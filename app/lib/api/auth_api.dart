@@ -94,8 +94,34 @@ class AuthApi {
   Future<Sessao> criarConta({
     required String email,
     required String senha,
+    /// A data de nascimento em **`YYYY-MM-DD`**, ja conferida contra a idade
+    /// minima de 16 anos (cliente, 18/10/2026: *"coloque maiores de 16
+    /// anos"*).
+    ///
+    /// `required` e nao-anulavel porque `RegisterRequest` a declara em
+    /// `required`: deixar o tipo aceitar a ausencia aqui seria deixar um
+    /// caminho de volta para o cadastro sem idade, e o servidor recusaria com
+    /// 400 depois da ida a rede.
+    ///
+    /// **`YYYY-MM-DD` e nao `31/12/1990`.** Quem converte e
+    /// `dataParaOContrato`, em `formato/data.dart`, e nenhuma tela manda o
+    /// texto do controlador: as duas gramaticas sao datas validas, e trocar
+    /// uma pela outra acerta a data errada em silencio.
+    required String nascimento,
     required String? versaoDosTermos,
     String? nome,
+    /// O apelido (`@`) **normalizado**, ou `null` quando a pessoa nao escolheu
+    /// nenhum.
+    ///
+    /// **Opcional, ao contrario de [nascimento]**, e a diferenca e decisao: o
+    /// cliente disse que o apelido *"vai estar no cadastro"* -- que ele ESTA
+    /// la, nao que e exigido -- e o desenho fechado (plano 4-C.8) diz que
+    /// nenhum fluxo obriga a escolher. Com `null` a chave nao vai no corpo, e a
+    /// conta nasce sem apelido.
+    ///
+    /// **Minusculo e sem espaco**, por `apelidoParaOContrato`: nenhuma tela
+    /// manda `controlador.text`.
+    String? apelido,
     bool continuarConectado = sessaoPersistentePorPadrao,
   }) async {
     final json = await _api.post(
@@ -104,6 +130,11 @@ class AuthApi {
       corpo: <String, dynamic>{
         'email': email,
         'password': senha,
+        'birth_date': nascimento,
+        // A CHAVE NAO VAI quando nao ha apelido, e isso nao e o mesmo que
+        // mandar `null`: `Handle` no contrato nao e `nullable`, entao
+        // `handle: null` seria recusado pelo schema. Ausente e "nao escolhi".
+        if (apelido != null && apelido.isNotEmpty) 'handle': apelido,
         if (nome != null && nome.isNotEmpty) 'display_name': nome,
         'accepted_terms_version': ?versaoDosTermos,
         // Enviado sempre, inclusive quando falso: e o padrao do contrato, e

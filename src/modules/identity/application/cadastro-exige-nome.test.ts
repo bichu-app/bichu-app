@@ -93,6 +93,9 @@ function contaRecemCriada(displayName: string | null): Conta {
     email: EMAIL,
     emailVerifiedAt: null,
     displayName,
+    // `handle: null` e o estado NORMAL de conta sem apelido: o apelido entrou
+    // em 18/10/2026 e **nenhum fluxo obriga a escolher** (plano 4-C.8).
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
@@ -128,21 +131,15 @@ function montar(aceitandoEscrita = false): Bancada {
   const recebidas: NovaConta[] = [];
 
   const repositorio: IdentityRepository = aceitandoEscrita
-    ? new (class extends RepositorioQueRecusaTudo {
-        protected recusar(nome: string): never {
-          return naoDeveriaTerChegado(nome);
-        }
-        override criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
+    ? {
+        ...repositorioQueRecusaTudo(),
+        criarContaLocal: (nova: NovaConta) => {
           recebidas.push(nova);
           return Promise.resolve(contaRecemCriada(nova.displayName ?? null));
-        }
-        override criarTokenDeVerificacao(): Promise<void> {
-          return Promise.resolve();
-        }
-        override gravarRefresh(): Promise<void> {
-          return Promise.resolve();
-        }
-      })()
+        },
+        criarTokenDeVerificacao: () => Promise.resolve(),
+        gravarRefresh: () => Promise.resolve(),
+      }
     : repositorioQueRecusaTudo();
 
   const assinador: TokenSigner = aceitandoEscrita
@@ -211,7 +208,14 @@ async function recusaComNome(nome: string | undefined, rotulo: string): Promise<
   const bancada = montar();
   try {
     await bancada.servico.cadastrar(
-      { email: EMAIL, password: SENHA_BOA, displayName: nome },
+      {
+        email: EMAIL,
+        password: SENHA_BOA,
+        // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data
+        // fixa e longe do corte: este arquivo mede o NOME, nao a idade.
+        birthDate: '1990-05-12',
+        displayName: nome,
+      },
       CONTEXTO,
     );
   } catch (erro) {
@@ -312,7 +316,12 @@ void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2
     const bancada = montar(true);
 
     const sessao = await bancada.servico.cadastrar(
-      { email: EMAIL, password: SENHA_BOA, displayName: '  Marina  ' },
+      {
+        email: EMAIL,
+        password: SENHA_BOA,
+        birthDate: '1990-05-12',
+        displayName: '  Marina  ',
+      },
       CONTEXTO,
     );
 

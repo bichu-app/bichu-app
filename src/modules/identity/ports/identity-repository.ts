@@ -14,6 +14,20 @@ export interface Conta {
   readonly email: string;
   readonly emailVerifiedAt: Date | null;
   readonly displayName: string | null;
+  /**
+   * O apelido (`@`), ou `null` quando a conta não escolheu nenhum.
+   *
+   * **`Conta` carrega o apelido e NÃO carrega a data de nascimento**, e a
+   * assimetria é a decisão: o apelido *"não tem relação com informações
+   * pessoais"* (cliente, 18/10/2026) e o dono precisa dele de volta para poder
+   * trocá-lo na tela de edição; a data de nascimento existe para ter sido
+   * conferida no cadastro e não volta para ninguém.
+   *
+   * Sai só em `GET /v1/me` e no que responde sobre a própria conta. Nenhuma
+   * resposta sem conta o declara -- a dependência está registrada no plano
+   * 4-C: o apelido não aparece para outra pessoa antes da fatia E.
+   */
+  readonly handle: string | null;
   readonly phoneE164: string | null;
   readonly phoneVerifiedAt: Date | null;
   readonly referencePostalCode: string | null;
@@ -63,6 +77,18 @@ export class EnvioDeFotoNaoServe extends Error {
 
 export interface CamposDoPerfil {
   readonly displayName?: string | null | undefined;
+  /**
+   * O apelido (`@`), na edição do perfil (cliente, 18/10/2026: *"vai estar no
+   * cadastro do usuário e na pagina de edição do perfil"*).
+   *
+   * **`string | undefined`, e nunca `null`** — ao contrário dos outros campos
+   * desta interface, em que `null` significa "apagar". Não há como abandonar um
+   * apelido: soltá-lo de volta ao pool é o furo do plano 4-C.7, porque quem o
+   * pegasse herdaria o que a vizinhança associava a quem o tinha. Trocar é
+   * permitido; abandonar não é, e a ausência do `null` é essa regra escrita no
+   * tipo.
+   */
+  readonly handle?: string | undefined;
   readonly phoneE164?: string | null | undefined;
   readonly referencePostalCode?: string | null | undefined;
   readonly referenceNeighborhood?: string | null | undefined;
@@ -105,6 +131,37 @@ export interface CredencialLocal {
 
 export interface NovaConta {
   readonly email: string;
+  /**
+   * A data de nascimento em `YYYY-MM-DD`, **já conferida** contra a idade
+   * mínima de 16 anos (`shared/idade/idade-minima.ts`).
+   *
+   * `string` e não `string | undefined`: o cadastro não cria mais conta sem
+   * ela, e deixar o tipo aceitar a ausência aqui seria deixar um caminho de
+   * volta para o estado que a decisão de 18/10/2026 fechou. A **coluna** é
+   * anulável, por causa das contas que já existiam — e isso é outra coisa,
+   * escrita no cabeçalho da `20261018000021`.
+   *
+   * Ela entra só na escrita. Não há método de leitura que a devolva, e
+   * `Conta` não a carrega: a data existe para ser conferida no cadastro, não
+   * para ser exibida.
+   */
+  readonly birthDate: string;
+  /**
+   * O apelido (`@`) **normalizado e conferido**, ou `undefined` quando a
+   * pessoa não escolheu nenhum.
+   *
+   * `undefined` e não `null`: no cadastro não existe "apagar o apelido", só
+   * "não escolhi" — e são a mesma coisa só aqui, onde a conta está nascendo.
+   *
+   * **Opcional de propósito** (plano 4-C.8): a coluna é anulável, a tela cai
+   * para o nome de exibição com apelido nulo, e **nenhum fluxo obriga a
+   * escolher**. Exigi-lo no cadastro seria uma segunda quebra de contrato e
+   * transformaria "achar um apelido livre" em pré-requisito para ter conta.
+   *
+   * **A disponibilidade NÃO é conferida antes.** Quem decide é o índice único
+   * de `handles`, nesta escrita, e a violação vira `code: 'taken'`.
+   */
+  readonly handle: string | undefined;
   readonly displayName: string | undefined;
   readonly acceptedTermsVersion: string | undefined;
   readonly passwordPhc: string;

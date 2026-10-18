@@ -4799,7 +4799,70 @@ export interface components {
         /** @enum {string} */
         Sex: "male" | "female" | "unknown";
         /**
-         * @description **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+         * @description O **apelido (`@`)**: identificador escolhido pela pessoa, unico, que
+         *     **nao deriva** do nome, do e-mail nem do telefone. Decisao do cliente
+         *     de 18/10/2026: *"o apelido esta livre, vai estar no cadastro do usuario
+         *     e na pagina de edicao do perfil"*, e antes dela *"slug nao tem relacao
+         *     com informacoes pessoais, e um id que o usuario escolhe e voce deve
+         *     verificar para garantir que nao tem dois iguais"*.
+         *
+         *     **A FAIXA AQUI E A MESMA DO BANCO E DA TELA, caractere a caractere.**
+         *     `minLength: 5` / `maxLength: 20` / `pattern` espelham o `CHECK` de
+         *     `handles.handle` (`20261018000021`) e o regex de
+         *     `app/lib/formato/apelido.dart`. Isto esta escrito porque esta casa ja
+         *     pagou pela divergencia: o recado do achado aceitava **1000** no
+         *     contrato e a coluna recusava acima de **500**, e a pessoa recebia erro
+         *     de servidor em vez de recusa explicada.
+         *
+         *     **O teto de 20 e do apelido NORMALIZADO, e por construcao ele e
+         *     identico ao digitado**: o conjunto e ASCII restrito, normalizar e so
+         *     minusculo e aparo, e maiuscula para minuscula e um para um. Nao ha
+         *     como digitado e normalizado divergirem em comprimento -- ganho direto
+         *     de ter recusado acento.
+         *
+         *     **Um separador so: o hifen.** Ponto e sublinhado foram recusados de
+         *     proposito: com os tres, `@maria.silva`, `@maria_silva` e
+         *     `@maria-silva` conviveriam.
+         *
+         *     **Guardado minusculo.** `@Leandro` e `@leandro` sao o mesmo apelido, e
+         *     quem garante e o indice (`citext`), nao o cliente.
+         *
+         *     **NAO EXISTE ROTA DE "ESTE APELIDO ESTA DISPONIVEL?"**, e a ausencia e
+         *     a decisao: ela deixaria varrer a base. A disponibilidade e decidida
+         *     **no envio**, pelo indice unico -- quem repetir recebe 400
+         *     `validation-failed` com `code: taken`, e a tela oferece tres sugestoes
+         *     derivadas do que foi digitado. Nenhum cliente deve conferir antes e
+         *     confiar: a janela entre conferir e gravar e onde a corrida mora.
+         *
+         *     **O espaco de nomes e COMPARTILHADO com `pets.slug`**: o site publica o
+         *     pet em `/@{slug}` (ADR-0028) e o `@` e um simbolo so para quem le.
+         *     Apelido de pessoa e slug de pet **nao coexistem iguais**, e quem
+         *     garante e a tabela `handles`.
+         *
+         *     **Parecidos nao coexistem.** `@maria-silva`, `@mariasilva` e
+         *     `@mar1a-silva` sao o mesmo apelido para o indice de esqueleto, que
+         *     colapsa `{0,o}`, `{1,i,l}`, `{5,s}` e `{3,e}` e tira o hifen.
+         *
+         *     **Palavras reservadas sao recusadas** com `code: reserved`. Para
+         *     `bichu` a regra e **CONTEM**, em qualquer posicao e sobre o esqueleto:
+         *     `@suporte-bichu` e `@b1chu-suporte` sao a forma real do golpe.
+         */
+        Handle: string;
+        /**
+         * @description **DUAS EXIGENCIAS NOVAS, do mesmo dia (18/10/2026), e as duas sao do
+         *     cliente.** `display_name` veio de *"o campo de nome no cadastro do
+         *     usuario e obrigatorio"* e `birth_date` de *"coloque maiores de 16
+         *     anos"*. Elas nasceram em ramos separados e se encontraram aqui: o
+         *     `required` desta operacao carrega **as duas**, e nenhuma substitui a
+         *     outra.
+         *
+         *     **As duas sao quebra de contrato, e as duas tem dispensa datada em
+         *     `.github/quality-gates.yml`** -- quatro entradas no total, porque o
+         *     juizo casa um par regra+operacao por entrada. O APK em campo nao tem
+         *     nenhum dos dois campos e deixa de criar conta ate sair APK novo; o
+         *     cliente aceitou esse custo nos dois casos.
+         *
+         *     **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
          *     cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
          *     ele esta cadastrando sem esse campo"*.
          *
@@ -4815,12 +4878,59 @@ export interface components {
          *     servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
          *     nao tem como exprimir "sobra caractere depois de aparar", e inventar
          *     `pattern` aqui faria a recusa do schema e a do servidor divergirem.
+         *
+         *     **`birth_date` e obrigatorio desde 18/10/2026**, por decisao do cliente:
+         *     *"coloque maiores de 16 anos"*.
+         *
+         *     **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+         *     que nao manda a chave passa a receber 400 `validation-failed` com
+         *     `errors[].field: birth_date` e `code: required`. O APK em campo que nao
+         *     tem o campo **deixa de criar conta** -- a correcao e APK novo, e nao
+         *     afrouxar a exigencia. E o mesmo custo que `display_name` cobrou no
+         *     mesmo dia, e o cliente o aceitou nos dois casos.
+         *
+         *     **O `format: date` nao esgota a regra, e de proposito.** O schema recusa
+         *     o que nao e data (`"ontem"`, `"32/13/2010"`), e **nao recusa**:
+         *
+         *     - data no **futuro** (`2030-01-01` e data valida);
+         *     - data **absurda** (`1203-04-05` e data valida);
+         *     - quem tem **menos de 16 anos**, que e a regra que motivou o campo.
+         *
+         *     Os tres sao recusados pelo **servidor**, em
+         *     `src/shared/idade/idade-minima.ts`, com `code: 'invalid'` e
+         *     `code: 'too_young'`. A idade e calculada **no servidor**, no fuso
+         *     `America/Sao_Paulo`, e **nunca lida de um campo de idade enviado pelo
+         *     cliente** -- nao existe campo de idade neste contrato, e nao e descuido:
+         *     idade que o cliente informa e idade que o cliente escolhe.
+         *
+         *     `minimum`/`maximum` de data nao existem em JSON Schema, e um `pattern`
+         *     aqui faria a recusa do schema e a do servidor divergirem -- a mesma
+         *     divisao de trabalho que `display_name` ja usa.
+         *
+         *     **A data de nascimento NAO VOLTA em resposta nenhuma**, nem para o
+         *     proprio dono: `Me`, `MeUpdate` e `RegisterResponse` nao a declaram. Com
+         *     idade minima de 16 o titular pode ser adolescente, e a data existe para
+         *     ser **conferida** no cadastro, nao para ser exibida.
          */
         RegisterRequest: {
             /** Format: email */
             email: string;
             password: components["schemas"]["Password"];
             display_name: string;
+            /**
+             * Format: date
+             * @description A data de nascimento de quem esta criando a conta, em `YYYY-MM-DD`.
+             *
+             *     Quem tem **menos de 16 anos nao cria conta** (cliente, 18/10/2026).
+             *     A conta precisa ter **16 anos ou mais no dia de hoje**, contado no
+             *     fuso `America/Sao_Paulo`: quem completa 16 anos hoje **passa**, e
+             *     quem os completa amanha nao. O limite de um dia aqui e a diferenca
+             *     entre recusar e aceitar alguem no proprio aniversario, e por isso o
+             *     calculo e civil (ano/mes/dia no fuso do produto) e nao uma subtracao
+             *     de instantes em UTC.
+             */
+            birth_date: string;
+            handle?: components["schemas"]["Handle"];
             accepted_terms_version?: string;
             stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
@@ -4895,6 +5005,43 @@ export interface components {
             email_deliverable: boolean;
             display_name?: string | null;
             /**
+             * @description O apelido (`@`) da **propria conta**, ou `null` quando ela nao
+             *     escolheu nenhum.
+             *
+             *     **O destinatario e sempre o DONO, e as rotas sao CINCO e nao
+             *     uma** -- medido resolvendo `$ref` sobre o contrato inteiro, e nao
+             *     suposto. `getMe` e `updateMe` exigem conta; e
+             *     `SessionResponse.user` aponta para este schema, entao o apelido
+             *     viaja tambem em `registerUser`, `login`, `refreshSession` e
+             *     `confirmEmailVerification`. Essas quatro tem `security: []`, **mas
+             *     nao sao anonimas**: cada uma entrega a sessao a quem acabou de
+             *     provar identidade com senha, com refresh ou com token de e-mail --
+             *     e sao exatamente as quatro que `portao-contrato-publico` dispensa
+             *     da varredura de campos, por este motivo escrito la.
+             *
+             *     Ele precisa sair por uma razao concreta: a **pagina de edicao do
+             *     perfil** mostra o apelido atual para a pessoa poder trocar de
+             *     apelido, e um campo que nao volta e um campo que a tela abre vazio
+             *     e sobrescreve com o que a pessoa digitar.
+             *
+             *     **`birth_date` nao sai em resposta nenhuma** -- zero, pela mesma
+             *     medicao. A assimetria e a decisao: o apelido *"nao tem relacao com
+             *     informacoes pessoais"* (cliente, 18/10/2026) e o dono precisa dele
+             *     de volta; a data existe para ter sido conferida no cadastro.
+             *
+             *     **Nenhuma rota de TERCEIRO declara este campo**, e a dependencia
+             *     esta registrada no plano 4-C: *"o apelido nao pode aparecer para
+             *     outra pessoa antes da fatia E"*. Esta fatia nao abre superficie
+             *     nenhuma -- nao existe `/@{apelido}` de pessoa, e nenhuma listagem,
+             *     nenhum teaser e nenhuma conversa o devolvem.
+             *
+             *     `null` e um estado legitimo e permanente: **nenhum fluxo obriga a
+             *     escolher apelido** (plano 4-C.8), e a tela cai para
+             *     `display_name` -- que e o que ela ja faz.
+             * @example maria-silva
+             */
+            handle?: string | null;
+            /**
              * @description A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
              *
              *     **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
@@ -4944,6 +5091,7 @@ export interface components {
              *     casos ocorreu -- a conferencia da conta esta na clausula `WHERE`.
              */
             photo_upload_id?: string | null;
+            handle?: components["schemas"]["Handle"];
             phone_e164?: string;
             reference_area?: {
                 postal_code?: string;

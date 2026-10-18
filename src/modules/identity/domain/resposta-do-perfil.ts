@@ -85,6 +85,28 @@ export function projetarMeuPerfil(
     pending_email: conta.pendingEmail,
     email_deliverable: conta.emailDeliverable,
     display_name: conta.displayName,
+    // O APELIDO VOLTA, E O DESTINATARIO E O DONO.
+    //
+    // Esta projecao alimenta `getMe`, `updateMe` e -- por
+    // `SessionResponse.user` -> `Me` -- tambem `registerUser`, `login`,
+    // `refreshSession` e `confirmEmailVerification`. As quatro ultimas tem
+    // `security: []`, **mas nao sao anonimas**: cada uma entrega a sessao a
+    // quem acabou de provar identidade com senha, com refresh ou com token de
+    // e-mail, e sao exatamente as quatro que `portao-contrato-publico`
+    // dispensa da varredura de campos, por esse motivo escrito la. Nenhuma
+    // rota de TERCEIRO traz este campo.
+    //
+    // Ele precisa voltar porque a pagina de edicao do perfil mostra o apelido
+    // atual para a pessoa poder troca-lo: campo que nao volta e campo que a
+    // tela abre vazio e sobrescreve com o que a pessoa digitar.
+    //
+    // **A DATA DE NASCIMENTO NAO ESTA NESTA LISTA, e a ausencia e a regra.**
+    // Medido resolvendo `$ref` sobre o contrato inteiro: `birth_date` sai em
+    // ZERO respostas. A assimetria e deliberada -- o apelido *"nao tem relacao
+    // com informacoes pessoais"* (cliente, 18/10/2026) e o dono precisa dele
+    // de volta; a data existe para ter sido conferida no cadastro, e com idade
+    // minima de 16 o titular pode ser adolescente.
+    handle: conta.handle,
     // A FOTO DO PRÓPRIO USUÁRIO. **Esta é a única resposta do contrato que a
     // carrega**, e `getMe` exige `bearerAuth` sem alternativa vazia: quem vê é o
     // dono. Mostrá-la a terceiros é exposição de pessoa física e depende de

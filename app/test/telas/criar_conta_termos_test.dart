@@ -142,11 +142,18 @@ void main() {
     // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
     // caso deixa de medir o que ele existe para medir.
     await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+    // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+    // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+    // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+    // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+    // passaria a medir o bloqueio em vez do que ele quer medir.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+    await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
     if (aceitar) {
       await rolarAte(tester, caixaDeAceite);
       await tester.tap(caixaDeAceite);
@@ -422,11 +429,18 @@ void main() {
       // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
       // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai.
       await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+      // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+      // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+      // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+      // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+      // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+      // passaria a medir o bloqueio em vez do que ele quer medir.
+      await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
       await tester.enterText(
-        find.byType(TextField).at(1),
+        find.byType(TextField).at(3),
         'marina@exemplo.com.br',
       );
-      await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+      await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
       await tester.pumpAndSettle();
 
       // A caixa comeca FORA da janela: sem isto o caso nao estaria medindo a

@@ -101,9 +101,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, por duas decisoes do cliente que
+  // entraram por OUTRO ramo: a ordem agora e Nome(0), Apelido(1), Data de
+  // nascimento(2), E-mail(3), Senha(4). O apelido e OPCIONAL e fica vazio
+  // aqui; a data e OBRIGATORIA e precisa ser preenchida, senao o botao do
+  // rodape fica bloqueado por causa DELA e os casos deste arquivo passariam a
+  // medir o bloqueio da data em vez da cobranca do nome.
   final Finder campoNome = find.byType(TextField).at(0);
-  final Finder campoEmail = find.byType(TextField).at(1);
-  final Finder campoSenha = find.byType(TextField).at(2);
+  final Finder campoNascimento = find.byType(TextField).at(2);
+  final Finder campoEmail = find.byType(TextField).at(3);
+  final Finder campoSenha = find.byType(TextField).at(4);
+
+  /// Data fixa e longe do corte de 16 anos, para a suite nao comecar a falhar
+  /// sozinha com o passar do tempo.
+  const String nascimentoValido = '12/05/1990';
   final Finder botaoCriarConta = find.widgetWithText(FilledButton, 'Criar conta');
 
   Future<void> marcarOAceite(WidgetTester tester) async {
@@ -116,6 +127,7 @@ void main() {
   /// Preenche tudo menos o nome, que cada caso escolhe.
   Future<void> preencher(WidgetTester tester, String nome) async {
     if (nome.isNotEmpty) await tester.enterText(campoNome, nome);
+    await tester.enterText(campoNascimento, nascimentoValido);
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'coleira-azul-do-bidu-2026');
     await tester.pumpAndSettle();
@@ -207,6 +219,9 @@ void main() {
     testWidgets('o `done` do teclado tambem recusa, e diz O QUE FAZER',
         (tester) async {
       await abrirCriarConta(tester);
+      // A data vai preenchida e o NOME nao: o que este caso mede e a guarda do
+      // nome no caminho do TECLADO, e sem a data a recusa viria da data.
+      await tester.enterText(campoNascimento, nascimentoValido);
       await tester.enterText(campoEmail, 'marina@exemplo.com.br');
       await tester.enterText(campoSenha, 'coleira-azul-do-bidu-2026');
       await tester.pumpAndSettle();

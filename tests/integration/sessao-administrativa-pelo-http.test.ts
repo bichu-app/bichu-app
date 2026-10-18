@@ -289,7 +289,9 @@ async function contaDoApp(opcoes: { email?: string; phc?: string } = {}): Promis
   const email = opcoes.email ?? `app-${randomUUID().slice(0, 8)}@exemplo.invalid`;
   const ids = criarIdGenerator(() => systemClock.now());
   const criada = await criarIdentityRepository(banco.db, ids).criarContaLocal({
-    email, displayName: 'Tutora', acceptedTermsVersion: undefined, passwordPhc: opcoes.phc ?? phc, agora: systemClock.now(),
+    // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
+    // e longe do corte: este arquivo mede as DUAS PORTAS de sessao, nao idade.
+    email, displayName: 'Tutora', birthDate: '1990-05-12', handle: undefined, acceptedTermsVersion: undefined, passwordPhc: opcoes.phc ?? phc, agora: systemClock.now(),
   });
   assert.ok(criada !== undefined);
   contasDoApp.push(criada.id);

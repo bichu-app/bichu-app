@@ -36,6 +36,9 @@ function conta(mudanca: Partial<Conta> = {}): Conta {
     email: 'tutor@exemplo.invalid',
     emailVerifiedAt: null,
     displayName: 'Maria',
+    // `handle: null` e o estado NORMAL: o apelido entrou em 18/10/2026 e nenhum
+    // fluxo obriga a escolher. Os casos de FOTO nao dependem dele.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,

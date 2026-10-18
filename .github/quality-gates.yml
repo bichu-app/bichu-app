@@ -645,3 +645,45 @@ dispensas:
     motivo: "StrayFoundReportInput.ref_data_version ganha maxLength 40 para igualar found_reports.ref_data_version, que sempre recusou acima de 40 (CHECK found_reports_ref_data_version_tamanho, de 1 a 40, migracao 20260922000010). O contrato nao declarava limite nenhum e o banco recusava: 41 caracteres em POST /v1/found-reports viravam erro de servidor, enquanto o caminho equivalente de PetInput ja devolvia 400. A mudanca ALINHA O CONTRATO A REALIDADE e remove um erro de servidor -- quem mandava 41 nunca recebeu 201, recebia 500. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
     responsavel: cliente
     vence_em: 2026-10-25
+
+  # IDADE MINIMA DE 16 ANOS, 18/10/2026 (decisao do cliente). Verbatim:
+  # "coloque maiores de 16 anos".
+  #
+  # A QUEBRA E INTENCIONAL, e por isso ela esta aqui em vez de reescrita: um
+  # campo NOVO entra em `required`, e nao ha forma compativel de exigir o que
+  # antes nao existia. Cliente antigo que nao manda a chave passa a receber
+  # 400 `validation-failed` com `code: required`.
+  #
+  # O QUE ISSO CUSTA, DITO EM VOZ ALTA: o APK que esta em aparelho hoje NAO
+  # TEM campo de data de nascimento, entao ele deixa de conseguir criar conta
+  # assim que esta spec subir. Resolve com APK novo. E o mesmo custo que
+  # `display_name` cobrou no mesmo dia, e o cliente o aceitou nos dois casos.
+  #
+  # POR QUE A DECISAO: antes disto NAO HAVIA FREIO DE IDADE NENHUM -- sem
+  # coluna em `users`, sem campo no contrato, sem campo na tela -- e a nossa
+  # propria politica de privacidade confessava isso por escrito no item 10
+  # ("Hoje o cadastro nao confere a idade").
+  #
+  # E UMA ENTRADA SO, e isso foi MEDIDO e nao suposto: o juizo
+  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada
+  # com exatamente um par `id da regra` + `operationId`, e recusa dispensa que
+  # valha para toda a rota. Rodado com tufin/oasdiff:v1.32.1 contra
+  # `e636f69c`, o veredito literal foi "1 changes: 1 error, 0 warning, 0
+  # info", com um unico par: `new-required-request-property registerUser`.
+  # Note que a regra NAO e `request-property-became-required` (a de
+  # `display_name`, que ja existia e virou obrigatorio): aqui a propriedade
+  # NASCE obrigatoria, e o oasdiff a classifica em outra regra.
+  #
+  # O resto da regra NAO E QUEBRA DE CONTRATO e por isso nao aparece aqui:
+  # recusar menor de 16, data no futuro e data absurda e trabalho do servidor
+  # dentro de um 400 que `registerUser` ja declarava.
+  #
+  # VENCE EM 25/10/2026, e o prazo nao e cerimonia: depois do merge em
+  # `development` a base da comparacao ja carrega o contrato novo e o portao
+  # fica quieto sozinho. Se esta entrada ainda estiver aqui depois disso, ela
+  # esta escondendo outra coisa e precisa SAIR, nao ser redatada.
+  - portao: oasdiff-data-de-nascimento-obrigatoria-no-cadastro
+    mudanca: "new-required-request-property registerUser"
+    motivo: "birth_date entra como propriedade nova e obrigatoria no cadastro por decisao do cliente de 18/10/2026 (verbatim: \"coloque maiores de 16 anos\"). Quebra INTENCIONAL: exigir um campo que nao existia nao tem forma compativel. Antes disto nao havia freio de idade em nenhuma camada -- sem coluna em users, sem campo no contrato, sem campo na tela -- e a politica de privacidade afirmava por escrito que \"hoje o cadastro nao confere a idade\" (item 10). CUSTO ACEITO: o APK em campo nao tem o campo e deixa de criar conta ate sair APK novo, o mesmo custo que display_name cobrou no mesmo dia. A idade e calculada NO SERVIDOR, no fuso America/Sao_Paulo, e nao ha campo de idade no contrato de proposito. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
+    responsavel: cliente
+    vence_em: 2026-10-25

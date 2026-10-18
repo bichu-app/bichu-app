@@ -698,6 +698,7 @@ export function registrarRotasDeIdentidade(
       const { conta } = await autenticado(request, deps);
       const corpo = request.body as {
         display_name?: string;
+        handle?: unknown;
         phone_e164?: string;
         photo_upload_id?: string | null;
         reference_area?: {
@@ -731,6 +732,15 @@ export function registrarRotasDeIdentidade(
         conta.id,
         {
           ...(corpo.display_name === undefined ? {} : { displayName: corpo.display_name }),
+          // O APELIDO, na edição do perfil (cliente, 18/10/2026).
+          //
+          // `undefined` é "não mexer", como todo campo deste `PATCH`. **Não há
+          // caminho para apagar**: `MeUpdate.handle` não é `nullable` no
+          // contrato e `CamposDoPerfil.handle` não aceita `null` -- soltar um
+          // apelido de volta ao pool é o furo do plano 4-C.7. A string vazia
+          // cai no `code: 'required'` de `verificarApelido`, e não em
+          // "apagar", que é a diferença que importa aqui.
+          ...(corpo.handle === undefined ? {} : { handle: corpo.handle as string }),
           ...(corpo.phone_e164 === undefined ? {} : { phoneE164: corpo.phone_e164 }),
           ...(area?.postal_code === undefined ? {} : { referencePostalCode: area.postal_code }),
           ...(area?.neighborhood === undefined ? {} : { referenceNeighborhood: area.neighborhood }),
@@ -775,6 +785,16 @@ export function registrarRotasDeIdentidade(
       const corpo = request.body as {
         email: string;
         password: string;
+        // `unknown` e não `string`, mesmo com `required` no schema: esta rota é
+        // pública e o serviço é quem confere. Declarar `string` aqui faria o
+        // tipo afirmar o que só o schema garante, e o dia em que o schema
+        // mudasse a afirmação continuaria de pé sem ninguém olhar.
+        birth_date?: unknown;
+        // `unknown` pela mesma razão de `birth_date`, e **OPCIONAL** porque o
+        // contrato não o declara em `required`: ausente significa "não escolhi
+        // apelido", e a conta nasce sem ele, com a tela caindo para o nome de
+        // exibição.
+        handle?: unknown;
         display_name?: string;
         accepted_terms_version?: string;
       };
@@ -782,6 +802,15 @@ export function registrarRotasDeIdentidade(
         {
           email: corpo.email,
           password: corpo.password,
+          // Repassada CRUA. Quem confere forma, futuro, absurdo e os 16 anos é
+          // `verificarDataDeNascimento`, no serviço — a rota não decide nada
+          // sobre idade, e não há segunda conta de aniversário em lugar nenhum.
+          birthDate: corpo.birth_date,
+          // Repassado CRU. Quem confere faixa, forma e reservadas é
+          // `verificarApelido`, no serviço; quem decide disponibilidade é o
+          // índice de `handles`, na escrita. A rota não decide nada sobre
+          // apelido, e não há consulta de disponibilidade em lugar nenhum.
+          handle: corpo.handle,
           displayName: corpo.display_name,
           acceptedTermsVersion: corpo.accepted_terms_version,
         },

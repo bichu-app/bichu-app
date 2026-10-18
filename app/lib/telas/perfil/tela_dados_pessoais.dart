@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
+import '../../formato/apelido.dart';
 import '../../formato/cep.dart';
 import '../../api/envio_de_foto.dart';
 import '../../api/estados_brasileiros.dart';
@@ -104,6 +105,7 @@ enum _Fase { carregando, formulario, falhaNaLeitura }
 
 class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   final TextEditingController _nome = TextEditingController();
+  final TextEditingController _apelido = TextEditingController();
   final TextEditingController _telefone = TextEditingController();
   final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
@@ -263,6 +265,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   void dispose() {
     for (final c in <TextEditingController>[
       _nome,
+      _apelido,
       _telefone,
       _cep,
       _bairro,
@@ -285,6 +288,18 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       setState(() {
         _lido = dados;
         _nome.text = dados.usuario.nome ?? '';
+        // O APELIDO ATUAL, para a pessoa poder trocar sem redigitar.
+        //
+        // Ele vem de `GET /v1/me`, que responde sobre quem esta autenticado:
+        // **o apelido sai so para o dono** nesta fatia (plano 4-C). Vazio e um
+        // estado valido -- nenhum fluxo obriga a escolher.
+        //
+        // Nao precisa passar por formatador: o que o servidor devolve ja esta
+        // normalizado (`citext` minusculo), e o `FiltroDeApelido` nao
+        // acrescenta separador nenhum -- ao contrario do CEP e do telefone,
+        // cuja leitura precisa ser mascarada a mao porque `formatEditUpdate`
+        // nao roda quando a tela escreve no controlador.
+        _apelido.text = dados.apelido ?? '';
         // **Mostra formatado, guarda E.164.** O que esta no campo e a
         // gramatica brasileira que se le; quem produz valor de contrato e
         // `telefoneEmE164`, na hora de enviar.
@@ -390,6 +405,37 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       erros[_CamposDosDados.nome] = _TextosDosDados.nomePrecisaDeTexto;
     }
 
+    // O APELIDO: so o PREENCHIDO e conferido.
+    //
+    // Cliente, 18/10/2026: *"o apelido esta livre, vai estar no cadastro do
+    // usuario e na pagina de edicao do perfil"*. Vazio e um estado valido e
+    // permanente -- nenhum fluxo obriga a escolher (plano 4-C.8).
+    //
+    // **Apagar nao da por aqui, e nao e falta de caminho: e a regra.** Soltar
+    // um apelido de volta ao pool e o furo do plano 4-C.7 -- quem o pegasse
+    // herdaria o que a vizinhanca associava a quem o tinha. Entao quem JA TEM
+    // apelido e esvazia o campo e avisado em vez de ter o campo ignorado em
+    // silencio.
+    //
+    // **A disponibilidade nao e conferida aqui**, e nao ha consulta: quem
+    // decide e o indice do banco, no envio, e a recusa volta com
+    // `code: taken` (plano 4-C.5). A troca de 60 dias tambem e do servidor,
+    // com `code: too_soon`.
+    final apelidoDigitado = _apelido.text.trim();
+    final apelidoLido = lido?.apelido ?? '';
+    if (apelidoDigitado.isEmpty) {
+      if (apelidoLido.isNotEmpty) {
+        erros[_CamposDosDados.apelido] = _TextosDosDados.apelidoNaoSeApaga;
+      }
+    } else {
+      final recusa = IdentificadorDoApelido.recusa(apelidoDigitado);
+      if (recusa != null) {
+        final saidas = IdentificadorDoApelido.sugestoes(apelidoDigitado);
+        erros[_CamposDosDados.apelido] =
+            saidas.isEmpty ? recusa : '$recusa Tente ${saidas.join(', ')}.';
+      }
+    }
+
     final telefoneDigitado = _telefone.text.trim();
     if (telefoneDigitado.isEmpty) {
       // **Apagar o telefone nao da por aqui, e isso e do contrato.**
@@ -456,6 +502,14 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final cepDigitado = _soDigitos(_cep.text);
 
     final nome = _seMudou(_nome.text.trim(), lido.usuario.nome);
+    // **Minusculo e aparado**, e nunca `_apelido.text`: `@Maria ` e `@maria`
+    // sao o mesmo apelido. Vazio nao vira `null`-que-apaga -- ele e filtrado
+    // por `_conferir` quando ha apelido gravado, e por `_seMudou` quando nao
+    // ha (vazio contra vazio nao mudou).
+    final apelido = _seMudou(
+      apelidoParaOContrato(_apelido.text) ?? '',
+      lido.apelido,
+    );
     // **E.164, nunca o que esta na tela.** A mascara e do olho.
     final telefone = novoTelefone == null
         ? null
@@ -468,6 +522,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final uf = _uf == null ? null : _seMudou(_uf!, lido.uf);
 
     if (nome == null &&
+        apelido == null &&
         telefone == null &&
         cep == null &&
         bairro == null &&
@@ -493,6 +548,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     try {
       final dados = await Escopo.of(context).me.atualizar(
             nome: nome,
+            apelido: apelido,
             telefone: telefone,
             cep: cep,
             bairro: bairro,
@@ -637,6 +693,23 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             controlador: _nome,
             limite: 80,
             capitalizacao: TextCapitalization.words,
+          ),
+          // O APELIDO (`@`), nesta tela desde 18/10/2026 (cliente: *"vai estar
+          // no cadastro do usuario e na pagina de edicao do perfil"*).
+          //
+          // **Sem `ajuda`**: a faixa esta na recusa, e as tres sugestoes vem
+          // com ela. O cliente mandou remover textos de apoio em 18/10.
+          //
+          // **Filtro e nao mascara**: o apelido nao tem separador a inserir.
+          // Ele passa maiuscula para minuscula e descarta o que nao e aceito
+          // enquanto se digita, e nao valida nada.
+          _campo(
+            chave: _CamposDosDados.apelido,
+            rotulo: _TextosDosDados.apelido,
+            controlador: _apelido,
+            limite: maximoDoApelido,
+            exemplo: 'maria-silva',
+            formatadores: const <TextInputFormatter>[FiltroDeApelido()],
           ),
           // O E-MAIL, DE LEITURA. Ver o cabecalho desta classe.
           _EmailDeLeitura(
@@ -1133,6 +1206,7 @@ class _EmailDeLeitura extends StatelessWidget {
 /// de ponteiro JSON do contrato).
 abstract final class _CamposDosDados {
   static const String nome = 'display_name';
+  static const String apelido = 'handle';
   static const String telefone = 'phone_e164';
   static const String cep = 'postal_code';
   static const String bairro = 'neighborhood';
@@ -1141,6 +1215,7 @@ abstract final class _CamposDosDados {
 
   static const List<String> todos = <String>[
     nome,
+    apelido,
     telefone,
     cep,
     bairro,
@@ -1169,6 +1244,17 @@ abstract final class _CamposDosDados {
 /// navegacao. Erro diz o que FAZER -- a palavra "invalido" nao aparece em
 /// nenhuma linha deste arquivo.
 abstract final class _TextosDosDados {
+  static const String apelido = 'Apelido';
+
+  /// A recusa de quem JA TEM apelido e esvaziou o campo.
+  ///
+  /// **Nao e falta de caminho: e a regra.** Soltar um apelido de volta ao pool
+  /// e o furo do plano 4-C.7 -- quem o pegasse herdaria o que a vizinhanca
+  /// associava a quem o tinha. Dizer isso e melhor que ignorar o campo vazio em
+  /// silencio, que faria a pessoa achar que apagou.
+  static const String apelidoNaoSeApaga =
+      'O apelido não pode ser apagado. Você pode trocá-lo por outro.';
+
   static const String titulo = 'Meus dados';
 
   static const String quemVoceE = 'Quem é você';

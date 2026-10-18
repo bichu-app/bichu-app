@@ -7,6 +7,8 @@
  */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { AppError, problemas } from '../../../shared/http/errors.js';
+import { verificarDataDeNascimento } from '../../../shared/idade/idade-minima.js';
+import { verificarApelido } from '../../../shared/apelido/apelido.js';
 import type { Instant, OpaqueToken, TokenHash, UserId } from '../../../shared/types/brands.js';
 import { emailTemFormaValida, normalizarEmail } from '../domain/email.js';
 import {
@@ -107,6 +109,25 @@ function nomeDeExibicaoAparado(bruto: string | null | undefined): string {
 export interface EntradaDeCadastro {
   readonly email: string;
   readonly password: string;
+  /**
+   * A data de nascimento como ela chegou, **sem conferir nada ainda**.
+   *
+   * `unknown` de propósito: quem confere é `verificarDataDeNascimento`, e
+   * declarar `string` aqui faria o tipo afirmar que o campo veio quando a rota
+   * é pública e ele pode não ter vindo. O `required` do schema recusa a
+   * ausência antes de chegar aqui, e a recusa do serviço existe para quem
+   * contorna o schema — não para o caminho felizes.
+   */
+  readonly birthDate: unknown;
+  /**
+   * O apelido (`@`) como ele chegou, **sem conferir nada ainda**.
+   *
+   * `unknown` pela mesma razão de `birthDate`: quem confere é
+   * `verificarApelido`. **Opcional**, porque o campo é opcional no contrato
+   * (ver `Handle` em `api/openapi.yaml`) -- ausente significa "não escolhi",
+   * e a conta nasce sem apelido, com a tela caindo para o nome de exibição.
+   */
+  readonly handle?: unknown;
   readonly displayName?: string | undefined;
   readonly acceptedTermsVersion?: string | undefined;
 }
@@ -732,6 +753,50 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // `code: 'required'` é o código que o contrato já declara e que outras
       // sete chamadas deste repositório já usam — não há código novo aqui.
       const displayName = nomeDeExibicaoAparado(entrada.displayName);
+      // A IDADE MÍNIMA É CONFERIDA AQUI, E NÃO NA TELA.
+      //
+      // Decisão do cliente de 18/10/2026, verbatim: *"coloque maiores de 16
+      // anos"*. Antes dela não havia freio de idade em nenhuma camada — sem
+      // coluna em `users`, sem campo no contrato, sem campo na tela — e a
+      // política de privacidade afirmava isso por escrito no item 10.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`), igual
+      // à do nome: a tela é conveniência, e quem chama
+      // `POST /v1/auth/register` direto não passa por ela. Freio de idade que
+      // só existe no app é um freio que qualquer `curl` contorna.
+      //
+      // A regra inteira — fuso, data futura, data absurda e a conta dos anos —
+      // mora em `shared/idade/idade-minima.ts`, e **esta linha é a única
+      // chamada dela no cadastro**. Uma fonte só: duas cópias da conta de
+      // aniversário divergiriam em um dia, e um dia aqui é a diferença entre
+      // aceitar e recusar alguém no próprio aniversário.
+      //
+      // **Antes da senha, de propósito.** `validarSenha` é a conferência mais
+      // cara desta função (ela varre listas de senha vazada), e cobrar os 16
+      // anos primeiro é o que evita gastá-la com quem não vai poder criar
+      // conta de todo modo.
+      const birthDate = verificarDataDeNascimento(entrada.birthDate, agora);
+
+      // O APELIDO É OPCIONAL, E É POR ISSO QUE A CONFERÊNCIA É CONDICIONAL.
+      //
+      // Decisão do cliente de 18/10/2026: *"o apelido esta livre, vai estar no
+      // cadastro do usuário e na pagina de edição do perfil"*. Ele disse que o
+      // campo ESTÁ no cadastro, não que é exigido -- e o desenho fechado
+      // (plano 4-C.8) diz que a coluna é anulável e que **nenhum fluxo obriga
+      // a escolher apelido**. Exigi-lo aqui contradiria o desenho.
+      //
+      // `undefined` e string vazia são a mesma coisa NESTE ponto e só neste:
+      // conta nascendo sem apelido. O `?? undefined` é o que impede que
+      // `handle: ''` de um cliente desatento vire uma recusa em vez de uma
+      // ausência.
+      //
+      // **A disponibilidade não é conferida aqui**, e não há consulta antes:
+      // quem decide é o índice de `handles`, na escrita, e a violação vira
+      // `code: 'taken'`. Conferir antes e confiar é o defeito -- a janela
+      // entre conferir e gravar é onde a corrida mora (plano 4-C.5).
+      const apelidoVeio =
+        typeof entrada.handle === 'string' && entrada.handle.trim().length > 0;
+      const handle = apelidoVeio ? verificarApelido(entrada.handle) : undefined;
       const errosDeSenha = validarSenha(entrada.password, {
         email,
         displayName,
@@ -741,6 +806,14 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const passwordPhc = await gerarHashDeSenha(entrada.password);
       const conta = await deps.repositorio.criarContaLocal({
         email,
+        // A data **conferida e canônica**, e não o que chegou no corpo: o que
+        // o banco guarda é o que passou pela regra.
+        birthDate,
+        // O apelido **normalizado**, ou `undefined`. Gravar `@Maria ` deixaria
+        // a caixa e o espaço aparecerem em toda tela que o mostra, e faria
+        // duas formas do mesmo apelido no banco -- que é o que `citext` e a
+        // normalização daqui existem para impedir, cada um do seu lado.
+        handle,
         // O nome **aparado**, e não o que chegou. Gravar `" Marina "` deixaria
         // o espaço aparecer em toda tela que mostra o nome, e faria a conta
         // ordenar antes de todas as outras em qualquer lista alfabética.
@@ -1210,11 +1283,44 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // consulta que `meuPerfil` faz, e sem ela nao da para saber se a conta
       // tem nome: `atualizarPerfil` devolve o estado DEPOIS, quando a escrita
       // ja aconteceu.
+      // O APELIDO, QUANDO ELE VEM NO CORPO.
+      //
+      // Cliente, 18/10/2026: *"o apelido esta livre, vai estar no cadastro do
+      // usuário e na pagina de edição do perfil"*. Esta é a segunda metade.
+      //
+      // `undefined` significa "não mexer", como em todo campo deste `PATCH`.
+      // **Não existe "apagar"**: `CamposDoPerfil.handle` é `string |
+      // undefined` e nunca `null`, porque soltar um apelido de volta ao pool é
+      // o furo do plano 4-C.7 -- quem o pegasse herdaria o que a vizinhança
+      // associava a quem o tinha. Trocar é permitido; abandonar não é.
+      //
+      // A conferência de FORMA é a mesma do cadastro, da mesma função: duas
+      // cópias da faixa divergiriam, e divergência de faixa entre dois
+      // caminhos da mesma conta é como `@maria-silva` entra por uma porta e é
+      // recusado na outra.
+      //
+      // **A TROCA (1 vez a cada 60 dias) e a RESERVA do anterior (180 dias)
+      // são do repositório**, e não daqui: as duas precisam ler `claimed_at` e
+      // escrever duas linhas de `handles` na MESMA transação da conta. Partir
+      // isso entre serviço e repositório deixaria uma janela em que o apelido
+      // novo está gravado e o antigo não está reservado -- que é exatamente a
+      // janela que o plano 4-C.7 fecha.
+      //
+      // **AS DUAS REGRAS NUMA DECLARACAO SO.** Elas nasceram em ramos
+      // separados -- o nome em `feat/nome-obrigatorio-cadastro`, o apelido
+      // aqui -- e as duas transformam `campos` antes de gravar. Duas
+      // declaracoes `const camposParaGravar` nao compilariam, e escolher uma
+      // desfaria a decisao da outra em silencio.
       const campaNome = campos.displayName;
-      const camposParaGravar: CamposDoPerfil =
-        campaNome === undefined
-          ? campos
-          : { ...campos, displayName: nomeDeExibicaoAparado(campaNome) };
+      const camposParaGravar: CamposDoPerfil = {
+        ...campos,
+        ...(campaNome === undefined
+          ? {}
+          : { displayName: nomeDeExibicaoAparado(campaNome) }),
+        ...(campos.handle === undefined
+          ? {}
+          : { handle: verificarApelido(campos.handle) }),
+      };
 
       if (campaNome === undefined) {
         const antes = await deps.repositorio.buscarContaPorId(userId);

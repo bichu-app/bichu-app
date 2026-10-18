@@ -40,6 +40,38 @@ export interface UsersTable {
    */
   photo_image_id: string | null;
   display_name: string | null;
+  /**
+   * A data de nascimento declarada no cadastro, para a idade mínima de 16 anos
+   * (cliente, 18/10/2026). `20261018000021`.
+   *
+   * **`ColumnType` com escrita em `string` e leitura em `Date`**: a coluna é
+   * `date` e o driver devolve `Date`, mas o que a aplicação tem é `YYYY-MM-DD`
+   * — a forma canônica que `verificarDataDeNascimento` produz. Converter para
+   * `Date` antes de gravar reintroduziria fuso numa data que não tem hora, e é
+   * assim que uma data de nascimento anda um dia.
+   *
+   * **`| null` na leitura porque a coluna é anulável**, e ela é anulável por
+   * causa das 7 contas que já existiam em 18/10/2026. A obrigatoriedade mora
+   * em `RegisterRequest.required` e em `NovaConta.birthDate`, não aqui.
+   *
+   * **Nenhuma consulta de leitura a seleciona** (ela não está em
+   * `COLUNAS_DA_CONTA`), e `Conta` não a carrega: ela não sai em resposta
+   * nenhuma.
+   */
+  birth_date: ColumnType<Date | null, string | undefined, string>;
+  /**
+   * O apelido (`@`) escolhido pela pessoa, já normalizado, apontando para
+   * `handles.handle` (FK). `20261018000021`.
+   *
+   * Anulável porque **nenhum fluxo obriga a escolher** (plano 4-C.8): a tela
+   * cai para o nome de exibição com apelido nulo, e as 7 contas de 18/10/2026
+   * continuam no banco sem apelido.
+   *
+   * `citext` no banco, `string` aqui: a insensibilidade de caixa é do índice, e
+   * a aplicação já grava minúsculo -- as duas metades, e nenhuma substitui a
+   * outra.
+   */
+  handle: ColumnType<string | null, string | undefined, string>;
   phone_e164: string | null;
   phone_verified_at: Date | null;
   reference_postal_code: string | null;
@@ -59,6 +91,40 @@ export interface UsersTable {
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
   deleted_at: Date | null;
+}
+
+/**
+ * O espaço de nomes do `@`, **compartilhado** entre pessoa, pet e reservadas.
+ * `20261018000021`.
+ *
+ * Tabela e não coluna com índice único porque o site publica o pet em
+ * `/@{slug}` (ADR-0028) e o `@` é um símbolo só para quem lê: `@bidu` não pode
+ * ser um pet para um leitor e uma pessoa para outro. Dois índices únicos em
+ * duas tabelas não conversam.
+ *
+ * **Não há rota de disponibilidade** (plano 4-C.5): a decisão é no envio, por
+ * `handles_pkey` e `handles_esqueleto_unico`.
+ */
+export interface HandlesTable {
+  /** `citext`: `@Leandro` e `@leandro` não coexistem, e quem garante é a chave. */
+  handle: string;
+  /**
+   * Derivado pelo gatilho `handles_esqueleto_derivado`, **nunca** pelo que a
+   * aplicação manda: o esqueleto é o índice que separa os parecidos, e quem o
+   * mandasse errado de propósito o contornaria.
+   *
+   * `Generated` é o que diz isso no tipo -- o valor enviado é descartado.
+   */
+  handle_esqueleto: Generated<string>;
+  kind: 'pessoa' | 'pet' | 'reservado';
+  /**
+   * A conta dona, quando `kind = 'pessoa'`. **Preservado** quando o apelido
+   * vira `reservado` numa troca: é ele que diz para quem a linha está guardada
+   * nos 180 dias (plano 4-C.7).
+   */
+  user_id: string | null;
+  /** Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui. */
+  claimed_at: ColumnType<Date, number | Date | string | undefined, number | Date | string>;
 }
 
 export interface UserIdentitiesTable {
@@ -1724,6 +1790,7 @@ export type OrigemDoEncontro = 'admin' | 'community';
 export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
 
 export interface Database {
+  handles: HandlesTable;
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;

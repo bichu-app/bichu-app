@@ -71,6 +71,9 @@ function conta(displayName: string | null): Conta {
     email: 'marina@exemplo.com.br',
     emailVerifiedAt: null,
     displayName,
+    // `handle: null` e o estado NORMAL de conta sem apelido: o apelido entrou
+    // em 18/10/2026 e **nenhum fluxo obriga a escolher** (plano 4-C.8).
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
