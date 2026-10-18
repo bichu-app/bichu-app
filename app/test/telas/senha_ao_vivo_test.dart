@@ -227,6 +227,9 @@ void main() {
       'ISCA — a tela recusa o que o servidor recusa, ANTES da ida a rede',
       (tester) async {
     await abrirCriarConta(tester);
+    // O nome e OBRIGATORIO desde 18/10/2026, e o botao do rodape fica
+    // bloqueado sem ele. Sem esta linha o caso nao chega a medir a senha.
+    await tester.enterText(campoNome, 'Marina Prado');
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'marina1998xyz');
     await tester.pumpAndSettle();
@@ -257,6 +260,9 @@ void main() {
     // a ADR-0003 prefere isto a `Senha@123`. Uma lista que cobrasse composicao
     // pararia aqui e a conta nao sairia.
     await abrirCriarConta(tester);
+    // O nome e OBRIGATORIO desde 18/10/2026, e o botao do rodape fica
+    // bloqueado sem ele. Sem esta linha o caso nao chega a medir a senha.
+    await tester.enterText(campoNome, 'Marina Prado');
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'o gato subiu no telhado');
     await tester.pumpAndSettle();
@@ -383,6 +389,10 @@ void main() {
           headers: <String, String>{'content-type': 'application/problem+json'},
         );
 
+    // O nome e OBRIGATORIO desde 18/10/2026, e o botao fica bloqueado sem ele:
+    // sem esta linha nenhum cadastro sai e o caso nao chega a medir o `code`
+    // desconhecido que ele existe para medir.
+    await tester.enterText(campoNome, 'Marina Prado');
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'o gato subiu no telhado');
     await tester.pumpAndSettle();

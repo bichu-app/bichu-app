@@ -56,6 +56,17 @@ type MotivoDeRevogacaoEmMassa = Extract<
   'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
+/**
+ * O teto do nome de exibicao, igual ao `maxLength` de `display_name` no
+ * contrato (`RegisterRequest` e `MeUpdate`, os dois com 80).
+ *
+ * Esta constante existe para a recusa do servidor dizer o MESMO numero que o
+ * schema: deixar o 80 solto no meio da frase de erro e como as duas metades
+ * divergem, e a divergencia aparece como "o app disse 80 e a API recusou em
+ * 64" para quem esta digitando.
+ */
+const LIMITE_DO_NOME = 80;
+
 export interface EntradaDeCadastro {
   readonly email: string;
   readonly password: string;
@@ -663,16 +674,54 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           { field: 'email', code: 'format', message: 'Confira o endereço de e-mail.' },
         ]);
       }
+
+      // O NOME É OBRIGATÓRIO, E A RECUSA É DAQUI — NÃO DA TELA.
+      //
+      // Queixa do cliente de 18/10/2026: *"o campo de nome no cadastro do
+      // usuário é obrigatorio, hoje ele esta cadastrando sem esse campo"*. O
+      // campo já existia na `F1.1` e já aparecia sem "(opcional)" no rótulo;
+      // o que não existia era alguém exigindo. A tela mandava `null` quando
+      // estava vazio e este serviço aceitava.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`): a tela
+      // é conveniência, e quem chama `POST /v1/auth/register` direto não passa
+      // por ela. Validar só no app seria trocar a exigência por uma sugestão.
+      //
+      // `trim` é o ponto todo. `required` no schema e `minLength: 1` recusam a
+      // chave ausente e a string vazia; **não recusam `"   "`**, que tem
+      // comprimento 3 e nenhum nome dentro. Era este o caso que escapava, e é
+      // ele que faz a conta nascer "sem nome" para as outras pessoas.
+      //
+      // `code: 'required'` é o código que o contrato já declara e que outras
+      // sete chamadas deste repositório já usam — não há código novo aqui.
+      const displayName = entrada.displayName?.trim();
+      if (displayName === undefined || displayName.length === 0) {
+        throw problemas.validacao([
+          { field: 'display_name', code: 'required', message: 'Diga como você quer ser chamado.' },
+        ]);
+      }
+      if (displayName.length > LIMITE_DO_NOME) {
+        throw problemas.validacao([
+          {
+            field: 'display_name',
+            code: 'too_long',
+            message: `Use no máximo ${LIMITE_DO_NOME} caracteres no nome.`,
+          },
+        ]);
+      }
       const errosDeSenha = validarSenha(entrada.password, {
         email,
-        displayName: entrada.displayName,
+        displayName,
       });
       if (errosDeSenha.length > 0) throw problemas.senhaFraca(errosDeSenha);
 
       const passwordPhc = await gerarHashDeSenha(entrada.password);
       const conta = await deps.repositorio.criarContaLocal({
         email,
-        displayName: entrada.displayName,
+        // O nome **aparado**, e não o que chegou. Gravar `" Marina "` deixaria
+        // o espaço aparecer em toda tela que mostra o nome, e faria a conta
+        // ordenar antes de todas as outras em qualquer lista alfabética.
+        displayName,
         acceptedTermsVersion: entrada.acceptedTermsVersion,
         passwordPhc,
         agora,
