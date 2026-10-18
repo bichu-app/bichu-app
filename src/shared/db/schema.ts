@@ -919,7 +919,7 @@ export type StatusDoPerfil = 'draft' | 'published' | 'hidden' | 'removed';
 export type NivelDeVerificacao = 'none' | 'contact_verified' | 'document_verified';
 
 /**
- * A avaliacao de um local do diretorio `Perto` (migracao `20261017000015`).
+ * A avaliacao de um local do diretorio `Perto` (migracao `20261017000017`).
  *
  * Pedido do cliente de 18/10/2026: nota de 1 a 5 e recomendacao em texto,
  * visiveis para os outros usuarios, "como acontece na playstore". O esquema e o
@@ -975,7 +975,7 @@ export interface ProfessionalReviewsTable {
 }
 
 /**
- * A denuncia de uma avaliacao (migracao `20261017000015`).
+ * A denuncia de uma avaliacao (migracao `20261017000017`).
  *
  * Contrapeso de a avaliacao publicar na hora. **Ela NAO esconde a avaliacao**:
  * se escondesse, uma denuncia seria todo o custo de apagar a avaliacao de um

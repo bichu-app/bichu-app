@@ -45,6 +45,32 @@
 --   faltam de verdade e estao relatadas, mas inventa-las aqui encheria a tela
 --   de linhas vazias permanentes, porque nao existe painel que as preencha.
 --
+-- POR QUE O CARIMBO E 0017 E NAO 0015, e o registro fica porque o defeito e
+-- caro: esta migracao NASCEU `20261017000015` e colidiu com
+-- `20261017000015_cep-da-sugestao-do-diretorio.sql`, de outro agente, na branch
+-- `feat/cep-sugestao-profissional`. Os dois medimos o proximo livre em momentos
+-- diferentes, cada um numa branch que o outro nao via, e os dois chegamos a
+-- 0015. **Dois arquivos com o mesmo carimbo travam o migrador de forma
+-- permanente.**
+--
+-- NA RENUMERACAO, 0016 TAMBEM JA ESTAVA TOMADO -- por
+-- `20261017000016_fila-de-indicacao-do-diretorio.sql`, de um TERCEIRO agente,
+-- ainda **NAO COMITADO** (existe so no disco do worktree
+-- `workspace/wt/fila-indicacao`). Isso nao aparece em `git ls-tree` de ref
+-- nenhuma, e portanto **o portao de carimbo nao o ve**: ele le as refs. Quem
+-- renumerar aqui precisa varrer os DIRETORIOS de trabalho dos worktreees, e nao
+-- so as refs -- foi assim que 0016 foi descoberto ocupado.
+--
+-- ORDEM E DEPENDENCIA: esta migracao entra DEPOIS da do CEP (0015) e depois da
+-- fila de indicacao (0016). **Nao ha dependencia entre as tres.** As duas
+-- vizinhas tocam `directory_suggestions` -- a sugestao de um local NOVO, que
+-- continua passando por revisao do administrador --, e esta toca
+-- `professional_reviews`, que e a avaliacao de um local que JA EXISTE. Nenhum
+-- objeto em comum: nenhuma coluna, nenhum indice, nenhuma funcao. A unica
+-- tabela que esta migracao referencia por chave estrangeira e `professionals`
+-- (e `users`), que as tres encontram ja criada desde 21/09. Em qualquer ordem
+-- relativa entre as tres o resultado e o mesmo.
+--
 -- NAO FOI EXERCITADA CONTRA BANCO. Validada em `BEGIN`/`ROLLBACK` apenas; o
 -- banco de desenvolvimento e compartilhado com outras sessoes e `migrate up`
 -- nao foi rodado. O que isso deixa sem prova esta no fim do arquivo.
