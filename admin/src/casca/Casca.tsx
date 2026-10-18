@@ -26,6 +26,10 @@ const ITENS: ItemDaNavegacao[] = [
   { para: '/loja/parceiros', rotulo: 'Parceiros', icone: 'open', sub: true, ativo: (c) => c.startsWith('/loja/parceiros') },
   { para: '/loja/tags', rotulo: 'Tags', icone: 'tick', sub: true, ativo: (c) => c.startsWith('/loja/tags') },
   { para: '/rede', rotulo: 'Rede', icone: 'groups', ativo: (c) => c === '/rede' || c.startsWith('/rede/') },
+  // BICHUS-189. O diretorio de `Perto`: estabelecimentos, clinicas e
+  // profissionais. O caminho e `/perto` e nao `/diretorio` porque e assim que a
+  // secao se chama no aplicativo, e o painel fala a lingua do produto.
+  { para: '/perto', rotulo: 'Perto', icone: 'search', ativo: (c) => c === '/perto' || c.startsWith('/perto/') },
 ];
 
 function iniciais(nome: string): string {

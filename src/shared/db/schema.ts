@@ -982,6 +982,12 @@ export interface ProfessionalsTable {
   published_at: Date | null;
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
+  /**
+   * A versao para `If-Match`, acrescentada pela migracao `20261017000011`.
+   * Mesma forma de `store_partners` e `network_events`: ela cresce na propria
+   * clausula `WHERE` do `UPDATE`, e nao e lida para ser comparada em memoria.
+   */
+  version: Generated<number>;
 }
 
 export type TipoDeEntidade = 'professional' | 'organization';

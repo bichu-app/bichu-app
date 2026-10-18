@@ -99,6 +99,9 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
+import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
+import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import { criarTaxonomiaDaVitrineRepository } from '../modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
@@ -358,6 +361,19 @@ export async function main(): Promise<void> {
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
     baseDoPerfilDoInstagram: config.instagramProfileBaseUrl,
     registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
+  });
+
+  // BICHUS-189. A escrita administrativa do diretorio de `Perto`. Sem
+  // `avisos` e sem `urlDeMidia`: uma entrada de diretorio nao notifica ninguem
+  // e nao tem imagem -- nao ha coluna de foto nem de logotipo em
+  // `professionals`, e inventar uma seria decidir produto aqui.
+  const diretorioAdministrativo = new DiretorioAdministrativo({
+    repositorio: criarDiretorioAdministrativoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    ids,
+    clock: systemClock,
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -894,6 +910,13 @@ export async function main(): Promise<void> {
           registrarRotasDaLojaAdministrativa(administrativo, { catalogo: catalogoAdministrativo, contrato });
           // BICHUS-273/292. A escrita da Rede e a fila de pedidos.
           registrarRotasDaRedeAdministrativa(administrativo, { rede: redeAdministrativa, contrato });
+          // BICHUS-189. A escrita do diretorio de `Perto`: o menu que faltava
+          // no painel. Ate 17/10/2026 nao havia escrita nenhuma, e as entradas
+          // de qualquer destino vinham de `src/bin/seed.ts`.
+          registrarRotasDoDiretorioAdministrativo(administrativo, {
+            diretorio: diretorioAdministrativo,
+            contrato,
+          });
         },
       );
     } else {
