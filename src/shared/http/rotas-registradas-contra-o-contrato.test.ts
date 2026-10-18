@@ -69,6 +69,7 @@ import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/adm
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
+import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -135,6 +136,10 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
   moderacaoAdministrativa,
+  // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
+  // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele
+  // reprova contando `defineRoute` no disco.
+  seguranca,
   saude,
   // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
   caixaDeNotificacoes,

@@ -5548,6 +5548,250 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{userRef}/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bloqueia esta pessoa
+         * @description Unilateral e **silencioso**. Quem bloqueia decide sozinho; quem e
+         *     bloqueado nao e avisado e **nao descobre pela resposta**.
+         *
+         *     **O efeito e nos DOIS SENTIDOS, e e aplicado na LEITURA do servidor** --
+         *     nunca num `if` de tela, pelo argumento que o ADR-0025 ja escreveu:
+         *     *"enquanto o dado sair da API, ele sai para qualquer cliente, inclusive
+         *     o que ninguem escreveu."* Quem bloqueou deixa de ver o bloqueado, e o
+         *     bloqueado deixa de ver quem o bloqueou. A segunda metade e a que
+         *     importa para quem bloqueia por estar sendo perseguido.
+         *
+         *     **O bloqueado recebe `404` IDENTICO ao de pessoa inexistente** -- mesmo
+         *     corpo, mesmo codigo (ADR-0021: autorizacao na clausula `WHERE`, `404` e
+         *     nunca `403`). Um `404` diferente seria um oraculo, e descobrir que foi
+         *     bloqueado e o que gera retaliacao.
+         *
+         *     **Idempotente.** Bloquear de novo responde `204` e nao `409`: erro aqui
+         *     contaria a quem chama um estado que ele ja escolheu, e obrigaria a tela
+         *     a ter um segundo caminho para nada.
+         *
+         *     ## O QUE ESTE BLOQUEIO NAO FECHA, e e a decisao mais consequente da fatia
+         *
+         *     **Ele NAO fecha a conversa mediada de um caso de pet ABERTO.**
+         *
+         *     O mecanismo para fechar existe e foi medido: a conversa mediada deriva
+         *     `status` de `estadoDaConversa`, e conta desabilitada em qualquer das duas
+         *     pontas a leva a `closed`, o que trava o envio **nos dois sentidos** com
+         *     `410 conversation-closed` e corpo fixo. Ligar o bloqueio nesse mesmo
+         *     derivador custaria um sinal novo e nada mais.
+         *
+         *     **Nao ligamos, de proposito.** Bloquear o achador no meio de um caso
+         *     aberto cortaria o UNICO canal entre quem esta com o animal e quem o
+         *     perdeu, e o resultado dessa economia de codigo e um cachorro que nao
+         *     volta porque duas pessoas se desentenderam. A conversa mediada ja e o
+         *     canal mais blindado do produto -- redige telefone, e-mail e endereco,
+         *     rotula os lados como `Tutor`/`Quem achou` e proibe foto por extenso --,
+         *     e ja tem a ferramenta certa para o caso em que ela precisa parar:
+         *     `blockConversation`, que e um ato explicito, por conversa, e nao um
+         *     efeito colateral de um gesto feito em outra tela.
+         *
+         *     Dar ao mesmo toque duas consequencias tao diferentes -- "nao quero ver
+         *     esta pessoa" e "desligue o canal do meu pet perdido" -- e o que nao
+         *     fazemos.
+         */
+        post: operations["blockUser"];
+        /**
+         * Desfaz o bloqueio desta pessoa
+         * @description So quem bloqueou desbloqueia, resolvido por igualdade com quem chama na
+         *     clausula `WHERE` (ADR-0021) -- nao existe caminho por aqui para desfazer
+         *     o bloqueio de outra pessoa, e por isso a resposta e `404` e nunca `403`.
+         *
+         *     **Desbloquear nao devolve nada do que o bloqueio desfez.** Quando a
+         *     conexao existir, ela nao volta; o desbloqueio devolve visibilidade, e
+         *     nada mais.
+         *
+         *     **Idempotente**, pela mesma razao do `POST`.
+         */
+        delete: operations["unblockUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia este perfil para a moderacao
+         * @description Sobre **quem a pessoa e**: apelido, nome de exibicao, capa. A foto se
+         *     denuncia **na foto** (`reportPhoto`) e a publicacao **no cartao**
+         *     (`reportPublication`), porque o dano esta ali e quem modera precisa
+         *     saber *qual*.
+         *
+         *     **`202` e nao `200`**: o que esta rota promete e que o pedido foi
+         *     recebido, nao que alguem ja olhou.
+         *
+         *     **Denunciar o mesmo perfil de novo nao duplica a fila e nao devolve
+         *     erro**: a segunda chamada responde `202` e incrementa a contagem de
+         *     repeticao, igual a `conversation_reports` e a
+         *     `reportDirectoryEntryReview`. Erro ensinaria a quem denuncia que ele ja
+         *     denunciou, o que nao e informacao dele e nao muda nada.
+         *
+         *     **O proprio perfil nao pode ser denunciado** (`400`,
+         *     `code: own_profile`).
+         *
+         *     **O que o administrador faz com uma denuncia de perfil**, ja que a fila
+         *     nao tem acao sobre conta: remove o **artefato** ofensivo -- apelido,
+         *     nome de exibicao ou capa, um de cada vez, com motivo obrigatorio --,
+         *     nunca a conta.
+         */
+        post: operations["reportUserProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+                 *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+                 *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+                 *     servidor.
+                 *
+                 *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+                 *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+                 *     divergiria de `derivadas.ts` na primeira geometria nova.
+                 */
+                photoRef: components["parameters"]["PhotoPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia esta foto para a moderacao
+         * @description **Denuncia-se NA FOTO**, e nao no perfil de quem a enviou: o
+         *     administrador precisa saber *qual* imagem, e uma denuncia de perfil que
+         *     dissesse "tem uma foto ruim" o obrigaria a adivinhar entre as fotos da
+         *     pessoa.
+         *
+         *     O endereco e a **chave da derivada publica** -- a mesma pela qual a
+         *     imagem foi servida a quem a viu. Nao e UUID: o ADR-0010 item 6 proibe
+         *     UUID interno em saida publica, e a chave carrega 128 bits aleatorios
+         *     (ADR-0007).
+         *
+         *     **Lista de seis motivos**, uma a mais que as outras duas, e as duas que
+         *     nao existem em nenhuma outra lista sao de imagem: `child_at_risk`, que
+         *     vai ao topo da fila, e `i_am_in_it` -- quem aparece numa foto nao e quem
+         *     a enviou e nao tem outro caminho, que e o mesmo direito de oposicao que
+         *     o ADR-0011 emenda 1 deu ao profissional cadastrado por terceiro.
+         *
+         *     Mesmo comportamento da denuncia de perfil em todo o resto: `202`,
+         *     repeticao que soma em vez de duplicar, **o denunciado nao e avisado**,
+         *     **nenhum prazo prometido** e ocultacao imediata para quem denunciou.
+         */
+        post: operations["reportPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{publicationRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+                 *     `20261018000032`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia esta publicacao para a moderacao
+         * @description **Ponto de acesso no proprio cartao**, pelo mesmo principio da foto:
+         *     denuncia-se onde o dano esta.
+         *
+         *     **Terceira lista fechada, e nao reuso de uma das outras duas**: "nudez"
+         *     e "maus-tratos" sao de imagem, e "nao e quem diz ser" e de perfil.
+         *
+         *     `false_lost_pet_info` -- *informacao falsa sobre um pet perdido* -- so
+         *     existe neste produto, e e por isso que ela nao cabia em `other`: **um
+         *     avistamento inventado manda a pessoa para o bairro errado e custa horas
+         *     de busca**.
+         *
+         *     Mesmo comportamento das outras duas em todo o resto: `202`, repeticao
+         *     que soma, **o denunciado nao e avisado**, **nenhum prazo prometido** e
+         *     ocultacao imediata para quem denunciou.
+         *
+         *     **O que o administrador le:** o texto da publicacao **como ele estava
+         *     quando foi denunciado**, congelado na denuncia. Sem o congelamento,
+         *     editar a publicacao depois de denunciada faria o administrador julgar um
+         *     texto que ninguem denunciou.
+         */
+        post: operations["reportPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -10842,6 +11086,72 @@ export interface components {
              */
             daily_cap: number;
         };
+        /**
+         * @description **LISTA FECHADA DE CINCO, SEM TEXTO LIVRE DE MOTIVO** (ADR-0023 secao
+         *     3). Campo de motivo livre vira desabafo e nao se tria -- e uma fila que
+         *     nao se tria e uma fila que ninguem trabalha.
+         *
+         *     `detail` e opcional e **nao e o motivo**: e o contexto que a pessoa
+         *     quiser dar sobre o motivo que ela ja escolheu.
+         */
+        ProfileReportInput: {
+            /**
+             * @description - `impersonation` — *Nao e quem diz ser*
+             *     - `harassment` — *Esta incomodando ou ameacando*
+             *     - `pet_ransom_scam` — *Golpe ou cobranca para devolver um pet*.
+             *       Especifico deste produto: o golpe do falso achador esta nomeado no
+             *       ADR-0010
+             *     - `minor_suspected` — *Parece ser menor de 16 anos*. **Vai ao topo
+             *       da fila**, e a idade e 16 porque foi o que o cliente decidiu
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "impersonation" | "harassment" | "pet_ransom_scam" | "minor_suspected" | "other";
+            /**
+             * @description Contexto opcional. Mesmo teto e mesmas duas recusas de
+             *     `DirectoryReviewReportInput.detail`: ate 1000 simbolos e sem os
+             *     sinais `<` e `>`.
+             */
+            detail?: string;
+        };
+        /**
+         * @description **LISTA FECHADA DE SEIS**, uma a mais que as outras duas. As duas que
+         *     nao existem em nenhuma outra lista sao de imagem.
+         */
+        PhotoReportInput: {
+            /**
+             * @description - `nudity_or_sexual` — *Nudez ou conteudo sexual*
+             *     - `child_at_risk` — *Crianca em situacao de risco*. **Topo da fila**
+             *     - `animal_violence` — *Violencia ou maus-tratos a animal*
+             *     - `i_am_in_it` — *Apareco nesta foto e nao autorizei*. Quem aparece
+             *       numa foto nao e quem a enviou e nao tem outro caminho: e o direito
+             *       de oposicao do ADR-0011 emenda 1
+             *     - `impersonation` — *Nao e quem diz ser*
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "nudity_or_sexual" | "child_at_risk" | "animal_violence" | "i_am_in_it" | "impersonation" | "other";
+            detail?: string;
+        };
+        /**
+         * @description **TERCEIRA LISTA FECHADA, DE CINCO**, e nao reuso de uma das outras
+         *     duas: "nudez" e "maus-tratos" sao de imagem, e "nao e quem diz ser" e de
+         *     perfil.
+         */
+        PublicationReportInput: {
+            /**
+             * @description - `offensive_or_discriminatory` — *Ofensa ou discriminacao*
+             *     - `scam_or_animal_sale` — *Golpe, cobranca ou venda de animal*
+             *     - `false_lost_pet_info` — *Informacao falsa sobre um pet perdido*.
+             *       **So existe neste produto**: um avistamento inventado manda a
+             *       pessoa para o bairro errado e custa horas de busca
+             *     - `spam_or_repetition` — *Propaganda ou repeticao*
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "offensive_or_discriminatory" | "scam_or_animal_sale" | "false_lost_pet_info" | "spam_or_repetition" | "other";
+            detail?: string;
+        };
     };
     responses: {
         /** @description Pedido aceito para processamento. */
@@ -11384,6 +11694,42 @@ export interface components {
         NotificationRef: string;
         AdminPage: number;
         AdminLimit: number;
+        /**
+         * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+         *     de base64url, 128 bits sorteados por linha.
+         *
+         *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+         *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+         *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+         *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+         *
+         *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+         *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+         *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+         *     caminho de escrita que o troque.
+         */
+        UserPublicRef: string;
+        /**
+         * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+         *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+         *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+         *     servidor.
+         *
+         *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+         *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+         *     divergiria de `derivadas.ts` na primeira geometria nova.
+         */
+        PhotoPublicRef: string;
+        /**
+         * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+         *     mesmo formato de `UserPublicRef` e pela mesma razao.
+         *
+         *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+         *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+         *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+         *     `20261018000032`.
+         */
+        PublicationRef: string;
     };
     requestBodies: never;
     headers: {
@@ -17587,6 +17933,181 @@ export interface operations {
             };
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    blockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bloqueada. Resposta vazia */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    unblockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desbloqueada. Resposta vazia */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportUserProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+                 *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+                 *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+                 *     servidor.
+                 *
+                 *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+                 *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+                 *     divergiria de `derivadas.ts` na primeira geometria nova.
+                 */
+                photoRef: components["parameters"]["PhotoPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhotoReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+                 *     `20261018000032`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

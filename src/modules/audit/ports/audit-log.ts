@@ -121,6 +121,29 @@ export type AuditAction =
    */
   | 'conversation.held_for_review'
   | 'conversation.reported'
+  /**
+   * FATIA E da frente de comunidade: bloquear alguem.
+   *
+   * **O `resourceId` e o ENDERECO PUBLICO do alvo** (`users.public_ref`, 128
+   * bits opacos), e nunca o UUID interno: a trilha guarda o ATO e nao a
+   * vitima, e o endereco publico e o que um suporte consegue ligar a uma linha
+   * sem que a trilha passe a ser uma lista de quem bloqueou quem por id.
+   *
+   * **Nenhum destes eventos chega a quem foi bloqueado ou denunciado.** A
+   * trilha e de quem audita.
+   */
+  | 'user_block.created'
+  | 'user_block.removed'
+  /**
+   * FATIA E: denuncia de perfil, de foto ou de publicacao. O `resourceKind`
+   * diz qual dos tres.
+   *
+   * O metadado carrega o MOTIVO escolhido e **nunca o relato**: relato e texto
+   * que uma pessoa escreveu sobre outra, e `docs/04-seguranca.md` secao 9
+   * proibe conteudo na trilha pelo mesmo juizo. Quem precisa do relato e quem
+   * modera, e ele esta na fila.
+   */
+  | 'content_report.created'
   | 'conversation.blocked'
   | 'moderation.decided'
   /**

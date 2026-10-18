@@ -99,6 +99,23 @@ export const MODULES = [
   // alguem, so a contagem do proprio dono e o predicado "estes dois estao
   // conectados?".
   'connections',
+  // FATIA E da frente de comunidade (18/10/2026). Bloquear e denunciar e modulo
+  // proprio, e nao um canto de `identity`, por uma razao de fronteira e uma de
+  // privacidade.
+  //
+  // DE FRONTEIRA: o alvo de uma denuncia nao e sempre uma pessoa. Sao tres --
+  // perfil, foto e publicacao --, e as duas ultimas moram em `media` e na fatia
+  // da timeline. Dentro de `identity`, este modulo teria de importar
+  // `domain/` de dois outros, que e exatamente o que esta fronteira existe
+  // para impedir.
+  //
+  // DE PRIVACIDADE, e e a que decide: `user_blocks` e as tres tabelas de
+  // denuncia sao as unicas tabelas desta frente que guardam um VINCULO ENTRE
+  // DUAS PESSOAS (ADR-0011 secao 4, BICHUS-174). Manter a fronteira e o que
+  // garante que nenhum outro modulo as leia a nao ser por `ports/` -- e o
+  // predicado que os outros modulos realmente precisam, `bloqueio_entre`, nao
+  // passa nem por `ports/`: e funcao SQL, chamada na clausula `WHERE`.
+  'safety',
 ];
 
 /**

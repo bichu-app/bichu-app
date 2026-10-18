@@ -275,6 +275,21 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const valores: Insertable<UsersTable> = {
         id: userId,
         email: nova.email,
+        // O ENDEREÇO PÚBLICO DA PESSOA nasce com a conta (fatia E, migração
+        // `20261018000031`): 128 bits de CSPRNG em base64url, 22 símbolos, no
+        // mesmo molde de `professional_reviews.ref` e de `upload_ref`.
+        //
+        // Nasce AQUI e não na primeira vez que alguém precisa dele, por duas
+        // razões. A coluna é `NOT NULL`, então um caminho de criação que não o
+        // escrevesse não compilaria — que é exatamente o freio que se quer. E
+        // preenchê-lo tarde obrigaria a leitura de um perfil a ESCREVER na
+        // linha de outra pessoa, o que é contenção e é um `UPDATE` num caminho
+        // que ninguém espera que escreva.
+        //
+        // **Sorteado, e nunca derivado do e-mail nem do nome**: um endereço que
+        // carregasse o dono permitiria cruzar as pegadas de uma pessoa entre
+        // superfícies (BICHUS-174).
+        public_ref: Buffer.from(ids.random128()).toString('base64url'),
         display_name: nova.displayName ?? null,
         // A data de nascimento entra na ESCRITA e em lugar nenhum mais: ela não
         // está em `COLUNAS_DA_CONTA` (o `returning` abaixo), e por isso não

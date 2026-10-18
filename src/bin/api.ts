@@ -125,6 +125,9 @@ import { criarDirectorySuggestionRepository } from '../modules/professionals/ada
 import { criarCanalDeContatoDoChamador } from '../modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { registrarRotasDeSeguranca } from '../modules/safety/adapters/http/safety-routes.js';
+import { SegurancaDaComunidade } from '../modules/safety/application/seguranca-da-comunidade.js';
+import { criarSafetyRepository } from '../modules/safety/adapters/persistence/kysely-safety-repository.js';
 import { registrarRotaDeBuscaDeCep } from '../modules/addresses/adapters/http/postal-code-routes.js';
 import { criarBuscaDeCep } from '../modules/addresses/adapters/external/viacep-com-brasilapi.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
@@ -1033,6 +1036,23 @@ export async function main(): Promise<void> {
     // montagens seriam dois `SugestaoDoDiretorio` -- dois caminhos ate a mesma
     // tabela, com a chance de um deles ganhar um dobre diferente do outro.
     registrarRotaDasMinhasIndicacoes(escopo, dependenciasDaSugestao);
+    // BLOQUEAR E DENUNCIAR (fatia E da frente de comunidade). Modulo proprio,
+    // e o autenticador e o MESMO do diretorio e da Rede: o modulo recebe a
+    // funcao e continua sem conhecer o servico de identidade.
+    //
+    // A trilha e a do APP (`trilha`, transacao propria) e nao a transacional do
+    // painel: um incidente no esquema de auditoria nao e motivo para alguem
+    // nao conseguir bloquear quem a esta assediando.
+    registrarRotasDeSeguranca(escopo, {
+      seguranca: new SegurancaDaComunidade({
+        repositorio: criarSafetyRepository(db, ids),
+        trilha,
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+    });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
       // O vocabulario dos dois niveis da categoria, com cache em processo
