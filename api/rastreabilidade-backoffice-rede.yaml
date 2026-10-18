@@ -814,6 +814,84 @@ telas:
           - path:requestRef
           - resp:status
 
+  # ======================================================================
+  # A FILA DE MODERACAO (18/10/2026)
+  # ======================================================================
+  #
+  # Decisao do cliente, literal: "quem modera vai ser o administrador, deve ir
+  # para a pagina de backoffice".
+  #
+  # AS QUATRO OPERACOES NASCEM EM `telas`, E NAO EM `contrato_sem_tela`. A tela
+  # vem no mesmo commit (`admin/src/moderacao/FilaDeModeracao.tsx`), e e o que
+  # as tres entradas da fila da plaquinha ensinaram em 18/10: elas ficaram meses
+  # em `contrato_sem_tela` com `resolucao: "tela: resolvido quando a tela
+  # existir"` -- e `contrato_sem_tela` so pedia uma nota, enquanto `telas` cobra
+  # que cada `usa` resolva contra o contrato.
+  #
+  # O ITEM E O ALVO, e nao a denuncia: tres pessoas denunciando a mesma
+  # avaliacao viram UMA linha com `report_count: 3`. `repeat_total` e o sinal
+  # que separa briga de problema real, e e por isso que os dois numeros estao
+  # em `usa` -- uma tela que parasse de ler um deles reprova aqui.
+  #
+  # `resp:content` ENTRA em `usa` de proposito, apesar de ser SEMPRE NULO na
+  # origem `conversation`: a tela le o campo e escreve a frase que explica a
+  # ausencia (`conteudoDo` em `moderacao/fila.ts`), e isso e uso.
+  #
+  # NAO HA OPERACAO DE CONTA nesta entrada, e a ausencia e a regra: desabilitar
+  # conta e outro poder, com outro evento de trilha, e nao entra nesta fila.
+  # Tambem nao ha operacao de notificacao: ninguem e avisado.
+  # ======================================================================
+  - tela: "Moderacao - fila de denuncias"
+    prototipo: nenhum
+    estados: [fila, vazio, removendo, descartando, decidida, conteudo_ja_removido]
+    operacoes:
+      - operationId: listAdminModerationReports
+        situacao: contrato
+        usa:
+          - query:state
+          - query:origin
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:pending_total
+          - enum:ModerationQueueState.open
+          - enum:ModerationQueueState.resolved
+          - enum:ModerationOrigin.review
+          - enum:ModerationOrigin.conversation
+      - operationId: removeAdminModerationContent
+        situacao: contrato
+        usa:
+          - path:origin
+          - path:targetRef
+          - req:reason
+          - resp:origin
+          - resp:target_ref
+          - resp:subject
+          - resp:content
+          - resp:rating
+          - resp:reason
+          - resp:reasons
+          - resp:detail
+          - resp:report_count
+          - resp:repeat_total
+          - resp:first_reported_at
+          - resp:last_reported_at
+          - resp:content_removed
+          - resp:resolution
+          - resp:resolution_reason
+          - resp:resolved_at
+      - operationId: dismissAdminModerationReport
+        situacao: contrato
+        usa:
+          - path:origin
+          - path:targetRef
+          - req:reason
+          - resp:content_removed
+          - resp:resolution
+          - resp:resolution_reason
+          - resp:resolved_at
+
 correspondencias:
   # ====================================================================
   # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO
@@ -1007,6 +1085,23 @@ contrato_sem_tela:
   - operationId: createNetworkEventCoverUploadIntent
     resolucao: "tela: resolvido quando a tela existir"
     nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet"
+  # 18/10/2026. A LEITURA DE UM ITEM da fila de moderacao, e ela esta AQUI e nao
+  # em `telas` porque a tela de verdade nao a chama -- e a ausencia e declarada,
+  # nao esquecida.
+  #
+  # `listAdminModerationReports` ja devolve o item inteiro: conteudo, relato,
+  # motivos, as duas contagens e a decisao. A tela abre o dialogo com a linha
+  # que ja tem na mao, e uma segunda viagem ao servidor para reler o que acabou
+  # de chegar seria trafego por nada.
+  #
+  # Ela existe no contrato porque a fila VAI precisar dela: quando a origem
+  # `conversation` ganhar o que mostrar, ou quando houver tela de item com
+  # endereco proprio (recarregar a pagina sobre uma decisao em andamento), a
+  # leitura e por onde isso entra. Inventa-la depois mudaria o contrato; deixa-la
+  # declarada agora nao custa nada e nao e quebra.
+  - operationId: getAdminModerationReport
+    resolucao: "tela: resolvido quando a tela de item existir"
+    nota: "a listagem ja devolve o item inteiro e a tela usa a linha que tem na mao; a leitura existe para a tela de item com endereco proprio, que e do despacho seguinte"
   # AS TRES ENTRADAS DA FILA DA PLAQUINHA SAIRAM DAQUI EM 18/10/2026, e nao
   # foram redatadas: `listAdminCollarTagRequests`,
   # `fulfillAdminCollarTagRequest` e `declineAdminCollarTagRequest`.

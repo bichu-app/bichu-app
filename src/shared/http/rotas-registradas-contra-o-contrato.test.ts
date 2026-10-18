@@ -63,6 +63,8 @@ import * as diretorioAdministrativo from '../../modules/professionals/adapters/h
 import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
+// 18/10/2026. A fila de moderacao do painel.
+import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -119,6 +121,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   indicacoesAdministrativas,
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
+  moderacaoAdministrativa,
   saude,
 ];
 

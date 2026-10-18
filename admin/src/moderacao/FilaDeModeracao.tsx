@@ -1,0 +1,514 @@
+/**
+ * A FILA DE MODERACAO no painel: remover o conteudo ou descartar a denuncia.
+ *
+ * ## O que esta tela responde, literal
+ *
+ * Decisao do cliente de 18/10/2026: "quem modera vai ser o administrador, deve
+ * ir para a pagina de backoffice".
+ *
+ * O estado antes: `conversation_reports` gravava denuncia desde 28/09 e
+ * **nenhuma tela, nem rota, a lia**. A denuncia de avaliacao tinha remocao pelo
+ * administrador, mas enderecada pelo `ref` que alguem tirava da pagina publica
+ * do local -- porque nao havia fila navegavel. Esta e ela.
+ *
+ * ## UMA LINHA E UM ALVO, e nao uma denuncia
+ *
+ * Tres pessoas denunciando a mesma avaliacao viram UMA linha, com "3 denúncias".
+ * Se a linha fosse a denuncia, quem modera decidiria a mesma coisa tres vezes
+ * sem nunca ver o numero que importa -- e **a contagem de repeticao e o sinal
+ * que separa briga de problema real**.
+ *
+ * ## AS DUAS ACOES, E O MOTIVO OBRIGATORIO NAS DUAS
+ *
+ * "Remover conteúdo" esconde (exclusao logica: nada e apagado) e "Descartar"
+ * deixa o conteudo no ar. As duas exigem motivo escrito, e as duas vao para a
+ * trilha de auditoria. O motivo nao e publicado e nao chega a ninguem.
+ *
+ * ## O QUE ESTA TELA NAO FAZ, e as ausencias sao a regra
+ *
+ * - **nao desabilita conta.** Nao ha botao, nao ha menu e nao ha caminho.
+ *   Desabilitar conta e outro poder, com outro evento de trilha, e nao entra
+ *   nesta fila;
+ * - **nao avisa ninguem.** Quem denunciou nao recebe resultado e quem foi
+ *   denunciado nao e avisado -- avisar o denunciado e retaliacao, e e decisao
+ *   de desenho ja tomada. Nao ha campo de mensagem em nenhum dos dois dialogos;
+ * - **nao mostra quem denunciou nem quem foi denunciado.** A resposta nao
+ *   carrega nome, conta nem identificador de nenhum dos dois: a decisao e sobre
+ *   o CONTEUDO;
+ * - **nao mostra prazo.** Nao ha vencimento nem contador: o produto nao promete
+ *   prazo a ninguem;
+ * - **nao modera automaticamente.** Nada aqui olha o texto para sugerir
+ *   decisao: o juizo e de pessoa, e e por isso que o motivo e obrigatorio.
+ *
+ * ## O CONTEUDO DA CONVERSA NAO APARECE, E A TELA DIZ ISSO
+ *
+ * `content` vem nulo na origem `conversation`, sempre: a conversa e privada
+ * entre duas pessoas e nada neste produto autoriza o administrador a le-la. A
+ * tela escreve a frase em vez de mostrar um campo vazio -- vazio sem explicacao
+ * faria quem modera achar que a tela quebrou. Ver [conteudoDo] em `fila.ts`.
+ */
+import { useCallback, useId, useRef, useState } from 'react';
+
+import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
+import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
+import { Dialogo } from '../componentes/Dialogo.tsx';
+import { Icone } from '../componentes/Icone.tsx';
+import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
+import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
+import {
+  ABAS,
+  AJUDA_DO_MOTIVO,
+  LIMITE_DO_MOTIVO,
+  ROTULO_DA_ABA,
+  ROTULO_DA_DECISAO,
+  ROTULO_DA_ORIGEM,
+  SELO_DA_DECISAO,
+  VAZIO_DA_ABA,
+  conteudoDo,
+  dataCurta,
+  eInsistente,
+  erroDoMotivo,
+  notaDe,
+  repeticaoDe,
+  rotuloDoMotivo,
+  type EstadoDaFila,
+  type Item,
+  type Origem,
+} from './fila.ts';
+
+/**
+ * Os padroes da lista, constante de modulo porque `useParametrosDaLista` o
+ * exige estavel. **Sem `as const`**: com ele os valores viram tipos literais e
+ * `mudar` passa a aceitar so a string que esta aqui.
+ */
+const PADROES = { estado: 'open', origem: '', busca: '' };
+
+const COLUNAS = ['O que foi denunciado', 'Conteúdo', 'Motivo', 'Denúncias', 'Quando', 'Ações'];
+
+type Acao = 'remover' | 'descartar';
+
+const TITULO_DA_ACAO = {
+  remover: 'Remover o conteúdo?',
+  descartar: 'Descartar a denúncia?',
+} as const satisfies Record<Acao, string>;
+
+const BOTAO_DA_ACAO = {
+  remover: 'Remover conteúdo',
+  descartar: 'Descartar denúncia',
+} as const satisfies Record<Acao, string>;
+
+const CORPO_DA_ACAO = {
+  remover: [
+    'O conteúdo sai do ar para todo mundo. Nada é apagado de verdade: ele continua gravado, com o seu motivo ao lado, para quem auditar.',
+    'Ninguém é avisado — nem quem denunciou, nem quem foi denunciado.',
+  ],
+  descartar: [
+    'O conteúdo fica no ar. A denúncia não é apagada: ela fica registrada como descartada, com o seu motivo.',
+    'Ninguém é avisado — nem quem denunciou, nem quem foi denunciado.',
+  ],
+} as const satisfies Record<Acao, readonly string[]>;
+
+type Resultado = { ok: true } | { ok: false; mensagem: string };
+
+function mensagemDaFalha(status: number | undefined): string {
+  if (status === 400) return 'Esta denúncia já foi decidida. Recarregue a fila.';
+  if (status === 404) return 'Esta denúncia não está mais na fila: alguém decidiu antes.';
+  if (status === 429) return 'Muitas escritas em pouco tempo. Tente de novo em alguns minutos.';
+  return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
+}
+
+/**
+ * A confirmacao com MOTIVO OBRIGATORIO, uma para as duas acoes.
+ *
+ * **Nao ha campo de mensagem e nao ha caixa de "desabilitar a conta"**, e as
+ * duas ausencias sao a regra: ninguem e avisado, e conta e outro poder.
+ */
+function DialogoDaDecisao({
+  item,
+  acao,
+  aoConfirmar,
+  aoFechar,
+}: {
+  item: Item;
+  acao: Acao;
+  aoConfirmar: (motivo: string) => Promise<Resultado>;
+  aoFechar: () => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [erro, setErro] = useState<string>();
+  const [falha, setFalha] = useState<string>();
+  const [carregando, setCarregando] = useState(false);
+  const campo = useRef<HTMLTextAreaElement>(null);
+  const idDoCorpo = useId();
+  const idDoMotivo = useId();
+
+  async function confirmar() {
+    if (carregando) return;
+    setFalha(undefined);
+    const problema = erroDoMotivo(motivo);
+    if (problema !== undefined) {
+      setErro(problema);
+      campo.current?.focus();
+      return;
+    }
+    setErro(undefined);
+    setCarregando(true);
+    try {
+      const resultado = await aoConfirmar(motivo.trim());
+      if (resultado.ok) aoFechar();
+      else setFalha(resultado.mensagem);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  return (
+    <Dialogo
+      titulo={TITULO_DA_ACAO[acao]}
+      aoFechar={carregando ? undefined : aoFechar}
+      descricaoId={idDoCorpo}
+      largo
+    >
+      <div id={idDoCorpo}>
+        <p className="t-body">
+          <strong>{ROTULO_DA_ORIGEM[item.origin]}</strong> · {item.subject} · {repeticaoDe(item)}
+        </p>
+        {CORPO_DA_ACAO[acao].map((frase) => (
+          <p key={frase} className="t-body c-sec">
+            {frase}
+          </p>
+        ))}
+      </div>
+      {falha && <Banner tipo="erro">{falha}</Banner>}
+      <form
+        className="form"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void confirmar();
+        }}
+      >
+        <div className={erro ? 'field err' : 'field'}>
+          <label htmlFor={idDoMotivo}>Motivo da decisão *</label>
+          <textarea
+            ref={campo}
+            id={idDoMotivo}
+            className="input"
+            rows={3}
+            maxLength={LIMITE_DO_MOTIVO}
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            readOnly={carregando}
+            aria-invalid={erro ? true : undefined}
+            aria-describedby={`${idDoMotivo}-ajuda`}
+            data-cy="motivo-da-decisao"
+            data-foco-inicial
+          />
+          {erro ? (
+            <span className="help err" id={`${idDoMotivo}-ajuda`} aria-live="polite">
+              <Icone nome="error" tamanho="s20" />
+              {erro}
+            </span>
+          ) : (
+            <span className="help" id={`${idDoMotivo}-ajuda`}>
+              {AJUDA_DO_MOTIVO}
+            </span>
+          )}
+        </div>
+        <div className="acoes">
+          <button type="button" className="btn sec" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className={acao === 'remover' ? 'btn danger' : 'btn pri'}
+            data-cy={`confirmar-${acao}`}
+            aria-busy={carregando || undefined}
+          >
+            {carregando && <span className="spin" aria-hidden="true" />}
+            {BOTAO_DA_ACAO[acao]}
+          </button>
+        </div>
+      </form>
+    </Dialogo>
+  );
+}
+
+export default function FilaDeModeracao() {
+  const { api } = useSessao();
+  const [parametros, mudar] = useParametrosDaLista(PADROES);
+  const aba = (ABAS.includes(parametros.estado as EstadoDaFila)
+    ? parametros.estado
+    : 'open') as EstadoDaFila;
+  const origemFiltrada = parametros.origem;
+  const busca = parametros.busca.trim().toLowerCase();
+
+  const [emDecisao, setEmDecisao] = useState<{ item: Item; acao: Acao }>();
+  const [aviso, setAviso] = useState<string>();
+  const [falhaDaLinha, setFalhaDaLinha] = useState<string>();
+
+  const buscar = useCallback(
+    async (pagina: number, sinal: AbortSignal) => {
+      const { data } = await api.GET('/admin/moderation/reports', {
+        params: {
+          query: {
+            state: aba,
+            ...(origemFiltrada === '' ? {} : { origin: origemFiltrada as Origem }),
+            page: pagina,
+            limit: 50,
+          },
+        },
+        signal: sinal,
+      });
+      return data === undefined ? undefined : { itens: data.items ?? [], total: data.total ?? 0 };
+    },
+    [api, aba, origemFiltrada],
+  );
+
+  const { estado, carregarMais, recarregar } = useListaPaginada<Item>(
+    `${aba}|${origemFiltrada}`,
+    buscar,
+  );
+
+  /**
+   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o
+   * contrato de `listAdminModerationReports` nao tem `q`, e inventar um aqui
+   * faria a tela mandar um parametro que o servidor ignora -- que e pior que
+   * nao ter busca, porque parece funcionar.
+   *
+   * Ela filtra pelo ASSUNTO (nome do local ou do pet) e pelo relato de quem
+   * denunciou. **Nao filtra por pessoa**, porque pessoa nao sai nesta resposta.
+   */
+  const itens =
+    busca === ''
+      ? estado.itens
+      : estado.itens.filter(
+          (i) =>
+            i.subject.toLowerCase().includes(busca) ||
+            (i.detail ?? '').toLowerCase().includes(busca) ||
+            (i.content ?? '').toLowerCase().includes(busca),
+        );
+
+  async function decidir(item: Item, acao: Acao, motivo: string): Promise<Resultado> {
+    setFalhaDaLinha(undefined);
+    const caminho =
+      acao === 'remover'
+        ? ('/admin/moderation/reports/{origin}/{targetRef}/removal' as const)
+        : ('/admin/moderation/reports/{origin}/{targetRef}/dismissal' as const);
+    const { data, response } = await api.POST(caminho, {
+      params: { path: { origin: item.origin, targetRef: item.target_ref } },
+      body: { reason: motivo },
+    });
+    if (data === undefined) return { ok: false, mensagem: mensagemDaFalha(response.status) };
+    // A aba e `open` e o item deixou de estar na fila: recarregar e o que tira
+    // a linha, em vez de deixa-la la com o selo trocado.
+    recarregar();
+    setAviso(
+      acao === 'remover'
+        ? `Conteúdo de ${item.subject} removido do ar, com o motivo registrado.`
+        : `Denúncia sobre ${item.subject} descartada, com o motivo registrado.`,
+    );
+    return { ok: true };
+  }
+
+  return (
+    <>
+      <header className="cab">
+        <h1 className="t-title-lg">Moderação</h1>
+        <p className="t-body c-sec">
+          O que a comunidade denunciou. Remover esconde o conteúdo e não apaga nada; descartar
+          deixa o conteúdo no ar. As duas pedem motivo, e ninguém é avisado.
+        </p>
+      </header>
+
+      {aviso && (
+        <Banner tipo="ok" aoFechar={() => setAviso(undefined)}>
+          {aviso}
+        </Banner>
+      )}
+      {falhaDaLinha && <Banner tipo="erro">{falhaDaLinha}</Banner>}
+
+      {/* Busca, filtro e ordenacao no TOPO DO CORPO da tela, e nunca na barra
+          de navegacao: e o padrao de toda pagina com registros neste painel. */}
+      <BarraDeListagem
+        rotuloDaBusca="Buscar denúncia"
+        placeholder="Local, pet ou relato"
+        busca={parametros.busca}
+        aoBuscar={(valor) => mudar({ busca: valor })}
+        chips={ABAS.map((a) => ({ valor: a, rotulo: ROTULO_DA_ABA[a] }))}
+        chipAtivo={aba}
+        aoEscolherChip={(valor) => mudar({ estado: valor, origem: '' })}
+        rotuloDosChips="Situação da denúncia"
+        seletores={[
+          {
+            id: 'origem-da-denuncia',
+            rotuloAcessivel: 'Origem da denúncia',
+            prefixoVisivel: 'Origem',
+            valor: origemFiltrada,
+            // As opcoes vem de `ROTULO_DA_ORIGEM`, e nao de uma lista escrita
+            // aqui: quando a frente de comunidade acrescentar `profile` ou
+            // `photo` ao contrato, a opcao aparece sozinha -- e o `satisfies`
+            // daquele mapa reprova a compilacao se o rotulo faltar.
+            opcoes: [
+              { valor: '', rotulo: 'Todas as origens' },
+              ...Object.entries(ROTULO_DA_ORIGEM).map(([valor, rotulo]) => ({ valor, rotulo })),
+            ],
+            aoMudar: (valor) => mudar({ origem: valor }),
+          },
+        ]}
+        limpar={
+          rotuloDeLimpar(parametros.busca !== '', origemFiltrada !== '')
+            ? {
+                rotulo: rotuloDeLimpar(parametros.busca !== '', origemFiltrada !== '') ?? 'Limpar',
+                aoLimpar: () => mudar({ busca: '', origem: '' }),
+              }
+            : undefined
+        }
+      />
+
+      {estado.fase === 'erro' && (
+        <Banner tipo="erro">
+          Não conseguimos carregar a fila.{' '}
+          <button type="button" className="btn ghost" onClick={recarregar}>
+            Tentar de novo
+          </button>
+        </Banner>
+      )}
+
+      <table className="tabela">
+        <thead>
+          <tr>
+            {COLUNAS.map((c) => (
+              <th key={c} scope="col">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={COLUNAS} />}
+          {itens.map((item) => {
+            const conteudo = conteudoDo(item);
+            return (
+              <tr key={`${item.origin}|${item.target_ref}`} data-cy="linha-da-denuncia">
+                <td>
+                  <span className="t-label-lg">{ROTULO_DA_ORIGEM[item.origin]}</span>
+                  <span className="t-body c-sec bloco">{item.subject}</span>
+                  {item.rating !== null && item.rating !== undefined && (
+                    <span className="t-body c-sec bloco">Nota {notaDe(item)}</span>
+                  )}
+                </td>
+                <td>
+                  <span className={conteudo.ausente ? 't-body c-sec' : 't-body'}>
+                    {conteudo.ausente ? conteudo.texto : `“${conteudo.texto}”`}
+                  </span>
+                  {item.detail && (
+                    <span className="t-body c-sec bloco" data-cy="relato-do-denunciante">
+                      Relato: “{item.detail}”
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <span className="t-body">{rotuloDoMotivo(item.reason)}</span>
+                  {item.reasons.length > 1 && (
+                    <span className="t-body c-sec bloco">
+                      {item.reasons.map(rotuloDoMotivo).join(' · ')}
+                    </span>
+                  )}
+                </td>
+                <td data-cy="repeticao">
+                  {/* O SINAL DE REPETICAO. Tres denunciantes distintos e o mesmo
+                      numero que o contrato ja trata como `raise_queue_priority`
+                      -- a tela nao inventa limiar. */}
+                  <span className={eInsistente(item) ? 't-label-lg' : 't-body'}>
+                    {repeticaoDe(item)}
+                  </span>
+                  {eInsistente(item) && (
+                    <span className="t-body c-sec bloco">Muitos denunciantes diferentes.</span>
+                  )}
+                </td>
+                <td>
+                  <span className="t-body">{dataCurta(item.first_reported_at)}</span>
+                  {item.last_reported_at !== item.first_reported_at && (
+                    <span className="t-body c-sec bloco">
+                      última {dataCurta(item.last_reported_at)}
+                    </span>
+                  )}
+                </td>
+                <td>
+                  {item.resolution ? (
+                    <>
+                      <Selo tipo={SELO_DA_DECISAO[item.resolution]} />
+                      <span className="t-body c-sec bloco">
+                        {ROTULO_DA_DECISAO[item.resolution]} · {dataCurta(item.resolved_at)}
+                      </span>
+                      {item.resolution_reason && (
+                        <span className="t-body c-sec bloco">“{item.resolution_reason}”</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {!item.content_removed && (
+                        <button
+                          type="button"
+                          className="btn danger"
+                          data-cy="remover-conteudo"
+                          onClick={() => setEmDecisao({ item, acao: 'remover' })}
+                        >
+                          {BOTAO_DA_ACAO.remover}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn sec"
+                        data-cy="descartar-denuncia"
+                        onClick={() => setEmDecisao({ item, acao: 'descartar' })}
+                      >
+                        {BOTAO_DA_ACAO.descartar}
+                      </button>
+                      {item.content_removed && (
+                        <span className="t-body c-sec bloco">
+                          O conteúdo já está fora do ar. Resta decidir a denúncia.
+                        </span>
+                      )}
+                    </>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {estado.fase === 'pronto' && itens.length === 0 && (
+        <EstadoVazio
+          titulo="Nada por aqui"
+          corpo={busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma denúncia desta página casa com a busca.'}
+          acao="Ver a fila"
+          destino="/moderacao"
+        />
+      )}
+
+      {estado.fase === 'pronto' && estado.itens.length < estado.total && (
+        <button
+          type="button"
+          className="btn sec"
+          data-cy="carregar-mais"
+          aria-busy={estado.carregandoMais || undefined}
+          onClick={carregarMais}
+        >
+          Carregar mais
+        </button>
+      )}
+
+      {emDecisao && (
+        <DialogoDaDecisao
+          item={emDecisao.item}
+          acao={emDecisao.acao}
+          aoConfirmar={(motivo) => decidir(emDecisao.item, emDecisao.acao, motivo)}
+          aoFechar={() => setEmDecisao(undefined)}
+        />
+      )}
+    </>
+  );
+}

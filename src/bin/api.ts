@@ -122,6 +122,11 @@ import {
 } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
 // 18/10/2026. A FILA DE REVISAO das indicacoes: o menu que faltava no painel.
 import { registrarRotasDaFilaDeIndicacoes } from '../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+// 18/10/2026. A FILA DE MODERACAO do painel: "quem modera vai ser o
+// administrador, deve ir para a pagina de backoffice".
+import { registrarRotasDaFilaDeModeracao } from '../modules/moderation/adapters/http/admin-moderation-routes.js';
+import { criarFilaDeModeracaoRepository } from '../modules/moderation/adapters/persistence/kysely-fila-de-moderacao.js';
+import { FilaDeModeracao } from '../modules/moderation/application/fila-de-moderacao.js';
 import { criarFilaDeIndicacoesRepository } from '../modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
 import { FilaDeIndicacoes } from '../modules/professionals/application/fila-de-indicacoes.js';
 import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
@@ -444,6 +449,19 @@ export async function main(): Promise<void> {
     // A entrada aprovada pela fila nasce sem imagem; a projecao e a mesma do
     // painel, e por isso ela precisa da funcao.
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
+  // A FILA DE MODERACAO. `conferencias` e o MESMO detector de D59 das outras
+  // duas filas, pela mesma porta e pelo mesmo motivo: um segundo detector
+  // divergiria calado do primeiro. A composicao mora aqui, fora de
+  // `src/modules/`, onde `arquitetura/fronteira-de-modulo` nao se aplica.
+  const filaDeModeracao = new FilaDeModeracao({
+    repositorio: criarFilaDeModeracaoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    clock: systemClock,
+    conferencias: { errosDeTextoDeUsuario },
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -1096,6 +1114,9 @@ export async function main(): Promise<void> {
           // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
           // daqui sai so o que ela chama.
           registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas, contrato });
+          // A FILA DE MODERACAO (18/10/2026). `conversation_reports` gravava
+          // denuncia desde 28/09 e NENHUMA rota do painel a resolvia.
+          registrarRotasDaFilaDeModeracao(administrativo, { fila: filaDeModeracao, contrato });
         },
       );
     } else {
