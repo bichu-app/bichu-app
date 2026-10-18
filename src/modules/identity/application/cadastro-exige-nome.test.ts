@@ -90,6 +90,12 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
     rotacionar: () => naoDeveriaTerChegado('rotacionar'),
     atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
+    // DEFEITO DE MESCLA de origin/development (87979b6d): a mescla 75466890
+    // acrescentou as duas operacoes de foto a `IdentityRepository` e atualizou
+    // oito dubles, e deixou este e o de `perfil-exige-nome` sem elas -- a
+    // arvore nao COMPILAVA, e com ela a suite inteira nao rodava.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
     buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
     regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
     registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),

@@ -114,6 +114,10 @@ function montar(nomeAtual: string | null): Bancada {
       const nome = campos.displayName;
       return Promise.resolve(conta(nome === undefined ? nomeAtual : nome));
     },
+    // DEFEITO DE MESCLA de origin/development (87979b6d): ver a mesma nota em
+    // `cadastro-exige-nome.test.ts`. Sem estas duas a arvore nao compila.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
     buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
     regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
     registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),
