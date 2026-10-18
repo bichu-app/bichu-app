@@ -193,8 +193,16 @@ class AbaRede extends StatelessWidget {
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[AgendaDaRede()],
+      // **O reforco desce para a agenda, e nao sai da tela.**
+      //
+      // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
+      // e o cliente pediu em 17/10/2026 que o campo de busca fique acima dele
+      // e das abas. A casca nao tem como por o campo acima do proprio reforco:
+      // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
+      // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
+      // `text-secondary`, exatamente como aqui, so com a busca acima.
+      reforco: null,
+      filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
     );
   }
 }

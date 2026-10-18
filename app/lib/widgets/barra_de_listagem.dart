@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import 'bichu_field.dart';
+import 'botao_primario.dart';
 
 /// O topo de **toda pagina com listagem** do app: busca, filtro e ordenacao.
 ///
@@ -21,7 +22,7 @@ import 'bichu_field.dart';
 /// ## Anatomia
 ///
 /// ```
-/// [ campo de busca ..................... ] [ filtro 48 ] [ ordem 48 ]
+/// [ campo de busca ............... (x) ] [ filtro 48 ] [ ordem 48 ]
 /// <n> resultados · <ordem que DE FATO valeu>
 /// [ faixa: por que a ordem pedida nao pode ser cumprida ]   (condicional)
 /// [ nota: o alcance real da busca ]                          (condicional)
@@ -47,6 +48,61 @@ import 'bichu_field.dart';
 /// caberiam. **Consequencia declarada: o `Filtros` sai da barra de topo e
 /// desce para o corpo**, junto com os outros dois; o slot unico da direita
 /// fica **livre**, que e o que o portao da gaveta cobra.
+///
+/// ---------------------------------------------------------------------------
+/// ## NADA SE APLICA SOZINHO (decisao do cliente, 17/10/2026)
+///
+/// Nas palavras dele: *"Todos os filtros do app, nao devem ser filtrados
+/// automaticamente, voce deve colocar um botao para o usuario clicar e aplicar
+/// os filtros"*. O desenho que isto produz tem tres partes, e as tres moram
+/// **aqui**, uma vez, e nao em cada tela:
+///
+/// 1. **A folha de filtros guarda a escolha PENDENTE.** Tocar numa pastilha
+///    nao chama a tela e nao fecha a folha: ele mexe num mapa local. O
+///    `Aplicar` manda **todos** os grupos de uma vez, em
+///    [ControleDeFiltro.aoAplicar], e e o unico caminho de saida com efeito.
+///    Antes disso a lista continua mostrando o resultado anterior, de
+///    proposito.
+/// 2. **A busca tem o mesmo contrato, e a razao e coerencia.** Deixar o filtro
+///    manual e a busca automatica seria duas regras no mesmo topo de tela. O
+///    termo vale quando a pessoa aperta a lupa dentro do campo **ou** a tecla
+///    de busca do teclado (`TextInputAction.search`) -- as duas sao a mesma
+///    acao, e nao ha uma terceira. Digitar deixou de perguntar ao servidor:
+///    sumiu com isso a espera de 300/350 ms que cada tela carregava por conta.
+/// 3. **O botao habilitado E o aviso de pendencia.** Nao ha selo e nao ha
+///    faixa. `Aplicar` nasce desabilitado e so habilita quando a escolha
+///    pendente difere da aplicada; a lupa segue a mesma regra sobre o texto
+///    digitado.
+///
+/// **Isto contradiz, de proposito e num lugar so, a regra de "controle
+/// desabilitado nao serve" da secao seguinte.** Ali a regra fala de controle
+/// que **nunca** tem desfecho -- um filtro sem opcao, uma ordem com uma opcao
+/// so --, e a saida certa continua sendo nao desenha-lo. `Aplicar` sem nada
+/// pendente e outra coisa: e um controle que existe, cujo desfecho depende de
+/// um estado que a propria pessoa acabou de mexer, e cujo estado desabilitado
+/// e a informacao que o cliente pediu que ficasse visivel.
+///
+/// **O que a ordenacao faz, e por que ela nao mudou.** A folha de ordem tem
+/// **um** valor e uma opcao por linha: tocar numa linha E a decisao, e a folha
+/// fecha nesse toque. Nao existe estado intermediario para um botao de aplicar
+/// confirmar, e um `Aplicar` ali pediria dois toques para uma escolha so.
+/// Ordem tambem nao e filtro: ela nao tira nada da lista.
+///
+/// ---------------------------------------------------------------------------
+/// ## O recorte ativo e o APLICADO, e nunca o digitado
+///
+/// [ControleDeBusca.termoAplicado] e o termo que **produziu** a lista que esta
+/// na tela, e e ele que [_recorteAtivo] le.
+///
+/// **Isto consertou um defeito medido.** Ate 17/10 o componente lia
+/// `busca.controlador.text` no momento de construir, e nao escutava o
+/// controlador: o estado do topo da tela dependia de alguem chamar `setState`
+/// na tela certa, no instante certo. `Loja` chamava (e o comentario dela dizia
+/// por que); `Rede` chamava so no ramo de um caractere; `Perto` nao chamava em
+/// ramo nenhum -- entao entre a tecla e o fim da espera a barra decidia
+/// aparecer ou sumir pelo texto da tecla anterior. Com o termo aplicado no
+/// lugar do texto digitado o estado deixa de depender de quem escuta o que: o
+/// unico momento em que ele muda e o momento em que a lista muda.
 ///
 /// ---------------------------------------------------------------------------
 /// ## O que ele nao sabe
@@ -117,6 +173,7 @@ class BarraDeListagem extends StatelessWidget {
     this.filtro,
     this.ordenacao,
     this.substantivo = const SubstantivoDaListagem(),
+    this.buscaAcima = false,
   });
 
   /// Quantos itens o recorte atual tem **no servidor**, e nao quantos vieram
@@ -131,6 +188,25 @@ class BarraDeListagem extends StatelessWidget {
   /// listaria `pet`.
   final SubstantivoDaListagem substantivo;
 
+  /// O campo de busca foi desenhado pela TELA, acima deste widget, e a barra
+  /// nao o desenha de novo.
+  ///
+  /// Existe por um pedido do cliente de 17/10/2026 sobre a `Rede`: *"coloque o
+  /// campo de busca acima do texto e das abas proximos e encerrados"*. As abas
+  /// e a linha de reforco da secao ficam **entre** o campo e os dois icones, e
+  /// nenhum dos dois pode entrar neste arquivo -- a barra nao sabe o que e uma
+  /// aba, e as abas precisam continuar na tela mesmo nos estados em que a
+  /// barra nao e desenhada.
+  ///
+  /// **A barra continua recebendo [busca] mesmo assim**, e nao `null`: e dela
+  /// que sai [ControleDeBusca.termoAplicado], e sem o termo a barra sumiria no
+  /// exato caso que a secao de lista vazia manda ela ficar -- a pessoa buscou
+  /// e nao sobrou nada.
+  ///
+  /// Quem passa `true` desenha [CampoDeBuscaDaListagem] onde quiser, e decide
+  /// se ele aparece com [BarraDeListagem.desenha].
+  final bool buscaAcima;
+
   /// Ha pelo menos um controle com desfecho.
   bool get _temControle =>
       busca != null ||
@@ -138,9 +214,34 @@ class BarraDeListagem extends StatelessWidget {
       (ordenacao?.temEscolha ?? false);
 
   /// A pessoa recortou a lista de alguma forma.
+  ///
+  /// Le o termo **aplicado**, e nao o digitado. Ver a secao "O recorte ativo e
+  /// o APLICADO" na prosa desta classe: o texto do controlador era um estado
+  /// que este widget nao escutava.
   bool get _recorteAtivo =>
       (filtro?.ativos ?? 0) > 0 ||
-      (busca?.controlador.text.trim().isNotEmpty ?? false);
+      (busca?.termoAplicado?.trim().isNotEmpty ?? false);
+
+  /// Se a barra tem o que desenhar com estes controles.
+  ///
+  /// Publico e estatico porque a tela que sobe o campo de busca para cima do
+  /// proprio conteudo ([buscaAcima]) precisa da **mesma** decisao, e duas
+  /// copias dela divergem na primeira edicao.
+  static bool desenha({
+    required int total,
+    ControleDeBusca? busca,
+    ControleDeFiltro? filtro,
+    ControleDeOrdenacao? ordenacao,
+  }) {
+    final barra = BarraDeListagem(
+      total: total,
+      busca: busca,
+      filtro: filtro,
+      ordenacao: ordenacao,
+    );
+    if (!barra._temControle) return false;
+    return total != 0 || barra._recorteAtivo;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +251,7 @@ class BarraDeListagem extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final aviso = ordenacao?.porQueNaoEAPedida;
+    final comCampo = busca != null && !buscaAcima;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,8 +259,8 @@ class BarraDeListagem extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: <Widget>[
-            if (busca != null)
-              Expanded(child: _CampoDeBusca(busca: busca!))
+            if (comCampo)
+              Expanded(child: CampoDeBuscaDaListagem(busca: busca!))
             else
               const Spacer(),
             if (filtro?.temOpcao ?? false) ...<Widget>[
@@ -195,7 +297,7 @@ class BarraDeListagem extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e3),
           _FaixaDaOrdem(ordenacao: ordenacao!),
         ],
-        if (busca?.avisoDeAlcance != null) ...<Widget>[
+        if (comCampo && busca?.avisoDeAlcance != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e2),
           Text(
             busca!.avisoDeAlcance!,
@@ -267,20 +369,47 @@ enum AlcanceDaBusca {
 class ControleDeBusca {
   const ControleDeBusca({
     required this.controlador,
-    required this.aoMudar,
+    required this.aoAplicar,
     required this.alcance,
-    required this.exemplo,
+    required this.termoAplicado,
     this.rotulo = 'Buscar',
+    this.minimoDeCaracteres = 1,
   });
 
   final TextEditingController controlador;
-  final ValueChanged<String> aoMudar;
+
+  /// Chamado **so** quando a pessoa pede a busca: a lupa dentro do campo ou a
+  /// tecla de busca do teclado.
+  ///
+  /// Recebe o termo ja sem espaco nas pontas, ou `null` quando o campo ficou
+  /// vazio -- e `null` significa "volte para a lista inteira", nunca "nao
+  /// mexer".
+  final ValueChanged<String?> aoAplicar;
+
   final AlcanceDaBusca alcance;
 
-  /// O texto de exemplo dentro do campo.
-  final String exemplo;
+  /// O termo que **produziu** a lista que esta na tela agora, ou nulo.
+  ///
+  /// E o unico estado de busca que o componente le para decidir qualquer
+  /// coisa. O texto do controlador e intencao, e intencao nao recorta lista.
+  final String? termoAplicado;
 
+  /// O nome do campo. Vai na **dica dentro do campo** e no nome acessivel.
+  ///
+  /// **O rotulo visivel acima do campo saiu** por pedido do cliente de
+  /// 17/10/2026: *"Tire o texto do app buscar encontro (opcional), coloque o
+  /// texto no placeholder do campo buscar"*. Ele continua existindo como nome
+  /// acessivel -- ver [BichuField.rotuloVisivel], onde esta a razao.
   final String rotulo;
+
+  /// Quantas letras a rota exige antes de aceitar o termo.
+  ///
+  /// `minLength: 2` da `Rede` e da `Loja`, e o piso de trigrama de `Perto`,
+  /// deixavam cada tela decidir sozinha o que fazer com uma letra: uma
+  /// chamava `setState` e engolia, outra mandava e tomava 400. Aqui ele vira
+  /// estado do controle: abaixo do piso a lupa **nao habilita**, e o nome
+  /// acessivel dela diz quantas letras faltam.
+  final int minimoDeCaracteres;
 
   /// A frase que o componente escreve sob o campo, ou nulo.
   String? get avisoDeAlcance => switch (alcance) {
@@ -311,38 +440,51 @@ class GrupoDeFiltro {
     required this.opcoes,
     required this.selecionado,
     this.nota,
+    this.dependeDe,
   });
 
-  /// O identificador que volta em [ControleDeFiltro.aoEscolher].
+  /// O identificador que volta em [ControleDeFiltro.aoAplicar].
   final String chave;
 
   final String titulo;
   final List<OpcaoDeRecorte> opcoes;
 
-  /// O codigo escolhido, ou nulo para "qualquer um".
+  /// O codigo **aplicado**, ou nulo para "qualquer um".
   final String? selecionado;
 
   /// Uma linha de explicacao sob o titulo. `Perto` usa para dizer que o nivel
   /// de verificacao e **piso e nao igualdade**, que e a regra do contrato que
   /// ninguem adivinha olhando a lista.
   final String? nota;
+
+  /// A chave do grupo de quem as opcoes deste dependem, quando ha um.
+  ///
+  /// A `Loja` tem o caso: as subcategorias sao as **da categoria escolhida**.
+  /// Com a escolha virando pendente, trocar a categoria na folha deixaria uma
+  /// subcategoria da categoria anterior marcada, e o par iria para a rota
+  /// junto -- recorte que item nenhum satisfaz, e a lista voltaria vazia sem a
+  /// pessoa entender por que. Declarado aqui, a folha solta a escolha
+  /// pendente deste grupo (e para de desenha-lo) no instante em que a do pai
+  /// muda.
+  final String? dependeDe;
 }
 
 /// O icone de filtro e a folha que ele abre.
 class ControleDeFiltro {
-  const ControleDeFiltro({
-    required this.grupos,
-    required this.aoEscolher,
-    required this.aoLimpar,
-  });
+  const ControleDeFiltro({required this.grupos, required this.aoAplicar});
 
   final List<GrupoDeFiltro> grupos;
 
-  /// Chamado com a chave do grupo e o codigo escolhido. Codigo nulo limpa
-  /// aquele grupo.
-  final void Function(String chave, String? codigo) aoEscolher;
-
-  final VoidCallback aoLimpar;
+  /// Chamado **uma vez**, no `Aplicar`, com a escolha de todos os grupos
+  /// declarados: a chave do grupo para o codigo escolhido, ou `null` para
+  /// "qualquer um".
+  ///
+  /// Um callback por grupo era o que havia antes, e com ele cada toque numa
+  /// pastilha fechava a folha e recarregava a lista -- que e exatamente a
+  /// aplicacao automatica que o cliente recusou. Com o mapa inteiro de uma
+  /// vez, trocar tres filtros e **uma** chamada a rota, e a lista volta para
+  /// a primeira pagina uma vez, e nao tres.
+  final void Function(Map<String, String?> escolhas) aoAplicar;
 
   int get ativos => grupos.where((g) => g.selecionado != null).length;
 
@@ -401,21 +543,103 @@ class ControleDeOrdenacao {
 // As pecas
 // ---------------------------------------------------------------------------
 
-class _CampoDeBusca extends StatelessWidget {
-  const _CampoDeBusca({required this.busca});
+/// O campo de busca da listagem, com a lupa que APLICA o termo.
+///
+/// Publico porque a `Rede` o desenha fora da barra, acima do reforco da secao
+/// e das abas (ver [BarraDeListagem.buscaAcima]). Quem o desenha fora continua
+/// passando o mesmo [ControleDeBusca] a barra, e decide se ele aparece com
+/// [BarraDeListagem.desenha].
+class CampoDeBuscaDaListagem extends StatelessWidget {
+  const CampoDeBuscaDaListagem({required this.busca, super.key});
 
   final ControleDeBusca busca;
 
+  /// O termo digitado agora, sem espaco nas pontas.
+  String get _digitado => busca.controlador.text.trim();
+
+  /// O que a lupa manda: nulo quando o campo ficou vazio.
+  String? get _aAplicar => _digitado.isEmpty ? null : _digitado;
+
+  /// Ha termo digitado diferente do aplicado, e ele pode ir.
+  ///
+  /// Campo vazio sempre pode ir quando ha termo aplicado: limpar a busca e o
+  /// caminho de volta para a lista inteira, e o piso de caracteres da rota
+  /// nao vale para ele.
+  bool get _podeAplicar {
+    if (_aAplicar == busca.termoAplicado) return false;
+    if (_aAplicar == null) return true;
+    return _digitado.length >= busca.minimoDeCaracteres;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BichuField(
-      rotulo: busca.rotulo,
-      controlador: busca.controlador,
-      exemplo: busca.exemplo,
-      opcional: true,
-      aoMudar: busca.aoMudar,
-      acaoDeTeclado: TextInputAction.search,
-      correcaoAutomatica: false,
+    return ValueListenableBuilder<TextEditingValue>(
+      // **O componente escuta o controlador.** Sem isto a lupa habilitaria
+      // uma tecla atrasada, que e a mesma classe de defeito que o termo
+      // aplicado tirou de `_recorteAtivo`.
+      valueListenable: busca.controlador,
+      builder: (context, _, _) {
+        return BichuField(
+          rotulo: busca.rotulo,
+          rotuloVisivel: false,
+          controlador: busca.controlador,
+          exemplo: busca.rotulo,
+          aoMudar: null,
+          aoEnviar: (_) {
+            if (_podeAplicar) busca.aoAplicar(_aAplicar);
+          },
+          acaoDeTeclado: TextInputAction.search,
+          correcaoAutomatica: false,
+          sufixo: _LupaQueAplica(
+            habilitada: _podeAplicar,
+            rotulo: _rotuloDaLupa,
+            aoTocar: () => busca.aoAplicar(_aAplicar),
+          ),
+        );
+      },
+    );
+  }
+
+  /// O nome acessivel da lupa, que carrega o ESTADO e nao so o verbo.
+  ///
+  /// Quem usa leitor de tela nao ve o botao apagado: ouvir "Buscar" e nao
+  /// acontecer nada e o toque sem desfecho que este projeto persegue, e por
+  /// isso o motivo entra no nome.
+  String get _rotuloDaLupa {
+    if (_podeAplicar) return 'Buscar';
+    if (_aAplicar == null) return 'Buscar, nada digitado';
+    if (_aAplicar == busca.termoAplicado) return 'Buscar, a busca já é esta';
+    final faltam = busca.minimoDeCaracteres - _digitado.length;
+    return 'Buscar, faltam $faltam ${faltam == 1 ? 'letra' : 'letras'}';
+  }
+}
+
+/// A lupa dentro do campo. Desabilitada quando nao ha o que aplicar.
+class _LupaQueAplica extends StatelessWidget {
+  const _LupaQueAplica({
+    required this.habilitada,
+    required this.rotulo,
+    required this.aoTocar,
+  });
+
+  final bool habilitada;
+  final String rotulo;
+  final VoidCallback aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    return SizedBox(
+      width: BichuAlvoDeToque.min,
+      height: BichuAlvoDeToque.min,
+      child: IconButton(
+        onPressed: habilitada ? aoTocar : null,
+        tooltip: rotulo,
+        icon: Icon(
+          Icons.search,
+          color: habilitada ? cores.textPrimary : cores.textMuted,
+        ),
+      ),
     );
   }
 }
@@ -519,17 +743,83 @@ class _FaixaDaOrdem extends StatelessWidget {
   }
 }
 
-class _FolhaDeFiltros extends StatelessWidget {
+/// A folha de filtros, que guarda a escolha PENDENTE e so aplica no botao.
+///
+/// Ela e `Stateful` por isso: a escolha vive aqui, em [_pendente], ate o
+/// `Aplicar`. Enquanto a folha esta aberta a tela nao e chamada nenhuma vez, e
+/// a lista atras dela continua sendo a lista do recorte anterior -- que e o
+/// desenho pedido, e nao um atraso.
+class _FolhaDeFiltros extends StatefulWidget {
   const _FolhaDeFiltros({required this.filtro});
 
   final ControleDeFiltro filtro;
+
+  static const String rotuloDeAplicar = 'Aplicar';
+  static const String rotuloDeLimpar = 'Limpar';
+
+  @override
+  State<_FolhaDeFiltros> createState() => _EstadoDaFolhaDeFiltros();
+}
+
+class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
+  /// A escolha de cada grupo declarado, como ela esta **nesta folha**.
+  late final Map<String, String?> _pendente = <String, String?>{
+    for (final g in widget.filtro.grupos) g.chave: g.selecionado,
+  };
+
+  /// O que esta aplicado na lista agora.
+  Map<String, String?> get _aplicado => <String, String?>{
+        for (final g in widget.filtro.grupos) g.chave: g.selecionado,
+      };
+
+  /// Ha diferenca entre o que a folha mostra e o que a lista tem.
+  ///
+  /// **E este booleano que habilita o `Aplicar`**, e e so ele que avisa que ha
+  /// mudanca pendente: o cliente pediu o botao habilitado e nenhum selo.
+  bool get _mudou {
+    final aplicado = _aplicado;
+    return _pendente.keys.any((c) => _pendente[c] != aplicado[c]);
+  }
+
+  /// Ha alguma escolha pendente para o `Limpar` tirar.
+  bool get _temEscolha => _pendente.values.any((v) => v != null);
+
+  /// Os grupos desenhados: com opcao, e com o pai ainda no valor aplicado.
+  List<GrupoDeFiltro> get _visiveis {
+    final aplicado = _aplicado;
+    return widget.filtro.grupos.where((g) {
+      if (g.opcoes.isEmpty) return false;
+      final pai = g.dependeDe;
+      // Grupo dependente de um pai que a folha acabou de mexer: as opcoes
+      // desenhadas sao as do valor APLICADO do pai, e nao as do pendente.
+      // Desenha-las sobre outro pai ofereceria a escolha errada.
+      if (pai != null && _pendente[pai] != aplicado[pai]) return false;
+      return true;
+    }).toList(growable: false);
+  }
+
+  void _escolher(GrupoDeFiltro grupo, String? codigo) {
+    setState(() {
+      _pendente[grupo.chave] = codigo;
+      // Mexer no pai solta o filho: a escolha guardada pertencia ao pai
+      // anterior (ver `GrupoDeFiltro.dependeDe`).
+      for (final g in widget.filtro.grupos) {
+        if (g.dependeDe == grupo.chave) _pendente[g.chave] = null;
+      }
+    });
+  }
+
+  void _aplicar() {
+    final escolhas = Map<String, String?>.unmodifiable(_pendente);
+    Navigator.of(context).pop();
+    widget.filtro.aoAplicar(escolhas);
+  }
 
   @override
   Widget build(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     final cores = BichuColors.of(context).cores;
-    final comOpcao =
-        filtro.grupos.where((g) => g.opcoes.isNotEmpty).toList(growable: false);
+    final visiveis = _visiveis;
 
     return SafeArea(
       child: Padding(
@@ -546,7 +836,7 @@ class _FolhaDeFiltros extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    for (final grupo in comOpcao) ...<Widget>[
+                    for (final grupo in visiveis) ...<Widget>[
                       Text(grupo.titulo, style: textos.titleMedium),
                       if (grupo.nota != null) ...<Widget>[
                         const SizedBox(height: BichuEspaco.e1),
@@ -564,13 +854,13 @@ class _FolhaDeFiltros extends StatelessWidget {
                           for (final opcao in grupo.opcoes)
                             _Pastilha(
                               rotulo: opcao.rotulo,
-                              marcada: grupo.selecionado == opcao.codigo,
+                              marcada: _pendente[grupo.chave] == opcao.codigo,
                               // Tocar no que ja esta marcado **desmarca**. Sem
                               // isso o unico jeito de voltar a "qualquer um"
                               // seria limpar tudo.
-                              aoTocar: () => filtro.aoEscolher(
-                                grupo.chave,
-                                grupo.selecionado == opcao.codigo
+                              aoTocar: () => _escolher(
+                                grupo,
+                                _pendente[grupo.chave] == opcao.codigo
                                     ? null
                                     : opcao.codigo,
                               ),
@@ -583,11 +873,22 @@ class _FolhaDeFiltros extends StatelessWidget {
                 ),
               ),
             ),
-            if (filtro.ativos > 0)
+            // **`Limpar` mexe na folha, e nao na lista.** Ele desmarca tudo e
+            // o `Aplicar` continua sendo o unico caminho com efeito: duas
+            // formas de recortar a lista a partir da mesma folha era o que
+            // havia antes, e uma delas aplicava sozinha.
+            if (_temEscolha)
               TextButton(
-                onPressed: filtro.aoLimpar,
-                child: const Text('Limpar os filtros'),
+                onPressed: () => setState(
+                  () => _pendente.updateAll((_, _) => null),
+                ),
+                child: const Text(_FolhaDeFiltros.rotuloDeLimpar),
               ),
+            const SizedBox(height: BichuEspaco.e2),
+            BotaoPrimario(
+              rotulo: _FolhaDeFiltros.rotuloDeAplicar,
+              aoTocar: _mudou ? _aplicar : null,
+            ),
           ],
         ),
       ),

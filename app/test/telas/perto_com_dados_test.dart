@@ -796,9 +796,10 @@ void main() {
               total: 3,
               busca: ControleDeBusca(
                 controlador: controlador,
-                aoMudar: (_) {},
+                aoAplicar: (_) {},
                 alcance: AlcanceDaBusca.paginaCarregada,
-                exemplo: 'Nome',
+                termoAplicado: null,
+                rotulo: 'Nome',
               ),
             ),
           ),
@@ -829,9 +830,10 @@ void main() {
               total: 3,
               busca: ControleDeBusca(
                 controlador: controlador,
-                aoMudar: (_) {},
+                aoAplicar: (_) {},
                 alcance: AlcanceDaBusca.servidor,
-                exemplo: 'Nome',
+                termoAplicado: null,
+                rotulo: 'Nome',
               ),
             ),
           ),
@@ -864,6 +866,11 @@ void main() {
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Veterinário'));
+      await tester.pumpAndSettle();
+      // **A pastilha nao recorta nada sozinha** (decisao do cliente de
+      // 17/10): ate o `Aplicar` a folha esta aberta e a rota nao foi chamada.
+      expect(urls.last.queryParameters.containsKey('kind'), isFalse);
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['kind'], 'vet');
@@ -922,6 +929,8 @@ void main() {
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Passeador'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(chamadas, 2);
@@ -1150,6 +1159,8 @@ void main() {
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Veterinário'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['kind'], 'vet');

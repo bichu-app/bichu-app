@@ -104,7 +104,6 @@ class VitrineDaLoja extends StatefulWidget {
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
-  static const String exemploDaBusca = 'ração, coleira, shampoo';
 
   /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
   ///
@@ -350,27 +349,20 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     return ControleDeBusca(
       controlador: _buscaControlador,
       alcance: AlcanceDaBusca.servidor,
-      exemplo: VitrineDaLoja.exemploDaBusca,
       rotulo: 'Buscar produto',
-      aoMudar: (texto) {
-        final limpo = texto.trim();
-        // O termo de dois caracteres e o piso do contrato (`minLength: 2`).
-        // Mandar um caractere so produziria um 400 a cada primeira tecla.
-        if (limpo.isNotEmpty && limpo.length < 2) {
-          // `setState` mesmo sem recarregar: a barra le o texto do
-          // controlador para saber se o recorte esta ativo, e sem a
-          // reconstrucao ela decidiria com o texto anterior.
-          setState(() {});
-          return;
-        }
-        _trocarRecorte(
-          _recorte.com(
-            termo: limpo,
-            limparTermo: limpo.isEmpty,
-            pagina: 1,
-          ),
-        );
-      },
+      termoAplicado: _recorte.termo,
+      // O piso do contrato (`minLength: 2`). Ele deixou de ser um `setState`
+      // que engolia a primeira tecla: agora a lupa nao habilita abaixo dele,
+      // e o `setState` que remendava o recorte ativo saiu junto -- a barra le
+      // o termo APLICADO e nao precisa mais de quem a avise.
+      minimoDeCaracteres: 2,
+      aoAplicar: (termo) => _trocarRecorte(
+        _recorte.com(
+          termo: termo,
+          limparTermo: termo == null,
+          pagina: 1,
+        ),
+      ),
     );
   }
 
@@ -408,6 +400,11 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
           GrupoDeFiltro(
             chave: 'subcategory',
             titulo: 'Subcategoria',
+            // As opcoes sao as da categoria APLICADA. Com a escolha virando
+            // pendente, trocar a categoria na folha solta esta e esconde o
+            // grupo -- sem isso o par (categoria nova, subcategoria antiga)
+            // iria junto para a rota e a lista voltaria vazia.
+            dependeDe: 'category',
             selecionado: _recorte.subcategoria,
             opcoes: <OpcaoDeRecorte>[
               for (final s in subcategorias)
@@ -415,30 +412,21 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
             ],
           ),
       ],
-      aoEscolher: (chave, codigo) {
-        Navigator.of(context).pop();
-        // Trocar a categoria LIMPA a subcategoria, e a regra mora em
-        // `RecorteDaLoja.com`: a subcategoria antiga pertence a categoria
-        // antiga, e o par produziria uma lista vazia que a pessoa nao sabe
-        // explicar.
+      // Os dois niveis de uma vez, no `Aplicar`. Trocar a categoria LIMPA a
+      // subcategoria, e a regra continua morando em `RecorteDaLoja.com`: a
+      // subcategoria antiga pertence a categoria antiga, e o par produziria
+      // uma lista vazia que a pessoa nao sabe explicar.
+      aoAplicar: (escolhas) {
+        final categoria = escolhas['category'];
+        final subcategoria = escolhas['subcategory'];
         _trocarRecorte(
-          chave == 'subcategory'
-              ? _recorte.com(
-                  subcategoria: codigo,
-                  limparSubcategoria: codigo == null,
-                  pagina: 1,
-                )
-              : _recorte.com(
-                  categoria: codigo,
-                  limparCategoria: codigo == null,
-                  pagina: 1,
-                ),
-        );
-      },
-      aoLimpar: () {
-        Navigator.of(context).pop();
-        _trocarRecorte(
-          _recorte.com(limparCategoria: true, limparSubcategoria: true, pagina: 1),
+          _recorte.com(
+            categoria: categoria,
+            limparCategoria: categoria == null,
+            subcategoria: subcategoria,
+            limparSubcategoria: subcategoria == null,
+            pagina: 1,
+          ),
         );
       },
     );

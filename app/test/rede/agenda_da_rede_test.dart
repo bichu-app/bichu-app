@@ -312,6 +312,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pago'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
       expect(
         rede.chamadasA('GET /v1/network/events').last.url.queryParameters['admission'],
         'paid',
@@ -322,6 +324,9 @@ void main() {
       await tester.ensureVisible(find.text('Grande'));
       await tester.tap(find.text('Grande'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+
       final q = rede.chamadasA('GET /v1/network/events').last.url.queryParameters;
       expect(q['size'], 'G');
       expect(q['admission'], 'paid');
@@ -333,6 +338,8 @@ void main() {
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Hoje'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       expect(
         rede.chamadasA('GET /v1/network/events').last.url.queryParameters['when'],
@@ -417,7 +424,8 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField).first, 'border');
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
       var q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
       expect(q['q'], 'border');
@@ -425,6 +433,8 @@ void main() {
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aprovado'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
       expect(q['state'], 'approved');
@@ -481,6 +491,8 @@ void main() {
       });
       await abrirRede(tester, rede: rede, logado: false);
       await tester.enterText(find.byType(TextField).first, 'agility');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
 
       expect(find.text('Nenhum encontro com “agility”'), findsOneWidget);
@@ -580,27 +592,33 @@ void main() {
 
   group('busca', () {
     testWidgets(
-        'ISCA -- espera 300 ms, não pergunta com 1 caractere e não repete as '
-        'distâncias', (tester) async {
-      // ISCA: em `_controleDeBusca`, troque o `Timer(esperaDaBusca, ...)`
-      // pela chamada direta de `_trocarRecorte`. Cada tecla vira pergunta e
-      // este caso reprova na contagem.
+        'ISCA -- digitar nao pergunta nada; a lupa pergunta uma vez e nao '
+        'repete as distâncias', (tester) async {
+      // A ESPERA DE 300 ms SAIU, e com ela a razao de existir dela.
+      //
+      // Ate 17/10 a agenda perguntava 300 ms depois da ultima tecla, e este
+      // caso media a espera. O cliente decidiu que nada se aplica sozinho, e
+      // a busca passou a sair no toque: nao ha mais pergunta por tecla para o
+      // teto de 300 por hora contar.
+      //
+      // ISCA: em `BichuField`, dentro de `CampoDeBuscaDaListagem`, troque
+      // `aoMudar: null` por `aoMudar: (t) => busca.aoAplicar(t)`. Cada tecla
+      // vira pergunta e este caso reprova na contagem.
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede);
       final antes = rede.chamadasA('GET /v1/network/events').length;
       final pertoAntes = rede.chamadasA('GET /v1/network/events/nearby').length;
 
       final campo = find.byType(TextField).first;
-      await tester.enterText(campo, 'a');
-      await tester.pump(const Duration(milliseconds: 400));
+      for (final t in <String>['a', 'ag', 'agi', 'agil', 'agility']) {
+        await tester.enterText(campo, t);
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+      // Cinco teclas, nenhuma pergunta: a espera nao existe mais porque a
+      // pergunta nao sai da tecla.
       expect(rede.chamadasA('GET /v1/network/events'), hasLength(antes));
 
-      for (final t in <String>['ag', 'agi', 'agil', 'agility']) {
-        await tester.enterText(campo, t);
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      expect(rede.chamadasA('GET /v1/network/events'), hasLength(antes));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
 
       final depois = rede.chamadasA('GET /v1/network/events');
@@ -608,6 +626,94 @@ void main() {
       expect(depois.last.url.queryParameters['q'], 'agility');
       // As distancias nao dependem do termo: nenhuma pergunta nova.
       expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(pertoAntes));
+    });
+
+    testWidgets('um caractere so: a lupa nao habilita e diz o que falta',
+        (tester) async {
+      // `minLength: 2` no contrato. Antes isto era um `setState` que engolia
+      // a tecla em silencio; agora e estado do controle, e o motivo vai no
+      // nome acessivel -- quem usa leitor de tela nao ve o botao apagado.
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, logado: false);
+      final antes = rede.chamadasA('GET /v1/network/events').length;
+
+      await tester.enterText(find.byType(TextField).first, 'a');
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Buscar, faltam 1 letra'), findsOneWidget);
+      await tester.tap(find.byTooltip('Buscar, faltam 1 letra'));
+      await tester.pumpAndSettle();
+      expect(rede.chamadasA('GET /v1/network/events'), hasLength(antes));
+    });
+
+    testWidgets('o rotulo saiu do topo do campo e virou a dica DENTRO dele',
+        (tester) async {
+      // Pedido do cliente de 17/10: *"Tire o texto do app buscar encontro
+      // (opcional), coloque o texto no placeholder do campo buscar"*.
+      await abrirRede(tester, rede: redeComAgenda(), logado: false);
+
+      expect(find.text('Buscar encontro (opcional)'), findsNothing);
+      final campo = tester.widget<TextField>(find.byType(TextField).first);
+      expect(campo.decoration?.hintText, 'Buscar encontro');
+    });
+
+    testWidgets('sem rotulo visivel o campo CONTINUA tendo nome acessivel',
+        (tester) async {
+      // A dica desaparece na primeira letra digitada. Se ela fosse o unico
+      // nome do campo, o campo ficaria mudo exatamente quando ha conteudo
+      // para revisar (SC 3.3.2 e SC 4.1.2).
+      final handle = tester.ensureSemantics();
+      await abrirRede(tester, rede: redeComAgenda(), logado: false);
+
+      await tester.enterText(find.byType(TextField).first, 'agility');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel(RegExp('Buscar encontro')),
+        findsWidgets,
+        reason: 'REPROVA: o campo de busca com texto digitado nao tem nome '
+            'acessivel. A dica sumiu junto com o rotulo visivel.',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a busca espera o toque e o campo fica ACIMA das abas',
+        (tester) async {
+      // Pedido do cliente de 17/10: *"coloque o campo de busca acima do texto
+      // e das abas proximos e encerrados"*.
+      await abrirRede(tester, rede: redeComAgenda(), logado: false);
+
+      final campo = tester.getTopLeft(find.byType(TextField).first);
+      final reforco = tester.getTopLeft(
+        find.text('Os eventos e encontros de quem tem pet aqui perto de você.'),
+      );
+      final abas = tester.getTopLeft(find.byType(TabBar));
+
+      expect(
+        campo.dy,
+        lessThan(reforco.dy),
+        reason: 'REPROVA: o campo de busca nao esta acima do texto da secao.',
+      );
+      expect(
+        reforco.dy,
+        lessThan(abas.dy),
+        reason: 'REPROVA: o texto da secao nao esta acima das abas.',
+      );
+    });
+
+    testWidgets('as abas FICAM quando a barra nao e desenhada', (tester) async {
+      // A armadilha de ter subido a busca: se as abas tivessem ido para
+      // dentro da `BarraDeListagem`, elas sumiriam no estado em que a barra
+      // nao nasce -- e quem estivesse em `Encerrados` ficaria preso.
+      final rede = RedeDeTeste(<String, http.Response Function(http.Request)>{
+        'GET /v1/network/events': (_) =>
+            json200(pagina(const <Map<String, dynamic>>[])),
+      });
+      await abrirRede(tester, rede: rede, logado: false);
+
+      expect(find.byType(TextField), findsNothing);
+      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
     });
   });
 
@@ -622,6 +728,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text(opcao).last);
       await tester.tap(find.text(opcao).last);
+      await tester.pumpAndSettle();
+      // O `Aplicar` e o unico caminho com efeito desde 17/10.
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       return rede.chamadasA(caminho).last.url.queryParameters;
     }

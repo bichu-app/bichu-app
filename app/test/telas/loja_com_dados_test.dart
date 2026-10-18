@@ -575,6 +575,10 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'ração');
       await tester.pumpAndSettle();
+      // Digitar nao pergunta nada desde 17/10: a lupa pergunta.
+      expect(urls.last.queryParameters.containsKey('q'), isFalse);
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['q'], 'ração');
       expect(
@@ -596,9 +600,12 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'r');
       await tester.pumpAndSettle();
+      // `minLength: 2` no contrato: a lupa NAO habilita com uma letra, e o
+      // nome acessivel dela diz o que falta.
+      expect(find.byTooltip('Buscar, faltam 1 letra'), findsOneWidget);
+      await tester.tap(find.byTooltip('Buscar, faltam 1 letra'));
+      await tester.pumpAndSettle();
 
-      // `minLength: 2` no contrato: mandar um caractere produziria um 400 a
-      // cada primeira tecla.
       expect(urls.length, antes);
     });
   });
@@ -815,6 +822,8 @@ void main() {
       await tester.ensureVisible(campo);
       await tester.pumpAndSettle();
       await tester.enterText(campo, 'bola');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['q'], 'bola');
