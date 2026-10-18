@@ -186,8 +186,29 @@ void describe('busca de CEP do servidor', () => {
       });
     }) as unknown as typeof globalThis.fetch;
 
-    const r = await criarBuscaDeCep({ buscarNaRede: fetch, prazoMs: 5 }).buscar('05435000');
-    assert.equal(r.desfecho, 'indisponivel');
-    assert.equal(chamadas, 2, 'o prazo vale POR SERVICO: os dois sao tentados');
+    // `AbortSignal.timeout` usa temporizador SEM `ref`: ele NAO segura o laco
+    // de eventos. Medido com `node -e` -- `AbortSignal.timeout(80)` com um
+    // ouvinte de `abort` e nada mais no laco sai sem nunca abortar.
+    //
+    // Aqui isso e o unico jeito de a medicao terminar: a promessa do cliente
+    // falso so se resolve PELO `abort`. Num runner ocioso o processo drena
+    // antes dos 5 ms, a promessa fica pendente para sempre e o caso reprova
+    // com "Promise resolution is still pending but the event loop has already
+    // resolved" -- que foi o que derrubou a suite no CI (Linux, Node 22) em
+    // 18/10/2026, duas rodadas seguidas, sem reproduzir na maquina de quem
+    // escreveu.
+    //
+    // O temporizador abaixo e COM `ref` e segura o laco enquanto a medicao
+    // acontece. Ele nao participa do que se mede: o prazo continua sendo o
+    // `AbortSignal.timeout` que o codigo de producao instala, e `prazoMs: 5`
+    // continua sendo quem decide quando os dois servicos desistem.
+    const seguraOLaco = setTimeout(() => undefined, 60_000);
+    try {
+      const r = await criarBuscaDeCep({ buscarNaRede: fetch, prazoMs: 5 }).buscar('05435000');
+      assert.equal(r.desfecho, 'indisponivel');
+      assert.equal(chamadas, 2, 'o prazo vale POR SERVICO: os dois sao tentados');
+    } finally {
+      clearTimeout(seguraOLaco);
+    }
   });
 });

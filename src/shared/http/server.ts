@@ -161,6 +161,35 @@ export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
     // Teto de corpo na aplicação além do teto da borda: basta uma rota interna
     // nova para a borda ser contornada (ADR-0001).
     bodyLimit: opcoes.bodyLimitBytes ?? 1_048_576,
+    // O Ajv NÃO preenche campo ausente com o `default` do contrato.
+    //
+    // O padrão do Fastify é `useDefaults: true`, e com ele o Ajv ESCREVE no
+    // que chegou — corpo, query e parâmetro — o `default` de todo campo que
+    // faltou. Numa CRIAÇÃO isso parece inofensivo. Numa EDIÇÃO PARCIAL é o
+    // contrário do que a operação promete, e foi medido três vezes neste
+    // contrato (17/10/2026):
+    //
+    // 1. `updateNetworkEvent`/`updateAdminNetworkEvent` — quem aceitava só
+    //    porte `P` e corrigia o título saía aceitando os quatro;
+    // 2. `updateLostCase` — o repositório só preserva `share_to_public_list`
+    //    quando o campo chega indefinido, e com o padrão injetado ele nunca
+    //    chegava: editar a descrição devolvia à lista pública o caso que o
+    //    tutor tinha tirado dela;
+    // 3. `changeAdminNetworkEventAccess` — `visibility` nunca chegava
+    //    indefinida, o `nothing_to_change` não disparava, e mudar só a
+    //    `admission` de um encontro PRIVADO o tornava PÚBLICO.
+    //
+    // Os três com `200` e sem aviso, e toda trilha que tira os nomes dos
+    // campos de `Object.keys(corpo)` passava a nomear campo não tocado.
+    //
+    // **Desligar é seguro, e foi medido campo a campo**: os 17 `default`
+    // alcançáveis de corpo e os 42 de query são todos redundantes — o caso de
+    // uso já supre o mesmo valor (`?? TAMANHO_PADRAO`, `?? 0`, `?? 'public'`,
+    // `limiteEfetivo(...)`) ou nunca lê o campo. `portao-padrao-do-contrato`
+    // é o inventário dessa medição, e é ele que impede o defeito oposto: a
+    // partir daqui o `default` do contrato é DOCUMENTAÇÃO, e quem o acrescenta
+    // precisa escrever o padrão no código — o portão reprova quem não o fizer.
+    ajv: { customOptions: { useDefaults: false } },
     trustProxy: true,
     disableRequestLogging: false,
     logger: {
