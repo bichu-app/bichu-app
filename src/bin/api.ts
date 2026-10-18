@@ -106,6 +106,7 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
+import { criarCanalDeContatoDoChamador } from '../modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
@@ -863,6 +864,9 @@ export async function main(): Promise<void> {
         sugestoes: criarDirectorySuggestionRepository(db, ids),
         trilha,
         conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+        // A trava de conta validada, no SERVIDOR: a mesma condicao de
+        // `estadoParaCriarEncontro`, porque "validado" e uma regua so.
+        canal: criarCanalDeContatoDoChamador(db),
       }),
       contrato,
     });

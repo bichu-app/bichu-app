@@ -10329,6 +10329,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`): so
+             *     conta VALIDADA sugere. O tipo e o mesmo de `createNetworkEvent` e de
+             *     `openLostCase`, porque a pergunta e a mesma; o texto muda. A trava e
+             *     do SERVIDOR: a tela esconde o botao de quem nao validou, e o botao
+             *     escondido nao recusa quem chama a rota direto.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
