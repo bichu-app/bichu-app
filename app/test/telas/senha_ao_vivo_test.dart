@@ -491,6 +491,21 @@ void main() {
           headers: <String, String>{'content-type': 'application/problem+json'},
         );
 
+    // COLISAO DA MESCLA DE 18/10/2026, e a linha do nome e a correcao dela.
+    //
+    // Este caso nasceu em `chore/remover-quatro-textos-18-10` e o nome de
+    // exibicao virou OBRIGATORIO em `feat/nome-obrigatorio-cadastro`, no mesmo
+    // dia e em paralelo. O ramo do nome acrescentou esta mesma linha a TODOS os
+    // casos deste arquivo que ele viu (quatro); este caso ainda nao existia
+    // quando ele passou, e o ramo dos textos nao sabia do nome obrigatorio.
+    //
+    // **Cada ramo passava sozinho; a UNIAO reprovava.** Sem o nome o botao do
+    // rodape fica bloqueado, o cadastro nunca sai, a resposta 422 de `pwned`
+    // nunca chega e o caso media uma tela que nao foi a lugar nenhum -- a
+    // mensagem vinha vazia. Isto NAO e afrouxar a isca: ela continua cobrando
+    // a frase inteira depois do envio; o que mudou foi o formulario ter um
+    // campo obrigatorio a mais para que o envio aconteca.
+    await tester.enterText(campoNome, 'Marina Prado');
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'o gato subiu no telhado');
     await tester.pumpAndSettle();
