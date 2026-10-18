@@ -632,6 +632,21 @@ telas:
           - resp:status
           - resp:missing_to_publish
           - resp:version
+      # A BUSCA DE CEP DO FORMULARIO (18/10/2026). Ela entra em `telas`, e nao
+      # em `contrato_sem_tela`, porque a tela EXISTE e e esta mesma: quem chama
+      # e `admin/src/diretorio/FormularioDaEntrada.tsx`, para poupar digitacao
+      # de rua, bairro, cidade e UF. O ramo que trouxe a operacao nao a
+      # classificou, e sem esta entrada o portao de rastreabilidade reprova por
+      # "operacao administrativa fora da matriz" -- que e exatamente o defeito
+      # que ele existe para pegar.
+      - operationId: lookupAdminPostalCode
+        situacao: contrato
+        usa:
+          - path:postalCode
+          - resp:street
+          - resp:neighborhood
+          - resp:city
+          - resp:state
       - operationId: getAdminDirectoryEntry
         situacao: contrato
         usa:
