@@ -1110,7 +1110,35 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// o mesmo hash. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**,
 /// pelo procedimento escrito acima. Ha pelo menos quatro valores diferentes
 /// em ramos abertos hoje, e valor de ramo isolado nao sobrevive a uniao.
-const String _arvoreDasTelas = '50b766d431b5c70fdd06aae82dbd1e8cd251a154'; // MESCLA DO LOTE DE OITO (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA, reproduzindo o calculo deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato nem de ramo isolado. Soma as duas frentes do lote que tocam esta pasta: (a) o aviso ao tutor do achado, e (b) a PINTURA das imagens -- a logo do profissional no cartao, a faixa 16:9 do local e o retrato da propria pessoa com o selo. Os dois paragrafos acima ficaram INTEIROS, um de cada lado da colisao, por serem justificativas de intencoes diferentes. (antes, por ramo isolado: dd6582d172 e 49d7f18b03; base 45b6093e7f)
+///
+/// **Destravado em 18/10/2026 pela dinamica do escanear e pelos quatro
+/// defeitos conhecidos** (ramo `feat/escanear-e-quatro-defeitos`, base
+/// `3f9a57c2`). UM arquivo desta pasta muda:
+/// `escanear/tela_do_pet_da_tag.dart`, e as tres mudancas sao a dinamica que
+/// o cliente definiu -- *"se eu escanear o qr-code abre a pagina do pet. se o
+/// tutor marcou como perdido, abre a pagina para o usuario enviar mensagem ao
+/// tutor"*. (1) o modo dono deixou de ser um beco: ele chama
+/// `GET /tags/{code}/owner-context` e faz `pushReplacement` para
+/// `Rotas.detalheDoPet`. (2) com `is_lost: true` a tela virou a pagina de
+/// falar com o tutor, com campo de recado que vira `client_note` (campo que
+/// JA estava no contrato e nenhum caminho do app mandava). (3) o desfecho do
+/// aviso passou a sair de `owner_notified` em vez de afirmar sempre que o
+/// tutor recebeu o push.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o unico
+/// importe novo e `dart:async` (por `unawaited`) mais `go_router` e
+/// `widgets/bichu_field.dart`, e o portao estrutural de diretivas deste mesmo
+/// arquivo responde por isso e passou. A CAMERA continua atras da porta: este
+/// ramo nao encosta em `escanear/tela_leitor_de_qr.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
+/// a uniao. (antes: dd6582d172)
+const String _arvoreDasTelas = 'e675a974ef5ed14cbc6de3b783bd7de1b5fc2eca'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. Os dois paragrafos acima ficaram INTEIROS, um de cada lado da colisao, por serem justificativas de intencoes diferentes. (valores de ramo isolado, TODOS invalidos nesta uniao: 50b766d431, 3fa5040a93, 21a7386cb2, 31bc7c80, 6e82b4f1, 144331ca, 9e61895d, dd6582d172, 49d7f18b03; base 45b6093e7f)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

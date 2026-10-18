@@ -197,17 +197,60 @@ Future<void> abrirOPerfil(
 // conteudo de F3.0 (quais pets a lista oferece, nada pre-marcado, escolher
 // levar a F3.1 com o pet no topo, o pet ja perdido fora do grupo de opcoes).
 //
-// PRECISA DE DECISAO DO CLIENTE, e nao de conserto meu, porque sao dois
-// produtos diferentes: ou F3.0 recupera uma porta -- e os quatro casos
-// voltam, trocando `_f30SemPorta` por `false` e a entrada pela porta nova --,
-// ou F3.0 se aposenta, e ai `TelaDeQuemEOCaso`, a rota e estes quatro casos
-// saem juntos, de proposito e num commit que diga isso. Nao escolhi por ele.
+// DECIDIDO EM 18/10/2026: **F3.0 SE APOSENTA.** Os quatro casos continuam
+// aqui, parados, com o motivo e a decisao escritos -- e nao apagados.
+//
+// O paragrafo anterior dizia "precisa de decisao do cliente, e nao de conserto
+// meu". A decisao foi tomada depois de MEDIR o que o aplicativo faz hoje com
+// dois ou mais pets, e a medicao esta escrita como caso no grupo `a escolha
+// com dois ou mais pets` (`com 2+ pets a escolha JA aconteceu ...`). O que ela
+// mostra, com tres pets elegiveis na conta:
+//
+//   `Perfil` > `Meus pets` -> cartao do pet -> T.1 do PET TOCADO -> `Marcar
+//   como perdido` -> F3.1 **ligada aquele pet**, com o nome dele no topo e o
+//   dos outros dois fora da tela.
+//
+// Isto e, **a escolha de qual animal ja aconteceu**, e aconteceu antes do
+// fluxo, por navegacao. O criterio 1 da BICHUS-21 criou F3.0 "para prevenir o
+// deslize de marcar o pet errado quando ha mais de um" -- e o deslize que ele
+// previne e o de uma acao de LISTA, que era onde a porta antiga morava
+// (`Perfil` > `Meus pets`). Essa porta saiu por decisao do cliente em 18/10:
+// as acoes de criar subiram para a barra e a acao de perdido desceu para a
+// pagina do animal. Na pagina da Nina nao ha deslize possivel.
+//
+// POR QUE NAO REPOR A PORTA, que era a leitura oposta. Repor significaria
+// acrescentar uma SEGUNDA porta para o mesmo fluxo, numa tela que nao sabe de
+// qual animal se fala -- e `meus_pets_test.dart` hoje REPROVA exatamente isso,
+// com estas palavras: *"duas portas para o mesmo fluxo fazem a escolha de qual
+// animal voltar a ser uma pergunta justamente onde ela nao precisa ser
+// feita"*. Nao e um conserto, e um produto diferente, e ele custaria o defeito
+// que a outra isca ja cobra.
+//
+// O QUE A APOSENTADORIA AINDA NAO FEZ, dito e nao escondido: `TelaDeQuemEOCaso`
+// e `Rotas.escolherPetPerdido` **continuam no aplicativo**. Tira-las exige
+// `app/lib/roteamento/rotas.dart`, que esta em reestruturacao por outra frente
+// nesta mesma rodada, e remover rota registrada enquanto outro ramo a reescreve
+// e como se perde trabalho alheio. A rota ficar registrada nao custa nada a
+// quem usa: nenhum `push` do produto a alcanca (`grep -rn 'escolherPetPerdido'
+// app/lib` acha so a declaracao), e `meus_pets_test.dart` cobra que ela
+// continue registrada justamente para a porta de T.1 nao empurrar para o
+// vazio. A remocao e um commit proprio, da sessao que mexe no roteador.
 //
 // O RESTO DO ARQUIVO FOI REPONTADO e mede o fluxo pela porta nova: nove casos
 // entram por `abrirAPaginaDoPet` e seguem para F3.1 -- que e exatamente onde
 // a porta antiga tambem caia quando havia UM pet elegivel, porque ali ela
 // tambem saltava F3.0 (criterio 1). Para esses nove nada se perdeu: mesmo
 // destino, mesma afirmacao, porta nova.
+/// Os casos de F3.0 ficam PARADOS, e desde 18/10/2026 por DECISAO e nao por
+/// pendencia.
+///
+/// O nome continua o mesmo porque o fato continua o mesmo -- F3.0 nao tem
+/// porta --, e o que mudou e que ninguem mais espera que ela volte. Ver o
+/// bloco acima: a escolha de qual animal passou a acontecer por navegacao, e a
+/// medicao que sustenta isso e um caso vivo deste arquivo.
+///
+/// **Trocar isto por `false` nao ressuscita os casos**: sem porta eles
+/// reprovam por nao achar a tela. Quem reabrir F3.0 reabre a porta primeiro.
 const bool _f30SemPorta = true;
 
 /// Um `open_case_id` plausivel, para o caso do criterio 13.
@@ -712,6 +755,73 @@ void main() {
   // F3.0 — a escolha com dois ou mais pets
   // -------------------------------------------------------------------------
   group('a escolha com dois ou mais pets', () {
+    // -----------------------------------------------------------------------
+    // A MEDICAO QUE APOSENTOU F3.0 (18/10/2026)
+    // -----------------------------------------------------------------------
+    //
+    // **Este caso NAO esta parado**, e e o unico deste grupo que roda. Ele
+    // mede o que o aplicativo faz hoje com dois ou mais pets elegiveis, que e
+    // a pergunta que a decisao sobre F3.0 dependia de responder.
+    //
+    // Tres pets na conta, todos elegiveis. A pessoa entra pela pagina do
+    // SEGUNDO (`p-2`, Bili) -- o caminho real e cartao de `Meus pets` ->
+    // T.1 --, toca em `Marcar como perdido`, e o fluxo nasce ligado a Bili:
+    // F3.0 nao aparece, F3.1 traz o nome dele no topo, e Rex e Thor nao estao
+    // na tela.
+    //
+    // E por isso que F3.0 se aposentou em vez de recuperar uma porta: a
+    // escolha de qual animal **ja aconteceu**, por navegacao, antes do fluxo
+    // comecar. Ver o bloco `PARADO, E NAO APAGADO` no topo do arquivo.
+    //
+    // O QUE ESTE CASO REPROVA SE O PRODUTO MUDAR: se alguem religar uma porta
+    // de LISTA para este fluxo, o pet deixa de vir ligado e as duas ultimas
+    // assercoes caem. A decisao de aposentar F3.0 deixa de valer no mesmo
+    // instante, e este caso e quem avisa.
+    testWidgets('com 2+ pets a escolha JA aconteceu: F3.1 nasce ligada ao pet '
+        'da pagina', (tester) async {
+      await abrirAPaginaDoPet(
+        tester,
+        petId: 'p-2',
+        rede: servidorCom(<Map<String, dynamic>>[
+          pet(id: 'p-1', nome: 'Rex'),
+          pet(id: 'p-2', nome: 'Bili'),
+          pet(id: 'p-3', nome: 'Thor'),
+        ]),
+      );
+      await tocar(tester, _porta);
+
+      expect(
+        find.byType(TelaDeQuemEOCaso),
+        findsNothing,
+        reason: 'REPROVA: F3.0 apareceu com a pessoa vindo da pagina de UM '
+            'animal. Perguntar "de quem e o caso?" a quem acabou de abrir a '
+            'pagina do Bili e perguntar o que ela ja respondeu.',
+      );
+      expect(
+        find.text(TelaOndeEQuando.perguntaDeOnde),
+        findsOneWidget,
+        reason: 'REPROVA: a acao da pagina do pet nao levou a F3.1. Com F3.0 '
+            'fora do caminho, F3.1 e o primeiro passo do fluxo.',
+      );
+      expect(
+        find.text('Bili'),
+        findsOneWidget,
+        reason: 'REPROVA: F3.1 nao nasceu ligada ao pet da pagina. E o '
+            'deslize do criterio 1 da BICHUS-21 -- marcar o pet errado quando '
+            'ha mais de um -- acontecendo pelo caminho novo, e ele seria '
+            'motivo para repor F3.0 em vez de aposenta-la.',
+      );
+      for (final outro in <String>['Rex', 'Thor']) {
+        expect(
+          find.text(outro),
+          findsNothing,
+          reason: 'REPROVA: "$outro" esta na tela do caso do Bili. Dois nomes '
+              'de animal no topo de F3.1 e a pergunta de F3.0 voltando pela '
+              'porta de tras, sem radio e sem `Continuar`.',
+        );
+      }
+    });
+
     testWidgets('nasce sem nada marcado, com o motivo do botao desabilitado',
         (tester) async {
       await abrirOPerfil(

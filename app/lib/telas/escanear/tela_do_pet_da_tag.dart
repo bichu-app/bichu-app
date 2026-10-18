@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../api/falhas.dart';
@@ -7,39 +10,74 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/pets_api.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/saida_da_tela.dart';
 
-/// O que a tela do codigo resolvido mostra, e por que ela tem **duas** formas
-/// e nao tres.
+/// O que a tela do codigo resolvido mostra, e por que ela tem **tres** formas.
 ///
-/// `viewer` chega com tres valores (`owner`, `authenticated_other`,
-/// `anonymous`) e o contrato diz, por escrito, que os dois ultimos **veem
-/// exatamente a mesma coisa**: a excecao permanente nao distingue quem esta
-/// logado (criterio 7 da BICHUS-57). Tratar os tres iguais apaga o modo dono;
-/// inventar uma terceira forma cria distincao que o servidor nao faz e que
-/// ninguem pediu. Sao duas.
+/// ## Eram duas, e viraram tres por decisao do cliente (18/10/2026)
+///
+/// O paragrafo que estava aqui dizia "sao duas", e ele estava certo enquanto a
+/// unica pergunta era `viewer`. O cliente definiu a dinamica do escanear com
+/// estas palavras: *"carrega a pagina do proprio pet. a dinamica e se eu
+/// escanear o qr-code abre a pagina do pet. se o tutor marcou como perdido,
+/// abre a pagina para o usuario enviar mensagem ao tutor."*
+///
+/// Isso faz de `lost.is_lost` uma bifurcacao de DESTINO, e nao mais so de
+/// faixa: com caso aberto, a tela que o achador precisa e a de falar com o
+/// tutor, e nao uma ficha com um botao no fim da rolagem. A terceira forma nao
+/// e uma distincao nova de `viewer` -- e a mesma pessoa (quem nao e o dono)
+/// diante de um fato diferente do animal.
+///
+/// ## `viewer` continua com tres valores e duas leituras
+///
+/// `owner`, `authenticated_other` e `anonymous`, e o contrato diz por escrito
+/// que os dois ultimos **veem exatamente a mesma coisa**: a excecao permanente
+/// nao distingue quem esta logado (criterio 7 da BICHUS-57). Tratar os tres
+/// iguais apagaria o modo dono; distinguir os dois ultimos criaria diferenca
+/// que o servidor nao faz.
 enum FormaDaTelaDaTag {
   /// `F2.3`: o tutor apontou a camera para a plaquinha do proprio pet.
+  ///
+  /// **Esta forma e de passagem.** Ela carrega a pagina do pet (`T.1`) assim
+  /// que `GET /tags/{code}/owner-context` responde o `pet_id` -- o que o
+  /// cliente pediu com as palavras "carrega a pagina do proprio pet". O que se
+  /// ve aqui e a ficha enquanto a ida acontece, e ela e o que fica quando
+  /// aquela chamada falha.
   modoDono,
 
-  /// `F2.2`: quem escaneou nao e o dono. E a mesma peca da `F4.1` da web.
-  achouOPet;
+  /// `F2.2`: quem escaneou nao e o dono, e **nao ha caso aberto**. E a mesma
+  /// peca da `F4.1` da web.
+  achouOPet,
 
-  static FormaDaTelaDaTag de(QuemEscaneou quem) {
+  /// Quem escaneou nao e o dono e **o tutor marcou o pet como perdido**.
+  ///
+  /// A pagina de falar com o tutor: identificacao do animal em cima (quem esta
+  /// com o bicho no colo confirma pela cara dele), e a mensagem como a acao
+  /// principal, acima dos sinais e do cartao de manejo.
+  mensagemAoTutor;
+
+  static FormaDaTelaDaTag de(QuemEscaneou quem, {required bool estaPerdido}) {
     return switch (quem) {
       QuemEscaneou.dono => FormaDaTelaDaTag.modoDono,
-      // Os dois caem aqui **de proposito**, e nao por esquecimento: o caminho
-      // conservador serve o achador. O dono que caisse aqui por engano perde
-      // uma tela; o achador que caisse no modo dono perde o resgate.
-      QuemEscaneou.outroLogado ||
-      QuemEscaneou.anonimo => FormaDaTelaDaTag.achouOPet,
+      // Os dois caem no caminho do achador **de proposito**, e nao por
+      // esquecimento: o caminho conservador serve o achador. O dono que caisse
+      // aqui por engano perde uma tela; o achador que caisse no modo dono
+      // perde o resgate.
+      QuemEscaneou.outroLogado || QuemEscaneou.anonimo => estaPerdido
+          ? FormaDaTelaDaTag.mensagemAoTutor
+          : FormaDaTelaDaTag.achouOPet,
     };
   }
+
+  /// Se esta forma e a de quem **nao** e o dono, nas duas variantes.
+  bool get eDoAchador => this != FormaDaTelaDaTag.modoDono;
 }
 
 /// F2.2 e F2.3: o que a pessoa ve depois de o codigo da tag resolver.
@@ -198,7 +236,10 @@ class TelaDoPetDaTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final forma = FormaDaTelaDaTag.de(tag.quemEscaneou);
+    final forma = FormaDaTelaDaTag.de(
+      tag.quemEscaneou,
+      estaPerdido: tag.estaPerdido,
+    );
     final cores = BichuColors.of(context).cores;
 
     return Scaffold(
@@ -236,7 +277,8 @@ class TelaDoPetDaTag extends StatelessWidget {
                   // Repetir "Este e o Thor" acima dela seria a mesma frase duas
                   // vezes no topo da tela.
                   FormaDaTelaDaTag.modoDono => tag.nomeDoPet,
-                  FormaDaTelaDaTag.achouOPet => tituloDoAchadorDe(
+                  FormaDaTelaDaTag.achouOPet ||
+                  FormaDaTelaDaTag.mensagemAoTutor => tituloDoAchadorDe(
                     tag.nomeDoPet,
                   ),
                 },
@@ -245,13 +287,28 @@ class TelaDoPetDaTag extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayLarge
                     ?.copyWith(color: cores.textPrimary),
               ),
+              // A MENSAGEM AO TUTOR SOBE PARA CA quando ha caso aberto, e a
+              // posicao e a decisao do cliente de 18/10: a tela de um pet
+              // perdido e a tela de falar com o tutor. Acima dela ficam a foto
+              // e o nome, que e o que a pessoa com o animal no colo usa para
+              // confirmar que e o mesmo bicho; abaixo ficam os sinais e o
+              // cartao de manejo, que ela le depois de ter avisado.
+              //
+              // Antes, o botao era o ULTIMO elemento da rolagem nas duas
+              // formas do achador -- depois do cartao de sinais e do de manejo.
+              if (forma == FormaDaTelaDaTag.mensagemAoTutor) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e6),
+                _AvisoAoTutor(tag: tag, codigo: codigo, comRecado: true),
+              ],
               const SizedBox(height: BichuEspaco.e4),
               _CartaoDeSinais(tag: tag),
               if (_temTexto(tag.notasDeCuidado)) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e4),
                 _CartaoDeManejo(tag: tag),
               ],
-              // O BOTAO DE AVISAR O TUTOR, so na forma do achador.
+              // O BOTAO DE AVISAR O TUTOR, na forma do achador SEM caso
+              // aberto. Com caso aberto ele ja apareceu acima, com o campo de
+              // recado -- e ele nunca aparece duas vezes.
               //
               // **No modo dono ele nao aparece, e nao e economia de tela:** o
               // dono avisando a si mesmo geraria um aviso real, gastaria o
@@ -260,6 +317,15 @@ class TelaDoPetDaTag extends StatelessWidget {
               if (forma == FormaDaTelaDaTag.achouOPet) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e6),
                 _AvisoAoTutor(tag: tag, codigo: codigo),
+              ],
+              // A PORTA DO DONO PARA A PAGINA DO PROPRIO PET.
+              //
+              // Era aqui que o dono nao tinha acao nenhuma, e foi o que o
+              // cliente viu: ele escaneou a coleira do proprio animal e chegou
+              // numa tela de leitura, sem caminho para lugar nenhum.
+              if (forma == FormaDaTelaDaTag.modoDono) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e6),
+                _PaginaDoPetDoDono(codigo: codigo, nome: tag.nomeDoPet),
               ],
             ],
           ),
@@ -288,12 +354,14 @@ class TelaDoPetDaTag extends StatelessWidget {
         tag.estaPerdido
             ? faixaDeDonoComCasoDe(tag.nomeDoPet, tag.perdidoDesde)
             : faixaDeDonoDe(tag.nomeDoPet),
-      // Quem nao e o dono so ve faixa quando **ha** caso aberto. Sem caso, a
-      // tela do achador comeca pelo nome, como a F4.1.
-      FormaDaTelaDaTag.achouOPet =>
-        tag.estaPerdido
-            ? faixaDePerdidoDe(tag.nomeDoPet, tag.perdidoDesde)
-            : null,
+      // Quem nao e o dono so ve faixa quando **ha** caso aberto -- e com caso
+      // aberto a forma JA e `mensagemAoTutor`. Sem caso, a tela do achador
+      // comeca pelo nome, como a F4.1.
+      FormaDaTelaDaTag.mensagemAoTutor => faixaDePerdidoDe(
+        tag.nomeDoPet,
+        tag.perdidoDesde,
+      ),
+      FormaDaTelaDaTag.achouOPet => null,
     };
     if (texto == null) return const <Widget>[];
     return <Widget>[
@@ -491,10 +559,25 @@ enum _EstadoDoAviso { pronto, enviando, avisado, naFila, falhou }
 /// chave e da ACAO ("este achador esta avisando sobre esta plaquinha"), e nao
 /// da tentativa; e e a mesma que vai para a fila quando a rede cai.
 class _AvisoAoTutor extends StatefulWidget {
-  const _AvisoAoTutor({required this.tag, required this.codigo});
+  const _AvisoAoTutor({
+    required this.tag,
+    required this.codigo,
+    this.comRecado = false,
+  });
 
   final TagResolvida tag;
   final String codigo;
+
+  /// Se o campo de RECADO entra, e com ele o rotulo de "enviar mensagem".
+  ///
+  /// Verdadeiro na forma [FormaDaTelaDaTag.mensagemAoTutor], que e a pagina de
+  /// falar com o tutor de um pet perdido. O campo vira `client_note` no corpo
+  /// de `POST /tags/{code}/found-reports` -- ele **ja esta no contrato**
+  /// (`FoundReportFromTagInput`, maxLength 500) e nenhum caminho do app o
+  /// mandava. A mensagem chega ao tutor dentro da conversa mediada que o
+  /// proprio aviso abre, e e por isso que ela nao precisa de rota nova para
+  /// SAIR daqui.
+  final bool comRecado;
 
   /// O rotulo do botao, que muda quando este aparelho **ja avisou** nas
   /// ultimas 24 h (`already_notified`).
@@ -503,16 +586,58 @@ class _AvisoAoTutor extends StatefulWidget {
   /// `code`+`finder_identity` e `group_notification`, ou seja, o segundo aviso
   /// e anexado a conversa e nunca descartado. Quem achou o animal de novo, ou
   /// tem algo novo a dizer, precisa poder falar.
-  static String rotuloDe(TagResolvida tag) =>
-      tag.jaAvisouDesteAparelho ? 'Avisar o tutor de novo' : 'Avisar o tutor';
+  static String rotuloDe(TagResolvida tag, {bool comRecado = false}) {
+    if (comRecado) {
+      return tag.jaAvisouDesteAparelho
+          ? 'Enviar outra mensagem ao tutor'
+          : 'Enviar mensagem ao tutor';
+    }
+    return tag.jaAvisouDesteAparelho ? 'Avisar o tutor de novo' : 'Avisar o tutor';
+  }
 
-  /// O texto do desfecho bom.
+  /// O titulo do bloco de mensagem, na forma de pet perdido.
+  static const String tituloDaMensagem = 'Fale com o tutor';
+
+  /// O rotulo do campo de recado.
   ///
-  /// Afirma no passado, e nao promete: quando esta frase aparece, o servidor
-  /// respondeu 201. `owner_notified: false` **nao** muda este texto -- ver o
-  /// campo [AvisoDoAchadorCriado.tutorAvisado].
+  /// **Opcional em texto, e nao por asterisco** (UX 13): o caminho principal
+  /// desta operacao continua sendo um toque e zero campos, e quem esta com o
+  /// animal na rua nao pode ser obrigado a redigir nada para avisar.
+  static const String rotuloDoRecado = 'Sua mensagem';
+
+  static const String ajudaDoRecado =
+      'Conte onde o animal esta e como o tutor pode te encontrar. O endereco '
+      'exato nao e necessario.';
+
+  /// O teto do campo, que e o do contrato (`client_note`, maxLength 500).
+  static const int limiteDoRecado = 500;
+
+  /// O texto do desfecho bom **quando a entrega saiu**
+  /// (`owner_notified: true`).
+  ///
+  /// Afirma no passado porque, quando esta frase aparece, o servidor respondeu
+  /// 201 **e** disse que a entrega ao tutor foi enfileirada.
   static const String textoDeAvisado =
       'O tutor foi avisado. Ele recebeu o aviso no celular agora.';
+
+  /// O texto do desfecho bom **quando a entrega NAO saiu**
+  /// (`owner_notified: false`).
+  ///
+  /// Este texto nasceu em 18/10/2026, e o motivo e o defeito que ele fecha. A
+  /// tela mostrava [textoDeAvisado] sempre -- inclusive com
+  /// `owner_notified: false` --, e o comentario que estava aqui dizia, com
+  /// estas palavras, que o campo "nao muda este texto". Medido: a resposta
+  /// devolvia `true` sem nenhuma entrega enfileirada, e a tela afirmava que o
+  /// telefone do tutor apitou. Quem acredita que avisou solta o animal e vai
+  /// embora.
+  ///
+  /// O que esta frase afirma e o que de fato aconteceu: o recado esta
+  /// registrado no caso do animal, e o tutor o encontra ao abrir o aplicativo.
+  /// Ela **nao** diz "talvez" e **nao** diz "falhou" -- nenhuma das duas e
+  /// verdade, e as duas fariam a pessoa ir embora.
+  static const String textoDeRegistrado =
+      'Seu recado esta registrado no caso do animal, e o tutor o ve ao abrir '
+      'o Bichu. Se puder, fique por perto.';
 
   /// O texto de quando o aviso foi para a fila.
   ///
@@ -530,8 +655,26 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
   /// A chave da ACAO. Ver o cabecalho da classe.
   final String _chave = ApiClient.novaChaveDeIdempotencia();
 
+  /// O recado que vira `client_note`. Existe tambem quando o campo nao e
+  /// desenhado, e ai vai vazio -- um controlador por forma seria dois caminhos
+  /// para o mesmo corpo.
+  final TextEditingController _recado = TextEditingController();
+
   _EstadoDoAviso _estado = _EstadoDoAviso.pronto;
   String? _erro;
+
+  /// **Se a ENTREGA ao tutor foi enfileirada**, lido de `owner_notified`.
+  ///
+  /// Nulo enquanto ninguem avisou, e nulo tambem no desfecho da fila offline
+  /// -- la nao houve resposta nenhuma, e inventar um valor aqui seria a
+  /// mesma classe de mentira que este campo existe para desfazer.
+  bool? _entregaSaiu;
+
+  @override
+  void dispose() {
+    _recado.dispose();
+    super.dispose();
+  }
 
   Future<void> _avisar() async {
     final escopo = Escopo.of(context);
@@ -541,9 +684,16 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
     });
 
     try {
-      await escopo.tags.avisarOTutor(widget.codigo, idempotencyKey: _chave);
+      final criado = await escopo.tags.avisarOTutor(
+        widget.codigo,
+        idempotencyKey: _chave,
+        recadoDoAchador: widget.comRecado ? _recado.text : null,
+      );
       if (!mounted) return;
-      setState(() => _estado = _EstadoDoAviso.avisado);
+      setState(() {
+        _estado = _EstadoDoAviso.avisado;
+        _entregaSaiu = criado.tutorAvisado;
+      });
     } on FalhaDeConexao {
       // A fila, com a MESMA chave. O corpo e o mesmo que a chamada mandaria,
       // montado pela funcao do cliente e nao a mao aqui.
@@ -552,7 +702,12 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
           id: ApiClient.novaChaveDeIdempotencia(),
           metodo: 'POST',
           caminho: TagsApi.caminhoDoAviso(widget.codigo),
-          corpo: TagsApi.corpoDoAviso(),
+          // O MESMO corpo que a chamada mandaria, recado incluido: enfileirar
+          // sem o texto entregaria ao tutor um aviso mudo, e a pessoa teria
+          // digitado para o vazio.
+          corpo: TagsApi.corpoDoAviso(
+            recadoDoAchador: widget.comRecado ? _recado.text : null,
+          ),
           idempotencyKey: _chave,
           criadaEm: DateTime.now(),
         ),
@@ -584,8 +739,13 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
   @override
   Widget build(BuildContext context) {
     return switch (_estado) {
-      _EstadoDoAviso.avisado => const _DesfechoDoAviso(
-          texto: _AvisoAoTutor.textoDeAvisado,
+      // **O texto do desfecho sai de `owner_notified`.** Era um unico texto
+      // para os dois valores do campo, e enquanto foi, esta tela afirmava que
+      // o telefone do tutor apitou sem nada ter sido enfileirado.
+      _EstadoDoAviso.avisado => _DesfechoDoAviso(
+          texto: _entregaSaiu == true
+              ? _AvisoAoTutor.textoDeAvisado
+              : _AvisoAoTutor.textoDeRegistrado,
           peso: PesoDaFaixa.informativo,
         ),
       _EstadoDoAviso.naFila => const _DesfechoDoAviso(
@@ -601,8 +761,35 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
               FaixaDeAviso(texto: _erro!),
               const SizedBox(height: BichuEspaco.e4),
             ],
+            // O BLOCO DE MENSAGEM, so na pagina de pet perdido.
+            if (widget.comRecado) ...<Widget>[
+              Text(
+                _AvisoAoTutor.tituloDaMensagem,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: BichuColors.of(context).cores.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              BichuField(
+                rotulo: _AvisoAoTutor.rotuloDoRecado,
+                controlador: _recado,
+                ajuda: _AvisoAoTutor.ajudaDoRecado,
+                // **Opcional, e dito no rotulo.** O caminho principal desta
+                // operacao e um toque e zero campos; exigir texto faria o
+                // aviso depender de alguem conseguir escrever na rua.
+                opcional: true,
+                limite: _AvisoAoTutor.limiteDoRecado,
+                linhas: 4,
+                capitalizacao: TextCapitalization.sentences,
+                habilitado: _estado != _EstadoDoAviso.enviando,
+              ),
+              const SizedBox(height: BichuEspaco.e4),
+            ],
             BotaoPrimario(
-              rotulo: _AvisoAoTutor.rotuloDe(widget.tag),
+              rotulo: _AvisoAoTutor.rotuloDe(
+                widget.tag,
+                comRecado: widget.comRecado,
+              ),
               carregando: _estado == _EstadoDoAviso.enviando,
               // **Nao desabilita por estado de rede**, e nem enquanto envia o
               // botao perde o rotulo: `BotaoPrimario` trata `carregando`.
@@ -611,6 +798,142 @@ class _AvisoAoTutorState extends State<_AvisoAoTutor> {
           ],
         ),
     };
+  }
+}
+
+/// O DONO ESCANEOU A PROPRIA PLAQUINHA: carrega a pagina do pet.
+///
+/// ## O que o cliente pediu, nas palavras dele
+///
+/// *"carrega a pagina do proprio pet. a dinamica e se eu escanear o qr-code
+/// abre a pagina do pet."* O que ele viu antes disso: apontou a camera para a
+/// coleira do proprio animal, a tela abriu a ficha, e **nao oferecia acao
+/// nenhuma**. Era um beco com informacao bonita dentro.
+///
+/// ## Por que isto precisou de uma chamada a mais
+///
+/// A pagina do pet (`T.1`, `Rotas.detalheDoPet`) e enderecada por `pet_id`, e
+/// o corpo publico de `GET /tags/{code}` **nao traz `pet_id`** -- de proposito,
+/// porque aquela rota tem caminho anonimo e os identificadores internos nao
+/// podem viajar nela (ADR-0010 item 6; SEC-001). Quem os tem e
+/// `GET /tags/{code}/owner-context`, que exige `bearerAuth`. Ela existia no
+/// contrato e no servidor desde sempre, e **nao tinha cliente neste app** --
+/// essa ausencia era a razao escrita de o modo dono nao ter acao.
+///
+/// ## `pushReplacement`, e nao `push`
+///
+/// A tela da tag e um DESVIO no caminho do dono: ele apontou a camera para
+/// saber se a plaquinha responde, e o destino e o pet. Empilhar as duas faria
+/// o `Voltar` da pagina do pet cair numa ficha intermediaria que nao e lugar
+/// de ninguem. Com a substituicao, voltar da pagina do pet leva de volta ao
+/// leitor, que e de onde ele veio.
+///
+/// ## Quando a chamada falha
+///
+/// Fica a ficha (que ja diz "Esta tag e de Thor") mais a faixa com o motivo e
+/// `Atualizar`. **Nenhum rotulo prometendo uma pagina que nao foi encontrada**:
+/// o 404 desta rota cobre codigo inexistente, revogado e de outro tutor, e um
+/// botao `Ver a pagina do Thor` que respondesse 404 para sempre seria a acao
+/// sem destino que o criterio 2 da BICHUS-62 proibe.
+class _PaginaDoPetDoDono extends StatefulWidget {
+  const _PaginaDoPetDoDono({required this.codigo, required this.nome});
+
+  final String codigo;
+  final String nome;
+
+  /// O que a tela diz enquanto a ida acontece.
+  static String carregandoDe(String nome) => 'Abrindo a pagina de $nome...';
+
+  static const String rotuloDeAtualizar = 'Atualizar';
+
+  @override
+  State<_PaginaDoPetDoDono> createState() => _PaginaDoPetDoDonoState();
+}
+
+class _PaginaDoPetDoDonoState extends State<_PaginaDoPetDoDono> {
+  bool _carregando = true;
+  String? _erro;
+
+  @override
+  void initState() {
+    super.initState();
+    // Depois do quadro: `initState` roda com a arvore travada, e navegar de
+    // dentro dele marca o roteador sujo durante a montagem.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_abrir());
+    });
+  }
+
+  Future<void> _abrir() async {
+    final escopo = Escopo.of(context);
+    final navegador = GoRouter.of(context);
+    setState(() {
+      _carregando = true;
+      _erro = null;
+    });
+
+    try {
+      final contexto = await escopo.tags.contextoDoDono(widget.codigo);
+      if (!mounted) return;
+      if (contexto.petId.isEmpty) {
+        // Corpo no formato certo e vazio por dentro. Navegar para
+        // `/pets/` montaria um endereco que nao e de pet nenhum.
+        setState(() {
+          _carregando = false;
+          _erro = MensagensDeErro.servidorFora;
+        });
+        return;
+      }
+      navegador.pushReplacement(Rotas.detalheDoPetDe(contexto.petId));
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _carregando = false;
+        _erro = MensagensDeErro.de(falha).texto;
+      });
+    } on Object catch (erro, pilha) {
+      // Corpo 200 fora do contrato estoura dentro de `doJson`, e sem este ramo
+      // o bloco ficaria girando para sempre com o erro engolido.
+      registrarFalhaInesperada(erro, pilha, onde: 'pagina do pet pela tag');
+      if (!mounted) return;
+      setState(() {
+        _carregando = false;
+        _erro = MensagensDeErro.servidorFora;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final erro = _erro;
+    if (erro != null) {
+      return FaixaDeAviso(
+        texto: erro,
+        rotuloDaAcao: _PaginaDoPetDoDono.rotuloDeAtualizar,
+        aoTocarNaAcao: () => unawaited(_abrir()),
+      );
+    }
+    if (!_carregando) return const SizedBox.shrink();
+    // Texto, e nao so um giro: quem escaneou precisa saber que a tela esta
+    // indo para algum lugar.
+    return Row(
+      children: <Widget>[
+        const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: BichuEspaco.e3),
+        Expanded(
+          child: Text(
+            _PaginaDoPetDoDono.carregandoDe(widget.nome),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: BichuColors.of(context).cores.textSecondary,
+                ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

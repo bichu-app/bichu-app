@@ -704,13 +704,20 @@ class AvisoDoAchadorCriado {
   /// `conversation_url`: o endereco da conversa mediada, montado pelo servidor.
   final String urlDaConversa;
 
-  /// `owner_notified`.
+  /// `owner_notified` — **verdadeiro so quando a entrega ao tutor foi
+  /// enfileirada**.
   ///
-  /// **Falso NAO significa que o aviso se perdeu**: o contrato diz que ele e
-  /// falso apenas quando a notificacao foi **agrupada** a um aviso recente, e
-  /// que o aviso em si nunca e descartado. A tela do achador continua dizendo
-  /// que o tutor foi avisado, porque foi -- mudar o texto para "talvez" faria
-  /// quem esta com o animal na mao duvidar e ir embora.
+  /// O paragrafo que estava aqui dizia que falso significa apenas "agrupado a
+  /// um aviso recente" e que a tela "continua dizendo que o tutor foi avisado,
+  /// porque foi". **Nao foi.** Medido em 18/10/2026: o servidor devolvia
+  /// `true` em todo primeiro escaneamento e nenhuma entrega era enfileirada --
+  /// o unico push emitido em producao e o alerta de vizinhanca. Quem achou o
+  /// animal lia que o tutor foi avisado e soltava o bicho.
+  ///
+  /// **Falso continua NAO significando que o aviso se perdeu**: o registro
+  /// existe e o tutor o encontra ao abrir o aplicativo. O que falso diz e que
+  /// ninguem garante que o telefone dele apitou, e a tela precisa dizer
+  /// exatamente isso -- nem mais, nem menos.
   final bool tutorAvisado;
 
   /// `pet_display_name`. Opcional no contrato.
@@ -720,8 +727,39 @@ class AvisoDoAchadorCriado {
     return AvisoDoAchadorCriado(
       tokenDoAchador: json['finder_token'] as String? ?? '',
       urlDaConversa: json['conversation_url'] as String? ?? '',
-      tutorAvisado: json['owner_notified'] as bool? ?? true,
+      // **O ausente vale FALSO**, e o padrao era `true`. Um corpo que nao
+      // trouxe o campo nao autoriza a tela a prometer que o tutor foi
+      // avisado: na duvida, a frase que nao faz ninguem soltar o animal.
+      tutorAvisado: json['owner_notified'] as bool? ?? false,
       nomeDoPet: json['pet_display_name'] as String?,
+    );
+  }
+}
+
+/// A resposta de `GET /tags/{code}/owner-context` (`TagOwnerContext`).
+///
+/// **Os dois identificadores internos da tag, e eles so saem por `bearerAuth`.**
+/// Eles vivem numa rota propria, e nao dentro de `TagResolution`, porque
+/// `GET /tags/{code}` tem caminho anonimo: enquanto `pet_id` e `tag_id`
+/// moraram no corpo daquela operacao, estavam protegidos apenas por uma frase
+/// de descricao (ADR-0010 item 6; SEC-001).
+///
+/// **Custa uma ida a mais so no caminho do dono**, que e o raro: quem escaneia
+/// a plaquinha na rua e um estranho, e para ele esta rota nunca e chamada.
+class ContextoDoDonoDaTag {
+  const ContextoDoDonoDaTag({required this.petId, required this.tagId});
+
+  /// `pet_id`. E o endereco da pagina do pet (`T.1`), que e para onde o dono
+  /// vai quando escaneia a propria plaquinha.
+  final String petId;
+
+  /// `tag_id`. Endereca as operacoes de plaquinha do tutor.
+  final String tagId;
+
+  factory ContextoDoDonoDaTag.doJson(Map<String, dynamic> json) {
+    return ContextoDoDonoDaTag(
+      petId: json['pet_id'] as String? ?? '',
+      tagId: json['tag_id'] as String? ?? '',
     );
   }
 }
