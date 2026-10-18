@@ -476,3 +476,73 @@ void describe('a trilha: `directory_suggestion.submitted`', () => {
     assert.equal(trilhaDeTeste.length, 0);
   });
 });
+
+/**
+ * A MODERACAO DE PALAVRAS, medida **pela rota** e nao pelo dominio.
+ *
+ * Este bloco existe separado das conferencias de D59 por um motivo de prova: as
+ * iscas de `shared/texto/moderacao.test.ts` provam a FUNCAO, e uma funcao certa
+ * que ninguem chama nao protege nada. O que falta provar e que a recusa
+ * acontece **no caminho de escrita**, com `app.inject` falando HTTP direto --
+ * sem aplicativo, sem tela e sem nenhum aviso de formulario no meio. E essa a
+ * unica forma da pergunta "um `curl` escreveria isto?".
+ *
+ * **Desligamento**: tire `errosDeModeracao` de `errosDaSugestao` e os tres
+ * primeiros casos viram `201`.
+ */
+void describe('ISCA: a moderacao de palavras vale CHAMANDO A API DIRETO', () => {
+  void it('xingamento em `display_name` responde 400 e NAO grava na fila', async () => {
+    const resposta = await sugerir(servidor(), {
+      corpo: { ...CORPO_VALIDO, display_name: 'Clínica dos Babacas' },
+    });
+    assert.equal(resposta.status, 400);
+    assert.equal(errosDe(resposta)[0]?.field, 'display_name');
+    assert.equal(errosDe(resposta)[0]?.code, 'inappropriate_language');
+    assert.equal(gravadas.length, 0);
+    assert.equal(trilhaDeTeste.length, 0);
+  });
+
+  void it('xingamento no `note` responde 400, e o corpo nao devolve a palavra nem a lista', async () => {
+    const resposta = await sugerir(servidor(), {
+      corpo: { ...CORPO_VALIDO, note: 'Atendimento de merda, não voltem lá.' },
+    });
+    assert.equal(resposta.status, 400);
+    assert.equal(errosDe(resposta)[0]?.code, 'inappropriate_language');
+    // A palavra medida nao volta em NENHUMA posicao da resposta, e a lista
+    // tambem nao: o `400` nao e oraculo de quem quer descobri-la.
+    for (const vazamento of ['merda', 'babaca', 'otario']) {
+      assert.equal(resposta.bruto.toLowerCase().includes(vazamento), false, vazamento);
+    }
+    assert.equal(gravadas.length, 0);
+  });
+
+  void it('a troca obvia de caractere nao escapa pela borda', async () => {
+    const resposta = await sugerir(servidor(), {
+      corpo: { ...CORPO_VALIDO, note: 'esse lugar é um b@b4c4 só' },
+    });
+    assert.equal(resposta.status, 400);
+    assert.equal(errosDe(resposta)[0]?.code, 'inappropriate_language');
+  });
+
+  void it('A ISCA MAIS IMPORTANTE: `Clínica Pinto` e `cadela` entram pela rota, com 201', async () => {
+    const resposta = await sugerir(servidor(), {
+      corpo: {
+        ...CORPO_VALIDO,
+        display_name: 'Clínica Pinto',
+        note: 'Cuidaram da minha cadela e do gato preto com paciência.',
+      },
+    });
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.equal(gravadas.length, 1);
+  });
+
+  void it('critica negativa dura entra pela rota: avaliacao ruim nao e ofensa', async () => {
+    const resposta = await sugerir(servidor(), {
+      corpo: {
+        ...CORPO_VALIDO,
+        note: 'Achei caro, o lugar estava sujo e nojento, e demoraram três horas.',
+      },
+    });
+    assert.equal(resposta.status, 201, resposta.bruto);
+  });
+});

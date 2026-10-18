@@ -3574,6 +3574,28 @@ paths:
         (`code: bidi_control`), como todo texto que a pessoa escreve. O contato
         publico e a UNICA posicao em que telefone, site ou perfil pode entrar,
         e ele e conferido pelo formato do proprio `public_contact.kind`.
+
+        ## Moderacao de palavras (`code: inappropriate_language`)
+
+        `display_name` e `note` recusam tambem xingamento e injuria, **na hora
+        da escrita** (pedido do cliente, 18/10/2026). A trava e do SERVIDOR: um
+        aviso de formulario evita que a pessoa perca o texto digitado, mas nao
+        protege nada, porque esta operacao atende chamada direta.
+
+        A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+        nem em `errors[]` nem em `detail`: devolve-la transformaria o `400` em
+        oraculo de quem quer descobrir o filtro. A mensagem e sempre a mesma e
+        diz o que fazer.
+
+        **Isto nao e a prova de contorno, e nao substitui a revisao.** A lista
+        pega palavra escrita por extenso; frase ofensiva sem palavra proibida,
+        palavra grudada em outra e troca de caractere nao prevista passam. A
+        protecao de fundo continua sendo a remocao pelo painel e a denuncia.
+
+        Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+        tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+        (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+        tolerancia. `city`, `state` e `neighborhood` nao passam pela moderacao.
       security:
         - bearerAuth: []
       x-rate-limit:

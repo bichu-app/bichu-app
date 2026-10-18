@@ -23,6 +23,23 @@
  * `^[A-Z]{2}$`), nao sao publicados por esta operacao, e um detector de link
  * sobre o nome de uma cidade recusaria "Santana do Livramento" por nada.
  *
+ * ## A MODERACAO DE PALAVRAS entra nos mesmos dois textos, e vem de `shared/`
+ *
+ * `display_name` e `note` passam tambem por `errosDeModeracao`
+ * (`shared/texto/moderacao.ts`, `code: inappropriate_language`): xingamento,
+ * injuria e o que prejudica a imagem do aplicativo. Pedido do cliente de
+ * 18/10/2026.
+ *
+ * Ela e **import direto, e nao porta**, e a diferenca com o detector de contato
+ * e estrutural: aquele vive em `modules/network/domain` e a fronteira de modulo
+ * reprova importa-lo daqui, enquanto `shared/` nao e modulo. Foi por isso que o
+ * mecanismo novo nasceu em `shared/` -- a recomendacao de profissional precisa
+ * da MESMA funcao, e ela e de outro modulo.
+ *
+ * `city`, `state` e `neighborhood` continuam de fora, pela mesma razao que os
+ * mantem fora do detector de contato: sao rotulo fechado, e moderar nome de
+ * cidade so produz falso positivo.
+ *
  * ## O detector chega INJETADO, e a razao esta na porta
  *
  * Ver `ports/conferencias-de-texto.ts`: `arquitetura/fronteira-de-modulo`
@@ -31,6 +48,7 @@
  * `src/bin/api.ts`.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
+import { errosDeModeracao } from '../../../shared/texto/moderacao.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { ConferenciasDeTexto } from '../ports/conferencias-de-texto.js';
 import type { TipoDeProfissional } from './entrada-do-diretorio.js';
@@ -164,14 +182,18 @@ export function errosDaSugestao(
       MINIMO_DO_NOME,
       TETO_DO_NOME,
     ),
+    ...errosDeModeracao('display_name', corpo.display_name),
     ...(corpo.note === undefined
       ? []
-      : conferencias.errosDeTextoDeUsuario(
-          'note',
-          corpo.note,
-          MINIMO_DO_RECADO,
-          TETO_DO_RECADO,
-        )),
+      : [
+          ...conferencias.errosDeTextoDeUsuario(
+            'note',
+            corpo.note,
+            MINIMO_DO_RECADO,
+            TETO_DO_RECADO,
+          ),
+          ...errosDeModeracao('note', corpo.note),
+        ]),
     ...errosDoContato(corpo.public_contact, conferencias),
   ];
 }
