@@ -308,17 +308,16 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
   // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
   // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
-  // projeta. `pending_review` nao esta no `enum` administrativo de proposito:
-  // o encontro da comunidade nao existe na v1, e o `CHECK`
-  // `network_events_revisao_so_da_comunidade` impede o administrador de cair
-  // nele.
+  // projeta. `pending_review` SAIU do banco na 20261001000005 (ADR-0025 emenda
+  // 3, 17/10/2026): sem fila de moderacao nao ha estado de revisao, entao ele
+  // tambem nao esta no `enum` administrativo.
   'public.network_events.network_events_origem_conhecida': {
     coluna: 'origin',
     valores: ['admin', 'community'],
   },
   'public.network_events.network_events_publicacao_conhecida': {
     coluna: 'publication_status',
-    valores: ['pending_review', 'published', 'cancelled', 'removed'],
+    valores: ['published', 'cancelled', 'removed'],
   },
   // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
   // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
@@ -442,6 +441,16 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // 20.2): ela tem tabela propria, `catalog_upload_intents`. Esta tabela e do
     // app e volta a lista da `development`.
     valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
+  },
+  // BICHUS-245, migracao 20261001000006. O estado da higiene da foto do achado.
+  // `ausente` e o objeto que nunca chegou (intencao assinada, envio desistido,
+  // nenhum byte) e e desfecho FINAL, e nao falha: sem ele a varredura
+  // reenfileiraria para sempre a mesma intencao vazia. A coerencia entre este
+  // estado e os campos que ele governa esta em
+  // `upload_intents_higiene_coerente`, no outro registro.
+  'public.upload_intents.upload_intents_status_da_higiene': {
+    coluna: 'sanitize_status',
+    valores: ['pendente', 'pronta', 'recusada', 'ausente'],
   },
   // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio do painel.
   'public.catalog_upload_intents.catalog_upload_intents_proposito': {
@@ -595,11 +604,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // So o recusado guarda desistencia (D54, 12.11).
   'public.network_event_join_requests.network_event_join_requests_desistencia_so_do_recusado':
     "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
-  // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
-  // que torna "o ponto de evento da comunidade so aparece depois de revisao
-  // humana" um estado do banco, porque `pending_review` nunca e visivel.
-  'public.network_events.network_events_revisao_so_da_comunidade':
-    "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -843,6 +847,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ele devolve em `PATCH /v1/finder/found-report`.
   'public.upload_intents.upload_intents_foto_do_achador_tem_aviso_e_ref':
     "CHECK (((kind <> 'finder_photo'::text) OR ((found_report_id IS NOT NULL) AND (upload_ref IS NOT NULL))))",
+  // BICHUS-245, migracao 20261001000006. A coerencia entre o estado da higiene
+  // da foto e os dois campos que ele governa, nos DOIS sentidos: `pronta` tem
+  // chave da derivada e nao tem motivo; `recusada` tem motivo e nao tem chave;
+  // `pendente` e `ausente` nao tem nenhum dos dois. Sem os dois sentidos o
+  // banco aceitaria uma linha com os campos do outro estado, que e uma linha
+  // que nenhum codigo sabe ler. O CONJUNTO de `sanitize_status` nao esta aqui:
+  // ele e a lista fechada `upload_intents_status_da_higiene`, em LISTAS_FECHADAS.
+  'public.upload_intents.upload_intents_higiene_coerente':
+    "CHECK ((((sanitize_status = 'pronta'::text) AND (sanitized_key IS NOT NULL) AND (sanitize_rejection_reason IS NULL)) OR ((sanitize_status = 'recusada'::text) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NOT NULL)) OR ((sanitize_status = ANY (ARRAY['pendente'::text, 'ausente'::text])) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NULL))))",
   // BICHUS-41. `FinderUploadIntent.upload_ref`: 128 bits em base64url, 22
   // caracteres, o mesmo padrão que o contrato declara.
   'public.upload_intents.upload_intents_upload_ref_formato':
