@@ -257,6 +257,15 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
      *
      * `description` e `share_to_public_list` usam o valor antigo quando o corpo
      * não os traz (ver `AtualizacaoDoCaso`). O contrato não detalha isto.
+     *
+     * **Esses dois ramos dependem da borda, e não só deste arquivo.** O
+     * `undefined` que eles procuram só chega aqui porque a rota valida o corpo
+     * do `PATCH` sem os `default` do contrato (`corpoSemPadroes`, em
+     * `sem-padroes.ts`): `share_to_public_list` tem `default: true` em
+     * `LostCaseInput`, e o `useDefaults` do Ajv o preencheria antes do
+     * manipulador — este `COALESCE` escrito à mão nunca seria alcançado, e a
+     * edição republicaria o caso calada. Tirar aquela chamada reabre o defeito
+     * sem tocar nenhuma linha daqui.
      */
     async atualizarOndeEQuando(entrada: AtualizacaoDoCaso): Promise<CasoGravado | null> {
       const ponto =
