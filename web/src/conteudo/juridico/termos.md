@@ -14,8 +14,9 @@ O Bichu dá uma identidade digital ao seu pet, com uma plaquinha de QR que você
 
 ## 3. Quem pode usar
 
-- **O Bichu é para maiores de 18 anos.** Para criar conta, você precisa ter 18 anos ou mais. Ao criar a conta, você declara que tem.
-- Se descobrirmos que uma conta é de alguém com menos de 18 anos, ela é suspensa e os dados dela são apagados, como na exclusão de conta. Se você souber de um caso, escreva para privacidade@bichu.app.
+- **O Bichu é para quem tem 16 anos ou mais.** No cadastro pedimos a sua data de nascimento. O Bichu calcula a sua idade no servidor e, com menos de 16 anos, a conta não é criada.
+- **Conferimos a data que você informa, e não um documento.** Não pedimos documento e não temos como saber se a data é verdadeira. Informar data falsa para criar conta é descumprir estes termos.
+- Se descobrirmos que uma conta é de alguém com menos de 16 anos, ela é suspensa e os dados dela são apagados, como na exclusão de conta. Se você souber de um caso, escreva para privacidade@bichu.app.
 - A conta é pessoal. Não crie conta em nome de outra pessoa nem se passe por alguém.
 - Qualquer pessoa pode avisar o tutor de um pet encontrado pela plaquinha, **sem criar conta**. Estes termos também valem para ela, no que couber.
 
@@ -111,7 +112,8 @@ Estas funções ainda não estão no ar. As regras abaixo valem a partir do dia 
 Na Loja você vê produtos escolhidos pela nossa equipe, cada um com um link que abre o site da loja parceira.
 
 - **O Bichu não vende nada.** Não existe carrinho, pagamento, pedido nem entrega dentro do Bichu. Nós mostramos o produto; quem vende é o parceiro.
-- **O preço é informação de referência.** Alguém da nossa equipe abriu a página do parceiro, leu aquele valor e anotou a data da consulta. Essa data aparece junto do preço, na tela: **o valor vale para o dia em que foi consultado** e pode ter mudado desde então.
+- **O preço é informação de referência.** Alguém da nossa equipe abriu a página do parceiro, leu aquele valor e anotou a data da consulta: **o valor vale para o dia em que foi consultado** e pode ter mudado desde então.
+- **Onde a data da consulta aparece.** Na lista da Loja, ela vem junto do preço. Na página do produto, hoje a tela mostra só o valor: a data é lida por leitor de tela, mas ainda não está escrita ali. Nas duas telas vale o mesmo aviso — o preço é o do dia da consulta.
 - **Passados 30 dias da consulta, o Bichu para de mostrar o valor** e diz que o preço não está confirmado. O produto continua na lista, sem o número.
 - **Não garantimos a venda nem a disponibilidade.** O produto pode estar esgotado, ter saído do catálogo do parceiro, ou custar outro valor na hora em que você abrir o link.
 - **Não controlamos preço nem estoque**, e também não controlamos frete, prazo, entrega, troca, devolução e garantia. Tudo isso é do parceiro.
