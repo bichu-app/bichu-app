@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
@@ -13,6 +14,8 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../widgets/item_de_menu.dart';
+import 'vitrine_de_fotos.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -801,6 +804,24 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             const SizedBox(height: BichuEspaco.e6),
             FaixaDeAviso(texto: _faixa!.texto),
           ],
+          // A PORTA DA VITRINE DE FOTOS (uniao de 18/10/2026).
+          //
+          // Ela nao estava em lugar nenhum: o autor da vitrine construiu a
+          // tela inteira e **nao pos a porta**, porque este arquivo era de
+          // outro ramo e mexer nele colidiria. Sem esta porta a tela existe,
+          // responde e nao e alcancavel por nenhum toque.
+          //
+          // AQUI e nao em `Perfil`: a lista de itens de `Perfil` e a ordem que
+          // o cliente determinou (`Meus dados`, `Escanear uma tag`, `Sair da
+          // conta`), e acrescentar uma quarta linha la e decisao dele, nao
+          // fiacao. `Meus dados` e a tela dos dados da PESSOA, e as fotos que
+          // ela mostra de si sao dado dela.
+          const SizedBox(height: BichuEspaco.e6),
+          ItemDeMenu(
+            rotulo: VitrineDeFotosDoUsuario.tituloDaTela,
+            apoio: _TextosDosDados.apoioDaVitrine,
+            aoTocar: () => GoRouter.of(context).push(Rotas.minhaVitrine),
+          ),
         ],
       ),
     );
@@ -1244,6 +1265,11 @@ abstract final class _CamposDosDados {
 /// navegacao. Erro diz o que FAZER -- a palavra "invalido" nao aparece em
 /// nenhuma linha deste arquivo.
 abstract final class _TextosDosDados {
+  /// O apoio da porta da vitrine. Diz o que ha do outro lado e para QUEM ela
+  /// e visivel -- "so voce" e a unica coisa que a pessoa precisa saber antes
+  /// de tocar, e e verdade medida: nao existe rota de vitrine de terceiro.
+  static const String apoioDaVitrine = 'As fotos que só você vê';
+
   static const String apelido = 'Apelido';
 
   /// A recusa de quem JA TEM apelido e esvaziou o campo.

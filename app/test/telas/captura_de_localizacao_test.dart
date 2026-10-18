@@ -45,6 +45,7 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
+import 'package:bichu/api/conexoes_api.dart';
 import 'package:bichu/api/me_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
@@ -129,6 +130,9 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // A porta das conexoes entrou no escopo na uniao de 18/10/2026, junto
+      // com a rota de `Pedidos de conexao`.
+      conexoes: ConexoesApi(api),
       // As rotas `tags: [me]` entraram no escopo com `Perfil` > `Meus dados`.
       me: MeApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.

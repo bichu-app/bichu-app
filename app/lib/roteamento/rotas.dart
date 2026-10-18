@@ -25,6 +25,13 @@ import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
 import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
+import '../api/vitrine_api.dart';
+import '../escopo.dart';
+import '../telas/conexoes/tela_pedidos_de_conexao.dart';
+import '../telas/perfil/vitrine_de_fotos.dart';
+import '../telas/mensagens/area_de_mensagens.dart';
+import '../telas/mensagens/tela_da_conversa.dart';
+import '../telas/notificacoes/caixa_de_notificacoes.dart';
 import '../telas/perfil/meus_achados.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
@@ -163,10 +170,37 @@ abstract final class Rotas {
   /// Enquanto ela nao desce, o slot empurra `destinoProvisorio`, que e
   /// [perfil] -- ver a entrada de mensagens em `CascaComAbas.destinos`.
   ///
-  /// **O QUE FALTA LIGAR:** registrar aqui o `GoRoute` desta rota apontando
-  /// para a tela do outro agente, e apagar `destinoProvisorio` da entrada do
-  /// registro. Duas linhas, e nenhuma outra.
+  /// **LIGADO em 18/10/2026, na uniao das quatorze.** O `GoRoute` desta rota
+  /// esta registrado abaixo e aponta para `AreaDeMensagens`; a conversa tem a
+  /// rota irma (`RotasDeMensagens.conversa`). `destinoProvisorio` saiu da
+  /// entrada do registro em `CascaComAbas.destinos`, e o slot `AuAu` empurra
+  /// este endereco.
+  ///
+  /// O valor e o MESMO de `RotasDeMensagens.area`, e nao ha duas fontes: esta
+  /// constante existe para a casca, aquela para a area, e um caso confere que
+  /// as duas dizem a mesma coisa.
   static const String mensagens = '/mensagens';
+
+  /// A CAIXA DE NOTIFICACOES (18/10/2026): o conteudo do sino.
+  ///
+  /// Mesmo valor de `RotasDaCaixa.caixa`, pela razao da constante acima.
+  ///
+  /// **O SINO NAO ESTA MONTADO**, de proposito: montar corta o titulo de
+  /// `Rede` e `Perto`, e a decisao de qual controle sai da barra e do cliente
+  /// e esta pendente. A rota fica registrada de qualquer forma -- sem ela, o
+  /// dia em que ele decidir vira uma segunda rodada de fiacao, e o endereco
+  /// nao responderia nem por link direto.
+  static const String notificacoes = '/notificacoes';
+
+  /// `Pedidos de conexao` (18/10/2026): as duas caixas, recebidos e enviados.
+  static const String pedidosDeConexao = '/conexoes/pedidos';
+
+  /// `Meus dados` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
+  ///
+  /// Endereco proprio porque `VitrineDeFotosDoUsuario` e TELA (tem `Scaffold`
+  /// e barra), e nao um bloco de `Meus dados`. A porta esta la: o autor da
+  /// vitrine nao a pos porque o arquivo de `Meus dados` era de outro ramo.
+  static const String minhaVitrine = '/perfil/minhas-fotos';
 
   /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
   ///
@@ -769,6 +803,54 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.meusAchados,
         builder: (context, estado) => const MeusAchados(),
+      ),
+      // -- AS QUATRO ROTAS DA UNIAO DE 18/10/2026 ---------------------------
+      //
+      // As quatro telas chegaram prontas, de frentes diferentes, e nenhuma
+      // estava registrada: cada ramo construiu a tela e deixou a fiacao para
+      // quem unisse, porque `rotas.dart` e arquivo de todos e colidiria em
+      // todos. Elas EMPURRAM (cobrem a casca) em vez de virar ramo, como
+      // `Meus dados` e `Meus achados` acima -- a barra de baixo continua
+      // existindo atras e voltar devolve a pessoa onde ela estava.
+      //
+      // A AREA DE MENSAGENS: o destino do slot `AuAu`.
+      GoRoute(
+        path: RotasDeMensagens.area,
+        builder: (context, estado) => const AreaDeMensagens(),
+      ),
+      // A CONVERSA, pelo id. **E este o destino do toque na notificacao do
+      // aviso ao tutor**, e por isso ela nao pode faltar: sem esta rota o
+      // toque no aviso cai numa rota que nao existe.
+      GoRoute(
+        path: RotasDeMensagens.conversa,
+        builder: (context, estado) => TelaDaConversa(
+          conversaId:
+              estado.pathParameters[RotasDeMensagens.parametroDaConversa]!,
+        ),
+      ),
+      // A CAIXA DE NOTIFICACOES. Registrada mesmo com o sino comentado, pela
+      // razao escrita em `Rotas.notificacoes`.
+      GoRoute(
+        path: RotasDaCaixa.caixa,
+        builder: (context, estado) => const CaixaDeNotificacoes(),
+      ),
+      // OS PEDIDOS DE CONEXAO. `ConexoesApi` sai do `Escopo`, onde esta
+      // fiacao a registrou -- a tela pedia a porta por parametro justamente
+      // porque o `Escopo` estava sendo mexido por outra sessao.
+      // A VITRINE DO PROPRIO TUTOR. A tela recebe a LEITURA e nao a
+      // `VitrineApi` inteira -- quem desenha nao escreve, e com a porta de
+      // escrita na mao um toque errado reordenaria ou apagaria a vitrine.
+      GoRoute(
+        path: Rotas.minhaVitrine,
+        builder: (context, estado) => VitrineDeFotosDoUsuario(
+          api: VitrineApi(Escopo.of(context).api),
+          aoAbrirMeusPets: () => GoRouter.of(context).go(Rotas.perfil),
+        ),
+      ),
+      GoRoute(
+        path: Rotas.pedidosDeConexao,
+        builder: (context, estado) =>
+            TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

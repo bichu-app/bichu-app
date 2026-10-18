@@ -5,6 +5,7 @@ import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/achados_api.dart';
 import 'api/casos_api.dart';
+import 'api/conexoes_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
@@ -39,6 +40,7 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.conexoes,
     required this.me,
     required this.diretorio,
     required this.loja,
@@ -72,6 +74,15 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// A porta das CONEXOES entre pessoas (18/10/2026).
+  ///
+  /// Ela entrou aqui na uniao das quatorze: `TelaDePedidosDeConexao` pedia a
+  /// porta por parametro de construtor porque, quando foi escrita, este
+  /// arquivo estava sendo mexido por outra sessao e ligar aqui colidiria. Com
+  /// os ramos unidos, ela mora onde as outras moram -- uma porta por rota, e
+  /// nao uma por tela.
+  final ConexoesApi conexoes;
 
   /// As rotas `tags: [me]` do contrato: os dados pessoais do tutor.
   ///

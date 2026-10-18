@@ -1175,7 +1175,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = 'a1301ce931c460bcaf8fa0d25edcff81ee36ea53'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

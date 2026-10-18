@@ -50,6 +50,14 @@ export const VAZIO_DA_ABA = {
 export const ROTULO_DA_ORIGEM = {
   review: 'Avaliação',
   conversation: 'Conversa',
+  // AS TRES DA UNIAO DE 18/10/2026. O `satisfies Record<Origem, string>` e
+  // quem cobrou: com os tres valores novos no `enum` do contrato e sem estes
+  // tres rotulos, o painel NAO COMPILA -- que e a trava descrita acima
+  // funcionando. O filtro de origem tambem sai deste mapa, entao os tres
+  // aparecem na lista sem uma linha a mais.
+  profile: 'Perfil',
+  photo: 'Foto',
+  publication: 'Publicação',
 } as const satisfies Record<Origem, string>;
 
 export const ROTULO_DA_DECISAO = {

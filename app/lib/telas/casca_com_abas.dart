@@ -417,16 +417,12 @@ class CascaComAbas extends StatefulWidget {
       // de mensagens aqui, e inventar uma seria construir a secao de outra
       // pessoa.
       //
-      // Enquanto a rota dela nao desce, o slot aponta para um lugar que
-      // EXISTE: `Rotas.perfil`, a tela da conta. Isto e fiacao parada, e esta
-      // dito assim de proposito -- o slot esta completo (posicao, glifo,
-      // rotulo medido, nome acessivel) e so o destino e provisorio.
-      //
-      // **O QUE FALTA LIGAR, numa linha:** apagar `destinoProvisorio` desta
-      // entrada e registrar `Rotas.mensagens` em `rotas.dart` apontando para a
-      // tela do outro agente. Nada mais nesta casca muda.
+      // **LIGADO em 18/10/2026, na uniao das quatorze.** A area de mensagens
+      // desceu junto, `rotas.dart` registra `RotasDeMensagens.area` apontando
+      // para `AreaDeMensagens`, e `destinoProvisorio` SAIU: o slot empurra o
+      // endereco de verdade. O desvio para `Rotas.perfil` existia so enquanto
+      // a tela do outro agente nao estava nesta arvore.
       rota: Rotas.mensagens,
-      destinoProvisorio: Rotas.perfil,
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.conversa,
       // **NAO E RAMO, e e por isso que `rotas.dart` nao mudou uma linha.**
@@ -1183,12 +1179,14 @@ class SinoDeNotificacoes extends StatelessWidget {
     return IconButton(
       tooltip: rotuloCom(naoLidas),
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
-      // **O QUE FALTA LIGAR (2 de 2):** o destino. A caixa de notificacoes e
-      // de outro agente e nao existe nesta arvore; enquanto nao desce, o
-      // toque abre a tela da conta, que e um lugar que EXISTE e onde os
-      // ajustes de aviso vao morar. Trocar por `Rotas.notificacoes` quando a
-      // tela chegar.
-      onPressed: () => GoRouter.of(context).go(Rotas.perfil),
+      // O DESTINO, ligado na uniao de 18/10/2026: a caixa desceu junto e
+      // `rotas.dart` a registra. **Isto nao monta o sino** -- a linha que o
+      // montaria (`const SinoDeNotificacoes()` em `TelaDeAba.actions`)
+      // continua comentada de proposito, porque montar corta o titulo de
+      // `Rede` e `Perto` e a decisao de qual controle sai da barra e do
+      // cliente e esta pendente. O que mudou aqui e so para onde ele leva no
+      // dia em que for montado: antes a tela da conta, agora a caixa.
+      onPressed: () => GoRouter.of(context).go(Rotas.notificacoes),
       // O glifo SIMPLES, e nao o `notifications_active` nem um sino com
       // badge embutido: o distintivo e desenhado aqui por cima, entao o
       // estado vazio e o cheio usam o MESMO glifo e nao ha dois desenhos

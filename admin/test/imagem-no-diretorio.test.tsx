@@ -36,6 +36,11 @@ function entrada(extra: Partial<Esquemas['AdminDirectoryEntry']> = {}): Esquemas
   return {
     slug: 'passeios-da-bia',
     kind: 'walker',
+    // `entity_kind` passou a ser obrigatorio na resposta com o eixo do tipo
+    // de entidade (`20261018000012`), e esta massa nasceu no ramo da midia,
+    // antes dele. `professional` e o DEFAULT da coluna e o que toda entrada
+    // antiga vale.
+    entity_kind: 'professional',
     display_name: 'Passeios da Bia',
     status: 'draft',
     verification: { level: 'none', evidence_kinds: [] },

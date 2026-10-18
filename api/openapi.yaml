@@ -13135,7 +13135,7 @@ components:
 
     ModerationOrigin:
       type: string
-      enum: [review, conversation]
+      enum: [review, conversation, profile, photo, publication]
       description: |
         De onde a denuncia veio.
 
@@ -13148,15 +13148,24 @@ components:
           18/10/2026 era gravada e **nunca lida por ninguem**: nenhuma rota do
           painel a resolvia.
 
-        **PERFIL e FOTO nao estao aqui, e a ausencia e informacao.** As duas vem
-        na frente de comunidade e nao existe tabela de nenhuma das duas neste
-        repositorio. Declara-las agora faria o `enum` prometer o que nenhuma
-        consulta devolve e faria a tela ganhar rotulo para um estado que nunca
-        acontece. O que esta PRONTO para elas e o caminho: a visao
-        `fila_de_moderacao` (migracao `20261018000009`) recebe cada origem como
-        uma perna de `UNION ALL`, e acrescentar uma custa a tabela da denuncia,
-        a perna da visao, um valor neste `enum` e um rotulo na tela -- **nenhuma
-        consulta de `src/`**, porque a consulta le a visao e nao as tabelas.
+        **CINCO ORIGENS DESDE A UNIAO DE 18/10/2026.** As tres novas sao:
+
+        - `profile` -- denuncia de perfil (`profile_reports`);
+        - `photo` -- denuncia de foto (`photo_reports`);
+        - `publication` -- denuncia de publicacao (`publication_reports`).
+
+        As tres tabelas e as tres pernas de `UNION ALL` da visao
+        `fila_de_moderacao` existem (migracoes `20261018000031` e
+        `20261018000032`), e por isso os valores entram: o `enum` so promete o
+        que alguma consulta devolve. Nenhuma linha de consulta de `src/` mudou
+        -- a fila le a VISAO e nao as tabelas, que era exatamente a aposta do
+        desenho de `20261018000009`.
+
+        **`publication` responde, e a tabela dela aceita linha orfa.** A
+        chave estrangeira para `user_publications` NAO entrou, porque a tabela
+        de publicacoes nao existe nesta arvore (a timeline nao foi construida).
+        A perna da visao sobrevive a isso porque o texto denunciado fica
+        CONGELADO em `publication_reports.publication_body`, e nao no alvo.
 
     ModerationQueueState:
       type: string

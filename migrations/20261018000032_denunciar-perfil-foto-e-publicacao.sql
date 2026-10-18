@@ -509,7 +509,156 @@ COMMENT ON FUNCTION publicacao_ocultada_para_quem_denunciou(text, uuid) IS
   'A ocultacao imediata da PUBLICACAO, para quem a denunciou. Mesma regra e mesmo motivo da irma do perfil.';
 
 -- ---------------------------------------------------------------------------
--- 7. O QUE FALTA LIGAR -- texto literal, para a mescla
+-- 7. A FILA DE MODERACAO GANHA AS TRES ORIGENS -- LIGADO em 18/10/2026
+-- ---------------------------------------------------------------------------
+--
+-- A secao 7 desta migracao era, ate a uniao das quatorze, um texto literal do
+-- que faltava ligar: a visao `fila_de_moderacao` nasceu com DUAS pernas na
+-- `20261018000009` e as tres tabelas desta fatia nao existiam na mesma arvore
+-- que ela. Agora existem, e o que era texto virou SQL.
+--
+-- **POR QUE AQUI, E NAO NUMA MIGRACAO NOVA.** O recado pedia "uma migracao
+-- nova, com carimbo novo", e isso valeria se a `...0009` ja estivesse
+-- aplicada. Ela NAO esta: o teto aplicado em homologacao e `20261018000008`, e
+-- as dez desta rodada -- `...0009` inclusive -- descem juntas, nesta ordem.
+-- Entao a visao de cinco pernas pode nascer aqui, que e a primeira posicao da
+-- ordem em que as tres tabelas e as funcoes de apoio ja existem. Uma migracao
+-- a mais seria um carimbo a mais para conferir sem nada em troca.
+--
+-- `CREATE OR REPLACE VIEW` e nao `DROP`/`CREATE`: as dezesseis colunas ficam
+-- na MESMA ordem e com os MESMOS tipos, e `reporter_weighs` entra no fim --
+-- que e a unica mudanca que `REPLACE` aceita, e e de proposito que ela seja a
+-- unica. Nenhuma linha de `src/` muda: a consulta da fila le a VISAO.
+
+CREATE OR REPLACE VIEW fila_de_moderacao AS
+  SELECT 'review'::text                                     AS origin,
+         r.ref::text                                        AS target_ref,
+         d.id                                               AS report_id,
+         d.reason::text                                     AS reason,
+         d.detail                                           AS detail,
+         d.repeat_count                                     AS repeat_count,
+         d.created_at                                       AS created_at,
+         d.last_reported_at                                 AS last_reported_at,
+         d.resolved_at                                      AS resolved_at,
+         d.resolution                                       AS resolution,
+         d.resolution_reason                                AS resolution_reason,
+         denuncia_de_avaliacao_com_denunciante_ativo(d.id)  AS reporter_active,
+         (r.status <> 'published')                          AS target_removed,
+         r.rating                                           AS target_rating,
+         r.body                                             AS target_body,
+         p.display_name::text                               AS target_subject,
+         denunciante_ordena_a_fila(d.reporter_user_id)      AS reporter_weighs
+    FROM professional_review_reports d
+    JOIN professional_reviews r ON r.id = d.review_id
+    JOIN professionals        p ON p.id = r.professional_id
+
+  UNION ALL
+
+  SELECT 'conversation'::text,
+         c.id::text,
+         d.id,
+         d.reason::text,
+         d.detail,
+         d.repeat_count,
+         d.created_at,
+         d.last_reported_at,
+         d.resolved_at,
+         d.resolution,
+         d.resolution_reason,
+         denuncia_de_conversa_com_denunciante_ativo(d.id),
+         (c.moderation_removed_at IS NOT NULL),
+         NULL::integer,
+         NULL::text,
+         pet.name::text,
+         -- `false`, E NAO A FUNCAO, e a decisao e desta uniao e nao herdada.
+         --
+         -- `conversation_reports` NAO TEM coluna de denunciante: quem avisa de
+         -- um achado pode nao ter conta, e nao ha a quem perguntar se a
+         -- denuncia pesa. A alternativa -- resolver o papel em conta, como a
+         -- perna da avaliacao faz -- faria o achador ANONIMO nunca pesar, e
+         -- isso e pior do que nenhuma das duas origens antigas pesar: trataria
+         -- a falta de conta como sinal de abuso, quando o produto inteiro
+         -- existe para aceitar quem avisa sem conta.
+         false
+    FROM conversation_reports d
+    JOIN conversations c   ON c.id   = d.conversation_id
+    JOIN pets          pet ON pet.id = c.pet_id
+
+  UNION ALL
+
+  SELECT 'profile'::text,
+         d.subject_ref,
+         d.id, d.reason::text, d.detail, d.repeat_count,
+         d.created_at, d.last_reported_at, d.resolved_at,
+         d.resolution, d.resolution_reason,
+         denuncia_de_perfil_com_denunciante_ativo(d.id),
+         (d.resolution = 'content_removed'),
+         NULL::integer,
+         u.display_name::text,
+         u.display_name::text,
+         denunciante_ordena_a_fila(d.reporter_user_id)
+    FROM profile_reports d
+    LEFT JOIN users u ON u.id = d.subject_user_id
+
+  UNION ALL
+
+  SELECT 'photo'::text,
+         d.image_public_key,
+         d.id, d.reason::text, d.detail, d.repeat_count,
+         d.created_at, d.last_reported_at, d.resolved_at,
+         d.resolution, d.resolution_reason,
+         denuncia_de_foto_com_denunciante_ativo(d.id),
+         (d.image_id IS NULL OR d.resolution = 'content_removed'),
+         NULL::integer,
+         d.image_public_key,
+         u.display_name::text,
+         denunciante_ordena_a_fila(d.reporter_user_id)
+    FROM photo_reports d
+    LEFT JOIN users u ON u.id = d.owner_user_id
+
+  UNION ALL
+
+  SELECT 'publication'::text,
+         d.publication_ref,
+         d.id, d.reason::text, d.detail, d.repeat_count,
+         d.created_at, d.last_reported_at, d.resolved_at,
+         d.resolution, d.resolution_reason,
+         denuncia_de_publicacao_com_denunciante_ativo(d.id),
+         (d.resolution = 'content_removed'),
+         NULL::integer,
+         d.publication_body,
+         u.display_name::text,
+         denunciante_ordena_a_fila(d.reporter_user_id)
+    FROM publication_reports d
+    LEFT JOIN users u ON u.id = d.author_user_id;
+
+COMMENT ON COLUMN fila_de_moderacao.reporter_weighs IS
+  'Esta denuncia PESA na ordem da fila? Sai de denunciante_ordena_a_fila(reporter_user_id) em QUATRO pernas e e `false` fixo na perna da conversa, que nao tem coluna de denunciante -- o achador pode nao ter conta. NAO e filtro: a denuncia que nao pesa ENTRA na fila igual, porque descartar seria julgar sem olhar. Quem filtra e reporter_active.';
+
+-- ---------------------------------------------------------------------------
+-- 7.1 O QUE CONTINUA FALTANDO -- texto literal, e so isto
+-- ---------------------------------------------------------------------------
+-- Nada abaixo desta linha e executado.
+--
+-- A FK DA PUBLICACAO NAO ENTROU, e a razao e medida: `user_publications` NAO
+-- EXISTE nesta arvore -- a timeline nao foi construida e a branch longa de
+-- comunidade nao foi mesclada (decisao do cliente). O `ALTER` abaixo reprovaria
+-- a subida inteira com "relation user_publications does not exist", e levaria
+-- as dez migracoes da rodada com ele.
+--
+-- CONSEQUENCIA ACEITA, dita em voz alta: ate a fatia da publicacao pousar,
+-- `publication_reports.publication_id` pode apontar para uma publicacao que
+-- nao existe -- linha orfa e possivel, e nada no banco a impede. A perna
+-- `publication` da visao acima sobrevive a isso porque o texto denunciado vive
+-- em `publication_body`, CONGELADO na propria denuncia, e nao no alvo.
+--
+--     ALTER TABLE publication_reports
+--       ADD CONSTRAINT publication_reports_publicacao
+--       FOREIGN KEY (publication_id) REFERENCES user_publications (id) ON DELETE SET NULL;
+
+-- (resto do recado original, cumprido acima)
+-- ---------------------------------------------------------------------------
+-- 7.2 O recado original, preservado
 -- ---------------------------------------------------------------------------
 -- Nada abaixo desta linha e executado. Esta aqui porque o que falta ligar
 -- depende de migracoes que NAO estao nesta base, e um relatorio em outro lugar
@@ -597,6 +746,61 @@ COMMENT ON FUNCTION publicacao_ocultada_para_quem_denunciou(text, uuid) IS
 --     rotulos. Nenhuma linha de `src/` da fila muda: a consulta le a VISAO.
 
 -- Down Migration
+
+-- A VISAO VOLTA A DUAS PERNAS **ANTES** de as tabelas cairem.
+--
+-- Sem isto a descida deixaria `fila_de_moderacao` apontando para
+-- `profile_reports`, `photo_reports` e `publication_reports` ja removidas, e a
+-- fila do painel pararia de responder -- a visao continua existindo e quebra na
+-- primeira leitura, que e a pior forma de quebrar.
+--
+-- `DROP` e `CREATE`, e nao `CREATE OR REPLACE`: `REPLACE` nao sabe REMOVER
+-- coluna, e `reporter_weighs` tem de sair junto. A definicao abaixo e a da
+-- `20261018000009`, verbatim.
+DROP VIEW IF EXISTS fila_de_moderacao;
+
+CREATE VIEW fila_de_moderacao AS
+  SELECT 'review'::text                                     AS origin,
+         r.ref::text                                        AS target_ref,
+         d.id                                               AS report_id,
+         d.reason::text                                     AS reason,
+         d.detail                                           AS detail,
+         d.repeat_count                                     AS repeat_count,
+         d.created_at                                       AS created_at,
+         d.last_reported_at                                 AS last_reported_at,
+         d.resolved_at                                      AS resolved_at,
+         d.resolution                                       AS resolution,
+         d.resolution_reason                                AS resolution_reason,
+         denuncia_de_avaliacao_com_denunciante_ativo(d.id)  AS reporter_active,
+         (r.status <> 'published')                          AS target_removed,
+         r.rating                                           AS target_rating,
+         r.body                                             AS target_body,
+         p.display_name::text                               AS target_subject
+    FROM professional_review_reports d
+    JOIN professional_reviews r ON r.id = d.review_id
+    JOIN professionals        p ON p.id = r.professional_id
+
+  UNION ALL
+
+  SELECT 'conversation'::text,
+         c.id::text,
+         d.id,
+         d.reason::text,
+         d.detail,
+         d.repeat_count,
+         d.created_at,
+         d.last_reported_at,
+         d.resolved_at,
+         d.resolution,
+         d.resolution_reason,
+         denuncia_de_conversa_com_denunciante_ativo(d.id),
+         (c.moderation_removed_at IS NOT NULL),
+         NULL::integer,
+         NULL::text,
+         pet.name::text
+    FROM conversation_reports d
+    JOIN conversations c   ON c.id   = d.conversation_id
+    JOIN pets          pet ON pet.id = c.pet_id;
 
 DROP FUNCTION IF EXISTS publicacao_ocultada_para_quem_denunciou(text, uuid);
 DROP FUNCTION IF EXISTS foto_ocultada_para_quem_denunciou(text, uuid);

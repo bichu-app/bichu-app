@@ -5,6 +5,7 @@ import '../achado/rascunho_do_achado.dart';
 import '../dispositivo/avisos_recebidos.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
+import '../telas/mensagens/area_de_mensagens.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -58,30 +59,27 @@ class AvisoQueChegou extends StatelessWidget {
   // nada de `avisos_recebidos.dart`, e nada dos testes -- a isca de widget
   // compara contra estas constantes de proposito, e nao contra um literal.
   //
-  // NA MESCLA, trocar exatamente estas duas linhas por:
-  //
-  //   static const String rotaDoAvisoDaPlaquinha = RotasDeMensagens.raiz;
-  //   static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerAMensagem;
-  //
-  // (`RotasDeMensagens` vive em `telas/mensagens/area_de_mensagens.dart`, da
-  // branch dele; `raiz` e `/mensagens`. Acrescentar o `import` junto.)
+  // TROCADAS NA UNIAO DE 18/10/2026, exatamente estas duas, com o `import`
+  // junto. **O nome da constante e `area`, e nao `raiz`**: o recado deixado
+  // aqui dizia `RotasDeMensagens.raiz`, e o que o arquivo do outro agente
+  // declara e `RotasDeMensagens.area` (o valor e o mesmo, `/mensagens`).
+  // Ficou o nome que existe.
   //
   // **E a LISTA, e nao `RotasDeMensagens.conversaDe(id)`**: nao existe
   // identificador publico de conversa, e o push nao pode carregar o UUID
   // interno (ADR-0010 item 6). A medicao inteira esta em
   // `DestinoDoAviso.areaDeMensagens`.
   //
-  // Enquanto a branch nao chega, o destino e a secao `Pets` -- que existe
-  // nesta arvore, nao exige `extra`, nao exige identificador e e a casa dos
-  // perdidos e dos achados. Nao e o lugar certo; e um lugar de verdade, e e o
-  // que impede este caminho de voltar ao `break`.
+  // O desvio para a secao `Pets` existiu enquanto a area de mensagens nao
+  // estava na arvore. Ela esta, e o tutor que recebe o aviso da plaquinha
+  // chega agora a quem avisou -- que e o que ele quer quando le isso.
   // ---------------------------------------------------------------------
 
-  /// Para onde o toque no aviso da plaquinha leva, **nesta arvore**.
-  static const String rotaDoAvisoDaPlaquinha = Rotas.pets;
+  /// Para onde o toque no aviso da plaquinha leva.
+  static const String rotaDoAvisoDaPlaquinha = RotasDeMensagens.area;
 
-  /// O rotulo do botao desse destino, **nesta arvore**.
-  static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerMeusPets;
+  /// O rotulo do botao desse destino.
+  static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerAMensagem;
 
   /// O rotulo da acao quando ha destino.
   static const String rotuloDeVerAgora = 'Vi este pet';

@@ -1317,6 +1317,16 @@ export interface FilaDeModeracaoView {
   target_body: string | null;
   /** O nome do local na perna da avaliacao; o nome do pet na da conversa. */
   target_subject: string;
+  /**
+   * Esta denuncia PESA na ordem da fila? (coluna acrescentada em 18/10/2026,
+   * na uniao, pela `20261018000032`.)
+   *
+   * **Nao e filtro.** A denuncia que nao pesa entra na fila igual; quem filtra
+   * e [reporter_active]. Sai de `denunciante_ordena_a_fila(reporter_user_id)`
+   * em quatro pernas e e `false` fixo na da conversa, que nao tem coluna de
+   * denunciante -- o achador pode nao ter conta.
+   */
+  reporter_weighs: boolean;
 }
 
 export interface ProfessionalsTable {

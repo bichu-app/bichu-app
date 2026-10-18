@@ -17,6 +17,8 @@ import {
   frasePendente,
   MENSAGEM_DO_SLUG,
   ORDEM_DAS_ATIVIDADES,
+  ORDEM_DOS_TIPOS_DE_ENTIDADE,
+  TIPOS_DE_ENTIDADE,
   PADRAO_DA_UF,
   PADRAO_DO_SLUG,
   SITUACOES,
@@ -24,6 +26,7 @@ import {
   type Entrada,
   type StatusDaEntrada,
   type TipoDaEntrada,
+  type TipoDeEntidadeDaEntrada,
 } from './dominio.ts';
 
 interface Valores {
@@ -31,6 +34,15 @@ interface Valores {
   slug: string;
   slugEditado: boolean;
   atividade: TipoDaEntrada | '';
+  /**
+   * O QUE a entrada e -- eixo SEPARADO de [atividade], que e o que ela faz.
+   *
+   * Sem `''`: o contrato tem `DEFAULT 'professional'` e toda entrada antiga
+   * vale como profissional, entao nao existe estado "nao escolhido" a
+   * representar. Um `''` aqui inventaria um terceiro valor que o contrato nao
+   * tem e exigiria uma validacao para algo que nunca esta vazio.
+   */
+  tipoDeEntidade: TipoDeEntidadeDaEntrada;
   sobre: string;
   cidade: string;
   uf: string;
@@ -64,6 +76,7 @@ type Campo =
   | 'e-nome'
   | 'e-slug'
   | 'e-atividade'
+  | 'e-tipo-entidade'
   | 'e-sobre'
   | 'e-cidade'
   | 'e-uf'
@@ -80,6 +93,7 @@ const ROTULOS: Record<Campo, string> = {
   'e-nome': 'Nome',
   'e-slug': 'Identificador',
   'e-atividade': 'Atividade',
+  'e-tipo-entidade': 'Tipo',
   'e-sobre': 'Apresentação',
   'e-cidade': 'Cidade',
   'e-uf': 'UF',
@@ -96,6 +110,7 @@ const ROTULOS: Record<Campo, string> = {
 const ORDEM: Campo[] = [
   'e-nome',
   'e-slug',
+  'e-tipo-entidade',
   'e-atividade',
   'e-sobre',
   'e-cidade',
@@ -115,6 +130,7 @@ const VAZIO: Valores = {
   slug: '',
   slugEditado: false,
   atividade: '',
+  tipoDeEntidade: 'professional',
   sobre: '',
   cidade: '',
   uf: '',
@@ -211,6 +227,7 @@ function valoresDa(entrada: Entrada): Valores {
     slug: entrada.slug,
     slugEditado: true,
     atividade: entrada.kind,
+    tipoDeEntidade: entrada.entity_kind,
     sobre: entrada.about ?? '',
     cidade: entrada.city ?? '',
     uf: entrada.state ?? '',
@@ -452,6 +469,7 @@ export default function FormularioDaEntrada() {
           body: {
             slug: valores.slug,
             kind: valores.atividade as TipoDaEntrada,
+            entity_kind: valores.tipoDeEntidade,
             display_name: nome,
             ...(ou(valores.sobre) === null ? {} : { about: ou(valores.sobre) as string }),
             ...(ou(valores.cidade) === null ? {} : { city: ou(valores.cidade) as string }),
@@ -488,6 +506,9 @@ export default function FormularioDaEntrada() {
       const patch: Esquemas['AdminDirectoryEntryPatch'] = {
         ...(valores.slug !== entrada.slug ? { slug: valores.slug } : {}),
         ...(valores.atividade !== entrada.kind ? { kind: valores.atividade as TipoDaEntrada } : {}),
+        ...(valores.tipoDeEntidade !== entrada.entity_kind
+          ? { entity_kind: valores.tipoDeEntidade }
+          : {}),
         ...(nome !== entrada.display_name ? { display_name: nome } : {}),
         ...(ou(valores.sobre) !== (entrada.about ?? null) ? { about: ou(valores.sobre) } : {}),
         ...(ou(valores.cidade) !== (entrada.city ?? null) ? { city: ou(valores.cidade) } : {}),
@@ -689,6 +710,41 @@ export default function FormularioDaEntrada() {
           }
         />
 
+        {/* O TIPO DE ENTIDADE, ligado na uniao de 18/10/2026.
+            O eixo e o campo existiam no contrato e na coluna desde
+            `20261018000012`, e o painel nao os oferecia: o autor do eixo nao
+            pos o campo aqui porque este arquivo estava com o ramo da midia.
+            Sem ele nao havia como cadastrar uma ONG pelo painel -- a entrada
+            nascia `professional` e nada na tela dizia o contrario.
+
+            ANTES da atividade de proposito: "o que e?" vem antes de "o que
+            faz?", e uma ONG responde as duas. */}
+        <div className="field">
+          <label htmlFor="e-tipo-entidade">Tipo *</label>
+          <div className="ordem sel campo-sel">
+            <select
+              id="e-tipo-entidade"
+              data-cy="entrada-tipo-entidade"
+              value={valores.tipoDeEntidade}
+              onChange={(e) =>
+                mudar({ tipoDeEntidade: e.target.value as TipoDeEntidadeDaEntrada })
+              }
+              aria-describedby="e-tipo-entidade-ajuda"
+            >
+              {ORDEM_DOS_TIPOS_DE_ENTIDADE.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {TIPOS_DE_ENTIDADE[tipo]}
+                </option>
+              ))}
+            </select>
+            <Icone nome="expand" tamanho="s20" />
+          </div>
+          <span className="help" id="e-tipo-entidade-ajuda">
+            Uma ONG continua escolhendo a atividade abaixo: o tipo diz o que a entrada é, e a
+            atividade diz o que ela faz.
+          </span>
+        </div>
+
         <div className={erros['e-atividade'] ? 'field err' : 'field'}>
           <label htmlFor="e-atividade">Atividade *</label>
           <div className="ordem sel campo-sel">
@@ -709,11 +765,14 @@ export default function FormularioDaEntrada() {
             </select>
             <Icone nome="expand" tamanho="s20" />
           </div>
-          {/* O limite do modelo, dito ao operador em vez de descoberto por ele.
-              Não há valor para ONG em `professionals.kind` (decisão 9.1). */}
+          {/* ATUALIZADA na uniao de 18/10/2026. Ela dizia "ainda não há opção
+              para ONG: o cadastro de ONG depende de uma decisão de modelo que
+              está em aberto" -- e a decisão saiu: ONG é EIXO PRÓPRIO
+              (`entity_kind`), e não um valor de `professionals.kind`. O campo
+              está logo acima. Deixar a frase antiga mandaria o operador
+              desistir de um cadastro que o painel agora faz. */}
           <span className="help" id="e-atividade-ajuda">
-            Ainda não há opção para ONG: o cadastro de ONG depende de uma decisão de modelo que está
-            em aberto. Clínica e estabelecimento usam a primeira opção.
+            O que a entrada faz. Uma ONG também escolhe aqui — o que ela é fica no campo Tipo, acima.
           </span>
           {erros['e-atividade'] && <ErroDoCampo id="e-atividade-erro">{erros['e-atividade']}</ErroDoCampo>}
         </div>

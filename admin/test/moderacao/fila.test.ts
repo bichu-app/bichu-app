@@ -124,11 +124,24 @@ describe('o motivo da decisao', () => {
 });
 
 describe('os rotulos', () => {
-  it('as duas origens construidas tem rotulo, e nenhuma a mais', () => {
-    // A frente de comunidade vai acrescentar `profile` e `photo`; quando
-    // acrescentar, o `satisfies Record<Origem, string>` de `fila.ts` reprova a
-    // compilacao se o rotulo faltar, e este caso passa a contar 4.
-    expect(Object.keys(ROTULO_DA_ORIGEM).sort()).toEqual(['conversation', 'review']);
+  it('as CINCO origens construidas tem rotulo, e nenhuma a mais', () => {
+    // ERAM DUAS ATE A UNIAO DE 18/10/2026, e o recado que estava aqui previu
+    // exatamente isto: "a frente de comunidade vai acrescentar `profile` e
+    // `photo`; quando acrescentar, o `satisfies Record<Origem, string>` de
+    // `fila.ts` reprova a compilacao se o rotulo faltar". Foi o que aconteceu
+    // -- e veio `publication` tambem, da mesma fatia.
+    //
+    // As cinco EXISTEM DE VERDADE: as cinco pernas de `UNION ALL` da visao
+    // `fila_de_moderacao` (migracoes `...0009`, `...0031` e `...0032`). O caso
+    // continua cobrando a mesma coisa -- rotulo para toda origem e nenhum
+    // rotulo orfao --, e o numero mudou porque o produto mudou.
+    expect(Object.keys(ROTULO_DA_ORIGEM).sort()).toEqual([
+      'conversation',
+      'photo',
+      'profile',
+      'publication',
+      'review',
+    ]);
   });
 
   it('motivo conhecido vira palavra; motivo novo aparece CRU em vez de desaparecer', () => {
