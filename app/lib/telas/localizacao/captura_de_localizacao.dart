@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
+import '../../api/busca_de_cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/modelos_localizacao.dart';
 import '../../dispositivo/localizacao.dart';
@@ -39,6 +41,42 @@ import 'textos_da_localizacao.dart';
 /// duas, e o que sustenta a proibicao nao e este comentario: e
 /// `sem_geocodificacao_test.dart`, e o fato de o pacote que converte nao estar
 /// no binario.
+///
+/// ## O CEP, e por que ele NAO desmente o paragrafo acima
+///
+/// O cliente pediu em 18/10/2026 ("na pagina de avisar que encontrou um pet o
+/// cep tambem nao entrou"), pela decisao dele de 17/10 -- ViaCEP em todo
+/// cadastro com CEP, preenchendo o endereco e **deixando a pessoa editar**.
+///
+/// O CEP troca **um codigo postal por bairro, cidade e estado -- texto**, que
+/// e exatamente o que a pessoa digitaria. Nenhuma latitude, nenhuma longitude:
+/// ver `api/busca_de_cep.dart`, que le quatro campos e **ignora de proposito**
+/// a coordenada que a BrasilAPI devolve. Geocodificar seria o contrario disto.
+///
+/// **As duas direcoes continuam fechadas, e e por construcao e nao por
+/// cuidado:**
+///
+/// - o GPS escreve `_ponto`, e **so** `_ponto`. Ele nunca tocou e continua sem
+///   tocar em `_bairro`, `_cidade` ou `_uf` -- derivar bairro de coordenada e
+///   o que o ADR-0006 proibe, e e por isso que o terceiro caso
+///   `OndeComPontoEArea` existe: a tela PERGUNTA o bairro em vez de deduzi-lo;
+/// - o CEP escreve `_bairro`, `_cidade` e `_uf`, e **so** eles. Ele nunca
+///   escreve `_ponto`, nao o apaga e nao o move.
+///
+/// Os dois nao disputam o mesmo campo, entao nao ha o que sobrescrever em
+/// nenhum dos dois sentidos. E dentro dos tres campos de texto vale a regra do
+/// utilitario: **so campo vazio recebe**, o que a pessoa digitou fica.
+///
+/// **O CEP nao viaja no corpo.** `Area` do contrato aceita `city`,
+/// `neighborhood` e `state` -- os tres que o CEP preenche --, e nada mais: o
+/// CEP serve para a pessoa nao digitar os tres. Guardar o codigo postal do
+/// lugar onde um animal foi achado seria **mais** precisao que bairro e
+/// cidade, que e o teto do ADR-0010 para superficie publica.
+///
+/// **E ele nao pode travar `Registrar`.** Nao entra em
+/// `ImpedimentoDeRegistrar`, nao entra em `montarOnde` e nenhum desfecho da
+/// busca marca campo ou desabilita botao. Quem esta com um animal na rua nao
+/// fica preso num formulario porque um servico gratuito caiu.
 ///
 /// ## Nada e guardado no aparelho
 ///
@@ -88,9 +126,22 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   PontoCapturado? _ponto;
   MotivoDeNaoTerPonto? _motivo;
 
+  /// **Campo de busca, e nao campo do `Onde`.** Mora no estado desta peca pelo
+  /// mesmo motivo dos outros dois controladores: e o que faz o que foi
+  /// digitado sobreviver ao vai e volta entre os dois passos do formulario de
+  /// achado (`IndexedStack`, que mantem os dois filhos montados).
+  final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final FocusNode _focoDoBairro = FocusNode();
+
+  /// O que a ultima busca de CEP devolveu, so para a linha de texto embaixo do
+  /// campo. **Nunca desabilita nada.**
+  ResultadoDaBusca? _buscaDoCep;
+  bool _buscandoOCep = false;
+
+  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
+  String _cepJaBuscado = '';
 
   /// A sigla escolhida na lista de estados, ou nulo.
   ///
@@ -119,6 +170,9 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         ..removeListener(_publicar)
         ..dispose();
     }
+    // Sem `removeListener`: o CEP nao publica `Onde` nenhum, porque ele nao e
+    // campo do `Onde` -- ele preenche os tres que sao.
+    _cep.dispose();
     _focoDoBairro.dispose();
     super.dispose();
   }
@@ -145,6 +199,77 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
 
   void _publicar() {
     widget.aoMudar(montarOnde(ponto: _ponto, area: _area));
+  }
+
+  static final RegExp _soDigitos = RegExp(r'[^0-9]');
+
+  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
+  ///
+  /// 1. **so campo vazio recebe.** O que a pessoa escreveu vence o que a base
+  ///    devolve: ela esta olhando o lugar, e a base erra;
+  /// 2. **tudo continua editavel**, inclusive depois da busca;
+  /// 3. **nada aqui impede `Registrar`.** Nenhum caminho desta funcao marca
+  ///    erro, nem toca em `_ponto`, nem muda o que `montarOnde` devolve, a nao
+  ///    ser pelo lado bom: uma cidade preenchida faz o `Onde` existir onde
+  ///    antes nao existia.
+  ///
+  /// `logradouro` e **descartado**: nao ha campo de rua aqui e nao deve haver.
+  /// O que sai em superficie publica para quem procura um animal e bairro e
+  /// cidade (ADR-0010), e a rua de onde um cao foi achado nao e endereco de
+  /// ninguem para ficar guardado.
+  Future<void> _buscarOCep() async {
+    final cep = _cep.text.replaceAll(_soDigitos, '');
+    if (cep.length != 8 || cep == _cepJaBuscado) return;
+    _cepJaBuscado = cep;
+
+    setState(() {
+      _buscandoOCep = true;
+      _buscaDoCep = null;
+    });
+
+    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
+    if (!mounted) return;
+
+    setState(() {
+      _buscandoOCep = false;
+      _buscaDoCep = resposta.resultado;
+      final endereco = resposta.endereco;
+      if (endereco == null) return;
+      // **`_ponto` nao e tocado aqui, em nenhum ramo.** Se a pessoa deu a
+      // localizacao, ela continua valendo e o CEP so acrescenta o rotulo de
+      // area que a coordenada nao tem -- que e o caso `OndeComPontoEArea`.
+      _preencherSeVazio(_bairro, endereco.bairro);
+      _preencherSeVazio(_cidade, endereco.cidade);
+      if (_uf == null && endereco.uf.length == 2) _uf = endereco.uf;
+    });
+    // Fora do `setState`: os controladores ja notificam `_publicar` ao mudar,
+    // mas `_uf` nao -- e sem esta chamada uma UF preenchida pelo CEP ficaria
+    // na tela sem entrar no `Onde`.
+    _publicar();
+  }
+
+  /// Campo vazio recebe; campo escrito fica.
+  void _preencherSeVazio(TextEditingController campo, String valor) {
+    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    campo.text = valor;
+  }
+
+  /// A linha que conta o que a busca fez. **Nenhum destes estados e erro.**
+  Widget _linhaDaBuscaDoCep() {
+    if (_buscandoOCep) {
+      return Semantics(
+        liveRegion: true,
+        child: const Text(TextosDaLocalizacao.buscandoOCep),
+      );
+    }
+    final texto = switch (_buscaDoCep) {
+      ResultadoDaBusca.naoEncontrado => TextosDaLocalizacao.cepNaoEncontrado,
+      ResultadoDaBusca.indisponivel =>
+        TextosDaLocalizacao.buscaDoCepIndisponivel,
+      _ => null,
+    };
+    if (texto == null) return const SizedBox.shrink();
+    return Text(texto);
   }
 
   /// O caminho de `Usar minha localizacao`.
@@ -324,10 +449,13 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     }
   }
 
-  /// Bairro, cidade e UF, na mesma ordem nas duas fases.
+  /// CEP, bairro, cidade e estado, na mesma ordem nas duas fases.
   ///
-  /// Uma lista so, e nao duas copias: as duas fases mostram os mesmos tres
-  /// campos e mudam apenas o que vem ANTES deles (a explicacao da captura, ou
+  /// O CEP e **campo de busca** e nao campo do `Onde`: ele existe para
+  /// preencher os tres seguintes, e nao viaja no corpo. Ver o cabecalho.
+  ///
+  /// Uma lista so, e nao duas copias: as duas fases mostram os mesmos campos
+  /// e mudam apenas o que vem ANTES deles (a explicacao da captura, ou
   /// a faixa do motivo) e se o teclado abre. Duas copias divergiriam na
   /// primeira mudanca, e a que divergiria e a menos exercitada.
   ///
@@ -336,6 +464,34 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// nao sobe sozinho -- ela ja tem o que precisava e pode nao querer digitar
   /// nada.
   List<Widget> _camposDeArea({required bool comFoco}) => <Widget>[
+        // **O CEP vem ANTES dos tres campos que ele preenche**, e a ordem e o
+        // proprio recurso: quem digita o CEP nao digita o resto. Opcional, e
+        // fora do caminho que destrava `Registrar` -- ele nao entra em
+        // `montarOnde` e nao e campo do `Onde`.
+        //
+        // **Nao recebe o foco automatico**, nem na fase em que a pessoa cai
+        // nos campos sem ter pedido: o criterio 5 manda abrir o teclado no
+        // BAIRRO, e trocar o destino do foco por este campo mudaria aquele
+        // criterio de lugar sem ninguem ter decidido.
+        BichuField(
+          rotulo: TextosDaLocalizacao.rotuloCep,
+          controlador: _cep,
+          opcional: true,
+          limite: 8,
+          tipoDeTeclado: TextInputType.number,
+          ajuda: TextosDaLocalizacao.ajudaDoCep,
+          formatadores: <TextInputFormatter>[
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          correcaoAutomatica: false,
+          // No oitavo digito a busca sai sozinha, sem botao `Buscar`.
+          aoMudar: (_) => _buscarOCep(),
+        ),
+        if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e2),
+          _linhaDaBuscaDoCep(),
+        ],
+        const SizedBox(height: BichuEspaco.e4),
         BichuField(
           rotulo: TextosDaLocalizacao.rotuloBairro,
           controlador: _bairro,

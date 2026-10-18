@@ -138,4 +138,23 @@ abstract final class TextosDaLocalizacao {
 
   /// O que a pessoa le enquanto o aparelho mede.
   static const String capturando = 'Procurando sua localização...';
+
+  // -- O CEP, que e campo de BUSCA e nao campo do corpo --------------------
+
+  static const String rotuloCep = 'CEP';
+
+  static const String ajudaDoCep =
+      'Preenche bairro, cidade e estado. Você pode mudar depois.';
+
+  /// Os tres desfechos da busca de CEP. **Nenhum e erro**: nenhum marca campo,
+  /// nenhum desabilita `Registrar` e nenhum impede o envio. Quem esta com um
+  /// animal na rua nao pode ficar preso num formulario por causa de um
+  /// servico de terceiro.
+  static const String buscandoOCep = 'Buscando o endereço…';
+
+  static const String cepNaoEncontrado =
+      'CEP não encontrado. Preencha abaixo.';
+
+  static const String buscaDoCepIndisponivel =
+      'Não deu para buscar o CEP agora. Preencha abaixo.';
 }

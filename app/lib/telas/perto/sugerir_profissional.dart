@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../api/busca_de_cep.dart';
 import '../../api/diretorio_api.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -52,9 +54,31 @@ import '../../widgets/saida_da_tela.dart';
 /// `entity_verifications`, e pedi-lo aqui seria coletar o documento de um
 /// terceiro pela mao de um estranho.
 ///
-/// **Sem endereco e sem ponto no mapa** (ADR-0006): nao ha geocodificacao neste
-/// caminho. Cidade, estado e bairro sao rotulo de texto. O ponto e trabalho do
-/// painel, com mapa de toque.
+/// **Sem endereco por extenso e sem ponto no mapa** (ADR-0006): nao ha
+/// geocodificacao neste caminho. Cidade, estado e bairro sao rotulo de texto. O
+/// ponto e trabalho do painel, com mapa de toque.
+///
+/// ## O CEP: campo de BUSCA, e nao campo do corpo
+///
+/// O cliente pediu em 18/10/2026 ("no formulario de indicacao do profissional,
+/// o campo cep nao entrou tambem"), pela decisao dele de 17/10 -- ViaCEP em
+/// todo cadastro com CEP, preenchendo o endereco e **deixando a pessoa
+/// editar**.
+///
+/// **E ele NAO viaja no corpo**, e a ausencia e medida e nao esquecimento:
+/// `DirectorySuggestionInput` e `additionalProperties: false` e os campos de
+/// endereco que ele aceita sao exatamente `city`, `state` e `neighborhood` --
+/// os tres que o CEP preenche. O CEP serve para a pessoa nao digitar os tres,
+/// e depois disso nao sobra nada dele para mandar: a entrada do diretorio, o
+/// endereco publico e o ponto do mapa sao trabalho do painel (ADR-0011), e
+/// guardar um codigo postal que ninguem le seria dado sem finalidade.
+///
+/// **Se o cliente quiser o CEP GRAVADO para quem revisa, aí sim muda o
+/// contrato** -- `postal_code` opcional no corpo, coluna nova e escrita no
+/// servidor. Isso e decisao dele e nao foi tomada aqui.
+///
+/// E **isto nao e geocodificacao**: ver `api/busca_de_cep.dart`, que troca CEP
+/// por texto e ignora de proposito a coordenada que a BrasilAPI devolve.
 class TelaSugerirProfissional extends StatefulWidget {
   const TelaSugerirProfissional({super.key});
 
@@ -78,6 +102,22 @@ class TelaSugerirProfissional extends StatefulWidget {
   static const String recebido =
       'Indicação recebida. Ela vai para conferência: nada aparece no Perto até '
       'alguém olhar.';
+
+  static const String rotuloDoCep = 'CEP';
+
+  static const String ajudaDoCep =
+      'Preenche bairro, cidade e estado. Você pode mudar depois.';
+
+  /// Os tres desfechos da busca. **Nenhum e erro de formulario**: nenhum marca
+  /// campo, nenhum desabilita o botao e nenhum impede o envio -- o CEP nao e
+  /// campo do corpo, e o pior desfecho quer dizer "digite você mesmo".
+  static const String buscandoOCep = 'Buscando o endereço…';
+
+  static const String cepNaoEncontrado =
+      'CEP não encontrado. Preencha abaixo.';
+
+  static const String buscaIndisponivel =
+      'Não deu para buscar o CEP agora. Preencha abaixo.';
 
   @override
   State<TelaSugerirProfissional> createState() =>
@@ -103,6 +143,7 @@ enum _Impedimento {
 
 class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   final TextEditingController _nome = TextEditingController();
+  final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final TextEditingController _uf = TextEditingController();
@@ -111,6 +152,14 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
 
   AtividadeDoDiretorio? _atividade;
   TipoDeContatoPublico? _tipoDeContato;
+
+  /// O que a ultima busca de CEP devolveu. **Nunca desabilita nada**: serve
+  /// so para a linha de texto embaixo do campo.
+  ResultadoDaBusca? _buscaDoCep;
+  bool _buscandoOCep = false;
+
+  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
+  String _cepJaBuscado = '';
 
   _Fase _fase = _Fase.preenchendo;
   MensagemDeErro? _erro;
@@ -136,6 +185,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   @override
   void dispose() {
     _nome.dispose();
+    _cep.dispose();
     _bairro.dispose();
     _cidade.dispose();
     _uf.dispose();
@@ -148,6 +198,84 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
         _erro = null;
         _errosDeCampo = const <String, String>{};
       });
+
+  static final RegExp _soDigitos = RegExp(r'[^0-9]');
+
+  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
+  ///
+  /// Tres regras, e as tres sao do pedido do cliente de 17/10/2026:
+  ///
+  /// 1. **so campo vazio recebe.** O que a pessoa escreveu vence o que a base
+  ///    devolve -- inclusive o bairro, a cidade e a UF que esta tela ja
+  ///    preencheu da regiao de referencia do tutor em [didChangeDependencies].
+  ///    A base erra, e quem esta olhando o endereco e a pessoa;
+  /// 2. **nada fica bloqueado depois da busca.** Os tres campos continuam
+  ///    editaveis: CEP generico de cidade nao traz bairro;
+  /// 3. **nada aqui pode impedir a indicacao.** Nenhum caminho desta funcao
+  ///    marca erro de campo, mexe em `_impedimento` ou desabilita o botao. O
+  ///    CEP nem viaja no corpo -- ver o cabecalho da tela.
+  ///
+  /// O `logradouro` que a busca devolve e **descartado**: nao ha campo de rua
+  /// nesta tela e nao ha coluna para ele (ADR-0011: endereco publico e ponto
+  /// do mapa sao do painel). Descartar e o certo; criar o campo seria decidir
+  /// por conta propria que a sugestao passa a carregar endereco de terceiro.
+  Future<void> _buscarOCep() async {
+    final cep = _cep.text.replaceAll(_soDigitos, '');
+    if (cep.length != 8 || cep == _cepJaBuscado) return;
+    _cepJaBuscado = cep;
+
+    setState(() {
+      _buscandoOCep = true;
+      _buscaDoCep = null;
+    });
+
+    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
+    if (!mounted) return;
+
+    setState(() {
+      _buscandoOCep = false;
+      _buscaDoCep = resposta.resultado;
+      final endereco = resposta.endereco;
+      if (endereco == null) return;
+      _preencherSeVazio(_bairro, endereco.bairro, 'neighborhood');
+      _preencherSeVazio(_cidade, endereco.cidade, 'city');
+      if (endereco.uf.length == 2) {
+        _preencherSeVazio(_uf, endereco.uf, 'state');
+      }
+    });
+  }
+
+  /// Campo vazio recebe; campo escrito fica. E o erro do campo que acabou de
+  /// ser preenchido sai junto -- deixar "Diga a cidade." embaixo de uma cidade
+  /// preenchida seria a tela discutindo consigo mesma.
+  void _preencherSeVazio(
+    TextEditingController campo,
+    String valor,
+    String chave,
+  ) {
+    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    campo.text = valor;
+    _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
+  }
+
+  /// A linha que conta o que a busca fez. **Nenhum destes estados e erro.**
+  Widget _linhaDaBusca(TextTheme textos) {
+    if (_buscandoOCep) {
+      return Text(
+        TelaSugerirProfissional.buscandoOCep,
+        style: textos.bodySmall,
+      );
+    }
+    final texto = switch (_buscaDoCep) {
+      ResultadoDaBusca.naoEncontrado =>
+        TelaSugerirProfissional.cepNaoEncontrado,
+      ResultadoDaBusca.indisponivel =>
+        TelaSugerirProfissional.buscaIndisponivel,
+      _ => null,
+    };
+    if (texto == null) return const SizedBox.shrink();
+    return Text(texto, style: textos.bodySmall);
+  }
 
   _Impedimento? get _impedimento {
     if (Escopo.of(context).sessao.usuario == null) {
@@ -326,6 +454,38 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   child: Text('Onde atende', style: textos.titleMedium),
                 ),
                 const SizedBox(height: BichuEspaco.e3),
+                // **O CEP vem ANTES dos tres campos que ele preenche**, e a
+                // ordem e o proprio recurso: quem digita primeiro o CEP nao
+                // digita o resto. Ele e **opcional** e nao entra em
+                // `_impedimento` -- quem nao sabe o CEP da clinica preenche
+                // cidade e UF a mao, como antes.
+                BichuField(
+                  rotulo: TelaSugerirProfissional.rotuloDoCep,
+                  controlador: _cep,
+                  opcional: true,
+                  limite: 8,
+                  tipoDeTeclado: TextInputType.number,
+                  ajuda: TelaSugerirProfissional.ajudaDoCep,
+                  formatadores: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  correcaoAutomatica: false,
+                  habilitado: !enviando,
+                  // No oitavo digito a busca sai sozinha. Sem botao `Buscar`:
+                  // um botao a mais e um passo a mais para quem so quer os
+                  // campos preenchidos, e nao buscar e desfecho valido.
+                  aoMudar: (valor) {
+                    _aoDigitar(valor);
+                    _buscarOCep();
+                  },
+                ),
+                // O que a busca disse, e **so isso**: nao marca campo e nao
+                // desabilita nada.
+                if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+                  const SizedBox(height: BichuEspaco.e2),
+                  _linhaDaBusca(textos),
+                ],
+                const SizedBox(height: BichuEspaco.e4),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
