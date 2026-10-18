@@ -765,7 +765,26 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Os pedidos da plaquinha deste pet
+         * @description A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app (decisao do
+         *     cliente, 18/10): privada, exige sessao, e a pessoa ve **so as
+         *     plaquinhas dela**.
+         *
+         *     **A autorizacao esta na clausula `WHERE`, e por isso a resposta de pet
+         *     de outra conta e `404` e nunca `403`** (ADR-0021): o `SELECT` carrega
+         *     `pets.owner_user_id = <chamador>` e simplesmente nao encontra linha.
+         *     Um `403` confirmaria que o pet existe.
+         *
+         *     **Nenhum endereco de entrega sai aqui.** Ele e dado pessoal, ja foi
+         *     digitado por quem pede, e a unica superficie que o projeta segue sendo
+         *     a fila do painel (`AdminCollarTagRequest`).
+         *
+         *     Ordenado do pedido mais recente para o mais antigo. Um pet costuma ter
+         *     um pedido; a lista existe porque a segunda plaquinha e um pedido
+         *     legitimo depois do primeiro ser atendido.
+         */
+        get: operations["listCollarTagRequests"];
         put?: never;
         /**
          * Pedir a plaquinha da coleira de um pet
@@ -779,9 +798,10 @@ export interface paths {
          *     coisa. Depois de atendido, um pedido novo e aceito -- a segunda
          *     plaquinha e um pedido legitimo.
          *
-         *     **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
-         *     que o painel usa no caminho nao e projetado para o app, que nao tem o
-         *     que fazer com ele.
+         *     **O `ref` do pedido SAI aqui desde 18/10**, para que a pessoa saia
+         *     desta tela com o numero que identifica o pedido dela. Ele e o mesmo
+         *     `ref` opaco da fila do painel, e **nenhum UUID interno sai**
+         *     (ADR-0010 item 6).
          *
          *     **O endereco e obrigatorio e nao volta na resposta.** Ele e dado
          *     pessoal, quem o enviou acabou de digita-lo, e devolve-lo seria uma
@@ -1716,7 +1736,83 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Minhas indicações
+         * @description As indicações que **a propria conta** fez para o `Perto`, com o estado
+         *     de cada uma. Pedido literal do cliente em 18/10/2026: *"e a aba de
+         *     minhas indicacoes, com o status se esta pendente ou se ja foi aprovado
+         *     pelo administrador?"*.
+         *
+         *     ## O LADO QUE FALTAVA, e o que ele desfaz
+         *
+         *     `suggestDirectoryEntry` existe desde 17/10 e devolve um recibo com
+         *     `reference`, `state` e `created_at` -- e nada mais depois disso. A
+         *     `20261017000016` deu ao PAINEL as quatro operacoes da fila; nenhuma
+         *     operacao deste contrato lia `directory_suggestions` do lado de **quem
+         *     indicou**, e por isso a pessoa nao tinha como saber se alguem olhou.
+         *
+         *     **Isto REVERTE uma frase, e a reversao esta declarada.** O
+         *     `COMMENT ON COLUMN` de `decline_reason` dizia "nao chega a quem
+         *     indicou", e `AdminDirectorySuggestion.decline_reason` repetia. A partir
+         *     de 18/10/2026 **o motivo da recusa chega a quem indicou**, por esta
+         *     operacao: recusa sem motivo faz a mesma clinica ser indicada outra vez,
+         *     e e a unica forma de resposta que nao ensina nada a ninguem. A migracao
+         *     `20261018000003` reescreve aquele `COMMENT` e justifica a troca; quem
+         *     recusa passa a escrever **para a pessoa**, e nao so para o proximo
+         *     revisor.
+         *
+         *     ## A autorizacao esta no `WHERE`, e por isso nao ha `403`
+         *
+         *     A consulta passa pela funcao `indicacoes_do_autor(uuid)` da migracao
+         *     `20261018000003`, que tem a conta na propria clausula `WHERE`. Nao e um
+         *     filtro aplicado depois de ler e nao e um `if` sobre a linha lida: a
+         *     indicacao de outra conta **nao existe** para quem chama. Nao ha `403`
+         *     nesta operacao, e nao ha por que haver (ADR-0021).
+         *
+         *     **Conta desabilitada devolve lista vazia**, pela mesma funcao, que
+         *     delega a `conta_habilitada(uuid)` (`20261017000013`) -- o ponto unico da
+         *     definicao, nao copiado aqui.
+         *
+         *     ## Nada de quem indicou sai na resposta
+         *
+         *     **Nenhum identificador interno** (ADR-0010): sem `id`, e o enderecamento
+         *     e por `reference`, o mesmo opaco de 128 bits que o recibo devolveu. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` no
+         *     `COMMENT ON COLUMN` da `20261017000004` (ADR-0011 secao 4, BICHUS-174) e
+         *     **nao e projetada** pela funcao: ela e parametro e filtro, nunca saida.
+         *
+         *     ## `entry_slug` SO VEM PUBLICADO, e o nulo tem significado
+         *
+         *     Aprovada **nao** quer dizer no ar. Uma entrada nascida de indicacao cujo
+         *     contato publico e `website` ou `instagram` nasce `draft` -- ela nao tem
+         *     `phone_e164`, que e o canal unico de `professionals` --, e `Perto` so
+         *     lista `status = 'published'`. Por isso `entry_slug` e devolvido
+         *     **apenas quando a entrada esta publicada**: devolver o `slug` do
+         *     rascunho faria a tela oferecer um caminho para uma pagina que nao esta
+         *     no `Perto`.
+         *
+         *     Entao `review_status: approved` com `entry_slug: null` e um estado com
+         *     nome, e a tela o diz com palavras em vez de prometer link: aprovada,
+         *     ainda nao no `Perto`.
+         *
+         *     ## `state` existe e `q` NAO, e as duas decisoes sao medidas
+         *
+         *     O padrao de listagem do projeto poe filtro e ordenacao no corpo da
+         *     tela -- e os poe **sobre o que o contrato aceita**. Um filtro aplicado
+         *     so na pagina carregada mentiria no `total` e no paginador: com `limit`
+         *     de 20 e uma lista que cresce 5 por dia (o teto de
+         *     `suggestDirectoryEntry`), "pendentes" filtrado no aplicativo mostraria
+         *     as pendentes **da pagina 1** e diria que sao todas. Entao `state` e do
+         *     SERVIDOR, e `total` passa a ser o do recorte.
+         *
+         *     **`q` nao existe, e a ausencia e a mesma medida ao contrario:** buscar
+         *     por nome numa lista de poucas dezenas de itens que a pessoa mesma
+         *     escreveu e um campo a mais para manter em troca de nada -- e seria a
+         *     unica busca do projeto sem indice por tras. Ordenacao tambem nao: a
+         *     ordem e uma so, e e a unica que faz sentido aqui (a mais recente
+         *     primeiro, porque e sobre ela que a pessoa quer noticia).
+         */
+        get: operations["listMyDirectorySuggestions"];
         put?: never;
         /**
          * Sugerir um estabelecimento ou profissional para o `Perto`
@@ -4397,6 +4493,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tag-requests/{requestRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um pedido da plaquinha
+         * @description A leitura de UM pedido, para a tela de entrega do painel: quem atende
+         *     abre o pedido, confere o endereco, digita o rastreio e marca o passo.
+         *     Sem ela a tela teria de achar o pedido dentro da pagina da listagem, e
+         *     perderia a linha a cada recarga.
+         *
+         *     Mesma projecao da listagem (`AdminCollarTagRequest`), e as mesmas
+         *     regras: **devolve o ENDERECO DE ENTREGA** (dado pessoal, so nesta
+         *     superficie, nunca na trilha, nunca geocodificado -- ADR-0006); **nenhum
+         *     PERFIL do solicitante**; e **nao traz o codigo da plaquinha**, que e
+         *     credencial ao portador (ADR-0004).
+         *
+         *     **Pedido de conta desabilitada responde `404`**, e nao uma leitura
+         *     parcial: decisao do cliente de 17/10 -- conta desabilitada nao e mais
+         *     encontrada em nenhuma pagina nem funcionalidade. O filtro esta na
+         *     clausula `WHERE`, e nao num ramo de JavaScript. `404` tambem para `ref`
+         *     desconhecido e para pedido de pet ja excluido; nao ha `403` nesta
+         *     superficie (ADR-0021).
+         */
+        get: operations["getAdminCollarTagRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atualiza a entrega da plaquinha
+         * @description O estado da entrega e o codigo de rastreio, numa escrita so -- que e
+         *     como o cliente pediu em 18/10: "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega".
+         *
+         *     As transicoes aceitas, o que acontece com cada uma e por que nao se
+         *     volta atras estao em `AdminCollarTagDeliveryUpdate`. Transicao fora da
+         *     tabela responde `400` com `code: invalid_delivery_transition`;
+         *     rastreio so com espaco responde `400` com `code: blank_tracking_code`.
+         *
+         *     **`POST` e nao `PATCH`**, e nao por indecisao: as outras duas escritas
+         *     desta fila sao `POST` em sub-recurso de acao
+         *     (`/fulfillment`, `/decline`), e esta e a terceira irma delas. Um `PATCH`
+         *     aqui obrigaria o painel a falar dois dialetos com a mesma fila.
+         *
+         *     **Sem `If-Match`**, ao contrario de `updateAdminDirectoryEntry`. La o
+         *     recurso tem `version` e a escrita e de formulario inteiro, onde duas
+         *     pessoas se sobrescrevem em silencio. Aqui a trava e a propria maquina de
+         *     estados, sob `FOR UPDATE`: quem chega com a tela velha tenta uma
+         *     transicao que o estado atual nao permite e leva `400` em voz alta. Um
+         *     `ETag` para esta fila seria uma segunda trava para a mesma propriedade,
+         *     e uma coluna `version` que so ela usaria.
+         *
+         *     **Nao apaga nada.** Nao existe exclusao de pedido nesta superficie, e o
+         *     que seria cancelar e `declined` -- estado, e por
+         *     `declineAdminCollarTagRequest`.
+         *
+         *     **Nao emite codigo** (ADR-0004) e **nao consulta transportadora
+         *     nenhuma**: o rastreio e texto digitado.
+         *
+         *     Pedido de conta desabilitada responde `404`, pela mesma clausula `WHERE`
+         *     da leitura.
+         */
+        post: operations["updateAdminCollarTagRequestDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tag-requests/{requestRef}/fulfillment": {
         parameters: {
             query?: never;
@@ -4525,11 +4713,29 @@ export interface components {
         PetSize: "P" | "M" | "G" | "GG";
         /** @enum {string} */
         Sex: "male" | "female" | "unknown";
+        /**
+         * @description **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+         *     cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+         *     ele esta cadastrando sem esse campo"*.
+         *
+         *     **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+         *     que nao manda a chave passa a receber 400 `validation-failed` com
+         *     `errors[].field: display_name` e `code: required`. O APK em campo que
+         *     nao preenche o nome deixa de criar conta -- a correcao e APK novo, e nao
+         *     afrouxar o campo.
+         *
+         *     **`minLength: 1` nao esgota a regra, e de proposito.** O caso que escapa
+         *     do schema e o nome **so com espaco em branco** (`"   "`), que tem
+         *     comprimento 1 e nao tem nome nenhum dentro. Quem recusa esse e o
+         *     servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
+         *     nao tem como exprimir "sobra caractere depois de aparar", e inventar
+         *     `pattern` aqui faria a recusa do schema e a do servidor divergirem.
+         */
         RegisterRequest: {
             /** Format: email */
             email: string;
             password: components["schemas"]["Password"];
-            display_name?: string;
+            display_name: string;
             accepted_terms_version?: string;
             stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
@@ -5894,6 +6100,94 @@ export interface components {
             state: components["schemas"]["DirectorySuggestionState"];
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Uma indicacao, como **quem a fez** a ve.
+         *
+         *     ## Nao e `AdminDirectorySuggestion`, e a diferenca nao e de organizacao
+         *
+         *     Sao duas audiencias com direitos diferentes sobre a mesma linha. O
+         *     painel ve `note` -- o recado PARA QUEM REVISA --, e esta projecao
+         *     **nao**: ele nao e conteudo da pessoa sobre a entidade, e devolve-lo
+         *     aqui faria a tela parecer um rascunho guardado. Esta projecao devolve
+         *     `entry_slug` **so publicado**; a do painel devolve sempre, porque o
+         *     painel precisa pular para o rascunho que ele mesmo vai completar.
+         *
+         *     Um `allOf` sobre a do painel acoplaria as duas: o dia em que o painel
+         *     ganhar um campo, a pessoa o receberia junto. A duplicacao aqui e
+         *     deliberada e e a fronteira.
+         *
+         *     ## Nada de identificador interno, e nada da autoria
+         *
+         *     **Sem `id`** (ADR-0010 item 6): o enderecamento e por `reference`. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` e nao e
+         *     projetada pela funcao que serve esta operacao.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state`
+         *     aqui e a UF, na mesma projecao, exatamente como na tabela e como em
+         *     `AdminDirectorySuggestion`.
+         */
+        MyDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description **O motivo da recusa, e ele CHEGA a quem indicou** -- decisao de
+             *     18/10/2026, que reverte a frase anterior deste contrato e o
+             *     `COMMENT ON COLUMN` da `20261017000016` (ver a descricao de
+             *     `listMyDirectorySuggestions` e o cabecalho da `20261018000003`).
+             *
+             *     Nulo em tudo que nao foi recusado. Continua fora da entrada do
+             *     diretorio e continua nao publicado para terceiros: quem o le e a
+             *     conta que indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco da entrada no `Perto`, **e so quando ela esta
+             *     publicada**.
+             *
+             *     Nulo com `review_status: approved` **tem significado**: a entrada
+             *     existe mas esta `draft`, e nao esta no `Perto`. Isso acontece
+             *     quando a indicacao foi aprovada sem telefone -- entrada nascida de
+             *     contato `website` ou `instagram` nasce rascunho, porque
+             *     `professionals` tem `phone_e164` como canal unico. A tela diz isso
+             *     com palavras e **nao oferece link**, porque link para rascunho leva
+             *     a pagina que nao esta la.
+             */
+            entry_slug?: string | null;
+        };
+        /**
+         * @description A pagina, **da mais recente para a mais antiga**. Sem `pending_total`:
+         *     aquele numero e o aviso do menu do PAINEL ("quanto trabalho esta
+         *     esperando"), e nao tem sentido na tela de quem indicou -- aqui o que
+         *     importa e o estado de cada uma, nao o tamanho de uma fila alheia.
+         */
+        MyDirectorySuggestionPage: {
+            items: components["schemas"]["MyDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /**
+             * @description Quantas indicacoes o RECORTE desta chamada tem -- todas, quando
+             *     `state` esta ausente. Alimenta "Mostrando 1 a 20 de 87" e o
+             *     paginador, e e por isso que ele acompanha o filtro: um total que
+             *     ignorasse `state` faria o paginador oferecer paginas vazias.
+             */
+            total: number;
         };
         /**
          * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
@@ -8419,26 +8713,133 @@ export interface components {
             state: string;
         };
         /**
-         * @description `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
-         *     FISICA saiu, e nao que o codigo foi emitido -- emitir e `issuePetTag`,
-         *     e o codigo e irreversivel (ADR-0004).
+         * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
+         *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
+         *
+         *     **Nao diz onde a encomenda esta** -- isso e `delivery_state`, que e o
+         *     eixo da entrega e carrega os passos que o tutor acompanha.
+         *
+         *     `fulfilled` NAO quer dizer que o codigo foi emitido: emitir e
+         *     `issuePetTag`, e o codigo e irreversivel (ADR-0004).
          * @enum {string}
          */
         CollarTagRequestStatus: "pending" | "fulfilled" | "declined";
         /**
-         * @description O pedido da plaquinha como o APP o ve. **Sem `ref`**: o identificador
-         *     opaco serve ao caminho do painel, e projeta-lo aqui daria ao app um
-         *     valor que ele nao tem o que fazer com. Sem UUID interno nenhum
-         *     (ADR-0010 item 6) -- o pet e o do caminho.
+         * @description O EIXO DA ENTREGA, e os tres passos que o cliente nomeou em 18/10:
+         *
+         *     | valor | passo, nas palavras dele |
+         *     | --- | --- |
+         *     | `requested` | solicitado |
+         *     | `in_transit` | em transporte |
+         *     | `arrived` | chegou |
+         *
+         *     **Nunca nulo e nunca ausente**: a coluna e `NOT NULL DEFAULT
+         *     'requested'`, entao todo pedido tem um passo escrito -- inclusive os
+         *     criados antes de a entrega existir. A tela le UM campo e desenha UM
+         *     passo, e nao infere "solicitado" de uma ausencia.
+         *
+         *     ## Por que e um eixo separado de `status`, e nao mais um valor dele
+         *
+         *     O desenho de UM eixo so -- `delivered` acrescentado a
+         *     `CollarTagRequestStatus` -- foi escrito primeiro e **reprovado por
+         *     `oasdiff`**: acrescentar valor a `enum` de RESPOSTA e quebra de contrato
+         *     pela regra `response-property-enum-value-added`, e ela saiu em nivel
+         *     `error` quatro vezes, uma por operacao que projeta o estado. Campo
+         *     ACRESCENTADO nao quebra ninguem; valor acrescentado a `enum` existente
+         *     quebra. O eixo separado e o desenho que nao precisa de dispensa.
+         *
+         *     ## E as combinacoes impossiveis?
+         *
+         *     Os dois eixos **nao sao independentes**, e quem garante isso e o banco:
+         *     `collar_tag_requests_entrega_exige_atendimento` proibe sair de
+         *     `requested` sem o pedido estar `fulfilled`. Com isso
+         *     recusado-que-chegou e pendente-em-transporte deixam de existir, e nao ha
+         *     par a conferir na aplicacao.
+         * @enum {string}
+         */
+        CollarTagDeliveryState: "requested" | "in_transit" | "arrived";
+        /**
+         * @description O pedido da plaquinha como o APP o ve.
+         *
+         *     **`ref` PASSOU A SAIR AQUI, em 18/10.** Ate entao esta projecao nao o
+         *     trazia, e o motivo escrito era que o app "nao tem o que fazer com
+         *     ele". O cliente deu o que fazer: a pessoa acompanha o pedido e precisa
+         *     de um numero para pedir ajuda sobre ele. Continua sendo o MESMO `ref`
+         *     opaco de 128 bits da fila do painel -- **nao ha identificador novo, e
+         *     nenhum UUID interno sai** (ADR-0010 item 6). O pet e o do caminho.
+         *
+         *     **Sem endereco de entrega**: dado pessoal, ja digitado por quem pede, e
+         *     a unica superficie que o projeta e `AdminCollarTagRequest`.
          */
         CollarTagRequest: {
+            /**
+             * @description O identificador opaco do pedido, 128 bits em base64url. O MESMO
+             *     valor de `AdminCollarTagRequest.ref`, e nao um segundo
+             *     identificador. Nao e UUID.
+             */
+            ref: string;
             status: components["schemas"]["CollarTagRequestStatus"];
             /** Format: date-time */
             requested_at: string;
+            /**
+             * Format: date-time
+             * @description Quando o painel decidiu, ou nulo enquanto `pending`.
+             */
+            decided_at?: string | null;
             /** @description A observacao que o tutor escreveu, ou nulo. */
             notes?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio da encomenda, ou nulo. **Sai para o DONO do
+             *     pedido**, que e quem acompanha a entrega, e nunca em superficie sem
+             *     conta.
+             *
+             *     Nulo e o caso comum e NAO e defeito: nem todo envio tem rastreio
+             *     (entrega em maos, correio simples), e nenhum pedido tem rastreio
+             *     antes de sair. A tela mostra o passo sem o codigo em vez de mostrar
+             *     um campo vazio.
+             *
+             *     **Sem validacao de formato de transportadora**: ver
+             *     `AdminCollarTagDeliveryUpdate.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha SAIU, o carimbo do passo "em transporte". Nulo
+             *     enquanto `delivery_state` e `requested`.
+             *
+             *     Coluna propria, e **nao `decided_at` reaproveitado**: `decided_at`
+             *     guarda tambem o instante da RECUSA, e chamar aquilo de "saiu" seria
+             *     mentir sobre uma plaquinha que nunca foi despachada. Nao volta a
+             *     nulo quando a encomenda chega -- `arrived` tambem ja saiu.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha CHEGOU, o carimbo do passo "chegou". Nulo em tudo
+             *     que nao chegou.
+             *
+             *     Com `requested_at` e `shipped_at`, fecha os TRES carimbos dos tres
+             *     passos -- a pagina privada do aplicativo nao precisa derivar nenhuma
+             *     data de nenhum estado.
+             */
+            delivered_at?: string | null;
         };
-        /** @enum {string} */
+        /**
+         * @description Os pedidos da plaquinha de UM pet, do mais recente para o mais antigo.
+         *     Sem paginacao: o teto de 3 pedidos por conta por dia e o indice parcial
+         *     de um pendente por pet mantem a lista curta por construcao.
+         */
+        CollarTagRequestPage: {
+            items: components["schemas"]["CollarTagRequest"][];
+        };
+        /**
+         * @description Os mesmos tres valores de `CollarTagRequestStatus`, que e o eixo da
+         *     DECISAO. Como filtro de `listAdminCollarTagRequests`, e a aba que o
+         *     painel abre; para recortar por passo da ENTREGA o filtro e
+         *     `delivery_state`, e os dois podem ser combinados.
+         * @enum {string}
+         */
         AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
         /**
          * @description Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
@@ -8474,6 +8875,96 @@ export interface components {
             requested_at: string;
             /** Format: date-time */
             decided_at?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio que o administrador digitou, ou nulo. O mesmo
+             *     valor que o dono do pedido le em `CollarTagRequest.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha saiu. Nulo enquanto `delivery_state` e `requested`.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha chegou. Nulo em tudo que nao chegou.
+             */
+            delivered_at?: string | null;
+        };
+        /**
+         * @description A ATUALIZACAO DA ENTREGA: o passo e o codigo de rastreio, numa escrita
+         *     so. Palavras do cliente (18/10): "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega" -- uma operacao, e nao duas.
+         *
+         *     ## As transicoes que esta operacao aceita
+         *
+         *     | de | para | o que e |
+         *     | --- | --- | --- |
+         *     | `requested` | `in_transit` | a plaquinha saiu |
+         *     | `in_transit` | `arrived` | a plaquinha chegou |
+         *     | `in_transit` | `in_transit` | so o rastreio mudou |
+         *     | `arrived` | `arrived` | so o rastreio mudou |
+         *
+         *     Qualquer outra responde `400` com `code: invalid_delivery_transition`.
+         *
+         *     **O pedido precisa estar `fulfilled`.** Nao se despacha o que o painel
+         *     nao aceitou: pedido em `pending` responde `400` com
+         *     `code: request_not_fulfilled`, e o caminho e `fulfillAdminCollarTagRequest`
+         *     antes. Pedido `declined` responde o mesmo -- recusado nao anda. Isto nao
+         *     e uma conferencia escrita a mao em paralelo ao banco: e a mesma regra do
+         *     `CHECK` `collar_tag_requests_entrega_exige_atendimento`, traduzida para
+         *     uma resposta que diz qual e o proximo passo em vez de estourar.
+         *
+         *     **Nao se volta atras**: `arrived` nao vira `in_transit`, e nada volta a
+         *     `requested`. Desfazer uma chegada marcada por engano nao e uma
+         *     transicao: e um pedido novo, ou um ajuste por quem opera o banco.
+         *
+         *     **`requested` -> `arrived` nao e aceito**, apesar de ser "para frente".
+         *     O passo "em transporte" e o que carrega o rastreio e o carimbo de
+         *     despacho, e pular direto para a chegada deixaria a entrega sem registro
+         *     de que ela saiu. Sao dois cliques, e o painel os oferece em sequencia.
+         *
+         *     **Nada aqui APAGA pedido.** Nao existe exclusao nesta superficie; o que
+         *     o cliente chamaria de cancelar e `declined`, que e estado e e da outra
+         *     operacao.
+         */
+        AdminCollarTagDeliveryUpdate: {
+            /**
+             * @description O passo desejado. So os dois passos que se alcanca: `requested` e o
+             *     inicial e ninguem volta a ele.
+             *
+             *     Repetir o passo atual (`in_transit` sobre `in_transit`, `arrived`
+             *     sobre `arrived`) e aceito de proposito: e o caminho de corrigir so o
+             *     rastreio, e e por isso que o campo e obrigatorio em vez de opcional
+             *     -- um corpo sem passo faria a operacao adivinhar.
+             * @enum {string}
+             */
+            delivery_state: "in_transit" | "arrived";
+            /**
+             * @description O codigo de rastreio, TEXTO que o administrador digita.
+             *
+             *     Tres casos, e os tres sao diferentes:
+             *
+             *     - **ausente**: o rastreio nao muda. E o que acontece quando so se
+             *       marca a chegada de uma encomenda que ja tinha codigo;
+             *     - **texto**: passa a ser este. Espaco nas bordas e removido antes de
+             *       gravar;
+             *     - **`null`**: o rastreio e APAGADO. Existe para o engano -- codigo da
+             *       encomenda errada -- e nao para uso comum.
+             *
+             *     **Sem validacao de formato de transportadora**, de proposito:
+             *     Correios tem 13 simbolos, FedEx de 12 a 22, DHL 10, e transportadora
+             *     regional tem o que quiser e muda. Um formato cravado aqui recusaria,
+             *     em producao e sem aviso, o rastreio legitimo de amanha. Recusa-se so
+             *     o claramente invalido: de 3 a 64 simbolos, e texto que seja **so
+             *     espaco** responde `400` com `code: blank_tracking_code`.
+             *
+             *     **Nao ha integracao com transportadora.** Nada neste projeto consulta
+             *     Correios nem ninguem: seria custo recorrente, e a decisao e do
+             *     cliente.
+             */
+            tracking_code?: string | null;
         };
         AdminCollarTagRequestPage: {
             items: components["schemas"]["AdminCollarTagRequest"][];
@@ -10235,6 +10726,31 @@ export interface operations {
             };
         };
     };
+    listCollarTagRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os pedidos deste pet, do mais recente para o mais antigo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollarTagRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     requestCollarTag: {
         parameters: {
             query?: never;
@@ -11477,6 +11993,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyDirectorySuggestions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Filtra pelo estado da revisao. Ausente, devolve **todos** os
+                 *     estados -- que e a pergunta de quem abre a tela.
+                 *
+                 *     Do SERVIDOR e nao do aplicativo: filtrar a pagina carregada
+                 *     mentiria no `total` e no paginador. Com o filtro, `total` e o do
+                 *     recorte.
+                 */
+                state?: components["schemas"]["DirectorySuggestionState"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina das indicacoes da conta, **da mais recente para a mais
+             *     antiga** -- ao contrario da fila do painel, que e trabalho humano e
+             *     se atende do mais antigo.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyDirectorySuggestionPage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];
@@ -14303,6 +14858,13 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AdminCollarTagRequestStatus"];
+                /**
+                 * @description Recorta por PASSO DA ENTREGA, e combina com `status` em vez de
+                 *     substitui-lo: os dois sao eixos diferentes. `status=fulfilled` com
+                 *     `delivery_state=requested` e a fila de trabalho de quem despacha --
+                 *     pedidos aceitos que ainda nao sairam.
+                 */
+                delivery_state?: components["schemas"]["CollarTagDeliveryState"];
                 page?: components["parameters"]["AdminPage"];
                 /** @description Teto de 50 por pagina, como na outra fila que le pessoa (D56). */
                 limit?: number;
@@ -14325,6 +14887,66 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminCollarTagRequestDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCollarTagDeliveryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Entrega atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

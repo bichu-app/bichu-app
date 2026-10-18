@@ -356,14 +356,37 @@ void main() {
   // -------------------------------------------------------------------------
   // 2. ISCA — a ordem por nome nao passa calada
   // -------------------------------------------------------------------------
-  group('ISCA — a lista nao sai por nome sem dizer', () {
-    // DESLIGAR PARA VER REPROVAR: em
-    // `lib/telas/perto/lista_do_diretorio.dart`, em `_controleDeOrdenacao`,
-    // troque `final divergiu = pedida != efetiva;` por `const divergiu =
-    // false;`. A lista continua saindo por nome e a tela para de dizer. Este
-    // caso e o da linha de resumo abaixo reprovam.
+  group('a lista nao sai por nome sem MOSTRAR que e por nome', () {
+    // **O GRUPO VIROU DE LADO EM 18/10/2026, e e o fim de uma pergunta
+    // aberta.**
+    //
+    // Ele cobrava a FAIXA de explicacao: "Esta lista esta em ordem alfabetica,
+    // nao por proximidade. O Bichu ainda nao tem a sua regiao de referencia,
+    // entao nao da para calcular a distancia ate cada um." O cliente mandou
+    // remover o bloco, literal: *"remova o bloco do texto: essa lista está em
+    // ordem alfabética"*.
+    //
+    // **A decisao que estava em aberto era esta.** O caso `quem PEDIU nome nao
+    // recebe explicacao nenhuma`, logo abaixo, ficava VERMELHO de proposito:
+    // duas decisoes deliberadas colidiam (a faixa deve calar quando a pessoa
+    // aceita a ordem, ou deve ficar enquanto a distancia nao existir?) e o
+    // comentario dele dizia, com todas as letras, que escolher um lado nao era
+    // decisao de quem escreve codigo. O cliente escolheu um TERCEIRO lado: nao
+    // ha faixa. Com isso aquele caso fica verde pela regra, e nao por
+    // afrouxamento.
+    //
+    // **O que o grupo continua provando e o que importa**: a tela nao esconde
+    // a ordem real. A ordem EFETIVA aparece no controle de ordenacao e na
+    // linha de resumo ("10 resultados · Nome"), medidos nos casos abaixo --
+    // e e isso que impede a tela de mentir sobre proximidade. O que a pessoa
+    // perdeu e a explicacao de POR QUE nao ha distancia.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `lib/widgets/barra_de_listagem.dart`,
+    // troque `efetiva: efetiva.codigo` por `efetiva: pedida.codigo` na tela. A
+    // linha de resumo passa a dizer `Mais perto` com a lista alfabetica, e os
+    // casos de ordem efetiva reprovam.
     testWidgets(
-        '`distance_available: false` faz a tela dizer que a ordem e alfabetica',
+        '`distance_available: false` NAO desenha mais a faixa de explicacao',
         (tester) async {
       await abrirPerto(
         tester,
@@ -379,26 +402,39 @@ void main() {
         ),
       );
 
-      // A frase esta escrita por extenso de proposito. Comparar com
-      // `ListaDoDiretorio.semLocalizacao` seria comparar a constante com ela
-      // mesma, e passaria com a tela mostrando qualquer coisa.
+      // As duas frases escritas por extenso, e por extenso de proposito:
+      // comparar com uma constante que nao existe mais nao compila, e
+      // comparar com outra passaria com a tela mostrando qualquer coisa.
       expect(
         find.textContaining(
           'Esta lista está em ordem alfabética, não por proximidade.',
         ),
-        findsOneWidget,
-        reason: 'REPROVA: a lista saiu por nome e a tela nao disse. Mostrar '
-            'ordem errada em silencio e a forma mais barata de mentir sobre '
-            'proximidade.',
+        findsNothing,
+        reason: 'REPROVA: a faixa de ordem alfabetica voltou. O cliente a '
+            'removeu nominalmente em 18/10/2026.',
       );
-      // **E nao ha botao nenhum.** O que falta e a regiao de referencia que o
-      // servidor guarda, e nenhuma tela deste app a escreve: um `Ligar a
-      // localização` aqui ligaria o GPS e a resposta continuaria a mesma, que
-      // e acao sem destino com cara de conserto.
-      expect(find.text('Ligar a localização'), findsNothing);
       expect(
         find.textContaining('O Bichu ainda não tem a sua região de referência'),
+        findsNothing,
+        reason: 'REPROVA: a segunda metade da faixa removida voltou a tela.',
+      );
+      // **E nao ha botao nenhum**, que nao era desta remocao e continua
+      // valendo. O que falta e a regiao de referencia que o servidor guarda, e
+      // nenhuma tela deste app a escreve: um `Ligar a localização` aqui
+      // ligaria o GPS e a resposta continuaria a mesma, que e acao sem destino
+      // com cara de conserto.
+      expect(find.text('Ligar a localização'), findsNothing);
+      // **A CONTRAPROVA, e ela e o que impede este caso de virar afirmacao de
+      // ausencia e nada mais.** Sem a faixa, o unico lugar em que a pessoa
+      // descobre a ordem real e o controle de ordenacao e a linha de resumo --
+      // e `distance_available: false` tem de chegar neles como `Nome`.
+      expect(
+        find.textContaining('· Nome'),
         findsOneWidget,
+        reason: 'REPROVA: a lista saiu por nome e a tela nao MOSTRA nome. Com '
+            'a faixa de explicacao fora, esta linha e o que sobra para a '
+            'pessoa saber que nao esta vendo proximidade -- e mostrar ordem '
+            'errada em silencio e a forma mais barata de mentir sobre ela.',
       );
     });
 
@@ -473,42 +509,54 @@ void main() {
       // A ordem mora DENTRO da folha de filtros desde 17/10.
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Nome').last);
+
+      // **`tocar` E NAO `tap`, e a troca consertou um erro de medida que ja
+      // estava aqui.**
+      //
+      // A opcao `Nome` nasce no PE da folha, e na janela da suite (800 x 600
+      // dp) ela cai em `Rect.fromLTRB(321,6, 576,0, 386,2, 600,0)` -- centro
+      // em y=588, dentro da faixa da barra de baixo. Um `tap` nessa coordenada
+      // nunca tocou na opcao: ele tocava na ABA que estivesse naquele x.
+      //
+      // Ate 18/10/2026 isso passava sem aparecer, porque a aba naquele ponto
+      // era `Perto` -- a propria secao aberta, e o toque era um nada. No mesmo
+      // dia o cliente inverteu `Rede` e `Perto` na barra, aquele ponto virou
+      // `Rede`, e o toque passou a NAVEGAR: a folha fechava, e o `Aplicar`
+      // seguinte nao achava nada. A inversao nao criou o defeito, ela o
+      // revelou.
+      //
+      // `tocar` faz `ensureVisible` antes do toque -- que e o que a pessoa faz
+      // --, e com isso o caso passa a exercitar de verdade o que ele diz
+      // exercitar: pedir `Nome` por esta folha.
+      await tocar(tester, find.text('Nome').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Aplicar'));
+      await tocar(tester, find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       // ---------------------------------------------------------------------
-      // ESTE CASO FICA VERMELHO DE PROPOSITO, e o motivo esta medido aqui em
-      // vez de escondido num `skip`.
+      // **ESTE CASO FICOU VERDE EM 18/10/2026, e nao por afrouxamento.**
       //
-      // Com `distance_available: false`, o que a tela mostra e:
-      //   - `ordemEfetiva` = `nome` (`modelos_diretorio.dart`, linhas
-      //     338-339: ela sai SO de `distance_available`);
-      //   - `_recorte.ordem`, a ordem PEDIDA, nasce `distancia`;
-      //   - entao `divergiu` e verdadeiro e a faixa aparece
-      //     (`lista_do_diretorio.dart`, linhas 414-420).
+      // Ele ficava VERMELHO de proposito, e o motivo estava medido aqui em vez
+      // de escondido num `skip`: com `distance_available: false`, a ordem
+      // EFETIVA ja era `nome` e a PEDIDA nascia `distancia`, entao `divergiu`
+      // era verdadeiro e a faixa aparecia -- e nao havia como pedir `Nome` por
+      // esta folha, porque `_ordemPendente` nasce na ordem efetiva e o
+      // `Aplicar` ficava desabilitado.
       //
-      // E **nao da para pedir `Nome` por esta folha**: `_ordemPendente` nasce
-      // na ordem EFETIVA (`barra_de_listagem.dart`, linha 962, com o motivo
-      // escrito: "a folha nao pinta marcada uma ordem em que a lista nao
-      // esta"), que neste estado JA e `nome`. Tocar em `Nome` nao muda nada,
-      // `_mudou` fica falso, o `Aplicar` permanece DESABILITADO e a ordem
-      // pedida nunca chega a `_aplicarAFolha`.
+      // Duas decisoes deliberadas colidiam, e o comentario antigo dizia, com
+      // todas as letras, que escolher um lado nao era decisao de quem escreve
+      // codigo:
+      //   (a) a faixa cala quando a pessoa aceita a ordem alfabetica;
+      //   (b) a faixa fica enquanto a distancia nao existir.
       //
-      // Duas decisoes deliberadas colidem, e **nao esta claro qual lado o
-      // produto quer**:
-      //   (a) a faixa deve calar quando a pessoa aceita a ordem alfabetica --
-      //       e ai a folha precisa deixar pedir a ordem efetiva, e o codigo a
-      //       consertar e `barra_de_listagem.dart`;
-      //   (b) a faixa deve ficar enquanto a distancia nao existir, porque ela
-      //       explica o ESTADO e nao se desculpa por um pedido -- e ai esta
-      //       isca e que esta errada, junto com o comentario de
-      //       `_controleDeOrdenacao` que promete o contrario.
+      // **O cliente decidiu, e escolheu um terceiro lado: nao ha faixa.**
+      // Literal: *"remova o bloco do texto: essa lista está em ordem
+      // alfabética"*. Com `porQueNaoEAPedida` fora de `_controleDeOrdenacao`,
+      // a pergunta deixou de existir e este `expect` passa pela REGRA.
       //
-      // Afrouxar para `findsWidgets` esconderia a pergunta, e inverter para
-      // `findsOneWidget` escolheria (b) por mim. Nenhuma das duas e minha
-      // decisao: fica vermelho, dito, e com as duas saidas nomeadas.
+      // A colisao de folha que o comentario antigo descrevia continua de pe
+      // como assunto de desenho (`_ordemPendente` nasce na ordem efetiva), mas
+      // ela nao e mais um lado desta pergunta: nao ha faixa para calar.
       // ---------------------------------------------------------------------
       expect(
         find.textContaining('Esta lista está em ordem alfabética'),
@@ -745,9 +793,19 @@ void main() {
       // **E o bloco de fato chega la.** Sem esta linha, as contagens acima
       // ficariam verdes com um `InkWell` que nao leva a lugar nenhum -- que e
       // a acao sem destino que o criterio 2 proibe, so com outra cara.
-      await tester.tap(
-        find.descendant(of: semFone, matching: find.byType(InkWell)).first,
-      );
+      // `ensureVisible` ANTES do toque, e nao e cerimonia de teste: a secao
+      // `Perto` ganhou a barra de abas (`Profissionais` / `Minhas
+      // indicacoes`) em 18/10, e os ~48 dp dela empurram o SEGUNDO cartao
+      // abaixo da area que recebe toque na janela de teste. Sem isto o `tap`
+      // avisa "would not hit test on the specified widget" e o caso reprova
+      // por posicao, nao por comportamento -- o mesmo arranjo que
+      // `tocarEmCarregarMais` neste arquivo e `abrirAGaveta` em
+      // `gaveta_com_submenus_test.dart` ja usam.
+      final blocoQueNavega =
+          find.descendant(of: semFone, matching: find.byType(InkWell)).first;
+      await tester.ensureVisible(blocoQueNavega);
+      await tester.pumpAndSettle();
+      await tester.tap(blocoQueNavega);
       await tester.pumpAndSettle();
       expect(
         find.byType(PaginaDoLocal),

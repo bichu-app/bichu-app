@@ -61,10 +61,16 @@ const List<double> larguras = <double>[320, 360, 375, 390, 412];
 /// caso `a ordem e esta` compara as duas. Um portao que so lesse
 /// `CascaComAbas.destinos` aprovaria qualquer troca de rotulo, inclusive a
 /// volta de `Perdidos`.
+///
+/// **A ORDEM MUDOU EM 18/10/2026**, literal do cliente: *"inverta a ordem no
+/// app do item rede e perto"*. Era `Pets, Rede, Perto, Loja, Perfil`; medido
+/// antes de inverter, `Rede` estava na posicao 2 e `Perto` na 3, entao
+/// inverter e por `Perto` antes. O caso `a ordem e esta` nao foi apagado: ele
+/// continua brigando com `CascaComAbas.destinos`, agora pela ordem nova.
 const List<String> ordemDecidida = <String>[
   'Pets',
-  'Rede',
   'Perto',
+  'Rede',
   'Loja',
   'Perfil',
 ];
@@ -581,6 +587,12 @@ void main() {
       // desaparece numa refatoracao sem deixar rastro na tela. Sem isca, a
       // decisao do cliente valeria ate o proximo diff grande.
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino: sem sub-destino nao ha gaveta e nao ha
+      // gatilho (a segunda metade de `comGaveta`, neste mesmo arquivo de
+      // producao). O caso fala da gaveta da casca, entao vai a uma secao que
+      // tem uma.
+      await abrirAAba(tester, 'Pets');
 
       final comGaveta = tester
           .widgetList<Scaffold>(find.byType(Scaffold))
@@ -696,6 +708,9 @@ void main() {
   group('o leitor de QR tem duas portas e um leitor so', () {
     testWidgets('a porta PRIMARIA, em Pets, chega ao leitor', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026: a porta primaria do leitor
+      // mora em `Pets` (UX 27.5.6), e o caso diz em voz alta que vai ate ela.
+      await abrirAAba(tester, 'Pets');
 
       expect(
         find.widgetWithText(NavigationDestination, 'Pets'),
@@ -811,11 +826,51 @@ void main() {
               'decorativo e NAO e anunciado. Sem o reforco, quem usa leitor de '
               'tela recebe um sinal onde quem enxerga recebe tres.',
         );
+        // **A DECISAO VIROU AO CONTRARIO EM 18/10/2026.**
+        //
+        // Ate esta data o caso cobrava `isNotEmpty` aqui, com a razao escrita
+        // "ela e a outra metade da decisao do cliente (UX 27.4.2)" -- e estava
+        // certo enquanto a decisao era aquela. Um agente parou nesta linha em
+        // vez de apagar a frase, e fez bem.
+        //
+        // O cliente reverteu, literal: *"remova os textos 'os profissionais e
+        // estabelecimentos indicados por quem já usou. os eventos de quem tem
+        // pet aqui perto de você. Os pets perdidos e os que estão para adoção
+        // aqui na sua região. Seus pets, sua plaquinha e os ajustes da sua
+        // conta.'"*. O caso NAO foi apagado: ele passou a cobrar a regra de
+        // hoje, no mesmo lugar e no mesmo laco. Quem escrever frase de apoio
+        // numa secao reprova aqui.
         expect(
           destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" voltou a ter linha de apoio no '
+              'corpo ("${destino.reforcoDaPagina}"). O cliente removeu as '
+              'cinco em 18/10/2026, nominalmente. Rotulo curto explicado por '
+              'frase no corpo foi decisao de 21/09 e ele a desfez.',
+        );
+        // **E a metade que NAO saiu, no mesmo laco de proposito.** As duas
+        // frases moravam no mesmo objeto, e o risco da remocao era levar esta
+        // junto: ela e invisivel na tela e e o unico sinal que quem usa leitor
+        // de tela recebe alem do rotulo de quatro letras. Os dois `expect` de
+        // `semanticsLabel` acima ja reprovariam; este nomeia o campo, para a
+        // reprovacao dizer QUAL metade caiu.
+        expect(
+          destino.reforcoAcessivel,
           isNotEmpty,
-          reason: 'REPROVA: "${destino.rotulo}" nao tem linha de reforco de '
-              'pagina. Ela e a outra metade da decisao do cliente (UX 27.4.2).',
+          reason: 'REPROVA: "${destino.rotulo}" ficou sem `reforcoAcessivel`. '
+              'ELE NAO E A FRASE QUE O CLIENTE REMOVEU: aquela aparecia no '
+              'corpo da pagina, esta nao aparece em lugar nenhum da tela -- e '
+              'a segunda metade do nome que o leitor de tela anuncia na barra. '
+              'Sem ela, `Pets` e `Rede` viram rotulos sem assunto e a remocao '
+              'de um texto visivel virou regressao de acessibilidade.',
+        );
+        expect(
+          destino.semanticsLabel,
+          contains(destino.reforcoAcessivel),
+          reason: 'REPROVA: o nome acessivel de "${destino.rotulo}" deixou de '
+              'carregar `reforcoAcessivel`. O campo pode estar cheio e nao '
+              'chegar a ninguem -- e o defeito de `nomeDaImagem` antes de '
+              '17/10, campo preenchido que a tela ignorava.',
         );
       }
     });
@@ -824,6 +879,17 @@ void main() {
         (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A `Rede` TEM ABAS PROPRIAS NO CORPO** (`Proximos`/`Encerrados`), e
+      // elas sao `SemanticsRole.tab` do mesmo jeito. Com a `Rede` virando a aba
+      // de arranque em 18/10/2026, a varredura passou a achar SETE guias para
+      // cinco destinos -- e a falha era exatamente esta, nao uma regressao de
+      // semantica.
+      //
+      // O assunto deste caso e a BARRA DE BAIXO. Ir para `Pets`, a raiz sem
+      // abas no corpo, devolve a varredura ao assunto dela e mantem o
+      // `isSelected` do indice 0 medindo o que media. Quem mede a aba de
+      // arranque e `test/widget_test.dart`.
+      await abrirAAba(tester, 'Pets');
 
       final guias = todosOsNos(tester)
           .where((n) => n.getSemanticsData().role == SemanticsRole.tab)
@@ -867,6 +933,104 @@ void main() {
         );
       }
       handle.dispose();
+    });
+
+    testWidgets(
+        'ISCA — o nome acessivel da aba NAO saiu junto com as descricoes',
+        (tester) async {
+      // **POR QUE ESTA ISCA EXISTE.** Em 18/10/2026 o cliente removeu as cinco
+      // frases de apoio do corpo das paginas. Os dois textos moravam no MESMO
+      // objeto (`DestinoDeNavegacao`): `reforcoDaPagina`, que era visivel, e
+      // `reforcoAcessivel`, que nunca apareceu em tela nenhuma e e a segunda
+      // metade do nome que o leitor de tela anuncia na barra.
+      //
+      // Levar os dois na mesma passada e a regressao obvia, e ela e CALADA:
+      // na tela nada muda, a suite de layout fica verde, e quem navega sem ver
+      // passa a ouvir cinco rotulos de quatro a seis letras -- `Pets`, `Rede`,
+      // `Perto`, `Loja`, `Perfil` -- sem nenhum assunto, porque o icone e
+      // decorativo e nao e anunciado.
+      //
+      // Esta isca mede as DUAS metades na mesma arvore: a frase visivel fora,
+      // a frase acessivel dentro. E o que separa "remover texto visivel" de
+      // "remover informacao".
+      //
+      // ISCA: em `telas/casca_com_abas.dart`, troque qualquer
+      // `reforcoAcessivel` por `''` -- ou apague a metade de tras de
+      // `semanticsLabel`. Este caso reprova nomeando a secao.
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _semServidor);
+      // Pelo mesmo motivo do caso acima: a `Rede` e a aba de arranque e tem
+      // abas proprias no corpo, que entrariam na varredura de guias. O assunto
+      // aqui e a barra de baixo.
+      await abrirAAba(tester, 'Pets');
+
+      final guias = todosOsNos(tester)
+          .where((n) => n.getSemanticsData().role == SemanticsRole.tab)
+          .toList();
+      expect(guias, hasLength(CascaComAbas.destinos.length));
+
+      for (var i = 0; i < CascaComAbas.destinos.length; i++) {
+        final destino = CascaComAbas.destinos[i];
+        expect(
+          destino.reforcoAcessivel.trim(),
+          isNotEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" ficou sem `reforcoAcessivel`. '
+              'ELE NAO E O TEXTO QUE O CLIENTE REMOVEU em 18/10/2026: aquele '
+              'aparecia no CORPO da pagina; este nao aparece em tela nenhuma.',
+        );
+        expect(
+          guias[i].label,
+          contains(destino.reforcoAcessivel),
+          reason: 'REPROVA: a guia "${destino.rotulo}" anuncia '
+              '"${guias[i].label}", sem o reforco acessivel '
+              '"${destino.reforcoAcessivel}". O rotulo visivel tem '
+              '${destino.rotulo.length} caracteres e o icone nao e anunciado: '
+              'sem o reforco, quem usa leitor de tela recebe um sinal onde '
+              'quem enxerga recebe dois.',
+        );
+        // E a outra metade, na mesma volta do laco: a frase do corpo saiu.
+        expect(
+          destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" voltou a ter frase de apoio '
+              'visivel no corpo.',
+        );
+      }
+      handle.dispose();
+    });
+
+    testWidgets('as cinco frases removidas nao estao em nenhuma secao',
+        (tester) async {
+      // Prova por VARREDURA DE TELA, e nao por campo: as frases podiam ter
+      // sido reescritas a mao dentro de uma tela, fora do registro, e o
+      // `isEmpty` de `reforcoDaPagina` ficaria verde com o texto na tela.
+      //
+      // Escritas por extenso, exatamente como o cliente as nomeou.
+      const List<String> removidas = <String>[
+        'Os pets perdidos e os que estão para adoção aqui na sua região.',
+        'Os eventos de quem tem pet aqui perto de você.',
+        'Os profissionais e estabelecimentos indicados por quem já usou.',
+        'Produtos escolhidos pelo Bichu, que abrem no site do parceiro.',
+        'Seus pets, sua plaquinha e os ajustes da sua conta.',
+      ];
+
+      await abrirOApp(tester, rede: _semServidor);
+
+      for (final destino in CascaComAbas.destinos) {
+        await tester.tap(
+          find.widgetWithText(NavigationDestination, destino.rotulo),
+        );
+        await tester.pumpAndSettle();
+        for (final frase in removidas) {
+          expect(
+            find.text(frase),
+            findsNothing,
+            reason: 'REPROVA: a secao "${destino.rotulo}" mostra "$frase". As '
+                'cinco frases sairam em 18/10/2026, nomeadas uma por uma pelo '
+                'cliente.',
+          );
+        }
+      }
     });
 
     test('ISCA DE FONTE: `addSemanticIndexes: false` continua em TelaDeAba',
@@ -1076,24 +1240,20 @@ void main() {
               'existe. Destino visivel que leva a lugar nenhum sem dizer o '
               'que e aquilo e defeito (UX 25.7.3).',
         );
+        // **A LINHA DE REFORCO SAIU DAQUI EM 18/10/2026.** Este caso cobrava
+        // a presenca dela no corpo (`findsOneWidget`) e a ausencia dela na
+        // barra de topo; o cliente removeu as cinco frases nominalmente, e o
+        // que resta a cobrar e que nenhuma volte. O laco e o mesmo e o caso
+        // nao foi apagado.
         expect(
-          find.text(destino.reforcoDaPagina),
-          findsOneWidget,
-          reason: 'REPROVA: a secao "${destino.rotulo}" nao traz a linha de '
-              'reforco no CORPO. Ela nao cabe na barra de topo (medido em '
-              '27.4.1: 240,0 dp disponiveis contra 406,72 pedidos), e sem ela '
-              'o rotulo de quatro letras nao explica nada.',
+          destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: a secao planejada "${destino.rotulo}" voltou a '
+              'declarar linha de apoio. As cinco sairam em 18/10/2026.',
         );
-        // O reforco vai no corpo, e **nao** no titulo: quem o puser no topo
-        // constroi uma tela que nao existe no aparelho.
-        expect(
-          find.widgetWithText(AppBar, destino.reforcoDaPagina),
-          findsNothing,
-          reason: 'REPROVA: a linha de reforco de "${destino.rotulo}" foi '
-              'parar na barra de topo, onde ela e cortada com reticencia. Um '
-              'significado que some com reticencia nao foi transferido para '
-              'lugar nenhum (UX 27.4.1).',
-        );
+        // O que esta secao PRECISA dizer continua cobrado pelo `expect` de
+        // "esta em construcao" acima: o estado vazio que nomeia o que vai
+        // existir e a licao da BICHUS-62, e ele nao dependia da frase de apoio.
         expect(
           find.widgetWithText(AppBar, destino.rotulo),
           findsOneWidget,
@@ -1226,6 +1386,9 @@ void main() {
     testWidgets('as portas de sub-destino de Pets e de Perto navegam',
         (tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026, e as portas de sub-destino
+      // deste caso saem de `Pets` e de `Perto`.
+      await abrirAAba(tester, 'Pets');
 
       // `Adoções` e sub-destino de `Pets`, com porta propria.
       await tester.tap(find.text('Adoções'));

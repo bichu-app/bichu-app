@@ -82,15 +82,6 @@ class ListaDoDiretorio extends StatefulWidget {
   static const String falhaAoCarregarMais =
       'Não foi possível carregar mais profissionais.';
 
-  /// Por que a lista nao saiu por distancia, quando falta a localizacao.
-  ///
-  /// **Palavra por palavra, num lugar so.** O texto afirma a ordem real antes
-  /// de explicar a causa: quem le a primeira frase ja sabe o que esta vendo.
-  static const String semLocalizacao =
-      'Esta lista está em ordem alfabética, não por proximidade. O Bichu '
-      'ainda não tem a sua região de referência, então não dá para calcular '
-      'a distância até cada um.';
-
   static const String rotuloDeAtualizar = 'Atualizar';
 
   /// O rotulo da porta de indicar.
@@ -409,15 +400,29 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   /// A ordenacao, montada a partir do que **de fato** aconteceu.
   ///
   /// [PaginaDoDiretorio.ordemEfetiva] sai de `distance_available`, que e a
-  /// resposta do servidor sobre a ordem real. O que a tela pediu
-  /// (`_recorte.ordem`) so serve para decidir se ha algo a explicar.
+  /// resposta do servidor sobre a ordem real, e e ela que o rotulo do controle
+  /// mostra: a linha de resumo diz `Nome` quando a lista saiu por nome, mesmo
+  /// que o app tenha pedido distancia. **Isso nao mudou.**
+  ///
+  /// **A FAIXA DE EXPLICACAO SAIU** (18/10/2026, literal do cliente: *"remova
+  /// o bloco do texto: essa lista está em ordem alfabética"*). Era
+  /// `ListaDoDiretorio.semLocalizacao`, montada aqui quando a ordem pedida
+  /// divergia da efetiva e desenhada por `BarraDeListagem` em
+  /// `porQueNaoEAPedida`.
+  ///
+  /// Com a faixa fora, a comparacao entre pedida e efetiva nao tem mais para
+  /// quem falar, e o calculo saiu junto -- deixar `divergiu` sem uso seria
+  /// codigo morto prometendo uma faixa que nao existe.
+  ///
+  /// **O campo `porQueNaoEAPedida` do componente FICA**: ele e compartilhado, e
+  /// `rede/agenda_da_rede.dart` o usa com outro texto
+  /// (`ordemTrocadaPeloServidor`), que o cliente nao mencionou.
+  ///
+  /// O que a pessoa perde: a frase que dizia POR QUE nao ha distancia. O que
+  /// ela mantem: a ordem REAL escrita no controle e na linha de resumo, que e
+  /// o que impede a tela de mentir sobre proximidade -- e tem caso proprio.
   ControleDeOrdenacao _controleDeOrdenacao(PaginaDoDiretorio pagina) {
     final efetiva = pagina.ordemEfetiva;
-    final pedida = _recorte.ordem;
-    // So ha o que explicar quando a pessoa pediu distancia e nao teve. Quem
-    // pediu nome recebeu nome: nao ha divergencia, e uma faixa aqui seria o
-    // app se desculpando por atender.
-    final divergiu = pedida != efetiva;
 
     return ControleDeOrdenacao(
       opcoes: <OpcaoDeRecorte>[
@@ -425,7 +430,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
           OpcaoDeRecorte(codigo: o.codigo, rotulo: o.rotulo),
       ],
       efetiva: efetiva.codigo,
-      porQueNaoEAPedida: divergiu ? ListaDoDiretorio.semLocalizacao : null,
     );
   }
 

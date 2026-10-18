@@ -41,8 +41,56 @@
 import type { AdminAccountId, PetId, UserId } from '../../../shared/types/brands.js';
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 
-/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+/**
+ * O `CHECK` `collar_tag_requests_decisao_conhecida`: a DECISAO do painel, e so
+ * ela. Nao diz onde a encomenda esta -- isso e [PassoDaEntrega].
+ */
 export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O `CHECK` `collar_tag_requests_entrega_conhecida`: o EIXO DA ENTREGA, e os
+ * tres passos que o cliente nomeou em 18/10 -- solicitado, em transporte,
+ * chegou.
+ *
+ * **Eixo separado de [DecisaoDoPedidoDePlaquinha], e a escolha foi medida.**
+ * Acrescentar um quarto valor a `status` quebraria o contrato pela regra
+ * `response-property-enum-value-added` do `oasdiff` -- quatro erros, um por
+ * operacao que projeta o estado --, e dispensar portao nao era opcao nesta
+ * frente. Campo acrescentado nao quebra ninguem.
+ *
+ * Os eixos NAO sao independentes: `collar_tag_requests_entrega_exige_atendimento`
+ * proibe sair de `requested` sem o pedido estar `fulfilled`, e com isso
+ * recusado-que-chegou e pendente-em-transporte deixam de existir no banco.
+ *
+ * **Nunca nulo**: a coluna e `NOT NULL DEFAULT 'requested'`, entao todo pedido
+ * tem um passo escrito -- inclusive os criados antes de a entrega existir -- e
+ * a tela nunca infere "solicitado" de uma ausencia.
+ */
+export type PassoDaEntrega = 'requested' | 'in_transit' | 'arrived';
+
+/**
+ * Os passos que a rota aceita como ALVO.
+ *
+ * `requested` fica de fora porque ele e so INICIAL: ninguem volta a ele, e o
+ * `enum` do corpo no contrato (`AdminCollarTagDeliveryUpdate.delivery_state`)
+ * tem exatamente estes dois valores. Derivado por `Exclude` e nao escrito a
+ * mao, para que um passo novo em [PassoDaEntrega] apareca aqui sozinho.
+ */
+export type PassoAlcancavelDoPedido = Exclude<PassoDaEntrega, 'requested'>;
+
+/**
+ * O que o painel escreve numa atualizacao de entrega: o passo e o que fazer com
+ * o codigo de rastreio.
+ *
+ * `rastreio` e `undefined` quando o corpo nao trouxe o campo -- o rastreio nao
+ * muda --, e `null` quando ele veio nulo, que e o pedido de APAGAR. A diferenca
+ * entre os dois e o que faz "marcar que chegou" nao limpar o codigo que ja
+ * estava la.
+ */
+export interface EntregaAAtualizar {
+  readonly passo: PassoDaEntrega;
+  readonly rastreio: string | null | undefined;
+}
 
 /**
  * O endereco de entrega, como o tutor o digitou.
@@ -73,13 +121,46 @@ export interface EnderecoDeEntrega {
 }
 
 /**
- * O pedido como o APP o ve. Sem `ref` e sem UUID nenhum (ADR-0010 item 6), e
- * **sem endereco**: ver a regra 2 no cabecalho deste arquivo.
+ * O pedido como o APP o ve. **Sem endereco**: ver a regra 2 no cabecalho
+ * deste arquivo.
+ *
+ * **`ref` entrou em 18/10**, quando o cliente pediu a pagina de
+ * acompanhamento: a pessoa precisa de um numero para falar sobre o pedido
+ * dela. E o MESMO `ref` opaco da fila do painel -- nao ha identificador novo
+ * --, e nenhum UUID interno sai (ADR-0010 item 6).
  */
 export interface PedidoDoTutor {
+  /** O identificador opaco, 128 bits em base64url. Nao e o UUID. */
+  readonly ref: string;
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly solicitadoEm: Date;
+  readonly decididoEm: Date | null;
   readonly observacao: string | null;
+  /**
+   * O passo da entrega -- `requested`, `in_transit` ou `arrived`. **Nunca
+   * nulo**: e o campo UNICO que a pagina privada do aplicativo le para desenhar
+   * o passo, e nao ha nulo a tratar.
+   */
+  readonly passoDaEntrega: PassoDaEntrega;
+  /**
+   * O codigo de rastreio, ou nulo. Nulo e o caso comum e NAO e defeito: nem
+   * todo envio tem rastreio, e nenhum pedido tem rastreio antes de sair.
+   *
+   * **COSTURA DA MESCLA DE 18/10/2026.** Este campo foi declarado DUAS VEZES,
+   * uma por frente, e a mescla ficou com esta. O ramo do aplicativo
+   * (`feat/acompanhar-pedido-plaquinha`) o declarou como *"hoje sempre nulo, e
+   * deliberadamente"*, porque quando ele foi escrito nao havia coluna nem
+   * escrita; o ramo do painel (`feat/entrega-da-plaquinha-no-painel`) criou a
+   * coluna `tracking_code`, a rota que a escreve e a tela que a preenche. A
+   * promessa de nulo perpetuo morreu com a segunda frente, e manter as duas
+   * declaracoes nao compilava. Quem le este campo hoje recebe VALOR REAL
+   * quando ha despacho com rastreio.
+   */
+  readonly codigoDeRastreio: string | null;
+  /** Quando saiu. Nulo enquanto o passo e `requested`. */
+  readonly despachadoEm: Date | null;
+  /** Quando chegou. Nulo em tudo que nao chegou. */
+  readonly entregueEm: Date | null;
 }
 
 /**
@@ -105,10 +186,20 @@ export interface PedidoNaFilaDePlaquinhas {
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly solicitadoEm: Date;
   readonly decididoEm: Date | null;
+  readonly passoDaEntrega: PassoDaEntrega;
+  readonly codigoDeRastreio: string | null;
+  readonly despachadoEm: Date | null;
+  readonly entregueEm: Date | null;
 }
 
 export interface RecorteDaFilaDePlaquinhas {
   readonly status?: DecisaoDoPedidoDePlaquinha | undefined;
+  /**
+   * Recorta por PASSO DA ENTREGA, e combina com `status` em vez de substitui-lo:
+   * os dois sao eixos diferentes. `fulfilled` com `requested` e a fila de
+   * trabalho de quem despacha.
+   */
+  readonly passoDaEntrega?: PassoDaEntrega | undefined;
   readonly page: number;
   readonly limit: number;
 }
@@ -136,6 +227,25 @@ export interface PedidoDePlaquinhaRepository {
     readonly observacao: string | null;
   }): Promise<PedidoDoTutor | undefined>;
 
+  /**
+   * Os pedidos de UM pet do chamador, do mais recente para o mais antigo.
+   *
+   * **A autorizacao esta na clausula `WHERE`**, como na criacao: o `SELECT`
+   * exige `pets.owner_user_id = <chamador>`, entao pet de outra pessoa nao
+   * devolve linha nenhuma e a rota responde 404 -- nunca 403, que confirmaria
+   * a existencia do pet (ADR-0021).
+   *
+   * Devolve `undefined` quando o PET nao e do chamador (ou nao existe), e uma
+   * lista vazia quando o pet e dele e ainda nao tem pedido. **Os dois casos
+   * sao diferentes e a rota os responde diferente**: 404 no primeiro, 200 com
+   * lista vazia no segundo. Colapsa-los faria a pagina do pet sem pedido
+   * dizer "este pet nao existe".
+   */
+  listarDoPet(
+    petId: PetId,
+    solicitante: UserId,
+  ): Promise<readonly PedidoDoTutor[] | undefined>;
+
   /** A fila do painel. Pedido de pet excluido nao aparece: a linha cai com o pet. */
   listarFila(recorte: RecorteDaFilaDePlaquinhas): Promise<PaginaDaFilaDePlaquinhas>;
 
@@ -147,6 +257,33 @@ export interface PedidoDePlaquinhaRepository {
     id: string,
     decisao: Exclude<DecisaoDoPedidoDePlaquinha, 'pending'>,
     decisor: AdminAccountId,
+    agora: Date,
+  ): Promise<PedidoNaFilaDePlaquinhas>;
+
+  /**
+   * UM pedido, para a tela de entrega do painel. SEM `FOR UPDATE`: e leitura, e
+   * travar linha numa leitura seguraria o pedido pelo tempo da requisicao sem
+   * ninguem escrever nada.
+   *
+   * **Pedido de conta desabilitada nao existe aqui**, pela mesma clausula
+   * `WHERE` da listagem (decisao do cliente de 17/10). `undefined` vira 404 na
+   * rota -- nunca 403 (ADR-0021).
+   */
+  pedidoParaLeitura(ref: string): Promise<PedidoNaFilaDePlaquinhas | undefined>;
+
+  /**
+   * Grava o passo da entrega e o codigo de rastreio.
+   *
+   * Os carimbos NAO vem de fora: `shipped_at` e `delivered_at` sao derivados do
+   * passo de destino dentro do `UPDATE`, porque os dois `CHECK` bicondicionais
+   * do banco (`despacho_tem_instante`, `chegada_tem_instante`) os exigem
+   * exatamente quando o passo os exige -- deixar isso para quem chama seria
+   * deixar uma violacao de restricao esperando por um descuido.
+   */
+  atualizarEntrega(
+    trx: TransacaoDeEscrita,
+    id: string,
+    entrega: EntregaAAtualizar,
     agora: Date,
   ): Promise<PedidoNaFilaDePlaquinhas>;
 }

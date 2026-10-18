@@ -293,12 +293,21 @@ void main() {
     });
   });
 
-  group('o valor nunca aparece sem o rotulo e sem a data', () {
-    // ISCA -- em `app/lib/api/modelos_loja.dart`, em `linhaDoPreco`, devolva
-    // so o valor:
-    //     return valor;
-    // Este caso reprova: a linha deixa de conter o rotulo e a data.
-    testWidgets('ISCA -- valor, rotulo e data no MESMO texto', (tester) async {
+  group('a linha do preco e SO o valor', () {
+    // **A REGRA VIROU EM 18/10/2026.** Este caso cobrava o contrario: a linha
+    // tinha de conter valor, rotulo e data no mesmo texto (criterio 15 da
+    // BICHUS-185), e a isca dele era "devolva so o valor". O cliente mandou
+    // remover o rabo, literal: *"remova o texto 'preço de referência,
+    // consultado em 17/10', porque você já colocou como eu pedi acima do
+    // titulo"*. O caso continua aqui e continua medindo a mesma linha -- so
+    // trocou de lado.
+    //
+    // ISCA -- em `app/lib/api/modelos_loja.dart`, em `linhaDoPreco`, volte a
+    // concatenar o rabo:
+    //     return '$valor · preço de referência, consultado em ...';
+    // Este caso reprova por dois caminhos: o texto exato do valor deixa de
+    // existir, e `consultado em` reaparece na tela.
+    testWidgets('ISCA -- so o valor, sem rotulo e sem data', (tester) async {
       await abrirLoja(
         tester,
         rede: redeDaVitrine(
@@ -315,8 +324,31 @@ void main() {
       // Escrito por extenso. Um `expect` montado com `formatarReais` ou com a
       // constante da tela acompanharia qualquer erro de digitacao.
       expect(
-        find.text('R\$ 89,90 · preço de referência, consultado em 14/03'),
+        find.text('R\$ 89,90'),
         findsOneWidget,
+        reason: 'REPROVA: a linha do preco nao e o valor limpo.',
+      );
+      // A metade negativa, e ela e o ponto: o rabo nao pode voltar por nenhum
+      // caminho -- nem inteiro, nem so a data.
+      expect(
+        find.textContaining('preço de referência, consultado em'),
+        findsNothing,
+        reason: 'REPROVA: o rabo da linha do preco voltou a tela.',
+      );
+      // **A DATA VOLTOU A TELA NA TARDE DE 18/10/2026**, e este `expect` virou
+      // de lado junto. Pedido literal: *"devolve a data onde esta o novo texto
+      // de preço de referência"*. Ela nao volta ao rabo -- os dois `expect`
+      // acima continuam cobrando isso -- e sim a linha de apoio, acima do nome
+      // do produto. Quem mede aquela linha e
+      // `test/telas/loja_preco_de_referencia_test.dart`; aqui basta provar que
+      // a data existe no cartao e NAO esta junto do valor.
+      expect(
+        find.textContaining('consultado em 14/03'),
+        findsOneWidget,
+        reason: 'REPROVA: a data de consulta nao esta no cartao. Ela voltou em '
+            '18/10/2026, e e ela que torna verdadeira a clausula de '
+            '`web/src/conteudo/juridico/termos.md` ("Essa data aparece junto '
+            'do preco, na tela").',
       );
     });
 

@@ -56,6 +56,52 @@ type MotivoDeRevogacaoEmMassa = Extract<
   'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
+/**
+ * O teto do nome de exibicao, igual ao `maxLength` de `display_name` no
+ * contrato (`RegisterRequest` e `MeUpdate`, os dois com 80).
+ *
+ * Esta constante existe para a recusa do servidor dizer o MESMO numero que o
+ * schema: deixar o 80 solto no meio da frase de erro e como as duas metades
+ * divergem, e a divergencia aparece como "o app disse 80 e a API recusou em
+ * 64" para quem esta digitando.
+ */
+const LIMITE_DO_NOME = 80;
+
+/**
+ * A recusa do nome de exibicao, para o cadastro e a atualizacao nao divergirem.
+ *
+ * Nasceu em `cadastrar` em 18/10/2026 e subiu para ca no mesmo dia, quando o
+ * cliente fechou a assimetria: *"nao permitir atualizar o cadastro, se nao
+ * tiver algum nome cadastrado"*. Duas copias da mesma regra em duas operacoes
+ * da mesma conta e como o cadastro passa a exigir o que a atualizacao deixa
+ * apagar -- que era exatamente o estado do produto antes desta linha.
+ *
+ * Devolve o nome **aparado**. `trim` e o ponto: `required` e `minLength: 1` do
+ * schema recusam a chave ausente e a string vazia, e nao recusam `"   "`, que
+ * tem comprimento 3 e nenhum nome dentro.
+ *
+ * `code: 'required'` e `code: 'too_long'` sao os codigos que o contrato ja
+ * declara e que outras chamadas deste repositorio ja usam: nao ha codigo novo.
+ */
+function nomeDeExibicaoAparado(bruto: string | null | undefined): string {
+  const aparado = (bruto ?? '').trim();
+  if (aparado.length === 0) {
+    throw problemas.validacao([
+      { field: 'display_name', code: 'required', message: 'Diga como você quer ser chamado.' },
+    ]);
+  }
+  if (aparado.length > LIMITE_DO_NOME) {
+    throw problemas.validacao([
+      {
+        field: 'display_name',
+        code: 'too_long',
+        message: `Use no máximo ${LIMITE_DO_NOME} caracteres no nome.`,
+      },
+    ]);
+  }
+  return aparado;
+}
+
 export interface EntradaDeCadastro {
   readonly email: string;
   readonly password: string;
@@ -663,16 +709,40 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           { field: 'email', code: 'format', message: 'Confira o endereço de e-mail.' },
         ]);
       }
+
+      // O NOME É OBRIGATÓRIO, E A RECUSA É DAQUI — NÃO DA TELA.
+      //
+      // Queixa do cliente de 18/10/2026: *"o campo de nome no cadastro do
+      // usuário é obrigatorio, hoje ele esta cadastrando sem esse campo"*. O
+      // campo já existia na `F1.1` e já aparecia sem "(opcional)" no rótulo;
+      // o que não existia era alguém exigindo. A tela mandava `null` quando
+      // estava vazio e este serviço aceitava.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`): a tela
+      // é conveniência, e quem chama `POST /v1/auth/register` direto não passa
+      // por ela. Validar só no app seria trocar a exigência por uma sugestão.
+      //
+      // `trim` é o ponto todo. `required` no schema e `minLength: 1` recusam a
+      // chave ausente e a string vazia; **não recusam `"   "`**, que tem
+      // comprimento 3 e nenhum nome dentro. Era este o caso que escapava, e é
+      // ele que faz a conta nascer "sem nome" para as outras pessoas.
+      //
+      // `code: 'required'` é o código que o contrato já declara e que outras
+      // sete chamadas deste repositório já usam — não há código novo aqui.
+      const displayName = nomeDeExibicaoAparado(entrada.displayName);
       const errosDeSenha = validarSenha(entrada.password, {
         email,
-        displayName: entrada.displayName,
+        displayName,
       });
       if (errosDeSenha.length > 0) throw problemas.senhaFraca(errosDeSenha);
 
       const passwordPhc = await gerarHashDeSenha(entrada.password);
       const conta = await deps.repositorio.criarContaLocal({
         email,
-        displayName: entrada.displayName,
+        // O nome **aparado**, e não o que chegou. Gravar `" Marina "` deixaria
+        // o espaço aparecer em toda tela que mostra o nome, e faria a conta
+        // ordenar antes de todas as outras em qualquer lista alfabética.
+        displayName,
         acceptedTermsVersion: entrada.acceptedTermsVersion,
         passwordPhc,
         agora,
@@ -1108,7 +1178,57 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       contexto: ContextoDaRequisicao,
     ): Promise<Conta> {
       const agora = deps.clock.now();
-      const conta = await deps.repositorio.atualizarPerfil(userId, campos, agora);
+
+      // O NOME NAO PODE SER APAGADO, E A CONTA SEM NOME NAO ATUALIZA SEM
+      // PREENCHE-LO. Decisao do cliente de 18/10/2026: *"nao permitir
+      // atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+      //
+      // Duas situacoes, e elas sao diferentes:
+      //
+      // 1. O nome VEIO no corpo. Entao ele precisa ter nome dentro. Era este o
+      //    caminho que apagava: `display_name: ""` e `display_name: null`
+      //    chegavam aqui, entravam no `SET` (o repositorio so ignora
+      //    `undefined`) e zeravam a coluna. A tela de `Meus dados` oferecia
+      //    isso em texto.
+      //
+      // 2. O nome NAO veio. `PATCH` de um campo so e legitimo e continua
+      //    sendo: nao se cobra o nome de quem esta mudando o telefone. Mas se
+      //    a conta ainda NAO TEM nome, a atualizacao para -- e e aqui que mora
+      //    o cuidado que importa.
+      //
+      // **ISTO NAO E UM BECO, E A SAIDA E O CASO 1.** Quem esta sem nome
+      // manda `display_name` junto e salva: o caso 1 aceita, e a conta sai do
+      // estado. Em homologacao ha 2 contas assim (de 7, medido em 18/10), e
+      // elas aparecem para as outras pessoas como "Tutor"
+      // (`conversa-mediada.ts`) -- era esta a razao da decisao. Tornar o campo
+      // obrigatorio NAO preenche o que ja esta vazio, e a trava daqui e o que
+      // faz essas contas serem cobradas em vez de esquecidas.
+      //
+      // A leitura ANTES da escrita e o que o caso 2 custa. Ela e a mesma
+      // consulta que `meuPerfil` faz, e sem ela nao da para saber se a conta
+      // tem nome: `atualizarPerfil` devolve o estado DEPOIS, quando a escrita
+      // ja aconteceu.
+      const campaNome = campos.displayName;
+      const camposParaGravar: CamposDoPerfil =
+        campaNome === undefined
+          ? campos
+          : { ...campos, displayName: nomeDeExibicaoAparado(campaNome) };
+
+      if (campaNome === undefined) {
+        const antes = await deps.repositorio.buscarContaPorId(userId);
+        if (antes === undefined) throw problemas.naoAutenticado();
+        if ((antes.displayName ?? '').trim().length === 0) {
+          throw problemas.validacao([
+            {
+              field: 'display_name',
+              code: 'required',
+              message: 'Diga como você quer ser chamado para continuar.',
+            },
+          ]);
+        }
+      }
+
+      const conta = await deps.repositorio.atualizarPerfil(userId, camposParaGravar, agora);
       if (conta === undefined) throw problemas.naoAutenticado();
 
       await deps.trilha.record({

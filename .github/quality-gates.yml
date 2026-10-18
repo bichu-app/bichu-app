@@ -521,6 +521,51 @@ dispensas:
     responsavel: squad
     vence_em: 2026-10-21
 
+  # ---------------------------------------------------------------------
+  # NOME DE EXIBICAO OBRIGATORIO, 18/10/2026 (decisao do cliente). Verbatim:
+  # "atualizar o contrato para tornar o nome obrigatorio / nao permitir
+  # atualizar o cadastro, se nao tiver algum nome cadastrado".
+  #
+  # A QUEBRA E INTENCIONAL, e por isso ela esta aqui em vez de reescrita: o
+  # campo passa a ser EXIGIDO onde era opcional, e nao ha forma compativel de
+  # exigir o que antes nao se exigia. Cliente antigo que nao manda a chave
+  # passa a receber 400 `validation-failed` com `code: required`.
+  #
+  # O QUE ISSO CUSTA, DITO EM VOZ ALTA: o APK que esta em aparelho hoje pode
+  # deixar de conseguir criar conta se a tela dele nao mandar o nome. Resolve
+  # com APK novo, e o cliente sabia disso quando decidiu.
+  #
+  # POR QUE A DECISAO: conta sem nome aparece as OUTRAS pessoas como "Tutor"
+  # ou "Quem achou" (`src/modules/messaging/domain/conversa-mediada.ts`), e
+  # isso prejudica o reconhecimento do pet -- que e o produto inteiro. Medido
+  # em homologacao em 18/10: 2 contas sem nome de 7.
+  #
+  # SAO TRES ENTRADAS E NAO UMA, e nao por gosto: o juizo
+  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada com
+  # exatamente um par `id da regra` + `operationId`, e recusa dispensa que
+  # valha para "tudo que vier desta rota". Medido com tufin/oasdiff:v1.32.1
+  # contra `e636f69c`: sao exatamente estas tres.
+  #
+  # VENCEM EM 25/10/2026, e o prazo nao e cerimonia: depois do merge em
+  # `development` a base da comparacao ja carrega o contrato novo e o portao
+  # fica quieto sozinho. Se estas entradas ainda estiverem aqui depois disso,
+  # elas estao escondendo outra coisa e precisam SAIR, nao ser redatadas.
+  - portao: oasdiff-nome-obrigatorio-no-cadastro
+    mudanca: "request-property-became-required registerUser"
+    motivo: "display_name entra em required no cadastro por decisao do cliente de 18/10/2026 (verbatim: \"atualizar o contrato para tornar o nome obrigatorio\"). Quebra INTENCIONAL: exigir o que era opcional nao tem forma compativel. Conta sem nome aparece aos outros como \"Tutor\"/\"Quem achou\" (conversa-mediada.ts) e prejudica o reconhecimento do pet; 2 de 7 contas de hml estavam nesse estado em 18/10. CUSTO ACEITO: o APK em campo pode deixar de criar conta ate sair APK novo. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
+    responsavel: cliente
+    vence_em: 2026-10-25
+  - portao: oasdiff-nome-sem-string-vazia-no-cadastro
+    mudanca: "request-property-min-length-set registerUser"
+    motivo: "display_name ganha minLength 1 no cadastro, pela mesma decisao do cliente de 18/10/2026. Sem o piso, `required` aceitaria display_name: \"\" e a conta nasceria sem nome com o campo preenchido -- o caso so com espaco (\"   \") passa pelo schema de qualquer forma e quem o recusa e o servidor, depois do trim. Quebra INTENCIONAL, mesmo custo de APK da entrada acima. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
+    responsavel: cliente
+    vence_em: 2026-10-25
+  - portao: oasdiff-nome-nao-pode-ser-apagado-no-perfil
+    mudanca: "request-property-min-length-set updateMe"
+    motivo: "display_name ganha minLength 1 em MeUpdate por decisao do cliente de 18/10/2026 (verbatim: \"nao permitir atualizar o cadastro, se nao tiver algum nome cadastrado\"). Fecha a assimetria que sobrava: o cadastro passou a exigir o nome e a atualizacao continuava deixando APAGA-LO com display_name: \"\", e a tela de Meus dados oferecia isso em texto. Quebra INTENCIONAL. NAO E BECO: a conta sem nome continua podendo PREENCHER o nome e salvar -- o servidor recusa o PATCH que omite o nome de quem nao tem nenhum, e aceita o que o preenche. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
+    responsavel: cliente
+    vence_em: 2026-10-25
+
   # O RECADO DO ACHADO ALINHADO EM 500. UMA entrada, para UMA operacao.
   #
   # `FoundReportEnrichment.message` declarava `maxLength: 1000`. A coluna onde

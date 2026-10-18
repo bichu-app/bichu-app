@@ -11,13 +11,30 @@
  *
  * Sao duas tabelas, dois sentidos e dois conjuntos de cenarios. Duas portas.
  *
- * **Um metodo so, e ele nao le.** Nao ha listar, nao ha detalhe e nao ha
- * decidir: as operacoes que o painel vai precisar para trabalhar esta fila nao
- * existem no contrato ainda, e declara-las aqui antes de existirem e como a
- * tabela de convite que o ADR-0011 secao 5.4 decidiu NAO criar antes do fluxo.
+ * **DOIS metodos desde 18/10/2026, e o segundo LE.** `registrar` escreve;
+ * `listarDoAutor` le as indicacoes de UMA conta, que e a tela `Minhas
+ * indicacoes` (`listMyDirectorySuggestions`). A frase anterior deste cabecalho
+ * -- "um metodo so, e ele nao le" -- valia enquanto nenhuma operacao de leitura
+ * desta tabela existisse no contrato; agora existe uma, do lado de quem
+ * indicou, e ela nasce com implementacao e com tela.
+ *
+ * **O que continua FORA desta porta e a fila do painel.** Listar, ler e decidir
+ * do lado administrativo moram em `FilaDeIndicacoesRepository`, e nao aqui:
+ * outro ator (conta de `admin_accounts`, nao de `users`), outro sentido e
+ * outros cenarios. Juntar os dois faria todo dobre desta porta carregar quatro
+ * metodos de painel -- e e por isso que as duas portas existem.
+ *
+ * **`listarDoAutor` cabe aqui, e a fila do painel nao, pela mesma regua:** o
+ * ator e o mesmo de `registrar` (a conta de `users` que indicou), e o cenario e
+ * o mesmo caminho do aplicativo. Quem grava e quem le a propria lista e a
+ * mesma pessoa.
  */
 import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../domain/sugestao-do-diretorio.js';
+// `RevisaoDaIndicacao` e o `CHECK` da tabela, e ele e UM so: reusado do dominio
+// da fila em vez de redeclarado aqui. Duas copias da mesma lista fechada e a
+// forma de uma delas ficar atras quando o `CHECK` crescer.
+import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
 import type { UserId } from '../../../shared/types/brands.js';
 
 /**
@@ -63,6 +80,84 @@ export interface SugestaoGravada {
   readonly createdAt: Date;
 }
 
+/**
+ * O recorte da lista de quem indicou: paginacao e o estado da revisao.
+ *
+ * **Nao ha `termo`, e a ausencia e medida**: o contrato nao aceita `q` nesta
+ * operacao, porque buscar por nome numa lista de poucas dezenas de itens que a
+ * propria pessoa escreveu e um campo a mais para manter em troca de nada.
+ * Declarar o campo aqui antes de a operacao aceita-lo criaria o parametro que
+ * ninguem preenche.
+ *
+ * **`reviewStatus` esta aqui porque ele e do SERVIDOR**, e nao do aplicativo:
+ * um filtro aplicado so na pagina carregada mentiria no `total` e no
+ * paginador.
+ */
+export interface RecorteDasMinhasIndicacoes {
+  readonly autor: UserId;
+  /** Ausente devolve TODOS os estados, que e a pergunta de quem abre a tela. */
+  readonly reviewStatus?: RevisaoDaIndicacao | undefined;
+  readonly page: number;
+  readonly limit: number;
+}
+
+/**
+ * Uma indicacao como QUEM INDICOU a ve.
+ *
+ * **Nao e `IndicacaoNaFila`** (a projecao do painel), e a diferenca nao e de
+ * organizacao: `note` nao esta aqui -- ele e o recado para quem revisa --, e
+ * `entradaSlug` aqui so vem quando a entrada esta PUBLICADA. Ver o esquema
+ * `MyDirectorySuggestion` do contrato, que explica as duas fronteiras.
+ */
+export interface MinhaIndicacao {
+  readonly ref: string;
+  readonly displayName: string;
+  readonly kind: TipoDeProfissional;
+  readonly city: string;
+  readonly state: string;
+  readonly neighborhood: string | null;
+  readonly contatoKind: TipoDeContatoPublico;
+  readonly contatoValue: string;
+  readonly reviewStatus: RevisaoDaIndicacao;
+  readonly createdAt: Date;
+  readonly decidedAt: Date | null;
+  /**
+   * O motivo da recusa, e **ele chega a quem indicou** desde 18/10/2026.
+   *
+   * Isto reverte a frase do `COMMENT ON COLUMN` da `20261017000016`, e a
+   * reversao esta justificada no cabecalho da `20261018000003`: recusa sem
+   * motivo faz a mesma entidade ser indicada outra vez.
+   */
+  readonly declineReason: string | null;
+  /**
+   * O endereco da entrada no `Perto`, **so quando ela esta publicada**.
+   *
+   * Nulo com `reviewStatus: 'approved'` TEM significado, e nao e ausencia de
+   * dado: a entrada existe e esta `draft`. Entrada nascida de indicacao com
+   * contato `website` ou `instagram` nasce rascunho (sem `phone_e164`), e
+   * `Perto` so lista `status = 'published'`. Quem decide isso e o `WHERE` da
+   * funcao `indicacoes_do_autor(uuid)`, e nao esta camada.
+   */
+  readonly entradaSlug: string | null;
+}
+
+/** A pagina das minhas indicacoes. Sem contagem de fila alheia. */
+export interface PaginaDasMinhasIndicacoes {
+  readonly itens: readonly MinhaIndicacao[];
+  readonly total: number;
+}
+
 export interface DirectorySuggestionRepository {
   registrar(sugestao: SugestaoAGravar): Promise<SugestaoGravada>;
+  /**
+   * As indicacoes DA CONTA, da mais recente para a mais antiga.
+   *
+   * **A autorizacao nao e parametro desta porta, e sim o `WHERE` da funcao do
+   * banco.** `autor` entra na clausula `WHERE` de `indicacoes_do_autor(uuid)`:
+   * nao ha caminho, por este metodo, para a indicacao de outra conta. Conta
+   * desabilitada devolve pagina vazia pelo mesmo `WHERE`, que delega a
+   * `conta_habilitada(uuid)` -- e por isso nao ha "ver de conta desabilitada"
+   * como opcao aqui.
+   */
+  listarDoAutor(recorte: RecorteDasMinhasIndicacoes): Promise<PaginaDasMinhasIndicacoes>;
 }

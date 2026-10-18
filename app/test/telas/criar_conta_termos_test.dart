@@ -137,6 +137,10 @@ void main() {
     WidgetTester tester, {
     required bool aceitar,
   }) async {
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
     await tester.enterText(
       find.byType(TextField).at(1),
       'marina@exemplo.com.br',
@@ -395,7 +399,28 @@ void main() {
       // COMPORTAMENTO, que e mais forte: comparar alturas continuaria verde
       // numa tela que criasse a conta sem o aceite, desde que a caixa
       // estivesse desenhada acima do botao.
+      // **A JANELA E FIXADA AQUI, em 360 x 560 dp**, e isso passou a ser
+      // necessario em 18/10/2026.
+      //
+      // O cliente mandou remover o aviso do vazamento do pe da lista de
+      // requisitos da senha (*"O servidor também recusa senha que já apareceu
+      // em vazamento conhecido..."*), e o formulario encurtou com ele. Na
+      // janela padrao da suite (800 x 600 dp) a caixa de aceite passou a
+      // nascer DENTRO da area visivel -- medido, topo em 472,0 contra 503,0 de
+      // fundo do rolavel --, e a pre-condicao abaixo deixou de valer.
+      //
+      // Afrouxar a pre-condicao esconderia o caso: ele diz medir a ROLAGEM
+      // ate a caixa, e sem a caixa fora da janela ele nao mede isso. Fixar a
+      // janela no aparelho estreito que o proprio comentario acima nomeia --
+      // 360 dp de largura -- devolve a condicao e mantem a medida honesta.
+      tester.view.devicePixelRatio = 3;
+      tester.view.physicalSize = const Size(360 * 3, 560 * 3);
+      addTearDown(tester.view.reset);
+
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+      // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai.
+      await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
       await tester.enterText(
         find.byType(TextField).at(1),
         'marina@exemplo.com.br',

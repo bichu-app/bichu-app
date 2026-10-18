@@ -24,8 +24,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('abre deslogado em Pets, com as cinco secoes visiveis',
+  testWidgets('abre deslogado em REDE, com as cinco secoes visiveis',
       (tester) async {
+    // **A ABA DE ARRANQUE MUDOU EM 18/10/2026.** Era `Pets`; o cliente pediu
+    // literalmente *"quando o usuário fizer o login ou abrir o app, traga a
+    // pagina da rede como padrão"*, e `Rotas.destinoDoArranque` passou a
+    // devolver `rede`. Este caso e o que MEDE isso, e por isso ele nao foi
+    // apagado nem afrouxado: so trocou de lado.
+    //
+    // **E ele mede deslogado de proposito.** A frase do cliente cobre os dois
+    // arranques, e a `Rede` abre para visitante: a casca de abas e visivel sem
+    // sessao (UX 5.2) e `GET /network/events` e rota publica. Se um dia a
+    // `Rede` passasse a exigir conta, este caso seria o primeiro a acusar.
     await abrirOApp(tester);
 
     // Deslogado e um estado de navegacao, nao um muro: nenhuma aba some,
@@ -39,7 +49,17 @@ void main() {
             'deslogada.',
       );
     }
-    expect(find.widgetWithText(AppBar, 'Pets'), findsOne);
+    expect(
+      find.widgetWithText(AppBar, 'Rede'),
+      findsOne,
+      reason: 'REPROVA: o app nao abriu na `Rede`. A aba de arranque e decisao '
+          'do cliente de 18/10/2026 e mora em `Rotas.destinoDoArranque`.',
+    );
+    expect(
+      find.widgetWithText(AppBar, 'Pets'),
+      findsNothing,
+      reason: 'REPROVA: o app voltou a abrir em `Pets`.',
+    );
   });
 
   testWidgets('o app fala pt-BR, e o Flutter tambem', (tester) async {
@@ -119,6 +139,10 @@ void main() {
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
 
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
     await tester.enterText(
       find.byType(TextField).at(1),
       'marina@exemplo.com.br',

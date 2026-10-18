@@ -473,7 +473,11 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               CampoDeBuscaDaListagem(busca: busca),
               const SizedBox(height: BichuEspaco.e4),
             ],
-            if (reforco != null) ...<Widget>[
+            // **Vazio nao desenha** (18/10/2026): a `Rede` manda
+            // `reforcoDaPagina: ''` desde que o cliente removeu as cinco
+            // frases de apoio, e sem o `isNotEmpty` a secao abriria com um
+            // `Text` vazio e 24 dp de respiro entre a busca e as abas.
+            if (reforco != null && reforco.isNotEmpty) ...<Widget>[
               Text(
                 reforco,
                 style: Theme.of(context)
