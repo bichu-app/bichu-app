@@ -901,7 +901,34 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '65dcb5cd25c486a5e7d537aeaec19566828420d5'; // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095)
+///
+/// DESTRAVADO EM 17/10 (BICHUS-278, as DUAS ESCRITAS DA COMUNIDADE: marcar um
+/// encontro na `Rede` e indicar um profissional no `Perto`). O cliente pediu
+/// "os botoes na rede e no perto para o usuario criar os eventos e recomendar
+/// os profissionais"; `createNetworkEvent` ja existia no contrato sem tela, e
+/// a indicacao do `Perto` nao existia em lugar nenhum.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `rede/criar_encontro.dart`: nasce. O formulario de
+///     `CommunityNetworkEventInput`, com os dois casos de recusa ditos com a
+///     saida que os resolve.
+///   - `perto/sugerir_profissional.dart`: nasce. A indicacao, que **nao
+///     publica**: ela nasce pendente de revisao, porque e texto sobre um
+///     TERCEIRO e nao sobre quem escreve.
+///   - `rede/agenda_da_rede.dart` e `perto/lista_do_diretorio.dart`: cada uma
+///     ganha a porta para a sua tela, no CORPO e acima dos controles de
+///     listagem -- o slot unico de acao da `AppBar` continua livre.
+///
+/// **Esta trava anda na direcao do portao ESTRUTURAL abaixo, e nao contra
+/// ele.** As duas telas novas nao falam com aparelho nenhum: nenhum importe de
+/// plugin, nenhum canal de plataforma, nenhuma coordenada. A capa do encontro
+/// ficou de fora desta rodada justamente por passar pela porta
+/// `CameraEGaleria`, que outra frente esta mexendo -- a porta NAO foi tocada.
+/// O unico recurso de aparelho que entra e `showTimePicker`, do proprio
+/// Flutter, pela mesma via de `showDatePicker` que duas telas ja usam.
+/// Anterior: `65dcb5cd25c486a5e7d537aeaec19566828420d5`.
+const String _arvoreDasTelas = 'b7b0a3ad352c7b8ec4f03b5a98d51d3672ee0b31'; // BICHUS-278, 17/10: as duas escritas da comunidade -- `rede/criar_encontro.dart` e `perto/sugerir_profissional.dart` nascem, e a agenda e a lista do diretorio ganham a porta para elas no corpo. Nenhuma porta de aparelho encostada: zero importe de plugin, zero canal de plataforma e nenhuma coordenada nas duas telas (antes: 65dcb5c)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
