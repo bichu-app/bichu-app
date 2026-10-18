@@ -69,6 +69,7 @@ import {
   type MudancaDaEntrada,
   type OrdemDoDiretorioAdministrativo,
   type RecorteDeEntradas,
+  type TransacaoDoDiretorio,
 } from '../ports/diretorio-administrativo.js';
 import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type { StatusDaEntrada } from '../domain/escrita-do-diretorio.js';
@@ -98,6 +99,14 @@ export interface DependenciasDoDiretorioAdministrativo {
   readonly repositorio: DiretorioAdministrativoRepository;
   readonly ids: IdGenerator;
   readonly clock: Clock;
+  /**
+   * A URL publica de uma chave de derivada (18/10/2026, com a logo e a foto).
+   *
+   * Injetada como na `Loja` e na `Rede`, e nao montada aqui: o host de midia e
+   * `MEDIA_PUBLIC_BASE_URL`, que e configuracao, e um caso de uso que leia
+   * variavel de ambiente deixa de ser testavel sem ambiente.
+   */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 function slugOcupado(): AppError {
@@ -256,7 +265,10 @@ export class DiretorioAdministrativo {
   }
 
   private escrito(entrada: EntradaAdministrativa): Escrito<EntradaProjetada> {
-    return { recurso: projetarEntradaAdministrativa(entrada), etag: comoEtag(entrada.version) };
+    return {
+      recurso: projetarEntradaAdministrativa(entrada, this.deps.urlDeMidia),
+      etag: comoEtag(entrada.version),
+    };
   }
 
   async listarEntradas(recorte: {
@@ -271,7 +283,7 @@ export class DiretorioAdministrativo {
   }): Promise<PaginaProjetada<EntradaProjetada>> {
     const pagina = await this.deps.repositorio.listarEntradas(recorte satisfies RecorteDeEntradas);
     return {
-      items: pagina.itens.map(projetarEntradaAdministrativa),
+      items: pagina.itens.map((e) => projetarEntradaAdministrativa(e, this.deps.urlDeMidia)),
       page: recorte.page,
       limit: recorte.limit,
       total: pagina.total,
@@ -293,6 +305,11 @@ export class DiretorioAdministrativo {
     if (erros.length > 0) throw problemas.validacao(erros);
 
     return this.deps.repositorio.emTransacao(async (tx) => {
+      // A logo e a foto sao confirmadas ANTES do `INSERT`, na mesma transacao:
+      // `imagemDoEnvio` recusa com `400` o envio que nao serve, e recusar antes
+      // de inserir evita gravar a entrada e desfaze-la em seguida.
+      const logoImageId = await this.imagemDoEnvio(tx, 'logo_upload_id', 'directory_logo', corpo.logo_upload_id);
+      const photoImageId = await this.imagemDoEnvio(tx, 'photo_upload_id', 'directory_photo', corpo.photo_upload_id);
       const criada = await comSlugLivre(() =>
         tx.inserirEntrada({
           id: this.deps.ids.uuidv7(),
@@ -311,6 +328,8 @@ export class DiretorioAdministrativo {
           streetNumber: aparado(corpo.street_number) ?? null,
           complement: aparado(corpo.complement) ?? null,
           phoneE164: aparado(corpo.phone_e164) ?? null,
+          logoImageId,
+          photoImageId,
           status: STATUS_INICIAL,
           source: ORIGEM_DO_PAINEL,
           claimStatus: TITULARIDADE_DO_PAINEL,
@@ -370,6 +389,11 @@ export class DiretorioAdministrativo {
       const decidido = planejarEdicao(atual, normalizado);
       if (!decidido.ok) throw problemas.validacao([...decidido.erros]);
 
+      // O `id` interno e lido ANTES do bloco abaixo porque `imagemDoEnvio`
+      // precisa dele para recusar a logo que ja esta em OUTRA entrada.
+      const id = await tx.idPorSlug(slug);
+      if (id === null) throw problemas.naoEncontrado();
+
       const mudanca: MudancaDaEntrada = {
         ...(normalizado.slug === undefined ? {} : { slug: normalizado.slug }),
         ...(normalizado.kind === undefined ? {} : { kind: normalizado.kind }),
@@ -389,12 +413,33 @@ export class DiretorioAdministrativo {
           : { streetNumber: normalizado.street_number }),
         ...(normalizado.complement === undefined ? {} : { complement: normalizado.complement }),
         ...(normalizado.phone_e164 === undefined ? {} : { phoneE164: normalizado.phone_e164 }),
+        // A logo e a foto: ausente nao mexe, `null` TIRA, `upload_id` novo
+        // TROCA. A confirmacao acontece aqui dentro, na transacao da escrita.
+        ...(patch.logo_upload_id === undefined
+          ? {}
+          : {
+              logoImageId: await this.imagemDoEnvio(
+                tx,
+                'logo_upload_id',
+                'directory_logo',
+                patch.logo_upload_id,
+                id,
+              ),
+            }),
+        ...(patch.photo_upload_id === undefined
+          ? {}
+          : {
+              photoImageId: await this.imagemDoEnvio(
+                tx,
+                'photo_upload_id',
+                'directory_photo',
+                patch.photo_upload_id,
+                id,
+              ),
+            }),
         ...(normalizado.status === undefined ? {} : { status: normalizado.status }),
         gravaMarcoDePublicacao: decidido.plano.gravaMarcoDePublicacao,
       };
-
-      const id = await tx.idPorSlug(slug);
-      if (id === null) throw problemas.naoEncontrado();
 
       const alterada = await comSlugLivre(() =>
         tx.atualizarEntrada(id, versao, mudanca, this.agora()),
@@ -411,6 +456,79 @@ export class DiretorioAdministrativo {
       );
       return this.escrito(alterada);
     });
+  }
+
+  /**
+   * O `catalog_images.id` de um `upload_id` da logo ou da foto da entrada
+   * (18/10/2026), ou `null` quando o corpo mandou `null` para TIRAR a imagem.
+   *
+   * **COPIA DELIBERADA DE `CatalogoAdministrativo.imagemDoEnvio`**, e nao uma
+   * abstracao nova: a diferenca entre os dois e o nome do campo no erro, o
+   * proposito exigido e a tabela do dono. Fatorar os tres numa funcao
+   * compartilhada trocaria quinze linhas por um parametro de injecao em tres
+   * modulos, e a regra que importa -- "o proposito do envio tem de ser o do
+   * campo" -- ficaria a um salto de distancia de quem a le.
+   *
+   * ## Por que a recusa nao diz QUAL dos casos ocorreu
+   *
+   * Envio inexistente, de outro proposito, vencido, ou ja usado em outra
+   * entrada: os quatro saem como o mesmo `400 upload_not_usable`. Distinguir
+   * entregaria a quem adivinha `upload_id` um oraculo de "este existe mas e de
+   * outra entrada", e e a mesma razao do ADR-0021.
+   *
+   * ## E ESTA FUNCAO QUE PROTEGE A IMAGEM DA VARREDURA DE VENCIDOS
+   *
+   * `confirmarEnvioDeCatalogo` grava `confirmed_at`, e e isso que tira a linha
+   * da lista de `listarIntencoesVencidas`. Um proposito que chegasse ate o
+   * balde sem passar por uma confirmacao seria apagado dez minutos depois, que
+   * e exatamente o que aconteceu com a foto do achado -- duas vezes, medido.
+   */
+  private async imagemDoEnvio(
+    tx: TransacaoDoDiretorio,
+    campo: 'logo_upload_id' | 'photo_upload_id',
+    proposito: 'directory_logo' | 'directory_photo',
+    uploadId: string | null | undefined,
+    entradaId?: string,
+  ): Promise<string | null> {
+    if (uploadId === undefined || uploadId === null) return null;
+
+    const recusa = (): never => {
+      throw problemas.validacao([
+        {
+          field: campo,
+          code: 'upload_not_usable',
+          message: 'Essa imagem não serve para esta entrada. Envie-a de novo.',
+        },
+      ]);
+    };
+
+    const envio = await tx.envioDeCatalogo(uploadId);
+    if (envio === null || envio.kind !== 'catalog_image' || envio.purpose !== proposito) recusa();
+    // `envio` ja nao e nulo aqui; o TypeScript nao sabe disso por causa do
+    // `never` dentro de `recusa`, e a assercao abaixo e o preco de manter a
+    // recusa numa funcao so.
+    const aberto = envio as NonNullable<typeof envio>;
+    if (aberto.confirmedAt !== null) {
+      // Envio ja confirmado e REAPROVEITADO quando e desta mesma entrada: o
+      // painel manda o formulario inteiro a cada salvamento, e recusar aqui
+      // faria a segunda gravacao de um telefone perder a logo.
+      if (aberto.catalogImageId === null) recusa();
+      const dono = await tx.entradaDaImagem(aberto.catalogImageId as string);
+      if (dono !== null && dono !== entradaId) recusa();
+      return aberto.catalogImageId;
+    }
+    const agora = this.agora();
+    if (aberto.expiresAt.getTime() <= agora) recusa();
+
+    const imagemId = this.deps.ids.uuidv7();
+    await tx.confirmarEnvioDeCatalogo({
+      imagemId,
+      trabalhoId: this.deps.ids.uuidv7(),
+      envioId: aberto.id,
+      purpose: proposito,
+      agora,
+    });
+    return imagemId;
   }
 
   /**

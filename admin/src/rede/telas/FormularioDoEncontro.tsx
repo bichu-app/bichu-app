@@ -13,7 +13,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../../componentes/basicos.tsx';
 import { CampoDeValorEmReais } from '../../componentes/campos.tsx';
-import { enviarImagem } from '../../componentes/envio-de-imagem.ts';
+import { DIMENSAO_MINIMA, enviarImagem, LIMITE_EM_MB } from '../../componentes/envio-de-imagem.ts';
 import { Galeria } from '../../componentes/Galeria.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
 import { SairSemSalvar } from '../../componentes/SairSemSalvar.tsx';
@@ -58,8 +58,9 @@ import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
 import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
 
-const AJUDA_DAS_FOTOS =
-  'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 600 × 600 pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.';
+// O teto vem de `LIMITE_EM_MB`: escrever "5 MB" a mao aqui faria a ajuda
+// mentir no dia em que o contrato mudasse o teto.
+const AJUDA_DAS_FOTOS = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.network_event.largura)} × ${String(DIMENSAO_MINIMA.network_event.altura)} pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.`;
 
 /** O id do elemento que recebe o foco pelo resumo de erros. */
 function idDoCampo(campo: Campo): string {

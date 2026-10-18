@@ -38,6 +38,8 @@ import {
   type EntradaAdministrativa,
 } from './escrita-do-diretorio.js';
 
+const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
+
 // `comoData` e nao `new Date(...)`: dominio nao constroi tempo real, e a regra
 // de arquitetura reprova a construcao direta tambem no teste. As tres marcas
 // vem de constantes, que e o que um teste de regra precisa.
@@ -53,6 +55,8 @@ const COMPLETA: EntradaAdministrativa = {
   city: 'São Paulo',
   state: 'SP',
   neighborhood: 'Vila Mariana',
+  logo: null,
+  photo: null,
   // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
   // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
   // continuar completa para publicar.
@@ -223,24 +227,24 @@ void describe('forma dos campos', () => {
 
 void describe('projecao', () => {
   void it('nao carrega `id`, coordenada, documento nem vinculo', () => {
-    const projetada = projetarEntradaAdministrativa(COMPLETA) as unknown as Record<string, unknown>;
+    const projetada = projetarEntradaAdministrativa(COMPLETA, URL_DE_MIDIA) as unknown as Record<string, unknown>;
     for (const proibido of ['id', 'geo', 'cnpj', 'crmv_number', 'crmv_uf', 'claimed_by_user_id', 'verification_level']) {
       assert.equal(proibido in projetada, false, `${proibido} nao pode sair na resposta`);
     }
   });
 
   void it('deriva a verificacao das provas aprovadas, e nao de uma coluna', () => {
-    const projetada = projetarEntradaAdministrativa(COMPLETA);
+    const projetada = projetarEntradaAdministrativa(COMPLETA, URL_DE_MIDIA);
     assert.equal(projetada.verification.level, 'document_verified');
     assert.deepEqual(projetada.verification.evidence_kinds, ['cnpj']);
   });
 
   void it('`missing_to_publish` vem vazio quando nada falta', () => {
-    assert.deepEqual(projetarEntradaAdministrativa(COMPLETA).missing_to_publish, []);
+    assert.deepEqual(projetarEntradaAdministrativa(COMPLETA, URL_DE_MIDIA).missing_to_publish, []);
   });
 
   void it('`published_at` nulo e um resultado, e nao `created_at`', () => {
-    const projetada = projetarEntradaAdministrativa(RASCUNHO_INCOMPLETO);
+    const projetada = projetarEntradaAdministrativa(RASCUNHO_INCOMPLETO, URL_DE_MIDIA);
     assert.equal(projetada.published_at, null);
     assert.equal(projetada.created_at, comoData(NASCEU_EM).toISOString());
   });

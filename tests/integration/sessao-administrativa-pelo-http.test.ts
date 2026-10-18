@@ -181,7 +181,15 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
     registrarOcorrencia: () => {}, baseDaWeb: config.webBaseUrl,
     avisarTitular: () => Promise.resolve(),
   });
-  const deps = { auth, assinador, contrato, issuer: config.token.issuer, apiBaseUrl: config.apiBaseUrl };
+  // `urlDeMidia`: a foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+  const deps = {
+    auth,
+    assinador,
+    contrato,
+    issuer: config.token.issuer,
+    apiBaseUrl: config.apiBaseUrl,
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
+  };
 
   const rotasAdministrativas: RouteDefinition[] = [];
   const app = criarServidor({

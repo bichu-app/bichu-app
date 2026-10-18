@@ -31,6 +31,9 @@ import {
   type ImagensDeCatalogoDoWorker,
 } from '../ports/imagem-de-catalogo.js';
 import {
+  DERIVADAS_DA_FOTO_DE_USUARIO,
+  DERIVADAS_DA_FOTO_DO_LOCAL,
+  DERIVADAS_DA_LOGO,
   DERIVADAS_DO_ENCONTRO,
   DERIVADAS_DO_PRODUTO,
   TETO_DE_BYTES_DA_DERIVADA,
@@ -49,6 +52,12 @@ import type { ObjectStorage } from '../ports/object-storage.js';
 const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaDerivada[]>> = {
   network_event: DERIVADAS_DO_ENCONTRO,
   store_item: DERIVADAS_DO_PRODUTO,
+  // 18/10/2026. Tres propositos, tres geometrias, e e por isso que a logo e a
+  // foto do profissional sao dois campos e nao um: quadrada 1:1 contra faixa
+  // 16:9. Ver `derivadas.ts` para a medida de cada tela.
+  directory_logo: DERIVADAS_DA_LOGO,
+  directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
+  user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
 };
 
 /** O texto que o painel mostra, por motivo. Nao e codigo de erro. */

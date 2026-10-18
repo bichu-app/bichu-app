@@ -61,6 +61,9 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     criarContaLocal: recusar('criarContaLocal'),
     buscarContaPorId: recusar('buscarContaPorId'),
     atualizarPerfil: recusar('atualizarPerfil'),
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    fotoDoPerfil: recusar('fotoDoPerfil'),
+    trocarFotoDoPerfil: recusar('trocarFotoDoPerfil'),
     buscarContaPorEmail: recusar('buscarContaPorEmail'),
     buscarCredencialLocalPorEmail: recusar('buscarCredencialLocalPorEmail'),
     regravarCredencial: recusar('regravarCredencial'),
@@ -161,6 +164,8 @@ function montar(): RegistradorDeRotas {
     contrato: carregarContrato('api/openapi.yaml'),
     issuer: 'https://api.bichu.test',
     apiBaseUrl: 'https://api.bichu.test',
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   void app.register(
     (escopo, _opcoes, pronto) => {

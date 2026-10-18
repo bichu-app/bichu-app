@@ -181,6 +181,14 @@ class RepositorioFalso implements IdentityRepository {
   atualizarPerfil(): Promise<Conta | undefined> {
     return naoUsado('atualizarPerfil');
   }
+  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
+  fotoDoPerfil(): Promise<null> {
+    return naoUsado('fotoDoPerfil');
+  }
+
+  trocarFotoDoPerfil(): Promise<Conta | undefined> {
+    return naoUsado('trocarFotoDoPerfil');
+  }
   buscarContaPorEmail(): Promise<Conta | undefined> {
     return naoUsado('buscarContaPorEmail');
   }

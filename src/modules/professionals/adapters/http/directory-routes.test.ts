@@ -51,6 +51,9 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio, rotaDoDiretorio } from './directory-routes.js';
 
+/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
+
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000;
@@ -66,6 +69,7 @@ const ENTRADA: EntradaDoDiretorio = {
   phoneE164: '+551130612200',
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
+  logoPublicKey: null,
 };
 
 interface Cenario {
@@ -125,6 +129,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     diretorio: repositorio(cenario),
     autenticador: { autenticar: (token: string) => Promise.resolve({ userId: token as UserId }) },
     clock,
+    urlDeMidia: URL_DE_MIDIA,
   });
   return app;
 }

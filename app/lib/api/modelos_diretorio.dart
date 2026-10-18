@@ -166,6 +166,7 @@ class EntradaDoDiretorio {
     this.telefoneE164,
     this.distanciaEmMetros,
     this.pontuacao,
+    this.logoUrl,
   });
 
   /// A chave. **Nao existe `id`.**
@@ -199,6 +200,19 @@ class EntradaDoDiretorio {
   /// **Nulo, e tambem `quantidade == 0`, nao desenham estrela nenhuma e nao
   /// escrevem "0,0"**: a linha da media simplesmente nao existe no cartao.
   final PontuacaoDoLocal? pontuacao;
+
+  /// A URL da **derivada** da logo da entidade, ou nulo (cliente, 18/10/2026:
+  /// *"pode liberar as imagens do profissional no app"*).
+  ///
+  /// **Nulo e o estado NORMAL**, em tres casos que a tela trata igual: a
+  /// entrada nao tem logo; a logo foi enviada e o worker ainda nao terminou; a
+  /// logo foi recusada nos bytes. Em nenhum deles o cartao deixa de existir --
+  /// **cartao sem logo desenha o nome sem imagem**, e nunca um quadro vazio.
+  ///
+  /// E sempre derivada: o original mora no armazenamento privado e nao e
+  /// servido a cliente nenhum. Quem garante isso e o servidor, que confere a
+  /// forma da chave antes de montar a URL.
+  final String? logoUrl;
 
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao.
   ///
@@ -245,6 +259,10 @@ class EntradaDoDiretorio {
       // tratar a ausencia como falha faria a listagem inteira cair por causa
       // de um numero de enfeite.
       pontuacao: PontuacaoDoLocal.opcional(json['rating']),
+      // **Campo OPCIONAL: ausente e nulo, e nao estoura.** Mesmo motivo de
+      // `rating`: o APK publicado le esta resposta e nao conhece o campo, e
+      // uma entrada sem logo nao pode derrubar a listagem inteira.
+      logoUrl: urlDeImagem(json['logo_url']),
     );
   }
 }
@@ -259,6 +277,25 @@ class EntradaDoDiretorio {
 /// Mora fora das classes porque o cartao da listagem
 /// ([EntradaDoDiretorio]) e a pagina do local ([DetalheDoLocal]) precisam
 /// escrever a MESMA linha: duas copias divergem na primeira edicao.
+/// A URL de imagem que veio do contrato, **ou nulo**.
+///
+/// Existe por tres razoes, e nenhuma e estetica:
+///
+/// 1. **Campo ausente e campo nulo sao a MESMA coisa** para a tela. O contrato
+///    declara `logo_url` e `photo_url` como anulaveis e nao obrigatorios, e um
+///    `as String?` cru sobre um valor de outro tipo estoura em tempo de
+///    execucao -- na listagem, isso derrubaria a pagina inteira por causa de
+///    uma entrada.
+/// 2. **String vazia nao e URL.** `Image.network('')` lanca, e o servidor nao
+///    promete nunca mandar vazio: ele promete nulo. Vazio vira nulo aqui.
+/// 3. **Uma definicao so**, porque o cartao da listagem e a pagina do local
+///    leem o mesmo campo. Duas copias divergem na primeira edicao.
+String? urlDeImagem(Object? bruto) {
+  if (bruto is! String) return null;
+  final limpo = bruto.trim();
+  return limpo.isEmpty ? null : limpo;
+}
+
 String? linhaDeLugarDe({String? bairro, String? cidade, String? estado}) {
   final partes = <String>[
     if (bairro != null && bairro.isNotEmpty) bairro,
@@ -772,6 +809,8 @@ class DetalheDoLocal {
     this.distanciaEmMetros,
     this.minhaAvaliacaoRef,
     this.motivoDeNaoPoderAvaliar,
+    this.logoUrl,
+    this.fotoUrl,
   });
 
   final String slug;
@@ -813,6 +852,30 @@ class DetalheDoLocal {
 
   /// Por que [podeAvaliar] e falso. Nulo quando ele e verdadeiro.
   final MotivoDeNaoPoderAvaliar? motivoDeNaoPoderAvaliar;
+
+  /// A URL da **derivada** da logo da entidade, ou nulo (cliente, 18/10/2026:
+  /// *"pode liberar as imagens do profissional no app"*).
+  ///
+  /// **Nulo e o estado NORMAL**, em tres casos que a tela trata igual: a
+  /// entrada nao tem logo; a logo foi enviada e o worker ainda nao terminou; a
+  /// logo foi recusada nos bytes. Em nenhum deles o cartao deixa de existir --
+  /// **cartao sem logo desenha o nome sem imagem**, e nunca um quadro vazio.
+  ///
+  /// E sempre derivada: o original mora no armazenamento privado e nao e
+  /// servido a cliente nenhum. Quem garante isso e o servidor, que confere a
+  /// forma da chave antes de montar a URL.
+  final String? logoUrl;
+
+  /// A URL da **derivada** da foto do lugar -- fachada ou ambiente --, ou nulo.
+  ///
+  /// Faixa 16:9 (derivada `banner`, 1280 x 720), e e a imagem que a pessoa olha
+  /// GRANDE antes de decidir se leva o animal ali.
+  ///
+  /// **So existe aqui, e nao em [EntradaDoDiretorio].** A faixa em ate 20
+  /// cartoes multiplicaria o peso da primeira pintura da lista; a lista desenha
+  /// a logo. Nulo nos mesmos tres casos da logo, e **pagina sem foto nao tem
+  /// faixa vazia**: ela simplesmente nao desenha a faixa.
+  final String? fotoUrl;
 
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao. **A MESMA
   /// linha do cartao da listagem**, por [linhaDeLugarDe]: duas copias da regra
@@ -862,6 +925,9 @@ class DetalheDoLocal {
       sobre: json['about'] as String?,
       telefoneE164: json['phone_e164'] as String?,
       distanciaEmMetros: distancia is num ? distancia.round() : null,
+      // Os dois sao OPCIONAIS: ausente e nulo, e nao estoura.
+      logoUrl: urlDeImagem(json['logo_url']),
+      fotoUrl: urlDeImagem(json['photo_url']),
     );
   }
 }

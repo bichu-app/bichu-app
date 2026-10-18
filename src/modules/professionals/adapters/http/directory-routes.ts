@@ -43,7 +43,11 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
-import { projetarEntrada, type TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import {
+  projetarEntrada,
+  urlDaDerivada,
+  type TipoDeProfissional,
+} from '../../domain/entrada-do-diretorio.js';
 import {
   projetarAvaliacao,
   projetarPontuacao,
@@ -110,6 +114,15 @@ export interface DependenciasDasRotasDoDiretorio {
   readonly diretorio: DirectoryRepository;
   readonly autenticador: Autenticador;
   readonly clock: Clock;
+  /**
+   * A URL publica de uma chave de derivada (18/10/2026, com a liberacao das
+   * imagens do profissional no aplicativo).
+   *
+   * Injetada como na `Loja`, na `Rede`, no painel do diretorio e em `Me`: o host
+   * de midia e `MEDIA_PUBLIC_BASE_URL`, que e configuracao, e uma rota que lesse
+   * variavel de ambiente deixaria de ser testavel sem ambiente.
+   */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 interface QueryDoDiretorio {
@@ -327,7 +340,10 @@ export function registrarRotasDoDiretorio(
       // falso a lista saiu em ordem de nome, e devolver um numero ao lado dela
       // seria dizer "estes sao os mais perto" sobre uma ordem que nao mediu
       // nada.
-      const itens = pagina.itens.map(projetarEntrada).map((entrada) =>
+      // `(e) => projetarEntrada(e, ...)` e nao `.map(projetarEntrada)`: com a
+      // referencia nua, o segundo argumento de `map` (o indice) chegaria no
+      // lugar de `urlDeMidia`.
+      const itens = pagina.itens.map((e) => projetarEntrada(e, deps.urlDeMidia)).map((entrada) =>
         pagina.distanciaDisponivel ? entrada : { ...entrada, distance_m: null },
       );
 
@@ -360,9 +376,13 @@ export function registrarRotasDoDiretorio(
       // quem nao tem direito de saber.
       if (local === undefined) throw problemas.naoEncontrado();
 
-      const entrada = projetarEntrada(local.entrada);
+      const entrada = projetarEntrada(local.entrada, deps.urlDeMidia);
       return reply.send({
         ...entrada,
+        // A FOTO EM FAIXA, so aqui. `projetarEntrada` -- que a listagem tambem
+        // usa -- nao a conhece, e e por isso que ela nao tem como escorregar
+        // para a lista num campo novo que alguem acrescente la.
+        photo_url: urlDaDerivada(local.fotoPublicKey, deps.urlDeMidia),
         rating: projetarPontuacao(local.pontuacao),
         my_review_ref: local.refDaMinhaAvaliacao,
         can_review: local.podeAvaliar,

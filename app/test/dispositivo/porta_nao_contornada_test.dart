@@ -1056,7 +1056,61 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// **Somado na mescla, do ramo `feat/minhas-indicacoes`:** BICHUS-278 18/10 (Minhas indicações): DOIS arquivos desta pasta mudam, e nenhum dos dois encosta em porta de aparelho. (1) `perto/minhas_indicacoes.dart` é ARQUIVO NOVO: a tela que o cliente pediu -- *"e a aba de minhas indicações, com o status se está pendente ou se já foi aprovado pelo administrador?"* -- e ela só lê `GET /v1/directory/suggestions` pela camada de API; nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissão, nenhum `dart:io`. (2) `gaveta_de_secoes.dart`: UMA linha de `SubDestino` na seção `Perto`, que é a porta de entrada da tela -- sem ela a tela fica alcançável só por URL. O portão estrutural de diretivas deste mesmo arquivo continua respondendo pelas duas, e ele passou. Valor LIDO DA PRÓPRIA FALHA deste portão nesta árvore (`encontrado:`), e não copiado de relato nem de outro ramo. **A QUEM MESCLAR: recalcule sobre a árvore MESCLADA**, pelo procedimento escrito acima; valor de ramo isolado não sobrevive à união -- e há cinco ramos tocando `app/lib/telas` nesta rodada. (antes: 45b6093e7f)
 /// **Somado na mescla, do ramo `feat/acompanhar-pedido-plaquinha`:** BICHUS-278 (pedido da plaquinha, 18/10): DOIS arquivos de `app/lib/telas` mudam, e os dois sao pedido direto do cliente. (1) `pet/tela_solicitar_plaquinha.dart`: saiu o exemplo `cor da plaquinha` da observacao ("a cor sera unica") e saiu o botao `Pedir a plaquinha` da tela de sucesso ("ja foi pedido") -- ele ficava DESABILITADO, e o criterio 2 da BICHUS-62 proibe acao sem destino nem habilitada nem desabilitada; o desfecho virou o acompanhamento do pedido. (2) `pet/tela_acompanhar_plaquinha.dart`: ARQUIVO NOVO, a pagina privada de acompanhamento, que LE `GET /v1/pets/{petId}/tag-requests` -- a autorizacao e a clausula `WHERE` do servidor (404 e nunca 403, ADR-0021) e nenhuma conferencia de dono mora na tela. (3) `pet/tela_detalhe_do_pet.dart` e `pet/textos_do_detalhe.dart`: o link para essa pagina, que so aparece quando ha pedido. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`read-tree HEAD` + `add -A -- app/lib/telas` + `write-tree`, em `GIT_INDEX_FILE` proprio), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outros ramos tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 45b6093e7f)
 /// **Somado na mescla, do ramo `feat/minhas-indicacoes`:** BICHUS-278 18/10 (Minhas indicações como ABA do Perto): TRÊS arquivos desta pasta mudam, e nenhum dos três encosta em porta de aparelho. (1) `perto/corpo_do_perto.dart`, ARQUIVO NOVO: a casca de abas da seção (`Profissionais` / `Minhas indicações`), com a mecânica de `rede/agenda_da_rede.dart` reusada. Ela nasceu em arquivo PRÓPRIO de propósito: a casca poderia ter nascido dentro de `perto/lista_do_diretorio.dart`, como a da Rede nasceu dentro da agenda, mas aquele arquivo está sendo editado por outra frente (a logo do profissional no cartão) -- e assim **zero linha** foi tocada lá. (2) `perto/minhas_indicacoes.dart`, ARQUIVO NOVO: o corpo da segunda aba, que só lê `GET /v1/directory/suggestions` pela camada de API. (3) `abas.dart`: `AbaPerto` passa a entregar `CorpoDoPerto` como único filho, com a porta de adoção como rodapé da aba da LISTA -- fora das abas ela apareceria embaixo de `Minhas indicações` também. Nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissão, nenhum `dart:io`; o portão estrutural de diretivas deste mesmo arquivo responde pelos três e passou. Valor LIDO DA PRÓPRIA FALHA deste portão nesta árvore (`encontrado:`), e não copiado de relato nem de outro ramo. **A QUEM MESCLAR: recalcule sobre a árvore MESCLADA**, pelo procedimento escrito acima -- há pelo menos quatro valores diferentes em ramos abertos tocando esta pasta hoje, e valor de ramo isolado não sobrevive à união. (antes: 2379100dab, e antes dele 45b6093e7f)
-const String _arvoreDasTelas = 'dd6582d1724c16705b0fa5f5cae0e0a2597fceda'; // MESCLA DOS SETE RAMOS (18/10/2026): valor RECALCULADO sobre a arvore mesclada, reproduzindo o calculo deste portao (indice temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`). Soma as duas intencoes do dia -- (a) BICHUS-278, SEGUNDA MEXIDA DO MESMO DIA: a DATA da consulta voltou, por pedido literal do cliente ("devolve a data onde esta o novo texto de preco de referencia"). Dois arquivos desta pasta mudam. (1) `loja/vitrine_da_loja.dart`: o rotulo visivel acima do nome passou a ser `rotuloDePrecoComData(item)` -- afirmacao mais `consultado em 14/03`, a MESMA redacao e a MESMA `dataCurta` do rabo que saiu de manha --, e `rotuloAcessivelDoPreco` passou a receber o item e a montar afirmacao, valor e data numa leitura so. A LINHA DO PRECO continua sendo so o valor: o rabo nao voltou. (2) `loja/produto_da_loja.dart`: so a chamada do mesmo rotulo acessivel, que e como a data chega a quem usa leitor de tela naquela pagina sem ela ser redesenhada. **Nenhuma porta de aparelho encostada**: e texto visivel e nome acessivel; nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore (`encontrado:`). **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** (antes: 0b7907e0d1, e antes dela 45b6093e7f) -- e (b) nome nao pode ser apagado (18/10/2026): `perfil/tela_dados_pessoais.dart` recusa o campo de nome vazio e deixou de oferecer apaga-lo. (antes: 26d2076350) -- mais o que os ramos de Minhas indicacoes e do acompanhamento da plaquinha acrescentaram em `app/lib/telas`. (antes, por ramo isolado: 7b8758b50c, f786eed4b2, 2379100dab, 7d706000d7; base 45b6093e7f)
+///
+/// DESTRAVADO EM 18/10 (QA, rodada final da suite), valor
+/// 45b6093e7fd295e6ba36fb9b0081a8b08f7755b4. QA 18/10 (rodada final da
+/// suite): dois arquivos desta pasta mudam, e os dois sao CONSERTO DE
+/// DEFEITO medido pela propria suite, nao tela nova. (1)
+/// `pet/tela_solicitar_plaquinha.dart`: `_carregarPets()` saiu de
+/// `initState` para `didChangeDependencies`, porque ler `Escopo` (um
+/// `InheritedWidget`) antes de `initState` terminar estoura
+/// `dependOnInheritedWidgetOfExactType ... before initState() completed` --
+/// a tela NUNCA listava os pets e abria dizendo "servidor fora". Mesmo
+/// arranjo e mesmo sinalizador de `pet/tela_editar_pet.dart` e
+/// `perfil/meus_pets.dart`. (2) `perfil/tela_dados_pessoais.dart`: o campo
+/// de telefone passou a ser preenchido por `telefoneDoE164` em vez de
+/// `mascaraDeTelefone`, porque a mascara de DIGITACAO descarta o `+` e lia
+/// `+5511987654321` como digitos locais -- o campo abria `(55) 11987-6543`
+/// e um `Salvar` gravava `+5555119876543` por cima do telefone certo.
+/// **Nenhuma porta de aparelho encostada**: as duas mudancas sao de ciclo
+/// de vida e de formatacao de texto; nenhum importe de plugin, nenhum canal
+/// de plataforma, nenhuma permissao, nenhum `dart:io`, e o portao
+/// estrutural de diretivas deste mesmo arquivo continua respondendo por
+/// isso. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore
+/// (`encontrado:`), e nao copiado de relato nem recalculado com comando de
+/// escrita -- a tarefa desta rodada proibia comando git que escreve. **A
+/// QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima; valor de ramo isolado nao sobrevive a uniao. (antes:
+/// 0c72963525)
+///
+/// DESTRAVADO EM 18/10 (a PINTURA das imagens do profissional e da foto do
+/// proprio usuario). O cliente autorizou as tres: "pode liberar as imagens
+/// do profissional no app" e "coloque um campo para o usuario cadastrar sua
+/// propria foto e um selo na foto dele, se ele estiver validado". O
+/// contrato, o servidor e o modelo Dart ja estavam prontos (1d2ccac1 e
+/// 51696860); o que muda aqui e so a pintura. Tres arquivos desta pasta
+/// mudam: `perto/lista_do_diretorio.dart` (a logo ao lado do nome no
+/// cartao, quadrado de 56 dp, FORA da semantica porque o nome ja e o
+/// rotulo), `perto/pagina_do_local.dart` (a faixa 16:9 com a foto do lugar,
+/// de borda a borda, e so no detalhe: vinte faixas de 1280 x 720 numa
+/// listagem seriam 65,6 MiB de imagem decodificada) e
+/// `perfil/tela_dados_pessoais.dart` (o retrato da propria pessoa, a previa
+/// do arquivo escolhido, o selo de `Me.email_verified` em cima dele e os
+/// tres passos do envio). **Nenhuma porta de aparelho contornada, e o
+/// portao estrutural deste mesmo arquivo responde por isso**: quem desenha
+/// arquivo local continua sendo `widgets/previa_da_foto.dart` e quem
+/// desenha imagem de servidor e `widgets/imagem_da_rede.dart` -- as duas
+/// fora de `lib/telas`, porque `dart:io` e proibido aqui dentro. A tela de
+/// dados pessoais importa `dispositivo/camera_e_galeria.dart`, que e a
+/// PORTA (a mesma que o registro de achado e o cadastro de pet usam), e nao
+/// o plugin: nenhum `package:image_picker/`, nenhum
+/// `package:permission_handler/`, nenhum `dart:io`. Valor LIDO DA PROPRIA
+/// FALHA deste portao nesta arvore (`encontrado:`), e conferido
+/// reproduzindo o calculo do portao num indice temporario -- os dois deram
+/// o mesmo hash. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**,
+/// pelo procedimento escrito acima. Ha pelo menos quatro valores diferentes
+/// em ramos abertos hoje, e valor de ramo isolado nao sobrevive a uniao.
+const String _arvoreDasTelas = '50b766d431b5c70fdd06aae82dbd1e8cd251a154'; // MESCLA DO LOTE DE OITO (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA, reproduzindo o calculo deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato nem de ramo isolado. Soma as duas frentes do lote que tocam esta pasta: (a) o aviso ao tutor do achado, e (b) a PINTURA das imagens -- a logo do profissional no cartao, a faixa 16:9 do local e o retrato da propria pessoa com o selo. Os dois paragrafos acima ficaram INTEIROS, um de cada lado da colisao, por serem justificativas de intencoes diferentes. (antes, por ramo isolado: dd6582d172 e 49d7f18b03; base 45b6093e7f)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
