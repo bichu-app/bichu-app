@@ -745,9 +745,19 @@ void main() {
       // **E o bloco de fato chega la.** Sem esta linha, as contagens acima
       // ficariam verdes com um `InkWell` que nao leva a lugar nenhum -- que e
       // a acao sem destino que o criterio 2 proibe, so com outra cara.
-      await tester.tap(
-        find.descendant(of: semFone, matching: find.byType(InkWell)).first,
-      );
+      // `ensureVisible` ANTES do toque, e nao e cerimonia de teste: a secao
+      // `Perto` ganhou a barra de abas (`Profissionais` / `Minhas
+      // indicacoes`) em 18/10, e os ~48 dp dela empurram o SEGUNDO cartao
+      // abaixo da area que recebe toque na janela de teste. Sem isto o `tap`
+      // avisa "would not hit test on the specified widget" e o caso reprova
+      // por posicao, nao por comportamento -- o mesmo arranjo que
+      // `tocarEmCarregarMais` neste arquivo e `abrirAGaveta` em
+      // `gaveta_com_submenus_test.dart` ja usam.
+      final blocoQueNavega =
+          find.descendant(of: semFone, matching: find.byType(InkWell)).first;
+      await tester.ensureVisible(blocoQueNavega);
+      await tester.pumpAndSettle();
+      await tester.tap(blocoQueNavega);
       await tester.pumpAndSettle();
       expect(
         find.byType(PaginaDoLocal),

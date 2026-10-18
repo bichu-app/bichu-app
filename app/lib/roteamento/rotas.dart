@@ -37,7 +37,6 @@ import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
-import '../telas/perto/minhas_indicacoes.dart';
 import '../telas/perto/pagina_do_local.dart';
 import '../telas/perto/sugerir_profissional.dart';
 import '../telas/rede/criar_encontro.dart';
@@ -110,31 +109,6 @@ abstract final class Rotas {
   /// esta comparando tres veterinarios quer continuar comparando, e esconder
   /// as outras quatro secoes para mostrar uma ficha tiraria o app de quem so
   /// foi ver uma nota.
-  /// `Minhas indicações`: o que esta conta indicou, e em que pé está cada uma.
-  ///
-  /// **IRMÃ DA CASCA, e não sob o ramo da seção** -- ao contrário de
-  /// [localDoPerto], e a escolha foi MEDIDA e não preferida:
-  ///
-  /// Ela é um sub-destino de GAVETA, e o padrão dos sub-destinos de gaveta
-  /// deste app é rota própria: [adocoes] é o precedente, alcançada pela gaveta
-  /// de `Pets` e pela porta das ONGs em `Perto`. Sob o ramo, ela ficava
-  /// alcançável e montava a tela certa, **mas o portão de
-  /// `gaveta_com_submenus_test.dart` reprovava**: ele lê
-  /// `currentConfiguration.matches`, e rota dentro de um `StatefulShellBranch`
-  /// não aparece ali -- o portão media `/perto` com a tela de `Minhas
-  /// indicações` montada na frente. Medido nesta árvore, e não suposto.
-  ///
-  /// Então ela é rota própria, com `Voltar` para a seção, como `Adoções`. O que
-  /// se perde é a barra de abas durante a leitura; o que se ganha é um portão
-  /// que enxerga o item -- e ele é o portão que existe para pegar item de
-  /// gaveta que não leva ao que promete.
-  ///
-  /// **Declarada ANTES de [sugerirProfissional] não é necessário**:
-  /// `/perto/indicacoes` e `/perto/indicacoes/nova` são caminhos exatos e
-  /// diferentes, sem parâmetro em nenhum dos dois -- não há como um engolir o
-  /// outro.
-  static const String minhasIndicacoes = '/perto/indicacoes';
-
   static const String localDoPerto = 'locais/:slug';
 
   static const String parametroDoLocal = 'slug';
@@ -593,14 +567,6 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.sugerirProfissional,
         builder: (context, estado) => const TelaSugerirProfissional(),
-      ),
-      // `Minhas indicações`: sub-destino da gaveta de `Perto`, com rota
-      // própria pelo mesmo arranjo de `Adoções`. Ver a prosa de
-      // `Rotas.minhasIndicacoes`, que explica por que ela NÃO fica sob o ramo
-      // da seção -- é o portão da gaveta que decide, e ele foi medido.
-      GoRoute(
-        path: Rotas.minhasIndicacoes,
-        builder: (context, estado) => const MinhasIndicacoes(),
       ),
       GoRoute(
         path: Rotas.registrarAchado,

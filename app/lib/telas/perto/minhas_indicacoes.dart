@@ -25,26 +25,24 @@ import '../../widgets/rodape_da_paginacao.dart';
 /// não havia, no contrato inteiro, operação que lesse a fila do lado de quem
 /// indicou. A fila do PAINEL existe desde 17/10; o lado da pessoa é esta tela.
 ///
-/// ## ONDE ELA FICA, e por que não é uma aba de barra
+/// ## ONDE ELA FICA: segunda aba do `Perto`
 ///
-/// Ele falou "aba", e o padrão da casa para isso é o de `Meus pedidos` na
-/// `Rede`: uma aba DENTRO da tela da seção (`AbaDaRede.pedidos`, em
-/// `agenda_da_rede.dart`), e não um quinto item na barra de baixo. **Medido e
-/// seguido** — mas com uma diferença que não é de gosto:
+/// Ele falou "aba", e confirmou pelo nome em 18/10. O padrão da casa para isso
+/// é o de `Meus pedidos` na `Rede`: uma aba DENTRO do corpo da seção, e não um
+/// sexto item na barra de baixo. Quem desenha as abas é [CorpoDoPerto], com a
+/// mecânica de `agenda_da_rede.dart` reusada; **esta classe é o CORPO da
+/// segunda aba**, e não uma tela com `Scaffold` próprio.
 ///
-/// A aba interna do `Perto` teria de nascer em `abas.dart` (que monta
-/// `AbaPerto`) ou em `lista_do_diretorio.dart` (que é o corpo da seção), e os
-/// dois arquivos estão com outro agente nesta rodada. Então esta tela nasce
-/// **destino próprio** (`/perto/indicacoes`), alcançada pela gaveta da seção
-/// `Perto` -- o mesmo arranjo de `Adoções`, que é o precedente de sub-destino
-/// de gaveta neste app.
+/// **Ela não tem rota, e isso é decisão.** Teve uma (`/perto/indicacoes`,
+/// alcançada pela gaveta) enquanto era destino próprio; a rota e o item da
+/// gaveta saíram quando ela virou aba, porque aba dentro da seção é a seção --
+/// e item de gaveta que navega para a seção é exatamente o que o portão de
+/// `gaveta_com_submenus_test.dart` proíbe. Duas portas para a mesma lista
+/// também seria a segunda definição de onde ela mora.
 ///
-/// **Sob o ramo da seção ela não pode ficar, e isso foi medido:** o portão de
-/// `gaveta_com_submenus_test.dart` lê `currentConfiguration.matches`, e rota
-/// dentro de um `StatefulShellBranch` não aparece ali -- o portão media
-/// `/perto` com esta tela montada na frente, e reprovava dizendo que o item da
-/// gaveta não leva ao que promete. A prosa de `Rotas.minhasIndicacoes` tem o
-/// episódio.
+/// **Por isso ela não monta `Scaffold`, `AppBar` nem slot de barra.** Quem os
+/// monta é a casca (`casca_com_abas.dart`), e o ícone de filtrar que esta tela
+/// publica vai para o slot dela, como o da lista do diretório.
 ///
 /// **O que falta para ser aba, e é uma linha:** um `AbaDoPerto` ao lado da
 /// lista do diretório, como `AbaDaRede` faz. Quem puder mexer naqueles dois
@@ -83,10 +81,14 @@ import '../../widgets/rodape_da_paginacao.dart';
 /// cliente pediu o `Filtros` na barra, e `BarraDeListagem` passou a publicar o
 /// ícone num [SlotDaBarraDeListagem] que a casca consome.
 ///
-/// **Esta tela monta o slot ela mesma**, porque ela não está dentro da casca:
-/// sem ele, `BarraDeListagem` publicaria o ícone para ninguém e o filtro ficaria
-/// inalcançável — foi exatamente o que a primeira versão deste arquivo fez, e o
-/// teste do filtro reprovou por não achar o ícone.
+/// **O slot é o da casca**, e esta tela não monta um seu: como aba, ela vive
+/// dentro de `casca_com_abas.dart`, que já publica o ícone na `AppBar`. Ela
+/// montou o seu próprio enquanto era tela com endereço, e o teste do filtro foi
+/// quem mostrou que sem slot `BarraDeListagem` publica o controle para ninguém.
+///
+/// **É por isso que só UMA aba está montada por vez** ([CorpoDoPerto] troca o
+/// corpo por `if`, sem `TabBarView`): duas listas montadas publicariam no mesmo
+/// slot, e o ícone da barra passaria a abrir o filtro da aba de trás.
 ///
 /// **O filtro de estado é do SERVIDOR** (`state` do contrato), e não um recorte
 /// do que já foi carregado: filtrar a página carregada mentiria no `total` e no
@@ -277,64 +279,20 @@ class _MinhasIndicacoesState extends State<MinhasIndicacoes> {
     );
   }
 
-  /// O slot do ícone de filtro, montado por ESTA tela.
-  ///
-  /// A casca (`casca_com_abas.dart`) monta um para as telas de seção; esta tem
-  /// endereço próprio e não passa por ela, então ela monta o seu. Sem o slot,
-  /// `BarraDeListagem` publica o controle para ninguém.
-  final ValueNotifier<AcaoDeListagem?> _acaoDaListagem =
-      ValueNotifier<AcaoDeListagem?>(null);
-
-  @override
-  void dispose() {
-    _acaoDaListagem.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final corpo = SafeArea(
-      child: Semantics(
-        scopesRoute: true,
-        namesRoute: true,
-        explicitChildNodes: true,
-        label: MinhasIndicacoes.tituloDaTela,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
-          children: _corpo(),
-        ),
-      ),
-    );
-
-    return SlotDaBarraDeListagem(
-      acao: _acaoDaListagem,
-      child: ValueListenableBuilder<AcaoDeListagem?>(
-        valueListenable: _acaoDaListagem,
-        child: corpo,
-        builder: (context, acao, corpo) => Scaffold(
-          appBar: AppBar(
-            // 64 dp, e não os 56 do padrão do M3 (design system 23.2) -- o
-            // mesmo da casca, para a barra não mudar de altura ao entrar aqui.
-            toolbarHeight: BichuAlvoDeToque.critico,
-            leadingWidth: BichuAlvoDeToque.critico,
-            title: const Text(MinhasIndicacoes.tituloDaTela),
-            // O LADO DIREITO: só o `Filtrar` da listagem.
-            //
-            // **Não há porta de criar aqui**, e a ausência é decisão: a ação de
-            // indicar é da seção `Perto`, e repeti-la nesta tela daria dois
-            // caminhos para a mesma coisa a dois toques de distância. Quem
-            // nunca indicou acha o botão no estado vazio, que é onde ele
-            // resolve algo.
-            //
-            // `null` quando não há ação: uma lista com widget vazio dentro faz
-            // o portão da gaveta achar ação onde não há nenhuma.
-            actions: acao == null
-                ? null
-                : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
-          ),
-          body: corpo,
-        ),
-      ),
+    // **CORPO, e não tela.** Sem `Scaffold`, sem `AppBar` e sem
+    // `SlotDaBarraDeListagem`: como segunda aba do `Perto`, quem os monta é a
+    // casca, e o título da seção já está na barra dela. Uma `AppBar` aqui
+    // daria duas barras empilhadas; um slot aqui roubaria o ícone de filtrar
+    // da barra de cima e o desenharia dentro do corpo.
+    //
+    // `Column`, e não `ListView`: a casca já rola o conteúdo da seção
+    // (`TelaDeAba`), e uma rolagem dentro de outra prende o gesto na de
+    // dentro -- o `RodapeDaPaginacao` ficaria inalcançável no fim da lista.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _corpo(),
     );
   }
 

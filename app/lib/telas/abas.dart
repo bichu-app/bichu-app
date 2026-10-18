@@ -15,6 +15,7 @@ import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
+import 'perto/corpo_do_perto.dart';
 import 'perto/lista_do_diretorio.dart';
 import 'rede/agenda_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
@@ -393,13 +394,22 @@ class AbaPerto extends StatelessWidget {
               )
             : null,
         reforco: destino.reforcoDaPagina,
+        // **AS DUAS ABAS DA SECAO** (cliente, 18/10/2026): `Profissionais` e
+        // `Minhas indicacoes`. Quem as desenha e `CorpoDoPerto`, com a
+        // mecanica de `agenda_da_rede.dart` reusada -- e nao esta classe: a
+        // casca entrega o corpo da secao, e as abas sao conteudo dele.
+        //
+        // **A porta de adocao entra como rodape da aba da LISTA**, e nao como
+        // filho da secao: pendurada fora das abas, ela apareceria embaixo de
+        // `Minhas indicacoes` tambem, oferecendo adocao a quem foi ver o
+        // estado de uma indicacao.
         filhos: const <Widget>[
-          ListaDoDiretorio(),
-          SizedBox(height: BichuEspaco.e6),
-          _PortaDeSubDestino(
-            icone: Icons.favorite_outline,
-            titulo: 'Pets de ONGs para adoção',
-            rota: Rotas.adocoes,
+          CorpoDoPerto(
+            rodapeDaListagem: _PortaDeSubDestino(
+              icone: Icons.favorite_outline,
+              titulo: 'Pets de ONGs para adoção',
+              rota: Rotas.adocoes,
+            ),
           ),
         ],
       ),
