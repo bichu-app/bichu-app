@@ -66,7 +66,14 @@ void describe('política assinada — o que ela limita', () => {
       | undefined;
 
     assert.notEqual(faixa, undefined, 'sem content-length-range: qualquer tamanho passaria');
-    assert.equal(faixa![2], 10_485_760, 'o teto não é o do contrato');
+    // O teto que SAI na política é o que o envio pediu, e não um número escrito
+    // dentro do adaptador: era um literal de 10 MiB aqui, e ele ficou de pé
+    // depois de o cliente unificar o envio em 5 MB (17/10/2026), enquanto o
+    // valor de verdade passou a vir de `TETO_DE_BYTES_DO_ENVIO`. Quanto é esse
+    // número, e que ele é o do contrato, está em `chave-de-objeto.test.ts`
+    // ("o teto é o do contrato: 5 MiB, o MESMO em todos os caminhos"); aqui se
+    // prova que a política carrega exatamente ele.
+    assert.equal(faixa![2], TETO_DE_BYTES, 'a política não leva o teto que o envio pediu');
     assert.ok(20 * 1024 * 1024 > faixa![2], '20 MB precisam estar acima do teto');
   });
 

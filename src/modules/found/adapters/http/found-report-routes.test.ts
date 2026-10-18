@@ -57,7 +57,10 @@ import type {
   FoundReportId,
   UserId,
 } from '../../../../shared/types/brands.js';
-import { FoundReportService } from '../../application/found-report-service.js';
+import {
+  FoundReportService,
+  TETO_DE_BYTES_DA_FOTO_DO_ACHADO,
+} from '../../application/found-report-service.js';
 import type { AchadoGravado } from '../../domain/registro-de-achado.js';
 import type { Sugestao } from '../../domain/cruzamento.js';
 import type { FoundReportRepository } from '../../ports/found-report-repository.js';
@@ -715,24 +718,41 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
     assert.notEqual(status, 201);
   });
 
-  void it('acima de 2 MB responde 415, e o teto NÃO é o de 10 MB da foto de pet', async () => {
-    // Este é o caminho em que o 415 declarado no contrato É alcançável: o schema
-    // aceita até 10 MB (é o `UploadIntentInput` compartilhado com a foto de
-    // pet), e quem recusa em 2 MB é o SEC-009, no serviço.
+  void it('acima do teto ÚNICO de envio não passa, e ele é recusado na BORDA pelo schema', async () => {
+    // **O teto desta rota era 2 MB, e deixou de ser.** O cliente unificou o
+    // envio em 5 MB em 17/10/2026 — "em toda a aplicação, seja para foto do
+    // pet, evento, loja ou qualquer outro recurso que utilize imagem" — e o
+    // número passou a morar num lugar só (`media/domain/derivadas.ts`), de onde
+    // `TETO_DE_BYTES_DA_FOTO_DO_ACHADO` o lê. O contrato diz o mesmo, em
+    // `UploadIntentInput.byte_size`. O caso lê a constante de propósito: um
+    // `2 * 1024 * 1024` escrito aqui é exatamente o que divergiu.
+    //
+    // **E o 415 deixou de ser alcançável por este caminho, que é divergência
+    // medida e não defeito.** Enquanto o schema aceitava 10 MB e o serviço
+    // recusava em 2, o que respondia era o serviço, com o 415 que o contrato
+    // declara. Agora os dois carregam o MESMO número, então quem recusa é o
+    // schema do corpo, antes do handler, com 400 — a mesma forma do caso do SVG
+    // logo acima, e o mesmo furo (`createFoundReportPhotoUploadIntent` não
+    // declara 400). O caso afirma o que o sistema FAZ: a conferência do serviço
+    // continua escrita, por defesa em profundidade, e não é mais ela que
+    // responde aqui.
     const app = servidor();
-    const doisMegasEUm = await pedir(app, {
+    const acimaDoTeto = await pedir(app, {
       metodo: 'POST',
       url: '/media/found-report-photo-intents',
-      corpo: { ...corpoDaFoto, byte_size: 2 * 1024 * 1024 + 1 },
+      corpo: { ...corpoDaFoto, byte_size: TETO_DE_BYTES_DA_FOTO_DO_ACHADO + 1 },
     });
     const dentroDoTeto = await pedir(app, {
       metodo: 'POST',
       url: '/media/found-report-photo-intents',
-      corpo: { ...corpoDaFoto, byte_size: 2 * 1024 * 1024 },
+      corpo: { ...corpoDaFoto, byte_size: TETO_DE_BYTES_DA_FOTO_DO_ACHADO },
     });
     await app.close();
 
-    assert.equal(doisMegasEUm.status, 415);
+    // O que importa de verdade: um byte acima do teto NÃO vira autorização.
+    assert.notEqual(acimaDoTeto.status, 201);
+    assert.equal(acimaDoTeto.status, 400);
+    assert.equal(tipoDe(acimaDoTeto.corpo), 'validation-failed');
     assert.equal(dentroDoTeto.status, 201);
   });
 

@@ -287,23 +287,93 @@ void describe('a escada de qualidade, e o teto de 500 KB', () => {
   });
 });
 
+/**
+ * Um WebP ANIMADO de verdade, montado chunk por chunk.
+ *
+ * **Por que à mão, e não pelo `sharp`.** A forma óbvia é a tira vertical —
+ * `sharp({ create: { height: 64 * 3, pageHeight: 64 } }).webp()` — porque o
+ * libvips representa animação como páginas empilhadas. Medido nesta instalação
+ * (sharp 0.35.4, libvips 8.18.6, libwebp 1.6.0), ela **não produz animação**: a
+ * saída tem 76 bytes, nenhum chunk `VP8X`/`ANIM`/`ANMF`, e `metadata()` devolve
+ * 64 x 64 com `pages` ausente. O codificador escreveu um quadro só e não
+ * avisou. Uma fixture assim deixa o caso vermelho sem defeito nenhum do lado
+ * de cá — que é a outra metade do modo de falha que o cabeçalho deste arquivo
+ * persegue: verde sem alvo, e vermelho sem culpado.
+ *
+ * O contêiner animado é o do formato (RIFF/WebP, seção "Animation"): `VP8X` com
+ * o bit de animação, `ANIM` com cor de fundo e contagem de voltas, e um `ANMF`
+ * por quadro embrulhando o bitstream. O bitstream vem do `sharp`, de um WebP
+ * parado — só o contêiner é nosso, e nenhum binário entra no repositório.
+ *
+ * Confirmado contra o mesmo `metadata()` que a implementação lê: com este
+ * arquivo ele devolve `pages: 3`.
+ */
+async function webpAnimado(lado = 64, quadros = 3): Promise<Buffer> {
+  /** Um chunk RIFF: fourcc, tamanho em 32 bits LE, corpo, e byte de alinhamento. */
+  function chunk(fourcc: string, corpo: Buffer): Buffer {
+    const cabecalho = Buffer.alloc(8);
+    cabecalho.write(fourcc, 0, 4, 'ascii');
+    cabecalho.writeUInt32LE(corpo.length, 4);
+    const alinhamento = corpo.length % 2 === 1 ? Buffer.alloc(1) : Buffer.alloc(0);
+    return Buffer.concat([cabecalho, corpo, alinhamento]);
+  }
+
+  // O bitstream de um quadro, tirado de um WebP parado que o `sharp` sabe
+  // escrever: é o `VP8 ` (lossy) ou `VP8L` (lossless) de dentro do arquivo.
+  const parado = await base(lado, lado).webp().toBuffer();
+  let posicao = 12; // pula `RIFF<tamanho>WEBP`
+  let bitstream: { fourcc: string; corpo: Buffer } | undefined;
+  while (posicao + 8 <= parado.length) {
+    const fourcc = parado.toString('ascii', posicao, posicao + 4);
+    const tamanho = parado.readUInt32LE(posicao + 4);
+    if (fourcc === 'VP8 ' || fourcc === 'VP8L') {
+      bitstream = { fourcc, corpo: parado.subarray(posicao + 8, posicao + 8 + tamanho) };
+      break;
+    }
+    posicao += 8 + tamanho + (tamanho % 2);
+  }
+  assert.notEqual(bitstream, undefined, 'o WebP parado não trouxe bitstream: a fixture provaria nada');
+
+  const vp8x = Buffer.alloc(10);
+  vp8x.writeUInt8(0b0000_0010, 0); // o bit de ANIMAÇÃO
+  vp8x.writeUIntLE(lado - 1, 4, 3); // largura do canvas, menos um
+  vp8x.writeUIntLE(lado - 1, 7, 3); // altura do canvas, menos um
+
+  const anim = Buffer.alloc(6);
+  anim.writeUInt32LE(0xffff_ffff, 0); // cor de fundo
+  anim.writeUInt16LE(0, 4); // voltas: infinitas
+
+  const quadro = (): Buffer => {
+    const cabecalho = Buffer.alloc(16);
+    cabecalho.writeUIntLE(0, 0, 3); // deslocamento x, em pares de pixel
+    cabecalho.writeUIntLE(0, 3, 3); // deslocamento y, em pares de pixel
+    cabecalho.writeUIntLE(lado - 1, 6, 3);
+    cabecalho.writeUIntLE(lado - 1, 9, 3);
+    cabecalho.writeUIntLE(80, 12, 3); // duração do quadro, em ms
+    cabecalho.writeUInt8(0, 15); // sem canal alfa, sem descarte
+    return chunk('ANMF', Buffer.concat([cabecalho, chunk(bitstream!.fourcc, bitstream!.corpo)]));
+  };
+
+  const corpo = Buffer.concat([
+    Buffer.from('WEBP', 'ascii'),
+    chunk('VP8X', vp8x),
+    chunk('ANIM', anim),
+    ...Array.from({ length: quadros }, quadro),
+  ]);
+  const riff = Buffer.alloc(8);
+  riff.write('RIFF', 0, 4, 'ascii');
+  riff.writeUInt32LE(corpo.length, 4);
+  return Buffer.concat([riff, corpo]);
+}
+
 void describe('WebP animado: recusa explícita, e não o primeiro quadro em silêncio', () => {
   void it('RECUSA o WebP animado na inspeção', async () => {
-    // Um WebP de VÁRIOS QUADROS. O libvips representa animação como páginas
-    // empilhadas na vertical, e `pageHeight` diz onde cada quadro termina: uma
-    // tira de 64 x 192 com páginas de 64 são três quadros. É a forma de
-    // produzir um animado sem trazer binário de fixture para o repositório.
-    const animado = await sharp({
-      create: {
-        width: 64,
-        height: 64 * 3,
-        channels: 3,
-        background: { r: 10, g: 20, b: 30 },
-        pageHeight: 64,
-      },
-    })
-      .webp({ loop: 0 })
-      .toBuffer();
+    const animado = await webpAnimado();
+
+    // A GUARDA, na forma do resto deste arquivo: antes de cobrar a recusa,
+    // confirma que a ENTRADA é de fato animada. Sem ela, uma fixture que
+    // perdesse a animação faria o caso reprovar acusando a implementação.
+    assert.equal((await sharp(animado).metadata()).pages, 3, 'a fixture não é animada');
 
     assert.equal(await processador.inspecionar(animado), 'imagem_animada');
   });
