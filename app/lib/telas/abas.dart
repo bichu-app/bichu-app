@@ -368,10 +368,31 @@ class AbaPerfil extends StatelessWidget {
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
-            // A POSICAO 2 (BICHUS-75, criterio 2): item destacado no TOPO da
-            // lista, antes do proprio endereco. Vem antes porque o criterio o
-            // chama de destacado, e um destaque abaixo da linha que ele
-            // comenta seria nota de rodape.
+            // -----------------------------------------------------------------
+            // A ORDEM DOS BLOCOS (18/10/2026, pedido do cliente)
+            //
+            // Literal: *"Coloque a secao meus pets como o primeiro item dessa
+            // pagina e depois traga os dados de conta. O sair da conta deve
+            // ser sempre a ultima opcao do menu"*.
+            //
+            // A ordem desta lista E a ordem na tela: `TelaDeAba` entrega
+            // `filhos` a um `ListView` vertical sem reordenacao nenhuma. Por
+            // isso ela esta escrita aqui de cima para baixo, e nao espalhada:
+            // 1) as faixas, 2) `Meus pets`, 3) o grupo `Conta`,
+            // 4) `Sair da conta` -- ultimo, sempre.
+            //
+            // **AS FAIXAS FICAM ACIMA DE `Meus pets`, e e escolha medida.**
+            // Elas nao sao itens: sao condicionais, e saem da arvore de quem
+            // confirmou o e-mail e nao negou o aviso -- para essa pessoa, que
+            // e o estado comum, `Meus pets` E o primeiro elemento da tela.
+            // Empurra-las para depois de uma lista de ate 20 cartoes as
+            // levaria para baixo da dobra, e a faixa de cadastro incompleto e
+            // justamente o caminho de quem ainda nao validou os dados: com as
+            // acoes de criar escondidas de quem nao validou, ela e o que sobra
+            // para a pessoa descobrir o que fazer. A POSICAO 2 da BICHUS-75
+            // (criterio 2) diz "item destacado no TOPO da lista", e um
+            // destaque abaixo do bloco que ele comenta seria nota de rodape.
+            // -----------------------------------------------------------------
             if (sessao.usuario != null)
               AvisoDeCadastroIncompleto(
                 key: ValueKey<String>('aviso-perfil-${sessao.usuario!.id}'),
@@ -381,6 +402,31 @@ class AbaPerfil extends StatelessWidget {
             // faixas ficam juntas, no alto: faixa nao e botao, e o cliente
             // nao reclamou delas -- ele reclamou da pilha de botoes.
             const _AvisoPorPertoDesligado(),
+            // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
+            // para os cartoes da BICHUS-62, agora o PRIMEIRO bloco da pagina.
+            // A chave e por conta para que a troca de usuario reconstrua o
+            // estado em vez de reaproveitar o que estava carregado para a
+            // anterior.
+            //
+            // **Continua CONTEUDO, e nao item de menu.** A lista de pets e o
+            // corpo da secao: um item `Meus pets` levaria a uma tela que nao
+            // existe, e inventar o endereco dela seria criar destino para uma
+            // tela que nao ha (e o que o registro de sub-destinos ja diz,
+            // palavra por palavra, sobre esta linha). E os cartoes sao o UNICO
+            // caminho do app ate `Rotas.detalheDoPet`, onde moram o QR da
+            // plaquinha e `Marcar como perdido`: troca-los por um item fecharia
+            // o caminho mais critico do produto. Subir o bloco para o topo
+            // ABRE esse caminho em vez de fecha-lo -- ele era o ultimo da
+            // pagina, abaixo de tres linhas de menu.
+            MeusPets(
+              key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
+              cache: Escopo.of(context).cacheDeMeusPets,
+            ),
+            // O VAO ENTRE BLOCOS, `e6`, que e o que a casca usa entre a linha
+            // de reforco e o corpo e o que `Meus pets` usa entre os cartoes e
+            // a acao permanente. Sem ele o hairline do primeiro `ItemDeMenu`
+            // encostava no bloco de cima e os dois grupos leem como um.
+            const SizedBox(height: BichuEspaco.e6),
             // -----------------------------------------------------------------
             // O MENU DA CONTA (18/10/2026, pedido do cliente)
             //
@@ -407,6 +453,11 @@ class AbaPerfil extends StatelessWidget {
             // confirmacao continuam escritos -- eram a unica informacao que
             // aquela linha dava, e sumir com ela seria perder conteudo em nome
             // de arrumar a forma.
+            //
+            // E a `Dados da conta` do pedido: o cliente nomeou o conteudo, nao
+            // o rotulo, e o rotulo `Meus dados` esta em tres portoes e na tela
+            // `/perfil/dados` que ele abre. Renomear seria mudar texto de tela
+            // sem ele pedir.
             ItemDeMenu(
               rotulo: 'Meus dados',
               apoio: _apoioDosDados(sessao),
@@ -421,25 +472,19 @@ class AbaPerfil extends StatelessWidget {
             // precisa ter volta. A porta PRIMARIA, em `Pets`, nao mudou de
             // forma: la ela e a acao da secao de aterrissagem, e quem achou um
             // cachorro na rua nao vai procurar menu.
+            //
+            // E o "resto dos itens no meio" do pedido: entre `Meus dados` e
+            // `Sair da conta`. Item novo neste menu entra AQUI, nunca depois
+            // do ultimo.
             ItemDeMenu(
               rotulo: 'Escanear uma tag',
               aoTocar: () => context.push(Rotas.escanear),
             ),
+            // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
+            // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois
+            // desta: era `Meus pets` que vinha depois dela, e era isso que
+            // fazia a pagina parecer quebrada no meio.
             _ItemDeSair(sessao: sessao),
-            // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
-            // para os cartoes da BICHUS-62. A chave e por conta para que a
-            // troca de usuario reconstrua o estado em vez de reaproveitar o
-            // que estava carregado para a anterior.
-            //
-            // **Continua CONTEUDO, e nao item de menu.** A lista de pets e o
-            // corpo da secao: um item `Meus pets` levaria a uma tela que nao
-            // existe, e inventar o endereco dela seria criar destino para uma
-            // tela que nao ha (e o que o registro de sub-destinos ja diz,
-            // palavra por palavra, sobre esta linha).
-            MeusPets(
-              key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
-              cache: Escopo.of(context).cacheDeMeusPets,
-            ),
           ],
         );
       },
