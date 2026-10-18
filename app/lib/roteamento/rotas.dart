@@ -198,26 +198,34 @@ abstract final class Rotas {
   static const String verifiqueSeuEmail = '/verifique-seu-email';
   static const String esqueciMinhaSenha = '/esqueci-minha-senha';
 
-  /// Para onde vai quem acabou de abrir o app.
+  /// Para onde vai quem acabou de abrir o app, ou acabou de entrar.
   ///
-  /// **Esta funcao e a costura de uma decisao do cliente que continua ABERTA**
-  /// (BICHUS-164, bloco "Em aberto"): qual e a primeira tela de quem abre o
-  /// app sem conta. Ela nao e a mesma pergunta que o destino de quem sai da
-  /// conta, que ja foi respondida, e eu nao infiro que a resposta seja a mesma
-  /// tela.
+  /// **`rede`, decisao do cliente de 18/10/2026**, literal: *"quando o usuário
+  /// fizer o login ou abrir o app, traga a pagina da rede como padrão"*. Era
+  /// `pets` ate esta data.
   ///
-  /// As duas respostas possiveis continuam possiveis, e as duas se escrevem
-  /// aqui e so aqui:
+  /// **A MESMA resposta para os dois estados de sessao, e isso e o que ele
+  /// pediu.** A frase dele cobre os dois arranques -- "fizer o login" e "abrir
+  /// o app" --, e `logado` continua sem uso por isso, nao por esquecimento.
+  /// Quem chega deslogado tambem cai na `Rede`, e a secao abre: a casca de
+  /// abas e visivel deslogada por decisao de produto (UX 5.2, "deslogado e um
+  /// estado de navegacao, nao um muro") e `GET /network/events` e rota publica
+  /// -- a agenda lista para visitante, e so as acoes de criar e de pedir
+  /// participacao exigem sessao, dentro do caminho delas.
   ///
-  /// - **"tela de aterrissagem antes da casca"** (a recomendacao do PM): nasce
-  ///   uma rota irma da casca, como as telas de conta, e este `switch` passa a
-  ///   devolve-la quando `logado` e falso.
-  /// - **"cai direto numa aba"**: nada muda, e esta linha ja e a resposta.
+  /// A pergunta que a BICHUS-164 deixava aberta era "tela de aterrissagem
+  /// antes da casca, ou cai direto numa aba". Ele respondeu "cai direto numa
+  /// aba" ao nomear a aba; se um dia a aterrissagem voltar, ela nasce como
+  /// rota irma da casca e e aqui que este retorno passa a depender de
+  /// [logado].
   ///
-  /// O parametro existe **hoje**, sem uso, de proposito: sem ele a decisao
-  /// mudaria a assinatura e os chamadores, e uma decisao de produto nao deve
-  /// custar refatoracao.
-  static String destinoDoArranque({required bool logado}) => pets;
+  /// **LINK PROFUNDO CONTINUA VENCENDO ESTA LINHA.** O `redirect` de
+  /// [criarRoteador] so reescreve o destino quando a posicao casada e
+  /// [abertura]; qualquer outro endereco passa intacto (`return null`). Quem
+  /// abre `/rede/:slug`, `/loja/:slug` ou `/t/:codigo` chega onde o link
+  /// manda, e trocar esta constante nao mexe nisso -- o que mudou foi so o
+  /// destino de quem nao pediu endereco nenhum.
+  static String destinoDoArranque({required bool logado}) => rede;
 
   /// Os tres passos do cadastro de pet (F1.3, F1.4, F1.5) e a confirmacao
   /// (F1.6).
@@ -696,12 +704,35 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         // do ramo pelo registro; se as duas listas sairem de ordem, tocar em
         // `Perfil` abre `Rede`. O portao `a ordem dos ramos e a ordem do
         // registro` reprova quando isso acontece.
+        //
+        // **18/10/2026: `Perto` e `Rede` trocaram de lugar** (literal do
+        // cliente: *"inverta a ordem no app do item rede e perto"*). A ordem
+        // era `Pets, Rede, Perto, Loja, Perfil` e passou a ser
+        // `Pets, Perto, Rede, Loja, Perfil`. Os ramos tiveram de andar JUNTO
+        // com o registro, e nao e detalhe: trocar so a barra faria tocar em
+        // `Perto` abrir a `Rede`, calado, porque a casca resolve o indice.
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
                 path: Rotas.pets,
                 builder: (context, estado) => const AbaPets(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: Rotas.perto,
+                builder: (context, estado) => const AbaPerto(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: Rotas.localDoPerto,
+                    builder: (context, estado) => PaginaDoLocal(
+                      slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -726,22 +757,6 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
                       erroDoPedido: estado.extra is RetomadaDoPedido
                           ? (estado.extra! as RetomadaDoPedido).erro.texto
                           : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: Rotas.perto,
-                builder: (context, estado) => const AbaPerto(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: Rotas.localDoPerto,
-                    builder: (context, estado) => PaginaDoLocal(
-                      slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
                     ),
                   ),
                 ],

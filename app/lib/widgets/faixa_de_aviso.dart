@@ -29,6 +29,17 @@ class FaixaDeAviso extends StatelessWidget {
     this.aoTocarNaAcao,
   });
 
+  /// A frase que a pessoa le. **Pode ser vazia**, e ai a faixa nao desenha
+  /// linha de texto nenhuma.
+  ///
+  /// Vazio e um estado legitimo desde 18/10/2026: o cliente mandou remover o
+  /// texto do 401 `unauthenticated` (*"entre na sua conta para continuar..."*)
+  /// e a saida dele -- o botao `Entrar` -- ficou. Sem a guarda de [build]
+  /// sobrava um `Text` vazio dentro de um `Expanded`, que o leitor de tela
+  /// anuncia SEM DIZER NADA, mais os 8 dp de respiro antes da acao.
+  ///
+  /// **Vazio nao e o estado normal**, e nenhuma faixa nova deve nascer assim:
+  /// faixa de erro sem frase e sem acao e falha calada.
   final String texto;
   final PesoDaFaixa peso;
   final String? rotuloDaAcao;
@@ -70,17 +81,21 @@ class FaixaDeAviso extends StatelessWidget {
                   size: 24,
                   semanticLabel: '',
                 ),
-                const SizedBox(width: BichuEspaco.e3),
-                Expanded(
-                  child: Text(
-                    texto,
-                    style: textos.bodyLarge?.copyWith(color: corDoTexto),
+                // O respiro acompanha o texto: sem frase, o icone nao fica com
+                // 12 dp de nada a direita dele.
+                if (texto.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: BichuEspaco.e3),
+                  Expanded(
+                    child: Text(
+                      texto,
+                      style: textos.bodyLarge?.copyWith(color: corDoTexto),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             if (rotuloDaAcao != null && aoTocarNaAcao != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e2),
+              if (texto.isNotEmpty) const SizedBox(height: BichuEspaco.e2),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(

@@ -454,18 +454,24 @@ void main() {
 
       // **As duas alturas no espaco do CONTEUDO, e nao no da tela.**
       //
-      // Duas coisas mudaram em 18/10 e as duas batem aqui. A primeira: o
+      // Tres coisas mudaram em 18/10 e as tres batem aqui. A primeira: o
       // `Perfil` virou so menus, e o e-mail deixou de ser linha propria -- ele
-      // e a LINHA DE APOIO do item `Meus dados`, que nesta arvore diz
-      // `marina@exemplo.com.br · E-mail confirmado`, entao o finder e
-      // `textContaining` e nao `text`. A segunda: com o cartao do pet no meio,
-      // o aviso e o item `Meus dados` NAO cabem juntos na dobra, e o `ListView`
-      // nao constroi o que nao cabe -- ler as duas alturas de tela exigia os
-      // dois montados ao mesmo tempo, e rolar ate um desmonta o outro.
+      // passou a ser a LINHA DE APOIO do item `Meus dados`. A segunda, no fim
+      // do mesmo dia: o cliente mandou remover essa linha de apoio tambem
+      // (*"na pagina do perfil, não traga o e-mail no menu, deixe apenas o
+      // titulo meus dados"*), entao **o e-mail nao esta mais em tela nenhuma
+      // do `Perfil`** e o ponto de referencia desta medida passou a ser o
+      // ROTULO do item. A terceira: com o cartao do pet no meio, o aviso e o
+      // item `Meus dados` NAO cabem juntos na dobra, e o `ListView` nao
+      // constroi o que nao cabe -- ler as duas alturas de tela exigia os dois
+      // montados ao mesmo tempo, e rolar ate um desmonta o outro.
       //
       // Somar o deslocamento da rolagem a cada leitura resolve sem afrouxar:
       // "acima" passa a ser medido onde a palavra significa algo -- na ordem do
       // conteudo --, e nao na janela que por acaso esta a vista.
+      //
+      // **O QUE O CASO PROVA NAO MUDOU**: a faixa de cadastro incompleto fica
+      // ACIMA do bloco de conta que ela comenta. O alvo e que mudou de nome.
       final rolagem = find.byType(Scrollable).first;
       double deslocamento() =>
           tester.state<ScrollableState>(rolagem).position.pixels;
@@ -473,17 +479,23 @@ void main() {
       final yDoAviso =
           tester.getTopLeft(find.text('Confirme seu e-mail')).dy +
               deslocamento();
-      await rolarAte(tester, find.textContaining('marina@exemplo.com.br'));
-      final yDoEmail = tester
-              .getTopLeft(find.textContaining('marina@exemplo.com.br'))
-              .dy +
-          deslocamento();
+      await rolarAte(tester, find.text('Meus dados'));
+      final yDosDados =
+          tester.getTopLeft(find.text('Meus dados')).dy + deslocamento();
       expect(
         yDoAviso,
-        lessThan(yDoEmail),
-        reason: 'REPROVA: o aviso esta ABAIXO da linha do proprio e-mail. O '
+        lessThan(yDosDados),
+        reason: 'REPROVA: o aviso esta ABAIXO do item `Meus dados`. O '
             'criterio 2 o chama de item destacado no TOPO da lista, e um '
-            'destaque abaixo da linha que ele comenta e nota de rodape.',
+            'destaque abaixo do bloco que ele comenta e nota de rodape.',
+      );
+      // E a remocao de 18/10, cobrada aqui porque e aqui que o e-mail era
+      // medido: a linha de apoio nao voltou.
+      expect(
+        find.textContaining('marina@exemplo.com.br'),
+        findsNothing,
+        reason: 'REPROVA: o e-mail voltou ao menu do `Perfil`. O cliente o '
+            'removeu em 18/10/2026; so o titulo `Meus dados` fica.',
       );
     });
   });

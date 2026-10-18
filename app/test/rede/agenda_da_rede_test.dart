@@ -669,23 +669,27 @@ void main() {
         (tester) async {
       // Pedido do cliente de 17/10: *"coloque o campo de busca acima do texto
       // e das abas proximos e encerrados"*.
+      //
+      // **O TEXTO DO MEIO SAIU EM 18/10/2026**, por pedido do mesmo cliente
+      // (*"remova os textos ... 'os eventos de quem tem pet aqui perto de
+      // você.'"*). A ordem que ele pediu em 17/10 era busca, texto, abas; com
+      // o texto fora, o que resta a provar e busca acima das abas -- e e isso
+      // que este caso mede agora, sem deixar de medir a ordem.
       await abrirRede(tester, rede: redeComAgenda(), logado: false);
 
       final campo = tester.getTopLeft(find.byType(TextField).first);
-      final reforco = tester.getTopLeft(
-        find.text('Os eventos de quem tem pet aqui perto de você.'),
-      );
       final abas = tester.getTopLeft(find.byType(TabBar));
 
       expect(
         campo.dy,
-        lessThan(reforco.dy),
-        reason: 'REPROVA: o campo de busca nao esta acima do texto da secao.',
+        lessThan(abas.dy),
+        reason: 'REPROVA: o campo de busca nao esta acima das abas.',
       );
       expect(
-        reforco.dy,
-        lessThan(abas.dy),
-        reason: 'REPROVA: o texto da secao nao esta acima das abas.',
+        find.text('Os eventos de quem tem pet aqui perto de você.'),
+        findsNothing,
+        reason: 'REPROVA: a linha de apoio da `Rede` voltou ao corpo. O '
+            'cliente a removeu nominalmente em 18/10/2026.',
       );
     });
 

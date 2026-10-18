@@ -67,6 +67,10 @@ void main() {
       camera: camera ?? CameraDeTeste(permissao),
       leitorDeQr: leitor ?? LeitorDeQrDeTeste(),
     );
+    // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
+    // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
+    // voz alta que vai ate ela em vez de herdar a aterrissagem.
+    await abrirAAba(tester, 'Pets');
     await tester.tap(find.descendant(
         of: find.byType(AppBar),
         matching: find.byIcon(Icons.qr_code_2),
@@ -479,6 +483,14 @@ void main() {
           return problema('tag-code-not-found', 404);
         },
       );
+
+      // **O CONTADOR ZERA AQUI, e isto nao afrouxa nada.** Desde 18/10/2026 o
+      // app abre na `Rede`, e a agenda pede `GET /v1/network/events` no
+      // arranque -- uma chamada que acontece ANTES de este caso existir e que
+      // nao tem nada a ver com o que ele mede. O que ele mede e a janela entre
+      // a leitura do QR e a recusa: zerar aqui deixa a conta exata em vez de
+      // trocar o `0` por `1`, que seria afrouxar.
+      chamou = 0;
 
       leitor.ler('https://exemplo.com.br/promocao');
       await tester.pump();

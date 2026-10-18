@@ -37,6 +37,25 @@ import '../validacao/politica_de_senha.dart';
 ///
 /// **Cor nao e o unico indicador** (WCAG 2.1 SC 1.4.1): cada estado tem icone
 /// proprio, e verde e vermelho saem de token (`cores.success`, `cores.error`).
+///
+/// ## O aviso do vazamento saiu (18/10/2026)
+///
+/// A lista terminava com *"O servidor também recusa senha que já apareceu em
+/// vazamento conhecido. Isso não dá para conferir aqui: se acontecer, avisamos
+/// depois de enviar."*, e o cliente mandou remover a frase.
+///
+/// **Ela saiu das DUAS aparicoes**, o `Text` do pe da lista e o
+/// [_rotulo] composto. Nao e descuido com acessibilidade, e o contrario: este
+/// widget roda com `excludeSemantics: true`, entao [_rotulo] e a UNICA leitura
+/// da lista -- manter a frase ali faria o leitor de tela anunciar um texto que
+/// nao existe mais em tela nenhuma, e a paridade entre o que se ve e o que se
+/// ouve e justamente o que o rotulo composto existe para garantir.
+///
+/// **O que a lista deixou de prometer, a recusa continua explicando.** Com o
+/// aviso fora, "quatro de quatro" em verde nao e mais ressalvado aqui; quem
+/// enviar uma senha vazada le `senhaRecusadaPeloServidor` no campo, que diz o
+/// que houve e o que fazer, e e por isso que a remocao nao abriu beco. A
+/// ligacao esta em `telas/conta/tela_criar_conta.dart` e tem isca que a cobra.
 class RequisitosDaSenha extends StatelessWidget {
   const RequisitosDaSenha({
     required this.senha,
@@ -97,11 +116,6 @@ class RequisitosDaSenha extends StatelessWidget {
                     ],
                   ),
                 ),
-              const SizedBox(height: BichuEspaco.e1),
-              Text(
-                avisoDoQueOServidorAindaConfere,
-                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-              ),
             ],
           ),
         );
@@ -147,8 +161,7 @@ class RequisitosDaSenha extends StatelessWidget {
 
     if (atendidas.isEmpty && faltando.isEmpty) {
       final todos = estados.keys.map((r) => r.texto.toLowerCase()).join('; ');
-      return 'Requisitos da senha: $todos. '
-          '$avisoDoQueOServidorAindaConfere';
+      return 'Requisitos da senha: $todos.';
     }
 
     final partes = <String>[
@@ -156,7 +169,6 @@ class RequisitosDaSenha extends StatelessWidget {
           'atendidos.',
       if (atendidas.isNotEmpty) 'Atendidos: ${atendidas.join('; ')}.',
       if (faltando.isNotEmpty) 'Falta: ${faltando.join('; ')}.',
-      avisoDoQueOServidorAindaConfere,
     ];
     return partes.join(' ');
   }

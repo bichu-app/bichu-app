@@ -145,6 +145,12 @@ void main() {
     testWidgets('deslogado', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
       exigirPetsSemCadastroNemConta(tester, estado: 'deslogado');
       handle.dispose();
     });
@@ -156,6 +162,12 @@ void main() {
         rede: _semServidor,
         deposito: depositoLogado(),
       );
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
       exigirPetsSemCadastroNemConta(tester, estado: 'logado completo');
       handle.dispose();
     });
@@ -167,6 +179,12 @@ void main() {
         rede: _semServidor,
         deposito: _depositoComPendencia(),
       );
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
 
       // O estado precisa ser MESMO o do cadastro incompleto, senao este caso
       // seria o de cima com outro nome.
@@ -185,6 +203,12 @@ void main() {
       // dia em que alguem apagar a secao inteira. O criterio 3 da issue diz
       // nome por nome o que nao se discute.
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
 
       // A PORTA CONTINUA EM `Pets`, e mudou de FORMA em 18/10/2026: ela virou
       // o icone de QR da barra de topo, por pedido do cliente ("o botao

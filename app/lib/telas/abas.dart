@@ -601,18 +601,31 @@ class AbaPerfil extends StatelessWidget {
             // pet.
             // -----------------------------------------------------------------
             const TituloDeGrupoDeMenu('Conta'),
-            // O `ListTile` mudo virou porta. O e-mail e a situacao de
-            // confirmacao continuam escritos -- eram a unica informacao que
-            // aquela linha dava, e sumir com ela seria perder conteudo em nome
-            // de arrumar a forma.
+            // **SO O TITULO** (18/10/2026, literal do cliente: *"na pagina do
+            // perfil, não traga o e-mail no menu, deixe apenas o titulo meus
+            // dados"*).
             //
-            // E a `Dados da conta` do pedido: o cliente nomeou o conteudo, nao
-            // o rotulo, e o rotulo `Meus dados` esta em tres portoes e na tela
-            // `/perfil/dados` que ele abre. Renomear seria mudar texto de tela
-            // sem ele pedir.
+            // O item tinha linha de apoio com o e-mail e a situacao de
+            // confirmacao ("marina@exemplo.com.br · E-mail confirmado"), e
+            // ela era HERANCA: antes desta pagina ser menu, o e-mail era um
+            // `ListTile` MUDO no topo, sem toque, e a linha nasceu para o
+            // conteudo daquele `ListTile` nao se perder quando ele virou porta.
+            // O cliente nomeou a linha agora, e ela sai -- com ela sai tambem
+            // a funcao `_apoioDosDados`, para a linha nao ter de onde voltar.
+            //
+            // **A FAIXA DE CADASTRO INCOMPLETO NAO E ESTA LINHA E NAO SAIU.**
+            // `AvisoDeCadastroIncompleto`, com o `Reenviar`, continua no TOPO
+            // desta mesma pagina (POSICAO 2 da BICHUS-75, logo acima). Ela e
+            // outra coisa: a linha de apoio era ESTADO ESCRITO -- dizia que o
+            // e-mail estava ou nao confirmado e paravam ali --, e a faixa e
+            // CAMINHO, com a acao de reenviar. Com as acoes de criar escondidas
+            // de quem nao validou, ela e o que sobra para a pessoa descobrir o
+            // que fazer, e remove-la seria beco.
+            //
+            // O rotulo `Meus dados` NAO mudou: ele esta em tres portoes e na
+            // tela `/perfil/dados` que este toque abre.
             ItemDeMenu(
               rotulo: 'Meus dados',
-              apoio: _apoioDosDados(sessao),
               aoTocar: () => context.push(Rotas.dadosPessoais),
             ),
             // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
@@ -642,22 +655,6 @@ class AbaPerfil extends StatelessWidget {
       },
     );
   }
-}
-
-/// A linha de apoio do item `Meus dados`: o e-mail e a situacao dele.
-///
-/// E o conteudo que o `ListTile` mudo do topo mostrava antes desta mudanca, e
-/// por isso ele nao desapareceu com aquela linha -- so passou a ficar embaixo
-/// de um rotulo que diz para onde o toque leva.
-///
-/// Deslogado nao chega aqui: este trecho so e construido no ramo logado.
-String _apoioDosDados(ControladorDeSessao sessao) {
-  final usuario = sessao.usuario;
-  if (usuario == null) return '';
-  final situacao = usuario.emailVerificado
-      ? 'E-mail confirmado'
-      : 'E-mail ainda não confirmado';
-  return '${usuario.email} · $situacao';
 }
 
 /// O logotipo no alto do `Perfil` deslogado.

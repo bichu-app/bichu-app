@@ -606,6 +606,27 @@ class CartaoDaLoja extends StatelessWidget {
   /// modelo -- aqui ela so ganha forma visivel antes do titulo.
   static const String rotuloDePrecoDeReferencia = 'Preço de referência';
 
+  /// O nome acessivel do no do preco: **a afirmacao junto do valor**.
+  ///
+  /// Existe porque o rabo da linha do preco saiu em 18/10/2026 por pedido
+  /// literal do cliente. Ate aquele dia a frase "preço de referência" viajava
+  /// DENTRO do mesmo no de texto do numero, e era por isso que o rotulo
+  /// visivel acima do nome podia ser `ExcludeSemantics` sem perda: quem nao ve
+  /// ouvia a afirmacao de qualquer jeito, colada no valor.
+  ///
+  /// Tirar o rabo e parar ai teria deixado o leitor de tela com
+  /// "R\$ 189,90" e mais nada -- regressao de acessibilidade silenciosa, porque
+  /// na tela a informacao continua (ela esta acima do nome, visivel). Este
+  /// rotulo devolve a afirmacao a semantica, no MESMO no do valor, e nada
+  /// disso aparece na tela.
+  ///
+  /// **O rotulo visivel continua `ExcludeSemantics`.** Anunciar os dois faria
+  /// o leitor dizer "Preço de referência" solto antes do nome do produto e de
+  /// novo junto do valor -- que e exatamente o rotulo orfao que aquele
+  /// `ExcludeSemantics` existe para evitar.
+  static String rotuloAcessivelDoPreco(String linhaDoPreco) =>
+      '$rotuloDePrecoDeReferencia, $linhaDoPreco';
+
   /// O nome acessivel do botao de saida: diz o produto e para onde leva.
   static String rotuloAcessivelDeSaida(ItemDaLoja item) =>
       '$rotuloDeSaida, ${item.titulo}, no site ${item.parceiro.nome}';
@@ -685,12 +706,19 @@ class CartaoDaLoja extends StatelessWidget {
               // um no de semantica PROPRIO. Um `Text` cru aqui seria anunciado
               // solto, "Preço de referência", antes do nome e sem dizer de que
               // preco fala -- quem nao ve ouviria o rotulo sem o valor. E nao
-              // precisa ser anunciado de novo: `linhaDoPreco` ja carrega
-              // "preço de referência" DENTRO do mesmo no de texto do numero
-              // ("R$ 99,90 · preço de referência, consultado em ..."), que e
-              // onde o leitor de tela precisa dele e onde ele nunca se separa
-              // do valor (criterio 15 da BICHUS-185). Esta linha e reforco
-              // VISUAL do que ja esta dito junto do preco.
+              // precisa ser anunciado de novo: o no do preco, duas linhas
+              // abaixo, carrega "preço de referência" no proprio
+              // `semanticsLabel` (`rotuloAcessivelDoPreco`), que e onde o
+              // leitor de tela precisa dele e onde ele nunca se separa do
+              // valor (criterio 15 da BICHUS-185).
+              //
+              // **Ate 18/10/2026 a afirmacao vinha de outro lugar**: ela
+              // viajava literalmente DENTRO do texto do numero
+              // ("R$ 99,90 · preço de referência, consultado em ..."). O
+              // cliente mandou remover esse rabo no mesmo dia, e a afirmacao
+              // mudou de endereco em vez de desaparecer -- o rabo era texto
+              // na tela, o `semanticsLabel` nao e. Esta linha continua sendo
+              // reforco VISUAL do que ja esta dito junto do preco.
               if (linhaDoPreco != null) ...<Widget>[
                 ExcludeSemantics(
                   child: Text(
@@ -712,36 +740,31 @@ class CartaoDaLoja extends StatelessWidget {
               // expansivel. Captura de tela e como isso circula.
               if (linhaDoPreco != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
-                // **O DESTAQUE E DO VALOR, e a linha continua INTEIRA.**
+                // **SO O VALOR** (18/10/2026, literal do cliente: *"remova o
+                // texto 'preço de referência, consultado em 17/10', porque
+                // você já colocou como eu pedi acima do titulo"*).
                 //
-                // `ItemDaLoja.linhaDoPreco` e uma string so de proposito (o
-                // criterio 15 da BICHUS-185: o numero nunca aparece sem o
-                // rotulo e a data). Desenhar so `precoFormatado` em corpo
-                // grande seria exatamente o que aquele comentario proibe.
+                // Era um `Text.rich` de dois trechos -- valor em `titleLarge`
+                // w700, rabo em `bodySmall` -- porque a linha carregava rotulo
+                // e data no mesmo no de texto. Sem o rabo nao ha segundo
+                // trecho para estilizar: um `Text` so, no estilo do valor.
                 //
-                // Entao o texto desenhado E a linha inteira, caractere por
-                // caractere: o que muda e o ESTILO dos primeiros
-                // `precoFormatado.length` caracteres. Um `Text.rich` com dois
-                // trechos e um no de texto so -- nao ha estado em que o valor
-                // apareca e o resto nao.
-                Text.rich(
-                  TextSpan(
-                    children: <InlineSpan>[
-                      TextSpan(
-                        text: linhaDoPreco.substring(0, item.precoFormatado!.length),
-                        style: textos.titleLarge?.copyWith(
-                          color: cores.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      TextSpan(
-                        text: linhaDoPreco.substring(item.precoFormatado!.length),
-                        style: textos.bodySmall?.copyWith(
-                          color: cores.textSecondary,
-                        ),
-                      ),
-                    ],
+                // **O `semanticsLabel` nao e enfeite.** Ele devolve
+                // "Preço de referência" a SEMANTICA deste no, que e de onde o
+                // rabo a tirou. O rotulo visivel duas linhas acima e
+                // `ExcludeSemantics`, de proposito, e sem esta linha quem usa
+                // leitor de tela ouviria o numero sem saber de que preco ele
+                // e -- enquanto quem enxerga continua lendo a afirmacao acima
+                // do nome. Ha caso em
+                // `test/telas/loja_preco_de_referencia_test.dart` que reprova
+                // se este rotulo sair.
+                Text(
+                  linhaDoPreco,
+                  style: textos.titleLarge?.copyWith(
+                    color: cores.textPrimary,
+                    fontWeight: FontWeight.w700,
                   ),
+                  semanticsLabel: rotuloAcessivelDoPreco(linhaDoPreco),
                 ),
               ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
