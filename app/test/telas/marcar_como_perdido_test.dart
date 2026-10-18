@@ -530,6 +530,24 @@ void main() {
               'items': <Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')],
             });
           }
+          // A PAGINA DO PET PRECISA CARREGAR ANTES DA PORTA SER TOCADA.
+          // Acrescentado em 18/10, quando a acao mudou de tela: T.1 le o pet e
+          // as plaquinhas ao nascer, e sem estas respostas a tela mostraria
+          // falha de conexao e a porta nao existiria para tocar.
+          //
+          // O `sem rede` que a isca mede CONTINUA valendo para o que vem
+          // DEPOIS da porta -- `lost-case-preview` e o `POST .../lost-cases`
+          // caem no `throw` abaixo, que e o ponto do caso.
+          if (req.url.path == '/v1/pets/p-1' && req.method == 'GET') {
+            return json200(pet(id: 'p-1', nome: 'Rex'));
+          }
+          if (req.url.path == '/v1/pets/p-1/tags' && req.method == 'GET') {
+            return json200(<String, dynamic>{'items': <dynamic>[]});
+          }
+          if (req.url.path.endsWith('/reference-data') &&
+              req.method == 'GET') {
+            return json200(referenciaDeTeste());
+          }
           // **Sem sinal daqui para a frente.** `ClientException` e o que o
           // `ApiClient` traduz para `FalhaDeConexao`.
           throw http.ClientException('sem rede');
@@ -849,6 +867,24 @@ void main() {
           }
           if (req.url.path == '/v1/auth/logout' && req.method == 'POST') {
             return http.Response('', 204);
+          }
+          // A PAGINA DO PET PRECISA CARREGAR ANTES DA PORTA SER TOCADA.
+          // Acrescentado em 18/10, quando a acao mudou de tela: T.1 le o pet e
+          // as plaquinhas ao nascer, e sem estas respostas a tela mostraria
+          // falha de conexao e a porta nao existiria para tocar.
+          //
+          // O `sem rede` que a isca mede CONTINUA valendo para o que vem
+          // DEPOIS da porta -- `lost-case-preview` e o `POST .../lost-cases`
+          // caem no `throw` abaixo, que e o ponto do caso.
+          if (req.url.path == '/v1/pets/p-1' && req.method == 'GET') {
+            return json200(pet(id: 'p-1', nome: 'Rex'));
+          }
+          if (req.url.path == '/v1/pets/p-1/tags' && req.method == 'GET') {
+            return json200(<String, dynamic>{'items': <dynamic>[]});
+          }
+          if (req.url.path.endsWith('/reference-data') &&
+              req.method == 'GET') {
+            return json200(referenciaDeTeste());
           }
           throw http.ClientException('sem rede');
         },
