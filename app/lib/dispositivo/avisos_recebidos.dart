@@ -277,6 +277,34 @@ enum DestinoDoAviso {
 
   /// Levar a pessoa a tela de registrar um achado, com o caso ja vinculado.
   registrarAchado,
+
+  /// Levar o TUTOR a secao `Pets`, a casa dos perdidos e dos achados.
+  ///
+  /// E o destino de `tagEscaneada`, e ele foi escolhido por eliminacao
+  /// MEDIDA e nao por gosto:
+  ///
+  /// - **A conversa com o achador nao existe neste app**, e construi-la e
+  ///   frente propria. O contrato diz por extenso, em dois lugares, que
+  ///   participante de conversa nao traz foto, e a frente de comunidade
+  ///   decidiu nao levar avatar para la: nao e um atalho, e uma tela.
+  /// - **A pagina do pet (`/pets/:petId`) e enderecada pelo id interno do
+  ///   pet**, e o ADR-0010 item 6 proibe UUID de banco em superficie publica.
+  ///   Push E superficie publica (ele acende na tela de bloqueio, passa em
+  ///   claro por um terceiro e fica no historico do sistema), e a porteira de
+  ///   `conteudo-do-push.ts` estoura se o id aparecer. Nao ha como o push
+  ///   dizer QUAL pet, em chave.
+  /// - **Nao existe rota de caso por `share_token` neste app.** A unica rota
+  ///   com `caso` no nome (`/pets/perdido/caso`) e tela de resultado: ela
+  ///   exige um `ResultadoDaAbertura` em `extra` e cai no perfil sem ele.
+  /// - **`/t/:codigo` tambem nao serve**: ela exige uma `TagResolvida` em
+  ///   `extra` e o `ref` do push nao e um codigo de tag.
+  ///
+  /// Sobra a secao `Pets`, e ela nao e um lugar qualquer: e a casa dos
+  /// perdidos e dos achados, lista os pets do tutor, e o pet de que o aviso
+  /// fala esta NOMEADO no titulo do push que a pessoa acabou de ler. Um toque
+  /// mais e a pagina dele. Nao e a conversa; e um lugar de verdade, e e
+  /// infinitamente melhor que o `break` que estava aqui.
+  secaoDePets,
 }
 
 /// Liga os tres estados a um lugar so, e avisa quem escuta.
@@ -382,10 +410,11 @@ class OuvinteDeAvisos extends ChangeNotifier {
   ///   chegou pelo push de um caso especifico". O vizinho que recebeu o alerta
   ///   e viu o animal diz "vi este pet", e o achado e vinculado **direto**
   ///   aquele caso, sem depender do cruzamento por atributos.
-  /// - `tagEscaneada` → [DestinoDoAviso.mostrarNoApp]. O destino dele e a
-  ///   **conversa com o achador**, que nao existe neste app. Mandar o tutor
-  ///   para um lugar parecido seria pior que nao mandar: ele chegaria numa tela
-  ///   que nao diz quem esta com o animal dele.
+  /// - `tagEscaneada` → [DestinoDoAviso.secaoDePets]. **Era
+  ///   `mostrarNoApp`, e isso era um `break`: o toque nao levava a tela
+  ///   nenhuma.** O destino ideal e a conversa com o achador, que nao existe
+  ///   neste app e e frente propria; o escolhido e a secao `Pets`, pelas quatro
+  ///   razoes medidas em [DestinoDoAviso.secaoDePets].
   /// - `possivelCorrespondencia` → [DestinoDoAviso.mostrarNoApp]. Precisa da
   ///   tela de confirmar candidato, que nao existe.
   /// - `lembreteDeDesfecho` → [DestinoDoAviso.mostrarNoApp]. Precisa da acao de
@@ -402,7 +431,11 @@ class OuvinteDeAvisos extends ChangeNotifier {
       TipoDeAvisoRecebido.alertaDeVizinhanca => aviso.referencia.isEmpty
           ? DestinoDoAviso.mostrarNoApp
           : DestinoDoAviso.registrarAchado,
-      TipoDeAvisoRecebido.tagEscaneada ||
+      // O AVISO MAIS URGENTE DO PRODUTO, e ele passou a ter para onde ir.
+      // Nao depende de `ref`: a secao `Pets` nao e enderecada por chave, e e
+      // justamente por isso que ela serve ao pet SEM caso aberto -- que e o
+      // caso em que o tutor ainda nao sabe de nada.
+      TipoDeAvisoRecebido.tagEscaneada => DestinoDoAviso.secaoDePets,
       TipoDeAvisoRecebido.possivelCorrespondencia ||
       TipoDeAvisoRecebido.lembreteDeDesfecho ||
       TipoDeAvisoRecebido.desconhecido => DestinoDoAviso.mostrarNoApp,

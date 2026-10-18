@@ -39,6 +39,13 @@ import '../theme/bichu_tokens.g.dart';
 class AvisoQueChegou extends StatelessWidget {
   const AvisoQueChegou({super.key});
 
+  /// O rotulo da acao do aviso da plaquinha escaneada.
+  ///
+  /// Diferente de [rotuloDeVerAgora] de proposito: "Vi este pet" e a fala de
+  /// quem ACHOU um animal de outra pessoa (o alerta de vizinhanca). Aqui quem
+  /// le e o TUTOR, e o que ele quer e chegar ao proprio pet.
+  static const String rotuloDeVerMeusPets = 'Ver meus pets';
+
   /// O rotulo da acao quando ha destino.
   static const String rotuloDeVerAgora = 'Vi este pet';
 
@@ -86,6 +93,17 @@ class _Faixa extends StatelessWidget {
           Rotas.registrarAchado,
           extra: RascunhoDoAchado(shareToken: aviso.referencia),
         );
+      case DestinoDoAviso.secaoDePets:
+        // `go` e nao `push`: a secao `Pets` e um ramo da casca com abas, e
+        // empilha-la sobre a tela corrente deixaria duas barras de aba na
+        // pilha. O tutor chega na casa dos perdidos e dos achados, com os pets
+        // dele na tela e o nome do pet do aviso fresco na cabeca -- o push que
+        // ele acabou de ler o nomeia.
+        //
+        // Nao ha `extra`: este destino nao e enderecado por chave, e e por
+        // isso que ele serve tambem ao pet sem caso aberto, cujo push sai sem
+        // `ref`. Ver as quatro razoes em `DestinoDoAviso.secaoDePets`.
+        context.go(Rotas.pets);
       case DestinoDoAviso.mostrarNoApp:
         // Nao ha para onde ir neste build, e a faixa acabou de ser fechada:
         // quem tocou ja leu. Ver a lacuna declarada em
@@ -98,8 +116,18 @@ class _Faixa extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final temDestino =
-        OuvinteDeAvisos.destinoDe(aviso) != DestinoDoAviso.mostrarNoApp;
+    final destino = OuvinteDeAvisos.destinoDe(aviso);
+    final temDestino = destino != DestinoDoAviso.mostrarNoApp;
+    // O rotulo e do DESTINO, e nao do tipo: dois tipos que caiam no mesmo
+    // lugar amanha dizem a mesma coisa sem ninguem ter de lembrar.
+    final rotuloDaAcao = switch (destino) {
+      DestinoDoAviso.registrarAchado => AvisoQueChegou.rotuloDeVerAgora,
+      DestinoDoAviso.secaoDePets => AvisoQueChegou.rotuloDeVerMeusPets,
+      // Nao e renderizado: `temDestino` esconde o botao. O ramo existe porque
+      // o `switch` e exaustivo, e exaustivo e o que faz um destino novo
+      // aparecer aqui como erro de compilacao em vez de rotulo errado.
+      DestinoDoAviso.mostrarNoApp => AvisoQueChegou.rotuloDeVerAgora,
+    };
     // `tagEscaneada` e o aviso mais urgente do produto: alguem esta com o
     // animal na mao. Ele chega em preenchimento solido, como a faixa da F2.2,
     // e nao com a mesma tinta de um lembrete.
@@ -147,7 +175,7 @@ class _Faixa extends StatelessWidget {
                         TextButton(
                           onPressed: () => _ir(context),
                           child: Text(
-                            AvisoQueChegou.rotuloDeVerAgora,
+                            rotuloDaAcao,
                             style: textos.labelLarge?.copyWith(
                               color: corDoTexto,
                               decoration: TextDecoration.underline,
