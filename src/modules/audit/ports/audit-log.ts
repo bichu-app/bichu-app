@@ -274,6 +274,18 @@ export const ACOES_ADMINISTRATIVAS = [
   // todo valor desta lista precisa estar no contrato.
   'admin.directory_entry.created',
   'admin.directory_entry.updated',
+  // 18/10/2026: a FILA DE REVISAO das indicacoes da comunidade. Aprovar grava
+  // uma entrada do diretorio, e recusar grava um motivo que o proximo revisor
+  // vai ler: as duas sao decisao de pessoa sobre o que a comunidade mandou, e
+  // sem rastro ninguem responde quem decidiu o que.
+  //
+  // **Nao ha `.listed` nem `.read`.** `x-audit` em `GET` administrativo e so da
+  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
+  // esta fila nao le pessoa nenhuma: a coluna que guarda quem indicou nunca sai
+  // do servidor, e a projecao e so da entidade indicada. Mesma ausencia, e pelo
+  // mesmo motivo, da fila da plaquinha.
+  'admin.directory_suggestion.approved',
+  'admin.directory_suggestion.declined',
   // A fila do pedido da plaquinha da coleira. SOLICITAR nao e EMITIR: emitir e
   // `issuePetTag` (irreversivel, ADR-0004) e sai na trilha do app; o que entra
   // aqui e a decisao do painel sobre o OBJETO FISICO. Nao ha `.listed`: a fila

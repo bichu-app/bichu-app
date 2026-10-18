@@ -653,6 +653,77 @@ telas:
           - resp:version
           - resp:published_at
 
+  # ====================================================================
+  # Diretorio de `Perto` -- A FILA DE REVISAO DAS INDICACOES (18/10/2026)
+  # ====================================================================
+  #
+  # A queixa do cliente, literal: "no backoffice nao tem um menu para aprovar os
+  # profissionais que as pessoas estao indicando". `suggestDirectoryEntry` existe
+  # desde 17/10 e grava em `directory_suggestions` com `review_status =
+  # pending`; os quatro menus do diretorio no painel vieram de outra branch, e
+  # nenhuma das duas fez a tela que LE a fila. As duas subiram em hml assim.
+  #
+  # TELA EM CODIGO E NAO EM PROTOTIPO, como a irma de cima: `prototipo: nenhum`,
+  # e nao um arquivo que ninguem escreveu.
+  #
+  # `pending_total` esta em `usa` porque e ele que o item do menu mostra -- a
+  # contagem do aviso. Ela passa pelo mesmo filtro de conta desabilitada da
+  # listagem e da leitura, nos tres lugares.
+
+  - tela: "Diretorio de Perto - fila de indicacoes da comunidade"
+    prototipo: nenhum
+    estados: [fila, vazio, decidida, aprovando, duplicata, recusando, recusada]
+    operacoes:
+      - operationId: listAdminDirectorySuggestions
+        situacao: contrato
+        usa:
+          - query:review_status
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:pending_total
+          - enum:DirectorySuggestionState.pending
+          - enum:DirectorySuggestionState.approved
+          - enum:DirectorySuggestionState.declined
+          - enum:DirectorySuggestionContactKind.phone
+          - enum:DirectorySuggestionContactKind.website
+          - enum:DirectorySuggestionContactKind.instagram
+      - operationId: getAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - resp:reference
+          - resp:display_name
+          - resp:kind
+          - resp:city
+          - resp:state
+          - resp:neighborhood
+          - resp:public_contact.kind
+          - resp:public_contact.value
+          - resp:note
+          - resp:review_status
+          - resp:created_at
+          - resp:decided_at
+          - resp:decline_reason
+          - resp:entry_slug
+      - operationId: approveAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - req:slug
+          - req:phone_e164
+          - resp:suggestion
+          - resp:entry
+          - resp:entry_created
+      - operationId: declineAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - req:reason
+          - resp:review_status
+          - resp:decline_reason
+
 
 correspondencias:
   # ====================================================================

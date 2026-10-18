@@ -1079,6 +1079,22 @@ export interface DirectorySuggestionsTable {
   created_at: Generated<Date>;
   /** Nulo enquanto pendente, por `CHECK`. */
   decided_at: Date | null;
+  /**
+   * O motivo da recusa, escrito pelo administrador para o PROXIMO revisor
+   * (`20261017000016`). Nulo em tudo que nao foi recusado, por `CHECK`. Nao e
+   * publicado e nao chega a quem indicou.
+   */
+  decline_reason: string | null;
+  /**
+   * A entrada do diretorio que a aprovacao produziu -- ou a que ja existia e a
+   * que a indicacao foi ligada, que e o caso da duplicata
+   * (`20261017000016`). Nulo em tudo que nao foi aprovado, por `CHECK`.
+   *
+   * **Este UUID nunca sai em resposta** (ADR-0010 item 6): a projecao devolve o
+   * `slug` da entrada, lido por `JOIN`. Ele esta no tipo porque a escrita da
+   * aprovacao precisa dele, e nao porque alguma leitura o projeta.
+   */
+  approved_entry_id: string | null;
 }
 
 /**
