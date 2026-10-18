@@ -18,10 +18,11 @@
  * do corpo em que telefone, site ou perfil pode entrar**, e ele e conferido
  * pelo formato do proprio `kind` -- declarado, nunca adivinhado.
  *
- * `city`, `state` e `neighborhood` nao passam pelo detector, e a ausencia e
- * deliberada: eles sao rotulo fechado pelo schema do contrato (tamanho e
- * `^[A-Z]{2}$`), nao sao publicados por esta operacao, e um detector de link
- * sobre o nome de uma cidade recusaria "Santana do Livramento" por nada.
+ * `city`, `state`, `neighborhood` e `postal_code` nao passam pelo detector, e
+ * a ausencia e deliberada: eles sao rotulo fechado pelo schema do contrato
+ * (tamanho, `^[A-Z]{2}$` e `^[0-9]{8}$`), nao sao publicados por esta
+ * operacao, e um detector de link sobre o nome de uma cidade recusaria
+ * "Santana do Livramento" por nada.
  *
  * ## A MODERACAO DE PALAVRAS entra nos mesmos dois textos, e vem de `shared/`
  *
@@ -87,6 +88,12 @@ export interface ContatoPublicoSugerido {
  * `street_address`, `source` e `claim_status`. Verificacao e prova de quem a
  * apresenta (`entity_verifications`); publicacao, nivel e ponto do mapa sao do
  * painel. Nenhum desses campos e de quem sugere.
+ *
+ * **`postal_code` entrou em 18/10/2026 e `street_address` NAO**, e a assimetria
+ * e decisao: o CEP e opcional, aponta para um trecho de rua e tem destinatario
+ * -- o revisor do painel, que precisa achar o estabelecimento para convida-lo
+ * (ADR-0011). Logradouro e numero apontam para a porta de um terceiro que nao
+ * pediu nada, e nao tem destinatario nenhum.
  */
 export interface CorpoDaSugestaoDoDiretorio {
   readonly display_name: string;
@@ -94,6 +101,20 @@ export interface CorpoDaSugestaoDoDiretorio {
   readonly city: string;
   readonly state: string;
   readonly neighborhood?: string;
+  /**
+   * O CEP, **oito digitos sem hifen** (`^[0-9]{8}$` no contrato).
+   *
+   * **Nao ha conferencia dele em [errosDaSugestao], e a ausencia e
+   * deliberada.** O `pattern` do contrato ja recusa qualquer outra forma antes
+   * de o corpo chegar ao caso de uso, pelo Ajv montado do proprio
+   * `api/openapi.yaml`, e a `20261017000015` repete a regra no `CHECK` do
+   * banco. Uma terceira redacao aqui seria a que diverge.
+   *
+   * Tambem **nao passa pelo detector de D59**, pelo mesmo motivo de `city`,
+   * `state` e `neighborhood`: oito digitos nao carregam contato nem link, e um
+   * detector sobre eles so produziria achado falso.
+   */
+  readonly postal_code?: string;
   readonly public_contact: ContatoPublicoSugerido;
   readonly note?: string;
 }

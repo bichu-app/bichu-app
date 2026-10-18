@@ -58,14 +58,29 @@ class RespostaDaBuscaDeCep {
 /// chamada seria a segunda verdade, e as duas divergiriam na primeira base que
 /// mudar de formato.
 ///
-/// **Inventario de 17/10/2026** (varri `app/lib/` e `admin/src/`): o pedido da
-/// plaquinha e **o unico campo de CEP digitavel do produto**. O contrato
-/// declara `postal_code` em `Me.reference_area` e `MeUpdate.reference_area`,
-/// mas nenhuma tela o coleta -- `telas/localizacao/captura_de_localizacao.dart`
-/// pede bairro e cidade e nao CEP. No painel nao ha campo de CEP: a unica
-/// mencao e `admin/src/rede/dominio/observacoes.ts`, que detecta CEP para
-/// **remove-lo** da observacao do encontro, o oposto de um cadastro. Quando o
-/// segundo formulario existir, ele chama [buscar] e nao escreve nada novo.
+/// **Inventario de 18/10/2026** (varri `app/lib/`, `admin/src/` e `web/src/`).
+/// O de 17/10 dizia que o pedido da plaquinha era o unico campo de CEP do
+/// produto, e isso ficou velho no mesmo dia -- a conta de que ele era o unico e
+/// o que fez o cliente cobrar o campo em outras quatro telas. **Quatro chamam
+/// [buscar] hoje**, e nenhuma delas escreveu uma segunda chamada:
+///
+/// 1. `telas/pet/tela_solicitar_plaquinha.dart` (entrega: o CEP VIAJA no
+///    corpo, `TagRequestInput.postal_code`);
+/// 2. `telas/perfil/tela_dados_pessoais.dart` (regiao de referencia: o CEP
+///    viaja em `MeUpdate.reference_area.postal_code`);
+/// 3. `telas/perto/sugerir_profissional.dart` (indicar profissional: o CEP
+///    viaja em `DirectorySuggestionInput.postal_code`, acrescentado ao
+///    contrato em 18/10 -- "pode armazenar o cep sim!" -- e guardado para a
+///    fila de revisao do painel, nunca publicado);
+/// 4. `telas/localizacao/captura_de_localizacao.dart` (passo 2 do achado: o
+///    CEP **nao** viaja -- ele preenche os tres campos de `Area`).
+///
+/// **Ainda sem CEP, e cada uma por um motivo diferente**:
+/// `telas/perdido/tela_onde_e_quando.dart` e `telas/rede/criar_encontro.dart`
+/// pedem bairro, cidade e UF e sao encaixe direto; no painel nao existe este
+/// utilitario em TypeScript, e a unica mencao a CEP la e
+/// `admin/src/rede/dominio/observacoes.ts`, que detecta CEP para **remove-lo**
+/// da observacao do encontro -- o oposto de um cadastro.
 ///
 /// ===========================================================================
 /// ISTO NAO E GEOCODIFICACAO, E A DISTINCAO E O QUE AUTORIZA ESTE ARQUIVO

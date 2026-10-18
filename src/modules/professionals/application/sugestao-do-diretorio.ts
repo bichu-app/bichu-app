@@ -32,8 +32,9 @@
  * arquivo nao o transforma e nao o registra: duas implementacoes do mesmo
  * hash divergem, e um IP em claro num log sobrevive a exclusao da conta.
  *
- * O metadado da trilha carrega `kind`, `city`, `state` e o TIPO do contato --
- * nunca o valor do contato, nunca o nome sugerido e nunca o recado. A trilha
+ * O metadado da trilha carrega `kind`, `city`, `state`, o TIPO do contato e
+ * se HAVIA CEP -- nunca o valor do contato, nunca o CEP em si, nunca o nome
+ * sugerido e nunca o recado. A trilha
  * sobrevive a exclusao da conta de proposito, e o que ela precisa responder e
  * "quem mandou quantas sugestoes, de que tipo e para onde", nao o conteudo.
  */
@@ -129,6 +130,12 @@ export class SugestaoDoDiretorio {
       city: corpo.city.trim(),
       state: corpo.state,
       neighborhood: aparado(corpo.neighborhood),
+      // **Aparado e nada mais.** Nenhum hifen e tirado e nenhum digito e
+      // acrescentado: o `pattern` `^[0-9]{8}$` do contrato ja recusou o resto,
+      // e tirar hifen aqui aceitaria em silencio uma forma que o contrato diz
+      // nao aceitar -- aí haveria duas formas guardadas na mesma coluna e
+      // ninguem saberia qual.
+      postalCode: aparado(corpo.postal_code),
       contatoKind: corpo.public_contact.kind,
       contatoValue: corpo.public_contact.value.trim(),
       note: aparado(corpo.note),
@@ -155,6 +162,14 @@ export class SugestaoDoDiretorio {
         // o perfil de um terceiro, e ela sobrevive a exclusao da conta.
         contact_kind: corpo.public_contact.kind,
         has_note: corpo.note !== undefined,
+        // **A EXISTENCIA do CEP, nunca o valor**, pelo mesmo juizo que mantem
+        // o valor do contato fora daqui: a trilha sobrevive a exclusao da
+        // conta, e o que ela precisa responder e "quem mandou quantas
+        // sugestoes, de que tipo e para onde" -- nao o endereco de um
+        // terceiro. Oito digitos sao mais finos que bairro e cidade, que e o
+        // teto do ADR-0010, e trilha nao tem portao de superficie publica
+        // olhando por ela.
+        has_postal_code: corpo.postal_code !== undefined,
         review_status: 'pending',
       },
     });

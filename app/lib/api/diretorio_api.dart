@@ -1,3 +1,4 @@
+import '../formato/cep.dart';
 import 'api_client.dart';
 import 'modelos_diretorio.dart';
 
@@ -53,14 +54,20 @@ class DiretorioApi {
   /// O corpo de `suggestDirectoryEntry`, montado num lugar so.
   ///
   /// **O minimo que permite checar, e nada alem**: nome, atividade, cidade,
-  /// bairro opcional, um contato publico e um recado para quem revisa. Nao ha
-  /// parametro de documento (CRMV, CNPJ) nem de pessoa fisica, e a ausencia e
-  /// deliberada: documento e prova de quem o APRESENTA, mora em
+  /// bairro e CEP opcionais, um contato publico e um recado para quem revisa.
+  /// Nao ha parametro de documento (CRMV, CNPJ) nem de pessoa fisica, e a
+  /// ausencia e deliberada: documento e prova de quem o APRESENTA, mora em
   /// `entity_verifications` e pedi-lo aqui seria coletar o documento de um
   /// terceiro pela mao de um estranho.
   ///
-  /// Sem coordenada e sem endereco (ADR-0006): cidade, estado e bairro sao
-  /// rotulo de texto, nunca fonte de ponto.
+  /// Sem coordenada e sem logradouro (ADR-0006): cidade, estado, bairro e CEP
+  /// sao texto, nunca fonte de ponto. O CEP **nao** e convertido em coordenada
+  /// em lugar nenhum -- `api/busca_de_cep.dart` ignora de proposito o
+  /// `location.coordinates` que a BrasilAPI devolve.
+  ///
+  /// **`postal_code` entrou em 18/10/2026** ("pode armazenar o cep sim!"), e e
+  /// guardado para a fila de revisao do painel -- nunca publicado: rua e CEP
+  /// nao saem no `Perto` (ADR-0010 itens 4 e 5).
   static Map<String, dynamic> corpoDaSugestao({
     required String nome,
     required AtividadeDoDiretorio atividade,
@@ -69,14 +76,32 @@ class DiretorioApi {
     required TipoDeContatoPublico tipoDeContato,
     required String contato,
     String? bairro,
+    String? cep,
     String? recado,
   }) {
+    // **O HIFEN MORRE AQUI, e esta linha e a fronteira.**
+    //
+    // A tela mostra `22041-001` desde 18/10 (a mascara que o cliente pediu) e
+    // o contrato declara `^[0-9]{8}$`. Mandar `controlador.text` direto
+    // produziria um `400` com a forma certa na tela -- a divergencia que passa
+    // por todo portao, porque nenhum comparador de contrato olha o que o
+    // campo guarda. `cepParaOContrato` e a UNICA tradutora, e ela mora com a
+    // mascara: as duas regras ficam no mesmo arquivo e nao podem divergir.
+    //
+    // **`null` nao e recusa.** CEP pela metade apenas NAO VAI no corpo, em vez
+    // de virar 400 para quem so parou de digitar: o campo e opcional, e nada
+    // aqui pode transformar um opcional incompleto numa recusa.
+    final cepDoContrato = cep == null ? null : cepParaOContrato(cep);
     return <String, dynamic>{
       'display_name': nome,
       'kind': atividade.codigo,
       'city': cidade,
       'state': uf,
       if (bairro != null && bairro.isNotEmpty) 'neighborhood': bairro,
+      // `?` e nao `if (… != null)`: o `use_null_aware_elements` do analisador
+      // cobra esta forma, e `flutter analyze` e o unico portao que roda nesta
+      // entrega.
+      'postal_code': ?cepDoContrato,
       'public_contact': <String, dynamic>{
         'kind': tipoDeContato.codigo,
         'value': contato,

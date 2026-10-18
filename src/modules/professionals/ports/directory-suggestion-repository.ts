@@ -41,6 +41,16 @@ export interface SugestaoAGravar {
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
+  /**
+   * O CEP, oito digitos sem hifen, ou nulo.
+   *
+   * **A forma canonica e do CONTRATO e do `CHECK`, nao desta porta**: o
+   * `pattern` `^[0-9]{8}$` de `DirectorySuggestionInput.postal_code` recusa o
+   * que vem com hifen antes de chegar aqui, e a `20261017000015` repete a
+   * regra no banco. Nada neste caminho tira hifen de nada: normalizar em
+   * silencio aceitaria duas formas e ninguem descobriria qual e a guardada.
+   */
+  readonly postalCode: string | null;
   readonly contatoKind: TipoDeContatoPublico;
   readonly contatoValue: string;
   readonly note: string | null;

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -506,10 +507,17 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         chave: _CamposDoPedido.cep,
                         rotulo: _TextosDaPlaquinha.cep,
                         controlador: _cep,
-                        limite: 8,
+                        limite: limiteDoCep,
                         tipoDeTeclado: TextInputType.number,
-                        formatadores: <TextInputFormatter>[
-                          FilteringTextInputFormatter.digitsOnly,
+                        // **A mascara, e nao `digitsOnly`** (cliente, 18/10:
+                        // "coloque mascara no campo cep de todos os
+                        // formularios"). Ela ja descarta o que nao e digito,
+                        // entao `digitsOnly` ao lado seria a segunda regra
+                        // sobre a mesma tecla. `limite` e 9 e nao 8: o
+                        // `maxLength` do campo conta o HIFEN, e com 8 o
+                        // ultimo digito do CEP seria cortado em silencio.
+                        formatadores: const <TextInputFormatter>[
+                          MascaraDeCep(),
                         ],
                         // No oitavo digito a busca sai sozinha. Sem botao
                         // `Buscar`: um botao a mais e um passo a mais para

@@ -1061,6 +1061,17 @@ export interface DirectorySuggestionsTable {
   /** A UF. E por esta coluna que o estado da revisao se chama `review_status`. */
   state: string;
   neighborhood: string | null;
+  /**
+   * O CEP do estabelecimento, oito digitos SEM hifen (`CHECK` da
+   * `20261017000015`, mesma forma de `tag_requests.postal_code`).
+   *
+   * **Guardado para quem REVISA, nunca publicado**: rua e CEP nao saem em
+   * superficie publica (ADR-0010 itens 4 e 5), nao ha operacao de leitura
+   * desta tabela no contrato, e `postal_code` ja e nome proibido em resposta
+   * sem conta em `tools/portao-contrato-publico.ts` e em
+   * `shared/http/vazamento-publico.ts`.
+   */
+  postal_code: string | null;
   contact_kind: TipoDeContatoSugerido;
   contact_value: string;
   note: string | null;
