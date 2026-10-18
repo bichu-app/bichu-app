@@ -81,16 +81,22 @@ export interface SugestaoGravada {
 }
 
 /**
- * O recorte da lista de quem indicou. **So paginacao.**
+ * O recorte da lista de quem indicou: paginacao e o estado da revisao.
  *
- * Nao ha `termo` nem `estado`: o contrato nao aceita `q` nem `state` nesta
- * operacao, e a razao esta na descricao dela -- o teto e de 5 indicacoes por
- * 24 h por conta, e a lista de uma pessoa nao chega ao tamanho em que filtrar
- * no servidor ganha de ler a pagina. Declarar o campo aqui antes de a operacao
- * aceita-lo criaria o parametro que ninguem preenche.
+ * **Nao ha `termo`, e a ausencia e medida**: o contrato nao aceita `q` nesta
+ * operacao, porque buscar por nome numa lista de poucas dezenas de itens que a
+ * propria pessoa escreveu e um campo a mais para manter em troca de nada.
+ * Declarar o campo aqui antes de a operacao aceita-lo criaria o parametro que
+ * ninguem preenche.
+ *
+ * **`reviewStatus` esta aqui porque ele e do SERVIDOR**, e nao do aplicativo:
+ * um filtro aplicado so na pagina carregada mentiria no `total` e no
+ * paginador.
  */
 export interface RecorteDasMinhasIndicacoes {
   readonly autor: UserId;
+  /** Ausente devolve TODOS os estados, que e a pergunta de quem abre a tela. */
+  readonly reviewStatus?: RevisaoDaIndicacao | undefined;
   readonly page: number;
   readonly limit: number;
 }

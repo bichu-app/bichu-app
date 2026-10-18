@@ -930,7 +930,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 48 linhas, 15 destinos e 6 atalhos vivos', () {
+    test('o inventario de 27.5 tem 49 linhas, 16 destinos e 8 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -945,6 +945,17 @@ void main() {
       // Quando um destes numeros mudar, ele deve mudar aqui tambem, e a
       // mudanca e o ponto: ninguem acrescenta sub-destino a um mapa de 48
       // linhas sem que alguem veja.
+      //
+      // **48 -> 49, 15 -> 16 destinos e 7 -> 8 vivos em 18/10/2026**, e a
+      // subida e a que esta mensagem chama de caminho normal: `Minhas
+      // indicacoes` entrou na secao `Perto`, com tela construida
+      // (`telas/perto/minhas_indicacoes.dart`) e rota registrada
+      // (`/perto/indicacoes`), a pedido do cliente -- *"e a aba de minhas
+      // indicacoes, com o status se esta pendente ou se ja foi aprovado pelo
+      // administrador?"*. Ela nasce `existe` e `destino`, entao sobe nas
+      // tres contas de uma vez; `porConstruir` nao muda, porque ela nunca
+      // esteve na lista de planejadas -- este item e novo no mapa, e nao uma
+      // linha que mudou de estado.
       final todos = RegistroDeSubDestinos.porSecao.values
           .expand((lista) => lista)
           .toList(growable: false);
@@ -959,9 +970,9 @@ void main() {
       );
       expect(
         todos.length,
-        48,
+        49,
         reason:
-            'REPROVA: o inventario de 27.5 saiu de 48 linhas e foi para '
+            'REPROVA: o inventario de 27.5 saiu de 49 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -972,10 +983,10 @@ void main() {
           .toList(growable: false);
       expect(
         destinos.length,
-        15,
+        16,
         reason:
-            'REPROVA: os destinos de MENU sairam de 15 e foram para '
-            '${destinos.length}. A maioria das 48 linhas nunca foi item de '
+            'REPROVA: os destinos de MENU sairam de 16 e foram para '
+            '${destinos.length}. A maioria das 49 linhas nunca foi item de '
             'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
             'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
             'uma linha, e reclassificar filtro como destino e exatamente como '
@@ -991,9 +1002,9 @@ void main() {
       // `toda rota de item vivo esta REGISTRADA no roteador` confere.
       expect(
         vivos.length,
-        7,
+        8,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 8 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',

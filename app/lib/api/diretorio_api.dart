@@ -131,6 +131,38 @@ class DiretorioApi {
     return ReciboDaSugestao.doJson(json);
   }
 
+  /// `GET /v1/directory/suggestions` (`listMyDirectorySuggestions`), com conta.
+  ///
+  /// **MINHAS INDICACOES**: as que esta conta mandou, da mais recente para a
+  /// mais antiga. Quem decide o que a conta pode ver e o servidor, na clausula
+  /// `WHERE` da consulta -- esta camada nao filtra nada e nao tem como: a
+  /// resposta ja vem recortada, e indicacao de outra pessoa nao chega aqui.
+  ///
+  /// **Nao trata falha**, pela mesma razao escrita em [listar]: quem chama
+  /// precisa distinguir "voce nunca indicou nada" de "nao consegui perguntar".
+  /// Um `catch` que devolvesse pagina vazia produziria a lista vazia que
+  /// parece sucesso -- e aqui ela diria, a quem indicou cinco clinicas, que
+  /// nao indicou nenhuma.
+  Future<PaginaDasMinhasIndicacoes> minhasIndicacoes({
+    int pagina = 1,
+    int tamanho = 20,
+    EstadoDaSugestao? estado,
+  }) async {
+    final json = await _api.get(
+      caminhoDaSugestao,
+      query: <String, String>{
+        // O FILTRO DE ESTADO E DO SERVIDOR, e nao um recorte do que ja veio:
+        // filtrar a pagina carregada mentiria no `total` e no paginador.
+        // Ausente, a rota devolve todos os estados -- que e a pergunta de quem
+        // abre a tela.
+        if (estado != null) 'state': estado.codigo,
+        'page': '$pagina',
+        'limit': '$tamanho',
+      },
+    );
+    return PaginaDasMinhasIndicacoes.doJson(json);
+  }
+
   // -------------------------------------------------------------------------
   // A PAGINA DO LOCAL E AS AVALIACOES (18/10/2026)
   // -------------------------------------------------------------------------

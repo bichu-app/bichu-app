@@ -58,6 +58,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { SugestaoDoDiretorio } from '../../application/sugestao-do-diretorio.js';
 import type { CorpoDaSugestaoDoDiretorio } from '../../domain/sugestao-do-diretorio.js';
+import type { RevisaoDaIndicacao } from '../../domain/fila-de-indicacoes.js';
 import { chamadorAutenticado, contaDoTeto, type Autenticador } from './directory-routes.js';
 
 /**
@@ -119,6 +120,7 @@ const TAMANHO_PADRAO = 20;
 
 /** O que o contrato aceita em `query`, e so isso. */
 interface QueryDasMinhasIndicacoes {
+  readonly state?: RevisaoDaIndicacao;
   readonly page?: number;
   readonly limit?: number;
 }
@@ -199,6 +201,10 @@ export function registrarRotaDasMinhasIndicacoes(
       const chamador = await chamadorAutenticado(request, deps);
       const query = (request.query ?? {}) as QueryDasMinhasIndicacoes;
       const pagina = await deps.sugestoes.minhasIndicacoes(chamador, {
+        // `state` vem do contrato, que ja recusou o valor fora da lista
+        // fechada: nao ha conversao nem `if` aqui, e nao pode haver -- uma
+        // segunda definicao da lista e a que fica atras do `CHECK`.
+        reviewStatus: query.state,
         page: query.page ?? PAGINA_INICIAL,
         limit: query.limit ?? TAMANHO_PADRAO,
       });

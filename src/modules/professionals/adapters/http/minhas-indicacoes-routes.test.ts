@@ -178,14 +178,14 @@ function itensDe(resposta: Resposta): Record<string, unknown>[] {
   return resposta.corpo['items'] as Record<string, unknown>[];
 }
 
-describe('GET /directory/suggestions — Minhas indicações', () => {
-  it('a rota e a do contrato, sem teto inventado', () => {
+void describe('GET /directory/suggestions — Minhas indicações', () => {
+  void it('a rota e a do contrato, sem teto inventado', () => {
     assert.equal(rotaDasMinhasIndicacoes.operationId, 'listMyDirectorySuggestions');
     assert.equal(rotaDasMinhasIndicacoes.method, 'get');
     assert.deepEqual(rotaDasMinhasIndicacoes.effects, []);
   });
 
-  it('devolve a lista com o estado de cada indicacao', async () => {
+  void it('devolve a lista com o estado de cada indicacao', async () => {
     const app = servidor({
       itens: [
         indicacao({ ref: 'aPendenteDaContaUm0001', reviewStatus: 'pending' }),
@@ -211,7 +211,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     assert.equal(resposta.corpo['total'], 2);
   });
 
-  it('sem conta, 401 — e a consulta nao acontece', async () => {
+  void it('sem conta, 401 — e a consulta nao acontece', async () => {
     const app = servidor({ itens: [indicacao()] });
     const resposta = await listar(app, { como: null });
 
@@ -221,8 +221,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     assert.deepEqual(recortes, []);
   });
 
-  describe('ISCA 1 — a pessoa ve SO as indicacoes dela', () => {
-    it('a conta do recorte e a do token', async () => {
+  void describe('ISCA 1 — a pessoa ve SO as indicacoes dela', () => {
+    void it('a conta do recorte e a do token', async () => {
       const app = servidor({ itens: [indicacao()] });
       await listar(app);
 
@@ -230,7 +230,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       assert.equal(recortes[0]?.autor, QUEM_CHAMA);
     });
 
-    it('CONTRAPESO: parametro de autoria na URL e IGNORADO', async () => {
+    void it('CONTRAPESO: parametro de autoria na URL e IGNORADO', async () => {
       // A isca de verdade. Se alguem trocar a origem da autoria de "o token"
       // para "o que vier na requisicao", este caso reprova -- e ele reprova
       // ANTES de qualquer banco, que e onde o estrago seria invisivel.
@@ -251,7 +251,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       }
     });
 
-    it('CONTRAPESO: duas contas, dois recortes diferentes', async () => {
+    void it('CONTRAPESO: duas contas, dois recortes diferentes', async () => {
       // Sem este caso, um `autor` fixo (constante, cache, variavel de modulo)
       // passaria nos dois de cima.
       const app = servidor({ itens: [indicacao()] });
@@ -263,8 +263,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('ISCA 2 — recusada mostra o motivo', () => {
-    it('o motivo da recusa chega a quem indicou', async () => {
+  void describe('ISCA 2 — recusada mostra o motivo', () => {
+    void it('o motivo da recusa chega a quem indicou', async () => {
       const app = servidor({
         itens: [
           indicacao({
@@ -280,7 +280,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       assert.equal(itensDe(resposta)[0]?.['decline_reason'], 'A clínica fechou em agosto.');
     });
 
-    it('CONTRAPESO: pendente e aprovada NAO trazem motivo', async () => {
+    void it('CONTRAPESO: pendente e aprovada NAO trazem motivo', async () => {
       // Sem este caso, uma projecao que devolvesse `decline_reason` sempre
       // passaria no de cima.
       const app = servidor({
@@ -296,8 +296,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('ISCA 3 — o identificador interno do autor NAO sai', () => {
-    it('o UUID da conta nao aparece no corpo, em posicao nenhuma', async () => {
+  void describe('ISCA 3 — o identificador interno do autor NAO sai', () => {
+    void it('o UUID da conta nao aparece no corpo, em posicao nenhuma', async () => {
       const app = servidor({
         itens: [
           indicacao({ reviewStatus: 'pending' }),
@@ -322,7 +322,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       }
     });
 
-    it('CONTRAPESO: a varredura do bruto ENXERGA o UUID quando ele esta la', async () => {
+    void it('CONTRAPESO: a varredura do bruto ENXERGA o UUID quando ele esta la', async () => {
       // Prova negativa que vive numa frase evapora. Se `includes` deixar de
       // enxergar -- outra forma de serializar, outro recorte --, o caso de cima
       // fica verde por vazio. Este o derruba.
@@ -339,8 +339,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('ISCA 4 — conta desabilitada nao lista', () => {
-    it('lista vazia e 200 com items e total, nunca 404 nem 403', async () => {
+  void describe('ISCA 4 — conta desabilitada nao lista', () => {
+    void it('lista vazia e 200 com items e total, nunca 404 nem 403', async () => {
       // O dobre devolve vazio porque quem filtra e o `WHERE` da funcao do
       // banco (`conta_habilitada`, migracao 20261018000003). O que ESTE caso
       // prova e a borda: vazio vira `200` com a forma completa, e nao um
@@ -357,8 +357,37 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('a paginacao vem do contrato', () => {
-    it('`page` e `limit` chegam ao recorte', async () => {
+  void describe('o filtro de estado e do SERVIDOR', () => {
+    void it('`state=declined` chega ao recorte', async () => {
+      const app = servidor({ itens: [], total: 0 });
+      const resposta = await listar(app, { busca: '?state=declined' });
+
+      assert.equal(resposta.status, 200);
+      assert.equal(recortes[0]?.reviewStatus, 'declined');
+    });
+
+    void it('CONTRAPESO: sem `state`, o recorte NAO filtra', async () => {
+      // Sem este caso, um estado padrao (`pending`, por exemplo) passaria no
+      // de cima -- e a tela abriria escondendo as aprovadas e as recusadas,
+      // que e justamente o que o cliente pediu para ver.
+      const app = servidor({ itens: [indicacao()] });
+      await listar(app);
+
+      assert.equal(recortes[0]?.reviewStatus, undefined);
+    });
+
+    void it('estado fora da lista fechada e recusado pelo contrato', async () => {
+      const app = servidor({ itens: [indicacao()] });
+      const resposta = await listar(app, { busca: '?state=arquivada' });
+
+      assert.equal(resposta.status, 400);
+      // O CONTRAPESO: recusado sem consultar nada.
+      assert.deepEqual(recortes, []);
+    });
+  });
+
+  void describe('a paginacao vem do contrato', () => {
+    void it('`page` e `limit` chegam ao recorte', async () => {
       const app = servidor({ itens: [indicacao()], total: 42 });
       const resposta = await listar(app, { busca: '?page=2&limit=5' });
 
@@ -368,7 +397,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       assert.equal(resposta.corpo['total'], 42);
     });
 
-    it('`page=0` e recusado pelo esquema do contrato, e nao por um `if` daqui', async () => {
+    void it('`page=0` e recusado pelo esquema do contrato, e nao por um `if` daqui', async () => {
       const app = servidor({ itens: [indicacao()] });
       const resposta = await listar(app, { busca: '?page=0' });
 
@@ -377,7 +406,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
       assert.deepEqual(recortes, []);
     });
 
-    it('`limit=21` passa do teto do contrato e e recusado', async () => {
+    void it('`limit=21` passa do teto do contrato e e recusado', async () => {
       const app = servidor({ itens: [indicacao()] });
       const resposta = await listar(app, { busca: '?limit=21' });
 
@@ -386,8 +415,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('entrada em RASCUNHO nao promete link', () => {
-    it('aprovada sem entrada publicada vem com `entry_slug` nulo', async () => {
+  void describe('entrada em RASCUNHO nao promete link', () => {
+    void it('aprovada sem entrada publicada vem com `entry_slug` nulo', async () => {
       // Entrada nascida de indicacao com contato `website`/`instagram` nasce
       // `draft` (sem `phone_e164`), e `Perto` so lista `published`. Quem anula
       // o `slug` e o `WHERE` da funcao do banco; aqui prova-se que a borda
@@ -410,8 +439,8 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
     });
   });
 
-  describe('o recado para quem revisa NAO volta para quem indicou', () => {
-    it('`note` nao sai nesta projecao', async () => {
+  void describe('o recado para quem revisa NAO volta para quem indicou', () => {
+    void it('`note` nao sai nesta projecao', async () => {
       const app = servidor({ itens: [indicacao()] });
       const resposta = await listar(app);
 
@@ -423,7 +452,7 @@ describe('GET /directory/suggestions — Minhas indicações', () => {
   });
 });
 
-describe('o adaptador le pela FUNCAO, e nao pela tabela', () => {
+void describe('o adaptador le pela FUNCAO, e nao pela tabela', () => {
   // Esta isca nao sobe servidor: ela guarda o CAMINHO ate o banco. Sem ela,
   // trocar `indicacoes_do_autor(...)` por um `WHERE` direto na tabela passaria
   // em todos os casos acima -- o dobre nao sabe de SQL -- e reprovaria so no
@@ -436,7 +465,7 @@ describe('o adaptador le pela FUNCAO, e nao pela tabela', () => {
     'utf8',
   );
 
-  it('chama `indicacoes_do_autor(` nas DUAS consultas, e nao em uma', () => {
+  void it('chama `indicacoes_do_autor(` nas DUAS consultas, e nao em uma', () => {
     // Duas, e nao "ao menos uma": sao duas consultas (as linhas e o total), e
     // uma delas sozinha mantinha a isca verde enquanto a outra lia a tabela
     // direto. Foi exatamente isso que a prova por desligamento mostrou.
@@ -450,7 +479,7 @@ describe('o adaptador le pela FUNCAO, e nao pela tabela', () => {
     );
   });
 
-  it('nao le a tabela direto em consulta nenhuma', () => {
+  void it('nao le a tabela direto em consulta nenhuma', () => {
     // A isca de verdade. `FROM <tabela>` em qualquer consulta deste arquivo
     // significa que a autoria voltou a ser filtro de TypeScript -- ou, pior,
     // que deixou de ser filtro. A ESCRITA nao casa aqui: ela passa por
@@ -463,7 +492,7 @@ describe('o adaptador le pela FUNCAO, e nao pela tabela', () => {
     );
   });
 
-  it('nao filtra a tabela por autoria em TypeScript', () => {
+  void it('nao filtra a tabela por autoria em TypeScript', () => {
     // O nome literal da coluna nao pode nem aparecer aqui, nem em comentario:
     // `portao-colunas-que-nao-saem.ts` varre este arquivo tambem. Entao a
     // conferencia e por MONTAGEM: 'suggested' mais 'by' mais o sufixo.

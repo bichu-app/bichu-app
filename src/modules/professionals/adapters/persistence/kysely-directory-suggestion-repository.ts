@@ -187,17 +187,33 @@ export function criarDirectorySuggestionRepository(
       // novo na origem entrar nesta borda por decisao, e nao por descuido.
       // Aqui a origem e uma funcao cuja saida ja exclui a autoria -- a lista
       // nao e a protecao, e sim a segunda afirmacao da mesma coisa.
+      // O FILTRO DE ESTADO, em UMA expressao usada nas duas consultas.
+      //
+      // Uma constante e nao duas copias: as duas sao a mesma pergunta, e a
+      // copia que fica atras e a que faz o paginador oferecer pagina vazia --
+      // `total` de um recorte e linhas de outro. Ausente, `TRUE`: todos os
+      // estados, que e a pergunta de quem abre a tela.
+      const doEstado =
+        recorte.reviewStatus === undefined
+          ? sql`TRUE`
+          : sql`review_status = ${recorte.reviewStatus}`;
+
       const linhas = await sql<LinhaDaMinhaIndicacao>`
         SELECT ref, display_name, kind, city, state, neighborhood,
                contact_kind, contact_value, review_status,
                created_at, decided_at, decline_reason, entry_slug
           FROM indicacoes_do_autor(${recorte.autor}::uuid)
+         WHERE ${doEstado}
          ORDER BY created_at DESC, ref ASC
          LIMIT ${recorte.limit} OFFSET ${(recorte.page - 1) * recorte.limit}
       `.execute(db);
 
+      // O total E O DO RECORTE, e passa pelo MESMO filtro: um total que
+      // ignorasse `state` faria "Mostrando 1 a 20 de 87" sobre 3 pendentes.
       const contagem = await sql<{ total: string }>`
-        SELECT count(*) AS total FROM indicacoes_do_autor(${recorte.autor}::uuid)
+        SELECT count(*) AS total
+          FROM indicacoes_do_autor(${recorte.autor}::uuid)
+         WHERE ${doEstado}
       `.execute(db);
 
       return {

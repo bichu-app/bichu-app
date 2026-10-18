@@ -1775,15 +1775,22 @@ export interface paths {
          *     nome, e a tela o diz com palavras em vez de prometer link: aprovada,
          *     ainda nao no `Perto`.
          *
-         *     ## Sem busca e sem filtro no contrato, e a ausencia e medida
+         *     ## `state` existe e `q` NAO, e as duas decisoes sao medidas
          *
-         *     O padrao de listagem do projeto poe busca, filtro e ordenacao no corpo
-         *     da tela -- e os poe **sobre o que o contrato aceita**. Aqui o teto de
-         *     indicacoes por conta e **5 por 24 h** (`suggestDirectoryEntry`), e a
-         *     lista de uma pessoa nao chega ao tamanho em que filtrar no servidor
-         *     ganha de ler a pagina. `page` e `limit` existem porque a lista cresce
-         *     com o tempo; `q` e `state` nao existem porque filtrar no servidor uma
-         *     lista que cabe na tela e uma rota a mais para manter em troca de nada.
+         *     O padrao de listagem do projeto poe filtro e ordenacao no corpo da
+         *     tela -- e os poe **sobre o que o contrato aceita**. Um filtro aplicado
+         *     so na pagina carregada mentiria no `total` e no paginador: com `limit`
+         *     de 20 e uma lista que cresce 5 por dia (o teto de
+         *     `suggestDirectoryEntry`), "pendentes" filtrado no aplicativo mostraria
+         *     as pendentes **da pagina 1** e diria que sao todas. Entao `state` e do
+         *     SERVIDOR, e `total` passa a ser o do recorte.
+         *
+         *     **`q` nao existe, e a ausencia e a mesma medida ao contrario:** buscar
+         *     por nome numa lista de poucas dezenas de itens que a pessoa mesma
+         *     escreveu e um campo a mais para manter em troca de nada -- e seria a
+         *     unica busca do projeto sem indice por tras. Ordenacao tambem nao: a
+         *     ordem e uma so, e e a unica que faz sentido aqui (a mais recente
+         *     primeiro, porque e sobre ela que a pessoa quer noticia).
          */
         get: operations["listMyDirectorySuggestions"];
         put?: never;
@@ -6028,7 +6035,12 @@ export interface components {
             items: components["schemas"]["MyDirectorySuggestion"][];
             page: number;
             limit: number;
-            /** @description Quantas indicacoes esta conta tem, ao todo. Alimenta "Mostrando 1 a 20 de 87" e o paginador. */
+            /**
+             * @description Quantas indicacoes o RECORTE desta chamada tem -- todas, quando
+             *     `state` esta ausente. Alimenta "Mostrando 1 a 20 de 87" e o
+             *     paginador, e e por isso que ele acompanha o filtro: um total que
+             *     ignorasse `state` faria o paginador oferecer paginas vazias.
+             */
             total: number;
         };
         /**
@@ -11623,6 +11635,15 @@ export interface operations {
     listMyDirectorySuggestions: {
         parameters: {
             query?: {
+                /**
+                 * @description Filtra pelo estado da revisao. Ausente, devolve **todos** os
+                 *     estados -- que e a pergunta de quem abre a tela.
+                 *
+                 *     Do SERVIDOR e nao do aplicativo: filtrar a pagina carregada
+                 *     mentiria no `total` e no paginador. Com o filtro, `total` e o do
+                 *     recorte.
+                 */
+                state?: components["schemas"]["DirectorySuggestionState"];
                 page?: number;
                 limit?: number;
             };

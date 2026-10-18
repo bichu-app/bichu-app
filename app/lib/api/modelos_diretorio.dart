@@ -1159,3 +1159,166 @@ Map<String, dynamic> corpoDaDenuncia({
 
 /// O limite de `DirectoryReviewReportInput.detail`.
 const int limiteDoDetalheDaDenuncia = 1000;
+
+/// `#/components/schemas/MyDirectorySuggestion` do contrato: uma indicacao
+/// como **quem a fez** a ve.
+///
+/// ## Nao e `ReciboDaSugestao`, e nao e a projecao do painel
+///
+/// O recibo e o instante do envio e nada mais -- `referencia`, `estado` e
+/// `criadaEm`. Este modelo e o que a tela `Minhas indicacoes` mostra depois:
+/// o estado atual, o motivo quando recusada e o caminho para o `Perto` quando
+/// a entrada esta no ar.
+///
+/// **`note` nao esta aqui porque o contrato nao o devolve.** O recado e para
+/// quem revisa; quem o le e o painel. Nao e esquecimento, e a fronteira.
+class MinhaIndicacao {
+  const MinhaIndicacao({
+    required this.referencia,
+    required this.nome,
+    required this.atividade,
+    required this.cidade,
+    required this.uf,
+    required this.tipoDeContato,
+    required this.contato,
+    required this.estado,
+    required this.criadaEm,
+    this.bairro,
+    this.decididaEm,
+    this.motivoDaRecusa,
+    this.entradaSlug,
+  });
+
+  /// O identificador opaco, 128 bits em base64url. **Nao e UUID**
+  /// (ADR-0010 item 6), e e o MESMO que o recibo do envio devolveu.
+  final String referencia;
+
+  final String nome;
+  final AtividadeDoDiretorio atividade;
+  final String cidade;
+  final String uf;
+  final String? bairro;
+  final TipoDeContatoPublico tipoDeContato;
+  final String contato;
+  final EstadoDaSugestao estado;
+  final DateTime criadaEm;
+  final DateTime? decididaEm;
+
+  /// O motivo da recusa, escrito pelo administrador.
+  ///
+  /// **Ele chega a quem indicou desde 18/10/2026**, e isso reverte o que o
+  /// contrato dizia antes. Nulo em tudo que nao foi recusado.
+  final String? motivoDaRecusa;
+
+  /// O caminho da entrada no `Perto`, **e so quando ela esta publicada**.
+  ///
+  /// **Nulo com [estado] `approved` TEM significado, e nao e dado faltando:**
+  /// a entrada existe e esta em rascunho. Entrada nascida de indicacao com
+  /// contato de site ou Instagram nasce rascunho (ela nao tem telefone, que e
+  /// o canal unico do diretorio), e o `Perto` so lista o que esta publicado.
+  ///
+  /// **Quem decide isso e o servidor**, na funcao `indicacoes_do_autor`: esta
+  /// tela nao reavalia publicacao, e por isso ela nao pode oferecer um caminho
+  /// que o servidor nao deu. Aprovada sem `entradaSlug` e dita com palavras.
+  final String? entradaSlug;
+
+  /// A entrada da indicacao aprovada esta no ar e tem para onde levar?
+  bool get levaAoPerto => entradaSlug != null;
+
+  factory MinhaIndicacao.doJson(Map<String, dynamic> json) {
+    final referencia = json['reference'];
+    final nome = json['display_name'];
+    final atividade = AtividadeDoDiretorio.porCodigo(json['kind'] as String?);
+    final cidade = json['city'];
+    final uf = json['state'];
+    final contatoJson = json['public_contact'];
+    final estado = EstadoDaSugestao.porCodigo(json['review_status'] as String?);
+    final criadaEm = DateTime.tryParse(json['created_at'] as String? ?? '');
+
+    // **Reprova em voz alta em vez de desenhar um cartao pela metade.** Campo
+    // obrigatorio ausente e resposta fora do contrato, e a tela trata
+    // `FormatException` como falha -- nao como lista vazia, que pareceria
+    // "voce nunca indicou nada".
+    if (referencia is! String || referencia.isEmpty) {
+      throw const FormatException('indicacao sem `reference`');
+    }
+    if (nome is! String || nome.isEmpty) {
+      throw const FormatException('indicacao sem `display_name`');
+    }
+    if (atividade == null) {
+      throw const FormatException('indicacao com `kind` desconhecido');
+    }
+    if (cidade is! String || uf is! String) {
+      throw const FormatException('indicacao sem `city` ou `state`');
+    }
+    if (contatoJson is! Map<String, dynamic>) {
+      throw const FormatException('indicacao sem `public_contact`');
+    }
+    final tipoDeContato = TipoDeContatoPublico.porCodigo(
+      contatoJson['kind'] as String?,
+    );
+    final contato = contatoJson['value'];
+    if (tipoDeContato == null || contato is! String) {
+      throw const FormatException('indicacao com `public_contact` incompleto');
+    }
+    if (estado == null) {
+      throw const FormatException('indicacao com `review_status` desconhecido');
+    }
+    if (criadaEm == null) {
+      throw const FormatException('indicacao sem `created_at` legivel');
+    }
+
+    return MinhaIndicacao(
+      referencia: referencia,
+      nome: nome,
+      atividade: atividade,
+      cidade: cidade,
+      uf: uf,
+      bairro: json['neighborhood'] as String?,
+      tipoDeContato: tipoDeContato,
+      contato: contato,
+      estado: estado,
+      criadaEm: criadaEm,
+      decididaEm: DateTime.tryParse(json['decided_at'] as String? ?? ''),
+      motivoDaRecusa: json['decline_reason'] as String?,
+      entradaSlug: json['entry_slug'] as String?,
+    );
+  }
+}
+
+/// `#/components/schemas/MyDirectorySuggestionPage`.
+///
+/// Sem `pending_total`: aquele numero e o aviso do menu do PAINEL, e nao tem
+/// sentido na tela de quem indicou.
+class PaginaDasMinhasIndicacoes {
+  const PaginaDasMinhasIndicacoes({
+    required this.itens,
+    required this.pagina,
+    required this.tamanho,
+    required this.total,
+  });
+
+  final List<MinhaIndicacao> itens;
+  final int pagina;
+  final int tamanho;
+
+  /// Quantas indicacoes a conta tem AO TODO, e nao quantas vieram nesta
+  /// pagina: e ele que alimenta "Mostrando 1 a 20 de 87".
+  final int total;
+
+  factory PaginaDasMinhasIndicacoes.doJson(Map<String, dynamic> json) {
+    final itens = json['items'];
+    if (itens is! List) {
+      throw const FormatException('pagina de indicacoes sem `items`');
+    }
+    return PaginaDasMinhasIndicacoes(
+      itens: itens
+          .whereType<Map<String, dynamic>>()
+          .map(MinhaIndicacao.doJson)
+          .toList(growable: false),
+      pagina: json['page'] as int? ?? 1,
+      tamanho: json['limit'] as int? ?? 20,
+      total: json['total'] as int? ?? 0,
+    );
+  }
+}

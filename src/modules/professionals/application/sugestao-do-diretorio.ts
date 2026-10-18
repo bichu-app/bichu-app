@@ -40,6 +40,7 @@
  */
 import { problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
+import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import {
   errosDaSugestao,
@@ -208,18 +209,23 @@ export class SugestaoDoDiretorio {
    */
   async minhasIndicacoes(
     autor: UserId,
-    pagina: { readonly page: number; readonly limit: number },
+    recorte: {
+      readonly page: number;
+      readonly limit: number;
+      readonly reviewStatus?: RevisaoDaIndicacao | undefined;
+    },
   ): Promise<PaginaDasMinhasIndicacoesProjetada> {
     const lida = await this.deps.sugestoes.listarDoAutor({
       autor,
-      page: pagina.page,
-      limit: pagina.limit,
+      reviewStatus: recorte.reviewStatus,
+      page: recorte.page,
+      limit: recorte.limit,
     });
 
     return {
       items: lida.itens.map(projetarMinhaIndicacao),
-      page: pagina.page,
-      limit: pagina.limit,
+      page: recorte.page,
+      limit: recorte.limit,
       total: lida.total,
     };
   }
