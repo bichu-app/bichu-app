@@ -6,6 +6,7 @@ import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../widgets/acao_de_criar_na_barra.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
@@ -17,6 +18,37 @@ import 'perfil/meus_pets.dart';
 import 'perto/lista_do_diretorio.dart';
 import 'rede/agenda_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
+
+/// Quem pode ver uma acao de CRIAR da comunidade.
+///
+/// **Regra unica, decidida pelo cliente em 18/10/2026**, nas palavras dele:
+/// *"assim como o marcar um encontro (evento), essas acoes so devem ser
+/// realizadas por usuarios cadastrados e validados, caso ao contrario o botao
+/// nem aparece"*. Sessao **e** e-mail confirmado; qualquer outro estado nao
+/// desenha nada -- nem botao, nem icone.
+///
+/// **Isto SUBSTITUI o comportamento anterior**, em que a porta aparecia sempre
+/// e a tela de destino explicava a recusa com a saida que a resolve. Os dois
+/// impedimentos (`semConta` e `semEmailConfirmado`) **continuam em
+/// `criar_encontro.dart` e `sugerir_profissional.dart` e nao foram tocados**:
+/// as rotas seguem alcancaveis por link profundo, e tela que recusa calada e
+/// pior do que tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+///
+/// **O caminho para validar nao depende desta porta, e isso foi conferido.** O
+/// `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com `Reenviar` em
+/// DUAS posicoes que nao saem da frente de ninguem: faixa de largura total no
+/// topo de `Pets` (posicao 1) e item destacado no topo de `Perfil` (posicao
+/// 2). Esconder a acao de criar nao fecha caminho nenhum de confirmacao.
+///
+/// **E ela NAO e a trava.** A trava de verdade e do servidor, e aqui vai o
+/// achado: `rotaDaCriacaoDeEncontro` e a rota da sugestao do diretorio exigem
+/// **conta** (teto por `account`, token obrigatorio) e **nao** exigem
+/// `email_verified` em lugar nenhum de `src/`. A metade "validado" desta regra
+/// existe **so no app**. Esta linha esconde a porta; ela nao recusa o pedido.
+bool podeCriarNaComunidade(ControladorDeSessao sessao) {
+  final usuario = sessao.usuario;
+  return sessao.logado && usuario != null && usuario.emailVerificado;
+}
 
 /// Secao 1 — `Pets`. A casa dos perdidos, dos achados e das adocoes.
 ///
@@ -58,6 +90,38 @@ class AbaPets extends StatelessWidget {
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
           raizDeSecao: true,
           titulo: destino.rotulo,
+          // A PORTA PRIMARIA DO LEITOR DE QR, AGORA NA BARRA DE TOPO
+          // (pedido do cliente em 18/10/2026: "ate o escanear poderia ser
+          // icones na barra superior ... e nao fique esse botao grande na
+          // pagina ocupando muito espaco"). O botao de contorno de largura
+          // total que morava no corpo saiu: 48 dp dele mais 24 dp de folga,
+          // 72 dp devolvidos ao corpo.
+          //
+          // **O GLIFO E O DE QR CODE, e ele foi escolhido por ele**: "o botao
+          // escanear uma tag, pode ser um icone de qr-code igual do
+          // whatsapp". `Icons.qr_code_2` e o quadrado com os tres marcadores
+          // de canto, da familia fechada do design system 10.1 (Material
+          // Symbols, embutida no Flutter) -- nenhum vetor novo, nada baixado,
+          // nada gerado. Ele nao colide com glifo nenhum em uso: `qr_code*`
+          // nao aparecia em `app/lib` antes desta mudanca.
+          //
+          // **ELE CONTINUA VISIVEL DESLOGADO, e isso foi MEDIDO e nao
+          // suposto.** `tela_leitor_de_qr.dart` diz que a autenticacao da
+          // rota do leitor e **opcional**, e o token entra quando ha. Quem
+          // acha um cachorro na rua e exatamente quem pode nao ter conta
+          // nenhuma: esconder o leitor dessa pessoa e o oposto da cunha do
+          // produto. As outras duas acoes desta tarefa -- criar evento e
+          // indicar -- exigem sessao e por isso desaparecem deslogadas; esta
+          // nao.
+          //
+          // `push` e nao `go`: o leitor cobre a casca inteira (o design
+          // system 11.11 manda a barra sumir no leitor de camera), e tela que
+          // cobre a casca precisa ter volta.
+          acaoDeCriar: AcaoDeCriarNaBarra(
+            icone: Icons.qr_code_2,
+            rotulo: 'Escanear uma tag',
+            aoTocar: () => context.push(Rotas.escanear),
+          ),
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
@@ -99,22 +163,19 @@ class AbaPets extends StatelessWidget {
             // sao uma coisa so: tirar daqui sem tornar permanente la apagaria
             // o unico caminho do app para cadastrar o segundo pet.
             //
-            // A PORTA PRIMARIA DO LEITOR DE QR (UX 27.5.6).
+            // A PORTA PRIMARIA DO LEITOR DE QR (UX 27.5.6) **SUBIU PARA A
+            // BARRA DE TOPO** em 18/10/2026, e esta no `acaoDeCriar` acima.
             //
-            // Ela vive aqui e nao em `Perfil` porque quem acha um cachorro na
-            // rua nao pensa a palavra "Perfil" (Nielsen 2). `Escanear` deixou
-            // de ser aba -- o rotulo pede 71,57 dp num slot de 64,0 -- mas o
-            // caminho **nao ficou mais longe**: e um toque a partir da secao de
-            // aterrissagem, exatamente como era.
+            // Ela continua vivendo nesta secao e nao em `Perfil`, porque quem
+            // acha um cachorro na rua nao pensa a palavra "Perfil" (Nielsen
+            // 2), e continua a UM toque de distancia: o caminho nao ficou mais
+            // longo, mudou de lugar na tela. As DUAS portas do 27.5.6 seguem
+            // existindo -- esta, primaria, e a de conta em `Perfil`, que e
+            // item de menu. Nenhuma das duas fechou.
             //
-            // `push` e nao `go`: o leitor cobre a casca inteira (o design
-            // system 11.11 manda a barra sumir no leitor de camera), e tela que
-            // cobre a casca precisa ter volta.
-            BotaoSecundario(
-              rotulo: 'Escanear uma tag',
-              aoTocar: () => context.push(Rotas.escanear),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
+            // O que saiu daqui foi a FORMA: um `BotaoSecundario` de largura
+            // total, 48 dp de altura mais 24 dp de folga.
+            //
             // `Adoções` e sub-destino de `Pets`, com porta propria, e **nao** e
             // item de `Perto` (UX 27.2.4). Em `Perto` fica a porta das ONGs,
             // que leva para ca pre-filtrado e nao duplica listagem.
@@ -192,9 +253,59 @@ class AbaRede extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.rede);
-    return TelaDeAba(
-      raizDeSecao: true,
-      titulo: destino.rotulo,
+    final sessao = Escopo.of(context).sessao;
+
+    // `AnimatedBuilder` porque a visibilidade da porta de criar passou a
+    // depender da SESSAO: sem ele, quem entra ou confirma o e-mail com a
+    // `Rede` aberta continuaria sem o icone ate trocar de aba.
+    return AnimatedBuilder(
+      animation: sessao,
+      builder: (context, _) => TelaDeAba(
+        raizDeSecao: true,
+        titulo: destino.rotulo,
+        // A PORTA DE CRIAR EVENTO, na barra de topo (pedido do cliente em
+        // 18/10/2026). Ela saiu do corpo da agenda, onde era um
+        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
+        // folga, 64 dp devolvidos ao corpo.
+        //
+        // **"Criar evento", e nao "Marcar um encontro".** O vocabulario do app
+        // trocou "encontro" por "evento" em 18/10 e os rotulos novos dizem
+        // `Criar evento`. `AgendaDaRede.rotuloDeMarcar` continua definida e
+        // nao foi tocada aqui: a troca de vocabulario dela e de outra frente,
+        // e mexer na constante no mesmo dia produziria conflito de mescla sem
+        // necessidade. **Quando as duas frentes se juntarem, esta string e a
+        // constante tem de virar uma coisa so** -- hoje sao duas.
+        //
+        // **O GLIFO: `Icons.more_time` -- o relogio com o sinal de mais.** Ele
+        // nao foi escolhido por gosto, e sim por eliminacao dentro da familia
+        // fechada do 10.1 (Material Symbols, a embutida no Flutter 3.47.4):
+        //
+        //   - calendario COM O SINAL DE MAIS, que seria o obvio, **nao existe**
+        //     nesta familia nesta versao (`calendar_add_on` nao esta la);
+        //   - `edit_calendar` (calendario com lapis) **ja esta em uso dentro da
+        //     propria `Rede`**, em `encontro_da_rede.dart`, significando
+        //     "adicionar ao meu calendario" -- dois sentidos no mesmo glifo na
+        //     mesma secao e a colisao que o cliente leu no aparelho em 22/09;
+        //   - `event_available` (calendario com visto) leria "vou participar",
+        //     que e outra acao que esta secao tem;
+        //   - `event` sozinho e o glifo decorativo de "quando" em quatro telas,
+        //     e diz "um evento", nunca "criar um".
+        //
+        // Sobra o sinal de mais sobre o objeto que a acao de fato produz: uma
+        // data e hora marcadas. Nenhum vetor novo, nada baixado, nada gerado.
+        //
+        // **So aparece com sessao E e-mail confirmado** (ver
+        // `podeCriarNaComunidade`). Deslogado, a barra da `Rede` fica com o
+        // titulo e o `Filtros` -- nao fica vazia --, e o caminho para entrar e
+        // a aba `Perfil`, que oferece `Entrar` e `Criar conta` e continua na
+        // barra de baixo em todo estado.
+        acaoDeCriar: podeCriarNaComunidade(sessao)
+            ? AcaoDeCriarNaBarra(
+                icone: Icons.more_time,
+                rotulo: 'Criar evento',
+                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
+              )
+            : null,
       // **O reforco desce para a agenda, e nao sai da tela.**
       //
       // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
@@ -203,8 +314,9 @@ class AbaRede extends StatelessWidget {
       // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
       // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
       // `text-secondary`, exatamente como aqui, so com a busca acima.
-      reforco: null,
-      filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
+        reforco: null,
+        filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
+      ),
     );
   }
 }
@@ -223,10 +335,11 @@ class AbaRede extends StatelessWidget {
 /// porque o conteudo da secao passou a existir, e porta para outra secao acima
 /// do conteudo proprio inverteria a ordem de leitura.
 ///
-/// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
-/// de listagem -- busca, filtro e ordenacao -- moram no corpo, no topo da
-/// lista (ver `BarraDeListagem`): o 11.23.1 da UMA acao na `AppBar`, e tres
-/// nao cabem numa. O `Filtros` desceu junto com os outros dois.
+/// **A barra de topo passou a ter DUAS acoes na direita**, e nao mais uma: a
+/// porta de INDICAR subiu para a barra em 18/10/2026 (pedido do cliente) e
+/// fica a esquerda do `Filtros`. Busca, filtro e ordenacao **nao mudaram de
+/// lugar nesta rodada**: a busca continua no corpo, em largura total, e o
+/// acesso a folha de filtro e ordem continua no slot que ganhou em 17/10.
 ///
 /// **Sem mapa**, por decisao de 17/09: o Maps cobra por carregamento de mapa e
 /// o componente criaria precedente contra o ADR-0010. E perfil de profissional
@@ -237,20 +350,70 @@ class AbaPerto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.perto);
-    return TelaDeAba(
-      raizDeSecao: true,
-      titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[
-        ListaDoDiretorio(),
-        SizedBox(height: BichuEspaco.e6),
-        _PortaDeSubDestino(
-          icone: Icons.favorite_outline,
-          titulo: 'Pets de ONGs para adoção',
-          descricao: 'Abre a lista de Pets já filtrada em adoção.',
-          rota: Rotas.adocoes,
-        ),
-      ],
+    final sessao = Escopo.of(context).sessao;
+
+    // Mesma razao de `AbaRede`: a visibilidade da porta de indicar depende da
+    // sessao, e sem escutar o controlador ela so apareceria na troca de aba.
+    return AnimatedBuilder(
+      animation: sessao,
+      builder: (context, _) => TelaDeAba(
+        raizDeSecao: true,
+        titulo: destino.rotulo,
+        // A PORTA DE INDICAR, na barra de topo (pedido do cliente em
+        // 18/10/2026). Ela saiu do corpo da lista do diretorio, onde era um
+        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
+        // folga, 64 dp devolvidos ao corpo.
+        //
+        // **O GLIFO E O DE PESSOAS JUNTAS, e ele foi escolhido por ele**: "o
+        // icone de recomendar um profissional, pode ser igual do instagram, as
+        // 3 pessoas juntos, para adicionar uma nova recomendacao".
+        // `Icons.group_add` e esse desenho na familia fechada do 10.1 --
+        // nenhum vetor novo, nada baixado, nada gerado.
+        //
+        // **O SINAL DE ADICIONAR NAO E ENFEITE, e e ele que resolve a
+        // ambiguidade.** Pessoas juntas SEM o sinal leria "ver a lista de
+        // profissionais" -- que e justamente o que esta tela ja mostra, e um
+        // icone que repete o conteudo da tela nao oferece acao nenhuma.
+        // `group_add` ja traz o sinal embutido no proprio glifo, entao a
+        // leitura "adicionar" vem sem compor dois glifos (o 10.1 e o UX 27.3.1
+        // proibem composicao).
+        //
+        // **Ha uma vizinhanca para vigiar, e ela esta escrita aqui para nao
+        // ser descoberta no aparelho:** a aba `Rede` usa `groups` na barra de
+        // BAIXO, e as duas saem do mesmo campo de "pessoas juntas". Elas vivem
+        // em barras diferentes e em secoes diferentes, e o cliente pediu este
+        // glifo com estas palavras. Se ele ler as duas como a mesma coisa no
+        // aparelho, quem muda e esta linha, nao a aba.
+        //
+        // **So aparece com sessao E e-mail confirmado.** O defeito que ele
+        // relatou era exatamente este: *"o botao indicar quem atende bem, nem
+        // deveria aparecer para o usuario se ele nao estiver logado"* -- a
+        // porta convidava, e a tela de destino e que dizia "Entre para
+        // indicar". Deslogado a barra fica com o hamburguer, o titulo e o
+        // `Filtros`, e o caminho para entrar e a aba `Perfil`.
+        acaoDeCriar: podeCriarNaComunidade(sessao)
+            ? AcaoDeCriarNaBarra(
+                icone: Icons.group_add,
+                // A MESMA palavra da tela, e de uma fonte so: "Indicar", nunca
+                // "Cadastrar". A emenda 1 do ADR-0011 diz que a comunidade
+                // convida e avalia, nunca cria, e `Cadastrar` prometeria
+                // publicacao -- nada e publicado por esta porta.
+                rotulo: ListaDoDiretorio.rotuloDeIndicar,
+                aoTocar: () => context.push(Rotas.sugerirProfissional),
+              )
+            : null,
+        reforco: destino.reforcoDaPagina,
+        filhos: const <Widget>[
+          ListaDoDiretorio(),
+          SizedBox(height: BichuEspaco.e6),
+          _PortaDeSubDestino(
+            icone: Icons.favorite_outline,
+            titulo: 'Pets de ONGs para adoção',
+            descricao: 'Abre a lista de Pets já filtrada em adoção.',
+            rota: Rotas.adocoes,
+          ),
+        ],
+      ),
     );
   }
 }

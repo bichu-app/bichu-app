@@ -1243,9 +1243,23 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // 10. A barra de topo nao foi ocupada
+  // 10. O que a barra de topo do `Perto` carrega
+  //
+  // ESTE CASO MUDOU DE AFIRMACAO DUAS VEZES, e as duas foram decisao do
+  // cliente. Ele nasceu cobrando que o slot de acao ficasse LIVRE, porque os
+  // tres controles de listagem moravam no corpo. Em 17/10 o `Filtros` subiu
+  // para a barra por pedido dele; em 18/10 a porta de INDICAR subiu tambem
+  // ("os itens de criacao ... poderia ser icones na barra superior"). O lado
+  // direito passou a ter DUAS acoes, e o 11.23.1 -- que da uma -- foi
+  // atravessado de propria vontade e esta dito em `casca_com_abas.dart`.
+  //
+  // O caso nao foi apagado: ele passou a medir o ARRANJO, que e o que pode
+  // quebrar agora. Duas coisas estragam esta barra, e nenhuma delas e "ter
+  // acao": uma terceira acao, que nao cabe com o titulo, e a BUSCA ou os
+  // controles de listagem subindo junto -- o cliente pediu a busca em largura
+  // total NO CORPO, e esta rodada nao mexeu nisso.
   // -------------------------------------------------------------------------
-  testWidgets('o slot unico de acao da `AppBar` continua LIVRE em Perto',
+  testWidgets('a `AppBar` do Perto tem indicar e filtros, e nada mais',
       (tester) async {
     await abrirPerto(
       tester,
@@ -1260,10 +1274,23 @@ void main() {
     final barra = tester.widget<AppBar>(find.byType(AppBar));
     expect(
       barra.actions ?? const <Widget>[],
-      isEmpty,
-      reason: 'REPROVA: `Perto` ocupou o slot de acao da direita. O 11.23.1 da '
-          'UM slot de 64 x 64 ali, e sao TRES os controles de listagem: eles '
-          'moram no corpo, no topo da lista. O `Filtros` desceu junto.',
+      hasLength(2),
+      reason: 'REPROVA: o lado direito da barra do `Perto` nao tem exatamente '
+          'duas acoes. Sao a porta de indicar (decisao de 18/10) e o acesso a '
+          'folha de filtro e ordem (decisao de 17/10). UMA significa que uma '
+          'das duas sumiu; TRES nao cabe: com o hamburguer na esquerda, tres '
+          'acoes de 64 dp deixam 64,0 dp de titulo em 320 dp.',
+    );
+
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(TextField),
+      ),
+      findsNothing,
+      reason: 'REPROVA: a busca subiu para a barra de topo. O cliente pediu o '
+          'campo de busca em LARGURA TOTAL no corpo da tela, e a rodada de '
+          '18/10 subiu so a acao de criar.',
     );
   });
 }
