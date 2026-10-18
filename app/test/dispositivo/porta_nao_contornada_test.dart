@@ -901,7 +901,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '65dcb5cd25c486a5e7d537aeaec19566828420d5'; // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095)
+const String _arvoreDasTelas = 'd1f761255dab3787c59a0e5c11343efbf2eeee29'; // BICHUS-278, 17/10: o registro de achado vira DOIS PASSOS a pedido do cliente (passo 1 o animal, passo 2 onde e quando), a cidade deixa de se dizer "(opcional)" quando e ela que destrava o envio, e saem os dois paragrafos que ele reprovou. Nenhuma porta de aparelho encostada: `CameraEGaleria` e `Localizacao` continuam chegando pelo `Escopo`, e a foto continua passando pela mesma porta -- o que mudou foi a ORDEM e a pagina em que cada bloco aparece (antes: 65dcb5cd25c486a5e7d537aeaec19566828420d5)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
