@@ -53,10 +53,16 @@
  *    ecoado: quem o enviou acabou de digita-lo. A varredura procura cada
  *    valor enviado no corpo da resposta, telefone inclusive.
  *
- * 5c. **O CEP e normalizado, e nada mais e tocado.** `01311-000` e `01311000`
- *    sao o mesmo lugar e precisam virar a mesma linha. O caso tambem afirma o
- *    que NAO muda: nenhum outro campo e completado, porque nada resolve CEP
- *    neste produto (ADR-0006).
+ * 5c. **O CEP COM MASCARA E RECUSADO, e a recusa NOMEIA o campo.** O contrato
+ *    declara `postal_code` com `pattern: '^[0-9]{8}$'`, entao `01311-000` nao
+ *    e CEP valido nesta operacao: a recusa e 400 com `errors[].field` citando
+ *    `postal_code`, e nada e gravado. O caso NAO afirma normalizacao -- ele
+ *    afirma o contrario, porque normalizar no adaptador faria a rota aceitar
+ *    um corpo que o contrato recusa, e o contrato e um so para backend, app,
+ *    painel e site.
+ *    O caso tambem afirma o que NAO muda no CEP valido: o que foi digitado e
+ *    o que foi gravado, nenhum outro campo e completado, porque nada resolve
+ *    CEP neste produto (ADR-0006).
  *
  * 6. **A observacao passa pelo schema do contrato.** 501 caracteres respondem
  *    400, e nao 500: sem `schema.body` o texto iria do corpo ao `INSERT` e
