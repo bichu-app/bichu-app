@@ -297,7 +297,18 @@ class _Conteudo extends StatelessWidget {
         ],
 
         // 2. Foto grande e nome.
-        Center(child: _FotoGrande(pet: pet)),
+        // **A foto ganhou descricao porque o nome saiu de baixo dela.**
+        // `Moldura` envolve o conteudo num `ExcludeSemantics`, entao a imagem
+        // nunca teve rotulo proprio: quem anunciava o animal aqui era o nome
+        // logo abaixo. Tirar o texto sem isto deixaria o bloco mudo para o
+        // leitor de tela.
+        Center(
+          child: Semantics(
+            image: true,
+            label: TextosDoDetalhe.fotoDe(pet.nome),
+            child: _FotoGrande(pet: pet),
+          ),
+        ),
 
         // O MOTIVO DA RECUSA, quando nao sobrou foto para mostrar.
         //
@@ -318,11 +329,12 @@ class _Conteudo extends StatelessWidget {
           ),
         ],
         const SizedBox(height: BichuEspaco.e4),
-        Semantics(
-          header: true,
-          child: Text(pet.nome, style: textos.displaySmall),
-        ),
-        const SizedBox(height: BichuEspaco.e1),
+        // **O NOME SAIU DAQUI** (cliente, 17/10/2026): ele ja esta na barra de
+        // cima, e a tela o dizia duas vezes. Quem usa leitor de tela ouvia o
+        // mesmo nome na barra e de novo como cabecalho do corpo.
+        //
+        // A linha de identificacao abaixo (especie, raca, porte) fica: ela e
+        // outra informacao, e nao a repeticao de nada.
 
         // 3. Linha de identificacao. O mesmo `atributosDe` do cartao: duas
         // formas de compor a mesma linha divergiriam na primeira manutencao.

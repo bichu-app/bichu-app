@@ -155,4 +155,10 @@ abstract final class TextosDoDetalhe {
   /// **mesmas regras** (criterio 7 da BICHUS-61), e duplicar o numero aqui
   /// seria a primeira divergencia.
   static const int limiteDosCuidados = TextosDoCadastro.limiteDosCuidados;
+
+  /// O rotulo acessivel da foto grande (cliente, 17/10/2026).
+  ///
+  /// Curto de proposito: o leitor de tela ja leu o nome na barra, e uma frase
+  /// aqui seria a terceira vez.
+  static String fotoDe(String nome) => 'Foto de $nome';
 }
