@@ -144,6 +144,25 @@ export type AuditAction =
   | 'network_event.submitted'
   | 'network_event.updated'
   | 'network_event.cancelled'
+  /**
+   * `suggestDirectoryEntry`. Uma conta do app SUGERIU uma entrada para o
+   * diretorio de `Perto`, e a sugestao entrou na fila de revisao.
+   *
+   * **A acao existe porque a coluna de autoria nao responde sozinha.** A coluna
+   * de `directory_suggestions` que guarda quem sugeriu leva a marca
+   * "nunca sai do servidor" -- o nome dela nao cabe neste arquivo, e e a funcao
+   * `directory_suggestions_registrar` da migracao `20261017000004` que a
+   * escreve. E esta linha que sobrevive a exclusao da conta e responde "quem
+   * sugeriu isto, e quantas vezes" numa resposta a abuso -- que e a pergunta de
+   * quem recebe uma fila de trabalho humano aberta a qualquer conta.
+   *
+   * O metadado carrega `kind`, `city`, `state` e o TIPO do contato. **Nunca o
+   * valor do contato, o nome sugerido nem o recado**: sao dado de um terceiro
+   * que nao pediu para estar aqui, e a trilha sobrevive a exclusao da conta de
+   * proposito. Nao ha par `approved`/`declined` ainda, porque as operacoes do
+   * painel que trabalham esta fila nao existem no contrato.
+   */
+  | 'directory_suggestion.submitted'
   | 'privacy.account_deletion_requested'
   /**
    * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`

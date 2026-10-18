@@ -1660,6 +1660,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/directory/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sugerir um estabelecimento ou profissional para o `Perto`
+         * @description A comunidade **sugere** uma entrada do diretorio. A sugestao nasce
+         *     `pending` e **NAO publica nada**, nem agora nem automaticamente depois.
+         *
+         *     ## Por que esta operacao nao publica, ao contrario de `createNetworkEvent`
+         *
+         *     Criar encontro e a pessoa falando **dela mesma**: ela escolheu o lugar,
+         *     marcou a hora e responde pelo que escreveu. Sugerir uma clinica e
+         *     publicar sobre um **TERCEIRO** que nao pediu, nao sabe e pode
+         *     discordar -- do texto, da categoria e de aparecer. O encontro publica
+         *     direto porque o autor e o assunto sao a mesma pessoa; aqui eles nao
+         *     sao, e nao existe no produto quem represente o assunto.
+         *
+         *     Isso nao e zelo novo: e a **emenda 1 do ADR-0011**, escrita no `CHECK`
+         *     de `professionals.source`, que **nao tem** o valor `'community'` --
+         *     *"nenhum perfil nasce sem o aceite de quem ele descreve; a comunidade
+         *     convida e avalia, nunca cria"*. Uma rota da comunidade que inserisse em
+         *     `professionals` desfaria aquela decisao em vez de implementar esta.
+         *
+         *     **Esta operacao nao escreve em `professionals`.** Ela grava em
+         *     `directory_suggestions`, que e fila de revisao e nada mais. Quem cria a
+         *     entrada do diretorio continua sendo o painel, a partir da sugestao, e
+         *     pelo caminho de convite e aceite do ADR-0011.
+         *
+         *     ## O que a resposta NAO devolve
+         *
+         *     Sem `id` (ADR-0010 item 6): o recibo e `reference`, 128 bits aleatorios
+         *     em base64url, pelo mesmo desenho de `AdminJoinRequest.ref`. Sem o nome
+         *     de quem sugeriu, sem contagem de sugestoes da mesma entidade e sem o
+         *     proprio texto sugerido: o conteudo so volta a existir em publico se o
+         *     painel aprovar, e devolve-lo aqui faria o recibo parecer publicacao.
+         *
+         *     ## Dado pessoal: o minimo, e so de entidade
+         *
+         *     `display_name`, `kind`, `city`/`state`, `neighborhood` e **um contato
+         *     publico** -- o que a entidade ja divulga para ser contratada. **Nao ha
+         *     campo de documento** (CRMV, CNPJ) e **nao ha campo de pessoa fisica**:
+         *     documento e prova de verificacao, mora em `entity_verifications` e so
+         *     entra por quem o apresenta; pedi-lo aqui seria coletar o documento de
+         *     um terceiro pela mao de um estranho.
+         *
+         *     **Sem coordenada e sem endereco** (ADR-0006): nao ha mapa nem
+         *     geocodificacao neste caminho. `city`, `state` e `neighborhood` sao
+         *     rotulo de texto. O ponto do mapa e trabalho do painel, com mapa de
+         *     toque, como a propria `listDirectoryEntries` descreve.
+         *
+         *     ## As conferencias de texto, porque ninguem mais confere antes da fila
+         *
+         *     `display_name` e `note` recusam contato e pagamento (D59,
+         *     `code: contact_or_payment_detected`) e controle bidirecional
+         *     (`code: bidi_control`), como todo texto que a pessoa escreve. O contato
+         *     publico e a UNICA posicao em que telefone, site ou perfil pode entrar,
+         *     e ele e conferido pelo formato do proprio `public_contact.kind`.
+         */
+        post: operations["suggestDirectoryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/store/items": {
         parameters: {
             query?: never;
@@ -4759,6 +4830,87 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description Que tipo de contato **publico** da entidade foi informado. O tipo e
+         *     declarado e nao adivinhado: o servidor confere o formato de `value`
+         *     contra ele, e um palpite por heuristica aceitaria um telefone no campo
+         *     de site e vice-versa.
+         * @enum {string}
+         */
+        DirectorySuggestionContactKind: "phone" | "website" | "instagram";
+        /**
+         * @description **Um** contato publico da entidade, e so um. Ele e o que o painel usa
+         *     para convidar quem a sugestao descreve (ADR-0011: convite e aceite);
+         *     sem ele a sugestao e um nome que ninguem consegue checar.
+         *
+         *     **E contato de ENTIDADE, divulgado por ela para ser contratada.** Nunca
+         *     o telefone de uma pessoa fisica, nunca o contato de quem sugeriu -- a
+         *     conta de quem sugeriu o servidor ja conhece, e ela nao entra no corpo.
+         */
+        DirectorySuggestionContact: {
+            kind: components["schemas"]["DirectorySuggestionContactKind"];
+            /**
+             * @description Conforme `kind`: `phone` e E.164 (`+5511...`), `website` e URL
+             *     `https://` completa (a mesma regua dos campos de site do painel) e
+             *     `instagram` e o perfil com `@`. Formato errado responde `400` com o
+             *     campo `public_contact.value` nomeado.
+             */
+            value: string;
+        };
+        /**
+         * @description A sugestao da comunidade. **O minimo que permite checar**, e nada alem:
+         *     nome, atividade, cidade, bairro opcional, um contato publico e um
+         *     recado curto para quem revisa.
+         *
+         *     **Nao tem** `crmv_number`, `cnpj`, `verification_level`, `status`,
+         *     `slug`, `about`, `geo`, `street_address`, `source` nem
+         *     `claim_status` -- a sugestao nao e a entrada, e nenhum desses campos e
+         *     de quem sugere. Verificacao e prova de quem a apresenta
+         *     (`entity_verifications`); publicacao, nivel e ponto do mapa sao do
+         *     painel.
+         */
+        DirectorySuggestionInput: {
+            /**
+             * @description O nome do estabelecimento ou do profissional, como ele se anuncia.
+             *     Mesmo teto de `professionals.display_name`.
+             */
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            city: string;
+            state: string;
+            neighborhood?: string;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            /**
+             * @description Opcional, **para quem revisa** e nao para o diretorio: por que a
+             *     pessoa recomenda. Nao e publicado, nem se a sugestao for aprovada --
+             *     avaliacao da comunidade e outro modelo, e ele nao existe
+             *     (ADR-0011 secao 5.4). Texto puro: contato e pagamento sao recusados
+             *     (D59), porque o canal do contato e o campo acima.
+             */
+            note?: string;
+        };
+        /**
+         * @description O estado da sugestao. Nasce sempre `pending`, e so o painel a move.
+         *     `approved` **nao** quer dizer que a entrada esta no ar: quer dizer que a
+         *     revisao aceitou seguir com o convite do ADR-0011.
+         * @enum {string}
+         */
+        DirectorySuggestionState: "pending" | "approved" | "declined";
+        /**
+         * @description O recibo. **Nao e o recurso sugerido**, de proposito: devolver o texto
+         *     de volta faria a tela parecer que algo foi publicado.
+         */
+        DirectorySuggestionReceipt: {
+            /**
+             * @description O identificador opaco da sugestao: 128 bits aleatorios em
+             *     base64url. **Nao e UUID** (ADR-0010 item 6), e nao carrega o
+             *     instante de criacao dentro, ao contrario de um UUIDv7.
+             */
+            reference: string;
+            state: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
         };
         /**
          * @description O **codigo** da categoria do produto, primeiro dos dois niveis
@@ -9488,6 +9640,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    suggestDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorySuggestionInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description A sugestao foi registrada e esta **na fila de revisao**. A tela diz
+             *     isso com estas palavras: nada aparece no `Perto` ate alguem olhar.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectorySuggestionReceipt"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

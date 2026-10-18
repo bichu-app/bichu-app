@@ -248,6 +248,8 @@ abstract final class MensagensDeErro {
           acao: 'Confirmar meu e-mail',
           proximaAcao: ProximaAcao.verificarEmail,
         ),
+      ProblemTipo.limiteDeEncontrosDaComunidade =>
+        _limiteDeEncontros(problem),
       ProblemTipo.petSemFoto => const MensagemDeErro(
           texto: 'A foto não foi enviada. Ela está salva aqui.',
           acao: tentarDeNovo,
@@ -405,6 +407,27 @@ abstract final class MensagensDeErro {
       texto: '$abertura Se precisar de mais, fale com a gente.',
       acao: verMeusPets,
       rotaDaAcao: Rotas.perfil,
+    );
+  }
+
+  /// `community-event-limit-reached`, 409 (ADR-0025 emenda 3).
+  ///
+  /// **O numero vem da resposta, nunca escrito na frase** -- a mesma regra de
+  /// [_limiteDePets], e pela mesma razao.
+  ///
+  /// **A saida e a propria agenda, e nao o perfil.** O que destrava esta
+  /// recusa e encerrar ou cancelar um encontro que ja existe, e os encontros
+  /// da pessoa estao na `Rede`. Mandar para o perfil seria um rotulo de acao
+  /// que leva para longe do que resolve.
+  static MensagemDeErro _limiteDeEncontros(Problem problem) {
+    final limite = problem.inteiro('limit');
+    final abertura = limite == null
+        ? 'Você já tem o máximo de encontros em aberto.'
+        : 'Você já tem $limite encontros em aberto.';
+    return MensagemDeErro(
+      texto: '$abertura Cancele ou espere terminar um deles para marcar outro.',
+      acao: 'Ver meus encontros',
+      rotaDaAcao: Rotas.rede,
     );
   }
 

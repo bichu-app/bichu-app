@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/diretorio_api.dart';
@@ -8,9 +9,11 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
@@ -88,6 +91,14 @@ class ListaDoDiretorio extends StatefulWidget {
       'a distância até cada um.';
 
   static const String rotuloDeAtualizar = 'Atualizar';
+
+  /// O rotulo da porta de indicar.
+  ///
+  /// **"Indicar" e nao "cadastrar", e a palavra e o contrato.** Quem usa esta
+  /// porta nao cria a entrada do diretorio: ele indica alguem para a gente
+  /// conferir e convidar (ADR-0011 emenda 1). Um rotulo que dissesse
+  /// "cadastrar" prometeria publicacao, e nada e publicado aqui.
+  static const String rotuloDeIndicar = 'Indicar quem atende bem';
 
   @override
   State<ListaDoDiretorio> createState() => _ListaDoDiretorioState();
@@ -277,6 +288,28 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // **A porta de indicar, no CORPO e nao na `AppBar`.** O slot unico de
+        // acao da barra de topo continua livre (11.23.1), e os controles de
+        // listagem moram no corpo -- a porta de escrita mora no corpo pelo
+        // mesmo motivo: a barra tem UMA vaga e tres candidatos.
+        //
+        // **Acima da barra de listagem**, porque ela nao e um controle de
+        // recorte: nao muda o que a lista mostra. Dentro dos controles, ela
+        // pareceria um filtro.
+        //
+        // Habilitada sempre: quem explica o bloqueio de conta e a tela de
+        // destino, que mostra o motivo e a saida. Botao apagado aqui seria
+        // botao morto sem lugar onde escrever a explicacao.
+        Padding(
+          padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
+          child: SizedBox(
+            width: double.infinity,
+            child: BotaoSecundario(
+              rotulo: ListaDoDiretorio.rotuloDeIndicar,
+              aoTocar: () => context.push(Rotas.sugerirProfissional),
+            ),
+          ),
+        ),
         // A barra so aparece quando ha pagina: antes dela a tela nao sabe
         // quantos itens existem nem em que ordem eles vieram, e um controle
         // de ordenacao sobre nada ainda medido seria o controle que afirma.

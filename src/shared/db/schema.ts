@@ -1012,6 +1012,58 @@ export interface EntityVerificationsTable {
   created_at: CriadoEm;
 }
 
+/** O `CHECK` `directory_suggestions_contato_conhecido` (`20261017000004`). */
+export type TipoDeContatoSugerido = 'phone' | 'website' | 'instagram';
+
+/** O `CHECK` `directory_suggestions_revisao_conhecida` (`20261017000004`). */
+export type RevisaoDaSugestao = 'pending' | 'approved' | 'declined';
+
+/**
+ * A fila de revisao de `Perto`: o que a comunidade SUGERIU para o diretorio
+ * (migracao `20261017000004`, operacao `suggestDirectoryEntry`).
+ *
+ * **Nao e `professionals`, e nao vira `professionals` por conta propria.** A
+ * emenda 1 do ADR-0011 tirou `'community'` de `professionals.source`: a entrada
+ * do diretorio nasce por convite e aceite, e o que esta tabela guarda e o
+ * pedido de revisao. Nenhuma escrita deste caminho toca `professionals`.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra --
+ * a mesma de `ProfessionalsTable` e de `NetworkEventsTable`: a coluna que
+ * guarda QUEM SUGERIU e vinculo entre duas pessoas, leva a marca
+ * `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao, e
+ * `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts` de `src/`
+ * pelo nome literal dela: declara-la aqui **reprova o build**.
+ *
+ * Quem a escreve e a funcao `directory_suggestions_registrar` da propria
+ * migracao, chamada por SQL cru -- aqui a autoria e `NOT NULL`, entao nao ha
+ * linha intermediaria para carimbar depois e a funcao faz o `INSERT` inteiro.
+ * O construtor tipado nao pode nem oferece a coluna, e o que nao esta no tipo
+ * nao atravessa a borda por descuido.
+ *
+ * **Sem `geo`, sem `street_address` e sem documento** (ADR-0006, ADR-0011
+ * secao 4): as ausencias estao escritas por extenso no cabecalho da migracao,
+ * para que ninguem complete a tabela achando que faltou.
+ */
+export interface DirectorySuggestionsTable {
+  /** UUIDv7 gerado pela aplicacao, como em `pets` e em `professionals`. */
+  id: string;
+  /** 128 bits em base64url. E ele que sai no recibo, e nunca o `id`. */
+  ref: string;
+  display_name: string;
+  kind: TipoDeProfissional;
+  city: string;
+  /** A UF. E por esta coluna que o estado da revisao se chama `review_status`. */
+  state: string;
+  neighborhood: string | null;
+  contact_kind: TipoDeContatoSugerido;
+  contact_value: string;
+  note: string | null;
+  review_status: Generated<RevisaoDaSugestao>;
+  created_at: Generated<Date>;
+  /** Nulo enquanto pendente, por `CHECK`. */
+  decided_at: Date | null;
+}
+
 /**
  * O codigo da categoria do produto. **Texto, e nao uniao de literais**, desde a
  * `20261017000003`: a lista fechada mora em `store_categories` e quem a fecha e
@@ -1408,6 +1460,7 @@ export interface Database {
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
   entity_verifications: EntityVerificationsTable;
+  directory_suggestions: DirectorySuggestionsTable;
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_categories: StoreCategoriesTable;

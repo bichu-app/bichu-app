@@ -435,3 +435,109 @@ String? textoDoTetoDoDiretorio(FalhaDeChamada falha) {
   return 'Você consultou o diretório muitas vezes seguidas. '
       'Tente de novo daqui a pouco.';
 }
+
+// ---------------------------------------------------------------------------
+// A SUGESTAO DA COMUNIDADE (`suggestDirectoryEntry`)
+// ---------------------------------------------------------------------------
+// A diferenca de natureza entre esta escrita e a do encontro da `Rede`, que e
+// o que explica tudo abaixo: criar encontro e a pessoa falando DELA MESMA, e
+// por isso publica direto. Sugerir uma clinica e publicar sobre um TERCEIRO
+// que nao pediu, nao sabe e pode discordar -- do texto, da categoria e de
+// aparecer. Por isso a sugestao nasce `pending` e NADA aparece no `Perto` ate
+// alguem do painel olhar.
+//
+// Isto nao e zelo novo: e a emenda 1 do ADR-0011, escrita no `CHECK` de
+// `professionals.source`, que nao tem o valor `'community'` -- "nenhum perfil
+// nasce sem o aceite de quem ele descreve; a comunidade convida e avalia,
+// nunca cria". A sugestao nao escreve em `professionals`: ela escreve numa
+// fila de revisao, e quem cria a entrada continua sendo o painel.
+
+/// `#/components/schemas/DirectorySuggestionContactKind` do contrato.
+///
+/// O tipo e DECLARADO e nao adivinhado: o servidor confere o formato do valor
+/// contra ele. Adivinhar por heuristica aceitaria um telefone no campo de site
+/// e vice-versa, e a recusa chegaria sem dizer qual dos dois estava errado.
+enum TipoDeContatoPublico {
+  phone('phone', 'Telefone', 'Com DDD, como +5511988887777'),
+  website('website', 'Site', 'O endereço completo, com https://'),
+  instagram('instagram', 'Instagram', 'O perfil, com @');
+
+  const TipoDeContatoPublico(this.codigo, this.rotulo, this.exemplo);
+
+  /// O valor que vai na API.
+  final String codigo;
+
+  /// O nome em portugues, que e o que a tela mostra.
+  final String rotulo;
+
+  /// A ajuda do campo, que depende do tipo escolhido.
+  final String exemplo;
+
+  static TipoDeContatoPublico? porCodigo(String? codigo) {
+    for (final t in TipoDeContatoPublico.values) {
+      if (t.codigo == codigo) return t;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/DirectorySuggestionState` do contrato.
+///
+/// Nasce sempre [pendente]. **[aprovada] nao quer dizer que a entrada esta no
+/// ar**: quer dizer que a revisao aceitou seguir com o convite do ADR-0011.
+enum EstadoDaSugestao {
+  pending('pending'),
+  approved('approved'),
+  declined('declined');
+
+  const EstadoDaSugestao(this.codigo);
+
+  final String codigo;
+
+  static EstadoDaSugestao? porCodigo(String? codigo) {
+    for (final e in EstadoDaSugestao.values) {
+      if (e.codigo == codigo) return e;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/DirectorySuggestionReceipt` do contrato.
+///
+/// O recibo, e **nao o recurso sugerido**. Devolver o texto de volta faria a
+/// tela parecer que algo foi publicado, e nada foi.
+class ReciboDaSugestao {
+  const ReciboDaSugestao({
+    required this.referencia,
+    required this.estado,
+    required this.criadaEm,
+  });
+
+  /// O identificador opaco, 128 bits em base64url. **Nao e UUID**
+  /// (ADR-0010 item 6).
+  final String referencia;
+
+  final EstadoDaSugestao estado;
+
+  final DateTime criadaEm;
+
+  factory ReciboDaSugestao.doJson(Map<String, dynamic> json) {
+    final referencia = json['reference'];
+    final estado = EstadoDaSugestao.porCodigo(json['state'] as String?);
+    final criadaEm = DateTime.tryParse(json['created_at'] as String? ?? '');
+    if (referencia is! String || referencia.isEmpty) {
+      throw const FormatException('sugestao sem `reference`');
+    }
+    if (estado == null) {
+      throw const FormatException('sugestao com `state` desconhecido');
+    }
+    if (criadaEm == null) {
+      throw const FormatException('sugestao sem `created_at` legivel');
+    }
+    return ReciboDaSugestao(
+      referencia: referencia,
+      estado: estado,
+      criadaEm: criadaEm,
+    );
+  }
+}
