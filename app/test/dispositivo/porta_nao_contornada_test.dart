@@ -1002,7 +1002,60 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// O unico recurso de aparelho que entra e `showTimePicker`, do proprio
 /// Flutter, pela mesma via de `showDatePicker` que duas telas ja usam.
 /// Anterior: `65dcb5cd25c486a5e7d537aeaec19566828420d5`.
-const String _arvoreDasTelas = '45b6093e7fd295e6ba36fb9b0081a8b08f7755b4'; // QA 18/10 (rodada final da suite): dois arquivos desta pasta mudam, e os dois sao CONSERTO DE DEFEITO medido pela propria suite, nao tela nova. (1) `pet/tela_solicitar_plaquinha.dart`: `_carregarPets()` saiu de `initState` para `didChangeDependencies`, porque ler `Escopo` (um `InheritedWidget`) antes de `initState` terminar estoura `dependOnInheritedWidgetOfExactType ... before initState() completed` -- a tela NUNCA listava os pets e abria dizendo "servidor fora". Mesmo arranjo e mesmo sinalizador de `pet/tela_editar_pet.dart` e `perfil/meus_pets.dart`. (2) `perfil/tela_dados_pessoais.dart`: o campo de telefone passou a ser preenchido por `telefoneDoE164` em vez de `mascaraDeTelefone`, porque a mascara de DIGITACAO descarta o `+` e lia `+5511987654321` como digitos locais -- o campo abria `(55) 11987-6543` e um `Salvar` gravava `+5555119876543` por cima do telefone certo. **Nenhuma porta de aparelho encostada**: as duas mudancas sao de ciclo de vida e de formatacao de texto; nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`, e o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore (`encontrado:`), e nao copiado de relato nem recalculado com comando de escrita -- a tarefa desta rodada proibia comando git que escreve. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento escrito acima; valor de ramo isolado nao sobrevive a uniao. (antes: 0c72963525)
+/// DESTRAVADO EM 18/10 (QA, rodada final da suite), valor
+/// 45b6093e7fd295e6ba36fb9b0081a8b08f7755b4. QA 18/10 (rodada final da
+/// suite): dois arquivos desta pasta mudam, e os dois sao CONSERTO DE
+/// DEFEITO medido pela propria suite, nao tela nova. (1)
+/// `pet/tela_solicitar_plaquinha.dart`: `_carregarPets()` saiu de
+/// `initState` para `didChangeDependencies`, porque ler `Escopo` (um
+/// `InheritedWidget`) antes de `initState` terminar estoura
+/// `dependOnInheritedWidgetOfExactType ... before initState() completed` --
+/// a tela NUNCA listava os pets e abria dizendo "servidor fora". Mesmo
+/// arranjo e mesmo sinalizador de `pet/tela_editar_pet.dart` e
+/// `perfil/meus_pets.dart`. (2) `perfil/tela_dados_pessoais.dart`: o campo
+/// de telefone passou a ser preenchido por `telefoneDoE164` em vez de
+/// `mascaraDeTelefone`, porque a mascara de DIGITACAO descarta o `+` e lia
+/// `+5511987654321` como digitos locais -- o campo abria `(55) 11987-6543`
+/// e um `Salvar` gravava `+5555119876543` por cima do telefone certo.
+/// **Nenhuma porta de aparelho encostada**: as duas mudancas sao de ciclo
+/// de vida e de formatacao de texto; nenhum importe de plugin, nenhum canal
+/// de plataforma, nenhuma permissao, nenhum `dart:io`, e o portao
+/// estrutural de diretivas deste mesmo arquivo continua respondendo por
+/// isso. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore
+/// (`encontrado:`), e nao copiado de relato nem recalculado com comando de
+/// escrita -- a tarefa desta rodada proibia comando git que escreve. **A
+/// QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima; valor de ramo isolado nao sobrevive a uniao. (antes:
+/// 0c72963525)
+///
+/// DESTRAVADO EM 18/10 (a PINTURA das imagens do profissional e da foto do
+/// proprio usuario). O cliente autorizou as tres: "pode liberar as imagens
+/// do profissional no app" e "coloque um campo para o usuario cadastrar sua
+/// propria foto e um selo na foto dele, se ele estiver validado". O
+/// contrato, o servidor e o modelo Dart ja estavam prontos (1d2ccac1 e
+/// 51696860); o que muda aqui e so a pintura. Tres arquivos desta pasta
+/// mudam: `perto/lista_do_diretorio.dart` (a logo ao lado do nome no
+/// cartao, quadrado de 56 dp, FORA da semantica porque o nome ja e o
+/// rotulo), `perto/pagina_do_local.dart` (a faixa 16:9 com a foto do lugar,
+/// de borda a borda, e so no detalhe: vinte faixas de 1280 x 720 numa
+/// listagem seriam 65,6 MiB de imagem decodificada) e
+/// `perfil/tela_dados_pessoais.dart` (o retrato da propria pessoa, a previa
+/// do arquivo escolhido, o selo de `Me.email_verified` em cima dele e os
+/// tres passos do envio). **Nenhuma porta de aparelho contornada, e o
+/// portao estrutural deste mesmo arquivo responde por isso**: quem desenha
+/// arquivo local continua sendo `widgets/previa_da_foto.dart` e quem
+/// desenha imagem de servidor e `widgets/imagem_da_rede.dart` -- as duas
+/// fora de `lib/telas`, porque `dart:io` e proibido aqui dentro. A tela de
+/// dados pessoais importa `dispositivo/camera_e_galeria.dart`, que e a
+/// PORTA (a mesma que o registro de achado e o cadastro de pet usam), e nao
+/// o plugin: nenhum `package:image_picker/`, nenhum
+/// `package:permission_handler/`, nenhum `dart:io`. Valor LIDO DA PROPRIA
+/// FALHA deste portao nesta arvore (`encontrado:`), e conferido
+/// reproduzindo o calculo do portao num indice temporario -- os dois deram
+/// o mesmo hash. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**,
+/// pelo procedimento escrito acima. Ha pelo menos quatro valores diferentes
+/// em ramos abertos hoje, e valor de ramo isolado nao sobrevive a uniao.
+const String _arvoreDasTelas = '49d7f18b0383b29f58ef3a7e4ce424f421c9f241'; // BICHUS-278: a pintura da logo, da faixa do local e da foto do proprio usuario. Ver o paragrafo acima. (antes: 45b6093e7f)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
