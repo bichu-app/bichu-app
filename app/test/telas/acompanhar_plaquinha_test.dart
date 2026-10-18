@@ -53,13 +53,21 @@ Map<String, dynamic> _pedidoDoContrato({
   String ref = _refDoServidor,
   String status = 'pending',
   String? rastreio,
+  // COSTURA DA MESCLA 18/10: o EIXO DA ENTREGA entrou no corpo do contrato.
+  // Padrao `requested`, que e o `NOT NULL DEFAULT` da coluna.
+  String entrega = 'requested',
+  String? despachadoEm,
+  String? entregueEm,
 }) {
   return <String, dynamic>{
     'ref': ref,
     'status': status,
     'requested_at': '2026-10-17T12:00:00.000Z',
     'decided_at': status == 'pending' ? null : '2026-10-18T09:00:00.000Z',
+    'delivery_state': entrega,
     'tracking_code': rastreio,
+    'shipped_at': despachadoEm,
+    'delivered_at': entregueEm,
     'notes': null,
   };
 }
@@ -194,27 +202,116 @@ void main() {
       // A situacao esta ESCRITA, e nao so na cor do icone: e isso que deixa o
       // passo legivel por leitor de tela e por quem nao distingue as cores.
       expect(find.text('Agora'), findsOneWidget);
-      expect(find.text('Ainda não'), findsOneWidget);
-      // **Nada promete entrega.** Nao ha coluna, nao ha escrita e nao ha quem
-      // mova o pedido para "chegou": um passo desses ficaria parado para
-      // sempre e a tela estaria mentindo.
-      expect(find.text('Chegou'), findsNothing);
+      // COSTURA DA MESCLA 18/10: eram DOIS passos depois do atual virando um
+      // so "Ainda nao"; agora sao DOIS -- `Enviada` e `Chegou`. O quarto passo
+      // passou a existir porque passou a haver quem o mova: a tela de entrega
+      // do painel escreve `delivery_state`.
+      expect(find.text('Ainda não'), findsNWidgets(2));
+      expect(find.text('Chegou'), findsOneWidget);
+      // O passo existe mas NAO esta cumprido: `requested` nao e entrega.
+      expect(find.text('Concluído'), findsOneWidget);
     });
 
-    testWidgets('3b. CONTRAPESO `fulfilled`: os tres passos ficam concluidos',
+    testWidgets(
+        '3b. COSTURA: `fulfilled` com entrega `requested` NAO diz enviada',
         (tester) async {
+      // **ESTE CASO E A COSTURA DA MESCLA DE 18/10/2026, e ele reprovava antes
+      // dela.** A tela do pedido nasceu desenhando o trilho a partir de
+      // `status`, e `fulfilled` pintava os tres passos como concluidos com o
+      // titulo "Plaquinha enviada". Isso era falso: `fulfilled` e a DECISAO do
+      // painel de atender o pedido, e **atender nao e despachar**. A pessoa
+      // lia "Enviada" no instante em que alguem clicou em "atender", dias
+      // antes de a plaquinha sair.
+      //
+      // O trilho agora vem de `delivery_state`. Com o pedido atendido mas
+      // ainda em `requested`, a encomenda NAO saiu, e a tela diz isso.
       await _abrirOAcompanhamento(
         tester,
-        pedidos: <Map<String, dynamic>>[_pedidoDoContrato(status: 'fulfilled')],
+        pedidos: <Map<String, dynamic>>[
+          _pedidoDoContrato(status: 'fulfilled', entrega: 'requested'),
+        ],
+      );
+
+      // DESLIGAMENTO: trocar `pedido.passoDaEntrega` de volta por
+      // `pedido.status` em `_PassoDoPedido.de` reprova exatamente aqui.
+      expect(find.text('Plaquinha enviada'), findsNothing);
+      expect(find.text('Em preparação'), findsOneWidget);
+      expect(find.text('Agora'), findsOneWidget);
+      expect(find.text('Ainda não'), findsNWidgets(2));
+    });
+
+    testWidgets(
+        '3d. COSTURA: `in_transit` move o trilho e mostra o rastreio REAL',
+        (tester) async {
+      // O outro lado da costura: quando o painel DESPACHA, o passo anda e o
+      // codigo de rastreio que ele gravou aparece. Antes da mescla o contrato
+      // declarava `tracking_code` "sempre nulo" e nao havia coluna; a
+      // `20261018000004` criou a coluna e a tela do painel a escreve.
+      const String rastreio = 'XQ771230045BR';
+      await _abrirOAcompanhamento(
+        tester,
+        pedidos: <Map<String, dynamic>>[
+          _pedidoDoContrato(
+            status: 'fulfilled',
+            entrega: 'in_transit',
+            rastreio: rastreio,
+            despachadoEm: '2026-10-18T10:00:00.000Z',
+          ),
+        ],
       );
 
       expect(find.text('Plaquinha enviada'), findsOneWidget);
-      expect(find.text('Concluído'), findsNWidgets(3));
-      // O que separa este caso do 3a: nenhum passo esta "agora" nem "ainda
-      // nao". Sem isto, uma tela que desenhasse sempre o mesmo passaria nos
-      // dois.
+      // `Enviada` e o passo ATUAL, e `Chegou` ainda nao.
+      expect(find.text('Enviada'), findsOneWidget);
+      expect(find.text('Agora'), findsOneWidget);
+      expect(find.text('Ainda não'), findsOneWidget);
+      expect(find.text('Concluído'), findsNWidgets(2));
+      // O RASTREIO REAL, que e o que a pessoa leva a transportadora.
+      expect(find.text('Código de rastreio'), findsOneWidget);
+      expect(find.text(rastreio), findsOneWidget);
+    });
+
+    testWidgets('3e. COSTURA: `arrived` conclui os QUATRO passos',
+        (tester) async {
+      // Sem este caso, uma tela que nunca concluisse o quarto passo passaria
+      // em 3b e 3d -- o passo ficaria parado para sempre, que era exatamente o
+      // defeito que o cabecalho antigo deste widget temia.
+      await _abrirOAcompanhamento(
+        tester,
+        pedidos: <Map<String, dynamic>>[
+          _pedidoDoContrato(
+            status: 'fulfilled',
+            entrega: 'arrived',
+            rastreio: 'XQ771230045BR',
+            despachadoEm: '2026-10-18T10:00:00.000Z',
+            entregueEm: '2026-10-20T14:05:00.000Z',
+          ),
+        ],
+      );
+
+      expect(find.text('Plaquinha entregue'), findsOneWidget);
+      expect(find.text('Concluído'), findsNWidgets(4));
       expect(find.text('Agora'), findsNothing);
       expect(find.text('Ainda não'), findsNothing);
+    });
+
+    testWidgets(
+        '3f. COSTURA: passo DESCONHECIDO nao afirma entrega nem quebra',
+        (tester) async {
+      // Um painel futuro pode ganhar um passo que este APK nao conhece. Chutar
+      // `concluido` faria um app velho dizer que a plaquinha chegou quando ela
+      // nao chegou; quebrar seria pior. Ele mostra o pedido EM ANDAMENTO.
+      await _abrirOAcompanhamento(
+        tester,
+        pedidos: <Map<String, dynamic>>[
+          _pedidoDoContrato(status: 'fulfilled', entrega: 'devolvida_ao_remetente'),
+        ],
+      );
+
+      expect(find.byType(AcompanhamentoDoPedido), findsOneWidget);
+      expect(find.text('Plaquinha entregue'), findsNothing);
+      expect(find.text('Em preparação'), findsOneWidget);
+      expect(find.text('Agora'), findsOneWidget);
     });
 
     testWidgets('3c. CONTRAPESO `declined`: a recusa nao vira passo de entrega',
@@ -233,9 +330,10 @@ void main() {
 
   group('ISCA — o codigo de rastreio so aparece quando existe', () {
     testWidgets('5. sem codigo, nenhum campo de rastreio nasce', (tester) async {
-      // E o estado de HOJE: o servidor sempre manda `tracking_code` nulo,
-      // porque nao ha coluna nem rota que o escreva. Campo vazio faria a
-      // pessoa procurar um numero que nao existe.
+      // Nulo e o caso COMUM e nao e defeito: entrega em maos, correio simples,
+      // ou pedido que ainda nao saiu. (Ate 18/10/2026 era o unico caso
+      // possivel, porque nao havia coluna; hoje ha, e o caso 3d mede o codigo
+      // real.) Campo vazio faria a pessoa procurar um numero que nao existe.
       await _abrirOAcompanhamento(
         tester,
         pedidos: <Map<String, dynamic>>[_pedidoDoContrato()],

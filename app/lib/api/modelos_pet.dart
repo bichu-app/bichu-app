@@ -807,8 +807,11 @@ class PedidoDePlaquinha {
     required this.ref,
     required this.status,
     required this.solicitadoEm,
+    this.passoDaEntrega = 'requested',
     this.decididoEm,
     this.codigoDeRastreio,
+    this.despachadoEm,
+    this.entregueEm,
     this.observacao,
   });
 
@@ -833,12 +836,38 @@ class PedidoDePlaquinha {
   /// Quando o painel decidiu, ou nulo enquanto ninguem decidiu.
   final DateTime? decididoEm;
 
+  /// O PASSO DA ENTREGA: `requested`, `in_transit` ou `arrived`.
+  ///
+  /// **E este campo que a tela desenha, e nao [status].** Os dois sao eixos
+  /// diferentes: [status] e a DECISAO do painel (atender ou recusar) e este e
+  /// ONDE A ENCOMENDA ESTA. Desenhar o trilho a partir de [status] faria o
+  /// pedido atendido parecer entregue no instante em que alguem clicou em
+  /// "atender", muito antes de a plaquinha sair.
+  ///
+  /// **Texto e nao enum**, pelo mesmo motivo de [status]: um valor novo numa
+  /// versao futura do painel nao pode quebrar o app que ja esta no aparelho.
+  ///
+  /// **Padrao `requested` e nao nulo**: a coluna do banco e
+  /// `NOT NULL DEFAULT 'requested'`, entao todo pedido tem um passo escrito --
+  /// inclusive os criados antes de a entrega existir -- e a tela nao tem nulo
+  /// a tratar. Resposta antiga sem a chave cai no mesmo lugar.
+  final String passoDaEntrega;
+
   /// O codigo de rastreio da transportadora, quando existir.
   ///
-  /// **Hoje o servidor sempre o manda nulo**: nao ha coluna que o guarde nem
-  /// rota que o escreva. A tela so o desenha quando ele vem preenchido --
-  /// campo de rastreio vazio e pior que nenhum campo.
+  /// **Vem PREENCHIDO quando ha despacho com rastreio.** Ate 18/10/2026 nao
+  /// havia coluna que o guardasse e este campo era sempre nulo; a migracao
+  /// `20261018000004` criou a coluna e a tela de entrega do painel a escreve.
+  /// Nulo continua sendo o caso comum e NAO e defeito: nem todo envio tem
+  /// rastreio, e nenhum pedido tem rastreio antes de sair. A tela so o desenha
+  /// quando ele vem preenchido -- campo de rastreio vazio e pior que nenhum.
   final String? codigoDeRastreio;
+
+  /// Quando a plaquinha SAIU, ou nulo enquanto ela nao saiu.
+  final DateTime? despachadoEm;
+
+  /// Quando a plaquinha CHEGOU, ou nulo em tudo que nao chegou.
+  final DateTime? entregueEm;
 
   final String? observacao;
 
@@ -851,13 +880,23 @@ class PedidoDePlaquinha {
     // `tracking_code` vazio conta como ausente: um codigo em branco nao e um
     // codigo, e deixa-lo passar faria a tela desenhar um campo vazio.
     final rastreio = json['tracking_code'] as String?;
+    final despachado = json['shipped_at'];
+    final entregue = json['delivered_at'];
+    // `delivery_state` ausente cai em `requested`, que e o passo INICIAL: o
+    // contrato o declara `NOT NULL DEFAULT 'requested'` do lado do banco, e
+    // supor "chegou" na ausencia seria a tela afirmando uma entrega.
+    final passo = json['delivery_state'] as String?;
     return PedidoDePlaquinha(
       ref: json['ref'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       solicitadoEm: quando is String ? DateTime.tryParse(quando) : null,
+      passoDaEntrega:
+          passo == null || passo.trim().isEmpty ? 'requested' : passo.trim(),
       decididoEm: decidido is String ? DateTime.tryParse(decidido) : null,
       codigoDeRastreio:
           rastreio == null || rastreio.trim().isEmpty ? null : rastreio.trim(),
+      despachadoEm: despachado is String ? DateTime.tryParse(despachado) : null,
+      entregueEm: entregue is String ? DateTime.tryParse(entregue) : null,
       observacao: json['notes'] as String?,
     );
   }
