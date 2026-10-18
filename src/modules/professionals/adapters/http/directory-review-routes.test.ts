@@ -71,6 +71,7 @@ const SLUG = 'clinica-veterinaria-santa-barbara';
 const ENTRADA: EntradaDoDiretorio = {
   slug: SLUG,
   kind: 'clinic',
+  entityKind: 'professional',
   displayName: 'Clínica Veterinária Santa Bárbara',
   about: 'Pronto atendimento 24 horas.',
   city: 'São Paulo',

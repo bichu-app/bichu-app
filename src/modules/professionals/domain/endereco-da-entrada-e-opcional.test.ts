@@ -40,6 +40,7 @@ const NASCEU_EM = Date.UTC(2026, 9, 18, 12, 0, 0) as Instant;
 const AUTONOMO: EntradaAdministrativa = {
   slug: 'passeios-da-bia',
   kind: 'walker',
+  entityKind: 'professional',
   displayName: 'Passeios da Bia',
   about: null,
   city: 'São Paulo',

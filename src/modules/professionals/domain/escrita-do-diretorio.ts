@@ -58,7 +58,7 @@
  * continuam sendo escritas pelo fluxo de verificacao, que nao passa por aqui.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
-import type { TipoDeProfissional } from './entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from './entrada-do-diretorio.js';
 import {
   evidenciasAprovadas,
   nivelDerivado,
@@ -155,6 +155,8 @@ export interface ImagemDaEntrada {
 export interface EntradaAdministrativa {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  /** O QUE a entrada e. Eixo separado de `kind`, que e a ATIVIDADE. */
+  readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
   readonly about: string | null;
   readonly city: string | null;
@@ -202,6 +204,12 @@ export interface EntradaAdministrativa {
 export interface CriacaoDaEntrada {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * **Opcional, e ausente vale `professional`.** Obriga-lo quebraria o contrato
+   * de REQUISICAO (`request-property-became-required`) e derrubaria o painel ja
+   * carregado no navegador de quem esta cadastrando agora.
+   */
+  readonly entity_kind?: TipoDeEntidade;
   readonly display_name: string;
   readonly about?: string;
   readonly city?: string;
@@ -228,6 +236,8 @@ export interface CriacaoDaEntrada {
 export interface EdicaoDaEntrada {
   readonly slug?: string;
   readonly kind?: TipoDeProfissional;
+  /** Sem `| null`: a coluna e NOT NULL, como `slug`, `kind` e `display_name`. */
+  readonly entity_kind?: TipoDeEntidade;
   readonly display_name?: string;
   readonly about?: string | null;
   readonly city?: string | null;
@@ -487,6 +497,7 @@ function projetarImagem(
 export interface EntradaProjetada {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly about: string | null;
   readonly city: string | null;
@@ -525,6 +536,7 @@ export function projetarEntradaAdministrativa(
   return {
     slug: entrada.slug,
     kind: entrada.kind,
+    entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     about: entrada.about,
     city: entrada.city,

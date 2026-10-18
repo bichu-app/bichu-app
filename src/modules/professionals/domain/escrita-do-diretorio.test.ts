@@ -50,6 +50,7 @@ const MEXERAM_EM = Date.UTC(2026, 9, 2, 12, 0, 0) as Instant;
 const COMPLETA: EntradaAdministrativa = {
   slug: 'clinica-sao-jorge',
   kind: 'clinic',
+  entityKind: 'professional',
   displayName: 'Clínica Veterinária São Jorge',
   about: null,
   city: 'São Paulo',

@@ -1142,6 +1142,13 @@ export interface ProfessionalsTable {
   /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
   id: string;
   kind: TipoDeProfissional;
+  /**
+   * O QUE a entrada e, eixo SEPARADO de `kind` (que e a ATIVIDADE). ONG e
+   * `organization`. `Generated` porque a `20261018000012` a criou com
+   * `NOT NULL DEFAULT 'professional'`: a escrita pode omiti-la e o banco
+   * preenche, que e o que faz a coluna ser aditiva.
+   */
+  entity_kind: Generated<TipoDeEntidade>;
   display_name: string;
   about: string | null;
   city: string | null;

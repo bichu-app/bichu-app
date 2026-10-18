@@ -6159,15 +6159,59 @@ export interface components {
             poster_url?: string;
         };
         /**
-         * @description A atividade. Espelha `professionals.kind` e a entrada
+         * @description A atividade: o que a entrada FAZ, o que se contrata dela. Espelha
+         *     `professionals.kind` e a entrada
          *     `public.professionals.professionals_kind_check` do teste de conjunto
-         *     exato. **Nao ha valor para ONG**, e a ausencia e decisao pendente do
-         *     modelo, nao esquecimento: `professionals` nao tem `entity_kind` e
-         *     `kind` nao tem valor para organizacao. A porta das ONGs em `Perto` leva
-         *     hoje a lista de pets filtrada em adocao (UX 27.2.4), que e outra coisa.
+         *     exato.
+         *
+         *     **Continua sem valor para ONG, e agora a ausencia e desenho concluido
+         *     e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
+         *     do modelo" porque `professionals` nao tinha `entity_kind`; desde
+         *     `20261018000012` ela tem, e o tipo de entidade passou a ser EIXO
+         *     PROPRIO (`EntityKind`). ONG nao entra nesta lista por duas razoes, e a
+         *     segunda e a que manda:
+         *
+         *     1. acrescentar valor a um `enum` que sai em RESPOSTA quebra o contrato
+         *        -- `oasdiff`, regra `response-property-enum-value-added`, **12 erros
+         *        medidos em 18/10/2026** em `listDirectoryEntries`,
+         *        `getDirectoryEntry`, `listMyDirectorySuggestions` e nove operacoes
+         *        de `/admin/directory/*`;
+         *     2. uma ONG nao e uma ATIVIDADE. Poe-la aqui afirmaria que organizacao
+         *        e um tipo de profissional, que era exatamente a pergunta aberta.
+         *        Uma ONG tem atividade (`clinic`, `vet`) **e** tipo de entidade
+         *        (`organization`) -- os dois eixos ao mesmo tempo, e e por isso que
+         *        um so campo nao os expressava.
          * @enum {string}
          */
         ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic";
+        /**
+         * @description O QUE a entrada e, e nao o que ela faz -- eixo SEPARADO de
+         *     `ProfessionalKind` de proposito. Ver a prosa daquele campo para por que
+         *     alargar a lista de la nao era caminho.
+         *
+         *     **Os valores e o nome sao os de `entity_verifications.entity_kind`**
+         *     (`20260921000002`), que carrega `organization` desde antes de existir
+         *     uma linha: a revisao de 17/09 do ADR-0011 generalizou a verificacao de
+         *     profissional para ENTIDADE precisamente para que a primeira entidade
+         *     nao-profissional nao obrigasse a refazer tabela. Uma segunda convencao
+         *     para o mesmo conceito e a convencao que diverge, entao nao ha vocabulario
+         *     novo aqui.
+         *
+         *     Espelha `professionals.entity_kind` e a entrada
+         *     `public.professionals.professionals_entity_kind_check` do teste de
+         *     conjunto exato.
+         *
+         *     **Aditivo, e com padrao.** Toda entrada que existia antes de
+         *     `20261018000012` vale como `professional`, que e o `DEFAULT` da coluna
+         *     -- nenhuma linha foi reescrita e nenhum cliente deixa de entender a
+         *     resposta, porque o campo e NOVO e nao um valor novo num campo antigo.
+         *
+         *     **Isto nao constroi adocao.** ONG aqui e tipo de ESTABELECIMENTO do
+         *     diretorio. Pet em adocao e outro assunto, nao tem rota neste contrato,
+         *     e nao ganhou nenhuma aqui.
+         * @enum {string}
+         */
+        EntityKind: "professional" | "organization";
         /**
          * @description O que foi provado, derivado da verificacao aprovada mais forte da
          *     entidade. `none` e estado legitimo e publicavel: passeador, hospedagem,
@@ -6204,6 +6248,7 @@ export interface components {
         DirectoryEntrySummary: {
             slug: components["schemas"]["Slug"];
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
             state?: string | null;
@@ -6735,8 +6780,13 @@ export interface components {
         /**
          * @description O cadastro de uma entrada, **em rascunho**. Ver
          *     `createAdminDirectoryEntry` para o que deliberadamente nao esta aqui:
-         *     documento (`cnpj`, `crmv_*`), nivel de verificacao, coordenada, e
-         *     qualquer coisa de ONG.
+         *     documento (`cnpj`, `crmv_*`), nivel de verificacao e coordenada.
+         *
+         *     **ONG passou a caber, e por `entity_kind`.** A frase anterior aqui
+         *     excluia "qualquer coisa de ONG" porque nao havia onde guardar o tipo de
+         *     entidade; desde `20261018000012` ha. O que continua de fora e ADOCAO:
+         *     pet em adocao nao e campo de cadastro de estabelecimento e nao tem rota
+         *     neste contrato.
          */
         AdminDirectoryEntryInput: {
             /**
@@ -6749,6 +6799,15 @@ export interface components {
              */
             slug: components["schemas"]["Slug"];
             kind: components["schemas"]["ProfessionalKind"];
+            /**
+             * @description O tipo de entidade. **Opcional, e ausente vale `professional`** --
+             *     o mesmo `DEFAULT` da coluna. Exigi-lo aqui tornaria obrigatorio um
+             *     campo que nao existia, que e quebra de contrato de REQUISICAO
+             *     (`request-property-became-required`) e derrubaria todo painel ja
+             *     carregado no navegador de quem esta cadastrando agora.
+             * @default professional
+             */
+            entity_kind: components["schemas"]["EntityKind"];
             /** @description O nome do estabelecimento ou de quem atende, como aparece em `Perto`. */
             display_name: string;
             /** @description Texto puro, renderizado como texto no app (D47). Nenhuma marcacao. */
@@ -6805,6 +6864,13 @@ export interface components {
             /** @description Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver. */
             slug?: components["schemas"]["Slug"];
             kind?: components["schemas"]["ProfessionalKind"];
+            /**
+             * @description Corrigir o tipo de entidade e permitido. **Nao aceita `null`**,
+             *     como `slug`, `kind` e `display_name`: a entrada nao existe sem ele,
+             *     e "nenhum tipo de entidade" nao e estado que o banco guarde (a
+             *     coluna e `NOT NULL`).
+             */
+            entity_kind?: components["schemas"]["EntityKind"];
             display_name?: string;
             about?: string | null;
             city?: string | null;
@@ -6842,6 +6908,7 @@ export interface components {
         AdminDirectoryEntry: {
             slug: components["schemas"]["Slug"];
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             about?: string | null;
             city?: string | null;
@@ -6979,6 +7046,7 @@ export interface components {
         DirectoryEntryDetail: {
             slug: components["schemas"]["Slug"];
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
             state?: string | null;

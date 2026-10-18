@@ -58,6 +58,7 @@ import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type {
   EntradaDoDiretorio,
+  TipoDeEntidade,
   TipoDeProfissional,
 } from '../../domain/entrada-do-diretorio.js';
 import type {
@@ -86,6 +87,7 @@ import type { Instant, UserId } from '../../../../shared/types/brands.js';
 interface LinhaDaEntrada {
   slug: string;
   kind: TipoDeProfissional;
+  entity_kind: TipoDeEntidade;
   display_name: string;
   about: string | null;
   city: string | null;
@@ -175,6 +177,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
   return {
     slug: l.slug,
     kind: l.kind,
+    entityKind: l.entity_kind,
     displayName: l.display_name,
     about: l.about,
     city: l.city,
@@ -422,6 +425,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       let pagina = construtorDaListagem(db, recorte).select([
         'slug',
         'kind',
+        'entity_kind',
         'display_name',
         'about',
         'city',
@@ -476,6 +480,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
           'id',
           'slug',
           'kind',
+          'entity_kind',
           'display_name',
           'about',
           'city',

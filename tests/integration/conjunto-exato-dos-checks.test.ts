@@ -296,6 +296,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'kind',
     valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
   },
+  // O TIPO DE ENTIDADE (`20261018000012`), eixo SEPARADO da atividade acima.
+  // ONG nao entrou em `kind` por duas razoes: acrescentar valor a `enum` de
+  // RESPOSTA quebra o contrato (`oasdiff`, response-property-enum-value-added,
+  // 12 erros medidos em 18/10) e, sobretudo, porque afirmaria que organizacao
+  // e um tipo de profissional. Os dois valores sao os MESMOS de
+  // `entity_verifications_entity_kind_check`, logo abaixo: uma segunda
+  // convencao para o mesmo conceito e a convencao que diverge.
+  'public.professionals.professionals_entity_kind_check': {
+    coluna: 'entity_kind',
+    valores: ['professional', 'organization'],
+  },
   // BICHUS-185 / BICHUS-189. A categoria do produto da vitrine. Espelha
   // ------------------------------------------------------------------
   // A CATEGORIA DA LOJA **SAIU** DESTE REGISTRO EM 17/10/2026, E A SAIDA E A

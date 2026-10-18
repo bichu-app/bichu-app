@@ -63,6 +63,7 @@ function entradaSemeada(): EntradaAdministrativa {
   return {
     slug: 'clinica-sao-jorge',
     kind: 'clinic',
+    entityKind: 'professional',
     displayName: 'Clínica Veterinária São Jorge',
     about: null,
     city: 'São Paulo',
@@ -173,6 +174,12 @@ function repositorioEmMemoria(): Memoria {
         const criada: EntradaAdministrativa = {
           slug: nova.slug,
           kind: nova.kind,
+          // O MESMO padrao do adaptador de verdade
+          // (`kysely-diretorio-administrativo.ts`): ausente vale
+          // `professional`. Repetido aqui de proposito -- um dobre que
+          // guardasse `undefined` deixaria passar o caso em que a aplicacao
+          // esquece de resolver o padrao.
+          entityKind: nova.entityKind ?? 'professional',
           displayName: nova.displayName,
           logo: null,
           photo: null,
@@ -205,6 +212,7 @@ function repositorioEmMemoria(): Memoria {
           ...atual,
           ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
           ...(mudanca.kind === undefined ? {} : { kind: mudanca.kind }),
+          ...(mudanca.entityKind === undefined ? {} : { entityKind: mudanca.entityKind }),
           ...(mudanca.displayName === undefined ? {} : { displayName: mudanca.displayName }),
           ...(mudanca.about === undefined ? {} : { about: mudanca.about }),
           ...(mudanca.city === undefined ? {} : { city: mudanca.city }),
@@ -457,5 +465,55 @@ void describe('listar', () => {
       [...pagina.items].map((i) => i.status).sort(),
       ['draft', 'published'],
     );
+  });
+});
+
+/**
+ * O TIPO DE ENTIDADE na escrita do painel (`20261018000012`).
+ *
+ * Iscas desligadas em 18/10/2026, conferidas no disco, suite rodada e
+ * reprovada, arquivo restaurado:
+ *
+ * | o que foi desligado | `fail` |
+ * |---|---|
+ * | `criarEntrada` deixando de repassar `entity_kind` ao repositorio | 2 |
+ * | o padrao `?? 'professional'` do dobre, devolvendo `undefined` | 1 |
+ * | o `PATCH` deixando de mapear `entity_kind` para `entityKind` | 1 |
+ */
+void describe('o tipo de entidade na escrita administrativa', () => {
+  void it('cadastrar ONG grava organization, e a atividade fica separada', async () => {
+    const criada = await diretorio.criarEntrada(AUTOR, {
+      slug: 'ong-patas-livres',
+      kind: 'clinic',
+      entity_kind: 'organization',
+      display_name: 'ONG Patas Livres',
+    });
+    assert.equal(criada.recurso.entity_kind, 'organization');
+    assert.equal(criada.recurso.kind, 'clinic');
+  });
+
+  void it('cadastrar SEM o campo vale professional, que e o padrao da coluna', async () => {
+    // E isto que faz a coluna ser ADITIVA: painel antigo, que nao manda o
+    // campo, continua cadastrando -- e grava o valor que a entrada sempre teve.
+    const criada = await diretorio.criarEntrada(AUTOR, {
+      slug: 'clinica-sem-o-campo',
+      kind: 'vet',
+      display_name: 'Clínica sem o campo',
+    });
+    assert.equal(criada.recurso.entity_kind, 'professional');
+  });
+
+  void it('corrigir o tipo de entidade pelo PATCH funciona', async () => {
+    await diretorio.criarEntrada(AUTOR, {
+      slug: 'virou-ong',
+      kind: 'clinic',
+      display_name: 'Virou ONG',
+    });
+    // A entrada nasce em `version: 1`, entao o `ETag` do primeiro `PATCH` e
+    // `"1"` -- a escrita administrativa exige o condicional (ADR-0030).
+    const editada = await diretorio.alterarEntrada(AUTOR, 'virou-ong', '"1"', {
+      entity_kind: 'organization',
+    });
+    assert.equal(editada.recurso.entity_kind, 'organization');
   });
 });

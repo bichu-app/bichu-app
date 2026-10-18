@@ -315,6 +315,7 @@ export class DiretorioAdministrativo {
           id: this.deps.ids.uuidv7(),
           slug: corpo.slug,
           kind: corpo.kind,
+          entityKind: corpo.entity_kind,
           displayName: corpo.display_name.trim(),
           about: aparado(corpo.about) ?? null,
           city: aparado(corpo.city) ?? null,
@@ -397,6 +398,9 @@ export class DiretorioAdministrativo {
       const mudanca: MudancaDaEntrada = {
         ...(normalizado.slug === undefined ? {} : { slug: normalizado.slug }),
         ...(normalizado.kind === undefined ? {} : { kind: normalizado.kind }),
+        ...(normalizado.entity_kind === undefined
+          ? {}
+          : { entityKind: normalizado.entity_kind }),
         ...(normalizado.display_name === undefined
           ? {}
           : { displayName: normalizado.display_name }),
