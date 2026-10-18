@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../roteamento/rotas.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
-import 'perto/minhas_indicacoes.dart';
 
 /// A FORMA de um sub-destino, e por que ela decide se ele entra na gaveta.
 ///
@@ -290,25 +289,6 @@ abstract final class RegistroDeSubDestinos {
         rotulo: 'Convidar um profissional',
         forma: FormaDoSubDestino.acaoNaTela,
         estado: EstadoDoSubDestino.planejada,
-      ),
-      SubDestino(
-        // `Minhas indicações` (18/10/2026). O cliente pediu "a aba de minhas
-        // indicações, com o status se está pendente ou se já foi aprovado
-        // pelo administrador".
-        //
-        // **É `destino` e não `acaoNaTela`**: ela tem endereço próprio
-        // (`/perto/indicacoes`), ao contrário de `Filtros`, que é controle do
-        // conteúdo e por isso fica fora da gaveta. E é por aqui que ela é
-        // alcançável hoje -- a aba dentro da tela da seção mora em `abas.dart`
-        // e em `lista_do_diretorio.dart`, que estão com outro agente nesta
-        // rodada; ver o cabeçalho de `perto/minhas_indicacoes.dart`.
-        //
-        // Rota própria, como `Adoções`: ver a prosa de
-        // `Rotas.minhasIndicacoes`.
-        rotulo: MinhasIndicacoes.tituloDaTela,
-        forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.existe,
-        rota: Rotas.minhasIndicacoes,
       ),
       SubDestino(
         rotulo: 'Reivindicar este perfil',

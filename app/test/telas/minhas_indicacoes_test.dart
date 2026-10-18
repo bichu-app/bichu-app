@@ -25,8 +25,8 @@
 
 import 'dart:convert';
 
-import 'package:bichu/roteamento/rotas.dart';
-import 'package:bichu/telas/gaveta_de_secoes.dart';
+import 'package:bichu/telas/perto/corpo_do_perto.dart';
+import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/minhas_indicacoes.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:flutter/material.dart';
@@ -132,12 +132,12 @@ Future<http.Response> Function(http.Request) redeDasIndicacoes(
   };
 }
 
-/// Abre `Minhas indicações` **pelo caminho que a pessoa tem**: a gaveta da
-/// seção `Perto`.
+/// Abre `Minhas indicações` **pelo caminho que a pessoa tem**: a segunda aba
+/// da seção `Perto`.
 ///
-/// Não navega pelo roteador direto de propósito. A porta de entrada é parte da
-/// entrega -- uma tela alcançável só por URL é uma tela que o cliente não acha,
-/// que é exatamente o defeito que esta rodada foi medir.
+/// Não monta a tela solta e não navega por rota -- ela não tem rota. A porta de
+/// entrada é parte da entrega: uma lista que só o roteador alcança é uma lista
+/// que o cliente não acha, que é exatamente o defeito que esta rodada mediu.
 Future<void> abrirMinhasIndicacoes(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
@@ -146,21 +146,32 @@ Future<void> abrirMinhasIndicacoes(
   await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
   await tester.pumpAndSettle();
 
-  // A gaveta da seção, e o item dentro dela.
-  await tester.tap(find.byTooltip(TextosDaGaveta.abrirAGaveta));
-  await tester.pumpAndSettle();
-  final item = find.byKey(
-    ItemDaGaveta.chaveDe(Rotas.perto, MinhasIndicacoes.tituloDaTela),
-  );
+  final aba = find.widgetWithText(Tab, AbaDoPerto.indicacoes.rotulo);
   expect(
-    item,
+    aba,
     findsOneWidget,
-    reason: 'REPROVA: `Minhas indicações` não está na gaveta da seção `Perto`, '
-        'e a tela fica alcançável só por URL -- que é uma tela que o cliente '
-        'não acha.',
+    reason: 'REPROVA: não há aba `Minhas indicações` na seção `Perto`. O '
+        'cliente pediu aba, e sem ela a lista não tem porta de entrada '
+        'nenhuma -- ela não tem rota.',
   );
-  await tester.tap(item);
+  await tester.tap(aba);
   await tester.pumpAndSettle();
+  expect(
+    find.byType(MinhasIndicacoes),
+    findsOneWidget,
+    reason: 'REPROVA: tocar na aba `Minhas indicações` não montou o corpo '
+        'dela.',
+  );
+  // **A lista do diretório SAI de cena, e isto não é detalhe de estilo:** as
+  // duas publicam o ícone de filtrar no mesmo slot da casca, e com as duas
+  // montadas o ícone da barra abriria o filtro da aba de trás.
+  expect(
+    find.byType(ListaDoDiretorio),
+    findsNothing,
+    reason: 'REPROVA: as duas abas estão montadas ao mesmo tempo (um '
+        '`TabBarView`?). As duas publicam no `SlotDaBarraDeListagem` da '
+        'casca, e a de trás ganharia a barra de cima.',
+  );
 }
 
 /// Os textos de motivo visíveis na tela.
@@ -174,6 +185,107 @@ List<String> motivosNaTela() {
 }
 
 void main() {
+  group('a aba na seção `Perto`', () {
+    testWidgets('`Profissionais` é a PRIMEIRA, e `Minhas indicações` a segunda',
+        (tester) async {
+      // A seção existe para achar quem atende bem: a lista do diretório é o
+      // conteúdo dela. Pôr a lista pessoal na frente trocaria o conteúdo pelo
+      // histórico de quem já contribuiu -- e quem nunca indicou, que é a
+      // maioria, abriria `Perto` numa tela vazia.
+      await abrirOApp(
+        tester,
+        rede: redeDasIndicacoes(
+          paginaDoContrato(const <Map<String, dynamic>>[]),
+        ),
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await tester.pumpAndSettle();
+
+      final rotulos = find
+          .byType(Tab)
+          .evaluate()
+          .map((e) => (e.widget as Tab).text ?? '')
+          .toList();
+      expect(
+        rotulos,
+        <String>[
+          AbaDoPerto.profissionais.rotulo,
+          AbaDoPerto.indicacoes.rotulo,
+        ],
+        reason: 'REPROVA: a ordem das abas do `Perto` mudou. A listagem é a '
+            'aba principal e vem primeiro; `Minhas indicações` é secundária '
+            'e não pode roubar a entrada da seção.',
+      );
+
+      // E a aba da frente, ao abrir, é a listagem -- não basta estar primeiro
+      // na barra se o corpo inicial for o outro.
+      expect(find.byType(ListaDoDiretorio), findsOneWidget);
+      expect(find.byType(MinhasIndicacoes), findsNothing);
+    });
+
+    testWidgets('ISCA: SEM CONTA a aba não aparece, e não fica desabilitada',
+        (tester) async {
+      // Mesma regra de `Meus pedidos` na `Rede`, e aqui ela é mais literal:
+      // sem conta não existe "minhas indicações" -- a rota responderia 401, e
+      // uma aba cujo desfecho é uma recusa é controle sem desfecho.
+      //
+      // PARA DESLIGAR E VER REPROVAR: em `corpo_do_perto.dart`, troque
+      // `if (logado) AbaDoPerto.indicacoes` por `AbaDoPerto.indicacoes` em
+      // `_abasVisiveis`.
+      await abrirOApp(
+        tester,
+        rede: redeDasIndicacoes(
+          paginaDoContrato(const <Map<String, dynamic>>[]),
+        ),
+        // SEM `deposito`: ninguém logado.
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(Tab, AbaDoPerto.indicacoes.rotulo),
+        findsNothing,
+        reason: 'REPROVA: a aba `Minhas indicações` aparece para quem não tem '
+            'conta. Não há o que listar, e a rota responderia 401.',
+      );
+      // **UMA ABA SÓ NÃO É ABA**: deslogado não há `TabBar` nenhuma, e não uma
+      // barra de um item -- que faria parecer que falta algo inalcançável.
+      expect(find.byType(TabBar), findsNothing);
+      // E a listagem continua lá: esconder a aba não esconde a seção.
+      expect(find.byType(ListaDoDiretorio), findsOneWidget);
+    });
+
+    testWidgets('a aba NÃO mostra contagem de pendentes', (tester) async {
+      // A ausência é decisão: o número só existiria honesto vindo do servidor
+      // e passando pelo predicado de conta desabilitada, e ele responderia
+      // "quanto trabalho está esperando" -- a pergunta do PAINEL, não da
+      // pessoa. `MyDirectorySuggestionPage` não traz `pending_total` por isso.
+      await abrirMinhasIndicacoes(
+        tester,
+        rede: redeDasIndicacoes(
+          paginaDoContrato(<Map<String, dynamic>>[
+            indicacaoDoContrato(reference: 'aPendenteDaContaUm0001'),
+            indicacaoDoContrato(reference: 'bPendenteDaContaUm0001'),
+          ], total: 2),
+        ),
+      );
+
+      final rotuloDaAba = find
+          .byType(Tab)
+          .evaluate()
+          .map((e) => (e.widget as Tab).text ?? '')
+          .firstWhere((r) => r.startsWith('Minhas indicações'));
+      expect(
+        rotuloDaAba,
+        AbaDoPerto.indicacoes.rotulo,
+        reason: 'REPROVA: a aba ganhou número no rótulo. Contagem na aba só '
+            'existiria honesta vindo do servidor com o predicado de conta '
+            'desabilitada, e ela responde a pergunta do painel.',
+      );
+    });
+  });
+
   group('Minhas indicações — os três estados', () {
     testWidgets('pendente diz `Em análise` e não oferece ação', (tester) async {
       await abrirMinhasIndicacoes(
@@ -367,10 +479,21 @@ void main() {
         ),
       );
 
-      // Conta os textos longos do corpo. Uma linha e um rótulo de botão
-      // passam; um parágrafo explicando o que é indicar reprova.
+      // Conta os textos longos DESTA ABA, e não da tela inteira. Uma linha e
+      // um rótulo de botão passam; um parágrafo explicando o que é indicar
+      // reprova.
+      //
+      // **O recorte em `MinhasIndicacoes` é necessário e não é afrouxamento:**
+      // a aba vive dentro da casca da seção, e a linha de reforço do `Perto`
+      // ("Os profissionais e estabelecimentos indicados por quem já usou.")
+      // está na mesma árvore. Ela é da SEÇÃO, não desta lista, e reprovar por
+      // causa dela faria este caso cobrar de mim um texto que não é meu --
+      // medido: foi exatamente o que ele pegou quando a lista virou aba.
       final longos = find
-          .byType(Text)
+          .descendant(
+            of: find.byType(MinhasIndicacoes),
+            matching: find.byType(Text),
+          )
           .evaluate()
           .map((e) => (e.widget as Text).data ?? '')
           .where((t) => t.length > 60)
@@ -404,7 +527,8 @@ void main() {
             'a segunda definição do controle.',
       );
       // A barra (resumo e folha) fica no CORPO; o ícone que abre a folha vai
-      // para a `AppBar`, que é onde o `Filtros` do `Perto` mora desde 17/10.
+      // para a `AppBar` DA CASCA, que é onde o `Filtros` do `Perto` mora desde
+      // 17/10 -- esta aba publica no slot dela, como a lista do diretório.
       expect(
         find.descendant(of: find.byType(AppBar), matching: barra),
         findsNothing,
@@ -415,10 +539,9 @@ void main() {
           matching: find.byType(BotaoDeAcaoDaListagem),
         ),
         findsOneWidget,
-        reason: 'REPROVA: o ícone de filtrar não está na barra de topo. Esta '
-            'tela não passa pela casca, então ela monta o '
-            '`SlotDaBarraDeListagem` ela mesma -- sem ele, `BarraDeListagem` '
-            'publica o controle para ninguém e o filtro fica inalcançável.',
+        reason: 'REPROVA: o ícone de filtrar não está na barra de topo. Como '
+            'aba, esta lista publica no `SlotDaBarraDeListagem` da casca; um '
+            'slot próprio aqui desenharia o ícone dentro do corpo.',
       );
     });
 
