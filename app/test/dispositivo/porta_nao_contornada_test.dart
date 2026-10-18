@@ -901,7 +901,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = 'b92f57ea3041d3c01a860b73d385e5882a85ef35'; // BICHUS-278, 17/10: a previa da foto entra no cadastro de pet e no registro de achado (a peca desenha o arquivo e mora em `widgets/`, FORA de `lib/telas`, justamente para `dart:io` continuar proibido aqui), o campo de UF vira a lista de 27 estados, e a captura passa a PEDIR a permissao quando ela esta `negada` -- no Android `denied` tambem quer dizer "nunca perguntei". Nenhuma tela importa plugin de aparelho: camera e localizacao continuam chegando pelo `Escopo` (antes: d1f761255dab3787c59a0e5c11343efbf2eeee29)
+const String _arvoreDasTelas = '0b00866e40cbedec656dc7f7b9512703a8e074de'; // BICHUS-278, 17/10: o nome do pet sai de baixo da foto no detalhe do tutor e fica so na barra, e a foto ganha rotulo acessivel no lugar (a `Moldura` exclui a semantica do conteudo, entao sem o rotulo o bloco ficaria mudo). Nenhuma porta de aparelho encostada (antes: b92f57ea3041d3c01a860b73d385e5882a85ef35)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
