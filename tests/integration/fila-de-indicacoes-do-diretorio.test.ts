@@ -127,13 +127,31 @@ async function desabilitar(userId: UserId): Promise<void> {
 
 /**
  * Uma indicação na fila, pela MESMA função que a rota do aplicativo usa
- * (`directory_suggestions_registrar`, migração `20261017000004`): escrever o
- * `INSERT` à mão aqui criaria um segundo caminho de escrita, e o caso passaria a
- * medir o caminho do teste em vez do caminho do produto.
+ * (`directory_suggestions_registrar`): escrever o `INSERT` à mão aqui criaria
+ * um segundo caminho de escrita, e o caso passaria a medir o caminho do teste
+ * em vez do caminho do produto.
+ *
+ * **DOZE argumentos, e não onze.** Este arquivo nasceu em 18/10 chamando a
+ * função de ONZE da migração `20261017000004`, e os seis casos daqui morriam
+ * todos em `42883 function ... does not exist`. A migração
+ * `20261017000015_cep-da-sugestao-do-diretorio.sql` (linha 115) DERRUBOU a de
+ * onze e criou a de doze, com `p_postal_code` entre `p_neighborhood` e
+ * `p_contact_kind` -- de propósito, e não com `CREATE OR REPLACE`, para que
+ * não restasse uma função gravando sugestão sem CEP. O caminho do produto
+ * (`kysely-directory-suggestion-repository.ts`) passa os doze.
+ *
+ * O CEP entra nulo por padrão, que é o caso comum declarado no `COMMENT ON
+ * COLUMN` da migração ("quem indica de outro bairro costuma não saber o CEP"),
+ * e `cep` permite exercitá-lo quando o caso precisa.
  */
 async function indicar(
   autorDaIndicacao: UserId,
-  ajuste: { nome?: string; contato?: ['phone' | 'website' | 'instagram', string]; recado?: string | null } = {},
+  ajuste: {
+    nome?: string;
+    contato?: ['phone' | 'website' | 'instagram', string];
+    recado?: string | null;
+    cep?: string | null;
+  } = {},
 ): Promise<string> {
   const ref = randomBytes(16).toString('base64url');
   const [kind, valor] = ajuste.contato ?? (['phone', '+551130612200'] as const);
@@ -141,6 +159,7 @@ async function indicar(
     select directory_suggestions_registrar(
       ${ids.uuidv7()}::uuid, ${ref}, ${autorDaIndicacao}::uuid,
       ${ajuste.nome ?? `Clinica ${sufixo()}`}, 'clinic', 'Sao Paulo', 'SP', 'Bela Vista',
+      ${ajuste.cep ?? null}::text,
       ${kind}, ${valor}, ${ajuste.recado ?? null})
   `.execute(banco.db);
   refs.push(ref);

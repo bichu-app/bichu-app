@@ -106,6 +106,8 @@ const MENSAGEM = '0192f3a1-7c2b-7e3d-9a10-215000000102';
 /** Usada só pelo caso do e-mail livre, e limpa junto com as outras duas. */
 const CONTA_DO_EMAIL_LIVRE = '0192f3a1-7c2b-7e3d-9a10-215000000999';
 const APARELHO = '0192f3a1-7c2b-7e3d-9a10-215000000103';
+/** A identidade de senha da achadora, usada só pela isca da credencial. */
+const IDENTIDADE = '0192f3a1-7c2b-7e3d-9a10-215000000104';
 
 let cliente: Client;
 let banco: DbHandle;
@@ -464,9 +466,16 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
 
   void it('ISCA: `user_devices` sobrevive à exclusão lógica da conta', async () => {
     await comMassa(async () => {
+      // `last_seen_at` É `NOT NULL` E NÃO TEM `DEFAULT`, e é por isso que ela
+      // está escrita aqui. Esta isca nasceu em 18/10 sem a coluna, nunca foi
+      // executada, e reprovava em `23502 null value in column "last_seen_at"`
+      // -- antes de chegar a medir a retenção, que é o que ela existe para
+      // medir. A forma é a mesma de `registrar` em
+      // `kysely-registro-de-aparelhos.ts`: registrado agora, visto agora.
       await cliente.query(
-        `insert into user_devices (id, user_id, platform, push_token, push_permission, registered_at)
-         values ($1, $2, 'android', $3, 'granted', now())`,
+        `insert into user_devices
+           (id, user_id, platform, push_token, push_permission, registered_at, last_seen_at)
+         values ($1, $2, 'android', $3, 'granted', now(), now())`,
         [APARELHO, ACHADORA, 'token-de-teste-que-nao-e-segredo'],
       );
 
@@ -536,6 +545,22 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
    */
   void it('ISCA: conta desabilitada não entra, e a credencial não foi apagada', async () => {
     await comMassa(async () => {
+      // A SENHA DA ACHADORA, semeada aqui e não em `comMassa`: só este caso a
+      // mede, e massa que nenhum outro caso usa é massa que ninguém consegue
+      // justificar depois. As duas linhas saem com a conta na limpeza, pelas
+      // cascatas `user_identities.user_id` e `local_credentials.identity_id`,
+      // que `chave-estrangeira-contra-restricao.test.ts` declara.
+      await cliente.query(
+        `insert into user_identities (id, user_id, provider, provider_subject)
+         values ($1, $2, 'local', 'achadora@expurgo.test')`,
+        [IDENTIDADE, ACHADORA],
+      );
+      await cliente.query(
+        `insert into local_credentials (identity_id, password_phc, password_updated_at)
+         values ($1, '$pbkdf2-sha512$i=1$c2Fs$aGFzaA', now())`,
+        [IDENTIDADE],
+      );
+
       await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
 
       assert.equal(
@@ -548,8 +573,19 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
           'status: com ela ativa, o login passa.',
       );
       assert.equal(
+        // `local_credentials`, E A TABELA É POR `identity_id`. A isca nasceu em
+        // 18/10 consultando `user_credentials where user_id = ...`, que não
+        // existe neste esquema, e reprovava em `42P01 relation
+        // "user_credentials" does not exist` sem chegar a medir nada. A senha
+        // mora em `local_credentials (identity_id, password_phc, ...)`, pendurada
+        // em `user_identities` -- é `user_identities.user_id` que leva à conta, e
+        // `provider = 'local'` é a identidade de senha (as outras três do
+        // `CHECK` são `google`, `apple` e `keycloak`).
         await contar(
-          `select count(*)::text as n from user_credentials where user_id = $1`,
+          `select count(*)::text as n
+             from local_credentials c
+             join user_identities i on i.id = c.identity_id
+            where i.user_id = $1`,
           [ACHADORA],
         ),
         '1',

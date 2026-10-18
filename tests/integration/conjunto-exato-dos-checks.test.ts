@@ -398,6 +398,52 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'verification_level',
     valores: ['none', 'contact_verified', 'document_verified'],
   },
+  // ------------------------------------------------------------------
+  // A INDICACAO DO DIRETORIO (`20261017000004`) E A FILA DELA
+  // (`20261017000016`). Tres conjuntos, e os tres nasceram em 17/10.
+  // ------------------------------------------------------------------
+  // A MESMA lista de `professionals_kind_check`, e a migracao diz por que:
+  // nao ha valor para ONG aqui pelo mesmo motivo de la -- `professionals` nao
+  // tem `entity_kind`, e acrescentar um decidiria por conta propria que uma
+  // ONG e um tipo de profissional, que e justamente a pergunta aberta.
+  'public.directory_suggestions.directory_suggestions_atividade_conhecida': {
+    coluna: 'kind',
+    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
+  },
+  // O tipo do contato e DECLARADO, nunca adivinhado: um palpite aceitaria um
+  // telefone no campo de site. Nao ha `email` aqui, e nao e esquecimento --
+  // `professionals` nao guarda e-mail de contato publico.
+  'public.directory_suggestions.directory_suggestions_contato_conhecido': {
+    coluna: 'contact_kind',
+    valores: ['phone', 'website', 'instagram'],
+  },
+  // A fila de 17/10 (BICHUS, queixa "no backoffice nao tem um menu para
+  // aprovar os profissionais que as pessoas estao indicando"). `approved` NAO
+  // quer dizer que a entrada esta no ar -- quer dizer que a revisao aceitou
+  // seguir com o convite do ADR-0011. Nasce `pending` pelo DEFAULT.
+  'public.directory_suggestions.directory_suggestions_revisao_conhecida': {
+    coluna: 'review_status',
+    valores: ['pending', 'approved', 'declined'],
+  },
+  // ------------------------------------------------------------------
+  // A AVALIACAO DO LOCAL E A DENUNCIA DELA (`20261017000017`).
+  // ------------------------------------------------------------------
+  // `published` e o DEFAULT, e isso e a decisao do cliente de 18/10: a
+  // avaliacao aparece na hora, como na Play Store, e **nao existe valor
+  // `pending`** porque nao ha fila de aprovacao de avaliacao. A INDICACAO de
+  // local novo continua revisada, e e outra coisa. `hidden` e `removed` tiram
+  // a linha da lista, da media e da contagem, e a linha FICA: o ADR-0011 manda
+  // a remocao ser registrada na trilha com o motivo.
+  'public.professional_reviews.professional_reviews_status_conhecido': {
+    coluna: 'status',
+    valores: ['published', 'hidden', 'removed'],
+  },
+  // Os valores do contrato, e campo livre nao tria fila. `other` existe para a
+  // denuncia que nao cabe nos quatro, e vem com `detail`.
+  'public.professional_review_reports.professional_review_reports_reason_conhecido': {
+    coluna: 'reason',
+    valores: ['spam', 'offensive', 'false_information', 'not_about_this_place', 'other'],
+  },
   'public.ref_sizes.ref_sizes_code_check': {
     coluna: 'code',
     valores: ['P', 'M', 'G', 'GG'],
@@ -646,6 +692,58 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // do `phone_e164` do perfil -- uma segunda redacao divergiria da primeira.
   'public.collar_tag_requests.collar_tag_requests_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
+  // ------------------------------------------------------------------
+  // A INDICACAO DO DIRETORIO (`20261017000004`), O CEP DELA
+  // (`20261017000015`) E A FILA (`20261017000016`).
+  // ------------------------------------------------------------------
+  // O `ref` opaco da indicacao: 128 bits em base64url. A MESMA forma do `ref`
+  // do pedido da plaquinha, e nao uma segunda redacao.
+  'public.directory_suggestions.directory_suggestions_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // O CEP da indicacao, oito digitos sem mascara, e ANULAVEL -- ao contrario
+  // do da plaquinha, que e obrigatorio: quem indica de outro bairro costuma
+  // nao saber o CEP. Formato, nunca existencia (ADR-0006).
+  'public.directory_suggestions.directory_suggestions_cep_formato':
+    "CHECK (((postal_code IS NULL) OR (postal_code ~ '^[0-9]{8}$'::text)))",
+  // Os tres da fila, e a forma de cada um e deliberada (cabecalho da
+  // `20261017000016`): o PRIMEIRO e bicondicional, porque "decidida" e
+  // "decidida quando" precisam andar juntas nos dois sentidos; os outros dois
+  // sao implicacao simples, para nao cobrar motivo de quem aprovou nem entrada
+  // de quem recusou.
+  'public.directory_suggestions.directory_suggestions_decisao_tem_instante':
+    "CHECK (((review_status = 'pending'::text) = (decided_at IS NULL)))",
+  'public.directory_suggestions.directory_suggestions_motivo_so_na_recusa':
+    "CHECK (((decline_reason IS NULL) OR (review_status = 'declined'::text)))",
+  // E o CHECK que garante que a ligacao com a entrada do diretorio NAO EXISTE
+  // fora de `approved`. `SET NULL` na chave estrangeira o violaria, e e por
+  // isso que `directory_suggestions_approved_entry_id_fkey` e NO ACTION.
+  'public.directory_suggestions.directory_suggestions_entrada_so_na_aprovacao':
+    "CHECK (((approved_entry_id IS NULL) OR (review_status = 'approved'::text)))",
+  // ------------------------------------------------------------------
+  // A AVALIACAO DO LOCAL E A DENUNCIA DELA (`20261017000017`).
+  // ------------------------------------------------------------------
+  // O `ref` da avaliacao: 22 caracteres, a forma de 128 bits em base64url SEM
+  // enchimento. A da indicacao aceita 20..32 porque e mais velha; esta fixa o
+  // tamanho exato.
+  'public.professional_reviews.professional_reviews_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  // O corpo e OPCIONAL -- nota sem texto e avaliacao valida --, e quando vem
+  // nao pode ser espaco em branco nem carregar `<` ou `>`. O segundo nao e
+  // sanitizacao: e a recusa que sobra quando alguem escrever na tabela por
+  // outro caminho que nao a borda.
+  'public.professional_reviews.professional_reviews_body_nao_vazio':
+    "CHECK (((body IS NULL) OR (btrim(body) <> ''::text)))",
+  'public.professional_reviews.professional_reviews_body_sem_html':
+    "CHECK (((body IS NULL) OR (body !~ '[<>]'::text)))",
+  // Esconder ou remover EXIGE motivo e instante, e publicar exige a ausencia
+  // dos dois -- nos dois sentidos. E o que torna "a remocao fica registrada
+  // com o motivo" (ADR-0011) invariante de banco e nao disciplina de quem
+  // modera.
+  'public.professional_reviews.professional_reviews_moderacao_tem_motivo':
+    "CHECK ((((status = 'published'::text) AND (moderation_reason IS NULL) AND (moderated_at IS NULL)) OR ((status <> 'published'::text) AND (moderation_reason IS NOT NULL) AND (moderated_at IS NOT NULL))))",
+  // O detalhe da denuncia, pelo mesmo motivo do corpo da avaliacao.
+  'public.professional_review_reports.professional_review_reports_detail_sem_html':
+    "CHECK (((detail IS NULL) OR (detail !~ '[<>]'::text)))",
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -919,12 +1017,19 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((postal_code IS NULL) OR (postal_code ~ '^[0-9]{8}$'::text)))",
   'public.professionals.professionals_cnpj_tamanho':
     "CHECK (((cnpj IS NULL) OR (cnpj ~ '^[0-9]{14}$'::text)))",
-  'public.professionals.professionals_complemento_tamanho':
-    "CHECK (((complement IS NULL) OR ((char_length(complement) >= 1) AND (char_length(complement) <= 80))))",
-  'public.professionals.professionals_logradouro_tamanho':
-    "CHECK (((street IS NULL) OR ((char_length(street) >= 2) AND (char_length(street) <= 120))))",
-  'public.professionals.professionals_numero_tamanho':
-    "CHECK (((street_number IS NULL) OR ((char_length(street_number) >= 1) AND (char_length(street_number) <= 20))))",
+  //
+  // `professionals_logradouro_tamanho`, `professionals_numero_tamanho` e
+  // `professionals_complemento_tamanho` -- os outros tres da `20261018000001`
+  // -- **NAO estao aqui, e nao e esquecimento.** Este registro e dos CHECK que
+  // MENCIONAM literal de texto (`MENCIONA_LITERAL`, logo abaixo), e os tres sao
+  // so `char_length(col) BETWEEN a AND b`: o catalogo os escreve sem nenhum
+  // `'...'::text`, entao a descoberta nao os traz e declarar aqui faz o caso
+  // "cada CHECK nao-lista tem exatamente a definicao declarada" reprovar. Foi o
+  // que aconteceu: os tres entraram em 18/10 junto com a migracao, sem a suite
+  // rodar, e as tres linhas reprovavam. `collar_tag_requests_logradouro_tamanho`
+  // e os pares dele estao ausentes pela mesma razao, desde 17/10.
+  // So `professionals_cep_oito_digitos` tem literal (a regex do CEP), e por
+  // isso ele e o unico dos quatro que fica.
   // O endereco publico da entrada do diretorio. Formato COPIADO de
   // `pets_slug_formato`: os dois sao endereco publico do mesmo produto, e dois
   // formatos diferentes para a mesma coisa e o defeito que a duplicacao produz.
