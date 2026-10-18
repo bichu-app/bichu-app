@@ -14,6 +14,14 @@
  * `DEFAULT` da tabela. Criar encontro da `Rede` publica direto porque o autor e
  * o assunto sao a mesma pessoa; aqui eles nao sao.
  *
+ * ## A trava de CONTA VALIDADA e aqui, e nao na tela
+ *
+ * So quem tem canal de contato verificado sugere (regra do cliente). A tela
+ * esconde o icone de quem nao validou, e isso e cortesia, nao recusa: o icone
+ * escondido nao impede ninguem de chamar `POST /v1/directory/suggestions`
+ * direto. A recusa e deste arquivo, com o MESMO `type` de criar encontro --
+ * `contact-channel-unverified` --, porque a pergunta e a mesma.
+ *
  * ## A trilha, e o IP que NAO e tratado aqui
  *
  * `directory_suggestion.submitted`, por `AuditLog.record` -- a trilha do app,
@@ -41,6 +49,25 @@ import {
 import type { ConferenciasDeTexto } from '../ports/conferencias-de-texto.js';
 import type { DirectorySuggestionRepository } from '../ports/directory-suggestion-repository.js';
 
+/**
+ * A leitura de apoio: a conta que chama TEM canal de contato verificado?
+ *
+ * Mora aqui, e nao no `DirectorySuggestionRepository`, porque aquela porta e a
+ * ESCRITA da fila e o cabecalho dela diz isso em voz alta ("um metodo so, e ele
+ * nao le"). Mesmo arranjo de `EmailVerificadoDoChamador` em
+ * `modules/transfers/application/pet-transfer-service.ts`: consulta de um
+ * modulo, declarada no modulo, e nao um metodo novo na porta de identidade que
+ * so esta operacao usaria.
+ *
+ * **E-mail OU telefone verificado**, a MESMA regua de
+ * `estadoParaCriarEncontro`. Uma segunda definicao de "validado" e a que
+ * diverge: se criar encontro aceitar telefone e sugerir nao, a mesma conta e
+ * validada numa tela e nao na outra.
+ */
+export interface CanalDeContatoDoChamador {
+  temCanalVerificado(conta: UserId): Promise<boolean>;
+}
+
 /** Quem sugeriu, e o contexto da requisicao que a trilha guarda. */
 export interface AutorDaSugestao {
   readonly userId: UserId;
@@ -62,6 +89,8 @@ export interface DependenciasDaSugestaoDoDiretorio {
   readonly trilha: AuditLog;
   /** Ver `ports/conferencias-de-texto.ts`: o detector de D59 nao mora neste modulo. */
   readonly conferencias: ConferenciasDeTexto;
+  /** Ver `CanalDeContatoDoChamador`: a trava de "conta validada", no SERVIDOR. */
+  readonly canal: CanalDeContatoDoChamador;
 }
 
 /** O texto como ele vai para o banco: aparado, e nunca vazio por causa disso. */
@@ -77,6 +106,19 @@ export class SugestaoDoDiretorio {
     autor: AutorDaSugestao,
     corpo: CorpoDaSugestaoDoDiretorio,
   ): Promise<ReciboDaSugestao> {
+    // A TRAVA DE CONTA VALIDADA, NO SERVIDOR, e ANTES de qualquer conferencia
+    // de texto: a recusa nao depende do que foi escrito, e gastar o detector
+    // sobre um corpo que nao vai ser gravado nao muda a resposta. Esconder o
+    // icone na tela nao recusa o pedido -- quem chama a rota direto passa por
+    // cima da tela, e e por isso que este `if` nao pode viver no app.
+    //
+    // O tipo e o MESMO de criar encontro e de abrir caso de perdido
+    // (`contact-channel-unverified`, 409 pelo `x-problem-types` do contrato);
+    // o que muda e o texto.
+    if (!(await this.deps.canal.temCanalVerificado(autor.userId))) {
+      throw problemas.canalDeContatoNaoVerificadoParaSugestao();
+    }
+
     const erros = errosDaSugestao(corpo, this.deps.conferencias);
     if (erros.length > 0) throw problemas.validacao(erros);
 

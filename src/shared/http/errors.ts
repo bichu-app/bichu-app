@@ -417,6 +417,29 @@ export const problemas = {
     }),
 
   /**
+   * 409. Nenhum canal de contato verificado, na sugestão de entrada do `Perto`.
+   *
+   * **O tipo é o MESMO** de abrir caso de pet perdido e de propor encontro, pela
+   * mesma razão escrita acima: a régua de "conta validada" é uma só no produto, e
+   * um terceiro `type` para a mesma pergunta faria o app decidir por três onde há
+   * um conceito. O que muda é o texto, e aqui ele precisa mudar outra vez --
+   * "para avisar a vizinhança" e "para propor um encontro" mandam quem está
+   * sugerindo uma clínica para a tela errada.
+   *
+   * A regra é do cliente, dita duas vezes: sugerir cria TRABALHO HUMANO de
+   * revisão sobre um TERCEIRO que não pediu, e esconder o botão na tela não
+   * recusa o pedido -- quem chama a rota direto passa por cima da tela.
+   *
+   * **Na prática isso é e-mail**, porque nenhuma operação verifica telefone --
+   * nada em `src/` grava `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaSugestao: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para sugerir um lugar', {
+      detail: 'Uma sugestão fala de um estabelecimento que não pediu para aparecer. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
    * 409. A conta já tem três encontros ativos (ADR-0025 emenda 3).
    *
    * Separado de `open-case-limit-reached` porque a **saída é diferente**: lá a

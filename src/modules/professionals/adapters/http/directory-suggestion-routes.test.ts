@@ -27,6 +27,7 @@ import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
+import { problemas } from '../../../../shared/http/errors.js';
 import {
   criarContadorDesligado,
   criarContadorEmMemoria,
@@ -40,6 +41,7 @@ import { comoData } from '../../../../shared/time/clock.js';
 import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
 import { SugestaoDoDiretorio } from '../../application/sugestao-do-diretorio.js';
+import type { CanalDeContatoDoChamador } from '../../application/sugestao-do-diretorio.js';
 import type { ConferenciasDeTexto } from '../../ports/conferencias-de-texto.js';
 import type {
   DirectorySuggestionRepository,
@@ -71,6 +73,13 @@ interface Cenario {
   readonly contador?: RateLimitStore;
   /** Campos que o detector de texto deve recusar, com o `code` de D59. */
   readonly recusarTexto?: readonly string[];
+  /**
+   * A conta que chama tem canal de contato verificado? **O padrao e `true`**,
+   * e o padrao e que torna o caso da isca honesto: todo outro cenario deste
+   * arquivo mede outra coisa, e com o padrao `false` eles passariam a medir a
+   * trava de validacao sem dizer.
+   */
+  readonly validada?: boolean;
 }
 
 /** O que o repositorio recebeu, por cenario. Zerado em cada `servidor()`. */
@@ -82,6 +91,18 @@ function repositorio(): DirectorySuggestionRepository {
     registrar: (sugestao) => {
       gravadas.push(sugestao);
       return Promise.resolve({ ref: REF, createdAt: CRIADO_EM });
+    },
+  };
+}
+
+/** Quais contas o servidor considera VALIDADAS, por cenario. */
+let consultasDeCanal: UserId[] = [];
+
+function canal(cenario: Cenario): CanalDeContatoDoChamador {
+  return {
+    temCanalVerificado: (conta) => {
+      consultasDeCanal.push(conta);
+      return Promise.resolve(cenario.validada ?? true);
     },
   };
 }
@@ -109,6 +130,7 @@ function conferencias(cenario: Cenario): ConferenciasDeTexto {
 function servidor(cenario: Cenario = {}): RegistradorDeRotas {
   gravadas = [];
   trilhaDeTeste = [];
+  consultasDeCanal = [];
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
@@ -126,6 +148,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
         },
       },
       conferencias: conferencias(cenario),
+      canal: canal(cenario),
     }),
     // O CONTRATO DE VERDADE, do disco.
     contrato: carregarContrato(resolve(process.cwd(), 'api/openapi.yaml')),
@@ -474,5 +497,74 @@ void describe('a trilha: `directory_suggestion.submitted`', () => {
   void it('corpo recusado nao gera trilha: nao houve sugestao para registrar', async () => {
     await sugerir(servidor({ recusarTexto: ['display_name'] }));
     assert.equal(trilhaDeTeste.length, 0);
+  });
+});
+
+/**
+ * A ISCA DA TRAVA DE CONTA VALIDADA (regra do cliente, dita duas vezes).
+ *
+ * ## Por que ela existe, e por que ela nao mede a tela
+ *
+ * A tela esconde o icone de sugerir de quem nao validou, e isso e cortesia --
+ * nao e recusa. Estes casos chamam a rota **direto**, sem passar pela tela, que
+ * e exatamente o que um cliente curioso, um script ou uma versao antiga do app
+ * fazem. A trava que vive so no app nao recusa nada aqui.
+ *
+ * ## O contrapeso NAO e enfeite
+ *
+ * O segundo caso e o que torna o primeiro uma medicao: um `temCanalVerificado`
+ * fixo em `false` passaria no caso da recusa, e passaria pelo motivo errado. Os
+ * dois casos sao o mesmo caminho com o mecanismo nos dois estados.
+ *
+ * ESCRITA E NAO RODADA nesta sessao (ordem do cliente: nada de suite unitaria
+ * nem de integracao). O que foi rodado esta no relatorio.
+ */
+void describe('ISCA: so conta VALIDADA sugere, e a recusa e do SERVIDOR', () => {
+  void it('conta valida e NAO validada, chamando a rota direto, recebe 409 `contact-channel-unverified`', async () => {
+    const app = servidor({ validada: false });
+    const resposta = await sugerir(app, { como: QUEM_CHAMA });
+    assert.equal(
+      resposta.status,
+      409,
+      `com a trava apenas no app, esta chamada responde 201: ${resposta.bruto}`,
+    );
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/contact-channel-unverified`);
+    assert.equal(
+      resposta.corpo['next_action'],
+      'verify_email',
+      'sem `next_action` a tela le "confirme seu e-mail" e nao tem caminho para fazer isso agora',
+    );
+    assert.equal(gravadas.length, 0, 'nada entrou na fila de revisao');
+    assert.equal(trilhaDeTeste.length, 0, 'nao houve sugestao para registrar na trilha');
+  });
+
+  void it('CONTRAPESO: a MESMA chamada com a conta validada passa (201)', async () => {
+    const resposta = await sugerir(servidor({ validada: true }), { como: QUEM_CHAMA });
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.equal(gravadas.length, 1);
+  });
+
+  void it('a pergunta e feita sobre a conta do TOKEN, e nao sobre o que o corpo disser', async () => {
+    await sugerir(servidor({ validada: false }), { como: OUTRA_CONTA });
+    assert.deepEqual(consultasDeCanal, [OUTRA_CONTA]);
+  });
+
+  void it('o tipo e o MESMO de criar encontro: uma regua so para "validado" no produto', () => {
+    assert.equal(
+      problemas.canalDeContatoNaoVerificadoParaSugestao().problemType,
+      problemas.canalDeContatoNaoVerificadoParaEncontro().problemType,
+      'um `type` novo para a mesma pergunta faria o app decidir por tres onde ha um conceito',
+    );
+  });
+
+  void it('o 409 esta DECLARADO na operacao do contrato, e nao so no codigo', () => {
+    const contrato = carregarContrato(resolve(process.cwd(), 'api/openapi.yaml'));
+    const respostas = (contrato.operacoes.get('suggestDirectoryEntry')?.raw['responses'] ??
+      {}) as Record<string, unknown>;
+    assert.equal(
+      Object.keys(respostas).includes('409'),
+      true,
+      'resposta que o servidor manda e o contrato nao declara e contrato que mente',
+    );
   });
 });
