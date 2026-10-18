@@ -113,7 +113,10 @@ import { registrarRotaDeBuscaDeCep } from '../modules/addresses/adapters/http/po
 import { criarBuscaDeCep } from '../modules/addresses/adapters/external/viacep-com-brasilapi.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
 import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
-import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+import {
+  registrarRotaDasMinhasIndicacoes,
+  registrarRotaDeSugestaoDoDiretorio,
+} from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
 // 18/10/2026. A FILA DE REVISAO das indicacoes: o menu que faltava no painel.
 import { registrarRotasDaFilaDeIndicacoes } from '../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
 import { criarFilaDeIndicacoesRepository } from '../modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
@@ -884,7 +887,7 @@ export async function main(): Promise<void> {
     // ADR-0011 tirou `'community'` de `professionals.source`, e o que esta
     // operacao grava e a fila de revisao (`directory_suggestions`). A trilha e
     // a do app (`trilha`, transacao propria), e nao a transacional do painel.
-    registrarRotaDeSugestaoDoDiretorio(escopo, {
+    const dependenciasDaSugestao = {
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
@@ -897,7 +900,14 @@ export async function main(): Promise<void> {
         canal: criarCanalDeContatoDoChamador(db),
       }),
       contrato,
-    });
+    };
+    registrarRotaDeSugestaoDoDiretorio(escopo, dependenciasDaSugestao);
+    // MINHAS INDICACOES: o lado de quem indicou, que nunca existiu (cliente,
+    // 18/10/2026). As dependencias sao AS MESMAS da escrita acima, e por isso
+    // o objeto e montado uma vez e passado aos dois registradores: duas
+    // montagens seriam dois `SugestaoDoDiretorio` -- dois caminhos ate a mesma
+    // tabela, com a chance de um deles ganhar um dobre diferente do outro.
+    registrarRotaDasMinhasIndicacoes(escopo, dependenciasDaSugestao);
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
       // O vocabulario dos dois niveis da categoria, com cache em processo
