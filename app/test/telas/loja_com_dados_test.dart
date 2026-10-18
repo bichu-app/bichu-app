@@ -377,7 +377,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Abrir na Cobasi'), findsWidgets);
+      // "Compre agora", literal do cliente (17/10). O nome do parceiro saiu
+      // do texto visivel e foi para o nome acessivel.
+      expect(find.text('Compre agora'), findsWidgets);
 
       // Nenhum rotulo de botao tem cifrao seguido de digito.
       final comCifrao = RegExp(r'R\$\s*\d');
@@ -543,7 +545,6 @@ void main() {
             OpcaoDeRecorte(codigo: 'curadoria', rotulo: 'Seleção do Bichu'),
           ],
           efetiva: 'preco',
-          aoEscolher: (_) {},
         ).rotuloEfetivo,
         throwsStateError,
       );
@@ -575,6 +576,10 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'ração');
       await tester.pumpAndSettle();
+      // Digitar nao pergunta nada desde 17/10: a lupa pergunta.
+      expect(urls.last.queryParameters.containsKey('q'), isFalse);
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['q'], 'ração');
       expect(
@@ -596,9 +601,12 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'r');
       await tester.pumpAndSettle();
+      // `minLength: 2` no contrato: a lupa NAO habilita com uma letra, e o
+      // nome acessivel dela diz o que falta.
+      expect(find.byTooltip('Buscar, faltam 1 letra'), findsOneWidget);
+      await tester.tap(find.byTooltip('Buscar, faltam 1 letra'));
+      await tester.pumpAndSettle();
 
-      // `minLength: 2` no contrato: mandar um caractere produziria um 400 a
-      // cada primeira tecla.
       expect(urls.length, antes);
     });
   });
@@ -616,12 +624,15 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Abrir na Cobasi').last);
+      await tester.tap(find.text('Compre agora').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('Você vai sair do Bichu'), findsOneWidget);
-      expect(find.textContaining('cobasi.com.br'), findsWidgets);
-      expect(find.text('Ficar aqui'), findsOneWidget);
+      // **O DIALOGO DE SAIDA SAIU** (pedido do cliente, 17/10/2026: "Remova a
+      // confirmacao de sair do bichu quando clica no produto"). A pessoa vai
+      // para o navegador do parceiro SEM AVISO: este caso guarda a decisao,
+      // para a volta do dialogo ser deliberada e nao acidental.
+      expect(find.text('Você vai sair do Bichu'), findsNothing);
+      expect(find.text('Ficar aqui'), findsNothing);
     });
 
     // ISCA -- em `vitrine_da_loja.dart`, em `_BotaoDeSaida._sair`, troque a
@@ -816,6 +827,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(campo, 'bola');
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['q'], 'bola');
       expect(
@@ -913,7 +926,14 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       );
       expect(desenhado.data, 'Primeira linha.\nSegunda linha.');
       expect(find.text('Ler mais'), findsNothing, reason: 'botão que não esconde nada não deve existir');
-    });
+      // DESLIGADO EM 17/10/2026, e nao apagado. O RESUMO SAIU DO CARTAO por
+      // pedido do cliente ("Deixe apenas a foto, titulo e preco"). A quebra
+      // de linha continua sendo dado do modelo e continua medida nos casos de
+      // `ItemDaLoja` acima; o que nao existe mais e o `Text` na vitrine. ONDE
+      // a descricao passa a aparecer esta PENDENTE DE DECISAO DO CLIENTE: a
+      // tela de detalhe, que a mostrava inteira, ficou sem entrada no mesmo
+      // dia, tambem por decisao dele.
+    }, skip: true);
 
     test('exatamente 500 caracteres cabem inteiros, e 501 não', () {
       final com500 = ItemDaLoja.doJson(itemDoContrato(summary: longo(500)));
@@ -943,7 +963,12 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       expect(item.trechoDoResumo.length, ItemDaLoja.tetoDoResumoNoCartao + 1, reason: '500 + reticências');
     });
 
-    testWidgets('descrição de 3000: o cartão mostra o trecho, "Ler mais" expande e "Ler menos" recolhe', (tester) async {
+    // DESLIGADO EM 17/10/2026, e nao apagado. O "Ler mais" saiu da vitrine:
+    // o cartao ficou com foto, titulo e preco, por pedido do cliente. O corte
+    // em 500 caracteres continua existindo em `ItemDaLoja.trechoDoResumo` e
+    // continua medido nos casos de modelo acima -- o que saiu foi o widget.
+    // Se a descricao voltar a ter onde aparecer, este caso volta com ela.
+    testWidgets('descrição de 3000: o cartão mostra o trecho, "Ler mais" expande e "Ler menos" recolhe', skip: true, (tester) async {
       final inteiro = longo(3000);
       await abrirLoja(
         tester,
@@ -1016,6 +1041,10 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       );
       // "Ler mais, botão" repetido numa lista de doze cartões não diz nada.
       expect(find.bySemanticsLabel('Ler mais da descrição de Bola Pop'), findsOneWidget);
-    });
+      // DESLIGADO pela mesma razao do caso acima. A regra que ele guardava
+      // -- rotulo repetido em doze cartoes precisa dizer de qual produto e --
+      // MUDOU DE DONO: vale agora para o "Compre agora", e esta medida no
+      // caso novo de `CartaoDaLoja.rotuloAcessivelDeSaida`.
+    }, skip: true);
   });
 }

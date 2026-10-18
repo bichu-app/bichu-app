@@ -275,8 +275,9 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
         ),
       const SizedBox(height: BichuEspaco.e4),
       _Margem(child: _Cabecalho(item: item)),
-      const SizedBox(height: BichuEspaco.e4),
-      const _Margem(child: AvisoDoParceiroDaLoja()),
+      // O AVISO DO PARCEIRO SAIU daqui e da vitrine (pedido do cliente,
+      // 17/10/2026). O texto continua em
+      // `VitrineDaLoja.avisoDeQueNaoSomosOVendedor`, com a razao ao lado.
       const SizedBox(height: BichuEspaco.e6),
       // A descricao INTEIRA, sem corte e sem botao: ver o cabecalho da classe.
       _Secao(

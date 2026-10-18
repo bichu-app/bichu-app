@@ -26,6 +26,7 @@ class BichuField extends StatelessWidget {
     this.ajuda,
     this.erro,
     this.opcional = false,
+    this.rotuloVisivel = true,
     this.tipoDeTeclado,
     this.autofill = const <String>[],
     this.obscurecer = false,
@@ -55,6 +56,24 @@ class BichuField extends StatelessWidget {
   final String? erro;
 
   final bool opcional;
+
+  /// Quando o rotulo e DESENHADO acima do campo.
+  ///
+  /// **Falso nao apaga o rotulo**: ele deixa de ser desenhado e continua sendo
+  /// o nome acessivel do campo, por um `Semantics` em volta do `TextField`.
+  /// Campo com dica e sem rotulo e campo **mudo** para leitor de tela
+  /// (SC 3.3.2 e SC 4.1.2): a dica desaparece no instante em que a pessoa
+  /// digita a primeira letra, e com ela desapareceria o unico nome que o
+  /// campo tinha. O `MergeSemantics` existe para o nome e o no editavel serem
+  /// **um** no, e nao um rotulo solto ao lado de um campo sem nome.
+  ///
+  /// Existe para o campo de busca da listagem, por pedido do cliente de
+  /// 17/10/2026: *"Tire o texto do app buscar encontro (opcional), coloque o
+  /// texto no placeholder do campo buscar"*. Formulario nenhum passa por aqui
+  /// -- ali o rotulo fixo acima do campo e a divergencia deliberada do M3 que
+  /// a prosa desta classe explica, e ela continua valendo.
+  final bool rotuloVisivel;
+
   final TextInputType? tipoDeTeclado;
   final List<String> autofill;
   final bool obscurecer;
@@ -107,11 +126,13 @@ class BichuField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          opcional ? '$rotulo (opcional)' : rotulo,
-          style: textos.labelLarge?.copyWith(color: cores.textPrimary),
-        ),
-        const SizedBox(height: BichuEspaco.e1),
+        if (rotuloVisivel) ...<Widget>[
+          Text(
+            opcional ? '$rotulo (opcional)' : rotulo,
+            style: textos.labelLarge?.copyWith(color: cores.textPrimary),
+          ),
+          const SizedBox(height: BichuEspaco.e1),
+        ],
         if (ajuda != null) ...<Widget>[
           Text(
             ajuda!,
@@ -121,7 +142,10 @@ class BichuField extends StatelessWidget {
         ],
         _comAvisoDePerdaDeFoco(
           aoPerderFoco: aoPerderFoco,
-          filho: TextField(
+          filho: _comNomeAcessivel(
+            rotulo: rotulo,
+            visivel: rotuloVisivel,
+            filho: TextField(
             controller: controlador,
             focusNode: foco,
             enabled: habilitado,
@@ -155,6 +179,7 @@ class BichuField extends StatelessWidget {
               // quando a pessoa precisa dele.
               counterText: '',
             ),
+            ),
           ),
         ),
         if (limite != null) ...<Widget>[
@@ -182,6 +207,24 @@ class BichuField extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Da ao campo sem rotulo visivel um nome acessivel, e nada mais.
+///
+/// Com [visivel] verdadeiro nao ha no nenhum a mais na arvore: o rotulo esta
+/// desenhado acima e o `TextField` ja o tem como nome. Com falso, o
+/// `MergeSemantics` cola o nome no no editavel -- sem ele seriam dois nos, um
+/// com o nome e outro com o campo, e o leitor de tela pararia num campo que
+/// nao se chama nada.
+Widget _comNomeAcessivel({
+  required String rotulo,
+  required bool visivel,
+  required Widget filho,
+}) {
+  if (visivel) return filho;
+  return MergeSemantics(
+    child: Semantics(label: rotulo, textField: true, child: filho),
+  );
 }
 
 /// Envolve o campo num `Focus` que so observa, quando ha quem observar.

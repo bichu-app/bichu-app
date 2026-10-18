@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -124,14 +123,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   /// O campo de busca por nome (`q`, desde 30/09).
   final TextEditingController _busca = TextEditingController();
 
-  /// O adiamento entre a tecla e a chamada.
-  ///
-  /// **Nao e enfeite.** `q` tem teto proprio por CONTA no servidor, e uma
-  /// chamada por tecla gastaria o teto de quem digita depressa e devolveria
-  /// 429 no meio da palavra. Adiar tambem evita desenhar o resultado de um
-  /// prefixo que a pessoa ja abandonou.
-  Timer? _adiamentoDaBusca;
-
   /// Recarrega quando a tela volta a aparecer, pelo mesmo mecanismo de
   /// `Perfil` > `Meus pets`: `TickerMode` responde as duas maneiras de esta
   /// tela sumir da vista (trocar de aba, e ser coberta por uma rota opaca do
@@ -216,7 +207,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
 
   @override
   void dispose() {
-    _adiamentoDaBusca?.cancel();
     _busca.dispose();
     super.dispose();
   }
@@ -286,6 +276,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
             busca: _controleDeBusca(),
             filtro: _controleDeFiltro(),
             ordenacao: _controleDeOrdenacao(pagina),
+            aoAplicar: _aplicarAFolha,
           ),
         ..._corpo(),
       ],
@@ -308,19 +299,17 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     return ControleDeBusca(
       controlador: _busca,
       alcance: AlcanceDaBusca.servidor,
-      exemplo: 'Nome do profissional',
-      aoMudar: (termo) {
-        _adiamentoDaBusca?.cancel();
-        _adiamentoDaBusca = Timer(const Duration(milliseconds: 350), () {
-          if (!mounted) return;
-          final limpo = termo.trim();
-          _trocarRecorte(
-            limpo.isEmpty
-                ? _recorte.com(limparTermo: true, pagina: 1)
-                : _recorte.com(termo: limpo, pagina: 1),
-          );
-        });
-      },
+      rotulo: 'Buscar profissional',
+      termoAplicado: _recorte.termo,
+      // Tres letras, e o motivo e o indice de trigrama que `termoQueVai`
+      // documenta: com duas a rota nao recebe `q`, a lista volta inteira e o
+      // topo da tela diria que ha recorte onde nao ha.
+      minimoDeCaracteres: 3,
+      aoAplicar: (termo) => _trocarRecorte(
+        termo == null
+            ? _recorte.com(limparTermo: true, pagina: 1)
+            : _recorte.com(termo: termo, pagina: 1),
+      ),
     );
   }
 
@@ -357,33 +346,27 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
           ],
         ),
       ],
-      aoEscolher: (chave, codigo) {
-        Navigator.of(context).pop();
-        if (chave == 'kind') {
-          _trocarRecorte(
-            _recorte.com(
-              atividade: AtividadeDoDiretorio.porCodigo(codigo),
-              limparAtividade: codigo == null,
-              pagina: 1,
-            ),
-          );
-          return;
-        }
-        _trocarRecorte(
-          _recorte.com(
-            nivelMinimo:
-                codigo == null ? null : NivelDeVerificacao.porCodigo(codigo),
-            limparNivel: codigo == null,
-            pagina: 1,
-          ),
-        );
-      },
-      aoLimpar: () {
-        Navigator.of(context).pop();
-        _trocarRecorte(
-          _recorte.com(limparAtividade: true, limparNivel: true, pagina: 1),
-        );
-      },
+    );
+  }
+
+  /// Os dois grupos **e a ordem** de uma vez, no `Aplicar`: uma chamada a
+  /// rota, e a lista sempre de volta a `pagina: 1`.
+  ///
+  /// Antes eram tres caminhos (cada grupo e a folha de ordem), e trocar
+  /// atividade, verificacao e ordem dava tres chamadas e tres voltas a
+  /// primeira pagina.
+  void _aplicarAFolha(EscolhaDaFolha escolha) {
+    final atividade = escolha.filtros['kind'];
+    final nivel = escolha.filtros['verification_level'];
+    _trocarRecorte(
+      _recorte.com(
+        atividade: AtividadeDoDiretorio.porCodigo(atividade),
+        limparAtividade: atividade == null,
+        nivelMinimo: nivel == null ? null : NivelDeVerificacao.porCodigo(nivel),
+        limparNivel: nivel == null,
+        ordem: OrdemDoDiretorio.porCodigo(escolha.ordem),
+        pagina: 1,
+      ),
     );
   }
 
@@ -407,9 +390,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
       ],
       efetiva: efetiva.codigo,
       porQueNaoEAPedida: divergiu ? ListaDoDiretorio.semLocalizacao : null,
-      aoEscolher: (codigo) => _trocarRecorte(
-        _recorte.com(ordem: OrdemDoDiretorio.porCodigo(codigo), pagina: 1),
-      ),
     );
   }
 

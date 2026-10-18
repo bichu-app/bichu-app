@@ -29,7 +29,6 @@
 
 import 'package:bichu/api/modelos_loja.dart';
 import 'package:bichu/dispositivo/saida_do_app.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'loja_com_dados_test.dart' show abrirLoja, itemDoContrato, paginaDoContrato, redeDaVitrine;
@@ -87,9 +86,10 @@ Future<void> _tocarEConfirmar(
       ]),
     ),
   );
-  await tester.tap(find.text('Abrir na Cobasi').last);
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(TextButton, 'Abrir na Cobasi'));
+  // **UM toque, e nao dois.** O dialogo de confirmacao saiu em 17/10/2026,
+  // por pedido do cliente: a pessoa vai para o navegador do parceiro sem
+  // aviso nenhum.
+  await tester.tap(find.text('Compre agora').last);
   await tester.pumpAndSettle();
 }
 
@@ -242,7 +242,7 @@ void main() {
 
       // O cartao continua la -- o produto e navegavel, so nao tem saida.
       expect(find.text('Bola Pop'), findsOneWidget);
-      expect(find.text('Abrir na Cobasi'), findsNothing);
+      expect(find.text('Compre agora'), findsNothing);
       // E nao ha mensagem de erro no lugar do botao: a pessoa nao tem o que
       // fazer a respeito, e o lugar do conserto e o painel.
       expect(find.textContaining('Não conseguimos'), findsNothing);
@@ -258,7 +258,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Abrir na Cobasi'), findsOneWidget);
+      expect(find.text('Compre agora'), findsOneWidget);
     });
   });
 
@@ -293,7 +293,7 @@ void main() {
       // Nao ha tela de erro, nao ha faixa que apague a lista e nao ha nova
       // tentativa: o cartao continua desenhado, com o botao.
       expect(find.text('Bola Pop'), findsOneWidget);
-      expect(find.text('Abrir na Cobasi'), findsOneWidget);
+      expect(find.text('Compre agora'), findsOneWidget);
     });
 
     testWidgets('quando abre, nao ha mensagem nenhuma', (tester) async {
@@ -305,8 +305,16 @@ void main() {
       expect(find.text('Não conseguimos abrir o link.'), findsNothing);
     });
 
-    // O dialogo e a ultima chance de desistir, e desistir nao abre nada.
-    testWidgets('“Ficar aqui” nao abre o navegador', (tester) async {
+    // **NAO HA MAIS COMO DESISTIR**, e este caso guarda a decisao em vez de
+    // a medir pelo avesso. O dialogo ("Você vai sair do Bichu", com
+    // `Ficar aqui`) saiu em 17/10/2026 por pedido do cliente: *"Remova a
+    // confirmacao de sair do bichu quando clica no produto"*.
+    //
+    // O que o caso antigo media -- desistir nao abre nada -- deixou de
+    // existir. O que ele mede agora e que o dialogo NAO VOLTOU por acidente,
+    // e que um toque so ja abre.
+    testWidgets('nao ha confirmacao: um toque ja abre o navegador',
+        (tester) async {
       await abrirLoja(
         tester,
         rede: redeDaVitrine(
@@ -314,12 +322,31 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Abrir na Cobasi').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(TextButton, 'Ficar aqui'));
+      await tester.tap(find.text('Compre agora').last);
       await tester.pumpAndSettle();
 
-      expect(saida.links, isEmpty);
+      expect(find.text('Você vai sair do Bichu'), findsNothing);
+      expect(find.text('Ficar aqui'), findsNothing);
+      expect(saida.links, hasLength(1));
+    });
+
+    // **O CARTAO INTEIRO tambem sai**, desde 17/10: *"remova o clique para
+    // entrar na pagina de detalhes do produto e coloque para abrir o site do
+    // parceiro"*. Antes este toque abria `TelaDoProduto`.
+    testWidgets('tocar no CARTAO abre o site do parceiro, e nao o detalhe',
+        (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
+        ),
+      );
+
+      await tester.tap(find.text('Bola Pop'));
+      await tester.pumpAndSettle();
+
+      expect(saida.links, hasLength(1));
+      expect(saida.links.single.host, 'cobasi.com.br');
     });
   });
 }

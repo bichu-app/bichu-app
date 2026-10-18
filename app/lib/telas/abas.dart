@@ -194,8 +194,16 @@ class AbaRede extends StatelessWidget {
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[AgendaDaRede()],
+      // **O reforco desce para a agenda, e nao sai da tela.**
+      //
+      // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
+      // e o cliente pediu em 17/10/2026 que o campo de busca fique acima dele
+      // e das abas. A casca nao tem como por o campo acima do proprio reforco:
+      // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
+      // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
+      // `text-secondary`, exatamente como aqui, so com a busca acima.
+      reforco: null,
+      filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
     );
   }
 }
@@ -273,7 +281,17 @@ class AbaLoja extends StatelessWidget {
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
+      // **A LINHA DE REFORCO NAO E MAIS DESENHADA** (pedido do cliente,
+      // 17/10/2026: *"remova o produtos escolhidos pelo bichu, que abrem no
+      // site do parceiro"*).
+      //
+      // O texto continua no REGISTRO (`CascaComAbas.destinos`), e nao foi
+      // apagado de la de proposito: ele e a outra metade do nome acessivel da
+      // aba -- o rotulo encurtou para quatro letras e o significado foi para
+      // o reforco (UX 27.7) --, e o portao de
+      // `test/telas/casca_de_cinco_secoes_test.dart` cobra que todo destino
+      // tenha um. O que saiu foi a linha na TELA.
+      reforco: null,
       filhos: const <Widget>[VitrineDaLoja()],
     );
   }

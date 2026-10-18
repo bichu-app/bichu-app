@@ -52,7 +52,20 @@ import 'cartao_do_encontro.dart';
 /// O cancelado fica em `Próximos` ate o fim previsto, com o selo `Cancelado`
 /// (ADR-0027 12.6). Esta tela nao recalcula nada.
 class AgendaDaRede extends StatefulWidget {
-  const AgendaDaRede({super.key});
+  const AgendaDaRede({super.key, this.reforcoDaSecao});
+
+  /// A linha que explica a secao, que ate 17/10 era desenhada pela casca
+  /// (`TelaDeAba.reforco`) **acima** de tudo o que esta tela monta.
+  ///
+  /// Ela desceu para ca porque o cliente pediu, em 17/10/2026: *"coloque o
+  /// campo de busca acima do texto e das abas proximos e encerrados"*. A
+  /// ordem pedida e busca, texto, abas -- e a casca nao tem como por nada
+  /// acima do proprio reforco sem conhecer o estado desta tela, que e de quem
+  /// o campo de busca e.
+  ///
+  /// Nulo em teste de unidade que monta a agenda sem a casca: a tela nao
+  /// inventa texto de secao.
+  final String? reforcoDaSecao;
 
   static const String tituloDoVazio = 'A Rede ainda não tem encontros';
   static const String explicacaoDoVazio =
@@ -72,7 +85,6 @@ class AgendaDaRede extends StatefulWidget {
   static const String textoDaFalha =
       'Não conseguimos carregar os encontros agora.';
   static const String rotuloDeAtualizar = 'Atualizar';
-  static const String exemploDaBusca = 'passeio, praça, Pinheiros';
   static const String notaDasCidades =
       'As cidades abaixo são as que já apareceram na agenda. O filtro procura '
       'na base inteira.';
@@ -145,11 +157,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   bool _carregandoMais = false;
   bool _falhaAoCarregarMais = false;
 
-  /// A espera da busca: a pergunta sai 300 ms depois da ultima tecla. A
-  /// agenda tem teto de 300 perguntas por hora (contrato, `x-rate-limit`).
-  Timer? _esperaDaBusca;
-  static const Duration esperaDaBusca = Duration(milliseconds: 300);
-
   bool? _logadoDaUltimaCarga;
 
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
@@ -164,7 +171,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   @override
   void dispose() {
-    _esperaDaBusca?.cancel();
     _buscaControlador.dispose();
     _abas?.dispose();
     super.dispose();
@@ -432,9 +438,48 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         if (!abas.contains(_aba)) _aba = AbaDaRede.proximos;
         final controlador = _controladorDasAbas(abas);
 
+        final busca = _controleDeBusca();
+        final filtro = _controleDeFiltro();
+        final ordenacao = _controleDeOrdenacao();
+        final reforco = widget.reforcoDaSecao;
+        // O campo de busca aparece **exatamente** quando a barra apareceria:
+        // a decisao e uma so, e ela mora no componente. Sem isto a `Rede`
+        // sem encontro nenhum desenharia um campo de busca sobre o nada,
+        // que e o caso que a secao "Lista vazia" da `BarraDeListagem`
+        // resolve nao desenhando.
+        final comControles = _fase != _Fase.carregando &&
+            BarraDeListagem.desenha(
+              total: _total,
+              busca: busca,
+              filtro: filtro,
+              ordenacao: ordenacao,
+              aoAplicar: _aplicarAFolha,
+            );
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            // A ORDEM E BUSCA, TEXTO, ABAS (decisao do cliente, 17/10/2026).
+            //
+            // As abas continuam DEPOIS do campo e **fora** da barra: elas
+            // ficam na tela em todo estado -- carregando, vazio, falha --, e
+            // a barra nao e desenhada em alguns deles. Abas dentro da barra
+            // sumiriam junto, e quem filtrou ate o vazio em `Encerrados`
+            // ficaria sem como voltar para `Próximos`.
+            if (comControles) ...<Widget>[
+              CampoDeBuscaDaListagem(busca: busca),
+              const SizedBox(height: BichuEspaco.e4),
+            ],
+            if (reforco != null) ...<Widget>[
+              Text(
+                reforco,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge
+                    ?.copyWith(color: BichuColors.of(context).cores.textSecondary),
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+            ],
             TabBar(
               controller: controlador,
               onTap: (i) => _trocarAba(abas[i]),
@@ -456,9 +501,13 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                         singular: 'encontro',
                         plural: 'encontros',
                       ),
-                busca: _controleDeBusca(),
-                filtro: _controleDeFiltro(),
-                ordenacao: _controleDeOrdenacao(),
+                // O campo ja foi desenhado acima; a barra recebe o controle
+                // para saber do TERMO APLICADO, e nao para desenhar de novo.
+                buscaAcima: true,
+                busca: busca,
+                filtro: filtro,
+                ordenacao: ordenacao,
+                aoAplicar: _aplicarAFolha,
               ),
             ..._corpo(),
           ],
@@ -467,26 +516,29 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
+  /// A busca. **Aplicada no toque, e nunca na tecla.**
+  ///
+  /// O rotulo `Buscar encontro` virou a dica DENTRO do campo, e o
+  /// `(opcional)` saiu: pedido do cliente de 17/10/2026, *"Tire o texto do
+  /// app buscar encontro (opcional), coloque o texto no placeholder do campo
+  /// buscar"*. O nome acessivel continua sendo `Buscar encontro` --
+  /// `BichuField.rotuloVisivel` explica como, e por que campo com dica e sem
+  /// rotulo e campo mudo.
+  ///
+  /// A espera de 300 ms **saiu**, e com ela a razao de existir dela: nao ha
+  /// mais pergunta por tecla para o teto de 300 por hora contar.
   ControleDeBusca _controleDeBusca() {
     return ControleDeBusca(
       controlador: _buscaControlador,
       alcance: AlcanceDaBusca.servidor,
-      exemplo: AgendaDaRede.exemploDaBusca,
       rotulo: 'Buscar encontro',
-      aoMudar: (texto) {
-        _esperaDaBusca?.cancel();
-        final limpo = texto.trim();
-        // `minLength: 2` no contrato: um caractere so produziria 400.
-        if (limpo.isNotEmpty && limpo.length < 2) {
-          setState(() {});
-          return;
-        }
-        final termo = limpo.isEmpty ? null : limpo;
+      termoAplicado: _recorte.termoLimpo,
+      // `minLength: 2` no contrato: um caractere so produziria 400, e agora
+      // ele e estado da lupa em vez de um `setState` que engolia a tecla.
+      minimoDeCaracteres: 2,
+      aoAplicar: (termo) {
         if (termo == _recorte.termoLimpo) return;
-        // A pergunta sai 300 ms depois da ultima tecla, e nao a cada tecla.
-        _esperaDaBusca = Timer(esperaDaBusca, () {
-          if (mounted) _trocarRecorte(_recorteCom(termo: termo));
-        });
+        _trocarRecorte(_recorteCom(termo: termo));
       },
     );
   }
@@ -620,30 +672,42 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       }
     }
 
-    return ControleDeFiltro(
-      grupos: grupos,
-      aoEscolher: (chave, codigo) {
-        Navigator.of(context).pop();
-        _trocarRecorte(switch (chave) {
-          'state' => _recorteCom(estadoDoPedido: EstadoDoPedido.porCodigo(codigo)),
-          'when' => _recorteCom(quando: QuandoDaRede.porCodigo(codigo)),
-          'admission' => _recorteCom(entrada: TipoDeEntrada.porCodigo(codigo)),
-          'visibility' =>
-            _recorteCom(visibilidade: VisibilidadeDoEncontro.porCodigo(codigo)),
-          'city' => _recorteCom(cidade: codigo),
-          'size' => _recorteCom(porte: Porte.de(codigo)),
-          'max_km' => _recorteCom(
-              distanciaMaxima: DistanciaMaxima.porCodigo(codigo),
-              // Lista so de publicos: o filtro de visibilidade sai junto.
-              visibilidade: codigo == null ? const _Nada() : null,
-            ),
-          _ => _recorte,
-        });
-      },
-      aoLimpar: () {
-        Navigator.of(context).pop();
-        _trocarRecorte(RecorteDaRede(termo: _recorte.termo, ordem: _recorte.ordem));
-      },
+    return ControleDeFiltro(grupos: grupos);
+  }
+
+  /// **Todos os grupos E a ordem de uma vez, no `Aplicar`.**
+  ///
+  /// Antes cada pastilha fechava a folha e recarregava a agenda, e a ordem
+  /// tinha folha propria: trocar `Quando`, `Valor`, `Cidade` e a ordem eram
+  /// quatro chamadas a rota, com a lista voltando a primeira pagina quatro
+  /// vezes. Agora e uma.
+  ///
+  /// So as chaves que os grupos da aba atual DECLARARAM entram: `_Nada` e
+  /// "nao mexer", e um grupo que esta aba nao oferece nao pode ter o recorte
+  /// apagado por ela.
+  void _aplicarAFolha(EscolhaDaFolha escolha) {
+    final filtros = escolha.filtros;
+    Object? v(String chave, Object? Function(String?) de) =>
+        filtros.containsKey(chave) ? de(filtros[chave]) : const _Nada();
+    final maxKm = filtros['max_km'];
+    final ordem = escolha.ordem;
+    // `Distância` como ordem e a lista so de publicos, pela mesma razao do
+    // filtro `max_km`: `listNearbyNetworkEvents` nao devolve privado.
+    final porDistancia = ordem == OrdemPorPerto.distancia.codigo;
+    _trocarRecorte(
+      _recorteCom(
+        estadoDoPedido: v('state', EstadoDoPedido.porCodigo),
+        quando: v('when', QuandoDaRede.porCodigo),
+        entrada: v('admission', TipoDeEntrada.porCodigo),
+        // Lista so de publicos: o filtro de visibilidade sai junto.
+        visibilidade: maxKm != null || porDistancia
+            ? null
+            : v('visibility', VisibilidadeDoEncontro.porCodigo),
+        cidade: v('city', (c) => c),
+        porte: v('size', Porte.de),
+        distanciaMaxima: v('max_km', DistanciaMaxima.porCodigo),
+        ordem: ordem ?? const _Nada(),
+      ),
     );
   }
 
@@ -696,15 +760,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       porQueNaoEAPedida: pedida != null && pedida != _ordemEfetiva
           ? AgendaDaRede.ordemTrocadaPeloServidor
           : null,
-      aoEscolher: (codigo) {
-        final distancia = codigo == OrdemPorPerto.distancia.codigo;
-        _trocarRecorte(
-          _recorteCom(
-            ordem: codigo,
-            visibilidade: distancia ? null : const _Nada(),
-          ),
-        );
-      },
     );
   }
 
