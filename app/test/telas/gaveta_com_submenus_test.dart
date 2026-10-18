@@ -947,11 +947,17 @@ void main() {
       );
 
       final vivos = todos.where((d) => d.viraItem).toList(growable: false);
+      // SEIS -> SETE em 18/10/2026: `Editar o perfil`, que a UX 27.5.5 listava
+      // e o app nao tinha, passou a existir como `Meus dados`
+      // (`TelaDadosPessoais`, rota `/perfil/dados`). E a subida que a propria
+      // mensagem abaixo chama de caminho normal -- e ela so aconteceu porque a
+      // tela do outro lado existe e esta registrada no roteador, o que o caso
+      // `toda rota de item vivo esta REGISTRADA no roteador` confere.
       expect(
         vivos.length,
-        6,
+        7,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -960,11 +966,14 @@ void main() {
       final porConstruir = todos
           .where((d) => d.pendente)
           .toList(growable: false);
+      // NOVE -> OITO no mesmo dia, e pelo mesmo motivo: `Meus dados` saiu
+      // desta lista para a de vivos. `vivos` subiu junto, que e a condicao que
+      // a mensagem abaixo exige para a queda nao ser um nome que desapareceu.
       expect(
         porConstruir.length,
-        9,
+        8,
         reason:
-            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 8 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
@@ -1485,9 +1494,12 @@ void main() {
       //
       // Roadmap em menu tem um custo que nao e de gosto: `Mensagens`,
       // `Doações`, `Carrinho e pedido`, `Meus pedidos`, `Convidar vizinhos`,
-      // `Editar o perfil`, `Notificações`, `Transferir um pet` e `Termos` sao
-      // nove telas que o app nao tem. Quem le nove nomes num menu tenta tocar
-      // em algum.
+      // `Notificações`, `Transferir um pet` e `Termos` sao OITO telas que o
+      // app nao tem. Quem le oito nomes num menu tenta tocar em algum.
+      //
+      // Eram nove ate 18/10/2026: `Editar o perfil` saiu desta lista porque a
+      // tela foi construida (`Meus dados`, `/perfil/dados`) e a linha virou
+      // atalho vivo.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
 
       final porConstruir = pendentes();

@@ -13,6 +13,7 @@ import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
+import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
@@ -227,6 +228,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final MeApi _me;
   late final AchadosApi _achados;
   late final DiretorioApi _diretorio;
   late final LojaApi _loja;
@@ -269,6 +271,9 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    // As rotas `tags: [me]`, ligadas pela tela de dados pessoais (18/10/2026).
+    // Antes dela nenhuma tela chamava `GET /me` nem `PATCH /me`.
+    _me = MeApi(_api);
     _achados = AchadosApi(_api);
     _diretorio = DiretorioApi(_api);
     _loja = LojaApi(_api);
@@ -575,6 +580,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      me: _me,
       diretorio: _diretorio,
       loja: _loja,
       achados: _achados,

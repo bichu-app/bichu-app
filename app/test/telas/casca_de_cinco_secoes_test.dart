@@ -37,6 +37,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_colors.dart';
+import 'package:bichu/widgets/item_de_menu.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -739,8 +740,17 @@ void main() {
       await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
       await tester.pumpAndSettle();
 
-      await rolarAte(tester, find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+      // A porta de conta virou ITEM DE MENU em 18/10/2026 (pedido do
+      // cliente: "apenas os menus para realizar as acoes e nao todos os
+      // botoes nessa pagina"). **O que este caso cobra nao mudou**: a porta
+      // existe em `Perfil` e chega ao MESMO leitor. Mudou a forma do
+      // controle, e por isso o finder e `ItemDeMenu` e nao `OutlinedButton` --
+      // a porta PRIMARIA, em `Pets`, continua botao e continua medida no caso
+      // de cima.
+      final portaDeConta =
+          find.widgetWithText(ItemDeMenu, 'Escanear uma tag');
+      await rolarAte(tester, portaDeConta);
+      await tester.tap(portaDeConta);
       await tester.pumpAndSettle();
 
       expect(
@@ -1108,7 +1118,10 @@ void main() {
       await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
       await tester.pumpAndSettle();
 
-      final sair = find.widgetWithText(OutlinedButton, 'Sair da conta');
+      // `Sair da conta` virou item de menu em 18/10/2026, pelo mesmo pedido do
+      // cliente. A folha de confirmacao abaixo nao mudou uma linha, e e ela
+      // que este caso mede.
+      final sair = find.widgetWithText(ItemDeMenu, 'Sair da conta');
       await rolarAte(tester, sair);
       await tester.tap(sair);
       await tester.pumpAndSettle();
