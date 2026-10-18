@@ -10,8 +10,8 @@ const CODIGOS: Record<string, string> = {
   contact_or_payment_detected: ERRO_DAS_OBSERVACOES,
   bidi_control: 'Tire do texto os caracteres invisíveis de direção.',
   event_in_past: 'O início precisa ser depois de agora.',
-  event_not_published: 'Este encontro não está mais publicado, e data, local e acesso não mudam.',
-  event_removed: 'Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.',
+  event_not_published: 'Este evento não está mais publicado, e data, local e acesso não mudam.',
+  event_removed: 'Este evento foi removido. Ele não aparece no app e não pode mais ser alterado.',
   admission_incomplete: 'Informe o valor em reais, por exemplo 15 ou 15,50.',
   request_not_pending: 'Este pedido já foi decidido ou a pessoa desistiu. A lista foi atualizada.',
 };
@@ -24,8 +24,8 @@ export function textoDeEncontroFechado(e?: { publication_status: string; timing:
   const estado =
     e?.publication_status === 'removed' ? 'foi removido' : e?.publication_status === 'cancelled' ? 'foi cancelado' : e?.timing === 'ended' ? 'já aconteceu' : undefined;
   return estado
-    ? `Este encontro ${estado}. Os pedidos dele não podem mais ser aprovados nem recusados.`
-    : 'Este encontro não está mais aberto a pedidos. Eles não podem mais ser aprovados nem recusados.';
+    ? `Este evento ${estado}. Os pedidos dele não podem mais ser aprovados nem recusados.`
+    : 'Este evento não está mais aberto a pedidos. Eles não podem mais ser aprovados nem recusados.';
 }
 
 export function mensagemDaFalha(falha: Falha, acao: string): string {
@@ -35,13 +35,13 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
       return conhecido ?? `Não conseguimos ${acao}. Confira os campos e tente de novo.`;
     }
     case 'sem-versao':
-      return 'Não conseguimos confirmar qual versão deste encontro você está vendo, e nada foi gravado. Os dados foram atualizados; confira e tente de novo.';
+      return 'Não conseguimos confirmar qual versão deste evento você está vendo, e nada foi gravado. Os dados foram atualizados; confira e tente de novo.';
     case 'versao':
-      return 'Alguém alterou este encontro antes de você. Os dados foram atualizados; confira e tente de novo.';
+      return 'Alguém alterou este evento antes de você. Os dados foram atualizados; confira e tente de novo.';
     case 'limite':
       return `Muitas tentativas. Tente de novo em ${esperaPorExtenso(falha.esperaSegundos)}.`;
     case 'nao-encontrado':
-      return 'Este encontro não existe mais.';
+      return 'Este evento não existe mais.';
     case 'proibido':
       return 'Você não tem permissão para isto.';
     case 'sem-conexao':
@@ -49,7 +49,7 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
     case 'encontro-fechado':
       return textoDeEncontroFechado();
     case 'endereco-ocupado':
-      return 'Já existe um encontro com um título parecido. Mude o título e tente de novo.';
+      return 'Já existe um evento com um título parecido. Mude o título e tente de novo.';
     case 'sessao':
       return 'Sua sessão terminou. Entre de novo para continuar.';
     case 'servidor':

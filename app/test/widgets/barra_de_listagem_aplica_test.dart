@@ -486,7 +486,7 @@ void main() {
       return ControleDeBusca(
         controlador: controlador,
         alcance: AlcanceDaBusca.servidor,
-        rotulo: 'Buscar encontro',
+        rotulo: 'Buscar evento',
         termoAplicado: termoAplicado,
         minimoDeCaracteres: minimo,
         aoAplicar: aplicados.add,
@@ -600,10 +600,10 @@ void main() {
       );
 
       // O `(opcional)` saiu com o rotulo visivel.
-      expect(find.text('Buscar encontro (opcional)'), findsNothing);
-      expect(find.text('Buscar encontro'), findsNothing);
+      expect(find.text('Buscar evento (opcional)'), findsNothing);
+      expect(find.text('Buscar evento'), findsNothing);
       final campo = tester.widget<TextField>(find.byType(TextField));
-      expect(campo.decoration?.hintText, 'Buscar encontro');
+      expect(campo.decoration?.hintText, 'Buscar evento');
     });
 
     testWidgets('sem rotulo visivel, o campo com texto CONTINUA com nome',
@@ -621,7 +621,7 @@ void main() {
       );
 
       expect(
-        find.bySemanticsLabel(RegExp('Buscar encontro')),
+        find.bySemanticsLabel(RegExp('Buscar evento')),
         findsWidgets,
         reason: 'REPROVA: campo com dica e sem rotulo ficou sem nome '
             'acessivel assim que recebeu texto.',

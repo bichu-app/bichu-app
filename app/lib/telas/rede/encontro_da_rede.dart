@@ -25,8 +25,8 @@ import 'pecas_da_rede.dart';
 ///
 /// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, `Organizado pela
 /// equipe do Bichu`, selos); aviso de cancelado ou caixa do privado;
-/// `Quando`; `Local`; `Sobre o encontro`; `Fotos`; `Para quais cães`; `O que
-/// levar`; `Cuidados no encontro`; `Acessibilidade e estrutura`;
+/// `Quando`; `Local`; `Sobre o evento`; `Fotos`; `Para quais cães`; `O que
+/// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
 /// `Observações`. **Sem `Quem organiza` e sem `Compartilhar`** (24.17.1 e
 /// 24.15 item 4). Sem check-in, sem galeria da comunidade e sem lista de
 /// presenca (ADR-0025).
@@ -73,18 +73,18 @@ class TelaDoEncontro extends StatefulWidget {
       'Não conseguimos ver agora se você já pediu para participar.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
-  static const String tituloDaTela = 'Encontro';
+  static const String tituloDaTela = 'Evento';
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String organizadoPor = 'Organizado pela equipe do Bichu';
   static const String avisoDeCancelado =
-      'A equipe do Bichu cancelou este encontro. Ele não vai acontecer.';
+      'A equipe do Bichu cancelou este evento. Ele não vai acontecer.';
   static const String rotuloDoCalendario = 'Adicionar ao calendário';
   static const String falhaDoCalendario =
       'Não conseguimos abrir o calendário.';
   static const String falhaDosDetalhes =
       'Não conseguimos carregar os detalhes agora.';
 
-  static const String tituloDoPrivado = 'Encontro privado';
+  static const String tituloDoPrivado = 'Evento privado';
   static const String textoDoPrivado =
       'O local e os detalhes aparecem se a equipe do Bichu aprovar o seu '
       'pedido.';
@@ -94,7 +94,7 @@ class TelaDoEncontro extends StatefulWidget {
   static const String rotuloDePedir = 'Pedir para participar';
   static const String tituloDoEnviado = 'Pedido enviado';
   static const String textoDoEnviado =
-      'Se o pedido for aprovado até o dia do encontro, o local e os detalhes '
+      'Se o pedido for aprovado até o dia do evento, o local e os detalhes '
       'aparecem aqui.';
   static const String tituloDoAprovado = 'Pedido aprovado';
   static const String textoDoAprovado =
@@ -103,7 +103,7 @@ class TelaDoEncontro extends StatefulWidget {
   static const String tituloDaDesistencia = 'Desistir do pedido?';
   static const String textoDaDesistencia =
       'O pedido sai de Meus pedidos. Se mudar de ideia, você pode pedir de novo '
-      'enquanto o encontro não acontecer.';
+      'enquanto o evento não acontecer.';
   static const String rotuloDeManter = 'Manter o pedido';
 
   static const String tituloDaGuarda = 'Entre para pedir';
@@ -112,7 +112,7 @@ class TelaDoEncontro extends StatefulWidget {
   static const String rotuloDeEntrar = 'Entrar';
   static const String rotuloDeAgoraNao = 'Agora não';
 
-  /// As quatro frases de `Cuidados no encontro` (UX 28.7.1). A segunda varia
+  /// As quatro frases de `Cuidados no evento` (UX 28.7.1). A segunda varia
   /// por `fenced_off_leash_area`.
   static List<String> cuidados({required bool areaCercada}) => <String>[
         'Recolha o cocô e leve o saquinho embora.',
@@ -530,7 +530,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     return Scaffold(
       body: SafeArea(
         child: Semantics(
-          // A rota anuncia `Encontro: {título}`: nao ha titulo visivel na
+          // A rota anuncia `Evento: {título}`: nao ha titulo visivel na
           // barra do topo enquanto a capa esta na tela (UX 28.7.2).
           scopesRoute: true,
           namesRoute: true,
@@ -761,7 +761,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       );
       secao(
         Icons.notes_outlined,
-        'Sobre o encontro',
+        'Sobre o evento',
         Text(conteudo.resumo, style: textos.bodyLarge),
       );
       // Links publicos: nao dependem de conta, e so aparecem os que vieram.
@@ -796,7 +796,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         }
         secao(
           Icons.health_and_safety_outlined,
-          'Cuidados no encontro',
+          'Cuidados no evento',
           _Cuidados(
             frases: TelaDoEncontro.cuidados(
               areaCercada: conteudo.areaCercadaParaSoltar,
@@ -1335,7 +1335,7 @@ class _OQueLevar extends StatelessWidget {
   }
 }
 
-/// `Cuidados no encontro`, com marcador NEUTRO: um ponto de 8 dp em
+/// `Cuidados no evento`, com marcador NEUTRO: um ponto de 8 dp em
 /// `textSecondary`, sem o visto, que se lia como "feito" (24.17.1, item 1).
 class _Cuidados extends StatelessWidget {
   const _Cuidados({required this.frases});
@@ -1518,7 +1518,7 @@ class _EsqueletoDoEncontro extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     return Semantics(
-      label: 'Carregando o encontro',
+      label: 'Carregando o evento',
       child: AspectRatio(
         aspectRatio: proporcaoDaCapa,
         child: DecoratedBox(

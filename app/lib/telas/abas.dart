@@ -155,15 +155,15 @@ class AbaPets extends StatelessWidget {
   }
 }
 
-/// Secao 2 — `Rede`. Eventos e encontros da comunidade.
+/// Secao 2 — `Rede`. Eventos da comunidade.
 ///
 /// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Rede esta em
 /// construcao" era o certo enquanto nao havia tabela nem rota;
 /// `GET /network/events` existe, e a agenda e [AgendaDaRede]. O estado vazio
 /// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
-/// quando o servidor responde que nao ha encontro -- que e afirmacao medida, e
+/// quando o servidor responde que nao ha evento -- que e afirmacao medida, e
 /// nao afirmacao sobre dado que a tela nao carrega. E ele virou **dois**, como
-/// na `Loja`: "a Rede ainda nao tem encontro" e "nada com esse recorte" dizem
+/// na `Loja`: "a Rede ainda nao tem evento" e "nada com esse recorte" dizem
 /// coisas opostas.
 ///
 /// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles

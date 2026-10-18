@@ -422,11 +422,11 @@ abstract final class MensagensDeErro {
   static MensagemDeErro _limiteDeEncontros(Problem problem) {
     final limite = problem.inteiro('limit');
     final abertura = limite == null
-        ? 'Você já tem o máximo de encontros em aberto.'
-        : 'Você já tem $limite encontros em aberto.';
+        ? 'Você já tem o máximo de eventos em aberto.'
+        : 'Você já tem $limite eventos em aberto.';
     return MensagemDeErro(
-      texto: '$abertura Cancele ou espere terminar um deles para marcar outro.',
-      acao: 'Ver meus encontros',
+      texto: '$abertura Cancele ou espere terminar um deles para criar outro.',
+      acao: 'Ver meus eventos',
       rotaDaAcao: Rotas.rede,
     );
   }

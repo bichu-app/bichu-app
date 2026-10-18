@@ -72,7 +72,7 @@ export function unidadeComoAparece(u: UnidadeDoValor): Exclude<UnidadeDoValor, '
 }
 
 export const ORDENS: Record<OrdemDaLista, string> = {
-  agenda: 'Data do encontro, próximos primeiro',
+  agenda: 'Data do evento, próximos primeiro',
   atualizado: 'Atualizados por último',
 };
 

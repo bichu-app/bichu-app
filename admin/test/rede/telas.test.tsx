@@ -41,7 +41,7 @@ const escritas = (d: Duble, metodo: string, fim: RegExp) => d.registro.filter((r
 describe('Rede: lista', () => {
   it('mostra os encontros com selo, acesso, pedidos pendentes e a contagem', async () => {
     montar('/rede');
-    expect(await screen.findByText('4 encontros')).toBeInTheDocument();
+    expect(await screen.findByText('4 eventos')).toBeInTheDocument();
     const linha = screen.getByRole('link', { name: 'Socialização para filhotes' }).closest('tr');
     if (!linha) throw new Error('linha nao encontrada');
     expect(within(linha).getByText('Privado')).toBeInTheDocument();
@@ -55,9 +55,9 @@ describe('Rede: lista', () => {
 
   it('filtro de escolha única vira parâmetro do contrato e a contagem diz o filtro', async () => {
     const { duble, usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('radio', { name: 'Encerrados' }));
-    expect(await screen.findByText('1 encontro em Encerrados')).toBeInTheDocument();
+    expect(await screen.findByText('1 evento em Encerrados')).toBeInTheDocument();
     const consulta = duble.registro.at(-1)?.consulta;
     expect(consulta?.get('timing')).toBe('ended');
     expect(consulta?.get('publication_status')).toBe('published');
@@ -65,34 +65,34 @@ describe('Rede: lista', () => {
 
   it('busca digitada chega ao servidor e o sem resultado diz o que limpar', async () => {
     const { usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
-    const busca = screen.getByRole('searchbox', { name: 'Buscar encontros' });
+    await screen.findByText('4 eventos');
+    const busca = screen.getByRole('searchbox', { name: 'Buscar eventos' });
     // O servidor busca em title, summary e place_name: o placeholder diz os tres.
     expect(busca).toHaveAttribute('placeholder', 'Buscar por título, resumo ou local');
     await usuario.type(busca, 'jacaré');
-    expect(await screen.findByText('Nenhum encontro com “jacaré”.')).toBeInTheDocument();
+    expect(await screen.findByText('Nenhum evento com “jacaré”.')).toBeInTheDocument();
     await usuario.click(screen.getAllByRole('button', { name: 'Limpar busca' }).at(-1) as HTMLElement);
-    expect(await screen.findByText('4 encontros')).toBeInTheDocument();
+    expect(await screen.findByText('4 eventos')).toBeInTheDocument();
   });
 
   it('vazia e erro ao carregar', async () => {
     montar('/rede', criarDuble({ encontros: [], pedidos: [] }));
-    expect(await screen.findByRole('heading', { name: 'A Rede ainda não tem encontros' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'A Rede ainda não tem eventos' })).toBeInTheDocument();
   });
 
   it('erro ao carregar tem Atualizar, que recarrega a lista inteira', async () => {
     const { usuario } = montar('/rede', criarDuble({ falharLista: true }));
-    expect(await screen.findByText('Não conseguimos carregar os encontros.')).toBeInTheDocument();
+    expect(await screen.findByText('Não conseguimos carregar os eventos.')).toBeInTheDocument();
     await usuario.click(screen.getByRole('button', { name: 'Atualizar' }));
-    expect(await screen.findByText('4 encontros')).toBeInTheDocument();
+    expect(await screen.findByText('4 eventos')).toBeInTheDocument();
   });
 
   it('encontro encerrado não oferece cancelar', async () => {
     const { usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Piquenique dos vira-latas' }));
     const menu = screen.getByRole('menu');
-    expect(within(menu).queryByRole('menuitem', { name: 'Cancelar encontro' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Cancelar evento' })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: 'Remover' })).toBeInTheDocument();
   });
 });
@@ -100,21 +100,21 @@ describe('Rede: lista', () => {
 describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
   it('cancelar exige motivo, confirma e cancela sem pedir senha', async () => {
     const { duble, usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
-    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar evento' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Cancelar “Encontro de cães no parque”?' });
-    expect(within(dialogo).getByText(/^O encontro continua no app, marcado como cancelado, até o horário de fim, às 11:00 de 11\/10\/2026\./)).toBeInTheDocument();
+    expect(within(dialogo).getByText(/^O evento continua no app, marcado como cancelado, até o horário de fim, às 11:00 de 11\/10\/2026\./)).toBeInTheDocument();
     expect(within(dialogo).getByRole('button', { name: 'Voltar' })).toBeInTheDocument();
 
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar evento' }));
     expect(within(dialogo).getByText('Escreva o motivo.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /cancellation$/)).toHaveLength(0);
 
     expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'A praça vai estar interditada para obra.');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.')).toBeInTheDocument();
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar evento' }));
+    expect(await screen.findByText('Evento cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.')).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     const [cancelamento] = escritas(duble, 'POST', /cancellation$/);
     expect(cancelamento?.corpo).toEqual({ note: 'A praça vai estar interditada para obra.' });
@@ -125,28 +125,28 @@ describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
 
   it('bug 5: encontro sem fim fica no app até o fim do dia, e o diálogo diz isso', async () => {
     const { usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Caminhada de fim de tarde' }));
-    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar evento' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Cancelar “Caminhada de fim de tarde”?' });
     expect(
-      within(dialogo).getByText(/^O encontro não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 28\/09\/2026\./),
+      within(dialogo).getByText(/^O evento não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 28\/09\/2026\./),
     ).toBeInTheDocument();
     expect(within(dialogo).queryByText(/horário previsto de fim/)).toBeNull();
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Chuva forte.');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 28/09/2026.')).toBeInTheDocument();
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar evento' }));
+    expect(await screen.findByText('Evento cancelado. O app mostra o aviso de cancelado até o fim do dia 28/09/2026.')).toBeInTheDocument();
   });
 
   it('nenhuma escrita protegida por If-Match sai sem ele (o servidor responderia 428)', async () => {
     const { duble, usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
-    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar evento' }));
     const dialogo = screen.getByRole('alertdialog');
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Obra na praça.');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    await screen.findByText(/^Encontro cancelado\./);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar evento' }));
+    await screen.findByText(/^Evento cancelado\./);
     const protegidas = duble.registro.filter(
       (r) => (r.metodo === 'PATCH' || r.metodo === 'DELETE' || r.metodo === 'POST') && /\/admin\/network\/events\/[^/]+(\/(relocation|cancellation|access))?$/.test(r.caminho),
     );
@@ -156,7 +156,7 @@ describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
 
   it('o foco fica preso no diálogo e Esc devolve o foco ao menu', async () => {
     const { usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Remover “Encontro de cães no parque”?' });
@@ -173,18 +173,18 @@ describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
 
   it('remover confirma sem senha, e Cancelar não envia nada', async () => {
     const { duble, usuario } = montar('/rede');
-    await screen.findByText('4 encontros');
+    await screen.findByText('4 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     const dialogo = screen.getByRole('alertdialog');
-    expect(within(dialogo).getByText('O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro.')).toBeInTheDocument();
+    expect(within(dialogo).getByText('O evento sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar evento.')).toBeInTheDocument();
     expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
     expect(escritas(duble, 'DELETE', /events\/[^/]+$/)).toHaveLength(0);
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     await usuario.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remover' }));
-    expect(await screen.findByText('Encontro removido. Ele saiu da Rede do app.')).toBeInTheDocument();
+    expect(await screen.findByText('Evento removido. Ele saiu da Rede do app.')).toBeInTheDocument();
     expect(escritas(duble, 'DELETE', /events\/[^/]+$/)).toHaveLength(1);
     expect(pedidosDeSenha(duble.registro)).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Observações'), 'Dúvidas no zap 11 98765-4321');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
 
     const resumo = await screen.findByRole('alert');
     expect(resumo).toHaveTextContent('Corrija 1 campo para publicar:');
@@ -236,9 +236,9 @@ describe('Rede: formulário novo', () => {
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
 
-    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/rede');
     const [criacao] = escritas(duble, 'POST', /\/admin\/network\/events$/);
     expect(criacao?.corpo).toEqual({
@@ -264,7 +264,7 @@ describe('Rede: formulário novo', () => {
     const { usuario } = montar('/rede/novo');
     const descricao = await screen.findByLabelText('Descrição *');
     expect(descricao.tagName).toBe('TEXTAREA');
-    expect(descricao).toHaveAccessibleDescription(/^Aparece na lista de encontros do app e no topo da página do encontro\./);
+    expect(descricao).toHaveAccessibleDescription(/^Aparece na lista de eventos do app e no topo da página do evento\./);
     await usuario.type(descricao, 'Primeira linha.{Enter}Segunda linha.');
     expect(descricao).toHaveValue('Primeira linha.\nSegunda linha.');
     expect(screen.getByText('30/200')).toBeInTheDocument();
@@ -295,13 +295,13 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200, fone (11) 98765-4321');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
     expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
     expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(/^Tire do endereço telefone, e-mail, link, perfil ou chave Pix\. Rua, número e CEP podem ficar\./);
     await usuario.clear(screen.getByLabelText('Endereço'));
     await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
-    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
+    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
     const criacoes = escritas(duble, 'POST', /\/admin\/network\/events$/);
     expect((criacoes.at(-1)?.corpo as { street_address?: string }).street_address).toBe('Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
   });
@@ -336,8 +336,8 @@ describe('Rede: formulário novo', () => {
     await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://www.instagram.com/Org.Pet/');
     expect(screen.getByText('Aparece no app como @org.pet.')).toBeInTheDocument();
     expect(screen.getByText('Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.')).toBeInTheDocument();
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
-    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
+    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
     const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_handle?: string };
     expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
     expect(corpo.instagram_handle).toBe('org.pet');
@@ -368,7 +368,7 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'http://sympla.com.br/e/1');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
     expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
     expect(screen.getByLabelText('Link do convite ou ingresso')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
     expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
@@ -378,9 +378,9 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await usuario.type(await screen.findByLabelText('Início *'), '2026-12-05T09:00');
     await usuario.type(screen.getByLabelText('Fim'), '2026-12-05T08:00');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
     expect(await screen.findByText('Corrija 6 campos para publicar:')).toBeInTheDocument();
-    expect(screen.getByText('Informe o título do encontro.')).toBeInTheDocument();
+    expect(screen.getByText('Informe o título do evento.')).toBeInTheDocument();
     expect(screen.getByText('O fim precisa ser depois do início.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
   });
@@ -508,7 +508,7 @@ describe('Rede: edição', () => {
     });
     montar('/rede/encontro-de-caes-no-parque', duble);
     expect(
-      await screen.findByText('A foto 2 veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.'),
+      await screen.findByText('A foto 2 veio de uma conta que não existe mais. Ela fica no evento enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do evento.'),
     ).toBeInTheDocument();
     const afetada = screen.getByRole('listitem', { name: 'Imagem 2 de 2, Sai se a galeria mudar' });
     expect(within(afetada).getByText('Sai se a galeria mudar')).toBeInTheDocument();
@@ -517,7 +517,7 @@ describe('Rede: edição', () => {
 
   it('encontro encerrado mostra o aviso de correção', async () => {
     montar('/rede/piquenique-dos-vira-latas');
-    expect(await screen.findByText('Este encontro já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.')).toBeInTheDocument();
+    expect(await screen.findByText('Este evento já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.')).toBeInTheDocument();
   });
 
   it('encontro cancelado trava data, local e acesso', async () => {
@@ -593,7 +593,7 @@ describe('Rede: fila de pedidos', () => {
     if (!carla) throw new Error('pedido nao encontrado');
     expect(within(carla).getByText('Conta validada')).toBeInTheDocument();
     expect(within(carla).getByText(/Conta criada em março de 2026 · Pediu em 21\/09\/2026 às 14:32/)).toBeInTheDocument();
-    expect(screen.getByText('Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do encontro.')).toBeInTheDocument();
+    expect(screen.getByText('Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do evento.')).toBeInTheDocument();
   });
 
   it('aprovar não tem desfazer; recusar tem, e desfazer aprova', async () => {
@@ -659,7 +659,7 @@ describe('Rede: fila de pedidos', () => {
     if (!privado) throw new Error('massa sem o privado');
     privado.publication_status = 'cancelled';
     montar(PRIVADO, duble);
-    expect(await screen.findByText('Este encontro foi cancelado. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
+    expect(await screen.findByText('Este evento foi cancelado. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
     await screen.findByText('Carla M.');
     expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Recusar o pedido/ })).toBeNull();
@@ -672,13 +672,13 @@ describe('Rede: fila de pedidos', () => {
       if (privado) privado.timing = 'ended';
       return b;
     }));
-    expect(await screen.findByText('Este encontro já aconteceu. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
+    expect(await screen.findByText('Este evento já aconteceu. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
     expect(duble.pedidos.find((p) => p.ref.startsWith('rq_Carla'))?.status).toBe('pending');
   });
 
   it('encontro público não tem fila', async () => {
     montar('/rede/encontro-de-caes-no-parque/pedidos');
-    expect(await screen.findByText('Este encontro é público.')).toBeInTheDocument();
+    expect(await screen.findByText('Este evento é público.')).toBeInTheDocument();
   });
 });

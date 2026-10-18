@@ -146,7 +146,7 @@ void main() {
       expect(find.text('Adicionar ao calendário'), findsOneWidget);
 
       for (final t in <String>[
-        'Sobre o encontro',
+        'Sobre o evento',
         'Para quais cães',
         'Todos os portes',
         'Qualquer idade',
@@ -154,7 +154,7 @@ void main() {
         'O que levar',
         'Água',
         'Saquinhos para cocô',
-        'Cuidados no encontro',
+        'Cuidados no evento',
         'Recolha o cocô e leve o saquinho embora.',
         'Na área cercada, o cão pode ficar solto. Fora dela, na guia.',
         'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por '
@@ -425,13 +425,13 @@ void main() {
 
       expect(find.text('Cancelado'), findsOneWidget);
       expect(
-        find.text('A equipe do Bichu cancelou este encontro. Ele não vai acontecer.'),
+        find.text('A equipe do Bichu cancelou este evento. Ele não vai acontecer.'),
         findsOneWidget,
       );
-      await rolarAte(tester, find.text('Sobre o encontro'));
+      await rolarAte(tester, find.text('Sobre o evento'));
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
-      expect(tela, isNot(contains('Cuidados no encontro')));
+      expect(tela, isNot(contains('Cuidados no evento')));
       expect(tela, isNot(contains('Para quais cães')));
       expect(find.byKey(LocalDoEncontro.chaveDoMapa), findsNothing);
       // Ha coordenada, e ela nao e usada: a pergunta nem sai.
@@ -447,10 +447,10 @@ void main() {
         rede: redeDoEncontro(encontro: encontroPublico(status: 'ended')),
       );
       expect(find.text('Encerrado'), findsOneWidget);
-      await rolarAte(tester, find.text('Sobre o encontro'));
+      await rolarAte(tester, find.text('Sobre o evento'));
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
-      expect(tela, isNot(contains('Cuidados no encontro')));
+      expect(tela, isNot(contains('Cuidados no evento')));
     });
   });
 
@@ -503,7 +503,7 @@ void main() {
       expect(find.text(tituloPrivado), findsOneWidget);
       expect(find.text('Domingo, 4 de outubro'), findsOneWidget);
       expect(find.text('Privado'), findsOneWidget);
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(
         find.text(
           'O local e os detalhes aparecem se a equipe do Bichu aprovar o seu '
@@ -522,7 +522,7 @@ void main() {
       for (final proibido in <String>[
         'ISCA-',
         'Local',
-        'Sobre o encontro',
+        'Sobre o evento',
         'Horário de',
         'Das ',
         'Gratuito',
@@ -577,7 +577,7 @@ void main() {
       expect(find.text('Pedido enviado'), findsOneWidget);
       expect(
         find.text(
-          'Se o pedido for aprovado até o dia do encontro, o local e os '
+          'Se o pedido for aprovado até o dia do evento, o local e os '
           'detalhes aparecem aqui.',
         ),
         findsOneWidget,
@@ -591,7 +591,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(rede.chamadasA('DELETE /v1/network/events/$slugPrivado/join-request'), hasLength(1));
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(find.text('Pedir para participar'), findsOneWidget);
     });
 
@@ -680,7 +680,7 @@ void main() {
       await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
       await tester.tap(find.text('Pedir para participar'));
       await tester.pumpAndSettle();
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(find.text('Pedido enviado'), findsNothing);
       expect(
         find.text('Isso precisa de conexão. Tente de novo quando tiver sinal.'),
@@ -730,11 +730,11 @@ void main() {
         titulo: tituloPrivado,
       );
       expect(
-        find.text('A equipe do Bichu cancelou este encontro. Ele não vai acontecer.'),
+        find.text('A equipe do Bichu cancelou este evento. Ele não vai acontecer.'),
         findsOneWidget,
       );
       expect(find.text('Pedir para participar'), findsNothing);
-      expect(find.text('Encontro privado'), findsNothing);
+      expect(find.text('Evento privado'), findsNothing);
     });
 
     testWidgets('privado encerrado sem aprovação: sem caixa e sem pedir',
@@ -758,12 +758,12 @@ void main() {
       GoRouter.of(contexto).go(
         Rotas.encontroDaRedeDe(slugPrivado),
         extra: const RetomadaDoPedido(
-          MensagemDeErro(texto: 'Este encontro já aconteceu.'),
+          MensagemDeErro(texto: 'Este evento já aconteceu.'),
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Encontro privado'), findsOneWidget);
-      expect(find.text('Este encontro já aconteceu.'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
+      expect(find.text('Este evento já aconteceu.'), findsOneWidget);
     });
     testWidgets('guarda: Agora não fecha a folha sem guardar nada', (tester) async {
       final rede = redePrivada();

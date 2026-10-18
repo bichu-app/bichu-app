@@ -75,12 +75,12 @@ class TelaCriarEncontro extends StatefulWidget {
   static const String titulo = 'Criar um evento';
 
   static const String avisoDePublicacao =
-      'O encontro entra na agenda na hora, visível para todos.';
+      'O evento entra na agenda na hora, visível para todos.';
 
-  static const String rotuloDeMarcar = 'Marcar encontro';
+  static const String rotuloDeMarcar = 'Criar evento';
 
   static const String semEmailConfirmado =
-      'Confirme seu e-mail antes de marcar. O encontro vai aparecer para toda '
+      'Confirme seu e-mail antes de criar. O evento vai aparecer para toda '
       'a comunidade com o seu nome.';
 
   static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
@@ -98,14 +98,14 @@ enum _Fase { preenchendo, enviando }
 enum _Impedimento {
   semConta(TelaCriarEncontro.entreParaMarcar),
   semEmailConfirmado(TelaCriarEncontro.semEmailConfirmado),
-  semTitulo('Dê um nome ao encontro.'),
+  semTitulo('Dê um nome ao evento.'),
   semResumo('Diga em uma linha o que vai acontecer.'),
   semLugar('Diga o nome do lugar.'),
   semBairro('Diga o bairro.'),
   semCidade('Diga a cidade.'),
   semUf('Diga o estado, com duas letras.'),
   semData('Escolha o dia e a hora.'),
-  dataNoPassado('O encontro precisa ser no futuro.'),
+  dataNoPassado('O evento precisa ser no futuro.'),
   fimAntesDoComeco('O fim não pode ser antes do começo.');
 
   const _Impedimento(this.texto);
@@ -272,8 +272,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       setState(() {
         _fase = _Fase.preenchendo;
         _erro = const MensagemDeErro(
-          texto: 'Sem conexão agora. O encontro entra na agenda assim que você '
-              'tocar em marcar com internet.',
+          texto: 'Sem conexão agora. O evento entra na agenda assim que você '
+              'tocar em criar com internet.',
           acao: MensagensDeErro.tentarDeNovo,
         );
       });
@@ -395,7 +395,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ],
                 const SizedBox(height: BichuEspaco.e6),
                 BichuField(
-                  rotulo: 'Nome do encontro',
+                  rotulo: 'Nome do evento',
                   controlador: _titulo,
                   aoMudar: _aoDigitar,
                   erro: _errosDeCampo['title'],

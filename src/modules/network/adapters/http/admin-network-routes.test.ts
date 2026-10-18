@@ -227,7 +227,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.doesNotMatch(r.bruto, /created_by/);
     assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
     assert.equal(b.avisos.length, 1);
-    assert.match(b.avisos[0]?.assunto ?? '', /Encontro criado/);
+    assert.match(b.avisos[0]?.assunto ?? '', /Evento criado/);
   });
 
   void it('ISCA: tutor e recusado com 403, sem escrita e sem linha de trilha', async () => {

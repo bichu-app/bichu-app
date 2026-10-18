@@ -177,9 +177,9 @@ class CascaComAbas extends StatefulWidget {
     ),
     DestinoDeNavegacao(
       rotulo: 'Rede',
-      reforcoAcessivel: 'eventos e encontros da comunidade',
+      reforcoAcessivel: 'eventos da comunidade',
       reforcoDaPagina:
-          'Os eventos e encontros de quem tem pet aqui perto de você.',
+          'Os eventos de quem tem pet aqui perto de você.',
       icone: Icons.groups_outlined,
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,

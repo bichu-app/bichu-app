@@ -4,13 +4,13 @@
 
 export const HOME = {
   titulo: 'Bichu',
-  descricao: 'Bichu é a rede dos pets: encontros no bairro e profissionais indicados e avaliados pela comunidade.',
+  descricao: 'Bichu é a rede dos pets: eventos no bairro e profissionais indicados e avaliados pela comunidade.',
 
   hero: {
     titulo: 'A rede dos pets.',
     // P.1.1: a frase manuscrita trocou para a assinatura da marca.
     manuscrito: 'Pets conectam pessoas.',
-    lead: 'Uma comunidade de tutores do mesmo bairro: encontros com os pets e profissionais indicados e avaliados por quem mora perto.',
+    lead: 'Uma comunidade de tutores do mesmo bairro: eventos com os pets e profissionais indicados e avaliados por quem mora perto.',
     alt: 'Ilustração de três pessoas abraçadas a um cão e a um gato, com árvores e prédios ao fundo.',
   },
 
@@ -19,9 +19,9 @@ export const HOME = {
     itens: [
       {
         chave: 'eventos',
-        titulo: 'Eventos e encontros',
-        texto: 'Encontros em praças e parques para juntar os pets do bairro, criados pela equipe do Bichu e pela própria comunidade, com check-in e galeria de fotos.',
-        link: { href: '#rede', texto: 'Como funcionam os encontros' },
+        titulo: 'Eventos no bairro',
+        texto: 'Eventos em praças e parques para juntar os pets do bairro, criados pela equipe do Bichu e pela própria comunidade, com check-in e galeria de fotos.',
+        link: { href: '#rede', texto: 'Como funcionam os eventos' },
       },
       {
         chave: 'profissionais',
@@ -35,14 +35,14 @@ export const HOME = {
   rede: {
     sobretitulo: 'Rede',
     titulo: 'Na Rede, os pets do bairro se encontram na praça.',
-    lead: 'Encontros em praças e parques, criados pela equipe do Bichu e pela própria comunidade. Você faz check-in quando chega, e as fotos do encontro ficam juntas na página do evento.',
+    lead: 'Eventos em praças e parques, criados pela equipe do Bichu e pela própria comunidade. Você faz check-in quando chega, e as fotos ficam juntas na página do evento.',
     passos: [
-      { icone: 'park', titulo: 'Encontros no bairro', texto: 'Passeios e encontros em praças e parques. O lugar aparece pelo nome da praça e do bairro, sem mapa.' },
-      { icone: 'how_to_reg', titulo: 'Check-in no encontro', texto: 'Chegou, faz o check-in pelo app. A página do evento mostra quantas pessoas fizeram check-in, nunca quem.' },
-      { icone: 'photo_library', titulo: 'Galeria do encontro', texto: 'As fotos ficam na página do evento, sem o nome de quem enviou.' },
+      { icone: 'park', titulo: 'Eventos no bairro', texto: 'Passeios e eventos em praças e parques. O lugar aparece pelo nome da praça e do bairro, sem mapa.' },
+      { icone: 'how_to_reg', titulo: 'Check-in no evento', texto: 'Chegou, faz o check-in pelo app. A página do evento mostra quantas pessoas fizeram check-in, nunca quem.' },
+      { icone: 'photo_library', titulo: 'Galeria do evento', texto: 'As fotos ficam na página do evento, sem o nome de quem enviou.' },
     ],
     // P.1.3: versao segura, sem a linha do bairro.
-    cartao: { titulo: 'Encontro no bairro', href: '/comunidade#eventos' },
+    cartao: { titulo: 'Evento no bairro', href: '/comunidade#eventos' },
     botao: { href: '/comunidade', texto: 'Conhecer a comunidade' },
   },
 

@@ -59,7 +59,7 @@ export function seloDoEncontro(e: Pick<Encontro, 'publication_status' | 'timing'
   return e.timing === 'upcoming' ? 'agendado' : e.timing === 'happening' ? 'agora' : 'encerrado';
 }
 
-const plural = (n: number) => (n === 1 ? 'encontro' : 'encontros');
+const plural = (n: number) => (n === 1 ? 'evento' : 'eventos');
 
 export function textoDaContagem(carregados: number, total: number, filtro: Filtro, q: string): string {
   if (carregados < total) return `Mostrando ${carregados} de ${total} ${plural(total)}`;
@@ -72,9 +72,9 @@ export function textoDaContagem(carregados: number, total: number, filtro: Filtr
 export function textoSemResultado(filtro: Filtro, q: string): { frase: string; limpar: string } {
   const busca = q.trim();
   const temF = filtro !== 'todos';
-  if (busca && temF) return { frase: `Nenhum encontro com “${busca}” em ${FILTROS[filtro]}.`, limpar: 'Limpar busca e filtro' };
-  if (temF) return { frase: `Nenhum encontro em ${FILTROS[filtro]}.`, limpar: 'Limpar filtro' };
-  return { frase: `Nenhum encontro com “${busca}”.`, limpar: 'Limpar busca' };
+  if (busca && temF) return { frase: `Nenhum evento com “${busca}” em ${FILTROS[filtro]}.`, limpar: 'Limpar busca e filtro' };
+  if (temF) return { frase: `Nenhum evento em ${FILTROS[filtro]}.`, limpar: 'Limpar filtro' };
+  return { frase: `Nenhum evento com “${busca}”.`, limpar: 'Limpar busca' };
 }
 
 /** O que o menu da linha oferece, pelo estado do encontro (25.5.2). */
@@ -100,10 +100,10 @@ export function textosDoCancelamento(e: Pick<Encontro, 'starts_at' | 'ends_at' |
     ? `até o horário de fim, às ${hora(e.ends_at, fuso)} de ${dataEHora(e.ends_at, fuso).slice(0, 10)}`
     : `até o fim do dia ${dataEHora(e.starts_at, fuso).slice(0, 10)}`;
   const abertura = e.ends_at
-    ? `O encontro continua no app, marcado como cancelado, ${ate}.`
-    : `O encontro não tem horário de fim, então continua no app, marcado como cancelado, ${ate}.`;
+    ? `O evento continua no app, marcado como cancelado, ${ate}.`
+    : `O evento não tem horário de fim, então continua no app, marcado como cancelado, ${ate}.`;
   return {
-    corpo: `${abertura} Não dá para desfazer: se ele for acontecer em outra data, crie um encontro novo. Todos os administradores recebem aviso.`,
-    sucesso: `Encontro cancelado. O app mostra o aviso de cancelado ${ate}.`,
+    corpo: `${abertura} Não dá para desfazer: se ele for acontecer em outra data, crie um evento novo. Todos os administradores recebem aviso.`,
+    sucesso: `Evento cancelado. O app mostra o aviso de cancelado ${ate}.`,
   };
 }

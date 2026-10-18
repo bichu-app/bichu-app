@@ -161,7 +161,7 @@ void main() {
       );
 
       final botao = tester.widget<BotaoPrimario>(
-        find.widgetWithText(BotaoPrimario, 'Marcar encontro'),
+        find.widgetWithText(BotaoPrimario, 'Criar evento'),
       );
       expect(
         botao.aoTocar,
@@ -214,7 +214,7 @@ void main() {
     /// Preenche o mínimo que o contrato exige e toca em marcar.
     Future<void> preencherEMarcar(WidgetTester tester) async {
       await tester.enterText(
-        find.widgetWithText(TextField, 'Nome do encontro'),
+        find.widgetWithText(TextField, 'Nome do evento'),
         'Caminhada no parque',
       );
       await tester.enterText(
@@ -241,7 +241,7 @@ void main() {
       await tocar(tester, find.text('OK'));
       await tocar(tester, find.text('OK'));
 
-      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
     }
 
     testWidgets(
@@ -353,17 +353,17 @@ void main() {
       );
       await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
-      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
       expect(
-        find.textContaining('encontros em aberto'),
+        find.textContaining('eventos em aberto'),
         findsOneWidget,
         reason: 'REPROVA: o 409 do teto saiu como erro genérico. Esperar não '
             'resolve este: o balde cheio é o de encontros em aberto, e o que '
             'destrava é cancelar ou deixar um terminar.',
       );
       expect(
-        find.textContaining('3 encontros'),
+        find.textContaining('3 eventos'),
         findsNothing,
         reason: 'REPROVA: o número do teto está escrito no app. Uma versão '
             'antiga continua instalada semanas depois de o servidor mudar o '
@@ -387,10 +387,10 @@ void main() {
       );
       await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
-      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
       expect(
-        find.textContaining('3 encontros em aberto'),
+        find.textContaining('3 eventos em aberto'),
         findsOneWidget,
         reason: 'REPROVA: a resposta mandou `limit` e a tela não o usou.',
       );
@@ -414,7 +414,7 @@ void main() {
       );
       await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
-      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
       expect(
         find.text('Confirmar meu e-mail'),
@@ -447,7 +447,7 @@ void main() {
       );
       await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
-      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
       expect(
         find.text('Escreva só o nome do lugar, sem endereço.'),
@@ -464,7 +464,7 @@ void main() {
 /// Preenche o mínimo exigido pelo contrato, sem tocar em marcar.
 Future<void> preencherOMinimo(WidgetTester tester) async {
   await tester.enterText(
-    find.widgetWithText(TextField, 'Nome do encontro'),
+    find.widgetWithText(TextField, 'Nome do evento'),
     'Caminhada no parque',
   );
   await tester.enterText(
