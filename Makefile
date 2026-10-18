@@ -525,7 +525,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina com `/usr/bin/time -p`, Node 22, Python 3:
 #
 #   npm run typecheck (tsc --noEmit)                            2,79 s
-#   npm run lint      (eslint .)                                8,34 s
+#   npm run lint      (eslint .)                   590 arquivos, ver abaixo
 #   verificar_passos_condicionais.py                            0,07 s
 #   verificar_consulta_externa.py                               0,05 s
 #   verificar_veredito_do_sonar.py --autoteste                  0,04 s
@@ -569,7 +569,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # 28/09: `npm run lint` vivia so no `ci.yml`, e `eslint.config.mjs` tem DUAS
 # regras proprias -- `arquitetura/fronteira-de-modulo` e
 # `arquitetura/marca-so-pela-porta` -- que ninguem exercitava desde que a esteira
-# parou. Medido: 371 arquivos lintados, zero mensagens. Lint que nao acha arquivo
+# parou. Medido: 590 arquivos lintados, zero mensagens. Lint que nao acha arquivo
 # aprova tudo calado, e por isso o numero de arquivos esta escrito aqui.
 #
 # ELE NAO REPROVA ARVORE SUJA LEGITIMA, e isso foi conferido: o `eslint` nao
@@ -577,7 +577,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # rastreado) -- saida 0, e o arquivo nao rastreado foi lintado junto. E a
 # diferenca que custou uma iteracao no portao dos tipos gerados, onde a forma da
 # esteira (`git diff --exit-code`) reprovava quem tinha regerado e nao commitado.
-verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (8,34 s, 371 arquivos)
+verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (590 arquivos, `workspace/**` fora do escopo)
 	npm run lint
 
 verificar-passos-condicionais: ## nenhum passo de workflow e pulado por premissa do proprio job, iscas dentro (0,07 s)
