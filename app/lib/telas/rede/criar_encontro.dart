@@ -72,7 +72,7 @@ class TelaCriarEncontro extends StatefulWidget {
   /// O relogio, injetavel para o teste de widget.
   final DateTime Function() agora;
 
-  static const String titulo = 'Marcar um encontro';
+  static const String titulo = 'Criar um evento';
 
   static const String avisoDePublicacao =
       'O encontro entra na agenda na hora, visível para todos.';
@@ -85,7 +85,7 @@ class TelaCriarEncontro extends StatefulWidget {
 
   static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
 
-  static const String entreParaMarcar = 'Entre para marcar um encontro.';
+  static const String entreParaMarcar = 'Entre para criar um evento.';
 
   @override
   State<TelaCriarEncontro> createState() => _TelaCriarEncontroState();

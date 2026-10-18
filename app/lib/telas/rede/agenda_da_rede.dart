@@ -91,9 +91,10 @@ class AgendaDaRede extends StatefulWidget {
   static const String exemploDaBusca = 'passeio, praça, Pinheiros';
 
   /// O rotulo da porta de criar. **Diz o verbo da pessoa**, e nao o nome do
-  /// recurso: quem abre a `Rede` quer marcar um encontro, nao "criar um
-  /// NetworkEvent".
-  static const String rotuloDeMarcar = 'Marcar um encontro';
+  /// recurso: quem abre a `Rede` quer criar um evento, nao "criar um
+  /// NetworkEvent". A redacao foi pedida pelo cliente em 18/10; o dominio
+  /// continua chamando a coisa de `encontro` no codigo inteiro.
+  static const String rotuloDeMarcar = 'Criar um evento';
   static const String notaDasCidades =
       'As cidades abaixo são as que já apareceram na agenda. O filtro procura '
       'na base inteira.';

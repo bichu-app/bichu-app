@@ -86,7 +86,7 @@ void main() {
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
       );
 
-      final porta = find.text('Marcar um encontro');
+      final porta = find.text('Criar um evento');
       expect(
         porta,
         findsOneWidget,
@@ -116,7 +116,7 @@ void main() {
 
         final naBarra = find.descendant(
           of: find.byType(AppBar),
-          matching: find.text('Marcar um encontro'),
+          matching: find.text('Criar um evento'),
         );
         expect(
           naBarra,
@@ -137,7 +137,7 @@ void main() {
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         emailVerificado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
 
       expect(
         find.textContaining('Confirme seu e-mail antes de marcar'),
@@ -178,10 +178,10 @@ void main() {
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         logado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
 
       expect(
-        find.textContaining('Entre para marcar um encontro'),
+        find.textContaining('Entre para criar um evento'),
         findsOneWidget,
         reason: 'REPROVA: sem conta a tela não diz o que falta.',
       );
@@ -198,7 +198,7 @@ void main() {
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         emailVerificado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
 
       expect(
         find.textContaining('Confirme seu e-mail antes de marcar'),
@@ -251,7 +251,7 @@ void main() {
       (tester) async {
         final enviados = <Map<String, dynamic>>[];
         await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-        await tocar(tester, find.text('Marcar um encontro'));
+        await tocar(tester, find.text('Criar um evento'));
         await preencherEMarcar(tester);
 
         expect(enviados, hasLength(1), reason: 'REPROVA: nada foi enviado.');
@@ -305,7 +305,7 @@ void main() {
     testWidgets('campo opcional vazio NÃO entra como `null`', (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherEMarcar(tester);
 
       final corpo = enviados.single;
@@ -327,7 +327,7 @@ void main() {
         (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherEMarcar(tester);
 
       expect(
@@ -351,7 +351,7 @@ void main() {
               problema('community-event-limit-reached', 409),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -385,7 +385,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -412,7 +412,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -445,7 +445,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await tocar(tester, find.text('Criar um evento'));
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
