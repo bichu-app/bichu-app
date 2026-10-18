@@ -30,6 +30,26 @@ class NomeDeExibicao {
   /// aparecem aqui de proposito.
   static const String precisaDoNome = 'Digite o nome que você quer usar no Bichu.';
 
+  /// POR QUE ESTA FRASE NAO E A DE `Meus dados`, E ISSO E DELIBERADO.
+  ///
+  /// `telas/perfil/tela_dados_pessoais.dart` tem a MESMA forma de regra -- ela
+  /// recusa `_nome.text.isNotEmpty && _nome.text.trim().isEmpty`, igual ao
+  /// `trim` daqui e ao de `camposPendentesDoPerfil`
+  /// (`completude-do-perfil.ts`). O que nao da para reaproveitar e o TEXTO:
+  /// lá a frase e *"Escreva o seu nome, ou deixe o campo vazio para
+  /// tirá-lo."*, porque naquela tela apagar o nome **e** uma escolha que o
+  /// contrato aceita (`MeUpdate.display_name` nao entrou em `required`).
+  ///
+  /// No cadastro deixar vazio deixou de ser escolha, entao a segunda metade
+  /// daquela frase passaria uma instrucao FALSA para quem esta criando a
+  /// conta. A regra e a mesma; a saida que a frase oferece e que nao existe
+  /// mais aqui.
+  ///
+  /// **A assimetria entre as duas telas e real e e decisao de produto, nao
+  /// descuido deste arquivo**: quem cria a conta agora precisa de nome, e
+  /// quem ja tem conta continua podendo apagar o seu em `Meus dados`.
+  /// Fechar essa porta mexeria em `MeUpdate` e na tela de outra frente.
+
   /// A cobranca do nome que passa do teto.
   static const String passouDoLimite =
       'Use no máximo $limite caracteres no nome.';

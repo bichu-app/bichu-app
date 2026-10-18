@@ -44,7 +44,7 @@ import { describe, it } from 'node:test';
 
 import { AppError } from '../../../shared/http/errors.js';
 import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/types/brands.js';
-import { INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
+import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Conta, IdentityRepository, NovaConta } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
@@ -124,7 +124,9 @@ function contaRecemCriada(displayName: string | null): Conta {
     emailDeliverable: true,
     status: 'active',
     sessionsInvalidBefore: INSTANTE_FIXO,
-    createdAt: new Date(INSTANTE_FIXO),
+    // `dataFixa`, e nunca `new Date`: tempo real só em `shared/time/clock.ts`,
+    // e o lint cobra isso em todo o repositório.
+    createdAt: dataFixa(INSTANTE_FIXO),
   };
 }
 
