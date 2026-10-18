@@ -284,6 +284,34 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
       },
     );
   }
+
+  /// `DELETE /pets/{petId}/photos/{photoId}`.
+  ///
+  /// **A rota existia no contrato e no servidor, e nenhum caminho do app a
+  /// chamava.** `deletePetPhoto` esta declarada desde a BICHUS-87 e
+  /// `excluirFoto` esta implementada em `media-service`; faltava so o cliente
+  /// Dart. Enquanto faltou, a unica forma de a pessoa se livrar de uma foto
+  /// errada era enviar outra por cima -- e quem nao queria foto nenhuma nao
+  /// tinha saida.
+  ///
+  /// **Remover NAO exige substituir**, e isso e do servidor: `excluirFoto`
+  /// apaga a linha e devolve 204, sem pedir foto nova em troca.
+  ///
+  /// **O 409 do contrato nao e emitido pelo servidor de hoje.** O contrato
+  /// declara "e a unica foto de um pet com caso aberto" como 409, e
+  /// `excluirFoto` **nao confere caso aberto nenhum**: ela apaga e pronto. A
+  /// divergencia e do servidor, nao deste metodo, e esta nomeada no relatorio.
+  /// Quem chama trata o 409 de todo jeito -- o dia em que o servidor passar a
+  /// emiti-lo nao pode ser o dia em que o app comeca a engolir a recusa.
+  Future<void> excluirFotoDoPet({
+    required String petId,
+    required String photoId,
+  }) async {
+    await _api.delete(
+      '/pets/${Uri.encodeComponent(petId)}'
+      '/photos/${Uri.encodeComponent(photoId)}',
+    );
+  }
 }
 
 /// As operacoes publicas de `/v1/tags` do contrato.

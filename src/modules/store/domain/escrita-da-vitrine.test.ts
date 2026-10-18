@@ -128,6 +128,7 @@ void describe('o preco no painel', () => {
         subcategoryLabel: vencido.subcategoryLabel,
         imageUrl: null,
         imageAltText: null,
+        imagens: [],
         species: ['dog'],
         tags: [],
         targetUrl: vencido.targetUrl ?? '',

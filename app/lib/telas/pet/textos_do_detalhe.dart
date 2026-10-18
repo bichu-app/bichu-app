@@ -82,6 +82,73 @@ abstract final class TextosDoDetalhe {
   static const String naoConseguimosSalvar =
       'Não conseguimos salvar. Seus dados continuam aqui.';
 
+  // -- A foto na edicao -----------------------------------------------------
+
+  /// O rotulo do bloco. "Foto" e nao "Foto do pet": o nome do pet ja esta no
+  /// primeiro campo da mesma tela.
+  static const String tituloDaFoto = 'Foto';
+
+  static const String adicionarFoto = 'Adicionar foto';
+  static const String trocarAFoto = 'Trocar a foto';
+  static const String removerAFoto = 'Remover a foto';
+
+  static const String semFotoAinda =
+      'Nenhuma foto ainda. A foto é o que faz alguém reconhecer o pet na rua.';
+
+  /// **Campo vazio a preencher, e nao pendencia acusada.** O criterio 10 da
+  /// BICHUS-61 pede isso por nome: a ausencia de foto nao e erro de quem
+  /// cadastrou, e a tela nao a trata como um problema a consertar.
+  static const String fotoEmProcessamento =
+      'A foto está sendo processada. Ela aparece aqui em instantes.';
+
+  static const String fotoSubindo = 'Enviando a foto…';
+
+  static const String fotoEnviada =
+      'Foto enviada. Ela aparece aqui quando o processamento terminar.';
+
+  static const String fotoSemSinal =
+      'Sem conexão para enviar a foto. Ela sai sozinha quando o sinal voltar.';
+
+  static const String fotoRecusada =
+      'O envio foi recusado. Tente outra foto.';
+
+  static const String naoConseguimosRemoverAFoto =
+      'Não conseguimos remover a foto. Ela continua aqui.';
+
+  /// O 409 de `deletePetPhoto`, se o servidor algum dia o emitir.
+  ///
+  /// Texto escrito **agora** de proposito: o contrato declara a recusa, e um
+  /// `switch` que nao a cobre devolveria a mensagem generica no unico caso em
+  /// que ha algo concreto a dizer.
+  static const String fotoPresaAoCasoAberto =
+      'Esta é a única foto, e o caso de perdido está aberto. Sem foto o alerta '
+      'não funciona. Troque a foto, ou encerre o caso antes de removê-la.';
+
+  static const String tituloDaRemocaoDaFoto = 'Remover a foto?';
+
+  static String corpoDaRemocaoDaFoto(String nome) =>
+      'Isso apaga a foto ${_de(nome)} do cadastro. Você pode enviar outra '
+      'depois.';
+
+  static const String confirmarRemocaoDaFoto = 'Remover';
+
+  static String confirmarRemocaoDaFotoAcessivel(String nome) =>
+      'Remover a foto de $nome do cadastro';
+
+  /// O texto alternativo da foto atual (SC 1.1.1). Diz **de quem** e a foto:
+  /// "Foto" sozinho nao informa nada a quem usa leitor de tela.
+  static String fotoAtualDe(String nome) => 'Foto atual de $nome';
+
+  /// A camera negada para sempre: o mesmo texto do cadastro, e **a mesma
+  /// razao**. Nao ha microcopy nova aqui -- duas frases diferentes para o
+  /// mesmo estado do aparelho e como as telas divergem sem ninguem ver.
+  static const String cameraNegada = TextosDoCadastro.cameraNegada;
+  static const String abrirOsAjustes = TextosDoCadastro.abrirOsAjustes;
+  static const String cameraNaoEmbarcada =
+      TextosDoCadastro.cameraNaoEmbarcada;
+  static const String tirarFoto = TextosDoCadastro.tirarFoto;
+  static const String escolherDaGaleria = TextosDoCadastro.escolherDaGaleria;
+
   // -- Exclusao (BICHUS-60) -------------------------------------------------
 
   static String tituloDaExclusao(String nome) => 'Excluir ${_o(nome)}?';
