@@ -35,6 +35,8 @@ import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
+import '../telas/perto/sugerir_profissional.dart';
+import '../telas/rede/criar_encontro.dart';
 import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
@@ -67,7 +69,24 @@ abstract final class Rotas {
 
   static String encontroDaRedeDe(String slug) =>
       '/rede/encontros/${Uri.encodeComponent(slug)}';
+
+  /// **Marcar um encontro da `Rede`: IRMA da casca, e nao sob o ramo.**
+  ///
+  /// Mesma razao do assistente de cadastro de pet e do registro de achado:
+  /// preencher um formulario e TAREFA, e a barra de abas abaixo dele
+  /// ofereceria quatro saidas para o meio do preenchimento. Leitura fica sob o
+  /// ramo (`encontroDaRede`); tarefa, irma.
+  ///
+  /// **Declarada ANTES do ramo da casca**, como `/pets/novo` em relacao a
+  /// `/pets`: o `go_router` casa na ordem de registro, e o
+  /// `encontros/:slug` do ramo engoliria qualquer segmento -- o formulario
+  /// abriria o detalhe de um encontro chamado "novo".
+  static const String criarEncontroDaRede = '/rede/encontros/novo';
   static const String perto = '/perto';
+
+  /// **Indicar um profissional para o `Perto`: irma da casca**, pela mesma
+  /// razao de [criarEncontroDaRede].
+  static const String sugerirProfissional = '/perto/indicacoes/nova';
   static const String loja = '/loja';
 
   /// O produto da `Loja`, sob o ramo da secao: a barra de abas continua, e
@@ -477,6 +496,17 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // registradas, e um parametro casa com qualquer segmento: declarado
       // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
       // detalhe de um achado chamado "novo".
+      // As duas ESCRITAS da comunidade, irmas da casca porque sao tarefa.
+      // Declaradas antes do ramo da casca: `encontros/:slug` engoliria
+      // `encontros/novo` e o formulario abriria um detalhe inexistente.
+      GoRoute(
+        path: Rotas.criarEncontroDaRede,
+        builder: (context, estado) => const TelaCriarEncontro(),
+      ),
+      GoRoute(
+        path: Rotas.sugerirProfissional,
+        builder: (context, estado) => const TelaSugerirProfissional(),
+      ),
       GoRoute(
         path: Rotas.registrarAchado,
         builder: (context, estado) {

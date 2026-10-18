@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/modelos_rede.dart';
 import '../../api/rede_api.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
@@ -85,6 +88,12 @@ class AgendaDaRede extends StatefulWidget {
   static const String textoDaFalha =
       'Não conseguimos carregar os encontros agora.';
   static const String rotuloDeAtualizar = 'Atualizar';
+  static const String exemploDaBusca = 'passeio, praça, Pinheiros';
+
+  /// O rotulo da porta de criar. **Diz o verbo da pessoa**, e nao o nome do
+  /// recurso: quem abre a `Rede` quer marcar um encontro, nao "criar um
+  /// NetworkEvent".
+  static const String rotuloDeMarcar = 'Marcar um encontro';
   static const String notaDasCidades =
       'As cidades abaixo são as que já apareceram na agenda. O filtro procura '
       'na base inteira.';
@@ -480,6 +489,24 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
+            // **A porta de criar encontro, no CORPO e nao na `AppBar`.** O
+            // slot unico de acao da barra de topo e da secao (11.23.1), e
+            // numa raiz de aba o slot da esquerda e a gaveta. Acima da
+            // `TabBar` porque a acao e da SECAO e nao de uma aba: em
+            // `Pedidos` ela continua querendo dizer a mesma coisa.
+            //
+            // **Habilitada sempre, inclusive sem conta e sem e-mail
+            // confirmado.** Quem decide e explica o bloqueio e a tela de
+            // destino, que mostra o motivo e a saida que o resolve. Um botao
+            // apagado aqui seria um botao morto sem explicacao -- e sem lugar
+            // onde escrever uma.
+            Padding(
+              padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
+              child: BotaoSecundario(
+                rotulo: AgendaDaRede.rotuloDeMarcar,
+                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
+              ),
+            ),
             TabBar(
               controller: controlador,
               onTap: (i) => _trocarAba(abas[i]),

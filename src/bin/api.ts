@@ -98,10 +98,21 @@ import {
   criarNomeDoPet,
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
 import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
+import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
+// As duas conferencias de texto que `professionals` NAO reimplementa. A
+// composicao mora aqui, fora de `src/modules/`, porque
+// `arquitetura/fronteira-de-modulo` reprova um modulo importar `domain/` de
+// outro -- e escrever um segundo detector de D59 ao lado deste seria manter
+// dois, que divergem calados. Ver
+// `modules/professionals/ports/conferencias-de-texto.ts`.
+import { errosDeTextoDeUsuario } from '../modules/network/domain/encontro-da-comunidade.js';
+import { handleDoInstagram } from '../modules/network/domain/escrita-do-encontro.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import { criarTaxonomiaDaVitrineRepository } from '../modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
@@ -810,6 +821,22 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+    });
+    // A SUGESTAO do diretorio: escrita da comunidade, em arquivo e em
+    // registrador proprios. Ela NAO escreve em `professionals` -- a emenda 1 do
+    // ADR-0011 tirou `'community'` de `professionals.source`, e o que esta
+    // operacao grava e a fila de revisao (`directory_suggestions`). A trilha e
+    // a do app (`trilha`, transacao propria), e nao a transacional do painel.
+    registrarRotaDeSugestaoDoDiretorio(escopo, {
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      sugestoes: new SugestaoDoDiretorio({
+        sugestoes: criarDirectorySuggestionRepository(db, ids),
+        trilha,
+        conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+      }),
+      contrato,
     });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),

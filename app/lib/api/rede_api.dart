@@ -4,9 +4,16 @@ import 'modelos_rede.dart';
 
 /// As operacoes da secao `Rede` que o app consome (`tags: [network]`).
 ///
-/// Nenhuma escrita de encontro: criar, editar e cancelar sao do backoffice
-/// (`/admin/network/events`, ADR-0027). O que o app escreve e so o pedido de
-/// participacao da propria conta, e a desistencia dele.
+/// **A escrita da comunidade entrou em 17/10/2026** (ADR-0025 emenda 3): a
+/// pessoa cria o proprio encontro por `createNetworkEvent`, e ele nasce
+/// `published`, sem fila de revisao. Editar e cancelar o proprio existem no
+/// contrato (`updateNetworkEvent` e `cancelNetworkEvent`) e **nao estao aqui**:
+/// os dois exigem `If-Match`, e `ApiClient.patch` nao envia cabecalho hoje.
+/// Declarar os metodos sem o cabecalho produziria 428 em toda chamada, que e
+/// pior que a ausencia -- ver o relato da entrega.
+///
+/// O resto do que o app escreve e o pedido de participacao da propria conta, e
+/// a desistencia dele.
 ///
 /// ## Quem leva token
 ///
@@ -28,6 +35,84 @@ class RedeApi {
   const RedeApi(this._api);
 
   final ApiClient _api;
+
+  /// O caminho de `createNetworkEvent`, exposto para a fila offline.
+  static const String caminhoDeCriacao = '/network/events';
+
+  /// O corpo de `createNetworkEvent`, montado num lugar so.
+  ///
+  /// **Monta apenas os campos que `CommunityNetworkEventInput` aceita.** O que
+  /// a operacao NAO aceita -- `visibility`, `admission`, `slug`, `point`,
+  /// `street_address`, `ticket_url`, `instagram_url` e estado de publicacao --
+  /// nao tem parametro aqui: o encontro da comunidade e sempre publico e
+  /// gratuito, e um parametro para escolher seria um campo que o servidor
+  /// recusa com `400` depois de a tela ter desenhado o controle.
+  ///
+  /// **Campo opcional ausente nao vira `null` no corpo: ele nao entra.** O
+  /// esquema e `additionalProperties: false` e os defaults sao do servidor
+  /// (`time_zone`, `accepted_sizes`, `dog_age`, `vaccination_required`,
+  /// `fenced_off_leash_area`); mandar `null` em `ends_at` na CRIACAO nao e
+  /// "sem fim previsto", e um tipo que o esquema nao declara.
+  ///
+  /// Datas em UTC com `Z`, como `format: date-time` pede. O fuso de exibicao e
+  /// `time_zone`, separado, e o servidor o aplica.
+  static Map<String, dynamic> corpoDeCriacao({
+    required String titulo,
+    required String resumo,
+    required String nomeDoLugar,
+    required String bairro,
+    required String cidade,
+    required String uf,
+    required DateTime comecaEm,
+    DateTime? terminaEm,
+    String? observacoes,
+  }) {
+    return <String, dynamic>{
+      'title': titulo,
+      'summary': resumo,
+      'place': <String, dynamic>{
+        'place_name': nomeDoLugar,
+        'neighborhood': bairro,
+        'city': cidade,
+        'state': uf,
+      },
+      'starts_at': comecaEm.toUtc().toIso8601String(),
+      if (terminaEm != null) 'ends_at': terminaEm.toUtc().toIso8601String(),
+      if (observacoes != null && observacoes.isNotEmpty)
+        'notes': observacoes,
+    };
+  }
+
+  /// `POST /v1/network/events` (`createNetworkEvent`), com conta.
+  ///
+  /// **Devolve o encontro criado, e ele JA esta em publico**: a resposta e
+  /// `NetworkEventPublic`, a mesma forma de `getNetworkEvent`, e por isso a
+  /// tela desenha o resultado com o que recebeu em vez de pedir de novo.
+  ///
+  /// Nao trata recusa: `contact-channel-unverified` e
+  /// `community-event-limit-reached` sobem como `FalhaDaApi` e a tela os
+  /// distingue por `ProblemTipo`. Um `catch` aqui apagaria justamente a
+  /// diferenca entre "confirme seu e-mail" e "cancele um encontro".
+  Future<EncontroPublico> criar(
+    Map<String, dynamic> corpo, {
+    String? idempotencyKey,
+  }) async {
+    final json = await _api.post(
+      caminhoDeCriacao,
+      corpo: corpo,
+      idempotencyKey: idempotencyKey,
+    );
+    return _ler(() {
+      final encontro = EncontroDaRede.doJson(json);
+      if (encontro is! EncontroPublico) {
+        throw const FormatException(
+          'createNetworkEvent devolveu encontro que nao e publico; o encontro '
+          'da comunidade e sempre publico pelo contrato',
+        );
+      }
+      return encontro;
+    });
+  }
 
   /// `GET /v1/network/events` (`listNetworkEvents`).
   Future<PaginaDaRede> listar(Map<String, String> query) async {
