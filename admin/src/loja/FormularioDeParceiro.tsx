@@ -12,7 +12,7 @@ import {
   hostDoSite,
   LIMITE_DO_SITE,
   MENSAGEM_DO_SITE,
-  recusaDoSite,
+  mensagemDoSite,
   type CodigoDoSite,
 } from '../endereco/enderecos.ts';
 import { PADRAO_DO_SLUG, slugSugerido } from './dominio.ts';
@@ -43,11 +43,13 @@ export function validarParceiro(v: Valores): Partial<Record<Campo, string>> {
   const nome = v.nome.trim();
   if (nome.length < 2 || nome.length > 80) e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
   if (!PADRAO_DO_SLUG.test(v.slug)) e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
-  // Pelo CODIGO, com a mesma regra do servidor: "falta o https://", "tem
-  // usuario e senha" e "e um IP" sao recusas diferentes e pedem textos
-  // diferentes.
-  const recusaDoSite_ = recusaDoSite(v.site);
-  if (recusaDoSite_ !== null) e['p-host'] = MENSAGEM_DO_SITE[recusaDoSite_];
+  // Pelo MOTIVO, com a mesma regra do servidor: "falta o https://", "troque
+  // http:// por https://", "tem usuario e senha" e "e um IP" sao recusas
+  // diferentes e pedem textos diferentes. A escolha da frase nao pode sair de
+  // um mapa de `code`: `site_url_not_https` cobre DOIS motivos, exatamente
+  // como no servidor (`errosDoEnderecoCompleto`).
+  const recusa = mensagemDoSite(v.site);
+  if (recusa !== null) e['p-host'] = recusa;
   const ordem = Number(v.ordem);
   if (v.ordem.trim() === '' || !Number.isInteger(ordem) || ordem < -32768 || ordem > 32767) e['p-ordem'] = 'Use um número inteiro, por exemplo 0 ou 10.';
   return e;

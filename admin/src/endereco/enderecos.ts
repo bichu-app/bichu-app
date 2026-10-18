@@ -207,3 +207,40 @@ export const MENSAGEM_DO_SITE: Record<CodigoDoSite, string> = {
   site_url_local_host: 'O endereço precisa ser de um site público.',
   site_url_invalid: SEM_ESPACO,
 };
+
+/**
+ * A frase da recusa LOCAL do site do parceiro, ou `null` quando o endereco
+ * passa.
+ *
+ * Mesmo motivo de [mensagemDoInstagram], no outro campo: **o `code` sozinho
+ * nao distingue o motivo**, e o servidor nao finge que distingue.
+ * `errosDoEnderecoCompleto` (em `src/shared/url/endereco-completo.ts`) escolhe
+ * a frase NO PONTO da recusa, porque dois motivos dividem o mesmo `code`:
+ *
+ * - `site_url_not_https`: sem esquema nenhum (`casadobicholapa.com.br`)
+ *   **ou** com `http://`. Quem escreveu `http://` ja escreveu um esquema, so
+ *   nao o certo, e mandar "escreva o endereco completo" responderia outra
+ *   pergunta.
+ * - `site_url_invalid`: espaco no meio **ou** endereco sem host nenhum
+ *   (`https://.`, que o `URL` aceita e cujo host some ao tirar o ponto
+ *   final). "Nao pode ter espaco" para um texto SEM espaco e simplesmente
+ *   falso, e o servidor ja responde o incompleto nesse caso.
+ *
+ * [MENSAGEM_DO_SITE] continua existindo e continua sendo o mapa das recusas
+ * que chegam DO SERVIDOR, onde a tela so tem o `code`.
+ */
+export function mensagemDoSite(valor: string): string | null {
+  const code = recusaDoSite(valor);
+  if (code === null) return null;
+  const texto = valor.trim();
+  if (code === 'site_url_not_https' && texto.toLowerCase().startsWith('http://')) {
+    return 'Troque http:// por https://.';
+  }
+  // O mapa guarda a frase do espaco, que e o caso comum; o host vazio e o
+  // outro motivo do mesmo `code` e pede a frase do endereco incompleto -- a
+  // mesma que `errosDoEnderecoCompleto` devolve para `host === ''`.
+  if (code === 'site_url_invalid' && !temEspacoOuControle(texto)) {
+    return MENSAGEM_DO_SITE.site_url_not_https;
+  }
+  return MENSAGEM_DO_SITE[code];
+}

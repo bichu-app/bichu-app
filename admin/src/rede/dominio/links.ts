@@ -87,6 +87,7 @@ export {
   MENSAGEM_DO_INSTAGRAM,
   MENSAGEM_DO_SITE,
   mensagemDoInstagram,
+  mensagemDoSite,
   recusaDoInstagram,
   recusaDoSite,
   type CodigoDoInstagram,
