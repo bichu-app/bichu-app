@@ -255,8 +255,13 @@ ARQUIVOS_GERADOS = ("package-lock.json",)
 # agora os 186 colados ao codigo recebem o mesmo tratamento que os 41, em vez
 # de depender de em que pasta alguem salvou o arquivo.
 #
-# Medido em 18/10/2026: a troca muda o veredito de exatamente 8 linhas, todas
-# massa de teste da sugestao do diretorio, com hosts de clinica inventada.
+# Medido em 18/10/2026: a troca muda o veredito de 10 linhas, em tres arquivos,
+# todas massa de teste -- hosts de clinica, de ingresso e de golpe inventados
+# para o caso. Eram 8 em dois arquivos quando este paragrafo nasceu, algumas
+# horas antes, e viraram 10 com a Rede entrando na development: o numero cresce
+# a cada teste novo que escreva uma URL. Esta datado por isso, em vez de virar
+# promessa -- a conta que envelhece calada e o defeito que este portao acabou
+# de pagar.
 #
 # As iscas de `tests/portabilidade/` NAO sao afetadas: nao tem este sufixo, nao
 # moram em raiz varrida, e o autoteste as le por caminho proprio.
