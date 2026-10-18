@@ -69,8 +69,9 @@ class RespostaDaBuscaDeCep {
 /// 2. `telas/perfil/tela_dados_pessoais.dart` (regiao de referencia: o CEP
 ///    viaja em `MeUpdate.reference_area.postal_code`);
 /// 3. `telas/perto/sugerir_profissional.dart` (indicar profissional: o CEP
-///    **nao** viaja -- ele preenche `city`, `state` e `neighborhood`, que sao
-///    os unicos campos de endereco que `DirectorySuggestionInput` aceita);
+///    viaja em `DirectorySuggestionInput.postal_code`, acrescentado ao
+///    contrato em 18/10 -- "pode armazenar o cep sim!" -- e guardado para a
+///    fila de revisao do painel, nunca publicado);
 /// 4. `telas/localizacao/captura_de_localizacao.dart` (passo 2 do achado: o
 ///    CEP **nao** viaja -- ele preenche os tres campos de `Area`).
 ///

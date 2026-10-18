@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/me_api.dart';
@@ -148,7 +149,18 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         // gramatica brasileira que se le; quem produz valor de contrato e
         // `telefoneEmE164`, na hora de enviar.
         _telefone.text = mascaraDeTelefone(dados.telefone ?? '');
-        _cep.text = dados.cep ?? '';
+        // **Mascarado na LEITURA tambem**, e nao so na digitacao: o
+        // formatador do campo roda em `formatEditUpdate`, que nao e chamado
+        // quando a tela escreve no controlador. Sem esta linha o CEP salvo
+        // apareceria `01310100` e a digitacao produziria `01310-100` -- duas
+        // formas do mesmo campo na mesma tela.
+        //
+        // E ela e o que aguenta o valor TORTO que pode estar gravado:
+        // `MeUpdate.reference_area.postal_code` aceita `^\d{5}-?\d{3}$`, com
+        // hifen OPCIONAL, entao existe CEP com hifen no banco vindo de cliente
+        // antigo. `mascaraDeCep` descarta o que nao e digito e reformata, em
+        // vez de mostrar `01310--100`.
+        _cep.text = mascaraDeCep(dados.cep ?? '');
         _bairro.text = dados.bairro ?? '';
         _cidade.text = dados.cidade ?? '';
         _uf = (dados.uf != null && dados.uf!.length == 2) ? dados.uf : null;
@@ -497,11 +509,19 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             chave: _CamposDosDados.cep,
             rotulo: _TextosDosDados.cep,
             controlador: _cep,
-            limite: 8,
+            limite: limiteDoCep,
             ajuda: _TextosDosDados.ajudaDoCep,
             tipoDeTeclado: TextInputType.number,
-            formatadores: <TextInputFormatter>[
-              FilteringTextInputFormatter.digitsOnly,
+            // **A mascara, e nao `digitsOnly`** (cliente, 18/10). `limite` e 9
+            // porque o `maxLength` do campo conta o hifen.
+            //
+            // **O que VAI para a API nao muda**: `_soDigitos(_cep.text)` tira
+            // o hifen antes de montar o corpo, e `MeUpdate.reference_area.
+            // postal_code` aceita `^\d{5}-?\d{3}$` -- com hifen opcional.
+            // Continuamos mandando SEM, para as quatro telas guardarem uma
+            // forma canonica so.
+            formatadores: const <TextInputFormatter>[
+              MascaraDeCep(),
             ],
             // No oitavo digito a busca sai sozinha, sem botao `Buscar`: um
             // botao a mais e um passo a mais, e nao buscar e desfecho valido.

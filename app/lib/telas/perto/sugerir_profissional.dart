@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/diretorio_api.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -58,27 +59,39 @@ import '../../widgets/saida_da_tela.dart';
 /// geocodificacao neste caminho. Cidade, estado e bairro sao rotulo de texto. O
 /// ponto e trabalho do painel, com mapa de toque.
 ///
-/// ## O CEP: campo de BUSCA, e nao campo do corpo
+/// ## O CEP: busca o endereco E vai no corpo, para quem revisa
 ///
-/// O cliente pediu em 18/10/2026 ("no formulario de indicacao do profissional,
-/// o campo cep nao entrou tambem"), pela decisao dele de 17/10 -- ViaCEP em
-/// todo cadastro com CEP, preenchendo o endereco e **deixando a pessoa
-/// editar**.
+/// O cliente pediu o campo em 18/10/2026 ("no formulario de indicacao do
+/// profissional, o campo cep nao entrou tambem"), pela decisao dele de 17/10 --
+/// ViaCEP em todo cadastro com CEP, preenchendo o endereco e **deixando a
+/// pessoa editar** --, e no mesmo dia autorizou GUARDAR o valor: *"pode
+/// armazenar o cep sim!"*.
 ///
-/// **E ele NAO viaja no corpo**, e a ausencia e medida e nao esquecimento:
-/// `DirectorySuggestionInput` e `additionalProperties: false` e os campos de
-/// endereco que ele aceita sao exatamente `city`, `state` e `neighborhood` --
-/// os tres que o CEP preenche. O CEP serve para a pessoa nao digitar os tres,
-/// e depois disso nao sobra nada dele para mandar: a entrada do diretorio, o
-/// endereco publico e o ponto do mapa sao trabalho do painel (ADR-0011), e
-/// guardar um codigo postal que ninguem le seria dado sem finalidade.
+/// Entao ele faz duas coisas, e as duas sao dele:
 ///
-/// **Se o cliente quiser o CEP GRAVADO para quem revisa, aí sim muda o
-/// contrato** -- `postal_code` opcional no corpo, coluna nova e escrita no
-/// servidor. Isso e decisao dele e nao foi tomada aqui.
+/// 1. **preenche** bairro, cidade e UF, e **so o que estiver vazio**;
+/// 2. **viaja no corpo** como `postal_code` -- opcional, oito digitos sem
+///    hifen (`^[0-9]{8}$`), acrescentado ao contrato pela mudanca aditiva de
+///    18/10 e guardado por `directory_suggestions.postal_code`
+///    (`20261017000015`).
+///
+/// **O destinatario e quem REVISA, e nunca o publico.** A fila do painel
+/// precisa achar o estabelecimento para convida-lo (ADR-0011: convite e
+/// aceite). Rua e CEP nao saem no `Perto` (ADR-0010 itens 4 e 5 -- bairro e
+/// cidade sao o teto), nao existe operacao de leitura de
+/// `directory_suggestions` no contrato, e o recibo desta tela nao devolve o
+/// CEP: `DirectorySuggestionReceipt` e `additionalProperties: false` com
+/// `reference`, `state` e `created_at`.
+///
+/// **Continua OPCIONAL, e nada nesta tela o torna obrigatorio**: ele nao entra
+/// em [_Impedimento], e CEP pela metade simplesmente nao vai no corpo em vez
+/// de virar recusa -- ver `DiretorioApi.corpoDaSugestao`.
 ///
 /// E **isto nao e geocodificacao**: ver `api/busca_de_cep.dart`, que troca CEP
-/// por texto e ignora de proposito a coordenada que a BrasilAPI devolve.
+/// por texto e ignora de proposito a coordenada que a BrasilAPI devolve. Nao
+/// ha logradouro aqui, e a assimetria e decisao: o CEP aponta para um trecho
+/// de rua e tem destinatario; logradouro e numero apontam para a porta de um
+/// terceiro que nao pediu nada.
 class TelaSugerirProfissional extends StatefulWidget {
   const TelaSugerirProfissional({super.key});
 
@@ -105,8 +118,12 @@ class TelaSugerirProfissional extends StatefulWidget {
 
   static const String rotuloDoCep = 'CEP';
 
+  /// **Diz que o CEP e guardado, e para quem.** A pessoa esta informando o
+  /// endereco de um terceiro: esconder que o valor fica salvo seria o tipo de
+  /// omissao que a faixa de revisao desta tela existe para nao fazer.
   static const String ajudaDoCep =
-      'Preenche bairro, cidade e estado. Você pode mudar depois.';
+      'Preenche bairro, cidade e estado. Você pode mudar depois. Fica salvo '
+      'só para quem confere, e não aparece no Perto.';
 
   /// Os tres desfechos da busca. **Nenhum e erro de formulario**: nenhum marca
   /// campo, nenhum desabilita o botao e nenhum impede o envio -- o CEP nao e
@@ -212,8 +229,10 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   /// 2. **nada fica bloqueado depois da busca.** Os tres campos continuam
   ///    editaveis: CEP generico de cidade nao traz bairro;
   /// 3. **nada aqui pode impedir a indicacao.** Nenhum caminho desta funcao
-  ///    marca erro de campo, mexe em `_impedimento` ou desabilita o botao. O
-  ///    CEP nem viaja no corpo -- ver o cabecalho da tela.
+  ///    marca erro de campo, mexe em `_impedimento` ou desabilita o botao.
+  ///    Servico de CEP fora do ar nao impede ninguem de indicar: o campo
+  ///    segue digitavel e o corpo sai com o CEP que a pessoa escreveu, ou sem
+  ///    nenhum.
   ///
   /// O `logradouro` que a busca devolve e **descartado**: nao ha campo de rua
   /// nesta tela e nao ha coluna para ele (ADR-0011: endereco publico e ponto
@@ -307,6 +326,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       tipoDeContato: _tipoDeContato!,
       contato: _contato.text.trim(),
       bairro: _bairro.text.trim(),
+      cep: _cep.text.trim(),
       recado: _recado.text.trim(),
     );
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
@@ -463,11 +483,23 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   rotulo: TelaSugerirProfissional.rotuloDoCep,
                   controlador: _cep,
                   opcional: true,
-                  limite: 8,
+                  // 9 e nao 8: o `maxLength` do campo conta o HIFEN da
+                  // mascara, e com 8 o ultimo digito seria cortado em
+                  // silencio -- o CEP ficaria errado na tela e no corpo.
+                  limite: limiteDoCep,
                   tipoDeTeclado: TextInputType.number,
                   ajuda: TelaSugerirProfissional.ajudaDoCep,
-                  formatadores: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
+                  // **A mascara, e nao `digitsOnly`** (cliente, 18/10:
+                  // "coloque mascara no campo cep de todos os formularios").
+                  // Ela mostra `01310-100`, aceita digitacao continua sem
+                  // hifen, descarta o que nao e digito -- e **nao valida
+                  // nada**: quem produz o valor do contrato e
+                  // `cepParaOContrato`, do mesmo arquivo, e e ela que tira o
+                  // hifen antes de o corpo sair. Sem essa separacao a tela
+                  // mandaria `22041-001` contra um `pattern` de
+                  // `^[0-9]{8}$`, que e a divergencia que nenhum portao pega.
+                  formatadores: const <TextInputFormatter>[
+                    MascaraDeCep(),
                   ],
                   correcaoAutomatica: false,
                   habilitado: !enviando,

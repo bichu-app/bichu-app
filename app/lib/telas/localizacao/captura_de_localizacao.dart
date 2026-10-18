@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/modelos_localizacao.dart';
 import '../../dispositivo/localizacao.dart';
@@ -477,11 +478,18 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           rotulo: TextosDaLocalizacao.rotuloCep,
           controlador: _cep,
           opcional: true,
-          limite: 8,
+          // 9 e nao 8: o `maxLength` conta o hifen da mascara.
+          limite: limiteDoCep,
           tipoDeTeclado: TextInputType.number,
           ajuda: TextosDaLocalizacao.ajudaDoCep,
-          formatadores: <TextInputFormatter>[
-            FilteringTextInputFormatter.digitsOnly,
+          // **A mascara FORMATA e nao valida** (cliente, 18/10), e aqui essa
+          // distincao e a regra sagrada da tela: CEP incompleto **nao pode
+          // travar `Registrar`**. `MascaraDeCep` nunca recusa, nunca marca
+          // erro e nunca desabilita botao -- ela so descarta o que nao e
+          // digito. E nada daqui viaja: `Area` do contrato nao tem
+          // `postal_code`, e o CEP deste formulario e so busca.
+          formatadores: const <TextInputFormatter>[
+            MascaraDeCep(),
           ],
           correcaoAutomatica: false,
           // No oitavo digito a busca sai sozinha, sem botao `Buscar`.

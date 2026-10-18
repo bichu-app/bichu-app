@@ -25,14 +25,23 @@
 //      ar, CEP inexistente, CEP vazio: nenhum dos tres pode prender quem esta
 //      com um animal na rua dentro de um formulario.
 //
-// ## O que estes casos NAO medem, de proposito
+// ## A ASSIMETRIA ENTRE OS DOIS FORMULARIOS, que e o que mais se perde aqui
 //
-// **Nenhum deles espera `postal_code` no corpo enviado**, e a ausencia e a
-// decisao: `DirectorySuggestionInput` e `Area` sao fechados nos campos de
-// endereco que o CEP preenche (`city`, `state`, `neighborhood`), e o contrato
-// nao foi tocado. Um `expect` cobrando `postal_code` no corpo reprovaria o
-// desenho em vez de medi-lo -- e se o cliente decidir GRAVAR o CEP, o que
-// muda primeiro e o contrato, e este comentario e que fica errado.
+// **A indicacao GUARDA o CEP e o achado NAO**, e isso nao e meio caminho:
+//
+// - na indicacao o CEP viaja como `DirectorySuggestionInput.postal_code`
+//   (opcional, oito digitos sem hifen), acrescentado ao contrato em 18/10 por
+//   autorizacao do cliente -- "pode armazenar o cep sim!" --, porque ha
+//   DESTINATARIO: a fila de revisao do painel precisa achar o estabelecimento
+//   para convida-lo (ADR-0011);
+// - no achado **nao ha revisor**, e `Area` do contrato nao tem `postal_code`.
+//   Guardar o CEP de onde um animal foi achado seria retencao sem
+//   destinatario, e seria mais fino que bairro e cidade -- o teto do ADR-0010.
+//   La o CEP e so busca.
+//
+// Os grupos 3 e 4 abaixo sao as duas iscas que o cliente pediu por extenso
+// quando autorizou guardar: **uma que falha se o CEP aparecer em resposta
+// publica**, e **uma que falha se o CEP virar obrigatorio na indicacao**.
 
 import 'dart:convert';
 import 'dart:io';
@@ -57,6 +66,7 @@ class _Registro {
   final List<String> chamadasDeCep = <String>[];
   final List<Map<String, String>> cabecalhosDeCep = <Map<String, String>>[];
   final List<Map<String, dynamic>> corposEnviados = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> corposDeAchado = <Map<String, dynamic>>[];
   int registrosDeAchado = 0;
 }
 
@@ -109,6 +119,7 @@ Future<http.Response> Function(http.Request) _rede(
     }
     if (caminho == '/v1/found-reports' && req.method == 'POST') {
       registro.registrosDeAchado += 1;
+      registro.corposDeAchado.add(jsonDecode(req.body) as Map<String, dynamic>);
       return json200(<String, dynamic>{
         'id': '0199a0d0-0000-7000-8000-000000000001',
         'status': 'open',
@@ -158,6 +169,23 @@ Future<void> _abrirAIndicacao(
   await abrirPerto(tester, rede: _rede(registro, cepFora: cepFora));
   await tocar(tester, find.text('Indicar quem atende bem'));
   expect(find.byType(TelaSugerirProfissional), findsOneWidget);
+}
+
+/// Preenche o resto da indicacao (tudo menos o CEP) e envia.
+///
+/// O CEP fica FORA deste ajudante de proposito: cada caso digita o seu antes
+/// de chamar, e e justamente o CEP que esta sendo medido.
+Future<void> _preencherORestoEEnviar(WidgetTester tester) async {
+  await _digitar(tester, 'Nome do lugar', 'Clínica Veterinária Bichinho');
+  await tocar(tester, find.text('O que eles fazem'));
+  await tocar(tester, find.text('Clínica'));
+  await _digitar(tester, 'Cidade', 'Rio de Janeiro');
+  await _digitar(tester, 'UF', 'RJ');
+  await tocar(tester, find.text('Como entrar em contato'));
+  await tocar(tester, find.text('Telefone'));
+  await _digitar(tester, 'Telefone', '+5521988887777');
+  await rolarAte(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
+  await tocar(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
 }
 
 /// Abre o passo 2 do achado, no ramo DIGITADO (sem coordenada).
@@ -265,47 +293,154 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // ISCA 1c -- O CEP NAO E CAMPO DO CORPO, E NAO DESTRAVA NEM TRAVA O ENVIO
+    // ISCA 1c -- O CEP DIGITADO CHEGA AO SERVIDOR
     //
-    // DESLIGAR PARA VER REPROVAR: acrescente
-    // `_Impedimento.semCep` a `_impedimento` quando `_cep.text` estiver vazio.
-    // O envio deixa de acontecer sem CEP, e este caso reprova em
-    // `corposEnviados`.
+    // DESLIGAR PARA VER REPROVAR: em `DiretorioApi.corpoDaSugestao`, apague a
+    // linha `if (cepLimpo != null && _oitoDigitos.hasMatch(cepLimpo))
+    // 'postal_code': cepLimpo,`. A tela continua preenchendo os campos e o
+    // envio continua dando 201 -- **o CEP so deixa de ser guardado**, em
+    // silencio, que e a forma de defeito que nenhuma verificacao de tela pega.
     // -----------------------------------------------------------------------
-    testWidgets('1c. a indicacao vai SEM CEP, e o CEP nao viaja no corpo',
+    testWidgets('1c. o CEP digitado VIAJA no corpo, como `postal_code`',
         (tester) async {
       final registro = _Registro();
       await _abrirAIndicacao(tester, registro);
 
-      await _digitar(tester, 'Nome do lugar', 'Clínica Veterinária Bichinho');
-      await tocar(tester, find.text('O que eles fazem'));
-      await tocar(tester, find.text('Clínica'));
-      await _digitar(tester, 'Cidade', 'Rio de Janeiro');
-      await _digitar(tester, 'UF', 'RJ');
-      await tocar(tester, find.text('Como entrar em contato'));
-      await tocar(tester, find.text('Telefone'));
-      await _digitar(tester, 'Telefone', '+5521988887777');
+      await _digitar(tester, TelaSugerirProfissional.rotuloDoCep, '22041001');
+      await _preencherORestoEEnviar(tester);
 
-      await rolarAte(
-        tester,
-        find.text(TelaSugerirProfissional.rotuloDeIndicar),
+      expect(registro.corposEnviados, hasLength(1));
+      expect(
+        registro.corposEnviados.single['postal_code'],
+        '22041001',
+        reason: 'REPROVA: o CEP que a pessoa digitou nao chegou ao servidor. O '
+            'cliente autorizou guardar em 18/10, e o destinatario e a fila de '
+            'revisao do painel -- sem este campo a revisao nao tem como achar '
+            'o estabelecimento para convida-lo (ADR-0011).',
       );
-      await tocar(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
+    });
+
+    // -----------------------------------------------------------------------
+    // ISCA 1c2 -- CEP PELA METADE NAO VIRA RECUSA, E NAO VAI NO CORPO
+    //
+    // O contrato declara oito-digitos-sem-hifen e `additionalProperties: false`: mandar
+    // `postal_code: '0543'` levaria um 400 para quem apenas parou de digitar.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `corpoDaSugestao`, troque a guarda de
+    // `_oitoDigitos.hasMatch(cepLimpo)` por `cepLimpo.isNotEmpty`.
+    // -----------------------------------------------------------------------
+    testWidgets('1c2. CEP incompleto nao vai no corpo e nao recusa o envio',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirAIndicacao(tester, registro);
+
+      await _digitar(tester, TelaSugerirProfissional.rotuloDoCep, '2204');
+      await _preencherORestoEEnviar(tester);
 
       expect(
         registro.corposEnviados,
         hasLength(1),
-        reason: 'REPROVA: o campo de CEP entrou no caminho do que destrava o '
-            'botao. Ele e opcional, e quem nao sabe o CEP da clinica continua '
-            'podendo indicar.',
+        reason: 'REPROVA: um CEP pela metade impediu a indicacao. O campo e '
+            'opcional, e campo opcional incompleto e campo que nao existe.',
       );
       expect(
         registro.corposEnviados.single.containsKey('postal_code'),
         isFalse,
-        reason: 'REPROVA: `DirectorySuggestionInput` e '
-            '`additionalProperties: false` e NAO declara `postal_code`. Mandar '
-            'o campo produziria 400 -- e se o cliente quiser o CEP gravado, o '
-            'que muda PRIMEIRO e `api/openapi.yaml`.',
+        reason: 'REPROVA: foi enviado um `postal_code` que nao bate com o '
+            '`pattern` oito-digitos-sem-hifen do contrato. O servidor responderia 400, e '
+            'a pessoa so tinha parado de digitar.',
+      );
+      expect(
+        registro.chamadasDeCep,
+        isEmpty,
+        reason: 'REPROVA: a busca saiu com menos de oito digitos, gastando '
+            'chamada em servico gratuito de terceiro por nada.',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // ISCA 1c4 -- O CEP NAO PODE VIRAR OBRIGATORIO
+    //
+    // O par desta isca esta no servidor
+    // (`src/modules/professionals/domain/cep-da-sugestao-nao-sai.test.ts`),
+    // onde ela olha o `required` do contrato. Aqui ela olha a TELA, e as duas
+    // precisam existir: o contrato pode continuar certo e a tela cobrar o
+    // campo por conta propria, que e o defeito mais provavel dos dois.
+    //
+    // DESLIGAR PARA VER REPROVAR: acrescente `semCep` a `_Impedimento` e
+    // devolva-o em `_impedimento` quando `_cep.text` estiver vazio.
+    // -----------------------------------------------------------------------
+    testWidgets('1c4. ISCA — sem CEP nenhum, a indicacao vai do mesmo jeito',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirAIndicacao(tester, registro);
+
+      await _preencherORestoEEnviar(tester);
+
+      expect(
+        registro.corposEnviados,
+        hasLength(1),
+        reason: 'REPROVA: o CEP virou exigencia da tela. Quem indica uma '
+            'clinica de outro bairro quase sempre nao sabe o CEP dela, e '
+            'cobra-lo troca uma indicacao por um campo inventado -- o mesmo '
+            'juizo que deixou o bairro opcional.',
+      );
+      expect(
+        registro.corposEnviados.single.containsKey('postal_code'),
+        isFalse,
+        reason: 'REPROVA: foi enviado um `postal_code` que ninguem digitou.',
+      );
+      expect(
+        find.text(TelaSugerirProfissional.recebido),
+        findsOneWidget,
+        reason: 'REPROVA: a tela nao deu o recibo. Sem CEP a indicacao e tao '
+            'valida quanto com, e o recibo e o que diz que ela foi para a '
+            'fila de conferencia.',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // ISCA 1c3 -- A MASCARA NA TELA, OITO DIGITOS NO CORPO
+    //
+    // **A isca da divergencia**, pela tela e nao pela funcao pura (essa esta
+    // em `app/test/formato/cep_test.dart`). Ela existe porque as duas podem
+    // estar certas sozinhas e erradas juntas: basta a tela mandar
+    // `_cep.text` em vez de passar por `cepParaOContrato`, e o resultado e um
+    // 400 no aparelho de quem preencheu tudo certo -- com a forma CERTA na
+    // tela, que e o que torna o defeito tao dificil de ver.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `DiretorioApi.corpoDaSugestao`, troque
+    // `cepParaOContrato(cep)` por `cep`. A tela nao muda em nada, a mascara
+    // continua perfeita, e o campo enviado passa a ser `22041-001`.
+    // -----------------------------------------------------------------------
+    testWidgets(
+        '1c3. ISCA — a tela mostra `22041-001` e o corpo leva `22041001`',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirAIndicacao(tester, registro);
+
+      // Digitacao CONTINUA, sem hifen: e assim que a pessoa digita.
+      await _digitar(tester, TelaSugerirProfissional.rotuloDoCep, '22041001');
+
+      expect(
+        _textoDoCampo(tester, TelaSugerirProfissional.rotuloDoCep),
+        '22041-001',
+        reason: 'REPROVA: a mascara nao apareceu no campo. O cliente pediu '
+            'mascara no CEP de todos os formularios, e quem digita oito '
+            'digitos seguidos nao digita o hifen.',
+      );
+
+      await _preencherORestoEEnviar(tester);
+
+      expect(
+        registro.corposEnviados.single['postal_code'],
+        '22041001',
+        reason: 'REPROVA: O QUE A TELA MOSTRA FOI ENVIADO AO SERVIDOR. '
+            '`DirectorySuggestionInput.postal_code` declara oito digitos sem '
+            'hifen, entao `22041-001` volta como 400 -- e nenhum portao do '
+            'projeto pega isso: `oasdiff` compara contratos, '
+            '`verificar-conformidade-do-app` compara tipos, e nenhum dos dois '
+            'olha o que o controlador guarda.',
       );
     });
 
@@ -561,13 +696,33 @@ void main() {
             'botao -- quem esta com um animal na rua nao pode ficar preso '
             'aqui.',
       );
+      // **A ASSIMETRIA, medida no corpo do ACHADO e nao no da indicacao.**
+      // A indicacao GUARDA o CEP (`DirectorySuggestionInput.postal_code`,
+      // 18/10); o achado nao, porque la nao ha revisor -- `Area` do contrato
+      // nao tem `postal_code`, e `additionalProperties` nao salva ninguem:
+      // o Ajv do Fastify roda com `removeAdditional: true` e APAGARIA o campo
+      // em silencio, o que e pior que recusar.
+      final corpo = registro.corposDeAchado.single;
+      final area = corpo['area'] as Map<String, dynamic>?;
       expect(
-        registro.corposEnviados.every((c) => !c.containsKey('postal_code')),
-        isTrue,
-        reason: 'REPROVA: `Area` do contrato aceita `city`, `neighborhood` e '
-            '`state`, e nada mais. Guardar o CEP de onde um animal foi achado '
-            'seria mais precisao que bairro e cidade, que e o teto do '
-            'ADR-0010 para superficie publica.',
+        corpo.containsKey('postal_code'),
+        isFalse,
+        reason: 'REPROVA: o achado passou a mandar CEP. Guardar o CEP de onde '
+            'um animal foi achado e retencao SEM DESTINATARIO -- nao ha '
+            'revisor neste caminho --, e e mais fino que bairro e cidade, que '
+            'e o teto do ADR-0010 para superficie publica.',
+      );
+      expect(
+        area?.containsKey('postal_code'),
+        isFalse,
+        reason: 'REPROVA: o CEP entrou dentro de `area`. `Area` do contrato '
+            'declara `city`, `neighborhood` e `state`, e nada mais.',
+      );
+      expect(
+        area?['city'],
+        'Rio de Janeiro',
+        reason: 'REPROVA: a cidade digitada a mao nao chegou. O caso inteiro '
+            'depende de o envio ter acontecido COM o servico de CEP fora.',
       );
     });
   });

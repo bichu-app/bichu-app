@@ -15,7 +15,13 @@
  *
  * Quem escreve e a funcao `directory_suggestions_registrar` da propria
  * migracao: o nome da coluna fica onde ele ja mora, e aqui chama-se a funcao
- * pelo nome dela. Mesmo arranjo de `network_events_gravar_autoria`, e nasceu da
+ * pelo nome dela.
+ *
+ * **Doze argumentos desde a `20261017000015`**, que acrescentou `postal_code`
+ * (cliente, 18/10: "pode armazenar o cep sim!"). Aquela migracao DERRUBOU a
+ * funcao de onze e criou a de doze, em vez de usar `CREATE OR REPLACE`: no
+ * Postgres assinatura diferente e outra funcao, e as duas de pe deixariam a de
+ * onze gravando sugestao sem CEP para sempre, pronta para alguem chamar. Mesmo arranjo de `network_events_gravar_autoria`, e nasceu da
  * mesma medicao -- a coluna de autoria do painel em `network_events` passou dez
  * dias existindo sem nunca ser gravada, porque o unico caminho ate ela passava
  * pelo nome proibido.
@@ -69,6 +75,7 @@ export function criarDirectorySuggestionRepository(
           ${sugestao.city},
           ${sugestao.state},
           ${sugestao.neighborhood},
+          ${sugestao.postalCode},
           ${sugestao.contatoKind},
           ${sugestao.contatoValue},
           ${sugestao.note}
@@ -81,7 +88,7 @@ export function criarDirectorySuggestionRepository(
         // nao caso de borda. Lancar com o motivo e melhor que devolver um
         // recibo com `created_at` inventado.
         throw new Error(
-          'directory_suggestions_registrar nao devolveu linha: a migracao 20261017000004 nao esta aplicada neste banco, ou a funcao mudou de forma.',
+          'directory_suggestions_registrar nao devolveu linha: as migracoes 20261017000004 e 20261017000015 nao estao aplicadas neste banco, ou a funcao mudou de forma.',
         );
       }
       return { ref, createdAt: gravada.created_at };

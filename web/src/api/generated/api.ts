@@ -1753,17 +1753,24 @@ export interface paths {
          *
          *     ## Dado pessoal: o minimo, e so de entidade
          *
-         *     `display_name`, `kind`, `city`/`state`, `neighborhood` e **um contato
-         *     publico** -- o que a entidade ja divulga para ser contratada. **Nao ha
-         *     campo de documento** (CRMV, CNPJ) e **nao ha campo de pessoa fisica**:
-         *     documento e prova de verificacao, mora em `entity_verifications` e so
-         *     entra por quem o apresenta; pedi-lo aqui seria coletar o documento de
-         *     um terceiro pela mao de um estranho.
+         *     `display_name`, `kind`, `city`/`state`, `neighborhood`, `postal_code` e
+         *     **um contato publico** -- o que a entidade ja divulga para ser
+         *     contratada. **Nao ha campo de documento** (CRMV, CNPJ) e **nao ha
+         *     campo de pessoa fisica**: documento e prova de verificacao, mora em
+         *     `entity_verifications` e so entra por quem o apresenta; pedi-lo aqui
+         *     seria coletar o documento de um terceiro pela mao de um estranho.
          *
-         *     **Sem coordenada e sem endereco** (ADR-0006): nao ha mapa nem
-         *     geocodificacao neste caminho. `city`, `state` e `neighborhood` sao
-         *     rotulo de texto. O ponto do mapa e trabalho do painel, com mapa de
-         *     toque, como a propria `listDirectoryEntries` descreve.
+         *     **Sem coordenada e sem logradouro** (ADR-0006): nao ha mapa nem
+         *     geocodificacao neste caminho. `city`, `state`, `neighborhood` e
+         *     `postal_code` sao texto, e o CEP **nao** e convertido em ponto -- nem
+         *     aqui nem no app, que ignora de proposito a coordenada que o servico de
+         *     CEP devolve. O ponto do mapa e trabalho do painel, com mapa de toque,
+         *     como a propria `listDirectoryEntries` descreve.
+         *
+         *     **O CEP e guardado para o REVISOR** (cliente, 18/10: "pode armazenar o
+         *     cep sim!") e **nunca publicado**: ver `DirectorySuggestionInput.
+         *     postal_code`. Nao ha operacao de leitura de `directory_suggestions`
+         *     neste contrato, e o recibo abaixo nao o devolve.
          *
          *     ## As conferencias de texto, porque ninguem mais confere antes da fila
          *
@@ -5123,8 +5130,8 @@ export interface components {
         };
         /**
          * @description A sugestao da comunidade. **O minimo que permite checar**, e nada alem:
-         *     nome, atividade, cidade, bairro opcional, um contato publico e um
-         *     recado curto para quem revisa.
+         *     nome, atividade, cidade, bairro e CEP opcionais, um contato publico e
+         *     um recado curto para quem revisa.
          *
          *     **Nao tem** `crmv_number`, `cnpj`, `verification_level`, `status`,
          *     `slug`, `about`, `geo`, `street_address`, `source` nem
@@ -5132,6 +5139,15 @@ export interface components {
          *     de quem sugere. Verificacao e prova de quem a apresenta
          *     (`entity_verifications`); publicacao, nivel e ponto do mapa sao do
          *     painel.
+         *
+         *     **`postal_code` entrou em 18/10/2026 e `street_address` NAO**, e a
+         *     diferenca nao e descuido. O CEP e opcional, aponta para um trecho de
+         *     rua e nao para uma porta, e tem destinatario: o revisor do painel, que
+         *     precisa achar o estabelecimento para convida-lo. Logradouro e numero
+         *     apontam para a porta de um terceiro que nao pediu nada, e nao tem
+         *     destinatario nenhum -- o endereco publico da entrada continua sendo
+         *     trabalho do painel (ADR-0011). Nenhum dos dois sai em superficie
+         *     publica (ADR-0010).
          */
         DirectorySuggestionInput: {
             /**
@@ -5143,6 +5159,43 @@ export interface components {
             city: string;
             state: string;
             neighborhood?: string;
+            /**
+             * @description O CEP do estabelecimento, **oito digitos, sem mascara e sem
+             *     hifen** -- a MESMA forma de `TagRequestInput.postal_code`, e nao
+             *     uma segunda redacao dela. O campo do app so aceita digito, e uma
+             *     forma canonica no banco e o que faz duas sugestoes do mesmo lugar
+             *     serem comparaveis; `05435-000` e `05435000` guardados lado a lado
+             *     nao sao.
+             *
+             *     **OPCIONAL, e nao e exigencia nova.** Quem indica uma clinica de
+             *     outro bairro quase sempre nao sabe o CEP dela, e cobra-lo trocaria
+             *     uma indicacao por um campo inventado -- o mesmo juizo de
+             *     `neighborhood`. `required` nao mudou.
+             *
+             *     O app tambem o usa para BUSCAR bairro, cidade e estado em servico
+             *     publico (ViaCEP, com BrasilAPI de reserva) e preencher os campos,
+             *     **que seguem editaveis** -- decisao do cliente de 17/10. Isso e
+             *     texto e nao coordenada: **nada aqui e geocodificado** (ADR-0006),
+             *     e o servidor nao participa da busca nem a repete.
+             *
+             *     ## Guardado para o REVISOR, e nunca publicado
+             *
+             *     O cliente autorizou guardar em 18/10 ("pode armazenar o cep
+             *     sim!"), e o destinatario e a fila de revisao do painel: ela precisa
+             *     achar o estabelecimento para convida-lo (ADR-0011, convite e
+             *     aceite).
+             *
+             *     **Guardar para quem revisa nao e mostrar em publico, e a regra de
+             *     superficie publica continua inteira:** rua e CEP nao saem no
+             *     diretorio (ADR-0010, itens 4 e 5 -- bairro e cidade sao o teto).
+             *     `postal_code` ja esta nas duas listas de campo proibido em
+             *     resposta sem conta (`src/tools/portao-contrato-publico.ts` e
+             *     `src/shared/http/vazamento-publico.ts`), e nao ha operacao de
+             *     LEITURA de `directory_suggestions` neste contrato -- nem publica
+             *     nem com conta. O recibo desta operacao e
+             *     `additionalProperties: false` e nao o traz de volta.
+             */
+            postal_code?: string;
             public_contact: components["schemas"]["DirectorySuggestionContact"];
             /**
              * @description Opcional, **para quem revisa** e nao para o diretorio: por que a
