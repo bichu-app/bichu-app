@@ -35,6 +35,9 @@ abstract final class TextosDoAchado {
   static const String escolherDaGaleria = 'Escolher da galeria';
   static const String trocarAFoto = 'Trocar a foto';
 
+  /// O rotulo que o leitor de tela anuncia sobre a previa.
+  static const String fotoEscolhidaDoAchado = 'Foto escolhida do pet achado';
+
   /// Quem ve a foto, numa linha (cliente, 17/10/2026).
   ///
   /// **O paragrafo saiu; a afirmacao de privacidade ficou.** O cliente pediu

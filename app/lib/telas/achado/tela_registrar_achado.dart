@@ -22,6 +22,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_de_opcoes.dart';
 import '../../widgets/grupo_segmentado.dart';
+import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../localizacao/antessala_de_localizacao.dart';
@@ -802,13 +803,19 @@ class _BlocoDaFoto extends StatelessWidget {
         ),
         if (escolhida) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),
-          // **O nome do arquivo, e nao os pixels.** Desenhar a imagem aqui
-          // pediria `dart:io` dentro de `lib/telas`, que o portao de diretivas
-          // proibe -- e com razao: tela que abre arquivo e tela que fala com o
-          // aparelho por fora da porta.
-          Text(
-            'Foto escolhida.',
-            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          // **A IMAGEM, e nao a frase "Foto escolhida."** (cliente,
+          // 17/10/2026). Desenhar o arquivo aqui dentro pediria `dart:io` em
+          // `lib/telas`, que o portao de diretivas proibe -- entao quem
+          // desenha e `PreviaDaFoto`, em `widgets/`, a MESMA peca do cadastro
+          // de pet. Mais baixa que la (180 contra 300) porque este formulario
+          // e longo e a foto aqui e opcional.
+          //
+          // Sem estado vazio: quem nao escolheu foto nao ganha um retangulo
+          // cinza ocupando a tela para dizer que nao escolheu.
+          PreviaDaFoto(
+            foto: foto,
+            descricao: TextosDoAchado.fotoEscolhidaDoAchado,
+            altura: 180,
           ),
         ],
       ],

@@ -8,6 +8,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/previa_da_foto.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'rascunho_de_pet.dart';
@@ -311,31 +312,18 @@ class _AreaDaFoto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
     final escolhida = foto;
 
-    return Semantics(
-      image: escolhida != null,
-      label: escolhida == null
-          ? TextosDoCadastro.nenhumaFotoAinda
-          : 'Foto escolhida',
-      child: Container(
-        height: 300,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cores.surfaceSunken,
-          borderRadius: BorderRadius.circular(BichuRaio.lg),
-          border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-        ),
-        child: Text(
-          escolhida == null
-              ? TextosDoCadastro.nenhumaFotoAinda
-              : escolhida.caminho,
-          textAlign: TextAlign.center,
-          style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
-        ),
-      ),
+    // **A IMAGEM, e nao o caminho do arquivo** (cliente, 17/10/2026). O que
+    // estava aqui era `escolhida.caminho` -- um `/data/user/0/.../image.jpg`
+    // no meio da tela, que nao diz a quem escolheu se a foto certa foi
+    // escolhida. `PreviaDaFoto` mora em `widgets/` porque desenhar o arquivo
+    // pede `dart:io`, proibido dentro de `lib/telas`; e e a MESMA peca que o
+    // registro de achado usa, para as duas telas nao darem duas respostas.
+    return PreviaDaFoto(
+      foto: escolhida,
+      descricao: TextosDoCadastro.fotoEscolhidaDoPet,
+      vazio: TextosDoCadastro.nenhumaFotoAinda,
     );
   }
 }

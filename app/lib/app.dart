@@ -127,12 +127,20 @@ class BichuApp extends StatefulWidget {
 
   /// Injetavel para teste. Em producao e [LocalizacaoPorGeolocator].
   ///
-  /// O padrao e [LocalizacaoNaoEmbarcada] de proposito, e a razao e mais forte
-  /// que a dos avisos: `Geolocator.checkPermission()` num ambiente sem canal
-  /// de plataforma lanca `MissingPluginException`, e ela cairia no meio de um
-  /// `Future` dentro de `setState` -- que e o formato de falha que nao aponta
-  /// para a causa. Com o padrao ausente, a suite exercita os cinco motivos de
-  /// nao haver ponto sem tocar em canal nenhum.
+  /// **O padrao ERA [LocalizacaoNaoEmbarcada], e isso era o defeito**: esta
+  /// frase dizia "em producao e `LocalizacaoPorGeolocator`" desde a BICHUS-23,
+  /// e `main.dart` nunca passou nada -- entao o binario inteiro rodava com a
+  /// implementacao ausente. Medido no emulador em 17/10/2026: tocar em `Usar
+  /// minha localizacao` respondia `indisponivel` NA HORA, sem dialogo de
+  /// permissao e sem leitura nenhuma. O pacote estava no `pubspec.yaml` e a
+  /// permissao no manifesto; o que faltava era a linha que escolhe.
+  ///
+  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera na
+  /// BICHUS-161. Em teste de widget nao ha canal de plataforma, e por isso
+  /// `test/telas/ajuda_de_tela.dart` passa [LocalizacaoNaoEmbarcada] por
+  /// parametro: `Geolocator.checkPermission()` sem canal lanca
+  /// `MissingPluginException` dentro de um `Future` em `setState`, que e o
+  /// formato de falha que nao aponta para a causa.
   final Localizacao? localizacao;
 
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
@@ -324,7 +332,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
+    _localizacao = widget.localizacao ?? const LocalizacaoPorGeolocator();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
