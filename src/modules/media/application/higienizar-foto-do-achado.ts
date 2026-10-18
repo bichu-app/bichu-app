@@ -27,8 +27,12 @@
  * - **UMA derivada, no tamanho de leitura na conversa.** A conversa mediada
  *   mostra a foto para o tutor decidir se é o animal dele; ela não tem galeria,
  *   cartaz nem miniatura. Duas derivadas seriam um objeto pago a mais.
- * - **O original não é apagado.** É dele que sai qualquer derivada futura, e
- *   cortar no servidor sem guardar o que sobrou não tem volta.
+ * - **O original não é apagado** (hoje). É dele que sai qualquer derivada
+ *   futura, e cortar no servidor sem guardar o que sobrou não tem volta.
+ *   **Mas guardar o original é guardar a coordenada de GPS**, porque é o
+ *   original que tem o EXIF. O ponto de decisão é único, está marcado no corpo
+ *   de `higienizarFotoDoAchado` (logo depois de `marcarHigienizada`) e está
+ *   ABERTO com o cliente.
  *
  * ## Recusa é final; armazenamento fora do ar não é
  *
@@ -138,6 +142,43 @@ export async function higienizarFotoDoAchado(
   // não está lá.
   await deps.armazenamento.put('privado', chave, derivada.bytes, derivada.contentType);
   await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);
+
+  // ======================================================================
+  // O DESTINO DO ORIGINAL — PONTO DE DECISÃO ÚNICO, E ELE ESTÁ ABERTO
+  // (cliente, 17/10/2026; ele disse que não entendeu e ainda não confirmou)
+  // ======================================================================
+  //
+  // Aqui, e só aqui, é onde o original passa a ser descartado SE o cliente
+  // decidir que a versão limpa o substitui. Hoje **nada acontece**: o original
+  // fica, e com ele a coordenada de GPS do EXIF.
+  //
+  // A pergunta é a única em que duas regras dele se cruzam:
+  //
+  //  - *"você só deve apagar as informações, caso o usuário remova o pet ou
+  //    delete a conta"* — nada automático apaga; e
+  //  - o EXIF do original carrega a coordenada de GPS de onde a pessoa que
+  //    achou o animal estava, e ela costuma ter achado o animal perto de onde
+  //    mora.
+  //
+  // As duas só convivem se o original for SUBSTITUÍDO — e substituir É apagar
+  // o original. Enquanto ele não responder, o produto guarda a coordenada
+  // indefinidamente: 1 objeto por foto, até 3 por aviso
+  // (`TETO_DE_FOTOS_POR_ACHADO`), sem prazo e sem nada que o alcance — não há
+  // regra de ciclo de vida no balde de mídia (o ADR-0007 a proíbe de
+  // propósito) e os dois únicos apagamentos de objeto do repositório são o
+  // expurgo de conta (SEC-020) e a varredura de envios vencidos, que desde
+  // `fix/varredura-nao-apaga-foto-de-achado` não toca o achado.
+  //
+  // O QUE CUSTA TROCAR quando ele responder: UMA linha, exatamente aqui --
+  //
+  //     await deps.armazenamento.delete('privado', foto.originalKey);
+  //
+  // e nada mais. A ordem já está certa de propósito: a versão limpa SOBE e é
+  // GRAVADA (as duas linhas acima) antes de qualquer coisa acontecer com o
+  // original, então a troca não abre janela em que não exista nenhuma cópia da
+  // foto, nem mesmo se o processo morrer entre as duas. Sem migração, sem
+  // mudança de contrato, sem tocar em `app/`: `sanitized_key` já é a chave que
+  // a leitura usa. Não implementado hoje porque a decisão é dele, não minha.
 
   return { tipo: 'higienizada', envioId: foto.uploadIntentId, bytes: derivada.bytes.length };
 }
