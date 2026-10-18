@@ -59,6 +59,8 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
     petDisplayName: 'Aurora',
     abertaEm: comoData(AGORA),
     papelDoChamador: 'tutor',
+    tutorDesabilitado: false,
+    achadorDesabilitado: false,
     encerradaEm: null,
     motivoDoEncerramento: null,
     bloqueadaEm: null,
@@ -263,6 +265,45 @@ void describe('critério 8 — conversa em modo leitura não recebe mensagem', (
   void it('caso encerrado fecha a conversa mesmo sem `closed_at` próprio', async () => {
     const { servico } = bancada({ conversa: { casoEncerrado: true } });
     await assert.rejects(() => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)));
+  });
+
+  /**
+   * ISCA DO ENVIO TRAVADO, lado COM CONTA (17/10).
+   *
+   * O cliente pediu "bloquear o chat para não enviar ou receber mais nenhuma
+   * nova mensagem". Aqui quem escreve é o participante que FICOU -- o outro não
+   * consegue nem entrar, porque `autenticar()` recusa `status != 'active'`. Então
+   * é este caso, e não um do lado que saiu, que implementa o "não receber".
+   *
+   * Isca a rodar (não rodada nesta branch): tirar
+   * `participanteDesabilitado: ...` de `sinaisDe` deve reprovar os dois casos
+   * abaixo; trocar o `||` por `&&` reprova os dois também.
+   */
+  void it('ISCA: tutor desabilitado trava o envio do OUTRO lado, com 410', async () => {
+    const { servico, gravadas } = bancada({ conversa: { tutorDesabilitado: true } });
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        // 410 `conversation-closed`, e NÃO 403: a conversa EXISTE para quem
+        // escreve, e o que mudou é o estado dela, não a autorização. E não 404
+        // porque o ADR-0021 manda 404 para o que não deve existir -- esta
+        // conversa deve existir, em modo leitura, para o lado que ficou.
+        //
+        // O tipo é o MESMO de encerrada e bloqueada, de propósito: um tipo
+        // próprio tipo `participant-disabled` contaria a quem escreve o que
+        // aconteceu com a conta da outra pessoa.
+        assert.equal(erro.problemType, 'conversation-closed');
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, [], 'gravou mensagem numa conversa de conta desabilitada');
+  });
+
+  void it('ISCA: achador com conta desabilitada trava o envio igual', async () => {
+    const { servico, gravadas } = bancada({ conversa: { achadorDesabilitado: true } });
+    await assert.rejects(() => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)));
+    assert.deepEqual(gravadas, []);
   });
 
   void it('bloqueada também recusa, e com o MESMO problema', async () => {

@@ -83,7 +83,7 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
     registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
     contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
-    expurgarConta: () => naoDeveriaTerChegado('expurgarConta'),
+    // `expurgarConta` saiu da porta em 17/10: nada apaga conta.
     registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
     concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
     cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),

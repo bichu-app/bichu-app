@@ -729,36 +729,70 @@ void describe('"Não fui eu" (BICHUS-215, critério 4 — gatilho 4 do SEC-006)'
 });
 
 /**
- * SEC-019, caminhos 4 e 5: "não fui eu" e exclusão de conta também apagam o
- * cadastro de push.
+ * SEC-019 depois de 17/10: "não fui eu" apaga o cadastro de push; a EXCLUSÃO
+ * DE CONTA, NÃO.
  *
- * Os dois herdam de `derrubarTodasAsSessoes`, e é por isso que não há
- * implementação nova aqui. O que estes casos guardam é a HERANÇA: quem separar
- * um dos dois caminhos da função comum, para tratá-lo à parte, reabre o buraco
- * naquele caminho e só naquele — que é exatamente como a redefinição de senha
- * ficou meses empurrando a barreira sem revogar família nenhuma.
+ * ## O que mudou, e por que o caso virou do avesso
  *
- * Isca rodada em 23/09/2026: com a chamada `deps.removerPushDaConta(userId)`
- * comentada em `derrubarTodasAsSessoes`, os dois casos abaixo reprovaram.
+ * Até 17/10 este bloco tinha dois casos simétricos, e o primeiro exigia que a
+ * exclusão de conta apagasse `user_devices` na hora. O cliente trocou o desenho
+ * no mesmo dia, por escrito:
+ *
+ * > *"Mantenha a foto e não delete os dados do usuário, apenas desabilite na
+ * > plataforma e filtro as páginas para que esse usuário não seja mais
+ * > encontrado em nenhuma pagina ou funcionalidade"*
+ *
+ * Então o caso foi INVERTIDO em vez de apagado, e a inversão é o registro de
+ * que a troca foi deliberada: hoje ele reprova se a exclusão voltar a apagar a
+ * linha.
+ *
+ * ## O SEC-019 continua fechado, e não é por confiança
+ *
+ * O risco do SEC-019 é um aparelho continuar sendo destinatário VÁLIDO de alerta
+ * de pet perdido. Quem decide isso é a consulta de alcance
+ * (`kysely-alcance-por-postgis.ts`), que junta `users` e exige
+ * `u.deleted_at IS NULL` desde 22/09 (BICHUS-88). Conta desabilitada não entra
+ * no conjunto de notificados **com ou sem** linha em `user_devices`. A linha
+ * deixa de ser alcançável por propriedade da consulta, que é exatamente a troca
+ * que o cliente pediu para as páginas, aplicada ao push.
+ *
+ * ## A assimetria é o ponto, e ela é de produto
+ *
+ * `logout_all`, `password_changed` e `not_me` CONTINUAM apagando, e a diferença
+ * não é descuido: nesses três a conta segue **ativa**, o aparelho pode estar na
+ * mão de outra pessoa, e nenhuma cláusula de consulta protege de um token de
+ * push válido numa conta ativa. Ali apagar é o remédio que a pessoa pediu. Na
+ * exclusão, a conta sai do conjunto por estado, e apagar seria apagar dado que
+ * o cliente mandou reter.
+ *
+ * Isca a rodar (NÃO rodada nesta branch, por instrução do cliente): tirar o
+ * `motivo === 'account_deleted' ? 0 :` de `derrubarTodasAsSessoes` deve reprovar
+ * o primeiro caso; recolocar a chamada em todos os motivos deve reprovar só ele.
  */
 const AINDA_RECEBE_APOS =
   'o aparelho continuaria recebendo alerta de pet perdido: a sessão caiu e a linha de ' +
   '`user_devices` ficou, com o token e a permissão intactos. É o SEC-019.';
 
-void describe('SEC-019: exclusão e "não fui eu" apagam o endereço de entrega', () => {
-  void it('a exclusão da conta tira os aparelhos do push na hora, e não em 30 dias', async () => {
-    // §19, item 4: os aparelhos precisam sair na exclusão LÓGICA. Esperar o
-    // expurgo deixaria trinta dias de alerta chegando num aparelho de uma conta
-    // que a pessoa já mandou apagar.
+const APAGOU_O_QUE_DEVIA_RETER =
+  'a exclusão de conta APAGOU a linha de `user_devices`. Desde 17/10 nada é apagado: a ' +
+  'conta é desabilitada e o aparelho para de receber pela cláusula `u.deleted_at IS NULL` ' +
+  'da consulta de alcance, não por ausência de linha.';
+
+void describe('SEC-019 depois de 17/10: "não fui eu" apaga o push, a exclusão retém', () => {
+  void it('ISCA: a exclusão da conta NÃO apaga `user_devices` -- a conta é desabilitada', async () => {
     const bancada = montar();
+    const antes = bancada.push.linhas.size;
+    assert.ok(antes > 0, 'a bancada precisa começar com aparelho, senão o caso não mede nada');
+
     await bancada.servico.excluirMinhaConta(autenticada(bancada.repo), CONTEXTO);
-    assert.equal(bancada.push.linhas.size, 0, AINDA_RECEBE_APOS);
+
+    assert.equal(bancada.push.linhas.size, antes, APAGOU_O_QUE_DEVIA_RETER);
   });
 
   void it('"não fui eu" tira os aparelhos do push', async () => {
     // É o caminho de quem foi avisado de reuso de refresh: alguém está com a
-    // credencial dela. Derrubar a sessão e deixar o push é entregar o alerta
-    // de pet perdido justamente a esse alguém.
+    // credencial dela, e a conta continua ATIVA. Derrubar a sessão e deixar o
+    // push é entregar o alerta de pet perdido justamente a esse alguém.
     const bancada = montar();
     darUmLinkValido(bancada.repo);
 

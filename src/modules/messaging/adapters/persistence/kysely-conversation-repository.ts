@@ -58,6 +58,8 @@ interface LinhaDaConversa {
   case_status: string | null;
   tutor_display_name: string | null;
   finder_display_name: string | null;
+  tutor_deleted_at: Date | null;
+  achador_deleted_at: Date | null;
 }
 
 interface LinhaDaMensagem {
@@ -85,6 +87,10 @@ function comoConversa(linha: LinhaDaConversa): ConversaDoChamador {
     casoEncerrado: linha.case_status !== null && linha.case_status !== 'open',
     nomeDoTutor: linha.tutor_display_name,
     nomeDoAchador: linha.finder_display_name,
+    // `!== null` e não um `if` de tela: quem decide o que isto SIGNIFICA é
+    // `estadoDaConversa` e `participantesVisiveis`, no domínio.
+    tutorDesabilitado: linha.tutor_deleted_at !== null,
+    achadorDesabilitado: linha.achador_deleted_at !== null,
   };
 }
 
@@ -153,6 +159,13 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
       sql<string | null>`coalesce("found_reports"."finder_display_name", "achador"."display_name")`.as(
         'finder_display_name',
       ),
+      // AS DUAS PONTAS DESABILITADAS (17/10). Sai `deleted_at` e não um booleano
+      // montado em SQL: o domínio decide o significado, e a consulta só traz o
+      // fato. `achador.deleted_at` é nulo também quando NÃO HÁ achador com conta
+      // -- o `LEFT JOIN` não casou -- e os dois nulos querem a mesma resposta
+      // ("não está desabilitado"), então a ambiguidade é inofensiva aqui.
+      'tutor.deleted_at as tutor_deleted_at',
+      'achador.deleted_at as achador_deleted_at',
       eb
         .case()
         .when('conversations.tutor_user_id', '=', chamador)
@@ -399,6 +412,8 @@ interface LinhaDaConversaDoAchador {
   finder_token_expires_at: Date | null;
   case_status: string | null;
   case_closed_at: Date | null;
+  tutor_deleted_at: Date | null;
+  achador_deleted_at: Date | null;
 }
 
 /**
@@ -427,6 +442,11 @@ export function construtorDaLeituraDoAchador(db: Db, resumo: Uint8Array) {
       sql<string | null>`coalesce("found_reports"."finder_display_name", "achador"."display_name")`.as(
         'finder_display_name',
       ),
+      // As duas pontas desabilitadas (17/10). Este é o caminho SEM LOGIN, e é
+      // por isso que a despersonalização não pode morar na montagem da
+      // resposta: são duas vistas, e esta é a que não pede token de acesso.
+      'tutor.deleted_at as tutor_deleted_at',
+      'achador.deleted_at as achador_deleted_at',
       'proprio.finder_token_hash',
       'proprio.finder_token_expires_at',
       'lost_cases.status as case_status',
@@ -475,6 +495,8 @@ function comoConversaDoAchador(linha: LinhaDaConversaDoAchador): ConversaDoAchad
     bloqueadaEm: linha.blocked_at,
     nomeDoTutor: linha.tutor_display_name,
     nomeDoAchador: linha.finder_display_name,
+    tutorDesabilitado: linha.tutor_deleted_at !== null,
+    achadorDesabilitado: linha.achador_deleted_at !== null,
     resumoDoToken: new Uint8Array(linha.finder_token_hash),
     tokenExpiraEm: linha.finder_token_expires_at,
     caso:

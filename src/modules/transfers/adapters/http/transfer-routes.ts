@@ -95,6 +95,46 @@ export const rotaDeAceiteDaTransferencia = defineRoute({
   ],
 });
 
+/**
+ * ====================================================================
+ * AS DUAS ROTAS DE TOKEN DE CANCELAMENTO NAO FILTRAM CONTA DESABILITADA
+ * ====================================================================
+ *
+ * Decisao de 18/10, e ela e deliberada: a decisao do cliente de 17/10 --
+ * "filtro as paginas para que esse usuario nao seja mais encontrado em nenhuma
+ * pagina ou funcionalidade" -- NAO se aplica aqui. Os quatro motivos, medidos:
+ *
+ * 1. **O corpo nao carrega pessoa nenhuma.** `buscarPorTokenDeCancelamento`
+ *    seleciona cinco coisas: o id da transferencia, o NOME DO PET, o estado, o
+ *    instante de consumacao e o de criacao. Nem nome, nem e-mail, nem foto, nem
+ *    identificador de nenhum dos dois lados. Nao ha ninguem para "nao ser
+ *    encontrado": filtrar aqui nao esconderia dado de pessoa, so apagaria um
+ *    botao.
+ *
+ * 2. **Filtrar quebraria o desfazer do OUTRO lado.** O token de cancelamento e
+ *    o unico caminho de desfazer dentro da janela, e quem o segura e a
+ *    contraparte -- normalmente uma conta ATIVA, que nao decidiu nada sobre a
+ *    saida de quem saiu. Esconder a transferencia dela por causa da conta do
+ *    outro e punir quem ficou.
+ *
+ * 3. **E e exatamente o caso que a heranca por `pets` cria.** O gatilho
+ *    `users_desabilitada_marca_pets` (migracao `20261017000013`) marca os pets
+ *    da conta, e `construtorDaTrocaDeDono` exige `deleted_at is null`: uma
+ *    transferencia aceita de um pet de conta desabilitada NAO consuma, e fica
+ *    parada em `accepted`. O token de cancelamento e o que resolve essa parada.
+ *    Fecha-lo deixaria a contraparte presa numa transferencia que nunca anda e
+ *    que ela nao pode desfazer.
+ *
+ * 4. **O token E a credencial, e ele nao e descobrivel.** `cancel_token_hash`
+ *    guarda so o resumo, o token vive na caixa de entrada de quem o recebeu, e
+ *    as duas rotas tem teto por IP (30/h e 10/h, com `log_and_alert`). Nao e
+ *    superficie que alguem varre: e um link que chegou a uma pessoa.
+ *
+ * O que isto NAO autoriza: as rotas autenticadas de transferencia continuam
+ * fechadas para a conta desabilitada, e nao por filtro daqui -- `autenticar()`
+ * passa por `buscarContaPorId`, que exige `deleted_at is null`, e a conta
+ * desabilitada recebe 401 em qualquer rota autenticada.
+ */
 export const rotaDaTransferenciaPorToken = defineRoute({
   operationId: 'getTransferByCancelToken',
   method: 'get',
