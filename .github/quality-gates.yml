@@ -520,3 +520,41 @@ dispensas:
     motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
     responsavel: squad
     vence_em: 2026-10-21
+
+  # O RECADO DO ACHADO ALINHADO EM 500. UMA entrada, para UMA operacao.
+  #
+  # `FoundReportEnrichment.message` declarava `maxLength: 1000`. A coluna onde
+  # esse texto e gravado,
+  # `found_reports.notes`, SEMPRE recusou acima de 500
+  # (`found_reports_notes_tamanho`, migracao 20260917000007 linha 210). O texto
+  # entre 501 e 1000 passava pela validacao do contrato e morria no banco: quem
+  # avisa recebia ERRO DE SERVIDOR em vez de recusa explicada, e o recado se
+  # perdia -- com o animal na mao de quem estava tentando ajudar.
+  #
+  # Nao e aperto de regra, e o contrato parando de prometer o que o banco nunca
+  # aceitou: a mudanca ALINHA O CONTRATO A REALIDADE e remove um erro de
+  # servidor. Nenhum texto que hoje e gravado deixa de caber, porque o que nao
+  # cabia nunca foi gravado. `StrayFoundReportInput.notes` ja estava em 500 pelo
+  # mesmo motivo, com a mesma frase na descricao; estas duas ficaram atras.
+  #
+  # DECISAO LITERAL DO CLIENTE, 18/10/2026: "pode corrigir o contrato e aceitar
+  # os 500 caracteres". Por isso `responsavel: cliente`.
+  #
+  # A ROTA IRMA NAO ENTRA AQUI, e foi medida: `enrichFinderFoundReport` usa um
+  # schema PROPRIO (`FinderFoundReportEnrichment`) e o `message` dele NAO vai
+  # para `found_reports.notes` -- vai para a conversa mediada, em
+  # `mediated_messages.body`, cujo CHECK aceita 4000 (`aviso-do-achador.ts`,
+  # "para onde vai cada campo"). Lá 1000 esta correto e casa com `body` de
+  # `postFinderMessage`, o mesmo destino; apertar para 500 cortaria pela metade
+  # o recado de quem avisa SEM CONTA sem corrigir descasamento nenhum.
+  #
+  # Medido com tufin/oasdiff:v1.32.1: e exatamente esta uma -- o juizo casa um
+  # par regra+operacao por entrada e recusa dispensa que valha para a rota
+  # inteira.
+  # Vence em 25/10/2026, pela razao das vizinhas: depois do merge a base
+  # carrega o contrato novo e a quebra deixa de existir.
+  - portao: oasdiff-recado-do-achado-500-com-conta
+    mudanca: "request-property-max-length-decreased enrichFoundReport"
+    motivo: "o contrato declarava maxLength 1000 em FoundReportEnrichment.message e a coluna found_reports.notes sempre recusou acima de 500 (found_reports_notes_tamanho); entre 501 e 1000 o texto passava pela validacao e estourava no banco como erro de servidor. Alinha o contrato a realidade e remove um erro de servidor; nenhum texto hoje gravado deixa de caber. Decisao literal do cliente de 18/10/2026"
+    responsavel: cliente
+    vence_em: 2026-10-25

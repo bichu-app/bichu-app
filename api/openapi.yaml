@@ -9697,7 +9697,15 @@ components:
     FoundReportEnrichment:
       type: object
       properties:
-        message: { type: string, maxLength: 1000 }
+        message:
+          type: string
+          maxLength: 500
+          description: |
+            500, o mesmo teto de `found_reports.notes` no banco
+            (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+            entre 501 e 1000 passava pela validacao e morria no banco como erro
+            de servidor -- o recado se perdia com o animal na mao de quem ajuda.
+            Mesmo alinhamento que `StrayFoundReportInput.notes` ja tinha.
         photo_upload_ref:
           type: string
           pattern: '^[A-Za-z0-9_-]{22}$'
@@ -9735,7 +9743,17 @@ components:
         de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
         consumidor (13 quebras no `oasdiff` do commit 19ee222).
       properties:
-        message: { type: string, maxLength: 1000 }
+        message:
+          type: string
+          maxLength: 1000
+          description: |
+            **1000 de proposito, e nao os 500 da rota com conta.** Este `message`
+            NAO e gravado em `found_reports.notes`: ele entra na conversa mediada
+            como mensagem do achador (`aviso-do-achador.ts`, "para onde vai cada
+            campo"), isto e em `mediated_messages.body`, cujo CHECK aceita 4000.
+            O numero casa com `body` de `postFinderMessage`, que e o mesmo
+            destino. Apertar aqui para 500 nao corrigiria descasamento nenhum e
+            cortaria pela metade o recado de quem avisa SEM CONTA.
         photo_upload_ref:
           type: string
           pattern: '^[A-Za-z0-9_-]{22}$'

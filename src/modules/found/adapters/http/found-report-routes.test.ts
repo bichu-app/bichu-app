@@ -294,14 +294,19 @@ const CORPO_MINIMO = {
   area: { city: 'São Paulo', neighborhood: 'Pinheiros' },
 };
 
-/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
-function tetoDoRecadoNoContrato(): number {
+/** O `maxLength` que o contrato declara, lido dele e não escrito aqui. */
+function tetoNoContrato(schema: string, campo: string): number {
   const spec = carregarContrato('api/openapi.yaml').spec as {
     components?: { schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }> };
   };
-  const teto = spec.components?.schemas?.['StrayFoundReportInput']?.properties?.['notes']?.maxLength;
-  assert.equal(typeof teto, 'number', 'o contrato não declara `maxLength` em StrayFoundReportInput.notes');
+  const teto = spec.components?.schemas?.[schema]?.properties?.[campo]?.maxLength;
+  assert.equal(typeof teto, 'number', `o contrato não declara \`maxLength\` em ${schema}.${campo}`);
   return teto as number;
+}
+
+/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
+function tetoDoRecadoNoContrato(): number {
+  return tetoNoContrato('StrayFoundReportInput', 'notes');
 }
 
 void describe('as rotas existem e respondem o que o contrato declara', () => {
@@ -841,5 +846,86 @@ void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
       'a isca não conseguiu desligar a autorização: os casos de 404 deste arquivo ' +
         'passaram a medir outra coisa',
     );
+  });
+});
+
+
+/**
+ * O RECADO DO ENRIQUECIMENTO, nas duas bordas.
+ *
+ * `FoundReportEnrichment.message` declarava `maxLength: 1000` e grava em
+ * `found_reports.notes`, que SEMPRE recusou acima de 500
+ * (`found_reports_notes_tamanho`, migração 20260917000007). O texto entre 501 e
+ * 1000 passava pela validação e estourava no banco: quem avisa recebia **erro de
+ * servidor** em vez de recusa explicada, e o recado se perdia -- com o animal na
+ * mão de quem estava tentando ajudar.
+ *
+ * As DUAS bordas, e não só a de cima, porque é em `<=` contra `<` que o erro de
+ * comparação mora: um teto escrito como 499 recusaria 500 e passaria neste
+ * arquivo se só o 501 fosse medido.
+ *
+ * A recusa é medida **chamando a aplicação**, pelo `inject` do Fastify de
+ * verdade -- a tela não participa. O teto sai do contrato (`tetoNoContrato`) e
+ * não de um número escrito aqui: uma cópia deixaria de acusar mudança na spec.
+ */
+void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bordas', () => {
+  void it('500 exatos é ACEITO e chega gravado na resposta', async () => {
+    const teto = tetoNoContrato('FoundReportEnrichment', 'message');
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto) },
+    });
+    await app.close();
+
+    assert.equal(teto, 500, 'o teto do contrato deixou de ser o da coluna (500)');
+    assert.equal(resposta.status, 200);
+    // Gravado, e não apenas aceito: `notes` da resposta é `observacao` do que o
+    // repositório devolveu depois do `UPDATE`.
+    assert.equal(resposta.corpo['notes'], 'a'.repeat(teto));
+  });
+
+  void it('501 é RECUSADO pela validação, com o limite na mensagem, e não chega ao banco', async () => {
+    const teto = tetoNoContrato('FoundReportEnrichment', 'message');
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.equal(resposta.status, 400);
+    assert.equal(tipoDe(resposta.corpo), 'validation-failed');
+
+    // A recusa precisa DIZER O LIMITE: "inválido" manda a pessoa adivinhar
+    // quanto cortar de um texto que ela acabou de escrever.
+    const erros = resposta.corpo['errors'] as { field: string; code: string; message: string }[];
+    const doRecado = erros.find((e) => e.field === 'message');
+    assert.ok(doRecado, `o 400 não nomeia o campo \`message\`: ${resposta.bruto}`);
+    assert.equal(doRecado.code, 'maxLength');
+    assert.match(
+      doRecado.message,
+      new RegExp(String(teto)),
+      `a recusa não diz o limite de ${String(teto)}: ${doRecado.message}`,
+    );
+  });
+
+  void it('o 501 é recusado ANTES do repositório: nada foi gravado', async () => {
+    // Se a validação do contrato deixasse passar, o `UPDATE` iria ao banco e o
+    // 500 viria dele. Aqui o dobre devolveria 200 com o texto inteiro, e é por
+    // isso que o status acima prova a borda e não a sorte.
+    const teto = tetoNoContrato('FoundReportEnrichment', 'message');
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.notEqual(resposta.corpo['notes'], 'a'.repeat(teto + 1));
+    assert.equal(resposta.status, 400);
   });
 });
