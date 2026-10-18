@@ -12,6 +12,7 @@ import type {
   EspecieDoItem,
   ImagemDaVitrine,
   ItemDaVitrine,
+  SubcategoriaDaVitrine,
   TagDaVitrine,
 } from '../domain/item-da-vitrine.js';
 
@@ -37,6 +38,14 @@ export interface RecorteDaVitrine {
    */
   readonly q?: string | undefined;
   readonly category?: CategoriaDaVitrine | undefined;
+  /**
+   * O segundo nivel. **Independe de `category`**: o par do item ja e coerente
+   * por chave estrangeira, entao filtrar so pela subcategoria e correto.
+   *
+   * Subcategoria inexistente, inativa ou de outra categoria devolve lista
+   * vazia, e nao erro -- a mesma regra de `tag`.
+   */
+  readonly subcategory?: SubcategoriaDaVitrine | undefined;
   /** Itens que servem a esta especie, entre outras. */
   readonly species?: EspecieDoItem | undefined;
   /**

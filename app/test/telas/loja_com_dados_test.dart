@@ -34,6 +34,9 @@ Map<String, dynamic> itemDoContrato({
   String title = 'Bola Pop',
   String summary = 'Bola de borracha atóxica que flutua.',
   String category = 'toy',
+  String? categoryLabel = 'Brinquedos',
+  String? subcategory,
+  String? subcategoryLabel,
   String? imageUrl,
   String? imageAltText,
   String targetUrl = 'https://cobasi.com.br/bola-pop-borracha',
@@ -49,6 +52,9 @@ Map<String, dynamic> itemDoContrato({
     'title': title,
     'summary': summary,
     'category': category,
+    'category_label': categoryLabel,
+    'subcategory': subcategory,
+    'subcategory_label': subcategoryLabel,
     'image_url': imageUrl,
     'image_alt_text': imageAltText,
     'target_url': targetUrl,
@@ -64,7 +70,52 @@ Map<String, dynamic> itemDoContrato({
   };
 }
 
-/// A resposta de `StoreItemPage`.
+/// A resposta de `StoreTaxonomy` (`GET /v1/store/taxonomy`).
+///
+/// **Um recorte do vocabulario, nao ele inteiro.** A arvore de verdade tem 14
+/// categorias e 83 subcategorias, e quem a confere e
+/// `tests/integration/taxonomia-da-loja-em-dois-niveis.test.ts`, contra a
+/// semente. Aqui bastam tres categorias: uma com arvore de segundo nivel, uma
+/// outra com arvore (para "subcategoria de outra categoria" existir) e uma
+/// SEM arvore -- que e o estado de 11 das 14 em 17/10 e o que faz o grupo de
+/// filtro do segundo nivel nao aparecer.
+Map<String, dynamic> taxonomiaDoContrato() {
+  return <String, dynamic>{
+    'categories': <Map<String, dynamic>>[
+      <String, dynamic>{
+        'code': 'food',
+        'label': 'Rações',
+        'subcategories': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'code': 'racao_seca',
+            'label': 'Ração seca',
+            'species': <String>['dog'],
+          },
+          <String, dynamic>{
+            'code': 'racao_umida',
+            'label': 'Ração úmida',
+            'species': <String>['dog'],
+          },
+        ],
+      },
+      <String, dynamic>{
+        'code': 'health',
+        'label': 'Medicamentos',
+        'subcategories': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'code': 'vermifugos',
+            'label': 'Vermífugos',
+            'species': <String>['dog'],
+          },
+        ],
+      },
+      // Sem subcategoria: o segundo nivel nao e oferecido para ela.
+      <String, dynamic>{'code': 'bed', 'label': 'Camas e casinhas', 'subcategories': <Map<String, dynamic>>[]},
+    ],
+  };
+}
+
+/// A resposta de `StoreTaxonomy`.
 Map<String, dynamic> paginaDoContrato(
   List<Map<String, dynamic>> itens, {
   String ordemEfetiva = 'curadoria',
@@ -109,6 +160,9 @@ Future<http.Response> Function(http.Request) redeQuePaginaAVitrine(
   Map<String, String> Function(Map<String, String> pedido)? filtrosAplicados,
 }) {
   return (req) async {
+    if (req.url.path == '/v1/store/taxonomy' && req.method == 'GET') {
+      return json200(taxonomiaDoContrato());
+    }
     if (req.url.path != '/v1/store/items' || req.method != 'GET') {
       return problema('not-found', 404);
     }
@@ -163,6 +217,11 @@ Future<http.Response> Function(http.Request) redeDaVitrine(
       urls?.add(req.url);
       cabecalhos?.add(req.headers);
       return json200(corpo);
+    }
+    // O vocabulario dos dois niveis: a tela o pede uma vez, e sem ele os
+    // grupos de filtro de categoria e de subcategoria nao nascem.
+    if (req.url.path == '/v1/store/taxonomy' && req.method == 'GET') {
+      return json200(taxonomiaDoContrato());
     }
     return problema('not-found', 404);
   };
@@ -373,6 +432,9 @@ void main() {
       await abrirLoja(
         tester,
         rede: (req) async {
+          if (req.url.path == '/v1/store/taxonomy' && req.method == 'GET') {
+            return json200(taxonomiaDoContrato());
+          }
           if (req.url.path == '/v1/store/items' && req.method == 'GET') {
             urls.add(req.url);
             // A primeira carga traz um item; depois do filtro, nenhum.
@@ -394,7 +456,9 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Saúde'));
+      // "Medicamentos", e nao "Saúde": o rotulo e dado do servidor desde
+      // 17/10, e este caso le o que o duble entregou em `taxonomiaDoContrato`.
+      await tester.tap(find.text('Medicamentos'));
       await tester.pumpAndSettle();
 
       // O filtro de fato foi para a rota.
@@ -713,7 +777,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Saúde'));
+      // "Medicamentos", e nao "Saúde": o rotulo e dado do servidor desde
+      // 17/10, e este caso le o que o duble entregou em `taxonomiaDoContrato`.
+      await tester.tap(find.text('Medicamentos'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['category'], 'health');
@@ -901,20 +967,42 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       expect(find.text(item.trechoDoResumo), findsOneWidget);
     });
 
-    // ISCA -- em `modelos_loja.dart`, no enum `CategoriaDaLoja`, troque
-    // `acessorio('accessory', ...)` por `acessorio('accessorios', ...)`. Este
-    // caso reprova: o APK instalado deixa de reconhecer a categoria que o
-    // servidor manda, e `porCodigo` passa a devolver nulo.
+    // ISCA -- em `modelos_loja.dart`, em `rotulosLegadosDaCategoria`, troque
+    // `'accessory': 'Acessórios'` por `'Acessório'`. Este caso reprova: o
+    // pedido do cliente de 17/10 era o PLURAL, e a reserva deste binario e o
+    // ultimo lugar onde alguem iria olhar.
+    //
+    // ESTE CASO MUDOU DE OBJETO NA MESCLA DOS DOIS NIVEIS, e nao de assunto.
+    // Ele falava do `enum CategoriaDaLoja`, que carregava codigo e rotulo no
+    // binario; o `enum` morreu quando a categoria virou DADO do servidor
+    // (`GET /v1/store/taxonomy`). O que sobrou no binario e
+    // `rotulosLegadosDaCategoria`, a reserva de uma versao para servidor que
+    // ainda nao manda `category_label` -- e e nela que o plural precisa
+    // continuar de pe.
+    //
+    // A outra metade do pedido -- "so o rotulo muda, o CODIGO nao" -- continua
+    // sendo afirmada aqui pelas CHAVES do mapa, que sao os codigos que o APK
+    // instalado filtra. E os rotulos do VOCABULARIO (o que o servidor manda
+    // hoje) sao guardados contra a semente da `20261017000003` em
+    // `tests/integration/taxonomia-da-loja-em-dois-niveis.test.ts`.
     test('ISCA -- pluralizar o rótulo NÃO mexe no código do contrato', () {
-      expect(CategoriaDaLoja.acessorio.codigo, 'accessory');
-      expect(CategoriaDaLoja.brinquedo.codigo, 'toy');
-      expect(CategoriaDaLoja.acessorio.rotulo, 'Acessórios');
-      expect(CategoriaDaLoja.brinquedo.rotulo, 'Brinquedos');
-      // O que o servidor manda continua resolvendo, que é o que o APK já
-      // instalado depende de continuar funcionando.
-      expect(CategoriaDaLoja.porCodigo('accessory'), CategoriaDaLoja.acessorio);
-      expect(CategoriaDaLoja.porCodigo('toy'), CategoriaDaLoja.brinquedo);
-      expect(CategoriaDaLoja.porCodigo('accessorios'), isNull);
+      // Os CODIGOS, que o APK instalado manda em `?category=`.
+      expect(rotulosLegadosDaCategoria.containsKey('accessory'), isTrue);
+      expect(rotulosLegadosDaCategoria.containsKey('toy'), isTrue);
+      expect(rotulosLegadosDaCategoria.containsKey('accessorios'), isFalse);
+      // Os ROTULOS, no plural que o cliente pediu em 17/10/2026.
+      expect(rotulosLegadosDaCategoria['accessory'], 'Acessórios');
+      expect(rotulosLegadosDaCategoria['toy'], 'Brinquedos');
+      // A reserva cobre os SEIS antigos, e so eles: codigo novo sem
+      // `category_label` nao ganha rotulo inventado.
+      expect(rotulosLegadosDaCategoria.keys.toSet(), <String>{
+        'food',
+        'toy',
+        'hygiene',
+        'accessory',
+        'health',
+        'bed',
+      });
     });
 
     testWidgets('o botão diz de qual produto ele é, para o leitor de tela', (tester) async {

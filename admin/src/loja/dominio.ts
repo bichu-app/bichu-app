@@ -2,27 +2,58 @@ import { CENTAVOS_MAXIMO, CENTAVOS_MINIMO, centavosDosDigitos, reaisDeCentavos }
 import type { Esquemas } from '../api/cliente.ts';
 
 /**
- * Codigo do contrato -> rotulo da tela. Os rotulos sao os que o app ja mostra
- * (UX 29.10; `correspondencias` de api/rastreabilidade-backoffice-rede.yaml,
- * que declara `app/lib/api/modelos_loja.dart` como a FONTE do rotulo e esta
- * matriz como o registro 1 para 1 -- este mapa e a copia que o painel usa, e
- * mudar o rotulo e mudar os tres juntos).
- * `satisfies Record<...>` faz o compilador reprovar se o contrato ganhar ou
- * perder um valor sem o rotulo acompanhar.
+ * O vocabulario dos dois niveis, como `GET /v1/store/taxonomy` o entrega.
  *
- * **`toy` e `accessory` no PLURAL desde 17/10/2026** (pedido do cliente). Só o
- * rótulo: os códigos do contrato continuam `toy` e `accessory`, porque trocar
- * o código quebraria o APK que já está instalado -- valor desconhecido num
- * enum estoura a tela e não há como atualizar o app à força.
+ * ## O mapa fixo de categorias morreu aqui, em 17/10/2026
+ *
+ * Havia um `CATEGORIAS` com seis pares `codigo -> rotulo` e um
+ * `satisfies Record<Esquemas['StoreCategory'], string>` que fazia o compilador
+ * reprovar quando o `enum` do contrato e os rotulos divergissem. A trava era
+ * boa, e **ela deixou de existir junto com o `enum`**: o cliente decidiu dois
+ * niveis com subcategorias como a petlove, e 14 categorias com 83
+ * subcategorias nao sao `enum` de contrato -- cada ajuste de vocabulario seria
+ * mudanca das quatro aplicacoes.
+ *
+ * ## E O PLURAL QUE O CLIENTE PEDIU NO MESMO DIA? VIROU DADO
+ *
+ * O outro lote de 17/10 trocou os rotulos deste mapa a pedido do cliente --
+ * `toy` para "Brinquedos" e `accessory` para "Acessorios", no PLURAL, sem
+ * mexer no codigo. Apagar o mapa nao desfaz aquele pedido: ele foi para onde o
+ * rotulo passou a morar, que e a semente de `store_categories` na
+ * `20261017000003` -- `('toy', 'Brinquedos', 8)` e
+ * `('accessory', 'Roupas e acessorios', 10)`, os dois no plural. Renomear de
+ * novo e um `UPDATE`, e nao mais tres arquivos no mesmo commit.
+ *
+ * O que substitui a trava nao e outra trava de compilacao, e e honesto dizer
+ * isso: e o fato de **nao haver mais dois lugares para divergirem**. O rotulo
+ * vem do servidor, que o le da mesma tabela que a chave estrangeira do item
+ * referencia. O painel nao tem mais opiniao sobre o vocabulario.
  */
-export const CATEGORIAS = {
-  food: 'Alimentação',
-  toy: 'Brinquedos',
-  hygiene: 'Higiene',
-  accessory: 'Acessórios',
-  health: 'Saúde',
-  bed: 'Cama e conforto',
-} as const satisfies Record<Esquemas['StoreCategory'], string>;
+export type Taxonomia = Esquemas['StoreTaxonomy'];
+export type CategoriaDoVocabulario = Esquemas['StoreTaxonomyCategory'];
+
+/** A categoria do vocabulario com este codigo, ou `undefined`. */
+export function categoriaDoVocabulario(
+  taxonomia: Taxonomia | undefined,
+  codigo: string,
+): CategoriaDoVocabulario | undefined {
+  return taxonomia?.categories.find((c) => c.code === codigo);
+}
+
+/**
+ * As subcategorias da categoria escolhida, **e so dela**.
+ *
+ * Sem categoria escolhida a lista e vazia, e o segundo select fica
+ * desabilitado: oferecer as 83 de uma vez devolveria a pessoa ao problema que
+ * os dois niveis existem para resolver.
+ */
+export function subcategoriasDaCategoria(
+  taxonomia: Taxonomia | undefined,
+  categoria: string,
+): readonly Esquemas['StoreTaxonomySubcategory'][] {
+  if (categoria === '') return [];
+  return categoriaDoVocabulario(taxonomia, categoria)?.subcategories ?? [];
+}
 
 export const ESPECIES = {
   dog: 'Cão',
@@ -31,13 +62,31 @@ export const ESPECIES = {
 } as const satisfies Record<Esquemas['Species'], string>;
 
 export type Categoria = Esquemas['StoreCategory'];
+export type Subcategoria = Esquemas['StoreSubcategory'];
 export type Especie = Esquemas['Species'];
 
 export const MAXIMO_DE_TAGS = 5;
 export const MAXIMO_DE_TAGS_ATIVAS = 40;
 
-export function eCategoria(v: string): v is Categoria {
-  return Object.hasOwn(CATEGORIAS, v);
+/**
+ * O valor escolhido no select e uma categoria do vocabulario CARREGADO.
+ *
+ * Confere contra a taxonomia em vez de contra um mapa fixo: a autoridade e a
+ * tabela, e o painel so sabe o que o servidor lhe contou. Sem taxonomia
+ * carregada nada e categoria -- e o select, nesse estado, nao tem opcao
+ * nenhuma para a pessoa escolher.
+ */
+export function eCategoria(taxonomia: Taxonomia | undefined, v: string): v is Categoria {
+  return v !== '' && categoriaDoVocabulario(taxonomia, v) !== undefined;
+}
+
+/** O valor escolhido e subcategoria ATIVA da categoria escolhida. */
+export function eSubcategoriaDaCategoria(
+  taxonomia: Taxonomia | undefined,
+  categoria: string,
+  v: string,
+): v is Subcategoria {
+  return v !== '' && subcategoriasDaCategoria(taxonomia, categoria).some((s) => s.code === v);
 }
 export function eEspecie(v: string): v is Especie {
   return Object.hasOwn(ESPECIES, v);

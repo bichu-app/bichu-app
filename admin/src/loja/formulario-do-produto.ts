@@ -5,12 +5,28 @@
  */
 import type { Esquemas } from '../api/cliente.ts';
 import { descricaoAceitavel, precisaDeDescricao, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
-import { centavosParaCampo, hojeCivil, MAXIMO_DE_TAGS, precoEmCentavos, type Categoria, type Especie } from './dominio.ts';
+import {
+  centavosParaCampo,
+  hojeCivil,
+  MAXIMO_DE_TAGS,
+  precoEmCentavos,
+  type Especie,
+} from './dominio.ts';
 
 export interface ValoresDoProduto {
   titulo: string;
   resumo: string;
-  categoria: Categoria | '';
+  /**
+   * O CODIGO da categoria, ou `''` enquanto nada foi escolhido.
+   *
+   * `string`, e nao uniao de literais: desde 17/10 o vocabulario e dado do
+   * servidor (`GET /v1/store/taxonomy`), e `Categoria | ''` so repetiria
+   * `string` com a aparencia de garantir algo. Quem garante que o valor esta
+   * no vocabulario e `eCategoria`, contra a taxonomia carregada.
+   */
+  categoria: string;
+  /** `''` e "sem subcategoria", que e estado valido: o campo e opcional. */
+  subcategoria: string;
   especies: Especie[];
   tags: string[];
   imagens: ImagemDaGaleria[];
@@ -24,6 +40,7 @@ export const VALORES_VAZIOS: ValoresDoProduto = {
   titulo: '',
   resumo: '',
   categoria: '',
+  subcategoria: '',
   especies: [],
   tags: [],
   imagens: [],
@@ -37,6 +54,7 @@ export type CampoDoProduto =
   | 'f-nome'
   | 'f-desc'
   | 'f-categoria'
+  | 'f-subcategoria'
   | 'f-especies'
   | 'f-tags'
   | 'imagens'
@@ -49,6 +67,7 @@ export const ROTULO_DO_CAMPO: Record<CampoDoProduto, string> = {
   'f-nome': 'Nome',
   'f-desc': 'Descrição',
   'f-categoria': 'Categoria',
+  'f-subcategoria': 'Subcategoria',
   'f-especies': 'Para quais animais',
   'f-tags': 'Tags',
   imagens: 'Imagens do produto',
@@ -63,6 +82,7 @@ export const ORDEM_DOS_CAMPOS: CampoDoProduto[] = [
   'f-nome',
   'f-desc',
   'f-categoria',
+  'f-subcategoria',
   'f-especies',
   'f-tags',
   'imagens',
@@ -137,6 +157,19 @@ export function validarProduto(
   // lista depois.
   if (v.titulo.trim().length < 2) e['f-nome'] = 'Informe o nome do produto.';
 
+  // **A SUBCATEGORIA NAO E COBRADA EM REGUA NENHUMA**, nem na publicacao: ela
+  // e opcional, e item publicado sem segundo nivel e estado normal. A
+  // coerencia com a categoria e garantida pela propria tela -- o segundo
+  // select so oferece as subcategorias da categoria escolhida, e trocar a
+  // categoria limpa o campo. O servidor confere de novo
+  // (`unknown_subcategory`, `subcategory_not_in_category`,
+  // `subcategory_without_category`) e a chave estrangeira composta do banco e
+  // a trava final.
+  //
+  // O que o RASCUNHO precisa garantir e so isto: subcategoria escolhida sem
+  // categoria nao vai para o servidor. A tela ja impede (o select do segundo
+  // nivel fica desabilitado sem o primeiro), e aqui fica dito, porque sem
+  // `category` a chave composta nao e cobrada pelo banco.
   if (regua === 'publicacao') {
     if (v.resumo.trim().length < 2) e['f-desc'] = 'Escreva uma descrição.';
     if (v.categoria === '') e['f-categoria'] = 'Escolha a categoria.';
@@ -147,6 +180,9 @@ export function validarProduto(
     // sendo recusada pelo contrato (`minLength: 2`): a tela diz isso em vez de
     // deixar o 400 chegar sem endereco.
     if (v.resumo.trim() !== '' && v.resumo.trim().length < 2) e['f-desc'] = 'Escreva ao menos duas letras, ou deixe vazio.';
+  }
+  if (v.categoria === '' && v.subcategoria !== '') {
+    e['f-subcategoria'] = 'Escolha a categoria antes da subcategoria.';
   }
   if (v.tags.length > MAXIMO_DE_TAGS) e['f-tags'] = `Escolha até ${MAXIMO_DE_TAGS} tags.`;
 
@@ -249,6 +285,13 @@ export function corpoDeCriacao(v: ValoresDoProduto): Esquemas['AdminStoreItemInp
     ...(v.parceiro === '' ? {} : { partner_slug: v.parceiro }),
     ...(resumo === '' ? {} : { summary: resumo }),
     ...(v.categoria === '' ? {} : { category: v.categoria }),
+    // `''` vira a AUSENCIA do campo, e nao `null`: no corpo de criacao os dois
+    // significam a mesma coisa, e omitir deixa o padrao do contrato falar. E a
+    // mesma regra que o rascunho ja aplica aos outros campos ao lado.
+    //
+    // **Sem categoria a subcategoria tambem e omitida**, e nao e cortesia: o
+    // servidor recusaria o par solto com `subcategory_without_category`.
+    ...(v.categoria === '' || v.subcategoria === '' ? {} : { subcategory: v.subcategoria }),
     ...(v.especies.length === 0 ? {} : { species: v.especies }),
     tag_slugs: v.tags,
     // Destino sem parceiro o servidor recusa (`partner_required`): sem host nao
@@ -300,6 +343,16 @@ export function corpoDeAlteracao(v: ValoresDoProduto, base?: Pick<ValoresDoProdu
     title: v.titulo.trim(),
     summary: resumo === '' ? null : resumo,
     category: v.categoria === '' ? null : v.categoria,
+    // Na ALTERACAO, `''` vira `null` e nao ausencia: ausente preservaria a
+    // subcategoria gravada, e a pessoa que limpou o campo veria o valor
+    // antigo voltar. Mandar sempre tambem e o que garante o par coerente
+    // quando a categoria muda.
+    //
+    // **Limpar a categoria limpa a subcategoria no mesmo patch**: o servidor
+    // recusa `category: null` com subcategoria de pe
+    // (`subcategory_without_category`), e mandar os dois nulos juntos e o que
+    // deixa o rascunho coerente em vez de reprovado.
+    subcategory: v.categoria === '' || v.subcategoria === '' ? null : v.subcategoria,
     species: v.especies,
     tag_slugs: v.tags,
     target_url: link === '' || semParceiro ? null : link,
@@ -313,9 +366,11 @@ export function valoresDoItem(item: Esquemas['AdminStoreItem']): ValoresDoProdut
   return {
     titulo: item.title,
     // Os quatro nulos do rascunho viram campo vazio na tela: o formulario fala
-    // em `''`, o contrato em `null`, e a traducao mora aqui e so aqui.
+    // em `''`, o contrato em `null`, e a traducao mora aqui e so aqui. A
+    // subcategoria entra na mesma regra, por ser anulavel desde que nasceu.
     resumo: item.summary ?? '',
     categoria: item.category ?? '',
+    subcategoria: item.subcategory ?? '',
     especies: [...item.species],
     tags: item.tags.map((t) => t.slug),
     imagens: [...item.images]
@@ -346,6 +401,7 @@ const CAMPO_DO_SERVIDOR: [RegExp, CampoDoProduto][] = [
   [/^title$/, 'f-nome'],
   [/^summary$/, 'f-desc'],
   [/^category$/, 'f-categoria'],
+  [/^subcategory$/, 'f-subcategoria'],
   [/^species/, 'f-especies'],
   [/^tag_slugs/, 'f-tags'],
   [/^images/, 'imagens'],
@@ -379,6 +435,7 @@ const MENSAGEM_PADRAO: Record<CampoDoProduto, string> = {
   'f-nome': 'Informe o nome do produto.',
   'f-desc': 'Escreva uma descrição.',
   'f-categoria': 'Escolha a categoria.',
+  'f-subcategoria': 'Escolha uma subcategoria da categoria selecionada.',
   'f-especies': 'Marque pelo menos um animal.',
   'f-tags': 'Confira as tags escolhidas.',
   imagens: 'A imagem não foi enviada.',

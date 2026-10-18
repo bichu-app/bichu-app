@@ -297,13 +297,32 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
   },
   // BICHUS-185 / BICHUS-189. A categoria do produto da vitrine. Espelha
-  // `CategoriaDaVitrine` em `src/modules/store/domain/item-da-vitrine.ts` e o
-  // `enum` `StoreCategory` do contrato -- os tres arquivos que o ADR-0023
-  // secao 3 exige no mesmo commit.
-  'public.store_items.store_items_categoria': {
-    coluna: 'category',
-    valores: ['food', 'toy', 'hygiene', 'accessory', 'health', 'bed'],
-  },
+  // ------------------------------------------------------------------
+  // A CATEGORIA DA LOJA **SAIU** DESTE REGISTRO EM 17/10/2026, E A SAIDA E A
+  // DECISAO
+  // ------------------------------------------------------------------
+  //
+  // Havia aqui `public.store_items.store_items_categoria`, com os seis valores
+  // (`food`, `toy`, `hygiene`, `accessory`, `health`, `bed`), e ele era um dos
+  // tres arquivos que o ADR-0023 secao 3 exige no mesmo commit.
+  //
+  // A `20261017000003` **apagou esse CHECK** e poe no lugar uma chave
+  // estrangeira para `store_categories (code)`: o cliente decidiu dois niveis
+  // com subcategorias como a petlove, e 14 categorias com 83 subcategorias nao
+  // cabem num conjunto de literais -- nem a relacao entre os dois niveis, nem
+  // a variacao por especie.
+  //
+  // **A trava nao desapareceu, ela mudou de forma**, e e honesto dizer onde
+  // ela esta agora: a chave estrangeira `store_items_categoria_existe` e a
+  // composta `store_items_subcategoria_e_da_categoria`, que
+  // `chave-estrangeira-contra-restricao.test.ts` confere. O que este arquivo
+  // perdeu e a afirmacao do CONJUNTO EXATO de valores; quem a faz agora e
+  // `semente-da-taxonomia-da-loja.test.ts`, contra as linhas semeadas.
+  //
+  // Nao e perda de garantia de graca: era preciso escolher entre fechar a
+  // lista num CHECK (e pagar mudanca de contrato das quatro aplicacoes a cada
+  // ajuste de vocabulario) e fecha-la numa tabela. O cliente escolheu tabela,
+  // por extenso.
   // A `Rede` (ADR-0027 12.3 e apendice A.4). Tres arquivos no mesmo commit,
   // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
   // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
@@ -614,8 +633,14 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------------
   // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
   // Nenhum destes e lista fechada: sao formato, faixa e coerencia entre
-  // colunas. O unico conjunto fechado da vitrine e `store_items_categoria`,
-  // que esta em LISTAS_FECHADAS.
+  // colunas. **A vitrine nao tem mais nenhum conjunto fechado aqui**: era
+  // `store_items_categoria`, com os seis valores, e a `20261017000003` o
+  // trocou por chave estrangeira -- ver a nota em LISTAS_FECHADAS.
+  //
+  // `store_items_subcategoria_exige_categoria` (`subcategory IS NULL OR
+  // category IS NOT NULL`, da mesma migracao) tambem **nao esta em registro
+  // nenhum**, e pela razao dos cinco abaixo: e coerencia entre colunas, sem
+  // literal de texto. Declara-lo seria entrada fantasma.
   // ------------------------------------------------------------------
   //
   // CINCO CHECKS DA VITRINE **NAO** ESTAO AQUI, E A AUSENCIA E DELIBERADA.
@@ -666,6 +691,34 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
   'public.store_items.store_items_destino_e_caminho':
     "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+  // ------------------------------------------------------------------
+  // A TAXONOMIA DOS DOIS NIVEIS DA LOJA (migracao `20261017000003`)
+  // ------------------------------------------------------------------
+  //
+  // Formato de codigo de dado de referencia, COPIADO de `ref_breeds.code` e
+  // `ref_colors.code`: a taxonomia da Loja segue a forma que o produto ja usa
+  // para raca e cor, e nao uma segunda convencao para o mesmo problema.
+  //
+  // **Nenhum destes tres e lista fechada**, e a diferenca importa: eles dizem
+  // a FORMA do codigo, e o conjunto de codigos aceitos mora nas LINHAS de
+  // `store_categories` e `store_subcategories`. Foi essa troca -- conjunto no
+  // CHECK por conjunto na tabela -- que a decisao do cliente de 17/10 ("dois
+  // niveis, com subcategorias como a petlove") obrigou.
+  //
+  // Os dois CHECKs de tamanho de rotulo
+  // (`store_categories_rotulo_tem_tamanho` e o irmao de
+  // `store_subcategories`) **nao estao aqui, de proposito**, pela mesma razao
+  // dos cinco da vitrine registrada acima: nenhum deles menciona literal de
+  // texto, `MENCIONA_LITERAL` nao casa, e eles ficariam como entrada fantasma.
+  'public.store_categories.store_categories_codigo_formato':
+    "CHECK ((code ~ '^[a-z][a-z0-9_]{1,29}$'::text))",
+  'public.store_subcategories.store_subcategories_codigo_formato':
+    "CHECK ((code ~ '^[a-z][a-z0-9_]{1,39}$'::text))",
+  // A subcategoria do item e OPCIONAL, e o `IS NULL OR` e a opcionalidade
+  // escrita: produto sem segundo nivel continua valido, e exigi-lo
+  // invalidaria todo cadastro anterior de uma vez.
+  'public.store_items.store_items_subcategoria_formato':
+    "CHECK (((subcategory IS NULL) OR (subcategory ~ '^[a-z][a-z0-9_]{1,39}$'::text)))",
   'public.store_items.store_items_imagem_e_caminho':
     "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
   // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira

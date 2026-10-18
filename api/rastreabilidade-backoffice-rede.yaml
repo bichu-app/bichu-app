@@ -208,14 +208,30 @@ telas:
           - req:price.amount
           - req:price.checked_at
           - req:price.currency
-          - enum:StoreCategory.food
-          - enum:StoreCategory.toy
-          - enum:StoreCategory.hygiene
-          - enum:StoreCategory.accessory
-          - enum:StoreCategory.health
-          - enum:StoreCategory.bed
+          - req:subcategory
+          # OS SEIS `enum:StoreCategory.*` SAIRAM DAQUI EM 17/10/2026.
+          #
+          # A `20261017000003` trocou o `CHECK` de seis literais por chave
+          # estrangeira para `store_categories`, e `StoreCategory` deixou de
+          # ser `enum` no contrato (virou `string` com padrao, precedente de
+          # `breed_code`). Referencia `enum:` a schema que nao e mais `enum`
+          # nao resolve, e foi assim que este portao reprovou -- pela terceira
+          # vez em que esta matriz nao acompanhou o contrato.
+          #
+          # O vocabulario que o select oferece passou a vir de
+          # `getStoreTaxonomy`, declarada abaixo. Nao ha o que enumerar aqui:
+          # a lista fechada mora em LINHAS, e e o portao de integracao
+          # (`taxonomia-da-loja-em-dois-niveis.test.ts`) que a conta.
           - problem:validation-failed
           - problem:slug-taken
+      - operationId: getStoreTaxonomy
+        situacao: contrato
+        nota: "os dois selects: o vocabulario dos dois niveis, que deixou de ser `enum` em 17/10"
+        usa:
+          - resp:categories[].code
+          - resp:categories[].label
+          - resp:categories[].subcategories[].code
+          - resp:categories[].subcategories[].label
       - operationId: updateAdminStoreItem
         situacao: contrato
         nota: "Salvar alteracoes"
@@ -223,6 +239,7 @@ telas:
           - req:title
           - req:summary
           - req:category
+          - req:subcategory
           - req:species
           - req:tag_slugs
           - req:images[].upload_id
@@ -564,17 +581,32 @@ telas:
 # ======================================================================
 
 correspondencias:
-  StoreCategory:
-    fonte_do_rotulo: app/lib/api/modelos_loja.dart
-    um_para_um: true
-    valores:
-      food: Alimentação
-      toy: Brinquedos
-      hygiene: Higiene
-      accessory: Acessórios
-      health: Saúde
-      bed: Cama e conforto
-    nota: "conferido em 23/09: seis codigos, seis rotulos, nenhum sobrando. O backoffice (CATS/CAT_CODE) usa os mesmos seis. Em 17/10/2026, a pedido do cliente, `toy` e `accessory` foram para o PLURAL: so o rotulo mudou, os codigos do contrato continuam `toy` e `accessory` (trocar o codigo quebraria o APK instalado)."
+  # ====================================================================
+  # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO
+  # ====================================================================
+  #
+  # Havia aqui uma correspondencia `um_para_um` com seis codigos e seis
+  # rotulos, `fonte_do_rotulo: app/lib/api/modelos_loja.dart`. Ela nao tem
+  # mais do que falar:
+  #
+  # - **o rotulo deixou de morar no cliente.** A `20261017000003` o poe em
+  #   `store_categories.label`, e ele chega na resposta
+  #   (`category_label`/`subcategory_label`). Nao ha mais dois lugares para
+  #   divergirem, que era exatamente o que esta secao cobrava;
+  # - **`StoreCategory` deixou de ser `enum`.** Sem lista fechada no contrato,
+  #   `um_para_um` nao tem contra o que ser conferido -- e foi por isso que
+  #   este portao reprovou os seis codigos como "fora da lista fechada".
+  #
+  # O PLURAL que o cliente pediu no mesmo dia (`toy` -> "Brinquedos",
+  # `accessory` -> "Roupas e acessorios") nao se perdeu: ele e semente da
+  # `20261017000003`, e quem o guarda agora e
+  # `tests/integration/taxonomia-da-loja-em-dois-niveis.test.ts`. Os CODIGOS
+  # continuam `toy` e `accessory`, porque trocar o codigo quebraria o APK
+  # instalado.
+  #
+  # `rotulosLegadosDaCategoria` em `app/lib/api/modelos_loja.dart` sobreviveu
+  # como reserva de UMA versao, para servidor sem `category_label`. Nao e
+  # correspondencia: ele cobre so os seis antigos, e de proposito.
   Species:
     um_para_um: true
     valores: { dog: Cão, cat: Gato, other: Outros animais }

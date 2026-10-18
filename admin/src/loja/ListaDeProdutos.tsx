@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import type { Esquemas } from '../api/cliente.ts';
@@ -11,7 +11,18 @@ import { useAvisoDaNavegacao, useListaPaginada, useParametrosDaLista } from '../
 import { MenuDeAcoes, type ItemDoMenu } from '../componentes/MenuDeAcoes.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { DialogoRenovarPreco } from './DialogoRenovarPreco.tsx';
-import { CATEGORIAS, centavosParaTexto, dataCivilParaTexto, eCategoria, eEspecie, ESPECIES, instanteParaTexto } from './dominio.ts';
+import {
+  categoriaDoVocabulario,
+  centavosParaTexto,
+  dataCivilParaTexto,
+  eCategoria,
+  eEspecie,
+  eSubcategoriaDaCategoria,
+  ESPECIES,
+  instanteParaTexto,
+  subcategoriasDaCategoria,
+  type Taxonomia,
+} from './dominio.ts';
 
 type Item = Esquemas['AdminStoreItem'];
 
@@ -36,7 +47,7 @@ const ORDENS = [
 type Ordem = (typeof ORDENS)[number]['valor'];
 const eOrdem = (v: string): v is Ordem => ORDENS.some((o) => o.valor === v);
 
-const PADROES = { q: '', filtro: 'todos', categoria: '', especie: '', ordem: 'atualizado' };
+const PADROES = { q: '', filtro: 'todos', categoria: '', subcategoria: '', especie: '', ordem: 'atualizado' };
 
 function nomeDoFiltro(filtro: string): string | undefined {
   return filtro === 'todos' ? undefined : CHIPS.find((c) => c.valor === filtro)?.rotulo;
@@ -52,13 +63,28 @@ function buscaEfetiva(q: string): string {
   return t.length >= 2 ? t : '';
 }
 
-function textoDaContagem(n: number, total: number, q: string, filtro: string, categoria: string, especie: string): string {
+function textoDaContagem(
+  n: number,
+  total: number,
+  q: string,
+  filtro: string,
+  categoria: string,
+  subcategoria: string,
+  especie: string,
+  taxonomia: Taxonomia | undefined,
+): string {
   if (n < total) return `Mostrando ${n} de ${total} ${plural(total)}`;
   let t = `${total} ${plural(total)}`;
   if (q) t += ` com “${q}”`;
   const f = nomeDoFiltro(filtro);
   if (f) t += ` em ${f}`;
-  if (eCategoria(categoria)) t += ` · ${CATEGORIAS[categoria]}`;
+  const doVocabulario = categoriaDoVocabulario(taxonomia, categoria);
+  if (doVocabulario) t += ` · ${doVocabulario.label}`;
+  // A subcategoria entra DEPOIS da categoria e so com ela: "· Bifinhos" sem
+  // "· Petiscos e ossos" na frente deixaria a linha afirmar um recorte menor
+  // do que o que de fato valeu.
+  const subDoVocabulario = doVocabulario?.subcategories.find((sc) => sc.code === subcategoria);
+  if (subDoVocabulario) t += ` · ${subDoVocabulario.label}`;
   if (eEspecie(especie)) t += ` · ${ESPECIES[especie]}`;
   return t;
 }
@@ -80,10 +106,30 @@ export default function ListaDeProdutos() {
   const [avisoLocal, setAvisoLocal] = useState<{ tipo: 'ok' | 'erro'; texto: string }>();
   const [renovar, setRenovar] = useState<Item>();
   const [retirar, setRetirar] = useState<Item>();
+  /**
+   * O vocabulario dos dois niveis. **Nao bloqueia a lista**: sem ele os dois
+   * seletores ficam sem opcao e a tabela continua carregando, porque o rotulo
+   * da categoria de cada linha vem do proprio item (`category_label`).
+   */
+  const [taxonomia, setTaxonomia] = useState<Taxonomia>();
+
+  useEffect(() => {
+    const controle = new AbortController();
+    api
+      .GET('/store/taxonomy', { signal: controle.signal })
+      .then(({ data }) => {
+        if (data) setTaxonomia(data);
+      })
+      .catch(() => {
+        // Silencio deliberado: o recorte por categoria deixa de ser oferecido,
+        // e nada mais na tela depende disto.
+      });
+    return () => controle.abort();
+  }, [api]);
 
   const q = buscaEfetiva(p.q);
   const ordem: Ordem = eOrdem(p.ordem) ? p.ordem : 'atualizado';
-  const chave = JSON.stringify([q, p.filtro, p.categoria, p.especie, ordem]);
+  const chave = JSON.stringify([q, p.filtro, p.categoria, p.subcategoria, p.especie, ordem]);
 
   const buscar = useCallback(
     async (pagina: number, sinal: AbortSignal) => {
@@ -94,7 +140,10 @@ export default function ListaDeProdutos() {
             ...(q ? { q } : {}),
             ...(filtro === 'published' || filtro === 'draft' || filtro === 'retired' ? { publication_state: filtro } : {}),
             ...(filtro === 'vencido' ? { price_status: 'vencido' as const } : {}),
-            ...(eCategoria(p.categoria) ? { category: p.categoria } : {}),
+            ...(eCategoria(taxonomia, p.categoria) ? { category: p.categoria } : {}),
+            ...(eSubcategoriaDaCategoria(taxonomia, p.categoria, p.subcategoria)
+              ? { subcategory: p.subcategoria }
+              : {}),
             ...(eEspecie(p.especie) ? { species: p.especie } : {}),
             sort: ordem,
             page: pagina,
@@ -105,11 +154,12 @@ export default function ListaDeProdutos() {
       });
       return data ? { itens: data.items, total: data.total } : undefined;
     },
-    [api, q, p.filtro, p.categoria, p.especie, ordem],
+    [api, q, p.filtro, p.categoria, p.subcategoria, p.especie, ordem, taxonomia],
   );
   const { estado, carregarMais, recarregar, substituir } = useListaPaginada<Item>(chave, buscar);
 
-  const temFiltro = p.filtro !== 'todos' || p.categoria !== '' || p.especie !== '';
+  const temFiltro =
+    p.filtro !== 'todos' || p.categoria !== '' || p.subcategoria !== '' || p.especie !== '';
   const temBusca = p.q.trim() !== '';
   const semNada = estado.fase === 'pronto' && estado.total === 0 && !temFiltro && !q;
 
@@ -233,8 +283,36 @@ export default function ListaDeProdutos() {
             id: 'f-cat',
             rotuloAcessivel: 'Categoria',
             valor: p.categoria,
-            opcoes: [{ valor: '', rotulo: 'Todas as categorias' }, ...Object.entries(CATEGORIAS).map(([valor, rotulo]) => ({ valor, rotulo }))],
-            aoMudar: (v) => mudar({ categoria: v }),
+            opcoes: [
+              { valor: '', rotulo: 'Todas as categorias' },
+              ...(taxonomia?.categories ?? []).map((c) => ({ valor: c.code, rotulo: c.label })),
+            ],
+            // Trocar a categoria LIMPA a subcategoria, sempre. Manter a
+            // anterior deixaria o recorte ser um par que nao existe, e a lista
+            // voltaria vazia sem a pessoa entender por que.
+            aoMudar: (v) => mudar({ categoria: v, subcategoria: '' }),
+          },
+          {
+            id: 'f-subcat',
+            rotuloAcessivel: 'Subcategoria',
+            valor: p.subcategoria,
+            // Sem categoria escolhida ha uma opcao so, e o seletor nao oferece
+            // as 83 de uma vez: oferecer todas devolveria a pessoa ao problema
+            // que os dois niveis existem para resolver.
+            opcoes: [
+              {
+                valor: '',
+                rotulo:
+                  p.categoria === ''
+                    ? 'Escolha a categoria primeiro'
+                    : 'Todas as subcategorias',
+              },
+              ...subcategoriasDaCategoria(taxonomia, p.categoria).map((sc) => ({
+                valor: sc.code,
+                rotulo: sc.label,
+              })),
+            ],
+            aoMudar: (v) => mudar({ subcategoria: v }),
           },
           {
             id: 'f-esp',
@@ -256,12 +334,12 @@ export default function ListaDeProdutos() {
         chipAtivo={p.filtro}
         aoEscolherChip={(v) => mudar({ filtro: v })}
         rotuloDosChips="Filtrar por status"
-        limpar={limpar ? { rotulo: limpar, aoLimpar: () => mudar({ q: '', filtro: 'todos', categoria: '', especie: '' }) } : undefined}
+        limpar={limpar ? { rotulo: limpar, aoLimpar: () => mudar({ q: '', filtro: 'todos', categoria: '', subcategoria: '', especie: '' }) } : undefined}
       />
       {estado.fase === 'carregando' && <p className="t-body-sm c-sec">Carregando produtos…</p>}
       {estado.fase === 'pronto' && (
         <p className="t-body-sm c-sec" aria-live="polite">
-          {textoDaContagem(estado.itens.length, estado.total, q, p.filtro, p.categoria, p.especie)}
+          {textoDaContagem(estado.itens.length, estado.total, q, p.filtro, p.categoria, p.subcategoria, p.especie, taxonomia)}
         </p>
       )}
       {estado.fase === 'pronto' && estado.total === 0 ? (
@@ -368,7 +446,18 @@ function LinhaDoProduto({ item, menu, aoRenovar }: { item: Item; menu: ItemDoMen
               <span className="sub t-body-sm c-sec">{item.partner ? item.partner.name : 'Sem parceiro'}</span>
             )}
             <span className="t-caption c-sec">
-              {item.category ? CATEGORIAS[item.category] : 'Sem categoria'} · {especies}
+              {/*
+                O rotulo vem do SERVIDOR (`category_label`), e nao de um mapa
+                do painel -- o mapa `CATEGORIAS` morreu com o `enum` do
+                contrato. `?? item.category` e a reserva para o rotulo que o
+                servidor nao resolveu; `'Sem categoria'` e o RASCUNHO sem
+                categoria, que a `20261017000002` permitiu e que nao pode
+                aparecer como linha vazia na lista.
+              */}
+              {item.category === null
+                ? 'Sem categoria'
+                : (item.category_label ?? item.category)}
+              {item.subcategory_label ? ` · ${item.subcategory_label}` : ''} · {especies}
               {n > 1 ? ` · ${n} imagens` : ''}
             </span>
           </span>

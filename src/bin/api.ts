@@ -101,6 +101,7 @@ import { criarDirectoryRepository } from '../modules/professionals/adapters/pers
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
+import { criarTaxonomiaDaVitrineRepository } from '../modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
 import {
   criarContagemNaTrilha,
   criarEscritaAuditada,
@@ -796,6 +797,9 @@ export async function main(): Promise<void> {
     });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
+      // O vocabulario dos dois niveis da categoria, com cache em processo
+      // invalidado por reinicio -- a lista so muda por migracao.
+      taxonomia: criarTaxonomiaDaVitrineRepository(db),
       clock: systemClock,
     });
     // A `Rede` tem as rotas no mesmo registrador: leituras alcancaveis sem
