@@ -327,17 +327,22 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
   // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
   // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
-  // projeta. `pending_review` nao esta no `enum` administrativo de proposito:
-  // o encontro da comunidade nao existe na v1, e o `CHECK`
-  // `network_events_revisao_so_da_comunidade` impede o administrador de cair
-  // nele.
+  // projeta.
+  //
+  // **`pending_review` NAO EXISTE MAIS, e a saida e a decisao do cliente de
+  // 17/10/2026** (ADR-0025 emenda 3, migracao `20261001000005`): "o usuario
+  // validado pode criar eventos sem aprovacao". Sem fila de moderacao o estado
+  // nao tem o que representar, e o `CHECK`
+  // `network_events_revisao_so_da_comunidade`, que existia so para amarra-lo a
+  // origem `community`, saiu na mesma migracao -- por isso ele tambem nao esta
+  // mais em CHECKS_QUE_NAO_SAO_LISTA_FECHADA. Sao TRES valores, e nao quatro.
   'public.network_events.network_events_origem_conhecida': {
     coluna: 'origin',
     valores: ['admin', 'community'],
   },
   'public.network_events.network_events_publicacao_conhecida': {
     coluna: 'publication_status',
-    valores: ['pending_review', 'published', 'cancelled', 'removed'],
+    valores: ['published', 'cancelled', 'removed'],
   },
   // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
   // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
@@ -496,6 +501,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // conta inteira.
       'not_me',
     ],
+  },
+  // A higiene da foto do achado (`20261001000006`). O EXIF da foto de celular
+  // carrega coordenada de GPS, e num produto de pet perdido isso entrega onde
+  // quem achou o animal estava.
+  //
+  // `ausente` e o objeto que NUNCA CHEGOU -- intencao assinada, pessoa desistiu
+  // no meio do envio, nao ha bytes. E desfecho FINAL e nao falha: sem ele a
+  // varredura reenfileiraria para sempre a mesma intencao vazia.
+  'public.upload_intents.upload_intents_status_da_higiene': {
+    coluna: 'sanitize_status',
+    valores: ['pendente', 'pronta', 'recusada', 'ausente'],
   },
   'public.upload_intents.upload_intents_kind_check': {
     coluna: 'kind',
@@ -672,11 +688,12 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // do `phone_e164` do perfil -- uma segunda redacao divergiria da primeira.
   'public.collar_tag_requests.collar_tag_requests_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
-  // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
-  // que torna "o ponto de evento da comunidade so aparece depois de revisao
-  // humana" um estado do banco, porque `pending_review` nunca e visivel.
-  'public.network_events.network_events_revisao_so_da_comunidade':
-    "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
+  // `network_events_revisao_so_da_comunidade` ESTAVA AQUI, e a ausencia e a
+  // decisao. Ele amarrava `pending_review` a origem `community`, e a
+  // `20261001000005` derrubou os dois: o cliente desfez a fila de moderacao em
+  // 17/10/2026 (ADR-0025 emenda 3). Mantida a entrada, o caso "restricao
+  // declarada que o banco nao tem mais" reprovaria -- que e o portao certo,
+  // pedindo que alguem olhasse. Alguem olhou, e a resposta esta aqui.
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -741,10 +758,21 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
   // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
   // esquema `https` deixou de ser assunto do banco porque deixou de ser
-  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
-  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  // dado -- ele e constante da composicao.
+  //
+  // **`?` e `#` passaram a ser ACEITOS pela `20261017000001`**, e a recusa
+  // anterior (consequencia 3 da BICHUS-185: parametro em link de saida e onde
+  // dado pessoal vaza) deixou de morar no banco -- o link do parceiro carrega
+  // query de verdade, e recusa-la aqui truncava link de cliente em silencio. O
+  // que resta e a FORMA: comeca em `/`, sem espaco em branco, e
+  // `[[:space:]]` cobre espaco, tabulacao e quebra de linha.
   'public.store_items.store_items_destino_e_caminho':
-    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+    "CHECK ((target_path ~ '^/[^[:space:]]*$'::text))",
+  // O host do destino, quando ele NAO e o do parceiro (`20261017000001`).
+  // Mesmo formato de `store_partners.host`: so o host, minusculo, com pelo
+  // menos um ponto -- nunca esquema, porta, caminho ou credencial.
+  'public.store_items.store_items_destino_e_so_host':
+    "CHECK (((target_host IS NULL) OR (target_host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text)))",
   // ------------------------------------------------------------------
   // A TAXONOMIA DOS DOIS NIVEIS DA LOJA (migracao `20261017000003`)
   // ------------------------------------------------------------------
@@ -991,6 +1019,12 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // caracteres, o mesmo padrão que o contrato declara.
   'public.upload_intents.upload_intents_upload_ref_formato':
     "CHECK (((upload_ref IS NULL) OR (upload_ref ~ '^[A-Za-z0-9_-]{22}$'::text)))",
+  // `20261001000006`. A chave da derivada SO existe quando a higiene terminou
+  // bem, e o motivo SO existe quando ela recusou -- os DOIS sentidos, porque um
+  // estado carregando os campos do outro e uma linha que nenhum codigo sabe
+  // ler. `pendente` e `ausente` nao tem nem um nem outro.
+  'public.upload_intents.upload_intents_higiene_coerente':
+    "CHECK ((((sanitize_status = 'pronta'::text) AND (sanitized_key IS NOT NULL) AND (sanitize_rejection_reason IS NULL)) OR ((sanitize_status = 'recusada'::text) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NOT NULL)) OR ((sanitize_status = ANY (ARRAY['pendente'::text, 'ausente'::text])) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NULL))))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
 };
