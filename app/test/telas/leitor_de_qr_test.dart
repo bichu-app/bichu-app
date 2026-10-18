@@ -67,7 +67,10 @@ void main() {
       camera: camera ?? CameraDeTeste(permissao),
       leitorDeQr: leitor ?? LeitorDeQrDeTeste(),
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+    await tester.tap(find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ));
     await tester.pumpAndSettle();
   }
 

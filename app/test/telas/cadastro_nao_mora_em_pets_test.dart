@@ -186,9 +186,22 @@ void main() {
       // nome por nome o que nao se discute.
       await abrirOApp(tester, rede: _semServidor);
 
-      expect(find.text('Escanear uma tag'), findsOneWidget,
-          reason: 'REPROVA: a porta primaria do leitor (UX 27.5.6) saiu de '
-              '`Pets`. Ela nao e desta mudanca.');
+      // A PORTA CONTINUA EM `Pets`, e mudou de FORMA em 18/10/2026: ela virou
+      // o icone de QR da barra de topo, por pedido do cliente ("o botao
+      // escanear uma tag, pode ser um icone de qr-code igual do whatsapp").
+      // O que este caso cobra nao mudou -- que a porta primaria do leitor NAO
+      // saiu de `Pets` --, so o lugar onde se olha. `find.text` nao serve
+      // mais: o texto saiu da tela, e o nome acessivel vive no `tooltip`.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.qr_code_2),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: a porta primaria do leitor (UX 27.5.6) saiu de '
+            '`Pets`. Ela nao e desta mudanca, e ela continua visivel '
+            'DESLOGADO de proposito: ler uma plaquinha nao exige conta.',
+      );
       expect(find.text('Adoções'), findsOneWidget,
           reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
       expect(
