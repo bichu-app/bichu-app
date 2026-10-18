@@ -69,6 +69,9 @@ import { criarLostCaseRepository } from '../modules/lostfound/adapters/persisten
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
 import { registrarRotasDaLeituraPublicaDoCaso } from '../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import { registrarRotaDaListagemDePerdidos } from '../modules/lostfound/adapters/http/listagem-publica-de-perdidos-routes.js';
+import { criarListagemPublicaDePerdidos } from '../modules/lostfound/adapters/persistence/kysely-listagem-publica-de-perdidos.js';
+import { ListagemPublicaDePerdidosService } from '../modules/lostfound/application/listagem-publica-de-perdidos.js';
 import { criarLeituraPublicaDoCaso } from '../modules/lostfound/adapters/persistence/kysely-leitura-publica-do-caso.js';
 import { LeituraPublicaDoCasoService } from '../modules/lostfound/application/leitura-publica-do-caso.js';
 import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
@@ -963,6 +966,16 @@ export async function main(): Promise<void> {
         baseDeMidia: config.mediaPublicBaseUrl,
       }),
       autenticador: dependenciasDasRotasDeCaso.autenticador,
+    });
+    // A listagem publica de perdidos. **Sem autenticador**: a operacao declara
+    // `security: []` e nao ha campo na resposta que varie com quem pede, ao
+    // contrario da pagina do caso.
+    registrarRotaDaListagemDePerdidos(escopo, {
+      listagem: new ListagemPublicaDePerdidosService(
+        criarListagemPublicaDePerdidos(db),
+        { baseDaWeb: config.webBaseUrl, baseDeMidia: config.mediaPublicBaseUrl },
+        systemClock,
+      ),
     });
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);

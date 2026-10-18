@@ -104,6 +104,30 @@ class AchadosApi implements IntencaoDeFotoDeAchado {
     return AchadoRegistrado.doJson(json);
   }
 
+  /// `GET /found-reports` (`listMyFoundReports`): **os meus achados**.
+  ///
+  /// A operação existia no servidor (`found-report-routes.ts`) e **esta classe
+  /// não tinha chamador dela**: a lista não existia em tela nenhuma, e o único
+  /// caminho para um achado registrado era o `Ver o achado` do desfecho do
+  /// registro — que serve a um achado, o último.
+  ///
+  /// **A autorização está no `WHERE` do servidor** (`reporter_user_id = :dono`),
+  /// e por isso esta chamada não manda filtro de dono nenhum: um parâmetro de
+  /// dono no cliente seria autorização do lado errado do fio.
+  ///
+  /// `cursor` nulo pede a primeira página. O `limit` do contrato vai até 50; a
+  /// tela pede 20, que é o mesmo tamanho das outras listagens do app.
+  Future<PaginaDeAchados> listarMeus({String? cursor, int limite = 20}) async {
+    final json = await _api.get(
+      caminhoDeRegistro,
+      query: <String, String>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': '$limite',
+      },
+    );
+    return PaginaDeAchados.doJson(json);
+  }
+
   /// `GET /found-reports/{foundReportId}` (`getFoundReport`).
   ///
   /// **A autorizacao esta na clausula `WHERE` do servidor, e a resposta de

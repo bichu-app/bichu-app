@@ -14,6 +14,8 @@ import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'perdido/lista_de_perdidos.dart';
+import 'perfil/meus_achados.dart';
 import 'perfil/meus_pets.dart';
 import 'perto/corpo_do_perto.dart';
 import 'perto/lista_do_diretorio.dart';
@@ -189,10 +191,21 @@ class AbaPets extends StatelessWidget {
             // "nenhum pet perdido por aqui agora": o app nao chama rota nenhuma
             // de listagem de perdidos, entao ele nao sabe se ha zero ou
             // trezentos. Diz o que vai existir e que ainda nao existe (25.7.3).
-            const EstadoVazio(
-              titulo: 'A lista de pets perdidos está em construção',
-              explicacao: 'Os perdidos e achados da sua região vão ficar aqui.',
-            ),
+            // A LISTA DE PERDIDOS, e a casca honesta SAI.
+            //
+            // O `EstadoVazio` que estava nesta linha dizia "a lista de pets
+            // perdidos esta em construcao", e a frase era verdadeira: o app
+            // nao chamava rota nenhuma de listagem, porque `listPublicLostPets`
+            // estava no contrato e **nao tinha rota** -- era a ultima linha de
+            // `OPERACOES_AINDA_SEM_ROTA`.
+            //
+            // A rota existe agora, e o estado vazio nao sumiu: ele mudou de
+            // dono, como o da `Rede`. Quem o mostra e a propria lista, e so
+            // quando o servidor responde que nao ha caso aberto no recorte --
+            // afirmacao medida, e nao afirmacao sobre dado que a tela nao
+            // carrega. E ele virou UMA LINHA, pelo pedido do cliente de
+            // 18/10/2026.
+            const ListaDePerdidos(),
             // `Entrou como <e-mail>` e `Ja tenho conta` TAMBEM SAIRAM
             // (BICHUS-232). Os dois eram identidade e acao de conta dentro da
             // secao de conteudo, e os dois eram **duplicata**: o e-mail com o
@@ -654,6 +667,20 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: 'Escanear uma tag',
               aoTocar: () => context.push(Rotas.escanear),
+            ),
+            // `Meus achados`: a lista dos avisos de achado desta conta.
+            //
+            // **Aqui e nao na aba `Pets`**, e a razao esta por extenso no
+            // cabecalho de `MeusAchados`: `Pets` e a vizinhanca e e alcancavel
+            // SEM CONTA (`listPublicLostPets` declara `security: []`), e
+            // `listMyFoundReports` exige conta com a autorizacao no `WHERE` do
+            // servidor. O "meu" mora em `Perfil`, como `Meus pets`.
+            //
+            // Entre `Escanear uma tag` e `Sair da conta`, que e onde item novo
+            // entra neste menu.
+            ItemDeMenu(
+              rotulo: MeusAchados.titulo,
+              aoTocar: () => context.push(Rotas.meusAchados),
             ),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
             // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois
