@@ -186,6 +186,11 @@ import {
 } from '../modules/admin-access/adapters/external/captcha-de-desenvolvimento-local.js';
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
+import { registrarRotasDeConexao } from '../modules/connections/adapters/http/connection-routes.js';
+import { ConexaoEntrePessoas } from '../modules/connections/application/conexao-entre-pessoas.js';
+import { criarConnectionsRepository } from '../modules/connections/adapters/persistence/kysely-connections-repository.js';
+import { nenhumConviteExiste } from '../modules/connections/ports/convite-de-conexao.js';
+import { semBloqueioConhecido } from '../modules/connections/ports/leitor-de-bloqueio.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
@@ -1061,6 +1066,38 @@ export async function main(): Promise<void> {
         ids,
         clock: systemClock,
       }),
+      contrato,
+    });
+    // FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com aceite.
+    //
+    // **DUAS PORTAS ENTRAM DESLIGADAS, e as duas sao declaracoes e nao esbocos.**
+    //
+    // `nenhumConviteExiste` e a afirmacao executavel de que NENHUMA CONTA
+    // ALCANCA NENHUMA OUTRA nesta fatia: o unico caminho que cria aresta e
+    // `requestConnection`, ele exige um convite, e nao existe emissor de convite
+    // em producao. Toda chamada responde 404, qualquer que seja o token. Os dois
+    // emissores sao as fatias H' (conexao ancorada em caso devolvido ou encontro
+    // em comum) e H'' (codigo presencial, token rotativo de 5 min), e ligar cada
+    // uma e trocar esta linha -- o dominio, o repositorio e as rotas nao mudam.
+    //
+    // `semBloqueioConhecido` esta aqui porque `user_blocks` NAO EXISTE em
+    // `origin/development` (medido em 18/10/2026: nenhuma ref tem a migracao). A
+    // fatia E a cria, e quando ela descer esta linha recebe o leitor dela. Hoje
+    // isso nao custa nada: sem convite nao ha aresta, e sem aresta nao ha par
+    // para bloquear.
+    const conexoesDaComunidade = criarConnectionsRepository(db);
+    registrarRotasDeConexao(escopo, {
+      conexoes: new ConexaoEntrePessoas({
+        conexoes: conexoesDaComunidade,
+        convites: nenhumConviteExiste,
+        bloqueios: semBloqueioConhecido,
+        trilha,
+        ids,
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
       contrato,
     });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);

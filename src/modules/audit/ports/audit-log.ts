@@ -224,6 +224,26 @@ export type AuditAction =
    * agendado 24 h antes, e nao a pessoa que aceitou.
    */
   | 'pet_transfer.consummated'
+  /**
+   * FATIA F (18/10/2026). A conexao entre pessoas, SIMETRICA, com aceite.
+   *
+   * **O recurso e a ARESTA (`resourceKind: 'user_connection'`, `resourceId` =
+   * `user_connections.ref`), e nunca a conta do outro lado.** A trilha e lida
+   * por gente, e trilha que nomeia o outro lado de uma recusa CONTA a recusa --
+   * que e exatamente o que o desenho nao da ("nenhum 'ela recusou voce'").
+   *
+   * Sao cinco verbos porque a investigacao pergunta cinco coisas diferentes, e
+   * `declined`/`cancelled`/`undone` respondem a mesma rota HTTP: quem encerrou
+   * uma aresta, e em que estado ela estava. `removed_by_block` tem ator
+   * `system`: quem executa e a escrita do bloqueio (fatia E), e nao a pessoa
+   * que bloqueou -- o bloqueio tem trilha propria, la.
+   */
+  | 'connection.requested'
+  | 'connection.accepted'
+  | 'connection.declined'
+  | 'connection.cancelled'
+  | 'connection.undone'
+  | 'connection.removed_by_block'
   // Backoffice (ADR-0027, apendice A.5). O padrao e `admin.<recurso>.<verbo>`
   // (D49), e cada valor e o `x-audit.action` de uma operacao do contrato, ou um
   // dos eventos que o item 8 manda gravar sem ser escrita (login recusado,
