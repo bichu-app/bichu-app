@@ -17,20 +17,29 @@
  * critério 9 da BICHUS-35 promete que vai acontecer. A hora de limpar é antes
  * de existir o consumidor, não depois.
  *
- * ## A derivada é PRIVADA, e o original fica
+ * ## A derivada é PRIVADA, e ela SUBSTITUI o original
  *
  * O critério 9 é literal: a foto do achador "é vista pelo tutor dentro da
  * conversa mediada, e só". Então a derivada higienizada vai para o bucket
  * **privado**, com a chave `found-reports/{id|sem-conta}/sanitized/{128
  * bits}.{ext}` — mesmo prefixo do original, para que política de bucket, ciclo
- * de vida e expurgo dos 30 dias tratem as duas juntas.
+ * de vida e expurgo dos 30 dias tratem as duas da mesma forma enquanto as duas
+ * existirem.
  *
- * E **o original não é apagado**. O contrato ainda diz, em
- * `createFinderPhotoUploadIntent`, que "o arquivo original e apagado assim que
- * a derivada e gerada"; essa frase descreve um worker que nunca existiu, e
- * apagar o original é precisamente o que não se faz — é dele que sai qualquer
- * derivada futura, e um corte errado não tem volta. A descrição do contrato foi
- * corrigida para dizer o que o código faz.
+ * E **o original é apagado assim que a derivada está GRAVADA** em
+ * `sanitized_key` — nunca antes (decisão do cliente, 17/10/2026; o descarte
+ * mora em `descartarOriginalComGps`, chamado depois de `marcarHigienizada`).
+ * Era o original que carregava a coordenada de GPS, porque é nele que o EXIF
+ * mora: o que sai é uma das DUAS cópias da mesma imagem, e a foto continua
+ * existindo. `recusada` e `ausente` não entram nesse caminho, e a assimetria é
+ * a invariante — nos dois não existe derivada, então o original é a ÚNICA
+ * cópia.
+ *
+ * O histórico fica escrito porque esta seção já disse os dois extremos e a
+ * próxima pessoa vai querer saber qual vale: o contrato prometia "o arquivo
+ * original e apagado assim que a derivada e gerada" quando nenhum worker fazia
+ * isso; passou a dizer que o original era "guardado, inteiro" quando o worker
+ * apareceu sem apagar; e agora diz a substituição, que é o que o código faz.
  *
  * ## Sem tabela nova
  *
