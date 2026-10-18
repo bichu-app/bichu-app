@@ -96,9 +96,16 @@ class _EstadoDaCasca extends State<_Casca> {
               // `TelaDeAba` oferece de verdade", e a altura da barra e parte
               // disso.
               toolbarHeight: BichuAlvoDeToque.critico,
-              actions: acao == null
-                  ? null
-                  : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
+              // **A BARRA DE TOPO NAO DESENHA MAIS A ACAO DA LISTAGEM**, e a
+              // casca de teste acompanha a de verdade: o `Filtros` voltou
+              // para o corpo em 19/10 e `TelaDeAba` deixou de pintar o slot.
+              //
+              // O `SlotDaBarraDeListagem` acima **fica**, e nao e resto: e
+              // ele que `BarraDeListagem` usa para publicar NULO e limpar a
+              // barra quando a lista sai da tela. Mantendo o slot montado, os
+              // casos continuam exercendo esse caminho; se a casca voltasse a
+              // pintar `acao`, a isca do grupo do corpo reprovaria.
+              actions: const <Widget>[],
             ),
             body: widget.child,
           ),
@@ -656,17 +663,31 @@ void main() {
     });
   });
 
-  group('o filtro mora na BARRA DE TITULO, e a busca ocupa a area toda', () {
-    // **O PADRAO DE LISTAGEM MUDOU POR DECISAO DO CLIENTE (17/10/2026)**:
-    // *"suba todos os filtros para a barra do titulo da pagina e deixe o
-    // campo de busca sempre ocupando a area toda"*. Isto REVERTE a regra de
+  group('o filtro mora no CORPO, e a busca ocupa a area toda', () {
+    // **O PADRAO DE LISTAGEM VOLTOU AO CORPO POR DECISAO DO CLIENTE
+    // (19/10/2026)**: *"qualquer coisa, pense em outro lugar para colocar o
+    // filtro da pagina"*.
+    //
+    // Isto REVERTE a decisao dele de 17/10 ("suba todos os filtros para a
+    // barra do titulo da pagina"), que por sua vez tinha revertido a regra de
     // 22/09 ("busca, filtro e ordenacao no topo do CORPO da tela, nunca na
-    // barra do aplicativo"). Quem ler estes casos em tres meses: a reversao
-    // e dele, e nao um defeito.
+    // barra do aplicativo"). O lugar de hoje e o de 22/09, que e a casa
+    // original. Quem ler estes casos em tres meses: as tres reversoes sao
+    // dele, e nenhuma e defeito.
+    //
+    // **A busca nao mudou**: ela continua em largura TOTAL no corpo, que foi
+    // o outro pedido de 17/10 e que ele nao reverteu.
+    //
+    // O que a saida da barra liberou: os 64 dp do slot. Eles NAO cobriram o
+    // sino de notificacoes -- `Filtros` era condicional (so onde ha lista) e
+    // o sino seria incondicional --, e a medicao disso esta em
+    // `gaveta_com_submenus_test.dart`.
 
-    testWidgets('ISCA -- o controle de filtro nao fica no corpo', (tester) async {
-      // ISCA: devolva o `_BotaoDeFolha` ao `Row` do corpo da barra. Este caso
-      // reprova: passa a haver um `Icons.tune` fora da `AppBar`.
+    testWidgets('ISCA -- o controle de filtro fica no CORPO, e nao na barra',
+        (tester) async {
+      // ISCA: faca `BarraDeListagem` voltar a publicar a acao no slot da
+      // `AppBar`. Este caso reprova: o `Icons.tune` reaparece dentro da
+      // `AppBar` e desaparece do corpo.
       await montar(
         tester,
         total: 3,
@@ -677,25 +698,30 @@ void main() {
       expect(find.byIcon(Icons.tune), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(AppBar),
-          matching: find.byIcon(Icons.tune),
-        ),
-        findsOneWidget,
-        reason: 'REPROVA: o controle de filtro nao esta na barra de titulo.',
-      );
-      expect(
-        find.descendant(
           of: find.byType(BarraDeListagem),
           matching: find.byIcon(Icons.tune),
         ),
+        findsOneWidget,
+        reason: 'REPROVA: o controle de filtro nao esta no corpo da tela. Ele '
+            'voltou para la em 19/10, por decisao do cliente.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.tune),
+        ),
         findsNothing,
-        reason: 'REPROVA: sobrou um controle de filtro no corpo da tela.',
+        reason: 'REPROVA: sobrou um controle de filtro na barra de titulo. Os '
+            '64 dp dele foram devolvidos ao titulo, e `Perto` depende disso.',
       );
     });
 
-    testWidgets('o alvo na barra e de 64 dp, e nao de 48', (tester) async {
-      // 11.23.1 fixa os dois alvos da barra de topo em 64 x 64. Enquanto o
-      // controle morou no corpo, 48 era a medida certa; nao ha mais corpo.
+    testWidgets('o alvo no corpo e de 48 dp, o piso do SC 2.5.8',
+        (tester) async {
+      // **64 -> 48, e a troca acompanha a mudanca de lugar.** O 11.23.1 fixa
+      // 64 x 64 para os controles de CANTO da barra de topo, onde o dedo
+      // disputa a borda com o titulo e com a mao que segura o aparelho. No
+      // corpo essa disputa nao existe: o piso e o do SC 2.5.8, que e 48.
       await montar(
         tester,
         total: 3,
@@ -703,24 +729,13 @@ void main() {
         aoAplicar: (_) {},
       );
 
-      // **A caixa do PROPRIO controle**, e nao o `SizedBox` mais proximo do
-      // glifo: `find.ancestor(...).first` devolve o ancestral mais INTERNO, e
-      // o `IconButton` do Material tem `SizedBox` proprio dentro dele -- a
-      // medida que saia dali era 56, que nao e nem 48 nem 64 e nao
-      // corresponde a decisao nenhuma. A caixa que o produto declara e a
-      // primeira DESCENDENTE de `BotaoDeAcaoDaListagem`
-      // (`barra_de_listagem.dart`, linhas 846-848,
-      // `BichuAlvoDeToque.critico`), e e ela que o polegar acerta.
-      final alvo = tester.getSize(
-        find
-            .descendant(
-              of: find.byType(BotaoDeAcaoDaListagem),
-              matching: find.byType(SizedBox),
-            )
-            .first,
+      final alvo = tester.getSize(find.byType(GatilhoDeRecorteNoCorpo));
+      expect(
+        alvo.height,
+        greaterThanOrEqualTo(48.0),
+        reason: 'REPROVA: o gatilho de filtro no corpo tem ${alvo.height} dp '
+            'de altura, abaixo do piso de 48 dp (SC 2.5.8).',
       );
-      expect(alvo.width, 64.0);
-      expect(alvo.height, 64.0);
     });
 
     testWidgets('o campo de busca ocupa a LARGURA TOTAL do corpo, em 320 dp',
@@ -770,7 +785,17 @@ void main() {
       );
 
       expect(find.byIcon(Icons.tune), findsNothing);
-      expect(tester.widget<AppBar>(find.byType(AppBar)).actions, isNull);
+      // A casca de teste passou a declarar `actions: const <Widget>[]`, como
+      // a de verdade: desde 19/10 a barra de topo nao desenha a acao da
+      // listagem. O que este caso cobra continua sendo o mesmo -- NENHUM
+      // controle de recorte na barra de titulo --, e agora ele cobra a lista
+      // VAZIA em vez de nula.
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).actions,
+        isEmpty,
+        reason: 'REPROVA: a barra de titulo ganhou controle sobre uma lista '
+            'vazia. Filtrar o nada e um toque sem desfecho.',
+      );
     });
   });
 

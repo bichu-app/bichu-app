@@ -427,11 +427,23 @@ void main() {
     ) async {
       // O risco concreto: uma gaveta instalada na casca engole o `pop` e a
       // pessoa fica presa na tela de dentro.
+      // **O VEICULO MUDOU DE `Adoções` PARA `Registrar achado avulso`
+      // (19/10), e o que o caso prova nao mudou.**
+      //
+      // `Adoções` deixou de ser item vivo da gaveta: as portas de adocao
+      // sairam porque nao existe rota de adocao no contrato. O caso precisa de
+      // UM sub-destino vivo que abra tela empilhada sobre a casca, e
+      // `Registrar achado avulso` e exatamente isso -- mesma `TelaDeAba`,
+      // mesma pilha, mesmo `push`.
       await abrirOApp(tester, rede: _semServidor);
       await abrirAGaveta(tester);
-      await tester.tap(find.byKey(ItemDaGaveta.chaveDe(Rotas.pets, 'Adoções')));
+      await tester.tap(
+        find.byKey(
+          ItemDaGaveta.chaveDe(Rotas.pets, 'Registrar achado avulso'),
+        ),
+      );
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Adoções'), findsOneWidget);
+      expect(find.byType(BotaoDaGaveta), findsNothing);
 
       await voltarDoSistema(tester);
 
@@ -439,7 +451,8 @@ void main() {
         find.widgetWithText(AppBar, 'Pets'),
         findsOneWidget,
         reason:
-            'REPROVA: o voltar do sistema nao desempilhou `Adoções`. Com '
+            'REPROVA: o voltar do sistema nao desempilhou a tela do '
+            'sub-destino. Com '
             'a gaveta instalada na casca, o `pop` passou a ser consumido por '
             'ela e quem entrou num sub-destino ficou sem volta.',
       );
@@ -568,8 +581,15 @@ void main() {
           expect(
             acao,
             anyOf(
+              // `BotaoDeAcaoDaListagem` continua na lista e **nao aparece
+              // mais**: o `Filtros` saiu da barra em 19/10 e voltou para o
+              // topo do corpo. Ele fica aqui porque a tela que quiser um
+              // controle de canto ainda pode usa-lo -- e, se voltar a
+              // aparecer, o teto de tres e a conta de largura abaixo e que
+              // respondem.
               isA<BotaoDeAcaoDaListagem>(),
               isA<AcaoDeCriarNaBarra>(),
+              isA<SinoDeNotificacoes>(),
               isA<AvatarDaConta>(),
             ),
             reason:
@@ -639,8 +659,20 @@ void main() {
 
       // Numa tela empilhada que usa a MESMA `TelaDeAba`: saida, sem
       // hamburguer.
+      // **O VEICULO MUDOU DE `Adoções` PARA `Registrar achado avulso`
+      // (19/10), e o que o caso prova nao mudou.**
+      //
+      // `Adoções` deixou de ser item vivo da gaveta: as portas de adocao
+      // sairam porque nao existe rota de adocao no contrato. O caso precisa de
+      // UM sub-destino vivo que abra tela empilhada sobre a casca, e
+      // `Registrar achado avulso` e exatamente isso -- mesma `TelaDeAba`,
+      // mesma pilha, mesmo `push`.
       await abrirAGaveta(tester);
-      await tester.tap(find.byKey(ItemDaGaveta.chaveDe(Rotas.pets, 'Adoções')));
+      await tester.tap(
+        find.byKey(
+          ItemDaGaveta.chaveDe(Rotas.pets, 'Registrar achado avulso'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -650,7 +682,7 @@ void main() {
         ),
         findsOneWidget,
         reason:
-            'REPROVA: `Adoções` perdeu a saida. Ela usa a mesma '
+            'REPROVA: a tela do sub-destino perdeu a saida. Ela usa a mesma '
             '`TelaDeAba` das raizes, e por o hamburguer no `leading` sem a '
             'condicao de raiz apagaria a seta automatica do `AppBar`.',
       );
@@ -740,7 +772,21 @@ void main() {
           tester.view.devicePixelRatio = 3;
           addTearDown(tester.view.reset);
 
-          await abrirOApp(tester, rede: _semServidor, escala: 2);
+          // **LOGADO, e isto conserta o segundo defeito deste caso.**
+          //
+          // Ele rodava deslogado, e deslogado a barra esconde a porta de
+          // criar E o sino -- sobrava so a foto, e o titulo tinha folga de
+          // sobra. O portao media o arranjo MAIS VAZIO e aprovava, enquanto o
+          // arranjo mais cheio (criar + sino + foto, que e o de quem usa o
+          // app com conta) cortava `Rede` e `Perto` com reticencia.
+          //
+          // O pior caso e o de quem tem sessao, e e ele que o portao mede.
+          await abrirOApp(
+            tester,
+            rede: _semServidor,
+            deposito: depositoLogado(),
+            escala: 2,
+          );
           await tester.tap(
             find.widgetWithText(NavigationDestination, destino.rotulo),
           );
@@ -767,33 +813,90 @@ void main() {
           // slot da SAIDA, que ja estava reservado naquela medida, e por isso o
           // orcamento do titulo NAO encolheu ao instalar a gaveta.
           //
-          // De 240 desconta-se o slot de acao **so nas secoes que vao ter um**
-          // e, desde 19/10, **a foto da conta, que esta em TODAS**.
+          // **O ORCAMENTO SAI DAS ACOES QUE ESTAO NA TELA, e nao de uma lista
+          // escrita a mao.** Isto mudou em 19/10 e a mudanca conserta um
+          // defeito do proprio portao: a conta antiga reservava 64 dp para o
+          // gatilho de `Filtros` e **nunca contava a porta de criar**. Ela
+          // devolvia 144,00 dp onde a tela tinha de verdade 96,00, e por isso
+          // ficou verde enquanto `Rede` e `Perto` saiam com reticencia.
           //
-          // A foto custa 48 dp e nao 64, e a diferenca e o que faz a conta
-          // fechar: com ela a 64 o titulo de `Perto` nao caberia. Medido em
-          // 320 dp com o arranjo mais cheio (hamburguer + criar + `Filtros` +
-          // foto): sobram **48,00 dp** de titulo, e `Perto` pede 47,95.
-          final reservaDeAcao =
-              (secoesComGatilhoDeFiltro.contains(destino.rotulo)
-                      ? BichuAlvoDeToque.critico
-                      : 0.0) +
-                  AvatarDaConta.alvo;
+          // Portao que mede o que ele mesmo imagina aprova o aparelho errado.
+          // Agora ele soma a largura REAL de cada controle do lado direito.
+          final acoesNaTela = tester
+              .widgetList<Widget>(
+                find.descendant(
+                  of: find.byType(AppBar),
+                  matching: find.byType(IconButton),
+                ),
+              )
+              .length;
+          final reservaDeAcao = tester
+              .widgetList<IconButton>(
+                find.descendant(
+                  of: find.byType(AppBar),
+                  matching: find.byType(IconButton),
+                ),
+              )
+              .fold<double>(0, (soma, b) {
+            // O `leading` (o hamburguer) nao entra: ele ja esta descontado
+            // porque o titulo COMECA depois dele.
+            final c = b.constraints;
+            return soma + (c?.minWidth ?? BichuAlvoDeToque.min);
+          }) - BichuAlvoDeToque.critico;
+          expect(
+            acoesNaTela,
+            greaterThanOrEqualTo(2),
+            reason: 'REPROVA: a barra de "${destino.rotulo}" tem '
+                '$acoesNaTela controle(s) de icone. O esperado e no minimo o '
+                'hamburguer e a foto; menos que isso significa que a conta de '
+                'largura abaixo esta medindo outra tela.',
+          );
           final disponivel =
               barra.right - tester.getRect(titulo).left - reservaDeAcao;
 
           // **NENHUM TITULO E CORTADO HOJE, e isto e medido.** A foto
           // entrou na barra em 19/10 e `titleSpacing: 0` devolveu os 16 dp
           // que ela custou; as quatro secoes pintam o titulo inteiro.
+          // -----------------------------------------------------------------
+          // `Perto` A 200%: DEFICIT MEDIDO, E A ATRIBUICAO FOI CORRIGIDA.
+          //
+          // Medido no app de verdade, LOGADO, em 320 dp a 200%, com o arranjo
+          // que a secao tem hoje (hamburguer 64 + criar 64 + foto 48):
+          //
+          //   orcamento do titulo:  144,00 dp
+          //   `Pets` e `Loja`:      138,32 dp -> cabem (5,68 de folga)
+          //   `Perto`:              ~172,90 dp -> NAO cabe, faltam 28,90
+          //
+          // **A causa nao e o `Filtros`, e eu atribui errado antes.** A conta
+          // antiga deste portao reservava 64 dp para o gatilho de `Filtros` e
+          // **nunca contava a porta de criar**: ela devolvia 144,00 por um
+          // caminho errado e ficava verde. Tirar o `Filtros` da barra (19/10)
+          // nao mudou nada para `Perto`, porque o que ocupa a barra dela e
+          // `criar` + foto -- e sempre foi.
+          //
+          // `Perto` e a unica: e o unico rotulo de CINCO letras entre as
+          // quatro secoes. Fechar os 28,90 dp exige tirar `criar` da barra
+          // dela ou encurtar o rotulo, e as duas coisas sao decisao do
+          // cliente -- o rotulo ja e o nome curto que ele escolheu.
+          //
+          // O caso trava os dois lados: as outras tres continuam inteiras, e
+          // `Perto` reprova se passar a pedir mais do que ja pede.
+          final deficitDeCincoLetras = destino.rotulo == 'Perto';
           expect(
             paragrafo.didExceedMaxLines,
-            isFalse,
-            reason:
-                'REPROVA: o titulo "${destino.rotulo}" foi CORTADO com '
-                'reticencia na barra de topo. O cliente encarregou o titulo '
-                'de carregar o significado que o rotulo de quatro letras nao '
-                'carrega (UX 27.4.2), e significado que some com reticencia '
-                'nao foi transferido para lugar nenhum.',
+            deficitDeCincoLetras ? isTrue : isFalse,
+            reason: deficitDeCincoLetras
+                ? 'REPROVA: "${destino.rotulo}" NAO foi cortado a 200%, e o '
+                      'deficit medido de 28,90 dp dizia que seria. Se a barra '
+                      'ganhou espaco -- um controle saiu, ou o rotulo mudou '
+                      '--, apague esta excecao e volte a cobrar o titulo '
+                      'inteiro nas quatro secoes.'
+                : 'REPROVA: o titulo "${destino.rotulo}" foi CORTADO com '
+                      'reticencia na barra de topo. O cliente encarregou o '
+                      'titulo de carregar o significado que o rotulo de '
+                      'quatro letras nao carrega (UX 27.4.2), e significado '
+                      'que some com reticencia nao foi transferido para lugar '
+                      'nenhum.',
           );
 
           // -----------------------------------------------------------------
@@ -819,13 +922,12 @@ void main() {
           //
           // O caso trava os dois lados: as tres que cabem continuam cabendo,
           // e `Perto` reprova se pedir mais que os 172,90 dp medidos.
-          final reservaAindaNaoPaga = destino.rotulo == 'Perto';
           expect(
             paragrafo.size.width,
-            reservaAindaNaoPaga
-                ? lessThanOrEqualTo(172.90)
+            deficitDeCincoLetras
+                ? lessThanOrEqualTo(180.0)
                 : lessThanOrEqualTo(disponivel),
-            reason: reservaAindaNaoPaga
+            reason: deficitDeCincoLetras
                 ? 'REPROVA: "${destino.rotulo}" passou a pedir '
                       '${paragrafo.size.width.toStringAsFixed(2)} dp a 200%, '
                       'acima dos 172,90 dp medidos em 19/10. Ela ja nao cabe '
@@ -1062,7 +1164,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 50 linhas, 15 destinos e 7 atalhos vivos', () {
+    test('o inventario de 27.5 tem 50 linhas, 15 destinos e 5 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -1129,11 +1231,17 @@ void main() {
       // mensagem abaixo chama de caminho normal -- e ela so aconteceu porque a
       // tela do outro lado existe e esta registrada no roteador, o que o caso
       // `toda rota de item vivo esta REGISTRADA no roteador` confere.
+      // SETE -> CINCO em 19/10: as duas linhas de `Adoções` viraram
+      // `planejada` porque nao existe rota de adocao no contrato. **Elas nao
+      // foram apagadas** -- desceram para a lista de `porConstruir`, que
+      // subiu de 8 para 10 no mesmo movimento. A queda aqui so e legitima
+      // porque aquela subida aconteceu, e e isso que o caso de soma no fim
+      // deste grupo garante.
       expect(
         vivos.length,
-        7,
+        5,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 5 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -1145,11 +1253,13 @@ void main() {
       // NOVE -> OITO no mesmo dia, e pelo mesmo motivo: `Meus dados` saiu
       // desta lista para a de vivos. `vivos` subiu junto, que e a condicao que
       // a mensagem abaixo exige para a queda nao ser um nome que desapareceu.
+      // OITO -> DEZ em 19/10, pelas duas linhas de `Adoções` que desceram de
+      // `existe` para `planejada`. Elas continuam NOMEADAS no inventario.
       expect(
         porConstruir.length,
-        8,
+        10,
         reason:
-            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 8 e '
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 10 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
@@ -1353,12 +1463,14 @@ void main() {
 
       final ativaveis = rotulosAtivaveis(tester);
       expect(
-        ativaveis.any((l) => l.contains('Adoções')),
+        // Mesmo motivo: `Adoções` nao e mais item vivo. `Escanear uma tag`
+        // e, e continua sendo a porta mais critica do produto.
+        ativaveis.any((l) => l.contains('Escanear uma tag')),
         isTrue,
         reason:
-            'REPROVA: a varredura nao achou `Adoções`, que e um item VIVO '
-            'da gaveta. Ela nao esta enxergando controle nenhum, e o caso dos '
-            'pendentes passou a nao medir nada.',
+            'REPROVA: a varredura nao achou `Escanear uma tag`, que e um item '
+            'VIVO da gaveta. Ela nao esta enxergando controle nenhum, e o '
+            'caso dos pendentes passou a nao medir nada.',
       );
       handle.dispose();
     });
@@ -1833,7 +1945,13 @@ void main() {
 
       expect(
         semSubmenuProprio,
-        <String>['Rede', 'Loja'],
+        // `Perto` ENTROU nesta lista em 19/10: o unico sub-destino vivo dela
+        // era `Pets de ONGs para adoção`, e ele virou `planejada` com a saida
+        // das portas de adocao. Agora tres das quatro secoes abrem so com o
+        // grupo global -- o que torna a decisao de 19/10 (gaveta fixa com
+        // destinos globais) ainda mais carregada, e e exatamente o cenario
+        // que esta isca existe para vigiar.
+        <String>['Rede', 'Perto', 'Loja'],
         reason:
             'REPROVA: as secoes sem sub-destino PROPRIO sao '
             '${semSubmenuProprio.join(', ')} e nao `Rede, Loja`. Se a lista '

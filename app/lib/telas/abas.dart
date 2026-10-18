@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
-import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/acao_de_criar_na_barra.dart';
 import '../widgets/botao_primario.dart';
@@ -159,15 +158,21 @@ class AbaPets extends StatelessWidget {
             // O que saiu daqui foi a FORMA: um `BotaoSecundario` de largura
             // total, 48 dp de altura mais 24 dp de folga.
             //
-            // `Adoções` e sub-destino de `Pets`, com porta propria, e **nao** e
-            // item de `Perto` (UX 27.2.4). Em `Perto` fica a porta das ONGs,
-            // que leva para ca pre-filtrado e nao duplica listagem.
-            const _PortaDeSubDestino(
-              icone: Icons.volunteer_activism_outlined,
-              titulo: 'Adoções',
-              rota: Rotas.adocoes,
-            ),
-            const SizedBox(height: BichuEspaco.e6),
+            // **AS DUAS PORTAS DE `Adoções` SAIRAM (19/10).**
+            //
+            // Nao e casca vazia: **nao existe rota de adocao no contrato** --
+            // confirmado por duas leituras independentes. As portas prometiam
+            // e abriam uma tela que dizia estar em construcao, e o cliente
+            // mandou fechar os defeitos listados, com este na lista.
+            //
+            // **A ROTA E A TELA FICAM**, de proposito: link profundo e
+            // endereco e nao depende de haver porta. Quem some e so o
+            // controle que promete. Quando a rota do contrato existir, as duas
+            // portas voltam aqui e no rodape do `Perto`, e o inventario de
+            // `gaveta_de_secoes.dart` volta de `planejada` para `existe`.
+            //
+            // A isca de que elas nao voltam esta em
+            // `test/telas/portas_de_adocoes_test.dart`.
             // O `EstadoVazio` "Nenhum pet cadastrado ainda" era renderizado
             // **sem condicional nenhuma**, numa tela que nao sabia listar pet:
             // o tutor cadastrava e continuava lendo que nao tinha nenhum. E o
@@ -386,13 +391,10 @@ class AbaPerto extends StatelessWidget {
             : null,
         reforco: destino.reforcoDaPagina,
         filhos: const <Widget>[
+          // A SEGUNDA PORTA DE `Adoções` SAIU (19/10), pela mesma razao da
+          // primeira: nao existe rota de adocao no contrato, e a porta abria
+          // uma tela em construcao. A rota e a tela ficam; so o controle sai.
           ListaDoDiretorio(),
-          SizedBox(height: BichuEspaco.e6),
-          _PortaDeSubDestino(
-            icone: Icons.favorite_outline,
-            titulo: 'Pets de ONGs para adoção',
-            rota: Rotas.adocoes,
-          ),
         ],
       ),
     );
@@ -709,53 +711,6 @@ class TelaDeAdocoes extends StatelessWidget {
           explicacao: 'Os pets para adoção da sua região vão ficar aqui.',
         ),
       ],
-    );
-  }
-}
-
-/// A porta de um sub-destino: um caminho da secao, com nome e explicacao.
-///
-/// Existe como componente para que **nenhuma porta nasca muda**: o criterio 2
-/// da historia e que nenhum toque termine sem resposta, e a forma mais comum
-/// de quebrar isso e um `ListTile` com `onTap: null` que continua parecendo
-/// tocavel. Aqui a rota e obrigatoria e nao aceita nulo.
-class _PortaDeSubDestino extends StatelessWidget {
-  const _PortaDeSubDestino({
-    required this.icone,
-    required this.titulo,
-    required this.rota,
-  });
-
-  final IconData icone;
-  final String titulo;
-  final String rota;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Material(
-      color: cores.surfaceSunken,
-      borderRadius: BorderRadius.circular(BichuRaio.lg),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        onTap: () => context.push(rota),
-        child: Padding(
-          padding: const EdgeInsets.all(BichuEspaco.e4),
-          child: Row(
-            children: <Widget>[
-              // Decorativo: o titulo ao lado ja diz o que e, e icone com nome
-              // proprio seria anuncio duplo no leitor de tela.
-              Icon(icone, color: cores.textSecondary),
-              const SizedBox(width: BichuEspaco.e4),
-              Expanded(child: Text(titulo, style: textos.titleMedium)),
-              const SizedBox(width: BichuEspaco.e2),
-              Icon(Icons.chevron_right, color: cores.textSecondary),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

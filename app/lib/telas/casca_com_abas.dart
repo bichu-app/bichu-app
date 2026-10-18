@@ -987,7 +987,35 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             // e `Pets` nao tinham acao nenhuma a direita.
             actions: <Widget>[
               if (widget.acaoDeCriar != null) widget.acaoDeCriar!,
-              if (acao != null) BotaoDeAcaoDaListagem(acao: acao),
+              // **O `Filtros` SAIU DAQUI em 19/10** (*"qualquer coisa, pense
+              // em outro lugar para colocar o filtro da pagina"*). Ele voltou
+              // para o topo do CORPO, que e a casa original dele, e quem o
+              // desenha agora e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem`
+              // continua publicando no slot -- publicando NULO --, porque e
+              // essa publicacao que limpa a barra quando a lista sai da tela.
+              //
+              // **O SINO NAO ESTA MONTADO, e a razao foi MEDIDA.**
+              //
+              // Os 64 dp que o `Filtros` devolveu NAO cobriram o sino, e o
+              // motivo e que os dois controles nao sao equivalentes:
+              // `Filtros` era CONDICIONAL -- so aparecia onde havia lista
+              // para filtrar -- e o sino e INCONDICIONAL, em toda tela de
+              // seccao. Nas secoes que tambem tem porta de criar (`Rede` e
+              // `Perto`), o arranjo fica hamburguer 64 + criar 64 + sino 48 +
+              // foto 48 = 224, e o titulo recebe **96,00 dp** medidos.
+              // `Rede` e `Perto` pedem 138,32 dp a 200% e **saem com
+              // reticencia** -- medido no app de verdade, logado, e reprovado
+              // pelo caso de orcamento de `gaveta_com_submenus_test.dart`.
+              //
+              // Sem o sino, as mesmas secoes recebem 144,00 dp e cabem com
+              // 5,68 dp de folga.
+              //
+              // `SinoDeNotificacoes` esta CONSTRUIDO logo abaixo -- glifo,
+              // alvo de 48 dp, rotulo acessivel com a contagem crua, oculto
+              // sem sessao -- e espera uma decisao do cliente: fechar os
+              // 42,32 dp que faltam exige tirar um dos tres controles que ele
+              // mesmo pos na barra. Montar aqui e uma linha.
+              //      const SinoDeNotificacoes(),
               AvatarDaConta(
                 inicial: _inicialDaSessao(context),
                 // `go`, e nao `push`: a tela da conta continua sendo RAMO da
@@ -1006,6 +1034,139 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ),
           body: corpo,
         ),
+      ),
+    );
+  }
+}
+
+/// O SINO DA BARRA DE TOPO: os avisos de evento, ao lado da foto.
+///
+/// Pedido do cliente (19/10): *"na barra principal crie um icone de
+/// notificacao para alertar o usuario sobre os posts dos seus amigos e sobre
+/// informacoes sistemicas e comunicados de eventos, etc."*
+///
+/// ## Sino e `AuAu` nao sao a mesma coisa, e a distincao e dele
+///
+/// Palavras dele: *"nao sao a mesma coisa, mensagens e conversa, notificacao
+/// sao eventos que estao acontecendo"*. Por isso os dois ficam: o balao da
+/// barra de baixo e conversa, o sino daqui e evento acontecendo. **Para quem
+/// nao ve, a diferenca vem dos nomes acessiveis**, que dizem a funcao por
+/// extenso -- `AuAu, mensagens` contra `Notificacoes` --, porque os dois
+/// glifos sozinhos nao carregam essa distincao.
+///
+/// ## Ele NAO aparece sem sessao
+///
+/// Notificacao e sobre o que aconteceu com a SUA rede, e sem conta nao ha
+/// rede nem o que contar. E a mesma regua que as acoes de criar seguem. O
+/// leitor de QR e a excecao conhecida, e por outro motivo: ler uma plaquinha
+/// nao exige conta.
+///
+/// ## O contador vem de FORA, e hoje nao vem
+///
+/// **Nao existe contagem global no contrato**: `unread_message_count` e campo
+/// de `LostCase`, de um caso, e nao do app. A caixa de notificacoes e a
+/// contagem no servidor estao sendo construidas por outro agente.
+///
+/// Entao o espaco existe e o numero **nao e inventado**. Contador que mostra
+/// zero quando ha coisa e pior que contador ausente, e calcular no app seria
+/// adivinhar.
+///
+/// **O QUE FALTA LIGAR, numa linha:** passar [naoLidas] a partir do callback
+/// `aoContarNaoLidas` da area de mensagens (branch
+/// `feat/area-de-mensagens-no-app`, nao mesclada) no ponto unico que a monta
+/// -- a linha `const SinoDeNotificacoes()` em `TelaDeAba.actions`, que passa a
+/// receber o numero cru.
+///
+/// **O numero vai INTEIRO para quem usa leitor de tela.** `9+` e apresentacao:
+/// o distintivo pintado encurta porque nao cabe, o nome acessivel nunca.
+class SinoDeNotificacoes extends StatelessWidget {
+  const SinoDeNotificacoes({super.key, this.naoLidas});
+
+  /// Quantas nao lidas, ou nulo enquanto a fonte nao existe.
+  ///
+  /// **Nulo nao e zero.** Nulo e "ninguem contou ainda" e nao pinta
+  /// distintivo nenhum; zero seria a afirmacao de que nao ha nada, e o app nao
+  /// tem como saber disso hoje.
+  final int? naoLidas;
+
+  static const String rotuloBase = 'Notificações';
+  static const double alvo = 48;
+
+  /// O nome acessivel, com a contagem CRUA quando ela existe.
+  static String rotuloCom(int? naoLidas) {
+    if (naoLidas == null || naoLidas <= 0) return rotuloBase;
+    final plural = naoLidas == 1 ? 'nova' : 'novas';
+    return '$rotuloBase, $naoLidas $plural';
+  }
+
+  /// O que o distintivo PINTA. Encurta, porque o circulo nao cresce.
+  static String? distintivoDe(int? naoLidas) {
+    if (naoLidas == null || naoLidas <= 0) return null;
+    return naoLidas > 9 ? '9+' : '$naoLidas';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessao = Escopo.of(context).sessao;
+    // Sem sessao o sino nao existe -- e `SizedBox.shrink`, e nao um sino
+    // desabilitado: controle visivel e morto e acao sem destino.
+    if (sessao.estado != EstadoDaSessao.logado) {
+      return const SizedBox.shrink();
+    }
+
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final distintivo = distintivoDe(naoLidas);
+
+    return IconButton(
+      tooltip: rotuloCom(naoLidas),
+      constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
+      // **O QUE FALTA LIGAR (2 de 2):** o destino. A caixa de notificacoes e
+      // de outro agente e nao existe nesta arvore; enquanto nao desce, o
+      // toque abre a tela da conta, que e um lugar que EXISTE e onde os
+      // ajustes de aviso vao morar. Trocar por `Rotas.notificacoes` quando a
+      // tela chegar.
+      onPressed: () => GoRouter.of(context).go(Rotas.perfil),
+      // O glifo SIMPLES, e nao o `notifications_active` nem um sino com
+      // badge embutido: o distintivo e desenhado aqui por cima, entao o
+      // estado vazio e o cheio usam o MESMO glifo e nao ha dois desenhos
+      // divergindo.
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Icon(Icons.notifications_outlined, color: cores.textPrimary),
+          if (distintivo != null)
+            Positioned(
+              right: -BichuEspaco.e1,
+              top: -BichuEspaco.e1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BichuEspaco.e1,
+                ),
+                constraints: const BoxConstraints(minWidth: BichuEspaco.e4),
+                // Os MESMOS papeis que o distintivo de filtros ja usava
+                // (`primary` sobre `onActionFill`), e nao uma cor de alerta
+                // propria: duas tintas diferentes para a mesma ideia de
+                // "ha algo novo aqui" seriam duas linguagens no mesmo app.
+                decoration: BoxDecoration(
+                  color: cores.primary,
+                  borderRadius: BorderRadius.circular(BichuRaio.full),
+                ),
+                child: Text(
+                  distintivo,
+                  textAlign: TextAlign.center,
+                  // O distintivo repete o que o `tooltip` ja diz por extenso,
+                  // e com o numero INTEIRO. Dois anuncios do mesmo estado no
+                  // mesmo controle e ruido -- e aqui seria pior: o pintado
+                  // diz `9+` e o anunciado diz `12`.
+                  semanticsLabel: '',
+                  style: textos.labelSmall?.copyWith(
+                    color: cores.onActionFill,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

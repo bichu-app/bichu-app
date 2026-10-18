@@ -746,9 +746,18 @@ void main() {
       // **E o bloco de fato chega la.** Sem esta linha, as contagens acima
       // ficariam verdes com um `InkWell` que nao leva a lugar nenhum -- que e
       // a acao sem destino que o criterio 2 proibe, so com outra cara.
-      await tester.tap(
-        find.descendant(of: semFone, matching: find.byType(InkWell)).first,
-      );
+      // **`ensureVisible` antes do toque, e a razao e de 19/10.** O gatilho de
+      // filtro voltou para o topo do CORPO (decisao do cliente), e com ele a
+      // lista desceu alguns dp. O primeiro cartao passou a nascer na dobra, e
+      // um `tap` seco acertava fora dele -- o caso reprovava dizendo que o
+      // cartao nao abre a pagina, quando o que falhava era o toque.
+      //
+      // O que o caso prova nao mudou: o cartao LEVA ao destino.
+      final alvoDoCartao =
+          find.descendant(of: semFone, matching: find.byType(InkWell)).first;
+      await tester.ensureVisible(alvoDoCartao);
+      await tester.pumpAndSettle();
+      await tester.tap(alvoDoCartao);
       await tester.pumpAndSettle();
       expect(
         find.byType(PaginaDoLocal),
@@ -1400,12 +1409,13 @@ void main() {
     final barra = tester.widget<AppBar>(find.byType(AppBar));
     expect(
       barra.actions ?? const <Widget>[],
-      hasLength(3),
+      hasLength(2),
       reason: 'REPROVA: o lado direito da barra do `Perto` nao tem exatamente '
-          'tres acoes. Sao a porta de indicar (18/10), o acesso a folha de '
-          'filtro e ordem (17/10) e a foto da conta (19/10). DUAS significa '
-          'que uma sumiu; QUATRO nao cabe: medido, o quarto controle leva o '
-          'titulo a 0,00 dp em 320 dp.',
+          'DUAS acoes. Sao a porta de indicar (18/10) e a foto da conta '
+          '(19/10) -- o acesso a folha de filtro saiu da barra em 19/10 e '
+          'voltou para o topo do corpo, por decisao do cliente. UMA significa '
+          'que uma sumiu; TRES significa que o filtro voltou para a barra, e '
+          'ai o titulo do `Perto` perde os 64 dp de que ele ja nao tem folga.',
     );
     expect(
       barra.actions!.last,

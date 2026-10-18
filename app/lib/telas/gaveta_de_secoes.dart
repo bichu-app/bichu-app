@@ -127,8 +127,20 @@ abstract final class RegistroDeSubDestinos {
       SubDestino(
         rotulo: 'Adoções',
         forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.existe,
-        rota: Rotas.adocoes,
+        // **`existe` -> `planejada` em 19/10, e a LINHA NAO FOI APAGADA.**
+        //
+        // Nao existe rota de adocao no contrato -- confirmado por duas
+        // leituras independentes --, e a tela do outro lado diz estar em
+        // construcao. Item de gaveta que abre uma tela em construcao e acao
+        // que promete, e o cliente mandou fechar esse defeito.
+        //
+        // `planejada` e o que o registro tem para dizer isto: por `viraItem`
+        // o item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO
+        // no inventario de 27.5. A rota sai desta linha porque o portao exige
+        // rota nula em item `planejada` -- rota preenchida e como ele volta a
+        // aparecer no dia em que alguem mexer na condicao --, e ela continua
+        // registrada no roteador para link profundo.
+        estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
         rotulo: 'Busca',
@@ -258,8 +270,20 @@ abstract final class RegistroDeSubDestinos {
       SubDestino(
         rotulo: 'Pets de ONGs para adoção',
         forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.existe,
-        rota: Rotas.adocoes,
+        // **`existe` -> `planejada` em 19/10, e a LINHA NAO FOI APAGADA.**
+        //
+        // Nao existe rota de adocao no contrato -- confirmado por duas
+        // leituras independentes --, e a tela do outro lado diz estar em
+        // construcao. Item de gaveta que abre uma tela em construcao e acao
+        // que promete, e o cliente mandou fechar esse defeito.
+        //
+        // `planejada` e o que o registro tem para dizer isto: por `viraItem`
+        // o item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO
+        // no inventario de 27.5. A rota sai desta linha porque o portao exige
+        // rota nula em item `planejada` -- rota preenchida e como ele volta a
+        // aparecer no dia em que alguem mexer na condicao --, e ela continua
+        // registrada no roteador para link profundo.
+        estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
         rotulo: 'Avaliações da comunidade',

@@ -209,8 +209,16 @@ void main() {
             'foi para a tela da conta em 19/10, e ela ja tinha a porta: '
             'repor aqui recria a segunda porta para o mesmo leitor.',
       );
-      expect(find.text('Adoções'), findsOneWidget,
-          reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
+      // **`Adoções` SAIU de `Pets` em 19/10, e este caso trocou de lado.**
+      //
+      // Nao existe rota de adocao no contrato -- confirmado por duas leituras
+      // independentes -- e a porta abria uma tela que diz estar em
+      // construcao. A rota e a tela ficam, para link profundo; a porta sai.
+      // Quem prova que nenhum controle leva mais a ela e
+      // `portas_de_adocoes_test.dart`.
+      expect(find.text('Adoções'), findsNothing,
+          reason: 'REPROVA: a porta de `Adoções` voltou a `Pets`. Ela promete '
+              'uma tela em construcao, e a rota dela nao existe no contrato.');
       expect(
         find.text('A lista de pets perdidos está em construção'),
         findsOneWidget,

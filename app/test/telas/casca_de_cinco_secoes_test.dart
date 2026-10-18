@@ -1424,51 +1424,42 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('criterio 2 — nenhum toque termina sem resposta', () {
-    testWidgets('as portas de sub-destino de Pets e de Perto navegam',
+    testWidgets('AS DUAS PORTAS DE `Adoções` SAIRAM, e nenhuma delas voltou',
         (tester) async {
+      // **O QUE ESTE CASO PROVAVA, E O QUE ELE PROVA AGORA.**
+      //
+      // Ele provava que as duas portas de `Adoções` NAVEGAVAM: a de `Pets` e
+      // a das ONGs em `Perto`, as duas chegando a mesma tela, sem duplicar
+      // listagem (criterio 6). O defeito que ele guardava era acao sem
+      // destino -- as duas `Ver meus pets` que nao levavam a lugar nenhum.
+      //
+      // **As duas portas sairam em 19/10.** Nao existe rota de adocao no
+      // contrato -- confirmado por duas leituras independentes --, e a tela do
+      // outro lado dizia estar em construcao: a porta prometia o que o
+      // produto nao tem, e o cliente mandou fechar esse defeito.
+      //
+      // O caso nao foi apagado: ele passou a assever a AUSENCIA das duas.
+      // Sem essa afirmacao, repor qualquer uma devolveria ao produto um toque
+      // que abre uma tela em construcao, e nenhum caso acusaria. O contrapeso
+      // -- que a ROTA continua registrada, para link profundo nao quebrar --
+      // vive em `portas_de_adocoes_test.dart`, junto do resto desta decisao.
       await abrirOApp(tester, rede: _semServidor);
 
-      // `Adoções` e sub-destino de `Pets`, com porta propria.
-      await tester.tap(find.text('Adoções'));
-      await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(AppBar, 'Adoções'),
-        findsOneWidget,
-        reason: 'REPROVA: a porta de `Adoções` em `Pets` nao abriu destino '
-            'nenhum. Era o defeito das duas acoes `Ver meus pets` sem '
-            'destino, de novo.',
-      );
-      expect(
-        find.text('A lista de adoções está em construção'),
-        findsOneWidget,
-        reason: 'REPROVA: `Adoções` abriu uma tela que nao diz o que vai '
-            'existir ali.',
+        find.text('Adoções'),
+        findsNothing,
+        reason: 'REPROVA: a porta de `Adoções` voltou a `Pets`. Ela abre uma '
+            'tela que diz estar em construcao, e a rota dela nao existe no '
+            'contrato.',
       );
 
-      // Volta e vai pela porta das ONGs, em `Perto`. Ela leva ao MESMO
-      // destino: pre-filtrado, sem duplicar listagem (criterio 6).
-      // `tester.pageBack()` procura o botao pelo tooltip em ingles, e este
-      // app declara `pt-BR`: o tooltip e `Voltar`. Usar `pageBack` aqui
-      // reprovaria por um motivo que nao e o do caso.
-      await tester.tap(find.byTooltip('Voltar'));
-      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
       await tester.pumpAndSettle();
-
-      final portaDasOngs = find.text('Pets de ONGs para adoção');
       expect(
-        portaDasOngs,
-        findsOneWidget,
-        reason: 'REPROVA: `Perto` nao tem a porta das ONGs. O criterio 6 pede '
-            'que ela exista ali e leve a `Pets` pre-filtrado em adocao.',
-      );
-      await tester.tap(portaDasOngs);
-      await tester.pumpAndSettle();
-      expect(
-        find.widgetWithText(AppBar, 'Adoções'),
-        findsOneWidget,
-        reason: 'REPROVA: a porta das ONGs nao leva a `Adoções`. Se ela '
-            'abrisse uma listagem propria, seriam duas listas da mesma coisa.',
+        find.text('Pets de ONGs para adoção'),
+        findsNothing,
+        reason: 'REPROVA: a porta das ONGs voltou ao rodape do `Perto`. Ela '
+            'levava a mesma tela em construcao que a de `Pets`.',
       );
     });
 

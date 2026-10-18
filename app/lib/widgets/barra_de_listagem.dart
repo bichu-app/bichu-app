@@ -412,11 +412,25 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     // sujo durante a construcao, que e o erro que o Flutter afirma contra.
     // `AcaoDeListagem` compara por VALOR (e ignora o fecho), entao publicar a
     // cada quadro nao reconstroi a casca -- sem isso isto seria um laco.
+    // **O CONTROLE DE RECORTE VOLTOU PARA O CORPO (19/10).**
+    //
+    // Ele subiu para o slot da `AppBar` em 17/10 e voltou agora, por decisao
+    // do cliente: *"qualquer coisa, pense em outro lugar para colocar o filtro
+    // da pagina"*. O lugar e a casa original dele -- busca, filtro e ordenacao
+    // no topo do CORPO da tela, nunca na barra.
+    //
+    // A publicacao continua existindo e passou a publicar **sempre nulo**: e
+    // ela que garante que nenhuma `AppBar` fique com um `Filtros` pendurado
+    // de uma lista que saiu da tela. O mecanismo nao foi arrancado porque ele
+    // tambem e a limpeza; o que mudou foi o que ele entrega.
+    //
+    // O que isso libera: os 64 dp do slot, que e o que faz o sino da barra de
+    // topo caber ao lado da foto.
     final acao = _acao(context);
     final slot = _slot;
     if (slot != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) slot.publicar(acao);
+        if (mounted) slot.publicar(null);
       });
     }
 
@@ -440,6 +454,24 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
         if (comCampo) ...<Widget>[
           CampoDeBuscaDaListagem(busca: b.busca!),
           const SizedBox(height: BichuEspaco.e2),
+        ],
+        // O GATILHO DE FILTRO E ORDEM, no corpo e logo abaixo da busca.
+        //
+        // **Com rotulo visivel, e nao so o glifo.** Na `AppBar` ele era um
+        // icone de 64 dp cujo nome vivia no `tooltip`; aqui ha largura, e um
+        // controle que diz o que faz por escrito e melhor para todo mundo --
+        // nao so para quem usa leitor de tela. O distintivo de filtros ativos
+        // continua no proprio rotulo, pelo `_rotuloDaFolha`, que ja dizia
+        // "Filtrar e ordenar, 2 filtros ativos".
+        //
+        // **Nao e botao de largura total**: o cliente reprovou botao grande
+        // ocupando o corpo (18/10). Ele se ajusta ao texto.
+        if (acao != null) ...<Widget>[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GatilhoDeRecorteNoCorpo(acao: acao),
+          ),
+          const SizedBox(height: BichuEspaco.e3),
         ],
         Text(
           b._resumo,
@@ -849,6 +881,66 @@ class SlotDaBarraDeListagem extends InheritedWidget {
 /// `rotulo` e `aoTocar` sao exigidos: um `IconButton` sem rotulo e anunciado
 /// como "botão" e nada mais (SC 4.1.2), e um com `onPressed: null` e o
 /// controle mudo que o criterio 2 proibe.
+/// O gatilho de filtro e ordem, **no corpo da tela**.
+///
+/// Ele existe desde 19/10, quando o cliente mandou o filtro sair da barra de
+/// topo: *"qualquer coisa, pense em outro lugar para colocar o filtro da
+/// pagina"*. O lugar e a casa original dele -- busca, filtro e ordenacao no
+/// topo do corpo --, e a saida da barra foi o que liberou os 64 dp de que o
+/// sino precisava.
+///
+/// **Ele nao substitui [BotaoDeAcaoDaListagem], que continua existindo** para
+/// a tela que ainda quiser um controle de canto; o que mudou e quem a
+/// `BarraDeListagem` desenha por padrao.
+///
+/// O rotulo vem de `AcaoDeListagem.rotulo`, que ja carrega o estado por
+/// extenso ("Filtrar e ordenar, 2 filtros ativos"): no corpo ha largura para
+/// ele ser PINTADO, e nao so anunciado no `tooltip`. Um controle que diz o que
+/// faz por escrito e melhor para todo mundo, e nao so para quem nao ve.
+class GatilhoDeRecorteNoCorpo extends StatelessWidget {
+  const GatilhoDeRecorteNoCorpo({required this.acao, super.key});
+
+  final AcaoDeListagem acao;
+
+  @override
+  Widget build(BuildContext context) {
+    final distintivo = acao.distintivo;
+
+    return OutlinedButton.icon(
+      onPressed: acao.aoTocar,
+      icon: const Icon(Icons.tune),
+      // O alvo de 48 dp do SC 2.5.8. Nao e o piso critico de 64 da barra de
+      // topo: ali o controle disputa a borda com o titulo e com o polegar que
+      // segura o aparelho; aqui ele esta no corpo, com folga em volta.
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, BichuAlvoDeToque.min),
+      ),
+      // **O rotulo pintado e curto; o longo e o nome acessivel.** Pintar
+      // "Filtrar e ordenar, 2 filtros ativos" encheria a linha, entao o
+      // numero aparece entre parenteses e a frase inteira vai para o
+      // `tooltip` -- que e como este app sempre declarou nome acessivel de
+      // controle (o gatilho da gaveta e a foto da conta fazem igual), e e por
+      // isso que os portoes o procuram por `byTooltip`.
+      //
+      // `ExcludeSemantics` no texto pintado: sem ele o leitor de tela
+      // anunciaria "Filtrar (2)" e depois a frase inteira, dois nomes para o
+      // mesmo controle.
+      label: Tooltip(
+        message: acao.rotulo,
+        child: ExcludeSemantics(
+          child: Text(
+            distintivo == null ? _verbo : '$_verbo ($distintivo)',
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A primeira palavra do rotulo longo: `Filtrar`, `Ordenar` ou
+  /// `Filtrar e ordenar`. Sai do mesmo texto, para nao haver duas verdades.
+  String get _verbo => acao.rotulo.split(',').first;
+}
+
 class BotaoDeAcaoDaListagem extends StatelessWidget {
   const BotaoDeAcaoDaListagem({required this.acao, super.key});
 
