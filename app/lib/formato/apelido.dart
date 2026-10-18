@@ -16,7 +16,7 @@
 ///
 /// [FormaDoApelido.regex] e o mesmo de:
 ///
-/// - o `CHECK` de `handles.handle` na migracao `20261018000005`;
+/// - o `CHECK` de `handles.handle` na migracao `20261018000021`;
 /// - o `pattern` de `Handle` em `api/openapi.yaml`;
 /// - `FORMA_DO_APELIDO` em `src/shared/apelido/apelido.ts`.
 ///
@@ -169,10 +169,24 @@ class IdentificadorDoApelido {
   /// O mapa dos parecidos, **por GRUPO**, igual ao `translate` de
   /// `handle_esqueleto` na migracao e ao `PARECIDOS` do TypeScript.
   ///
-  /// **DIVERGENCIA DECLARADA DO PLANO:** ele escreve `0->o`, `1->l`, `5->s`,
-  /// `3->e`, e esse mapa **sozinho nao produz a colisao que o proprio plano
-  /// exige** (`mar1a` viraria `marla` e `maria` ficaria `maria`). `i` tambem
-  /// colapsa em `l` para o invariante escrito valer.
+  /// **DIVERGENCIA DECLARADA DO PLANO, e ela foi endossada pelo coordenador.**
+  /// O plano escreve o mapa como `0->o`, `1->l`, `5->s`, `3->e`, e esse mapa
+  /// **sozinho nao produz a colisao que o proprio plano exige**: com ele,
+  /// `mar1a` vira `marla` e `maria` fica `maria`, e os dois coexistiriam -- ao
+  /// contrario do invariante escrito, que diz que `@maria-silva`,
+  /// `@mariasilva` e `@mar1a-silva` nao coexistem.
+  ///
+  /// Para o invariante valer, **`i` tambem colapsa em `l`**, e o mapa real e
+  /// por GRUPO de parecidos: `{0,o}`, `{1,i,l}`, `{5,s}`, `{3,e}`.
+  ///
+  /// **O CUSTO, MEDIDO E DITO EM VOZ ALTA: `@lia-vet`, `@l1a-vet` e `@iia-vet` passam a
+  /// ser o MESMO apelido.** Os tres viram `llavet`, entao o segundo e o
+  /// terceiro a pedir sao recusados com "indisponivel". Os exemplos tem 5 ou
+  /// mais caracteres de proposito: o piso de 5 ja barra `@lia`, entao ele nao
+  /// ilustraria custo nenhum. Isso recusa alguns
+  /// apelidos legitimos a mais do que o plano previa -- e a alternativa era
+  /// deixar `@mar1a-silva` coexistir com `@maria-silva`, que e a imitacao que
+  /// este freio existe para impedir. A troca e essa, e e deliberada.
   static const Map<String, String> _parecidos = <String, String>{
     '0': 'o',
     '1': 'l',
@@ -185,7 +199,7 @@ class IdentificadorDoApelido {
   /// reinventadas**.
   ///
   /// A mesma lista esta em `src/shared/apelido/apelido.ts` e carregada em
-  /// `handles` pela migracao `20261018000005`. Tres copias sao inevitaveis
+  /// `handles` pela migracao `20261018000021`. Tres copias sao inevitaveis
   /// (SQL, TypeScript e Dart nao se importam), e e por isso que o teste deste
   /// arquivo confere o tamanho e a colisao de `noreply`/`no-reply`.
   static const List<String> reservadas = <String>[

@@ -16,6 +16,7 @@ import '../../formato/email.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../validacao/nome_de_exibicao.dart';
 import '../../validacao/politica_de_senha.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
@@ -93,6 +94,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   /// recusado esta a 400 dp de distancia, fora da tela. Marcar o campo com
   /// `erro` e nao mostra-lo e escrever a resposta num lugar que ninguem olha,
   /// que e exatamente "toquei no botao e nao aconteceu nada".
+  final GlobalKey _alvoDoNome = GlobalKey();
   final GlobalKey _alvoDoApelido = GlobalKey();
   final GlobalKey _alvoDoNascimento = GlobalKey();
   final GlobalKey _alvoDoEmail = GlobalKey();
@@ -102,6 +104,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   bool _senhaVisivel = false;
   bool _aceitouOsTermos = false;
   bool _enviando = false;
+  String? _erroDoNome;
   String? _erroDoApelido;
   String? _erroDoNascimento;
   String? _erroDoEmail;
@@ -162,6 +165,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 
   Future<void> _criarConta() async {
     setState(() {
+      _erroDoNome = null;
       _erroDoApelido = null;
       _erroDoNascimento = null;
       _erroDoEmail = null;
@@ -169,6 +173,25 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       _erroDoAceite = null;
       _faixa = null;
     });
+
+    // O NOME, PRIMEIRO, PORQUE E O PRIMEIRO CAMPO DA TELA.
+    //
+    // Recusa fora da ordem de leitura manda a pessoa para cima depois de
+    // mandar para baixo. Cobrado desde 18/10/2026, por queixa do cliente: *"o
+    // campo de nome no cadastro do usuario e obrigatorio, hoje ele esta
+    // cadastrando sem esse campo"*.
+    //
+    // A regra vem de `NomeDeExibicao`, que e a MESMA fonte que decide se o
+    // botao do rodape esta habilitado -- e por isso que as duas nao divergem.
+    // Esta guarda nao e redundante com o botao: o botao fecha o caminho do
+    // toque, e ela fecha o do teclado (`aoEnviar` da senha, abaixo, chama
+    // `_criarConta` direto e nao passa pelo estado do botao).
+    final String? recusaDoNome = NomeDeExibicao.recusa(_nome.text);
+    if (recusaDoNome != null) {
+      setState(() => _erroDoNome = recusaDoNome);
+      _levarAte(_alvoDoNome);
+      return;
+    }
 
     // O APELIDO, QUANDO ELE FOI PREENCHIDO -- ELE E OPCIONAL.
     //
@@ -194,11 +217,13 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       }
     }
 
-    // A DATA DE NASCIMENTO, PRIMEIRO, PORQUE E O PRIMEIRO CAMPO COBRADO.
+    // A DATA DE NASCIMENTO, TERCEIRA, PORQUE E O TERCEIRO CAMPO DA TELA.
     //
+    // **A ORDEM DAS TRES GUARDAS E A ORDEM DOS CAMPOS**: Nome, Apelido, Data.
     // Recusa fora da ordem de leitura manda a pessoa para cima depois de
-    // mandar para baixo. Cobrada desde 18/10/2026, por decisao do cliente:
-    // *"coloque maiores de 16 anos"*.
+    // mandar para baixo, e as tres nasceram em ramos diferentes -- o nome em
+    // `feat/nome-obrigatorio-cadastro`, as outras duas aqui. Cobrada desde
+    // 18/10/2026, por decisao do cliente: *"coloque maiores de 16 anos"*.
     //
     // A regra vem de `IdadeMinima`, que e a MESMA fonte que decide se o botao
     // do rodape esta habilitado -- e por isso que as duas nao divergem. Esta
@@ -309,7 +334,12 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
         // banco guardar o que a tela mostrou em vez do que a regra diz.
         // `null` quando vazio -- a chave nao vai no corpo.
         apelido: apelidoParaOContrato(_apelido.text),
-        nome: _nome.text.trim().isEmpty ? null : _nome.text.trim(),
+        // **Nunca mais `null`.** Esta linha era
+        // `_nome.text.trim().isEmpty ? null : _nome.text.trim()`, e era ela
+        // que fazia a conta nascer sem nome: apagava a chave em silencio e o
+        // servidor, que tambem nao exigia, aceitava. Chega aqui nao-nulo por
+        // construcao -- a guarda de `recusaDoNome` acima ja voltou.
+        nome: NomeDeExibicao.aparar(_nome.text),
         // A versao dos termos aceitos, que e prova juridica e nao dado de
         // tela. Chega aqui **nao-nula por construcao**: a guarda acima ja
         // recusou o caso em que ela falta, e e por isso que esta linha pode
@@ -472,6 +502,17 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
             // O botao continua habilitado sem conexao: o detector de offline
             // erra, e deixar a pessoa sem caminho e pior que deixa-la tentar.
             //
+            // **MAS ELE FICA BLOQUEADO SEM NOME**, que e outra coisa: offline
+            // e uma condicao que o app nao sabe medir e que a pessoa nao tem
+            // como consertar no formulario; nome vazio e uma condicao que a
+            // tela mede com certeza e que a pessoa conserta digitando. Cobrado
+            // em 18/10/2026 junto com a recusa do servidor.
+            //
+            // **O rotulo do campo ja cobra em texto** ("Nome", sem
+            // "(opcional)") e a recusa de `_criarConta` ainda existe para quem
+            // chega pelo teclado -- entao o botao apagado aqui nao e a unica
+            // coisa que explica o bloqueio, que e a armadilha que a prosa desta
+            // tela combate em outros tres lugares.
             // **MAS ELE FICA BLOQUEADO SEM A DATA COMPLETA**, que e outra
             // coisa: offline e uma condicao que o app nao sabe medir e que a
             // pessoa nao tem como consertar no formulario; data pela metade e
@@ -484,7 +525,16 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
             // explica a regra -- um botao apagado nao diz por que, e seria
             // exatamente "toquei no botao e nao aconteceu nada". Quem filtra
             // de verdade e a guarda de `_criarConta`.
-            aoTocar: IdadeMinima.completo(_nascimento.text) ? _criarConta : null,
+            //
+            // **AS DUAS CONDICOES, e nao uma.** Nome e data nasceram em ramos
+            // separados e as duas bloqueiam o botao; manter so uma deixaria o
+            // botao vivo com o outro campo vazio, e a pessoa tocaria para nao
+            // acontecer nada. **O apelido NAO entra aqui**: ele e opcional, e
+            // vazio e uma escolha valida.
+            aoTocar: NomeDeExibicao.completo(_nome.text) &&
+                    IdadeMinima.completo(_nascimento.text)
+                ? _criarConta
+                : null,
           ),
         ],
       ),
@@ -515,11 +565,24 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
                 const SizedBox(height: BichuEspaco.e6),
               ],
               BichuField(
+                key: _alvoDoNome,
                 rotulo: 'Nome',
                 controlador: _nome,
+                erro: _erroDoNome,
+                // **Sem `opcional`, e agora isso e verdade.** O rotulo desta
+                // tela nunca disse "(opcional)" -- o campo PARECIA obrigatorio
+                // e nao era, que e a pior das combinacoes.
+                limite: NomeDeExibicao.limite,
                 autofill: const <String>[AutofillHints.name],
                 capitalizacao: TextCapitalization.words,
                 acaoDeTeclado: TextInputAction.next,
+                // O `setState` vazio existe para o BOTAO do rodape, que mora
+                // fora desta arvore e le `_nome.text`. Sem ele o botao nasce
+                // desabilitado e fica desabilitado enquanto a pessoa digita,
+                // porque nada pediu o redesenho da barra fixa.
+                aoMudar: (_) => setState(() {
+                  if (_erroDoNome != null) _erroDoNome = null;
+                }),
               ),
               const SizedBox(height: BichuEspaco.e6),
               // O APELIDO (`@`), que nasceu em 18/10/2026 (cliente: *"o

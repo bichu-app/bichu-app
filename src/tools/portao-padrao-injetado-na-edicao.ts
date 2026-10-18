@@ -1,54 +1,92 @@
 /**
- * Portao do padrao injetado na edicao.
+ * Portao do `default` alcancavel no CORPO DA EDICAO.
  *
- * ## O defeito que ele fecha
+ * ## O que ele cobra
  *
- * O Fastify monta o Ajv com `useDefaults: true`, e o Ajv **escreve no corpo
- * recebido** o `default` de todo campo ausente. Num corpo de CRIACAO isso e o
- * certo: o registro tem de nascer com valor. Num corpo de EDICAO PARCIAL e o
- * contrario do que a operacao promete, e silencioso nas duas pontas:
- *
- * 1. **a edicao reescreve o que ninguem mandou**: quem aceitava so porte `P` e
- *    corrige o titulo sai aceitando os quatro, com `200` e sem aviso;
- * 2. **a trilha mente**: toda trilha que tira os nomes dos campos de
- *    `Object.keys(corpo)` passa a nomear campo que o autor nao tocou.
- *
- * Foi MEDIDO em 17/10/2026 em `CommunityNetworkEventPatch`: um `PATCH` com
- * `title` e `notes` chegou ao manipulador com `accepted_sizes: [P,M,G,GG]` e
- * `dog_age: 'any'` por cima. O conserto daquela rota mora em
- * `network-routes.ts` (`semPadroes`), e vale so onde esta instalado -- nada
- * impedia o proximo `*Patch` a `$ref`ar uma forma de criacao com `default` de
- * reintroduzir o defeito, em qualquer modulo, sem nenhum teste reprovar.
- *
- * E isso que este portao fecha: ele le `api/openapi.yaml`, resolve os `$ref`
- * **transitivamente** a partir do corpo de cada edicao e acusa todo `default`
+ * Recebe o contrato como TEXTO (`api/openapi.yaml`; quem abre o arquivo e o
+ * autoteste ao lado -- este modulo e funcao pura e nao tem linha de comando nem
+ * alvo de `make`) e, para cada operacao de EDICAO, resolve os `$ref`
+ * TRANSITIVAMENTE a partir do corpo `application/json` e acusa todo `default`
  * alcancado, dizendo o CAMINHO ate ele (`AdminNetworkEventPatch ->
- * .../accepted_sizes -> NetworkEventAcceptedSizes`), porque quem reprovar
- * precisa saber onde mexer. O contrato nao muda: o `default` esta certo onde
- * nasceu, no schema da criacao.
+ * .../accepted_sizes -> NetworkEventAcceptedSizes`), porque quem reprova
+ * precisa saber onde mexer.
  *
- * ## O que e "edicao"
+ * "Edicao" e a OPERACAO `patch`, e nao o nome do schema terminando em `Patch`:
+ * o que importa e o corpo que o Ajv valida, e um `*Input` de criacao usado como
+ * corpo de `PATCH` conta igual -- `updateLostCase` reusa `LostCaseInput`. Corpo
+ * de mudanca PARCIAL servido por `POST` o metodo nao alcanca, e entra a mao em
+ * `EDICOES_PARCIAIS_SERVIDAS_POR_POST`. Em 18/10/2026 isso da 12 edicoes
+ * conferidas (11 `patch` com corpo JSON + 1 `POST` da lista).
  *
- * A varredura e pelas OPERACOES `patch` do contrato, e nao por nome de schema
- * terminando em `Patch`: o que importa e o corpo que o Ajv valida, e um
- * `*Input` usado como corpo de `PATCH` conta igual -- e um existe hoje
- * (`updateLostCase` reusa `LostCaseInput`).
+ * O criterio nao e "o Ajv comprovadamente escreve este default", e sim "este
+ * default e ALCANCAVEL do corpo": dentro de `oneOf`/`anyOf` o Ajv nao aplica o
+ * padrao de forma confiavel, e mesmo assim o portao acusa. Um `default` em
+ * corpo de edicao nao tem o que fazer ali de qualquer jeito, e a alternativa --
+ * adivinhar o que aquela versao do Ajv faz -- e o tipo de precisao que
+ * envelhece calada. `example` e `examples` ficam de fora: exemplo nao e
+ * injetado.
  *
- * Metodo nao e tudo: ha corpo de MUDANCA PARCIAL servido por `POST`, que o
- * `patch` da varredura nao alcanca. Esses entram a mao, em
- * `EDICOES_PARCIAIS_SERVIDAS_POR_POST`, uma linha por operacao.
+ * Alcancar `default` so REPROVA quando a operacao nao esta em
+ * `PADRAO_INJETADO_ACEITO_HOJE`, o inventario das 4 dividas medidas (a nota
+ * dela diz por que a lista e exata nos dois sentidos). E **nao achar alvo
+ * reprova tambem**: com zero edicoes conferidas o portao nao verificou nada, e
+ * diz isso.
  *
- * ## Deliberadamente conservador
+ * ## Por que ele existe
  *
- * Ele acusa `default` alcancavel, e nao `default` que o Ajv comprovadamente
- * escreve: dentro de `oneOf`/`anyOf` o Ajv nao aplica o padrao de forma
- * confiavel, e mesmo assim o portao acusa. Um `default` num corpo de edicao nao
- * tem o que fazer ali de qualquer jeito, e a alternativa -- adivinhar o que
- * aquela versao do Ajv faz -- e o tipo de precisao que envelhece calada.
- * `example` e `examples` ficam de fora: exemplo nao e injetado.
+ * O tutor tirava o pet da lista publica, editava a descricao do caso, e a
+ * edicao devolvia o pet para a lista -- com `200` e sem aviso.
  *
- * **Nao achar alvo reprova**: com zero edicoes conferidas o portao nao
- * verificou nada, e diz isso.
+ * O mecanismo: `share_to_public_list` tem `default: true` em `LostCaseInput`,
+ * `LostCaseInput` e tambem o corpo do `PATCH`, o Ajv que o Fastify monta com
+ * `useDefaults: true` (como `criarServidor` o monta em 18/10/2026) ESCREVE no
+ * corpo recebido o `default` de todo campo ausente, e o `COALESCE` do
+ * repositorio -- que so preserva o valor gravado quando o campo chega
+ * INDEFINIDO -- nunca era alcancado. O mesmo mecanismo custou outros dois
+ * defeitos medidos em 17/10/2026 na Rede: quem aceitava so porte `P` e corrigia
+ * o titulo saia aceitando os quatro (`CommunityNetworkEventPatch` entregou
+ * `accepted_sizes: [P,M,G,GG]` e `dog_age: 'any'` por cima), e toda trilha que
+ * tira os nomes dos campos de `Object.keys(corpo)` passa a nomear campo que o
+ * autor nao tocou.
+ *
+ * O remedio por rota existe e e compartilhado (`corpoSemPadroes`, em
+ * `src/shared/http/sem-padroes.ts`), mas vale so onde esta instalado: nada
+ * impedia o proximo `*Patch` a `$ref`ar uma forma de criacao com `default` de
+ * reintroduzir o defeito, em qualquer modulo, sem nenhum teste reprovar. E esse
+ * buraco que este portao fecha. O contrato nao muda: o `default` esta certo
+ * onde nasceu, no schema da criacao.
+ *
+ * ## O que ele NAO cobre, dito por escrito
+ *
+ * 1. **parametro nenhum.** Ele le `requestBody`, e nao `query`, `path` ou
+ *    header. Medido em 18/10/2026: ha 46 `default` alcancaveis em `query`
+ *    (`page`, `limit`, `sort`...) que este portao nao ve, e o Ajv os injeta
+ *    igual. O que torna isso tolerado numa listagem e o caso de uso, nao este
+ *    arquivo.
+ * 2. **`PUT` nao conta como edicao**, por ser substituicao. Dos 4 `PUT` com
+ *    corpo JSON de 18/10/2026 nenhum alcanca `default`, mas edicao PARCIAL
+ *    escrita como `PUT` passaria batida -- o remedio seria a mesma lista a mao
+ *    usada para o `POST`.
+ * 3. **so `application/json`.** Outra midia de corpo nao e varrida; em
+ *    18/10/2026 o contrato nao declara nenhuma.
+ * 4. **o inventario perdoa por OPERACAO, nao por campo.** `default` NOVO dentro
+ *    de um corpo ja inventariado nao gera violacao aqui. Para duas das quatro
+ *    linhas (`updateLostCase`, `updateNetworkEvent`) o autoteste prende a trilha
+ *    exata e reprova no lugar do portao; para `updateAdminNetworkEvent` e
+ *    `changeAdminNetworkEventAccess` ele prende so o CONJUNTO de operacoes, e
+ *    um campo novo com `default` entra calado nessas duas.
+ * 5. **o comportamento do Ajv.** Tudo aqui e leitura de contrato: o portao nao
+ *    sobe servidor nem faz requisicao. Que o manipulador receba so o que veio e
+ *    medido pelo fio em `a-edicao-nao-republica-o-caso.test.ts` (lostfound).
+ *
+ * ## Como ver ele reprovar
+ *
+ * Este arquivo nao tem chave de desligar, e nao precisa de uma: o autoteste ao
+ * lado tem uma ISCA por regra, e cada isca e o contrato real com UMA alteracao
+ * feita sobre COPIA em memoria (`api/openapi.yaml` nunca e tocado). Para ver a
+ * reprovacao central na mao, ponha `default: 0` em
+ * `AdminStoreItemPatch.properties.sort_order` no contrato, rode `npm test`, e
+ * desfaca.
  */
 import { parse as parseYaml } from 'yaml';
 
@@ -77,10 +115,12 @@ const EDICOES_PARCIAIS_SERVIDAS_POR_POST: readonly string[] = ['changeAdminNetwo
  *
  * Isto nao e uma dispensa. Cada linha e uma operacao em que o Ajv escreve no
  * corpo campo que o autor da requisicao nao mandou, e o motivo de ela estar
- * aqui e um so: o conserto e decisao de arquitetura (ou `useDefaults: false`
- * em `criarServidor`, que muda TODA rota de uma vez, ou o `semPadroes` da Rede
- * promovido a `src/shared/http/` e aplicado nos corpos de edicao), e essa
- * decisao tem o PR dela.
+ * aqui e um so: o conserto que FALTA e decisao de arquitetura, e essa decisao
+ * tem o PR dela. O remedio por rota ja existe e ja e compartilhado --
+ * `corpoSemPadroes`, em `src/shared/http/sem-padroes.ts` (18/10/2026),
+ * aplicado em `network-routes.ts` e em `lost-case-routes.ts`. O que esta em
+ * aberto e aplica-lo nos corpos de edicao que faltam, ou desligar o
+ * `useDefaults` em `criarServidor`, que muda TODA rota de uma vez.
  *
  * A lista e EXATA nos dois sentidos, e e ela que torna o portao verificavel:
  * edicao nova que alcance `default` e fique fora daqui REPROVA -- e e esse o
@@ -90,8 +130,8 @@ const EDICOES_PARCIAIS_SERVIDAS_POR_POST: readonly string[] = ['changeAdminNetwo
  */
 const PADRAO_INJETADO_ACEITO_HOJE: readonly string[] = [
   // Medido em 17/10/2026. O conserto do manipulador ja existe
-  // (`semPadroes`, em `network-routes.ts`), mas e local: o contrato continua
-  // alcancando `default` e por isso a linha fica.
+  // (`corpoSemPadroes`, chamado em `network-routes.ts`), mas e local: o
+  // contrato continua alcancando `default` e por isso a linha fica.
   'updateNetworkEvent',
   // O mesmo corpo, do lado administrativo, SEM o conserto do manipulador.
   'updateAdminNetworkEvent',

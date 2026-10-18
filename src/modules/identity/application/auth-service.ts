@@ -29,10 +29,12 @@ import {
 } from '../domain/session.js';
 import type {
   CamposDoPerfil,
+  FotoDoPerfil,
   Conta,
   MotivoDeRevogacao,
   PropositoDoToken,
 } from '../ports/identity-repository.js';
+import { EnvioDeFotoNaoServe } from '../ports/identity-repository.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 import {
   expiracaoDaJanela,
@@ -57,6 +59,52 @@ type MotivoDeRevogacaoEmMassa = Extract<
   MotivoDeRevogacao,
   'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
+
+/**
+ * O teto do nome de exibicao, igual ao `maxLength` de `display_name` no
+ * contrato (`RegisterRequest` e `MeUpdate`, os dois com 80).
+ *
+ * Esta constante existe para a recusa do servidor dizer o MESMO numero que o
+ * schema: deixar o 80 solto no meio da frase de erro e como as duas metades
+ * divergem, e a divergencia aparece como "o app disse 80 e a API recusou em
+ * 64" para quem esta digitando.
+ */
+const LIMITE_DO_NOME = 80;
+
+/**
+ * A recusa do nome de exibicao, para o cadastro e a atualizacao nao divergirem.
+ *
+ * Nasceu em `cadastrar` em 18/10/2026 e subiu para ca no mesmo dia, quando o
+ * cliente fechou a assimetria: *"nao permitir atualizar o cadastro, se nao
+ * tiver algum nome cadastrado"*. Duas copias da mesma regra em duas operacoes
+ * da mesma conta e como o cadastro passa a exigir o que a atualizacao deixa
+ * apagar -- que era exatamente o estado do produto antes desta linha.
+ *
+ * Devolve o nome **aparado**. `trim` e o ponto: `required` e `minLength: 1` do
+ * schema recusam a chave ausente e a string vazia, e nao recusam `"   "`, que
+ * tem comprimento 3 e nenhum nome dentro.
+ *
+ * `code: 'required'` e `code: 'too_long'` sao os codigos que o contrato ja
+ * declara e que outras chamadas deste repositorio ja usam: nao ha codigo novo.
+ */
+function nomeDeExibicaoAparado(bruto: string | null | undefined): string {
+  const aparado = (bruto ?? '').trim();
+  if (aparado.length === 0) {
+    throw problemas.validacao([
+      { field: 'display_name', code: 'required', message: 'Diga como você quer ser chamado.' },
+    ]);
+  }
+  if (aparado.length > LIMITE_DO_NOME) {
+    throw problemas.validacao([
+      {
+        field: 'display_name',
+        code: 'too_long',
+        message: `Use no máximo ${LIMITE_DO_NOME} caracteres no nome.`,
+      },
+    ]);
+  }
+  return aparado;
+}
 
 export interface EntradaDeCadastro {
   readonly email: string;
@@ -684,6 +732,27 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           { field: 'email', code: 'format', message: 'Confira o endereço de e-mail.' },
         ]);
       }
+
+      // O NOME É OBRIGATÓRIO, E A RECUSA É DAQUI — NÃO DA TELA.
+      //
+      // Queixa do cliente de 18/10/2026: *"o campo de nome no cadastro do
+      // usuário é obrigatorio, hoje ele esta cadastrando sem esse campo"*. O
+      // campo já existia na `F1.1` e já aparecia sem "(opcional)" no rótulo;
+      // o que não existia era alguém exigindo. A tela mandava `null` quando
+      // estava vazio e este serviço aceitava.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`): a tela
+      // é conveniência, e quem chama `POST /v1/auth/register` direto não passa
+      // por ela. Validar só no app seria trocar a exigência por uma sugestão.
+      //
+      // `trim` é o ponto todo. `required` no schema e `minLength: 1` recusam a
+      // chave ausente e a string vazia; **não recusam `"   "`**, que tem
+      // comprimento 3 e nenhum nome dentro. Era este o caso que escapava, e é
+      // ele que faz a conta nascer "sem nome" para as outras pessoas.
+      //
+      // `code: 'required'` é o código que o contrato já declara e que outras
+      // sete chamadas deste repositório já usam — não há código novo aqui.
+      const displayName = nomeDeExibicaoAparado(entrada.displayName);
       // A IDADE MÍNIMA É CONFERIDA AQUI, E NÃO NA TELA.
       //
       // Decisão do cliente de 18/10/2026, verbatim: *"coloque maiores de 16
@@ -728,10 +797,9 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const apelidoVeio =
         typeof entrada.handle === 'string' && entrada.handle.trim().length > 0;
       const handle = apelidoVeio ? verificarApelido(entrada.handle) : undefined;
-
       const errosDeSenha = validarSenha(entrada.password, {
         email,
-        displayName: entrada.displayName,
+        displayName,
       });
       if (errosDeSenha.length > 0) throw problemas.senhaFraca(errosDeSenha);
 
@@ -746,7 +814,10 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         // duas formas do mesmo apelido no banco -- que é o que `citext` e a
         // normalização daqui existem para impedir, cada um do seu lado.
         handle,
-        displayName: entrada.displayName,
+        // O nome **aparado**, e não o que chegou. Gravar `" Marina "` deixaria
+        // o espaço aparecer em toda tela que mostra o nome, e faria a conta
+        // ordenar antes de todas as outras em qualquer lista alfabética.
+        displayName,
         acceptedTermsVersion: entrada.acceptedTermsVersion,
         passwordPhc,
         agora,
@@ -1183,6 +1254,35 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     ): Promise<Conta> {
       const agora = deps.clock.now();
 
+      // O NOME NAO PODE SER APAGADO, E A CONTA SEM NOME NAO ATUALIZA SEM
+      // PREENCHE-LO. Decisao do cliente de 18/10/2026: *"nao permitir
+      // atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+      //
+      // Duas situacoes, e elas sao diferentes:
+      //
+      // 1. O nome VEIO no corpo. Entao ele precisa ter nome dentro. Era este o
+      //    caminho que apagava: `display_name: ""` e `display_name: null`
+      //    chegavam aqui, entravam no `SET` (o repositorio so ignora
+      //    `undefined`) e zeravam a coluna. A tela de `Meus dados` oferecia
+      //    isso em texto.
+      //
+      // 2. O nome NAO veio. `PATCH` de um campo so e legitimo e continua
+      //    sendo: nao se cobra o nome de quem esta mudando o telefone. Mas se
+      //    a conta ainda NAO TEM nome, a atualizacao para -- e e aqui que mora
+      //    o cuidado que importa.
+      //
+      // **ISTO NAO E UM BECO, E A SAIDA E O CASO 1.** Quem esta sem nome
+      // manda `display_name` junto e salva: o caso 1 aceita, e a conta sai do
+      // estado. Em homologacao ha 2 contas assim (de 7, medido em 18/10), e
+      // elas aparecem para as outras pessoas como "Tutor"
+      // (`conversa-mediada.ts`) -- era esta a razao da decisao. Tornar o campo
+      // obrigatorio NAO preenche o que ja esta vazio, e a trava daqui e o que
+      // faz essas contas serem cobradas em vez de esquecidas.
+      //
+      // A leitura ANTES da escrita e o que o caso 2 custa. Ela e a mesma
+      // consulta que `meuPerfil` faz, e sem ela nao da para saber se a conta
+      // tem nome: `atualizarPerfil` devolve o estado DEPOIS, quando a escrita
+      // ja aconteceu.
       // O APELIDO, QUANDO ELE VEM NO CORPO.
       //
       // Cliente, 18/10/2026: *"o apelido esta livre, vai estar no cadastro do
@@ -1205,10 +1305,36 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // isso entre serviço e repositório deixaria uma janela em que o apelido
       // novo está gravado e o antigo não está reservado -- que é exatamente a
       // janela que o plano 4-C.7 fecha.
-      const camposParaGravar: CamposDoPerfil =
-        campos.handle === undefined
-          ? campos
-          : { ...campos, handle: verificarApelido(campos.handle) };
+      //
+      // **AS DUAS REGRAS NUMA DECLARACAO SO.** Elas nasceram em ramos
+      // separados -- o nome em `feat/nome-obrigatorio-cadastro`, o apelido
+      // aqui -- e as duas transformam `campos` antes de gravar. Duas
+      // declaracoes `const camposParaGravar` nao compilariam, e escolher uma
+      // desfaria a decisao da outra em silencio.
+      const campaNome = campos.displayName;
+      const camposParaGravar: CamposDoPerfil = {
+        ...campos,
+        ...(campaNome === undefined
+          ? {}
+          : { displayName: nomeDeExibicaoAparado(campaNome) }),
+        ...(campos.handle === undefined
+          ? {}
+          : { handle: verificarApelido(campos.handle) }),
+      };
+
+      if (campaNome === undefined) {
+        const antes = await deps.repositorio.buscarContaPorId(userId);
+        if (antes === undefined) throw problemas.naoAutenticado();
+        if ((antes.displayName ?? '').trim().length === 0) {
+          throw problemas.validacao([
+            {
+              field: 'display_name',
+              code: 'required',
+              message: 'Diga como você quer ser chamado para continuar.',
+            },
+          ]);
+        }
+      }
 
       const conta = await deps.repositorio.atualizarPerfil(userId, camposParaGravar, agora);
       if (conta === undefined) throw problemas.naoAutenticado();
@@ -1224,6 +1350,70 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         // O QUE mudou, nunca o valor: telefone e endereço são justamente o que a
         // trilha não pode guardar (docs/04-seguranca.md 9).
         metadata: { campos: Object.keys(campos).filter((c) => campos[c as keyof CamposDoPerfil] !== undefined) },
+      });
+
+      return conta;
+    },
+
+    /** A foto do perfil desta conta, para a resposta `Me`. */
+    async minhaFoto(userId: UserId): Promise<FotoDoPerfil | null> {
+      return deps.repositorio.fotoDoPerfil(userId);
+    },
+
+    /**
+     * Troca ou TIRA a foto do perfil (cliente, 18/10/2026).
+     *
+     * **Quem vê a foto é o dono, e só.** Esta operação e `meuPerfil` são as
+     * únicas que a tocam, as duas exigem a conta autenticada, e nenhuma outra
+     * resposta do contrato a carrega. Mostrar a foto a terceiros — em avaliação
+     * do `Perto`, em participante de evento, em conversa — é exposição de
+     * pessoa física e **depende de decisão do cliente**: o ADR-0025 item 2
+     * proíbe avatar na `Rede` por nome, e o contrato diz por extenso que
+     * `Conversation.participants` nunca traz foto de perfil.
+     *
+     * **O selo de validado não passa por aqui.** Ele é `emailVerifiedAt`, que
+     * a resposta já projeta como `email_verified` — nenhum campo novo, nenhuma
+     * escolha de quem envia a foto.
+     *
+     * `uploadId` nulo tira a foto. A trilha registra O QUE mudou e nunca a
+     * chave do objeto: chave de objeto em trilha append-only é um ponteiro
+     * permanente para um arquivo que pode ser trocado.
+     */
+    async trocarMinhaFoto(
+      userId: UserId,
+      uploadId: string | null,
+      contexto: ContextoDaRequisicao,
+    ): Promise<Conta> {
+      const agora = deps.clock.now();
+      let conta: Conta | undefined;
+      try {
+        conta = await deps.repositorio.trocarFotoDoPerfil(userId, uploadId, agora);
+      } catch (erro) {
+        if (erro instanceof EnvioDeFotoNaoServe) {
+          // Inexistente, de outra conta, de outro propósito, vencido ou de
+          // imagem alheia: a MESMA recusa, sem dizer qual (ADR-0021).
+          throw problemas.validacao([
+            {
+              field: 'photo_upload_id',
+              code: 'upload_not_usable',
+              message: 'Essa imagem não serve para esta conta. Envie-a de novo.',
+            },
+          ]);
+        }
+        throw erro;
+      }
+      if (conta === undefined) throw problemas.naoAutenticado();
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'profile.updated',
+        resourceKind: 'user',
+        resourceId: userId,
+        // `photo` como BOOLEANO, nunca a chave do objeto nem a URL.
+        metadata: { campos: ['photo'], photo: uploadId !== null },
       });
 
       return conta;

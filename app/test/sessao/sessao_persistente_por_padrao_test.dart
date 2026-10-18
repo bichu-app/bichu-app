@@ -125,6 +125,10 @@ void main() {
     testWidgets('o corpo carrega stay_signed_in true', (tester) async {
       await abrir(tester, Rotas.criarConta);
 
+      // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+      // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+      // caso deixa de medir o que ele existe para medir.
+      await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
       // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
       // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
       // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,

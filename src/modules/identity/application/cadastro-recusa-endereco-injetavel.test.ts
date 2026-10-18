@@ -71,6 +71,9 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
     rotacionar: () => naoDeveriaTerChegado('rotacionar'),
     atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
     buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
     regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
     registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),

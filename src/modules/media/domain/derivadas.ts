@@ -210,6 +210,76 @@ export const DERIVADAS_DO_PRODUTO: readonly EspecificacaoDaDerivada[] = [
 ];
 
 /**
+ * ## A derivada da LOGO do profissional recomendado (cliente, 18/10/2026)
+ *
+ * **Quadrada, e o corte e 1:1 de propósito.** Logo é marca: ela é desenhada ao
+ * lado do nome na lista do `Perto` e no cabeçalho do detalhe da entrada, e nos
+ * dois lugares o espaço é um quadrado. Encaixar uma logo numa faixa 16:9 (a
+ * proporção da foto do lugar) deixaria duas tarjas vazias em volta dela em cada
+ * cartão da listagem.
+ *
+ * - `card` 512 × 512, `enxuta` — o cabeçalho do detalhe desenha ~112 dp, ou 336
+ *   px a 3x; 512 cobre isso e cobre um cabeçalho maior amanhã. `enxuta` porque
+ *   uma logo é desenho de poucas cores: nos degraus desta escada ela pesa
+ *   dezenas de KB, e empurrá-la para a faixa de 300–500 KB seria pagar meio
+ *   megabyte por um símbolo.
+ * - `thumb` 176 × 176, `enxuta` — o mesmo 176 da miniatura do pet, e pelo mesmo
+ *   motivo: o cartão da lista tem 56 dp e 176 px cobre os 3x com folga. Reusar o
+ *   número em vez de inventar um é o que faz a listagem do `Perto` e a de pets
+ *   terem o mesmo peso por linha.
+ *
+ * **Sem `banner`**: não existe tela que desenhe a logo de borda a borda.
+ */
+export const DERIVADAS_DA_LOGO: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'card', largura: 512, altura: 512, porte: 'enxuta' },
+  { variante: 'thumb', largura: 176, altura: 176, porte: 'enxuta' },
+];
+
+/**
+ * ## As derivadas da FOTO do lugar do profissional (cliente, 18/10/2026)
+ *
+ * É a fachada ou o ambiente, e é a imagem que a pessoa olha GRANDE antes de
+ * decidir se leva o animal ali. Então a geometria é a do encontro da `Rede`, e
+ * isso não é preguiça: as duas são foto de um lugar desenhada de borda a borda
+ * no detalhe e em cartão na listagem, e já medi aquela tela.
+ *
+ * - `banner` 1280 × 720 (16:9), `grande` — o detalhe desenha de borda a borda,
+ *   360 a 430 dp, ou 1080 a 1290 px a 3x. `grande` porque é exatamente a imagem
+ *   que alguém olha grande, e é para ela que a faixa de 300–500 KB existe.
+ * - `card` 1024 × 576 (16:9), `enxuta` — o mesmo recorte, no peso de listagem.
+ *
+ * **Sem `thumb`**: a lista do `Perto` desenha a LOGO ao lado do nome, não a
+ * fachada. Uma derivada que nenhuma tela pede é um objeto pago a mais.
+ */
+export const DERIVADAS_DA_FOTO_DO_LOCAL: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'banner', largura: 1280, altura: 720, porte: 'grande' },
+  { variante: 'card', largura: 1024, altura: 576, porte: 'enxuta' },
+];
+
+/**
+ * ## As derivadas da FOTO DO PRÓPRIO USUÁRIO (cliente, 18/10/2026)
+ *
+ * **Quadrada**, porque é retrato e porque toda moldura de retrato deste produto
+ * é redonda ou quadrada; e `enxuta` nas duas, porque **nenhuma tela desenha esta
+ * foto grande**. Ela aparece em "Meus dados", para o dono, no tamanho de um
+ * retrato de cabeçalho — e a faixa de 300–500 KB, que existe para a imagem que
+ * se olha grande, seria desperdício medido aqui: a pessoa baixaria meio
+ * megabyte para ver 112 dp.
+ *
+ * - `card` 512 × 512 — ~112 dp a 3x são 336 px, e 512 deixa margem.
+ * - `thumb` 176 × 176 — o mesmo 176 das outras miniaturas.
+ *
+ * **O selo de validado não é imagem.** Ele é `users.email_verified_at`, lido
+ * como `Me.email_verified`, e desenhado PELO CLIENTE em cima da moldura. Gravar
+ * o selo dentro do JPEG faria a derivada mentir no dia em que a pessoa trocasse
+ * de e-mail, e não há como despintar um pixel.
+ */
+export const DERIVADAS_DA_FOTO_DE_USUARIO: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'card', largura: 512, altura: 512, porte: 'enxuta' },
+  { variante: 'thumb', largura: 176, altura: 176, porte: 'enxuta' },
+];
+
+/**
  * A dimensão mínima da foto de pet, que não existia.
  *
  * 600 × 600, e o número tem dois motivos. O primeiro: é o mesmo mínimo que o

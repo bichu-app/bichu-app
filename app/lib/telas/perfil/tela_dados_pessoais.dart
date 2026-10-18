@@ -5,11 +5,13 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
 import '../../formato/apelido.dart';
 import '../../formato/cep.dart';
+import '../../api/envio_de_foto.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/me_api.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
+import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
@@ -19,6 +21,9 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/moldura.dart';
+import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/seletor_de_lista.dart';
 
@@ -37,10 +42,29 @@ import '../../widgets/seletor_de_lista.dart';
 /// campo nesta tela que o servidor nao aceite -- um campo a mais seria um
 /// controle que recusa com 400 ou, pior, que parece salvar e nao salva.
 ///
-/// **Nao ha foto.** `Me` nao tem foto de usuario: nao ha campo no contrato, nao
-/// ha rota de intencao de upload para perfil (as que existem sao de pet, de
-/// achado e de capa de encontro) e nao ha coluna. `widgets/previa_da_foto.dart`
-/// continua onde esta, servindo quem tem foto de verdade.
+/// **A FOTO EXISTE DESDE 18/10/2026**, e o paragrafo que dizia "nao ha foto"
+/// foi substituido por este e nao apagado: ele era certo enquanto o contrato
+/// nao tinha o campo. O cliente pediu, literal: *"coloque um campo para o
+/// usuario cadastrar sua propria foto e um selo na foto dele, se ele estiver
+/// validado"*.
+///
+/// Tres pecas do contrato, e nenhuma delas e nova aqui:
+/// `createMyPhotoUploadIntent` (prefixo `people/`, HEIC aceito),
+/// `MeUpdate.photo_upload_id` para amarrar a foto a conta, e `Me.photo` para
+/// le-la de volta. **O selo nao e imagem**: ele e `Me.email_verified`, o mesmo
+/// conceito que o resto do produto usa, desenhado em cima da foto. Gravar o
+/// selo dentro do JPEG faria a imagem mentir no dia em que a pessoa trocasse
+/// de e-mail.
+///
+/// **A foto e visivel SO AO DONO.** `Me.photo` e a unica resposta do contrato
+/// que a traz, `getMe` exige `bearerAuth` sem alternativa vazia, e a decisao
+/// registrada (ADR-0025 item 2, "nem slug, nem avatar") proibe avatar para
+/// terceiros. **Nenhuma outra tela deste app a desenha**, e acrescentar uma
+/// seria exposicao de pessoa fisica sem decisao do cliente.
+///
+/// **Esta tela nao TIRA a foto.** `MeUpdate.photo_upload_id` aceita `null` para
+/// remover, e o cliente pediu o cadastro. Um botao `Tirar a foto` aqui seria
+/// superficie que ninguem pediu sobre uma operacao que ninguem conferiu.
 ///
 /// ===========================================================================
 /// O E-MAIL APARECE E NAO SE EDITA, E O MOTIVO E DE CONTRATO
@@ -108,6 +132,20 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   bool _buscandoOCep = false;
   String _cepJaBuscado = '';
 
+  /// A foto que a pessoa acabou de escolher no aparelho, **antes de subir**.
+  ///
+  /// Existe para a PREVIA: escolher e enviar sao dois momentos, e sem este
+  /// campo a tela subiria o arquivo antes de a pessoa ver qual arquivo pegou.
+  /// Nulo depois de um envio bem-sucedido -- dali em diante quem manda e a
+  /// derivada do servidor, em [DadosPessoais.fotoUrl].
+  FotoLocal? _fotoEscolhida;
+
+  /// Comeca em `negada` como no registro de achado: `negada` e o estado em que
+  /// ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
+  EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
+
+  bool _enviandoAFoto = false;
+
   bool _carregou = false;
 
   @override
@@ -119,6 +157,108 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     if (_carregou) return;
     _carregou = true;
     _carregar();
+    _lerAPermissaoDaCamera();
+  }
+
+  /// O estado da camera, lido **antes** de a pessoa tocar em nada.
+  ///
+  /// E o que permite a tela nao desenhar `Tirar foto` em aparelho sem camera:
+  /// botao que nao leva a nada e pior que a ausencia dele. Mesmo arranjo do
+  /// cadastro de foto do pet e do registro de achado.
+  Future<void> _lerAPermissaoDaCamera() async {
+    final estado = await Escopo.of(context).camera.estadoDaCamera();
+    if (!mounted) return;
+    setState(() => _permissaoDaCamera = estado);
+  }
+
+  // -------------------------------------------------------------------------
+  // A FOTO DA PROPRIA PESSOA
+  // -------------------------------------------------------------------------
+
+  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
+  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
+  Future<void> _tirarAFoto() async {
+    final camera = Escopo.of(context).camera;
+    var estado = _permissaoDaCamera;
+    if (estado == EstadoDaPermissao.negada) {
+      estado = await camera.pedirCamera();
+      if (!mounted) return;
+      setState(() => _permissaoDaCamera = estado);
+    }
+    if (estado != EstadoDaPermissao.concedida) return;
+    final foto = await camera.tirarFoto();
+    if (!mounted) return;
+    if (foto != null) _escolheu(foto);
+  }
+
+  Future<void> _escolherDaGaleria() async {
+    final foto = await Escopo.of(context).camera.escolherDaGaleria();
+    if (!mounted) return;
+    if (foto != null) _escolheu(foto);
+  }
+
+  Future<void> _abrirOsAjustes() =>
+      Escopo.of(context).camera.abrirAjustesDoSistema();
+
+  /// A foto escolhida entra na PREVIA, e **nao sobe ainda**.
+  ///
+  /// Subir no toque do seletor tiraria da pessoa a chance de ver qual arquivo
+  /// ela pegou -- que e o defeito que `PreviaDaFoto` nasceu para consertar, em
+  /// outra tela, quando ela imprimia o caminho do arquivo.
+  void _escolheu(FotoLocal foto) {
+    setState(() {
+      _fotoEscolhida = foto;
+      _faixa = null;
+      _confirmacao = null;
+    });
+  }
+
+  /// Os tres passos: intencao, bytes, e o `PATCH /v1/me` que amarra a foto a
+  /// conta.
+  ///
+  /// **A tela nao afirma envio que nao aconteceu.** `DesfechoDoEnvio` tem tres
+  /// valores e cada um tem a sua frase: sem sinal diz para tentar de novo (nao
+  /// ha fila offline para esta foto -- a `RetomadaDeFotos` e do pet, e dizer
+  /// "ela sai sozinha" aqui seria mentira); recusada diz para tentar outra
+  /// foto; enviada diz que ela aparece quando o processamento terminar.
+  ///
+  /// A foto escolhida **fica** quando o envio falha: limpar a previa faria a
+  /// pessoa escolher o arquivo de novo para tentar de novo.
+  Future<void> _enviarAFoto() async {
+    final foto = _fotoEscolhida;
+    if (foto == null || _enviandoAFoto) return;
+
+    setState(() {
+      _enviandoAFoto = true;
+      _faixa = null;
+      _confirmacao = null;
+    });
+
+    final escopo = Escopo.of(context);
+    final destino = FotoDoUsuario(api: escopo.me);
+    final desfecho =
+        await escopo.envioDeFoto.enviar(foto: foto, destino: destino);
+    if (!mounted) return;
+
+    setState(() {
+      _enviandoAFoto = false;
+      switch (desfecho) {
+        case DesfechoDoEnvio.enviada:
+          _fotoEscolhida = null;
+          _confirmacao = _TextosDosDados.fotoEnviada;
+          // O PATCH de confirmacao JA devolveu o `/me` novo: ler o corpo que
+          // ele trouxe e o que evita um `GET /v1/me` a mais logo depois do
+          // envio. Nulo nao acontece num desfecho `enviada`, mas o `case`
+          // existe porque um dia pode acontecer e `!` apagaria a tela.
+          if (destino.corpoDoMe case final Map<String, dynamic> corpo) {
+            _lido = DadosPessoais.doJson(corpo);
+          }
+        case DesfechoDoEnvio.semSinal:
+          _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoSemSinal);
+        case DesfechoDoEnvio.recusada:
+          _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoRecusada);
+      }
+    });
   }
 
   @override
@@ -256,12 +396,13 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final erros = <String, String>{};
     final lido = _lido;
 
-    // O NOME pode ficar vazio no contrato (`display_name` nao tem `minLength`),
-    // e por isso apagar nao e erro -- e uma escolha que o servidor aceita. O
-    // que a tela recusa e o nome que e **so espaco**: ele passaria o contrato e
-    // apareceria como um branco no cartao de quem encontra o pet.
-    if (_nome.text.isNotEmpty && _nome.text.trim().isEmpty) {
-      erros[_CamposDosDados.nome] = _TextosDosDados.nomeSoComEspaco;
+    // O NOME NAO PODE MAIS FICAR VAZIO, por decisao do cliente de 18/10/2026:
+    // *"nao permitir atualizar o cadastro, se nao tiver algum nome
+    // cadastrado"*. `MeUpdate.display_name` ganhou `minLength: 1` e o servidor
+    // recusa vazio e so-espaco; esta linha e a conveniencia que para antes da
+    // ida a rede. Antes daqui apagar o nome era uma escolha OFERECIDA em texto.
+    if (_nome.text.trim().isEmpty) {
+      erros[_CamposDosDados.nome] = _TextosDosDados.nomePrecisaDeTexto;
     }
 
     // O APELIDO: so o PREENCHIDO e conferido.
@@ -530,6 +671,22 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _grupo(_TextosDosDados.quemVoceE, textos),
+          // A FOTO DA PROPRIA PESSOA, com o selo de validado em cima
+          // (cliente, 18/10/2026). Primeira do grupo porque e o retrato: ela
+          // vem antes do nome como vem num documento.
+          _BlocoDaFoto(
+            fotoDoServidor: lido.fotoUrl,
+            processando: lido.fotoProcessando,
+            escolhida: _fotoEscolhida,
+            validado: lido.usuario.emailVerificado,
+            permissao: _permissaoDaCamera,
+            enviando: _enviandoAFoto,
+            aoTirar: _tirarAFoto,
+            aoEscolher: _escolherDaGaleria,
+            aoEnviar: _enviarAFoto,
+            aoAbrirAjustes: _abrirOsAjustes,
+          ),
+          const SizedBox(height: BichuEspaco.e6),
           _campo(
             chave: _CamposDosDados.nome,
             rotulo: _TextosDosDados.nome,
@@ -720,6 +877,259 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   }
 }
 
+/// A foto da propria pessoa: o retrato, o selo em cima dele, e as acoes.
+///
+/// ## O custo em memoria, medido
+///
+/// O retrato e um quadrado de [BichuMoldura.larguraFotoLg] dp -- 160, o
+/// tamanho que a tabela 5.4 do design system publica para foto de perfil. A
+/// derivada do contrato e `card` 512 x 512; a 3x a tela pede 480 px, que cabe
+/// nos 512 **sem ampliar**, e a imagem decodificada custa `480 x 480 x 4` =
+/// **900 KiB**. Sem `cacheWidth` seriam os 512 do arquivo, 1,0 MiB, em
+/// qualquer aparelho -- e a 2x o mesmo codigo cobra 400 KiB.
+///
+/// A previa local custa mais que isso, e por um motivo que nao e defeito: o
+/// arquivo da camera nao e quadrado, entao `PreviaDaFoto` decodifica 480 px de
+/// largura pela altura que a proporcao da camera impoe -- uns 640 px em 4:3,
+/// ou **1,17 MiB**. Os dois nunca sao desenhados juntos (a previa SUBSTITUI o
+/// retrato enquanto ela existe), mas os dois podem estar no cache de imagem ao
+/// mesmo tempo: **2,07 MiB no pior caso desta tela**, e 900 KiB no caso comum.
+///
+/// ## Os tres estados de ausencia, e todos sao normais
+///
+/// - **Sem foto**: o quadrado desenha o simbolo de pessoa sobre o fundo
+///   afundado. Nao e erro, nao tem frase e nao tem botao desabilitado -- e o
+///   lugar da foto, dizendo que cabe uma foto ali.
+/// - **Processando**: `Me.photo.status` e `processing` e `url` e nula. O mesmo
+///   quadrado, com OUTRO simbolo -- **nao** um erro, porque aqui HAVERA foto,
+///   e dentro de instantes. Simbolo e nao frase: o cliente mandou tirar texto
+///   de apoio do app hoje. E simbolo PARADO e nao indicador girando:
+///   `CircularProgressIndicator` nunca assenta, e um quadro que nunca assenta
+///   estoura `pumpAndSettle` em todo caso de teste desta tela -- medido. Quem
+///   nao ve a tela recebe o rotulo.
+/// - **Recusada nos bytes**: `url` nula tambem, e a tela trata igual a sem
+///   foto. Quem recusou foi o worker, sobre os bytes reais, e o motivo vive em
+///   `Me.photo.rejection_reason` -- que esta tela **nao** desenha, pelo mesmo
+///   motivo do texto de apoio. Tentar outra foto e o caminho, e os dois botoes
+///   logo abaixo ja o oferecem.
+class _BlocoDaFoto extends StatelessWidget {
+  const _BlocoDaFoto({
+    required this.fotoDoServidor,
+    required this.processando,
+    required this.escolhida,
+    required this.validado,
+    required this.permissao,
+    required this.enviando,
+    required this.aoTirar,
+    required this.aoEscolher,
+    required this.aoEnviar,
+    required this.aoAbrirAjustes,
+  });
+
+  final String? fotoDoServidor;
+  final bool processando;
+  final FotoLocal? escolhida;
+
+  /// `Me.email_verified`. **O selo e isto, e nada mais**: nao vem da imagem,
+  /// nao e escolhido pelo app e nao e gravado no JPEG.
+  final bool validado;
+
+  final EstadoDaPermissao permissao;
+  final bool enviando;
+  final VoidCallback aoTirar;
+  final VoidCallback aoEscolher;
+  final VoidCallback aoEnviar;
+  final VoidCallback aoAbrirAjustes;
+
+  /// O lado do quadrado. Ver a prosa desta classe.
+  static const double lado = BichuMoldura.larguraFotoLg;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final local = escolhida;
+    final remota = fotoDoServidor;
+    // O selo so existe **sobre uma foto**: ele e o selo DA foto, e um escudo
+    // flutuando sobre um quadrado vazio nao se apoia em nada.
+    final temImagem = local != null || remota != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: lado,
+            height: lado,
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(child: _retrato(local, remota, cores)),
+                if (validado && temImagem)
+                  Positioned(
+                    right: BichuEspaco.e1,
+                    bottom: BichuEspaco.e1,
+                    child: _SeloDeValidado(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        // A ORIENTACAO DE 5 MB, uma linha. O cliente pediu expressamente que
+        // esta informacao aparecesse (17/10/2026), e o numero vem de
+        // `orientacaoDeTamanhoDaImagem` -- o mesmo ponto unico das outras duas
+        // telas de foto. Ele vale no SERVIDOR, dentro da politica assinada; a
+        // tela diz o numero e nao e a regra.
+        Text(
+          orientacaoDeTamanhoDaImagem,
+          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        if (permissao == EstadoDaPermissao.negadaPermanentemente) ...<Widget>[
+          FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            texto: _TextosDosDados.cameraNosAjustes,
+            rotuloDaAcao: _TextosDosDados.abrirAjustes,
+            aoTocarNaAcao: aoAbrirAjustes,
+          ),
+          const SizedBox(height: BichuEspaco.e3),
+        ],
+        // **Sem camera o botao SOME**, e o oposto do caso acima e deliberado:
+        // ali ha o que liberar e o botao ensina isso; aqui nao ha, e um botao
+        // que nao leva a nada e pior que a ausencia dele. A galeria continua,
+        // e ela nao tem estado de permissao proprio (ver `CameraDoAparelho`).
+        if (permissao != EstadoDaPermissao.indisponivel) ...<Widget>[
+          BotaoSecundario(
+            rotulo: _TextosDosDados.tirarFoto,
+            aoTocar: enviando ? null : aoTirar,
+          ),
+          const SizedBox(height: BichuEspaco.e2),
+        ],
+        OutlinedButton(
+          onPressed: enviando ? null : aoEscolher,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+          ),
+          child: const Text(_TextosDosDados.escolherDaGaleria),
+        ),
+        // `Salvar a foto` **so existe quando ha foto escolhida**: sem arquivo
+        // nao ha o que enviar, e um botao desabilitado aqui seria um controle
+        // pedindo um toque que nao faz nada.
+        if (local != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e2),
+          BotaoPrimario(
+            rotulo: _TextosDosDados.salvarAFoto,
+            carregando: enviando,
+            aoTocar: aoEnviar,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// O que desenhar no quadrado, na ordem de precedencia que a pessoa espera.
+  ///
+  /// A escolhida ganha da remota: quem acabou de pegar um arquivo quer ver o
+  /// arquivo que pegou, e nao a foto antiga.
+  Widget _retrato(FotoLocal? local, String? remota, BichuCores cores) {
+    if (local != null) {
+      // `PreviaDaFoto` porque desenhar arquivo do aparelho pede `dart:io`, que
+      // o portao de diretivas proibe dentro de `lib/telas` -- com razao: foi
+      // assim que uma tela imprimiu o caminho do arquivo em vez da imagem.
+      return PreviaDaFoto(
+        foto: local,
+        descricao: _TextosDosDados.aFotoEscolhida,
+        altura: lado,
+      );
+    }
+    if (remota != null) {
+      return ImagemDaRede(
+        url: remota,
+        descricao: _TextosDosDados.aSuaFoto,
+        largura: lado,
+        raio: BichuRaio.lg,
+        simboloDeFalha: Icons.person_outline,
+      );
+    }
+    return _QuadradoSemFoto(cores: cores, processando: processando);
+  }
+}
+
+/// O lugar da foto quando nao ha foto -- **nos tres casos de ausencia**.
+///
+/// Fundo afundado, borda de cabelo e o simbolo de pessoa: o mesmo desenho que
+/// a foto ocuparia, dizendo que cabe uma foto ali. **Sem frase**: o cliente
+/// mandou tirar texto de apoio do app, e os dois botoes logo abaixo ja dizem o
+/// que fazer.
+class _QuadradoSemFoto extends StatelessWidget {
+  const _QuadradoSemFoto({required this.cores, required this.processando});
+
+  final BichuCores cores;
+
+  /// `Me.photo.status == 'processing'`: a foto JA subiu e a derivada ainda nao
+  /// existe. Troca o simbolo -- e a diferenca entre "cabe uma foto aqui" e "a
+  /// sua foto esta chegando", dita sem uma linha de texto nova.
+  final bool processando;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.lg),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      // **Simbolo PARADO, e nao um indicador girando**, e a razao e medida:
+      // `CircularProgressIndicator` nunca para de animar, e um quadro que
+      // nunca assenta faz `pumpAndSettle` estourar por tempo em todo caso de
+      // teste desta tela -- medido nesta rodada. Um simbolo diferente ja
+      // separa "cabe uma foto aqui" de "a sua foto esta chegando", e custa
+      // zero quadro.
+      child: Semantics(
+        label: processando ? _TextosDosDados.processandoAFoto : null,
+        child: Icon(
+          processando ? Icons.hourglass_top : Icons.person_outline,
+          size: BichuEspaco.e10,
+          color: cores.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+/// O selo de validado, **sobre** a foto.
+///
+/// `Me.email_verified` e a unica fonte. O anel de cor de superficie existe
+/// porque o selo pousa em cima de uma imagem de conteudo desconhecido: sem ele
+/// um escudo verde sobre um fundo verde desaparece.
+///
+/// **Com rotulo**, e nao decorativo: a validacao e informacao que nao esta
+/// escrita em nenhum outro lugar desta tela, e um icone sem rotulo e um dado
+/// que quem usa leitor de tela nao recebe.
+class _SeloDeValidado extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    return Semantics(
+      label: _TextosDosDados.contaValidada,
+      child: Container(
+        padding: const EdgeInsets.all(BichuEspaco.e1),
+        decoration: BoxDecoration(
+          color: cores.surface,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.verified,
+          size: BichuEspaco.e6,
+          color: cores.success,
+        ),
+      ),
+    );
+  }
+}
+
 /// O e-mail da conta, de leitura, com a situacao de confirmacao.
 ///
 /// **Nao e um `BichuField` desabilitado**, e a diferenca importa: campo
@@ -851,8 +1261,51 @@ abstract final class _TextosDosDados {
   static const String suaRegiao = 'Sua região de referência';
 
   static const String nome = 'Nome';
-  static const String nomeSoComEspaco =
-      'Escreva o seu nome, ou deixe o campo vazio para tirá-lo.';
+  static const String nomePrecisaDeTexto = 'Digite o nome que você quer usar no Bichu.';
+
+  // -------------------------------------------------------------------------
+  // A FOTO DA PROPRIA PESSOA
+  //
+  // **Nenhum texto de apoio aqui**: sao rotulos de controle, rotulos de leitor
+  // de tela e desfechos de acao. A unica linha informativa do bloco e a
+  // orientacao de 5 MB, que vem de `orientacaoDeTamanhoDaImagem` (ponto unico,
+  // em `dispositivo/camera_e_galeria.dart`) porque o cliente pediu
+  // expressamente que o numero aparecesse.
+  // -------------------------------------------------------------------------
+
+  static const String tirarFoto = 'Tirar foto';
+  static const String escolherDaGaleria = 'Escolher da galeria';
+  static const String salvarAFoto = 'Salvar a foto';
+
+  /// O rotulo do retrato que ja esta na conta, para quem nao ve a imagem.
+  static const String aSuaFoto = 'A sua foto';
+
+  /// O rotulo da previa do arquivo que acabou de ser escolhido. Diferente do
+  /// de cima de proposito: a pessoa precisa saber qual das duas esta vendo.
+  static const String aFotoEscolhida = 'A foto que você escolheu';
+
+  /// O rotulo do selo. O icone nao fala.
+  static const String contaValidada = 'Conta validada';
+
+  /// O rotulo do simbolo de processamento no lugar da foto. O icone tambem
+  /// nao fala.
+  static const String processandoAFoto = 'Processando a foto';
+
+  static const String cameraNosAjustes =
+      'A câmera está bloqueada para o Bichu. Dá para liberar nos ajustes do '
+      'sistema.';
+  static const String abrirAjustes = 'Abrir os ajustes';
+
+  static const String fotoEnviada =
+      'Foto enviada. Ela aparece aqui quando o processamento terminar.';
+
+  /// **Sem promessa de fila.** A `RetomadaDeFotos` e do pet; esta foto nao
+  /// entra em fila nenhuma, e dizer "ela sai sozinha quando o sinal voltar"
+  /// seria afirmar um envio que ninguem vai tentar.
+  static const String fotoSemSinal =
+      'Sem conexão para enviar a foto. Tente de novo quando o sinal voltar.';
+
+  static const String fotoRecusada = 'O envio foi recusado. Tente outra foto.';
 
   static const String email = 'E-mail';
   static const String emailConfirmado = 'E-mail confirmado';

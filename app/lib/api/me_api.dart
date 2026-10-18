@@ -41,7 +41,14 @@
 library;
 
 import 'api_client.dart';
+import 'envio_de_foto.dart';
 import 'modelos.dart';
+// **So `urlDeImagem`, e nao o modulo.** A funcao e a definicao UNICA de "URL
+// de imagem que veio do contrato, ou nulo" -- ela trata campo ausente, tipo
+// errado e string vazia como nulo, e o motivo esta escrito nela: a tela usa
+// `Image.network`, e `Image.network('')` lanca. Uma segunda copia aqui
+// divergiria da primeira na primeira edicao.
+import 'modelos_diretorio.dart' show urlDeImagem;
 
 /// O recorte de `#/components/schemas/Me` que o formulario de dados pessoais
 /// edita, mais o que ele mostra de leitura.
@@ -63,6 +70,8 @@ class DadosPessoais {
     this.bairro,
     this.cidade,
     this.uf,
+    this.fotoUrl,
+    this.fotoProcessando = false,
   });
 
   /// O mesmo corpo lido como [Usuario], para repor na sessao.
@@ -93,8 +102,33 @@ class DadosPessoais {
   final String? cidade;
   final String? uf;
 
+  /// `Me.photo.url`: a URL da **derivada** `card` (512 x 512) da foto que a
+  /// propria pessoa cadastrou, ou nulo.
+  ///
+  /// **Esta e a unica resposta do contrato que traz esta foto, e quem a ve e o
+  /// dono.** `getMe` exige `bearerAuth` sem alternativa vazia. Nenhuma
+  /// listagem, nenhuma superficie publica, nenhuma resposta de terceiro: a
+  /// decisao registrada (ADR-0025 item 2, "nem slug, nem avatar") proibe
+  /// avatar para terceiros e o cliente nao liberou o contrario. **Nenhuma
+  /// outra tela deste app desenha este campo.**
+  ///
+  /// Nulo em quatro casos, e todos sao normais: conta sem foto, `processing`
+  /// (o worker nao terminou), `rejected` (recusada nos bytes) e campo ausente
+  /// -- o APK publicado le esta resposta e nao conhece `photo`.
+  final String? fotoUrl;
+
+  /// `Me.photo.status == 'processing'`: a foto subiu e a derivada ainda nao
+  /// existe. **Nao e erro**, e e por isso que esta separado de [fotoUrl] ser
+  /// nulo: aqui havera foto, e dentro de instantes.
+  final bool fotoProcessando;
+
   factory DadosPessoais.doJson(Map<String, dynamic> json) {
     final regiao = json['reference_area'] as Map<String, dynamic>?;
+    // `photo` e `oneOf: [MyPhoto, null]`, e `as Map?` cru sobre outro tipo
+    // estoura em tempo de execucao. O recorte por `is` trata ausente, nulo e
+    // tipo errado do mesmo jeito: sem foto.
+    final foto = json['photo'];
+    final dadosDaFoto = foto is Map<String, dynamic> ? foto : null;
     return DadosPessoais(
       usuario: Usuario.doJson(json),
       apelido: json['handle'] as String?,
@@ -104,11 +138,13 @@ class DadosPessoais {
       bairro: regiao?['neighborhood'] as String?,
       cidade: regiao?['city'] as String?,
       uf: regiao?['state'] as String?,
+      fotoUrl: urlDeImagem(dadosDaFoto?['url']),
+      fotoProcessando: dadosDaFoto?['status'] == 'processing',
     );
   }
 }
 
-class MeApi {
+class MeApi implements IntencaoEGravacaoDaFotoDoUsuario {
   const MeApi(this._api);
 
   final ApiClient _api;
@@ -161,5 +197,54 @@ class MeApi {
       },
     );
     return DadosPessoais.doJson(json);
+  }
+
+  /// `POST /v1/media/my-photo-intents` (`createMyPhotoUploadIntent`).
+  ///
+  /// **Sem `purpose` no corpo, e isso e do contrato**: `MyPhotoIntentInput`
+  /// existe para um proposito so (`user_photo`) e nao deixa o cliente
+  /// escolhe-lo -- deixar escolher seria deixar o app pedir uma autorizacao de
+  /// imagem de produto por uma rota de perfil.
+  ///
+  /// O teto de 5 MB vale no SERVIDOR e dentro da politica assinada; a porta
+  /// `fotoLocalDoArquivo` tambem o cobra no aparelho, para nao gastar uma ida
+  /// e volta com o que o balde vai recusar. **A tela diz o numero, a tela nao
+  /// e a regra.**
+  @override
+  Future<Map<String, dynamic>> intencaoDeFotoDoUsuario({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      '/media/my-photo-intents',
+      corpo: <String, dynamic>{
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
+  }
+
+  /// `PATCH /v1/me` com **so** `photo_upload_id` (`MeUpdate`).
+  ///
+  /// E esta chamada que amarra a foto a conta: os bytes no armazenamento sem
+  /// ela ficam orfaos, e a intencao que ninguem confirma vence em dez minutos
+  /// e o varredor a recolhe.
+  ///
+  /// **Devolve o corpo CRU de `/me`, e nao [DadosPessoais]**, porque quem a
+  /// chama e o mecanismo de envio (`FotoDoUsuario`), que vive em
+  /// `api/envio_de_foto.dart` e nao conhece este modelo. Quem precisa do
+  /// modelo chama `DadosPessoais.doJson` -- e com isso a tela nao faz uma
+  /// segunda leitura de `/me` so para descobrir a URL da derivada.
+  ///
+  /// **So grava, nunca tira.** `MeUpdate.photo_upload_id` aceita `null` para
+  /// REMOVER a foto, e esse caminho nao esta aqui: o cliente pediu o cadastro
+  /// da foto, e um metodo de remover sem tela que o chame seria superficie sem
+  /// pedido.
+  @override
+  Future<Map<String, dynamic>> gravarFotoDoUsuario(String uploadId) {
+    return _api.patch(
+      '/me',
+      corpo: <String, dynamic>{'photo_upload_id': uploadId},
+    );
   }
 }

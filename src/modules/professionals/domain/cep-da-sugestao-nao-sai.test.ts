@@ -95,6 +95,11 @@ function cenario(): Observado {
       gravadas.push(sugestao);
       return Promise.resolve({ ref: REF, createdAt: CRIADO_EM });
     },
+    // Este arquivo nao mede a LEITURA: o dobre recusa em voz alta em vez de
+    // devolver pagina vazia, que passaria por resultado legitimo. Quem mede
+    // `listarDoAutor` e `minhas-indicacoes-routes.test.ts`.
+    listarDoAutor: () =>
+      Promise.reject(new Error('cenario de escrita: listarDoAutor nao e exercitado aqui')),
   };
   return {
     gravadas,

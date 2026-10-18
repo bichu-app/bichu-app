@@ -35,6 +35,8 @@ import type {
   TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
+import { EnvioDeFotoNaoServe, type FotoDoPerfil } from '../../ports/identity-repository.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-catalogo.js';
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 
@@ -279,7 +281,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         // volta nem para quem acabou de se cadastrar. Com idade mínima de 16 o
         // titular pode ser adolescente, e a data existe para ter sido
         // conferida, não para ser exibida — ver o cabeçalho da
-        // `20261018000005`.
+        // `20261018000021`.
         birth_date: nova.birthDate,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
@@ -511,6 +513,124 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           .returning(COLUNAS_DA_CONTA)
           .executeTakeFirst();
 
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      });
+    },
+
+    /**
+     * A foto do perfil desta conta (cliente, 18/10/2026).
+     *
+     * Uma consulta propria, e nao uma subconsulta em `COLUNAS_DA_CONTA`: so a
+     * resposta `Me` quer a foto, e pendurar a leitura de `catalog_images` em
+     * `paraConta` faria todo login e todo cadastro consultarem a tabela de
+     * imagem sem precisar. O custo e uma busca por chave primaria, pelo
+     * ponteiro que a propria linha da conta carrega.
+     */
+    async fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null> {
+      const linha = await db
+        .selectFrom('users')
+        .innerJoin('catalog_images', 'catalog_images.id', 'users.photo_image_id')
+        .select(['catalog_images.status as status', 'catalog_images.public_key as public_key', 'catalog_images.rejection_reason as rejection_reason'])
+        .where('users.id', '=', id)
+        .where('users.deleted_at', 'is', null)
+        .executeTakeFirst();
+      if (linha === undefined) return null;
+      return {
+        status: linha.status,
+        publicKey: linha.public_key,
+        rejectionReason: linha.rejection_reason,
+      };
+    },
+
+    /**
+     * Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`.
+     *
+     * **A conta na clausula `WHERE` (`u.user_id`) e o que impede confirmar o
+     * envio de outra pessoa**, e e a mesma forma de `capaDoEnvio`
+     * (`kysely-network-repository.ts`): um `if` depois do `SELECT` responderia
+     * sobre envio alheio. `admin_account_id` nao casa aqui nunca -- envio do
+     * painel nao vira foto de pessoa (T9).
+     *
+     * `purpose = 'user_photo'` tambem esta no `WHERE`: a capa de um encontro e
+     * a logo de um profissional, enviadas pela mesma esteira, nao viram foto de
+     * perfil.
+     */
+    async trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined> {
+      return db.transaction().execute(async (trx) => {
+        let imagemId: string | null = null;
+
+        if (uploadId !== null) {
+          const r = await sql<{
+            id: string;
+            expires_at: Date;
+            confirmed_at: Date | null;
+            catalog_image_id: string | null;
+            dono_da_imagem: string | null;
+          }>`
+            SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id,
+                   (SELECT d.id FROM users d WHERE d.photo_image_id = c.id) AS dono_da_imagem
+              FROM catalog_upload_intents u
+              LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
+             WHERE u.id = ${uploadId}::uuid
+               AND u.user_id = ${id}::uuid
+               AND u.purpose = 'user_photo'
+             FOR UPDATE OF u
+          `.execute(trx);
+          const envio = r.rows[0];
+          if (envio === undefined) throw new EnvioDeFotoNaoServe();
+
+          if (envio.confirmed_at !== null) {
+            // Ja confirmado: serve de novo SO para esta mesma conta. Reenviar o
+            // mesmo `upload_id` num segundo `PATCH` nao pode criar imagem nova,
+            // e o app manda o formulario inteiro ao salvar.
+            if (envio.catalog_image_id === null) throw new EnvioDeFotoNaoServe();
+            if (envio.dono_da_imagem !== null && envio.dono_da_imagem !== id) {
+              throw new EnvioDeFotoNaoServe();
+            }
+            imagemId = envio.catalog_image_id;
+          } else {
+            if (envio.expires_at.getTime() <= Number(agora)) throw new EnvioDeFotoNaoServe();
+            imagemId = ids.uuidv7();
+            // ESTE `UPDATE` E O QUE PROTEGE A FOTO DA VARREDURA DE VENCIDOS:
+            // com `confirmed_at` preenchido, a linha sai de
+            // `listarIntencoesVencidas` e o objeto no balde deixa de ser
+            // candidato a limpeza.
+            await trx
+              .updateTable('catalog_upload_intents')
+              .set({ confirmed_at: new Date(Number(agora)) })
+              .where('id', '=', envio.id)
+              .where('confirmed_at', 'is', null)
+              .execute();
+            await trx
+              .insertInto('catalog_images')
+              .values({
+                id: imagemId,
+                upload_intent_id: envio.id,
+                purpose: 'user_photo',
+                public_key: null,
+                rejection_reason: null,
+              })
+              .execute();
+            // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
+            // imagem falharia em laco. Os dois na mesma transacao.
+            await trx
+              .insertInto('jobs')
+              .values({
+                id: ids.uuidv7(),
+                kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+                payload: JSON.stringify({ catalog_image_id: imagemId }),
+              })
+              .execute();
+          }
+        }
+
+        const linha = await trx
+          .updateTable('users')
+          .set({ photo_image_id: imagemId, updated_at: new Date(Number(agora)) })
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
         return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
       });
     },

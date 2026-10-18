@@ -254,6 +254,14 @@ class BancoDeMentira implements IdentityRepository {
   atualizarPerfil(): never {
     throw new Error('atualizarPerfil: nenhum caso deste arquivo deveria chegar aqui');
   }
+  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
+  fotoDoPerfil(): never {
+    throw new Error('fotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  trocarFotoDoPerfil(): never {
+    throw new Error('trocarFotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
+  }
   buscarContaPorEmail(): never {
     throw new Error('buscarContaPorEmail: nenhum caso deste arquivo deveria chegar aqui');
   }

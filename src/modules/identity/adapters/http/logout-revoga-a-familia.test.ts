@@ -234,6 +234,16 @@ class RepositorioFalso implements IdentityRepository {
   atualizarPerfil(): Promise<Conta | undefined> {
     return naoUsado('atualizarPerfil');
   }
+  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo. Recusa em vez
+  // de corpo vazio: um `null` faria um caso que chegasse aqui passar como se
+  // tivesse medido a regra da foto.
+  fotoDoPerfil(): Promise<null> {
+    return naoUsado('fotoDoPerfil');
+  }
+
+  trocarFotoDoPerfil(): Promise<Conta | undefined> {
+    return naoUsado('trocarFotoDoPerfil');
+  }
   buscarContaPorEmail(): Promise<Conta | undefined> {
     return naoUsado('buscarContaPorEmail');
   }
@@ -443,6 +453,8 @@ function montar(): Bancada {
     contrato,
     issuer: 'https://api.bichu.test',
     apiBaseUrl: 'https://api.bichu.test',
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   void app.register(
     (escopo, _opcoes, pronto) => {

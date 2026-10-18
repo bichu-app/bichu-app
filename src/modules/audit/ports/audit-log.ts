@@ -302,6 +302,17 @@ export const ACOES_ADMINISTRATIVAS = [
   // pessoa, que anda junto do teto por `rows_returned` (D55/D56).
   'admin.collar_tag_request.fulfilled',
   'admin.collar_tag_request.declined',
+  // 18/10/2026: a ENTREGA do objeto fisico -- o passo da encomenda e o codigo
+  // de rastreio, que o cliente pediu na mesma frase ("mudar o status da
+  // entrega e inserir o codigo de rastreio"). Uma acao so, porque e uma
+  // escrita so.
+  //
+  // `before`/`after` carregam `delivery_state` e `tracking_code`, e **nenhum
+  // campo do endereco de entrega** -- a regra 4 da migracao `20261017000012`,
+  // que esta frente nao afrouxa. O rastreio ENTRA de proposito: e numero de
+  // encomenda e nao dado pessoal, e e justamente o campo cuja troca alguem vai
+  // querer auditar depois.
+  'admin.collar_tag_request.delivery_updated',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

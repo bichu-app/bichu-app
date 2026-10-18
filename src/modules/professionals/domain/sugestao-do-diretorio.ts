@@ -53,6 +53,10 @@ import { errosDeModeracao } from '../../../shared/texto/moderacao.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { ConferenciasDeTexto } from '../ports/conferencias-de-texto.js';
 import type { TipoDeProfissional } from './entrada-do-diretorio.js';
+// `RevisaoDaIndicacao` e o `CHECK` da tabela, e ele e UM so: reusado em vez de
+// redeclarado. Duas copias da mesma lista fechada e a forma de uma delas ficar
+// atras quando o `CHECK` crescer.
+import type { RevisaoDaIndicacao } from './fila-de-indicacoes.js';
 
 /** Os tetos do contrato, COPIADOS dele e nao escolhidos aqui. */
 export const MINIMO_DO_NOME = 2;
@@ -248,5 +252,82 @@ export function projetarRecibo(gravada: {
     reference: gravada.ref,
     state: 'pending',
     created_at: gravada.createdAt.toISOString(),
+  };
+}
+
+/**
+ * Uma indicacao na tela `Minhas indicacoes`, como `MyDirectorySuggestion` a
+ * declara.
+ *
+ * **Projecao, e nao o recurso do banco.** A conversao de `Date` para texto ISO
+ * mora aqui e nao na borda HTTP pelo mesmo motivo do recibo acima: a forma do
+ * que sai e decisao do dominio, e a borda so a entrega.
+ */
+export interface MinhaIndicacaoProjetada {
+  readonly reference: string;
+  readonly display_name: string;
+  readonly kind: TipoDeProfissional;
+  readonly city: string;
+  readonly state: string;
+  readonly neighborhood: string | null;
+  readonly public_contact: { readonly kind: TipoDeContatoPublico; readonly value: string };
+  readonly review_status: RevisaoDaIndicacao;
+  readonly created_at: string;
+  readonly decided_at: string | null;
+  readonly decline_reason: string | null;
+  readonly entry_slug: string | null;
+}
+
+/** A pagina projetada, como `MyDirectorySuggestionPage` a declara. */
+export interface PaginaDasMinhasIndicacoesProjetada {
+  readonly items: readonly MinhaIndicacaoProjetada[];
+  readonly page: number;
+  readonly limit: number;
+  readonly total: number;
+}
+
+/**
+ * Projeta uma indicacao para quem a fez.
+ *
+ * **O que esta projecao NAO tem, e cada ausencia e decisao:**
+ *
+ * - **`note`**: o recado e PARA QUEM REVISA. Quem o le e o painel; devolve-lo
+ *   aqui faria a tela parecer rascunho guardado, e o contrato nao o declara.
+ * - **qualquer identificador interno**: sem `id` (ADR-0010 item 6), e o
+ *   enderecamento e por `reference`. A autoria nao chega nem a esta camada --
+ *   a funcao do banco nao a projeta.
+ *
+ * `entry_slug` ja chega nulo quando a entrada esta em rascunho: quem decide
+ * isso e o `WHERE` de `indicacoes_do_autor(uuid)`, e esta funcao nao reavalia
+ * publicacao -- duas decisoes sobre "esta no ar?" seriam duas respostas.
+ */
+export function projetarMinhaIndicacao(i: {
+  readonly ref: string;
+  readonly displayName: string;
+  readonly kind: TipoDeProfissional;
+  readonly city: string;
+  readonly state: string;
+  readonly neighborhood: string | null;
+  readonly contatoKind: TipoDeContatoPublico;
+  readonly contatoValue: string;
+  readonly reviewStatus: RevisaoDaIndicacao;
+  readonly createdAt: Date;
+  readonly decidedAt: Date | null;
+  readonly declineReason: string | null;
+  readonly entradaSlug: string | null;
+}): MinhaIndicacaoProjetada {
+  return {
+    reference: i.ref,
+    display_name: i.displayName,
+    kind: i.kind,
+    city: i.city,
+    state: i.state,
+    neighborhood: i.neighborhood,
+    public_contact: { kind: i.contatoKind, value: i.contatoValue },
+    review_status: i.reviewStatus,
+    created_at: i.createdAt.toISOString(),
+    decided_at: i.decidedAt === null ? null : i.decidedAt.toISOString(),
+    decline_reason: i.declineReason,
+    entry_slug: i.entradaSlug,
   };
 }

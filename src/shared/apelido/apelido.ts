@@ -13,7 +13,7 @@
  * ## A FAIXA É A MESMA NOS TRÊS LUGARES, E ISSO É A ARMADILHA DO DIA
  *
  * `FORMA_DO_APELIDO` é o mesmo regex do `CHECK` de `handles.handle`
- * (`20261018000005`) e do `pattern` de `Handle` no contrato, e o mesmo de
+ * (`20261018000021`) e do `pattern` de `Handle` no contrato, e o mesmo de
  * `app/lib/formato/apelido.dart`. Esta casa já pagou pela divergência: o
  * recado do achado aceitava **1000** no contrato e a coluna recusava acima de
  * **500**, e a pessoa recebia erro de servidor em vez de recusa explicada.
@@ -64,7 +64,7 @@ export const MAXIMO_DO_APELIDO = 20;
 
 /**
  * O mapa dos parecidos, **por GRUPO**, igual ao `translate` de
- * `handle_esqueleto` na migração `20261018000005`.
+ * `handle_esqueleto` na migração `20261018000021`.
  *
  * **DIVERGÊNCIA DECLARADA DO PLANO, e ela é deliberada.** O plano `9d99ac0f`
  * escreve o mapa como `0→o`, `1→l`, `5→s`, `3→e`, e **esse mapa sozinho não
@@ -76,9 +76,11 @@ export const MAXIMO_DO_APELIDO = 20;
  * Para o invariante valer, **`i` também colapsa em `l`**. O mapa real é por
  * grupo de parecidos: `{0,o}`, `{1,i,l}`, `{5,s}`, `{3,e}`.
  *
- * **Custo, dito em voz alta:** `@lia`, `@l1a` e `@iia` passam a ser o mesmo
- * apelido, e isso recusa alguns apelidos legítimos a mais do que o plano
- * previa. A alternativa era deixar `@mar1a-silva` coexistir com
+ * **Custo, dito em voz alta:** `@lia-vet`, `@l1a-vet` e `@iia-vet` passam a ser o
+ * MESMO apelido -- os três viram `llavet` --, e o segundo e o terceiro a pedir
+ * recebem "indisponível". Os exemplos têm 5 ou mais caracteres de propósito: o
+ * piso de 5 já barra `@lia`, então ele não ilustraria custo nenhum. Isso recusa
+ * alguns apelidos legítimos a mais do que o plano previa. A alternativa era deixar `@mar1a-silva` coexistir com
  * `@maria-silva`, que é a imitação que o freio existe para impedir.
  */
 const PARECIDOS: ReadonlyMap<string, string> = new Map([
@@ -98,7 +100,7 @@ const PARECIDOS: ReadonlyMap<string, string> = new Map([
  * `user`): reservar o que `FORMA_DO_APELIDO` já proíbe é regra morta.
  *
  * **Lida do plano, não reinventada.** A mesma lista está carregada em
- * `handles` pela migração `20261018000005`, e as duas precisam continuar
+ * `handles` pela migração `20261018000021`, e as duas precisam continuar
  * iguais — é por isso que o teste deste módulo conta as 51.
  */
 export const RESERVADAS: readonly string[] = [
@@ -190,7 +192,7 @@ export function normalizarApelido(bruto: string): string {
 /**
  * O **esqueleto** de um apelido: sem hífen e com os parecidos colapsados.
  *
- * Igual a `handle_esqueleto(text)` da migração `20261018000005`, e as duas
+ * Igual a `handle_esqueleto(text)` da migração `20261018000021`, e as duas
  * precisam continuar iguais — o teste deste módulo compara as duas saídas para
  * os mesmos casos. Se divergirem, o índice do banco e a recusa da aplicação
  * passam a discordar sobre o que é parecido, e o furo aparece como "o servidor

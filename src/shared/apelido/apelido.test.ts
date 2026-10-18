@@ -16,7 +16,7 @@
  * ## A PARIDADE COM O BANCO É MEDIDA AQUI
  *
  * `esqueletoDoApelido` precisa dar exatamente o mesmo que
- * `handle_esqueleto(text)` da migração `20261018000005`. Se as duas
+ * `handle_esqueleto(text)` da migração `20261018000021`. Se as duas
  * divergirem, o índice do banco e a recusa da aplicação passam a discordar
  * sobre o que é parecido, e o furo aparece como "o servidor aceitou e o banco
  * recusou". Os casos de `esqueleto` abaixo foram rodados contra o Postgres e

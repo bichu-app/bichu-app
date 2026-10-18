@@ -150,6 +150,14 @@ export interface DependenciasDaFilaDeIndicacoes {
   readonly clock: Clock;
   /** Ver `ports/conferencias-de-texto.ts`: o detector de D59 nao mora neste modulo. */
   readonly conferencias: ConferenciasDeTexto;
+  /**
+   * A URL publica de uma chave de derivada, injetada como em
+   * `DiretorioAdministrativo`. A entrada aprovada pela fila nasce SEM imagem,
+   * entao hoje esta funcao e sempre chamada com `null` e nunca produz URL --
+   * ela esta aqui porque a projecao e UMA so, e duas projecoes de entrada
+   * seriam duas definicoes do que o painel ve.
+   */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 export class FilaDeIndicacoes {
@@ -264,7 +272,7 @@ export class FilaDeIndicacoes {
 
       return {
         suggestion: projetarIndicacao(aprovada),
-        entry: projetarEntradaAdministrativa(entrada),
+        entry: projetarEntradaAdministrativa(entrada, this.deps.urlDeMidia),
         entry_created: existente === null,
         etagDaEntrada: comoEtag(entrada.version),
       };
@@ -330,6 +338,13 @@ export class FilaDeIndicacoes {
       street: null,
       streetNumber: null,
       complement: null,
+      // A LOGO E A FOTO NASCEM VAZIAS, pelo mesmo motivo dos quatro acima: quem
+      // indica um profissional informa cidade, UF, bairro e um contato, e nao
+      // sobe imagem. Imagem de entrada do diretorio e enviada pelo
+      // ADMINISTRADOR no painel (cliente, 18/10/2026), e quem aprova a
+      // indicacao completa depois, pela edicao da entrada.
+      logoImageId: null,
+      photoImageId: null,
       phoneE164: telefone,
       status,
       source: ORIGEM_DO_PAINEL,

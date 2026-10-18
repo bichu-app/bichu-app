@@ -154,8 +154,10 @@ COMMENT ON COLUMN users.birth_date IS
 -- `mar1a` vira `marla` e `maria` fica `maria`, e os dois coexistiriam. Para o
 -- invariante escrito valer, **`i` tambem colapsa em `l`** -- e a funcao abaixo
 -- faz isso. O mapa real e por GRUPO de parecidos: `{0,o}`, `{1,i,l}`, `{5,s}`,
--- `{3,e}`. Custo dito em voz alta: `@lia` e `@l1a` e `@iia` passam a ser o
--- mesmo apelido, o que recusa alguns apelidos legitimos a mais. Sem isso, a
+-- `{3,e}`. Custo dito em voz alta: `@lia-vet`, `@l1a-vet` e `@iia-vet` passam a ser
+-- o MESMO apelido (os tres viram `llavet`), e o segundo e o terceiro a pedir
+-- recebem "indisponivel". Exemplos com 5 ou mais caracteres de proposito: o
+-- piso de 5 ja barra `@lia`, entao ele nao ilustraria custo nenhum. Sem isso, a
 -- isca de `@mar1a-silva` do plano nao passa.
 --
 -- **A FAIXA E A MESMA NOS TRES LUGARES**, e esta casa ja pagou por nao ser: o

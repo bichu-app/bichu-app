@@ -675,6 +675,24 @@ Set<String> rotasRegistradasDoApp(WidgetTester tester) {
   return achadas;
 }
 
+/// Toca numa aba da barra inferior e espera a secao assentar.
+///
+/// **Existe por causa de 18/10/2026.** A aba de arranque deixou de ser `Pets` e
+/// passou a ser `Rede`, por pedido do cliente (*"quando o usuário fizer o
+/// login ou abrir o app, traga a pagina da rede como padrão"*). Todo caso cujo
+/// assunto e uma porta de `Pets` -- o leitor de QR pela porta primaria (UX
+/// 27.5.6), o cadastro de pet, a gaveta da secao -- herdava a aterrissagem e
+/// parou de achar a porta.
+///
+/// **O caso passa a DIZER em voz alta para onde vai, e isso e o ponto.** Fazer
+/// `abrirOApp` navegar sozinho para `Pets` esconderia a troca de padrao de
+/// todos os casos de uma vez: a suite ficaria verde com o app abrindo em
+/// qualquer aba, e o portao que mede a aba de arranque seria o unico a saber.
+Future<void> abrirAAba(WidgetTester tester, String rotulo) async {
+  await tester.tap(find.widgetWithText(NavigationDestination, rotulo));
+  await tester.pumpAndSettle();
+}
+
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.
 ///
 /// Pelo roteador, e nao montando a tela solta: o `extra` e parte do contrato

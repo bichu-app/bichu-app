@@ -19,11 +19,30 @@ export interface UsersTable {
   /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, de propósito. */
   id: string;
   email: string;
+  /**
+   * O instante da verificacao do e-mail. **E ELE o selo de validado** que o
+   * cliente pediu em 18/10/2026 ("um selo na foto dele, se ele estiver
+   * validado"): o conceito ja existe e ja sai como `Me.email_verified`. Nao ha
+   * nem pode haver uma segunda coluna dizendo a mesma coisa.
+   */
   email_verified_at: Date | null;
+  /**
+   * A foto que a PROPRIA pessoa cadastrou (migracao `20261018000008`,
+   * `catalog_images.purpose = 'user_photo'`).
+   *
+   * **Visivel so para o dono.** Ela sai em `GET /v1/me` e em nenhuma outra
+   * resposta -- nao ha coluna de visibilidade para terceiros, porque mostrar a
+   * outros contraria decisao registrada (ADR-0025 item 2 proibe avatar na
+   * `Rede`; o contrato proibe foto de perfil em `Conversation.participants`) e
+   * isso e decisao do cliente, nao de implementacao.
+   *
+   * O id **nunca sai em resposta**: o app recebe a URL da derivada.
+   */
+  photo_image_id: string | null;
   display_name: string | null;
   /**
    * A data de nascimento declarada no cadastro, para a idade mínima de 16 anos
-   * (cliente, 18/10/2026). `20261018000005`.
+   * (cliente, 18/10/2026). `20261018000021`.
    *
    * **`ColumnType` com escrita em `string` e leitura em `Date`**: a coluna é
    * `date` e o driver devolve `Date`, mas o que a aplicação tem é `YYYY-MM-DD`
@@ -42,7 +61,7 @@ export interface UsersTable {
   birth_date: ColumnType<Date | null, string | undefined, string>;
   /**
    * O apelido (`@`) escolhido pela pessoa, já normalizado, apontando para
-   * `handles.handle` (FK). `20261018000005`.
+   * `handles.handle` (FK). `20261018000021`.
    *
    * Anulável porque **nenhum fluxo obriga a escolher** (plano 4-C.8): a tela
    * cai para o nome de exibição com apelido nulo, e as 7 contas de 18/10/2026
@@ -76,7 +95,7 @@ export interface UsersTable {
 
 /**
  * O espaço de nomes do `@`, **compartilhado** entre pessoa, pet e reservadas.
- * `20261018000005`.
+ * `20261018000021`.
  *
  * Tabela e não coluna com índice único porque o site publica o pet em
  * `/@{slug}` (ADR-0028) e o `@` é um símbolo só para quem lê: `@bidu` não pode
@@ -542,7 +561,15 @@ export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
  * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
  * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
  */
-export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
+export type PropositoDaImagemDeCatalogo =
+  | 'store_item'
+  | 'network_event'
+  // 18/10/2026: a logo e a foto do profissional recomendado (enviadas pelo
+  // administrador) e a foto do proprio usuario (enviada pela pessoa). Mesma
+  // esteira, propositos novos -- ver `migrations/20261018000008`.
+  | 'directory_logo'
+  | 'directory_photo'
+  | 'user_photo';
 
 export interface UploadIntentsTable {
   id: string;
@@ -1100,6 +1127,24 @@ export interface ProfessionalsTable {
   street_number: string | null;
   complement: string | null;
   /**
+   * A LOGO e a FOTO da entidade, acrescentadas pela migracao `20261018000008`
+   * (pedido do cliente de 18/10/2026).
+   *
+   * Duas colunas porque sao DOIS PROPOSITOS: a logo e quadrada e pequena, e
+   * aparece ao lado do nome na lista do `Perto`; a foto e da fachada ou do
+   * ambiente, e e olhada grande no detalhe. As derivadas tem geometrias
+   * diferentes (`derivadas.ts`), e um campo so obrigaria uma tela a esticar a
+   * outra.
+   *
+   * **As duas sao ANULAVEIS, e nulo e o estado normal**: entrada sem logo e sem
+   * foto existe e publica como antes desta migracao.
+   *
+   * O valor e `catalog_images.id`, e ele **NUNCA sai em resposta** (ADR-0010
+   * item 6): quem le recebe a URL da derivada, montada na leitura.
+   */
+  logo_image_id: string | null;
+  photo_image_id: string | null;
+  /**
    * `geography(Point,4326)`. `never` nos tres sentidos, como
    * `user_reference_locations.reference_point` e `found_reports.found_point`: o
    * tipo impede a coluna de ser selecionada crua ou inserida pelo construtor
@@ -1611,15 +1656,31 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
-/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+/**
+ * O `CHECK` `collar_tag_requests_decisao_conhecida`: a DECISAO do painel, e so
+ * ela. Nao diz onde a encomenda esta -- isso e [PassoDaEntregaDaPlaquinha].
+ */
 export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O `CHECK` `collar_tag_requests_entrega_conhecida`: os tres passos da ENTREGA,
+ * acrescentados pela `20261018000004` -- solicitado, em transporte, chegou.
+ *
+ * Eixo SEPARADO de [DecisaoDoPedidoDePlaquinha] porque acrescentar valor a uma
+ * `enum` de resposta quebra o contrato (`oasdiff`,
+ * `response-property-enum-value-added`). Os dois eixos nao sao independentes:
+ * `collar_tag_requests_entrega_exige_atendimento` proibe sair de `requested`
+ * sem o pedido estar `fulfilled`.
+ */
+export type PassoDaEntregaDaPlaquinha = 'requested' | 'in_transit' | 'arrived';
 
 /**
  * O pedido do OBJETO FISICO da plaquinha da coleira.
  *
  * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
- * Nao guarda endereco nem valor, e as duas ausencias sao decisao de produto do
- * cliente ainda em aberto, e nao esquecimento.
+ * Guarda o endereco de entrega desde a `20261017000012` (decisao do cliente de
+ * 17/10) e a ENTREGA desde a `20261018000004`; o VALOR segue fora, e cobranca
+ * continua fora de escopo por decisao dele.
  *
  * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
  * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
@@ -1651,6 +1712,23 @@ export interface CollarTagRequestsTable {
   status: Generated<DecisaoDoPedidoDePlaquinha>;
   requested_at: Generated<Date>;
   decided_at: Date | null;
+  /**
+   * O passo da ENTREGA. `Generated` porque a coluna e
+   * `NOT NULL DEFAULT 'requested'`: o `INSERT` do pedido nao o escreve, e todo
+   * pedido que existe -- inclusive os de antes da `20261018000004` -- tem um
+   * passo. **Nunca nulo**, e e isso que faz a tela nao inferir passo de ausencia.
+   */
+  delivery_state: Generated<PassoDaEntregaDaPlaquinha>;
+  /**
+   * O codigo de rastreio, TEXTO que o administrador digita. Opcional: nem todo
+   * envio tem rastreio. **Sem validacao de formato de transportadora** e **sem
+   * integracao com transportadora nenhuma** -- so teto de tamanho (3 a 64).
+   */
+  tracking_code: string | null;
+  /** Quando saiu. Nulo enquanto `delivery_state` e `requested`. */
+  shipped_at: Date | null;
+  /** Quando chegou. Nulo em tudo que nao chegou. */
+  delivered_at: Date | null;
 }
 
 /** O `CHECK` `network_events_origem_conhecida`. */

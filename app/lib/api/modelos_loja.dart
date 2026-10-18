@@ -415,17 +415,34 @@ class ItemDaLoja {
     return formatarReais(centavos);
   }
 
-  /// A linha inteira do preco, que e a unica forma em que o valor aparece.
+  /// A linha do preco, que e **so o valor**.
   ///
-  /// **O numero nunca aparece sozinho.** O rotulo e a data sao parte do preco,
-  /// nao enfeite dele, e nao ha estado da tela em que o valor apareca e a data
-  /// nao (criterio 15 da BICHUS-185). Por isso esta e **uma** string: duas
-  /// propriedades separadas permitiriam que alguem renderizasse so a primeira.
+  /// **18/10/2026, literal do cliente:** *"remova o texto 'preço de
+  /// referência, consultado em 17/10', porque você já colocou como eu pedi
+  /// acima do titulo"*. O rabo da linha -- o rótulo e a data -- saiu do texto
+  /// VISIVEL: `CartaoDaLoja.rotuloDePrecoDeReferencia` ja diz
+  /// "Preço de referência" acima do nome do produto, e repetir a mesma
+  /// afirmacao duas linhas abaixo era a duplicacao que ele mandou tirar.
+  ///
+  /// **O criterio 15 da BICHUS-185 nao foi jogado fora: mudou de endereco.**
+  /// Ele dizia que o numero nunca aparece sozinho, e quem usa leitor de tela
+  /// ouvia a afirmacao DENTRO deste mesmo no de texto -- e e por isso que o
+  /// rotulo visivel acima do nome e `ExcludeSemantics`. Apagar o rabo e so
+  /// isso deixaria quem nao ve com o numero e nada mais. A afirmacao foi para
+  /// o `semanticsLabel` do proprio no do preco
+  /// (`CartaoDaLoja.rotuloAcessivelDoPreco`), que e o mesmo endereco de antes
+  /// para o leitor de tela e **nao e mais texto na tela**.
+  ///
+  /// **A guarda da data FICA.** `consultadoEm` saiu da TELA, nao da condicao:
+  /// sem ela, um item que chegasse com valor e sem data passaria a mostrar um
+  /// preco que hoje nao mostra -- e isso seria mudanca de produto, nao remocao
+  /// de texto. `dataCurta` continua existindo e continua coberta por teste
+  /// proprio; o que saiu foi o uso dela nesta frase.
   String? get linhaDoPreco {
     final valor = precoFormatado;
     final data = consultadoEm;
     if (valor == null || data == null) return null;
-    return '$valor · preço de referência, consultado em ${dataCurta(data)}';
+    return valor;
   }
 
   /// A linha de classificacao do cartao: "Rações · Ração seca".

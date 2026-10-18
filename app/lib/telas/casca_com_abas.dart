@@ -45,12 +45,15 @@ enum ConfiguracaoDeBuild {
 
 /// Um destino da barra inferior.
 ///
-/// Carrega **os tres sinais** que a decisao do cliente de 21/09 separou: o
-/// icone (quem enxerga), o [rotulo] visivel (todo mundo) e o [reforcoDaPagina]
-/// (quem abriu a secao). O [semanticsLabel] existe porque quem usa leitor de
-/// tela recebia **so o rotulo**, e o rotulo acabou de encurtar de `Perdidos`
-/// para `Pets` e de `Eventos` para `Rede` -- sem ele, a decisao de produto
-/// seria uma regressao de acessibilidade (UX 27.7).
+/// Carrega o icone (quem enxerga), o [rotulo] visivel (todo mundo) e o
+/// [reforcoAcessivel] (quem usa leitor de tela). O [semanticsLabel] existe
+/// porque quem usa leitor de tela recebia **so o rotulo**, e o rotulo encurtou
+/// de `Perdidos` para `Pets` e de `Eventos` para `Rede` -- sem ele, a decisao
+/// de produto seria uma regressao de acessibilidade (UX 27.7).
+///
+/// **Eram tres sinais visiveis ate 18/10/2026**, quando o cliente removeu a
+/// frase de apoio do corpo das paginas ([reforcoDaPagina], hoje vazia nas
+/// cinco). O sinal de acessibilidade NAO saiu com ela.
 class DestinoDeNavegacao {
   const DestinoDeNavegacao({
     required this.rotulo,
@@ -68,19 +71,50 @@ class DestinoDeNavegacao {
   /// trocando a palavra em projeto, nunca com reticencia ou quebra de linha.
   final String rotulo;
 
-  /// A metade de tras do nome acessivel. Redacao equivalente a
-  /// [reforcoDaPagina] (UX 27.7, regra 5), mais curta porque o leitor de tela
-  /// le a frase inteira a cada passagem pela barra.
+  /// A metade de tras do nome acessivel, que **nunca e vazia**.
+  ///
+  /// **NAO SAIU em 18/10/2026, e nao e o que o cliente mandou remover.** Ele
+  /// nomeou as frases que apareciam NA TELA, no corpo das paginas
+  /// ([reforcoDaPagina]); esta nao aparece em lugar nenhum da tela -- ela e a
+  /// segunda metade do [semanticsLabel] da aba, e e o unico sinal que quem usa
+  /// leitor de tela recebe alem do rotulo de quatro letras. O icone e
+  /// decorativo e nao e anunciado; sem esta frase, `Pets` e `Rede` viram
+  /// rotulos sem assunto, e a remocao de um texto visivel teria virado
+  /// regressao de acessibilidade.
+  ///
+  /// Redacao mais curta que a frase do corpo era (UX 27.7, regra 5), porque o
+  /// leitor de tela le o nome inteiro a cada passagem pela barra.
+  ///
+  /// O portao de `test/telas/casca_de_cinco_secoes_test.dart` reprova se esta
+  /// frase sair junto: ele cobra `semanticsLabel` comecando pelo rotulo E mais
+  /// longo que ele, e cobra este campo nao-vazio por nome.
   final String reforcoAcessivel;
 
-  /// A primeira linha do corpo da pagina, em `body-lg`.
+  /// A primeira linha do corpo da pagina. **Vazia nas cinco secoes.**
   ///
-  /// **Nao vai na barra de topo.** Medido em UX 27.4.1: o titulo da `AppBar`
-  /// dispoe de 240,0 dp em 320 dp e corta com reticencia, e
-  /// `Profissionais e estabelecimentos` pede 406,72 ja em escala 1x. Um
-  /// significado que some com reticencia nao foi transferido para lugar
-  /// nenhum, e era justamente o titulo que o cliente encarregou de carregar o
-  /// significado que o rotulo curto deixou de carregar.
+  /// **18/10/2026: o cliente REVERTEU a decisao dele de 21/09.** Literal:
+  /// *"remova os textos 'os profissionais e estabelecimentos indicados por
+  /// quem já usou. os eventos de quem tem pet aqui perto de você. Os pets
+  /// perdidos e os que estão para adoção aqui na sua região. Seus pets, sua
+  /// plaquinha e os ajustes da sua conta.'"*. Com a quinta -- a da `Loja` --
+  /// na mesma lista, as cinco saem.
+  ///
+  /// O campo **fica**, e fica vazio: e o que permite o portao de
+  /// `test/telas/casca_de_cinco_secoes_test.dart` cobrar a regra de HOJE (nenhuma
+  /// secao tem texto de apoio) em vez de simplesmente deixar de olhar. Quem
+  /// escrever uma frase aqui de novo reprova aquele caso.
+  ///
+  /// **Nao confundir com [reforcoAcessivel], que NAO saiu.** Aquele e
+  /// invisivel na tela, e a metade de tras do nome que o leitor de tela
+  /// anuncia na barra; e o que deixa `Pets` e `Rede` -- rotulos de quatro
+  /// letras -- navegaveis por quem nao ve. Os dois campos sempre foram
+  /// separados, e e por isso que esta remocao nao encosta naquele.
+  ///
+  /// Quando havia frase, ela ia no CORPO e nunca na barra de topo (medido em
+  /// UX 27.4.1: a `AppBar` dispoe de 240,0 dp em 320 dp e
+  /// `Profissionais e estabelecimentos` pede 406,72 ja em escala 1x). As duas
+  /// telas que a desenhavam -- `TelaDeAba` e `AgendaDaRede` -- pulam a linha e
+  /// o respiro de 24 dp quando ela e vazia.
   final String reforcoDaPagina;
 
   final IconData icone;
@@ -131,12 +165,29 @@ class CascaComAbas extends StatefulWidget {
   /// **Publico e constante de proposito:** os portoes desta historia e o da
   /// BICHUS-172 iteram esta lista em vez de repetir os rotulos a mao. Portao
   /// que guarda uma copia da lista fica verde no dia em que a lista muda.
+  ///
+  /// ## A ordem mudou em 18/10/2026
+  ///
+  /// `Pets, Perto, Rede, Loja, Perfil`. Era `Pets, Rede, Perto, Loja, Perfil`,
+  /// e o cliente pediu literalmente: *"inverta a ordem no app do item rede e
+  /// perto"*. Medida antes de inverter: `Rede` estava na posicao 2 e `Perto`
+  /// na 3, entao inverter e por `Perto` antes -- e nao o contrario.
+  ///
+  /// **A ordem dos RAMOS em `roteamento/rotas.dart` andou junto.** A casca
+  /// traduz a posicao tocada na barra para o indice do ramo por esta lista;
+  /// trocar so aqui faria tocar em `Perto` abrir a `Rede`, calado. Ha portao
+  /// que reprova a divergencia (`a ordem dos ramos e a ordem do registro`).
+  ///
+  /// **A aba de ARRANQUE nao e a primeira desta lista, e nao precisa ser.** No
+  /// mesmo dia o cliente fez da `Rede` a aba padrao de quem abre o app ou
+  /// acaba de entrar (`Rotas.destinoDoArranque`), e ela ficou na posicao 3. As
+  /// duas decisoes sao independentes: a ordem e onde o dedo encontra a secao,
+  /// o arranque e onde o app comeca. Quem mudar uma nao herda a outra.
   static const List<DestinoDeNavegacao> destinos = <DestinoDeNavegacao>[
     DestinoDeNavegacao(
       rotulo: 'Pets',
       reforcoAcessivel: 'pets perdidos e para adoção perto de você',
-      reforcoDaPagina:
-          'Os pets perdidos e os que estão para adoção aqui na sua região.',
+      reforcoDaPagina: '',
       // A PATINHA AQUI E LEGITIMA, e isto esta escrito para nao ser reaberto.
       //
       // `Icons.pets` e o glifo `pets` do Material Symbols, que e a familia
@@ -176,31 +227,9 @@ class CascaComAbas extends StatefulWidget {
       campoSemantico: CampoSemantico.animal,
     ),
     DestinoDeNavegacao(
-      rotulo: 'Rede',
-      reforcoAcessivel: 'eventos da comunidade',
-      reforcoDaPagina:
-          'Os eventos de quem tem pet aqui perto de você.',
-      icone: Icons.groups_outlined,
-      iconeSelecionado: Icons.groups,
-      rota: Rotas.rede,
-      // `GET /network/events` (ADR-0025). A casca honesta saiu da TELA e
-      // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
-      // `planejada`, o portao do 25.7.3 continuaria procurando a frase "Rede
-      // esta em construcao" que a secao nao diz mais.
-      //
-      // E ha a segunda razao, que e a cara: `visiveisEm` ESCONDE o que e
-      // `planejada` no build de ENTREGA. Com esta linha errada, a secao com
-      // conteudo simplesmente nao apareceria na barra do build que vai para a
-      // loja de aplicativos -- e o defeito so apareceria no aparelho de quem
-      // instalasse. E o mesmo passo que `Perto` e `Loja` ja deram.
-      estado: EstadoDaSecao.existe,
-      campoSemantico: CampoSemantico.comunidade,
-    ),
-    DestinoDeNavegacao(
       rotulo: 'Perto',
       reforcoAcessivel: 'profissionais e estabelecimentos indicados',
-      reforcoDaPagina:
-          'Os profissionais e estabelecimentos indicados por quem já usou.',
+      reforcoDaPagina: '',
       // O ALFINETE DE LOCALIZACAO, e nao a fachada de loja (BICHUS-233).
       //
       // `storefront` desenha uma fachada, e ficava a **dois slots** de
@@ -238,6 +267,26 @@ class CascaComAbas extends StatefulWidget {
       campoSemantico: CampoSemantico.lugar,
     ),
     DestinoDeNavegacao(
+      rotulo: 'Rede',
+      reforcoAcessivel: 'eventos da comunidade',
+      reforcoDaPagina: '',
+      icone: Icons.groups_outlined,
+      iconeSelecionado: Icons.groups,
+      rota: Rotas.rede,
+      // `GET /network/events` (ADR-0025). A casca honesta saiu da TELA e
+      // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
+      // `planejada`, o portao do 25.7.3 continuaria procurando a frase "Rede
+      // esta em construcao" que a secao nao diz mais.
+      //
+      // E ha a segunda razao, que e a cara: `visiveisEm` ESCONDE o que e
+      // `planejada` no build de ENTREGA. Com esta linha errada, a secao com
+      // conteudo simplesmente nao apareceria na barra do build que vai para a
+      // loja de aplicativos -- e o defeito so apareceria no aparelho de quem
+      // instalasse. E o mesmo passo que `Perto` e `Loja` ja deram.
+      estado: EstadoDaSecao.existe,
+      campoSemantico: CampoSemantico.comunidade,
+    ),
+    DestinoDeNavegacao(
       rotulo: 'Loja',
       reforcoAcessivel: 'produtos escolhidos pelo Bichu',
       // **A plaquinha saiu desta linha**, e a saida e decisao de produto e nao
@@ -245,8 +294,7 @@ class CascaComAbas extends StatefulWidget {
       // FORA da Loja no MVP: a vitrine e de parceiro, e nenhum parceiro vende
       // plaquinha do Bichu. Prometer aqui um item que a lista nunca vai ter e
       // a mesma classe de defeito do estado vazio que mente.
-      reforcoDaPagina:
-          'Produtos escolhidos pelo Bichu, que abrem no site do parceiro.',
+      reforcoDaPagina: '',
       icone: Icons.shopping_bag_outlined,
       iconeSelecionado: Icons.shopping_bag,
       rota: Rotas.loja,
@@ -265,7 +313,7 @@ class CascaComAbas extends StatefulWidget {
     DestinoDeNavegacao(
       rotulo: 'Perfil',
       reforcoAcessivel: 'seus pets e sua conta',
-      reforcoDaPagina: 'Seus pets, sua plaquinha e os ajustes da sua conta.',
+      reforcoDaPagina: '',
       icone: Icons.account_circle_outlined,
       iconeSelecionado: Icons.account_circle,
       rota: Rotas.perfil,
@@ -621,7 +669,13 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
         addSemanticIndexes: false,
         padding: const EdgeInsets.all(BichuEspaco.e4),
         children: <Widget>[
-          if (reforco != null) ...<Widget>[
+          // **Vazio tambem nao desenha** (18/10/2026). As cinco secoes passaram
+          // a mandar `reforcoDaPagina: ''` por pedido do cliente, e sem o
+          // `isNotEmpty` a pagina abriria com um `Text` vazio e 24 dp de
+          // respiro para nada -- um buraco acima do primeiro bloco, em todas
+          // as cinco. O `!= null` fica para quem nao manda reforco nenhum,
+          // como a `Rede`, que passa o texto para dentro da propria agenda.
+          if (reforco != null && reforco.isNotEmpty) ...<Widget>[
             Text(
               reforco,
               style: textos.bodyLarge?.copyWith(color: cores.textSecondary),

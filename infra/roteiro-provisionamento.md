@@ -454,7 +454,7 @@ que importam:
 | `ENVIRONMENT` | `homolog` | `make reset` se recusa a rodar com este valor: apagar volume aqui apaga a massa de teste do QA |
 | `PUBLIC_BASE_URL` | `https://hml.bichu.app` | o Caddy escuta na porta que está aqui, e daqui sai o `type` do `problem+json`. **Ele deixou de ser o que o QR codifica em 19/09**: as duas linhas abaixo tiraram esse papel dele (ADR-0017 item 2). Enquanto era um valor só, este campo dizia `https://bichu.app` e estava errado de um jeito perigoso — o apex serve a página da Squarespace, e uma tag gerada assim apontaria para uma página que não é nossa, de forma **irreversível** (ADR-0004) |
 | `TAG_BASE_URL` | `https://tag.bichu.app` | **o que o QR codifica e o que vai prensado na plaquinha.** Decisão do cliente de 19/09. É a única variável desta tabela que não se conserta depois: trocar o valor não muda nenhuma tag que já saiu. **`tag.bichu.app` ainda não resolve no DNS**, e enquanto não resolver, toda tag gerada aqui aponta para lugar nenhum. **NÃO IMPRIMA TAG A PARTIR DESTE AMBIENTE.** Confira o valor efetivo antes de gerar **qualquer** código: `docker compose exec -T api printenv TAG_BASE_URL` |
-| `WEB_BASE_URL` | `https://hml.bichu.app` | onde o site serve cartaz, página do caso, perfil, conversa do achador e as telas de e-mail e senha (ADR-0017, ADR-0028). É a base dos links dos e-mails. Reversível: trocar aqui muda o link do próximo e-mail e nada mais. **O valor depende do ambiente** e esta tabela é a da VM de homologação; a de produção é `https://bichu.app` (ADR-0029 seção 7). **Corrigido em 28/09, por decisão do cliente:** esta linha prescrevia o apex, e o apex **ainda é da Squarespace** — um link de verificação enviado de homologação levava o usuário para a página de um terceiro, o que é pior do que um 404 nosso. Em `hml.bichu.app` o link responde **404 hoje**, por dois motivos medidos: o passo 14 deixa `BORDA_RESTO_DA_APP` fora do `.env` de homologação de propósito (o catch-all de `hml` continua 404), e `web/src/pages/` só tem `index.astro` e `t/[code].astro` — `/verificar-email` ainda não existe e é da sessão Web (ADR-0028). Conferir junto com a de cima: `docker compose exec -T api printenv WEB_BASE_URL`. A aplicação **recusa subir** se esta e a de cima estiverem em domínios registráveis diferentes |
+| `WEB_BASE_URL` | `https://hml.bichu.app` | onde o site serve cartaz, página do caso, perfil, conversa do achador e as telas de e-mail e senha (ADR-0017, ADR-0028). É a base dos links dos e-mails. Reversível: trocar aqui muda o link do próximo e-mail e nada mais. **O valor depende do ambiente** e esta tabela é a da VM de homologação; a de produção é `https://bichu.app` (ADR-0029 seção 7). **Corrigido em 28/09, por decisão do cliente:** esta linha prescrevia o apex, e o apex **ainda é da Squarespace** — um link de verificação enviado de homologação levava o usuário para a página de um terceiro, o que é pior do que um 404 nosso. **Atualizado em 18/10/2026: o link RESPONDE 200 em `hml.bichu.app`.** Os dois motivos do 404 anterior deixaram de valer: `web/src/pages/` passou a ter `verificar-email.astro`, `redefinir-senha.astro`, `termos.astro` e `privacidade.astro` (entre outras), e `BORDA_RESTO_DA_APP=site` foi acrescentada ao `.env` de homologação — sem ela as páginas existiam e a borda nunca chegava no container `web`, o que custou dois dias de links de termos e de política quebrados. Ver o passo 15. Conferir junto com a de cima: `docker compose exec -T api printenv WEB_BASE_URL`. A aplicação **recusa subir** se esta e a de cima estiverem em domínios registráveis diferentes |
 | `MEDIA_PUBLIC_BASE_URL` | `https://img.bichu.app` | o MinIO **assina a URL com o host pelo qual ele se conhece**. Divergir daqui quebra TODA URL assinada, com erro de assinatura que não diz que é de host |
 | `MAIL_TRANSPORT` | `log` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui, e ele nunca provou entregabilidade de qualquer forma. **Não use `postmark`:** a chave de HML já está no cofre, mas o adaptador do Postmark não existe (ADR-0009), e `app-config.ts` recusa o valor na subida. Com `log` o e-mail é escrito no log e nada sai — que é a verdade do estado de hoje |
 | `PORTA_APP` / `PORTA_MIDIA` | `80` e a porta da mídia | ver o passo 8 |
@@ -1170,6 +1170,54 @@ docker compose up -d --no-deps --wait web
 `--wait` é a metade que importa: a borda só pode passar a mandar um host para
 o `web` depois de ele estar saudável. Na ordem contrária o host responde 502.
 
+**`BORDA_RESTO_DA_APP=site` no `.env` do host é OBRIGATÓRIA enquanto
+`WEB_BASE_URL` e `PUBLIC_BASE_URL` forem o mesmo host.** Em homologação os dois
+são `https://hml.bichu.app`, então o site não tem host próprio ali: sem a
+linha, o catch-all do bloco da aplicação é `resto_fechado` e **todas** as
+páginas do site respondem `404 nao encontrado` em `text/plain` — `/termos`,
+`/privacidade`, `/`, `/verificar-email` e `/redefinir-senha` — com as páginas
+existindo em `web/src/pages/` e o container `web` saudável. **Essa ausência
+custou dois dias de links de termos e de política quebrados no aparelho do
+cliente (corrigido em 18/10/2026):** o padrão `fechado` protege contra
+vazamento de rota, não contra link quebrado, e só é o valor certo onde o site
+tem host próprio em `SITE_HOSTS`. Os dois únicos valores são `site`
+(`resto_site`, vai para `web:4321`) e `fechado` (`resto_fechado`, 404);
+qualquer outro **não sobe a borda**, de propósito.
+
+A borda roda com `admin off`, então **não há `caddy reload`**, e variável de
+ambiente só entra em container novo. Validar primeiro, sem escrever segredo em
+arquivo nenhum, e só então recriar **somente** o `edge`:
+
+```bash
+# com a linha já acrescentada ao .env (acrescentar, nunca sobrescrever: confira
+# o sha256 antes e depois e exija que a única diferença seja essa linha)
+docker compose exec -e BORDA_RESTO_DA_APP=site -T edge caddy validate --config /etc/caddy/Caddyfile
+docker compose up -d --no-deps edge   # recria SÓ a borda; nunca --remove-orphans
+```
+
+**Verificação, de fora, pelas cinco URLs** — nenhuma pode devolver
+`nao encontrado` em `text/plain`:
+
+```bash
+for u in /termos /privacidade / /verificar-email /redefinir-senha; do
+  curl -sS -o /dev/null -w "$u %{http_code} %{content_type}\n" "https://hml.bichu.app$u"
+done
+# esperado: 200 text/html nas quatro primeiras; /redefinir-senha é HTML também
+# (400 sem token, 410 com token inválido — é a validação da própria página)
+curl -sS https://hml.bichu.app/v1/health            # 200, status ok, commit inalterado
+curl -sS -o /dev/null -w '%{http_code}\n' https://hml.bichu.app/v1/admin/ping   # 404 DA BORDA
+```
+
+`/v1/*` **não** regride: `import gateway_v1` vem antes do catch-all no bloco, e
+`/v1/admin*` continua 404 da borda. Se alguma rota de `/v1` passar a devolver
+HTML do site, a ordem do bloco foi invertida e isso é defeito grave.
+
+**O preço de `site` neste bloco:** o valor vale para o BLOCO INTEIRO da
+aplicação, então **todo nome em `HOSTS_EXTRA_APP` passa a servir o site junto**
+— hoje `bichu.app` e `tag.bichu.app`. Confira a lista antes de aplicar, e
+decida com o cliente se publicar o site nesses nomes é desejado agora ou se o
+caminho é o corte abaixo.
+
 Enquanto as variáveis `SITE_*` não estiverem no `.env`, os blocos do site na
 borda existem só com os nomes de teste (`site.localhost`, `tag.localhost`,
 `www.localhost`), que nenhum DNS resolve. `bichu.app` e `tag.bichu.app`
@@ -1179,7 +1227,7 @@ continuam em `HOSTS_EXTRA_APP`, respondendo como hoje.
 
 ```bash
 docker compose exec -T web node -e "fetch('http://web:4321/healthz').then(r=>console.log(r.status))"   # 200
-curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/   # 404 text/plain, igual a antes
+curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/   # 404 text/plain ENQUANTO BORDA_RESTO_DA_APP estiver ausente; com `site` o apex passa a servir o site, porque ele está em HOSTS_EXTRA_APP
 curl -sS https://hml.bichu.app/v1/health                                       # 200, status ok
 ```
 
@@ -1222,8 +1270,13 @@ logo depois, na mesma janela.
    SITE_BASE_URL=https://bichu.app
    ```
 
-   `BORDA_RESTO_DA_APP` **não** entra: sem ela o catch-all de `hml` e `api`
-   continua 404.
+   `BORDA_RESTO_DA_APP` **sai** neste passo, e só neste: depois do corte o
+   site tem host próprio em `SITE_HOSTS`, `WEB_BASE_URL` aponta para lá, e o
+   catch-all de `hml` e `api` volta a ser 404, que é o seguro. **Antes do
+   corte ela é obrigatória com `site`** (veja acima), porque até aqui
+   `hml.bichu.app` é ao mesmo tempo `PUBLIC_BASE_URL` e `WEB_BASE_URL`. Ao
+   tirá-la, reabra as cinco URLs do site no host novo: o 404 que volta em
+   `hml` é esperado, o 404 em `bichu.app/termos` não é.
 3. Validar antes de aplicar (um nome em dois blocos reprova aqui, e não com a
    borda fora do ar):
 

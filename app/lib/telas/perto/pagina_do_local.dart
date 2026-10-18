@@ -16,6 +16,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/grupo_de_opcoes.dart';
+import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 import 'lista_do_diretorio.dart';
@@ -211,6 +212,15 @@ class PaginaDoLocal extends StatefulWidget {
   /// controle indistinguivel para quem navega por leitor de tela e chegou nele
   /// sem ver a tela inteira.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
+
+  /// O rotulo da faixa do local, para quem nao ve a imagem.
+  ///
+  /// **A faixa NAO e decorativa, ao contrario da logo no cartao da lista.** La
+  /// a logo fica ao lado do nome e o nome e o rotulo; aqui a faixa vem ANTES
+  /// do nome, e e a fachada ou o ambiente -- a unica informacao desta pagina
+  /// que nao esta escrita em lugar nenhum. Imagem sem rotulo seria uma parada
+  /// de foco muda sobre um dado que ninguem mais conta.
+  static String fotoDe(String nome) => 'Foto de $nome';
 
   /// A minha avaliacao existe, mas nao esta em nenhuma pagina ja carregada.
   ///
@@ -758,6 +768,23 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     final pontuacao = _pontuacao ?? detalhe.pontuacao;
 
     return <Widget>[
+      // A FOTO DO LUGAR, de borda a borda, acima de tudo (cliente,
+      // 18/10/2026: "pode liberar as imagens do profissional no app").
+      //
+      // **Fora de `_Margem`, e e o unico filho desta pagina que fica fora
+      // dela.** A derivada e `banner` 1280 x 720 e o servidor a mediu para
+      // exatamente esta pintura: 360 a 430 dp de borda a borda, 1080 a
+      // 1290 px a 3x.
+      // Enfiada na margem de 16 dp de cada lado ela pagaria o mesmo peso para
+      // pintar menos.
+      //
+      // **Local sem foto nao tem faixa vazia**: `fotoUrl` e nulo em tres casos
+      // normais (sem foto, ainda processando, recusada nos bytes) e a pagina
+      // abre no nome, exatamente como antes de a foto existir.
+      if (detalhe.fotoUrl case final String foto) ...<Widget>[
+        _FaixaDoLocal(url: foto, nome: detalhe.nome),
+        const SizedBox(height: BichuEspaco.e4),
+      ],
       _Margem(child: _Cabecalho(detalhe: detalhe, aoLigar: _ligar)),
       const _Divisor(),
       _Secao(
@@ -954,6 +981,41 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
 // ---------------------------------------------------------------------------
 // O cabecalho
 // ---------------------------------------------------------------------------
+
+/// A faixa 16:9 com a foto do lugar, de borda a borda.
+///
+/// ## O custo, medido e nao estimado
+///
+/// `cacheWidth` pede ao decodificador a largura que a tela PINTA. Num aparelho
+/// de 412 dp a 3x isso da 1236 px, e a imagem decodificada custa
+/// `1236 x 695 x 4` = **3,28 MiB**; sem `cacheWidth` ela custaria os 1280 x
+/// 720 do arquivo, 3,52 MiB, em qualquer aparelho. A 2x o mesmo codigo cobra
+/// 1,11 MiB, e e esse o ponto: o numero acompanha a tela.
+///
+/// **Uma por pagina, e e por isso que ela cabe.** Vinte destas numa listagem
+/// seriam 65,6 MiB de imagem decodificada (20 x 3,28 MiB), e e exatamente a
+/// conta que mantem a faixa fora do cartao do `Perto`.
+class _FaixaDoLocal extends StatelessWidget {
+  const _FaixaDoLocal({required this.url, required this.nome});
+
+  final String url;
+  final String nome;
+
+  /// 16:9, a proporcao da derivada `banner` do contrato. Recortar numa
+  /// proporcao diferente da que o servidor cortou deixaria tarja.
+  static const double proporcao = 16 / 9;
+
+  @override
+  Widget build(BuildContext context) => ImagemDaRede(
+        url: url,
+        descricao: PaginaDoLocal.fotoDe(nome),
+        proporcao: proporcao,
+        // Sem raio: de borda a borda, raio arredondaria contra a borda da
+        // tela e deixaria quatro cantos de fundo aparecendo.
+        raio: BichuRaio.none,
+        simboloDeFalha: Icons.storefront_outlined,
+      );
+}
 
 /// Nome, atividade, lugar, distancia, **o que foi verificado** e `Ligar`.
 class _Cabecalho extends StatelessWidget {

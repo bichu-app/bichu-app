@@ -861,10 +861,19 @@ void main() {
   // -------------------------------------------------------------------------
 
   group('o preco no detalhe e o mesmo bloco do cartao', () {
-    // ISCA -- no `_Cabecalho`, troque `item.linhaDoPreco` por
-    // `item.precoFormatado`. O caso reprova: o numero apareceria sem o rotulo
-    // e sem a data, e captura de tela e como isso circula.
-    testWidgets('valor, rotulo e data saem juntos', (tester) async {
+    // **18/10/2026: o rabo da linha saiu, e esta PAGINA mudou sem ser tocada.**
+    //
+    // A decisao do cliente foi sobre a linha do preco, e a linha nasce em
+    // `ItemDaLoja.linhaDoPreco` -- a mesma funcao que esta pagina chama. O
+    // desenho da pagina continua parado; o que mudou e o que acompanha a
+    // funcao compartilhada.
+    //
+    // ISCA -- no `_Cabecalho`, apague o `semanticsLabel` do `Text` do preco. O
+    // caso de semantica abaixo reprova: esta pagina NAO tem a linha visivel
+    // "Preço de referência" (ela e do cartao da vitrine), entao sem o rotulo
+    // acessivel a afirmacao desaparece daqui para todo mundo.
+    testWidgets('o valor sai limpo, e a afirmacao fica na semantica',
+        (tester) async {
       final urls = <Uri>[];
       await abrirLoja(
         tester,
@@ -881,9 +890,52 @@ void main() {
       await tocarNoCartao(tester, 'Bola Pop');
 
       expect(
-        find.text('R\$ 89,90 · preço de referência, consultado em 14/10'),
+        find.text('R\$ 89,90'),
         findsOneWidget,
+        reason: 'REPROVA: o preco do detalhe nao e o valor limpo.',
       );
+      expect(
+        find.textContaining('consultado em'),
+        findsNothing,
+        reason: 'REPROVA: o rabo da linha do preco voltou ao detalhe.',
+      );
+    });
+
+    testWidgets('quem nao ve continua ouvindo "preço de referência" junto do '
+        'valor', (tester) async {
+      // A CONTRAPROVA DA REMOCAO, nesta pagina. No cartao da vitrine o rotulo
+      // sobrevive em texto visivel acima do nome do produto; aqui nao ha essa
+      // linha. Se o rabo saisse e nada o substituisse, o leitor de tela desta
+      // pagina passaria a anunciar "R$ 89,90" e nada mais.
+      final manipulador = tester.ensureSemantics();
+      final urls = <Uri>[];
+      await abrirLoja(
+        tester,
+        rede: redeDaLojaEDoDetalhe(
+          itens: <Map<String, dynamic>>[itemDoContrato()],
+          detalhe: detalheDoContrato(
+            priceAmount: 8990,
+            priceCheckedAt: '2026-10-14',
+            priceStatus: 'vigente',
+          ),
+          urls: urls,
+        ),
+      );
+      await tocarNoCartao(tester, 'Bola Pop');
+
+      expect(
+        // `RegExp` e nao `String`: `bySemanticsLabel` com string compara o
+        // rotulo INTEIRO, e o no do preco pode vir mesclado com o resto do
+        // cabecalho. O que importa e a afirmacao estar junto do valor.
+        find.bySemanticsLabel(RegExp(r'Preço de referência, R\$ 89,90')),
+        findsOneWidget,
+        reason: 'REPROVA: o no do preco nao diz de que preco fala. O rabo '
+            '"preço de referência, consultado em ..." carregava a afirmacao '
+            'DENTRO do texto do numero e saiu em 18/10/2026 por pedido do '
+            'cliente; o `semanticsLabel` e o endereco novo dela. Sem ele a '
+            'remocao de texto visivel virou perda de informacao.',
+      );
+      manipulador.dispose();
     });
 
     testWidgets('preco vencido: a frase no lugar do numero', (tester) async {

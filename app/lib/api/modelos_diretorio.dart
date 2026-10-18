@@ -166,6 +166,7 @@ class EntradaDoDiretorio {
     this.telefoneE164,
     this.distanciaEmMetros,
     this.pontuacao,
+    this.logoUrl,
   });
 
   /// A chave. **Nao existe `id`.**
@@ -199,6 +200,19 @@ class EntradaDoDiretorio {
   /// **Nulo, e tambem `quantidade == 0`, nao desenham estrela nenhuma e nao
   /// escrevem "0,0"**: a linha da media simplesmente nao existe no cartao.
   final PontuacaoDoLocal? pontuacao;
+
+  /// A URL da **derivada** da logo da entidade, ou nulo (cliente, 18/10/2026:
+  /// *"pode liberar as imagens do profissional no app"*).
+  ///
+  /// **Nulo e o estado NORMAL**, em tres casos que a tela trata igual: a
+  /// entrada nao tem logo; a logo foi enviada e o worker ainda nao terminou; a
+  /// logo foi recusada nos bytes. Em nenhum deles o cartao deixa de existir --
+  /// **cartao sem logo desenha o nome sem imagem**, e nunca um quadro vazio.
+  ///
+  /// E sempre derivada: o original mora no armazenamento privado e nao e
+  /// servido a cliente nenhum. Quem garante isso e o servidor, que confere a
+  /// forma da chave antes de montar a URL.
+  final String? logoUrl;
 
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao.
   ///
@@ -245,6 +259,10 @@ class EntradaDoDiretorio {
       // tratar a ausencia como falha faria a listagem inteira cair por causa
       // de um numero de enfeite.
       pontuacao: PontuacaoDoLocal.opcional(json['rating']),
+      // **Campo OPCIONAL: ausente e nulo, e nao estoura.** Mesmo motivo de
+      // `rating`: o APK publicado le esta resposta e nao conhece o campo, e
+      // uma entrada sem logo nao pode derrubar a listagem inteira.
+      logoUrl: urlDeImagem(json['logo_url']),
     );
   }
 }
@@ -259,6 +277,25 @@ class EntradaDoDiretorio {
 /// Mora fora das classes porque o cartao da listagem
 /// ([EntradaDoDiretorio]) e a pagina do local ([DetalheDoLocal]) precisam
 /// escrever a MESMA linha: duas copias divergem na primeira edicao.
+/// A URL de imagem que veio do contrato, **ou nulo**.
+///
+/// Existe por tres razoes, e nenhuma e estetica:
+///
+/// 1. **Campo ausente e campo nulo sao a MESMA coisa** para a tela. O contrato
+///    declara `logo_url` e `photo_url` como anulaveis e nao obrigatorios, e um
+///    `as String?` cru sobre um valor de outro tipo estoura em tempo de
+///    execucao -- na listagem, isso derrubaria a pagina inteira por causa de
+///    uma entrada.
+/// 2. **String vazia nao e URL.** `Image.network('')` lanca, e o servidor nao
+///    promete nunca mandar vazio: ele promete nulo. Vazio vira nulo aqui.
+/// 3. **Uma definicao so**, porque o cartao da listagem e a pagina do local
+///    leem o mesmo campo. Duas copias divergem na primeira edicao.
+String? urlDeImagem(Object? bruto) {
+  if (bruto is! String) return null;
+  final limpo = bruto.trim();
+  return limpo.isEmpty ? null : limpo;
+}
+
 String? linhaDeLugarDe({String? bairro, String? cidade, String? estado}) {
   final partes = <String>[
     if (bairro != null && bairro.isNotEmpty) bairro,
@@ -772,6 +809,8 @@ class DetalheDoLocal {
     this.distanciaEmMetros,
     this.minhaAvaliacaoRef,
     this.motivoDeNaoPoderAvaliar,
+    this.logoUrl,
+    this.fotoUrl,
   });
 
   final String slug;
@@ -813,6 +852,30 @@ class DetalheDoLocal {
 
   /// Por que [podeAvaliar] e falso. Nulo quando ele e verdadeiro.
   final MotivoDeNaoPoderAvaliar? motivoDeNaoPoderAvaliar;
+
+  /// A URL da **derivada** da logo da entidade, ou nulo (cliente, 18/10/2026:
+  /// *"pode liberar as imagens do profissional no app"*).
+  ///
+  /// **Nulo e o estado NORMAL**, em tres casos que a tela trata igual: a
+  /// entrada nao tem logo; a logo foi enviada e o worker ainda nao terminou; a
+  /// logo foi recusada nos bytes. Em nenhum deles o cartao deixa de existir --
+  /// **cartao sem logo desenha o nome sem imagem**, e nunca um quadro vazio.
+  ///
+  /// E sempre derivada: o original mora no armazenamento privado e nao e
+  /// servido a cliente nenhum. Quem garante isso e o servidor, que confere a
+  /// forma da chave antes de montar a URL.
+  final String? logoUrl;
+
+  /// A URL da **derivada** da foto do lugar -- fachada ou ambiente --, ou nulo.
+  ///
+  /// Faixa 16:9 (derivada `banner`, 1280 x 720), e e a imagem que a pessoa olha
+  /// GRANDE antes de decidir se leva o animal ali.
+  ///
+  /// **So existe aqui, e nao em [EntradaDoDiretorio].** A faixa em ate 20
+  /// cartoes multiplicaria o peso da primeira pintura da lista; a lista desenha
+  /// a logo. Nulo nos mesmos tres casos da logo, e **pagina sem foto nao tem
+  /// faixa vazia**: ela simplesmente nao desenha a faixa.
+  final String? fotoUrl;
 
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao. **A MESMA
   /// linha do cartao da listagem**, por [linhaDeLugarDe]: duas copias da regra
@@ -862,6 +925,9 @@ class DetalheDoLocal {
       sobre: json['about'] as String?,
       telefoneE164: json['phone_e164'] as String?,
       distanciaEmMetros: distancia is num ? distancia.round() : null,
+      // Os dois sao OPCIONAIS: ausente e nulo, e nao estoura.
+      logoUrl: urlDeImagem(json['logo_url']),
+      fotoUrl: urlDeImagem(json['photo_url']),
     );
   }
 }
@@ -1159,3 +1225,166 @@ Map<String, dynamic> corpoDaDenuncia({
 
 /// O limite de `DirectoryReviewReportInput.detail`.
 const int limiteDoDetalheDaDenuncia = 1000;
+
+/// `#/components/schemas/MyDirectorySuggestion` do contrato: uma indicacao
+/// como **quem a fez** a ve.
+///
+/// ## Nao e `ReciboDaSugestao`, e nao e a projecao do painel
+///
+/// O recibo e o instante do envio e nada mais -- `referencia`, `estado` e
+/// `criadaEm`. Este modelo e o que a tela `Minhas indicacoes` mostra depois:
+/// o estado atual, o motivo quando recusada e o caminho para o `Perto` quando
+/// a entrada esta no ar.
+///
+/// **`note` nao esta aqui porque o contrato nao o devolve.** O recado e para
+/// quem revisa; quem o le e o painel. Nao e esquecimento, e a fronteira.
+class MinhaIndicacao {
+  const MinhaIndicacao({
+    required this.referencia,
+    required this.nome,
+    required this.atividade,
+    required this.cidade,
+    required this.uf,
+    required this.tipoDeContato,
+    required this.contato,
+    required this.estado,
+    required this.criadaEm,
+    this.bairro,
+    this.decididaEm,
+    this.motivoDaRecusa,
+    this.entradaSlug,
+  });
+
+  /// O identificador opaco, 128 bits em base64url. **Nao e UUID**
+  /// (ADR-0010 item 6), e e o MESMO que o recibo do envio devolveu.
+  final String referencia;
+
+  final String nome;
+  final AtividadeDoDiretorio atividade;
+  final String cidade;
+  final String uf;
+  final String? bairro;
+  final TipoDeContatoPublico tipoDeContato;
+  final String contato;
+  final EstadoDaSugestao estado;
+  final DateTime criadaEm;
+  final DateTime? decididaEm;
+
+  /// O motivo da recusa, escrito pelo administrador.
+  ///
+  /// **Ele chega a quem indicou desde 18/10/2026**, e isso reverte o que o
+  /// contrato dizia antes. Nulo em tudo que nao foi recusado.
+  final String? motivoDaRecusa;
+
+  /// O caminho da entrada no `Perto`, **e so quando ela esta publicada**.
+  ///
+  /// **Nulo com [estado] `approved` TEM significado, e nao e dado faltando:**
+  /// a entrada existe e esta em rascunho. Entrada nascida de indicacao com
+  /// contato de site ou Instagram nasce rascunho (ela nao tem telefone, que e
+  /// o canal unico do diretorio), e o `Perto` so lista o que esta publicado.
+  ///
+  /// **Quem decide isso e o servidor**, na funcao `indicacoes_do_autor`: esta
+  /// tela nao reavalia publicacao, e por isso ela nao pode oferecer um caminho
+  /// que o servidor nao deu. Aprovada sem `entradaSlug` e dita com palavras.
+  final String? entradaSlug;
+
+  /// A entrada da indicacao aprovada esta no ar e tem para onde levar?
+  bool get levaAoPerto => entradaSlug != null;
+
+  factory MinhaIndicacao.doJson(Map<String, dynamic> json) {
+    final referencia = json['reference'];
+    final nome = json['display_name'];
+    final atividade = AtividadeDoDiretorio.porCodigo(json['kind'] as String?);
+    final cidade = json['city'];
+    final uf = json['state'];
+    final contatoJson = json['public_contact'];
+    final estado = EstadoDaSugestao.porCodigo(json['review_status'] as String?);
+    final criadaEm = DateTime.tryParse(json['created_at'] as String? ?? '');
+
+    // **Reprova em voz alta em vez de desenhar um cartao pela metade.** Campo
+    // obrigatorio ausente e resposta fora do contrato, e a tela trata
+    // `FormatException` como falha -- nao como lista vazia, que pareceria
+    // "voce nunca indicou nada".
+    if (referencia is! String || referencia.isEmpty) {
+      throw const FormatException('indicacao sem `reference`');
+    }
+    if (nome is! String || nome.isEmpty) {
+      throw const FormatException('indicacao sem `display_name`');
+    }
+    if (atividade == null) {
+      throw const FormatException('indicacao com `kind` desconhecido');
+    }
+    if (cidade is! String || uf is! String) {
+      throw const FormatException('indicacao sem `city` ou `state`');
+    }
+    if (contatoJson is! Map<String, dynamic>) {
+      throw const FormatException('indicacao sem `public_contact`');
+    }
+    final tipoDeContato = TipoDeContatoPublico.porCodigo(
+      contatoJson['kind'] as String?,
+    );
+    final contato = contatoJson['value'];
+    if (tipoDeContato == null || contato is! String) {
+      throw const FormatException('indicacao com `public_contact` incompleto');
+    }
+    if (estado == null) {
+      throw const FormatException('indicacao com `review_status` desconhecido');
+    }
+    if (criadaEm == null) {
+      throw const FormatException('indicacao sem `created_at` legivel');
+    }
+
+    return MinhaIndicacao(
+      referencia: referencia,
+      nome: nome,
+      atividade: atividade,
+      cidade: cidade,
+      uf: uf,
+      bairro: json['neighborhood'] as String?,
+      tipoDeContato: tipoDeContato,
+      contato: contato,
+      estado: estado,
+      criadaEm: criadaEm,
+      decididaEm: DateTime.tryParse(json['decided_at'] as String? ?? ''),
+      motivoDaRecusa: json['decline_reason'] as String?,
+      entradaSlug: json['entry_slug'] as String?,
+    );
+  }
+}
+
+/// `#/components/schemas/MyDirectorySuggestionPage`.
+///
+/// Sem `pending_total`: aquele numero e o aviso do menu do PAINEL, e nao tem
+/// sentido na tela de quem indicou.
+class PaginaDasMinhasIndicacoes {
+  const PaginaDasMinhasIndicacoes({
+    required this.itens,
+    required this.pagina,
+    required this.tamanho,
+    required this.total,
+  });
+
+  final List<MinhaIndicacao> itens;
+  final int pagina;
+  final int tamanho;
+
+  /// Quantas indicacoes a conta tem AO TODO, e nao quantas vieram nesta
+  /// pagina: e ele que alimenta "Mostrando 1 a 20 de 87".
+  final int total;
+
+  factory PaginaDasMinhasIndicacoes.doJson(Map<String, dynamic> json) {
+    final itens = json['items'];
+    if (itens is! List) {
+      throw const FormatException('pagina de indicacoes sem `items`');
+    }
+    return PaginaDasMinhasIndicacoes(
+      itens: itens
+          .whereType<Map<String, dynamic>>()
+          .map(MinhaIndicacao.doJson)
+          .toList(growable: false),
+      pagina: json['page'] as int? ?? 1,
+      tamanho: json['limit'] as int? ?? 20,
+      total: json['total'] as int? ?? 0,
+    );
+  }
+}

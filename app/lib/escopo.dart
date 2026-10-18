@@ -101,8 +101,9 @@ class Escopo extends InheritedWidget {
   /// nomeou. Um envio construido dentro de cada tela seria um cliente por
   /// tela, e a proxima pessoa passaria o cliente da API "para reaproveitar".
   ///
-  /// Um so no app inteiro, e dois consumidores: a foto do pet (F1.6) e a foto
-  /// do achado avulso, quando F3.5 existir.
+  /// Um so no app inteiro, e tres consumidores: a foto do pet (F1.6), a foto
+  /// do achado avulso e a foto do PROPRIO usuario em `Meus dados` (cliente,
+  /// 18/10/2026).
   final EnvioDeFoto envioDeFoto;
 
   /// A busca de endereco por CEP, para poupar digitacao no pedido da

@@ -90,6 +90,39 @@ export async function registrarIntencaoDeCapaDaComunidade(
     .execute();
 }
 
+/**
+ * A intencao de envio da FOTO DO PROPRIO USUARIO (cliente, 18/10/2026).
+ *
+ * Terceira funcao e nao um parametro, pelo mesmo motivo da segunda: `purpose` e
+ * o que amarra o envio ao destino (T9), e um parametro livre deixaria uma rota
+ * do app assinar envio de imagem de produto. Aqui ele e LITERAL.
+ */
+export async function registrarIntencaoDeFotoDoUsuario(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      purpose: 'user_photo',
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

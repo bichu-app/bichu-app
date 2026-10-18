@@ -10,6 +10,8 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 import 'pagina_do_local.dart';
@@ -30,11 +32,19 @@ import 'pagina_do_local.dart';
 ///
 /// ## O que esta tela NAO tem, e nenhuma das ausencias e esquecimento
 ///
-/// - **Nao ha foto, logotipo, horario, endereco de rua, site, e-mail, redes,
-///   lista de servicos nem preco.** A tabela nao tem essas colunas. Desenhar
-///   espaco para foto ensinaria quem le que a foto vem. **`avaliacao` saiu
-///   desta lista**: `DirectoryEntrySummary.rating` entrou no contrato em 18/10
-///   e o cartao mostra a media e a quantidade.
+/// - **Nao ha horario, endereco de rua, site, e-mail, redes, lista de
+///   servicos nem preco.** A tabela nao tem essas colunas. **`logotipo` saiu
+///   desta lista** e **`foto` continua nela**, e a diferenca entre as duas e
+///   medida: `DirectoryEntrySummary.logo_url` entrou no contrato em 18/10
+///   ("pode liberar as imagens do profissional no app") e o cartao a desenha
+///   ao lado do nome, num quadrado de 56 dp; a FOTO do lugar e faixa 16:9 de
+///   borda a borda e mora **so** na [PaginaDoLocal]. Vinte faixas numa
+///   pagina de listagem custariam **65,6 MiB** de imagem decodificada (20 x
+///   3,28 MiB, a 412 dp e 3x) -- 70,4 MiB se alguem esquecer o `cacheWidth`.
+///   A vitrine da `Loja` chegou a 9,8 MB de primeira pintura por menos que
+///   isso. **`avaliacao` tambem saiu desta lista**:
+///   `DirectoryEntrySummary.rating` entrou no contrato em 18/10 e o cartao
+///   mostra a media e a quantidade.
 /// - **Nao ha mapa** (decisao de 17/09): o Maps cobra por carregamento e o
 ///   componente criaria precedente contra o ADR-0010.
 ///
@@ -81,15 +91,6 @@ class ListaDoDiretorio extends StatefulWidget {
   /// Quando a pagina seguinte nao chega. A lista ja carregada **fica**.
   static const String falhaAoCarregarMais =
       'Não foi possível carregar mais profissionais.';
-
-  /// Por que a lista nao saiu por distancia, quando falta a localizacao.
-  ///
-  /// **Palavra por palavra, num lugar so.** O texto afirma a ordem real antes
-  /// de explicar a causa: quem le a primeira frase ja sabe o que esta vendo.
-  static const String semLocalizacao =
-      'Esta lista está em ordem alfabética, não por proximidade. O Bichu '
-      'ainda não tem a sua região de referência, então não dá para calcular '
-      'a distância até cada um.';
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
@@ -409,15 +410,29 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   /// A ordenacao, montada a partir do que **de fato** aconteceu.
   ///
   /// [PaginaDoDiretorio.ordemEfetiva] sai de `distance_available`, que e a
-  /// resposta do servidor sobre a ordem real. O que a tela pediu
-  /// (`_recorte.ordem`) so serve para decidir se ha algo a explicar.
+  /// resposta do servidor sobre a ordem real, e e ela que o rotulo do controle
+  /// mostra: a linha de resumo diz `Nome` quando a lista saiu por nome, mesmo
+  /// que o app tenha pedido distancia. **Isso nao mudou.**
+  ///
+  /// **A FAIXA DE EXPLICACAO SAIU** (18/10/2026, literal do cliente: *"remova
+  /// o bloco do texto: essa lista está em ordem alfabética"*). Era
+  /// `ListaDoDiretorio.semLocalizacao`, montada aqui quando a ordem pedida
+  /// divergia da efetiva e desenhada por `BarraDeListagem` em
+  /// `porQueNaoEAPedida`.
+  ///
+  /// Com a faixa fora, a comparacao entre pedida e efetiva nao tem mais para
+  /// quem falar, e o calculo saiu junto -- deixar `divergiu` sem uso seria
+  /// codigo morto prometendo uma faixa que nao existe.
+  ///
+  /// **O campo `porQueNaoEAPedida` do componente FICA**: ele e compartilhado, e
+  /// `rede/agenda_da_rede.dart` o usa com outro texto
+  /// (`ordemTrocadaPeloServidor`), que o cliente nao mencionou.
+  ///
+  /// O que a pessoa perde: a frase que dizia POR QUE nao ha distancia. O que
+  /// ela mantem: a ordem REAL escrita no controle e na linha de resumo, que e
+  /// o que impede a tela de mentir sobre proximidade -- e tem caso proprio.
   ControleDeOrdenacao _controleDeOrdenacao(PaginaDoDiretorio pagina) {
     final efetiva = pagina.ordemEfetiva;
-    final pedida = _recorte.ordem;
-    // So ha o que explicar quando a pessoa pediu distancia e nao teve. Quem
-    // pediu nome recebeu nome: nao ha divergencia, e uma faixa aqui seria o
-    // app se desculpando por atender.
-    final divergiu = pedida != efetiva;
 
     return ControleDeOrdenacao(
       opcoes: <OpcaoDeRecorte>[
@@ -425,7 +440,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
           OpcaoDeRecorte(codigo: o.codigo, rotulo: o.rotulo),
       ],
       efetiva: efetiva.codigo,
-      porQueNaoEAPedida: divergiu ? ListaDoDiretorio.semLocalizacao : null,
     );
   }
 
@@ -556,6 +570,7 @@ class CartaoDoDiretorio extends StatelessWidget {
     final verificacao = entrada.verificacao.oQueFoiVerificado;
     final telefone = entrada.telefoneE164;
     final pontuacao = pontuacaoEmTexto(entrada.pontuacao);
+    final logo = entrada.logoUrl;
 
     return Container(
       width: double.infinity,
@@ -584,7 +599,38 @@ class CartaoDoDiretorio extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(entrada.nome, style: textos.titleMedium),
+                  // A LOGO AO LADO DO NOME, quando ha (cliente, 18/10/2026).
+                  //
+                  // **Fora da semantica, de proposito.** A logo esta ao lado
+                  // do nome e o nome ja e o rotulo desta entrada: rotula-la
+                  // faria o leitor de tela dizer "Clinica Santa Barbara,
+                  // imagem, Clinica Santa Barbara" numa parada de foco so. Ela
+                  // e decorativa AQUI por causa de onde esta -- e por isso a
+                  // decisao e do cartao, e nao de `ImagemDaRede`.
+                  //
+                  // **Sem logo nao ha quadrado vazio**: `logoUrl` e nulo em
+                  // tres casos normais (sem logo, ainda processando, recusada
+                  // nos bytes) e o cartao desenha o nome na largura inteira,
+                  // exatamente como antes de a logo existir.
+                  if (logo != null)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        ImagemDaRede(
+                          url: logo,
+                          descricao: null,
+                          largura: BichuMoldura.larguraFotoSm,
+                          raio: BichuRaio.sm,
+                          simboloDeFalha: Icons.storefront_outlined,
+                        ),
+                        const SizedBox(width: BichuEspaco.e3),
+                        Expanded(
+                          child: Text(entrada.nome, style: textos.titleMedium),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(entrada.nome, style: textos.titleMedium),
                   if (atividade != null) ...<Widget>[
                     const SizedBox(height: BichuEspaco.e1),
                     Text(

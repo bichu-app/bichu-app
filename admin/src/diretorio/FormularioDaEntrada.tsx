@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
+import { CampoDeImagem } from '../componentes/CampoDeImagem.tsx';
 import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
@@ -41,6 +42,21 @@ interface Valores {
   complemento: string;
   /** Com mascara brasileira. O E.164 sai de `telefoneEmE164`, no `salvar`. */
   telefone: string;
+  /**
+   * A logo e a foto guardam **o que a pessoa fez**, e nao a imagem gravada:
+   *
+   * - `undefined`: ela nao tocou no campo, e a imagem gravada (`entrada.logo` /
+   *   `entrada.photo`) continua valendo. A chave NAO entra no `PATCH`.
+   * - `null`: ela removeu a imagem gravada. O `PATCH` manda `null`, que apaga.
+   * - `string`: ela escolheu outra, os bytes ja subiram, e este e o `upload_id`
+   *   que a escrita confirma.
+   *
+   * A imagem gravada nao e copiada para ca de proposito: `Valores` e comparado
+   * com a base para saber se o formulario esta sujo, e carregar nele um objeto
+   * que ninguem edita faria todo rascunho parecer alterado.
+   */
+  logoUploadId: string | null | undefined;
+  fotoUploadId: string | null | undefined;
   situacao: StatusDaEntrada;
 }
 
@@ -56,7 +72,9 @@ type Campo =
   | 'e-logradouro'
   | 'e-numero'
   | 'e-complemento'
-  | 'e-telefone';
+  | 'e-telefone'
+  | 'e-logo'
+  | 'e-foto';
 
 const ROTULOS: Record<Campo, string> = {
   'e-nome': 'Nome',
@@ -71,6 +89,8 @@ const ROTULOS: Record<Campo, string> = {
   'e-numero': 'Número',
   'e-complemento': 'Complemento',
   'e-telefone': 'Telefone comercial',
+  'e-logo': 'Logo',
+  'e-foto': 'Foto do local',
 };
 
 const ORDEM: Campo[] = [
@@ -86,6 +106,8 @@ const ORDEM: Campo[] = [
   'e-complemento',
   'e-bairro',
   'e-telefone',
+  'e-logo',
+  'e-foto',
 ];
 
 const VAZIO: Valores = {
@@ -102,6 +124,8 @@ const VAZIO: Valores = {
   numero: '',
   complemento: '',
   telefone: '',
+  logoUploadId: undefined,
+  fotoUploadId: undefined,
   situacao: 'draft',
 };
 
@@ -163,6 +187,24 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   return e;
 }
 
+/**
+ * O que a chave de imagem vale no `PATCH`, ou `undefined` quando ela nao deve
+ * entrar no corpo.
+ *
+ * Tres casos, e eles nao sao dois: envio NOVO manda o `upload_id`; REMOVER
+ * manda `null`, que apaga; e campo INTOCADO nao manda nada. O quarto caso --
+ * remover o que nunca existiu -- tambem nao manda nada: `null` ali seria uma
+ * mudanca inventada, e com `minProperties: 1` no contrato ela faria um clique
+ * que nao mudou nada virar uma escrita.
+ */
+function imagemParaOPatch(
+  escolhido: string | null | undefined,
+  gravada: Esquemas['AdminCatalogImage'] | null | undefined,
+): string | null | undefined {
+  if (typeof escolhido === 'string') return escolhido;
+  return escolhido === null && gravada ? null : undefined;
+}
+
 function valoresDa(entrada: Entrada): Valores {
   return {
     nome: entrada.display_name,
@@ -184,6 +226,13 @@ function valoresDa(entrada: Entrada): Valores {
     // NAO e completar em silencio o que a pessoa digitou -- e exibir o que a
     // escrita ja validou, como o formulario do parceiro faz com `https://`.
     telefone: telefoneDoE164(entrada.phone_e164),
+    // A logo e a foto GRAVADAS sao lidas de `entrada.logo` / `entrada.photo` e
+    // vao direto para a previa do campo (`salva`); aqui elas nascem
+    // `undefined`, que quer dizer "a pessoa nao tocou nestes campos". Guardar o
+    // objeto da imagem em `Valores` tornaria toda edicao suja antes do primeiro
+    // clique, e nao ha o que editar nele.
+    logoUploadId: undefined,
+    fotoUploadId: undefined,
     situacao: entrada.status,
   };
 }
@@ -415,6 +464,14 @@ export default function FormularioDaEntrada() {
               ? {}
               : { complement: ou(valores.complemento) as string }),
             ...(telefone === null ? {} : { phone_e164: telefone }),
+            // No cadastro so existe envio NOVO: nao ha imagem gravada para
+            // remover, e `null` nao e valor aceito no corpo de criacao.
+            ...(typeof valores.logoUploadId === 'string'
+              ? { logo_upload_id: valores.logoUploadId }
+              : {}),
+            ...(typeof valores.fotoUploadId === 'string'
+              ? { photo_upload_id: valores.fotoUploadId }
+              : {}),
           },
         });
         if (data) {
@@ -426,6 +483,8 @@ export default function FormularioDaEntrada() {
       }
 
       if (!entrada || !etag) return;
+      const logoNoPatch = imagemParaOPatch(valores.logoUploadId, entrada.logo);
+      const fotoNoPatch = imagemParaOPatch(valores.fotoUploadId, entrada.photo);
       const patch: Esquemas['AdminDirectoryEntryPatch'] = {
         ...(valores.slug !== entrada.slug ? { slug: valores.slug } : {}),
         ...(valores.atividade !== entrada.kind ? { kind: valores.atividade as TipoDaEntrada } : {}),
@@ -451,6 +510,13 @@ export default function FormularioDaEntrada() {
         // Compara o E.164, que e o que o servidor guarda: trocar `(11) 3061-2200`
         // por `11 3061 2200` nao e mudanca de telefone.
         ...(telefone !== (entrada.phone_e164 ?? null) ? { phone_e164: telefone } : {}),
+        // Imagem: a chave so entra quando a pessoa MEXEU no campo. Envio novo
+        // vai como `upload_id`; remover manda `null`, e apagar o que nunca
+        // existiu nao e mudanca -- por isso `null` so vai quando havia imagem
+        // gravada. Campo intocado nao aparece no corpo, que e o mesmo idioma
+        // dos outros campos deste `PATCH`.
+        ...(logoNoPatch !== undefined ? { logo_upload_id: logoNoPatch } : {}),
+        ...(fotoNoPatch !== undefined ? { photo_upload_id: fotoNoPatch } : {}),
         ...(valores.situacao !== entrada.status ? { status: valores.situacao } : {}),
       };
       // Sem mudanca nada vai ao servidor, e a tela diz isso em vez de voltar
@@ -511,6 +577,10 @@ export default function FormularioDaEntrada() {
         } else if (erro.field === 'neighborhood') e['e-bairro'] = 'Entre 2 e 80 caracteres.';
         else if (erro.field === 'postal_code') {
           e['e-cep'] = 'O CEP tem oito dígitos. Por exemplo: 05435-000.';
+        } else if (erro.field === 'logo_upload_id') {
+          e['e-logo'] = 'Não conseguimos usar esta imagem como logo. Envie a imagem de novo.';
+        } else if (erro.field === 'photo_upload_id') {
+          e['e-foto'] = 'Não conseguimos usar esta imagem como foto do local. Envie a imagem de novo.';
         } else if (erro.field === 'street') e['e-logradouro'] = 'Entre 2 e 120 caracteres.';
         else if (erro.field === 'street_number') e['e-numero'] = 'Até 20 caracteres.';
         else if (erro.field === 'complement') e['e-complemento'] = 'Até 80 caracteres.';
@@ -772,6 +842,37 @@ export default function FormularioDaEntrada() {
           erroDeForma={erroDoTelefone}
           aoMudarErroDeForma={setErroDoTelefone}
           ajuda="Com DDD. É o único canal de contato do cadastro hoje, e precisa estar preenchido para a entrada aparecer em Perto."
+        />
+
+        {/* Duas imagens, e DOIS campos: a logo e quadrada e pequena, a foto e
+            do lugar. Confirmar o envio de uma no campo da outra e recusado com
+            `400 upload_not_usable`, e por isso nenhum dos dois aceita o envio
+            do outro. A orientacao de tamanho fica sempre em tela, dentro de
+            cada campo. */}
+        <CampoDeImagem
+          id="e-logo"
+          dataCy="entrada-logo"
+          rotulo="Logo"
+          proposito="directory_logo"
+          api={api}
+          uploadId={valores.logoUploadId}
+          salva={entrada?.logo ?? null}
+          aoMudar={(v) => mudar({ logoUploadId: v })}
+          erro={erros['e-logo']}
+          ajuda="Quadrada. Aparece ao lado do nome na lista e no cartão desta entrada."
+        />
+
+        <CampoDeImagem
+          id="e-foto"
+          dataCy="entrada-foto"
+          rotulo="Foto do local"
+          proposito="directory_photo"
+          api={api}
+          uploadId={valores.fotoUploadId}
+          salva={entrada?.photo ?? null}
+          aoMudar={(v) => mudar({ fotoUploadId: v })}
+          erro={erros['e-foto']}
+          ajuda="A fachada ou o ambiente, em faixa deitada. É a imagem grande da entrada."
         />
 
         {editando && (

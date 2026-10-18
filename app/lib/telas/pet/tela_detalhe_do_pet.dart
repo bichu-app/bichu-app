@@ -114,6 +114,16 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   /// F1.6, e e com ele que o rotulo acessivel diz DE QUAL plaquinha e o QR.
   String _sufixoDaTag = '';
 
+  /// Se este pet TEM pedido da plaquinha, e por isso se o link de
+  /// acompanhamento tem para onde levar.
+  ///
+  /// **Nasce `false` e so vira `true` por leitura**, nunca por suposicao: ter
+  /// plaquinha ativa nao quer dizer ter pedido, e oferecer o link sem pedido
+  /// levaria a pessoa a uma pagina vazia -- acao sem destino e o que o
+  /// criterio 2 da BICHUS-62 proibe. Enquanto a leitura nao volta, o link nao
+  /// aparece; ele e informacao secundaria e nao vale segurar a tela por ele.
+  bool _temPedidoDePlaquinha = false;
+
   bool _iniciou = false;
 
   @override
@@ -143,6 +153,7 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       // ainda nao tinha. E ela nao e `await`-ada por quem chama: o detalhe nao
       // espera a plaquinha para desenhar o animal.
       await _carregarOQr(pet);
+      await _carregarOPedidoDaPlaquinha(pet);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -166,6 +177,34 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
         _textoDaFalha = MensagensDeErro.servidorFora;
         _fase = _Fase.falha;
       });
+    }
+  }
+
+  /// Pergunta ao servidor se este pet tem pedido da plaquinha.
+  ///
+  /// **Serve a UMA decisao: mostrar ou nao o link de acompanhamento.** Por
+  /// isso ela e a ultima chamada da tela e nenhuma falha dela muda a fase: um
+  /// pet que carregou nao pode virar "servidor fora" porque a leitura
+  /// secundaria caiu. Falhou? O link nao aparece, e o resto da pagina do pet
+  /// -- o QR e `Marcar como perdido`, que chegaram hoje -- continua inteiro.
+  ///
+  /// **Nao e `pet.semTag` que decide.** Ter plaquinha ativa e ter PEDIDO sao
+  /// coisas diferentes: a tag e emitida em F1.6, no cadastro, e o pedido do
+  /// plastico e outro ato. Usar `semTag` aqui ofereceria o link para todo pet
+  /// com tag, e a maioria deles nunca pediu nada.
+  Future<void> _carregarOPedidoDaPlaquinha(Pet pet) async {
+    try {
+      final pedidos =
+          await Escopo.of(context).pets.listarPedidosDePlaquinha(pet.id);
+      if (!mounted) return;
+      setState(() => _temPedidoDePlaquinha = pedidos.isNotEmpty);
+    } on Object {
+      // Silencioso DE PROPOSITO, e este e o unico lugar da tela em que isso
+      // vale: o desfecho da falha e "nao ofereca o link", que ja e o estado
+      // inicial. Uma faixa de erro aqui faria a pagina do pet reclamar de uma
+      // leitura que a pessoa nem sabe que existe.
+      if (!mounted) return;
+      setState(() => _temPedidoDePlaquinha = false);
     }
   }
 
@@ -391,6 +430,9 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
           sufixoDaTag: _sufixoDaTag,
           aoTentarOQr: () => _carregarOQr(_pet!),
           aoMarcarPerdido: () => _marcarComoPerdido(_pet!),
+          temPedidoDePlaquinha: _temPedidoDePlaquinha,
+          aoAcompanharPlaquinha: () =>
+              context.push(Rotas.acompanharPlaquinhaDe(_pet!.id)),
         ),
     };
   }
@@ -454,6 +496,8 @@ class _Conteudo extends StatelessWidget {
     required this.sufixoDaTag,
     required this.aoTentarOQr,
     required this.aoMarcarPerdido,
+    required this.temPedidoDePlaquinha,
+    required this.aoAcompanharPlaquinha,
   });
 
   final Pet pet;
@@ -464,6 +508,11 @@ class _Conteudo extends StatelessWidget {
   final String sufixoDaTag;
   final VoidCallback aoTentarOQr;
   final VoidCallback aoMarcarPerdido;
+
+  /// Se ha pedido da plaquinha para este pet. Ver o campo de mesmo nome no
+  /// estado da tela: `false` tambem e o que a leitura que falhou produz.
+  final bool temPedidoDePlaquinha;
+  final VoidCallback aoAcompanharPlaquinha;
 
   /// Se o pet **ja** esta sendo procurado.
   ///
@@ -633,6 +682,26 @@ class _Conteudo extends StatelessWidget {
           nomeDoPet: pet.nome,
           aoTentarDeNovo: aoTentarOQr,
         ),
+
+        // O LINK DO ACOMPANHAMENTO (cliente, 18/10: "adicione o link para
+        // abrir a pagina de rastreio da tag dentro da pagina do pet").
+        //
+        // **So quando ha pedido.** Pet sem plaquinha e pet com plaquinha mas
+        // sem pedido nao veem link nenhum: ele levaria a uma pagina vazia, e
+        // acao sem destino e o que o criterio 2 da BICHUS-62 proibe. Quem
+        // mede isso e `_carregarOPedidoDaPlaquinha`, por leitura, e nao
+        // `pet.semTag` -- ter tag e ter pedido sao coisas diferentes.
+        //
+        // AQUI, junto do QR: os dois falam da mesma plaquinha. E longe das
+        // destrutivas do fim, que seguem separadas por mais de 16 dp de
+        // qualquer outro alvo.
+        if (temPedidoDePlaquinha) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          _AcaoEmTexto(
+            rotulo: TextosDoDetalhe.acompanharPlaquinha,
+            aoTocar: aoAcompanharPlaquinha,
+          ),
+        ],
 
         // As acoes destrutivas, em texto, no fim, e separadas por mais de
         // 16 dp de qualquer outro alvo (7.6.3, acessibilidade).

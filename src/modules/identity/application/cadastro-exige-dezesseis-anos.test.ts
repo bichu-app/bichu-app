@@ -129,6 +129,11 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
     concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
     cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
+    // As duas portas da FOTO entraram em 18/10/2026, pela development. Elas
+    // recusam como todas as outras: nenhum caso deste arquivo e sobre foto, e
+    // chegar la seria o cadastro fazendo coisa que a idade nao pede.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
   };
 }
 
@@ -406,7 +411,7 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
 
   /**
    * O ano absurdo, que é a mesma regra do `CHECK` da migração
-   * `20261018000005`. Ele tem código próprio porque a saída da pessoa é
+   * `20261018000021`. Ele tem código próprio porque a saída da pessoa é
    * diferente: aqui ela digitou o ano errado, e corrigir resolve.
    */
   void it('ano antes de 1900 é recusado como fora de faixa', async () => {

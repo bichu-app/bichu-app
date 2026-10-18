@@ -441,7 +441,7 @@ paths:
             examples:
               minimo:
                 summary: O minimo aceito
-                value: { email: "marina@exemplo.com.br", password: "girassol-de-agosto-9", birth_date: "1991-03-22" }
+                value: { email: "marina@exemplo.com.br", password: "girassol-de-agosto-9", display_name: "Marina", birth_date: "1991-03-22" }
               comAEscolhaDaCaixa:
                 summary: A tela F1.1 inteira, com a caixa marcada e a versao dos termos
                 value:
@@ -1979,9 +1979,10 @@ paths:
         coisa. Depois de atendido, um pedido novo e aceito -- a segunda
         plaquinha e um pedido legitimo.
 
-        **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
-        que o painel usa no caminho nao e projetado para o app, que nao tem o
-        que fazer com ele.
+        **O `ref` do pedido SAI aqui desde 18/10**, para que a pessoa saia
+        desta tela com o numero que identifica o pedido dela. Ele e o mesmo
+        `ref` opaco da fila do painel, e **nenhum UUID interno sai**
+        (ADR-0010 item 6).
 
         **O endereco e obrigatorio e nao volta na resposta.** Ele e dado
         pessoal, quem o enviou acabou de digita-lo, e devolve-lo seria uma
@@ -2014,6 +2015,43 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+    get:
+      operationId: listCollarTagRequests
+      tags: [tags]
+      x-effects: []
+      summary: Os pedidos da plaquinha deste pet
+      description: |
+        A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app (decisao do
+        cliente, 18/10): privada, exige sessao, e a pessoa ve **so as
+        plaquinhas dela**.
+
+        **A autorizacao esta na clausula `WHERE`, e por isso a resposta de pet
+        de outra conta e `404` e nunca `403`** (ADR-0021): o `SELECT` carrega
+        `pets.owner_user_id = <chamador>` e simplesmente nao encontra linha.
+        Um `403` confirmaria que o pet existe.
+
+        **Nenhum endereco de entrega sai aqui.** Ele e dado pessoal, ja foi
+        digitado por quem pede, e a unica superficie que o projeta segue sendo
+        a fila do painel (`AdminCollarTagRequest`).
+
+        Ordenado do pedido mais recente para o mais antigo. Um pet costuma ter
+        um pedido; a lista existe porque a segunda plaquinha e um pedido
+        legitimo depois do primeiro ser atendido.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Os pedidos deste pet, do mais recente para o mais antigo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollarTagRequestPage' }
+        # `petId` e `format: uuid` e a validacao de parametro pode recusa-lo
+        # antes de qualquer leitura. Sem este `400` declarado a aplicacao nao
+        # sobe: o portao de rotas registradas cobra que toda operacao que PODE
+        # recusar parametro diga isso no contrato.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /pets/{petId}/tags/{tagId}/qr.png:
     parameters:
@@ -3522,6 +3560,122 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
   /directory/suggestions:
+    get:
+      operationId: listMyDirectorySuggestions
+      tags: [directory]
+      x-effects: []
+      summary: Minhas indicações
+      description: |
+        As indicações que **a propria conta** fez para o `Perto`, com o estado
+        de cada uma. Pedido literal do cliente em 18/10/2026: *"e a aba de
+        minhas indicacoes, com o status se esta pendente ou se ja foi aprovado
+        pelo administrador?"*.
+
+        ## O LADO QUE FALTAVA, e o que ele desfaz
+
+        `suggestDirectoryEntry` existe desde 17/10 e devolve um recibo com
+        `reference`, `state` e `created_at` -- e nada mais depois disso. A
+        `20261017000016` deu ao PAINEL as quatro operacoes da fila; nenhuma
+        operacao deste contrato lia `directory_suggestions` do lado de **quem
+        indicou**, e por isso a pessoa nao tinha como saber se alguem olhou.
+
+        **Isto REVERTE uma frase, e a reversao esta declarada.** O
+        `COMMENT ON COLUMN` de `decline_reason` dizia "nao chega a quem
+        indicou", e `AdminDirectorySuggestion.decline_reason` repetia. A partir
+        de 18/10/2026 **o motivo da recusa chega a quem indicou**, por esta
+        operacao: recusa sem motivo faz a mesma clinica ser indicada outra vez,
+        e e a unica forma de resposta que nao ensina nada a ninguem. A migracao
+        `20261018000003` reescreve aquele `COMMENT` e justifica a troca; quem
+        recusa passa a escrever **para a pessoa**, e nao so para o proximo
+        revisor.
+
+        ## A autorizacao esta no `WHERE`, e por isso nao ha `403`
+
+        A consulta passa pela funcao `indicacoes_do_autor(uuid)` da migracao
+        `20261018000003`, que tem a conta na propria clausula `WHERE`. Nao e um
+        filtro aplicado depois de ler e nao e um `if` sobre a linha lida: a
+        indicacao de outra conta **nao existe** para quem chama. Nao ha `403`
+        nesta operacao, e nao ha por que haver (ADR-0021).
+
+        **Conta desabilitada devolve lista vazia**, pela mesma funcao, que
+        delega a `conta_habilitada(uuid)` (`20261017000013`) -- o ponto unico da
+        definicao, nao copiado aqui.
+
+        ## Nada de quem indicou sai na resposta
+
+        **Nenhum identificador interno** (ADR-0010): sem `id`, e o enderecamento
+        e por `reference`, o mesmo opaco de 128 bits que o recibo devolveu. A
+        coluna da autoria leva a marca `NUNCA sai do servidor` no
+        `COMMENT ON COLUMN` da `20261017000004` (ADR-0011 secao 4, BICHUS-174) e
+        **nao e projetada** pela funcao: ela e parametro e filtro, nunca saida.
+
+        ## `entry_slug` SO VEM PUBLICADO, e o nulo tem significado
+
+        Aprovada **nao** quer dizer no ar. Uma entrada nascida de indicacao cujo
+        contato publico e `website` ou `instagram` nasce `draft` -- ela nao tem
+        `phone_e164`, que e o canal unico de `professionals` --, e `Perto` so
+        lista `status = 'published'`. Por isso `entry_slug` e devolvido
+        **apenas quando a entrada esta publicada**: devolver o `slug` do
+        rascunho faria a tela oferecer um caminho para uma pagina que nao esta
+        no `Perto`.
+
+        Entao `review_status: approved` com `entry_slug: null` e um estado com
+        nome, e a tela o diz com palavras em vez de prometer link: aprovada,
+        ainda nao no `Perto`.
+
+        ## `state` existe e `q` NAO, e as duas decisoes sao medidas
+
+        O padrao de listagem do projeto poe filtro e ordenacao no corpo da
+        tela -- e os poe **sobre o que o contrato aceita**. Um filtro aplicado
+        so na pagina carregada mentiria no `total` e no paginador: com `limit`
+        de 20 e uma lista que cresce 5 por dia (o teto de
+        `suggestDirectoryEntry`), "pendentes" filtrado no aplicativo mostraria
+        as pendentes **da pagina 1** e diria que sao todas. Entao `state` e do
+        SERVIDOR, e `total` passa a ser o do recorte.
+
+        **`q` nao existe, e a ausencia e a mesma medida ao contrario:** buscar
+        por nome numa lista de poucas dezenas de itens que a pessoa mesma
+        escreveu e um campo a mais para manter em troca de nada -- e seria a
+        unica busca do projeto sem indice por tras. Ordenacao tambem nao: a
+        ordem e uma so, e e a unica que faz sentido aqui (a mais recente
+        primeiro, porque e sobre ela que a pessoa quer noticia).
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "mesmo teto de `listMyNetworkEventJoinRequests`, que e a mesma pergunta na `Rede`: leitura da propria lista, aberta e reaberta a cada noticia"
+      parameters:
+        - name: state
+          in: query
+          description: |
+            Filtra pelo estado da revisao. Ausente, devolve **todos** os
+            estados -- que e a pergunta de quem abre a tela.
+
+            Do SERVIDOR e nao do aplicativo: filtrar a pagina carregada
+            mentiria no `total` e no paginador. Com o filtro, `total` e o do
+            recorte.
+          schema: { $ref: '#/components/schemas/DirectorySuggestionState' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina das indicacoes da conta, **da mais recente para a mais
+            antiga** -- ao contrario da fila do painel, que e trabalho humano e
+            se atende do mais antigo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyDirectorySuggestionPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
     post:
       operationId: suggestDirectoryEntry
       tags: [directory]
@@ -4286,6 +4440,73 @@ paths:
   # direto e a capa e PUBLICA, entao a intencao de envio precisa existir fora do
   # painel. Mesma forma de `/media/pet-photo-intents`: o backend assina e nunca
   # recebe os bytes.
+  /media/my-photo-intents:
+    post:
+      operationId: createMyPhotoUploadIntent
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: [irreversible_write]
+      summary: Pede as credenciais de upload direto da foto do proprio usuario
+      description: |
+        O backend assina a autorizacao de envio direto e **nunca recebe os
+        bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+        prefixo `people/`, que e proprio e nao compartilhado com a `Loja`, a
+        `Rede` nem o diretorio: foto de pessoa e foto de estabelecimento tem
+        regimes de privacidade diferentes (ADR-0010), e prefixos separados sao o
+        que permite uma politica de balde valer para uma e nao para a outra.
+
+        `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+        assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+        contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+        tem.
+
+        **O envio e da CONTA.** `updateMe` so confirma `upload_id` cuja intencao
+        e da propria conta (a conferencia esta na clausula `WHERE`), e
+        `upload_id` de outra pessoa, de outro proposito, ja usado ou vencido e
+        recusado com `400` (`code: upload_not_usable`), sem dizer qual dos casos
+        ocorreu.
+
+        **O teto e 5 MB e ele vale no SERVIDOR**: `byte_size` acima dele e
+        recusado aqui, antes de qualquer assinatura, e a politica assinada leva o
+        mesmo numero dentro dela -- e ela que impede o envio direto ao
+        armazenamento de passar por cima da recusa. A tela diz o numero tambem,
+        mas a tela nao e a regra.
+
+        Dimensao minima 300 x 300: `width`/`height` sao opcionais e, quando vem
+        abaixo dela, respondem `422 image-too-small` **antes** de assinar. Quem
+        decide de verdade e o worker, nos bytes.
+
+        **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+        dez minutos e o varredor a recolhe; conta sem foto e estado normal
+        (`Me.photo` nulo).
+
+        **Quem ve a foto: so o dono.** Ela sai em `getMe` e em nenhuma outra
+        resposta. O selo de validado nao e enviado nem escolhido aqui -- ele e
+        `Me.email_verified`.
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto de createPetPhotoUploadIntent: assinar e barato, mas cada assinatura e uma autorizacao de escrita que nao se desfaz"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MyPhotoIntentInput' }
+      responses:
+        '201':
+          description: Credenciais de upload, validas por 10 minutos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '422': { $ref: '#/components/responses/ImageTooSmall' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /media/network-event-cover-intents:
     post:
       operationId: createNetworkEventCoverUploadIntent
@@ -8140,6 +8361,14 @@ paths:
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/AdminCollarTagRequestStatus' }
+        - name: delivery_state
+          in: query
+          description: |
+            Recorta por PASSO DA ENTREGA, e combina com `status` em vez de
+            substitui-lo: os dois sao eixos diferentes. `status=fulfilled` com
+            `delivery_state=requested` e a fila de trabalho de quem despacha --
+            pedidos aceitos que ainda nao sairam.
+          schema: { $ref: '#/components/schemas/CollarTagDeliveryState' }
         - $ref: '#/components/parameters/AdminPage'
         - name: limit
           in: query
@@ -8154,6 +8383,126 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/AdminUnauthorized' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/tag-requests/{requestRef}:
+    parameters:
+      - $ref: '#/components/parameters/CollarTagRequestRef'
+    get:
+      operationId: getAdminCollarTagRequest
+      tags: [admin]
+      x-effects: []
+      summary: Um pedido da plaquinha
+      description: |
+        A leitura de UM pedido, para a tela de entrega do painel: quem atende
+        abre o pedido, confere o endereco, digita o rastreio e marca o passo.
+        Sem ela a tela teria de achar o pedido dentro da pagina da listagem, e
+        perderia a linha a cada recarga.
+
+        Mesma projecao da listagem (`AdminCollarTagRequest`), e as mesmas
+        regras: **devolve o ENDERECO DE ENTREGA** (dado pessoal, so nesta
+        superficie, nunca na trilha, nunca geocodificado -- ADR-0006); **nenhum
+        PERFIL do solicitante**; e **nao traz o codigo da plaquinha**, que e
+        credencial ao portador (ADR-0004).
+
+        **Pedido de conta desabilitada responde `404`**, e nao uma leitura
+        parcial: decisao do cliente de 17/10 -- conta desabilitada nao e mais
+        encontrada em nenhuma pagina nem funcionalidade. O filtro esta na
+        clausula `WHERE`, e nao num ramo de JavaScript. `404` tambem para `ref`
+        desconhecido e para pedido de pet ja excluido; nao ha `403` nesta
+        superficie (ADR-0021).
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "contagem de requisicoes, aplicada pela borda. Nao e `rows_returned`: o teto por linhas e da leitura de pessoa (D56), e este pedido nao le pessoa"
+      responses:
+        '200':
+          description: O pedido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollarTagRequest' }
+        # `requestRef` e validado pela borda, entao esta leitura PODE recusar
+        # parametro -- e `rotas-registradas-contra-o-contrato` cobra o 400 de
+        # toda operacao registrada que possa.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/tag-requests/{requestRef}/delivery:
+    parameters:
+      - $ref: '#/components/parameters/CollarTagRequestRef'
+    post:
+      operationId: updateAdminCollarTagRequestDelivery
+      tags: [admin]
+      x-effects: []
+      summary: Atualiza a entrega da plaquinha
+      description: |
+        O estado da entrega e o codigo de rastreio, numa escrita so -- que e
+        como o cliente pediu em 18/10: "mudar o status da entrega e inserir o
+        codigo de rastreio e atualizar a entrega".
+
+        As transicoes aceitas, o que acontece com cada uma e por que nao se
+        volta atras estao em `AdminCollarTagDeliveryUpdate`. Transicao fora da
+        tabela responde `400` com `code: invalid_delivery_transition`;
+        rastreio so com espaco responde `400` com `code: blank_tracking_code`.
+
+        **`POST` e nao `PATCH`**, e nao por indecisao: as outras duas escritas
+        desta fila sao `POST` em sub-recurso de acao
+        (`/fulfillment`, `/decline`), e esta e a terceira irma delas. Um `PATCH`
+        aqui obrigaria o painel a falar dois dialetos com a mesma fila.
+
+        **Sem `If-Match`**, ao contrario de `updateAdminDirectoryEntry`. La o
+        recurso tem `version` e a escrita e de formulario inteiro, onde duas
+        pessoas se sobrescrevem em silencio. Aqui a trava e a propria maquina de
+        estados, sob `FOR UPDATE`: quem chega com a tela velha tenta uma
+        transicao que o estado atual nao permite e leva `400` em voz alta. Um
+        `ETag` para esta fila seria uma segunda trava para a mesma propriedade,
+        e uma coluna `version` que so ela usaria.
+
+        **Nao apaga nada.** Nao existe exclusao de pedido nesta superficie, e o
+        que seria cancelar e `declined` -- estado, e por
+        `declineAdminCollarTagRequest`.
+
+        **Nao emite codigo** (ADR-0004) e **nao consulta transportadora
+        nenhuma**: o rastreio e texto digitado.
+
+        Pedido de conta desabilitada responde `404`, pela mesma clausula `WHERE`
+        da leitura.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit:
+        action: admin.collar_tag_request.delivery_updated
+        resource_kind: collar_tag_request
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCollarTagDeliveryUpdate' }
+      responses:
+        '200':
+          description: Entrega atualizada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollarTagRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /admin/tag-requests/{requestRef}/fulfillment:
@@ -9142,7 +9491,7 @@ components:
 
         **A FAIXA AQUI E A MESMA DO BANCO E DA TELA, caractere a caractere.**
         `minLength: 5` / `maxLength: 20` / `pattern` espelham o `CHECK` de
-        `handles.handle` (`20261018000005`) e o regex de
+        `handles.handle` (`20261018000021`) e o regex de
         `app/lib/formato/apelido.dart`. Isto esta escrito porque esta casa ja
         pagou pela divergencia: o recado do achado aceitava **1000** no
         contrato e a coluna recusava acima de **500**, e a pessoa recebia erro
@@ -9183,8 +9532,38 @@ components:
 
     RegisterRequest:
       type: object
-      required: [email, password, birth_date]
+      required: [email, password, display_name, birth_date]
       description: |
+        **DUAS EXIGENCIAS NOVAS, do mesmo dia (18/10/2026), e as duas sao do
+        cliente.** `display_name` veio de *"o campo de nome no cadastro do
+        usuario e obrigatorio"* e `birth_date` de *"coloque maiores de 16
+        anos"*. Elas nasceram em ramos separados e se encontraram aqui: o
+        `required` desta operacao carrega **as duas**, e nenhuma substitui a
+        outra.
+
+        **As duas sao quebra de contrato, e as duas tem dispensa datada em
+        `.github/quality-gates.yml`** -- quatro entradas no total, porque o
+        juizo casa um par regra+operacao por entrada. O APK em campo nao tem
+        nenhum dos dois campos e deixa de criar conta ate sair APK novo; o
+        cliente aceitou esse custo nos dois casos.
+
+        **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+        cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+        ele esta cadastrando sem esse campo"*.
+
+        **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+        que nao manda a chave passa a receber 400 `validation-failed` com
+        `errors[].field: display_name` e `code: required`. O APK em campo que
+        nao preenche o nome deixa de criar conta -- a correcao e APK novo, e nao
+        afrouxar o campo.
+
+        **`minLength: 1` nao esgota a regra, e de proposito.** O caso que escapa
+        do schema e o nome **so com espaco em branco** (`"   "`), que tem
+        comprimento 1 e nao tem nome nenhum dentro. Quem recusa esse e o
+        servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
+        nao tem como exprimir "sobra caractere depois de aparar", e inventar
+        `pattern` aqui faria a recusa do schema e a do servidor divergirem.
+
         **`birth_date` e obrigatorio desde 18/10/2026**, por decisao do cliente:
         *"coloque maiores de 16 anos"*.
 
@@ -9220,6 +9599,11 @@ components:
       properties:
         email: { type: string, format: email, maxLength: 254 }
         password: { $ref: '#/components/schemas/Password' }
+        # `minLength: 1` vem de `feat/nome-obrigatorio-cadastro`: sem o piso,
+        # `required` aceitaria `display_name: ""` e a conta nasceria sem nome
+        # com o campo preenchido. O caso so com espaco (`"   "`) passa pelo
+        # schema de qualquer forma e quem o recusa e o servidor, depois do trim.
+        display_name: { type: string, minLength: 1, maxLength: 80 }
         birth_date:
           type: string
           format: date
@@ -9233,7 +9617,6 @@ components:
             entre recusar e aceitar alguem no proprio aniversario, e por isso o
             calculo e civil (ano/mes/dia no fuso do produto) e nao uma subtracao
             de instantes em UTC.
-        display_name: { type: string, maxLength: 80 }
         # **OPCIONAL no cadastro, e a escolha e deliberada.** O cliente disse
         # que o apelido *"vai estar no cadastro"* -- que ele ESTA la, nao que
         # ele seja exigido. Tres razoes para nao entrar em `required`:
@@ -9342,23 +9725,55 @@ components:
             O apelido (`@`) da **propria conta**, ou `null` quando ela nao
             escolheu nenhum.
 
-            **Ele SAI aqui, e so aqui, e o destinatario e o DONO.** `GET
-            /v1/me` exige conta e responde sobre quem esta autenticado: nao ha
-            como outra pessoa ler este campo por esta rota. Ele precisa sair
-            por uma razao concreta -- a **pagina de edicao do perfil** precisa
-            mostrar o apelido atual para a pessoa poder trocar de apelido, e um
-            campo que nao volta e um campo que a tela abre vazio e sobrescreve
-            com o que a pessoa digitar.
+            **O destinatario e sempre o DONO, e as rotas sao CINCO e nao
+            uma** -- medido resolvendo `$ref` sobre o contrato inteiro, e nao
+            suposto. `getMe` e `updateMe` exigem conta; e
+            `SessionResponse.user` aponta para este schema, entao o apelido
+            viaja tambem em `registerUser`, `login`, `refreshSession` e
+            `confirmEmailVerification`. Essas quatro tem `security: []`, **mas
+            nao sao anonimas**: cada uma entrega a sessao a quem acabou de
+            provar identidade com senha, com refresh ou com token de e-mail --
+            e sao exatamente as quatro que `portao-contrato-publico` dispensa
+            da varredura de campos, por este motivo escrito la.
 
-            **Nenhuma resposta SEM conta declara este campo**, e a dependencia
+            Ele precisa sair por uma razao concreta: a **pagina de edicao do
+            perfil** mostra o apelido atual para a pessoa poder trocar de
+            apelido, e um campo que nao volta e um campo que a tela abre vazio
+            e sobrescreve com o que a pessoa digitar.
+
+            **`birth_date` nao sai em resposta nenhuma** -- zero, pela mesma
+            medicao. A assimetria e a decisao: o apelido *"nao tem relacao com
+            informacoes pessoais"* (cliente, 18/10/2026) e o dono precisa dele
+            de volta; a data existe para ter sido conferida no cadastro.
+
+            **Nenhuma rota de TERCEIRO declara este campo**, e a dependencia
             esta registrada no plano 4-C: *"o apelido nao pode aparecer para
             outra pessoa antes da fatia E"*. Esta fatia nao abre superficie
-            nenhuma -- nao existe `/@{apelido}` de pessoa, e nem rota de
-            terceiros que o devolva.
+            nenhuma -- nao existe `/@{apelido}` de pessoa, e nenhuma listagem,
+            nenhum teaser e nenhuma conversa o devolvem.
 
             `null` e um estado legitimo e permanente: **nenhum fluxo obriga a
             escolher apelido** (plano 4-C.8), e a tela cai para
             `display_name` -- que e o que ela ja faz.
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/MyPhoto'
+            - type: 'null'
+          description: |
+            A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
+
+            **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
+            dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
+            Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
+            terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
+            pessoas (ADR-0025 item 2, que proibe avatar por nome) e
+            `Conversation.participants` continua dizendo por extenso que nunca
+            traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
+            pessoa fisica e **depende de decisao do cliente**, nao de
+            implementacao.
+
+            Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
+            inteira sem foto.
         phone_e164: { type: string, nullable: true, example: '+5511999998888' }
         phone_verified: { type: boolean, default: false }
         reference_area:
@@ -9387,7 +9802,32 @@ components:
         assincrona, em `POST /v1/me/email-change`. Aceitar aqui faria a
         resposta revelar se um endereco ja tem conta.
       properties:
-        display_name: { type: string, maxLength: 80 }
+        # **`minLength: 1` desde 18/10/2026**, por decisao do cliente: *"nao
+        # permitir atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+        #
+        # Antes desta linha `display_name: ""` era aceito e APAGAVA o nome, e a
+        # tela de `Meus dados` oferecia isso em texto ("deixe o campo vazio
+        # para tira-lo"). Conta sem nome aparece aos outros como "Tutor" ou
+        # "Quem achou" (`conversa-mediada.ts`), o que prejudica o
+        # reconhecimento do pet -- era a razao da decisao.
+        #
+        # Mesma divisao de trabalho do cadastro: o schema recusa `""`, e o
+        # **servidor** recusa o nome so com espaco (`"   "`), que passa por
+        # `minLength` e nao tem nome dentro. O servidor tambem recusa o PATCH
+        # que **omite** o nome quando a conta ainda nao tem nenhum -- e aceita
+        # o PATCH que o PREENCHE, que e a saida de quem esta nesse estado.
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+        # A FOTO DA PROPRIA PESSOA (cliente, 18/10/2026). `null` TIRA a foto,
+        # ausente nao mexe, `upload_id` novo TROCA. Tirar nao apaga objeto no
+        # balde: o que sai e o ponteiro da conta.
+        photo_upload_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            O `upload_id` de `createMyPhotoUploadIntent`, **da propria conta**:
+            envio de outra pessoa, de outro proposito, ja usado ou vencido e
+            recusado com `400` (`code: upload_not_usable`), sem dizer qual dos
+            casos ocorreu -- a conferencia da conta esta na clausula `WHERE`.
         # **O apelido na edicao do perfil** (cliente, 18/10/2026: *"vai estar
         # no cadastro do usuario e na pagina de edicao do perfil"*).
         #
@@ -9853,7 +10293,15 @@ components:
     FoundReportEnrichment:
       type: object
       properties:
-        message: { type: string, maxLength: 1000 }
+        message:
+          type: string
+          maxLength: 500
+          description: |
+            500, o mesmo teto de `found_reports.notes` no banco
+            (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+            entre 501 e 1000 passava pela validacao e morria no banco como erro
+            de servidor -- o recado se perdia com o animal na mao de quem ajuda.
+            Mesmo alinhamento que `StrayFoundReportInput.notes` ja tinha.
         photo_upload_ref:
           type: string
           pattern: '^[A-Za-z0-9_-]{22}$'
@@ -9891,7 +10339,17 @@ components:
         de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
         consumidor (13 quebras no `oasdiff` do commit 19ee222).
       properties:
-        message: { type: string, maxLength: 1000 }
+        message:
+          type: string
+          maxLength: 1000
+          description: |
+            **1000 de proposito, e nao os 500 da rota com conta.** Este `message`
+            NAO e gravado em `found_reports.notes`: ele entra na conversa mediada
+            como mensagem do achador (`aviso-do-achador.ts`, "para onde vai cada
+            campo"), isto e em `mediated_messages.body`, cujo CHECK aceita 4000.
+            O numero casa com `body` de `postFinderMessage`, que e o mesmo
+            destino. Apertar aqui para 500 nao corrigiria descasamento nenhum e
+            cortaria pela metade o recado de quem avisa SEM CONTA.
         photo_upload_ref:
           type: string
           pattern: '^[A-Za-z0-9_-]{22}$'
@@ -10615,6 +11073,31 @@ components:
             O recorte e o MESMO da pagina do local e da lista de avaliacoes
             (`status = 'published'` e `conta_habilitada(author_user_id)`), para
             a media do cartao e a da pagina nunca discordarem.
+        logo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A LOGO da entidade, liberada para o aplicativo pelo cliente em
+            18/10/2026 ("pode liberar as imagens do profissional no app"). E
+            ela que o cartao desenha ao lado do nome.
+
+            **E a URL da DERIVADA publica, nunca do original.** O original mora
+            no armazenamento privado e nao e servido a cliente nenhum; a chave
+            da derivada tem 128 bits aleatorios no nome e a forma
+            `directory/{card|thumb}/{nome}.jpeg`. A URL e montada na leitura a
+            partir de `MEDIA_PUBLIC_BASE_URL` (ADR-0007 §11.1 proibicao 9).
+
+            **Nula e o estado normal**, em tres casos que a tela trata igual:
+            a entrada nao tem logo; a logo foi enviada e o worker ainda nao
+            terminou; a logo foi recusada nos bytes. Em nenhum deles o cartao
+            deixa de existir -- ele desenha o nome sem imagem.
+
+            **A FOTO EM FAIXA NAO ESTA AQUI, e a ausencia e medida.** Ela e
+            1280 x 720 e pertence a pagina do local (`DirectoryEntryDetail.
+            photo_url`): mandar a faixa em lista de ate 20 cartoes multiplicaria
+            o peso da primeira pintura, que neste projeto ja chegou a 9,8 MB por
+            excesso de imagem em lista. Logo na lista, foto no detalhe.
         verification: { $ref: '#/components/schemas/DirectoryVerification' }
         distance_m:
           type: integer
@@ -10804,6 +11287,110 @@ components:
             instante de criacao dentro, ao contrario de um UUIDv7.
         state: { $ref: '#/components/schemas/DirectorySuggestionState' }
         created_at: { type: string, format: date-time }
+    MyDirectorySuggestion:
+      type: object
+      description: |
+        Uma indicacao, como **quem a fez** a ve.
+
+        ## Nao e `AdminDirectorySuggestion`, e a diferenca nao e de organizacao
+
+        Sao duas audiencias com direitos diferentes sobre a mesma linha. O
+        painel ve `note` -- o recado PARA QUEM REVISA --, e esta projecao
+        **nao**: ele nao e conteudo da pessoa sobre a entidade, e devolve-lo
+        aqui faria a tela parecer um rascunho guardado. Esta projecao devolve
+        `entry_slug` **so publicado**; a do painel devolve sempre, porque o
+        painel precisa pular para o rascunho que ele mesmo vai completar.
+
+        Um `allOf` sobre a do painel acoplaria as duas: o dia em que o painel
+        ganhar um campo, a pessoa o receberia junto. A duplicacao aqui e
+        deliberada e e a fronteira.
+
+        ## Nada de identificador interno, e nada da autoria
+
+        **Sem `id`** (ADR-0010 item 6): o enderecamento e por `reference`. A
+        coluna da autoria leva a marca `NUNCA sai do servidor` e nao e
+        projetada pela funcao que serve esta operacao.
+
+        **O estado da revisao e `review_status`, e nao `state`** -- `state`
+        aqui e a UF, na mesma projecao, exatamente como na tabela e como em
+        `AdminDirectorySuggestion`.
+      required: [reference, display_name, kind, city, state, public_contact, review_status, created_at]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+          minLength: 20
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu.
+        display_name: { type: string, minLength: 2, maxLength: 120 }
+        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        city:
+          type: string
+          minLength: 2
+          maxLength: 80
+          description: Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006).
+        state:
+          type: string
+          pattern: '^[A-Z]{2}$'
+          description: 'A UF. **Nao e o estado da revisao**: esse e `review_status`.'
+        neighborhood: { type: [string, 'null'], minLength: 2, maxLength: 80 }
+        public_contact: { $ref: '#/components/schemas/DirectorySuggestionContact' }
+        review_status: { $ref: '#/components/schemas/DirectorySuggestionState' }
+        created_at: { type: string, format: date-time }
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+          description: Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+        decline_reason:
+          type: [string, 'null']
+          maxLength: 280
+          description: |
+            **O motivo da recusa, e ele CHEGA a quem indicou** -- decisao de
+            18/10/2026, que reverte a frase anterior deste contrato e o
+            `COMMENT ON COLUMN` da `20261017000016` (ver a descricao de
+            `listMyDirectorySuggestions` e o cabecalho da `20261018000003`).
+
+            Nulo em tudo que nao foi recusado. Continua fora da entrada do
+            diretorio e continua nao publicado para terceiros: quem o le e a
+            conta que indicou.
+        entry_slug:
+          type: [string, 'null']
+          description: |
+            O endereco da entrada no `Perto`, **e so quando ela esta
+            publicada**.
+
+            Nulo com `review_status: approved` **tem significado**: a entrada
+            existe mas esta `draft`, e nao esta no `Perto`. Isso acontece
+            quando a indicacao foi aprovada sem telefone -- entrada nascida de
+            contato `website` ou `instagram` nasce rascunho, porque
+            `professionals` tem `phone_e164` como canal unico. A tela diz isso
+            com palavras e **nao oferece link**, porque link para rascunho leva
+            a pagina que nao esta la.
+
+    MyDirectorySuggestionPage:
+      type: object
+      description: |
+        A pagina, **da mais recente para a mais antiga**. Sem `pending_total`:
+        aquele numero e o aviso do menu do PAINEL ("quanto trabalho esta
+        esperando"), e nao tem sentido na tela de quem indicou -- aqui o que
+        importa e o estado de cada uma, nao o tamanho de uma fila alheia.
+      required: [items, page, limit, total]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MyDirectorySuggestion' }
+        page: { type: integer }
+        limit: { type: integer }
+        total:
+          type: integer
+          description: |
+            Quantas indicacoes o RECORTE desta chamada tem -- todas, quando
+            `state` esta ausente. Alimenta "Mostrando 1 a 20 de 87" e o
+            paginador, e e por isso que ele acompanha o filtro: um total que
+            ignorasse `state` faria o paginador oferecer paginas vazias.
+
     AdminDirectorySuggestion:
       type: object
       description: |
@@ -11092,6 +11679,32 @@ components:
           maxLength: 2
           description: A UF, duas letras.
         # ---------------------------------------------------------------
+        # A LOGO E A FOTO (cliente, 18/10/2026)
+        # ---------------------------------------------------------------
+        # *"coloque um campo no backoffice para subir uma imagem do logo e foto
+        # dos profissionais recomendados"*. Quem sobe e o ADMINISTRADOR, no
+        # painel, pelo caminho que a `Loja` e a `Rede` ja usam: o envio e
+        # autorizado por `createAdminCatalogImageUploadIntent`, os bytes vao
+        # direto ao armazenamento, e aqui chega apenas o `upload_id`.
+        #
+        # OS DOIS SAO OPCIONAIS, e isso e requisito e nao conveniencia:
+        # profissional sem logo e sem foto continua sendo cadastrado, publicado
+        # e listado exatamente como antes.
+        logo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            O `upload_id` de um envio com `purpose: directory_logo` desta mesma
+            sessao do painel. Envio de outro proposito, ja usado em outra
+            entrada ou vencido e recusado com `400`
+            (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            O `upload_id` de um envio com `purpose: directory_photo`. Mesma
+            regra de recusa da logo.
+        # ---------------------------------------------------------------
         # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
         # ---------------------------------------------------------------
         # A decisao 9.2 de `api/contrato-de-escrita-do-diretorio.md` --
@@ -11160,6 +11773,12 @@ components:
         city: { type: string, nullable: true, minLength: 2, maxLength: 80 }
         state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
         neighborhood: { type: string, nullable: true, minLength: 2, maxLength: 80 }
+        # A LOGO e a FOTO (18/10/2026). `null` TIRA a imagem, ausente nao mexe,
+        # `upload_id` novo TROCA -- o mesmo idioma de `price` e de
+        # `image_upload_id` na `Loja`. Tirar a imagem nao apaga objeto nenhum do
+        # balde: o que sai e o ponteiro da entrada.
+        logo_upload_id: { type: [string, 'null'], format: uuid }
+        photo_upload_id: { type: [string, 'null'], format: uuid }
         # Os quatro do endereco de rua (decisao 9.2, respondida em 18/10). `null`
         # APAGA e ausente NAO MEXE, como os demais: e a distincao que separa
         # "limpar o CEP" de "editar so o telefone". Nenhum deles e exigido para
@@ -11213,6 +11832,25 @@ components:
         street_number: { type: string, nullable: true }
         complement: { type: string, nullable: true }
         phone_e164: { type: string, nullable: true }
+        # A LOGO e a FOTO (cliente, 18/10/2026). Nulas quando a entrada nao tem,
+        # e nulo e o estado normal. **Sem `upload_id` e sem `id` de imagem**: o
+        # painel escreve por `logo_upload_id`/`photo_upload_id` e LE a URL da
+        # derivada, e nenhum UUID interno sai aqui (ADR-0010 item 6).
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+          description: |
+            A logo da entidade, quadrada. `status: processing` enquanto o worker
+            nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
+            imagem, nao um erro.
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+          description: |
+            A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
+            `status` e `url` da logo.
         status: { $ref: '#/components/schemas/DirectoryEntryStatus' }
         verification:
           allOf:
@@ -11328,9 +11966,14 @@ components:
         interseccao para `allOf`, e um campo nulavel atravessa isso perdendo a
         nulabilidade. Os tres geradores leem este arquivo.
 
-        **Nao ganhou nenhum campo de cadastro que nao exista no banco.** Site,
-        e-mail, WhatsApp, redes sociais, horario e foto nao sao colunas de
-        `professionals`; nao ha de onde preenche-los e eles nao estao aqui.
+        **A FOTO E A LOGO PASSARAM A EXISTIR**, e esta frase substitui a
+        anterior, que dizia que "foto nao e coluna de `professionals`". Era
+        verdade e deixou de ser: a migracao `20261018000008` criou
+        `logo_image_id` e `photo_image_id`, e o cliente liberou as duas para o
+        aplicativo em 18/10/2026. Site, e-mail, WhatsApp, redes sociais e
+        horario continuam sem coluna e continuam fora -- declarar campo que
+        ninguem pode preencher produziria uma tela com linhas vazias
+        permanentes.
 
         **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
         quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
@@ -11353,6 +11996,33 @@ components:
             `DirectoryEntrySummary`: este campo so pode existir porque a
             operacao exige conta -- ele esta na lista de proibidos de
             `src/tools/portao-contrato-publico.ts`.
+        logo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma
+            regra: derivada publica, nunca o original, nula quando nao ha, quando
+            ainda processa e quando foi recusada. A pagina a desenha ao lado do
+            nome, como o cartao.
+        photo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A FOTO do lugar -- fachada ou ambiente --, liberada para o
+            aplicativo pelo cliente em 18/10/2026. Faixa 16:9, derivada
+            `banner` de 1280 x 720, e e a imagem que a pessoa olha GRANDE antes
+            de decidir se leva o animal ali.
+
+            **So no detalhe, e nunca na listagem.** Ela nao existe em
+            `DirectoryEntrySummary` de proposito: a faixa em ate 20 cartoes
+            multiplicaria o peso da primeira pintura, e a lista desenha a logo.
+
+            **E a URL da DERIVADA publica, nunca do original**, com a forma
+            `directory/{banner|card}/{nome}.jpeg`. Nula quando nao ha foto,
+            quando o worker ainda nao terminou e quando os bytes foram
+            recusados -- nos tres a pagina existe sem a faixa.
         verification: { $ref: '#/components/schemas/DirectoryVerification' }
         distance_m:
           type: integer
@@ -12409,6 +13079,71 @@ components:
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
         cover_image: { $ref: '#/components/schemas/CommunityNetworkEventCoverInput' }
 
+    MyPhoto:
+      type: object
+      description: |
+        A foto do proprio usuario, como o DONO a ve (cliente, 18/10/2026).
+
+        **Nao tem `id` nem `upload_id`** (ADR-0010 item 6): o app grava por
+        `MeUpdate.photo_upload_id` e le a URL da derivada. Nao tem `original_url`
+        tambem: o original fica no armazenamento privado e nunca e servido ao
+        cliente, aqui como na foto de pet.
+
+        **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e `Me.email_verified`, que ja
+        existia e e o MESMO conceito que o resto do produto usa. A moldura do app
+        desenha o selo em cima da foto quando `email_verified` e verdadeiro, e
+        nao desenha quando e falso. Gravar o selo dentro do JPEG faria a imagem
+        mentir no dia em que a pessoa trocasse de e-mail.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [processing, ready, rejected]
+          description: |
+            `processing` enquanto o worker nao terminou -- `url` e nula nesse
+            intervalo, e a tela mostra o lugar da foto em vez de um erro.
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A derivada `card` (512 x 512, JPEG), no armazenamento publico com 128
+            bits aleatorios no nome. Nula enquanto processa e quando recusada.
+        rejection_reason:
+          type: string
+          nullable: true
+          description: O motivo medido nos bytes reais, quando `status` e `rejected`.
+
+    MyPhotoIntentInput:
+      type: object
+      required: [content_type, byte_size]
+      additionalProperties: false
+      description: |
+        O pedido de autorizacao de envio da foto do proprio usuario. **Sem
+        `purpose`**, pelo mesmo motivo de `NetworkEventCoverIntentInput`: esta
+        operacao existe para um proposito so (`user_photo`), e deixar o cliente
+        escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de produto por
+        uma rota do app.
+      properties:
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/heic, image/webp]
+          description: |
+            **HEIC entra aqui**, e nao entra em `AdminCatalogImageIntentInput`:
+            esta foto sai de um celular, metade dos celulares e iPhone, e o
+            cliente autorizou HEIC na entrada por causa disso (18/10/2026). A
+            conversao para JPEG e nossa, no servidor. SVG nunca, e por
+            IGUALDADE, nunca por prefixo `image/`.
+        # 5 MiB: o teto unico de toda a aplicacao (cliente, 17/10/2026). Ele vale
+        # AQUI, no servidor, e dentro da politica assinada -- nao so na tela.
+        byte_size: { type: integer, minimum: 1, maximum: 5242880 }
+        width:
+          type: integer
+          minimum: 1
+          maximum: 20000
+          description: Opcional, como o cliente a le. Abaixo de 300 responde 422 antes de assinar.
+        height: { type: integer, minimum: 1, maximum: 20000 }
+
     NetworkEventCoverIntentInput:
       type: object
       required: [content_type, byte_size]
@@ -12807,11 +13542,22 @@ components:
       properties:
         purpose:
           type: string
-          enum: [store_item, network_event]
+          enum: [store_item, network_event, directory_logo, directory_photo]
           description: |
             Fica gravado no envio. A escrita que confirma o envio exige o mesmo
             proposito, e recusa foto de pet, de achador ou de outro proposito
             (T9).
+
+            `directory_logo` e `directory_photo` entraram em 18/10/2026, com a
+            logo e a foto do profissional recomendado. Sao DOIS propositos e nao
+            um: a logo e quadrada e pequena (minima 256 x 256, derivadas 512 x
+            512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
+            600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
+            outro e `400 upload_not_usable`.
+
+            **`user_photo` nao esta aqui, de proposito**: a foto da propria
+            pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
+            app, e nao pelo painel.
         content_type:
           type: string
           enum: [image/jpeg, image/png, image/webp]
@@ -14009,30 +14755,153 @@ components:
       type: string
       enum: [pending, fulfilled, declined]
       description: |
-        `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
-        FISICA saiu, e nao que o codigo foi emitido -- emitir e `issuePetTag`,
-        e o codigo e irreversivel (ADR-0004).
+        A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
+        quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
+
+        **Nao diz onde a encomenda esta** -- isso e `delivery_state`, que e o
+        eixo da entrega e carrega os passos que o tutor acompanha.
+
+        `fulfilled` NAO quer dizer que o codigo foi emitido: emitir e
+        `issuePetTag`, e o codigo e irreversivel (ADR-0004).
+
+    CollarTagDeliveryState:
+      type: string
+      enum: [requested, in_transit, arrived]
+      description: |
+        O EIXO DA ENTREGA, e os tres passos que o cliente nomeou em 18/10:
+
+        | valor | passo, nas palavras dele |
+        | --- | --- |
+        | `requested` | solicitado |
+        | `in_transit` | em transporte |
+        | `arrived` | chegou |
+
+        **Nunca nulo e nunca ausente**: a coluna e `NOT NULL DEFAULT
+        'requested'`, entao todo pedido tem um passo escrito -- inclusive os
+        criados antes de a entrega existir. A tela le UM campo e desenha UM
+        passo, e nao infere "solicitado" de uma ausencia.
+
+        ## Por que e um eixo separado de `status`, e nao mais um valor dele
+
+        O desenho de UM eixo so -- `delivered` acrescentado a
+        `CollarTagRequestStatus` -- foi escrito primeiro e **reprovado por
+        `oasdiff`**: acrescentar valor a `enum` de RESPOSTA e quebra de contrato
+        pela regra `response-property-enum-value-added`, e ela saiu em nivel
+        `error` quatro vezes, uma por operacao que projeta o estado. Campo
+        ACRESCENTADO nao quebra ninguem; valor acrescentado a `enum` existente
+        quebra. O eixo separado e o desenho que nao precisa de dispensa.
+
+        ## E as combinacoes impossiveis?
+
+        Os dois eixos **nao sao independentes**, e quem garante isso e o banco:
+        `collar_tag_requests_entrega_exige_atendimento` proibe sair de
+        `requested` sem o pedido estar `fulfilled`. Com isso
+        recusado-que-chegou e pendente-em-transporte deixam de existir, e nao ha
+        par a conferir na aplicacao.
 
     CollarTagRequest:
       type: object
       description: |
-        O pedido da plaquinha como o APP o ve. **Sem `ref`**: o identificador
-        opaco serve ao caminho do painel, e projeta-lo aqui daria ao app um
-        valor que ele nao tem o que fazer com. Sem UUID interno nenhum
-        (ADR-0010 item 6) -- o pet e o do caminho.
-      required: [status, requested_at]
+        O pedido da plaquinha como o APP o ve.
+
+        **`ref` PASSOU A SAIR AQUI, em 18/10.** Ate entao esta projecao nao o
+        trazia, e o motivo escrito era que o app "nao tem o que fazer com
+        ele". O cliente deu o que fazer: a pessoa acompanha o pedido e precisa
+        de um numero para pedir ajuda sobre ele. Continua sendo o MESMO `ref`
+        opaco de 128 bits da fila do painel -- **nao ha identificador novo, e
+        nenhum UUID interno sai** (ADR-0010 item 6). O pet e o do caminho.
+
+        **Sem endereco de entrega**: dado pessoal, ja digitado por quem pede, e
+        a unica superficie que o projeta e `AdminCollarTagRequest`.
+      required: [ref, status, requested_at]
       additionalProperties: false
       properties:
+        ref:
+          type: string
+          description: |
+            O identificador opaco do pedido, 128 bits em base64url. O MESMO
+            valor de `AdminCollarTagRequest.ref`, e nao um segundo
+            identificador. Nao e UUID.
         status: { $ref: '#/components/schemas/CollarTagRequestStatus' }
         requested_at: { type: string, format: date-time }
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando o painel decidiu, ou nulo enquanto `pending`.
         notes:
           type: string
           nullable: true
           description: A observacao que o tutor escreveu, ou nulo.
+        # COSTURA DA MESCLA 18/10: `tracking_code` estava declarado DUAS vezes
+        # neste schema -- a frente do aplicativo o descrevia como "HOJE E SEMPRE
+        # NULO ... nao ha coluna que o guarde", e a do painel o redeclarava
+        # abaixo depois de criar a coluna pela `20261018000004`. A uniao por
+        # linha fechava a contagem mas o YAML NAO PARSEAVA (chave de mapa
+        # repetida). Ficou UMA, a do painel, que e a que diz a verdade.
+        delivery_state: { $ref: '#/components/schemas/CollarTagDeliveryState' }
+        tracking_code:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 64
+          description: |
+            O codigo de rastreio da encomenda, ou nulo. **Sai para o DONO do
+            pedido**, que e quem acompanha a entrega, e nunca em superficie sem
+            conta.
+
+            Nulo e o caso comum e NAO e defeito: nem todo envio tem rastreio
+            (entrega em maos, correio simples), e nenhum pedido tem rastreio
+            antes de sair. A tela mostra o passo sem o codigo em vez de mostrar
+            um campo vazio.
+
+            **Sem validacao de formato de transportadora**: ver
+            `AdminCollarTagDeliveryUpdate.tracking_code`.
+        shipped_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Quando a plaquinha SAIU, o carimbo do passo "em transporte". Nulo
+            enquanto `delivery_state` e `requested`.
+
+            Coluna propria, e **nao `decided_at` reaproveitado**: `decided_at`
+            guarda tambem o instante da RECUSA, e chamar aquilo de "saiu" seria
+            mentir sobre uma plaquinha que nunca foi despachada. Nao volta a
+            nulo quando a encomenda chega -- `arrived` tambem ja saiu.
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Quando a plaquinha CHEGOU, o carimbo do passo "chegou". Nulo em tudo
+            que nao chegou.
+
+            Com `requested_at` e `shipped_at`, fecha os TRES carimbos dos tres
+            passos -- a pagina privada do aplicativo nao precisa derivar nenhuma
+            data de nenhum estado.
+
+    CollarTagRequestPage:
+      type: object
+      description: |
+        Os pedidos da plaquinha de UM pet, do mais recente para o mais antigo.
+        Sem paginacao: o teto de 3 pedidos por conta por dia e o indice parcial
+        de um pendente por pet mantem a lista curta por construcao.
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CollarTagRequest' }
 
     AdminCollarTagRequestStatus:
       type: string
       enum: [pending, fulfilled, declined]
+      description: |
+        Os mesmos tres valores de `CollarTagRequestStatus`, que e o eixo da
+        DECISAO. Como filtro de `listAdminCollarTagRequests`, e a aba que o
+        painel abre; para recortar por passo da ENTREGA o filtro e
+        `delivery_state`, e os dois podem ser combinados.
 
     AdminCollarTagRequest:
       type: object
@@ -14078,6 +14947,105 @@ components:
           type: string
           format: date-time
           nullable: true
+        delivery_state: { $ref: '#/components/schemas/CollarTagDeliveryState' }
+        tracking_code:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 64
+          description: |
+            O codigo de rastreio que o administrador digitou, ou nulo. O mesmo
+            valor que o dono do pedido le em `CollarTagRequest.tracking_code`.
+        shipped_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando a plaquinha saiu. Nulo enquanto `delivery_state` e `requested`.
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando a plaquinha chegou. Nulo em tudo que nao chegou.
+
+    AdminCollarTagDeliveryUpdate:
+      type: object
+      description: |
+        A ATUALIZACAO DA ENTREGA: o passo e o codigo de rastreio, numa escrita
+        so. Palavras do cliente (18/10): "mudar o status da entrega e inserir o
+        codigo de rastreio e atualizar a entrega" -- uma operacao, e nao duas.
+
+        ## As transicoes que esta operacao aceita
+
+        | de | para | o que e |
+        | --- | --- | --- |
+        | `requested` | `in_transit` | a plaquinha saiu |
+        | `in_transit` | `arrived` | a plaquinha chegou |
+        | `in_transit` | `in_transit` | so o rastreio mudou |
+        | `arrived` | `arrived` | so o rastreio mudou |
+
+        Qualquer outra responde `400` com `code: invalid_delivery_transition`.
+
+        **O pedido precisa estar `fulfilled`.** Nao se despacha o que o painel
+        nao aceitou: pedido em `pending` responde `400` com
+        `code: request_not_fulfilled`, e o caminho e `fulfillAdminCollarTagRequest`
+        antes. Pedido `declined` responde o mesmo -- recusado nao anda. Isto nao
+        e uma conferencia escrita a mao em paralelo ao banco: e a mesma regra do
+        `CHECK` `collar_tag_requests_entrega_exige_atendimento`, traduzida para
+        uma resposta que diz qual e o proximo passo em vez de estourar.
+
+        **Nao se volta atras**: `arrived` nao vira `in_transit`, e nada volta a
+        `requested`. Desfazer uma chegada marcada por engano nao e uma
+        transicao: e um pedido novo, ou um ajuste por quem opera o banco.
+
+        **`requested` -> `arrived` nao e aceito**, apesar de ser "para frente".
+        O passo "em transporte" e o que carrega o rastreio e o carimbo de
+        despacho, e pular direto para a chegada deixaria a entrega sem registro
+        de que ela saiu. Sao dois cliques, e o painel os oferece em sequencia.
+
+        **Nada aqui APAGA pedido.** Nao existe exclusao nesta superficie; o que
+        o cliente chamaria de cancelar e `declined`, que e estado e e da outra
+        operacao.
+      additionalProperties: false
+      required: [delivery_state]
+      properties:
+        delivery_state:
+          type: string
+          enum: [in_transit, arrived]
+          description: |
+            O passo desejado. So os dois passos que se alcanca: `requested` e o
+            inicial e ninguem volta a ele.
+
+            Repetir o passo atual (`in_transit` sobre `in_transit`, `arrived`
+            sobre `arrived`) e aceito de proposito: e o caminho de corrigir so o
+            rastreio, e e por isso que o campo e obrigatorio em vez de opcional
+            -- um corpo sem passo faria a operacao adivinhar.
+        tracking_code:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 64
+          description: |
+            O codigo de rastreio, TEXTO que o administrador digita.
+
+            Tres casos, e os tres sao diferentes:
+
+            - **ausente**: o rastreio nao muda. E o que acontece quando so se
+              marca a chegada de uma encomenda que ja tinha codigo;
+            - **texto**: passa a ser este. Espaco nas bordas e removido antes de
+              gravar;
+            - **`null`**: o rastreio e APAGADO. Existe para o engano -- codigo da
+              encomenda errada -- e nao para uso comum.
+
+            **Sem validacao de formato de transportadora**, de proposito:
+            Correios tem 13 simbolos, FedEx de 12 a 22, DHL 10, e transportadora
+            regional tem o que quiser e muda. Um formato cravado aqui recusaria,
+            em producao e sem aviso, o rastreio legitimo de amanha. Recusa-se so
+            o claramente invalido: de 3 a 64 simbolos, e texto que seja **so
+            espaco** responde `400` com `code: blank_tracking_code`.
+
+            **Nao ha integracao com transportadora.** Nada neste projeto consulta
+            Correios nem ninguem: seria custo recorrente, e a decisao e do
+            cliente.
 
     AdminCollarTagRequestPage:
       type: object

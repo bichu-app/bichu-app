@@ -59,6 +59,9 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio } from './directory-routes.js';
 
+/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
+
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const OUTRA_PESSOA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
@@ -76,6 +79,7 @@ const ENTRADA: EntradaDoDiretorio = {
   phoneE164: '+551130612200',
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
+  logoPublicKey: null,
 };
 
 const SEM_AVALIACAO: PontuacaoDoLocal = {
@@ -140,6 +144,7 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
         pontuacao: pontuacao(),
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: temCanal(chamador),
+        fotoPublicKey: null,
       });
     },
 
@@ -220,6 +225,9 @@ function servidor(cenario: Cenario, espiao: Espiao): RegistradorDeRotas {
   });
   registrarRotasDoDiretorio(app, {
     diretorio: repositorio(cenario, espiao),
+    // Nenhum caso deste arquivo tem logo: `logoPublicKey` e nulo nas fixturas, e
+    // `urlDaDerivada` devolve nulo sem chamar esta funcao.
+    urlDeMidia: URL_DE_MIDIA,
     autenticador: {
       autenticar: (token: string) =>
         Promise.resolve({ userId: token === 'outra' ? OUTRA_PESSOA : QUEM_CHAMA }),

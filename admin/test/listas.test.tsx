@@ -166,6 +166,49 @@ describe('5 · Parceiros', () => {
     });
   });
 
+  // ISCA -- em `endereco/enderecos.ts`, em `mensagemDoSite`, devolva
+  // `MENSAGEM_DO_SITE[code]` logo no comeco. O `http://` volta a receber a
+  // frase do endereco sem esquema, e o `https://.` a frase do espaco; os
+  // dois reprovam.
+  it('o site do parceiro recusa pelo MOTIVO, e nao por `code`: dois deles cobrem dois motivos', async () => {
+    montar('/loja/parceiros/novo', { 'POST /admin/store/partners': json(201, parceiro()) });
+    const campo = await screen.findByLabelText('Site do parceiro *');
+    // Sem esquema nenhum: a frase ENSINA o padrao.
+    fireEvent.change(campo, { target: { value: 'casadobicholapa.com.br' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    expect(campo).toHaveAccessibleDescription('Escreva o endereço completo do site, começando com https://.');
+
+    // Com `http://` a pessoa JA escreveu um esquema, so nao o certo: mandar
+    // "escreva o endereço completo" responderia outra pergunta. E a mesma
+    // distincao que o servidor faz no ponto da recusa
+    // (`errosDoEnderecoCompleto`), e que o `code` sozinho nao carrega.
+    fireEvent.change(campo, { target: { value: 'http://casadobicholapa.com.br' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    expect(campo).toHaveAccessibleDescription('Troque http:// por https://.');
+
+    // O outro `code` dividido: `site_url_invalid` e espaco no meio OU host
+    // nenhum. `https://.` nao tem espaco algum -- dizer "não pode ter espaço"
+    // mandaria a pessoa procurar o que nao existe.
+    fireEvent.change(campo, { target: { value: 'casa do bicho.com.br' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    expect(campo).toHaveAccessibleDescription('Confira o endereço: ele não pode ter espaço.');
+
+    fireEvent.change(campo, { target: { value: 'https://.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    expect(campo).toHaveAccessibleDescription('Escreva o endereço completo do site, começando com https://.');
+
+    // E as outras recusas continuam com o motivo real, cada uma a sua.
+    for (const [site, frase] of [
+      ['https://u:s@casadobicholapa.com.br', 'Tire o usuário e a senha do endereço.'],
+      ['https://203.0.113.5', 'Use o endereço do site, e não um número de IP.'],
+      ['https://servidor.local', 'O endereço precisa ser de um site público.'],
+    ] as const) {
+      fireEvent.change(campo, { target: { value: site } });
+      fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+      expect(campo).toHaveAccessibleDescription(frase);
+    }
+  });
+
   it('edita mandando so o que mudou, com If-Match', async () => {
     const { servidor } = montar('/loja/parceiros/pet-center-aurora', {
       'GET /admin/store/partners/{partnerSlug}': json(200, parceiro(), { ETag: '"3"' }),

@@ -52,10 +52,12 @@ import type {
 } from '../../domain/nivel-de-verificacao.js';
 import type {
   EntradaAdministrativa,
+  ImagemDaEntrada,
   OrigemDaEntrada,
   StatusDaEntrada,
   TitularidadeDaEntrada,
 } from '../../domain/escrita-do-diretorio.js';
+import type { RegistroDeImagemDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
 import {
   SlugOcupado,
   type DiretorioAdministrativoRepository,
@@ -69,6 +71,12 @@ import {
 export interface DependenciasDoDiretorioAdministrativo {
   readonly db: Db;
   readonly trilha: TrilhaTransacional;
+  /**
+   * O registro da imagem de catalogo (18/10/2026, com a logo e a foto da
+   * entrada). **A MESMA porta que a `Loja` e a `Rede` injetam**: nao ha segunda
+   * esteira de imagem neste produto, e por isso nao ha segunda porta.
+   */
+  readonly imagens: RegistroDeImagemDeCatalogo;
 }
 
 /** `23505`, `unique_violation`, no indice de endereco publico do diretorio. */
@@ -121,10 +129,36 @@ interface LinhaDaEntrada {
   source: OrigemDaEntrada;
   claim_status: TitularidadeDaEntrada;
   evidencias: TipoDeEvidencia[] | null;
+  logo_status: string | null;
+  logo_public_key: string | null;
+  logo_rejection_reason: string | null;
+  photo_status: string | null;
+  photo_public_key: string | null;
+  photo_rejection_reason: string | null;
   published_at: Date | null;
   created_at: Date;
   updated_at: Date;
   version: number;
+}
+
+/**
+ * A imagem, ou `null` quando a entrada nao tem.
+ *
+ * `status` nulo e o unico sinal de ausencia: nao existe linha de
+ * `catalog_images` com `status` nulo (a coluna e `NOT NULL`), entao nulo aqui
+ * so pode vir da subconsulta que nao achou nada.
+ */
+function comoImagem(
+  status: string | null,
+  publicKey: string | null,
+  rejectionReason: string | null,
+): ImagemDaEntrada | null {
+  if (status === null) return null;
+  return {
+    status: status as ImagemDaEntrada['status'],
+    publicKey,
+    rejectionReason,
+  };
 }
 
 function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
@@ -146,6 +180,8 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     streetNumber: l.street_number,
     complement: l.complement,
     phoneE164: l.phone_e164,
+    logo: comoImagem(l.logo_status, l.logo_public_key, l.logo_rejection_reason),
+    photo: comoImagem(l.photo_status, l.photo_public_key, l.photo_rejection_reason),
     status: l.status,
     source: l.source,
     claimStatus: l.claim_status,
@@ -185,11 +221,37 @@ const COLUNAS = [
   'professionals.version as version',
 ] as const;
 
+/**
+ * O estado da LOGO e da FOTO, por subconsulta e nao por `JOIN` (18/10/2026).
+ *
+ * Subconsulta porque `entradaPorSlug` usa `FOR UPDATE`, e `FOR UPDATE` com
+ * `JOIN` travaria tambem a linha de `catalog_images` -- o que faria uma
+ * correcao de telefone na entrada esperar pelo worker que esta marcando a
+ * imagem pronta. `FOR UPDATE` nao alcanca subconsulta, que e o mesmo motivo
+ * pelo qual `EVIDENCIAS_APROVADAS` e subconsulta.
+ *
+ * `status` vem como `null` quando nao ha imagem, e e isso que `comoEntrada` le
+ * como "sem logo".
+ */
+function imagemDa(coluna: 'logo_image_id' | 'photo_image_id', campo: 'status' | 'public_key' | 'rejection_reason') {
+  return sql<string | null>`(
+  select c.${sql.raw(campo)}
+    from catalog_images c
+   where c.id = professionals.${sql.raw(coluna)}
+)`;
+}
+
 function consultaDeEntradas(db: DbExecutor) {
   return db
     .selectFrom('professionals')
     .select([...COLUNAS])
-    .select(EVIDENCIAS_APROVADAS.as('evidencias'));
+    .select(EVIDENCIAS_APROVADAS.as('evidencias'))
+    .select(imagemDa('logo_image_id', 'status').as('logo_status'))
+    .select(imagemDa('logo_image_id', 'public_key').as('logo_public_key'))
+    .select(imagemDa('logo_image_id', 'rejection_reason').as('logo_rejection_reason'))
+    .select(imagemDa('photo_image_id', 'status').as('photo_status'))
+    .select(imagemDa('photo_image_id', 'public_key').as('photo_public_key'))
+    .select(imagemDa('photo_image_id', 'rejection_reason').as('photo_rejection_reason'));
 }
 
 /**
@@ -282,6 +344,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             street_number: nova.streetNumber,
             complement: nova.complement,
             phone_e164: nova.phoneE164,
+            logo_image_id: nova.logoImageId,
+            photo_image_id: nova.photoImageId,
             status: nova.status,
             source: nova.source,
             claim_status: nova.claimStatus,
@@ -318,6 +382,9 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             ...(mudanca.streetNumber === undefined ? {} : { street_number: mudanca.streetNumber }),
             ...(mudanca.complement === undefined ? {} : { complement: mudanca.complement }),
             ...(mudanca.phoneE164 === undefined ? {} : { phone_e164: mudanca.phoneE164 }),
+            // `null` TIRA o ponteiro da imagem e nao apaga objeto no balde.
+            ...(mudanca.logoImageId === undefined ? {} : { logo_image_id: mudanca.logoImageId }),
+            ...(mudanca.photoImageId === undefined ? {} : { photo_image_id: mudanca.photoImageId }),
             ...(mudanca.status === undefined ? {} : { status: mudanca.status }),
             // So na transicao PARA publicado. Uma correcao de telefone numa
             // entrada ja publicada nao mexe no marco: ele responde "desde
@@ -361,6 +428,25 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
         .returning(['id', 'rating'])
         .executeTakeFirst();
       return linha === undefined ? null : { id: linha.id, notaAntes: linha.rating };
+    },
+
+    envioDeCatalogo: (uploadId) => deps.imagens.envio(trx, uploadId),
+
+    confirmarEnvioDeCatalogo: (entrada) => deps.imagens.confirmar(trx, entrada),
+
+    async entradaDaImagem(imagemId: string) {
+      // Duas colunas, uma consulta: os dois indices parciais unicos da migracao
+      // `20261018000008` impedem a mesma imagem de estar em duas entradas, e
+      // esta leitura e o que transforma a recusa num `400` com nome de campo em
+      // vez de num erro de banco chegando na borda.
+      const linha = await trx
+        .selectFrom('professionals')
+        .select('id')
+        .where((eb) =>
+          eb.or([eb('logo_image_id', '=', imagemId), eb('photo_image_id', '=', imagemId)]),
+        )
+        .executeTakeFirst();
+      return linha?.id ?? null;
     },
 
     registrarNaTrilha: (evento) => deps.trilha.recordIn(trx, evento),

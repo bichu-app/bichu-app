@@ -40,11 +40,14 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
+import type { Contrato } from '../../../../shared/http/contract.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
 import type {
   DecisaoDoPedidoDePlaquinha,
   PaginaDaFilaDePlaquinhas,
+  PassoAlcancavelDoPedido,
+  PassoDaEntrega,
   PedidoNaFilaDePlaquinhas,
 } from '../../ports/pedido-de-plaquinha.js';
 import type { FilaDePlaquinhasAdministrativa } from '../../application/pedido-de-plaquinha-service.js';
@@ -91,8 +94,62 @@ export const rotaDeRecusarPedidoDePlaquinha = defineRoute({
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
+/**
+ * A leitura de UM pedido, para a tela de entrega.
+ *
+ * Sem `x-audit` e sem teto por `rows_returned`, como a listagem irma e pelo
+ * mesmo motivo: esta superficie nao le PESSOA -- o nome que sai e o de quem
+ * recebe a encomenda, dentro do endereco. A unica leitura de conta do
+ * backoffice v1 segue sendo a fila de pedidos de encontro (D53 a D57).
+ */
+export const rotaDeLerPedidoDePlaquinha = defineRoute({
+  operationId: 'getAdminCollarTagRequest',
+  method: 'get',
+  path: '/admin/tag-requests/:requestRef',
+  effects: [],
+  adminRoles: ADMIN,
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A ATUALIZACAO DA ENTREGA: passo e codigo de rastreio numa escrita so.
+ *
+ * `POST` em sub-recurso de acao, e nao `PATCH`: as outras duas escritas desta
+ * fila sao `/fulfillment` e `/decline`, e esta e a terceira irma delas. Um
+ * `PATCH` aqui faria o painel falar dois dialetos com a mesma fila.
+ */
+export const rotaDeAtualizarEntregaDaPlaquinha = defineRoute({
+  operationId: 'updateAdminCollarTagRequestDelivery',
+  method: 'post',
+  path: '/admin/tag-requests/:requestRef/delivery',
+  effects: [],
+  adminRoles: ADMIN,
+  audit: {
+    action: 'admin.collar_tag_request.delivery_updated',
+    resourceKind: 'collar_tag_request',
+  },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
 export interface DependenciasDaFilaDePlaquinhas {
   readonly fila: FilaDePlaquinhasAdministrativa;
+  /**
+   * De onde sai o schema do corpo da atualizacao de entrega. Validacao escrita
+   * a mao em paralelo a spec e a segunda definicao, e e ela que diverge.
+   */
+  readonly contrato: Contrato;
+}
+
+/** O schema do corpo, tirado do proprio contrato pelo `operationId`. */
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
+    );
+  }
+  return schema;
 }
 
 const PAGINA_INICIAL = 1;
@@ -112,8 +169,21 @@ function parametro(request: FastifyRequest, nome: string): string {
 
 interface QueryDaFila {
   readonly status?: DecisaoDoPedidoDePlaquinha;
+  /** O passo da entrega. COMBINA com `status`: os dois sao eixos diferentes. */
+  readonly delivery_state?: PassoDaEntrega;
   readonly page?: number;
   readonly limit?: number;
+}
+
+/** O corpo de `updateAdminCollarTagRequestDelivery`, como o schema o validou. */
+interface CorpoDaEntrega {
+  readonly delivery_state: PassoAlcancavelDoPedido;
+  /**
+   * Ausente, texto ou `null`, e os tres sao pedidos diferentes -- manter, definir
+   * e apagar. `undefined` e ausente e NAO e o mesmo que `null`, e e por isso que
+   * este campo nao ganha valor padrao em lugar nenhum do caminho.
+   */
+  readonly tracking_code?: string | null;
 }
 
 /**
@@ -144,6 +214,14 @@ function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<str
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),
     decided_at: pedido.decididoEm === null ? null : pedido.decididoEm.toISOString(),
+    // A ENTREGA. `delivery_state` nunca e nulo (a coluna e `NOT NULL`); os dois
+    // carimbos saem explicitamente nulos, e nao omitidos, pela mesma razao de
+    // `complement`: omitir faria o painel distinguir "nao aconteceu" de "campo
+    // que sumiu".
+    delivery_state: pedido.passoDaEntrega,
+    tracking_code: pedido.codigoDeRastreio,
+    shipped_at: pedido.despachadoEm === null ? null : pedido.despachadoEm.toISOString(),
+    delivered_at: pedido.entregueEm === null ? null : pedido.entregueEm.toISOString(),
   };
 }
 
@@ -164,7 +242,7 @@ export function registrarRotasDaFilaDePlaquinhas(
   app: RegistradorDeRotas,
   deps: DependenciasDaFilaDePlaquinhas,
 ): void {
-  const { fila } = deps;
+  const { fila, contrato } = deps;
   const resolvedores = { account: contaDoTeto };
 
   registrarRota(
@@ -175,8 +253,46 @@ export function registrarRotasDaFilaDePlaquinhas(
       const query = (request.query ?? {}) as QueryDaFila;
       const page = query.page ?? PAGINA_INICIAL;
       const limit = query.limit ?? TAMANHO_PADRAO;
-      const pagina = await fila.listar({ status: query.status, page, limit });
+      const pagina = await fila.listar({
+        status: query.status,
+        passoDaEntrega: query.delivery_state,
+        page,
+        limit,
+      });
       return reply.send(comoPagina(pagina, page, limit));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeLerPedidoDePlaquinha,
+    { resolvedores },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const pedido = await fila.ler(parametro(request, 'requestRef'));
+      return reply.send(comoAdminCollarTagRequest(pedido));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeAtualizarEntregaDaPlaquinha,
+    {
+      schema: { body: corpoDe(contrato, rotaDeAtualizarEntregaDaPlaquinha.operationId) },
+      resolvedores,
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const corpo = request.body as CorpoDaEntrega;
+      const atualizado = await fila.atualizarEntrega(
+        rotaDeAtualizarEntregaDaPlaquinha.audit,
+        atorAdministrativoDe(request),
+        parametro(request, 'requestRef'),
+        corpo.delivery_state,
+        // `tracking_code` e repassado COMO VEIO -- ausente, texto ou `null`. Um
+        // `?? null` aqui transformaria "manter" em "apagar", e marcar a chegada
+        // limparia o rastreio que ja estava la.
+        corpo.tracking_code,
+      );
+      return reply.send(comoAdminCollarTagRequest(atualizado));
     },
   );
 

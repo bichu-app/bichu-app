@@ -70,7 +70,7 @@ export const IDADE_MINIMA_EM_ANOS = 16;
 
 /**
  * O piso de plausibilidade, **igual ao `CHECK` da migração**
- * `20261018000005_data-de-nascimento-do-tutor.sql`.
+ * `20261018000021_data-de-nascimento-do-tutor.sql`.
  *
  * Deliberadamente largo: ele não é a regra de idade, é a recusa do que não é
  * data de nascimento de ninguém (`0001-05-03`, o ano digitado com um dígito a

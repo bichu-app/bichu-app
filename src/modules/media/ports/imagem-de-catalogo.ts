@@ -14,18 +14,43 @@
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
-import type { CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+import { TIPOS_ACEITOS, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
 import { TETO_DE_BYTES_DO_ENVIO } from '../domain/derivadas.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
 
-export type PropositoDaImagem = 'store_item' | 'network_event';
+/**
+ * Os propositos da esteira.
+ *
+ * Os TRES ultimos entraram em 18/10/2026, por pedido do cliente: a logo e a foto
+ * do profissional recomendado, enviadas pelo ADMINISTRADOR no painel, e a foto
+ * que a PROPRIA PESSOA cadastra. Sao propositos nesta esteira e nao uma segunda
+ * esteira, porque teto de bytes, formato de saida, higiene de EXIF, escada de
+ * qualidade e varredura de vencidos ja moram aqui -- e uma copia deles seria
+ * cinco regras concordando por enquanto.
+ *
+ * **`user_photo` e o SEGUNDO proposito com autor de `users`**, depois da capa do
+ * encontro da comunidade (ADR-0025 emenda 3): `catalog_upload_intents.user_id`
+ * ja existe e o `CHECK catalog_upload_intents_um_autor` continua impondo
+ * exatamente um autor.
+ */
+export type PropositoDaImagem =
+  | 'store_item'
+  | 'network_event'
+  | 'directory_logo'
+  | 'directory_photo'
+  | 'user_photo';
 
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
   store_item: 'products',
   network_event: 'events',
+  // UM prefixo para as duas imagens do diretorio: sao da mesma entidade.
+  directory_logo: 'directory',
+  directory_photo: 'directory',
+  // Prefixo PROPRIO para foto de pessoa: regime de privacidade diferente.
+  user_photo: 'people',
 };
 
 /**
@@ -33,6 +58,32 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
  * computador de mesa (`AdminCatalogImageIntentInput.content_type`).
  */
 export const TIPOS_DE_IMAGEM_DE_CATALOGO = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/**
+ * A lista de ENTRADA de cada proposito, e por que ela nao e uma so.
+ *
+ * O que o administrador envia sai de um computador de mesa, e a lista de tres
+ * tipos vale para ele desde o ADR-0027. **A foto do proprio usuario sai de um
+ * celular**, e metade dos celulares e iPhone, que grava HEIC. O cliente
+ * autorizou HEIC na entrada por causa disso, em 18/10/2026, e a conversao para
+ * JPEG continua sendo nossa, no servidor (`FORMATO_DAS_DERIVADAS`).
+ *
+ * Recusar HEIC na entrada da foto de perfil nao protegeria nada: tiraria o
+ * recurso da mao de quem usa iPhone e deixaria a pessoa achando que a foto dela
+ * "nao e imagem". `TIPOS_ACEITOS` (`domain/chave-de-objeto.ts`) e a MESMA lista
+ * que a foto de pet usa, e e dela que este mapa tira o valor -- duas listas dos
+ * mesmos quatro tipos e o defeito esperando a quinta.
+ *
+ * **SVG continua fora das duas**, por igualdade e nunca por prefixo de
+ * `image/`: SVG e documento com script.
+ */
+export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly string[]>> = {
+  store_item: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  network_event: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  directory_logo: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  directory_photo: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  user_photo: TIPOS_ACEITOS,
+};
 
 /**
  * O teto do envio, reexportado do PONTO ÚNICO (`domain/derivadas.ts`).
@@ -56,6 +107,21 @@ export const TETO_DE_BYTES_DO_CATALOGO = TETO_DE_BYTES_DO_ENVIO;
 export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
+  // A LOGO e a excecao mais baixa, e o motivo e o arquivo que a entidade TEM:
+  // logo de clinica de bairro costuma ser um PNG de 300 px que saiu de um
+  // cartao de visita. Exigir 600 reprovaria a logo real da maioria das entradas
+  // e o administrador nao tem como produzir outra. 256 e o piso em que a
+  // derivada `card` de 512 ainda fica aceitavel sem ampliar (`sharp` nao
+  // amplia), e abaixo disso o simbolo aparece mole ao lado do nome.
+  directory_logo: { largura: 256, altura: 256 },
+  // A foto do LUGAR usa 600 x 600, o mesmo numero que o cliente aceitou para a
+  // capa do encontro em 01/10: as duas sao foto de celular de um lugar.
+  directory_photo: { largura: 600, altura: 600 },
+  // 300 x 300 na foto de pessoa, e nao 600. A maior derivada dela e 512, e
+  // retrato recortado de uma foto antiga ou de uma captura de tela chega perto
+  // disso; recusar a 500 px entregaria "sua foto nao serve" a quem tem a unica
+  // foto que tem. Abaixo de 300 o rosto aparece borrado na propria moldura.
+  user_photo: { largura: 300, altura: 300 },
 };
 
 /**
