@@ -78,10 +78,6 @@ abstract final class MensagensDeErro {
 
   static const String credencialNaoConfere = 'E-mail ou senha não conferem.';
 
-  /// Texto de `unauthenticated` **fora** da tela de entrar (UX 12.6).
-  static const String entreParaContinuar =
-      'Entre na sua conta para continuar. O que você escreveu está salvo aqui.';
-
   /// C.2, campo vazio antes de enviar (UX 8.2.2).
   static const String digiteSeuEmail = 'Digite seu e-mail.';
 
@@ -269,8 +265,26 @@ abstract final class MensagensDeErro {
       // Os tres 401 que agora tem tipo proprio. Textos da tabela 12.6 do UX,
       // que e o catalogo geral; a tela de entrar tem os seus, diferentes para
       // dois deles, e por isso ela usa [deEntrar] e nao este caminho.
+      // **O TEXTO SAIU, A SAIDA FICOU** (18/10/2026, literal do cliente:
+      // *"remova esse bloco de texto 'entre na sua conta para continuar. O que
+      // você escreveu esta salvo aqui.'"*).
+      //
+      // `texto: ''` e deliberado, e nao esquecimento. `acao` e `proximaAcao`
+      // continuam exatamente como estavam: a faixa deste 401 passa a ser **so
+      // a saida**, o botao `Entrar`, e `FaixaDeAviso` deixa de desenhar a
+      // linha de texto quando ela e vazia (sem a guarda, sobrava um no de
+      // texto vazio e 8 dp de respiro para nada).
+      //
+      // **O caminho de entrar nao depende desta frase.** As cinco telas que
+      // fazem acao com sessao -- `perdido/tela_alcance_do_alerta.dart`,
+      // `pet/tela_cadastrar_sinais.dart`, `perto/sugerir_profissional.dart`,
+      // `rede/criar_encontro.dart`, `achado/tela_registrar_achado.dart` --
+      // interceptam `naoAutenticado` ANTES de montar mensagem: guardam o
+      // rascunho na guarda de intencao e empurram `Rotas.entrar` sozinhas.
+      // Esta entrada do catalogo e o que sobra para quem apenas LE, e nela o
+      // botao `Entrar` e o caminho.
       ProblemTipo.naoAutenticado => const MensagemDeErro(
-          texto: entreParaContinuar,
+          texto: '',
           acao: 'Entrar',
           proximaAcao: ProximaAcao.entrar,
         ),

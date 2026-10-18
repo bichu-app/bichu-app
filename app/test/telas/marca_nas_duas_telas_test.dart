@@ -137,6 +137,10 @@ void main() {
   group('Digitar o codigo: a plaquinha, e o teclado manda nela', () {
     Future<void> abrirADigitacao(WidgetTester tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
+      // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
+      // voz alta que vai ate ela em vez de herdar a aterrissagem.
+      await abrirAAba(tester, 'Pets');
       await tester.tap(find.descendant(
         of: find.byType(AppBar),
         matching: find.byIcon(Icons.qr_code_2),

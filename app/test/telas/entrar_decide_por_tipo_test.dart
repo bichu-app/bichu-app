@@ -211,6 +211,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
+      // **ZERA DEPOIS DO ARRANQUE, e isto nao afrouxa a conta.** Desde
+      // 18/10/2026 o app abre na `Rede` e a agenda pede
+      // `GET /v1/network/events` sozinha -- chamada do arranque, anterior ao
+      // que este caso mede. O caso mede a janela do TOQUE em `Entrar` com o
+      // campo vazio, e por isso a contagem comeca aqui, em `0` exato, em vez
+      // de trocar o `0` por `1`.
+      chamadas = 0;
 
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
@@ -242,6 +249,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
+      // **ZERA DEPOIS DO ARRANQUE, e isto nao afrouxa a conta.** Desde
+      // 18/10/2026 o app abre na `Rede` e a agenda pede
+      // `GET /v1/network/events` sozinha -- chamada do arranque, anterior ao
+      // que este caso mede. O caso mede a janela do TOQUE em `Entrar` com o
+      // campo vazio, e por isso a contagem comeca aqui, em `0` exato, em vez
+      // de trocar o `0` por `1`.
+      chamadas = 0;
 
       await tester.enterText(find.byType(TextField).at(0), 'marina.exemplo');
       await tester.enterText(find.byType(TextField).at(1), 'uma frase curta');

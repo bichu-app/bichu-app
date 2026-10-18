@@ -122,13 +122,23 @@ enum EstadoDaRegra {
   naoAtendida,
 }
 
-/// O aviso que acompanha a lista, e que existe para ela nao mentir.
-///
-/// Texto de tela: quem le e a pessoa. Ele nao pede acao nenhuma dela, so evita
-/// que "quatro de quatro" seja lido como garantia de que o cadastro passa.
-const String avisoDoQueOServidorAindaConfere =
-    'O servidor também recusa senha que já apareceu em vazamento conhecido. '
-    'Isso não dá para conferir aqui: se acontecer, avisamos depois de enviar.';
+// O AVISO DA LISTA SAIU (18/10/2026), e nao foi trocado por outro.
+//
+// Literal do cliente: *"remova os textos ... 'O servidor também recusa senha
+// que já apareceu em vazamento conhecido. Isso não da para conferir aqui: se
+// acontecer, avisamos depois de enviar.'"*. Era uma constante
+// (`avisoDoQueOServidorAindaConfere`) desenhada ao pe de `RequisitosDaSenha` e
+// repetida no rotulo acessivel da lista; as duas aparicoes eram a MESMA frase,
+// e as duas sairam -- deixar so a do leitor de tela faria quem nao ve ouvir um
+// texto que nao esta mais na tela de ninguem.
+//
+// **A RECUSA NAO SAIU, e ela e o que importa.** O aviso era PREVENTIVO (dizia
+// antes do envio que havia mais uma conferencia); a recusa e o DESFECHO, e
+// continua inteira em [senhaRecusadaPeloServidor] logo abaixo, ligada em
+// `telas/conta/tela_criar_conta.dart` aos dois caminhos de resposta 422 --
+// `code` conhecido e `code` que este build nao conhece, que e exatamente o
+// caso da lista de vazamento. Quem enviar uma senha vazada continua lendo o
+// que houve e o que fazer. Ha isca que reprova se essa ligacao sumir.
 
 /// O que dizer quando o servidor recusou a senha por um `code` que este build
 /// nao conhece.
@@ -245,8 +255,8 @@ bool _pareceComIdentidade(
 /// O residuo: caractere acentuado fora dessas faixas (vietnamita, grego
 /// politonico) some aqui e vira letra base no servidor. Nesses casos a tela fica
 /// **menos** exigente, e a recusa chega depois do envio -- que e o mesmo
-/// caminho da lista de vazamento, ja dito por
-/// [avisoDoQueOServidorAindaConfere].
+/// caminho da lista de vazamento, e o desfecho dos dois e
+/// [senhaRecusadaPeloServidor].
 String _normalizarParaComparacao(String valor) {
   final minusculo = valor.toLowerCase();
   final buffer = StringBuffer();

@@ -383,6 +383,12 @@ void main() {
       // O risco concreto: uma gaveta instalada na casca engole o `pop` e a
       // pessoa fica presa na tela de dentro.
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
       await tester.tap(find.byKey(ItemDaGaveta.chaveDe(Rotas.pets, 'Adoções')));
       await tester.pumpAndSettle();
@@ -403,6 +409,12 @@ void main() {
     testWidgets('com a gaveta ABERTA, o voltar do sistema fecha a gaveta e '
         'nao a tela', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
 
       await voltarDoSistema(tester);
@@ -429,6 +441,12 @@ void main() {
   group('2. onde o hamburguer ficou, e o que saiu do lugar', () {
     testWidgets('ele esta no slot da ESQUERDA (`leading`)', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
 
       final barra = tester.widget<AppBar>(find.byType(AppBar));
       expect(
@@ -552,6 +570,12 @@ void main() {
       // ela nao existe neste app por construcao: `raizDeSecao` e a unica
       // condicao que monta o gatilho, e raiz de secao nao tem saida.
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
 
       // Na raiz: hamburguer, sem saida.
       expect(find.byType(BotaoDaGaveta), findsOneWidget);
@@ -635,6 +659,12 @@ void main() {
       tester,
     ) async {
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       final tamanho = tester.getSize(
         find.descendant(
           of: find.byType(BotaoDaGaveta),
@@ -668,6 +698,12 @@ void main() {
           addTearDown(tester.view.reset);
 
           await abrirOApp(tester, rede: _semServidor, escala: 2);
+          // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+          // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+          // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+          // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+          // escolhida por ser a que o resto do arquivo usa.
+          await irParaASecao(tester, 'Pets');
           await tester.tap(
             find.widgetWithText(NavigationDestination, destino.rotulo),
           );
@@ -859,6 +895,12 @@ void main() {
       // Pintar a palavra de novo seria a terceira vez na mesma tela.
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
 
       final pintados = tester
@@ -1169,6 +1211,12 @@ void main() {
       // apareceu quatro vezes neste repositorio.
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
 
       final pendentesDoMapa = pendentes();
@@ -1209,6 +1257,12 @@ void main() {
       // caso acima aprovaria uma gaveta cheia de itens mortos.
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
 
       final ativaveis = rotulosAtivaveis(tester);
@@ -1267,6 +1321,12 @@ void main() {
         'semantica', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
 
       final ativaveis = rotulosAtivaveis(tester);
@@ -1315,6 +1375,12 @@ void main() {
       tester,
     ) async {
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
+      // `Rede` nao tem sub-destino -- logo nao tem gaveta e nao tem gatilho,
+      // pela segunda metade de `comGaveta` em `casca_com_abas.dart`. Este caso
+      // fala da gaveta, entao ele vai a uma secao que TEM uma. `Pets` e a
+      // escolhida por ser a que o resto do arquivo usa.
+      await irParaASecao(tester, 'Pets');
       await abrirAGaveta(tester);
       expect(
         find.byType(ModalBarrier),

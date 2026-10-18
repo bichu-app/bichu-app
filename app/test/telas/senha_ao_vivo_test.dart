@@ -155,13 +155,29 @@ void main() {
             'isso. Regra aplicada e regra mostrada.',
       );
     }
+    // **O AVISO DO VAZAMENTO SAIU EM 18/10/2026.**
+    //
+    // Este `expect` cobrava a PRESENCA dele (`findsOneWidget`), com a razao de
+    // que sem o aviso "quatro de quatro em verde e lido como garantia". O
+    // cliente mandou remover a frase, nominalmente: *"remova os textos ... 'O
+    // servidor também recusa senha que já apareceu em vazamento conhecido.
+    // Isso não da para conferir aqui: se acontecer, avisamos depois de
+    // enviar.'"*. O caso nao foi apagado: ele cobra o outro lado agora.
+    //
+    // O que o aviso protegia continua protegido, e por prova PROPRIA: a isca
+    // "a recusa de senha vazada continua EXPLICADA", no fim deste arquivo,
+    // reprova se a recusa do servidor deixar de dizer o que houve e o que
+    // fazer. Era isso que o aviso prometia; agora quem garante e o desfecho.
     expect(
       find.textContaining('vazamento conhecido'),
-      findsOneWidget,
-      reason: 'REPROVA: a lista some com o aviso de que o servidor confere '
-          'mais uma coisa. Sem ele, quatro de quatro em verde e lido como '
-          'garantia de que o cadastro passa, e a recusa por vazamento chega '
-          'como surpresa depois do envio.',
+      findsNothing,
+      reason: 'REPROVA: o aviso do vazamento voltou ao pe da lista. O cliente '
+          'o removeu nominalmente em 18/10/2026.',
+    );
+    expect(
+      find.textContaining('avisamos depois de enviar'),
+      findsNothing,
+      reason: 'REPROVA: a segunda metade do aviso removido voltou a tela.',
     );
   });
 
@@ -319,11 +335,26 @@ void main() {
         reason: 'REPROVA: o anuncio nao nomeia o que falta. "Um requisito '
             'pendente" nao diz a ninguem o que corrigir.',
       );
+      // **A MESMA REMOCAO, NA SEMANTICA.** O caso cobrava que o anuncio
+      // repetisse o aviso, para quem nao ve nao ficar sem ele. Com a frase
+      // fora da tela a cobranca inverte, e pelo mesmo princípio: este widget
+      // roda com `excludeSemantics: true`, entao este rotulo e a UNICA leitura
+      // da lista -- deixar a frase aqui faria o leitor anunciar um texto que
+      // nao esta mais em tela nenhuma, que e a divergencia que o rotulo
+      // composto existe para nao ter.
       expect(
         rotulo,
-        contains('vazamento conhecido'),
-        reason: 'REPROVA: quem usa leitor de tela nao ouve que o servidor '
-            'confere mais uma coisa, e so quem enxerga fica sabendo.',
+        isNot(contains('vazamento conhecido')),
+        reason: 'REPROVA: o anuncio ainda carrega o aviso removido. Quem usa '
+            'leitor de tela ouviria um texto que quem enxerga nao ve mais.',
+      );
+      // E o anuncio continua dizendo o que importa -- a contraprova que impede
+      // este caso de ficar verde com um rotulo vazio.
+      expect(
+        rotulo,
+        contains('Requisitos da senha'),
+        reason: 'REPROVA: o anuncio da lista sumiu junto com o aviso. A '
+            'remocao era de UMA frase, nao da leitura da lista.',
       );
     } finally {
       handle.dispose();
@@ -402,6 +433,87 @@ void main() {
       findsOneWidget,
       reason: 'REPROVA: a recusa ficou muda. Recusa sem texto e '
           'indistinguivel de um botao quebrado.',
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // A ISCA DA REMOCAO DE 18/10/2026
+  // -------------------------------------------------------------------------
+
+  testWidgets(
+      'ISCA — a recusa de senha vazada continua EXPLICADA depois do envio',
+      (tester) async {
+    // **POR QUE ESTA ISCA EXISTE.** Em 18/10/2026 o cliente mandou remover o
+    // aviso preventivo da lista de requisitos (*"O servidor também recusa
+    // senha que já apareceu em vazamento conhecido. Isso não dá para
+    // conferir aqui: se acontecer, avisamos depois de enviar."*). Aquele aviso
+    // era a promessa; esta isca cobra o cumprimento dela.
+    //
+    // A pergunta que ela responde e uma so: **se a pessoa enviar uma senha
+    // vazada, ela fica sabendo o que houve e o que fazer?** Enquanto a
+    // resposta for sim, a remocao do aviso nao abriu beco. No dia em que
+    // alguem tirar `senhaRecusadaPeloServidor` do caminho, ou trocar por um
+    // texto que nao diz a saida, este caso reprova -- e a remocao do aviso
+    // passa a ser um beco, que e exatamente a conta que o cliente nao fez.
+    //
+    // ISCA, as duas formas de quebrar:
+    //   1. em `telas/conta/tela_criar_conta.dart`, apague o
+    //      `?? senhaRecusadaPeloServidor` do ramo de `code` desconhecido: a
+    //      recusa fica muda;
+    //   2. em `validacao/politica_de_senha.dart`, troque
+    //      `senhaRecusadaPeloServidor` por uma frase sem saida ("Senha
+    //      recusada."): a pessoa sabe que houve recusa e nao sabe o que fazer.
+    await abrirCriarConta(tester);
+    resposta = () => http.Response(
+          jsonEncode(<String, dynamic>{
+            'type': 'https://api.exemplo/problems/validation-failed',
+            'title': 'Senha fraca',
+            'status': 422,
+            'errors': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'field': 'password',
+                'code': 'pwned',
+                'message': 'Esta senha apareceu em vazamento.',
+              },
+            ],
+          }),
+          422,
+          headers: <String, String>{'content-type': 'application/problem+json'},
+        );
+
+    await tester.enterText(campoEmail, 'marina@exemplo.com.br');
+    await tester.enterText(campoSenha, 'o gato subiu no telhado');
+    await tester.pumpAndSettle();
+    await marcarOAceite(tester);
+    await tocarEmCriarConta(tester);
+
+    // O aviso preventivo NAO esta na tela -- e a metade que o cliente removeu.
+    expect(
+      find.textContaining('vazamento conhecido'),
+      findsNothing,
+      reason: 'REPROVA: o aviso removido voltou.',
+    );
+
+    // **E a recusa diz as DUAS coisas**, escritas por extenso: o que houve e o
+    // que fazer. Ler a constante aqui deixaria o caso verde com a tela
+    // mostrando qualquer frase.
+    final texto = tester
+        .widgetList<Text>(find.textContaining('Não conseguimos aceitar'))
+        .map((t) => t.data ?? '')
+        .join(' ');
+    expect(
+      texto,
+      contains('Não conseguimos aceitar esta senha'),
+      reason: 'REPROVA: a recusa nao diz O QUE HOUVE. Sem o aviso preventivo, '
+          'este e o unico momento em que a pessoa descobre que a senha foi '
+          'recusada -- se ele ficar mudo, a remocao de 18/10 virou beco.',
+    );
+    expect(
+      texto,
+      contains('Escolha outra'),
+      reason: 'REPROVA: a recusa nao diz O QUE FAZER. "Recusada" sem saida '
+          'manda a pessoa adivinhar, e adivinhar em campo de senha e '
+          'acrescentar caracteres a uma senha que nao tem nada de curta.',
     );
   });
 }

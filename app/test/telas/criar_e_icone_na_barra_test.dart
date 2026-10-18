@@ -185,6 +185,9 @@ void main() {
     testWidgets('Pets → escanear: o ícone de QR abre o leitor',
         (tester) async {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
 
       final icone = _naBarra(Icons.qr_code_2);
       expect(
@@ -304,6 +307,9 @@ void main() {
         (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
       _exigirRotuloEAcao(
         tester,
         rotulo: 'Escanear uma tag',
@@ -363,6 +369,9 @@ void main() {
       // é a altura da própria barra. Este caso afirma o PISO, porque é ele
       // que é contrato de acessibilidade, e não a escolha de 64.
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
 
       void exigirAlvo(IconData glifo, String onde) {
         final caixa = tester.getSize(
@@ -438,6 +447,9 @@ void main() {
       // é exatamente quem pode não ter conta nenhuma, e esconder o leitor
       // dessa pessoa é o oposto da cunha do produto.
       await abrirOApp(tester, rede: _rede);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
       expect(
         _naBarra(Icons.qr_code_2),
         findsOneWidget,
@@ -454,6 +466,9 @@ void main() {
         rede: _rede,
         deposito: depositoLogado(emailVerificado: false),
       );
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
 
       // O estado tem de ser MESMO o do e-mail não confirmado, senão este caso
       // seria o de cima com outro nome: a faixa é a prova de que estamos no
@@ -519,6 +534,9 @@ void main() {
       // com o título deslocado. Em `Pets` ela continua com o QR; nas outras
       // duas, o `Filtros` é da listagem e não depende de sessão.
       await abrirOApp(tester, rede: _rede);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
+      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
+      await abrirAAba(tester, 'Pets');
       expect(
         find.byType(AppBar),
         findsOneWidget,

@@ -223,6 +223,17 @@ void main() {
     // e `Confirmar`. Entao o caminho ate aqui passa por `Agora nao` primeiro.
     // O que este caso mede -- que a tela tem saida anunciavel e que ela
     // devolve a aba `Pets` -- nao mudou.
+    //
+    // **O CAMINHO ATE A FAIXA GANHOU UM PASSO EM 18/10/2026.** O app passou a
+    // abrir na `Rede` (pedido do cliente), e a faixa de cadastro incompleto
+    // mora nas POSICOES 1 e 2 da BICHUS-75: o topo de `Pets` e o topo de
+    // `Perfil`. Sem este toque o caso procurava `Agora não` na aba errada.
+    //
+    // E e `Pets` de proposito: o desfecho medido no fim deste caso e que a
+    // saida `Fechar` devolve a aba `Pets`, entao a ida tem de sair de lA.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Agora não'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirmar'));
