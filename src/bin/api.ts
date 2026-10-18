@@ -536,6 +536,10 @@ export async function main(): Promise<void> {
         await conversas.abrirPorAviso(aviso);
       },
     },
+    // O EMISSOR DO AVISO AO TUTOR. A MESMA fila de `alert.dispatch` e de
+    // `media.process_upload`: o aviso da plaquinha nao ganha esteira propria.
+    // Quem consome `tag.scan_notify` e `bin/worker.ts`.
+    fila: criarJobQueue(db, ids),
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
