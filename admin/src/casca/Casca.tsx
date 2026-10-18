@@ -55,6 +55,7 @@ const ITENS: ItemDaNavegacao[] = [
   // **COM aviso de contagem**: `AdminModerationItemPage` tem `pending_total`,
   // que passa pelo mesmo filtro de conta desabilitada dos outros dois lugares.
   { para: '/moderacao', rotulo: 'Moderação', icone: 'error', ativo: (c) => c === '/moderacao' || c.startsWith('/moderacao/') },
+  { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
 
 /**

@@ -18,6 +18,7 @@ export const TIPOS_DE_PROBLEMA = {
   "community-event-limit-reached": 409,
   "open-case-limit-reached": 409,
   "pet-limit-reached": 409,
+  "broadcast-daily-cap-reached": 409,
   "tag-limit-reached": 409,
   "contact-channel-unverified": 409,
   "pet-photo-missing": 409,

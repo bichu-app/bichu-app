@@ -715,6 +715,86 @@ export type TipoDeEventoDeEntrega =
  * exclusão quando a conta pedir remoção (ADR-0010 item 6). O endereço vive só
  * dentro da requisição, o tempo de achar a conta e marcar `email_deliverable`.
  */
+/**
+ * A CAIXA DE NOTIFICACOES (migracao `20261018000020`): uma linha por aviso e
+ * por destinatario.
+ *
+ * **`src/` quase nao escreve nesta tabela.** Quem insere sao os GATILHOS nas
+ * tabelas de origem, e quem le sao as funcoes SQL `caixa_de_notificacoes`,
+ * `contagem_de_notificacoes` e `notificacao_marcar_lida`. O tipo existe aqui
+ * para o Kysely conhecer a tabela (as iscas inserem direto) e para o nome das
+ * colunas ter UM lugar.
+ */
+export interface NotificationItemsTable {
+  id: Generated<string>;
+  /** Identificador opaco, 22 caracteres base64url. **Nao e UUID** (ADR-0010). */
+  ref: string;
+  recipient_user_id: string;
+  item_kind: TipoDeAvisoDaCaixa;
+  /** Nome do pet, titulo do encontro, nome indicado. */
+  subject_label: string | null;
+  /**
+   * Quem causou o aviso. Existe SO para agrupar por (tipo, autor, dia), e NAO
+   * sai na resposta: a caixa nao tem autor nem avatar na tela, de proposito.
+   */
+  author_user_id: string | null;
+  source_kind: string;
+  source_id: string;
+  /** Quando o FATO aconteceu, e nao quando a linha nasceu. */
+  occurred_at: Date;
+  /** O item foi ABERTO. Nulo e nao lido. Ver a LISTA nao mexe nisto. */
+  read_at: Date | null;
+  created_at: Generated<Date>;
+}
+
+/**
+ * Os tipos de aviso da caixa. Espelha o `CHECK` de `notification_items.item_kind`
+ * e o `enum` `NotificationKind` do contrato.
+ */
+export type TipoDeAvisoDaCaixa =
+  | 'tag_scanned'
+  | 'found_reported'
+  | 'match_suggested'
+  | 'neighborhood_alert'
+  | 'event_join_requested'
+  | 'event_join_decided'
+  | 'event_cancelled'
+  | 'suggestion_decided'
+  | 'tag_request_updated'
+  | 'broadcast';
+
+/**
+ * Quando esta conta viu a lista pela ultima vez (migracao `20261018000020`).
+ *
+ * Abrir a caixa empurra `zeroed_at` para agora, e o contador passa a ignorar
+ * todo item anterior a isso SEM marcar nenhum como lido. Tabela propria e nao
+ * coluna em `users` de proposito: `users` e a tabela mais disputada deste
+ * repositorio, e este estado nao e identidade.
+ */
+export interface NotificationCounterStateTable {
+  user_id: string;
+  zeroed_at: Date;
+}
+
+/**
+ * Os COMUNICADOS disparados pelo painel (migracao `20261018000020`).
+ *
+ * Nao ha coluna de exclusao e nao ha rota de apagar: comunicado disparado fica
+ * registrado, por requisito.
+ */
+export interface NotificationBroadcastsTable {
+  id: Generated<string>;
+  /** Identificador opaco. Nao e UUID (ADR-0010). */
+  ref: string;
+  title: string;
+  body: string;
+  /** Conta do PAINEL (`admin_accounts`), nunca `users`. */
+  dispatched_by_admin: string;
+  dispatched_at: Generated<Date>;
+  /** Quantas caixas ele alcancou NO INSTANTE do disparo. */
+  recipients_total: number;
+}
+
 export interface NotificationDeliveriesTable {
   id: string;
   /** `MessageID` do provedor. Texto: o formato é dele, não nosso. */
@@ -1913,6 +1993,9 @@ export interface Database {
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
   notification_deliveries: NotificationDeliveriesTable;
+  notification_items: NotificationItemsTable;
+  notification_counter_state: NotificationCounterStateTable;
+  notification_broadcasts: NotificationBroadcastsTable;
   lost_cases: LostCasesTable;
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;

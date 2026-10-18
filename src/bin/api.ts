@@ -45,6 +45,15 @@ import { registrarRotasDeLocalizacao } from '../modules/identity/adapters/http/l
 import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
 import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
 import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http/device-routes.js';
+// 18/10/2026. A CAIXA DE NOTIFICACOES (o destino do sino) e o COMUNICADO. As
+// duas moram em `notifications` pelo mesmo argumento que trouxe o aparelho para
+// ca: o modulo e o do aviso, e nao o da identidade.
+import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import { registrarRotasDeComunicado } from '../modules/notifications/adapters/http/admin-comunicado-routes.js';
+import { criarCaixaDeNotificacoes } from '../modules/notifications/adapters/persistence/kysely-caixa-de-notificacoes.js';
+import { criarRepositorioDeComunicados } from '../modules/notifications/adapters/persistence/kysely-comunicados.js';
+import { CaixaDeNotificacoesService } from '../modules/notifications/application/caixa-de-notificacoes-service.js';
+import { ComunicadosAdministrativos } from '../modules/notifications/application/comunicados-administrativos.js';
 import {
   criarVerificadorDeReautenticacao,
   registrarRotasDeDescoberta,
@@ -689,6 +698,26 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // A CAIXA DE NOTIFICACOES. O autenticador chega injetado, como no aparelho: o
+  // modulo recebe um `autenticar` e nao o servico de identidade, entao ele nao
+  // tem como devolver dado de conta por engano.
+  const dependenciasDasRotasDaCaixa = {
+    caixa: new CaixaDeNotificacoesService({ caixa: criarCaixaDeNotificacoes(db) }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
+  // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
+  // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
+  // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
+  // na trilha nao fica de pe.
+  const comunicadosAdministrativos = new ComunicadosAdministrativos({
+    repositorio: criarRepositorioDeComunicados(db),
+    escrita: escritaAuditada,
+  });
+
   const dependenciasDasRotasDeMidia = {
     // ADR-0025 emenda 3: a capa do encontro da comunidade. O MESMO preparador
     // do painel (prefixo `events/`, `purpose = network_event`), com o autor em
@@ -1017,6 +1046,7 @@ export async function main(): Promise<void> {
     });
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
+    registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     // BICHUS-76. A pagina do caso e o cartaz, pelo `share_token`. O token e a
@@ -1117,6 +1147,14 @@ export async function main(): Promise<void> {
           // A FILA DE MODERACAO (18/10/2026). `conversation_reports` gravava
           // denuncia desde 28/09 e NENHUMA rota do painel a resolvia.
           registrarRotasDaFilaDeModeracao(administrativo, { fila: filaDeModeracao, contrato });
+          // O COMUNICADO. Fica DENTRO deste bloco como todas as outras: fora
+          // dele a fronteira de `registrarRota` derruba a subida, e e isso que
+          // garante que nenhuma escrita administrativa suba sem a guarda de
+          // papel, cookie, `Origin` e `X-CSRF-Token` na frente.
+          registrarRotasDeComunicado(administrativo, {
+            comunicados: comunicadosAdministrativos,
+            contrato,
+          });
         },
       );
     } else {

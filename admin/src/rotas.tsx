@@ -45,6 +45,7 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         // 18/10/2026: a fila de moderacao. `conversation_reports` gravava
         // denuncia desde 28/09 e nenhuma tela a lia.
         ...rotasDaModeracao,
+        { path: 'comunicados', children: [{ index: true, lazy: async () => ({ Component: (await import('./comunicados/ListaDeComunicados.tsx')).default }) }, { path: 'novo', lazy: async () => ({ Component: (await import('./comunicados/FormularioDeComunicado.tsx')).default }) }] },
         { path: '*', element: <NaoEncontrada /> },
       ],
     },

@@ -322,6 +322,7 @@ x-problem-types:
   - { slug: community-event-limit-reached, status: 409, note: "teto de 3 encontros ATIVOS (ainda nao encerrados) criados pela comunidade, por conta (ADR-0025 emenda 3). O mesmo numero de `open-case-limit-reached`, e de proposito: as duas perguntas sao a mesma -- quantas acoes de peso uma conta mantem em aberto -- e dois numeros para ela obrigariam a defender os dois. Sem revisao humana, este teto e o de chamada sao a unica contencao de volume" }
   - { slug: open-case-limit-reached,       status: 409, note: "teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa" }
   - { slug: pet-limit-reached,             status: 409, note: "teto de pets DA CONTA" }
+  - { slug: broadcast-daily-cap-reached,   status: 409, note: "teto de 3 comunicados por dia, contado da meia-noite UTC e aplicado no banco na mesma transacao da gravacao. 409 e nao 429: 429 e teto de CHAMADA, aplicado pela borda e que passa em um minuto; este e teto de PRODUTO, e a saida da pessoa e esperar amanha ou nao mandar -- tratar os dois com o mesmo tipo faria o painel oferecer 'tentar de novo' para o unico caso em que tentar de novo nao resolve" }
   - { slug: tag-limit-reached,             status: 409, note: "teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada" }
   - { slug: contact-channel-unverified,    status: 409 }
   - { slug: pet-photo-missing,             status: 409 }
@@ -1374,6 +1375,191 @@ paths:
       responses:
         '204': { description: Apagada. }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ----------------------------------------------------------------------
+  # A caixa de notificacoes -- o conteudo do sino
+  # ----------------------------------------------------------------------
+  #
+  # FRONTEIRA DAS TRES CAIXAS, decidida e nao redesenhada aqui:
+  #
+  #   Mensagens (barra inferior)  conversa com uma PESSOA     contador de nao lidas
+  #   Sino (barra superior)       DIRIGIDO A VOCE, acionavel  contador de nao lidos
+  #   Petline                     de TERCEIRO, informativo    ponto, sem numero
+  #
+  # "Post de amigo" NAO entra no sino: 150 conexoes a uma publicacao por semana
+  # dariam cerca de 21 avisos por dia, e o aviso da plaquinha chegaria na 22a
+  # posicao. Ele e da Petline, que nao e desta frente.
+  #
+  # A UNICA DUPLICACAO DELIBERADA e `neighborhood_alert`: pet perdido perto de
+  # voce aparece no sino E na Petline, porque e o unico item cujo custo de ser
+  # perdido e irreversivel.
+  #
+  # DENUNCIA NAO ENTRA EM CAIXA NENHUMA: o denunciante nao recebe resultado nem
+  # prazo, e o denunciado nao e avisado.
+
+  /me/notifications:
+    get:
+      operationId: listNotifications
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      summary: A caixa de notificacoes, agrupada e paginada
+      description: |
+        Ordem decrescente de quando a coisa aconteceu. **Pagina de 30**, e a
+        retencao e de **90 dias**: o que e mais antigo nao aparece.
+
+        **AGRUPAMENTO** por tipo, autor quando houver, e janela de 24 h -- uma
+        linha por combinacao por dia, e `grouped_count` diz quantos avisos ela
+        resume. **`tag_scanned` e `found_reported` NUNCA agrupam**, e a ausencia
+        e deliberada: cada um e um animal e uma acao distintos, e "2 avisos de
+        plaquinha" esconderia qual pet.
+
+        **Nenhuma imagem.** A caixa nao devolve avatar nem foto de pet, de
+        proposito: sao 0 KB de imagem por pagina, para nao trazer a foto do pet
+        a uma quarta superficie.
+
+        `unread_total` vem junto para a tela nao precisar de uma segunda
+        chamada. **Esta operacao NAO zera o contador** -- quem zera e
+        `markNotificationsListSeen`, e a separacao e o que torna "abrir a lista
+        nao marca os itens" verificavel.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          description: Pagina de 30 por decisao de desenho.
+          schema: { type: integer, minimum: 1, maximum: 30, default: 30 }
+      responses:
+        '200':
+          description: Pagina da caixa.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/notifications/count:
+    get:
+      operationId: getNotificationCount
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      summary: O numero do sino
+      description: |
+        **E a fonte do numero que a barra superior exibe.** Operacao propria, e
+        nao um campo de outra leitura, porque a barra vive em toda tela e nao
+        pode pagar uma pagina de 30 linhas para desenhar um numero.
+
+        O numero sai **inteiro**. O recorte em `9+` e regra da barra -- tres
+        digitos comem o espaco do titulo --, e recortar aqui apagaria a
+        diferenca entre 10 e 400 para quem for medir uso depois.
+
+        **O que o numero conta**, e esta e a regra inteira: aviso ainda nao
+        ABERTO cujo instante e posterior a ultima vez que a lista foi vista.
+        Abrir a lista derruba o numero sem marcar item nenhum. A excecao
+        nomeada: **`tag_scanned` e `found_reported` NAO saem do contador ao
+        abrir a lista** -- eles so saem quando o item e aberto, porque os dois
+        dizem que ha um pet na rua agora.
+      responses:
+        '200':
+          description: O contador.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationCount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/notifications/seen:
+    post:
+      operationId: markNotificationsListSeen
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 240
+          window: 1h
+          on_exceed: deny_429
+      summary: A lista foi aberta -- zera o numero sem marcar os itens
+      description: |
+        **Zera o contador e NAO marca nada como lido.** Os dois efeitos sao
+        separados por requisito: "lido" e o item aberto, nao a lista vista.
+
+        E `POST` e nao efeito de `listNotifications` porque aquela e `GET`, e
+        `GET` que escreve e `GET` que nao pode ser repetido nem cacheado.
+
+        Idempotente: chamar duas vezes deixa o mesmo estado.
+      responses:
+        '204': { description: Contador zerado. Os itens continuam nao lidos. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /me/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      summary: Marcar todas como lidas
+      description: |
+        Acao **explicita**, pedida na tela. Existe separada de
+        `markNotificationsListSeen` porque abrir a lista so derruba o numero:
+        sem esta operacao nao haveria como limpar de verdade uma caixa grande,
+        nem tirar do contador a plaquinha e o achado, que atravessam o zero de
+        proposito.
+
+        Respeita a mesma janela de 90 dias da listagem: nao mexe no que a caixa
+        nao mostra mais.
+      responses:
+        '200':
+          description: Quantas foram marcadas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [marked]
+                properties:
+                  marked: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /me/notifications/{notificationRef}/read:
+    parameters:
+      - $ref: '#/components/parameters/NotificationRef'
+    post:
+      operationId: markNotificationRead
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 600
+          window: 1h
+          on_exceed: deny_429
+      summary: Marca UM aviso como lido (o item foi aberto)
+      description: |
+        Idempotente: marcar duas vezes responde `204` nas duas, porque o
+        aparelho reenvia.
+
+        **Aviso de outra conta responde `404`, nunca `403`** (ADR-0021): a
+        autorizacao e a propria clausula `WHERE`, e um `403` confirmaria que o
+        `ref` existe.
+      responses:
+        '204': { description: Marcado como lido. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   # ----------------------------------------------------------------------
   # Pets
@@ -8980,6 +9166,177 @@ paths:
         '422': { $ref: '#/components/responses/ImageTooSmall' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  # ----------------------------------------------------------------------
+  # Comunicado -- o unico aviso do produto com alcance total
+  # ----------------------------------------------------------------------
+  #
+  # POR QUE AS TRES OPERACOES FICAM SOB `/v1/admin`: o bloco do host
+  # administrativo do `Caddyfile` repassa `/v1/admin/*` inteiro, e nao ha rota a
+  # acrescentar na borda. Foi o contrario que fez a taxonomia da Loja responder
+  # 404 no painel.
+  #
+  # A TRAVA, e o que ficou de fora dela:
+  #
+  #   - papel de administrador fechado    `x-admin-roles: [admin]`
+  #   - trilha de auditoria obrigatoria   `x-audit`, e `EscritaAuditada` no
+  #                                       servidor nao admite escrita sem evento
+  #   - teto de TRES por dia              aplicado no banco, na mesma transacao
+  #   - sem apagar                        nao existe `DELETE`
+  #
+  #   - **SEM CONFIRMACAO DE SENHA.** O esquema `adminReauth` existe neste
+  #     contrato e ZERO operacoes o declaram: a emenda do item 23 do ADR-0027
+  #     (07/10/2026) diz que "as escritas do painel deixam de pedir senha
+  #     (reautenticacao), por decisao do cliente, com o risco de sessao
+  #     sequestrada aceito; a rota de reautenticacao fica obsoleta, sem
+  #     remover". Pedir senha AQUI contrariaria ADR em vigor, e por isso o
+  #     comunicado sai com a mesma trava das outras escritas do painel e nao
+  #     com uma mais forte. Megafone sem trilha e o que vira incidente -- a
+  #     trilha existe; a senha e que nao.
+  #
+  # NAO DISPARA E-MAIL NEM PUSH. O comunicado entra na caixa. Push para todo
+  # mundo e decisao do cliente, e ela nao foi tomada.
+
+  /admin/broadcasts:
+    get:
+      operationId: listAdminBroadcasts
+      tags: [admin]
+      x-effects: []
+      summary: Os comunicados ja disparados
+      description: |
+        Do mais recente para o mais antigo. **Nao ha rascunho e nao ha
+        exclusao**: a lista e o registro do que foi disparado, e e por isso que
+        ela existe -- sem ela, "quem mandou aquilo" nao tem resposta na tela.
+
+        Sem `x-audit`: `x-audit` em `GET` administrativo e so da leitura de
+        PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e esta
+        lista nao le pessoa nenhuma -- ela le comunicados e o nome de exibicao
+        de quem os disparou, que e conta de painel. Mesma ausencia, e pelo
+        mesmo motivo, da fila da plaquinha e da fila de indicacoes.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      parameters:
+        - $ref: '#/components/parameters/AdminPage'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Pagina dos comunicados disparados.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminBroadcastPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    post:
+      operationId: dispatchAdminBroadcast
+      tags: [admin]
+      x-effects: [notifies, irreversible_write]
+      summary: Dispara o comunicado para todas as caixas
+      description: |
+        **Irreversivel.** Nao ha como apagar um comunicado nem desfazer o
+        disparo: ele entra na caixa de toda conta habilitada no mesmo instante,
+        e e por isso que `previewAdminBroadcast` existe e que a tela do painel
+        obriga a passar por ela.
+
+        **Teto de 3 por dia**, contado a partir da meia-noite UTC, aplicado no
+        banco e na mesma transacao da gravacao -- teto conferido numa consulta
+        anterior e teto que duas abas furam. O quarto responde `409`
+        (`broadcast-daily-cap-reached`).
+
+        `recipients_total` na resposta e quantas caixas ele alcancou **no
+        instante do disparo**, guardado e nao recalculado depois.
+
+        Nao dispara e-mail nem push.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.broadcast.dispatched, resource_kind: broadcast }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52). O teto de verdade e o de 3 por dia, no banco"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminBroadcastDraft' }
+      responses:
+        '201':
+          description: Comunicado disparado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminBroadcast' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/BroadcastDailyCapReached' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/broadcasts/dispatch-window:
+    get:
+      operationId: getAdminBroadcastDispatchWindow
+      tags: [admin]
+      x-effects: []
+      summary: Quanto o disparo alcancaria, e quantos ainda cabem hoje
+      description: |
+        O que a tela precisa do SERVIDOR para pre-visualizar um comunicado:
+        quantas contas o disparo alcancaria agora, quantos ainda cabem hoje, e
+        qual e o teto. **Nao grava nada e nao alcanca caixa nenhuma.**
+
+        **Por que ela nao recebe o rascunho.** A primeira forma desta operacao
+        era um `POST /admin/broadcasts/preview` que mandava titulo e corpo e os
+        devolvia. Ela nao se sustentou por duas razoes que apontam para o mesmo
+        lugar:
+
+        1. `portao-contrato-administrativo` (ADR-0027 item 7, regra 2) exige
+           `x-audit` de **toda** operacao sob `/admin/` de metodo nao seguro --
+           e com razao: sob `/admin`, metodo nao seguro E escrita, e "esta aqui
+           nao escreve" e exatamente a afirmacao que um portao nao pode aceitar
+           na palavra de quem escreveu a rota. Dar `x-audit` a uma
+           pre-visualizacao gravaria trilha por tecla digitada e afogaria a
+           trilha do disparo, que e a que importa.
+        2. **O servidor nao precisa do texto.** `would_reach` e
+           `remaining_today` nao dependem de uma letra do rascunho. Renderizar
+           o titulo e o corpo e trabalho do painel, que ja os tem na mao.
+
+        Entao ela e `GET`, sem corpo: o rascunho nao atravessa a rede, nao
+        aparece em registro de acesso de borda nenhum, e a operacao e o que ela
+        sempre foi -- uma leitura. **A pre-visualizacao continua obrigatoria
+        antes do disparo**; ela so deixou de precisar de uma ida ao servidor
+        carregando o texto.
+
+        Sem `x-audit`: e `GET` e nao le pessoa nenhuma -- `would_reach` e uma
+        CONTAGEM de contas, nunca uma lista delas (`x-audit` em `GET`
+        administrativo e so da leitura de pessoa auditada, D55/D56).
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: A janela de disparo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminBroadcastDispatchWindow' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
 components:
 
   securitySchemes:
@@ -9387,6 +9744,12 @@ components:
 
         Cadeia opaca para o painel, que nunca tenta interpreta-la.
       schema: { type: string, minLength: 20, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
+    NotificationRef:
+      name: notificationRef
+      in: path
+      required: true
+      description: O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010).
+      schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
     AdminPage:
       name: page
       in: query
@@ -9599,6 +9962,13 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     PetLimitReached:
       description: Teto de 20 pets por conta.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    BroadcastDailyCapReached:
+      description: |
+        Teto de 3 comunicados por dia, ja atingido. A saida nao e tentar de
+        novo: e esperar o proximo dia ou nao mandar.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -15807,3 +16177,191 @@ components:
           type: array
           maxItems: 40
           items: { $ref: '#/components/schemas/StoreTagRef' }
+
+    # ------------------------------------------------------------------
+    # A caixa de notificacoes
+    # ------------------------------------------------------------------
+
+    NotificationKind:
+      type: string
+      description: |
+        O tipo do aviso. Lista FECHADA, e cada valor tem fonte medida no banco.
+
+        **Os dois que NAO estao aqui, e as ausencias sao medidas:**
+
+        - **evento movido** (`event_relocated`): nao existe coluna que registre
+          a mudanca de lugar ou de hora. `starts_at` e o endereco mudam em cima
+          da linha, e a unica memoria do movimento e a trilha de auditoria com
+          `admin.network_event.relocated` -- trilha forense de ator
+          administrativo, nao fonte de produto. Um aviso de "movido" exige
+          coluna nova ou evento de produto, e isso e decisao, nao conserto.
+        - **caso devolvido** (`case_reunited`): a linha existe
+          (`closure_outcome: reunited`), mas nao tem destinatario de SINO --
+          quem fecha o caso e o proprio tutor, e para os vizinhos a noticia e
+          de terceiro e informativa, quer dizer, Petline.
+
+        **`friend_post` nao existe e nao vai existir aqui**: post de amigo e da
+        Petline, por decisao de desenho (21 avisos por dia empurrariam a
+        plaquinha para a 22a posicao).
+      enum:
+        - tag_scanned
+        - found_reported
+        - match_suggested
+        - neighborhood_alert
+        - event_join_requested
+        - event_join_decided
+        - event_cancelled
+        - suggestion_decided
+        - tag_request_updated
+        - broadcast
+
+    NotificationItem:
+      type: object
+      required: [ref, kind, occurred_at, read, grouped_count]
+      properties:
+        ref:
+          type: string
+          description: Identificador opaco. **Nao e UUID** (ADR-0010).
+          minLength: 20
+          maxLength: 32
+        kind: { $ref: '#/components/schemas/NotificationKind' }
+        subject:
+          type: string
+          nullable: true
+          maxLength: 120
+          description: |
+            O nome do pet, o titulo do encontro ou o nome indicado -- o que a
+            linha e sobre, em texto ja pronto. Nulo quando o aviso nao tem
+            assunto proprio.
+        occurred_at:
+          type: string
+          format: date-time
+          description: Quando o FATO aconteceu, e nao quando a linha nasceu.
+        read:
+          type: boolean
+          description: |
+            O item foi ABERTO. **Ver a lista nao marca nada** -- abrir a lista
+            zera o contador e deixa isto em `false`.
+        grouped_count:
+          type: integer
+          minimum: 1
+          description: |
+            Quantos avisos esta linha resume. `1` quando ela e um aviso so.
+            **Sempre `1` para `tag_scanned` e `found_reported`**, que nunca
+            agrupam porque cada um e um animal e uma acao distintos.
+      description: |
+        Uma linha da caixa. **Nao traz imagem nenhuma** -- sem avatar e sem foto
+        de pet, de proposito, para nao trazer a foto a uma quarta superficie. E
+        nao traz autor: o autor existe no servidor so para agrupar.
+
+    NotificationPage:
+      type: object
+      required: [items, page, limit, total, unread_total]
+      properties:
+        items:
+          type: array
+          maxItems: 30
+          items: { $ref: '#/components/schemas/NotificationItem' }
+        page: { type: integer }
+        limit: { type: integer }
+        total:
+          type: integer
+          description: Total de LINHAS ja agrupadas, e nao de avisos.
+        unread_total:
+          type: integer
+          minimum: 0
+          description: |
+            O mesmo numero de `getNotificationCount`, junto para a tela nao
+            precisar de uma segunda chamada. Conta AVISOS nao abertos, nao
+            linhas.
+
+    NotificationCount:
+      type: object
+      required: [unread_total]
+      properties:
+        unread_total:
+          type: integer
+          minimum: 0
+          description: |
+            Inteiro, sem recorte. O `9+` e regra da barra, e recortar aqui
+            apagaria a diferenca entre 10 e 400 para quem for medir uso.
+
+    # ------------------------------------------------------------------
+    # Comunicado
+    # ------------------------------------------------------------------
+
+    AdminBroadcastDraft:
+      type: object
+      required: [title, body]
+      properties:
+        title: { type: string, minLength: 2, maxLength: 80 }
+        body:
+          type: string
+          minLength: 2
+          maxLength: 1000
+          description: |
+            **Texto puro.** O painel o mostra como texto e nunca como HTML, e o
+            `eslint` dele proibe `dangerouslySetInnerHTML` (ADR-0027 item 6).
+
+    AdminBroadcast:
+      type: object
+      required: [ref, title, body, dispatched_at, dispatched_by, recipients_total]
+      properties:
+        ref:
+          type: string
+          minLength: 20
+          maxLength: 32
+          description: Identificador opaco. Nao e UUID (ADR-0010).
+        title: { type: string }
+        body: { type: string }
+        dispatched_at: { type: string, format: date-time }
+        dispatched_by:
+          type: string
+          description: |
+            O **nome de exibicao** da conta de painel que disparou. Nao e o
+            e-mail e nao e o UUID: a pergunta que a tela responde e "quem
+            mandou isto", e o nome a responde sem publicar identificador.
+        recipients_total:
+          type: integer
+          minimum: 0
+          description: Quantas caixas ele alcancou NO INSTANTE do disparo.
+
+    AdminBroadcastPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminBroadcast' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    AdminBroadcastDispatchWindow:
+      type: object
+      required: [would_reach, remaining_today, daily_cap]
+      properties:
+        would_reach:
+          type: integer
+          minimum: 0
+          description: |
+            Quantas contas habilitadas o disparo alcancaria AGORA. E uma
+            CONTAGEM e nunca uma lista: o painel nao monta quem recebeu o que.
+
+            Estimativa por construcao -- o numero muda entre a leitura e o
+            disparo --, e e por isso que `AdminBroadcast.recipients_total` e
+            gravado em separado, no instante do disparo.
+        remaining_today:
+          type: integer
+          minimum: 0
+          description: |
+            Quantos comunicados ainda cabem hoje. **Zero aqui e o que a tela usa
+            para desabilitar o disparo antes de tentar**, em vez de descobrir
+            pelo `409`.
+        daily_cap:
+          type: integer
+          minimum: 1
+          description: |
+            O teto diario (hoje, 3). Vem do servidor em vez de ser uma constante
+            do painel: duas copias do mesmo numero divergem, e a que diverge e a
+            que diz "resta 1" sobre um teto que o banco ja fechou.

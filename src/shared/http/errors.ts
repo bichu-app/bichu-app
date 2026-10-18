@@ -278,6 +278,25 @@ export const problemas = {
     }),
 
   /**
+   * 409. O teto de três comunicados por dia, já atingido.
+   *
+   * **409 e não 429, e a diferença é o que a tela faz com cada um.** 429 é teto
+   * de CHAMADA: ele é aplicado pela borda e passa em um minuto, então a tela
+   * oferece "tentar de novo". Este é teto de PRODUTO, e a saída de quem o
+   * encontra é esperar o próximo dia ou não mandar. Tratar os dois com o mesmo
+   * tipo faria o painel oferecer "tentar de novo" para o único caso em que
+   * tentar de novo não resolve.
+   *
+   * A tela do painel normalmente nem chega aqui: a pré-visualização devolve
+   * `remaining_today`, e com zero ela desabilita o disparo antes da tentativa.
+   * Este problema cobre a corrida — outro operador disparou no meio.
+   */
+  tetoDiarioDeComunicados: (): AppError =>
+    new AppError('broadcast-daily-cap-reached', 'Já saíram três comunicados hoje', {
+      detail: 'O limite é de três por dia. O próximo pode ser enviado amanhã.',
+    }),
+
+  /**
    * 409. Nenhum canal de contato verificado.
    *
    * O bloqueio existe porque um caso sem canal alcançável produz **movimento e
