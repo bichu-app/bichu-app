@@ -137,7 +137,10 @@ void main() {
   group('Digitar o codigo: a plaquinha, e o teclado manda nela', () {
     Future<void> abrirADigitacao(WidgetTester tester) async {
       await abrirOApp(tester, rede: _semServidor);
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+      await tester.tap(find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ));
       await tester.pumpAndSettle();
       await tester.tap(
         find.widgetWithText(BotaoPrimario, TextosDoCadastro.digitarOCodigo),

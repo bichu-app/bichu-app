@@ -1,6 +1,5 @@
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/diretorio_api.dart';
@@ -8,11 +7,9 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../escopo.dart';
-import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
-import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
@@ -278,28 +275,29 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **A porta de indicar, no CORPO e nao na `AppBar`.** O slot unico de
-        // acao da barra de topo continua livre (11.23.1), e os controles de
-        // listagem moram no corpo -- a porta de escrita mora no corpo pelo
-        // mesmo motivo: a barra tem UMA vaga e tres candidatos.
+        // **A PORTA DE INDICAR SUBIU PARA A BARRA DE TOPO** em 18/10/2026, e
+        // nao esta mais aqui. Pedido literal do cliente: "os itens de criacao,
+        // como evento e indicacao, ate o escanear poderia ser icones na barra
+        // superior ... e nao fique esse botao grande na pagina ocupando muito
+        // espaco".
         //
-        // **Acima da barra de listagem**, porque ela nao e um controle de
-        // recorte: nao muda o que a lista mostra. Dentro dos controles, ela
-        // pareceria um filtro.
+        // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no CORPO
+        // e nao na `AppBar`" --, e a reversao e decisao dele. Quem desenha e
+        // `AcaoDeCriarNaBarra`; quem a entrega a casca e `AbaPerto`, em
+        // `abas.dart`.
         //
-        // Habilitada sempre: quem explica o bloqueio de conta e a tela de
-        // destino, que mostra o motivo e a saida. Botao apagado aqui seria
-        // botao morto sem lugar onde escrever a explicacao.
-        Padding(
-          padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-          child: SizedBox(
-            width: double.infinity,
-            child: BotaoSecundario(
-              rotulo: ListaDoDiretorio.rotuloDeIndicar,
-              aoTocar: () => context.push(Rotas.sugerirProfissional),
-            ),
-          ),
-        ),
+        // **E ela deixou de aparecer para quem nao pode usa-la**, que era o
+        // segundo defeito que ele relatou no mesmo dia: a porta convidava
+        // deslogado e a tela de destino e que dizia "Entre para indicar". Ela
+        // agora exige conta E e-mail confirmado, e `podeCriarNaComunidade`,
+        // em `abas.dart`, e quem decide. `rotuloDeIndicar` continua aqui
+        // porque ele e o rotulo acessivel do icone e esta tela e a dona da
+        // palavra.
+        //
+        // O que saiu daqui foi um `BotaoSecundario` de largura total com 48 dp
+        // de altura, dentro de um `Padding` de 16 dp embaixo: 64 dp de altura
+        // devolvidos ao corpo da listagem.
+        //
         // A barra so aparece quando ha pagina: antes dela a tela nao sabe
         // quantos itens existem nem em que ordem eles vieram, e um controle
         // de ordenacao sobre nada ainda medido seria o controle que afirma.

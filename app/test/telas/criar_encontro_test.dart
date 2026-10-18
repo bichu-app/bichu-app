@@ -30,7 +30,6 @@ import 'dart:convert';
 
 import 'package:bichu/telas/rede/criar_encontro.dart';
 import 'package:bichu/widgets/botao_primario.dart';
-import 'package:bichu/widgets/faixa_de_aviso.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -78,21 +77,69 @@ Future<void> abrirAgenda(
   await tester.pumpAndSettle();
 }
 
+/// Abre o formulário pela PORTA REAL da seção, que desde 18/10/2026 é o ícone
+/// da barra de topo e não mais o botão de largura total do corpo.
+///
+/// Ela mora numa função, e não copiada em cada caso, por um motivo que já
+/// custou caro aqui: quando o cliente mudou a forma da porta, dez casos deste
+/// arquivo deixaram de ter o que tocar ao mesmo tempo. Com a porta numa função
+/// só, a próxima mudança de forma custa uma edição.
+///
+/// **O glifo é procurado DENTRO da `AppBar`.** `Icons.more_time` pode aparecer
+/// em outro lugar da árvore amanhã, e um `find.byIcon` solto acharia o outro e
+/// ficaria verde com a barra vazia.
+Future<void> abrirAPorta(WidgetTester tester) async {
+  await tocar(
+    tester,
+    find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.more_time),
+    ),
+  );
+}
+
 void main() {
-  group('a porta de marcar encontro', () {
-    testWidgets('está no corpo da agenda e abre o formulário', (tester) async {
+  // -------------------------------------------------------------------------
+  // A PORTA MUDOU DE FORMA E DE REGRA EM 18/10/2026, por decisão do cliente,
+  // e este grupo foi reescrito para cobrar o que ele decidiu. Nenhum caso foi
+  // apagado: os dois que afirmavam o contrário passaram a afirmar o novo.
+  //
+  //   1. *"os itens de criação, como evento e indicação, até o escanear
+  //      poderia ser ícones na barra superior ... e não fique esse botão
+  //      grande na página ocupando muito espaço"* — a porta saiu do corpo e
+  //      virou ícone na barra. Isto REVERTE a regra de 17/10 que este arquivo
+  //      cobrava ("a porta NÃO está na AppBar"), do mesmo jeito que o
+  //      `Filtros` reverteu em 17/10 a regra de 22/09.
+  //   2. *"essas ações só devem ser realizadas por usuários cadastrados e
+  //      validados, caso ao contrário o botão nem aparece"* — a porta só
+  //      existe com conta E e-mail confirmado.
+  //
+  // **A consequência no grupo de recusas, e ela não é cosmética:** os dois
+  // impedimentos de `criar_encontro.dart` continuam no código e NÃO foram
+  // tocados, mas a porta não leva mais ninguém até eles — quem não pode criar
+  // não vê o ícone. A rota segue alcançável por link profundo, e é por isso
+  // que a recusa continua no app em vez de ter sido apagada. Os dois casos
+  // abaixo passaram a medir o que agora é verdade: a porta **não aparece**.
+  // -------------------------------------------------------------------------
+  group('a porta de criar evento', () {
+    testWidgets('está na BARRA DE TOPO da Rede e abre o formulário',
+        (tester) async {
       await abrirAgenda(
         tester,
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
       );
 
-      final porta = find.text('Marcar um encontro');
+      final porta = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.more_time),
+      );
       expect(
         porta,
         findsOneWidget,
-        reason: 'REPROVA: a agenda não oferece como marcar um encontro. O '
-            'cliente pediu o botão na Rede, e sem ele a rota de criar existe '
-            'sem ninguém poder alcançá-la.',
+        reason: 'REPROVA: a barra da Rede não oferece como criar um evento. O '
+            'botão do corpo saiu por pedido do cliente, então este ícone é o '
+            'único caminho do app: sem ele a rota de criar existe sem ninguém '
+            'poder alcançá-la.',
       );
 
       await tocar(tester, porta);
@@ -100,112 +147,148 @@ void main() {
       expect(
         find.byType(TelaCriarEncontro),
         findsOneWidget,
-        reason: 'REPROVA: o botão não levou ao formulário.',
+        reason: 'REPROVA: o ícone não levou ao formulário. Glifo que não abre '
+            'nada é pior que botão nenhum: ele promete.',
       );
     });
 
     testWidgets(
-      'ISCA — a porta NÃO está na AppBar. Para ver reprovar, mova o '
-      '`BotaoSecundario` de `agenda_da_rede.dart` para `actions:` da '
-      '`AppBar` de `TelaDeAba`.',
+      'ISCA — o botão grande NÃO voltou ao corpo. Para ver reprovar, reponha '
+      'o `Padding` + `BotaoSecundario` que saiu de `agenda_da_rede.dart`.',
       (tester) async {
         await abrirAgenda(
           tester,
           rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         );
 
-        final naBarra = find.descendant(
-          of: find.byType(AppBar),
-          matching: find.text('Marcar um encontro'),
+        expect(
+          find.widgetWithText(OutlinedButton, 'Criar evento'),
+          findsNothing,
+          reason: 'REPROVA: a porta voltou a ser botão de largura total no '
+              'corpo. Com o ícone na barra ela seria a segunda cópia da mesma '
+              'ação, e os 64 dp de altura que o cliente pediu de volta não '
+              'voltaram.',
         );
         expect(
-          naBarra,
+          find.widgetWithText(OutlinedButton, 'Marcar um encontro'),
           findsNothing,
-          reason: 'REPROVA: a porta foi para a barra de topo. O slot único de '
-              'ação dela é da seção (11.23.1), e numa raiz de aba o slot da '
-              'esquerda é a gaveta: três ações não cabem numa.',
+          reason: 'REPROVA: o botão grande voltou com o rótulo ANTIGO. O '
+              'vocabulário do app trocou "encontro" por "evento" em 18/10.',
         );
       },
     );
   });
 
-  group('os dois casos de recusa nunca viram botão morto', () {
-    testWidgets('sem e-mail confirmado: diz o motivo e oferece confirmar',
-        (tester) async {
+  group('quem não pode criar não vê a porta', () {
+    testWidgets('sem e-mail confirmado: o ícone não aparece', (tester) async {
+      // ESTE CASO MUDOU DE AFIRMAÇÃO em 18/10, e o que ele media antes está
+      // escrito aqui para não se perder: a porta aparecia, o toque abria o
+      // formulário, e o formulário dizia "Confirme seu e-mail antes de
+      // marcar" com `Confirmar meu e-mail` como saída. O cliente decidiu o
+      // contrário com todas as letras — *"caso ao contrário o botão nem
+      // aparece"* —, e manter a recusa explicada NO LUGAR da ação era
+      // exatamente o que ele mandou descartar.
+      //
+      // **A recusa não foi apagada do app.** `_Impedimento.semEmailConfirmado`
+      // e a faixa com a saída continuam em `criar_encontro.dart`, intocados,
+      // para quem chegar à rota por link profundo. O que mudou é quem é
+      // convidado a chegar lá.
+      //
+      // **E o caminho para validar não dependia desta porta:** o
+      // `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com
+      // `Reenviar` no topo de `Pets` e no topo de `Perfil`.
       await abrirAgenda(
         tester,
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         emailVerificado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
 
       expect(
-        find.textContaining('Confirme seu e-mail antes de marcar'),
-        findsOneWidget,
-        reason: 'REPROVA: a tela não diz por que não dá para marcar. Botão '
-            'desabilitado sem explicação é o defeito que custou tempo ao '
-            'cliente três vezes num dia.',
-      );
-      expect(
-        find.widgetWithText(FaixaDeAviso, 'Confirmar meu e-mail'),
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.more_time),
+        ),
         findsNothing,
-        reason: 'o rótulo da ação não é o texto da faixa; o próximo expect '
-            'é o que vale.',
-      );
-      expect(
-        find.text('Confirmar meu e-mail'),
-        findsOneWidget,
-        reason: 'REPROVA: o motivo foi dito sem SAÍDA. Rótulo de ação sem '
-            'destino é o defeito da BICHUS-62; aqui o oposto — motivo sem '
-            'ação — deixa a pessoa parada sabendo por quê.',
-      );
-
-      final botao = tester.widget<BotaoPrimario>(
-        find.widgetWithText(BotaoPrimario, 'Marcar encontro'),
-      );
-      expect(
-        botao.aoTocar,
-        isNull,
-        reason: 'REPROVA: o botão está habilitado sem e-mail confirmado. A '
-            'chamada voltaria 409 e a pessoa teria preenchido o formulário '
-            'inteiro para descobrir.',
+        reason: 'REPROVA: com o e-mail não confirmado a Rede ainda oferece '
+            'criar evento. A porta convida para uma tela que responde '
+            '"Confirme seu e-mail antes de marcar", e é esse convite vazio '
+            'que a decisão de 18/10 tirou.',
       );
     });
 
-    testWidgets('sem conta: diz o motivo e oferece entrar', (tester) async {
+    testWidgets('sem conta: o ícone não aparece', (tester) async {
+      // Mesma troca de afirmação, e aqui ela também fecha um defeito que o
+      // cliente relatou no mesmo dia sobre a ação irmã: a porta convidava
+      // quem não tinha entrado, e só a tela de destino dizia "Entre para".
       await abrirAgenda(
         tester,
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
         logado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
 
       expect(
-        find.textContaining('Entre para marcar um encontro'),
-        findsOneWidget,
-        reason: 'REPROVA: sem conta a tela não diz o que falta.',
-      );
-      expect(
-        find.text('Entrar'),
-        findsWidgets,
-        reason: 'REPROVA: o motivo foi dito sem a saída que o resolve.',
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.more_time),
+        ),
+        findsNothing,
+        reason: 'REPROVA: deslogado, a Rede ainda oferece criar evento.',
       );
     });
 
-    testWidgets('o motivo não é anunciado duas vezes', (tester) async {
+    testWidgets('CONTRAPROVA — com conta e e-mail confirmado, a porta aparece',
+        (tester) async {
+      // Sem esta contraprova os dois casos acima ficariam verdes para sempre
+      // com um `acaoDeCriar: null` fixo, escondendo a ação de TODO MUNDO. É a
+      // classe de defeito mais fácil de produzir quando a mudança do dia é
+      // "esconder", e afirmação de ausência é a forma mais fácil de escrever
+      // um portão cego.
       await abrirAgenda(
         tester,
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
-        emailVerificado: false,
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.more_time),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: quem tem conta e e-mail confirmado NÃO vê a porta. '
+            'A regra esconde de quem não pode; esconder de quem pode apaga a '
+            'função.',
+      );
+    });
+
+    testWidgets('o motivo, na tela de destino, não é anunciado duas vezes',
+        (tester) async {
+      // O caso continua existindo porque o que ele mede é da TELA DE DESTINO,
+      // e aquela tela não mudou. Ele chega lá com a porta visível — conta
+      // válida — e exercita o estado de e-mail não confirmado pelo único
+      // caminho que sobrou de dentro da suíte: o formulário aberto por quem
+      // pode, com a sessão trocando depois, não é reproduzível aqui. Então
+      // ele mede o que ainda é alcançável: uma única cópia da frase na tela
+      // aberta por quem pode criar não existe, e a dupla anunciação era entre
+      // a faixa e a barra de ação da MESMA tela.
+      //
+      // **Este é o caso que esta entrega NÃO conseguiu preservar inteiro**, e
+      // está dito em vez de escondido: com a porta oculta para quem não
+      // confirmou o e-mail, não há como esta suíte abrir o formulário NESSE
+      // estado sem um link profundo, que `abrirOApp` não oferece hoje. A
+      // afirmação sobre a tela de destino ficou pendente de alguém dar rota
+      // inicial ao ajudante.
+      await abrirAgenda(
+        tester,
+        rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
+      );
+      await abrirAPorta(tester);
 
       expect(
         find.textContaining('Confirme seu e-mail antes de marcar'),
-        findsOneWidget,
-        reason: 'REPROVA: a mesma frase aparece na faixa e na barra de ação. '
-            'Duas cópias fazem o leitor de tela anunciar o bloqueio duas '
-            'vezes, e a segunda não tem a saída.',
+        findsNothing,
+        reason: 'REPROVA: a tela de criar evento diz "Confirme seu e-mail" '
+            'para quem JÁ confirmou. A faixa de impedimento está presa num '
+            'estado que não é o da sessão.',
       );
     });
   });
@@ -251,7 +334,7 @@ void main() {
       (tester) async {
         final enviados = <Map<String, dynamic>>[];
         await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-        await tocar(tester, find.text('Marcar um encontro'));
+        await abrirAPorta(tester);
         await preencherEMarcar(tester);
 
         expect(enviados, hasLength(1), reason: 'REPROVA: nada foi enviado.');
@@ -305,7 +388,7 @@ void main() {
     testWidgets('campo opcional vazio NÃO entra como `null`', (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherEMarcar(tester);
 
       final corpo = enviados.single;
@@ -327,7 +410,7 @@ void main() {
         (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherEMarcar(tester);
 
       expect(
@@ -351,7 +434,7 @@ void main() {
               problema('community-event-limit-reached', 409),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -385,7 +468,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -412,7 +495,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 
@@ -445,7 +528,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Marcar um encontro'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Marcar encontro'));
 

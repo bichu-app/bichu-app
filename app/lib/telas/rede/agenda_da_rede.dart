@@ -2,18 +2,15 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/modelos_rede.dart';
 import '../../api/rede_api.dart';
 import '../../escopo.dart';
-import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
-import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
@@ -489,24 +486,22 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            // **A porta de criar encontro, no CORPO e nao na `AppBar`.** O
-            // slot unico de acao da barra de topo e da secao (11.23.1), e
-            // numa raiz de aba o slot da esquerda e a gaveta. Acima da
-            // `TabBar` porque a acao e da SECAO e nao de uma aba: em
-            // `Pedidos` ela continua querendo dizer a mesma coisa.
+            // **A PORTA DE CRIAR EVENTO SUBIU PARA A BARRA DE TOPO** em
+            // 18/10/2026, e nao esta mais aqui. Pedido literal do cliente:
+            // "os itens de criacao, como evento e indicacao, ate o escanear
+            // poderia ser icones na barra superior ... e nao fique esse botao
+            // grande na pagina ocupando muito espaco".
             //
-            // **Habilitada sempre, inclusive sem conta e sem e-mail
-            // confirmado.** Quem decide e explica o bloqueio e a tela de
-            // destino, que mostra o motivo e a saida que o resolve. Um botao
-            // apagado aqui seria um botao morto sem explicacao -- e sem lugar
-            // onde escrever uma.
-            Padding(
-              padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-              child: BotaoSecundario(
-                rotulo: AgendaDaRede.rotuloDeMarcar,
-                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
-              ),
-            ),
+            // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no
+            // CORPO e nao na `AppBar`" --, e a reversao e decisao dele. Quem
+            // desenha o icone e `AcaoDeCriarNaBarra`; quem o entrega a casca e
+            // `AbaRede`, em `abas.dart`, que e quem conhece a sessao: a porta
+            // so aparece com conta E e-mail confirmado, tambem por decisao
+            // dele no mesmo dia.
+            //
+            // O que saiu daqui foi um `BotaoSecundario` de largura total com
+            // 48 dp de altura, dentro de um `Padding` de 16 dp embaixo: 64 dp
+            // de altura devolvidos ao corpo da agenda.
             TabBar(
               controller: controlador,
               onTap: (i) => _trocarAba(abas[i]),

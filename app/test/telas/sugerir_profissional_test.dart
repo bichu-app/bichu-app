@@ -22,6 +22,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:flutter/material.dart';
@@ -110,21 +111,68 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Abre o formulário pela PORTA REAL da seção, que desde 18/10/2026 é o ícone
+/// de pessoas da barra de topo e não mais o botão de largura total do corpo.
+///
+/// Numa função, e não copiada em cada caso, pelo motivo que este arquivo
+/// acabou de viver: a mudança de forma da porta tirou o chão de doze casos de
+/// uma vez. Com a porta num lugar só, a próxima custa uma edição.
+///
+/// **O glifo é procurado DENTRO da `AppBar`**, e não solto na árvore: um
+/// `find.byIcon` largo acharia um `group_add` de outra tela e ficaria verde
+/// com a barra vazia.
+Future<void> abrirAPorta(WidgetTester tester) async {
+  await tocar(
+    tester,
+    find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.group_add),
+    ),
+  );
+}
+
 void main() {
+  // -------------------------------------------------------------------------
+  // A PORTA MUDOU DE FORMA E DE REGRA EM 18/10/2026, por dois pedidos do
+  // cliente no mesmo dia, e este grupo foi reescrito para cobrar o que ele
+  // decidiu. Nenhum caso foi apagado: os que afirmavam o contrário passaram a
+  // afirmar o novo.
+  //
+  //   1. *"os itens de criação, como evento e indicação, até o escanear
+  //      poderia ser ícones na barra superior ... e não fique esse botão
+  //      grande na página ocupando muito espaço"*, com o glifo escolhido por
+  //      ele: *"o ícone de recomendar um profissional, pode ser igual do
+  //      instagram, as 3 pessoas juntos"*. Isto REVERTE a regra de 17/10 que
+  //      este arquivo cobrava ("a porta NÃO está na AppBar").
+  //   2. *"o botão indicar quem atende bem, nem deveria aparecer para o
+  //      usuário se ele não estiver logado"*, depois estendido: *"essas ações
+  //      só devem ser realizadas por usuários cadastrados e validados, caso ao
+  //      contrário o botão nem aparece"*.
+  //
+  // `_Impedimento.semConta` e a faixa com `Entrar` continuam em
+  // `sugerir_profissional.dart`, INTOCADOS: a rota segue alcançável por link
+  // profundo, e tela que recusa calada é pior que tela que recusa dizendo. O
+  // que mudou é quem é convidado a chegar lá.
+  // -------------------------------------------------------------------------
   group('a porta de indicar', () {
-    testWidgets('está no corpo do Perto e abre o formulário', (tester) async {
+    testWidgets('está na BARRA DE TOPO do Perto e abre o formulário',
+        (tester) async {
       await abrirPerto(
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
 
-      final porta = find.text('Indicar quem atende bem');
+      final porta = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.group_add),
+      );
       expect(
         porta,
         findsOneWidget,
         reason: 'REPROVA: o Perto não oferece como indicar um profissional. O '
-            'cliente pediu o botão, e sem ele o diretório continua sem '
-            'nenhuma forma de a comunidade alimentá-lo.',
+            'botão do corpo saiu por pedido do cliente, então este ícone é o '
+            'único caminho do app, e sem ele o diretório continua sem nenhuma '
+            'forma de a comunidade alimentá-lo.',
       );
 
       await tocar(tester, porta);
@@ -132,28 +180,91 @@ void main() {
     });
 
     testWidgets(
-      'ISCA — a porta NÃO está na AppBar. Para ver reprovar, mova o '
-      '`BotaoSecundario` de `lista_do_diretorio.dart` para `actions:` da '
-      'barra de topo.',
+      'ISCA — o botão grande NÃO voltou ao corpo. Para ver reprovar, reponha '
+      'o `Padding` + `BotaoSecundario` que saiu de `lista_do_diretorio.dart`.',
       (tester) async {
         await abrirPerto(
           tester,
           rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
         );
         expect(
-          find.descendant(
-            of: find.byType(AppBar),
-            matching: find.text('Indicar quem atende bem'),
+          find.widgetWithText(
+            OutlinedButton,
+            ListaDoDiretorio.rotuloDeIndicar,
           ),
           findsNothing,
-          reason: 'REPROVA: a porta foi para a barra de topo, cujo slot único '
-              'de ação é da seção. Busca, filtro e ordenação já moram no corpo '
-              'pelo mesmo motivo.',
+          reason: 'REPROVA: a porta voltou a ser botão de largura total no '
+              'corpo. Com o ícone na barra ela seria a segunda cópia da mesma '
+              'ação, e os 64 dp de altura que o cliente pediu de volta não '
+              'voltaram.',
         );
       },
     );
 
-    testWidgets('o rótulo diz INDICAR, e não cadastrar', (tester) async {
+    testWidgets('o ícone se anuncia com RÓTULO, e o rótulo diz INDICAR',
+        (tester) async {
+      // O caso ganhou a primeira metade em 18/10 e ela não é zelo: o texto
+      // que o botão grande carregava SAIU DA TELA, e o glifo ficou sendo a
+      // única pista do que a ação faz. Ícone sem rótulo é mudo para quem usa
+      // TalkBack ou VoiceOver — e, aqui, ambíguo até para quem vê: pessoas
+      // juntas sem o sinal de adicionar leria "ver a lista", que é o que esta
+      // tela já mostra.
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+      );
+
+      final icone = tester.widget<IconButton>(
+        find
+            .ancestor(
+              of: find.descendant(
+                of: find.byType(AppBar),
+                matching: find.byIcon(Icons.group_add),
+              ),
+              matching: find.byType(IconButton),
+            )
+            .first,
+      );
+      expect(
+        icone.tooltip,
+        ListaDoDiretorio.rotuloDeIndicar,
+        reason: 'REPROVA: o ícone de indicar não carrega o rótulo da tela no '
+            '`tooltip`. É dele que sai o nome acessível: sem ele, o leitor de '
+            'tela anuncia só "botão" (SC 4.1.2).',
+      );
+      expect(
+        ListaDoDiretorio.rotuloDeIndicar.toLowerCase().contains('cadastr'),
+        isFalse,
+        reason: 'REPROVA: o rótulo promete cadastro. Quem usa esta porta não '
+            'cria a entrada do diretório: a emenda 1 do ADR-0011 diz que a '
+            'comunidade convida e avalia, nunca cria. "Cadastrar" prometeria '
+            'publicação, e nada é publicado aqui.',
+      );
+    });
+
+    testWidgets('deslogado, a porta NÃO aparece', (tester) async {
+      // O defeito que ele relatou, com as palavras dele: *"quando eu tento
+      // indicar um profissional a página interna fala pra eu entrar pra poder
+      // indicar. Mas o botão indicar quem atende bem, nem deveria aparecer
+      // para o usuário se ele não estiver logado"*.
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+        logado: false,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.group_add),
+        ),
+        findsNothing,
+        reason: 'REPROVA: deslogado, o Perto ainda oferece indicar. A porta '
+            'convida para uma tela que responde "Entre para indicar".',
+      );
+    });
+
+    testWidgets('a lista do diretório não promete cadastro em texto nenhum',
+        (tester) async {
       await abrirPerto(
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
@@ -176,7 +287,7 @@ void main() {
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
 
       expect(
         find.textContaining('confere antes de publicar'),
@@ -196,7 +307,7 @@ void main() {
           tester,
           rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
         );
-        await tocar(tester, find.text('Indicar quem atende bem'));
+        await abrirAPorta(tester);
         await preencherOMinimo(tester);
         await tocar(
           tester,
@@ -227,7 +338,7 @@ void main() {
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(
         tester,
@@ -250,7 +361,7 @@ void main() {
       (tester) async {
         final enviados = <Map<String, dynamic>>[];
         await abrirPerto(tester, rede: redeDaIndicacao(enviados: enviados));
-        await tocar(tester, find.text('Indicar quem atende bem'));
+        await abrirAPorta(tester);
         await preencherOMinimo(tester);
         await tocar(
           tester,
@@ -279,7 +390,7 @@ void main() {
         (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirPerto(tester, rede: redeDaIndicacao(enviados: enviados));
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(
         tester,
@@ -315,7 +426,7 @@ void main() {
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
 
       for (final proibido in <String>['CNPJ', 'CPF', 'CRMV', 'Endereço']) {
         expect(
@@ -330,7 +441,7 @@ void main() {
     testWidgets('o contato vai com o tipo DECLARADO', (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirPerto(tester, rede: redeDaIndicacao(enviados: enviados));
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(
         tester,
@@ -359,7 +470,7 @@ void main() {
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await tocar(tester, find.text('Como entrar em contato'));
       await tocar(tester, find.text('Site'));
 
@@ -377,7 +488,7 @@ void main() {
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await tocar(tester, find.text('Como entrar em contato'));
       await tocar(tester, find.text('Instagram'));
 
@@ -386,21 +497,31 @@ void main() {
   });
 
   group('as recusas', () {
-    testWidgets('sem conta: diz o motivo e oferece entrar', (tester) async {
-      await abrirPerto(
-        tester,
-        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
-        logado: false,
-      );
-      await tocar(tester, find.text('Indicar quem atende bem'));
-
+    testWidgets('sem conta: a RECUSA continua no app, e não foi apagada',
+        (tester) async {
+      // ESTE CASO MUDOU DE AFIRMAÇÃO em 18/10, e o que ele media antes está
+      // escrito aqui para não se perder: deslogado, a porta aparecia, o toque
+      // abria o formulário, e o formulário dizia "Entre para indicar." com
+      // `Entrar` como saída. O cliente decidiu que a porta **nem aparece**
+      // nesse estado, e com isso esta suíte perdeu o caminho até a recusa:
+      // `abrirOApp` não oferece rota inicial, então não há como abrir o
+      // formulário deslogado de dentro daqui.
+      //
+      // **O que ele NÃO decidiu foi apagar a recusa**, e ela não foi apagada:
+      // `_Impedimento.semConta` e a faixa com `Entrar` seguem em
+      // `sugerir_profissional.dart`, intocados, para quem chegar à rota por
+      // link profundo. O que este caso mede agora é exatamente isso — que o
+      // texto da recusa continua existindo no código —, e a afirmação sobre a
+      // TELA montada ficou pendente de alguém dar rota inicial ao ajudante.
+      // Está dito em vez de escondido.
       expect(
-        find.textContaining('Entre para indicar'),
-        findsOneWidget,
-        reason: 'REPROVA: sem conta a tela não diz o que falta, e o botão '
-            'fica morto.',
+        TelaSugerirProfissional.entreParaIndicar,
+        'Entre para indicar.',
+        reason: 'REPROVA: a frase da recusa sem conta saiu do app. A porta '
+            'deixou de convidar quem não entrou, mas a rota continua '
+            'alcançável por link profundo, e tela que recusa calada é pior '
+            'que tela que recusa dizendo.',
       );
-      expect(find.text('Entrar'), findsWidgets);
     });
 
     testWidgets('o 400 nomeado marca o campo do contato', (tester) async {
@@ -423,7 +544,7 @@ void main() {
           ),
         ),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(
         tester,
@@ -447,7 +568,7 @@ void main() {
           respostaDaIndicacao: () => problema('rate-limited', 429),
         ),
       );
-      await tocar(tester, find.text('Indicar quem atende bem'));
+      await abrirAPorta(tester);
       await preencherOMinimo(tester);
       await tocar(
         tester,
