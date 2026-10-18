@@ -2280,6 +2280,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/my-photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da foto do proprio usuario
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `people/`, que e proprio e nao compartilhado com a `Loja`, a
+         *     `Rede` nem o diretorio: foto de pessoa e foto de estabelecimento tem
+         *     regimes de privacidade diferentes (ADR-0010), e prefixos separados sao o
+         *     que permite uma politica de balde valer para uma e nao para a outra.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O envio e da CONTA.** `updateMe` so confirma `upload_id` cuja intencao
+         *     e da propria conta (a conferencia esta na clausula `WHERE`), e
+         *     `upload_id` de outra pessoa, de outro proposito, ja usado ou vencido e
+         *     recusado com `400` (`code: upload_not_usable`), sem dizer qual dos casos
+         *     ocorreu.
+         *
+         *     **O teto e 5 MB e ele vale no SERVIDOR**: `byte_size` acima dele e
+         *     recusado aqui, antes de qualquer assinatura, e a politica assinada leva o
+         *     mesmo numero dentro dela -- e ela que impede o envio direto ao
+         *     armazenamento de passar por cima da recusa. A tela diz o numero tambem,
+         *     mas a tela nao e a regra.
+         *
+         *     Dimensao minima 300 x 300: `width`/`height` sao opcionais e, quando vem
+         *     abaixo dela, respondem `422 image-too-small` **antes** de assinar. Quem
+         *     decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; conta sem foto e estado normal
+         *     (`Me.photo` nulo).
+         *
+         *     **Quem ve a foto: so o dono.** Ela sai em `getMe` e em nenhuma outra
+         *     resposta. O selo de validado nao e enviado nem escolhido aqui -- ele e
+         *     `Me.email_verified`.
+         */
+        post: operations["createMyPhotoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/network-event-cover-intents": {
         parameters: {
             query?: never;
@@ -4603,6 +4657,23 @@ export interface components {
              */
             email_deliverable: boolean;
             display_name?: string | null;
+            /**
+             * @description A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
+             *
+             *     **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
+             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
+             *     Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
+             *     terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
+             *     pessoas (ADR-0025 item 2, que proibe avatar por nome) e
+             *     `Conversation.participants` continua dizendo por extenso que nunca
+             *     traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
+             *     pessoa fisica e **depende de decisao do cliente**, nao de
+             *     implementacao.
+             *
+             *     Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
+             *     inteira sem foto.
+             */
+            photo?: components["schemas"]["MyPhoto"] | null;
             /** @example +5511999998888 */
             phone_e164?: string | null;
             /** @default false */
@@ -4628,6 +4699,14 @@ export interface components {
          */
         MeUpdate: {
             display_name?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createMyPhotoUploadIntent`, **da propria conta**:
+             *     envio de outra pessoa, de outro proposito, ja usado ou vencido e
+             *     recusado com `400` (`code: upload_not_usable`), sem dizer qual dos
+             *     casos ocorreu -- a conferencia da conta esta na clausula `WHERE`.
+             */
+            photo_upload_id?: string | null;
             phone_e164?: string;
             reference_area?: {
                 postal_code?: string;
@@ -6111,6 +6190,20 @@ export interface components {
             city?: string;
             /** @description A UF, duas letras. */
             state?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de um envio com `purpose: directory_logo` desta mesma
+             *     sessao do painel. Envio de outro proposito, ja usado em outra
+             *     entrada ou vencido e recusado com `400`
+             *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+             */
+            logo_upload_id?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de um envio com `purpose: directory_photo`. Mesma
+             *     regra de recusa da logo.
+             */
+            photo_upload_id?: string;
             neighborhood?: string;
             /**
              * @description CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
@@ -6151,6 +6244,10 @@ export interface components {
             city?: string | null;
             state?: string | null;
             neighborhood?: string | null;
+            /** Format: uuid */
+            logo_upload_id?: string | null;
+            /** Format: uuid */
+            photo_upload_id?: string | null;
             postal_code?: string | null;
             street?: string | null;
             street_number?: string | null;
@@ -6189,6 +6286,17 @@ export interface components {
             street_number?: string | null;
             complement?: string | null;
             phone_e164?: string | null;
+            /**
+             * @description A logo da entidade, quadrada. `status: processing` enquanto o worker
+             *     nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
+             *     imagem, nao um erro.
+             */
+            logo?: components["schemas"]["AdminCatalogImage"] | null;
+            /**
+             * @description A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
+             *     `status` e `url` da logo.
+             */
+            photo?: components["schemas"]["AdminCatalogImage"] | null;
             status: components["schemas"]["DirectoryEntryStatus"];
             /**
              * @description **Somente leitura**, derivada de `entity_verifications`. Esta aqui
@@ -7186,6 +7294,58 @@ export interface components {
             cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
         };
         /**
+         * @description A foto do proprio usuario, como o DONO a ve (cliente, 18/10/2026).
+         *
+         *     **Nao tem `id` nem `upload_id`** (ADR-0010 item 6): o app grava por
+         *     `MeUpdate.photo_upload_id` e le a URL da derivada. Nao tem `original_url`
+         *     tambem: o original fica no armazenamento privado e nunca e servido ao
+         *     cliente, aqui como na foto de pet.
+         *
+         *     **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e `Me.email_verified`, que ja
+         *     existia e e o MESMO conceito que o resto do produto usa. A moldura do app
+         *     desenha o selo em cima da foto quando `email_verified` e verdadeiro, e
+         *     nao desenha quando e falso. Gravar o selo dentro do JPEG faria a imagem
+         *     mentir no dia em que a pessoa trocasse de e-mail.
+         */
+        MyPhoto: {
+            /**
+             * @description `processing` enquanto o worker nao terminou -- `url` e nula nesse
+             *     intervalo, e a tela mostra o lugar da foto em vez de um erro.
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada `card` (512 x 512, JPEG), no armazenamento publico com 128
+             *     bits aleatorios no nome. Nula enquanto processa e quando recusada.
+             */
+            url?: string | null;
+            /** @description O motivo medido nos bytes reais, quando `status` e `rejected`. */
+            rejection_reason?: string | null;
+        };
+        /**
+         * @description O pedido de autorizacao de envio da foto do proprio usuario. **Sem
+         *     `purpose`**, pelo mesmo motivo de `NetworkEventCoverIntentInput`: esta
+         *     operacao existe para um proposito so (`user_photo`), e deixar o cliente
+         *     escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de produto por
+         *     uma rota do app.
+         */
+        MyPhotoIntentInput: {
+            /**
+             * @description **HEIC entra aqui**, e nao entra em `AdminCatalogImageIntentInput`:
+             *     esta foto sai de um celular, metade dos celulares e iPhone, e o
+             *     cliente autorizou HEIC na entrada por causa disso (18/10/2026). A
+             *     conversao para JPEG e nossa, no servidor. SVG nunca, e por
+             *     IGUALDADE, nunca por prefixo `image/`.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o cliente a le. Abaixo de 300 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
          * @description O pedido de autorizacao de envio da capa. **Sem `purpose`**, ao
          *     contrario de `AdminCatalogImageIntentInput`: esta operacao existe para
          *     um proposito so (`network_event`), e deixar o cliente escolhe-lo seria
@@ -7475,9 +7635,20 @@ export interface components {
              * @description Fica gravado no envio. A escrita que confirma o envio exige o mesmo
              *     proposito, e recusa foto de pet, de achador ou de outro proposito
              *     (T9).
+             *
+             *     `directory_logo` e `directory_photo` entraram em 18/10/2026, com a
+             *     logo e a foto do profissional recomendado. Sao DOIS propositos e nao
+             *     um: a logo e quadrada e pequena (minima 256 x 256, derivadas 512 x
+             *     512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
+             *     600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
+             *     outro e `400 upload_not_usable`.
+             *
+             *     **`user_photo` nao esta aqui, de proposito**: a foto da propria
+             *     pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
+             *     app, e nao pelo painel.
              * @enum {string}
              */
-            purpose: "store_item" | "network_event";
+            purpose: "store_item" | "network_event" | "directory_logo" | "directory_photo";
             /**
              * @description SVG nunca. HEIC nao, porque a origem e um computador de mesa.
              * @enum {string}
@@ -11852,6 +12023,35 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createMyPhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyPhotoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };

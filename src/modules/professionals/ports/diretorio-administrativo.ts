@@ -26,6 +26,7 @@
  *   entrada do painel nasce sem titular -- ver `ORIGEM_DO_PAINEL`.
  */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
+import type { ConfirmacaoDeCatalogo, EnvioDeCatalogo } from '../../media/ports/imagem-de-catalogo.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type {
@@ -83,6 +84,12 @@ export interface NovaEntrada {
   readonly streetNumber: string | null;
   readonly complement: string | null;
   readonly phoneE164: string | null;
+  /**
+   * `catalog_images.id` da logo e da foto, ja CONFIRMADAS nesta mesma
+   * transacao. Nulas quando a entrada nasce sem imagem, que e o normal.
+   */
+  readonly logoImageId: string | null;
+  readonly photoImageId: string | null;
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
   readonly claimStatus: TitularidadeDaEntrada;
@@ -109,6 +116,18 @@ export interface MudancaDaEntrada {
   readonly streetNumber?: string | null;
   readonly complement?: string | null;
   readonly phoneE164?: string | null;
+  /**
+   * `catalog_images.id` resolvido pelo caso de uso, ou `null` para TIRAR a
+   * imagem. Ausente nao mexe -- a mesma distincao dos demais campos.
+   *
+   * Tirar a imagem **nao apaga objeto nenhum do balde**: o que sai e o
+   * ponteiro da entrada. Apagar o objeto aqui seria apagamento automatico de
+   * imagem por efeito colateral de uma edicao de cadastro, e a decisao do
+   * cliente de 17/10 (`varrer-envios-vencidos.ts`) e que apagamento e ato
+   * explicito de pessoa sobre o dado dela.
+   */
+  readonly logoImageId?: string | null;
+  readonly photoImageId?: string | null;
   readonly status?: StatusDaEntrada;
   /** `true` so na transicao para `published`: e ele que grava `published_at`. */
   readonly gravaMarcoDePublicacao?: boolean;
@@ -145,6 +164,25 @@ export interface TransacaoDoDiretorio {
     agora: Instant,
   ): Promise<{ id: string; notaAntes: number } | null>;
 
+  /**
+   * O envio de catalogo, com trava de linha, para a logo e a foto da entrada
+   * (18/10/2026). As duas MESMAS portas que a `Loja` e a `Rede` usam: nao ha
+   * segunda esteira de imagem neste produto.
+   */
+  envioDeCatalogo(uploadId: string): Promise<EnvioDeCatalogo | null>;
+  /**
+   * Confirma o envio e cria a imagem em `processing`, com o trabalho
+   * enfileirado, **na mesma transacao da escrita da entrada**.
+   *
+   * E ESTA CONFIRMACAO que protege a imagem da varredura de envios vencidos:
+   * `catalog_upload_intents.confirmed_at` deixa de ser nulo, e a linha sai da
+   * lista de `listarIntencoesVencidas`. Um proposito novo SEM confirmacao
+   * reabriria o defeito da foto do achado (ver o cabecalho de
+   * `varrer-envios-vencidos.ts`).
+   */
+  confirmarEnvioDeCatalogo(entrada: ConfirmacaoDeCatalogo): Promise<void>;
+  /** A entrada que ja usa esta imagem, ou `null`. Impede a mesma logo em duas marcas. */
+  entradaDaImagem(imagemId: string): Promise<string | null>;
   /** O ULTIMO passo de toda escrita, na MESMA transacao (ADR-0027 item 8). */
   registrarNaTrilha(evento: AuditEvent): Promise<void>;
 }

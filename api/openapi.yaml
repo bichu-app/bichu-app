@@ -4285,6 +4285,73 @@ paths:
   # direto e a capa e PUBLICA, entao a intencao de envio precisa existir fora do
   # painel. Mesma forma de `/media/pet-photo-intents`: o backend assina e nunca
   # recebe os bytes.
+  /media/my-photo-intents:
+    post:
+      operationId: createMyPhotoUploadIntent
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: [irreversible_write]
+      summary: Pede as credenciais de upload direto da foto do proprio usuario
+      description: |
+        O backend assina a autorizacao de envio direto e **nunca recebe os
+        bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+        prefixo `people/`, que e proprio e nao compartilhado com a `Loja`, a
+        `Rede` nem o diretorio: foto de pessoa e foto de estabelecimento tem
+        regimes de privacidade diferentes (ADR-0010), e prefixos separados sao o
+        que permite uma politica de balde valer para uma e nao para a outra.
+
+        `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+        assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+        contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+        tem.
+
+        **O envio e da CONTA.** `updateMe` so confirma `upload_id` cuja intencao
+        e da propria conta (a conferencia esta na clausula `WHERE`), e
+        `upload_id` de outra pessoa, de outro proposito, ja usado ou vencido e
+        recusado com `400` (`code: upload_not_usable`), sem dizer qual dos casos
+        ocorreu.
+
+        **O teto e 5 MB e ele vale no SERVIDOR**: `byte_size` acima dele e
+        recusado aqui, antes de qualquer assinatura, e a politica assinada leva o
+        mesmo numero dentro dela -- e ela que impede o envio direto ao
+        armazenamento de passar por cima da recusa. A tela diz o numero tambem,
+        mas a tela nao e a regra.
+
+        Dimensao minima 300 x 300: `width`/`height` sao opcionais e, quando vem
+        abaixo dela, respondem `422 image-too-small` **antes** de assinar. Quem
+        decide de verdade e o worker, nos bytes.
+
+        **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+        dez minutos e o varredor a recolhe; conta sem foto e estado normal
+        (`Me.photo` nulo).
+
+        **Quem ve a foto: so o dono.** Ela sai em `getMe` e em nenhuma outra
+        resposta. O selo de validado nao e enviado nem escolhido aqui -- ele e
+        `Me.email_verified`.
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto de createPetPhotoUploadIntent: assinar e barato, mas cada assinatura e uma autorizacao de escrita que nao se desfaz"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MyPhotoIntentInput' }
+      responses:
+        '201':
+          description: Credenciais de upload, validas por 10 minutos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '422': { $ref: '#/components/responses/ImageTooSmall' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /media/network-event-cover-intents:
     post:
       operationId: createNetworkEventCoverUploadIntent
@@ -9214,6 +9281,25 @@ components:
             persistente com a oferta de corrigir o endereco: sem isto, o tutor
             de e-mail invalido nunca descobre que ninguem consegue avisa-lo.
         display_name: { type: string, nullable: true }
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/MyPhoto'
+            - type: 'null'
+          description: |
+            A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
+
+            **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
+            dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
+            Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
+            terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
+            pessoas (ADR-0025 item 2, que proibe avatar por nome) e
+            `Conversation.participants` continua dizendo por extenso que nunca
+            traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
+            pessoa fisica e **depende de decisao do cliente**, nao de
+            implementacao.
+
+            Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
+            inteira sem foto.
         phone_e164: { type: string, nullable: true, example: '+5511999998888' }
         phone_verified: { type: boolean, default: false }
         reference_area:
@@ -9243,6 +9329,17 @@ components:
         resposta revelar se um endereco ja tem conta.
       properties:
         display_name: { type: string, maxLength: 80 }
+        # A FOTO DA PROPRIA PESSOA (cliente, 18/10/2026). `null` TIRA a foto,
+        # ausente nao mexe, `upload_id` novo TROCA. Tirar nao apaga objeto no
+        # balde: o que sai e o ponteiro da conta.
+        photo_upload_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            O `upload_id` de `createMyPhotoUploadIntent`, **da propria conta**:
+            envio de outra pessoa, de outro proposito, ja usado ou vencido e
+            recusado com `400` (`code: upload_not_usable`), sem dizer qual dos
+            casos ocorreu -- a conferencia da conta esta na clausula `WHERE`.
         phone_e164: { type: string, pattern: '^\+55\d{10,11}$' }
         reference_area:
           type: object
@@ -10936,6 +11033,32 @@ components:
           maxLength: 2
           description: A UF, duas letras.
         # ---------------------------------------------------------------
+        # A LOGO E A FOTO (cliente, 18/10/2026)
+        # ---------------------------------------------------------------
+        # *"coloque um campo no backoffice para subir uma imagem do logo e foto
+        # dos profissionais recomendados"*. Quem sobe e o ADMINISTRADOR, no
+        # painel, pelo caminho que a `Loja` e a `Rede` ja usam: o envio e
+        # autorizado por `createAdminCatalogImageUploadIntent`, os bytes vao
+        # direto ao armazenamento, e aqui chega apenas o `upload_id`.
+        #
+        # OS DOIS SAO OPCIONAIS, e isso e requisito e nao conveniencia:
+        # profissional sem logo e sem foto continua sendo cadastrado, publicado
+        # e listado exatamente como antes.
+        logo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            O `upload_id` de um envio com `purpose: directory_logo` desta mesma
+            sessao do painel. Envio de outro proposito, ja usado em outra
+            entrada ou vencido e recusado com `400`
+            (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            O `upload_id` de um envio com `purpose: directory_photo`. Mesma
+            regra de recusa da logo.
+        # ---------------------------------------------------------------
         # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
         # ---------------------------------------------------------------
         # A decisao 9.2 de `api/contrato-de-escrita-do-diretorio.md` --
@@ -11004,6 +11127,12 @@ components:
         city: { type: string, nullable: true, minLength: 2, maxLength: 80 }
         state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
         neighborhood: { type: string, nullable: true, minLength: 2, maxLength: 80 }
+        # A LOGO e a FOTO (18/10/2026). `null` TIRA a imagem, ausente nao mexe,
+        # `upload_id` novo TROCA -- o mesmo idioma de `price` e de
+        # `image_upload_id` na `Loja`. Tirar a imagem nao apaga objeto nenhum do
+        # balde: o que sai e o ponteiro da entrada.
+        logo_upload_id: { type: [string, 'null'], format: uuid }
+        photo_upload_id: { type: [string, 'null'], format: uuid }
         # Os quatro do endereco de rua (decisao 9.2, respondida em 18/10). `null`
         # APAGA e ausente NAO MEXE, como os demais: e a distincao que separa
         # "limpar o CEP" de "editar so o telefone". Nenhum deles e exigido para
@@ -11057,6 +11186,25 @@ components:
         street_number: { type: string, nullable: true }
         complement: { type: string, nullable: true }
         phone_e164: { type: string, nullable: true }
+        # A LOGO e a FOTO (cliente, 18/10/2026). Nulas quando a entrada nao tem,
+        # e nulo e o estado normal. **Sem `upload_id` e sem `id` de imagem**: o
+        # painel escreve por `logo_upload_id`/`photo_upload_id` e LE a URL da
+        # derivada, e nenhum UUID interno sai aqui (ADR-0010 item 6).
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+          description: |
+            A logo da entidade, quadrada. `status: processing` enquanto o worker
+            nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
+            imagem, nao um erro.
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+          description: |
+            A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
+            `status` e `url` da logo.
         status: { $ref: '#/components/schemas/DirectoryEntryStatus' }
         verification:
           allOf:
@@ -12253,6 +12401,71 @@ components:
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
         cover_image: { $ref: '#/components/schemas/CommunityNetworkEventCoverInput' }
 
+    MyPhoto:
+      type: object
+      description: |
+        A foto do proprio usuario, como o DONO a ve (cliente, 18/10/2026).
+
+        **Nao tem `id` nem `upload_id`** (ADR-0010 item 6): o app grava por
+        `MeUpdate.photo_upload_id` e le a URL da derivada. Nao tem `original_url`
+        tambem: o original fica no armazenamento privado e nunca e servido ao
+        cliente, aqui como na foto de pet.
+
+        **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e `Me.email_verified`, que ja
+        existia e e o MESMO conceito que o resto do produto usa. A moldura do app
+        desenha o selo em cima da foto quando `email_verified` e verdadeiro, e
+        nao desenha quando e falso. Gravar o selo dentro do JPEG faria a imagem
+        mentir no dia em que a pessoa trocasse de e-mail.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [processing, ready, rejected]
+          description: |
+            `processing` enquanto o worker nao terminou -- `url` e nula nesse
+            intervalo, e a tela mostra o lugar da foto em vez de um erro.
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A derivada `card` (512 x 512, JPEG), no armazenamento publico com 128
+            bits aleatorios no nome. Nula enquanto processa e quando recusada.
+        rejection_reason:
+          type: string
+          nullable: true
+          description: O motivo medido nos bytes reais, quando `status` e `rejected`.
+
+    MyPhotoIntentInput:
+      type: object
+      required: [content_type, byte_size]
+      additionalProperties: false
+      description: |
+        O pedido de autorizacao de envio da foto do proprio usuario. **Sem
+        `purpose`**, pelo mesmo motivo de `NetworkEventCoverIntentInput`: esta
+        operacao existe para um proposito so (`user_photo`), e deixar o cliente
+        escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de produto por
+        uma rota do app.
+      properties:
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/heic, image/webp]
+          description: |
+            **HEIC entra aqui**, e nao entra em `AdminCatalogImageIntentInput`:
+            esta foto sai de um celular, metade dos celulares e iPhone, e o
+            cliente autorizou HEIC na entrada por causa disso (18/10/2026). A
+            conversao para JPEG e nossa, no servidor. SVG nunca, e por
+            IGUALDADE, nunca por prefixo `image/`.
+        # 5 MiB: o teto unico de toda a aplicacao (cliente, 17/10/2026). Ele vale
+        # AQUI, no servidor, e dentro da politica assinada -- nao so na tela.
+        byte_size: { type: integer, minimum: 1, maximum: 5242880 }
+        width:
+          type: integer
+          minimum: 1
+          maximum: 20000
+          description: Opcional, como o cliente a le. Abaixo de 300 responde 422 antes de assinar.
+        height: { type: integer, minimum: 1, maximum: 20000 }
+
     NetworkEventCoverIntentInput:
       type: object
       required: [content_type, byte_size]
@@ -12651,11 +12864,22 @@ components:
       properties:
         purpose:
           type: string
-          enum: [store_item, network_event]
+          enum: [store_item, network_event, directory_logo, directory_photo]
           description: |
             Fica gravado no envio. A escrita que confirma o envio exige o mesmo
             proposito, e recusa foto de pet, de achador ou de outro proposito
             (T9).
+
+            `directory_logo` e `directory_photo` entraram em 18/10/2026, com a
+            logo e a foto do profissional recomendado. Sao DOIS propositos e nao
+            um: a logo e quadrada e pequena (minima 256 x 256, derivadas 512 x
+            512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
+            600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
+            outro e `400 upload_not_usable`.
+
+            **`user_photo` nao esta aqui, de proposito**: a foto da propria
+            pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
+            app, e nao pelo painel.
         content_type:
           type: string
           enum: [image/jpeg, image/png, image/webp]

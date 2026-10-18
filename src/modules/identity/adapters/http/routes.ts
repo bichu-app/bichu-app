@@ -20,13 +20,10 @@ import {
 } from '../../../../shared/http/registrar-rota.js';
 import type { ReauthScope } from '../../../../shared/http/route-definition.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
-import {
-  camposPendentesDoPerfil,
-  podeAbrirCasoDePerdido,
-} from '../../domain/completude-do-perfil.js';
 import { normalizarEmail } from '../../domain/email.js';
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
-import type { Conta } from '../../ports/identity-repository.js';
+import type { Conta, FotoDoPerfil } from '../../ports/identity-repository.js';
+import { projetarMeuPerfil } from '../../domain/resposta-do-perfil.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import { corpoAusenteEhCorpoVazio } from '../../../../shared/http/corpo-opcional.js';
@@ -447,6 +444,11 @@ export interface DependenciasDasRotas {
   readonly contrato: Contrato;
   readonly issuer: string;
   readonly apiBaseUrl: string;
+  /**
+   * A URL publica de uma chave de derivada (18/10/2026, com a foto do perfil).
+   * Injetada como na `Loja`, na `Rede` e no diretorio.
+   */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 /**
@@ -572,35 +574,16 @@ export function registrarRotasDeIdentidade(
    * "informou parcialmente", e quatro nulos dentro de um objeto parecem a
    * segunda coisa.
    */
-  const comoRespostaDoPerfil = (conta: Conta): Record<string, unknown> => {
-    const temArea =
-      conta.referencePostalCode !== null ||
-      conta.referenceNeighborhood !== null ||
-      conta.referenceCity !== null ||
-      conta.referenceState !== null;
-
-    return {
-      id: conta.id,
-      email: conta.email,
-      email_verified: conta.emailVerifiedAt !== null,
-      pending_email: conta.pendingEmail,
-      email_deliverable: conta.emailDeliverable,
-      display_name: conta.displayName,
-      phone_e164: conta.phoneE164,
-      phone_verified: conta.phoneVerifiedAt !== null,
-      reference_area: temArea
-        ? {
-            postal_code: conta.referencePostalCode,
-            neighborhood: conta.referenceNeighborhood,
-            city: conta.referenceCity,
-            state: conta.referenceState,
-          }
-        : null,
-      pending_profile_fields: camposPendentesDoPerfil(conta),
-      can_open_lost_case: podeAbrirCasoDePerdido(conta),
-      created_at: conta.createdAt.toISOString(),
-    };
-  };
+  /**
+   * A resposta `Me`, numa funcao PURA em `domain/resposta-do-perfil.ts`.
+   *
+   * Ela saiu daqui em 18/10/2026 para poder ser medida sem subir Fastify: as
+   * duas regras novas sao de OMISSAO (a foto sai so nesta resposta; o selo e
+   * `email_verified` e nao um campo de escrita), e regra de omissao se mede mal
+   * por injecao de requisicao.
+   */
+  const comoRespostaDoPerfil = (conta: Conta, foto: FotoDoPerfil | null): Record<string, unknown> =>
+    projetarMeuPerfil(conta, foto, deps.urlDeMidia);
 
   registrarRota(
     app,
@@ -695,7 +678,13 @@ export function registrarRotasDeIdentidade(
 
   registrarRota(app, rotaDoMeuPerfil, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const { conta } = await autenticado(request, deps);
-    return reply.status(200).send(comoRespostaDoPerfil(await deps.auth.meuPerfil(conta.id)));
+    // Duas leituras e nao uma: a foto sai de uma consulta propria, porque so
+    // esta resposta a quer. Ver `FotoDoPerfil` em `ports/identity-repository.ts`.
+    const [perfil, foto] = await Promise.all([
+      deps.auth.meuPerfil(conta.id),
+      deps.auth.minhaFoto(conta.id),
+    ]);
+    return reply.status(200).send(comoRespostaDoPerfil(perfil, foto));
   });
 
   registrarRota(
@@ -710,6 +699,7 @@ export function registrarRotasDeIdentidade(
       const corpo = request.body as {
         display_name?: string;
         phone_e164?: string;
+        photo_upload_id?: string | null;
         reference_area?: {
           postal_code?: string;
           neighborhood?: string;
@@ -721,6 +711,21 @@ export function registrarRotasDeIdentidade(
       // `undefined` é "não mexer". A área vem aninhada no contrato e achatada no
       // banco, e é aqui que a tradução acontece — o repositório não conhece a
       // forma do JSON e o contrato não conhece a forma da tabela.
+      // A FOTO PRIMEIRO, e numa chamada propria. Duas razoes:
+      //
+      // 1. A confirmacao do envio tem de acontecer na MESMA transacao em que
+      //    `users.photo_image_id` muda, senao um envio confirmado poderia
+      //    apontar para uma conta que nao foi atualizada -- e e a confirmacao
+      //    que tira a linha da varredura de envios vencidos.
+      // 2. A foto e a unica recusa possivel deste corpo (`upload_not_usable`).
+      //    Recusa-la ANTES de gravar os outros campos evita um `PATCH` que
+      //    muda o telefone e devolve 400 sobre a imagem.
+      //
+      // `undefined` nao mexe; `null` tira a foto; `upload_id` troca.
+      if (corpo.photo_upload_id !== undefined) {
+        await deps.auth.trocarMinhaFoto(conta.id, corpo.photo_upload_id, contextoDe(request));
+      }
+
       const area = corpo.reference_area;
       const atualizada = await deps.auth.atualizarMeuPerfil(
         conta.id,
@@ -735,7 +740,9 @@ export function registrarRotasDeIdentidade(
         contextoDe(request),
       );
 
-      return reply.status(200).send(comoRespostaDoPerfil(atualizada));
+      return reply
+        .status(200)
+        .send(comoRespostaDoPerfil(atualizada, await deps.auth.minhaFoto(conta.id)));
     },
   );
 

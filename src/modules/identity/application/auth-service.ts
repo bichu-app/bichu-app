@@ -27,10 +27,12 @@ import {
 } from '../domain/session.js';
 import type {
   CamposDoPerfil,
+  FotoDoPerfil,
   Conta,
   MotivoDeRevogacao,
   PropositoDoToken,
 } from '../ports/identity-repository.js';
+import { EnvioDeFotoNaoServe } from '../ports/identity-repository.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 import {
   expiracaoDaJanela,
@@ -1122,6 +1124,70 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         // O QUE mudou, nunca o valor: telefone e endereço são justamente o que a
         // trilha não pode guardar (docs/04-seguranca.md 9).
         metadata: { campos: Object.keys(campos).filter((c) => campos[c as keyof CamposDoPerfil] !== undefined) },
+      });
+
+      return conta;
+    },
+
+    /** A foto do perfil desta conta, para a resposta `Me`. */
+    async minhaFoto(userId: UserId): Promise<FotoDoPerfil | null> {
+      return deps.repositorio.fotoDoPerfil(userId);
+    },
+
+    /**
+     * Troca ou TIRA a foto do perfil (cliente, 18/10/2026).
+     *
+     * **Quem vê a foto é o dono, e só.** Esta operação e `meuPerfil` são as
+     * únicas que a tocam, as duas exigem a conta autenticada, e nenhuma outra
+     * resposta do contrato a carrega. Mostrar a foto a terceiros — em avaliação
+     * do `Perto`, em participante de evento, em conversa — é exposição de
+     * pessoa física e **depende de decisão do cliente**: o ADR-0025 item 2
+     * proíbe avatar na `Rede` por nome, e o contrato diz por extenso que
+     * `Conversation.participants` nunca traz foto de perfil.
+     *
+     * **O selo de validado não passa por aqui.** Ele é `emailVerifiedAt`, que
+     * a resposta já projeta como `email_verified` — nenhum campo novo, nenhuma
+     * escolha de quem envia a foto.
+     *
+     * `uploadId` nulo tira a foto. A trilha registra O QUE mudou e nunca a
+     * chave do objeto: chave de objeto em trilha append-only é um ponteiro
+     * permanente para um arquivo que pode ser trocado.
+     */
+    async trocarMinhaFoto(
+      userId: UserId,
+      uploadId: string | null,
+      contexto: ContextoDaRequisicao,
+    ): Promise<Conta> {
+      const agora = deps.clock.now();
+      let conta: Conta | undefined;
+      try {
+        conta = await deps.repositorio.trocarFotoDoPerfil(userId, uploadId, agora);
+      } catch (erro) {
+        if (erro instanceof EnvioDeFotoNaoServe) {
+          // Inexistente, de outra conta, de outro propósito, vencido ou de
+          // imagem alheia: a MESMA recusa, sem dizer qual (ADR-0021).
+          throw problemas.validacao([
+            {
+              field: 'photo_upload_id',
+              code: 'upload_not_usable',
+              message: 'Essa imagem não serve para esta conta. Envie-a de novo.',
+            },
+          ]);
+        }
+        throw erro;
+      }
+      if (conta === undefined) throw problemas.naoAutenticado();
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'profile.updated',
+        resourceKind: 'user',
+        resourceId: userId,
+        // `photo` como BOOLEANO, nunca a chave do objeto nem a URL.
+        metadata: { campos: ['photo'], photo: uploadId !== null },
       });
 
       return conta;

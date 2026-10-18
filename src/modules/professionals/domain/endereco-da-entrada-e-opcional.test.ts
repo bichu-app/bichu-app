@@ -32,6 +32,8 @@ import {
   type EntradaAdministrativa,
 } from './escrita-do-diretorio.js';
 
+const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
+
 const NASCEU_EM = Date.UTC(2026, 9, 18, 12, 0, 0) as Instant;
 
 /** Um autonomo publicavel: tem nome, endereco publico, cidade, UF e telefone, e **nenhuma rua**. */
@@ -43,6 +45,8 @@ const AUTONOMO: EntradaAdministrativa = {
   city: 'São Paulo',
   state: 'SP',
   neighborhood: 'Sumarezinho',
+  logo: null,
+  photo: null,
   postalCode: null,
   street: null,
   streetNumber: null,
@@ -72,7 +76,7 @@ void describe('o endereco de rua da entrada do diretorio', () => {
 
   void it('ISCA: um autonomo SEM endereco nenhum nao tem nada faltando', () => {
     assert.deepEqual(faltasParaPublicar(AUTONOMO), []);
-    assert.deepEqual(projetarEntradaAdministrativa(AUTONOMO).missing_to_publish, []);
+    assert.deepEqual(projetarEntradaAdministrativa(AUTONOMO, URL_DE_MIDIA).missing_to_publish, []);
   });
 
   void it('ISCA: com endereco preenchido, continua sem nada faltando', () => {
@@ -93,7 +97,7 @@ void describe('o endereco de rua da entrada do diretorio', () => {
       street: 'Rua Harmonia',
       streetNumber: '120A',
       complement: 'Sala 2',
-    });
+    }, URL_DE_MIDIA);
     assert.equal(projetada.postal_code, '05435000');
     assert.equal(projetada.street, 'Rua Harmonia');
     assert.equal(projetada.street_number, '120A');

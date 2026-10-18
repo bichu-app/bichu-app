@@ -109,8 +109,22 @@ const LIMITE_DA_CHAVE = 1024;
  *
  * `site/` e `partners/` ficam reservados: o site empacota as imagens dele no
  * container, e parceiro nao tem imagem. Nenhum codigo escreve neles hoje.
+ *
+ * `directory/` entrou em 18/10/2026 com a logo e a foto do profissional
+ * recomendado, e e UM prefixo para os dois propositos: as duas imagens sao da
+ * MESMA entidade, e uma regra de bucket ("as imagens do diretorio") que
+ * precisasse ser escrita duas vezes seria duas regras que concordam por
+ * enquanto. O que as separa e `catalog_images.purpose`, que e onde a diferenca
+ * importa (geometria da derivada e dimensao minima).
+ *
+ * `people/` entrou junto, com a foto que a propria pessoa cadastra. Prefixo
+ * PROPRIO, e nao `directory/`: foto de pessoa e foto de estabelecimento tem
+ * regimes de privacidade diferentes (ADR-0010), e separar os prefixos e o que
+ * permite uma politica de bucket, um ciclo de vida e um expurgo valerem para a
+ * foto de pessoa e para nada mais -- sem isso, "apague as fotos de pessoa"
+ * viraria uma varredura que precisa consultar o banco linha por linha.
  */
-export const CATEGORIAS_DE_CATALOGO = ['products', 'events'] as const;
+export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'directory', 'people'] as const;
 export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
 /** As categorias que tem derivada PUBLICA. Achado nao tem: a foto dele nunca e publica. */
 export const CATEGORIAS_PUBLICAS = ['pets', ...CATEGORIAS_DE_CATALOGO] as const;

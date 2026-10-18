@@ -68,6 +68,8 @@ function entradaSemeada(): EntradaAdministrativa {
     city: 'São Paulo',
     state: 'SP',
     neighborhood: 'Vila Mariana',
+    logo: null,
+    photo: null,
     // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
     // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
     // continuar completa para publicar.
@@ -152,12 +154,28 @@ function repositorioEmMemoria(): Memoria {
       removerAvaliacao: () => {
         throw new Error('removerAvaliacao nao e exercitado por este arquivo');
       },
+      // A LOGO E A FOTO (18/10/2026) NAO SAO EXERCITADAS NESTE ARQUIVO, e os
+      // tres dubles LANCAM em vez de devolver nulo pelo mesmo motivo de
+      // `removerAvaliacao`: um `() => null` faria um caso que chegasse aqui
+      // passar como se tivesse medido a recusa de envio. A regra da imagem tem
+      // dobre proprio, em `imagem-da-entrada-do-diretorio.test.ts`.
+      envioDeCatalogo: () => {
+        throw new Error('envioDeCatalogo nao e exercitado por este arquivo');
+      },
+      confirmarEnvioDeCatalogo: () => {
+        throw new Error('confirmarEnvioDeCatalogo nao e exercitado por este arquivo');
+      },
+      entradaDaImagem: () => {
+        throw new Error('entradaDaImagem nao e exercitado por este arquivo');
+      },
       inserirEntrada(nova: NovaEntrada) {
         if ([...linhas.values()].some((l) => l.slug === nova.slug)) throw new SlugOcupado();
         const criada: EntradaAdministrativa = {
           slug: nova.slug,
           kind: nova.kind,
           displayName: nova.displayName,
+          logo: null,
+          photo: null,
           about: nova.about,
           city: nova.city,
           state: nova.state,
@@ -226,6 +244,10 @@ beforeEach(() => {
     ids: {
       uuidv7: () => `0192a3b4-0000-7000-8000-00000000f0${String(++proximoId).padStart(2, '0')}`,
     } as unknown as IdGenerator,
+    // Nenhuma entrada deste arquivo tem imagem, entao esta funcao nunca e
+    // chamada. Ela existe porque a porta a exige, e um valor que gritasse
+    // deixaria claro no dia em que alguem acrescentar um caso com imagem.
+    urlDeMidia: (chave) => `https://midia.invalido/${chave}`,
     clock: { now: () => AGORA },
   });
 });
