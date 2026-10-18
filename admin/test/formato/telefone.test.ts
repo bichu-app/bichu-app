@@ -20,7 +20,7 @@ import {
   mascaraDeTelefone,
   telefoneDoE164,
   telefoneEmE164,
-} from './telefone.ts';
+} from '../../src/formato/telefone.ts';
 
 describe('mascaraDeTelefone', () => {
   it('formata progressivamente, sem esperar o campo ficar completo', () => {

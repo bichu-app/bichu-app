@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { frasePendente, PADRAO_DO_SLUG, slugSugerido } from './dominio.ts';
+import { frasePendente, PADRAO_DO_SLUG, slugSugerido } from '../../src/diretorio/dominio.ts';
 
 describe('slugSugerido', () => {
   it('tira acento, baixa a caixa e troca espaco por hifen', () => {
