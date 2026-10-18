@@ -214,6 +214,17 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
   @override
   Widget build(BuildContext context) {
+    // O TECLADO E MEDIDO AQUI, ACIMA DO `Scaffold`, E NAO LA DENTRO.
+    //
+    // `Scaffold` com `resizeToAvoidBottomInset` -- que e o padrao -- ja trata o
+    // teclado: ele ENCOLHE o corpo e entrega ao corpo um `MediaQuery` com
+    // `viewInsets.bottom` **zerado**. Quem perguntar pelo teclado de dentro do
+    // corpo recebe "fechado" com o teclado aberto na cara. Este `context` e o
+    // do `State`, acima do `Scaffold`, e e o unico ponto desta tela que ve o
+    // numero de verdade. Mesmo motivo escrito em `escanear/tela_leitor_de_qr`.
+    final tecladoAberto = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final alturaDaTela = MediaQuery.sizeOf(context).height;
+
     return Scaffold(
       appBar: const BarraDeConta(titulo: 'Entrar', saida: TipoDeSaida.voltar),
       // O BOTAO DE ENTRAR NAO ROLA COM O FORMULARIO, E ISSO FOI MEDIDO.
@@ -263,6 +274,16 @@ class _TelaEntrarState extends State<TelaEntrar> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              // A ILUSTRACAO DA IDENTIDADE VISUAL, no alto da porta de entrada
+              // (pedido do cliente: "a imagem da identidade visual das pessoas
+              // com o pet no parque", na TELA DE ENTRAR).
+              //
+              // **Ela SAI com o teclado aberto**, e essa e a parte que decide
+              // se a tela continua usavel -- ver `_IlustracaoDaEntrada`.
+              if (!tecladoAberto) ...<Widget>[
+                _IlustracaoDaEntrada(alturaDaTela: alturaDaTela),
+                const SizedBox(height: BichuEspaco.e6),
+              ],
               BichuField(
                 rotulo: 'E-mail',
                 controlador: _email,
@@ -345,6 +366,76 @@ class _TelaEntrarState extends State<TelaEntrar> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A ilustracao da identidade visual no alto da tela de entrar.
+///
+/// **De onde sai a imagem.** `assets/ilustracoes/tres-pessoas-no-parque.webp`,
+/// derivada da arte do cliente -- as tres pessoas com os pets, arvores e os
+/// predios do bairro atras. A procedencia, o comando que refaz o arquivo e o
+/// porque do formato estao escritos em `app/pubspec.yaml`, ao lado da
+/// declaracao do asset. **Embarcada**: nada de rede, porque a tela de login
+/// pode ser a primeira coisa que o aparelho abre e com sinal ruim ela ficaria
+/// feia exatamente quando precisa estar de pe.
+///
+/// **DECORATIVA, e por isso `excludeFromSemantics`.** Quem usa leitor de tela
+/// chega aqui ja ouvindo `Entrar` da barra de topo e encontra logo abaixo os
+/// rotulos `E-mail` e `Senha`: a ilustracao nao diz nada que o texto da tela
+/// nao diga, e esse e exatamente o criterio de decorativo do WCAG 1.1.1.
+/// Descreve-la ("tres pessoas com seus pets") custaria um anuncio inteiro
+/// antes do primeiro campo, sem entregar nada que mude o que a pessoa faz
+/// aqui. Nenhuma frase nova entrou em tela junto dela.
+///
+/// **TECLADO ABERTO: ela nao aparece.** Quem chama decide isso (o `if` em
+/// `build`), porque so la em cima o `viewInsets` e visivel. Esta tela tem dois
+/// campos e o teclado come perto da metade da altura util; dividir o que
+/// sobra com uma imagem de 128 a 192 dp empurraria o campo da senha e a faixa
+/// de recusa para fora da dobra, que e o erro classico de imagem grande em
+/// tela de login. Com o teclado na tela o formulario volta a ser EXATAMENTE o
+/// que era antes desta mudanca, inclusive a conta de rolagem medida em
+/// 23/09/2026 que esta no comentario do `bottomNavigationBar`. E o corpo
+/// continua sendo `SingleChildScrollView`: mesmo com o teclado fechado, numa
+/// tela curta a coluna inteira rola -- nada e cortado, nem estoura.
+///
+/// **Tela pequena e tela grande.** A altura e 20% da altura da tela, presa
+/// entre [_piso] e [_teto], que sao multiplos do passo de espaco do tema e nao
+/// numero inventado. Nos quatro gabaritos do design system: 320x568 e 360x640
+/// batem no piso de 128 dp; 375x667 fica em 133 dp; 412x915 vai a 183 dp. A
+/// largura vem esticada da coluna e o `BoxFit.contain` preserva a proporcao
+/// 2:1 da arte -- em tela larga sobra transparente dos lados, e nunca corta
+/// pessoa nem pet. O maior retangulo que a imagem chega a ocupar e 384x192 dp,
+/// que e de onde sai a largura de 1152 px do arquivo (384 x 3).
+class _IlustracaoDaEntrada extends StatelessWidget {
+  const _IlustracaoDaEntrada({required this.alturaDaTela});
+
+  /// Altura da tela medida acima do `Scaffold`.
+  final double alturaDaTela;
+
+  static const String caminho = 'assets/ilustracoes/tres-pessoas-no-parque.webp';
+
+  /// Fracao da altura da tela que a ilustracao pode ocupar.
+  static const double _fracaoDaAltura = 0.2;
+
+  /// Piso e teto, em passos do espaco do tema (`BichuEspaco.e16` = 64).
+  static const double _piso = BichuEspaco.e16 * 2;
+  static const double _teto = BichuEspaco.e16 * 3;
+
+  static double alturaPara(double alturaDaTela) =>
+      (alturaDaTela * _fracaoDaAltura).clamp(_piso, _teto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      caminho,
+      height: alturaPara(alturaDaTela),
+      fit: BoxFit.contain,
+      // Decorativa: fora da arvore de semantica. Ver a nota da classe.
+      excludeFromSemantics: true,
+      // O arquivo e dimensionado para a densidade 3x; em aparelho 2x ele
+      // encolhe, e `low` (o padrao) serrilha o traco chapado desta arte.
+      filterQuality: FilterQuality.medium,
     );
   }
 }

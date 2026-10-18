@@ -175,6 +175,43 @@ flutter:
 
   assets:
     - assets/fonts/OFL.txt
+    # A ilustracao da identidade visual (tres pessoas com os pets no bairro),
+    # na TELA DE ENTRAR. Embarcada, e nao baixada: a tela de login nao pode
+    # depender de rede para ficar de pe -- e o mesmo motivo das fontes acima.
+    #
+    # ORIGEM E COMO REFAZER. A arte e do cliente e a fonte continua sendo
+    # `design/marca/referencia/08-ilustracao-tres-pessoas.png` (1536x1024, com
+    # vinheta). O arquivo daqui e DERIVADO da versao ja recortada de fundo que
+    # o site usa, `web/src/assets/ilustracoes/ilustracao-tres-pessoas.png`:
+    # margem transparente aparada (1399x700) e largura reduzida a 1152 px.
+    # Nao da para apontar `assets:` para fora do pacote -- o Flutter recusa
+    # caminho com `..` --, entao a copia aqui e obrigatoria; ela nao e uma
+    # segunda FONTE, e uma saida medida, e e por isso que o comando esta
+    # escrito:
+    #
+    #   node -e "require('sharp')('web/src/assets/ilustracoes/ilustracao-tres-pessoas.png')\
+    #     .trim({threshold:1}).resize({width:1152}).webp({lossless:true,effort:6})\
+    #     .toFile('app/assets/ilustracoes/tres-pessoas-no-parque.webp')"
+    #
+    # POR QUE 1152 px: a tela pinta a ilustracao numa caixa de no maximo
+    # 384 dp de largura (ver `telas/conta/tela_entrar.dart`), e 1152 = 384 x 3,
+    # a densidade do aparelho mais denso que o produto mira. Acima disso seria
+    # peso que nenhum pixel usa.
+    #
+    # POR QUE WEBP SEM PERDA, e nao JPEG nem PNG. Medido nos tres, no mesmo
+    # 1152x576, com o erro por canal calculado so onde ha desenho:
+    #
+    #   webp sem perda   451.292 B   erro 0,000   <- escolhido
+    #   png de paleta    209.298 B   erro medio 0,760 / max 179
+    #   png de 24 bits   782.360 B   erro 0,000
+    #
+    # A regra do produto e JPEG para FOTO, com alvo de 300-500 KB. Isto nao e
+    # foto: e ilustracao de cor chapada COM CANAL ALFA (ela se apoia na
+    # superficie do tema, nos dois temas), e JPEG nao tem alfa e ainda toca
+    # anel nas bordas duras. Entre os dois que tem alfa, o WebP sem perda cabe
+    # na faixa de 300-500 KB e nao mexe num byte da arte do cliente; o PNG de
+    # 24 bits passa da faixa e o de paleta so cabe quantizando a marca.
+    - assets/ilustracoes/tres-pessoas-no-parque.webp
 
 # ---------------------------------------------------------------------------
 # Icone do app (flutter_launcher_icons)
