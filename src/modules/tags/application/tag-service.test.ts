@@ -34,6 +34,7 @@ import {
   criarTagService,
   type AberturaDeConversaPorAviso,
   type Chamador,
+  type EntregaDoAvisoAoTutor,
 } from './tag-service.js';
 import type { DesenhoDoQr } from '../domain/qr-da-tag.js';
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
@@ -174,7 +175,16 @@ function repositorioDeMemoria(
   return { repositorio, contadores };
 }
 
-function servico(estado: EstadoDoRepositorio) {
+/**
+ * A fiação opcional do serviço. Hoje só a ENTREGA do aviso ao tutor, que é a
+ * porta que decide `owner_notified` — e que a composição de produção ainda não
+ * liga. Ver o grupo `owner_notified não promete entrega que ninguém enfileirou`.
+ */
+interface FiacaoDoServico {
+  readonly avisoAoTutor?: EntregaDoAvisoAoTutor;
+}
+
+function servico(estado: EstadoDoRepositorio, fiacao: FiacaoDoServico = {}) {
   const { repositorio, contadores } = repositorioDeMemoria(estado);
   const eventos: AuditEvent[] = [];
   const trilha: AuditLog = {
@@ -243,6 +253,11 @@ function servico(estado: EstadoDoRepositorio) {
       chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
       rasterizador,
       conversaDoAviso,
+      // **Ausente por omissão, como em `bin/api.ts`.** O estado de hoje é "não
+      // há entrega", e é dele que o caso de desligamento abaixo parte.
+      ...(fiacao.avisoAoTutor === undefined
+        ? {}
+        : { avisoAoTutor: fiacao.avisoAoTutor }),
     }),
     contadores,
     eventos,
@@ -498,7 +513,13 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
     const { tags, contadores } = servico({ tag: tagAtiva() });
     const criado = await tags.avisar(CODIGO, chamador(undefined), {});
     assert.equal(contadores.avisosGravados.length, 1);
-    assert.equal(criado.ownerNotified, true);
+    // **Era `true` aqui, e a linha mentia** (corrigida em 18/10/2026). O campo
+    // afirmava entrega por NÃO ter havido agrupamento, com zero entrega
+    // enfileirada no produto. A asserção não foi apagada: ela trocou de valor
+    // junto com o significado do campo, e o caso de desligamento no grupo
+    // `owner_notified não promete entrega que ninguém enfileirou` é quem
+    // sustenta os dois lados.
+    assert.equal(criado.ownerNotified, false);
     assert.equal(criado.petDisplayName, 'Thor');
   });
 
@@ -533,17 +554,124 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
     assert.doesNotMatch(JSON.stringify(gravado), new RegExp(criado.finderToken));
   });
 
-  void it('agrupar muda `owner_notified` e NÃO descarta o aviso', async () => {
-    const { tags, contadores } = servico({
-      tag: tagAtiva(),
-      avisoRecente: { id: 'anterior', criadoEm: comoData((AGORA - 3600_000) as Instant) },
-    });
+  void it('agrupar NÃO entrega de novo, e NÃO descarta o aviso', async () => {
+    // O título dizia "agrupar muda `owner_notified`", e essa redação era parte
+    // do defeito: ela tratava o campo como um relato de agrupamento. Agrupar
+    // continua levando a `false`, e agora pelo motivo certo -- o telefone do
+    // tutor não é acordado duas vezes pela mesma pessoa. A entrega está LIGADA
+    // neste caso, para que `false` aqui seja o agrupamento e não a ausência de
+    // porta.
+    const entregas: unknown[] = [];
+    const { tags, contadores } = servico(
+      {
+        tag: tagAtiva(),
+        avisoRecente: { id: 'anterior', criadoEm: comoData((AGORA - 3600_000) as Instant) },
+      },
+      {
+        avisoAoTutor: {
+          entregar: (aviso) => {
+            entregas.push(aviso);
+            return Promise.resolve(true);
+          },
+        },
+      },
+    );
     const criado = await tags.avisar(CODIGO, chamador(undefined), {});
 
     assert.equal(criado.ownerNotified, false);
+    assert.equal(
+      entregas.length,
+      0,
+      'REPROVA: o aviso agrupado chamou a entrega. O segundo escaneamento do ' +
+        'mesmo achador vira mensagem na conversa que já existe, e acordar o ' +
+        'telefone do tutor de novo é o que a janela de agrupamento evita.',
+    );
     // A metade que costuma faltar: o aviso continua existindo. Contar a linha
     // gravada é o que separa "agrupou" de "engoliu".
     assert.equal(contadores.avisosGravados.length, 1);
+  });
+
+  // -------------------------------------------------------------------------
+  // ISCA — `owner_notified` não promete entrega que ninguém enfileirou
+  // -------------------------------------------------------------------------
+  //
+  // O defeito, medido em 18/10/2026 na `development`: a resposta de
+  // `POST /v1/tags/{code}/found-reports` devolvia `owner_notified: true` ao
+  // achador e **nada era enviado**. O único push emitido em produção é o
+  // alerta de vizinhança (`lostfound`); registrar o aviso e abrir a conversa
+  // mediada não acordam telefone nenhum. A pessoa estava com o cachorro de
+  // outra na mão, lia que o tutor foi avisado, e não foi.
+  //
+  // Os três casos abaixo são um só por DESLIGAMENTO, e é isso que os faz
+  // iscas em vez de espelhos da implementação: o mesmo aviso, o mesmo achador
+  // e a mesma tag, com a porta de entrega desligada, ligada dizendo "sim" e
+  // ligada dizendo "não". O campo tem de acompanhar a PORTA, e não o
+  // agrupamento -- se alguém devolver `ownerNotified: recente === undefined`,
+  // o primeiro e o terceiro reprovam.
+  void describe('owner_notified não promete entrega que ninguém enfileirou', () => {
+    void it('sem emissor ligado: o campo é FALSO, e o aviso é gravado igual', async () => {
+      const { tags, contadores } = servico({ tag: tagAtiva() });
+      const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+      assert.equal(
+        criado.ownerNotified,
+        false,
+        'REPROVA: o campo prometeu aviso ao tutor sem nenhuma entrega ' +
+          'enfileirada. É a mentira mais caro do produto: quem acredita que ' +
+          'avisou solta o animal e vai embora.',
+      );
+      assert.equal(contadores.avisosGravados.length, 1);
+    });
+
+    void it('com a entrega enfileirada: o campo é VERDADEIRO', async () => {
+      const { tags } = servico(
+        { tag: tagAtiva() },
+        { avisoAoTutor: { entregar: () => Promise.resolve(true) } },
+      );
+      const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+      assert.equal(
+        criado.ownerNotified,
+        true,
+        'REPROVA: a entrega foi enfileirada e o campo continuou falso. O ' +
+          'contrapeso existe para o conserto não virar `false` fixo -- isso ' +
+          'pararia de mentir e passaria a esconder.',
+      );
+    });
+
+    void it('a fila recusou: o campo é FALSO mesmo sem agrupamento', async () => {
+      const { tags, contadores } = servico(
+        { tag: tagAtiva() },
+        { avisoAoTutor: { entregar: () => Promise.resolve(false) } },
+      );
+      const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+      assert.equal(
+        criado.ownerNotified,
+        false,
+        'REPROVA: a entrega NÃO foi enfileirada (tutor sem aparelho ' +
+          'registrado, por exemplo) e o campo afirmou que foi.',
+      );
+      // E o aviso continua gravado: a entrega que não saiu não engole o
+      // registro, que é o que o tutor encontra quando abre o aplicativo.
+      assert.equal(contadores.avisosGravados.length, 1);
+    });
+
+    void it('o aviso entregue é o que acabou de ser gravado', async () => {
+      const entregas: { readonly nomeDoPet: string; readonly escaneadoEm: number }[] = [];
+      const { tags } = servico(
+        { tag: tagAtiva() },
+        {
+          avisoAoTutor: {
+            entregar: (aviso) => {
+              entregas.push({ nomeDoPet: aviso.nomeDoPet, escaneadoEm: aviso.escaneadoEm });
+              return Promise.resolve(true);
+            },
+          },
+        },
+      );
+      await tags.avisar(CODIGO, chamador(undefined), {});
+      assert.equal(entregas.length, 1);
+      assert.equal(entregas[0]?.nomeDoPet, 'Thor');
+      assert.equal(entregas[0]?.escaneadoEm, AGORA);
+    });
   });
 
   void it('marca o scan como originador do aviso', async () => {

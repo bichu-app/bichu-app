@@ -435,6 +435,30 @@ class TagsApi {
     return TagResolvida.doJson(json);
   }
 
+  /// `GET /tags/{code}/owner-context` — os identificadores da PROPRIA tag.
+  ///
+  /// **Exige conta, e nao tem caminho anonimo** (`exigeToken` padrao, e aqui
+  /// isso e exigencia de verdade: sem token o servidor responde 401). E a
+  /// contrapartida autenticada de `viewer: owner` em `GET /tags/{code}`.
+  ///
+  /// **Quem chama e o modo dono da tela da tag, e ninguem mais.** O dono que
+  /// aponta a camera para a plaquinha do proprio pet quer a pagina do pet, e a
+  /// pagina do pet e enderecada por `pet_id` -- que o corpo publico da
+  /// resolucao nao traz de proposito. Esta era a operacao que faltava para o
+  /// modo dono oferecer acao alguma; enquanto ela nao tinha cliente, o dono
+  /// escaneava a coleira do proprio animal e chegava numa tela so de leitura.
+  ///
+  /// **O 404 cobre tres casos** -- codigo inexistente, revogado, ou de outro
+  /// tutor --, e distinguir seria transformar a rota num oraculo de enumeracao
+  /// de codigo com um cadastro gratuito na frente (ADR-0010, item 9). Quem
+  /// chama trata os tres igual, porque o servidor os trata igual.
+  Future<ContextoDoDonoDaTag> contextoDoDono(String codigo) async {
+    final json = await _api.get(
+      '/tags/${Uri.encodeComponent(codigo)}/owner-context',
+    );
+    return ContextoDoDonoDaTag.doJson(json);
+  }
+
   /// O caminho de `POST /tags/{code}/found-reports`, num lugar so.
   ///
   /// Existe como funcao porque a fila offline grava o **caminho** da acao, e

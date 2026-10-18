@@ -1301,58 +1301,106 @@ void main() {
       await tocarEmCarregarMais(tester);
       expect(urls.last.queryParameters['page'], '2');
 
-      // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais`.
+      // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais` --
+      // e o controle de recorte subiu para a `AppBar` em 18/10, entao ele esta
+      // visivel de todo jeito. O `ensureVisible` fica porque ele e barato e
+      // porque o dia em que o controle voltar ao corpo nao pode ser o dia em
+      // que este caso para de alcancar o defeito.
       await tester.ensureVisible(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+
+      // A fronteira da medicao: o que vier DEPOIS deste ponto e o que o toque
+      // em `Aplicar` produziu, e nada antes dele conta.
+      final antesDeAplicar = urls.length;
+
       await tester.tap(find.text('Veterinário'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       // ---------------------------------------------------------------------
-      // ESTE CASO FICA VERMELHO, e ele esta CERTO: o defeito e do aplicativo.
+      // ESTE CASO FICOU VERMELHO ATE 18/10/2026, E HOJE ESTA VERDE PORQUE O
+      // DEFEITO SAIU -- e o paragrafo anterior, que dizia "este caso fica
+      // vermelho", esta aqui embaixo em vez de apagado, porque e a historia
+      // que explica a forma deste caso.
       //
-      // Medido nesta arvore, com os tres experimentos que separam a causa:
+      // O QUE ERA MEDIDO quando ele reprovava, com os tres experimentos que
+      // separavam a causa:
       //
       //   A) filtrar SEM `Carregar mais` ->
       //      `page=1` | `kind=vet&page=1`                      (correto)
       //   B) `Carregar mais` e DEPOIS filtrar ->
       //      `page=1` | `page=2` | `kind=vet&page=1` | `page=1`
-      //      **a quarta chamada sai sem o filtro**, e e ela que fica valendo
+      //      **a quarta chamada saia sem o filtro**, e era ela que ficava
+      //      valendo -- `25 resultados · Mais perto` e a lista INTEIRA na tela
+      //      de quem acabou de escolher `Veterinário`
       //   C) `Carregar mais`, abrir e FECHAR a folha sem aplicar ->
       //      `page=1` | `page=2`                   (nenhuma chamada a mais)
       //
-      // O que a pessoa ve no fim de (B): `25 resultados · Mais perto` e 20
-      // cartoes -- a lista INTEIRA. Ela escolheu `Veterinário`, o filtro foi
-      // para a rota, e o aplicativo desfez sozinho. E o defeito de "filtrei e
-      // nao aconteceu nada", com o agravante de ter acontecido e sido
-      // revertido.
+      // A quarta chamada era o recorte PADRAO, identica a primeira, e o unico
+      // lugar que produz recorte padrao e o campo `_recorte = const
+      // RecorteDoDiretorio()` de `lista_do_diretorio.dart` -- isto e, um
+      // ESTADO NOVO da lista, que ao nascer agenda a propria carga por
+      // `didChangeDependencies`. O experimento (C) ja descartava o
+      // `TickerMode`: fechar a folha, por si, nao recarregava nada.
       //
-      // A quarta chamada e o recorte PADRAO (`sort=distance&page=1&limit=20`,
-      // identica a primeira), e o unico lugar que produz um recorte padrao e o
-      // campo `_recorte = const RecorteDoDiretorio()` de
-      // `lista_do_diretorio.dart`, linha 114 -- isto e, um ESTADO NOVO da
-      // lista, que ao nascer agenda a propria carga por
-      // `didChangeDependencies` (linhas 143-162). O experimento (C) descarta a
-      // hipotese mais obvia: fechar a folha, por si, nao recarrega nada, entao
-      // nao e o `TickerMode`.
+      // O QUE MUDOU, medido nesta arvore em 18/10 (base `3f9a57c2`), com o
+      // mesmo roteiro de (B): `page=1` | `page=2` | `kind=vet&page=1`. **Tres
+      // chamadas, e nao quatro.** O que recriava o estado era a arvore em que
+      // a lista morava: ate 18/10 `AbaPerto`, em `abas.dart`, entregava
+      // `ListaDoDiretorio` como filha direta da secao, e a mexida das acoes de
+      // criar na barra de topo reconstruia esse filho; desde
+      // `feat/minhas-indicacoes` (1b8a576b) a lista vive dentro do `TabBarView`
+      // de `perto/corpo_do_perto.dart`, que mantem o estado vivo. **O conserto
+      // foi colateral de outra frente, e nao deste arquivo** -- motivo de
+      // sobra para este caso ficar mais severo, e nao menos.
       //
-      // **Nao consertei o aplicativo porque nao localizei o que recria o
-      // estado**, e mexer na fiacao da casca no fim de uma rodada de QA, no
-      // escuro, e pior que entregar isto vermelho e descrito. A isca nao foi
-      // tocada: ela afirma o que o produto deve fazer.
+      // POR QUE A ASSERCAO OLHA TODAS AS CHAMADAS, e nao `urls.last`. Enquanto
+      // ela olhava so a ultima, este caso estava a uma chamada de distancia de
+      // virar verde falso: bastava a carga padrao chegar ANTES da filtrada em
+      // vez de depois. E exatamente a lição que o caso irmao logo abaixo
+      // (`voltar para a aba ...`) aprendeu medindo `[page=1, page=2, page=2,
+      // page=1]`. Agora o caso afirma o conjunto: **toda** chamada disparada
+      // pelo `Aplicar` leva o filtro e pede a pagina 1.
+      //
+      // PROVA DE QUE ELA AINDA ALCANCA O DEFEITO (18/10): com a regressao
+      // reposta a mao em `_aplicarAFolha` -- um `addPostFrameCallback` que
+      // zera `_recorte` e recarrega, que e a forma exata da quarta chamada
+      // medida em (B) --, este caso REPROVOU com
+      // `kind` nulo na 4a chamada. Revertida a mutacao, voltou a passar.
       // ---------------------------------------------------------------------
-      expect(urls.last.queryParameters['kind'], 'vet');
+      final depoisDeAplicar = urls.sublist(antesDeAplicar);
       expect(
-        urls.last.queryParameters['page'],
-        '1',
-        reason: 'REPROVA: o filtro foi aplicado mantendo a pagina 2. A fatia '
-            'volta vazia e a tela diz que nada casa com o filtro, com tres '
-            'entradas existindo. Este e o defeito que aparece como "a lista '
-            'ficou vazia sem motivo".',
+        depoisDeAplicar,
+        isNotEmpty,
+        reason: 'REPROVA: `Aplicar` nao chamou a rota, e o caso perdeu o que '
+            'ele existe para medir.',
       );
+      for (final (indice, url) in depoisDeAplicar.indexed) {
+        expect(
+          url.queryParameters['kind'],
+          'vet',
+          reason: 'REPROVA: a chamada ${indice + 1} de '
+              '${depoisDeAplicar.length} disparada pelo `Aplicar` saiu SEM o '
+              'filtro (`${url.query}`). A pessoa escolheu `Veterinário`, o '
+              'filtro foi para a rota, e o aplicativo desfez sozinho -- o '
+              'defeito de "filtrei e nao aconteceu nada", com o agravante de '
+              'ter acontecido e sido revertido. Chamadas: '
+              '${depoisDeAplicar.map((u) => u.query).toList()}',
+        );
+        expect(
+          url.queryParameters['page'],
+          '1',
+          reason: 'REPROVA: a chamada ${indice + 1} de '
+              '${depoisDeAplicar.length} aplicou o filtro mantendo a pagina 2. '
+              'A fatia volta vazia e a tela diz que nada casa com o filtro, '
+              'com tres entradas existindo. Este e o defeito que aparece como '
+              '"a lista ficou vazia sem motivo". Chamadas: '
+              '${depoisDeAplicar.map((u) => u.query).toList()}',
+        );
+      }
 
       // E a tela mostra as tres, e nao o vazio filtrado.
       expect(nomesNaTela(tester), hasLength(3));

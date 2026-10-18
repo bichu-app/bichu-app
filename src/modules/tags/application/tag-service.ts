@@ -110,6 +110,45 @@ export interface DependenciasDeTags {
    * dados do aviso e segue. Quem liga os dois é a composição, em `bin/api.ts`.
    */
   readonly conversaDoAviso: AberturaDeConversaPorAviso;
+
+  /**
+   * Quem ENTREGA o aviso ao tutor — e a única razão de `owner_notified` poder
+   * ser verdadeiro.
+   *
+   * **Opcional de propósito, e a ausência é o estado de hoje.** Registrar o
+   * aviso e abrir a conversa (as duas linhas acima) não acordam o telefone de
+   * ninguém: o único push que esta plataforma emite em produção é o alerta de
+   * vizinhança, de `lostfound`. Enquanto esta porta não for ligada, nada deste
+   * caminho enfileira entrega, e o campo da resposta diz isso.
+   *
+   * **Este módulo não emite push, e não pode passar a emitir.** A porta
+   * PERGUNTA — "a entrega foi enfileirada?" — e quem responde é a composição,
+   * em `bin/api.ts`, com o emissor de `notifications`. Um `PushSender` chamado
+   * daqui seria o segundo emissor do produto, e dois emissores é como o tutor
+   * recebe o mesmo aviso duas vezes.
+   */
+  readonly avisoAoTutor?: EntregaDoAvisoAoTutor;
+}
+
+/**
+ * A porta acima: o aviso já gravado, e a resposta sobre a ENTREGA.
+ *
+ * `true` quer dizer **enfileirada**, e não "entregue no aparelho": o que
+ * acontece depois do enfileiramento é o relatório de entrega
+ * (`notifications/registrar-evento-de-entrega`), e nenhuma resposta de API
+ * tem como afirmá-lo no instante do 201. Enfileirada é o mais forte que esta
+ * resposta pode dizer sem mentir — e é exatamente o que o achador precisa
+ * saber: que o aviso dele está no caminho do tutor.
+ */
+export interface EntregaDoAvisoAoTutor {
+  entregar(aviso: {
+    readonly foundReportId: FoundReportId;
+    readonly petId: PetId;
+    readonly nomeDoPet: string;
+    readonly escaneadoEm: Instant;
+    /** O aviso anterior do mesmo achador, quando este foi agrupado a ele. */
+    readonly avisoAnteriorId: FoundReportId | null;
+  }): Promise<boolean>;
 }
 
 /** A porta acima. O aviso já gravado, na forma que a abertura precisa. */
@@ -178,6 +217,28 @@ export interface ImagemDoQr {
 export interface AvisoCriado {
   readonly finderToken: OpaqueToken;
   readonly conversationUrl: AbsoluteUrl;
+  /**
+   * **Verdadeiro só quando a ENTREGA ao tutor foi enfileirada.**
+   *
+   * Esta é a correção de 18/10/2026, e vale dizer o que estava errado porque é
+   * o defeito mais caro que este arquivo já teve. O campo era
+   * `recente === undefined`: ele respondia "este aviso não foi agrupado a um
+   * recente do mesmo achador" — uma pergunta sobre AGRUPAMENTO — e a tela do
+   * achador leu a resposta como a pergunta que ela de fato faz: *o tutor foi
+   * avisado?* Medido: nada neste caminho enfileirava entrega, e o campo
+   * respondia `true` em todo primeiro escaneamento. A pessoa estava com o
+   * cachorro de outra na mão, lia que o tutor foi avisado, soltava o animal, e
+   * o tutor não tinha recebido nada.
+   *
+   * Agora quem responde é [TagServiceDeps.avisoAoTutor]. Sem a porta ligada o
+   * campo é `false`, porque `false` é a verdade de hoje; com ela ligada o campo
+   * é a resposta dela. O agrupamento continua entrando — um aviso agrupado não
+   * acorda o telefone de novo —, mas ele deixou de ser a única coisa que o
+   * campo olha.
+   *
+   * **O aviso em si nunca é descartado em nenhum dos casos.** Este campo fala
+   * de entrega, e não de registro.
+   */
   readonly ownerNotified: boolean;
   readonly petDisplayName: string;
 }
@@ -400,9 +461,10 @@ export function criarTagService(deps: DependenciasDeTags) {
      * a operação mais crítica do produto e a exceção permanente da política de
      * autenticação.
      *
-     * `owner_notified` é falso **apenas** quando o aviso foi agrupado a um
-     * recente do mesmo achador. O aviso em si nunca é descartado, e a tela do
-     * achador continua dizendo a verdade.
+     * `owner_notified` é verdadeiro **apenas quando a entrega ao tutor foi
+     * enfileirada** — ver o campo em [AvisoCriado]. O aviso em si nunca é
+     * descartado em nenhum caso, e a tela do achador só afirma o que o campo
+     * afirma.
      */
     async avisar(
       codigoBruto: string,
@@ -461,10 +523,27 @@ export function criarTagService(deps: DependenciasDeTags) {
         avisoAnteriorId: recente === undefined ? null : (recente.id as FoundReportId),
       });
 
+      // A ENTREGA, que é a única coisa que autoriza `owner_notified: true`.
+      //
+      // Agrupado NÃO entrega: o segundo escaneamento do mesmo achador virou
+      // mensagem na conversa que já existe, e acordar o telefone do tutor de
+      // novo pela mesma pessoa é o que a janela de agrupamento existe para
+      // evitar. Sem porta ligada não há entrega nenhuma, e o campo diz isso.
+      const entregaEnfileirada =
+        recente === undefined && deps.avisoAoTutor !== undefined
+          ? await deps.avisoAoTutor.entregar({
+              foundReportId: avisoId as FoundReportId,
+              petId: tag.petId,
+              nomeDoPet: tag.pet.displayName,
+              escaneadoEm: agora,
+              avisoAnteriorId: null,
+            })
+          : false;
+
       return {
         finderToken,
         conversationUrl: `${deps.baseDaWeb}/c/${finderToken}` as AbsoluteUrl,
-        ownerNotified: recente === undefined,
+        ownerNotified: entregaEnfileirada,
         petDisplayName: tag.pet.displayName,
       };
     },

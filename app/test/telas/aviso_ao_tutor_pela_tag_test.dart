@@ -34,6 +34,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:bichu/telas/escanear/tela_do_pet_da_tag.dart';
+
+import '../api/pets_api_listar_test.dart' show petDoContrato;
 import 'ajuda_de_tela.dart';
 
 void main() {
@@ -58,9 +61,18 @@ void main() {
   /// [avisoResponde] deixa cada caso escolher o desfecho do `POST` sem montar
   /// outra rede: 201 no caminho bom, e uma excecao de socket no caminho sem
   /// sinal.
+  /// [perdido] e FALSO por padrao desde 18/10/2026, e a troca tem motivo.
+  ///
+  /// Era `true`, e com a dinamica do escanear que o cliente definiu -- *"se o
+  /// tutor marcou como perdido, abre a pagina para o usuario enviar mensagem
+  /// ao tutor"* -- `is_lost: true` passou a abrir OUTRA forma da tela, com
+  /// campo de recado e o rotulo `Enviar mensagem ao tutor`. Os casos deste
+  /// grupo medem o aviso de um toque e zero campos, que e a forma SEM caso
+  /// aberto; a forma de pet perdido tem grupo proprio no fim do arquivo.
   Future<http.Response> Function(http.Request) rede({
-    bool perdido = true,
+    bool perdido = false,
     bool jaAvisou = false,
+    bool entregaSaiu = true,
     Future<http.Response> Function(http.Request)? avisoResponde,
   }) {
     return (http.Request req) async {
@@ -95,7 +107,7 @@ void main() {
         return json200(<String, dynamic>{
           'finder_token': 'ft_abc123',
           'conversation_url': 'https://bichu.app/c/ft_abc123',
-          'owner_notified': true,
+          'owner_notified': entregaSaiu,
           'pet_display_name': 'Thor',
         }, status: 201);
       }
@@ -409,6 +421,206 @@ void main() {
             'reenvio nasceria sem ela, o contrato a exige, e o pedido seria '
             'recusado quando o sinal voltasse -- a fila teria guardado algo '
             'que nunca sai.',
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ISCA 4 — A DINAMICA DO ESCANEAR, E OS TRES CAMINHOS DELA
+  // -----------------------------------------------------------------------
+  //
+  // O cliente definiu a dinamica com estas palavras: *"carrega a pagina do
+  // proprio pet. a dinamica e se eu escanear o qr-code abre a pagina do pet.
+  // se o tutor marcou como perdido, abre a pagina para o usuario enviar
+  // mensagem ao tutor."*
+  //
+  // Sao tres caminhos, e cada um tem um caso aqui:
+  //
+  //  1. DONO escaneando o proprio pet -> carrega a pagina do pet (`T.1`), pelo
+  //     `pet_id` de `GET /tags/{code}/owner-context`. Desligue
+  //     `TagsApi.contextoDoDono` ou o `pushReplacement` e o caso reprova: o
+  //     dono volta a ficar numa tela de leitura sem acao nenhuma, que e o que
+  //     o cliente viu.
+  //  2. ESTRANHO, pet NAO perdido -> a ficha do pet com `Avisar o tutor`, e
+  //     SEM campo de mensagem. Medido nos grupos acima e no contrapeso aqui.
+  //  3. ESTRANHO, pet PERDIDO -> a pagina de falar com o tutor: campo de
+  //     recado que vira `client_note`. Apague o campo e o caso reprova.
+  //
+  // O CONTRAPESO de cada um e o caminho vizinho: o campo de mensagem nao pode
+  // aparecer sem caso aberto, e a pagina do pet nao pode ser carregada para
+  // quem nao e o dono.
+  group('ISCA — a dinamica do escanear tem tres caminhos', () {
+    testWidgets('DONO escaneando o proprio pet: carrega a PAGINA DO PET', (
+      tester,
+    ) async {
+      const String petId = '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f';
+      final pedidos = <String>[];
+
+      Future<http.Response> redeDeDono(http.Request req) async {
+        pedidos.add('${req.method} ${req.url.path}');
+        if (req.url.path == '/v1/tags/$codigo' && req.method == 'GET') {
+          return json200(<String, dynamic>{
+            'viewer': 'owner',
+            'pet': <String, dynamic>{
+              'display_name': 'Thor',
+              'species': 'dog',
+              'size': 'M',
+              'photo_url': null,
+            },
+            'lost': <String, dynamic>{'is_lost': false, 'since': null},
+            'already_notified': false,
+          });
+        }
+        if (req.url.path == '/v1/tags/$codigo/owner-context' &&
+            req.method == 'GET') {
+          return json200(<String, dynamic>{
+            'pet_id': petId,
+            'tag_id': '018f7c1e-8b3c-7d4e-af50-3c2b1d0e9f80',
+          });
+        }
+        if (req.url.path == '/v1/pets/$petId' && req.method == 'GET') {
+          return json200(petDoContrato(id: petId, nome: 'Thor'));
+        }
+        return rede()(req);
+      }
+
+      await escanear(tester, comRede: redeDeDono);
+
+      expect(
+        pedidos,
+        contains('GET /v1/tags/$codigo/owner-context'),
+        reason:
+            'REPROVA: o modo dono nao chamou `GET /tags/{code}/owner-context`. '
+            'A pagina do pet e enderecada por `pet_id`, e o corpo publico da '
+            'resolucao nao o traz (SEC-001): sem esta chamada nao ha como '
+            'carregar a pagina do pet, que e a dinamica que o cliente pediu. '
+            'Pedidos: $pedidos',
+      );
+      expect(
+        find.byType(TelaDoPetDaTag),
+        findsNothing,
+        reason:
+            'REPROVA: o dono escaneou a propria plaquinha e FICOU na tela da '
+            'tag. O cliente pediu "carrega a pagina do proprio pet", e o que '
+            'ele viu foi uma tela de leitura sem acao nenhuma. Pedidos: '
+            '$pedidos',
+      );
+      expect(
+        pedidos,
+        contains('GET /v1/pets/$petId'),
+        reason:
+            'REPROVA: a tela da tag saiu de cena e a pagina do pet nao '
+            'carregou. Substituir uma tela por nada e pior que ficar na '
+            'primeira. Pedidos: $pedidos',
+      );
+    });
+
+    testWidgets('ESTRANHO com pet PERDIDO: a mensagem vira `client_note`', (
+      tester,
+    ) async {
+      await escanear(tester, comRede: rede(perdido: true));
+
+      final campo = find.byType(TextField);
+      expect(
+        campo,
+        findsOneWidget,
+        reason:
+            'REPROVA: com caso aberto nao ha campo de mensagem. O cliente '
+            'pediu que escanear um pet perdido abrisse "a pagina para o '
+            'usuario enviar mensagem ao tutor", e `client_note` ja esta no '
+            'contrato (`FoundReportFromTagInput`, maxLength 500) sem nenhum '
+            'caminho do app a mandar.',
+      );
+
+      await tester.enterText(campo, 'Esta na praca da Matriz, comigo.');
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Enviar mensagem ao tutor'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(saiu.length, 1, reason: 'REPROVA: nenhum `POST` saiu.');
+      expect(
+        jsonDecode(saiu.single.corpo) as Map<String, dynamic>,
+        containsPair('client_note', 'Esta na praca da Matriz, comigo.'),
+        reason:
+            'REPROVA: a pessoa digitou a mensagem e o corpo saiu sem '
+            '`client_note` (`${saiu.single.corpo}`). Ela escreveu para o '
+            'vazio, e e pior que nao ter campo: a tela confirma o envio de '
+            'uma mensagem que nao foi.',
+      );
+    });
+
+    testWidgets('CONTRAPESO: sem caso aberto nao ha campo de mensagem', (
+      tester,
+    ) async {
+      await escanear(tester, comRede: rede());
+      expect(
+        find.byType(TextField),
+        findsNothing,
+        reason:
+            'REPROVA: a tela do achador pede texto para um pet que ninguem '
+            'esta procurando. O caminho principal desta operacao e um toque e '
+            'zero campos, e um campo aqui transforma o aviso mais urgente do '
+            'produto em formulario.',
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ISCA 5 — a tela nao promete entrega que o servidor nao prometeu
+  // -----------------------------------------------------------------------
+  //
+  // A metade de TELA do defeito de `owner_notified`. O servidor devolvia
+  // `true` sem nenhuma entrega enfileirada, e esta tela mostrava a mesma
+  // frase -- "O tutor foi avisado. Ele recebeu o aviso no celular agora." --
+  // para os dois valores do campo, com o comentario dizendo que o campo "nao
+  // muda este texto".
+  //
+  // Os dois casos sao um por DESLIGAMENTO: a mesma tela, o mesmo toque, e o
+  // campo da resposta trocado.
+  group('ISCA — a tela nao promete entrega que o servidor nao prometeu', () {
+    testWidgets('`owner_notified: false`: a tela NAO diz que o tutor foi '
+        'avisado', (tester) async {
+      await escanear(tester, comRede: rede(entregaSaiu: false));
+      await tester.tap(find.widgetWithText(FilledButton, 'Avisar o tutor'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('O tutor foi avisado'),
+        findsNothing,
+        reason:
+            'REPROVA: o servidor respondeu `owner_notified: false` e a tela '
+            'afirmou que o tutor foi avisado. E a mentira mais caro do '
+            'produto: quem acredita que avisou solta o animal e vai embora.',
+      );
+      // E ela tambem nao diz que falhou: o recado esta registrado, e dizer
+      // "nao foi" faria a pessoa ir embora do mesmo jeito.
+      expect(
+        find.textContaining('Seu recado esta registrado'),
+        findsOneWidget,
+        reason:
+            'REPROVA: a tela nao disse o que aconteceu. Entre prometer o push '
+            'e dizer que falhou ha a verdade -- o aviso esta no caso do '
+            'animal --, e e ela que mantem a pessoa por perto.',
+      );
+    });
+
+    testWidgets('`owner_notified: true`: a tela afirma no passado', (
+      tester,
+    ) async {
+      await escanear(tester, comRede: rede(entregaSaiu: true));
+      await tester.tap(find.widgetWithText(FilledButton, 'Avisar o tutor'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('O tutor foi avisado'),
+        findsOneWidget,
+        reason:
+            'REPROVA: a entrega saiu e a tela nao confirmou. O contrapeso '
+            'existe para o conserto nao virar "nunca prometa": isso pararia '
+            'de mentir e passaria a esconder, e quem avisou de verdade '
+            'merece saber.',
       );
     });
   });
