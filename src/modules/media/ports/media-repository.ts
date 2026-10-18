@@ -124,6 +124,11 @@ export interface MediaRepository {
    * cliente pede a autorização, some, e o objeto pode ou não estar lá. Sem esta
    * varredura, cada desistência deixa um arquivo pago e invisível no bucket
    * privado — invisível porque nenhuma linha de `pet_photos` aponta para ele.
+   *
+   * **NÃO DEVOLVE FOTO DE ACHADO.** As duas espécies do achado
+   * (`ESPECIES_DO_ACHADO`) estão fora desta lista por decisão do cliente de
+   * 17/10/2026: nenhum apagamento automático toca informação de perdido ou
+   * achado. Ver o cabeçalho de `varrer-envios-vencidos.ts`.
    */
   listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]>;
 
@@ -164,9 +169,30 @@ export interface ObjetoDaConta {
   readonly chave: ObjectKey;
 }
 
+/**
+ * A espécie de uma intenção vencida.
+ *
+ * Os três primeiros são os `kind` de `upload_intents`; `'catalog_image'` é o
+ * envio do painel (`catalog_upload_intents`, ADR-0027 A.3), que não tem coluna
+ * `kind` porque aquela tabela só guarda um tipo de coisa.
+ *
+ * A união é escrita aqui e não importada de `shared/db/schema.ts` pelo mesmo
+ * motivo de `StatusDaFoto` logo acima: a porta não depende do esquema do banco.
+ *
+ * Ela existe para que a varredura possa RECUSAR o que não deve apagar. Sem a
+ * espécie viajando junto, o caso de uso recebia um `id` e uma chave e não tinha
+ * como saber que estava apagando a foto de um achado — e não soube.
+ */
+export type EspecieVencida =
+  | 'pet_photo'
+  | 'found_report_photo'
+  | 'finder_photo'
+  | 'catalog_image';
+
 export interface IntencaoVencida {
   readonly id: string;
   readonly objectKey: ObjectKey;
+  readonly kind: EspecieVencida;
 }
 
 export interface FotoParaProcessar {
