@@ -751,6 +751,163 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.admin_accounts',
     aoApagar: 'NO ACTION',
   },
+  // A SEGUNDA autoria da mesma tabela, de `users`, da `20261001000005` (linha
+  // 107): a capa do encontro da comunidade e de USUARIO, e o CHECK
+  // `catalog_upload_intents_um_autor` exige exatamente um dos dois. CASCADE
+  // porque a intencao e descartavel -- vence em dez minutos e o varredor a
+  // recolhe --, e e o que o `COMMENT ON COLUMN` da migracao diz por extenso.
+  'public.catalog_upload_intents.catalog_upload_intents_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a intencao de envio da capa do encontro da propria pessoa. Descartavel: ela vence em ' +
+      'dez minutos, e a imagem que ja virou `catalog_images` fica (aquela ligacao e SET NULL).',
+  },
+
+  // -------------------------------------------------------------------------
+  // a taxonomia da Loja em dois niveis (`20261017000003`)
+  // -------------------------------------------------------------------------
+  // Vocabulario curado, sem dado de pessoa nenhum, e por isso a regra e a mesma
+  // de `ref_species` e de `store_partners`: NO ACTION para cima. Categoria e
+  // subcategoria retiradas ficam `active = false`, nunca apagadas -- o
+  // `COMMENT ON COLUMN store_categories.active` diz que apagar "arrastaria os
+  // itens pela chave estrangeira", e NO ACTION e a rede que faz o DELETE
+  // reprovar em voz alta em vez de arrastar.
+  'public.store_subcategories.store_subcategories_category_code_fkey': {
+    colunas: ['category_code'],
+    referencia: 'public.store_categories',
+    aoApagar: 'NO ACTION',
+  },
+  // A unica CASCADE desta arvore, e ela desce DENTRO do vocabulario: apagar uma
+  // subcategoria leva as especies para as quais ela foi levantada, que sao
+  // atributo dela e de mais ninguem.
+  'public.store_subcategory_species.store_subcategory_species_category_code_code_fkey': {
+    colunas: ['category_code', 'code'],
+    referencia: 'public.store_subcategories',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as especies levantadas para a subcategoria apagada. Vocabulario curado, sem dado de ' +
+      'pessoa.',
+  },
+  'public.store_subcategory_species.store_subcategory_species_species_code_fkey': {
+    colunas: ['species_code'],
+    referencia: 'public.ref_species',
+    aoApagar: 'NO ACTION',
+  },
+  // As duas do ITEM para a arvore. Nomes proprios, e nao `_fkey`, porque as
+  // duas entraram por `ALTER TABLE ... ADD CONSTRAINT` nomeado (linhas 358 e
+  // 371 da migracao). A segunda e COMPOSTA, e e ela que faz "a subcategoria
+  // pertence a categoria escolhida" ser invariante de banco e nao `if` de
+  // aplicacao -- ver o `COMMENT ON TABLE store_subcategories`.
+  'public.store_items.store_items_categoria_existe': {
+    colunas: ['category'],
+    referencia: 'public.store_categories',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_items.store_items_subcategoria_e_da_categoria': {
+    colunas: ['category', 'subcategory'],
+    referencia: 'public.store_subcategories',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
+  // o pedido da plaquinha da coleira (`20261017000012`)
+  // -------------------------------------------------------------------------
+  // As duas CASCADE daqui sao a mesma decisao vista de dois lados, e as duas
+  // apagam ENDERECO: a tabela guarda o endereco de entrega, e o item 5 do
+  // cabecalho da migracao diz que a cascata do pet "e o endereco saindo do
+  // banco quando o pet sai".
+  'public.collar_tag_requests.collar_tag_requests_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o pedido de plaquinha do pet apagado, e com ele o endereco de entrega. Pet e pedido ' +
+      'sao da mesma pessoa, e um pedido sobrevivente mandaria o painel prensar o codigo de ' +
+      'um pet que nao existe mais (ADR-0004).',
+  },
+  'public.collar_tag_requests.collar_tag_requests_requested_by_fkey': {
+    colunas: ['requested_by'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos de plaquinha da propria pessoa, com o endereco de entrega. A coluna existe ' +
+      'alem de `pets.owner_id` porque a transferencia do pet troca o dono sem reescrever ' +
+      'quem fez o pedido -- e por isso ela alcanca pedido de pet que hoje e de OUTRA pessoa.',
+  },
+  'public.collar_tag_requests.collar_tag_requests_decided_by_admin_id_fkey': {
+    colunas: ['decided_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'SET NULL',
+  },
+
+  // -------------------------------------------------------------------------
+  // a indicacao do diretorio e a fila dela (`20261017000004`, `20261017000016`)
+  // -------------------------------------------------------------------------
+  'public.directory_suggestions.directory_suggestions_suggested_by_user_id_fkey': {
+    colunas: ['suggested_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as indicacoes que a propria pessoa fez. A ENTRADA aprovada fica: ela aponta para ' +
+      '`professionals`, e aquela ligacao e NO ACTION no outro sentido.',
+  },
+  // NO ACTION escrito por extenso na migracao da fila (linha 72): apagar a
+  // entrada do diretorio passa a ser RECUSADO enquanto houver indicacao
+  // aprovada apontando para ela. `CASCADE` apagaria a indicacao, que e
+  // trabalho de pessoa, e `SET NULL` deixaria a indicacao `approved` sem
+  // entrada -- que e o que o CHECK `entrada_so_na_aprovacao` existe para
+  // impedir.
+  'public.directory_suggestions.directory_suggestions_approved_entry_id_fkey': {
+    colunas: ['approved_entry_id'],
+    referencia: 'public.professionals',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
+  // a avaliacao do local e a denuncia dela (`20261017000017`)
+  // -------------------------------------------------------------------------
+  // QUATRO CASCADE, e DUAS delas atravessam pessoas -- estao em
+  // `CASCATAS_QUE_ATRAVESSAM_PESSOAS`. A avaliacao e de quem escreveu; a
+  // denuncia sobre ela e de um TERCEIRO. Apagar a conta de quem escreveu leva
+  // a avaliacao e, por `review_id`, as denuncias que outras pessoas fizeram
+  // sobre ela.
+  'public.professional_reviews.professional_reviews_professional_id_fkey': {
+    colunas: ['professional_id'],
+    referencia: 'public.professionals',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as avaliacoes da entrada apagada, que sao de OUTRAS pessoas. Nao ha `apagarEntrada` ' +
+      "neste produto -- retirar e `status = 'removed'` --, entao a cascata so anda num " +
+      'expurgo operacional.',
+  },
+  'public.professional_reviews.professional_reviews_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as avaliacoes que a propria pessoa escreveu, e com elas -- por ' +
+      '`professional_review_reports.review_id` -- as denuncias que TERCEIROS fizeram sobre ' +
+      'elas. A denuncia de outra pessoa some com a avaliacao denunciada.',
+  },
+  'public.professional_review_reports.professional_review_reports_review_id_fkey': {
+    colunas: ['review_id'],
+    referencia: 'public.professional_reviews',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias sobre a avaliacao apagada. A avaliacao e de uma pessoa e a denuncia e de ' +
+      'outra: e por aqui que a exclusao de uma conta alcanca a fila de moderacao de um ' +
+      'terceiro.',
+  },
+  'public.professional_review_reports.professional_review_reports_reporter_user_id_fkey': {
+    colunas: ['reporter_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias que a propria pessoa fez. A avaliacao denunciada FICA, e ela e de outra ' +
+      'pessoa: a fila de moderacao perde o pedido, nao o conteudo.',
+  },
 
   // -------------------------------------------------------------------------
   // upload_intents
@@ -1014,6 +1171,12 @@ const CASCATAS_QUE_ATRAVESSAM_PESSOAS: readonly string[] = [
   'public.found_reports.found_reports_reporter_user_id_fkey',
   'public.match_candidates.match_candidates_decided_by_user_id_fkey',
   'public.match_candidates.match_candidates_found_report_id_fkey',
+  // 18/10, com a avaliacao do local (`20261017000017`): apagar a conta de quem
+  // ESCREVEU uma avaliacao leva a avaliacao por `author_user_id`, e a cascata
+  // segue por `review_id` para as denuncias que TERCEIROS fizeram sobre ela.
+  // A fila de moderacao de outra pessoa perde o pedido, em silencio, e e
+  // exatamente a classe de caminho que esta lista existe para nomear.
+  'public.professional_review_reports.professional_review_reports_review_id_fkey',
 ];
 
 const ACAO_POR_CODIGO: Readonly<Record<string, Acao>> = {

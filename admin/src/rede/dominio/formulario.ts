@@ -27,7 +27,7 @@ import type {
   UnidadeDoValor,
   Visibilidade,
 } from './tipos.ts';
-import { handleDoInstagram, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, recusaDoInstagram, recusaDoLinkDoConvite } from './links.ts';
+import { handleDoInstagram, mensagemDoInstagram, MENSAGEM_DO_LINK, recusaDoLinkDoConvite } from './links.ts';
 import { unidadeComoAparece } from './rotulos.ts';
 import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.ts';
 
@@ -284,13 +284,15 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
     const recusa = recusaDoLinkDoConvite(f.linkDoConvite);
     if (recusa) e('linkDoConvite', 'Link do convite ou ingresso', MENSAGEM_DO_LINK[recusa]);
   }
-  // Pelo CODIGO, e nao por uma frase so: o apelido cru, um perfil de outra
-  // e `a base do perfil do Instagram` sao recusas diferentes e pedem textos
-  // diferentes. Uma frase para as tres e o defeito que custou o tempo do
-  // cliente em 17/10.
+  // Pelo MOTIVO, e nao por uma frase so: o apelido cru, o `http://`, o espaco,
+  // um perfil de outro site e o endereco sem perfil no fim sao recusas
+  // diferentes e pedem textos diferentes. Uma frase para todas e o defeito que
+  // custou o tempo do cliente em 17/10 -- e e por isso que a escolha da frase
+  // nao pode sair de um mapa de `code`: dois motivos dividem o mesmo `code`,
+  // exatamente como no servidor (`errosDoInstagram`).
   if (f.instagram.trim()) {
-    const recusa = recusaDoInstagram(f.instagram);
-    if (recusa !== null) e('instagram', 'Instagram para dúvidas', MENSAGEM_DO_INSTAGRAM[recusa]);
+    const recusa = mensagemDoInstagram(f.instagram);
+    if (recusa !== null) e('instagram', 'Instagram para dúvidas', recusa);
   }
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');

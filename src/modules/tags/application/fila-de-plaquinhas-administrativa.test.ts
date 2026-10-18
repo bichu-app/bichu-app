@@ -219,9 +219,13 @@ void describe('a decisao do painel sobre o pedido da plaquinha', () => {
     await assert.rejects(
       () => b.fila.atender(rotaDeAtenderPedidoDePlaquinha.audit, ATOR, REF),
       (erro: unknown) => {
-        const problema = erro as { status?: number; campos?: { code?: string }[] };
+        // `errors`, e nao `campos`: e o nome do campo em `AppError`
+        // (`src/shared/http/errors.ts`, linha 53) e o que `problemas.validacao`
+        // preenche (linha 106). Com `campos` a leitura dava `undefined` e a
+        // isca nao media `code` nenhum.
+        const problema = erro as { status?: number; errors?: { code?: string }[] };
         assert.equal(problema.status, 400);
-        assert.equal(problema.campos?.[0]?.code, 'request_not_pending');
+        assert.equal(problema.errors?.[0]?.code, 'request_not_pending');
         return true;
       },
     );

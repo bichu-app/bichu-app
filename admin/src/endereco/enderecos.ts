@@ -24,6 +24,18 @@ const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const CONTROLE_BIDIRECIONAL = /[\u202A-\u202E\u2066-\u2069]/;
 
 /**
+ * A frase do endereco com espaco. Uma so para os dois campos: o motivo e o
+ * mesmo, e o servidor tambem a escreve uma vez (`'O endereço não pode ter
+ * espaço.'`, em `errosDoEnderecoCompleto`).
+ */
+const SEM_ESPACO = 'Confira o endereço: ele não pode ter espaço.';
+
+/** Espaco (de qualquer largura) ou caractere de controle no texto. */
+function temEspacoOuControle(texto: string): boolean {
+  return [...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
+}
+
+/**
  * O exemplo que as mensagens mostram.
  *
  * Montado da configuracao (`VITE_URL_DO_PERFIL_DO_INSTAGRAM`, em
@@ -59,9 +71,7 @@ export function recusaDoInstagram(valor: string): CodigoDoInstagram | null {
   if (CONTROLE_BIDIRECIONAL.test(valor)) return 'bidi_control';
   const texto = valor.trim();
   if (texto.length === 0 || texto.length > LIMITE_DA_URL_DO_INSTAGRAM) return 'instagram_url_length';
-  if ([...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) {
-    return 'instagram_url_invalid';
-  }
+  if (temEspacoOuControle(texto)) return 'instagram_url_invalid';
   let url: URL;
   try {
     url = new URL(texto);
@@ -108,9 +118,7 @@ export function recusaDoSite(valor: string): CodigoDoSite | null {
   if (CONTROLE_BIDIRECIONAL.test(valor)) return 'bidi_control';
   const texto = valor.trim();
   if (texto.length === 0 || texto.length > LIMITE_DO_SITE) return 'site_url_length';
-  if ([...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) {
-    return 'site_url_invalid';
-  }
+  if (temEspacoOuControle(texto)) return 'site_url_invalid';
   let url: URL;
   try {
     url = new URL(texto);
@@ -155,6 +163,38 @@ export const MENSAGEM_DO_INSTAGRAM: Record<CodigoDoInstagram, string> = {
   instagram_url_invalid: `Falta o perfil no fim do endereço. Por exemplo: ${EXEMPLO_DO_INSTAGRAM}`,
 };
 
+/**
+ * A frase da recusa LOCAL do Instagram, ou `null` quando o endereco passa.
+ *
+ * **O `code` sozinho nao distingue o motivo**, e o servidor nao finge que
+ * distingue: `errosDoInstagram` (em `src/modules/network/domain/
+ * escrita-do-encontro.ts`) escolhe a frase NO PONTO da recusa, porque dois
+ * motivos diferentes dividem o mesmo `code`:
+ *
+ * - `instagram_url_not_https`: sem esquema nenhum (`@bichu.app`) **ou** com
+ *   `http://`. Quem escreveu `http://` ja escreveu um esquema, so nao o
+ *   certo, e mandar "cole o endereco completo" responderia outra pergunta.
+ * - `instagram_url_invalid`: espaco no meio **ou** endereco sem o perfil no
+ *   fim. "Falta o perfil" para um texto com espaco e simplesmente falso.
+ *
+ * Foi essa confusao de uma frase so para recusas diferentes que custou o
+ * tempo do cliente em 17/10. [MENSAGEM_DO_INSTAGRAM] continua existindo e
+ * continua sendo o mapa das recusas que chegam DO SERVIDOR, onde a tela so
+ * tem o `code`.
+ */
+export function mensagemDoInstagram(valor: string): string | null {
+  const code = recusaDoInstagram(valor);
+  if (code === null) return null;
+  const texto = valor.trim();
+  if (code === 'instagram_url_not_https' && texto.toLowerCase().startsWith('http://')) {
+    return 'Troque http:// por https://.';
+  }
+  if (code === 'instagram_url_invalid' && temEspacoOuControle(texto)) {
+    return SEM_ESPACO;
+  }
+  return MENSAGEM_DO_INSTAGRAM[code];
+}
+
 /** O texto de cada recusa do site do parceiro. */
 export const MENSAGEM_DO_SITE: Record<CodigoDoSite, string> = {
   bidi_control: 'O endereço tem caracteres invisíveis. Apague e digite de novo.',
@@ -165,5 +205,5 @@ export const MENSAGEM_DO_SITE: Record<CodigoDoSite, string> = {
   site_url_has_credentials: 'Tire o usuário e a senha do endereço.',
   site_url_ip_literal: 'Use o endereço do site, e não um número de IP.',
   site_url_local_host: 'O endereço precisa ser de um site público.',
-  site_url_invalid: 'Confira o endereço: ele não pode ter espaço.',
+  site_url_invalid: SEM_ESPACO,
 };

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Entrar } from '../src/entrar/Entrar.tsx';
 import { criarRotas } from '../src/rotas.tsx';
-import { item, pagina, parceiro, tag } from './apoio/massa.ts';
+import { item, pagina, parceiro, tag, taxonomia } from './apoio/massa.ts';
 import { criarServidorFalso, json, problema, SESSAO, type Resposta, type Rota } from './apoio/servidor-falso.ts';
 
 const L6 = 'Alguém alterou este produto enquanto você editava, e nada foi gravado. Recarregar traz a versão atual e descarta o que você mudou aqui.';
@@ -18,6 +18,7 @@ function montar(caminho: string, rotas: Record<string, Rota | Resposta> = {}) {
     'GET /admin/session': json(200, SESSAO),
     'GET /admin/store/partners': json(200, pagina([parceiro()])),
     'GET /admin/store/tags': json(200, pagina([tag('adulto'), tag('filhote')])),
+    'GET /store/taxonomy': json(200, taxonomia()),
     'GET /admin/store/items': json(200, { ...pagina([item()]), effective_sort: 'atualizado' }),
     ...rotas,
   });

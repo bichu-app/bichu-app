@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Galeria, type ImagemDaGaleria } from '../src/componentes/Galeria.tsx';
 import { criarRotas } from '../src/rotas.tsx';
-import { item, pagina, parceiro, tag } from './apoio/massa.ts';
+import { item, pagina, parceiro, tag, taxonomia } from './apoio/massa.ts';
 import { criarServidorFalso, json, problema, SESSAO, type Resposta, type Rota } from './apoio/servidor-falso.ts';
 
 const SEIS_TAGS = ['adulto', 'filhote', 'porte pequeno', 'porte médio', 'porte grande', 'natural'].map((t) => tag(t));
@@ -15,6 +15,7 @@ function montar(caminho: string, rotas: Record<string, Rota | Resposta> = {}) {
     'GET /admin/session': json(200, SESSAO),
     'GET /admin/store/partners': json(200, pagina([parceiro()])),
     'GET /admin/store/tags': json(200, pagina(SEIS_TAGS)),
+    'GET /store/taxonomy': json(200, taxonomia()),
     'GET /admin/store/items': json(200, { ...pagina([item()]), effective_sort: 'atualizado' }),
     ...rotas,
   });
@@ -102,8 +103,12 @@ describe('3 · Loja: formulario', () => {
     await preencherObrigatorios();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
     await screen.findByText('Corrija 1 campo para salvar:');
+    // O contrato recusa `host_mismatch` quando o link NAO e do host do
+    // parceiro nem de um SUBDOMINIO dele, e a frase diz as duas coisas. O
+    // texto exato esta fixado em `test/loja-dominio.test.ts` (dois casos
+    // verdes), que e a autoridade sobre `errosDoServidor`.
     expect(screen.getByLabelText('Link do produto no parceiro *')).toHaveAccessibleDescription(
-      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br) ou de um subdomínio dele, como www.petcenteraurora.com.br.',
     );
   });
 

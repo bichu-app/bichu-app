@@ -387,6 +387,20 @@ void main() {
       await tocar(tester, find.text(TextosDoDetalhe.confirmarRemocaoDaFoto));
 
       expect(rede.remocoes, hasLength(1));
+      // O recado da foto e desenhado no bloco da foto, no alto da tela
+      // (`tela_editar_pet.dart`, linhas 709-715). Logo depois de a folha de
+      // confirmacao fechar ele ainda nao esta achavel, e **medi os tres
+      // caminhos**: `pumpAndSettle` sozinho nao resolve, `ensureVisible`
+      // sozinho nao resolve, e `rolarAte` -- que rola e bombeia quadros ate o
+      // alvo existir -- resolve. Nao afirmo aqui qual e o mecanismo, porque
+      // nao o isolei: a tela e `SingleChildScrollView` e nao `ListView`, entao
+      // nao e a virtualizacao obvia. O que esta medido e que o recado APARECE,
+      // e e isso que o caso cobra.
+      await rolarAte(
+        tester,
+        find.text(TextosDoDetalhe.fotoPresaAoCasoAberto),
+        passo: -120,
+      );
       expect(
         find.text(TextosDoDetalhe.fotoPresaAoCasoAberto),
         findsOneWidget,

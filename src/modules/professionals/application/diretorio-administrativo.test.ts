@@ -380,8 +380,18 @@ void describe('alterar', () => {
   });
 
   void it('entrada inexistente e 404 (com versao apresentada)', async () => {
+    // `city` VALIDA de proposito. A isca nasceu com `city: 'X'`, copiado do caso
+    // do 428 acima, e media outra coisa: `X` tem UM caractere e o contrato pede
+    // `minLength: 2` (`api/openapi.yaml`, `AdminDirectoryEntryPatch.city`, linha
+    // 10997), entao a forma do campo e recusada ANTES da leitura do recurso
+    // (passo 2 antes do passo 4, no cabecalho de `diretorio-administrativo.ts`)
+    // e pela rota o Ajv da borda nem chegaria ao caso de uso. O que este caso
+    // afirma e o 404 do recurso ausente COM versao apresentada -- e para chegar
+    // la o corpo precisa ser um corpo que o contrato aceita.
     assert.equal(
-      await tipoDoErro(() => diretorio.alterarEntrada(AUTOR, 'nao-existe', '"1"', { city: 'X' })),
+      await tipoDoErro(() =>
+        diretorio.alterarEntrada(AUTOR, 'nao-existe', '"1"', { city: 'Campinas' }),
+      ),
       'not-found',
     );
   });

@@ -301,7 +301,12 @@ describe('plano de edição (as três operações)', () => {
     const erros = validar({ ...preenchido(), linkDoConvite: 'http://exemplo.com.br', instagram: '@com espaco' }, 'novo', AGORA);
     expect(erros.map((e) => [e.campo, e.mensagem])).toEqual([
       ['linkDoConvite', 'O link precisa começar com https://.'],
-      ['instagram', 'Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app'],
+      // `@com espaco` recusa pelo ESPACO, e nao por falta de `https://`: o
+      // espaco e conferido ANTES do esquema, no painel
+      // (`enderecos.ts`) e no servidor (`errosDoEnderecoCompleto`), que e
+      // quem decide. A frase de `not_https` e a de quem escreveu um endereco
+      // sem esquema, e esta entrada nunca chega la.
+      ['instagram', 'Confira o endereço: ele não pode ter espaço.'],
     ]);
   });
 

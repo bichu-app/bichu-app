@@ -6,10 +6,10 @@
  * O QUE ESTE ARQUIVO PROVA
  * ===========================================================================
  * 1. **A visibilidade mora no `WHERE`, e e a mesma nas tres leituras.** Um
- *    encontro publicado, um cancelado ainda por acontecer, um cancelado que ja
- *    terminou, um da comunidade esperando revisao e um retirado -- os dois
- *    ultimos COM ponto, de proposito. A agenda, o detalhe e o `location` so
- *    enxergam os tres primeiros.
+ *    encontro publicado, um publicado sem ponto, um cancelado ainda por
+ *    acontecer, um cancelado que ja terminou, um retirado do painel e um
+ *    retirado da comunidade -- os dois ultimos COM ponto, de proposito. A
+ *    agenda, o detalhe e o `location` so enxergam os quatro primeiros.
  * 2. **O cancelado segue a decisao do cliente de 23/09**: antes do fim previsto
  *    ele aparece na agenda de `upcoming` com `status` `cancelled`; depois do fim
  *    aparece em `past` com `status` `ended`, a regra do encerrado.
@@ -18,9 +18,21 @@
  *    `lat`, `lon`, `point` nem UUID nenhum -- varridos no JSON serializado, e
  *    nao campo a campo.
  * 4. **O que o banco garante da regra "lugar publico" (ADR-0027 secao 13)**:
- *    `pending_review` so existe para `origin = 'community'`, e ponto sem
- *    origem `map_pin` e recusado. O resto da regra e processo, e este arquivo
- *    nao finge testa-lo.
+ *    ponto sem origem `map_pin` e recusado, e `publication_status` fora da
+ *    lista fechada tambem. O resto da regra e processo, e este arquivo nao
+ *    finge testa-lo.
+ *
+ * **`pending_review` NAO EXISTE MAIS, e por isso ele nao esta neste arquivo.**
+ * Ele era o estado da fila de revisao do encontro da comunidade. A migracao
+ * `20261001000005_encontro-da-comunidade-publica-direto.sql` tirou o valor do
+ * `CHECK` `network_events_publicacao_conhecida` e APAGOU o
+ * `network_events_revisao_so_da_comunidade` que o amarrava a origem (ADR-0025
+ * emenda 3, 17/10/2026; `api/openapi.yaml` linha 13249). Ate 18/10 este
+ * arquivo gravava uma linha `pending_review` no `before`, o `CHECK` a recusava
+ * e os 15 casos daqui morriam no preparo -- nenhum deles chegava a medir nada.
+ * A linha escondida virou um SEGUNDO `removed`, da comunidade e COM ponto: a
+ * forma do cenario (duas escondidas com ponto, uma de cada origem) fica de pe
+ * sem afirmar um estado que o banco nao tem.
  *
  * O 401 do `location` sem token e a prova do `network-routes.test.ts`, sobre um
  * Fastify de verdade; aqui o assunto e o que a consulta devolve.
@@ -58,7 +70,7 @@ const PUBLICADO_COM_PONTO = `${PREFIXO}publicado`;
 const PUBLICADO_SEM_PONTO = `${PREFIXO}sem-ponto`;
 const CANCELADO_POR_VIR = `${PREFIXO}cancelado-por-vir`;
 const CANCELADO_ENCERRADO = `${PREFIXO}cancelado-passado`;
-const ESPERANDO_REVISAO = `${PREFIXO}em-revisao`;
+const RETIRADO_DA_COMUNIDADE = `${PREFIXO}retirado-comunidade`;
 const RETIRADO = `${PREFIXO}retirado`;
 
 /** Pontos de lugar publico, e distintivos: a varredura procura os numeros. */
@@ -82,7 +94,7 @@ interface Linha {
   readonly duracaoEmHoras: number;
   readonly ponto: { lat: number; lon: number } | null;
   readonly origem: 'admin' | 'community';
-  readonly publicacao: 'published' | 'cancelled' | 'pending_review' | 'removed';
+  readonly publicacao: 'published' | 'cancelled' | 'removed';
 }
 
 const LINHAS: readonly Linha[] = [
@@ -90,12 +102,11 @@ const LINHAS: readonly Linha[] = [
   { slug: PUBLICADO_SEM_PONTO, comecaEmHoras: 30, duracaoEmHoras: 2, ponto: null, origem: 'admin', publicacao: 'published' },
   { slug: CANCELADO_POR_VIR, comecaEmHoras: 48, duracaoEmHoras: 2, ponto: PONTO_CANCELADO, origem: 'admin', publicacao: 'cancelled' },
   { slug: CANCELADO_ENCERRADO, comecaEmHoras: -48, duracaoEmHoras: 2, ponto: PONTO_CANCELADO, origem: 'admin', publicacao: 'cancelled' },
-  { slug: ESPERANDO_REVISAO, comecaEmHoras: 26, duracaoEmHoras: 2, ponto: PONTO_ESCONDIDO, origem: 'community', publicacao: 'pending_review' },
+  { slug: RETIRADO_DA_COMUNIDADE, comecaEmHoras: 26, duracaoEmHoras: 2, ponto: PONTO_ESCONDIDO, origem: 'community', publicacao: 'removed' },
   { slug: RETIRADO, comecaEmHoras: 28, duracaoEmHoras: 2, ponto: PONTO_ESCONDIDO, origem: 'admin', publicacao: 'removed' },
 ];
 
 async function inserir(linha: Linha): Promise<void> {
-  const visivelOuRetirado = linha.publicacao !== 'pending_review';
   await cliente.query(
     `INSERT INTO network_events (
        id, slug, title, summary, place_name, neighborhood, city, state,
@@ -109,7 +120,7 @@ async function inserir(linha: Linha): Promise<void> {
              now() + make_interval(hours => $5::int),
              now() + make_interval(hours => $5::int + $6::int),
              'America/Sao_Paulo', $7, $8,
-             CASE WHEN $9::boolean THEN now() - interval '7 days' END,
+             now() - interval '7 days',
              CASE WHEN $8::text = 'cancelled' THEN now() - interval '1 day' END,
              CASE WHEN $8::text = 'cancelled' THEN 'Chuva forte prevista.' END)`,
     [
@@ -121,7 +132,6 @@ async function inserir(linha: Linha): Promise<void> {
       linha.duracaoEmHoras,
       linha.origem,
       linha.publicacao,
-      visivelOuRetirado,
     ],
   );
 }
@@ -175,7 +185,7 @@ void describe('o cenario existe: as seis linhas estao gravadas, duas delas escon
       [`${PREFIXO}%`],
     );
     assert.equal(r.rows.length, LINHAS.length);
-    const escondidas = r.rows.filter((l) => l.slug === ESPERANDO_REVISAO || l.slug === RETIRADO);
+    const escondidas = r.rows.filter((l) => l.slug === RETIRADO_DA_COMUNIDADE || l.slug === RETIRADO);
     assert.equal(escondidas.length, 2);
     assert.ok(
       escondidas.every((l) => l.tem_ponto),
@@ -185,7 +195,7 @@ void describe('o cenario existe: as seis linhas estao gravadas, duas delas escon
 });
 
 void describe('a visibilidade e a mesma nas tres leituras', () => {
-  void it('a agenda (`all`) mostra publicados e cancelados, e nunca revisao nem retirado', async () => {
+  void it('a agenda (`all`) mostra publicados e cancelados, e nunca os retirados', async () => {
     const slugs = (await agenda('all')).map((e) => e.slug).sort();
     assert.deepEqual(
       slugs,
@@ -193,19 +203,18 @@ void describe('a visibilidade e a mesma nas tres leituras', () => {
     );
   });
 
-  void it('o detalhe de revisao, de retirado e de inexistente e `undefined` -- o mesmo 404', async () => {
-    assert.equal(await repo.buscarEncontro(ESPERANDO_REVISAO), undefined);
+  void it('o detalhe dos retirados e do inexistente e `undefined` -- o mesmo 404', async () => {
+    assert.equal(await repo.buscarEncontro(RETIRADO_DA_COMUNIDADE), undefined);
     assert.equal(await repo.buscarEncontro(RETIRADO), undefined);
     assert.equal(await repo.buscarEncontro(`${PREFIXO}nunca-existiu`), undefined);
     assert.notEqual(await repo.buscarEncontro(PUBLICADO_COM_PONTO), undefined);
     assert.notEqual(await repo.buscarEncontro(CANCELADO_POR_VIR), undefined);
   });
 
-  void it('ISCA -- o `location` de revisao e de retirado e `undefined`, mesmo havendo ponto gravado', async () => {
-    // A regra do ADR-0027 13.5 como estado do banco: o ponto do encontro da
-    // comunidade so sai depois de revisao humana. E o do retirado nao sai
-    // nunca.
-    assert.equal(await repo.buscarLocalDoEncontro(ESPERANDO_REVISAO, QUALQUER_CONTA), undefined);
+  void it('ISCA -- o `location` dos retirados e `undefined`, mesmo havendo ponto gravado', async () => {
+    // A regra do ADR-0027 13.5 como estado do banco: `removed` e terminal, e o
+    // ponto dele nao sai nunca -- nem o do painel nem o da comunidade.
+    assert.equal(await repo.buscarLocalDoEncontro(RETIRADO_DA_COMUNIDADE, QUALQUER_CONTA), undefined);
     assert.equal(await repo.buscarLocalDoEncontro(RETIRADO, QUALQUER_CONTA), undefined);
     assert.equal(await repo.buscarLocalDoEncontro(`${PREFIXO}nunca-existiu`, QUALQUER_CONTA), undefined);
   });
@@ -291,10 +300,16 @@ void describe('o que o banco garante da regra "lugar publico" (ADR-0027 secao 13
                 VALUES ($1, '${PREFIXO}recusado', 'Titulo', 'Resumo', 'Praca', 'Bairro', 'Cidade', 'SP',
                         now() + interval '1 day'`;
 
-  void it('`pending_review` so existe para o encontro da comunidade', async () => {
+  // Era "`pending_review` so existe para o encontro da comunidade", contra
+  // `network_events_revisao_so_da_comunidade`. Aquela restricao foi APAGADA
+  // pela 20261001000005 junto com o valor, e o que o banco garante hoje e mais
+  // forte: `pending_review` nao e um estado possivel para origem NENHUMA. A
+  // assercao continua sendo uma recusa do banco, com codigo e nome de
+  // restricao -- o que mudou foi qual restricao recusa.
+  void it('`pending_review` nao e estado possivel: a lista fechada o recusa', async () => {
     await recusa(
-      `${BASE}, 'admin', 'pending_review', NULL, NULL, NULL)`,
-      'network_events_revisao_so_da_comunidade',
+      `${BASE}, 'community', 'pending_review', NULL, NULL, NULL)`,
+      'network_events_publicacao_conhecida',
     );
   });
 

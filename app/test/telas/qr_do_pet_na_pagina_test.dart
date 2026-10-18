@@ -231,9 +231,30 @@ void main() {
         await _abrirAPaginaDoPet(tester);
         await rolarAte(tester, find.byType(QrDaPlaquinha));
 
-        final semantica = tester.getSemantics(_oQr());
+        // **O `Semantics` DECLARADO em volta da imagem**, e nao
+        // `getSemantics(...)` sobre ela.
+        //
+        // `tester.getSemantics(_oQr())` devolvia um no de `label` VAZIO, e o
+        // vazio fazia este caso mentir nos dois sentidos: a primeira assercao
+        // passava por vacuidade (`isNot(contains(id))` e sempre verdade sobre
+        // `''`) e a segunda reprovava sobre uma tela correta. Liguei a arvore
+        // de semantica com `ensureSemantics` e o `label` continuou vazio, ou
+        // seja: nao era a arvore desligada, e o no que `getSemantics` alcanca a
+        // partir da `Image` nao e o que carrega o rotulo.
+        //
+        // O que o app PUBLICA e a propriedade do `Semantics` que embrulha a
+        // imagem (`qr_da_plaquinha.dart`, linhas 146-148), e e ela que esta
+        // medida aqui -- a mesma escolha que `loja_detalhe_do_produto_test.dart`
+        // faz para o nome acessivel do quadro grande, e pelo mesmo motivo.
+        final rotuloDoQr = tester
+                .widget<Semantics>(
+                  find.ancestor(of: _oQr(), matching: find.byType(Semantics)).first,
+                )
+                .properties
+                .label ??
+            '';
         expect(
-          semantica.label,
+          rotuloDoQr,
           isNot(contains(_petId)),
           reason: 'REPROVA: o rotulo do leitor de tela entrega o UUID do pet. '
               'Rotulo acessivel e saida publica tanto quanto pixel: quem usa '
@@ -241,7 +262,7 @@ void main() {
               'item 6.',
         );
         expect(
-          semantica.label,
+          rotuloDoQr,
           contains(_sufixo),
           reason: 'REPROVA: o QR ficou um quadrado sem descricao util. Ele nao '
               'pode anunciar o codigo inteiro -- o app nao o tem --, mas tem de '

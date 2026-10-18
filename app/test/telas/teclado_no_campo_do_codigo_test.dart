@@ -68,7 +68,23 @@ void main() {
       camera: CameraDeTeste(EstadoDaPermissao.concedida),
       leitorDeQr: LeitorDeQrDeTeste(),
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+    // **A porta de escanear virou ICONE NA BARRA em 18/10/2026** (pedido
+    // literal do cliente: "os itens de criacao, como evento e indicacao, ate o
+    // escanear poderia ser icones na barra superior ... e nao fique esse botao
+    // grande na pagina"). Em `Pets` ela e `AcaoDeCriarNaBarra` com
+    // `Icons.qr_code_2` (`lib/telas/abas.dart`, linhas 119-122); o botao de
+    // largura total com esse texto so sobrou no `Perfil` DESLOGADO. O
+    // `widgetWithText(OutlinedButton, ...)` achava zero e o `tap` estourava.
+    //
+    // Dentro da `AppBar` de proposito: `Icons.qr_code_2` tambem aparece na
+    // pagina do pet, e um `find.byIcon` solto ficaria verde com a barra vazia
+    // -- o mesmo cuidado que `criar_e_icone_na_barra_test.dart` escreve.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text(TextosDoCadastro.digitarOCodigo).last);
     await tester.pumpAndSettle();

@@ -370,13 +370,32 @@ void describe('a avaliacao de um local do diretorio', () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
+      // `semConta: true` -- sem ele a isca mandava o `Authorization` do cenario
+      // padrao e media o caminho da conta VALIDA (200 de `putMyDirectoryEntryReview`),
+      // que e o oposto do que o titulo afirma. O 401 e do contrato:
+      // `api/openapi.yaml`, `putMyDirectoryEntryReview` -- "Visitante sem conta
+      // nao escreve e nao e surpreendido: 401".
       const escrita = await pedir(app, {
-          method: 'PUT',
+        method: 'PUT',
         url: `/directory/entries/${SLUG}/reviews/me`,
         payload: { rating: 5 },
+        semConta: true,
       });
       assert.equal(escrita.status, 401);
       assert.equal(espiao.gravacoes.length, 0);
+
+      // "e a leitura tambem": o titulo afirma as DUAS e so a escrita estava
+      // escrita. A leitura exige conta e NAO e publica -- `getDirectoryEntry`
+      // declara `security: [bearerAuth]` em `api/openapi.yaml` (linha 3722) e a
+      // propria descricao diz por que: ela devolve `phone_e164`, e
+      // `src/tools/portao-contrato-publico.ts` reprova esse campo em qualquer
+      // operacao alcancavel sem conta.
+      const leitura = await pedir(app, {
+        method: 'GET',
+        url: `/directory/entries/${SLUG}`,
+        semConta: true,
+      });
+      assert.equal(leitura.status, 401, 'a leitura do local tambem exige conta');
     } finally {
       await app.close();
     }

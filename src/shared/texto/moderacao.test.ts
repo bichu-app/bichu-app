@@ -165,8 +165,21 @@ void describe('(c) a palavra proibida NAO aparece na mensagem de erro nem em log
 
   void it('o modulo nao tem como registrar nada: nem `console`, nem logger, nem trilha', () => {
     const fonte = readFileSync(resolve(process.cwd(), 'src/shared/texto/moderacao.ts'), 'utf8');
+    // A varredura e sobre o CODIGO, sem os comentarios. Sobre o texto cru ela
+    // acusava a unica ocorrencia de `logger` no arquivo, que esta no cabecalho
+    // de `moderacao.ts` (linha 40) e e a PROPRIA promessa que esta isca mede:
+    // "Nao ha `console`, nao ha `logger`, nao ha evento de auditoria". Prosa
+    // nao registra nada; quem registra e codigo -- e sobre o codigo a varredura
+    // continua inteira, com os mesmos quatro nomes.
+    const codigo = fonte.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     for (const proibido of ['console.', 'logger', 'auditLog', 'request.log']) {
-      assert.equal(fonte.includes(proibido), false, proibido);
+      assert.equal(codigo.includes(proibido), false, proibido);
     }
+    // E a trava que nenhum comentario alcanca, e que vale mais que a varredura
+    // de nome: o modulo so importa o TIPO do erro de campo e as duas listas de
+    // palavras. Sem porta de log nem de trilha no alcance dele, nao ha o que
+    // registrar -- nem por engano, nem amanha.
+    const importados = [...codigo.matchAll(/from '([^']+)'/g)].map((casado) => casado[1] ?? '');
+    assert.deepEqual(importados.sort(), ['../http/problem.js', './lista-de-moderacao.js']);
   });
 });

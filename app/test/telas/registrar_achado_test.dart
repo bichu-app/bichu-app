@@ -148,7 +148,12 @@ Future<void> preencherOMinimo(
     await rolarAte(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
     await tocar(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
   }
-  await rolarAte(tester, find.text('Agora'));
+  // `passo: -120`, para CIMA: `Quando?` e o PRIMEIRO bloco do passo 2
+  // (`tela_registrar_achado.dart`, linhas 659-665) e a localizacao vem depois
+  // dele, entao a lista ja rolou para baixo quando se chega aqui. Com passo
+  // positivo o `scrollUntilVisible` procura para baixo o que ficou para tras,
+  // roda ate o fim e estoura `Bad state: No element`.
+  await rolarAte(tester, find.text('Agora'), passo: -120);
   await tocar(tester, find.text('Agora'));
 }
 
@@ -392,13 +397,15 @@ void main() {
       await irPara(tester, Rotas.registrarAchado);
       await preencherOMinimo(tester, digitarACidade: false);
 
-      // `passo` negativo: o aviso fica ACIMA de `Quando?`, e o ultimo toque
-      // de `preencherOMinimo` rolou a lista para baixo. `scrollUntilVisible`
-      // so procura num sentido.
+      // `passo` POSITIVO, para baixo. O aviso do lugar e desenhado DEPOIS do
+      // bloco de localizacao (`tela_registrar_achado.dart`, linhas 693-702),
+      // e nao acima de `Quando?` como esta isca supunha: a ordem do passo 2 e
+      // `Quando?` (linha 659), `Onde?` (linha 686), a captura (linha 693) e o
+      // aviso (linha 700). O ultimo toque de `preencherOMinimo` e em `Agora`,
+      // que fica no topo, entao daqui o aviso esta ABAIXO da dobra.
       await rolarAte(
         tester,
         find.text(TextosDoAchado.semRotuloDeArea),
-        passo: -120,
       );
       expect(
         find.text(TextosDoAchado.semRotuloDeArea),
@@ -426,11 +433,9 @@ void main() {
       await preencherOMinimo(tester);
 
       expect(find.text(TextosDoAchado.semRotuloDeArea), findsNothing);
-      await rolarAte(
-        tester,
-        find.text(TextosDoAchado.semCoordenada),
-        passo: -120,
-      );
+      // Para baixo, pelo mesmo motivo do caso de cima: o aviso do lugar vem
+      // DEPOIS da captura de localizacao no passo 2.
+      await rolarAte(tester, find.text(TextosDoAchado.semCoordenada));
       expect(
         find.text(TextosDoAchado.semCoordenada),
         findsOneWidget,

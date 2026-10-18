@@ -71,7 +71,25 @@ void main() {
 
     expect(find.text('Passo 2 de 3'), findsOne);
     expect(find.text('Uma foto de Nina'), findsOne);
-    expect(find.textContaining('reconhecer seu pet na rua'), findsOne);
+    // **O PARAGRAFO DE APOIO SAIU EM 18/10/2026**, por pedido literal do
+    // cliente: *"remova todos esses textos descritivos das paginas, textos
+    // de apoio, explicacao, isso esta deixando o app poluido, cheio de
+    // informacao e feio em relacao ao designer"*. O commit e o `b6b6f31`, e
+    // ele apagou as proprias constantes de `textos_do_cadastro.dart` (41
+    // linhas), atualizando os casos da `Rede` e deixando os do cadastro para
+    // tras -- e por isso estes ficaram pedindo frases que o produto nao
+    // escreve mais.
+    //
+    // O caso **virou do avesso e nao foi apagado**: a ausencia da frase e
+    // afirmada, e junto com ela o que resolve o problema que a frase
+    // resolvia. A decisao preservou de proposito erro, validacao, rotulo
+    // acessivel e a ultima linha de estado vazio -- e quem cobra isso e
+    // `test/telas/limpeza_nao_leva_o_protegido_test.dart`, criado no mesmo
+    // commit.
+    //
+    // Aqui a frase era o corpo de F1.4. O passo, o nome do pet e a saida --
+    // que e o que este caso mede -- continuam afirmados acima e abaixo.
+    expect(find.textContaining('reconhecer seu pet na rua'), findsNothing);
     expect(find.byTooltip('Voltar'), findsOne);
   });
 

@@ -144,8 +144,14 @@ describe('5 · Parceiros', () => {
     // e e o nome pelado que para agora.
     fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'casadobicholapa.com.br' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    // A frase DESCREVE o padrao em vez de exemplificar com um host, e isso e
+    // decisao registrada em `src/endereco/enderecos.ts` ("Sem exemplo com
+    // host: o site do parceiro nao tem um host de terceiro que caiba em
+    // configuracao"). `MENSAGEM_DO_SITE` e um mapa estatico de `code` para
+    // texto: nao ha de onde sair o host do parceiro -- e aqui o exemplo
+    // antigo trazia o de OUTRO parceiro, nao o que esta sendo cadastrado.
     expect(await screen.findByLabelText('Site do parceiro *')).toHaveAccessibleDescription(
-      'Escreva o endereço completo. Por exemplo: https://petcenteraurora.com.br',
+      'Escreva o endereço completo do site, começando com https://.',
     );
     // A barra final e aceita e descartada: e o que o navegador mostra ao
     // copiar um endereco, e recusa-la seria o rigor que travou o cliente hoje.

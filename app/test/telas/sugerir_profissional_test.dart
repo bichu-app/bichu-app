@@ -24,7 +24,9 @@ import 'dart:convert';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
+import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -83,31 +85,93 @@ Future<void> abrirPerto(
   await tester.pumpAndSettle();
 }
 
+/// O `TextField` do [BichuField] cujo rótulo é [rotulo].
+///
+/// Pelo `rotulo` DECLARADO no widget, e **não** por `widgetWithText`: o rótulo
+/// do `BichuField` é um `Text` IRMÃO do campo, dentro da mesma `Column`
+/// (`lib/widgets/bichu_field.dart`, linhas 125-133), e não um descendente
+/// dele. `find.widgetWithText(TextField, 'Nome do lugar')` acha ZERO widgets,
+/// e `enterText` sobre zero estoura `Bad state: No element` -- era isso que
+/// tirava o chão de nove casos deste arquivo. O mesmo cuidado está escrito em
+/// `test/telas/cep_nos_dois_formularios_test.dart`, linhas 140-147.
+Finder campoDoRotulo(String rotulo) => find.descendant(
+      of: find.byWidgetPredicate(
+        (widget) => widget is BichuField && widget.rotulo == rotulo,
+        description: 'BichuField de rótulo "$rotulo"',
+      ),
+      matching: find.byType(TextField),
+    );
+
+/// Abre um [SeletorDeLista] pelo rótulo e escolhe a opção pelo NOME.
+///
+/// Dois cuidados, e os dois foram medidos nesta rodada:
+///
+/// 1. o toque vai no `InkWell` do seletor, e **não** no `Text` do rótulo: o
+///    rótulo é um `Text` IRMÃO do controle (`lib/widgets/seletor_de_lista.dart`,
+///    linhas 93-121) e não abre nada. `tocar(find.text('O que eles fazem'))`
+///    tocava no rótulo, a folha não abria, `find.text('Clínica')` achava zero
+///    e `tocar` estourava `Bad state: No element`. O mesmo cuidado está
+///    escrito em `test/telas/cadastrar_identificacao_test.dart`, linhas 52-62,
+///    que passa;
+/// 2. a opção é procurada dentro do `ListTile` da folha, e a folha rola: o
+///    `ListView` só constrói o que cabe.
+Future<void> escolherNaLista(
+  WidgetTester tester,
+  String rotulo,
+  String opcao,
+) async {
+  // O corpo da tela e um `ListView` e o seletor pode estar abaixo da dobra:
+  // sem rolar primeiro, `find.text(rotulo)` acha zero e `tocar` estoura.
+  await rolarAte(tester, find.text(rotulo));
+  final seletor = find.ancestor(
+    of: find.text(rotulo),
+    matching: find.byType(SeletorDeLista),
+  );
+  await tocar(
+    tester,
+    find.descendant(of: seletor, matching: find.byType(InkWell)),
+  );
+  final item = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text(opcao),
+  );
+  if (item.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      item,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tocar(tester, item);
+}
+
 /// Preenche o mínimo que o contrato exige, sem enviar.
 Future<void> preencherOMinimo(WidgetTester tester) async {
+  await rolarAte(tester, campoDoRotulo('Nome do lugar'));
   await tester.enterText(
-    find.widgetWithText(TextField, 'Nome do lugar'),
+    campoDoRotulo('Nome do lugar'),
     'Clínica Veterinária Bichinho',
   );
   await tester.pumpAndSettle();
 
-  await tocar(tester, find.text('O que eles fazem'));
-  await tocar(tester, find.text('Clínica'));
+  await escolherNaLista(tester, 'O que eles fazem', 'Clínica');
 
-  await tester.enterText(
-    find.widgetWithText(TextField, 'Cidade'),
-    'Rio de Janeiro',
-  );
-  await tester.enterText(find.widgetWithText(TextField, 'UF'), 'RJ');
+  await rolarAte(tester, campoDoRotulo('Cidade'));
+  await tester.enterText(campoDoRotulo('Cidade'), 'Rio de Janeiro');
+  await rolarAte(tester, campoDoRotulo('UF'));
+  await tester.enterText(campoDoRotulo('UF'), 'RJ');
   await tester.pumpAndSettle();
 
-  await tocar(tester, find.text('Como entrar em contato'));
-  await tocar(tester, find.text('Telefone'));
+  await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
 
-  await tester.enterText(
-    find.widgetWithText(TextField, 'Telefone'),
-    '+5521988887777',
-  );
+  await rolarAte(tester, campoDoRotulo('Telefone'));
+  await tester.enterText(campoDoRotulo('Telefone'), '+5521988887777');
   await tester.pumpAndSettle();
 }
 
@@ -471,8 +535,7 @@ void main() {
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
       await abrirAPorta(tester);
-      await tocar(tester, find.text('Como entrar em contato'));
-      await tocar(tester, find.text('Site'));
+      await escolherNaLista(tester, 'Como entrar em contato', 'Site');
 
       expect(
         find.textContaining('endereço completo, com https://'),
@@ -489,10 +552,14 @@ void main() {
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
       await abrirAPorta(tester);
-      await tocar(tester, find.text('Como entrar em contato'));
-      await tocar(tester, find.text('Instagram'));
+      await escolherNaLista(tester, 'Como entrar em contato', 'Instagram');
 
-      expect(find.textContaining('o perfil, com @'), findsOneWidget);
+      // `perfil, com @`, e nao `o perfil, com @`: o texto da tela e
+      // `'O perfil, com @'` (`lib/api/modelos_diretorio.dart`, linha 498),
+      // com O MAIUSCULO de inicio de frase, e `textContaining` compara
+      // maiuscula de minuscula. O caso irmao deste grupo ja evita a primeira
+      // letra pelo mesmo motivo (`endereço completo, com https://`).
+      expect(find.textContaining('perfil, com @'), findsOneWidget);
     });
   });
 
@@ -575,6 +642,13 @@ void main() {
         find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
       );
 
+      // A faixa de erro e o SEGUNDO filho do `ListView` da tela
+      // (`sugerir_profissional.dart`, linhas 417-431), e o formulario ficou
+      // rolado para baixo depois de preenchido: o `ListView` nao mantem
+      // construido o que saiu da tela, e `find` nao enxerga o que nao existe.
+      // Rolar PARA CIMA e o que a pessoa faz -- e e para isso que o `passo`
+      // negativo de `rolarAte` existe (`ajuda_de_tela.dart`, linhas 711-730).
+      await rolarAte(tester, find.textContaining('Espere um pouco'), passo: -120);
       expect(
         find.textContaining('Espere um pouco'),
         findsOneWidget,

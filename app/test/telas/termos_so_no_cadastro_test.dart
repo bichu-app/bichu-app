@@ -142,8 +142,13 @@ void main() {
     testWidgets('logado', (tester) async {
       await abrirOPerfilCom(tester, deposito: depositoLogado());
 
+      // `textContaining`, e nao `text`: desde 18/10 o `Perfil` e so menus, e o
+      // e-mail deixou de ser uma linha propria -- ele virou a LINHA DE APOIO
+      // do item `Meus dados`, junto do estado do canal. Medido nesta arvore, o
+      // `Text` do item diz `marina@exemplo.com.br · E-mail confirmado`, e
+      // `find.text` compara a string inteira.
       expect(
-        find.text('marina@exemplo.com.br'),
+        find.textContaining('marina@exemplo.com.br'),
         findsOneWidget,
         reason: 'A aba Perfil logada nao abriu; a varredura abaixo estaria '
             'olhando outra tela e passaria sem ter conferido nada.',

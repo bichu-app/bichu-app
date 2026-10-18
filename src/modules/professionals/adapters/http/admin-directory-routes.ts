@@ -169,7 +169,7 @@ function filtrosAplicados(query: QueryDeEntradas): Record<string, string> {
 export const rotaDeRemoverAvaliacao = defineRoute({
   operationId: 'removeAdminDirectoryReview',
   method: 'delete',
-  path: '/directory/reviews/:reviewRef',
+  path: '/admin/directory/reviews/:reviewRef',
   effects: [],
   adminRoles: ['admin'],
   audit: { action: 'admin.directory_review.removed', resourceKind: 'professional_review' },

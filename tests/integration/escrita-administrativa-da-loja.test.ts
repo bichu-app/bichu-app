@@ -658,7 +658,16 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     const criado = await loja.criarItem(autor, {
       slug,
       partner_slug: parceiro.slug,
-      title: 'Racao com galeria',
+      // O SLUG VAI NO TITULO, e nao e enfeite: `vitrinePublica` busca por
+      // `?q=`, e `q` casa `i.title` e `i.summary` -- NUNCA `i.slug`
+      // (`kysely-store-repository.ts`, linhas 178-186). Este caso nasceu em
+      // 17/10 com o titulo `Racao com galeria`, nunca foi executado, e a busca
+      // devolvia ZERO itens: `publico` era `undefined`, e por isso
+      // `publico?.image_alt_text` era `undefined` em vez de `Terceira`. Nao
+      // havia campo ausente nenhum na resposta -- nao havia resposta. A
+      // convencao esta nos casos vizinhos que passam, como
+      // `galeria contra o banco` (`title: \`Racao ${slug}\``).
+      title: `Racao com galeria ${slug}`,
       summary: 'Tres imagens, em ordem.',
       category: 'food',
       species: ['dog'],
@@ -717,7 +726,14 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     const criado = await loja.criarItem(autor, {
       slug,
       partner_slug: parceiro.slug,
-      title: 'Racao sem descricao de imagem',
+      // O slug no titulo, pelo mesmo motivo do caso acima: `q` casa titulo e
+      // resumo, nao o slug. Sem ele a busca nao achava o item, `publico` era
+      // `undefined`, e o `undefined` era lido como "o servidor omitiu o campo
+      // em vez de mandar nulo" -- diagnostico errado. Com o item na mao, o que
+      // o caso mede e o que ele diz medir: `image_alt_text` sai `null`
+      // EXPLICITO, como `api/openapi.yaml` linha 11565 declara (`nullable:
+      // true`), e e esse nulo que faz o app cair no nome do produto.
+      title: `Racao sem descricao de imagem ${slug}`,
       summary: 'Uma imagem, sem texto alternativo.',
       category: 'food',
       species: ['dog'],
