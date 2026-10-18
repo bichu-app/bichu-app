@@ -85,3 +85,20 @@ export interface FotosDoAchadoDoWorker {
   marcarRecusada(uploadIntentId: string, motivo: string, agora: Date): Promise<void>;
   marcarAusente(uploadIntentId: string, agora: Date): Promise<void>;
 }
+
+/**
+ * AS DUAS ESPÉCIES DO ACHADO, e esta é a ÚNICA definição delas.
+ *
+ * Ela morava como `const` privada em `kysely-fotos-do-achado.ts`, e a varredura
+ * de envios vencidos (`varrer-envios-vencidos.ts`) não tinha como enxergá-la —
+ * foi assim que a varredura passou a apagar a foto do achado sem que nada
+ * acusasse. Duas listas dos mesmos dois valores em dois arquivos é o defeito
+ * esperando para acontecer de novo: quem acrescentar uma terceira espécie de
+ * foto de achado amanhã só vai lembrar de uma delas.
+ */
+export const ESPECIES_DO_ACHADO = ['found_report_photo', 'finder_photo'] as const;
+
+/** `true` quando a espécie é uma das duas do achado. */
+export function eDoAchado(especie: string): boolean {
+  return (ESPECIES_DO_ACHADO as readonly string[]).includes(especie);
+}

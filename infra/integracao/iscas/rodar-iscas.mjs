@@ -98,6 +98,78 @@ const ISCAS = [
     casoQueReprova: '1 — o byte sobe pelo caminho do produto e a derivada volta do balde público',
   },
   {
+    nome: 'janela-de-perda-da-foto-do-achado',
+    porque:
+      'INVERTE A ORDEM da higiene: apaga o original ANTES de gravar a chave da versao limpa. ' +
+      'As duas ordens terminam com a versao limpa no balde e a linha `pronta`, entao nenhum ' +
+      'teste de RESULTADO pega a diferenca -- so a ordem denuncia.\n' +
+      '  Invertida, a operacao PERDE a foto de quem achou um pet: com o original fora do balde ' +
+      'e a intencao ainda `pendente`, um processo que morra no meio faz a readiacao dar `head` ' +
+      'no original, achar nada, marcar `ausente` (estado FINAL, que nunca volta) e o aviso fica ' +
+      'sem foto nenhuma, para sempre e sem erro em lugar nenhum.\n' +
+      '  O cliente decidiu em 17/10/2026 que o original e apagado ("pode apagar o original e ' +
+      'guardar so o arquivo 2"), e a troca e segura por UMA razao e so por ela: a ordem.',
+    alvo: 'src/modules/media/application/higienizar-foto-do-achado.ts',
+    trecho: `  await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);`,
+    substituto: `  // ISCA EM EXECUCAO: a ordem esta INVERTIDA -- o original e apagado ANTES de a
+  // chave da versao limpa ser gravada. Se voce esta lendo isto num arquivo do
+  // repositorio, a isca nao foi restaurada e existe uma janela em que a foto do
+  // achado nao tem nenhuma copia alcancavel.
+  await deps.armazenamento.delete('privado', foto.originalKey);
+  await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);`,
+    casoQueReprova:
+      'a ordem é: sobe a limpa, GRAVA a chave, e SÓ ENTÃO apaga o original',
+  },
+  {
+    nome: 'expurgo-ignora-a-versao-limpa',
+    porque:
+      'faz `chavesDaConta` voltar a ler so `object_key`, sem `sanitized_key`, que era o estado ' +
+      'antes desta correcao. Com a decisao de 17/10/2026 a higiene APAGA o original assim que a ' +
+      'versao limpa esta gravada, entao `sanitized_key` e a UNICA copia que existe daquela foto ' +
+      '-- e o expurgo de conta estaria apagando a copia que a higiene ja apagou sozinha e ' +
+      'deixando no balde justamente a que sobrou.\n' +
+      '  O agravante e o NUMERO: `objects_deleted` vai para `privacy.account_purged`, e quem ' +
+      'audita o art. 18, VI le aquele numero como "arquivos que sairam". Ele sairia afirmando ' +
+      'mais do que aconteceu -- o mesmo defeito de leitura que o SEC-020 existe para corrigir.',
+    alvo: 'src/modules/media/adapters/persistence/kysely-media-repository.ts',
+    trecho: `        .select(['object_key', 'sanitized_key'])`,
+    substituto: `        // ISCA EM EXECUCAO: a coluna da versao limpa saiu da selecao. Se voce esta lendo isto
+        // num arquivo do repositorio, a isca nao foi restaurada e o expurgo de conta
+        // deixa no balde a unica copia que existe da foto do achado.
+        .select(['object_key'])`,
+    casoQueReprova: 'devolve a versão limpa JUNTO do original',
+  },
+  {
+    nome: 'varredura-apaga-foto-de-achado',
+    porque:
+      'remove o filtro por especie da consulta de envios vencidos, que e o estado em que a ' +
+      'varredura APAGAVA a foto de quem acha um pet cerca de dez minutos depois de ela subir. ' +
+      'Medido duas vezes com hora no balde de hml: subida 01:18:44 -> apagada 01:29:10; subida ' +
+      '01:33:35 -> apagada 01:44:10.\n' +
+      '  A causa nao era o filtro: era julgar pelo `confirmed_at` uma foto cujo ciclo de vida ' +
+      'nao e `confirmed_at`. A foto do achado NAO TEM operacao de confirmacao no contrato, de ' +
+      'proposito, entao ela era PERMANENTEMENTE elegivel -- nao "a desistida". O comentario do ' +
+      'codigo afirmava que "nao ha risco de apagar o original de uma foto viva", e aquilo valia ' +
+      'para a foto de pet e a imagem de catalogo, que tem confirmacao. O achado era o terceiro ' +
+      'caso, e ninguem o considerou.\n' +
+      '  Esta isca derruba os casos 1, 2, 4 e 5 e NAO derruba o caso 3, e a assimetria e ' +
+      'honesta: o caso 3 e o contrapeso, e exige que o envio ABANDONADO de foto de pet continue ' +
+      'sendo limpo. Uma correcao que apenas devolvesse lista vazia passaria 1 e 2 e reprovaria 3.',
+    alvo: 'src/modules/media/adapters/persistence/kysely-media-repository.ts',
+    // A linha do filtro JUNTO do comentario que a explica: a cadeia
+    // `.where('kind', 'not in', ...)` sozinha e curta e generica o bastante para
+    // casar de novo no dia em que outra consulta ganhar um filtro parecido, e a
+    // conferencia de casamento unico transforma essa escolha em garantia.
+    trecho: `        // AS DUAS ESPECIES DO ACHADO FICAM FORA. \`kind\` e NOT NULL, entao o
+        // \`not in\` nao tem a armadilha do NULL que faria a linha sumir calada.
+        .where('kind', 'not in', [...ESPECIES_DO_ACHADO])`,
+    substituto: `        // ISCA EM EXECUCAO: o filtro por especie SAIU. Se voce esta lendo isto num
+        // arquivo do repositorio, a isca nao foi restaurada e a varredura voltou a
+        // apagar a foto de quem acha um pet, dez minutos depois de ela subir.`,
+    casoQueReprova:
+      'CASO 1 — a foto do achado (COM conta) NÃO entra na lista de vencidas',
+  },
+  {
     nome: 'balde-privado-aberto',
     porque:
       'abre o balde privado a leitura anonima, que e o que o criterio 22 de BICHUS-87 ' +
