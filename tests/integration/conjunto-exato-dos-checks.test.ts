@@ -384,6 +384,41 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['pending', 'fulfilled', 'declined'],
   },
+  // ------------------------------------------------------------------
+  // A fila de revisao de `Perto` (ADR-0011 emenda 1, migracao 20261017000004).
+  // ------------------------------------------------------------------
+  //
+  // Sao TRES listas fechadas, e nao as onze restricoes da tabela: seis sao
+  // faixa de `char_length` e a classificacao do cabecalho nao as colhe, e as
+  // outras duas (`..._ref_formato` e `..._decisao_tem_instante`) mencionam
+  // literal e estao no segundo registro.
+  //
+  // `kind` repete, caractere a caractere, a lista de `professionals.kind` --
+  // de proposito, e a migracao diz por que: a sugestao nao pode descrever uma
+  // atividade que o diretorio nao sabe publicar. Sem valor para ONG nos dois
+  // lugares, porque acrescenta-lo DECIDIRIA que ONG e um tipo de profissional,
+  // que e justamente a decisao 9.1, ainda aberta.
+  'public.directory_suggestions.directory_suggestions_atividade_conhecida': {
+    coluna: 'kind',
+    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
+  },
+  // O tipo do contato PUBLICO da entidade, DECLARADO e nunca adivinhado: um
+  // palpite por heuristica aceitaria telefone no campo de site e vice-versa.
+  // Nao ha `email` nem `whatsapp` -- um quarto valor entraria junto com o
+  // detector que conferisse o formato dele.
+  'public.directory_suggestions.directory_suggestions_contato_conhecido': {
+    coluna: 'contact_kind',
+    valores: ['phone', 'website', 'instagram'],
+  },
+  // O estado da REVISAO, e a coluna nao se chama `state` porque `state` nesta
+  // mesma tabela e a UF. `approved` NAO quer dizer que a entrada esta no ar:
+  // quer dizer que a revisao aceitou seguir com o convite do ADR-0011. Quem
+  // publica continua sendo o painel, por `professionals` -- e e por isso que
+  // `professionals.source` nao tem `community`, logo abaixo.
+  'public.directory_suggestions.directory_suggestions_revisao_conhecida': {
+    coluna: 'review_status',
+    valores: ['pending', 'approved', 'declined'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -882,6 +917,39 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text)))",
   'public.professionals.professionals_titularidade_tem_marco':
     "CHECK ((((claim_status = 'unclaimed'::text) AND (claimed_at IS NULL) AND (claimed_by_user_id IS NULL)) OR ((claim_status <> 'unclaimed'::text) AND (claimed_at IS NOT NULL))))",
+  // ------------------------------------------------------------------
+  // A fila de revisao de `Perto` (migracao 20261017000004), e a versao da
+  // entrada do diretorio (20261017000011).
+  // ------------------------------------------------------------------
+  //
+  // **A `professionals_versao_positiva` da `20261017000011` nao entra em
+  // registro nenhum**, e a ausencia e a decisao -- a mesma que mantem fora o
+  // `network_events_versao_positiva` de onde a migracao a copiou: faixa
+  // numerica (`CHECK ((version > 0))`) nao menciona literal de texto, a
+  // classificacao do cabecalho nao a colhe, e declara-la aqui faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  //
+  // Os seis CHECKs de `char_length` da `20261017000004`
+  // (`..._nome_tamanho`, `..._cidade_tamanho`, `..._uf_tamanho`,
+  // `..._bairro_tamanho`, `..._contato_tamanho` e `..._recado_tamanho`) ficam
+  // fora pela mesma regra. As tres listas fechadas da tabela estao em
+  // LISTAS_FECHADAS; os DOIS que mencionam literal sao os de baixo.
+  //
+  // O endereco publico NAO e desta tabela: a sugestao nao tem `slug`, e isso e
+  // a ausencia 3 da migracao -- endereco publico e do painel. Este `ref` e o do
+  // RECIBO: 128 bits em base64url, mesma forma de
+  // `network_event_join_requests.ref` e pela mesma razao do ADR-0010 item 6 --
+  // um UUIDv7 na resposta carregaria o instante de criacao dentro e entregaria
+  // a taxa de criacao de registros da plataforma.
+  'public.directory_suggestions.directory_suggestions_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // Decidida tem instante, e pendente NAO tem: a igualdade cobra os dois
+  // sentidos, e o segundo e o que ninguem olha -- pendente carimbada e estado
+  // que nenhuma tela da fila sabe desenhar. Mesma forma de
+  // `collar_tag_requests_decidido_tem_instante`, escrita como igualdade porque
+  // aqui o estado pendente e UM valor so.
+  'public.directory_suggestions.directory_suggestions_decisao_tem_instante':
+    "CHECK (((review_status = 'pending'::text) = (decided_at IS NULL)))",
   // BICHUS-66. `cancellation_reason` e lista fechada, mas NAO e da forma
   // simples: a coluna e anulavel, entao a restricao e `IS NULL OR ... IN (...)`
   // e o catalogo a escreve como uma disjuncao. Ela cai aqui, onde a definicao
