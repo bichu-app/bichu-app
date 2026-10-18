@@ -1,7 +1,37 @@
 /**
  * A MODERACAO DE PALAVRAS dos textos que a comunidade escreve sobre
  * profissionais: a **indicacao** (`suggestDirectoryEntry`) e a **recomendacao**
- * com nota e texto.
+ * com nota e texto (`putMyDirectoryEntryReview`).
+ *
+ * ## ONDE ESTA FUNCAO ESTA LIGADA HOJE, e a lista e a verdade e nao a intencao
+ *
+ * Esta secao existe porque este cabecalho **mentiu por um dia**. Ele afirmava
+ * cobrir a indicacao e a recomendacao enquanto a chamada existia so na
+ * indicacao: a recomendacao foi escrita em paralelo, a ligacao dela ficou para
+ * depois e a prosa nao foi corrigida. Quem leu o cabecalho acreditou, que e
+ * exatamente o modo de falhar que o resto deste arquivo tenta evitar. **Se
+ * voce ligar esta funcao em mais um campo, acrescente a linha aqui na mesma
+ * edicao.**
+ *
+ * - `modules/professionals/domain/sugestao-do-diretorio.ts` --
+ *   `errosDaSugestao`: `display_name` e `note` da INDICACAO.
+ * - `modules/professionals/domain/avaliacao-do-local.ts` --
+ *   `errosDeModeracaoDaAvaliacao`, chamada pela borda em
+ *   `adapters/http/directory-routes.ts`: o `body` da RECOMENDACAO.
+ *
+ * **E nenhum outro campo do produto**, e a ausencia nao e esquecimento: o
+ * pedido do cliente de 18/10/2026 falou dos campos de indicacao e de
+ * recomendacao de profissionais, e e so onde ela esta. Nome de pet, descricao
+ * de achado, nome e descricao de evento, observacao de plaquinha e nome de
+ * exibicao do usuario **nao passam por aqui**.
+ *
+ * ## A ORDEM, nas duas, e a mesma
+ *
+ * A trava de **canal de contato verificado** (`409
+ * `contact-channel-unverified`) roda **antes** da moderacao nas duas
+ * operacoes: na indicacao dentro de
+ * `application/sugestao-do-diretorio.ts`, na recomendacao na borda. Quem nao
+ * confirmou o e-mail ouve o que de fato falta, e nao um `400` sobre o texto.
  *
  * Pedido do cliente, 18/10/2026: os campos de indicacao e recomendacao de
  * profissionais nao podem aceitar xingamento, discriminacao "e tudo que possa
@@ -77,6 +107,9 @@
  *
  * Em cada campo de texto livre, concatene o resultado aos erros que a escrita
  * ja devolve: `...errosDeModeracao('body', corpo.body)`.
+ *
+ * **E acrescente o campo na lista do topo**, na mesma edicao. A lista e o que
+ * o proximo leitor vai acreditar.
  */
 import type { ProblemFieldError } from '../http/problem.js';
 import { EXCECOES, PALAVRAS_RECUSADAS } from './lista-de-moderacao.js';

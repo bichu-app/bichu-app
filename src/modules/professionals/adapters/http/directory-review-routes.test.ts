@@ -7,13 +7,13 @@
  * e gancho e nao `if`) e a **serializacao real**, que e onde um `id` interno
  * vazaria.
  *
- * ## ATENCAO: ESTAS ISCAS FORAM ESCRITAS E **NAO FORAM RODADAS**
+ * ## ESTADO DAS ISCAS: RODADAS
  *
- * O cliente proibiu rodar suite unitaria e de integracao nesta rodada
- * (18/10/2026), e isto esta declarado aqui e no relatorio em vez de ser
- * omitido. **Nenhuma linha deste arquivo e prova de nada ainda**: ela e uma
- * afirmacao escrita, com o alvo nomeado, para a rodada em que a suite voltar a
- * rodar.
+ * Elas nasceram sem ser rodadas -- o cliente havia suspendido a suite na
+ * rodada de 18/10/2026, e o cabecalho dizia isso. **A suspensao acabou e a
+ * suite rodou**: as iscas (a) a (d) e as de moderacao (m1) a (m5) passaram na
+ * unitaria do backend. Este paragrafo e atualizado junto com o estado, e nao
+ * depois dele.
  *
  * As quatro iscas que o pedido exige, com **o que desligar** para provar cada
  * uma. Quem for rodar: desligue UMA por vez, confira o disco com
@@ -26,6 +26,11 @@
  * | (b) quem nao confirmou e-mail NAO avalia | devolver sempre `true` em vez de `'sem-canal-verificado'` | o mesmo metodo, logo apos `TEM_CANAL_VERIFICADO` |
  * | (c) avaliacao de conta desabilitada NAO e listada | tirar `conta_habilitada(...)` de `AVALIACAO_VISIVEL` | `kysely-directory-repository.ts`, a constante |
  * | (d) nota fora de 1--5 e recusada | tirar o ramo `out_of_range` de `validarEntradaDaAvaliacao` | `avaliacao-do-local.ts` |
+ * | (m1) xingamento e recusado na escrita | tirar `errosDeModeracaoDaAvaliacao` do manipulador | `directory-routes.ts`, `rotaDeGravarMinhaAvaliacao` |
+ * | (m2) `Clinica Pinto` e `cadela` passam | acrescentar uma delas a `PALAVRAS_RECUSADAS` | `lista-de-moderacao.ts` |
+ * | (m3) a palavra nao vai para resposta nem log | devolver a palavra em `message`, ou logar o corpo | `moderacao.ts` / o manipulador |
+ * | (m4) avaliacao limpa e aceita | fazer `temPalavraRecusada` devolver sempre `true` | `moderacao.ts` |
+ * | (m5) `409` do canal vence o `400` da moderacao | mover a moderacao para antes do `if` do canal | `directory-routes.ts` |
  *
  * **(c) e a unica que este arquivo NAO consegue provar sozinho**, e a limitacao
  * precisa estar escrita: `conta_habilitada` e uma funcao do BANCO, e o dobre em
@@ -50,6 +55,10 @@ import {
   type EntradaDaAvaliacao,
   type PontuacaoDoLocal,
 } from '../../domain/avaliacao-do-local.js';
+import {
+  CODIGO_DA_MODERACAO,
+  MENSAGEM_DA_MODERACAO,
+} from '../../../../shared/texto/moderacao.js';
 import type {
   AvaliacaoGravada,
   DirectoryRepository,
@@ -180,6 +189,12 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
       });
     },
 
+    // O MESMO `temCanal` que `gravarMinhaAvaliacao` usa: o dobre nao pode ter
+    // duas opinioes sobre a mesma conta, senao a ordem entre `409` e `400`
+    // passaria a depender de qual metodo foi chamado.
+    temCanalVerificadoParaAvaliar: (chamador: UserId): Promise<boolean> =>
+      Promise.resolve(temCanal(chamador)),
+
     apagarMinhaAvaliacao: (slug: string, chamador: UserId): Promise<boolean> => {
       if (slug !== SLUG) return Promise.resolve(false);
       avaliacoes.delete(chamador);
@@ -211,12 +226,17 @@ const clock: Clock = { now: () => AGORA as Instant };
  * confere. O que falta e um caso que o exercite, e isso esta na lista do fim do
  * arquivo.
  */
-function servidor(cenario: Cenario, espiao: Espiao): RegistradorDeRotas {
+function servidor(cenario: Cenario, espiao: Espiao, log?: string[]): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
     teto: tetoDeTeste(criarContadorDesligado()),
     bodyLimitBytes: 1_048_576,
+    // O LOG CAPTURADO, quando a isca precisa afirmar o que NAO foi escrito
+    // nele. `level: 'debug'` fora de producao, entao o que passar por aqui e
+    // tudo o que a rota produziu -- e a unica forma honesta de medir a
+    // ausencia da palavra no log.
+    ...(log === undefined ? {} : { destinoDoLog: { write: (linha: string) => void log.push(linha) } }),
   });
   registrarRotasDoDiretorio(app, {
     diretorio: repositorio(cenario, espiao),
@@ -706,6 +726,166 @@ void describe('a avaliacao de um local do diretorio', () => {
       assert.equal(obj(r.corpo, 'rating')['count'], 0);
       const histograma = obj(obj(r.corpo, 'rating'), 'histogram');
       assert.deepEqual(Object.keys(histograma).sort(), ['1', '2', '3', '4', '5']);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // ====================================================================
+  // A MODERACAO DE PALAVRAS NA AVALIACAO (18/10/2026)
+  //
+  // O achado que originou estas iscas: `errosDeModeracao` existia, o cabecalho
+  // de `shared/texto/moderacao.ts` afirmava cobrir a indicacao E a
+  // recomendacao, e **a recomendacao publicava sem filtro nenhum**. As iscas
+  // abaixo medem a LIGACAO, e nao a funcao -- a funcao ja tem as suas em
+  // `shared/texto/moderacao.test.ts`.
+  //
+  // **Desligamento (prova de que elas medem algo):** tire
+  // `errosDeModeracaoDaAvaliacao` do manipulador de `rotaDeGravarMinhaAvaliacao`
+  // em `directory-routes.ts` e (m1), (m3) e (m5) reprovam; (m2) e (m4)
+  // continuam passando, porque sao o contrapeso.
+  // ====================================================================
+
+  void it('ISCA (m1): avaliacao com xingamento e RECUSADA, chamando a aplicacao direto', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    const app = servidor({}, espiao);
+    try {
+      // **Pela APLICACAO e nao pela tela**, e e isso que a isca prova: um aviso
+      // de formulario no app nao protege nada, porque esta rota atende chamada
+      // direta. `app.inject` e o `curl` desta suite.
+      const r = await pedir(app, {
+        method: 'PUT',
+        url: `/directory/entries/${SLUG}/reviews/me`,
+        payload: { rating: 1, body: 'o atendente e um babaca, nao voltem' },
+      });
+
+      assert.equal(r.status, 400, 'recusada na escrita, nao depois');
+      const erros = r.corpo['errors'] as { field: string; code: string }[];
+      assert.equal(erros.length, 1);
+      assert.equal(erros[0]?.field, 'body');
+      // O MESMO `code` da indicacao, e nao um codigo novo: o app ja sabe
+      // tratar este.
+      assert.equal(erros[0]?.code, CODIGO_DA_MODERACAO);
+
+      // E NADA foi gravado. A avaliacao aparece na hora: se ela fosse gravada
+      // e recusada depois, o texto ja teria aparecido para outra pessoa.
+      assert.equal(espiao.gravacoes.length, 0, 'nada chegou ao repositorio');
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA (m2): "Clinica Pinto" e "cadela" PASSAM -- o falso positivo e o defeito', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    const app = servidor({}, espiao);
+    try {
+      // O autor da lista tirou dela 30+ palavras justamente por colidirem com
+      // nome proprio e com vocabulario veterinario. Esta isca e a que protege
+      // essa decisao: se um dia alguem "reforcar" a lista, ela reprova aqui, e
+      // nao na pagina de um negocio real que parou de receber avaliacao.
+      const r = await pedir(app, {
+        method: 'PUT',
+        url: `/directory/entries/${SLUG}/reviews/me`,
+        payload: {
+          rating: 5,
+          body: 'Levei minha cadela na Clinica Pinto e o cavalo crioulo do vizinho tambem. Otima reputacao.',
+        },
+      });
+
+      assert.equal(r.status, 200, 'nome proprio e termo do dominio NAO sao ofensa');
+      assert.equal(espiao.gravacoes.length, 1, 'foi gravada');
+      assert.equal(
+        espiao.gravacoes[0]?.entrada.texto,
+        'Levei minha cadela na Clinica Pinto e o cavalo crioulo do vizinho tambem. Otima reputacao.',
+        'chegou inteira ao repositorio, sem corte e sem mascara',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA (m3): a palavra recusada NAO aparece na resposta nem no log', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    const log: string[] = [];
+    const app = servidor({}, espiao, log);
+    try {
+      const PALAVRA = 'babaca';
+      const r = await pedir(app, {
+        method: 'PUT',
+        url: `/directory/entries/${SLUG}/reviews/me`,
+        payload: { rating: 1, body: `que ${PALAVRA}, nunca mais` },
+      });
+      assert.equal(r.status, 400);
+
+      // 1. NAO ESTA NA RESPOSTA. Devolve-la transformaria o 400 em oraculo:
+      // quem quer descobrir a lista manda uma palavra por requisicao e le a
+      // resposta.
+      assert.ok(
+        !r.bruto.toLowerCase().includes(PALAVRA),
+        'a palavra recusada vazou no corpo da resposta',
+      );
+      // A mensagem e a canonica, inteira, vinda do modulo -- a borda nao a
+      // reescreve nem a enriquece com o texto recusado.
+      const erros = r.corpo['errors'] as { message: string }[];
+      assert.equal(erros[0]?.message, MENSAGEM_DA_MODERACAO);
+
+      // 2. NAO ESTA NO LOG, e nem o texto que a continha. O corpo da
+      // requisicao nao e logado por esta rota, e esta linha e o que impede
+      // alguem de acrescentar um `request.log` "para depurar".
+      const tudo = log.join('\n').toLowerCase();
+      assert.ok(tudo.length > 0, 'o log foi capturado de verdade (senao a isca nao mede nada)');
+      assert.ok(!tudo.includes(PALAVRA), 'a palavra recusada vazou no log');
+      assert.ok(!tudo.includes('nunca mais'), 'o texto recusado vazou no log');
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA (m4): CONTRAPESO -- avaliacao limpa com critica negativa e aceita e gravada', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    const app = servidor({}, espiao);
+    try {
+      // "critica negativa pode, ofensa nao" -- e a propria mensagem da recusa
+      // que promete isso. Sem esta isca, um filtro que recusasse TUDO passaria
+      // por (m1) e (m3) e pareceria certo.
+      const r = await pedir(app, {
+        method: 'PUT',
+        url: `/directory/entries/${SLUG}/reviews/me`,
+        payload: { rating: 1, body: 'Demorou duas horas, cobraram caro e nao resolveram. Nao recomendo.' },
+      });
+
+      assert.equal(r.status, 200);
+      assert.equal(r.corpo['created'], true);
+      assert.equal(espiao.gravacoes.length, 1, 'gravada de verdade');
+      assert.equal(obj(r.corpo, 'review')['rating'], 1, 'nota baixa nao e ofensa');
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA (m5): a trava de e-mail confirmado vem ANTES da moderacao -- 409 e nao 400', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    // Conta SEM e-mail confirmado E texto com xingamento: os dois erros de uma
+    // vez. A ordem decide qual a pessoa ve.
+    const app = servidor({ comCanalVerificado: [] }, espiao);
+    try {
+      const r = await pedir(app, {
+        method: 'PUT',
+        url: `/directory/entries/${SLUG}/reviews/me`,
+        payload: { rating: 1, body: 'o atendente e um babaca' },
+      });
+
+      // 409 E NAO 400, e e a MESMA ordem da indicacao
+      // (`application/sugestao-do-diretorio.ts`: o `if` do canal vem antes de
+      // `errosDaSugestao`). Duas ordens para a mesma regra do cliente fariam a
+      // tela decidir por dois caminhos onde ha um -- e mandariam a pessoa
+      // reescrever um texto que ela nao pode publicar de todo jeito.
+      assert.equal(r.status, 409, 'o canal verificado vence a moderacao');
+      assert.equal(r.corpo['type'], `${BASE_DE_PROBLEMA}/contact-channel-unverified`);
+      assert.equal(r.corpo['next_action'], 'verify_email');
+      // E a palavra continua nao vazando, nem neste caminho.
+      assert.ok(!r.bruto.toLowerCase().includes('babaca'));
+      assert.equal(espiao.gravacoes.length, 0);
     } finally {
       await app.close();
     }

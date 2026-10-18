@@ -104,6 +104,9 @@ function repositorio(cenario: Cenario): DirectoryRepository {
     gravarMinhaAvaliacao: () => {
       throw new Error('gravarMinhaAvaliacao nao e exercitado por este arquivo');
     },
+    temCanalVerificadoParaAvaliar: () => {
+      throw new Error('temCanalVerificadoParaAvaliar nao e exercitado por este arquivo');
+    },
     apagarMinhaAvaliacao: () => {
       throw new Error('apagarMinhaAvaliacao nao e exercitado por este arquivo');
     },
