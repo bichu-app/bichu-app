@@ -805,6 +805,18 @@ export interface ConversationsTable {
   /** Invisível aos dois lados de propósito. Ver a migração. */
   held_for_review_at: Date | null;
   held_reason: MotivoDeRetencao | null;
+  /**
+   * A REMOCAO LOGICA pela fila de moderacao do painel (`20261018000009`).
+   *
+   * Nao e `blocked_at` (acao de um dos dois lados, BICHUS-40), nao e
+   * `closed_at` (encerramento) e nao e `held_for_review_at` (retencao
+   * automatica). `conversation_messages` continua inteira: o que estas duas
+   * colunas fazem e tirar a conversa das LEITURAS dos dois lados, nas quatro
+   * consultas de `kysely-conversation-repository.ts`.
+   */
+  moderation_removed_at: Date | null;
+  /** O motivo, obrigatorio quando ha remocao por `CHECK`. **Nunca sai para o aplicativo.** */
+  moderation_reason: string | null;
 }
 
 /**
@@ -824,6 +836,19 @@ export interface ConversationReportsTable {
   created_at: Generated<Date>;
   last_reported_at: Generated<Date>;
   resolved_at: Date | null;
+  /**
+   * O QUE o administrador decidiu (`20261018000009`). Nulo enquanto na fila.
+   *
+   * Sem esta coluna, denuncia descartada e denuncia cujo conteudo foi removido
+   * ficariam indistinguiveis -- as duas com `resolved_at` preenchido.
+   *
+   * Resolver LIBERA o par (conversa, papel) para uma denuncia nova, pelo
+   * indice unico PARCIAL desta tabela, e isso e legitimo aqui: a conversa
+   * continua, e um abuso novo depois da decisao e item de fila novo.
+   */
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao. Nao publicado, e nao chega a nenhum dos dois lados. */
+  resolution_reason: string | null;
 }
 
 /** BICHUS-43. A mensagem, com o texto **já redigido**. */
@@ -999,6 +1024,64 @@ export interface ProfessionalReviewReportsTable {
   last_reported_at: Generated<Date>;
   /** Escrito por quem modera. Nulo e "na fila". */
   resolved_at: Date | null;
+  /** O QUE o administrador decidiu (`20261018000009`). Nulo enquanto na fila. */
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao. Nao publicado, e nao chega a quem denunciou. */
+  resolution_reason: string | null;
+}
+
+/**
+ * **A DECISAO da fila de moderacao, nas duas tabelas de denuncia.**
+ *
+ * Dois valores e nao tres: a fila tem um estado de espera (`resolved_at IS
+ * NULL`) e dois de saida. Um terceiro valor convidaria a primeira pessoa com
+ * pressa a inventar um fluxo que ninguem desenhou.
+ */
+export type DecisaoDaModeracao = 'content_removed' | 'dismissed';
+
+/**
+ * A VISAO `fila_de_moderacao` (`20261018000009`): UMA LINHA POR DENUNCIA,
+ * juntando as origens que existem.
+ *
+ * Hoje duas pernas: `review` (denuncia de avaliacao do `Perto`) e
+ * `conversation` (denuncia de conversa mediada, que ate 18/10/2026 era gravada
+ * e **nunca lida por ninguem**). Denuncia de PERFIL e de FOTO vem na frente de
+ * comunidade e custa uma perna de `UNION ALL` na visao, um valor de `enum` no
+ * contrato e um rotulo na tela -- **nenhuma linha daqui**, porque a consulta le
+ * a visao e nao as tabelas. Desenho DECLARADO, nao construido.
+ *
+ * `reporter_active` e BOOLEANO de proposito: nenhuma coluna de autoria
+ * atravessa a visao. Ele vem das funcoes
+ * `denuncia_de_*_com_denunciante_ativo(uuid)`, que delegam a
+ * `conta_habilitada(uuid)`.
+ *
+ * `target_body` e `target_rating` sao NULOS na perna da conversa, e a
+ * assimetria e escolhida: a avaliacao e conteudo PUBLICADO, e quem modera
+ * precisa ler o que todo mundo le; a conversa e privada entre duas pessoas, e
+ * nada neste produto autoriza o administrador a le-la.
+ */
+export interface FilaDeModeracaoView {
+  origin: string;
+  /** `professional_reviews.ref` na perna da avaliacao; `conversations.id` na da conversa. */
+  target_ref: string;
+  report_id: string;
+  reason: string;
+  /** O texto que o denunciante escreveu PARA QUEM MODERA. */
+  detail: string | null;
+  repeat_count: number;
+  created_at: Date;
+  last_reported_at: Date;
+  resolved_at: Date | null;
+  resolution: DecisaoDaModeracao | null;
+  resolution_reason: string | null;
+  /** Falso tambem quando a denuncia nao existe: a rota responde 404 e nunca 403 (ADR-0021). */
+  reporter_active: boolean;
+  target_removed: boolean;
+  target_rating: number | null;
+  /** O conteudo denunciado. **Nulo na conversa**, e isso e desenho e nao falta. */
+  target_body: string | null;
+  /** O nome do local na perna da avaliacao; o nome do pet na da conversa. */
+  target_subject: string;
 }
 
 export interface ProfessionalsTable {
@@ -1695,6 +1778,8 @@ export interface Database {
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
   collar_tag_requests: CollarTagRequestsTable;
+  /** VISAO, e nao tabela. Somente leitura: nada escreve aqui (`20261018000009`). */
+  fila_de_moderacao: FilaDeModeracaoView;
   'audit.events': AuditEventsTable;
 }
 

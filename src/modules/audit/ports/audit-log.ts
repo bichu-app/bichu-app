@@ -313,6 +313,33 @@ export const ACOES_ADMINISTRATIVAS = [
   // encomenda e nao dado pessoal, e e justamente o campo cuja troca alguem vai
   // querer auditar depois.
   'admin.collar_tag_request.delivery_updated',
+  // 18/10/2026: a FILA DE MODERACAO do painel. Decisao do cliente, literal:
+  // "quem modera vai ser o administrador, deve ir para a pagina de backoffice".
+  //
+  // `resource_kind` e `moderation_report` nas duas, e nao `professional_review`
+  // nem `conversation`: o alvo da DECISAO e o item de fila, e a ORIGEM vai em
+  // `metadata.origin`. Uma investigacao que procurasse por `moderation_report`
+  // acha as duas acoes das duas origens numa consulta so, que e a pergunta que
+  // se faz de uma fila de moderacao.
+  //
+  // **As duas sao obrigatorias, e `dismissed` nao e menos importante.**
+  // Descartar tambem e decisao sobre o trabalho de outra pessoa -- alguem
+  // denunciou e um administrador disse que nao procedia --, e sem rastro
+  // ninguem responde quem decidiu o que. `after.reason` carrega o motivo, que
+  // e texto do ADMINISTRADOR sobre o proprio trabalho; `before`/`after`
+  // **nunca** carregam o conteudo denunciado nem o relato de quem denunciou
+  // (docs/04-seguranca.md 9, e a trilha sobrevive a exclusao da conta).
+  //
+  // Nao ha `.listed` nem `.read`: `x-audit` em `GET` administrativo e so da
+  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
+  // esta fila nao le pessoa -- nem o denunciante nem o denunciado aparecem em
+  // campo nenhum da resposta. Mesma ausencia das duas outras filas do painel.
+  //
+  // **Nao ha acao de conta aqui.** Desabilitar conta e outro poder
+  // (`admin.account.disabled`, `privacy.account_deletion_requested`) e nao
+  // entra nesta fila.
+  'admin.moderation_report.content_removed',
+  'admin.moderation_report.dismissed',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

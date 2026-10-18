@@ -4458,6 +4458,273 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/moderation/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de moderacao -- o que a comunidade denunciou
+         * @description So existe no painel: nenhuma operacao do aplicativo lista denuncia de
+         *     ninguem, nem como contagem. Sem filtro, vem a fila ABERTA, da denuncia
+         *     mais antiga para a mais nova -- a unica ordem justa numa fila de
+         *     trabalho humano, e e a ordem dos indices parciais das duas tabelas de
+         *     denuncia.
+         *
+         *     ## O ITEM E O ALVO, E NAO A DENUNCIA
+         *
+         *     Tres pessoas denunciando a mesma avaliacao viram UM item, com
+         *     `report_count: 3`. Se o item fosse a denuncia, quem modera decidiria a
+         *     mesma coisa tres vezes sem nunca ver o numero que importa --
+         *     **`repeat_total` e o sinal que separa briga de problema real**: uma
+         *     briga de vizinho da 1 e 1, um problema real da 7 e 11.
+         *
+         *     Consequencia: as duas acoes resolvem TODAS as denuncias abertas daquele
+         *     alvo de uma vez. Nao existe "esta denuncia sim, aquela nao" sobre o
+         *     mesmo conteudo -- ele ou sai do ar ou fica.
+         *
+         *     ## AS ORIGENS: duas construidas
+         *
+         *     `review` (denuncia de avaliacao do `Perto`) e `conversation` (denuncia
+         *     de conversa mediada). **Denuncia de PERFIL e de FOTO vem na frente de
+         *     comunidade e NAO existe**: nao ha tabela de nenhuma das duas neste
+         *     repositorio, e `ModerationOrigin` nao as declara de proposito -- um
+         *     valor de `enum` sem tabela por tras faria o contrato prometer o que
+         *     nenhuma consulta devolve. O que esta pronto para elas e o caminho: a
+         *     visao `fila_de_moderacao` (migracao `20261018000009`) recebe cada
+         *     origem como uma perna de `UNION ALL`, e nenhuma consulta de `src/` muda.
+         *
+         *     ## `pending_total` E A CONTAGEM DO AVISO DO MENU
+         *
+         *     Ela IGNORA o filtro de proposito: o numero que o item da navegacao
+         *     mostra responde "quanto trabalho esta esperando", nao "quantas linhas
+         *     esta pagina trouxe". Passa pelo MESMO filtro de conta desabilitada da
+         *     listagem e da leitura -- **os tres lugares**, porque filtrar em um so
+         *     faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito que a
+         *     fila da Rede ja produziu.
+         *
+         *     ## NADA DO DENUNCIANTE E NADA DO DENUNCIADO
+         *
+         *     Em campo nenhum: nem nome, nem UUID, nem a existencia de uma conta por
+         *     tras. Os dois sao pessoas que nao pediram para estar numa tela de
+         *     administrador, e a decisao e sobre o CONTEUDO.
+         */
+        get: operations["listAdminModerationReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um item da fila de moderacao
+         * @description O item em qualquer estado, para a tela de decisao poder mostrar o
+         *     conteudo e o relato inteiros antes de alguem decidir -- e para poder
+         *     reabrir um item ja decidido e LER O MOTIVO da decisao, que e o que
+         *     impede o proximo moderador de refazer o juizo que alguem ja fez.
+         *
+         *     **Nao ha `ETag`**, e a ausencia e a mesma das outras filas do painel: a
+         *     decisao nao e uma edicao campo a campo, e decidir o que ja foi decidido
+         *     responde `400` com `code: report_already_resolved`.
+         *
+         *     Alvo que nao existe, alvo sem denuncia nenhuma e denuncia de **conta
+         *     desabilitada** respondem o mesmo `404`, e o predicado esta no `WHERE` e
+         *     nao num `if` depois da leitura (ADR-0021): para esta rota ela nao
+         *     existe, e nunca `403`.
+         */
+        get: operations["getAdminModerationReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}/removal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove o conteudo denunciado do ar, com o motivo escrito
+         * @description **EXCLUSAO LOGICA, e nunca `DELETE`.** E por isso que esta operacao e
+         *     `POST` em sub-recurso de acao e nao `DELETE`: um `DELETE` diria o
+         *     contrario do que ela faz.
+         *
+         *     O que acontece, numa transacao, com a trilha como ultimo passo:
+         *
+         *     1. o conteudo sai do ar -- `professional_reviews.status = 'removed'` na
+         *        origem `review`, `conversations.moderation_removed_at` na origem
+         *        `conversation` --, com o motivo gravado na propria linha do
+         *        conteudo, por `CHECK` cruzado que nao deixa um sem o outro;
+         *     2. **todas** as denuncias abertas daquele alvo recebem
+         *        `resolution: content_removed` e o motivo. A linha da denuncia FICA.
+         *
+         *     A ordem e esta de proposito: marcar a denuncia antes de esconder o
+         *     conteudo deixaria, numa falha no meio, uma denuncia resolvida sobre
+         *     conteudo que continua no ar -- e a fila nao mostraria mais o item para
+         *     ninguem consertar.
+         *
+         *     ## O MOTIVO E OBRIGATORIO, e e a diferenca entre moderacao e arbitrio
+         *
+         *     De 3 a 500 simbolos, o mesmo par do `CHECK` do banco. Ele vai para a
+         *     trilha e para a linha do conteudo. **Nao e publicado, nao chega a quem
+         *     denunciou e nao chega a quem foi denunciado.**
+         *
+         *     ## NINGUEM E AVISADO, e isso e decisao de desenho
+         *
+         *     O denunciante NAO recebe resultado e o denunciado NAO e avisado --
+         *     avisar o denunciado e retaliacao. Nenhuma notificacao e enfileirada por
+         *     esta operacao, em nenhum canal.
+         *
+         *     ## NENHUMA ACAO SOBRE A CONTA DA PESSOA
+         *
+         *     Esta operacao nao desabilita, nao suspende e nao marca conta nenhuma.
+         *     Desabilitar conta e outro poder, com outro evento de trilha, e nao
+         *     entra nesta fila.
+         *
+         *     ## O que responde o que
+         *
+         *     - conteudo JA fora do ar: `404`. Nao `409`: o motivo da primeira
+         *       remocao e de quem auditar, e sobrescreve-lo apagaria a decisao que
+         *       valeu. Mesma escolha de `removeAdminDirectoryReview`;
+         *     - denuncia ja resolvida: `400`, `code: report_already_resolved`;
+         *     - alvo inexistente, ou denuncia de conta desabilitada: `404` (ADR-0021).
+         */
+        post: operations["removeAdminModerationContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}/dismissal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Descarta a denuncia, com o motivo escrito. O conteudo fica no ar
+         * @description **A DENUNCIA NAO E APAGADA.** Ela fica com `resolution: dismissed`,
+         *     `resolved_at` e `resolution_reason` gravados, e continua legivel em
+         *     `listAdminModerationReports` com `state=resolved`. O `down` da migracao
+         *     `20261018000009` recusa a propria descida enquanto houver decisao
+         *     gravada, pelo mesmo motivo: o juizo de uma pessoa nao se descarta em
+         *     silencio.
+         *
+         *     **O conteudo nao e tocado**: `content_removed` volta como estava.
+         *
+         *     ## O MOTIVO E OBRIGATORIO AQUI TAMBEM, e nao e zelo
+         *
+         *     Descartar e uma decisao sobre o trabalho de outra pessoa -- alguem
+         *     denunciou e um administrador disse que nao procedia. Sem o motivo
+         *     gravado, o proximo que receber a MESMA denuncia refaz o juizo que
+         *     alguem ja fez; e na origem `conversation` isso acontece de verdade,
+         *     porque o indice unico daquela tabela e PARCIAL (`WHERE resolved_at IS
+         *     NULL`) e resolver libera o par (conversa, papel) para denunciar de novo.
+         *
+         *     ## NINGUEM E AVISADO, E NENHUMA ACAO SOBRE A CONTA
+         *
+         *     Mesmas duas regras da remocao, e pelos mesmos motivos: quem denunciou
+         *     nao recebe resultado, quem foi denunciado nao e avisado, e nenhuma
+         *     conta e desabilitada por aqui.
+         *
+         *     Denuncia ja resolvida responde `400` (`code: report_already_resolved`);
+         *     alvo inexistente ou denuncia de conta desabilitada, `404` (ADR-0021).
+         */
+        post: operations["dismissAdminModerationReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tag-requests": {
         parameters: {
             query?: never;
@@ -6172,6 +6439,202 @@ export interface components {
              *     ignorasse `state` faria o paginador oferecer paginas vazias.
              */
             total: number;
+        };
+        /**
+         * @description De onde a denuncia veio.
+         *
+         *     **DUAS ORIGENS, E AS DUAS EXISTEM DE VERDADE:**
+         *
+         *     - `review` -- denuncia de avaliacao do `Perto`
+         *       (`professional_review_reports`, migracao `20261017000017`);
+         *     - `conversation` -- denuncia de conversa mediada
+         *       (`conversation_reports`, migracao `20260928000009`), que ate
+         *       18/10/2026 era gravada e **nunca lida por ninguem**: nenhuma rota do
+         *       painel a resolvia.
+         *
+         *     **PERFIL e FOTO nao estao aqui, e a ausencia e informacao.** As duas vem
+         *     na frente de comunidade e nao existe tabela de nenhuma das duas neste
+         *     repositorio. Declara-las agora faria o `enum` prometer o que nenhuma
+         *     consulta devolve e faria a tela ganhar rotulo para um estado que nunca
+         *     acontece. O que esta PRONTO para elas e o caminho: a visao
+         *     `fila_de_moderacao` (migracao `20261018000009`) recebe cada origem como
+         *     uma perna de `UNION ALL`, e acrescentar uma custa a tabela da denuncia,
+         *     a perna da visao, um valor neste `enum` e um rotulo na tela -- **nenhuma
+         *     consulta de `src/`**, porque a consulta le a visao e nao as tabelas.
+         * @enum {string}
+         */
+        ModerationOrigin: "review" | "conversation";
+        /**
+         * @description `open` e a fila: denuncia esperando decisao. `resolved` e o que ja foi
+         *     decidido -- **nada e apagado**, e o motivo da decisao continua legivel
+         *     ali, que e o que impede o proximo moderador de refazer um juizo que
+         *     alguem ja fez.
+         * @enum {string}
+         */
+        ModerationQueueState: "open" | "resolved";
+        /**
+         * @description O que o administrador decidiu.
+         *
+         *     **Dois valores e nao tres**: a fila tem um estado de espera e dois de
+         *     saida. Nao ha `escalated` nem `pending_review` -- um terceiro valor
+         *     convidaria a primeira pessoa com pressa a ligar um fluxo que ninguem
+         *     desenhou.
+         *
+         *     Sem esta distincao, denuncia descartada e denuncia cujo conteudo foi
+         *     removido ficariam indistinguiveis (as duas com `resolved_at`
+         *     preenchido), e e justamente essa diferenca que alguem vai querer contar.
+         * @enum {string}
+         */
+        ModerationResolution: "content_removed" | "dismissed";
+        /**
+         * @description Um item da fila de moderacao: **um ALVO, com as denuncias dele
+         *     agregadas** -- e nao uma denuncia.
+         *
+         *     Tres pessoas denunciando a mesma avaliacao viram UM item com
+         *     `report_count: 3`. Se o item fosse a denuncia, quem modera decidiria a
+         *     mesma coisa tres vezes sem nunca ver o numero que importa.
+         *
+         *     ## NADA DO DENUNCIANTE E NADA DO DENUNCIADO
+         *
+         *     Em campo nenhum: nem nome, nem UUID, nem a existencia de uma conta por
+         *     tras. Os dois sao pessoas que nao pediram para estar numa tela de
+         *     administrador, e a decisao e sobre o CONTEUDO. O filtro de conta
+         *     desabilitada do denunciante tira o item da fila inteira (tres lugares),
+         *     e nem para isso o nome dele sai do servidor: o predicado do banco
+         *     devolve booleano.
+         *
+         *     **Nada de `id`** (ADR-0010 item 6): o enderecamento e por
+         *     `(origin, target_ref)`.
+         */
+        AdminModerationItem: {
+            origin: components["schemas"]["ModerationOrigin"];
+            /** @description O identificador publico do conteudo denunciado. Ver `parameters/ModerationTargetRef`. */
+            target_ref: string;
+            /**
+             * @description O que identifica o alvo para quem decide: o NOME DO LOCAL na origem
+             *     `review`, o NOME DO PET na origem `conversation`. Nao e nome de
+             *     pessoa em nenhuma das duas.
+             */
+            subject: string;
+            /**
+             * @description **O CONTEUDO DENUNCIADO, quando ele e PUBLICADO.**
+             *
+             *     O texto da avaliacao na origem `review`: ela esta na pagina do
+             *     local, qualquer pessoa a le, e quem modera precisa ler exatamente o
+             *     que todo mundo esta lendo para decidir. Nulo quando a avaliacao foi
+             *     dada so com nota, que e um caso comum.
+             *
+             *     **SEMPRE NULO na origem `conversation`, e isso e desenho e nao
+             *     falta.** A conversa mediada e privada entre duas pessoas, o texto
+             *     que elas trocaram foi escrito esperando que ninguem mais lesse, e
+             *     nada neste produto autoriza o administrador a le-lo
+             *     (`docs/04-seguranca.md` 9 proibe conteudo de mensagem na trilha
+             *     pelo mesmo juizo). O que a origem `conversation` entrega para quem
+             *     decide e `reason`, `detail` -- o relato que o denunciante escreveu,
+             *     que e o canal desenhado para isso e e por isso que ele aceita 1000
+             *     simbolos --, `repeat_total` e `subject`. **E uma limitacao real
+             *     desta fila, declarada aqui para quem for decidir alarga-la saber que
+             *     a estreiteza foi escolhida.**
+             */
+            content?: string | null;
+            /** @description A nota da avaliacao. Nula na origem `conversation`, que nao tem nota. */
+            rating?: number | null;
+            /**
+             * @description O MOTIVO ESCOLHIDO na denuncia mais antiga aberta deste alvo -- a que
+             *     abriu o item de fila. Lista fechada no banco, e os valores diferem
+             *     por origem (`spam`, `offensive`, `false_information`,
+             *     `not_about_this_place`, `other` na avaliacao; `extortion`,
+             *     `harassment`, `spam`, `impersonation`, `other` na conversa). Sai
+             *     como cadeia livre de proposito: um `enum` unico aqui misturaria os
+             *     dois vocabularios e passaria a valer como se fosse um.
+             */
+            reason: string;
+            /** @description Os motivos DISTINTOS de todas as denuncias deste recorte, para a triagem. */
+            reasons: string[];
+            /**
+             * @description O que o denunciante escreveu PARA QUEM MODERA, da denuncia mais
+             *     antiga. Na origem `conversation` e a informacao mais importante do
+             *     item, porque o conteudo nao sai.
+             */
+            detail?: string | null;
+            /** @description Quantas denuncias (de pessoas diferentes) este alvo tem neste recorte. */
+            report_count: number;
+            /**
+             * @description **A CONTAGEM DE REPETICAO, e e o sinal que separa briga de problema
+             *     real.** A soma de `repeat_count` das denuncias do alvo: a insistencia
+             *     de cada denunciante somada. Uma briga de vizinho da 1 e 1; um
+             *     problema real da 7 e 11.
+             */
+            repeat_total: number;
+            /**
+             * Format: date-time
+             * @description QUANDO a denuncia mais antiga deste alvo chegou. E a ordem da fila.
+             */
+            first_reported_at: string;
+            /** Format: date-time */
+            last_reported_at: string;
+            /**
+             * @description O conteudo esta fora do ar? Verdadeiro depois de
+             *     `removeAdminModerationContent` -- e tambem quando a avaliacao foi
+             *     removida pela rota direta `removeAdminDirectoryReview`, que continua
+             *     valendo e grava a mesma coluna.
+             */
+            content_removed: boolean;
+            /**
+             * @description Nula enquanto na fila. Ver `ModerationResolution`.
+             * @enum {string|null}
+             */
+            resolution?: "content_removed" | "dismissed" | null;
+            /**
+             * @description O motivo da decisao, escrito pelo administrador. Nulo enquanto na
+             *     fila. **Nao e publicado, nao chega a quem denunciou e nao chega a
+             *     quem foi denunciado.**
+             */
+            resolution_reason?: string | null;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto na fila.
+             */
+            resolved_at?: string | null;
+        };
+        AdminModerationItemPage: {
+            items: components["schemas"]["AdminModerationItem"][];
+            page: number;
+            limit: number;
+            /** @description Quantos ALVOS o recorte desta chamada tem, com o filtro aplicado -- e nao quantas denuncias. */
+            total: number;
+            /**
+             * @description **A CONTAGEM DO AVISO DO MENU**, e ela IGNORA o filtro de proposito:
+             *     o numero que o item da navegacao mostra responde "quanto trabalho
+             *     esta esperando". Passa pelo mesmo filtro de conta desabilitada da
+             *     listagem e da leitura -- **os tres lugares**, porque filtrar em um
+             *     so faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito
+             *     que a fila da Rede ja produziu.
+             */
+            pending_total: number;
+        };
+        /**
+         * @description O corpo das DUAS acoes, e uma forma so porque e a mesma decisao: o
+         *     motivo escrito.
+         *
+         *     **Obrigatorio nas duas**, e nao so na remocao. Descartar tambem e uma
+         *     decisao sobre o trabalho de outra pessoa, e sem o motivo gravado o
+         *     proximo que receber a mesma denuncia refaz o juizo que alguem ja fez.
+         *
+         *     **Nao ha campo de conta aqui**, e nao ha como pedir acao sobre a pessoa
+         *     por este corpo: desabilitar conta e outro poder e nao entra nesta fila.
+         *     Nao ha campo de mensagem: ninguem e avisado.
+         */
+        AdminModerationDecision: {
+            /**
+             * @description De 3 a 500 simbolos, o MESMO par do `CHECK` do banco
+             *     (`professional_reviews.moderation_reason` e as duas colunas
+             *     `resolution_reason`). Nao e o 2..280 da fila de indicacao: la o
+             *     motivo e um rotulo curto para o proximo revisor, e aqui ele e a
+             *     justificativa de ter tirado conteudo de pessoa do ar, que e o que
+             *     alguem vai ler numa contestacao.
+             */
+            reason: string;
         };
         /**
          * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
@@ -9456,6 +9919,27 @@ export interface components {
          *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
          */
         IfMatch: string;
+        /**
+         * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+         *     na frente de comunidade e nao existem ainda -- ver
+         *     `ModerationOrigin`.
+         */
+        ModerationOriginPath: components["schemas"]["ModerationOrigin"];
+        /**
+         * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+         *
+         *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+         *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+         *       pelo painel";
+         *     - `conversation`: o `conversationId`, que **ja e** o identificador
+         *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+         *       por `getConversation`, `blockConversation` e `reportConversation`).
+         *       Inventar um segundo identificador para a mesma linha seria exposicao
+         *       nova, e nao menos.
+         *
+         *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+         */
+        ModerationTargetRef: string;
         AdminPage: number;
         AdminLimit: number;
     };
@@ -14829,6 +15313,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminModerationReports: {
+        parameters: {
+            query?: {
+                /** @description Sem o parametro, a fila ABERTA. `resolved` traz o que ja foi decidido, com o motivo -- nada e apagado. */
+                state?: components["schemas"]["ModerationQueueState"];
+                /** @description Sem o parametro, todas as origens na mesma fila. */
+                origin?: components["schemas"]["ModerationOrigin"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como nas outras filas do painel. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItemPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminModerationReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeAdminModerationContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminModerationDecision"];
+            };
+        };
+        responses: {
+            /** @description O item, com o conteudo fora do ar e a decisao gravada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    dismissAdminModerationReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminModerationDecision"];
+            };
+        };
+        responses: {
+            /** @description O item, com a denuncia descartada e o conteudo intacto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

@@ -6,6 +6,7 @@ import { rotasDaLoja } from './loja/rotas.tsx';
 import { rotasDaRede } from './rede/rotas.tsx';
 import { rotasDoDiretorio } from './diretorio/rotas.tsx';
 import { rotasDasPlaquinhas } from './plaquinhas/rotas.tsx';
+import { rotasDaModeracao } from './moderacao/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
 import NaoEncontrada from './rotas/NaoEncontrada.tsx';
 import { ProvedorDeSessao, type PropsDoProvedor } from './sessao/ProvedorDeSessao.tsx';
@@ -41,6 +42,9 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         // 18/10/2026: a fila da plaquinha da coleira e a entrega. O backend das
         // tres operacoes existia desde 17/10 e nenhuma tela as chamava.
         ...rotasDasPlaquinhas,
+        // 18/10/2026: a fila de moderacao. `conversation_reports` gravava
+        // denuncia desde 28/09 e nenhuma tela a lia.
+        ...rotasDaModeracao,
         { path: '*', element: <NaoEncontrada /> },
       ],
     },

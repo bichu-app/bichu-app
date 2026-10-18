@@ -51,6 +51,22 @@ export const MODULES = [
   // **Nenhuma tabela.** Este modulo nao tem persistencia: o endereco que ele
   // devolve e gravado por quem pediu, na tabela de quem pediu.
   'addresses',
+  // 18/10/2026, decisao do cliente: *"quem modera vai ser o administrador,
+  // deve ir para a pagina de backoffice"*. A FILA DE MODERACAO e modulo
+  // proprio e nao um canto de `professionals` nem de `messaging`, porque ela
+  // atravessa os dois: as origens que existem hoje sao a denuncia de
+  // AVALIACAO (`professionals`) e a denuncia de CONVERSA (`messaging`), e as
+  // de perfil e de foto vao chegar de outros modulos ainda. Dentro de um
+  // deles, os outros teriam de importar `domain/` alheio -- que e exatamente o
+  // que esta fronteira existe para impedir.
+  //
+  // **Nenhuma tabela propria.** A persistencia e a VISAO `fila_de_moderacao`
+  // (migracao `20261018000009`), que junta as tabelas de denuncia que ja
+  // existem, e as duas escritas sao `UPDATE` nas tabelas de quem denunciou e
+  // de quem publicou. Esse e o preco de nao normalizar, e esta escrito no
+  // cabecalho da migracao: mover dado exigiria reescrever os dois caminhos de
+  // escrita, em modulos diferentes, no mesmo commit.
+  'moderation',
 ];
 
 /**

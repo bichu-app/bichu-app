@@ -179,7 +179,24 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
         eb('conversations.tutor_user_id', '=', chamador),
         eb('conversations.finder_user_id', '=', chamador),
       ]),
-    );
+    )
+    // LEITURA PUBLICA 1 de 4: a conversa REMOVIDA pela moderacao do painel sai
+    // das duas vistas do chamador (a lista e a leitura de uma), porque as duas
+    // passam por este construtor. Migracao `20261018000009`.
+    //
+    // **Exclusao LOGICA**: `conversation_messages` continua inteira e
+    // `moderation_reason` continua gravado para quem auditar. O que esta
+    // clausula faz e tirar a conversa da tela dos dois lados.
+    //
+    // Sai pelo `WHERE`, e nao por um descarte na montagem da resposta: um
+    // `filter` depois da leitura traria a conversa para a memoria do processo e
+    // deixaria o caminho novo que esquecesse o `filter` publicando-a de volta.
+    //
+    // **O denunciado NAO e avisado** (avisar e retaliacao, decisao de desenho
+    // ja tomada): a conversa simplesmente deixa de estar la, e nenhum campo da
+    // resposta diz por que. `moderation_reason` nao e projetado em lugar
+    // nenhum desta vista.
+    .where('conversations.moderation_removed_at', 'is', null);
 }
 
 /** `GET /v1/conversations`. A mesma leitura, paginada por `opened_at`. */
@@ -235,6 +252,10 @@ export function construtorDasMensagens(
         eb('conversations.finder_user_id', '=', chamador),
       ]),
     )
+    // LEITURA PUBLICA 2 de 4. Sem esta clausula, a conversa sairia da LISTA e
+    // as mensagens dela continuariam legiveis por quem tivesse o `id` -- e o
+    // `id` esta no contrato, nas maos dos dois lados.
+    .where('conversations.moderation_removed_at', 'is', null)
     .orderBy('conversation_messages.created_at', 'asc')
     .orderBy('conversation_messages.id', 'asc')
     .limit(pagina.limit);
@@ -452,7 +473,11 @@ export function construtorDaLeituraDoAchador(db: Db, resumo: Uint8Array) {
       'lost_cases.status as case_status',
       'lost_cases.closed_at as case_closed_at',
     ])
-    .where('conversations.id', '=', idDaConversaDoToken(resumo));
+    .where('conversations.id', '=', idDaConversaDoToken(resumo))
+    // LEITURA PUBLICA 3 de 4, e e a que nao pede token de acesso: o caminho do
+    // achador SEM CONTA. Esquecer esta clausula deixaria a conversa removida
+    // visivel justamente para quem o produto nem autentica.
+    .where('conversations.moderation_removed_at', 'is', null);
 }
 
 /** As mensagens pelo token, na ordem da conversa, pela posição. */
@@ -465,6 +490,19 @@ export function construtorDasMensagensDoAchador(
     .selectFrom('conversation_messages')
     .select(['id', 'sender_role', 'body', 'redactions', 'photo_object_key', 'created_at'])
     .where('conversation_id', '=', idDaConversaDoToken(resumo))
+    // LEITURA PUBLICA 4 de 4. `conversation_messages` nao tem a coluna da
+    // remocao -- ela e da conversa --, entao o predicado vem por subconsulta
+    // em vez de `JOIN`: esta consulta nao junta nada hoje, e um `JOIN` novo
+    // mudaria o plano dela por causa de um booleano.
+    .where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom('conversations')
+          .select('conversations.id')
+          .whereRef('conversations.id', '=', 'conversation_messages.conversation_id')
+          .where('conversations.moderation_removed_at', 'is', null),
+      ),
+    )
     .orderBy('created_at', 'asc')
     .orderBy('id', 'asc')
     .offset(pagina.deslocamento)

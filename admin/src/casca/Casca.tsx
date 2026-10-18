@@ -6,6 +6,7 @@ import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone, MarcaDaNavegacao, type NomeDoIcone } from '../componentes/Icone.tsx';
 import { MenuDeAcoes } from '../componentes/MenuDeAcoes.tsx';
 import { useIndicacoesPendentes } from '../diretorio/fila.ts';
+import { useDenunciasPendentes } from '../moderacao/fila.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 
 interface ItemDaNavegacao {
@@ -47,7 +48,36 @@ const ITENS: ItemDaNavegacao[] = [
   // nao tem `pending_total`, e inventar uma soma na tela contaria o que a
   // listagem nao mostra, que e o defeito de "1 pendente" sobre fila vazia.
   { para: '/plaquinhas', rotulo: 'Plaquinhas', icone: 'tick', ativo: (c) => c === '/plaquinhas' || c.startsWith('/plaquinhas/') },
+  // 18/10/2026. A FILA DE MODERACAO: "quem modera vai ser o administrador, deve
+  // ir para a pagina de backoffice". Secao propria e nao sub-item: ela
+  // atravessa Perto (denuncia de avaliacao) e a conversa mediada, e vai
+  // receber perfil e foto -- nao e assunto de nenhuma secao existente.
+  // **COM aviso de contagem**: `AdminModerationItemPage` tem `pending_total`,
+  // que passa pelo mesmo filtro de conta desabilitada dos outros dois lugares.
+  { para: '/moderacao', rotulo: 'Moderação', icone: 'error', ativo: (c) => c === '/moderacao' || c.startsWith('/moderacao/') },
 ];
+
+/**
+ * O numero ao lado do item do menu, ou `undefined`.
+ *
+ * `undefined` deixa o item SEM numero, e isso e diferente de zero: o servidor
+ * ainda nao respondeu. Zero tambem nao mostra numero -- fila vazia nao precisa
+ * de "(0)".
+ *
+ * Os dois numeros vem do servidor (`pending_total`), e nao de uma soma na tela:
+ * cada um passa pelo mesmo filtro de conta desabilitada da listagem e da
+ * leitura da sua fila, e uma soma local contaria o que a fila nao mostra -- que
+ * e o defeito de dizer "1 pendente" sobre fila vazia.
+ */
+function avisoDoItem(
+  para: string,
+  indicacoes: number | undefined,
+  denuncias: number | undefined,
+): number | undefined {
+  if (para === '/perto/indicacoes') return indicacoes ? indicacoes : undefined;
+  if (para === '/moderacao') return denuncias ? denuncias : undefined;
+  return undefined;
+}
 
 function iniciais(nome: string): string {
   const partes = nome.trim().split(/\s+/).filter(Boolean);
@@ -68,6 +98,7 @@ export function Casca() {
   // da listagem e da leitura, e uma soma local contaria o que a fila nao mostra
   // -- que e o defeito de dizer "1 pendente" sobre fila vazia.
   const indicacoesPendentes = useIndicacoesPendentes(api);
+  const denunciasPendentes = useDenunciasPendentes(api);
   const { pathname } = useLocation();
   const [confirmarTodas, setConfirmarTodas] = useState(false);
   const [saindoDeTodas, setSaindoDeTodas] = useState(false);
@@ -85,8 +116,7 @@ export function Casca() {
             const ativo = item.ativo(pathname);
             // So o item da fila carrega aviso, e so quando o servidor respondeu:
             // `undefined` deixa o item sem numero, e isso e diferente de zero.
-            const aviso =
-              item.para === '/perto/indicacoes' && indicacoesPendentes ? indicacoesPendentes : undefined;
+            const aviso = avisoDoItem(item.para, indicacoesPendentes, denunciasPendentes);
             const rotulo = aviso === undefined ? item.rotulo : `${item.rotulo} (${aviso})`;
             return (
               <li key={item.para}>
