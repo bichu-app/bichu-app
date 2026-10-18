@@ -59,7 +59,7 @@ void describe('portao do default do contrato', () => {
   void it('o contrato real passa, e todo default alcancado esta inventariado', () => {
     const { alcancados, violacoes } = conferirPadraoDoContrato(TEXTO);
     assert.deepEqual(violacoes, []);
-    assert.ok(alcancados.length >= 60, `so ${String(alcancados.length)} defaults alcancados`);
+    assert.ok(alcancados.length >= 65, `so ${String(alcancados.length)} defaults alcancados`);
   });
 
   /**
@@ -68,11 +68,11 @@ void describe('portao do default do contrato', () => {
    * perder um `default`, o caso acima ja reprova; este diz em que parte da
    * superficie ele estava.
    */
-  void it('a medicao de 18/10: 66 defaults, 25 em corpo e 41 em query, 7 deles em edicao', () => {
+  void it('a medicao de 18/10: 71 defaults, 25 em corpo e 46 em query, 7 deles em edicao', () => {
     const { alcancados } = conferirPadraoDoContrato(TEXTO);
-    assert.equal(alcancados.length, 66);
+    assert.equal(alcancados.length, 71);
     assert.equal(alcancados.filter((a) => a.lugar === 'corpo').length, 25);
-    assert.equal(alcancados.filter((a) => a.lugar === 'query').length, 41);
+    assert.equal(alcancados.filter((a) => a.lugar === 'query').length, 46);
     assert.equal(alcancados.filter((a) => a.ehEdicao).length, 7);
     assert.deepEqual(
       [...new Set(alcancados.filter((a) => a.ehEdicao).map((a) => a.operationId))].sort(),

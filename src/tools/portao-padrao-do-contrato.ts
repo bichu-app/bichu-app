@@ -96,7 +96,7 @@ interface PadraoDoContrato {
  * O INVENTARIO: todo `default` alcancavel do contrato, e quem o supre.
  *
  * MEDIDO em 18/10/2026, campo a campo, antes de `useDefaults` ser desligado --
- * e e essa medicao que tornou o desligamento seguro: dos 66 `default`
+ * e e essa medicao que tornou o desligamento seguro: dos 71 `default`
  * alcancaveis, NENHUM era carregante. Ou o caso de uso ja escrevia o mesmo
  * valor, ou ninguem lia o campo.
  *
@@ -236,6 +236,37 @@ const INVENTARIO: readonly PadraoDoContrato[] = [
     operationId: 'listAdminDirectoryEntries',
     trilha: 'limit',
     onde: 'modules/professionals/adapters/http/admin-directory-routes.ts',
+    exige: 'limit: query.limit ?? TAMANHO_PADRAO,',
+  },
+
+  {
+    operationId: 'listDirectoryEntryReviews',
+    trilha: 'sort',
+    onde: 'modules/professionals/adapters/http/directory-routes.ts',
+    exige: 'sort: query.sort ?? ORDEM_PADRAO_DAS_AVALIACOES,',
+  },
+  {
+    operationId: 'listDirectoryEntryReviews',
+    trilha: 'page',
+    onde: 'modules/professionals/adapters/http/directory-routes.ts',
+    exige: 'const page = query.page ?? PAGINA_INICIAL;',
+  },
+  {
+    operationId: 'listDirectoryEntryReviews',
+    trilha: 'limit',
+    onde: 'modules/professionals/adapters/http/directory-routes.ts',
+    exige: 'const limit = query.limit ?? TAMANHO_PADRAO_DAS_AVALIACOES;',
+  },
+  {
+    operationId: 'listAdminDirectorySuggestions',
+    trilha: 'page',
+    onde: 'modules/professionals/adapters/http/admin-directory-suggestion-routes.ts',
+    exige: 'page: query.page ?? PAGINA_INICIAL,',
+  },
+  {
+    operationId: 'listAdminDirectorySuggestions',
+    trilha: 'limit',
+    onde: 'modules/professionals/adapters/http/admin-directory-suggestion-routes.ts',
     exige: 'limit: query.limit ?? TAMANHO_PADRAO,',
   },
 
