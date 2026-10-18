@@ -58,6 +58,18 @@ export interface ConversaDoChamador {
   readonly casoEncerrado: boolean;
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
+  /**
+   * As duas pontas desabilitaram a conta? (17/10)
+   *
+   * `users.deleted_at !== null` de cada lado. O domínio usa isto para duas
+   * coisas: despersonalizar o lado que saiu (`participantesVisiveis`) e travar
+   * a conversa nos dois sentidos (`estadoDaConversa` devolve `closed`).
+   *
+   * Dois campos e não um: o lado que saiu é o que perde o nome, e um booleano
+   * só não diria qual.
+   */
+  readonly tutorDesabilitado: boolean;
+  readonly achadorDesabilitado: boolean;
 }
 
 export interface MensagemGravada {
@@ -101,6 +113,9 @@ export interface ConversaDoAchador {
   readonly bloqueadaEm: Date | null;
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
+  /** Ver `ConversaDoChamador`: as duas pontas desabilitadas (17/10). */
+  readonly tutorDesabilitado: boolean;
+  readonly achadorDesabilitado: boolean;
   /**
    * O resumo GRAVADO do token do aviso. O serviço o compara com o resumo do
    * token apresentado em tempo constante: a igualdade do índice já achou a

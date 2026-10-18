@@ -201,8 +201,48 @@ function aprovado(chamador: string): Expression<SqlBool> {
 
 type Consulta = ReturnType<typeof consultaBase>;
 
+/**
+ * O PONTO UNICO DA REDE, e desde 17/10 ele carrega o autor.
+ *
+ * Toda leitura de encontro deste arquivo passa por aqui -- a agenda publica, o
+ * `nearby`, a leitura por slug, o local, os detalhes privados, o pedido de
+ * participacao e "meus pedidos". Foi por isso que o filtro do autor desabilitado
+ * entrou NESTA funcao e nao em cada uma das sete: o cliente pediu "filtro as
+ * paginas para que esse usuario nao seja mais encontrado em nenhuma pagina ou
+ * funcionalidade", e sete clausulas repetidas e a forma que perde a oitava.
+ *
+ * ## `encontro_com_autor_ativo` e nao um `innerJoin('users')`
+ *
+ * A coluna de autoria de `network_events` esta marcada "NUNCA sai do servidor"
+ * na `20260928000001`, e `src/tools/portao-colunas-que-nao-saem.ts` reprova
+ * qualquer arquivo de `src/` que CITE o nome dela -- inclusive dentro de um
+ * `WHERE`, e inclusive dentro de um COMENTARIO, porque ele compara texto puro.
+ * (Medido: a primeira versao deste proprio comentario reprovou o portao, por
+ * escrever o nome por extenso aqui.) A funcao de banco (migracao
+ * `20261017000012`) devolve `boolean` e nao a autoria, entao o predicado existe
+ * sem que o nome da coluna apareca aqui. Mesmo arranjo de
+ * `network_events_do_autor`, da `20261001000005`.
+ *
+ * ## O que isto FAZ, medido, e o que e consequencia a relatar
+ *
+ * O encontro sai da agenda em TODOS os recortes de tempo, `when=all` incluido:
+ * o predicado e da consulta base e nao da janela, entao encontro PASSADO de
+ * autor desabilitado tambem sai. Foi a escolha deliberada -- "sair de todas as
+ * superficies" -- e nao ha hoje nenhuma superficie que mostre so o passado.
+ *
+ * CONSEQUENCIA QUE NAO E OBVIA: `listarMeusPedidos` e `lerPedido` tambem passam
+ * por aqui. Quem tinha pedido de participacao PENDENTE num encontro cujo autor
+ * desabilitou a conta deixa de ver o pedido -- a linha de
+ * `network_event_join_requests` continua no banco, intacta e nao apagada, mas a
+ * lista vem vazia, SEM EXPLICACAO. Isso esta no relatorio como decisao de
+ * produto em aberto: dizer a essa pessoa o que aconteceu exige um texto que o
+ * cliente precisa escolher, e inventa-lo aqui seria pior do que relatar.
+ */
 function consultaBase(db: DbExecutor) {
-  return db.selectFrom('network_events as e').where('e.publication_status', 'in', VISIVEL);
+  return db
+    .selectFrom('network_events as e')
+    .where('e.publication_status', 'in', VISIVEL)
+    .where(sql<SqlBool>`encontro_com_autor_ativo(e.id)`);
 }
 
 /** 23:59:59 do dia local do encontro, no fuso dele, como instante. */

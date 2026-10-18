@@ -80,7 +80,7 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     consumirJanelaDeReautenticacao: recusar('consumirJanelaDeReautenticacao'),
     registrarPedidoDeExclusao: recusar('registrarPedidoDeExclusao'),
     contasAExpurgar: recusar('contasAExpurgar'),
-    expurgarConta: recusar('expurgarConta'),
+    // `expurgarConta` saiu da porta em 17/10: nada apaga conta.
     registrarPedidoDeTrocaDeEmail: recusar('registrarPedidoDeTrocaDeEmail'),
     concluirTrocaDeEmail: recusar('concluirTrocaDeEmail'),
     cancelarTrocaDeEmailPendente: recusar('cancelarTrocaDeEmailPendente'),

@@ -577,7 +577,23 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     // agora visível como erro em vez de silencioso. Um `catch` mudo com
     // resposta de sucesso seria a falha silenciosa que este repositório já
     // registrou cinco vezes.
-    const aparelhosRemovidos = await deps.removerPushDaConta(userId);
+    //
+    // A EXCECAO, e ela e de 17/10: `account_deleted` NAO apaga o cadastro.
+    //
+    // O cliente trocou o desenho da exclusao de conta no dia 17/10, por escrito:
+    // *"nao delete os dados do usuario, apenas desabilite na plataforma"*. O
+    // cadastro de aparelho e dado do usuario, entao ele passa a ser RETIDO, e o
+    // que o faz parar de receber alerta e a consulta de alcance
+    // (`kysely-alcance-por-postgis.ts`, `u.deleted_at IS NULL` desde 22/09), que
+    // nao devolve conta desabilitada com ou sem linha em `user_devices`.
+    //
+    // Os outros tres motivos continuam apagando, e a diferenca nao e detalhe:
+    // em `logout_all`, `password_changed` e `not_me` apagar E O REMEDIO que a
+    // pessoa pediu -- o aparelho pode estar na mao de outra pessoa, e nenhuma
+    // clausula de consulta protege de um token de push que continua valido numa
+    // conta que segue ATIVA. O SEC-019 permanece fechado nos tres.
+    const aparelhosRemovidos =
+      motivo === 'account_deleted' ? 0 : await deps.removerPushDaConta(userId);
     await deps.trilha.record({
       actorKind: 'user',
       actorUserId: userId,
@@ -1759,11 +1775,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
      *
      * ## O que ela é, e o que ela não é
      *
-     * Ela **não apaga linha nenhuma**. O contrato diz o que ela faz, e a
-     * palavra está lá: *"Exclusão lógica imediata, expurgo definitivo em 30
-     * dias"*. O apagamento físico é {@link expurgarContasExcluidas}, no worker,
-     * e é ele que dispara as cascatas do banco. Responder 202 e não 204 é
-     * exatamente isso: o pedido foi aceito e o efeito completo tem prazo.
+     * Ela **não apaga linha nenhuma**, e desde 17/10 **nada apaga**: o cliente
+     * decidiu por escrito que *"não delete os dados do usuário, apenas
+     * desabilite na plataforma"*. O expurgo de 30 dias ficou inócuo
+     * (`expurgar-contas-excluidas.ts`) e o `DELETE FROM users` saiu da porta de
+     * identidade. A conta passa a DESABILITADA, e o que a tira do produto é
+     * cláusula de consulta -- não ausência de linha. Responder 202 e não 204
+     * continua certo por outro motivo: o efeito é imediato, mas é assíncrono do
+     * ponto de vista de quem pediu (e-mail, plaquinhas, sessões em outros
+     * aparelhos).
      *
      * ## A ORDEM, que não é estilo
      *
@@ -1827,14 +1847,19 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await avisarSemDerrubarOEfeito(
         {
           para: conta.email,
-          assunto: 'Sua conta do Bichu foi excluida',
+          assunto: 'Sua conta do Bichu foi desativada',
+          // A FRASE "apagados definitivamente em 30 dias" SAIU, e a remocao e
+          // obrigatoria: desde 17/10 nada e apagado, e um aviso que prometesse
+          // apagamento seria informacao falsa ao titular sobre o tratamento dos
+          // proprios dados -- defeito maior do que o texto antigo era util.
           corpo:
-            'Recebemos o seu pedido de exclusao e a sua conta ja foi desativada: ' +
-            'as sessoes foram encerradas em todos os aparelhos e as plaquinhas dos ' +
-            'seus pets pararam de responder.\n\n' +
-            'Os dados serao apagados definitivamente em 30 dias.\n\n' +
-            'Se nao foi voce que pediu, responda esta mensagem agora: dentro desse ' +
-            'prazo ainda da para desfazer.',
+            'Recebemos o seu pedido e a sua conta ja foi desativada: as sessoes ' +
+            'foram encerradas em todos os aparelhos, as plaquinhas dos seus pets ' +
+            'pararam de responder e o seu perfil, os seus pets e os seus ' +
+            'anuncios nao aparecem mais no Bichu.\n\n' +
+            'Os seus dados ficam guardados e inacessiveis no aplicativo. Para pedir ' +
+            'o apagamento definitivo, responda esta mensagem.\n\n' +
+            'Se nao foi voce que pediu, responda tambem: da para reativar.',
         },
         { evento: 'account.deletion_requested', correlationId: contexto.correlationId },
       );

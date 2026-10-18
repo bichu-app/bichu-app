@@ -41,6 +41,7 @@ import {
   participantesVisiveis,
   type EstadoDaConversa,
   type ParticipanteVisivel,
+  type SinaisDeEstado,
 } from '../domain/conversa-mediada.js';
 import { retencaoDestaMensagem } from '../domain/retencao-para-revisao.js';
 import { codificarCursor } from '../domain/paginacao.js';
@@ -437,6 +438,8 @@ export class ConversationService {
       participants: participantesVisiveis({
         nomeDoTutor: conversa.nomeDoTutor,
         nomeDoAchador: conversa.nomeDoAchador,
+        tutorDesabilitado: conversa.tutorDesabilitado,
+        achadorDesabilitado: conversa.achadorDesabilitado,
       }),
       messages: mensagens,
       nextCursor,
@@ -444,15 +447,20 @@ export class ConversationService {
   }
 }
 
-function sinaisDe(conversa: ConversaDoChamador): {
-  encerradaEm: Date | null;
-  bloqueadaEm: Date | null;
-  casoEncerrado: boolean;
-} {
+function sinaisDe(conversa: ConversaDoChamador): SinaisDeEstado {
   return {
     encerradaEm: conversa.encerradaEm,
     bloqueadaEm: conversa.bloqueadaEm,
     casoEncerrado: conversa.casoEncerrado,
+    // O PONTO ÚNICO DA TRAVA, lado com conta (17/10). `enviar` e `comoVisivel`
+    // são os dois consumidores, e os dois passam por aqui: o `status` que a tela
+    // lê e a recusa do `POST` saem do MESMO sinal, então não existe o arranjo em
+    // que a tela diz "encerrada" e a rota aceita, nem o inverso.
+    //
+    // `||` e não `&&`: basta UM lado ter saído. Ver o comentário de
+    // `SinaisDeEstado.participanteDesabilitado` -- "não receber mensagem nova"
+    // só existe se quem escreve também for travado.
+    participanteDesabilitado: conversa.tutorDesabilitado || conversa.achadorDesabilitado,
   };
 }
 
