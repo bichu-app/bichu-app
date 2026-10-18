@@ -1002,7 +1002,36 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// O unico recurso de aparelho que entra e `showTimePicker`, do proprio
 /// Flutter, pela mesma via de `showDatePicker` que duas telas ja usam.
 /// Anterior: `65dcb5cd25c486a5e7d537aeaec19566828420d5`.
-const String _arvoreDasTelas = '45b6093e7fd295e6ba36fb9b0081a8b08f7755b4'; // QA 18/10 (rodada final da suite): dois arquivos desta pasta mudam, e os dois sao CONSERTO DE DEFEITO medido pela propria suite, nao tela nova. (1) `pet/tela_solicitar_plaquinha.dart`: `_carregarPets()` saiu de `initState` para `didChangeDependencies`, porque ler `Escopo` (um `InheritedWidget`) antes de `initState` terminar estoura `dependOnInheritedWidgetOfExactType ... before initState() completed` -- a tela NUNCA listava os pets e abria dizendo "servidor fora". Mesmo arranjo e mesmo sinalizador de `pet/tela_editar_pet.dart` e `perfil/meus_pets.dart`. (2) `perfil/tela_dados_pessoais.dart`: o campo de telefone passou a ser preenchido por `telefoneDoE164` em vez de `mascaraDeTelefone`, porque a mascara de DIGITACAO descarta o `+` e lia `+5511987654321` como digitos locais -- o campo abria `(55) 11987-6543` e um `Salvar` gravava `+5555119876543` por cima do telefone certo. **Nenhuma porta de aparelho encostada**: as duas mudancas sao de ciclo de vida e de formatacao de texto; nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`, e o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore (`encontrado:`), e nao copiado de relato nem recalculado com comando de escrita -- a tarefa desta rodada proibia comando git que escreve. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento escrito acima; valor de ramo isolado nao sobrevive a uniao. (antes: 0c72963525)
+/// **Destravado pelo NOME OBRIGATORIO NO CADASTRO (18/10/2026)**, pela queixa
+/// do cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+/// ele esta cadastrando sem esse campo"*. Um arquivo desta pasta muda,
+/// `conta/tela_criar_conta.dart`:
+///
+/// - o campo `Nome` ganhou `erro`, `limite` e o alvo de rolagem da recusa;
+/// - `_criarConta` passou a recusar nome ausente, vazio e **so com espaco**,
+///   pela regra de `validacao/nome_de_exibicao.dart` (arquivo novo, FORA
+///   desta pasta, e por isso ele nao entra neste hash);
+/// - o botao do rodape ficou bloqueado enquanto nao ha nome, e a linha
+///   `nome: ... .isEmpty ? null : ...` -- que era a que apagava a chave em
+///   silencio -- deixou de existir.
+///
+/// **Nenhuma porta de aparelho encostada**, que e o que o criterio 10
+/// protege: a mudanca e de validacao de formulario. Nenhum importe de
+/// plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` --
+/// e o portao estrutural de diretivas deste mesmo arquivo continua
+/// respondendo por isso.
+///
+/// Valor medido com `git rev-parse HEAD:app/lib/telas` sobre esta arvore
+/// commitada, e nao copiado de relato.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Havia quatro
+/// frentes abertas neste repositorio em 18/10, e ao menos uma mexe em
+/// `app/lib/telas` (`casca_com_abas.dart`, `abas.dart`, `perfil/*`,
+/// `perto/lista_do_diretorio.dart`, `loja/*`). Valor de ramo isolado NAO
+/// sobrevive a uniao -- foi exatamente assim que seis historias erraram o
+/// hash na integracao de 22/09.
+/// Anterior: `45b6093e7fd295e6ba36fb9b0081a8b08f7755b4`.
+const String _arvoreDasTelas = '26d2076350283395220e65985ba49c29387eed50'; // nome obrigatorio no cadastro (18/10/2026): `conta/tela_criar_conta.dart` exige o nome, bloqueia o botao sem ele e nao manda mais `display_name` nulo. (antes: 45b6093e7f)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
