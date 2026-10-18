@@ -53,6 +53,7 @@ import '../../api/conversas_api.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_conversa.dart';
 import '../../escopo.dart';
+import '../../formato/quando.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -133,9 +134,11 @@ abstract final class TextosDasMensagens {
     required String quem,
     required String pet,
     required bool naoLida,
+    String? quando,
   }) {
     final marca = naoLida ? ', mensagem nova' : '';
-    return 'Conversa com $quem sobre $pet$marca';
+    final momento = quando == null ? '' : ', $quando';
+    return 'Conversa com $quem sobre $pet$marca$momento';
   }
 
   static String rotuloDaMarcaNeutra(String quem) => 'Marca de $quem';
@@ -145,7 +148,7 @@ abstract final class TextosDasMensagens {
 ///
 /// **E ESTE o widget de entrada que o agente da barra pluga.**
 class AreaDeMensagens extends StatefulWidget {
-  const AreaDeMensagens({super.key, this.conversas});
+  const AreaDeMensagens({super.key, this.conversas, this.aoContarNaoLidas});
 
   /// O cliente de conversa. Nulo usa o do [Escopo], que e o caminho do app.
   ///
@@ -155,6 +158,22 @@ class AreaDeMensagens extends StatefulWidget {
   /// `agenda_da_rede.dart` monta `RedeApi(escopo.api)` na tela: nao ha estado
   /// global para um teste trocar.
   final ConversasApi? conversas;
+
+  /// **A COSTURA DO SINO**, para quem monta a barra de topo.
+  ///
+  /// Dispara com `unread_count` **como o servidor mandou**, sem teto, cada vez
+  /// que a lista chega. Quem desenha o distintivo passa o numero por
+  /// [seloDoContador] (`9+`) e por [rotuloDoSino] (o numero inteiro, por
+  /// extenso, para quem ouve a tela).
+  ///
+  /// Existe como callback e nao como leitura de um estado global porque o sino
+  /// e de OUTRO ramo: assim ele pluga sem que esta tela conheca a barra, e sem
+  /// que a barra conheca `ConversasApi`.
+  ///
+  /// **O sino nao e alimentado so por aqui.** Quem precisa do numero sem a
+  /// pessoa abrir a area chama `ConversasApi.listar()` e le `unreadCount` --
+  /// e a MESMA fonte, e nunca uma contagem local.
+  final ValueChanged<int>? aoContarNaoLidas;
 
   @override
   State<AreaDeMensagens> createState() => _EstadoDaAreaDeMensagens();
@@ -169,6 +188,15 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   bool _carregando = true;
   bool _carregandoMais = false;
   String? _falha;
+
+  /// O numero do sino, como o SERVIDOR mandou. Nunca contado aqui.
+  ///
+  /// Guardado mesmo sem o sino morar nesta tela: ele e da barra de topo, que e
+  /// de outro ramo, e este campo e o ponto unico de onde o valor sai quando ela
+  /// chegar. Contar `_conversas.where(unread)` seria errado por tres motivos de
+  /// uma vez -- a pagina nao e a conta inteira, a lista vista nao conta, e a
+  /// excecao do aviso de plaquinha nao e exprimivel aqui.
+  int _naoLidas = 0;
 
   @override
   void initState() {
@@ -189,8 +217,19 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
           ..clear()
           ..addAll(pagina.items);
         _cursor = pagina.nextCursor;
+        _naoLidas = pagina.unreadCount;
         _carregando = false;
       });
+      widget.aoContarNaoLidas?.call(_naoLidas);
+      // A AREA FOI VISTA: zera o CONTADOR, e **nao** marca item nenhum.
+      //
+      // Depois do `await` da lista e nao antes: se a lista nao carregou, a
+      // pessoa nao viu nada, e zerar o sino aqui esconderia o aviso de quem
+      // abriu a area num elevador sem sinal.
+      //
+      // As marcas de nao lida das linhas na tela NAO mudam. "Lido" e o item
+      // aberto, e a isca `abrir_a_lista_nao_marca_itens` reprova se mudarem.
+      await _api.marcarListaVista();
     } on FalhaDeChamada {
       // A lista anterior e LIMPADA na primeira pagina, como as outras
       // listagens do app: a pessoa veria o resultado antigo como se fosse o
@@ -229,8 +268,10 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       setState(() {
         _conversas.addAll(pagina.items);
         _cursor = pagina.nextCursor;
+        _naoLidas = pagina.unreadCount;
         _carregandoMais = false;
       });
+      widget.aoContarNaoLidas?.call(_naoLidas);
     } on FalhaDeChamada {
       if (!mounted) return;
       setState(() {
@@ -320,41 +361,34 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   }
 }
 
-/// Uma linha da lista.
+/// Uma linha da lista: quem escreveu, o trecho, quando, e a marca de nao lida.
 ///
-/// ## A MARCA DE NAO LIDA, e de onde ela viria
+/// ## A MARCA DE NAO LIDA VEM DO SERVIDOR
 ///
-/// **Ela nao e desenhada hoje, e nao e esquecimento.** Medido em 18/10/2026
-/// contra `api/openapi.yaml` e contra `migrations/`:
+/// `Conversa.unread` e lido da resposta, e **nao calculado aqui**. O servidor
+/// guarda ate quando cada lado leu (`conversation_reads`, migracao
+/// `20261018000014`); o app nao tem esse dado, e se o inventasse dois aparelhos
+/// da mesma pessoa divergiriam -- o primeiro a abrir mentiria para o segundo.
 ///
-///   - `Conversation` **nao declara** `unread_count`, `read_at` nem nada
-///     equivalente;
-///   - **nao existe coluna de leitura no banco**: nenhuma migracao guarda o
-///     que cada lado da conversa ja leu.
+/// **Abrir a lista NAO apaga esta marca.** "Lido" e o ITEM ABERTO: quem abre a
+/// area para de ver o numero no sino e continua vendo QUAL conversa ainda nao
+/// leu. Sem essa separacao, uma passada de olho apagaria a unica pista de onde
+/// esta o recado -- que e o buraco que esta tela existe para fechar.
 ///
-/// Ou seja: o servidor **nao tem como saber** o que esta nao lido, e por isso
-/// nao manda. A instrucao desta historia e explicita -- se houver contagem,
-/// ela vem do servidor e **nao e calculada no app** --, e calcular aqui
-/// exigiria o app guardar o proprio "ja li", que divergiria entre dois
-/// aparelhos da mesma pessoa e mentiria no primeiro.
+/// ## A PREVIA JA VEM REDIGIDA, e esta tela nao mexe nela
 ///
-/// O caminho e um **aditivo de contrato mais uma migracao** (a coluna de
-/// leitura), e migracao esta fora do que esta historia pode fazer: os carimbos
-/// chegaram a `20261018000004`, `...0002` esta tomado por ramo nao comitado e
-/// o portao nao ve arquivo nao comitado. **Parado e relatado**, em vez de
-/// inventado.
-///
-/// [naoLida] existe com o valor que o servidor manda **hoje** -- sempre falso,
-/// porque nao ha campo -- e nao como um `false` espalhado pela tela: no dia em
-/// que o campo entrar, ele e lido num lugar so e a marca acende.
+/// `last_message_preview` sai, no servidor, do corpo GRAVADO da ultima
+/// mensagem -- que ja passou pela redacao de telefone, e-mail, endereco e link.
+/// Esta tela **pinta o texto como veio**: nao corta, nao mascara e nao
+/// reescreve. Qualquer tratamento aqui seria uma segunda regra de redacao, e
+/// duas regras divergem na primeira que alguem esquecer de atualizar.
 class LinhaDaConversa extends StatelessWidget {
   const LinhaDaConversa({required this.conversa, super.key});
 
   final Conversa conversa;
 
-  /// Enquanto o contrato nao tem o campo, isto e sempre falso -- **e vem do
-  /// servidor quando vier**, nunca de contagem local.
-  bool get naoLida => false;
+  /// O PONTO UNICO da marca. Vem do servidor (`Conversation.unread`).
+  bool get naoLida => conversa.unread;
 
   @override
   Widget build(BuildContext context) {
@@ -371,7 +405,13 @@ class LinhaDaConversa extends StatelessWidget {
     // A conversa encerrada e o unico sinal do lado desabilitado que a tela
     // tem, e ela nao afirma qual dos dois e: ver `TextosDasMensagens`.
     final emLeitura = !conversa.status.aceitaMensagem;
-    final trecho = TrechoDaUltimaMensagem.de(conversa);
+    // A PREVIA DO SERVIDOR primeiro, e o corpo da mensagem carregada como
+    // reserva: a LISTA manda `messages: []` e traz `last_message_preview`, e o
+    // DETALHE manda as mensagens e tambem a previa. `TrechoDaUltimaMensagem`
+    // continua existindo para a segunda vista, e porque e ele que trata uma
+    // resposta antiga (versao de servidor sem o campo) sem pintar linha vazia.
+    final trecho = conversa.lastMessagePreview ?? TrechoDaUltimaMensagem.de(conversa);
+    final quando = conversa.lastMessageAt;
 
     return Semantics(
       button: true,
@@ -379,6 +419,12 @@ class LinhaDaConversa extends StatelessWidget {
         quem: quem,
         pet: conversa.petDisplayName,
         naoLida: naoLida,
+        // O "quando" entra no rotulo acessivel porque ele e informacao da
+        // linha, e `excludeSemantics` abaixo colapsa a linha num no so: sem
+        // isto, quem usa leitor de tela perderia a hora que quem ve tem.
+        quando: quando == null
+            ? null
+            : QuandoNaLista.de(quando, agora: DateTime.now()),
       ),
       // `excludeSemantics` para a linha ser UM controle para o leitor de tela,
       // com o rotulo acima -- e nao quatro nos soltos sem papel.
@@ -459,14 +505,30 @@ class LinhaDaConversa extends StatelessWidget {
                   ],
                 ),
               ),
-              if (naoLida)
-                Container(
-                  margin: const EdgeInsets.only(left: BichuEspaco.e2, top: 6),
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: cores.primary,
-                    shape: BoxShape.circle,
+              if (quando != null || naoLida)
+                Padding(
+                  padding: const EdgeInsets.only(left: BichuEspaco.e2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      if (quando != null)
+                        Text(
+                          QuandoNaLista.de(quando, agora: DateTime.now()),
+                          style: textos.bodySmall?.copyWith(
+                            color: cores.textMuted,
+                          ),
+                        ),
+                      if (naoLida)
+                        Container(
+                          margin: const EdgeInsets.only(top: BichuEspaco.e2),
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: cores.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
             ],

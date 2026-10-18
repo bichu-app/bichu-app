@@ -524,6 +524,7 @@ void describe('a autorização filtra de verdade, contra linhas que existem', ()
       conversationId: conversa,
       body: 'Alguém escaneou a tag da Aurora hoje às 15:30.',
       redactions: [],
+      especie: 'scan_notice',
     });
 
     assert.equal((await repo.mensagens(conversa, tutor, PAGINA)).length, 1);
@@ -749,6 +750,7 @@ void describe('a exclusão do pet leva a conversa junto', () => {
       conversationId: conversa,
       body: 'abertura',
       redactions: [],
+      especie: 'scan_notice',
     });
 
     await cliente.query('DELETE FROM pets WHERE id = $1', [pet]);

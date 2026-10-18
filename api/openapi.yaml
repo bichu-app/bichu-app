@@ -3217,6 +3217,56 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  # A area de mensagens foi VISTA. Zera o contador do sino, e nada mais.
+  #
+  # ## Por que e uma rota propria, e nao um efeito do GET da lista
+  #
+  # Porque ela ESCREVE, e `listConversations` declara `x-effects: []` e e um
+  # GET. Pendurar a escrita no GET faria um verbo seguro mudar estado -- e o
+  # pre-carregamento da lista, ou um `Atualizar`, zeraria o sino sem a pessoa
+  # ter olhado nada. O toque que abre a area e um ato dela, e tem rota.
+  #
+  # ## Por que em `/me` e nao em `/conversations/seen`
+  #
+  # `/conversations/{conversationId}` existe, e `conversationId` e um `uuid`.
+  # Um irmao estatico `seen` depende da precedencia do roteador para nao ser
+  # lido como id, e "funciona porque o roteador resolve nesta ordem" nao e uma
+  # garantia que se escreve no contrato. `/me` ja e o lugar do estado da
+  # PROPRIA conta neste contrato, e e disso que se trata.
+  /me/conversations-seen:
+    post:
+      operationId: markMyConversationsSeen
+      tags: [conversations]
+      # VAZIO E VERDADE: nao notifica ninguem e nao gera trabalho humano. A
+      # regra de `x-effects` e piso e nao teto (secao 5), e esta rota escreve --
+      # como `blockConversation`, que tambem declara vazio e tambem escreve.
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 240
+          window: 1h
+          on_exceed: accept_and_deduplicate
+          note: "a tela chama isto a cada abertura da area, e trocar de aba e voltar e um caso normal. NAO recusa: um 429 aqui deixaria o sino aceso para quem acabou de ler, que e a mentira exata que este contador existe para evitar. O teto existe so para o caso degenerado"
+      summary: Marca a area de mensagens como vista
+      description: |
+        Zera `ConversationPage.unread_count` e **nao marca conversa nenhuma
+        como lida**: `Conversation.unread` continua como estava.
+
+        As duas coisas sao fatos diferentes -- "eu vi que tenho mensagens" e
+        "eu li esta conversa" --, e uma rota que fizesse as duas apagaria a
+        unica pista de QUAL conversa guarda o recado.
+
+        **Nao zera o aviso de plaquinha lida nem o de achado.** Esses dois
+        continuam no contador ate que a conversa deles seja aberta. Ver
+        `ConversationPage.unread_count`.
+
+        Idempotente: chamar duas vezes seguidas responde igual.
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Marcada. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /conversations/{conversationId}:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -10150,7 +10200,7 @@ components:
 
     Conversation:
       type: object
-      required: [status, participants, messages]
+      required: [status, participants, messages, unread]
       description: |
         Vista do chamador **autenticado**. O achador sem conta recebe
         `FinderConversation`, que e outro schema e nao tem `id` nem `case_id`
@@ -10177,15 +10227,76 @@ components:
         messages:
           type: array
           items: { $ref: '#/components/schemas/Message' }
+        unread:
+          type: boolean
+          description: |
+            Esta conversa tem mensagem que o chamador ainda nao leu.
+
+            **"Lido" e o ITEM ABERTO, nao a lista vista** (BICHUS-278). Abrir
+            `listConversations` ZERA `unread_count`, e **nao** mexe neste campo:
+            quem abre a area de mensagens para de ver o numero no sino, mas
+            continua vendo QUAL conversa ainda nao leu. Sem essa separacao, uma
+            passada de olho na lista apagaria a unica pista de onde esta o
+            recado.
+
+            Nao conta a mensagem do proprio chamador. Vira falso quando ele
+            abre a conversa (`getConversation`).
+          # Calculado no servidor, e nunca no cliente: dois aparelhos da mesma
+          # pessoa divergiriam, e o primeiro a abrir mentiria para o segundo.
+        last_message_preview:
+          type: string
+          nullable: true
+          description: |
+            O inicio da ultima mensagem, cortado, para a linha da lista.
+
+            **Sai de `Message.body`, que ja esta REDIGIDO** -- telefone, e-mail,
+            endereco e link externo foram retirados antes de o texto ser
+            gravado. A previa nao pode desfazer a redacao porque nao existe, em
+            coluna nenhuma, o texto cru de onde ela desfaria: o que a pessoa
+            digitou nao e guardado. O recado original do achador vive em
+            `found_reports.notes`, em claro, e a previa **nao sai de la**.
+
+            Nulo quando a conversa nao tem mensagem visivel ao chamador.
+        last_message_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Quando foi a ultima mensagem, para a lista mostrar "quando" sem
+            abrir cada conversa. Nulo junto com `last_message_preview`.
         next_cursor: { type: string, nullable: true }
 
     ConversationPage:
       type: object
-      required: [items]
+      required: [items, unread_count]
       properties:
         items:
           type: array
           items: { $ref: '#/components/schemas/Conversation' }
+        unread_count:
+          type: integer
+          minimum: 0
+          description: |
+            Quantas conversas entram no **contador do sino** agora.
+
+            **Nao e "quantas estao nao lidas"**, e a diferenca e a regra de
+            produto: abrir a area de mensagens (`markMyConversationsSeen`)
+            zera este numero e deixa os itens nao lidos. Ver `Conversation.unread`.
+
+            **A EXCECAO NOMEADA:** o aviso de **plaquinha lida** e o de
+            **achado** NAO saem deste numero quando a pessoa abre a lista. Eles
+            sao a coisa mais importante que o produto tem para dizer -- alguem
+            esta com o animal na mao agora --, e deixar uma passada de olho na
+            lista apaga-los seria perder o recado pelo outro caminho. Eles saem
+            quando a conversa daquele aviso e ABERTA, e so ai.
+
+            **A tela exibe no maximo `9+`.** Tres digitos comem o espaco do
+            titulo na barra de topo. O numero aqui e o real, sem teto: o corte
+            e de apresentacao, e um teto na resposta impediria qualquer outra
+            superficie de dizer a verdade.
+          # O numero e DERIVADO na leitura, e nao materializado em coluna: duas
+          # fontes para o mesmo fato divergem no primeiro caminho que esquecer
+          # de decrementar uma delas -- e o decremento aqui e disparado por tela.
         next_cursor: { type: string, nullable: true }
 
     Message:

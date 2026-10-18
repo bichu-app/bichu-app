@@ -160,6 +160,10 @@ export class ConversaDoAchadorService {
         conversationId: conversa.id,
         body: AVISO_DE_DADO_RETIRADO,
         redactions: [],
+        // Explicação de interface, e não AVISO: sai do contador do tutor pela
+        // regra geral (BICHUS-278). Marcá-la como aviso deixaria o sino do
+        // tutor aceso por uma frase dirigida a quem achou o pet.
+        especie: 'redaction_warning',
       });
     }
 

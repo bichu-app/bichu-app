@@ -135,6 +135,33 @@ class ConversasApi {
     return mensagem;
   }
 
+  /// `POST /v1/me/conversations-seen` (`markMyConversationsSeen`).
+  ///
+  /// **Zera o contador do sino, e NAO marca conversa nenhuma como lida.**
+  ///
+  /// As duas coisas sao fatos diferentes -- "eu vi que tenho mensagens" e "eu
+  /// li esta conversa" --, e e por isso que sao duas chamadas: quem abre a area
+  /// para de ver o numero e continua vendo QUAL conversa guarda o recado. Uma
+  /// chamada so apagaria a unica pista de onde esta o recado.
+  ///
+  /// **O aviso de plaquinha lida e o de achado NAO saem do contador por aqui.**
+  /// Eles saem quando a conversa deles e aberta, e isso e decidido no servidor
+  /// -- o app nao sabe quais sao, e nao precisa saber.
+  ///
+  /// **A falha e ENGOLIDA de proposito**, e e o unico lugar deste arquivo em
+  /// que isso acontece: nao e dado da tela, e a pessoa nao pediu isto. Mostrar
+  /// "nao conseguimos marcar como visto" em cima da lista que acabou de
+  /// carregar seria um erro sobre uma operacao que ninguem executou. O numero
+  /// continua aceso e a proxima abertura tenta de novo, que e o pior desfecho
+  /// possivel -- e e aceitavel.
+  Future<void> marcarListaVista() async {
+    try {
+      await _api.post('/me/conversations-seen');
+    } on FalhaDeChamada {
+      // Ver o doc acima. Nao relanca.
+    }
+  }
+
   /// Le uma resposta, e resposta fora do contrato sai como `FormatException`.
   ///
   /// Mesma razao de `RedeApi._ler`: os modelos conferem tipo antes de ler, mas

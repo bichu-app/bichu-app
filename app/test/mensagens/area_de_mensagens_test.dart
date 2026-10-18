@@ -29,6 +29,7 @@ import 'dart:convert';
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/conversas_api.dart';
+import 'package:bichu/api/modelos_conversa.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/mensagens/area_de_mensagens.dart';
 import 'package:bichu/telas/mensagens/tela_da_conversa.dart';
@@ -86,6 +87,9 @@ Map<String, dynamic> conversa({
   String nomeDoPet = 'Tobias',
   List<Map<String, dynamic>>? mensagens,
   String? proximoCursor,
+  bool naoLida = false,
+  String? previa,
+  String? ultimaEm,
 }) => <String, dynamic>{
   'id': id,
   'case_id': null,
@@ -97,13 +101,21 @@ Map<String, dynamic> conversa({
   ],
   // A LISTA manda `messages: []`, como o servidor faz. O detalhe manda cheio.
   'messages': mensagens ?? <Map<String, dynamic>>[],
+  'unread': naoLida,
+  'last_message_preview': previa,
+  'last_message_at': ultimaEm,
   'next_cursor': proximoCursor,
 };
 
 Map<String, dynamic> paginaDeConversas(
   List<Map<String, dynamic>> itens, {
   String? proximoCursor,
-}) => <String, dynamic>{'items': itens, 'next_cursor': proximoCursor};
+  int naoLidas = 0,
+}) => <String, dynamic>{
+  'items': itens,
+  'unread_count': naoLidas,
+  'next_cursor': proximoCursor,
+};
 
 http.Response json200(Map<String, dynamic> corpo, {int status = 200}) =>
     http.Response(
@@ -153,7 +165,15 @@ class ServidorDeConversas {
     // O PADRAO E 404, e nao 200 vazio: e o que o servidor responde para
     // recurso que nao e do chamador (ADR-0021). Um 200 vazio aqui deixaria a
     // isca (a) verde pelo motivo errado.
-    if (resposta == null) return problema('not-found', 404);
+    if (resposta == null) {
+      // `POST /v1/me/conversations-seen` responde 204 por padrao: ela e
+      // chamada por TODA abertura da lista, e um 404 padrao aqui faria cada
+      // caso ter de registra-la a mao.
+      if (chave == 'POST /v1/me/conversations-seen') {
+        return http.Response('', 204);
+      }
+      return problema('not-found', 404);
+    }
     return resposta(req);
   }
 }
@@ -178,6 +198,7 @@ Future<void> abrirAMensagens(
   WidgetTester tester, {
   required ServidorDeConversas servidor,
   String rotaInicial = RotasDeMensagens.area,
+  ValueChanged<int>? aoContar,
 }) async {
   final api = apiDe(servidor);
   final roteador = GoRouter(
@@ -185,7 +206,8 @@ Future<void> abrirAMensagens(
     routes: <RouteBase>[
       GoRoute(
         path: RotasDeMensagens.area,
-        builder: (context, estado) => AreaDeMensagens(conversas: api),
+        builder: (context, estado) =>
+            AreaDeMensagens(conversas: api, aoContarNaoLidas: aoContar),
         routes: <RouteBase>[
           GoRoute(
             path: 'conversas/:${RotasDeMensagens.parametroDaConversa}',
@@ -974,5 +996,324 @@ void main() {
         isNot(contains('Retiramos um dado de contato')),
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // (e) O CONTADOR E A MARCA DE NAO LIDA (BICHUS-278)
+  //
+  // A regra, nas palavras do cliente via coordenacao: **"lido" e o ITEM
+  // ABERTO, nao a lista vista.** Abrir a lista ZERA O NUMERO e os itens
+  // CONTINUAM NAO LIDOS. Excecao nomeada: o aviso de plaquinha lida e o de
+  // achado NAO saem do contador ao abrir a lista.
+  //
+  // A excecao e cumprida NO SERVIDOR (`contarParaOSino`, pelo `system_kind`), e
+  // esta bancada prova o lado do app: que ele NAO recalcula o numero e NAO
+  // apaga marca ao abrir a lista. Os dois lados juntos sao a regra; nenhum
+  // sozinho e.
+  // -------------------------------------------------------------------------
+  group('(e) o contador vem do servidor, e abrir a lista nao marca itens', () {
+    testWidgets(
+      'ISCA: o contador e o do SERVIDOR, e nao a contagem dos itens da pagina',
+      (tester) async {
+        // 23 no sino, e UM item nao lido nesta pagina. Os numeros divergem de
+        // proposito: e exatamente o que acontece com quem tem 57 conversas e
+        // ve 20. Um app que contasse os itens mostraria 1.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(naoLida: true, previa: 'Achei ele na praça'),
+                conversa(
+                  id: '0192f3a1-7b2c-7def-8a01-000000000002',
+                  nomeDoAchador: 'Rafael',
+                ),
+              ], naoLidas: 23),
+            ),
+          },
+        );
+        var contado = -1;
+        await abrirAMensagens(
+          tester,
+          servidor: servidor,
+          aoContar: (n) => contado = n,
+        );
+
+        expect(
+          contado,
+          23,
+          reason: 'REPROVA: o app nao repassou o `unread_count` do servidor. '
+              'Contar os itens da pagina mostraria 1 para quem tem 23, e o '
+              'contador que mostra menos do que ha e pior que contador '
+              'ausente.',
+        );
+        // E o SELO corta em `9+`, sem mexer no numero real.
+        expect(seloDoContador(contado), '9+');
+        // Mas quem OUVE a tela recebe o numero inteiro: o corte e de quem ve.
+        expect(rotuloDoSino(contado), 'Mensagens, 23 não lidas');
+      },
+    );
+
+    testWidgets(
+      'ISCA: abrir a lista chama a rota de visto E NAO apaga a marca dos itens',
+      (tester) async {
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(naoLida: true, previa: 'Está comigo, pode vir'),
+              ], naoLidas: 1),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        // A rota de "visto" FOI chamada: e ela que zera o numero do sino.
+        expect(
+          servidor.chamadasA('POST /v1/me/conversations-seen'),
+          hasLength(1),
+          reason: 'REPROVA: abrir a area nao marcou a lista como vista, e o '
+              'sino ficaria aceso para quem acabou de ler.',
+        );
+        // E A MARCA DO ITEM CONTINUA ACESA.
+        final linha = tester.widget<LinhaDaConversa>(
+          find.byType(LinhaDaConversa),
+        );
+        expect(
+          linha.naoLida,
+          isTrue,
+          reason: 'REPROVA: abrir a lista apagou a marca do item. "Lido" e o '
+              'item aberto: apagar aqui tira a unica pista de QUAL conversa '
+              'guarda o recado -- que e o buraco que esta tela existe para '
+              'fechar.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: a rota de visto NAO manda conversa nenhuma no corpo',
+      (tester) async {
+        // Se ela mandasse, alguem acabaria usando a lista para marcar as da
+        // pagina como lidas -- o defeito exato que a regra proibe, entrando
+        // pela porta do corpo da requisicao.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(naoLida: true),
+              ], naoLidas: 1),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        final visto = servidor.chamadasA('POST /v1/me/conversations-seen').single;
+        expect(
+          visto.body,
+          anyOf(isEmpty, '{}'),
+          reason: 'REPROVA: a chamada de "visto" levou corpo. Ela zera o '
+              'CONTADOR e nao marca item: um corpo com ids convidaria a '
+              'marca-los.',
+        );
+        expect(visto.body, isNot(contains(idDaMinha)));
+      },
+    );
+
+    testWidgets(
+      'ISCA: o contador que chega ZERO nao desenha selo, e nao desenha "0"',
+      (tester) async {
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) =>
+                json200(paginaDeConversas(<Map<String, dynamic>>[conversa()])),
+          },
+        );
+        var contado = -1;
+        await abrirAMensagens(
+          tester,
+          servidor: servidor,
+          aoContar: (n) => contado = n,
+        );
+        expect(contado, 0);
+        expect(
+          seloDoContador(contado),
+          isNull,
+          reason: 'REPROVA: zero virou selo. Um `0` pintado chama o olho para '
+              'dizer que nao ha motivo para olhar.',
+        );
+        expect(textoDaTela(tester), isNot(contains('0 não lidas')));
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: sem marca no servidor, a linha NAO acende -- e o app nao '
+      'inventa a marca a partir da previa',
+      (tester) async {
+        // `unread: false` com previa e horario presentes. Um app que acendesse
+        // a marca "porque tem mensagem" passaria nas iscas acima e erraria
+        // aqui, dizendo que ha recado novo para quem ja leu tudo.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(previa: 'Combinado, levo ela amanhã'),
+              ]),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        expect(find.text('Combinado, levo ela amanhã'), findsOneWidget);
+        expect(
+          tester.widget<LinhaDaConversa>(find.byType(LinhaDaConversa)).naoLida,
+          isFalse,
+          reason: 'REPROVA: o app acendeu a marca sem o servidor ter dito que '
+              'ha algo nao lido. Sem este contrapeso, uma tela que acende '
+              'SEMPRE passaria nas iscas de cima.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // (f) A PREVIA NAO DESFAZ A REDACAO
+  //
+  // A garantia de verdade e ESTRUTURAL e esta no servidor: a previa sai de
+  // `conversation_messages.body`, que ja esta redigido no banco, e o texto cru
+  // nao existe em coluna nenhuma. O que esta bancada prova e o lado do app --
+  // que ele pinta o que veio e **nao tem caminho proprio** para reconstruir o
+  // dado nem para buscar o recado cru de outro campo.
+  // -------------------------------------------------------------------------
+  group('(f) a previa mostra o texto redigido, e nada alem', () {
+    testWidgets(
+      'ISCA: a previa redigida e pintada como veio, com o marcador do que saiu',
+      (tester) async {
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(
+                  naoLida: true,
+                  // E ASSIM que o servidor manda: o telefone JA saiu.
+                  previa: 'me liga no [telefone removido] que eu levo',
+                ),
+              ], naoLidas: 1),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        final texto = textoDaTela(tester);
+        expect(texto, contains('[telefone removido]'));
+        // E NENHUM digito de telefone aparece em lugar nenhum da lista.
+        expect(
+          RegExp(r'\d{4,}').hasMatch(texto),
+          isFalse,
+          reason: 'REPROVA: sequencia de 4+ digitos na lista. A previa nao '
+              'pode trazer de volta o que a redacao retirou -- e a lista e a '
+              'superficie onde isso passaria sem ninguem abrir nada.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: o app NAO pede a conversa inteira para montar a previa da linha',
+      (tester) async {
+        // O caminho errado e curto e tentador: pedir `getConversation` por
+        // linha so para ter o trecho. Sao 20 requisicoes antes de a lista
+        // aparecer, na tela que o tutor abre com o telefone tocando -- e, pior,
+        // o detalhe tem as MENSAGENS, de onde alguem montaria a previa a mao e
+        // por outra regra.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(previa: 'Está comigo'),
+                conversa(
+                  id: '0192f3a1-7b2c-7def-8a01-000000000002',
+                  previa: 'Levo amanhã',
+                ),
+              ]),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        expect(
+          servidor.chamadasA('GET /v1/conversations/$idDaMinha'),
+          isEmpty,
+          reason: 'REPROVA: a lista pediu a conversa inteira. A previa vem na '
+              'propria pagina (`last_message_preview`), e pedir por linha e o '
+              'N+1 que o servidor evitou de proposito.',
+        );
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: sem previa na resposta, a linha nao pinta trecho nenhum -- '
+      'e nao inventa um',
+      (tester) async {
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) =>
+                json200(paginaDeConversas(<Map<String, dynamic>>[conversa()])),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        expect(find.byType(LinhaDaConversa), findsOneWidget);
+        expect(find.text('Marina  ·  Tobias'), findsOneWidget);
+        // Nenhum texto de reserva, nenhum "sem mensagens", nenhum placeholder.
+        expect(textoDaTela(tester), isNot(contains('Sem mensagens')));
+        expect(textoDaTela(tester), isNot(contains('...')));
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // (g) O DESTINO DO AVISO: a conversa nova em cima, com o pet nomeado
+  // -------------------------------------------------------------------------
+  group('(g) quem chega do aviso ve a conversa nova em cima', () {
+    testWidgets(
+      'a ordem da resposta e a ordem da tela, e o pet aparece nomeado',
+      (tester) async {
+        // O servidor ordena por `opened_at DESC`, e a conversa de uma plaquinha
+        // recem-escaneada nasce AGORA -- entao ela vem primeiro na resposta. O
+        // que esta tela precisa garantir e que ela NAO reordena: um `sort` aqui
+        // por qualquer campo quebraria o destino do aviso em silencio.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (_) => json200(
+              paginaDeConversas(<Map<String, dynamic>>[
+                conversa(
+                  nomeDoPet: 'Tobias',
+                  nomeDoAchador: 'Marina',
+                  naoLida: true,
+                  previa: 'Alguém escaneou a plaquinha de Tobias',
+                ),
+                conversa(
+                  id: '0192f3a1-7b2c-7def-8a01-000000000002',
+                  nomeDoPet: 'Nina',
+                  nomeDoAchador: 'Rafael',
+                  previa: 'Combinado',
+                ),
+              ], naoLidas: 1),
+            ),
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+
+        final primeira = tester.getTopLeft(find.text('Marina  ·  Tobias')).dy;
+        final segunda = tester.getTopLeft(find.text('Rafael  ·  Nina')).dy;
+        expect(
+          primeira,
+          lessThan(segunda),
+          reason: 'REPROVA: a tela reordenou a resposta. Quem chega do aviso '
+              'da plaquinha precisa achar a conversa nova EM CIMA -- se ela '
+              'desce, a pessoa cata o recado na lista.',
+        );
+        // O PET NOMEADO na linha: e por ele que a pessoa reconhece o aviso.
+        expect(find.textContaining('Tobias'), findsWidgets);
+      },
+    );
   });
 }

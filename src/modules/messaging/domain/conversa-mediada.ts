@@ -152,3 +152,64 @@ export function participantesVisiveis(nomes: NomesDaConversa): readonly Particip
     { role: 'finder', displayName: primeiroNomeOuApelido(achador, 'Quem achou') },
   ];
 }
+
+/**
+ * O teto da prévia da última mensagem, em caracteres.
+ *
+ * 140 e não 1000: a linha da lista mostra UMA linha, e mandar o corpo inteiro
+ * de cada uma das vinte conversas da página seria trafegar 20 KB para pintar
+ * 20 linhas de texto cortado na tela.
+ */
+export const TETO_DA_PREVIA = 140;
+
+/**
+ * A prévia da última mensagem, para a linha da lista.
+ *
+ * ## A PRÉVIA NÃO DESFAZ A REDAÇÃO, e a garantia é estrutural
+ *
+ * O argumento desta função é `conversation_messages.body`, que **já está
+ * redigido no banco** — telefone, e-mail, endereço e link saíram do texto antes
+ * de ele ser gravado, e a migração da conversa mediada diz isso por extenso: *"O
+ * TEXTO JÁ REDIGIDO. Nunca o que a pessoa digitou"*. O texto cru **não existe em
+ * coluna nenhuma**.
+ *
+ * Então a prévia não pode vazar o que a redação esconde, e não por disciplina de
+ * quem escreveu a consulta: não há, no banco, de onde desfazer. É a mesma razão
+ * pela qual esta função recebe uma string e não um id — ela não tem como ir
+ * buscar outra versão do texto.
+ *
+ * **O que seria o erro, e está nomeado para não ser cometido:** o recado que o
+ * achador digita no formulário do aviso vive em `found_reports.notes`, **em
+ * claro** — a coluna nasceu antes da redação, e é o serviço que redige aquele
+ * texto ao montar a mensagem de abertura. Uma prévia montada a partir de
+ * `found_reports.notes` publicaria na LISTA exatamente o telefone que a conversa
+ * existe para não deixar passar, e passaria por todos os testes que olhassem
+ * apenas a conversa aberta. A prévia sai de `conversation_messages.body`, e só.
+ *
+ * Corta no limite de caracteres sem tentar fechar palavra: cortar na palavra
+ * faria o fim da prévia variar com o conteúdo, e um "…" depois de um espaço é
+ * mais confuso que depois de uma letra.
+ */
+export function previaDaMensagem(corpo: string): string | null {
+  // Espaço em branco colapsado: a mensagem de abertura tem quebra de linha, e
+  // sem isto a prévia sairia com `\n` no meio e a linha da lista cresceria.
+  const limpo = corpo.replace(/\s+/gu, ' ').trim();
+  if (limpo === '') return null;
+  if (limpo.length <= TETO_DA_PREVIA) return limpo;
+  return `${limpo.slice(0, TETO_DA_PREVIA - 1).trimEnd()}…`;
+}
+
+/**
+ * O que a barra de topo pinta no sino. **Apresentação, e nada mais.**
+ *
+ * O contador na resposta é o número REAL, sem teto, porque um teto no corpo
+ * impediria qualquer outra superfície de dizer a verdade. O corte em `9+` é
+ * daqui: três dígitos comem o espaço do título na barra.
+ *
+ * Zero devolve nulo e não `'0'`: o sino sem nada não desenha distintivo. Um
+ * `0` pintado é pior que nada — ele chama o olho para dizer que não há motivo.
+ */
+export function selarContador(naoLidas: number): string | null {
+  if (naoLidas <= 0) return null;
+  return naoLidas > 9 ? '9+' : String(naoLidas);
+}

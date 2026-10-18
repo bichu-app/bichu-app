@@ -1572,6 +1572,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca a area de mensagens como vista
+         * @description Zera `ConversationPage.unread_count` e **nao marca conversa nenhuma
+         *     como lida**: `Conversation.unread` continua como estava.
+         *
+         *     As duas coisas sao fatos diferentes -- "eu vi que tenho mensagens" e
+         *     "eu li esta conversa" --, e uma rota que fizesse as duas apagaria a
+         *     unica pista de QUAL conversa guarda o recado.
+         *
+         *     **Nao zera o aviso de plaquinha lida nem o de achado.** Esses dois
+         *     continuam no contador ate que a conversa deles seja aberta. Ver
+         *     `ConversationPage.unread_count`.
+         *
+         *     Idempotente: chamar duas vezes seguidas responde igual.
+         */
+        post: operations["markMyConversationsSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{conversationId}": {
         parameters: {
             query?: never;
@@ -5467,10 +5498,63 @@ export interface components {
                 display_name: string;
             }[];
             messages: components["schemas"]["Message"][];
+            /**
+             * @description Esta conversa tem mensagem que o chamador ainda nao leu.
+             *
+             *     **"Lido" e o ITEM ABERTO, nao a lista vista** (BICHUS-278). Abrir
+             *     `listConversations` ZERA `unread_count`, e **nao** mexe neste campo:
+             *     quem abre a area de mensagens para de ver o numero no sino, mas
+             *     continua vendo QUAL conversa ainda nao leu. Sem essa separacao, uma
+             *     passada de olho na lista apagaria a unica pista de onde esta o
+             *     recado.
+             *
+             *     Nao conta a mensagem do proprio chamador. Vira falso quando ele
+             *     abre a conversa (`getConversation`).
+             */
+            unread: boolean;
+            /**
+             * @description O inicio da ultima mensagem, cortado, para a linha da lista.
+             *
+             *     **Sai de `Message.body`, que ja esta REDIGIDO** -- telefone, e-mail,
+             *     endereco e link externo foram retirados antes de o texto ser
+             *     gravado. A previa nao pode desfazer a redacao porque nao existe, em
+             *     coluna nenhuma, o texto cru de onde ela desfaria: o que a pessoa
+             *     digitou nao e guardado. O recado original do achador vive em
+             *     `found_reports.notes`, em claro, e a previa **nao sai de la**.
+             *
+             *     Nulo quando a conversa nao tem mensagem visivel ao chamador.
+             */
+            last_message_preview?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando foi a ultima mensagem, para a lista mostrar "quando" sem
+             *     abrir cada conversa. Nulo junto com `last_message_preview`.
+             */
+            last_message_at?: string | null;
             next_cursor?: string | null;
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
+            /**
+             * @description Quantas conversas entram no **contador do sino** agora.
+             *
+             *     **Nao e "quantas estao nao lidas"**, e a diferenca e a regra de
+             *     produto: abrir a area de mensagens (`markMyConversationsSeen`)
+             *     zera este numero e deixa os itens nao lidos. Ver `Conversation.unread`.
+             *
+             *     **A EXCECAO NOMEADA:** o aviso de **plaquinha lida** e o de
+             *     **achado** NAO saem deste numero quando a pessoa abre a lista. Eles
+             *     sao a coisa mais importante que o produto tem para dizer -- alguem
+             *     esta com o animal na mao agora --, e deixar uma passada de olho na
+             *     lista apaga-los seria perder o recado pelo outro caminho. Eles saem
+             *     quando a conversa daquele aviso e ABERTA, e so ai.
+             *
+             *     **A tela exibe no maximo `9+`.** Tres digitos comem o espaco do
+             *     titulo na barra de topo. O numero aqui e o real, sem teto: o corte
+             *     e de apresentacao, e um teto na resposta impediria qualquer outra
+             *     superficie de dizer a verdade.
+             */
+            unread_count: number;
             next_cursor?: string | null;
         };
         Message: {
@@ -11264,6 +11348,25 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markMyConversationsSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marcada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: components["responses"]["Unauthorized"];
         };
     };

@@ -277,8 +277,11 @@ class Conversa {
     required this.status,
     required this.participants,
     required this.messages,
+    required this.unread,
     this.caseId,
     this.nextCursor,
+    this.lastMessagePreview,
+    this.lastMessageAt,
   });
 
   /// `id` do contrato. **Chave de lista e parametro de caminho, e nada mais.**
@@ -305,6 +308,32 @@ class Conversa {
 
   /// O cursor da proxima pagina de MENSAGENS desta conversa. Nulo no fim.
   final String? nextCursor;
+
+  /// `unread` do contrato: esta conversa tem mensagem que eu ainda nao li.
+  ///
+  /// **Vem do servidor, e nunca e calculado aqui.** O servidor guarda ate
+  /// quando cada lado leu (`conversation_reads`); o app nao tem esse dado e,
+  /// se o inventasse, dois aparelhos da mesma pessoa divergiriam e o primeiro a
+  /// abrir mentiria para o segundo.
+  ///
+  /// **Nao e afetado por abrir a lista.** "Lido" e o ITEM ABERTO: a pessoa que
+  /// abre a area para de ver o numero no sino e continua vendo QUAL conversa
+  /// ainda nao leu. Sem essa separacao, uma passada de olho apagaria a unica
+  /// pista de onde esta o recado.
+  final bool unread;
+
+  /// `last_message_preview`: o inicio da ultima mensagem, ja cortado pelo
+  /// servidor.
+  ///
+  /// **Ele vem REDIGIDO, e nao e o app que redige.** O servidor monta a previa
+  /// a partir do corpo gravado, que ja passou pela redacao de telefone,
+  /// e-mail, endereco e link. O app **nao tenta cortar, mascarar nem reescrever
+  /// este texto**: qualquer tratamento aqui seria uma segunda regra de redacao,
+  /// e duas regras divergem.
+  final String? lastMessagePreview;
+
+  /// `last_message_at`: quando foi a ultima mensagem. Nulo junto com a previa.
+  final DateTime? lastMessageAt;
 
   /// O outro lado, para o titulo da conversa e para a marca neutra.
   ///
@@ -333,12 +362,20 @@ class Conversa {
     final cursor = bruto['next_cursor'];
     final participantes = bruto['participants'];
     final mensagens = bruto['messages'];
+    final previa = bruto['last_message_preview'];
+    final quando = bruto['last_message_at'];
     return Conversa(
       id: id,
       caseId: caso is String ? caso : null,
       petDisplayName: nomeDoPet is String ? nomeDoPet : '',
       status: estado,
       nextCursor: cursor is String ? cursor : null,
+      // `unread` e `required` no contrato. Ausente, o valor verdadeiro e
+      // `false`: pintar a marca sem o servidor ter dito que ha algo nao lido
+      // seria a mentira que o contador existe para evitar, so na outra direcao.
+      unread: bruto['unread'] == true,
+      lastMessagePreview: previa is String ? previa : null,
+      lastMessageAt: quando is String ? DateTime.tryParse(quando) : null,
       participants: participantes is! List
           ? const <ParticipanteDaConversa>[]
           : <ParticipanteDaConversa>[
@@ -361,9 +398,25 @@ class Conversa {
 
 /// `#/components/schemas/ConversationPage` do contrato.
 class PaginaDeConversas {
-  const PaginaDeConversas({required this.items, this.nextCursor});
+  const PaginaDeConversas({
+    required this.items,
+    required this.unreadCount,
+    this.nextCursor,
+  });
 
   final List<Conversa> items;
+
+  /// `unread_count` do contrato: o numero do **sino**, da conta inteira.
+  ///
+  /// **Nao e `items.where(unread).length`**, e a diferenca e a regra: abrir a
+  /// area zera este numero e deixa as marcas de item; e o aviso de plaquinha
+  /// lida e o de achado **nao** saem daqui ao abrir a lista -- so quando a
+  /// conversa deles e aberta. O app nao sabe nada disso, e nao precisa: o
+  /// numero vem pronto.
+  ///
+  /// Ele vem **sem teto**. O corte em `9+` e de apresentacao e mora em
+  /// [seloDoContador].
+  final int unreadCount;
 
   /// O cursor da proxima pagina. **Cursor, e nunca deslocamento**: o contrato
   /// so declara `cursor`, e paginar por numero de pagina reordenaria a lista
@@ -373,8 +426,13 @@ class PaginaDeConversas {
   static PaginaDeConversas doJson(Map<String, dynamic> json) {
     final itens = json['items'];
     final cursor = json['next_cursor'];
+    final contador = json['unread_count'];
     return PaginaDeConversas(
       nextCursor: cursor is String ? cursor : null,
+      // `unread_count` e `required` no contrato. Ausente ou de tipo
+      // inesperado, zero: um sino apagado e melhor que um sino com numero
+      // inventado.
+      unreadCount: contador is int && contador > 0 ? contador : 0,
       items: itens is! List
           ? const <Conversa>[]
           : <Conversa>[
@@ -426,4 +484,34 @@ bool conversaNaoAceitaMais(Problem problem) {
   // precisa fechar a caixa de texto -- deixar o campo aberto faria a pessoa
   // escrever de novo o que nunca vai ser entregue.
   return problem.tipo == ProblemTipo.conversaEncerrada || problem.status == 410;
+}
+
+/// O que o **sino** da barra de topo pinta. Apresentacao, e nada mais.
+///
+/// O contador vem do servidor **sem teto**, porque um teto na resposta
+/// impediria qualquer outra superficie de dizer a verdade. O corte e aqui:
+/// **`9+`**, porque tres digitos comem o espaco do titulo na barra.
+///
+/// Zero devolve **nulo**, e nao `'0'`: o sino sem nada nao desenha distintivo.
+/// Um `0` pintado e pior que nada -- ele chama o olho para dizer que nao ha
+/// motivo para olhar.
+///
+/// Numero negativo tambem devolve nulo. Nao e caso teorico: o app le
+/// `unread_count` de uma resposta, e um campo ausente ou estranho nao pode
+/// virar `-1 mensagens` na barra.
+String? seloDoContador(int naoLidas) {
+  if (naoLidas <= 0) return null;
+  return naoLidas > 9 ? '9+' : '$naoLidas';
+}
+
+/// O rotulo acessivel do sino, com o numero REAL por extenso.
+///
+/// **O leitor de tela recebe o numero inteiro, e nao `9+`**: o corte existe
+/// porque tres digitos nao cabem em 64 dp de barra, e essa restricao nao
+/// alcanca quem ouve a tela. Anunciar "nove mais mensagens" para quem tem 23
+/// seria aplicar a quem ouve um limite que e de quem ve.
+String rotuloDoSino(int naoLidas) {
+  if (naoLidas <= 0) return 'Mensagens';
+  if (naoLidas == 1) return 'Mensagens, 1 não lida';
+  return 'Mensagens, $naoLidas não lidas';
 }
