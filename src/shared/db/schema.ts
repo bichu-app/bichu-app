@@ -1545,15 +1545,31 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
-/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+/**
+ * O `CHECK` `collar_tag_requests_decisao_conhecida`: a DECISAO do painel, e so
+ * ela. Nao diz onde a encomenda esta -- isso e [PassoDaEntregaDaPlaquinha].
+ */
 export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O `CHECK` `collar_tag_requests_entrega_conhecida`: os tres passos da ENTREGA,
+ * acrescentados pela `20261018000004` -- solicitado, em transporte, chegou.
+ *
+ * Eixo SEPARADO de [DecisaoDoPedidoDePlaquinha] porque acrescentar valor a uma
+ * `enum` de resposta quebra o contrato (`oasdiff`,
+ * `response-property-enum-value-added`). Os dois eixos nao sao independentes:
+ * `collar_tag_requests_entrega_exige_atendimento` proibe sair de `requested`
+ * sem o pedido estar `fulfilled`.
+ */
+export type PassoDaEntregaDaPlaquinha = 'requested' | 'in_transit' | 'arrived';
 
 /**
  * O pedido do OBJETO FISICO da plaquinha da coleira.
  *
  * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
- * Nao guarda endereco nem valor, e as duas ausencias sao decisao de produto do
- * cliente ainda em aberto, e nao esquecimento.
+ * Guarda o endereco de entrega desde a `20261017000012` (decisao do cliente de
+ * 17/10) e a ENTREGA desde a `20261018000004`; o VALOR segue fora, e cobranca
+ * continua fora de escopo por decisao dele.
  *
  * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
  * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
@@ -1585,6 +1601,23 @@ export interface CollarTagRequestsTable {
   status: Generated<DecisaoDoPedidoDePlaquinha>;
   requested_at: Generated<Date>;
   decided_at: Date | null;
+  /**
+   * O passo da ENTREGA. `Generated` porque a coluna e
+   * `NOT NULL DEFAULT 'requested'`: o `INSERT` do pedido nao o escreve, e todo
+   * pedido que existe -- inclusive os de antes da `20261018000004` -- tem um
+   * passo. **Nunca nulo**, e e isso que faz a tela nao inferir passo de ausencia.
+   */
+  delivery_state: Generated<PassoDaEntregaDaPlaquinha>;
+  /**
+   * O codigo de rastreio, TEXTO que o administrador digita. Opcional: nem todo
+   * envio tem rastreio. **Sem validacao de formato de transportadora** e **sem
+   * integracao com transportadora nenhuma** -- so teto de tamanho (3 a 64).
+   */
+  tracking_code: string | null;
+  /** Quando saiu. Nulo enquanto `delivery_state` e `requested`. */
+  shipped_at: Date | null;
+  /** Quando chegou. Nulo em tudo que nao chegou. */
+  delivered_at: Date | null;
 }
 
 /** O `CHECK` `network_events_origem_conhecida`. */

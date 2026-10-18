@@ -67,6 +67,8 @@
  * mao: caminho a mao vira 404 em silencio, e 404 e a resposta do caso 3.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
@@ -160,7 +162,28 @@ interface Bancada {
   }[];
 }
 
-function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.now())): Bancada {
+/**
+ * A entrega que o repositorio devolve. Padrao: pedido recem-nascido, no passo
+ * inicial e sem rastreio, que e o que a coluna `NOT NULL DEFAULT 'requested'`
+ * grava.
+ */
+const ENTREGA_NOVA = {
+  passoDaEntrega: 'requested',
+  codigoDeRastreio: null,
+  despachadoEm: null,
+  entregueEm: null,
+} as const satisfies Pick<
+  PedidoDoTutor,
+  'passoDaEntrega' | 'codigoDeRastreio' | 'despachadoEm' | 'entregueEm'
+>;
+
+function bancada(
+  contador: RateLimitStore = criarContadorEmMemoria(() => Date.now()),
+  entrega: Pick<
+    PedidoDoTutor,
+    'passoDaEntrega' | 'codigoDeRastreio' | 'despachadoEm' | 'entregueEm'
+  > = ENTREGA_NOVA,
+): Bancada {
   const criados: { petId: PetId; endereco: EnderecoDeEntrega; observacao: string | null }[] = [];
 
   const repositorio: PedidoDePlaquinhaRepository = {
@@ -178,11 +201,14 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
         status: 'pending',
         solicitadoEm: SOLICITADO_EM,
         observacao: entrada.observacao,
+        ...entrega,
       });
     },
     listarFila: () => naoUsado('listarFila'),
     pedidoPorRef: () => naoUsado('pedidoPorRef'),
+    pedidoParaLeitura: () => naoUsado('pedidoParaLeitura'),
     decidir: () => naoUsado('decidir'),
+    atualizarEntrega: () => naoUsado('atualizarEntrega'),
   };
 
   const ids: IdGenerator = {
@@ -264,8 +290,23 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     const b = bancada();
     const resposta = await pedir(b, MEU_PET);
     const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(corpo).sort(), ['notes', 'requested_at', 'status']);
+    // O conjunto e FECHADO, e os quatro campos da entrega entraram nele em
+    // 18/10 (migracao `20261018000004`). Nenhum deles e UUID, e a varredura
+    // abaixo e o que garante isso.
+    assert.deepEqual(Object.keys(corpo).sort(), [
+      'delivered_at',
+      'delivery_state',
+      'notes',
+      'requested_at',
+      'shipped_at',
+      'status',
+      'tracking_code',
+    ]);
     assert.equal(corpo['status'], 'pending');
+    // `delivery_state` NUNCA e nulo: a coluna e `NOT NULL DEFAULT 'requested'`,
+    // e a pagina privada do aplicativo desenha o passo a partir deste campo
+    // sozinho -- sem nulo a tratar.
+    assert.equal(corpo['delivery_state'], 'requested');
     // Nenhum valor da resposta tem forma de UUID. A varredura e sobre o corpo
     // inteiro, e nao sobre uma lista de campos: campo novo que vaze UUID
     // amanha reprova aqui sem ninguem lembrar de incluir o nome dele.
@@ -421,6 +462,65 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     // E o schema do contrato que recusou, nao o banco: nada chegou ao
     // repositorio.
     assert.equal(b.criados.length, 0);
+  });
+
+  void it('7. a ENTREGA sai na leitura do DONO: passo, rastreio e os dois carimbos', async () => {
+    const RASTREIO = 'XQ771230045BR';
+    const DESPACHADO = new Date('2026-10-18T09:30:00.000Z');
+    const CHEGOU = new Date('2026-10-20T14:05:00.000Z');
+    const b = bancada(undefined, {
+      passoDaEntrega: 'arrived',
+      codigoDeRastreio: RASTREIO,
+      despachadoEm: DESPACHADO,
+      entregueEm: CHEGOU,
+    });
+    const resposta = await pedir(b, MEU_PET);
+    assert.equal(resposta.statusCode, 200);
+    const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
+
+    // Esta e uma leitura DO DONO: quem chamou se autenticou, e o `WHERE` do
+    // repositorio ja exigiu `pets.owner_user_id = <chamador>`. O rastreio sai
+    // aqui porque e ele que a pessoa precisa para acompanhar a encomenda.
+    assert.equal(corpo['delivery_state'], 'arrived');
+    assert.equal(corpo['tracking_code'], RASTREIO);
+    assert.equal(corpo['shipped_at'], DESPACHADO.toISOString());
+    assert.equal(corpo['delivered_at'], CHEGOU.toISOString());
+
+    // DESLIGAMENTO: apagar as quatro linhas da entrega de
+    // `comoCollarTagRequest` (`pedido-de-plaquinha-routes.ts`) reprova aqui, e
+    // e isso que separa esta isca de uma que so olhasse o `status`.
+  });
+
+  void it('7b. o rastreio NAO sai em superficie sem conta: `resolveTag` nao o projeta', () => {
+    // A unica leitura publica que fala de plaquinha e a RESOLUCAO da tag, e ela
+    // e de outro modulo e de outro repositorio: `tag-routes.ts` com
+    // `kysely-tag-repository.ts`. Nenhuma das duas passa por
+    // `PedidoDoTutor` nem por `collar_tag_requests`.
+    //
+    // O que este caso mede e a FONTE, e nao uma resposta: o conjunto de campos
+    // que a projecao publica pode carregar nao inclui nenhum dos quatro da
+    // entrega. Medir pela resposta exigiria subir a rota publica aqui, e o que
+    // interessa e que a entrega nao tenha caminho ate la.
+    // A RAIZ DO REPOSITORIO, e nao `import.meta.url`: a suite compila para
+    // `dist/_tests` e roda de la, entao um caminho relativo ao modulo procura o
+    // `.ts` dentro de `dist` e nao acha. `process.cwd()` e a raiz, de onde
+    // `npm test` roda.
+    const fonte = readFileSync(
+      join(process.cwd(), 'src/modules/tags/adapters/persistence/kysely-tag-repository.ts'),
+      'utf8',
+    );
+    for (const campo of ['tracking_code', 'delivery_state', 'shipped_at', 'delivered_at']) {
+      assert.ok(
+        !fonte.includes(campo),
+        `o repositorio da resolucao publica da tag passou a tocar \`${campo}\`. ` +
+          'O rastreio e a entrega sao do DONO e da administracao; uma superficie sem conta ' +
+          'que os projete entrega informacao de encomenda a quem so escaneou a coleira.',
+      );
+    }
+
+    // CONTRAPESO: o arquivo FOI lido de verdade. Sem esta linha, um caminho
+    // errado daria string vazia e as quatro afirmacoes acima passariam juntas.
+    assert.ok(fonte.includes('pet_tags'), 'a fonte lida nao e o repositorio da tag');
   });
 
   void it('6b. observacao no limite passa, e chega inteira ao repositorio', async () => {

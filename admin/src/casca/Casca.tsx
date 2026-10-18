@@ -40,6 +40,13 @@ const ITENS: ItemDaNavegacao[] = [
   // Parceiros e Tags sao sub-itens da Loja: e o mesmo assunto, e nao uma secao
   // nova.
   { para: '/perto/indicacoes', rotulo: 'Indicações', icone: 'add', sub: true, ativo: (c) => c.startsWith('/perto/indicacoes') },
+  // 18/10/2026. A fila da plaquinha da coleira e a ENTREGA dela. Secao propria,
+  // e nao sub-item: o pedido do objeto fisico nao e assunto da Loja (que vende)
+  // nem do Perto (que lista lugares) -- e trabalho de expedicao, e e dele que
+  // quem atende cuida. **Sem aviso de contagem**: `AdminCollarTagRequestPage`
+  // nao tem `pending_total`, e inventar uma soma na tela contaria o que a
+  // listagem nao mostra, que e o defeito de "1 pendente" sobre fila vazia.
+  { para: '/plaquinhas', rotulo: 'Plaquinhas', icone: 'tick', ativo: (c) => c === '/plaquinhas' || c.startsWith('/plaquinhas/') },
 ];
 
 function iniciais(nome: string): string {

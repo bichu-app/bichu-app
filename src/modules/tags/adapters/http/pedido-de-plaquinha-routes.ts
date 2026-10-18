@@ -165,6 +165,16 @@ function comoCollarTagRequest(pedido: PedidoDoTutor): Record<string, unknown> {
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),
     notes: pedido.observacao,
+    // A ENTREGA, que e o que a pagina privada do aplicativo desenha. Sai aqui
+    // porque esta e uma leitura DO DONO -- quem chama acabou de se autenticar e
+    // o `WHERE` do repositorio ja exigiu `pets.owner_user_id = <chamador>`.
+    //
+    // **Nenhum destes quatro sai em superficie sem conta.** A resolucao publica
+    // da tag (`resolveTag`) nao os projeta, e nao passa por aqui.
+    delivery_state: pedido.passoDaEntrega,
+    tracking_code: pedido.codigoDeRastreio,
+    shipped_at: pedido.despachadoEm === null ? null : pedido.despachadoEm.toISOString(),
+    delivered_at: pedido.entregueEm === null ? null : pedido.entregueEm.toISOString(),
   };
 }
 

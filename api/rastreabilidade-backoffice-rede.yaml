@@ -740,6 +740,80 @@ telas:
           - resp:decline_reason
 
 
+  # ======================================================================
+  # A PLAQUINHA DA COLEIRA: a fila de pedidos e a ENTREGA (18/10/2026).
+  #
+  # Pedido do cliente, palavras dele: "deve ser inserido uma rota no backoffice
+  # para o adminstrador mudar o status da entrega e inserir o codigo de rastreio
+  # e atualizar a entrega".
+  #
+  # DOIS EIXOS, e a escolha foi medida: `status` e a DECISAO
+  # (pending/fulfilled/declined) e `delivery_state` e a ENTREGA
+  # (requested/in_transit/arrived). Alargar `status` com um quarto valor foi a
+  # primeira forma escrita, e `oasdiff` a reprovou quatro vezes pela regra
+  # `response-property-enum-value-added`; dispensar portao nao era opcao, entao o
+  # desenho mudou. Os eixos nao sao independentes: o `CHECK`
+  # `collar_tag_requests_entrega_exige_atendimento` proibe sair de `requested`
+  # sem o pedido estar `fulfilled`.
+  #
+  # O ENDERECO DE ENTREGA sai nesta tela e so nela, e nao entra na trilha de
+  # auditoria (regra 4 da migracao `20261017000012`, mantida).
+  # ======================================================================
+  - tela: "Plaquinha da coleira - fila de pedidos e entrega"
+    prototipo: nenhum
+    estados: [fila, vazio, atendendo, recusando, despachando, em_transporte, chegou, recusada]
+    operacoes:
+      - operationId: listAdminCollarTagRequests
+        situacao: contrato
+        usa:
+          - query:status
+          - query:delivery_state
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - enum:AdminCollarTagRequestStatus.pending
+          - enum:AdminCollarTagRequestStatus.fulfilled
+          - enum:AdminCollarTagRequestStatus.declined
+          - enum:CollarTagDeliveryState.requested
+          - enum:CollarTagDeliveryState.in_transit
+          - enum:CollarTagDeliveryState.arrived
+      - operationId: getAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:ref
+          - resp:pet
+          - resp:delivery_address
+          - resp:notes
+          - resp:status
+          - resp:requested_at
+          - resp:decided_at
+          - resp:delivery_state
+          - resp:tracking_code
+          - resp:shipped_at
+          - resp:delivered_at
+      - operationId: updateAdminCollarTagRequestDelivery
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - req:delivery_state
+          - req:tracking_code
+          - resp:delivery_state
+          - resp:tracking_code
+          - resp:shipped_at
+          - resp:delivered_at
+      - operationId: fulfillAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:status
+      - operationId: declineAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:status
+
 correspondencias:
   # ====================================================================
   # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO
@@ -933,19 +1007,19 @@ contrato_sem_tela:
   - operationId: createNetworkEventCoverUploadIntent
     resolucao: "tela: resolvido quando a tela existir"
     nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet"
-  # A fila do pedido da plaquinha da coleira (17/10/2026). O LADO DO BACKEND
-  # ESTA AQUI; A TELA DO PAINEL NAO -- a sessao Backoffice e dona dela, e estas
-  # tres operacoes sao o que ela vai chamar. Declarado assim no proprio
-  # contrato, e nao suposto aqui.
-  - operationId: listAdminCollarTagRequests
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "a fila de pedidos da plaquinha, com o endereco de entrega que o administrador le para enviar; a tela e da sessao Backoffice"
-  - operationId: fulfillAdminCollarTagRequest
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "marcar que a plaquinha fisica saiu. NAO emite codigo: emitir e `issuePetTag`, irreversivel (ADR-0004)"
-  - operationId: declineAdminCollarTagRequest
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "recusar o pedido, sem motivo escrito; o que o tutor ve depois da recusa e decisao de produto em aberto"
+  # AS TRES ENTRADAS DA FILA DA PLAQUINHA SAIRAM DAQUI EM 18/10/2026, e nao
+  # foram redatadas: `listAdminCollarTagRequests`,
+  # `fulfillAdminCollarTagRequest` e `declineAdminCollarTagRequest`.
+  #
+  # A `resolucao` das tres era, nas tres, "tela: resolvido quando a tela
+  # existir", e a TELA EXISTE: `admin/src/plaquinhas/FilaDePlaquinhas.tsx`,
+  # construida junto da entrega. O motivo delas CADUCOU pelo unico desfecho que
+  # elas mesmas previam.
+  #
+  # As tres passaram para `telas`, na entrada "Plaquinha da coleira - fila de
+  # pedidos e entrega", junto das duas operacoes novas da entrega. Elas nao
+  # deixaram de ser cobradas: em `telas` o portao cobra MAIS -- cada `usa` tem
+  # de resolver contra o contrato --, e `contrato_sem_tela` so pedia uma nota.
   - campo: "AdminNetworkEvent.origin=community"
     nota: "a lista do painel ainda nao distingue o encontro da comunidade do encontro do painel; o campo sai na resposta desde 17/10"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"
