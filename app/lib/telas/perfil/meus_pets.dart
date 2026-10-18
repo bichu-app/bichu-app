@@ -101,8 +101,7 @@ class MeusPets extends StatefulWidget {
   static const String tituloDoVazio = 'Seu primeiro pet entra aqui.';
 
   static const String explicacaoDoVazio =
-      'Cadastre seu pet para gerar a plaquinha com QR e entrar na rede de quem '
-      'procura e de quem encontra.';
+      'Cadastre seu pet para gerar a plaquinha com QR.';
 
   /// A faixa do criterio 7, palavra por palavra.
   static const String faixaDeCache =

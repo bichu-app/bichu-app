@@ -69,12 +69,10 @@ class AgendaDaRede extends StatefulWidget {
 
   static const String tituloDoVazio = 'A Rede ainda não tem encontros';
   static const String explicacaoDoVazio =
-      'Os encontros da comunidade em praças e parques aparecem aqui assim que '
-      'forem marcados.';
+      'Aparecem aqui assim que forem marcados.';
   static const String tituloDoVazioDePedidos = 'Nenhum pedido ainda';
   static const String explicacaoDoVazioDePedidos =
-      'Quando você pedir para participar de um encontro privado, ele aparece '
-      'aqui.';
+      'Seus pedidos aparecem aqui.';
   static const String tituloDoVazioDeEncerrados = 'Nenhum encontro encerrado';
   static const String explicacaoDoVazioDeEncerrados =
       'Os encontros que já aconteceram ficam aqui.';
@@ -91,15 +89,6 @@ class AgendaDaRede extends StatefulWidget {
   /// recurso: quem abre a `Rede` quer marcar um encontro, nao "criar um
   /// NetworkEvent".
   static const String rotuloDeMarcar = 'Marcar um encontro';
-  static const String notaDasCidades =
-      'As cidades abaixo são as que já apareceram na agenda. O filtro procura '
-      'na base inteira.';
-  static const String notaDaDistancia =
-      'Calculada a partir da região do seu perfil. Só entram os encontros '
-      'públicos que têm mapa.';
-  static const String notaDeMaisPerto =
-      'Mais perto usa a região do seu perfil. Os encontros sem mapa ficam no '
-      'fim, e os privados saem da lista.';
   static const String ordemTrocadaPeloServidor =
       'A ordem escolhida não está disponível agora. A lista usa a ordem '
       'marcada acima.';
@@ -660,7 +649,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         GrupoDeFiltro(
           chave: 'city',
           titulo: 'Cidade',
-          nota: AgendaDaRede.notaDasCidades,
           selecionado: r.cidade,
           opcoes: <OpcaoDeRecorte>[
             for (final c in cidades) OpcaoDeRecorte(codigo: c, rotulo: c),
@@ -683,7 +671,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
           GrupoDeFiltro(
             chave: 'max_km',
             titulo: 'Distância',
-            nota: AgendaDaRede.notaDaDistancia,
             selecionado: r.distanciaMaxima?.codigo,
             opcoes: <OpcaoDeRecorte>[
               for (final d in DistanciaMaxima.values)
@@ -778,7 +765,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return ControleDeOrdenacao(
       opcoes: opcoes,
       efetiva: _ordemEfetiva,
-      nota: _podeMedir ? AgendaDaRede.notaDeMaisPerto : null,
       porQueNaoEAPedida: pedida != null && pedida != _ordemEfetiva
           ? AgendaDaRede.ordemTrocadaPeloServidor
           : null,

@@ -68,7 +68,6 @@ class AbaPets extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.pets);
     final sessao = Escopo.of(context).sessao;
-    final textos = Theme.of(context).textTheme;
 
     return AnimatedBuilder(
       animation: sessao,
@@ -140,14 +139,6 @@ class AbaPets extends StatelessWidget {
                 key: ValueKey<String>('aviso-inicio-${usuario.id}'),
                 usuario: usuario,
               ),
-            if (!logado) ...<Widget>[
-              Text(
-                'O Bichu dá uma identidade ao seu pet e aciona a vizinhança '
-                'quando ele some.',
-                style: textos.bodyLarge,
-              ),
-              const SizedBox(height: BichuEspaco.e6),
-            ],
             // `Cadastrar meu pet` NAO MORA AQUI (BICHUS-232, pedido do
             // cliente em 22/09 depois do primeiro teste em aparelho).
             //
@@ -182,7 +173,6 @@ class AbaPets extends StatelessWidget {
             const _PortaDeSubDestino(
               icone: Icons.volunteer_activism_outlined,
               titulo: 'Adoções',
-              descricao: 'Os pets da vizinhança que estão procurando uma casa.',
               rota: Rotas.adocoes,
             ),
             const SizedBox(height: BichuEspaco.e6),
@@ -200,8 +190,7 @@ class AbaPets extends StatelessWidget {
             // trezentos. Diz o que vai existir e que ainda nao existe (25.7.3).
             const EstadoVazio(
               titulo: 'A lista de pets perdidos está em construção',
-              explicacao: 'Aqui vão ficar os pets perdidos e achados da sua '
-                  'região, com a foto e o bairro onde foram vistos.',
+              explicacao: 'Os perdidos e achados da sua região vão ficar aqui.',
             ),
             // `Entrou como <e-mail>` e `Ja tenho conta` TAMBEM SAIRAM
             // (BICHUS-232). Os dois eram identidade e acao de conta dentro da
@@ -409,7 +398,6 @@ class AbaPerto extends StatelessWidget {
           _PortaDeSubDestino(
             icone: Icons.favorite_outline,
             titulo: 'Pets de ONGs para adoção',
-            descricao: 'Abre a lista de Pets já filtrada em adoção.',
             rota: Rotas.adocoes,
           ),
         ],
@@ -713,13 +701,10 @@ class TelaDeAdocoes extends StatelessWidget {
   Widget build(BuildContext context) {
     return const TelaDeAba(
       titulo: 'Adoções',
-      reforco: 'Os pets da sua região que estão procurando uma casa, '
-          'incluindo os das ONGs parceiras.',
       filhos: <Widget>[
         EstadoVazio(
           titulo: 'A lista de adoções está em construção',
-          explicacao: 'Aqui vão ficar os pets para adoção da sua região, no '
-              'mesmo cartão e na mesma lista dos perdidos.',
+          explicacao: 'Os pets para adoção da sua região vão ficar aqui.',
         ),
       ],
     );
@@ -736,13 +721,11 @@ class _PortaDeSubDestino extends StatelessWidget {
   const _PortaDeSubDestino({
     required this.icone,
     required this.titulo,
-    required this.descricao,
     required this.rota,
   });
 
   final IconData icone;
   final String titulo;
-  final String descricao;
   final String rota;
 
   @override
@@ -764,21 +747,7 @@ class _PortaDeSubDestino extends StatelessWidget {
               // proprio seria anuncio duplo no leitor de tela.
               Icon(icone, color: cores.textSecondary),
               const SizedBox(width: BichuEspaco.e4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(titulo, style: textos.titleMedium),
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      descricao,
-                      style: textos.bodyMedium?.copyWith(
-                        color: cores.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: Text(titulo, style: textos.titleMedium)),
               const SizedBox(width: BichuEspaco.e2),
               Icon(Icons.chevron_right, color: cores.textSecondary),
             ],

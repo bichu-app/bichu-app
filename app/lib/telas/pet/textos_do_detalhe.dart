@@ -74,9 +74,7 @@ abstract final class TextosDoDetalhe {
 
   // -- Sinais e vazios ------------------------------------------------------
 
-  static String semSinais(String nome) =>
-      'Nenhum sinal cadastrado. Sinais são o que faz alguém reconhecer '
-      '${_o(nome)} na rua.';
+  static const String semSinais = 'Nenhum sinal cadastrado.';
 
   static const String adicionarSinais = 'Adicionar sinais';
 
@@ -107,8 +105,7 @@ abstract final class TextosDoDetalhe {
   static const String trocarAFoto = 'Trocar a foto';
   static const String removerAFoto = 'Remover a foto';
 
-  static const String semFotoAinda =
-      'Nenhuma foto ainda. A foto é o que faz alguém reconhecer o pet na rua.';
+  static const String semFotoAinda = 'Nenhuma foto ainda.';
 
   /// **Campo vazio a preencher, e nao pendencia acusada.** O criterio 10 da
   /// BICHUS-61 pede isso por nome: a ausencia de foto nao e erro de quem

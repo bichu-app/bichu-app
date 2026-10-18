@@ -94,21 +94,17 @@ class TelaDoEncontro extends StatefulWidget {
   static const String rotuloDePedir = 'Pedir para participar';
   static const String tituloDoEnviado = 'Pedido enviado';
   static const String textoDoEnviado =
-      'Se o pedido for aprovado até o dia do encontro, o local e os detalhes '
-      'aparecem aqui.';
+      'Se for aprovado, o local aparece aqui.';
   static const String tituloDoAprovado = 'Pedido aprovado';
-  static const String textoDoAprovado =
-      'Você pode participar. O local e os detalhes estão abaixo.';
+  static const String textoDoAprovado = 'Você pode participar.';
   static const String rotuloDeDesistir = 'Desistir do pedido';
   static const String tituloDaDesistencia = 'Desistir do pedido?';
   static const String textoDaDesistencia =
-      'O pedido sai de Meus pedidos. Se mudar de ideia, você pode pedir de novo '
-      'enquanto o encontro não acontecer.';
+      'O pedido sai de Meus pedidos. Você pode pedir de novo depois.';
   static const String rotuloDeManter = 'Manter o pedido';
 
   static const String tituloDaGuarda = 'Entre para pedir';
-  static const String textoDaGuarda =
-      'Entre na sua conta para pedir. Depois de entrar, a gente envia o pedido.';
+  static const String textoDaGuarda = 'Depois de entrar, a gente envia o pedido.';
   static const String rotuloDeEntrar = 'Entrar';
   static const String rotuloDeAgoraNao = 'Agora não';
 

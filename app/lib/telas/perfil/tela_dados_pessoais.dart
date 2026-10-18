@@ -456,15 +456,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(_TextosDosDados.reforco, style: textos.bodyLarge),
-          const SizedBox(height: BichuEspaco.e6),
           _grupo(_TextosDosDados.quemVoceE, textos),
           _campo(
             chave: _CamposDosDados.nome,
             rotulo: _TextosDosDados.nome,
             controlador: _nome,
             limite: 80,
-            ajuda: _TextosDosDados.ajudaDoNome,
             capitalizacao: TextCapitalization.words,
           ),
           // O E-MAIL, DE LEITURA. Ver o cabecalho desta classe.
@@ -479,7 +476,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             rotulo: _TextosDosDados.telefone,
             controlador: _telefone,
             limite: limiteDoTelefone,
-            ajuda: _TextosDosDados.ajudaDoTelefone,
             tipoDeTeclado: TextInputType.phone,
             exemplo: _TextosDosDados.exemploDoTelefone,
             // Mostra formatado; `telefoneEmE164` e quem envia.
@@ -498,7 +494,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             rotulo: _TextosDosDados.cep,
             controlador: _cep,
             limite: 8,
-            ajuda: _TextosDosDados.ajudaDoCep,
             tipoDeTeclado: TextInputType.number,
             formatadores: <TextInputFormatter>[
               FilteringTextInputFormatter.digitsOnly,
@@ -741,16 +736,10 @@ abstract final class _CamposDosDados {
 abstract final class _TextosDosDados {
   static const String titulo = 'Meus dados';
 
-  static const String reforco =
-      'O nome que a vizinhança vê e o jeito de a gente te achar quando '
-      'alguém encontrar o seu pet.';
-
   static const String quemVoceE = 'Quem é você';
   static const String suaRegiao = 'Sua região de referência';
 
   static const String nome = 'Nome';
-  static const String ajudaDoNome =
-      'Como você aparece para quem encontra o seu pet.';
   static const String nomeSoComEspaco =
       'Escreva o seu nome, ou deixe o campo vazio para tirá-lo.';
 
@@ -767,8 +756,6 @@ abstract final class _TextosDosDados {
       'para oi@bichu.app.';
 
   static const String telefone = 'Telefone';
-  static const String ajudaDoTelefone =
-      'Com DDD. Celular tem 9 dígitos, fixo tem 8.';
   static const String exemploDoTelefone = '(11) 98765-4321';
   static const String telefoneIncompleto =
       'Faltam dígitos. Confira o DDD e o número, como em (11) 98765-4321.';
@@ -778,8 +765,6 @@ abstract final class _TextosDosDados {
   static const String telefoneConfirmado = 'Telefone confirmado.';
 
   static const String cep = 'CEP';
-  static const String ajudaDoCep =
-      'Preenche bairro e cidade sozinho. Tudo continua editável.';
   static const String cepTemOitoDigitos = 'O CEP tem 8 dígitos.';
   static const String cepNaoSeApaga =
       'O CEP não pode ser apagado por aqui. Para tirá-lo, escreva para '
