@@ -315,6 +315,31 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
       return comoEntrada(linha);
     },
 
+    async removerAvaliacao(ref: string, motivo: string, agora) {
+      // EXCLUSAO LOGICA e numa consulta so: `status`, o motivo e o instante
+      // juntos, porque o `CHECK professional_reviews_moderacao_tem_motivo`
+      // recusa a linha em que `status <> 'published'` sem motivo. Duas
+      // atualizacoes separadas nao passariam pelo primeiro `UPDATE`.
+      //
+      // `status = 'published'` no `WHERE` torna a operacao IDEMPOTENTE no que
+      // importa: remover duas vezes nao reescreve o motivo da primeira, e a
+      // segunda chamada devolve `null` -> 404. O motivo original e de quem
+      // auditar, e sobrescreve-lo apagaria a decisao que de fato tirou a
+      // avaliacao do ar.
+      const linha = await trx
+        .updateTable('professional_reviews')
+        .set({
+          status: 'removed',
+          moderation_reason: motivo,
+          moderated_at: new Date(agora),
+        })
+        .where('ref', '=', ref)
+        .where('status', '=', 'published')
+        .returning(['id', 'rating'])
+        .executeTakeFirst();
+      return linha === undefined ? null : { id: linha.id, notaAntes: linha.rating };
+    },
+
     registrarNaTrilha: (evento) => deps.trilha.recordIn(trx, evento),
   };
 }

@@ -37,6 +37,7 @@ import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
+import '../telas/perto/pagina_do_local.dart';
 import '../telas/perto/sugerir_profissional.dart';
 import '../telas/rede/criar_encontro.dart';
 import '../telas/rede/encontro_da_rede.dart';
@@ -88,7 +89,37 @@ abstract final class Rotas {
 
   /// **Indicar um profissional para o `Perto`: irma da casca**, pela mesma
   /// razao de [criarEncontroDaRede].
+  ///
+  /// **Declarada ANTES do ramo da casca** nao e necessario aqui, ao contrario
+  /// de [criarEncontroDaRede]: o caminho dela e `/perto/indicacoes/nova`, e
+  /// [localDoPerto] casa em `/perto/locais/:slug`. Os dois primeiros segmentos
+  /// diferem, entao nao ha como um engolir o outro.
   static const String sugerirProfissional = '/perto/indicacoes/nova';
+
+  /// A pagina de um local do `Perto`, **sob o ramo da secao** (18/10/2026).
+  ///
+  /// O cliente pediu que o cartao do diretorio abrisse uma pagina, com
+  /// pontuacao de 1 a 5 e recomendacao em texto visivel aos outros usuarios.
+  /// Esta e a porta.
+  ///
+  /// **Sob o ramo, e nao irma da casca**, pela mesma escolha de
+  /// [produtoDaLoja] e [encontroDaRede] e pelo mesmo motivo: a pagina de um
+  /// local e LEITURA, nao tarefa. A barra de abas continua, e voltar devolve a
+  /// lista com a busca e o filtro de quem estava procurando intactos -- quem
+  /// esta comparando tres veterinarios quer continuar comparando, e esconder
+  /// as outras quatro secoes para mostrar uma ficha tiraria o app de quem so
+  /// foi ver uma nota.
+  static const String localDoPerto = 'locais/:slug';
+
+  static const String parametroDoLocal = 'slug';
+
+  /// O endereco do local [slug].
+  ///
+  /// `Uri.encodeComponent` porque o `slug` vem da resposta do servidor, e nao
+  /// desta tela: montar caminho com interpolacao crua e como um slug com barra
+  /// vira uma rota que nao existe. Mesma regra de [produtoDaLojaDe].
+  static String localDoPertoDe(String slug) =>
+      '/perto/locais/${Uri.encodeComponent(slug)}';
   static const String loja = '/loja';
 
   /// O produto da `Loja`, sob o ramo da secao: a barra de abas continua, e
@@ -706,6 +737,14 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               GoRoute(
                 path: Rotas.perto,
                 builder: (context, estado) => const AbaPerto(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: Rotas.localDoPerto,
+                    builder: (context, estado) => PaginaDoLocal(
+                      slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

@@ -146,8 +146,13 @@ class VerificacaoDaEntrada {
 ///
 /// O que ela **nao tem, porque a tabela nao tem coluna**: foto, logotipo,
 /// horario de funcionamento, rua e numero, site, e-mail, redes sociais, lista
-/// de servicos, faixa de preco e avaliacao. Nada disso e omissao desta classe:
-/// nao existe no contrato e nao existe no banco.
+/// de servicos e faixa de preco. Nada disso e omissao desta classe: nao existe
+/// no contrato e nao existe no banco.
+///
+/// **`avaliacao` SAIU dessa lista em 18/10/2026.** `DirectoryEntrySummary`
+/// ganhou `rating` porque o cliente pediu media e quantidade "na lista e na
+/// pagina", e [pontuacao] e esse campo. Ele e **opcional** no contrato, e a
+/// opcionalidade importa aqui: ver o comentario do campo.
 class EntradaDoDiretorio {
   const EntradaDoDiretorio({
     required this.slug,
@@ -160,6 +165,7 @@ class EntradaDoDiretorio {
     this.sobre,
     this.telefoneE164,
     this.distanciaEmMetros,
+    this.pontuacao,
   });
 
   /// A chave. **Nao existe `id`.**
@@ -183,20 +189,24 @@ class EntradaDoDiretorio {
   /// quando a entrada nao tem coordenada.
   final int? distanciaEmMetros;
 
+  /// A pontuacao agregada do local, **ou nulo**.
+  ///
+  /// `rating` nao esta em `required` no contrato, e a opcionalidade e
+  /// deliberada: o APK publicado le esta resposta e nao conhece o campo, e uma
+  /// resposta que nao conseguiu agregar e melhor sem o campo do que com media
+  /// zero -- zero se le como "pessimo", e local sem avaliacao nao e pessimo.
+  ///
+  /// **Nulo, e tambem `quantidade == 0`, nao desenham estrela nenhuma e nao
+  /// escrevem "0,0"**: a linha da media simplesmente nao existe no cartao.
+  final PontuacaoDoLocal? pontuacao;
+
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao.
   ///
   /// Os tres campos sao anulaveis no contrato, e juntar a mao produz
   /// `" · São Paulo · "` no dia em que o bairro vier nulo. Aqui a lista e
   /// filtrada antes de unir.
-  String? get linhaDeLugar {
-    final partes = <String>[
-      if (bairro != null && bairro!.isNotEmpty) bairro!,
-      if (cidade != null && cidade!.isNotEmpty) cidade!,
-      if (estado != null && estado!.isNotEmpty) estado!,
-    ];
-    if (partes.isEmpty) return null;
-    return partes.join(' · ');
-  }
+  String? get linhaDeLugar =>
+      linhaDeLugarDe(bairro: bairro, cidade: cidade, estado: estado);
 
   static EntradaDoDiretorio doJson(Map<String, dynamic> json) {
     final slug = json['slug'];
@@ -230,8 +240,33 @@ class EntradaDoDiretorio {
       sobre: json['about'] as String?,
       telefoneE164: json['phone_e164'] as String?,
       distanciaEmMetros: distancia is num ? distancia.round() : null,
+      // **Campo OPCIONAL: ausente devolve nulo e nao estoura.** Ao contrario
+      // de `slug` e `display_name` acima, `rating` nao esta em `required`, e
+      // tratar a ausencia como falha faria a listagem inteira cair por causa
+      // de um numero de enfeite.
+      pontuacao: PontuacaoDoLocal.opcional(json['rating']),
     );
   }
+}
+
+/// A linha de lugar de uma entrada: bairro, cidade e UF, **sem separador
+/// orfao**.
+///
+/// Os tres campos sao anulaveis no contrato, e juntar a mao produz
+/// `" · São Paulo · "` no dia em que o bairro vier nulo. Aqui a lista e
+/// filtrada antes de unir.
+///
+/// Mora fora das classes porque o cartao da listagem
+/// ([EntradaDoDiretorio]) e a pagina do local ([DetalheDoLocal]) precisam
+/// escrever a MESMA linha: duas copias divergem na primeira edicao.
+String? linhaDeLugarDe({String? bairro, String? cidade, String? estado}) {
+  final partes = <String>[
+    if (bairro != null && bairro.isNotEmpty) bairro,
+    if (cidade != null && cidade.isNotEmpty) cidade,
+    if (estado != null && estado.isNotEmpty) estado,
+  ];
+  if (partes.isEmpty) return null;
+  return partes.join(' · ');
 }
 
 /// `#/paths/~1directory~1entries/get/parameters/6/schema` do contrato.
@@ -541,3 +576,586 @@ class ReciboDaSugestao {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// A PAGINA DO LOCAL E AS AVALIACOES (18/10/2026)
+// ---------------------------------------------------------------------------
+// O cliente pediu que o cartao do `Perto` abrisse uma pagina, com pontuacao de
+// 1 a 5 e recomendacao em texto visivel para os outros, "como acontece na
+// playstore". Cinco operacoes entraram no contrato por isso:
+// `getDirectoryEntry`, `listDirectoryEntryReviews`, `putMyDirectoryEntryReview`,
+// `deleteMyDirectoryEntryReview` e `reportDirectoryEntryReview`.
+//
+// Quatro regras do contrato que alguem adivinharia errado, e que por isso
+// moram em codigo e nao em comentario de tela:
+//
+// 1. **`average` e NULO quando `count` e zero, e nunca vira `0,0`.** Zero se
+//    le como "pessimo", e local sem avaliacao nao e pessimo. A media tem UMA
+//    casa decimal e o SERVIDOR a arredonda: [PontuacaoDoLocal.mediaEmTexto] so
+//    troca o ponto pela virgula.
+// 2. **`body` nulo e estado normal e frequente**: quem deu so a nota. A nota E
+//    a avaliacao, o texto e o opcional.
+// 3. **`author_display_name` nulo e estado normal** (conta sem nome de
+//    exibicao), e a linha nao fica muda: ela diz
+//    [AvaliacaoDoLocal.nomeDeQuemLe].
+// 4. **`edited_at` nao nulo se DIZ.** Avaliacao reescrita depois de alguem ter
+//    lido a primeira versao e um formato conhecido de ma-fe, e marcar a edicao
+//    e o que o torna visivel.
+
+/// `#/components/schemas/DirectoryRating` do contrato.
+///
+/// **Calculada na consulta, nunca materializada.** Nao ha coluna
+/// `rating_average` e nao ha gatilho: o autor desabilitar a conta muda a media
+/// de todo local que ele avaliou sem tocar em nenhuma avaliacao, e um gatilho
+/// nao enxerga esse caminho. Para esta classe o que isso significa e simples:
+/// o valor que chegou e o valor de agora, e nao ha cache a invalidar aqui.
+class PontuacaoDoLocal {
+  const PontuacaoDoLocal({
+    required this.media,
+    required this.quantidade,
+    required this.histograma,
+  });
+
+  /// A media das notas publicadas, **com uma casa decimal, arredondada pelo
+  /// servidor**. Nula quando [quantidade] e zero.
+  ///
+  /// **Nao ha `?? 0` em nenhum lugar deste arquivo nem das telas.** Nulo aqui
+  /// e a instrucao de nao desenhar media nem estrela.
+  final double? media;
+
+  /// Quantas avaliacoes publicadas o local tem. Zero e estado normal.
+  final int quantidade;
+
+  /// Quantas avaliacoes em cada nota, de 1 a 5. **As cinco chaves existem
+  /// sempre**, inclusive com zero: a barra de uma nota que ninguem deu precisa
+  /// existir vazia, senao o grafico muda de forma e deixa de ser comparavel
+  /// entre locais.
+  final Map<int, int> histograma;
+
+  /// Ha avaliacao a mostrar. Falso leva ao estado zero, que **nao tem media e
+  /// nao tem estrela**.
+  bool get temAvaliacoes => quantidade > 0;
+
+  /// A media como a tela escreve: uma casa e **virgula** decimal.
+  ///
+  /// Nula quando nao ha media. A tela que a recebe nula nao desenha o bloco,
+  /// em vez de desenhar um bloco com um traco dentro.
+  String? get mediaEmTexto {
+    final valor = media;
+    if (valor == null) return null;
+    return valor.toStringAsFixed(1).replaceAll('.', ',');
+  }
+
+  /// `128 avaliações`, no plural e no singular.
+  String get quantidadeEmTexto =>
+      quantidade == 1 ? '1 avaliação' : '$quantidade avaliações';
+
+  /// Quantas avaliacoes tem a nota [nota]. Fora de 1..5 devolve zero.
+  int quantasNaNota(int nota) => histograma[nota] ?? 0;
+
+  /// A fracao da barra de [nota] no histograma, de 0 a 1.
+  ///
+  /// O divisor e [quantidade] e nao a maior barra: a barra de 5 estrelas de um
+  /// local com 78 de 128 precisa parecer 61% e nao 100%, senao dois locais com
+  /// distribuicoes diferentes desenham o mesmo grafico.
+  double fracaoDaNota(int nota) {
+    if (quantidade <= 0) return 0;
+    return quantasNaNota(nota) / quantidade;
+  }
+
+  static const List<int> notasDeCimaParaBaixo = <int>[5, 4, 3, 2, 1];
+
+  /// O rotulo acessivel de uma barra: `4 estrelas: 26 de 128 avaliações`.
+  String rotuloDaBarra(int nota) {
+    final quantas = quantasNaNota(nota);
+    final estrelas = nota == 1 ? '1 estrela' : '$nota estrelas';
+    return '$estrelas: $quantas de $quantidade';
+  }
+
+  /// A pontuacao de um corpo obrigatorio (`DirectoryEntryDetail.rating` e
+  /// `DirectoryReviewWritten.rating`).
+  static PontuacaoDoLocal doJson(Object? bruto) {
+    if (bruto is! Map) {
+      throw const FormatException(
+        'A resposta trouxe `rating` que nao e objeto. O contrato declara o '
+        'campo como obrigatorio em `DirectoryEntryDetail` e em '
+        '`DirectoryReviewWritten` (api/openapi.yaml).',
+      );
+    }
+    final quantidade = bruto['count'];
+    if (quantidade is! num) {
+      throw const FormatException(
+        '`rating` sem `count`. O contrato declara o campo como obrigatorio, e '
+        'ele e o que distingue "ainda sem avaliacoes" de "nao consegui '
+        'agregar": assumir zero aqui apagaria a diferenca.',
+      );
+    }
+    final media = bruto['average'];
+    final histograma = bruto['histogram'];
+    return PontuacaoDoLocal(
+      // **Nulo atravessa nulo.** `average` nulo com `count` zero e o caso
+      // normal; `average` nulo com `count` acima de zero seria resposta fora
+      // do contrato, e mesmo ai a tela fica sem media em vez de inventar uma.
+      media: media is num ? media.toDouble() : null,
+      quantidade: quantidade.toInt(),
+      histograma: Map<int, int>.unmodifiable(<int, int>{
+        for (final nota in <int>[1, 2, 3, 4, 5])
+          nota: histograma is Map && histograma['$nota'] is num
+              ? (histograma['$nota'] as num).toInt()
+              : 0,
+      }),
+    );
+  }
+
+  /// A pontuacao de um campo **opcional** (`DirectoryEntrySummary.rating`).
+  ///
+  /// **Opcional de proposito, e nao por timidez** (contrato, 18/10): o APK
+  /// publicado le a listagem e nao conhece o campo, e uma resposta que nao
+  /// conseguiu agregar e melhor sem o campo do que com media zero. Ausente
+  /// devolve nulo, e **o cartao sem pontuacao nao desenha estrela nenhuma**.
+  static PontuacaoDoLocal? opcional(Object? bruto) {
+    if (bruto is! Map) return null;
+    if (bruto['count'] is! num) return null;
+    return doJson(bruto);
+  }
+}
+
+/// `#/components/schemas/DirectoryEntryDetail/properties/review_blocked_reason`.
+///
+/// Por que `can_review` e falso, **para a tela escrever a frase certa e
+/// oferecer a saida** em vez de um "nao e possivel" sem porta. Enum de um
+/// valor so hoje, e aberto de proposito no contrato: bloqueio por moderacao
+/// entra aqui e nao num segundo booleano.
+enum MotivoDeNaoPoderAvaliar {
+  /// Conta sem e-mail confirmado. A mesma regua de criar encontro.
+  canalNaoVerificado('unverified_channel');
+
+  const MotivoDeNaoPoderAvaliar(this.codigo);
+
+  final String codigo;
+
+  static MotivoDeNaoPoderAvaliar? porCodigo(String? codigo) {
+    for (final m in MotivoDeNaoPoderAvaliar.values) {
+      if (m.codigo == codigo) return m;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/DirectoryEntryDetail` do contrato — a pagina do local.
+///
+/// **Os mesmos campos de [EntradaDoDiretorio], mais [pontuacao],
+/// [minhaAvaliacaoRef], [podeAvaliar] e [motivoDeNaoPoderAvaliar].** O
+/// contrato repete os campos em vez de usar `allOf` porque o gerador de tipos
+/// de `src/`, `admin/` e `web/` perde a nulabilidade na interseccao; aqui a
+/// classe e separada pelo mesmo motivo pratico: o detalhe tem `rating`
+/// OBRIGATORIO e o resumo nao.
+///
+/// **Nenhum campo de cadastro novo.** Site, e-mail, WhatsApp, redes sociais,
+/// horario de funcionamento, foto e endereco de rua **nao existem** em
+/// `professionals` -- nao ha coluna e nao ha painel que as preencha. Esta
+/// classe nao tem onde guarda-los e a tela nao desenha espaco para eles:
+/// espaco reservado ensinaria quem le que o dado vem.
+class DetalheDoLocal {
+  const DetalheDoLocal({
+    required this.slug,
+    required this.atividade,
+    required this.nome,
+    required this.verificacao,
+    required this.pontuacao,
+    required this.podeAvaliar,
+    this.cidade,
+    this.estado,
+    this.bairro,
+    this.sobre,
+    this.telefoneE164,
+    this.distanciaEmMetros,
+    this.minhaAvaliacaoRef,
+    this.motivoDeNaoPoderAvaliar,
+  });
+
+  final String slug;
+  final AtividadeDoDiretorio? atividade;
+  final String nome;
+  final VerificacaoDaEntrada verificacao;
+
+  final String? cidade;
+  final String? estado;
+  final String? bairro;
+  final String? sobre;
+
+  /// Telefone **comercial** (ADR-0011 secao 4), e a unica acao de contato que
+  /// a pagina oferece. Nulo e comum, e pagina sem telefone **nao tem botao de
+  /// ligar desabilitado**: nao tem botao.
+  final String? telefoneE164;
+
+  /// Arredondada a 100 m, a grade do ADR-0006. **Nula com mais frequencia aqui
+  /// do que na lista**: quem chega por link direto costuma nao ter localizacao
+  /// de referencia valida. Nula nao escreve linha nenhuma.
+  final int? distanciaEmMetros;
+
+  final PontuacaoDoLocal pontuacao;
+
+  /// O `ref` da MINHA avaliacao deste local, ou nulo se eu nao avaliei.
+  ///
+  /// Existe para a tela saber **antes de montar** se desenha o campo vazio ou
+  /// a minha avaliacao com `Editar` e `Apagar`. Sem ele a tela teria de varrer
+  /// a paginacao inteira procurando `mine: true`, e a minha pode estar na
+  /// pagina 7.
+  final String? minhaAvaliacaoRef;
+
+  /// **Se EU posso avaliar agora**, e nao se a funcionalidade existe.
+  ///
+  /// **Nao e autorizacao**: `putMyDirectoryEntryReview` reavalia a condicao no
+  /// servidor. Este campo existe para a tela nao oferecer um campo que vai
+  /// levar 403.
+  final bool podeAvaliar;
+
+  /// Por que [podeAvaliar] e falso. Nulo quando ele e verdadeiro.
+  final MotivoDeNaoPoderAvaliar? motivoDeNaoPoderAvaliar;
+
+  /// A linha de lugar: bairro, cidade e UF, sem separador orfao. **A MESMA
+  /// linha do cartao da listagem**, por [linhaDeLugarDe]: duas copias da regra
+  /// divergem na primeira edicao, e a pagina e o cartao mostram o mesmo lugar.
+  String? get linhaDeLugar =>
+      linhaDeLugarDe(bairro: bairro, cidade: cidade, estado: estado);
+
+  /// Eu ja avaliei este local.
+  bool get jaAvaliei => minhaAvaliacaoRef != null;
+
+  static DetalheDoLocal doJson(Map<String, dynamic> json) {
+    final slug = json['slug'];
+    if (slug is! String || slug.isEmpty) {
+      throw const FormatException(
+        'GET /directory/entries/{slug} respondeu sem `slug`. O contrato '
+        'declara o campo como obrigatorio (DirectoryEntryDetail), e o `slug` e '
+        'a chave da entrada: nao existe `id`.',
+      );
+    }
+    final nome = json['display_name'];
+    if (nome is! String || nome.isEmpty) {
+      throw const FormatException(
+        'GET /directory/entries/{slug} respondeu sem `display_name`. O '
+        'contrato declara o campo como obrigatorio.',
+      );
+    }
+    final distancia = json['distance_m'];
+    final pode = json['can_review'];
+    return DetalheDoLocal(
+      slug: slug,
+      nome: nome,
+      atividade: AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
+      verificacao: VerificacaoDaEntrada.doJson(json['verification']),
+      pontuacao: PontuacaoDoLocal.doJson(json['rating']),
+      // **Ausente vira FALSO, e nao verdadeiro.** `can_review` nao esta em
+      // `required` no contrato, e o lado seguro de um campo ausente aqui e nao
+      // oferecer o campo: oferecer levaria a pessoa a escrever um texto e
+      // perde-lo num 403.
+      podeAvaliar: pode is bool ? pode : false,
+      motivoDeNaoPoderAvaliar: MotivoDeNaoPoderAvaliar.porCodigo(
+        json['review_blocked_reason'] as String?,
+      ),
+      minhaAvaliacaoRef: json['my_review_ref'] as String?,
+      cidade: json['city'] as String?,
+      estado: json['state'] as String?,
+      bairro: json['neighborhood'] as String?,
+      sobre: json['about'] as String?,
+      telefoneE164: json['phone_e164'] as String?,
+      distanciaEmMetros: distancia is num ? distancia.round() : null,
+    );
+  }
+}
+
+/// `#/components/schemas/DirectoryReview` do contrato.
+///
+/// **Nao ha identificador do autor, de nenhuma forma** -- nem conta, nem
+/// `slug`, nem ref estavel entre locais. [ref] identifica a AVALIACAO e e
+/// sorteado por linha: duas avaliacoes da mesma pessoa em locais diferentes
+/// nao tem nada em comum na resposta. A BICHUS-174 proibe expor vinculo entre
+/// duas pessoas "inclusive como contagem e como existencia", e um ref de autor
+/// permitiria montar o historico de qualquer um. **Nao invente aqui o campo
+/// que o contrato se esforcou para nao ter.**
+class AvaliacaoDoLocal {
+  const AvaliacaoDoLocal({
+    required this.ref,
+    required this.nota,
+    required this.criadaEm,
+    required this.minha,
+    this.texto,
+    this.nomeDeQuemEscreveu,
+    this.editadaEm,
+  });
+
+  /// O identificador opaco da avaliacao, usado pela denuncia. **Nao e UUID**
+  /// (ADR-0010 item 6) e nao e derivado do autor.
+  final String ref;
+
+  /// A nota, inteira de 1 a 5. **Nunca nula: a nota E a avaliacao.**
+  final int nota;
+
+  /// A recomendacao em texto, ou nulo. **Nulo e estado normal e frequente**: o
+  /// texto e opcional e dar so a nota tem de funcionar. A tela mostra o item
+  /// com as estrelas e sem paragrafo.
+  final String? texto;
+
+  /// O nome de exibicao de quem escreveu, **ou nulo**. Nulo e conta sem nome,
+  /// que e estado normal. Ver [nomeDeQuemLe].
+  final String? nomeDeQuemEscreveu;
+
+  final DateTime criadaEm;
+
+  /// Quando o autor editou pela ultima vez, ou nulo se nunca editou.
+  final DateTime? editadaEm;
+
+  /// Verdadeiro na avaliacao de quem chama. A tela a tira do fluxo e a mostra
+  /// no bloco de edicao, com `Editar` e `Apagar` -- **o servidor nao manda um
+  /// bloco separado**, e e por isso que esta marca existe.
+  final bool minha;
+
+  /// O nome que a tela escreve.
+  ///
+  /// Conta sem nome de exibicao e estado normal, e a linha **nao fica muda**:
+  /// um item de avaliacao sem nome nenhum parece defeito de carregamento.
+  static const String semNome = 'Alguém da comunidade';
+
+  String get nomeDeQuemLe {
+    final nome = nomeDeQuemEscreveu;
+    if (nome == null || nome.trim().isEmpty) return semNome;
+    return nome;
+  }
+
+  /// A avaliacao foi editada depois de publicada, e a tela **diz isso**.
+  bool get foiEditada => editadaEm != null;
+
+  /// A data que a tela mostra: a de edicao quando houve edicao, a de
+  /// publicacao quando nao houve.
+  ///
+  /// `dd/MM/aaaa`, com `toLocal()` porque as duas chegam em UTC e quem le esta
+  /// num fuso. Sem `intl`: o pacote nao esta no `pubspec` e uma dependencia
+  /// nova por uma linha de texto e custo que esta tela nao pede.
+  String get dataEmTexto {
+    final quando = (editadaEm ?? criadaEm).toLocal();
+    final dia = quando.day.toString().padLeft(2, '0');
+    final mes = quando.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${quando.year}';
+  }
+
+  /// O rotulo acessivel da nota: `4 de 5 estrelas`.
+  String get notaEmTexto => '$nota de 5 estrelas';
+
+  static AvaliacaoDoLocal doJson(Map<String, dynamic> json) {
+    final ref = json['ref'];
+    if (ref is! String || ref.isEmpty) {
+      throw const FormatException(
+        'Uma avaliacao chegou sem `ref`. O contrato declara o campo como '
+        'obrigatorio (DirectoryReview), e ele e o que a denuncia usa: um item '
+        'sem ref teria um botao de denunciar sem destino.',
+      );
+    }
+    final nota = json['rating'];
+    if (nota is! num) {
+      throw const FormatException(
+        'Uma avaliacao chegou sem `rating`. A nota E a avaliacao: o contrato a '
+        'declara obrigatoria e nunca nula.',
+      );
+    }
+    final criadaEm = DateTime.tryParse(json['created_at'] as String? ?? '');
+    if (criadaEm == null) {
+      throw const FormatException(
+        'Uma avaliacao chegou sem `created_at` legivel. O contrato declara o '
+        'campo como obrigatorio.',
+      );
+    }
+    final texto = json['body'] as String?;
+    final minha = json['mine'];
+    return AvaliacaoDoLocal(
+      ref: ref,
+      nota: nota.toInt(),
+      criadaEm: criadaEm,
+      // Ausente vira falso: tratar como minha a avaliacao de outra pessoa
+      // ofereceria `Apagar` sobre o texto de um estranho.
+      minha: minha is bool ? minha : false,
+      texto: (texto == null || texto.trim().isEmpty) ? null : texto,
+      nomeDeQuemEscreveu: json['author_display_name'] as String?,
+      editadaEm: DateTime.tryParse(json['edited_at'] as String? ?? ''),
+    );
+  }
+}
+
+/// `#/paths/~1directory~1entries~1{slug}~1reviews/get/parameters/0/schema` — a
+/// ordem da lista.
+///
+/// `recentes` e o padrao, e e o padrao de proposito (contrato): numa pagina sem
+/// historico a avaliacao de ontem informa mais do que a melhor de 2026.
+///
+/// **Nao ha "mais util"**: nao ha voto de utilidade neste produto, e oferecer a
+/// ordem sem o voto ordenaria por nada.
+enum OrdemDasAvaliacoes {
+  recentes('recent', 'Mais recentes'),
+  maiorNota('rating_desc', 'Maior nota'),
+  menorNota('rating_asc', 'Menor nota');
+
+  const OrdemDasAvaliacoes(this.codigo, this.rotulo);
+
+  final String codigo;
+  final String rotulo;
+
+  static OrdemDasAvaliacoes porCodigo(String? codigo) {
+    for (final o in OrdemDasAvaliacoes.values) {
+      if (o.codigo == codigo) return o;
+    }
+    return OrdemDasAvaliacoes.recentes;
+  }
+}
+
+/// `#/components/schemas/DirectoryReviewPage` do contrato.
+class PaginaDeAvaliacoes {
+  const PaginaDeAvaliacoes({
+    required this.itens,
+    required this.pagina,
+    required this.limite,
+    required this.total,
+  });
+
+  final List<AvaliacaoDoLocal> itens;
+  final int pagina;
+  final int limite;
+
+  /// O total de avaliacoes publicadas do local, **o mesmo numero de
+  /// [PontuacaoDoLocal.quantidade]**: as duas consultas usam o mesmo recorte.
+  /// Dois numeros diferentes na mesma tela e o defeito que a duplicacao de
+  /// recorte produz, e e por isso que a tela nao soma nada por conta propria.
+  final int total;
+
+  static PaginaDeAvaliacoes doJson(Map<String, dynamic> json) {
+    final itens = json['items'];
+    if (itens is! List) {
+      throw const FormatException(
+        'GET /directory/entries/{slug}/reviews respondeu sem `items`. O '
+        'contrato declara o campo como obrigatorio (DirectoryReviewPage).',
+      );
+    }
+    return PaginaDeAvaliacoes(
+      itens: List<AvaliacaoDoLocal>.unmodifiable(
+        itens
+            .whereType<Map<String, dynamic>>()
+            .map(AvaliacaoDoLocal.doJson)
+            .toList(growable: false),
+      ),
+      pagina: (json['page'] as num?)?.toInt() ?? 1,
+      limite: (json['limit'] as num?)?.toInt() ?? itens.length,
+      total: (json['total'] as num?)?.toInt() ?? itens.length,
+    );
+  }
+}
+
+/// `#/components/schemas/DirectoryReviewWritten` — a resposta do `PUT`.
+///
+/// **[criada] e o que escolhe a frase.** `PUT` grava a primeira e atualiza a
+/// que ja existia pelo mesmo caminho, e sem este campo a tela teria de
+/// adivinhar pelo estado anterior -- que e exatamente o estado que pode estar
+/// velho.
+///
+/// **[pontuacao] vem na mesma resposta de proposito**: ja com esta avaliacao
+/// dentro. Uma segunda chamada so para atualizar a media deixaria a media
+/// velha na tela no dia em que ela falhasse.
+class AvaliacaoGravada {
+  const AvaliacaoGravada({
+    required this.avaliacao,
+    required this.criada,
+    required this.pontuacao,
+  });
+
+  final AvaliacaoDoLocal avaliacao;
+
+  /// Verdadeiro quando esta foi a PRIMEIRA avaliacao desta pessoa neste local;
+  /// falso quando o envio **atualizou** a que ja existia.
+  final bool criada;
+
+  /// A pontuacao do local ja com esta avaliacao dentro.
+  final PontuacaoDoLocal pontuacao;
+
+  static AvaliacaoGravada doJson(Map<String, dynamic> json) {
+    final avaliacao = json['review'];
+    if (avaliacao is! Map<String, dynamic>) {
+      throw const FormatException(
+        'PUT /directory/entries/{slug}/reviews/me respondeu sem `review`. O '
+        'contrato declara o campo como obrigatorio (DirectoryReviewWritten).',
+      );
+    }
+    final criada = json['created'];
+    if (criada is! bool) {
+      throw const FormatException(
+        'PUT /directory/entries/{slug}/reviews/me respondeu sem `created`. O '
+        'contrato declara o campo como obrigatorio, e ele e o que escolhe '
+        'entre "Avaliacao publicada" e "Avaliacao atualizada": adivinhar '
+        'escreveria a frase errada para quem acabou de editar.',
+      );
+    }
+    return AvaliacaoGravada(
+      avaliacao: AvaliacaoDoLocal.doJson(avaliacao),
+      criada: criada,
+      pontuacao: PontuacaoDoLocal.doJson(json['rating']),
+    );
+  }
+}
+
+/// `#/components/schemas/DirectoryReviewReportInput/properties/reason` do
+/// contrato.
+///
+/// **Lista fechada e nao texto livre**, pelo mesmo desenho de
+/// `conversation_reports`: a fila de moderacao precisa ser triada, e campo
+/// livre nao tria. O detalhe opcional existe para o caso que a lista nao
+/// cobre.
+enum MotivoDaDenuncia {
+  spam('spam', 'Spam ou propaganda'),
+  ofensiva('offensive', 'Ofensiva ou agressiva'),
+
+  /// O caso que motiva a rota existir: negocio real com nome e endereco, e uma
+  /// afirmacao falsa sobre ele tem consequencia fora do app.
+  informacaoFalsa('false_information', 'Informação falsa'),
+
+  /// O caso mais comum e mais facil de verificar num diretorio: a pessoa
+  /// avaliou o lugar errado.
+  naoEDesteLocal('not_about_this_place', 'Não é sobre este local'),
+  outro('other', 'Outro motivo');
+
+  const MotivoDaDenuncia(this.codigo, this.rotulo);
+
+  final String codigo;
+  final String rotulo;
+}
+
+/// O corpo de `putMyDirectoryEntryReview`, montado num lugar so.
+///
+/// **A nota e obrigatoria e o texto e opcional** (decisao do cliente, 18/10).
+/// Texto vazio ou so com espaco **nao vai**: o servidor trata como ausente e
+/// grava nulo, e mandar `''` criaria duas representacoes de "sem texto" que
+/// toda tela futura teria de conhecer.
+Map<String, dynamic> corpoDaAvaliacao({required int nota, String? texto}) {
+  final limpo = texto?.trim();
+  return <String, dynamic>{
+    'rating': nota,
+    if (limpo != null && limpo.isNotEmpty) 'body': limpo,
+  };
+}
+
+/// O limite do corpo da avaliacao, **que e o limite da COLUNA e nao um numero
+/// de tela**: o `CHECK` em `professional_reviews.body` recusa 1501, e texto
+/// maior leva 400. O contador da tela sai daqui.
+const int limiteDoTextoDaAvaliacao = 1500;
+
+/// O corpo de `reportDirectoryEntryReview`.
+Map<String, dynamic> corpoDaDenuncia({
+  required MotivoDaDenuncia motivo,
+  String? detalhe,
+}) {
+  final limpo = detalhe?.trim();
+  return <String, dynamic>{
+    'reason': motivo.codigo,
+    if (limpo != null && limpo.isNotEmpty) 'detail': limpo,
+  };
+}
+
+/// O limite de `DirectoryReviewReportInput.detail`.
+const int limiteDoDetalheDaDenuncia = 1000;

@@ -136,6 +136,15 @@ function repositorioEmMemoria(): Memoria {
         Promise.resolve([...linhas.values()].find((l) => l.slug === slug) ?? null),
       idPorSlug: (slug) =>
         Promise.resolve([...linhas].find(([, l]) => l.slug === slug)?.[0] ?? null),
+      // A MODERACAO DA AVALIACAO (18/10/2026) NAO E EXERCITADA NESTE ARQUIVO.
+      //
+      // **Nao e corpo vazio**, e a diferenca importa: `() => null` faria um
+      // caso que chegasse aqui ver "nao encontrado" e passar como se tivesse
+      // medido a regra do 404. Este arquivo cobre a escrita da ENTRADA do
+      // diretorio; a remocao de avaliacao tem outro dobre, no arquivo dela.
+      removerAvaliacao: () => {
+        throw new Error('removerAvaliacao nao e exercitado por este arquivo');
+      },
       inserirEntrada(nova: NovaEntrada) {
         if ([...linhas.values()].some((l) => l.slug === nova.slug)) throw new SlugOcupado();
         const criada: EntradaAdministrativa = {
