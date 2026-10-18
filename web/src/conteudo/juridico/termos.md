@@ -106,9 +106,19 @@ Estas funções ainda não estão no ar. As regras abaixo valem a partir do dia 
 
 **Se você discordar** de uma decisão sobre o seu conteúdo ou a sua conta, escreva para oi@bichu.app explicando por quê. Uma pessoa da equipe vai rever.
 
-## 13. Links e lojas de parceiros
+## 13. A Loja: o Bichu não vende nada
 
-O Bichu pode mostrar produtos e links de lojas parceiras. **A compra é feita no site do parceiro. O Bichu não é o vendedor e não controla preço, estoque nem entrega.** [JURÍDICO: revisar esta redação, que hoje está na tela da Loja]
+Na Loja você vê produtos escolhidos pela nossa equipe, cada um com um link que abre o site da loja parceira.
+
+- **O Bichu não vende nada.** Não existe carrinho, pagamento, pedido nem entrega dentro do Bichu. Nós mostramos o produto; quem vende é o parceiro.
+- **O preço é informação de referência.** Alguém da nossa equipe abriu a página do parceiro, leu aquele valor e anotou a data da consulta. Essa data aparece junto do preço, na tela: **o valor vale para o dia em que foi consultado** e pode ter mudado desde então.
+- **Passados 30 dias da consulta, o Bichu para de mostrar o valor** e diz que o preço não está confirmado. O produto continua na lista, sem o número.
+- **Não garantimos a venda nem a disponibilidade.** O produto pode estar esgotado, ter saído do catálogo do parceiro, ou custar outro valor na hora em que você abrir o link.
+- **Não controlamos preço nem estoque**, e também não controlamos frete, prazo, entrega, troca, devolução e garantia. Tudo isso é do parceiro.
+- **A compra acontece no site do parceiro, sob as regras do parceiro** — os termos de uso e a política de privacidade dele, que são outros, e não estes. Vale ler antes de comprar.
+- Deu problema com um pedido? Resolva com o parceiro, que é quem vendeu. Se quiser, nos conte em **oi@bichu.app**: não resolvemos o pedido por você, mas podemos tirar o produto ou o parceiro da Loja.
+- A Loja é uma lista escolhida pela equipe. Essa escolha não é garantia do produto nem do parceiro, e não substitui a orientação de um veterinário.
+- [JURÍDICO: se houver link de afiliado, comissão ou qualquer pagamento por indicação, isso tem de ser declarado aqui. Hoje não existe nada disso no sistema: o app abre o endereço do parceiro exatamente como está no nosso catálogo, sem acrescentar parâmetro nenhum]
 
 ## 14. Até onde vai a responsabilidade do Bichu
 
