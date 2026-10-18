@@ -705,6 +705,33 @@
 		reverse_proxy api:3000
 	}
 
+	# A UNICA rota PUBLICA que o backoffice consome, e por isso ela precisa de
+	# bloco proprio ANTES do 404 abaixo. O formulario de produto da Loja pede
+	# `GET /v1/store/taxonomy` (`security: []` no contrato) para montar o select
+	# dos dois niveis da categoria, e o `handle /v1/*` seguinte respondia 404:
+	# medido em `admin-hml.bichu.app` em 17/10, com a tela inteira em erro porque
+	# `FormularioDeProduto.tsx` reprova a carga quando o vocabulario falha. A
+	# LISTA sobrevive sem ele, e foi por isso que so o formulario quebrou.
+	#
+	# Repontar o painel para `hml.bichu.app` NAO resolve: o `connect-src` do CSP
+	# deste host e `'self'`, e a chamada cruzada morre no navegador.
+	#
+	# SEM `X-Internal-Surface`: rota publica nao e superficie administrativa, e o
+	# `request_header -X-Internal-*` do host (acima) ja apagou o forjado.
+	#
+	# SEM zona de `rate_limit`: zona nova exige numero correspondente em
+	# `x-edge-limits` do contrato, e `verificar_borda.py` reprova divergencia. O
+	# teto desta rota mora no servico (`ip`, 300/1h) e ela e cacheavel com ETag.
+	#
+	# DIVIDA DE DESENHO: o padrao do repositorio e o painel so falar com
+	# `/v1/admin/*`. O consistente seria espelhar como
+	# `GET /v1/admin/store/taxonomy`, mas isso custa contrato + rota + painel, e
+	# `api/openapi.yaml` e compartilhado por tres sessoes. Esta e a mudanca menor
+	# e reversivel; a divida esta registrada.
+	handle /v1/store/taxonomy {
+		reverse_proxy api:3000
+	}
+
 	# O resto da API nao e servido neste host.
 	handle /v1/* {
 		respond "nao encontrado" 404

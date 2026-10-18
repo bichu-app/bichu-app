@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import 'api/busca_de_cep.dart';
 import 'api/achados_api.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
@@ -12,6 +13,7 @@ import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
+import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
@@ -127,12 +129,20 @@ class BichuApp extends StatefulWidget {
 
   /// Injetavel para teste. Em producao e [LocalizacaoPorGeolocator].
   ///
-  /// O padrao e [LocalizacaoNaoEmbarcada] de proposito, e a razao e mais forte
-  /// que a dos avisos: `Geolocator.checkPermission()` num ambiente sem canal
-  /// de plataforma lanca `MissingPluginException`, e ela cairia no meio de um
-  /// `Future` dentro de `setState` -- que e o formato de falha que nao aponta
-  /// para a causa. Com o padrao ausente, a suite exercita os cinco motivos de
-  /// nao haver ponto sem tocar em canal nenhum.
+  /// **O padrao ERA [LocalizacaoNaoEmbarcada], e isso era o defeito**: esta
+  /// frase dizia "em producao e `LocalizacaoPorGeolocator`" desde a BICHUS-23,
+  /// e `main.dart` nunca passou nada -- entao o binario inteiro rodava com a
+  /// implementacao ausente. Medido no emulador em 17/10/2026: tocar em `Usar
+  /// minha localizacao` respondia `indisponivel` NA HORA, sem dialogo de
+  /// permissao e sem leitura nenhuma. O pacote estava no `pubspec.yaml` e a
+  /// permissao no manifesto; o que faltava era a linha que escolhe.
+  ///
+  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera na
+  /// BICHUS-161. Em teste de widget nao ha canal de plataforma, e por isso
+  /// `test/telas/ajuda_de_tela.dart` passa [LocalizacaoNaoEmbarcada] por
+  /// parametro: `Geolocator.checkPermission()` sem canal lanca
+  /// `MissingPluginException` dentro de um `Future` em `setState`, que e o
+  /// formato de falha que nao aponta para a causa.
   final Localizacao? localizacao;
 
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
@@ -218,10 +228,12 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final MeApi _me;
   late final AchadosApi _achados;
   late final DiretorioApi _diretorio;
   late final LojaApi _loja;
   late final EnvioDeFoto _envioDeFoto;
+  late final BuscaDeCep _buscaDeCep;
   late final FotosPendentes _fotosPendentes;
   late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
@@ -259,6 +271,9 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    // As rotas `tags: [me]`, ligadas pela tela de dados pessoais (18/10/2026).
+    // Antes dela nenhuma tela chamava `GET /me` nem `PATCH /me`.
+    _me = MeApi(_api);
     _achados = AchadosApi(_api);
     _diretorio = DiretorioApi(_api);
     _loja = LojaApi(_api);
@@ -289,6 +304,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
     // importa: este cliente nao conhece o token da sessao, e o endereco para
     // onde os bytes vao e outro host, escolhido pelo servidor.
+    // A busca de CEP, pelo MESMO padrao do envio de fotos acima: cliente
+    // injetado em teste, proprio em producao, e **sem o token da sessao**.
+    // Ela fala com servico publico de terceiro (BrasilAPI, ViaCEP) e o unico
+    // dado que sai e o CEP -- ver `api/busca_de_cep.dart`.
+    _buscaDeCep = BuscaDeCep(cliente: widget.clienteHttp);
     _envioDeFoto = EnvioDeFoto(
       camera: _camera,
       cliente: widget.clienteHttp,
@@ -324,7 +344,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
+    _localizacao = widget.localizacao ?? const LocalizacaoPorGeolocator();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -560,10 +580,12 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      me: _me,
       diretorio: _diretorio,
       loja: _loja,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
+      buscaDeCep: _buscaDeCep,
       retomadaDeFotos: _retomadaDeFotos,
       fila: _fila,
       tags: _tags,

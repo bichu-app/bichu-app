@@ -146,6 +146,20 @@ class Sessao {
 
   final Usuario usuario;
 
+  /// A MESMA sessao com outro usuario dentro.
+  ///
+  /// Existe para `PATCH /me`: o corpo da resposta e um `Me` completo e novo, e
+  /// os tokens nao mudam. Sem isto, salvar os dados pessoais atualizaria a tela
+  /// do formulario e deixaria o `Perfil` atras dela dizendo que falta o
+  /// telefone que acabou de ser preenchido. **Nao recria token nenhum**: um
+  /// `Sessao.doJson` sobre a resposta de `/me` nao teria tokens para ler.
+  Sessao comUsuario(Usuario novo) => Sessao(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiraEm: expiraEm,
+        usuario: novo,
+      );
+
   bool get expirado => DateTime.now().isAfter(expiraEm);
 
   /// Verdadeiro quando falta pouco para expirar. Renovar antes evita que a

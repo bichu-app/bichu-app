@@ -17,10 +17,12 @@
 // sempre.
 
 import 'package:bichu/api/modelos_loja.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/loja/produto_da_loja.dart';
 import 'package:bichu/telas/loja/vitrine_da_loja.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import 'ajuda_de_tela.dart';
@@ -123,10 +125,22 @@ Future<http.Response> Function(http.Request) redeDaLojaEDoDetalhe({
   };
 }
 
-/// Toca no cartao da vitrine e espera o detalhe.
+/// Abre o detalhe **pela ROTA**, e nao por um toque na vitrine.
 ///
-/// **Toca no CARTAO, e nao no botao de saida**: e a convivencia dos dois
-/// gestos que estes casos medem.
+/// ## A TELA DE DETALHE FICOU SEM ENTRADA, POR DECISAO DO CLIENTE (17/10/2026)
+///
+/// Ate 17/10 este auxiliar tocava no cartao da vitrine, e o caso media a
+/// convivencia de dois gestos no mesmo cartao (o cartao abria o detalhe, o
+/// botao saia para o parceiro). No mesmo dia o cliente pediu *"remova o
+/// clique para entrar na pagina de detalhes do produto e coloque para abrir o
+/// site do parceiro"*, e depois **"deixe parado por enquanto a tela de
+/// detalhes do produto"**.
+///
+/// A tela NAO foi apagada e a rota continua registrada: ela esta parada, e
+/// volta a ser alcancavel quando ele quiser. Estes casos continuam medindo a
+/// tela -- a galeria em ordem, a descricao inteira, os estados --, e passaram
+/// a chegar nela pelo endereco em vez de pelo gesto que nao existe mais.
+/// Medir a tela pelo caminho que foi removido so provaria a remocao.
 Future<void> tocarNoCartao(WidgetTester tester, String titulo) async {
   final cartao = find.ancestor(
     of: find.text(titulo),
@@ -137,17 +151,17 @@ Future<void> tocarNoCartao(WidgetTester tester, String titulo) async {
     findsOneWidget,
     reason: 'REPROVA: nao achei o cartao de "$titulo" na vitrine.',
   );
-  await tester.ensureVisible(cartao);
-  await tester.pumpAndSettle();
-  await tester.tap(cartao);
+  final item = tester.widget<CartaoDaLoja>(cartao).item;
+  final contexto = tester.element(find.byType(VitrineDaLoja));
+  GoRouter.of(contexto).push(Rotas.produtoDaLojaDe(item.slug));
   await tester.pumpAndSettle();
   expect(
     find.byType(TelaDoProduto),
     findsOneWidget,
     reason:
-        'REPROVA: tocar no cartao nao abriu a tela de detalhe. Ela e o UNICO '
-        'lugar em que a galeria aparece: sem este caminho, as oito imagens '
-        'continuam sem onde aparecer.',
+        'REPROVA: o endereco do detalhe nao abriu a tela. Ela esta PARADA por '
+        'decisao do cliente, e nao removida: a rota tem de continuar de pe '
+        'para ela voltar sem ser reconstruida.',
   );
 }
 
@@ -474,7 +488,7 @@ void main() {
       );
       // E o resto da pagina continua inteiro.
       expect(find.text('Bola Pop'), findsWidgets);
-      expect(find.text('Abrir na Cobasi'), findsOneWidget);
+      expect(find.text('Compre agora'), findsOneWidget);
     });
 
     // ISCA -- em `produto_da_loja.dart`, no `catch` de `FalhaDaApi`, apague o
@@ -592,7 +606,7 @@ void main() {
         ),
       );
 
-      final botao = find.text('Abrir na Cobasi');
+      final botao = find.text('Compre agora');
       await tester.ensureVisible(botao);
       await tester.pumpAndSettle();
       await tester.tap(botao);
@@ -662,12 +676,12 @@ void main() {
       await tocarNoCartao(tester, 'Bola Pop');
 
       expect(
-        find.text('Abrir na Cobasi'),
+        find.text('Compre agora'),
         findsOneWidget,
         reason:
             'REPROVA: o detalhe nao tem saida para o site do parceiro. O '
-            'rotulo NOMEIA o destino e nao carrega valor: "Comprar por '
-            'R\$ 89,90" seria uma oferta nossa, e nos nao somos o vendedor.',
+            'rotulo e "Compre agora" desde 17/10/2026, literal do cliente, e '
+            'o nome do parceiro foi para o nome acessivel.',
       );
     });
   });
@@ -676,11 +690,16 @@ void main() {
   // O AVISO DE QUE NAO SOMOS O VENDEDOR VEM PARA CA
   // -------------------------------------------------------------------------
 
-  // ISCA -- em `produto_da_loja.dart`, apague
-  // `const _Margem(child: AvisoDoParceiroDaLoja())`. O caso reprova: na pagina
-  // de um produto so o preco aparece sem os outros cartoes em volta lembrando
-  // que aquilo e uma vitrine de saida, e o aviso pesa mais, nao menos.
-  testWidgets('o detalhe repete o aviso de que a compra e do parceiro', (
+  // **O AVISO SAIU DAS DUAS TELAS** (pedido do cliente, 17/10/2026: *"Remova
+  // o bloco a compra e feita no site do parceiro"*).
+  //
+  // O caso virou do avesso, e NAO foi apagado: ele guardava uma afirmacao de
+  // natureza juridica -- o criterio 6 da BICHUS-185 chamava o aviso de
+  // "condicao para a vitrine existir" --, e a remocao de uma afirmacao dessas
+  // precisa de um caso que reprove se ela voltar por acidente, e nao de um
+  // silencio. A redacao exata continua em
+  // `VitrineDaLoja.avisoDeQueNaoSomosOVendedor`.
+  testWidgets('o aviso de que a compra e do parceiro NAO aparece mais', (
     tester,
   ) async {
     final urls = <Uri>[];
@@ -699,7 +718,7 @@ void main() {
         'A compra é feita no site do parceiro. O Bichu não é o vendedor e não '
         'controla preço, estoque nem entrega.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
   });
 

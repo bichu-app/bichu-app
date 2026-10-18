@@ -37,6 +37,17 @@ export interface SinaisDeEstado {
   readonly bloqueadaEm: Date | null;
   /** O caso ligado deixou de estar aberto. Falso quando não há caso. */
   readonly casoEncerrado: boolean;
+  /**
+   * Um dos dois lados desabilitou a conta (17/10).
+   *
+   * Vem de `users.deleted_at` das duas pontas da conversa, lido pela consulta.
+   * É `true` para QUALQUER dos dois lados, e a simetria é a decisão do cliente
+   * lida por extenso: *"bloquear o chat para não enviar ou receber mais nenhuma
+   * nova mensagem"*. "Não receber" só é alcançável travando quem ESCREVE, e
+   * quem escreve é o outro participante -- um chat em que o lado ativo ainda
+   * manda entrega mensagem a alguém que não está mais na plataforma.
+   */
+  readonly participanteDesabilitado: boolean;
 }
 
 /**
@@ -51,6 +62,19 @@ export interface SinaisDeEstado {
  * qualquer um dos dois caminhos.
  */
 export function estadoDaConversa(sinais: SinaisDeEstado): EstadoDaConversa {
+  // PRIMEIRO DE TODOS, e por isso a conversa fica em modo leitura: conta
+  // desabilitada é `closed` e não `blocked`, pelo mesmo critério 8 que a ordem
+  // original já aplica -- `closed` é o estado que carrega explicação na tela, e
+  // é exatamente isso que o outro lado precisa ler. `blocked` diria "alguém te
+  // bloqueou", que é falso e é a informação que a política de
+  // `problemas.conversaEncerrada()` existe para NÃO dar.
+  //
+  // Nada é escrito no banco para isto. `conversations.closed_at` continua nulo,
+  // e o estado é DERIVADO de `users.deleted_at` a cada leitura: reativar a conta
+  // devolve a conversa ao ar sem desfazer gravação nenhuma. Escrever `closed_at`
+  // aqui exigiria um `closure_reason` novo (o CHECK da `20260922000012` só aceita
+  // três) e seria uma marca a desfazer depois.
+  if (sinais.participanteDesabilitado) return 'closed';
   if (sinais.encerradaEm !== null || sinais.casoEncerrado) return 'closed';
   if (sinais.bloqueadaEm !== null) return 'blocked';
   return 'open';
@@ -87,6 +111,10 @@ export interface NomesDaConversa {
   readonly nomeDoTutor: string | null;
   /** `found_reports.finder_display_name`, opcional por desenho do produto. */
   readonly nomeDoAchador: string | null;
+  /** `users.deleted_at` do tutor não é nulo (17/10). */
+  readonly tutorDesabilitado: boolean;
+  /** `users.deleted_at` do achador COM CONTA não é nulo (17/10). */
+  readonly achadorDesabilitado: boolean;
 }
 
 /**
@@ -100,8 +128,27 @@ export interface NomesDaConversa {
  * sozinho, e é por isso que ele é o teto e não o piso do que sai.
  */
 export function participantesVisiveis(nomes: NomesDaConversa): readonly ParticipanteVisivel[] {
+  // A DESPERSONALIZAÇÃO É AQUI, e ela não inventa nada: o lado desabilitado
+  // entra como se nunca tivesse preenchido nome, e `primeiroNomeOuApelido` já
+  // devolve o rótulo neutro que o produto usa desde sempre -- `Tutor` e
+  // `Quem achou`. O cliente pediu o nome "que não identifique" junto do avatar
+  // cinza, e este é o rótulo que o próprio sistema já escolheu para "sem nome".
+  //
+  // O NOME NÃO SAI DO BANCO ESCONDIDO POR UM `if` DE TELA: ele é substituído no
+  // domínio, que é o único ponto por onde as DUAS vistas passam -- a do chamador
+  // com conta (`conversation-service.ts`) e a do achador por token
+  // (`conversa-do-achador.ts`). Despersonalizar em cada montagem de resposta
+  // seria perder um dos dois caminhos, e o caminho do achador é justamente o que
+  // não pede login.
+  //
+  // Sobre o AVATAR: não existe campo de foto de participante em consulta, DTO,
+  // resposta nem contrato -- `Conversation.participants` tem dois campos, e a
+  // descrição do contrato proíbe foto de perfil por extenso. Não há o que pintar
+  // de cinza no servidor, e nada foi inventado aqui. Está no relatório.
+  const tutor = nomes.tutorDesabilitado ? null : nomes.nomeDoTutor;
+  const achador = nomes.achadorDesabilitado ? null : nomes.nomeDoAchador;
   return [
-    { role: 'tutor', displayName: primeiroNomeOuApelido(nomes.nomeDoTutor, 'Tutor') },
-    { role: 'finder', displayName: primeiroNomeOuApelido(nomes.nomeDoAchador, 'Quem achou') },
+    { role: 'tutor', displayName: primeiroNomeOuApelido(tutor, 'Tutor') },
+    { role: 'finder', displayName: primeiroNomeOuApelido(achador, 'Quem achou') },
   ];
 }

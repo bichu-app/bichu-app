@@ -45,6 +45,7 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
+import 'package:bichu/api/me_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
@@ -52,6 +53,7 @@ import 'package:bichu/api/diretorio_api.dart';
 import 'package:bichu/api/loja_api.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
+import 'package:bichu/api/estados_brasileiros.dart';
 import 'package:bichu/api/modelos_localizacao.dart';
 import 'package:bichu/api/pets_api.dart';
 import 'package:bichu/config/app_config.dart';
@@ -75,6 +77,7 @@ import 'package:bichu/telas/localizacao/textos_da_localizacao.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/bichu_field.dart';
+import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -125,6 +128,8 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // As rotas `tags: [me]` entraram no escopo com `Perfil` > `Meus dados`.
+      me: MeApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.
       diretorio: DiretorioApi(api),
       // A vitrine de `Loja` entrou no escopo junto com a listagem dela.
@@ -215,8 +220,21 @@ Future<void> _digitarArea(
 }) async {
   await tester.enterText(_campo(TextosDaLocalizacao.rotuloBairro), bairro);
   await tester.enterText(_campo(TextosDaLocalizacao.rotuloCidade), cidade);
-  await tester.enterText(_campo(TextosDaLocalizacao.rotuloUf), uf);
   await tester.pumpAndSettle();
+  // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026): a
+  // lista mostra o nome e guarda a sigla, entao o caso escolhe pelo NOME e
+  // continua afirmando a sigla no corpo que sai.
+  await _escolherOEstado(tester, uf);
+}
+
+/// Abre a lista de estados e escolhe o item da sigla [sigla].
+Future<void> _escolherOEstado(WidgetTester tester, String sigla) async {
+  final nome = estadosBrasileiros
+      .firstWhere((ItemDeLista e) => e.codigo == sigla)
+      .rotulo;
+  await rolarAte(tester, find.text(TextosDaLocalizacao.escolherOEstado));
+  await tocar(tester, find.text(TextosDaLocalizacao.escolherOEstado));
+  await tocar(tester, find.text(nome).last);
 }
 
 void main() {

@@ -8,6 +8,8 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
+import '../widgets/item_de_menu.dart';
+import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
@@ -193,8 +195,16 @@ class AbaRede extends StatelessWidget {
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[AgendaDaRede()],
+      // **O reforco desce para a agenda, e nao sai da tela.**
+      //
+      // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
+      // e o cliente pediu em 17/10/2026 que o campo de busca fique acima dele
+      // e das abas. A casca nao tem como por o campo acima do proprio reforco:
+      // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
+      // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
+      // `text-secondary`, exatamente como aqui, so com a busca acima.
+      reforco: null,
+      filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
     );
   }
 }
@@ -272,7 +282,17 @@ class AbaLoja extends StatelessWidget {
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
+      // **A LINHA DE REFORCO NAO E MAIS DESENHADA** (pedido do cliente,
+      // 17/10/2026: *"remova o produtos escolhidos pelo bichu, que abrem no
+      // site do parceiro"*).
+      //
+      // O texto continua no REGISTRO (`CascaComAbas.destinos`), e nao foi
+      // apagado de la de proposito: ele e a outra metade do nome acessivel da
+      // aba -- o rotulo encurtou para quatro letras e o significado foi para
+      // o reforco (UX 27.7) --, e o portao de
+      // `test/telas/casca_de_cinco_secoes_test.dart` cobra que todo destino
+      // tenha um. O que saiu foi a linha na TELA.
+      reforco: null,
       filhos: const <Widget>[VitrineDaLoja()],
     );
   }
@@ -306,6 +326,22 @@ class AbaPerfil extends StatelessWidget {
             titulo: destino.rotulo,
             reforco: destino.reforcoDaPagina,
             filhos: <Widget>[
+              // A MARCA NO ALTO DA PORTA DE ENTRADA (pedido do cliente,
+              // 17/10/2026: "coloque a imagem da identidade visual na pagina
+              // do perfil para entrar").
+              //
+              // E o `MarcaLockup` que `widgets/marca.dart` ja desenha a partir
+              // de `design/marca/vetor/lockup-sem-descritor.svg`: a identidade
+              // que o repositorio ja tem, resolvida contra os papeis de cor do
+              // tema. Nao e asset novo -- nao pesa um byte no APK e acompanha
+              // claro e escuro sozinho, porque a tinta sai de `BichuCores` e
+              // nao de um PNG assado numa cor so.
+              //
+              // **Nao e a linguagem do site.** As pecas expressivas da pasta
+              // da marca (a ilustracao de tres pessoas, o cartao de frase
+              // manuscrita) sao do institucional; o que entra aqui e o
+              // logotipo, que e vocabulario do app e esta no §8.4.
+              const _MarcaDoPerfilDeslogado(),
               BotaoPrimario(
                 rotulo: 'Entrar',
                 aoTocar: () => context.push(Rotas.entrar),
@@ -341,39 +377,117 @@ class AbaPerfil extends StatelessWidget {
                 key: ValueKey<String>('aviso-perfil-${sessao.usuario!.id}'),
                 usuario: sessao.usuario!,
               ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(sessao.usuario?.email ?? ''),
-              subtitle: Text(
-                sessao.usuario?.emailVerificado ?? false
-                    ? 'E-mail confirmado'
-                    : 'E-mail ainda não confirmado',
-              ),
+            // A saida de quem negou o aviso (UX 10.1, BICHUS-24). As duas
+            // faixas ficam juntas, no alto: faixa nao e botao, e o cliente
+            // nao reclamou delas -- ele reclamou da pilha de botoes.
+            const _AvisoPorPertoDesligado(),
+            // -----------------------------------------------------------------
+            // O MENU DA CONTA (18/10/2026, pedido do cliente)
+            //
+            // Literal: *"Essa pagina inicial atual, deveria ter apenas os
+            // menus para realizar as acoes e nao todos os botoes nessa
+            // pagina"*. O que havia aqui eram tres botoes de contorno de
+            // largura total -- `Escanear uma tag`, `Sair da conta` e, dentro
+            // de `Meus pets`, `Marcar como perdido` -- mais um `ListTile`
+            // MUDO com o e-mail, que se parecia com um item de menu e nao
+            // levava a lugar nenhum.
+            //
+            // **Nenhuma acao foi apagada.** Cada botao virou item, com o mesmo
+            // rotulo e o mesmo destino; o `ListTile` mudo ganhou destino e
+            // virou `Meus dados`, que e a tela nova. `Cadastrar meu pet`
+            // continua BOTAO PRIMARIO, e isso nao e descuido: ela e a acao
+            // primaria desta tela e o portao de
+            // `cadastro_nao_mora_em_pets_test.dart` cobra `FilledButton` com
+            // esse rotulo nos dois estados da lista -- com a acao fora de
+            // `Pets`, este e o unico caminho do app para cadastrar o proximo
+            // pet.
+            // -----------------------------------------------------------------
+            const TituloDeGrupoDeMenu('Conta'),
+            // O `ListTile` mudo virou porta. O e-mail e a situacao de
+            // confirmacao continuam escritos -- eram a unica informacao que
+            // aquela linha dava, e sumir com ela seria perder conteudo em nome
+            // de arrumar a forma.
+            ItemDeMenu(
+              rotulo: 'Meus dados',
+              apoio: _apoioDosDados(sessao),
+              aoTocar: () => context.push(Rotas.dadosPessoais),
             ),
-            const Divider(),
+            // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
+            // cliente pediu. Um leitor so; o destino da leitura sai das regras
+            // dos tres cenarios de QR e **nunca** da aba de origem.
+            //
+            // Virou item de menu e **continua sendo a mesma porta**: mesmo
+            // rotulo, mesma rota, mesmo `push` -- o leitor cobre a casca e
+            // precisa ter volta. A porta PRIMARIA, em `Pets`, nao mudou de
+            // forma: la ela e a acao da secao de aterrissagem, e quem achou um
+            // cachorro na rua nao vai procurar menu.
+            ItemDeMenu(
+              rotulo: 'Escanear uma tag',
+              aoTocar: () => context.push(Rotas.escanear),
+            ),
+            _ItemDeSair(sessao: sessao),
             // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
             // para os cartoes da BICHUS-62. A chave e por conta para que a
             // troca de usuario reconstrua o estado em vez de reaproveitar o
             // que estava carregado para a anterior.
+            //
+            // **Continua CONTEUDO, e nao item de menu.** A lista de pets e o
+            // corpo da secao: um item `Meus pets` levaria a uma tela que nao
+            // existe, e inventar o endereco dela seria criar destino para uma
+            // tela que nao ha (e o que o registro de sub-destinos ja diz,
+            // palavra por palavra, sobre esta linha).
             MeusPets(
               key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
               cache: Escopo.of(context).cacheDeMeusPets,
             ),
-            const SizedBox(height: BichuEspaco.e6),
-            // A saida de quem negou o aviso (UX 10.1, BICHUS-24).
-            const _AvisoPorPertoDesligado(),
-            // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
-            // cliente pediu. Um leitor so; o destino da leitura sai das regras
-            // dos tres cenarios de QR e **nunca** da aba de origem.
-            BotaoSecundario(
-              rotulo: 'Escanear uma tag',
-              aoTocar: () => context.push(Rotas.escanear),
-            ),
-            const SizedBox(height: BichuEspaco.e8),
-            _BotaoSair(sessao: sessao),
           ],
         );
       },
+    );
+  }
+}
+
+/// A linha de apoio do item `Meus dados`: o e-mail e a situacao dele.
+///
+/// E o conteudo que o `ListTile` mudo do topo mostrava antes desta mudanca, e
+/// por isso ele nao desapareceu com aquela linha -- so passou a ficar embaixo
+/// de um rotulo que diz para onde o toque leva.
+///
+/// Deslogado nao chega aqui: este trecho so e construido no ramo logado.
+String _apoioDosDados(ControladorDeSessao sessao) {
+  final usuario = sessao.usuario;
+  if (usuario == null) return '';
+  final situacao = usuario.emailVerificado
+      ? 'E-mail confirmado'
+      : 'E-mail ainda não confirmado';
+  return '${usuario.email} · $situacao';
+}
+
+/// O logotipo no alto do `Perfil` deslogado.
+///
+/// **Decorativo, e por isso `ExcludeSemantics`.** Quem usa leitor de tela
+/// chega nesta tela ja ouvindo `Perfil` da barra de topo e a linha de reforco
+/// logo abaixo; um "Bichu" anunciado entre as duas e antes de `Entrar` so
+/// adiaria o unico conteudo que a tela tem, que sao os tres controles. A
+/// imagem aqui nao carrega informacao: ela nao diz nada que o texto ja nao
+/// diga, e esse e exatamente o criterio de decorativo do WCAG 1.1.1.
+///
+/// **Sem frase junto.** A tela nao ganhou nenhuma linha de texto nova; o
+/// cliente reprovou texto a mais em tela e o logotipo nao precisa de legenda.
+///
+/// A largura e 180 dp: uma vez e meia o piso medido de
+/// [MarcaLockup.pisoDeLargura] (§3.10), e cabe com folga nos 328 dp uteis de
+/// uma tela de 360 dp, que e a mais estreita que o produto mira.
+class _MarcaDoPerfilDeslogado extends StatelessWidget {
+  const _MarcaDoPerfilDeslogado();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: BichuEspaco.e8),
+        child: Center(child: MarcaLockup(largura: 180)),
+      ),
     );
   }
 }
@@ -532,15 +646,23 @@ class _AvisoPorPertoDesligado extends StatelessWidget {
   }
 }
 
-class _BotaoSair extends StatelessWidget {
-  const _BotaoSair({required this.sessao});
+/// `Sair da conta`, agora como item de menu.
+///
+/// **A folha de confirmacao nao mudou uma linha**, e e ela que carrega a
+/// decisao desta acao: avisar o que muda antes de sair, e so entao sair. O que
+/// mudou foi a forma do gatilho -- de botao de contorno de largura total para
+/// linha de menu --, pelo pedido do cliente de 18/10/2026. `critico` poe a
+/// tinta da marca no rotulo: e a unica linha deste menu que encerra algo.
+class _ItemDeSair extends StatelessWidget {
+  const _ItemDeSair({required this.sessao});
 
   final ControladorDeSessao sessao;
 
   @override
   Widget build(BuildContext context) {
-    return BotaoSecundario(
+    return ItemDeMenu(
       rotulo: 'Sair da conta',
+      critico: true,
       aoTocar: () async {
         // Ao sair, avisar o que muda: a pessoa precisa saber que para de
         // receber os alertas de pets perdidos por perto.

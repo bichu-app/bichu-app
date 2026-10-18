@@ -474,6 +474,52 @@ class Pet {
   }
 }
 
+/// `PetTag`: a tag do pet como o **dono** a ve em `GET /v1/pets/{petId}/tags`.
+///
+/// **Ela nao tem o codigo, e a ausencia e o contrato.** A rota "nunca devolve
+/// o codigo em claro, nem para o dono: apenas os quatro ultimos caracteres,
+/// para que ele consiga identificar a plaquinha fisica". Quem quer o codigo
+/// inteiro de novo nao tem por onde: ele saiu uma vez, em [TagEmitida], na
+/// F1.6, e o contrato manda o cliente **nao** persistir aquele valor.
+///
+/// Por isso [TagDoPet] existe com tres campos e nao com quatro: o caminho de
+/// recuperacao do codigo e a IMAGEM (`qr.png`), que o servidor desenha, e nao
+/// um codigo guardado no aparelho. A consequencia de desenho esta na tela do
+/// detalhe: o rotulo acessivel do QR **nao pode** ser o codigo por extenso,
+/// porque o app nao o tem.
+class TagDoPet {
+  const TagDoPet({
+    required this.id,
+    required this.ativa,
+    required this.sufixo,
+    this.apelido,
+  });
+
+  final String id;
+
+  /// `status == 'active'`. O contrato fecha o enum em `active` e `revoked`, e
+  /// a tela so tem o que fazer com a primeira: tag revogada responde 410 no
+  /// `qr.png` ("A tag revogada. O QR nao e reimpresso"), entao pedir a imagem
+  /// dela seria pedir uma recusa.
+  final bool ativa;
+
+  /// `code_suffix`: os quatro ultimos caracteres. **Tudo o que o app tem** do
+  /// codigo depois da F1.6.
+  final String sufixo;
+
+  /// `label`: o apelido que distingue uma plaquinha da outra. Nao viaja no QR.
+  final String? apelido;
+
+  factory TagDoPet.doJson(Map<String, dynamic> json) {
+    return TagDoPet(
+      id: json['id'] as String? ?? '',
+      ativa: (json['status'] as String?) == 'active',
+      sufixo: json['code_suffix'] as String? ?? '',
+      apelido: json['label'] as String?,
+    );
+  }
+}
+
 /// `PetTagIssued`: a **unica** resposta do contrato que traz o codigo em claro.
 ///
 /// `GET /v1/pets/{petId}/tags` nunca mais devolve [codigo], nem para o dono:
@@ -671,6 +717,109 @@ class AvisoDoAchadorCriado {
       urlDaConversa: json['conversation_url'] as String? ?? '',
       tutorAvisado: json['owner_notified'] as bool? ?? true,
       nomeDoPet: json['pet_display_name'] as String?,
+    );
+  }
+}
+
+/// O endereco para onde a plaquinha e enviada (`DeliveryAddress`).
+///
+/// **Dado pessoal, e o minimo para entregar.** Sem documento e sem data de
+/// nascimento. O telefone entrou em 17/10 por decisao do cliente: a
+/// transportadora costuma exigir um para entregar.
+///
+/// **Nenhum campo vira coordenada** (ADR-0006): nao ha latitude, nao ha
+/// longitude e nada aqui e geocodificado. O CEP **preenche** rua, bairro,
+/// cidade e estado desde 17/10, por decisao do cliente, e isso e TEXTO --
+/// quem busca e `api/busca_de_cep.dart`, e o que vem de la a pessoa pode
+/// corrigir inteiro.
+///
+/// O `uf` e a sigla de dois caracteres. A lista dos 27 nomes vive em
+/// `estados_brasileiros.dart`, e e ela que o formulario mostra; o que viaja e
+/// a sigla.
+class EnderecoDeEntrega {
+  const EnderecoDeEntrega({
+    required this.destinatario,
+    required this.cep,
+    required this.logradouro,
+    required this.numero,
+    required this.bairro,
+    required this.cidade,
+    required this.uf,
+    required this.telefone,
+    this.complemento,
+  });
+
+  /// Quem recebe, como vai na etiqueta.
+  final String destinatario;
+
+  /// Oito digitos, **sem mascara**: o contrato declara `^[0-9]{8}$`.
+  final String cep;
+
+  final String logradouro;
+
+  /// Texto, e nao numero: `s/n`, `120A` e `KM 32` sao numeros de porta.
+  final String numero;
+
+  /// O unico campo opcional do endereco.
+  final String? complemento;
+
+  final String bairro;
+  final String cidade;
+
+  /// A sigla de dois caracteres.
+  final String uf;
+
+  /// **E.164**, `+55` e 10 ou 11 digitos, como o contrato exige. Obrigatorio:
+  /// transportadora costuma precisar dele para entregar.
+  final String telefone;
+
+  Map<String, dynamic> paraJson() {
+    return <String, dynamic>{
+      'recipient_name': destinatario,
+      'postal_code': cep,
+      'street': logradouro,
+      'street_number': numero,
+      if (complemento != null && complemento!.isNotEmpty)
+        'complement': complemento,
+      'neighborhood': bairro,
+      'city': cidade,
+      'state': uf,
+      'recipient_phone': telefone,
+    };
+  }
+}
+
+/// O pedido da plaquinha da coleira, como o app o ve.
+///
+/// **Solicitar nao e emitir.** [TagEmitida] e o CODIGO, irreversivel
+/// (ADR-0004) e visivel uma unica vez; este e o pedido do PLASTICO, e ele nao
+/// carrega codigo nenhum.
+///
+/// Sem `ref` e sem identificador: o `ref` serve ao caminho do painel, e o
+/// contrato nao o projeta para o app (ADR-0010 item 6).
+class PedidoDePlaquinha {
+  const PedidoDePlaquinha({
+    required this.status,
+    required this.solicitadoEm,
+    this.observacao,
+  });
+
+  /// `pending`, `fulfilled` ou `declined`, como o contrato os escreve.
+  final String status;
+
+  final DateTime? solicitadoEm;
+
+  final String? observacao;
+
+  /// Verdadeiro enquanto ninguem decidiu.
+  bool get aguardando => status == 'pending';
+
+  factory PedidoDePlaquinha.doJson(Map<String, dynamic> json) {
+    final quando = json['requested_at'];
+    return PedidoDePlaquinha(
+      status: json['status'] as String? ?? 'pending',
+      solicitadoEm: quando is String ? DateTime.tryParse(quando) : null,
+      observacao: json['notes'] as String?,
     );
   }
 }

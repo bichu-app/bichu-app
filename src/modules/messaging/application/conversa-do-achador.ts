@@ -117,6 +117,8 @@ export class ConversaDoAchadorService {
       participants: participantesVisiveis({
         nomeDoTutor: conversa.nomeDoTutor,
         nomeDoAchador: conversa.nomeDoAchador,
+        tutorDesabilitado: conversa.tutorDesabilitado,
+        achadorDesabilitado: conversa.achadorDesabilitado,
       }),
       messages: mensagens.map(paraOAchador),
       // Página cheia pode ter continuação; página curta é o fim. A posição é a
@@ -311,6 +313,16 @@ function estadoDe(conversa: ConversaDoAchador): EstadoDaConversa {
     encerradaEm: conversa.encerradaEm,
     bloqueadaEm: conversa.bloqueadaEm,
     casoEncerrado: conversa.caso !== null && !conversa.caso.aberto,
+    // O PONTO ÚNICO DA TRAVA, lado SEM CONTA (17/10). `enviar` e a leitura são
+    // os dois consumidores de `estadoDe`, então a trava e o `status` que a tela
+    // do achador lê saem do mesmo sinal.
+    //
+    // ESTE É O LADO QUE IMPLEMENTA O "NÃO RECEBER". Quem desabilitou a conta é
+    // o tutor, e é o achador -- que não tem login -- quem continuaria
+    // escrevendo. Sem esta linha, "bloquear o chat para não enviar ou receber
+    // mais nenhuma nova mensagem" ficaria pela metade justamente no caminho que
+    // não pede credencial.
+    participanteDesabilitado: conversa.tutorDesabilitado || conversa.achadorDesabilitado,
   });
 }
 

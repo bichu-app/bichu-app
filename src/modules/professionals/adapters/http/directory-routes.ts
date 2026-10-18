@@ -117,10 +117,19 @@ interface QueryDoDiretorio {
   readonly limit?: number;
 }
 
-/** MEMOIZADA: o teto por `account` e o manipulador precisam do mesmo dono. */
-function chamadorAutenticado(
+/**
+ * MEMOIZADA: o teto por `account` e o manipulador precisam do mesmo dono.
+ *
+ * **Exportada, e o parametro e so o autenticador**, porque
+ * `directory-suggestion-routes.ts` reusa esta funcao: o memo e por requisicao e
+ * a chave e a mesma (`diretorio:chamador`), entao o teto da sugestao e o
+ * manipulador dela veem a MESMA conta, e a credencial e lida uma vez so. Uma
+ * segunda copia desta funcao ali daria dois donos possiveis para a mesma
+ * requisicao, que e a forma de o teto contar no balde de outra pessoa.
+ */
+export function chamadorAutenticado(
   request: FastifyRequest,
-  deps: DependenciasDasRotasDoDiretorio,
+  deps: { readonly autenticador: Autenticador },
 ): Promise<UserId> {
   return memoDaRequisicao(request, 'diretorio:chamador', async () => {
     const cabecalho = request.headers.authorization;
@@ -134,9 +143,9 @@ function chamadorAutenticado(
 }
 
 /** `account` para o teto. Sem credencial valida nao ha balde de conta. */
-async function contaDoTeto(
+export async function contaDoTeto(
   request: FastifyRequest,
-  deps: DependenciasDasRotasDoDiretorio,
+  deps: { readonly autenticador: Autenticador },
 ): Promise<string | undefined> {
   try {
     return await chamadorAutenticado(request, deps);

@@ -15,6 +15,13 @@ import type { Ref } from 'react';
 import { CampoDeTexto } from './basicos.tsx';
 import { mascaraDeReais } from '../formato/dinheiro.ts';
 import { ERRO_AO_SAIR_DO_EMAIL, erraAoSairDoCampo } from '../formato/email.ts';
+import {
+  ERRO_AO_SAIR_DO_TELEFONE,
+  erraAoSairDoTelefone,
+  LIMITE_DO_TELEFONE,
+  mascaraDeTelefone,
+  telefoneEmE164,
+} from '../formato/telefone.ts';
 
 /**
  * Campo de valor monetario em reais.
@@ -148,6 +155,78 @@ export function CampoDeEmail({
       {...(autoComplete !== undefined ? { autoComplete } : {})}
       {...(somenteLeitura !== undefined ? { somenteLeitura } : {})}
       {...(referencia !== undefined ? { referencia } : {})}
+      {...(dataCy !== undefined ? { dataCy } : {})}
+    />
+  );
+}
+
+/**
+ * Campo de telefone brasileiro: mascara ao digitar, E.164 no envio.
+ *
+ * ## O que ele NAO faz, e e o mesmo ponto do campo de valor
+ *
+ * **Ele nao muda o que vai para a API.** O valor que ele guarda continua sendo
+ * a string do formulario, e quem a transforma em `phone_e164` continua sendo
+ * [telefoneEmE164], que devolve `null` quando o que foi digitado nao e um
+ * telefone. A mascara mexe no que a pessoa ve.
+ *
+ * ## A linha viva mostra o E.164, de proposito
+ *
+ * "Fica +5511306122 00." parece detalhe tecnico, e e justamente por isso que
+ * ela esta la: o telefone do diretorio **aparece no aplicativo**, e quem
+ * cadastra precisa ver o numero exato que vai ser discado antes de salvar. Um
+ * campo que escondesse a forma final faria o erro de DDD aparecer para o
+ * usuario, e nao para o operador.
+ *
+ * O erro de forma e **local** e vive em [erroDeForma]: aparece ao sair do campo
+ * e sai sozinho quando o numero volta a ser plausivel. O erro do servidor vem
+ * em [erro] e ganha a frente, porque ele sabe mais.
+ */
+export function CampoDeTelefone({
+  id,
+  rotulo,
+  valor,
+  aoMudar,
+  erro,
+  erroDeForma,
+  aoMudarErroDeForma,
+  ajuda,
+  dataCy,
+}: {
+  id: string;
+  rotulo: string;
+  valor: string;
+  aoMudar: (v: string) => void;
+  erro?: string | undefined;
+  erroDeForma: boolean;
+  aoMudarErroDeForma: (erra: boolean) => void;
+  ajuda?: string | undefined;
+  dataCy?: string;
+}) {
+  const mostrado = erro ?? (erroDeForma ? ERRO_AO_SAIR_DO_TELEFONE : undefined);
+  const e164 = telefoneEmE164(valor);
+  return (
+    <CampoDeTexto
+      id={id}
+      rotulo={rotulo}
+      valor={valor}
+      aoMudar={(v) => {
+        // O erro de forma sai assim que o numero fica plausivel de novo, sem
+        // esperar outro blur: erro que sobrevive a correcao e o defeito que a
+        // secao 13 de UX proibe. Ele nao NASCE enquanto se digita, so morre.
+        if (erroDeForma && !erraAoSairDoTelefone(v)) aoMudarErroDeForma(false);
+        aoMudar(mascaraDeTelefone(v));
+      }}
+      aoSair={() => aoMudarErroDeForma(erraAoSairDoTelefone(valor))}
+      tipo="tel"
+      // `tel` e nao `numeric`: no celular ele oferece o teclado de discagem,
+      // com o `+` que o numero de fora do Brasil precisa.
+      modoDeEntrada="tel"
+      semCorrecao
+      maximo={LIMITE_DO_TELEFONE}
+      comoFica={e164 === null ? '' : `Fica ${e164}.`}
+      {...(mostrado !== undefined ? { erro: mostrado } : {})}
+      {...(ajuda !== undefined ? { ajuda } : {})}
       {...(dataCy !== undefined ? { dataCy } : {})}
     />
   );

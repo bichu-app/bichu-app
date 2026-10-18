@@ -1,6 +1,30 @@
 /**
- * O apagamento físico dos arquivos de uma conta que vai ser expurgada
- * (SEC-020).
+ * DESLIGADO EM 17/10. NINGUÉM CHAMA ESTA FUNÇÃO PARA APAGAR NADA.
+ *
+ * O cliente decidiu, por escrito, *"Mantenha a foto e não delete os dados do
+ * usuário, apenas desabilite na plataforma"*. A foto fica. Este módulo era
+ * exatamente o que a apagava, e o comentário abaixo descreve um desenho que
+ * **não vale mais**.
+ *
+ * O arquivo continua existindo por um motivo mecânico e não por indecisão:
+ * `src/bin/worker.ts` importa `criarApagadorDeObjetosDaConta`, e `worker.ts` é de
+ * outra branch e não pode ser editado nesta. A função que o worker injeta o
+ * resultado dentro de — `expurgarContasExcluidas` — **ignora a dependência**, e
+ * o isca `src/modules/identity/application/expurgo-nao-apaga-objeto.test.ts`
+ * reprova se ela voltar a ser chamada.
+ *
+ * **O que falta, e está no relatório desta branch:** quando `worker.ts` estiver
+ * livre, a fiação (`criarApagadorDeObjetosDaConta` + a chave
+ * `apagarObjetosDaConta`) e este arquivo saem juntos.
+ *
+ * **Não confundir com a higiene de EXIF.** A substituição do original pela
+ * versão limpa continua valendo e não é tocada aqui: ela remove GPS da foto, não
+ * dado do usuário, e foi autorizada separadamente.
+ *
+ * ---
+ *
+ * O texto abaixo é o desenho SEC-020, mantido como registro histórico do que foi
+ * desfeito:
  *
  * ## O defeito que este arquivo fecha
  *

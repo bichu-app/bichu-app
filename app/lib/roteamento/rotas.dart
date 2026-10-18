@@ -23,6 +23,8 @@ import '../telas/pet/tela_cadastrar_sinais.dart';
 import '../telas/pet/tela_detalhe_do_pet.dart';
 import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
+import '../telas/pet/tela_solicitar_plaquinha.dart';
+import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
 import '../telas/perdido/tela_de_quem_e_o_caso.dart';
@@ -35,6 +37,8 @@ import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
+import '../telas/perto/sugerir_profissional.dart';
+import '../telas/rede/criar_encontro.dart';
 import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
@@ -67,7 +71,24 @@ abstract final class Rotas {
 
   static String encontroDaRedeDe(String slug) =>
       '/rede/encontros/${Uri.encodeComponent(slug)}';
+
+  /// **Marcar um encontro da `Rede`: IRMA da casca, e nao sob o ramo.**
+  ///
+  /// Mesma razao do assistente de cadastro de pet e do registro de achado:
+  /// preencher um formulario e TAREFA, e a barra de abas abaixo dele
+  /// ofereceria quatro saidas para o meio do preenchimento. Leitura fica sob o
+  /// ramo (`encontroDaRede`); tarefa, irma.
+  ///
+  /// **Declarada ANTES do ramo da casca**, como `/pets/novo` em relacao a
+  /// `/pets`: o `go_router` casa na ordem de registro, e o
+  /// `encontros/:slug` do ramo engoliria qualquer segmento -- o formulario
+  /// abriria o detalhe de um encontro chamado "novo".
+  static const String criarEncontroDaRede = '/rede/encontros/novo';
   static const String perto = '/perto';
+
+  /// **Indicar um profissional para o `Perto`: irma da casca**, pela mesma
+  /// razao de [criarEncontroDaRede].
+  static const String sugerirProfissional = '/perto/indicacoes/nova';
   static const String loja = '/loja';
 
   /// O produto da `Loja`, sob o ramo da secao: a barra de abas continua, e
@@ -92,6 +113,19 @@ abstract final class Rotas {
   static String produtoDaLojaDe(String slug) =>
       '/loja/produtos/${Uri.encodeComponent(slug)}';
   static const String perfil = '/perfil';
+
+  /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
+  ///
+  /// **Endereco proprio, e nao bloco dentro da aba.** `Meus pets` mora dentro
+  /// de `Perfil` porque e a lista da secao; um formulario de edicao nao e
+  /// conteudo de secao -- ele tem barra de saida, acao fixa embaixo e um
+  /// desfecho. Com endereco, ele e tambem o destino do item `Meus dados` da
+  /// gaveta, que e a linha que a UX 27.5.5 listava como `Editar o perfil` e
+  /// que ate hoje nao tinha para onde ir.
+  ///
+  /// **Irma da casca, como as telas de conta**, e por isso ela tem saida
+  /// propria: ela cobre a barra de baixo, e o `escape` dela e [perfil].
+  static const String dadosPessoais = '/perfil/dados';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -166,6 +200,21 @@ abstract final class Rotas {
   static const String cadastrarPetFoto = '/pets/novo/foto';
   static const String cadastrarPetSinais = '/pets/novo/sinais';
   static const String petCadastrado = '/pets/cadastrado';
+
+  /// O pedido da plaquinha da coleira: o destino que o botao `Fazer a tag da
+  /// coleira` nunca teve.
+  ///
+  /// **Declarado aqui, no bloco de `/pets/...` literais, e nao depois de
+  /// `/pets/:petId`**: `go_router` casa na ordem de registro e um parametro
+  /// casa com qualquer segmento. Abaixo do detalhe, este endereco abriria o
+  /// detalhe de um pet chamado "plaquinha".
+  ///
+  /// O pet **nao** esta no endereco, e isso e deliberado: o formulario escolhe
+  /// o pet entre os do tutor, e um pet no caminho brigaria com a escolha. Quem
+  /// chega do `Pet cadastrado` manda o `petId` em `extra`, que serve so para
+  /// pre-selecionar; alcancada por link direto, a tela abre com a lista e
+  /// nenhum pet escolhido, que e um estado valido e nao um erro.
+  static const String solicitarPlaquinha = '/pets/plaquinha';
 
   /// O fluxo de marcar como perdido: F3.0, F3.1, F3.2 e F3.3.
   ///
@@ -477,6 +526,17 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // registradas, e um parametro casa com qualquer segmento: declarado
       // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
       // detalhe de um achado chamado "novo".
+      // As duas ESCRITAS da comunidade, irmas da casca porque sao tarefa.
+      // Declaradas antes do ramo da casca: `encontros/:slug` engoliria
+      // `encontros/novo` e o formulario abriria um detalhe inexistente.
+      GoRoute(
+        path: Rotas.criarEncontroDaRede,
+        builder: (context, estado) => const TelaCriarEncontro(),
+      ),
+      GoRoute(
+        path: Rotas.sugerirProfissional,
+        builder: (context, estado) => const TelaSugerirProfissional(),
+      ),
       GoRoute(
         path: Rotas.registrarAchado,
         builder: (context, estado) {
@@ -536,6 +596,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaPetCadastrado(resultado: resultado);
         },
       ),
+      // O pedido da plaquinha. **Antes de `/pets/:petId`**, como as outras
+      // rotas literais de `/pets/...`: abaixo do detalhe, `go_router` casaria
+      // `plaquinha` como `petId`.
+      //
+      // Sem `extra` a tela NAO cai em outro destino, e aqui a diferenca com o
+      // assistente e real: ela nao depende de um passo anterior, ela carrega os
+      // pets do tutor sozinha. O `extra` so pre-seleciona, e um link direto
+      // abre o formulario com a lista inteira -- estado valido, e nao erro.
+      GoRoute(
+        path: Rotas.solicitarPlaquinha,
+        builder: (context, estado) {
+          final petId = estado.extra;
+          return TelaSolicitarPlaquinha(
+            petIdInicial: petId is String ? petId : null,
+          );
+        },
+      ),
       // T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61).
       //
       // **Declaradas DEPOIS de `/pets/novo` e `/pets/cadastrado`, e a ordem e
@@ -569,6 +646,16 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           }
           return TelaEditarPet(pet: pet);
         },
+      ),
+      // `Perfil` > `Meus dados` (18/10/2026). Declarada ANTES da casca, como
+      // as outras telas que a cobrem: o caminho e `/perfil/dados` e a aba e
+      // `/perfil`, dois enderecos distintos, e `go_router` casa o mais
+      // especifico por ser exato. Cobre a casca de abas, e por isso tem saida
+      // propria -- o `Perfil` continua vivo no ramo de baixo e voltar devolve
+      // a pessoa onde ela estava.
+      GoRoute(
+        path: Rotas.dadosPessoais,
+        builder: (context, estado) => const TelaDadosPessoais(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

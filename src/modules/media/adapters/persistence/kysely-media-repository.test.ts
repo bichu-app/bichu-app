@@ -211,6 +211,77 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
     assert.equal(fotos[0]?.cardKey, null);
   });
 
+  void describe('O EXPURGO DE CONTA ALCANÇA A VERSÃO LIMPA (art. 18, VI)', () => {
+    // ======================================================================
+    // Isca: se o expurgo voltar a ignorar `sanitized_key`, estes casos reprovam.
+    // ======================================================================
+    //
+    // Com a decisão do cliente de 17/10/2026 — *"pode apagar o original e
+    // guardar só o arquivo 2"* — a higiene APAGA o original da foto do achado
+    // assim que a versão sem metadado está gravada. Então `sanitized_key`
+    // passa a ser a **única** cópia que existe daquela foto.
+    //
+    // `chavesDaConta` lia só `object_key`. Antes isso era um furo; com a
+    // decisão é O furo: quem exerce o direito de apagamento teria apagado a
+    // cópia que a higiene já apagou sozinha, e deixado no balde justamente a
+    // que sobrou — com `privacy.account_purged` afirmando que os arquivos
+    // saíram. O número é o que alguém audita, e ele mentiria.
+    //
+    // `chavesDaConta` faz TRÊS consultas, nesta ordem: `upload_intents`,
+    // `pet_photos` (com junção) e `conversation_messages`. Os lotes abaixo
+    // seguem essa ordem.
+    const LIMPA = 'found-reports/r-1/sanitized/limpa';
+    const ORIGINAL_DO_ACHADO = 'found-reports/r-1/original/orig';
+
+    void it('devolve a versão limpa JUNTO do original', async () => {
+      const repo = criarMediaRepository(
+        bancoQueDevolve(
+          [{ object_key: ORIGINAL_DO_ACHADO, sanitized_key: LIMPA }],
+          [],
+          [],
+        ),
+      );
+
+      const chaves = (await repo.chavesDaConta(DONO)).map((o) => String(o.chave));
+
+      assert.ok(
+        chaves.includes(LIMPA),
+        'o expurgo IGNOROU a versão limpa, que é a única cópia que existe da foto',
+      );
+      // O original continua na lista: a conta pode ter fotos cuja higiene ainda
+      // não rodou, e nesse caso é ele que está no balde.
+      assert.ok(chaves.includes(ORIGINAL_DO_ACHADO));
+      // As DUAS, e sem repetição: `chavesDaConta` junta por `(classe, chave)`
+      // porque o número vai para `privacy.account_purged`.
+      assert.deepEqual(chaves, [ORIGINAL_DO_ACHADO, LIMPA]);
+    });
+
+    void it('a classe das duas é `privado`', async () => {
+      const repo = criarMediaRepository(
+        bancoQueDevolve([{ object_key: ORIGINAL_DO_ACHADO, sanitized_key: LIMPA }], [], []),
+      );
+      const objetos = await repo.chavesDaConta(DONO);
+      assert.deepEqual(
+        objetos.map((o) => o.classe),
+        ['privado', 'privado'],
+      );
+    });
+
+    void it('o contrapeso: `sanitized_key` nula não vira chave', async () => {
+      // Nula enquanto a higiene não terminou, nula em `recusada`/`ausente` (o
+      // CHECK `upload_intents_higiene_coerente` exige), e nula na foto de pet,
+      // que não passa por este caminho. Sem o `continue`, `comoObjectKey(null)`
+      // derrubaria o expurgo inteiro da conta — e o expurgo que lança não
+      // apaga nada.
+      const repo = criarMediaRepository(
+        bancoQueDevolve([{ object_key: ORIGINAL_DO_ACHADO, sanitized_key: null }], [], []),
+      );
+
+      const chaves = (await repo.chavesDaConta(DONO)).map((o) => String(o.chave));
+      assert.deepEqual(chaves, [ORIGINAL_DO_ACHADO]);
+    });
+  });
+
   void it('o contrapeso: a intenção e a foto do worker leem a chave boa', async () => {
     const intencoes = criarMediaRepository(
       bancoQueDevolve([

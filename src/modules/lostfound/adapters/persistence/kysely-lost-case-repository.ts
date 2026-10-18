@@ -466,6 +466,34 @@ function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
 }
 
 /**
+ * O RELATOR DO ACHADO AINDA TEM CONTA HABILITADA?
+ *
+ * Decisao do cliente de 17/10: conta desabilitada "nao e mais encontrada em
+ * nenhuma pagina ou funcionalidade". O candidato e a unica superficie em que o
+ * achado de UMA pessoa aparece na tela de OUTRA -- o tutor le o que o relator
+ * escreveu (cidade, bairro, observacao, instante) para dizer "e o meu pet".
+ * Todas as outras leituras de `found_reports` sao do proprio relator
+ * (`reporter_user_id = :dono`) ou do achador sem conta (`finder_token_hash`), e
+ * a do proprio relator ja e inalcancavel: `autenticar()` passa por
+ * `buscarContaPorId`, que exige `deleted_at is null`, e a conta desabilitada
+ * recebe 401 em qualquer rota autenticada.
+ *
+ * `conta_habilitada` (migracao `20261017000013`) e nao um `innerJoin('users')`:
+ * `reporter_user_id` e NULO no achado do achador sem conta, que e o caminho
+ * normal da plaquinha, e uma juncao interna apagaria esses achados da lista do
+ * tutor em silencio. A funcao devolve verdadeiro para nulo.
+ *
+ * CONSEQUENCIA MEDIDA, e ela vale nas TRES consultas de proposito: se o relator
+ * desabilita a conta depois de ter sido decidido, o reenvio da fila offline
+ * (`construtorDoCandidatoDecidido`, criterio 7) deixa de achar a linha e
+ * responde como candidato inexistente em vez de repetir a resposta anterior.
+ * Preferi isso a manter o candidato vivo em uma das tres: a lista, a escrita da
+ * decisao e a releitura precisam concordar sobre quem existe, ou a tela mostra
+ * um candidato que a decisao recusa.
+ */
+const RELATOR_HABILITADO = sql<boolean>`conta_habilitada(found_reports.reporter_user_id)`;
+
+/**
  * A escrita da decisão, como consulta ainda não executada.
  *
  * ## A autorização é `lost_cases.owner_user_id = :dono`, e ela está AQUI
@@ -519,6 +547,7 @@ export function construtorDaDecisaoDoCandidato(
     .where('match_candidates.status', '=', 'suggested')
     .where('lost_cases.owner_user_id', '=', entrada.dono)
     .where('lost_cases.status', '=', 'open')
+    .where(RELATOR_HABILITADO)
     .returning([
       ...COLUNAS_DO_CANDIDATO,
       'lost_cases.pet_id as pet_id',
@@ -560,7 +589,8 @@ export function construtorDoCandidatoDecidido(
     .where('match_candidates.id', '=', candidato)
     .where('match_candidates.case_id', '=', caso)
     .where('match_candidates.status', '<>', 'suggested')
-    .where('lost_cases.owner_user_id', '=', dono);
+    .where('lost_cases.owner_user_id', '=', dono)
+    .where(RELATOR_HABILITADO);
 }
 
 /**
@@ -623,6 +653,7 @@ export function construtorDosCandidatosDoCaso(
     .where('match_candidates.case_id', '=', caso)
     .where('lost_cases.owner_user_id', '=', dono)
     .where('pets.deleted_at', 'is', null)
+    .where(RELATOR_HABILITADO)
     .orderBy('match_candidates.score', 'desc')
     .orderBy('match_candidates.id', 'desc')
     .limit(pagina.limit);

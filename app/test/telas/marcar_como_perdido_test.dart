@@ -1,8 +1,17 @@
 // BICHUS-21 — marcar o pet como perdido: onde e quando ele foi visto.
 //
-// O fluxo inteiro, medido no app montado: a porta em `Perfil` > `Meus pets`,
-// a escolha de quem e o caso (F3.0), o formulario (F3.1), o alcance e o envio
-// (F3.2) e o resultado (F3.3).
+// O fluxo inteiro, medido no app montado: a porta na PAGINA DO PET (T.1), o
+// formulario (F3.1), o alcance e o envio (F3.2) e o resultado (F3.3).
+//
+// A PORTA MUDOU DE TELA EM 18/10, na mescla do lote de tres ramos. Ela era
+// `Perfil` > `Meus pets`; a acao saiu dali em `perfil-dados-pessoais` e nasceu
+// na pagina do pet em `feat/qr-e-perdido-na-pagina-do-pet`, no MESMO dia. Os
+// dois lados so existem juntos nesta arvore, entao nenhum dos dois autores
+// podia repontar este arquivo: quem mesclou e que pode.
+//
+// A escolha de quem e o caso (F3.0) saiu do caminho e nao e mais alcancavel --
+// ver o bloco `_f30SemPorta` abaixo, que diz por que quatro casos estao
+// PARADOS e nao apagados, e o que precisa ser decidido.
 //
 // ---------------------------------------------------------------------------
 // AS QUATRO ISCAS DESTE ARQUIVO
@@ -38,31 +47,42 @@ import 'package:bichu/telas/perdido/tela_alcance_do_alerta.dart';
 import 'package:bichu/telas/perdido/tela_de_quem_e_o_caso.dart';
 import 'package:bichu/telas/perdido/tela_onde_e_quando.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
+import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/cartao_de_pet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import '../api/pets_api_listar_test.dart' show petDoContrato;
 import 'ajuda_de_tela.dart';
 
 // ---------------------------------------------------------------------------
 // A bancada
 // ---------------------------------------------------------------------------
 
+/// Um pet como o CONTRATO o declara, e nao um corpo a mao.
+///
+/// Mudou em 18/10, na mescla do lote: a porta de `Marcar como perdido` saiu de
+/// `Perfil` > `Meus pets` e entrou na **pagina do pet** (T.1), que le
+/// `GET /pets/{id}` e nao a lista. Um corpo parcial passava na lista e faltaria
+/// campo em T.1, e o caso reprovaria por um motivo que nao e o dele. Delegar a
+/// `petDoContrato` -- a mesma bancada que `pets_api_listar_test.dart` usa --
+/// mantem os dois lados falando o contrato, e os nomes dos parametros aqui
+/// continuam os que os casos abaixo ja escreviam.
 Map<String, dynamic> pet({
   required String id,
   required String nome,
   String status = 'active',
+  String? casoAberto,
 }) {
-  return <String, dynamic>{
-    'id': id,
-    'name': nome,
-    'species': 'dog',
-    'size': 'M',
-    'status': status,
-    'active_tag_count': 1,
-  };
+  return petDoContrato(
+    id: id,
+    nome: nome,
+    status: status,
+    casoAberto: casoAberto,
+  );
 }
 
 /// Um servidor que responde `GET /pets` com [pets] e nada mais.
@@ -92,6 +112,39 @@ Future<http.Response> Function(http.Request) servidorCom(
     if (req.url.path == '/v1/auth/logout' && req.method == 'POST') {
       return http.Response('', 204);
     }
+    // -----------------------------------------------------------------------
+    // A PAGINA DO PET (T.1) -- a porta NOVA, desde 18/10.
+    // -----------------------------------------------------------------------
+    //
+    // A acao `Marcar como perdido` saiu de `Perfil` > `Meus pets` e entrou em
+    // T.1. O fluxo deste arquivo so e alcancavel se o duble souber responder o
+    // que T.1 le ao nascer. Nada aqui inventa sucesso: o 404 do fim continua
+    // sendo a resposta de tudo o que ninguem declarou, que e a isca do
+    // criterio 6 (F3.1 nao chama rede).
+    //
+    // A lista de plaquinhas volta VAZIA de proposito: `qr.png` so e pedido
+    // quando ha plaquinha, e pet sem plaquinha nao mostra QR por decisao. Um
+    // duble que devolvesse plaquinha faria estes casos pedirem a imagem do QR,
+    // que nao e o que eles medem -- isso e `qr_do_pet_na_pagina_test.dart`.
+    final plaquinhas = RegExp(r'^/v1/pets/([^/]+)/tags$').firstMatch(
+      req.url.path,
+    );
+    if (plaquinhas != null && req.method == 'GET') {
+      return json200(<String, dynamic>{'items': <dynamic>[]});
+    }
+    if (req.url.path.endsWith('/reference-data') && req.method == 'GET') {
+      return json200(referenciaDeTeste());
+    }
+    final umPet = RegExp(r'^/v1/pets/([^/]+)$').firstMatch(req.url.path);
+    if (umPet != null && req.method == 'GET') {
+      final procurado = Uri.decodeComponent(umPet.group(1)!);
+      for (final corpo in pets) {
+        if (corpo['id'] == procurado) return json200(corpo);
+      }
+      // Pet que a conta nao tem e 404, e nao um corpo inventado: a isca 1
+      // (`so o pet do chamador`) depende de T.1 nao servir pet alheio.
+      return http.Response('', 404);
+    }
     return http.Response('', 404);
   };
 }
@@ -115,7 +168,100 @@ Future<void> abrirOPerfil(
   await tester.pumpAndSettle();
 }
 
-Finder get _porta => find.text(MeusPets.rotuloDeMarcarPerdido);
+// ---------------------------------------------------------------------------
+// PARADO, E NAO APAGADO: F3.0 FICOU SEM PORTA NA MESCLA DE 18/10
+// ---------------------------------------------------------------------------
+//
+// Quatro casos deste arquivo medem F3.0 -- `TelaDeQuemEOCaso`, a escolha de
+// qual animal. Eles estao marcados `skip: _f30SemPorta` e **nenhum foi
+// apagado**. O motivo, medido nesta arvore e nao suposto:
+//
+// F3.0 nao e alcancavel. `Rotas.escolherPetPerdido` continua REGISTRADA, mas
+// o construtor dela exige a lista de pets em `extra` e **nao chama rede**
+// (criterio 6): `if (pets is! List<Pet> || pets.isEmpty) return AbaPerfil()`.
+// O unico lugar do produto que passava essa lista era
+// `MeusPets._acaoDeMarcarPerdido`, e ele saiu em `perfil-dados-pessoais`. A
+// porta nova, em `feat/qr-e-perdido-na-pagina-do-pet`, nao repoe F3.0: a
+// pagina do pet empurra `Rotas.marcarPerdido` direto com UM pet, e salta a
+// escolha de proposito -- na pagina da Nina nao ha deslize possivel. Medido:
+// `grep -rn 'escolherPetPerdido' app/lib` nao acha nenhum `push`.
+//
+// POR QUE NAO REPONTEI ESTES QUATRO. Pela porta nova F3.0 nunca aparece,
+// entao nao ha como medi-la por ela. A outra saida seria empurrar a rota com
+// um `List<Pet>` montado no teste -- e isso seria TAUTOLOGIA: o caso passaria
+// a fornecer justamente o que a producao deixou de fornecer, e ficaria verde
+// com a porta apagada, que e o estado em que estamos. Um caso que nao
+// distingue os dois mundos e pior que um caso parado com o motivo escrito.
+//
+// O QUE ISSO CUSTA, dito e nao escondido: a esta altura ninguem mede mais o
+// conteudo de F3.0 (quais pets a lista oferece, nada pre-marcado, escolher
+// levar a F3.1 com o pet no topo, o pet ja perdido fora do grupo de opcoes).
+//
+// PRECISA DE DECISAO DO CLIENTE, e nao de conserto meu, porque sao dois
+// produtos diferentes: ou F3.0 recupera uma porta -- e os quatro casos
+// voltam, trocando `_f30SemPorta` por `false` e a entrada pela porta nova --,
+// ou F3.0 se aposenta, e ai `TelaDeQuemEOCaso`, a rota e estes quatro casos
+// saem juntos, de proposito e num commit que diga isso. Nao escolhi por ele.
+//
+// O RESTO DO ARQUIVO FOI REPONTADO e mede o fluxo pela porta nova: nove casos
+// entram por `abrirAPaginaDoPet` e seguem para F3.1 -- que e exatamente onde
+// a porta antiga tambem caia quando havia UM pet elegivel, porque ali ela
+// tambem saltava F3.0 (criterio 1). Para esses nove nada se perdeu: mesmo
+// destino, mesma afirmacao, porta nova.
+const bool _f30SemPorta = true;
+
+/// Um `open_case_id` plausivel, para o caso do criterio 13.
+///
+/// T.1 le `status` E `open_case_id` (ver `_jaProcurado` em
+/// `tela_detalhe_do_pet.dart`): os dois dizem a mesma coisa quando o servidor
+/// esta consistente, e o duble manda os dois para nao deixar passar a tela que
+/// le so um deles.
+const String _idDoCaso = '7a2b9c10-0000-7000-8000-0000000000aa';
+
+/// Abre a PAGINA DO PET (T.1), onde a porta de `Marcar como perdido` mora
+/// desde 18/10.
+///
+/// Entra pela ROTA, e nao tocando no cartao de `Meus pets`, pelo mesmo motivo
+/// que `qr_do_pet_na_pagina_test.dart` ja adotou: a tela inicial do `Perfil`
+/// virou so menus no mesmo dia, e uma isca que entrasse por ela passaria a
+/// reprovar por causa da reescrita da OUTRA tela, que nao e o que estes casos
+/// medem. Que o cartao leva a T.1 e medido onde isso e o assunto
+/// (`perfil_so_menus_nada_perdido_test.dart`); aqui o assunto e F3.1 em
+/// diante.
+Future<void> abrirAPaginaDoPet(
+  WidgetTester tester, {
+  required Future<http.Response> Function(http.Request) rede,
+  String petId = 'p-1',
+  RegiaoDeReferencia? regiao,
+  DepositoDaFilaEmMemoria? fila,
+  Avisos? avisos,
+}) async {
+  await abrirOApp(
+    tester,
+    rede: rede,
+    deposito: depositoLogado(regiaoDeReferencia: regiao),
+    depositoDaFila: fila,
+    avisos: avisos,
+  );
+  await irPara(tester, Rotas.detalheDoPetDe(petId));
+}
+
+/// A porta, **como ela e hoje**: a acao na pagina do pet.
+///
+/// Trocada em 18/10, na mescla do lote de tres ramos. Ela era
+/// `MeusPets.rotuloDeMarcarPerdido`, em `Perfil` > `Meus pets`, e aquela acao
+/// nao existe mais -- saiu em `perfil-dados-pessoais` no mesmo dia em que a
+/// nova nasceu em `feat/qr-e-perdido-na-pagina-do-pet`. Os dois lados so
+/// existem juntos NESTA arvore, e nenhum dos dois autores podia repontar isto.
+///
+/// As duas constantes valem a MESMA frase (`TextosDoDetalhe.marcarComoPerdido`
+/// e apelido de `TelaDeQuemEOCaso.titulo`), entao a troca nao e cosmetica: o
+/// que muda e a TELA em que a frase e procurada, e por isso o finder antigo
+/// encontrava texto nenhum na arvore mesclada.
+Finder get _porta => find.text(TextosDoDetalhe.marcarComoPerdido);
+
+/// A porta ANTIGA, so para medir que ela nao voltou a `Meus pets`.
+Finder get _portaAntiga => find.text(MeusPets.rotuloDeMarcarPerdido);
 
 /// Rola ate a opcao e toca nela.
 ///
@@ -132,12 +278,25 @@ void main() {
   // ISCA 3 — acao com destino
   // -------------------------------------------------------------------------
   group('acao com destino: a barra nao oferece caminho que nao existe', () {
-    testWidgets('conta sem pet nenhum nao mostra `Marcar como perdido`',
+    testWidgets('conta sem pet nenhum nao tem porta para o fluxo',
         (tester) async {
+      // REPONTADO em 18/10. A porta mudou de tela, e a cadeia tambem: ela
+      // agora e cartao de `Meus pets` -> pagina do pet -> acao. Sem pet nao
+      // ha CARTAO, e e por isso que nao ha porta -- medir so a ausencia do
+      // rotulo no `Perfil` deixaria de discriminar, porque depois da reescrita
+      // em menus aquele rotulo nunca aparece ali, com pet ou sem.
       await abrirOPerfil(tester, rede: servidorCom(<Map<String, dynamic>>[]));
 
       expect(
-        find.text(MeusPets.rotuloDeMarcarPerdido),
+        find.byType(CartaoDePet),
+        findsNothing,
+        reason: 'REPROVA: apareceu cartao de pet numa conta sem pet. O cartao '
+            'e o UNICO caminho do app ate a pagina do pet, e a pagina do pet '
+            'e onde `Marcar como perdido` mora desde 18/10: um cartao a mais '
+            'aqui e uma porta para T.1 de um animal que nao existe.',
+      );
+      expect(
+        _portaAntiga,
         findsNothing,
         reason: 'REPROVA: a acao apareceu numa conta sem pet. Ela abriria '
             'F3.0 com zero opcoes, ou F3.1 sem saber de qual animal fala. E o '
@@ -148,20 +307,37 @@ void main() {
 
     testWidgets('pet que JA tem caso aberto nao reabre a acao (criterio 13)',
         (tester) async {
-      await abrirOPerfil(
+      // REPONTADO em 18/10, para a TELA onde a acao mora agora. O criterio 13
+      // e o mesmo e a afirmacao e a mesma; o que mudou e quem responde por
+      // ela. `status: 'lost'` E `open_case_id` juntos de proposito: T.1 le os
+      // DOIS campos, e um duble que mandasse so um deixaria passar a tela que
+      // le so o outro.
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(<Map<String, dynamic>>[
-          pet(id: 'p-1', nome: 'Rex', status: 'lost'),
+          pet(id: 'p-1', nome: 'Rex', status: 'lost', casoAberto: _idDoCaso),
         ]),
       );
 
       expect(
-        find.text(MeusPets.rotuloDeMarcarPerdido),
+        _porta,
         findsNothing,
         reason: 'REPROVA: o unico pet da conta ja esta sendo procurado, e a '
             'acao apareceu assim mesmo. O teto e de UM caso aberto por pet '
             '(criterio 8), e a tela precisa refletir o teto em vez de deixar '
             'a pessoa bater nele depois de duas telas e um 409.',
+      );
+      // O CONTRAPESO. Sem ele este caso passaria numa tela que nao desenhou
+      // nada -- erro de rede, pet nao carregado, qualquer coisa --, e um
+      // `findsNothing` sobre tela vazia e o que o criterio 13 NAO pede: ele
+      // pede que a tela REFLITA o teto, dito em texto e fora de controle.
+      expect(
+        find.text('Rex: ${TelaDeQuemEOCaso.jaProcurado}'),
+        findsOneWidget,
+        reason: 'REPROVA: a acao nao apareceu, mas a tela tambem nao disse '
+            'que o animal ja esta sendo procurado. Esconder sem explicar e o '
+            'desenho preguicoso que o criterio 5 recusa, e deixaria este caso '
+            'verde sobre uma tela que simplesmente nao carregou.',
       );
     });
 
@@ -221,7 +397,7 @@ void main() {
             'devolveu para esta conta. A lista de F3.0 e a resposta de '
             '`listMyPets` da sessao em pe, e nao ha outra porta.',
       );
-    });
+    }, skip: _f30SemPorta);
 
     testWidgets('a rota de F3.1 recusa um `extra` que nao e o rascunho',
         (tester) async {
@@ -253,7 +429,7 @@ void main() {
   group('data no futuro', () {
     testWidgets('`Continuar` fica desabilitado com o motivo visivel',
         (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(<Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')]),
         // Com regiao, o bairro ja vem preenchido e o unico impedimento que
@@ -295,7 +471,7 @@ void main() {
   group('criterio 2: o bairro ja preenchido, e de onde ele vem', () {
     testWidgets('a regiao de referencia do tutor preenche os campos',
         (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(<Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')]),
         regiao: const RegiaoDeReferencia(
@@ -314,7 +490,7 @@ void main() {
     });
 
     testWidgets('sem regiao cadastrada o campo abre vazio', (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(<Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')]),
       );
@@ -344,7 +520,7 @@ void main() {
       final fila = DepositoDaFilaEmMemoria();
       final chamadas = <String>[];
 
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         fila: fila,
         rede: (req) async {
@@ -353,6 +529,24 @@ void main() {
             return json200(<String, dynamic>{
               'items': <Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')],
             });
+          }
+          // A PAGINA DO PET PRECISA CARREGAR ANTES DA PORTA SER TOCADA.
+          // Acrescentado em 18/10, quando a acao mudou de tela: T.1 le o pet e
+          // as plaquinhas ao nascer, e sem estas respostas a tela mostraria
+          // falha de conexao e a porta nao existiria para tocar.
+          //
+          // O `sem rede` que a isca mede CONTINUA valendo para o que vem
+          // DEPOIS da porta -- `lost-case-preview` e o `POST .../lost-cases`
+          // caem no `throw` abaixo, que e o ponto do caso.
+          if (req.url.path == '/v1/pets/p-1' && req.method == 'GET') {
+            return json200(pet(id: 'p-1', nome: 'Rex'));
+          }
+          if (req.url.path == '/v1/pets/p-1/tags' && req.method == 'GET') {
+            return json200(<String, dynamic>{'items': <dynamic>[]});
+          }
+          if (req.url.path.endsWith('/reference-data') &&
+              req.method == 'GET') {
+            return json200(referenciaDeTeste());
           }
           // **Sem sinal daqui para a frente.** `ClientException` e o que o
           // `ApiClient` traduz para `FalhaDeConexao`.
@@ -427,7 +621,7 @@ void main() {
     });
 
     testWidgets('o caso que ABRIU diz que abriu', (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(
           <Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')],
@@ -476,7 +670,7 @@ void main() {
   // -------------------------------------------------------------------------
   group('alcance `unavailable`: a tela nao inventa numero', () {
     testWidgets('mostra a variante D e nenhum zero', (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(
           <Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')],
@@ -541,7 +735,7 @@ void main() {
             'custar um toque so.',
       );
       expect(find.text(TelaDeQuemEOCaso.semEscolha), findsOneWidget);
-    });
+    }, skip: _f30SemPorta);
 
     testWidgets('escolher leva F3.1 com o pet escolhido no topo',
         (tester) async {
@@ -567,7 +761,7 @@ void main() {
             'o deslize de marcar o pet errado quando ha mais de um".',
       );
       expect(find.text('Rex'), findsNothing);
-    });
+    }, skip: _f30SemPorta);
 
     testWidgets('o pet ja perdido aparece, e fora do grupo de opcoes',
         (tester) async {
@@ -599,7 +793,7 @@ void main() {
         reason: 'REPROVA: um pet que ja esta sendo procurado virou opcao. O '
             'caminho termina em 409 depois de duas telas.',
       );
-    });
+    }, skip: _f30SemPorta);
   });
 
   // -------------------------------------------------------------------------
@@ -608,7 +802,7 @@ void main() {
   group('acessibilidade: nenhum controle se anuncia sem entregar o toque', () {
     testWidgets('a arvore de semantica do app montado nao tem botao mudo',
         (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         rede: servidorCom(<Map<String, dynamic>>[
           pet(id: 'p-1', nome: 'Rex'),
@@ -662,7 +856,7 @@ void main() {
   group('a fila offline morre no logout', () {
     testWidgets('o arquivo fica vazio depois de sair da conta', (tester) async {
       final fila = DepositoDaFilaEmMemoria();
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         fila: fila,
         rede: (req) async {
@@ -673,6 +867,24 @@ void main() {
           }
           if (req.url.path == '/v1/auth/logout' && req.method == 'POST') {
             return http.Response('', 204);
+          }
+          // A PAGINA DO PET PRECISA CARREGAR ANTES DA PORTA SER TOCADA.
+          // Acrescentado em 18/10, quando a acao mudou de tela: T.1 le o pet e
+          // as plaquinhas ao nascer, e sem estas respostas a tela mostraria
+          // falha de conexao e a porta nao existiria para tocar.
+          //
+          // O `sem rede` que a isca mede CONTINUA valendo para o que vem
+          // DEPOIS da porta -- `lost-case-preview` e o `POST .../lost-cases`
+          // caem no `throw` abaixo, que e o ponto do caso.
+          if (req.url.path == '/v1/pets/p-1' && req.method == 'GET') {
+            return json200(pet(id: 'p-1', nome: 'Rex'));
+          }
+          if (req.url.path == '/v1/pets/p-1/tags' && req.method == 'GET') {
+            return json200(<String, dynamic>{'items': <dynamic>[]});
+          }
+          if (req.url.path.endsWith('/reference-data') &&
+              req.method == 'GET') {
+            return json200(referenciaDeTeste());
           }
           throw http.ClientException('sem rede');
         },
@@ -765,7 +977,7 @@ void main() {
     // dirige a tela em vez de chamar `oferecer` direto.
     testWidgets('abrir o caso em F3.2 oferece a antessala da segunda',
         (tester) async {
-      await abrirOPerfil(
+      await abrirAPaginaDoPet(
         tester,
         avisos: AvisosDeTeste(PermissaoDeAviso.naoPedida),
         rede: servidorCom(

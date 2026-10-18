@@ -371,9 +371,22 @@ abstract final class RegistroDeSubDestinos {
         estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
-        rotulo: 'Editar o perfil',
+        // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou
+        // para o da tela que foi construida: `Meus dados` (18/10/2026, pedido
+        // do cliente). **Dois nomes para o mesmo destino e pior que divergir
+        // do documento**: o item da gaveta e o item do corpo do `Perfil` sao a
+        // mesma viagem, e quem leu um precisa reconhecer o outro. Onde o
+        // documento e o codigo divergem, vale o codigo -- a mesma regra que
+        // ja valeu para `Registrar achado avulso` e para os filtros de
+        // `Perto`.
+        rotulo: 'Meus dados',
         forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.planejada,
+        // Saiu de `planejada` porque a tela existe: `TelaDadosPessoais`, com
+        // endereco registrado no roteador de verdade. E a subida que o portao
+        // de contagem chama de "caminho normal, e so quando a tela do outro
+        // lado existir".
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.dadosPessoais,
       ),
       SubDestino(
         rotulo: 'Notificações',

@@ -20,7 +20,12 @@ import {
   primeiroNomeOuApelido,
 } from './conversa-mediada.js';
 
-const ABERTA = { encerradaEm: null, bloqueadaEm: null, casoEncerrado: false };
+const ABERTA = {
+  encerradaEm: null,
+  bloqueadaEm: null,
+  casoEncerrado: false,
+  participanteDesabilitado: false,
+};
 const UM_INSTANTE = comoData(Date.parse('2026-09-22T12:00:00.000Z') as Instant);
 
 void describe('o estado sai de três sinais, e não de uma coluna `status`', () => {
@@ -46,7 +51,7 @@ void describe('o estado sai de três sinais, e não de uma coluna `status`', () 
     // A ordem não é arbitrária: o encerramento carrega a explicação que a
     // pessoa precisa ler, e o bloqueio já obteve o que existe para obter.
     assert.equal(
-      estadoDaConversa({ encerradaEm: UM_INSTANTE, bloqueadaEm: UM_INSTANTE, casoEncerrado: true }),
+      estadoDaConversa({ ...ABERTA, encerradaEm: UM_INSTANTE, bloqueadaEm: UM_INSTANTE, casoEncerrado: true }),
       'closed',
     );
   });
@@ -84,6 +89,8 @@ void describe('o participante que sai não permite deduzir nada do outro lado', 
     const participantes = participantesVisiveis({
       nomeDoTutor: 'Leandro Panegassi',
       nomeDoAchador: 'Ana Paula Ribeiro',
+      tutorDesabilitado: false,
+      achadorDesabilitado: false,
     });
     for (const p of participantes) {
       assert.deepEqual(
@@ -102,6 +109,8 @@ void describe('o participante que sai não permite deduzir nada do outro lado', 
       participantesVisiveis({
         nomeDoTutor: 'Leandro Panegassi',
         nomeDoAchador: 'Ana Paula Ribeiro',
+        tutorDesabilitado: false,
+        achadorDesabilitado: false,
       }),
     );
     assert.doesNotMatch(serializado, /\d{8,}/, `sobrou sequência de dígitos: ${serializado}`);
@@ -122,8 +131,8 @@ void describe('o participante que sai não permite deduzir nada do outro lado', 
     // ADR-0010, item 7: nada que permita agrupar os pets de um mesmo tutor. Se
     // o participante carregasse um id estável, duas plaquinhas escaneadas por
     // duas pessoas diferentes passariam a ser reconhecíveis como do mesmo dono.
-    const uma = participantesVisiveis({ nomeDoTutor: 'Leandro P', nomeDoAchador: 'Ana' });
-    const outra = participantesVisiveis({ nomeDoTutor: 'Leandro P', nomeDoAchador: 'Bruno' });
+    const uma = participantesVisiveis({ nomeDoTutor: 'Leandro P', nomeDoAchador: 'Ana', tutorDesabilitado: false, achadorDesabilitado: false });
+    const outra = participantesVisiveis({ nomeDoTutor: 'Leandro P', nomeDoAchador: 'Bruno', tutorDesabilitado: false, achadorDesabilitado: false });
     const tutorDeUma = uma.find((p) => p.role === 'tutor');
     const tutorDeOutra = outra.find((p) => p.role === 'tutor');
     assert.deepEqual(Object.keys(tutorDeUma ?? {}).sort(), ['displayName', 'role']);

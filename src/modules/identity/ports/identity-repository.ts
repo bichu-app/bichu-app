@@ -293,7 +293,8 @@ export interface IdentityRepository {
    *
    * O contrato de `deleteMyAccount` diz o que esta operação é: *"Exclusão
    * lógica imediata, expurgo definitivo em 30 dias"*. Ela não apaga linha
-   * nenhuma — quem apaga é {@link expurgarConta}, 30 dias depois. Aqui a conta
+   * nenhuma — e, desde 17/10, **nada apaga**: o expurgo de 30 dias foi
+   * desligado por decisão do cliente e a conta fica DESABILITADA. Aqui a conta
    * passa a `deletion_requested`, ganha `deleted_at`, e com isso sai do índice
    * `users_email_unico_ativo`: o endereço fica livre para uma conta nova no
    * mesmo instante, que é o que faz a exclusão valer para quem a pediu.
@@ -323,20 +324,24 @@ export interface IdentityRepository {
    */
   contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]>;
 
-  /**
-   * O `DELETE FROM users` de verdade, e o ponto em que as cascatas disparam.
-   *
-   * **Esta é a operação que precisa CONCLUIR**, e a classe de defeito que já
-   * apareceu cinco vezes em 22/09 mora exatamente aqui: contradição entre a
-   * ação de deleção de uma chave estrangeira e uma restrição da mesma tabela
-   * (`23514`), ou `SET NULL` de neto revalidando contra um pai que a cascata do
-   * mesmo comando acabou de levar (`23503`). Nenhuma das duas aparece em teste
-   * unitário, e nenhuma aparece em uso normal.
-   *
-   * Devolve `false` quando não havia o que apagar. O worker trata isso como
-   * sucesso: outra rodada pode ter chegado antes.
-   */
-  expurgarConta(userId: UserId): Promise<boolean>;
+  // `expurgarConta` SAIU DAQUI em 17/10, e a ausência é a mudança.
+  //
+  // Ela era o único `DELETE FROM users` deste produto, e o ponto em que as
+  // cascatas de dezoito tabelas disparavam. O cliente decidiu, por escrito,
+  // que *"não delete os dados do usuário, apenas desabilite na plataforma"*, e
+  // com isso não há mais nenhum caminho de código que apague uma conta: a
+  // exclusão é só lógica, e o que faz a pessoa desaparecer é cláusula de
+  // consulta.
+  //
+  // O método foi REMOVIDO em vez de deixado sem chamador de propósito. Um
+  // `DELETE FROM users` existindo na porta é um convite a ser religado por quem
+  // ler o nome e supor a intenção antiga, e o isca
+  // `tests/integration/expurgo-nao-apaga-nada.test.ts` reprova se ele voltar.
+  //
+  // O apagamento efetivo sob pedido formal do titular (LGPD art. 18, VI) passa
+  // a ser procedimento administrativo, e **não existe hoje**. A emenda de ADR
+  // que registra isso saiu junto desta branch.
+
   // --- Troca de e-mail ----------------------------------------------------
 
   /**

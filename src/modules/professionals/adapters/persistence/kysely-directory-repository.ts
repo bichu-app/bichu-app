@@ -159,7 +159,30 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
 
 /** O recorte, com `status = 'published'` dentro da consulta. */
 export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio) {
-  let consulta = db.selectFrom('professionals').where('status', '=', 'published');
+  let consulta = db
+    .selectFrom('professionals')
+    .where('status', '=', 'published')
+    // O TITULAR DESABILITADO SAI DO DIRETORIO.
+    //
+    // Decisao do cliente de 17/10: conta desabilitada "nao e mais encontrada em
+    // nenhuma pagina ou funcionalidade". A entrada do diretorio E a pessoa --
+    // `display_name`, `about`, `phone_e164` e o bairro dela saem nesta mesma
+    // projecao --, entao e a superficie mais direta de todas.
+    //
+    // AQUI, e nao em `listarPublicados`: esta funcao e o unico caminho de
+    // leitura do diretorio, e a contagem e a pagina a chamam as duas. Um
+    // predicado posto so na pagina daria `total` maior que a lista, que e o
+    // mesmo defeito do aviso do painel da Rede.
+    //
+    // `claimed_by_user_id` e o TITULAR, e e a coluna certa. A outra coluna de
+    // usuario desta tabela e "quem CONVIDOU" (emenda 1 do ADR-0011): vinculo
+    // entre duas pessoas, marcada "NUNCA sai do servidor", e filtrar por ela
+    // esconderia o profissional legitimo porque QUEM O CONVIDOU saiu da
+    // plataforma -- punindo o convidado pelo convite. `conta_habilitada`
+    // (migracao `20261017000013`) devolve verdadeiro para nulo, entao a entrada
+    // de `source = 'import'`, que o CHECK `professionals_aceite_antes_do_perfil`
+    // deixa nascer sem titular, continua publicada.
+    .where(sql<boolean>`conta_habilitada(professionals.claimed_by_user_id)`);
 
   // A BUSCA POR TEXTO CASA SOBRE O MESMO `where`, e isso e o ponto.
   //

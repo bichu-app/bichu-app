@@ -376,6 +376,13 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['pending', 'approved', 'declined'],
   },
+  // BICHUS: o pedido do OBJETO FISICO da plaquinha. `fulfilled` quer dizer que
+  // a plaquinha saiu, e nao que o codigo foi emitido -- emitir e `pet_tags`, e
+  // e irreversivel (ADR-0004).
+  'public.collar_tag_requests.collar_tag_requests_decisao_conhecida': {
+    coluna: 'status',
+    valores: ['pending', 'fulfilled', 'declined'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -623,6 +630,22 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // So o recusado guarda desistencia (D54, 12.11).
   'public.network_event_join_requests.network_event_join_requests_desistencia_so_do_recusado':
     "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
+  // O identificador opaco do pedido da plaquinha, base64url. Mesma forma do
+  // `ref` do pedido de encontro, porque e a mesma necessidade.
+  'public.collar_tag_requests.collar_tag_requests_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // Decidido tem instante, nos dois sentidos.
+  'public.collar_tag_requests.collar_tag_requests_decidido_tem_instante':
+    "CHECK (((status = ANY (ARRAY['fulfilled'::text, 'declined'::text])) = (decided_at IS NOT NULL)))",
+  // O CEP, oito digitos sem mascara. **Formato, nunca existencia**: nada
+  // resolve CEP neste produto (ADR-0006), e o banco nao tem como saber se ele
+  // confere com bairro e cidade.
+  'public.collar_tag_requests.collar_tag_requests_cep_formato':
+    "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
+  // O telefone de quem recebe, E.164 do Brasil. A MESMA forma do contrato e
+  // do `phone_e164` do perfil -- uma segunda redacao divergiria da primeira.
+  'public.collar_tag_requests.collar_tag_requests_telefone_formato':
+    "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -687,10 +710,47 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
   // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
   // esquema `https` deixou de ser assunto do banco porque deixou de ser
-  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
-  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  // dado -- ele e constante da composicao.
+  //
+  // As duas formas abaixo DEIXARAM DE SER IGUAIS em 17/10/2026, e a diferenca
+  // e deliberada. `target_path` aceita `?` e `#` desde a `20261017000001`; o
+  // caminho da imagem, logo depois dela, continua sem os dois.
+  //
+  // A proibicao que estava aqui citava a consequencia 3 da BICHUS-185
+  // (parametro em link de saida e onde dado pessoal vaza) e acertava o risco,
+  // errava o INSTRUMENTO: proibir `?` na coluna nao impede dado pessoal de
+  // viajar, impede QUALQUER parametro -- e loja de verdade identifica o SKU
+  // exatamente assim (`/p?idsku=1197673`, no catalogo da Cobasi, foi o link
+  // legitimo que ficou bloqueado). A consequencia 3 continua valendo e
+  // continua tendo dono: ela e sobre o que o APLICATIVO acrescenta na saida, e
+  // isso e garantido na tela (`app/test/telas/loja_abre_no_navegador_test.dart`
+  // reprova se algum parametro aparecer), nao nesta coluna. O cabecalho da
+  // `20261017000001` tem o raciocinio por extenso.
+  //
+  // O que sobrou no `CHECK` nao e sobre privacidade: comeca em `/` e nao tem
+  // espaco em branco (`[[:space:]]` cobre espaco, tabulacao e quebra de
+  // linha), porque a coluna guarda um caminho e nao uma frase.
   'public.store_items.store_items_destino_e_caminho':
-    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+    "CHECK ((target_path ~ '^/[^[:space:]]*$'::text))",
+  // `image_path` CONTINUA sem `?` e sem `#`, e por isso ganhou comentario
+  // proprio: a `20261017000001` abriu o caminho do DESTINO, e so ele. Caminho
+  // de imagem de catalogo nao carrega identificador de produto, entao aqui a
+  // proibicao larga nao bloqueia nada legitimo e a consequencia 3 da
+  // BICHUS-185 segue sendo a razao dela.
+  'public.store_items.store_items_imagem_e_caminho':
+    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
+  // O host do destino quando ele e um SUBDOMINIO do parceiro
+  // (`20261017000001`): `www.cobasi.com.br` para o parceiro `cobasi.com.br`.
+  // NULO no caso comum, que e o host ser o do proprio parceiro. A forma e a
+  // MESMA de `store_partners.host`, logo abaixo, porque e o mesmo dado.
+  //
+  // O `CHECK` confere so a FORMA. O vinculo "e subdominio do parceiro" e da
+  // aplicacao (`errosDoDestino`), porque depende de OUTRA tabela e um `CHECK`
+  // nao enxerga `store_partners` -- e a comparacao de la e por sufixo COM
+  // FRONTEIRA DE ROTULO, senao `malcobasi.com.br` passaria por subdominio de
+  // `cobasi.com.br`.
+  'public.store_items.store_items_destino_e_so_host':
+    "CHECK (((target_host IS NULL) OR (target_host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text)))",
   // ------------------------------------------------------------------
   // A TAXONOMIA DOS DOIS NIVEIS DA LOJA (migracao `20261017000003`)
   // ------------------------------------------------------------------
@@ -719,8 +779,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // invalidaria todo cadastro anterior de uma vez.
   'public.store_items.store_items_subcategoria_formato':
     "CHECK (((subcategory IS NULL) OR (subcategory ~ '^[a-z][a-z0-9_]{1,39}$'::text)))",
-  'public.store_items.store_items_imagem_e_caminho':
-    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
   // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
   // convidaria um parametro a viajar junto, e parametro em link de saida e
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).

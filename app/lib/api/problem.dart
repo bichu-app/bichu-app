@@ -62,6 +62,20 @@ enum ProblemTipo {
   /// por versao antiga do app depois de o servidor ter mudado o valor.
   limiteDePetsAtingido('pet-limit-reached'),
 
+  /// Teto de 3 encontros ATIVOS da comunidade por conta. 409. So aparece ao
+  /// criar encontro na `Rede`.
+  ///
+  /// **Tipo proprio, e nao [limiteDePetsAtingido] nem o 429 de chamada.** O
+  /// contrato declara os tres separados (`#/x-problem-types`), e a diferenca e
+  /// de tela: o 429 pede para esperar, este pede para ENCERRAR ou cancelar um
+  /// encontro -- esperar nao resolve, porque o balde que esta cheio e o de
+  /// encontros em aberto e nao o de chamadas.
+  ///
+  /// O numero **nao e escrito na frase**: ele sai de `limit` na resposta, pela
+  /// mesma razao de [limiteDePetsAtingido] -- uma versao antiga do app fica
+  /// instalada por semanas depois de o servidor mudar o valor.
+  limiteDeEncontrosDaComunidade('community-event-limit-reached'),
+
   /// O texto **nao normaliza para um codigo**: tamanho diferente de 16 depois
   /// da normalizacao, caractere fora do alfabeto, ou **simbolo de verificacao
   /// que nao bate**. 400.

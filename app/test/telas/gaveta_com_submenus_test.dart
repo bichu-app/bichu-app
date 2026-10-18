@@ -43,6 +43,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -441,12 +442,31 @@ void main() {
       );
     });
 
-    testWidgets('o slot UNICO de acao da direita continua LIVRE', (
-      tester,
-    ) async {
-      // O que a pergunta "o que saiu do lugar?" cobra: NADA saiu. Este caso
-      // reprova no dia em que alguem puser o hamburguer -- ou qualquer outra
-      // coisa -- no slot que o `Filtros` vai ocupar.
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 17/10/2026, POR DECISAO DO CLIENTE.**
+    //
+    // Nas palavras dele: *"suba todos os filtros para a barra do titulo da
+    // pagina e deixe o campo de busca sempre ocupando a area toda"*. Isto
+    // REVERTE a regra de 22/09 que mandou busca, filtro e ordenacao para o
+    // topo do CORPO da tela, e devolve ao slot unico da direita o `Filtros`
+    // que a UX 27.5.1 a 27.5.4 sempre lhe deu.
+    //
+    // O caso antigo cobrava que o slot ficasse VAZIO em toda secao. Ele nao
+    // foi apagado nem dispensado: virou a afirmacao nova, que e mais estreita
+    // e continua pegando o defeito que o original existia para pegar -- o
+    // hamburguer, ou qualquer outra coisa, caindo na direita.
+    //
+    // O que ele cobra agora:
+    //  - **no maximo UM** controle na direita, em qualquer secao (11.23.1);
+    //  - o que estiver la e o `Filtros`, e nunca o gatilho da gaveta;
+    //  - o gatilho da gaveta continua na ESQUERDA, inteiro.
+    //
+    // Por que nao "exatamente um em Rede, Perto e Loja": com `_semServidor`
+    // nenhuma das tres carrega lista, e a barra de listagem nao publica
+    // controle sobre o nada. Cobrar presenca aqui mediria a rede de mentira,
+    // e nao o leiaute. A presenca e medida onde ha dado:
+    // `test/telas/perto_com_dados_test.dart` e `test/rede/agenda_da_rede_test.dart`.
+    testWidgets('o slot UNICO de acao da direita tem no maximo UM controle, '
+        'e ele nao e o gatilho da gaveta', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
 
       for (final destino in CascaComAbas.destinos) {
@@ -456,14 +476,35 @@ void main() {
         await tester.pumpAndSettle();
 
         final barra = tester.widget<AppBar>(find.byType(AppBar));
+        final acoes = barra.actions ?? const <Widget>[];
         expect(
-          barra.actions ?? const <Widget>[],
-          isEmpty,
+          acoes.length,
+          lessThanOrEqualTo(1),
           reason:
-              'REPROVA: a secao "${destino.rotulo}" ocupou o slot de acao '
-              'da direita. Ele e UM so (11.23.1) e esta reservado ao '
-              '`Filtros` em `Pets` e em `Perto`; o hamburguer foi para a '
-              'esquerda justamente para nao disputa-lo.',
+              'REPROVA: a secao "${destino.rotulo}" pos ${acoes.length} '
+              'controles no slot de acao da direita. Ele e UM so (11.23.1), '
+              'e empilhar controle sobre controle na barra de titulo foi '
+              'exatamente o que o cliente mandou nao fazer.',
+        );
+        for (final acao in acoes) {
+          expect(
+            acao,
+            isA<BotaoDeAcaoDaListagem>(),
+            reason:
+                'REPROVA: a secao "${destino.rotulo}" pos no slot da direita '
+                'algo que nao e o `Filtros`. Ele e do filtro desde 17/10, e '
+                'o gatilho da gaveta tem o slot da ESQUERDA.',
+          );
+        }
+        // O gatilho da gaveta continua inteiro, e na ESQUERDA: ele e o
+        // `leading` da barra, nunca uma `action`. O caso do slot da esquerda,
+        // logo acima, mede a largura de 64 dp dele.
+        expect(
+          tester.widget<AppBar>(find.byType(AppBar)).leading,
+          anyOf(isNull, isA<BotaoDaGaveta>()),
+          reason:
+              'REPROVA: o slot da ESQUERDA de "${destino.rotulo}" deixou de '
+              'ser do gatilho da gaveta.',
         );
       }
     });
@@ -906,11 +947,17 @@ void main() {
       );
 
       final vivos = todos.where((d) => d.viraItem).toList(growable: false);
+      // SEIS -> SETE em 18/10/2026: `Editar o perfil`, que a UX 27.5.5 listava
+      // e o app nao tinha, passou a existir como `Meus dados`
+      // (`TelaDadosPessoais`, rota `/perfil/dados`). E a subida que a propria
+      // mensagem abaixo chama de caminho normal -- e ela so aconteceu porque a
+      // tela do outro lado existe e esta registrada no roteador, o que o caso
+      // `toda rota de item vivo esta REGISTRADA no roteador` confere.
       expect(
         vivos.length,
-        6,
+        7,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -919,11 +966,14 @@ void main() {
       final porConstruir = todos
           .where((d) => d.pendente)
           .toList(growable: false);
+      // NOVE -> OITO no mesmo dia, e pelo mesmo motivo: `Meus dados` saiu
+      // desta lista para a de vivos. `vivos` subiu junto, que e a condicao que
+      // a mensagem abaixo exige para a queda nao ser um nome que desapareceu.
       expect(
         porConstruir.length,
-        9,
+        8,
         reason:
-            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 8 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
@@ -1444,9 +1494,12 @@ void main() {
       //
       // Roadmap em menu tem um custo que nao e de gosto: `Mensagens`,
       // `Doações`, `Carrinho e pedido`, `Meus pedidos`, `Convidar vizinhos`,
-      // `Editar o perfil`, `Notificações`, `Transferir um pet` e `Termos` sao
-      // nove telas que o app nao tem. Quem le nove nomes num menu tenta tocar
-      // em algum.
+      // `Notificações`, `Transferir um pet` e `Termos` sao OITO telas que o
+      // app nao tem. Quem le oito nomes num menu tenta tocar em algum.
+      //
+      // Eram nove ate 18/10/2026: `Editar o perfil` saiu desta lista porque a
+      // tela foi construida (`Meus dados`, `/perfil/dados`) e a linha virou
+      // atalho vivo.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
 
       final porConstruir = pendentes();

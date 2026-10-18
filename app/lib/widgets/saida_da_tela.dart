@@ -44,9 +44,26 @@ class SaidaDaTela extends StatelessWidget {
     required this.tipo,
     super.key,
     this.escape = Rotas.pets,
+    this.resultado,
   });
 
   final TipoDeSaida tipo;
+
+  /// O valor que [BuildContext.pop] devolve a quem empilhou a tela.
+  ///
+  /// **Nulo em quase toda tela, e e por isso que ele e opcional.** Voltar de
+  /// um formulario que so escreve no `Salvar` nao tem o que devolver: quem
+  /// abriu continua com o dado que tinha.
+  ///
+  /// Ele existe para a tela que **escreve no servidor antes do `Salvar`**. A
+  /// edicao do pet e a primeira: trocar e remover a foto valem na hora, e sem
+  /// este valor quem volta sem salvar deixa o detalhe pintando a foto antiga
+  /// de um pet que ja nao a tem.
+  ///
+  /// E uma funcao, e nao um valor, porque o `build` da barra roda antes de a
+  /// escrita acontecer: um valor capturado aqui seria sempre o do primeiro
+  /// quadro.
+  final Object? Function()? resultado;
 
   /// Para onde ir quando nao ha nada para desempilhar. `Pets` e o default
   /// porque ele e a secao de aterrissagem -- a unica tela do app que nunca
@@ -66,7 +83,17 @@ class SaidaDaTela extends StatelessWidget {
     return IconButton(
       onPressed: () {
         if (context.canPop()) {
-          context.pop();
+          final valor = resultado?.call();
+          // `pop()` e `pop(null)` nao sao a mesma chamada para quem espera um
+          // tipo nao nulo: o segundo satisfaz o `await` com nulo, e o primeiro
+          // tambem -- mas passar nulo explicitamente obrigaria toda tela sem
+          // resultado a declarar o tipo. O ramo mantem o comportamento antigo
+          // byte a byte para quem nao usa `resultado`.
+          if (valor == null) {
+            context.pop();
+          } else {
+            context.pop(valor);
+          }
           return;
         }
         context.go(escape);
@@ -107,11 +134,15 @@ class BarraDeConta extends StatelessWidget implements PreferredSizeWidget {
     required this.saida,
     super.key,
     this.escape = Rotas.pets,
+    this.resultado,
   });
 
   final String titulo;
   final TipoDeSaida saida;
   final String escape;
+
+  /// Repassado a [SaidaDaTela.resultado]. Ver a documentacao de la.
+  final Object? Function()? resultado;
 
   @override
   Size get preferredSize =>
@@ -122,7 +153,7 @@ class BarraDeConta extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       toolbarHeight: BichuAlvoDeToque.critico,
       leadingWidth: BichuAlvoDeToque.critico,
-      leading: SaidaDaTela(tipo: saida, escape: escape),
+      leading: SaidaDaTela(tipo: saida, escape: escape, resultado: resultado),
       title: Text(titulo),
     );
   }

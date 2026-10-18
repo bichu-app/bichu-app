@@ -134,6 +134,21 @@ export function julgar(r, { eco }) {
     `admin /v1/admin/...: Cache-Control precisa ser no-store (D48), veio '${cabecalho(r.adminApi, 'cache-control')}'`);
   exigir(r.adminOutraApi.status === 404 && tipo(r.adminOutraApi).startsWith('text/plain'),
     `admin /v1/health: o host administrativo nao e endereco da API inteira; esperado 404 da borda, veio ${r.adminOutraApi.status} ${tipo(r.adminOutraApi)}`);
+  // A rota PUBLICA que o painel consome NAO pode cair no 404 da borda. O
+  // formulario de produto da Loja pede `GET /v1/store/taxonomy` para montar o
+  // select dos dois niveis da categoria (rota publica, `security: []`), e ate
+  // 17/10 o `handle /v1/*` deste host respondia `nao encontrado` 404: a tela
+  // inteira ia para erro, porque `FormularioDeProduto.tsx` reprova a carga
+  // quando o vocabulario falha. Repontar para o host do app nao resolve, o
+  // `connect-src` da CSP daqui e `'self'`.
+  //
+  // O que se exige e o NEGATIVO -- "nao e o 404 da borda" -- e nao 200: com
+  // `--eco` nao existe taxonomia nenhuma atras da borda, e exigir 200 faria a
+  // sonda reprovar a pilha isolada por um motivo que nao e o dela. O status
+  // exato da rota de pe e conferido pelo juizo do contrato, nao aqui.
+  exigir(!(r.adminTaxonomia.status === 404 && tipo(r.adminTaxonomia).startsWith('text/plain')),
+    `admin /v1/store/taxonomy: a borda respondeu 404 em texto puro. Rota PUBLICA que o painel consome caiu no \`handle /v1/*\` -- o estado medido em admin-hml.bichu.app em 17/10, com o formulario de produto da Loja inteiro em erro`);
+
   if (eco) {
     exigir(/surface=\[admin\]/.test(r.adminApi.corpo),
       `admin /v1/admin/...: a API nao recebeu \`X-Internal-Surface: admin\` (D33). Corpo do eco: ${r.adminApi.corpo}`);
@@ -203,6 +218,7 @@ function respostaCerta() {
     adminAssetSumido: r(404, 'text/plain', { ...seguranca, 'cache-control': 'no-store' }),
     adminApi: r(200, 'application/problem+json', { ...seguranca, 'cache-control': 'no-store' }, 'API surface=[admin] forjado=[]'),
     adminOutraApi: r(404, 'text/plain; charset=utf-8', seguranca),
+    adminTaxonomia: r(200, 'application/json', seguranca, '{"categories":[]}'),
     appAdmin: r(404, 'text/plain; charset=utf-8'),
     appAdminSemBarra: r(404, 'text/plain; charset=utf-8'),
     appAdminOptions: r(404, 'text/plain; charset=utf-8'),
@@ -231,6 +247,7 @@ export function autoteste() {
     ['fallback engolindo /assets/', (r) => { r.adminAssetSumido = { ...r.adminAssetSumido, status: 200 }; }],
     ['marca interna ausente', (r) => { r.adminApi.corpo = 'API surface=[] forjado=[]'; }],
     ['cabecalho interno forjado sobrevivendo', (r) => { r.adminApi.corpo = 'API surface=[admin] forjado=[x]'; }],
+    ['rota publica do painel caindo no 404 da borda (o estado de 17/10)', (r) => { r.adminTaxonomia = { status: 404, cabecalhos: { 'content-type': 'text/plain; charset=utf-8' }, corpo: 'nao encontrado' }; }],
     ['host administrativo servindo a API inteira', (r) => { r.adminOutraApi = { ...r.adminOutraApi, status: 200, cabecalhos: { ...r.adminOutraApi.cabecalhos, 'content-type': 'application/json' } }; }],
     ['login sem a CSP propria', (r) => { r.adminLogin.cabecalhos['content-security-policy'] = r.adminRaiz.cabecalhos['content-security-policy']; }],
     ['sem teto de taxa no login (o 11o passa)', (r) => { r.adminLoginRajada[10] = r.adminLoginRajada[0]; }],
@@ -292,6 +309,7 @@ async function main() {
     r.adminRotaDeCliente = await A('/eventos/123');
     r.adminApi = await A('/v1/admin/sonda-da-borda', { cabecalhos: forjado });
     r.adminOutraApi = await A('/v1/health');
+    r.adminTaxonomia = await A('/v1/store/taxonomy');
     r.appAdmin = await P('/v1/admin/ping', { cabecalhos: { Origin: 'https://evil.example' } });
     r.appAdminSemBarra = await P('/v1/admin');
     r.appAdminOptions = await P('/v1/admin/ping', {

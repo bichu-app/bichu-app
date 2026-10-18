@@ -580,6 +580,80 @@ telas:
 # portao cobra e que a correspondencia seja 1 para 1 e que todo codigo exista.
 # ======================================================================
 
+  # ====================================================================
+  # Diretorio de `Perto` -- a escrita administrativa (BICHUS-189, 17/10/2026)
+  # ====================================================================
+  #
+  # ESTA TELA EXISTE EM CODIGO E NAO EM PROTOTIPO. Ela nasceu em
+  # `admin/src/diretorio/` (ListaDeEntradas.tsx, FormularioDaEntrada.tsx) no
+  # mesmo despacho que as quatro operacoes, sem passar por
+  # `docs/prototipos/backoffice.html` -- por isso `prototipo: nenhum`, e nao um
+  # arquivo que ninguem escreveu. Classificada aqui, e nao em
+  # `contrato_sem_tela`, porque dizer que nao ha tela seria falso.
+  #
+  # NAO CADASTRA ONG: `professionals` nao tem `entity_kind`, e `ProfessionalKind`
+  # nao tem valor para organizacao. A ausencia e decisao pendente do cliente.
+
+  - tela: "Diretorio de Perto · lista, cadastro e edicao"
+    prototipo: nenhum
+    estados: [lista, vazio, filtrada, cadastrando, editando, publicando, conflito_de_versao, recusada]
+    operacoes:
+      - operationId: listAdminDirectoryEntries
+        situacao: contrato
+        usa:
+          - query:q
+          - query:kind
+          - query:status
+          - query:city
+          - query:state
+          - query:sort
+          - resp:items
+          - resp:total
+          - resp:applied_filters
+          - enum:DirectoryEntryStatus.draft
+          - enum:DirectoryEntryStatus.published
+          - enum:DirectoryEntryStatus.hidden
+          - enum:DirectoryEntryStatus.removed
+          - enum:ProfessionalKind.vet
+          - enum:ProfessionalKind.clinic
+          - enum:ProfessionalKind.walker
+      - operationId: createAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - req:slug
+          - req:kind
+          - req:display_name
+          - req:about
+          - req:city
+          - req:state
+          - req:neighborhood
+          - req:phone_e164
+          - resp:slug
+          - resp:status
+          - resp:missing_to_publish
+          - resp:version
+      - operationId: getAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - path:entrySlug
+          - resp:display_name
+          - resp:missing_to_publish
+          - resp:version
+          - resp:verification
+          - resp:claim_status
+      - operationId: updateAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - path:entrySlug
+          - header:If-Match
+          - req:display_name
+          - req:phone_e164
+          - req:status
+          - resp:status
+          - resp:version
+          - resp:published_at
+
+
 correspondencias:
   # ====================================================================
   # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO
@@ -752,6 +826,19 @@ contrato_sem_tela:
   - operationId: createNetworkEventCoverUploadIntent
     resolucao: "tela: resolvido quando a tela existir"
     nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet"
+  # A fila do pedido da plaquinha da coleira (17/10/2026). O LADO DO BACKEND
+  # ESTA AQUI; A TELA DO PAINEL NAO -- a sessao Backoffice e dona dela, e estas
+  # tres operacoes sao o que ela vai chamar. Declarado assim no proprio
+  # contrato, e nao suposto aqui.
+  - operationId: listAdminCollarTagRequests
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "a fila de pedidos da plaquinha, com o endereco de entrega que o administrador le para enviar; a tela e da sessao Backoffice"
+  - operationId: fulfillAdminCollarTagRequest
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "marcar que a plaquinha fisica saiu. NAO emite codigo: emitir e `issuePetTag`, irreversivel (ADR-0004)"
+  - operationId: declineAdminCollarTagRequest
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "recusar o pedido, sem motivo escrito; o que o tutor ve depois da recusa e decisao de produto em aberto"
   - campo: "AdminNetworkEvent.origin=community"
     nota: "a lista do painel ainda nao distingue o encontro da comunidade do encontro do painel; o campo sai na resposta desde 17/10"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"

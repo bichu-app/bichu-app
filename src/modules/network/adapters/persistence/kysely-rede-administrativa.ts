@@ -129,8 +129,15 @@ const COLUNAS = sql`
   array(SELECT b.item FROM network_event_bring_items b WHERE b.event_id = e.id
          ORDER BY array_position(ARRAY['water','water_bowl','leash','poop_bags','treats','towel',
            'vaccination_card','toy'], b.item)) AS bring_items,
+  -- O filtro da conta habilitada entra aqui tambem, e nao so na fila: este
+  -- numero e o aviso que manda o administrador abrir a fila. Sem ele o painel
+  -- diria "1 pendente" sobre uma fila vazia, e quem abrisse procuraria um pedido
+  -- que a listagem nao mostra mais -- o defeito que filtrar em um lugar so
+  -- produz. (Sem acento grave nesta prosa: ela mora dentro de um template
+  -- literal de TypeScript, e o acento grave o encerraria no meio.)
   (SELECT count(*) FROM network_event_join_requests j
-    WHERE j.event_id = e.id AND j.status = 'pending' AND j.withdrawn_at IS NULL) AS pending_requests,
+    WHERE j.event_id = e.id AND j.status = 'pending' AND j.withdrawn_at IS NULL
+      AND conta_habilitada(j.user_id)) AS pending_requests,
   (SELECT json_agg(json_build_object(
             'upload_id', c.upload_intent_id, 'image_id', c.id, 'position', i.position,
             'alt_text', i.alt_text, 'status', c.status, 'public_key', c.public_key,
@@ -277,6 +284,23 @@ function comoPedido(l: LinhaDoPedido): PedidoNaFila {
 /**
  * O pedido pelo `ref` ou pelo `id`, de encontro privado em qualquer estado do
  * painel: o removido tambem e lido, para a decisao responder 409 e nao 404.
+ *
+ * `conta_habilitada(j.user_id)` (migracao `20261017000013`): decisao do cliente
+ * de 17/10 -- conta desabilitada "nao e mais encontrada em nenhuma pagina ou
+ * funcionalidade", e `solicitante.displayName` sai nesta projecao. O predicado
+ * esta NO `WHERE` e nao num `if` depois da leitura (ADR-0021): pedido de conta
+ * desabilitada nao existe para esta rota, e a decisao responde 404 -- nunca
+ * 403, que confirmaria que ele existe.
+ *
+ * A LINHA NAO E APAGADA. Ela fica em `network_event_join_requests`, inteira, e
+ * volta a aparecer no dia em que a conta for reabilitada. O que muda e a
+ * alcancabilidade, nao o dado -- a mesma troca que o cliente pediu para as
+ * paginas.
+ *
+ * CONSEQUENCIA A RELATAR: pedido pendente de conta desabilitada fica pendente
+ * para sempre, porque sai da fila sem ser decidido. Nao ha hoje nenhuma rotina
+ * que encerre pedido orfao, e inventar uma aqui seria decidir sozinho o que
+ * acontece com quem volta.
  */
 async function lerPedido(db: DbExecutor, onde: ReturnType<typeof sql<SqlBool>>, travar: boolean): Promise<PedidoNaFila | null> {
   const r = await sql<LinhaDoPedido>`
@@ -284,7 +308,8 @@ async function lerPedido(db: DbExecutor, onde: ReturnType<typeof sql<SqlBool>>, 
       FROM network_event_join_requests j
       JOIN network_events e ON e.id = j.event_id
       JOIN users u ON u.id = j.user_id
-     WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled', 'removed') AND ${onde}
+     WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled', 'removed')
+       AND conta_habilitada(j.user_id) AND ${onde}
      ${travar ? sql`FOR UPDATE OF j` : sql``}`.execute(db);
   const linha = r.rows[0];
   return linha === undefined ? null : comoPedido(linha);
@@ -519,7 +544,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
       const base = sql`FROM network_event_join_requests j
         JOIN network_events e ON e.id = j.event_id
         JOIN users u ON u.id = j.user_id
-       WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled') AND ${filtro}`;
+       WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled')
+         AND conta_habilitada(j.user_id) AND ${filtro}`;
       const contagem = await sql<{ total: string }>`SELECT count(*) AS total ${base}`.execute(trx);
       const linhas = await sql<LinhaDoPedido>`
         SELECT ${COLUNAS_DO_PEDIDO} ${base}

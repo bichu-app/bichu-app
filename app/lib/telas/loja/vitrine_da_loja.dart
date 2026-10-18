@@ -10,10 +10,10 @@ import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/carrossel_de_fotos.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
-import 'produto_da_loja.dart';
 
 /// `Loja` — a vitrine curada que leva a loja do parceiro.
 ///
@@ -85,6 +85,13 @@ class VitrineDaLoja extends StatefulWidget {
   /// **O texto final e de quem assina os termos**, e a pergunta esta na pauta
   /// de refinamento: o que esta aqui e a redacao de engenharia, para a tela
   /// nao ir ao ar sem o aviso.
+  /// **NAO E MAIS DESENHADO EM LUGAR NENHUM** (pedido do cliente, 17/10/2026).
+  ///
+  /// A frase fica aqui porque e afirmacao de natureza juridica -- o criterio 6
+  /// da BICHUS-185 a chamava de "condicao para a vitrine existir" --, e apagar
+  /// o texto junto com o widget tiraria do repositorio a unica copia do que o
+  /// produto afirmava a quem comprava. Quem reabrir a decisao encontra a
+  /// redacao exata aqui.
   static const String avisoDeQueNaoSomosOVendedor =
       'A compra é feita no site do parceiro. O Bichu não é o vendedor e não '
       'controla preço, estoque nem entrega.';
@@ -104,7 +111,6 @@ class VitrineDaLoja extends StatefulWidget {
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
-  static const String exemploDaBusca = 'ração, coleira, shampoo';
 
   /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
   ///
@@ -321,10 +327,14 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // O aviso vem ANTES da lista e fica sempre, inclusive no vazio e na
-        // falha. Ele nao e um rodape: e a condicao para a vitrine existir.
-        const AvisoDoParceiroDaLoja(),
-        const SizedBox(height: BichuEspaco.e4),
+        // O AVISO DO PARCEIRO SAIU, por pedido do cliente de 17/10/2026:
+        // *"Remova o bloco a compra e feita no site do parceiro"*. Ele estava
+        // aqui e na tela de detalhe, e saiu dos dois. O texto que deixou de
+        // aparecer esta em `VitrineDaLoja.avisoDeQueNaoSomosOVendedor`, que
+        // continua no arquivo de proposito: ele e afirmacao de natureza
+        // juridica (criterio 6 da BICHUS-185), e apagar a frase junto com o
+        // widget tiraria do repositorio a unica copia do que o produto
+        // afirmava.
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
@@ -335,6 +345,7 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
             busca: _controleDeBusca(),
             filtro: _controleDeFiltro(),
             ordenacao: _controleDeOrdenacao(pagina),
+            aoAplicar: _aplicarAFolha,
           ),
         ..._corpo(),
       ],
@@ -350,27 +361,20 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     return ControleDeBusca(
       controlador: _buscaControlador,
       alcance: AlcanceDaBusca.servidor,
-      exemplo: VitrineDaLoja.exemploDaBusca,
       rotulo: 'Buscar produto',
-      aoMudar: (texto) {
-        final limpo = texto.trim();
-        // O termo de dois caracteres e o piso do contrato (`minLength: 2`).
-        // Mandar um caractere so produziria um 400 a cada primeira tecla.
-        if (limpo.isNotEmpty && limpo.length < 2) {
-          // `setState` mesmo sem recarregar: a barra le o texto do
-          // controlador para saber se o recorte esta ativo, e sem a
-          // reconstrucao ela decidiria com o texto anterior.
-          setState(() {});
-          return;
-        }
-        _trocarRecorte(
-          _recorte.com(
-            termo: limpo,
-            limparTermo: limpo.isEmpty,
-            pagina: 1,
-          ),
-        );
-      },
+      termoAplicado: _recorte.termo,
+      // O piso do contrato (`minLength: 2`). Ele deixou de ser um `setState`
+      // que engolia a primeira tecla: agora a lupa nao habilita abaixo dele,
+      // e o `setState` que remendava o recorte ativo saiu junto -- a barra le
+      // o termo APLICADO e nao precisa mais de quem a avise.
+      minimoDeCaracteres: 2,
+      aoAplicar: (termo) => _trocarRecorte(
+        _recorte.com(
+          termo: termo,
+          limparTermo: termo == null,
+          pagina: 1,
+        ),
+      ),
     );
   }
 
@@ -408,6 +412,11 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
           GrupoDeFiltro(
             chave: 'subcategory',
             titulo: 'Subcategoria',
+            // As opcoes sao as da categoria APLICADA. Com a escolha virando
+            // pendente, trocar a categoria na folha solta esta e esconde o
+            // grupo -- sem isso o par (categoria nova, subcategoria antiga)
+            // iria junto para a rota e a lista voltaria vazia.
+            dependeDe: 'category',
             selecionado: _recorte.subcategoria,
             opcoes: <OpcaoDeRecorte>[
               for (final s in subcategorias)
@@ -415,32 +424,26 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
             ],
           ),
       ],
-      aoEscolher: (chave, codigo) {
-        Navigator.of(context).pop();
-        // Trocar a categoria LIMPA a subcategoria, e a regra mora em
-        // `RecorteDaLoja.com`: a subcategoria antiga pertence a categoria
-        // antiga, e o par produziria uma lista vazia que a pessoa nao sabe
-        // explicar.
-        _trocarRecorte(
-          chave == 'subcategory'
-              ? _recorte.com(
-                  subcategoria: codigo,
-                  limparSubcategoria: codigo == null,
-                  pagina: 1,
-                )
-              : _recorte.com(
-                  categoria: codigo,
-                  limparCategoria: codigo == null,
-                  pagina: 1,
-                ),
-        );
-      },
-      aoLimpar: () {
-        Navigator.of(context).pop();
-        _trocarRecorte(
-          _recorte.com(limparCategoria: true, limparSubcategoria: true, pagina: 1),
-        );
-      },
+    );
+  }
+
+  /// Os dois niveis **e a ordem** de uma vez, no `Aplicar`.
+  ///
+  /// Trocar a categoria LIMPA a subcategoria, e a regra continua morando em
+  /// `RecorteDaLoja.com`: a subcategoria antiga pertence a categoria antiga, e
+  /// o par produziria uma lista vazia que a pessoa nao sabe explicar.
+  void _aplicarAFolha(EscolhaDaFolha escolha) {
+    final categoria = escolha.filtros['category'];
+    final subcategoria = escolha.filtros['subcategory'];
+    _trocarRecorte(
+      _recorte.com(
+        categoria: categoria,
+        limparCategoria: categoria == null,
+        subcategoria: subcategoria,
+        limparSubcategoria: subcategoria == null,
+        ordem: OrdemDaLoja.porCodigo(escolha.ordem),
+        pagina: 1,
+      ),
     );
   }
 
@@ -456,9 +459,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
           OpcaoDeRecorte(codigo: o.codigo, rotulo: o.rotulo),
       ],
       efetiva: pagina.ordemEfetiva.codigo,
-      aoEscolher: (codigo) => _trocarRecorte(
-        _recorte.com(ordem: OrdemDaLoja.porCodigo(codigo), pagina: 1),
-      ),
     );
   }
 
@@ -518,60 +518,64 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
   }
 }
 
-/// O aviso de que a compra e com o parceiro.
+/// O cartao de um item da vitrine: **foto, titulo e preco, e nada mais**.
 ///
-/// **Publico porque a tela de detalhe o reusa.** Ele nao e um rodape nem um
-/// enfeite da lista: e a condicao para a vitrine existir (criterio 6 da
-/// BICHUS-185), e a pagina de um produto so precisa dele mais, e nao menos --
-/// la o preco aparece sozinho, sem os outros cartoes em volta lembrando que
-/// aquilo e uma vitrine de saida. Uma segunda copia do texto criaria duas
-/// redacoes para a mesma afirmacao juridica.
-class AvisoDoParceiroDaLoja extends StatelessWidget {
-  const AvisoDoParceiroDaLoja({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(BichuEspaco.e4),
-      decoration: BoxDecoration(
-        color: cores.surfaceSunken,
-        borderRadius: BorderRadius.circular(BichuRaio.md),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
-      child: Text(
-        VitrineDaLoja.avisoDeQueNaoSomosOVendedor,
-        style: textos.bodySmall?.copyWith(color: cores.textPrimary),
-      ),
-    );
-  }
-}
-
-/// O cartao de um item da vitrine.
+/// Decisao do cliente, 17/10/2026: *"Na listagem do produto, remova as
+/// informacoes adicionais, descricoes. Deixe apenas a foto, titulo e preco,
+/// como nos e-commerces tradicionais. Coloque o campo de preco em destaque"*.
 ///
-/// **Dois gestos, e eles nao disputam a mesma area.**
+/// **O que saiu**, e saiu nesta mesma mescla: a linha de classificacao
+/// ("Rações · Ração seca"), o resumo com `Ler mais` e o nome do parceiro em
+/// linha propria. O nome do parceiro nao sumiu do cartao -- ele continua no
+/// nome acessivel do botao de saida, que e onde ele importa: e para la que a
+/// pessoa vai.
 ///
-/// - **Tocar no cartao abre o detalhe do produto** (`TelaDoProduto`), dentro
-///   do Bichu, sob o ramo da `Loja`: a barra de abas continua e voltar devolve
-///   esta vitrine com a busca e o filtro de quem estava lendo.
-/// - **Tocar no botao `Abrir na <parceiro>` sai do app**, com o aviso antes,
-///   como sempre foi.
+/// **Um gesto, e ele vai para fora.** Ate 17/10 o cartao tinha dois destinos
+/// (tocar no cartao abria o detalhe; o botao saia para o parceiro). O cliente
+/// trocou isto no mesmo dia: *"remova o clique para entrar na pagina de
+/// detalhes do produto e coloque para abrir o site do parceiro"*. Agora o
+/// cartao inteiro e o botao levam ao MESMO lugar, e `TelaDoProduto` ficou sem
+/// entrada -- parada por decisao dele, e nao por descuido.
 ///
-/// O botao e FILHO do cartao, e o toque dele nao chega ao cartao: o teste de
-/// acerto do Flutter entrega o gesto ao alvo mais interno, e `OutlinedButton`
-/// e `TextButton` (o `Ler mais`) consomem o proprio toque. Nao ha area em que
-/// o gesto seja ambiguo -- e por isso a saida nao e um toque no cartao
-/// inteiro, que era o desenho de antes: la a vitrine tinha UM destino e ele
-/// era para fora; agora ha dois, e o de fora ficou com o controle que o
-/// nomeia.
+/// **O preco em destaque e hierarquia, e nao cor.** Ele sobe de `body-md`
+/// para `title-lg` com `w700`, nos tokens que ja existem: nenhuma cor nova,
+/// nenhum componente novo. Em `text-primary`, como estava -- preco em cor de
+/// acao pareceria um botao.
 ///
-/// **O que o cartao mostra continua sendo o resumo.** A galeria inteira, a
-/// descricao sem corte e a ficha do produto moram no detalhe: a lista carrega
-/// so `image_url` de proposito, e trazer oito imagens por cartao pesaria a
-/// vitrine para quem esta comparando produtos.
+/// **ARRASTAR NAO SAI DA LOJA.** O carrossel entrou DENTRO do alvo de toque do
+/// cartao, e o cartao inteiro agora e o unico destino -- o site do parceiro.
+/// Sem cuidado, arrastar para ver a segunda foto abriria o navegador no meio
+/// do gesto. Nao abre: o `PageView` do carrossel e o alvo mais interno e
+/// reivindica o arrasto horizontal na arena de gestos do Flutter, enquanto o
+/// `InkWell` do cartao responde por `onTap`, que so dispara quando o dedo sobe
+/// sem ter virado arrasto. O autor do carrossel mediu isto no desenho ANTIGO,
+/// em que o cartao levava ao detalhe interno; foi MEDIDO DE NOVO depois desta
+/// mescla, porque o destino do cartao mudou e o gesto com ele. Ver
+/// `app/test/telas/loja_abre_no_navegador_test.dart`.
+///
+/// O botao `Compre agora` tambem e filho do cartao e consome o proprio toque;
+/// como ele leva ao MESMO destino, nao ha mais area de gesto ambigua.
+///
+/// **O cartao mostra as fotos, e a ficha nao tem mais entrada.** A descricao
+/// sem corte, o preco com historico e a ficha moram em `TelaDoProduto`, que
+/// ficou PARADA e nao apagada por decisao do cliente de 17/10: nada no
+/// aplicativo navega para ela.
+///
+/// As fotos passaram a vir na listagem em 17/10/2026, por campo ADITIVO
+/// (`StoreItemSummary.images`, opcional, com `image_url` intocado). O
+/// paragrafo que estava aqui dizia que trazer oito imagens por cartao pesaria
+/// a vitrine, e ele estava certo sobre os BYTES e errado sobre a causa: o que
+/// pesa e BAIXAR as oito, nao recebe-las na lista. Medido em 17/10/2026, para
+/// uma pagina cheia de 20 cartoes:
+///
+/// - o JSON da pagina vai de 12,9 KB para 32,7 KB (+19,9 KB) com 8 imagens por
+///   item -- ao lado de UMA derivada de 500 KB, e troco;
+/// - baixar as 8 de cada cartao pediria ate 78 MB, contra ate 9,8 MB da
+///   primeira pintura.
+///
+/// Por isso o carrossel **carrega sob demanda** (`PageView.builder`): a
+/// primeira pintura baixa uma imagem por cartao, exatamente como antes, e as
+/// outras sete so saem da rede se a pessoa arrastar. Ver [CarrosselDeFotos].
 class CartaoDaLoja extends StatelessWidget {
   const CartaoDaLoja({required this.item, super.key});
 
@@ -579,16 +583,22 @@ class CartaoDaLoja extends StatelessWidget {
 
   /// O rotulo do botao de saida.
   ///
-  /// **Nomeia o destino e nao carrega valor monetario.** "Comprar por
-  /// R$ 89,90" seria uma oferta nossa, e nos nao somos o vendedor (criterio
-  /// 18).
-  static String rotuloDeSaida(String parceiro) => 'Abrir na $parceiro';
+  /// **"Compre agora", literal do cliente** (17/10/2026), no lugar de
+  /// `Abrir na <parceiro>`. O nome do parceiro saiu do texto VISIVEL e foi
+  /// para o nome acessivel, em [rotuloAcessivelDeSaida]: "Compre agora,
+  /// botao" repetido em doze cartoes nao diz de qual produto e.
+  static const String rotuloDeSaida = 'Compre agora';
+
+  /// O nome acessivel do botao de saida: diz o produto e para onde leva.
+  static String rotuloAcessivelDeSaida(ItemDaLoja item) =>
+      '$rotuloDeSaida, ${item.titulo}, no site ${item.parceiro.nome}';
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final linhaDoPreco = item.linhaDoPreco;
+    final destino = item.destinoExterno;
 
     // `Material` + `InkWell`, e nao `GestureDetector` sobre o `Container`: o
     // respingo de tinta e pintado no `Material` mais proximo, e sem este o
@@ -598,7 +608,10 @@ class CartaoDaLoja extends StatelessWidget {
       color: cores.surface,
       borderRadius: BorderRadius.circular(BichuRaio.lg),
       child: InkWell(
-        onTap: () => TelaDoProduto.abrir(context, item.slug),
+        // Sem destino utilizavel o cartao **nao e tocavel**: um produto mal
+        // cadastrado continua na lista, com foto, titulo e preco, e nao ganha
+        // um toque que nao leva a lugar nenhum.
+        onTap: destino == null ? null : () => sairDaLoja(context, item, destino),
         borderRadius: BorderRadius.circular(BichuRaio.lg),
         child: Container(
           width: double.infinity,
@@ -613,59 +626,60 @@ class CartaoDaLoja extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (item.urlDaImagem != null) ...<Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(BichuRaio.md),
-                  child: Image.network(
-                    item.urlDaImagem!,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    // Nome acessivel em portugues (criterio 11): o texto que o
-                    // administrador escreveu, e `Foto de <titulo>` quando ele nao
-                    // escreveu. A escolha e de `ItemDaLoja.nomeDaImagem`, e nao
-                    // daqui: ate 17/10/2026 esta linha montava a frase generica e
-                    // o texto do painel nunca chegava a ninguem.
-                    semanticLabel: item.nomeDaImagem,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
+              // **O CARROSSEL** (17/10/2026). Com uma foto ele desenha a
+              // mesma `Image` de antes, sem indicador e sem gesto; com varias
+              // vira `PageView` que carrega sob demanda. Nome acessivel por
+              // foto, pela reserva de `ImagemDoProduto.nomeDaImagem`.
+              //
+              // `fotosDoCartao` e nao `imagens`: o item que vem de servidor sem
+              // `images`, ou da massa com imagem externa, cai na lista de um
+              // elemento montada a partir de `image_url` -- e a tela tem um
+              // caminho so para desenhar foto.
+              if (item.fotosDoCartao.isNotEmpty) ...<Widget>[
+                CarrosselDeFotos(
+                  fotos: item.fotosDoCartao,
+                  titulo: item.titulo,
+                  altura: 160,
                 ),
                 const SizedBox(height: BichuEspaco.e3),
               ],
-              // A classificacao vem ANTES do titulo, e em corpo menor: ela e o
-              // contexto do produto, nao o nome dele. Depois do titulo ela
-              // disputaria a leitura com o resumo, que e a frase que vende.
-              //
-              // **Ate 17/10/2026 o cartao nao mostrava categoria nenhuma** -- o
-              // dado chegava na resposta e nao aparecia em lugar nenhum da tela. A
-              // decisao dos dois niveis e o que trouxe a linha para ca.
-              if (item.linhaDaClassificacao case final String classificacao) ...<Widget>[
-                Text(
-                  classificacao,
-                  style: textos.labelMedium?.copyWith(color: cores.textSecondary),
-                ),
-                const SizedBox(height: BichuEspaco.e1),
-              ],
               Text(item.titulo, style: textos.titleMedium),
-              const SizedBox(height: BichuEspaco.e1),
-              // O resumo com "Ler mais" (lote anterior de 17/10). O ramo dos
-              // dois niveis nasceu antes dele e trazia um `Text` simples aqui;
-              // o que ele acrescenta e a linha acima, nao a troca deste.
-              _ResumoDoProduto(item: item),
-              const SizedBox(height: BichuEspaco.e2),
-              Text(
-                item.parceiro.nome,
-                style: textos.labelMedium?.copyWith(color: cores.textSecondary),
-              ),
               // O preco, quando ha. **Valor, rotulo e data no MESMO bloco e
               // simultaneamente**, sem interacao nenhuma (criterio 15): nao ha
               // dica de ferramenta, nao ha icone de informacao e nao ha secao
               // expansivel. Captura de tela e como isso circula.
               if (linhaDoPreco != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
-                Text(
-                  linhaDoPreco,
-                  style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+                // **O DESTAQUE E DO VALOR, e a linha continua INTEIRA.**
+                //
+                // `ItemDaLoja.linhaDoPreco` e uma string so de proposito (o
+                // criterio 15 da BICHUS-185: o numero nunca aparece sem o
+                // rotulo e a data). Desenhar so `precoFormatado` em corpo
+                // grande seria exatamente o que aquele comentario proibe.
+                //
+                // Entao o texto desenhado E a linha inteira, caractere por
+                // caractere: o que muda e o ESTILO dos primeiros
+                // `precoFormatado.length` caracteres. Um `Text.rich` com dois
+                // trechos e um no de texto so -- nao ha estado em que o valor
+                // apareca e o resto nao.
+                Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: linhaDoPreco.substring(0, item.precoFormatado!.length),
+                        style: textos.titleLarge?.copyWith(
+                          color: cores.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: linhaDoPreco.substring(item.precoFormatado!.length),
+                        style: textos.bodySmall?.copyWith(
+                          color: cores.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
@@ -674,11 +688,7 @@ class CartaoDaLoja extends StatelessWidget {
                   style: textos.bodySmall?.copyWith(color: cores.textSecondary),
                 ),
               ],
-              // O botao so existe com destino `https` utilizavel. Sem ele o
-              // cartao termina no preco: um produto mal cadastrado continua
-              // navegavel -- tocar no cartao ainda abre o detalhe -- e nao
-              // ganha um botao que nao leva a lugar nenhum.
-              if (item.destinoExterno case final Uri destino) ...<Widget>[
+              if (destino != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e3),
                 BotaoDeSaidaDaLoja(item: item, destino: destino),
               ],
@@ -690,108 +700,61 @@ class CartaoDaLoja extends StatelessWidget {
   }
 }
 
-/// A descricao do produto no cartao: **os 500 primeiros caracteres, com um
-/// botao para ler o resto no lugar** (decisao do cliente de 17/10/2026).
+/// Sai do Bichu para o site do parceiro, **sem confirmacao**.
 ///
-/// ## Por que nao `maxLines` com reticencias
+/// Decisao do cliente, 17/10/2026: *"Remova a confirmacao de sair do bichu
+/// quando clica no produto"*. Ate aqui havia um `AlertDialog` ("Você vai sair
+/// do Bichu") com `Ficar aqui` e o nome do parceiro; ele saiu, e **a pessoa
+/// passa a ir para o navegador sem aviso nenhum**.
 ///
-/// `maxLines` corta pelo que CABE na largura do aparelho, e nao pelo texto:
-/// o mesmo produto mostraria trechos diferentes em telas diferentes, e nao
-/// haveria como dizer "500 caracteres". O corte por caractere, no ultimo
-/// espaco, mora em `ItemDaLoja.trechoDoResumo` e e o mesmo em todo aparelho.
+/// **O que NAO mudou, e a diferenca importa:** a porta [SaidaDoApp] continua
+/// de pe, e continua sendo ela quem escolhe
+/// `LaunchMode.externalApplication`. Quem tinha dialogo era este arquivo da
+/// `Loja`, e so ele: os tres usos da `Rede` -- mapa, calendario e o link do
+/// encontro -- chamam a mesma porta por caminhos proprios e **nao foram
+/// tocados**. Tirar o aviso da porta teria mudado a `Rede` junto.
 ///
-/// ## Recolhe, e isso e deliberado
-///
-/// A vitrine e uma LISTA. Um cartao expandido com 3000 caracteres empurra o
-/// resto da vitrine para baixo, e sem como recolher a pessoa teria de rolar de
-/// volta para seguir comparando produtos. Os rotulos sao de duas palavras:
-/// "Ler mais" e "Ler menos".
-///
-/// ## Leitor de tela
-///
-/// Colapsado, o `Text` recebe o TRECHO como dado -- nao ha `semanticsLabel`
-/// mentindo sobre o que esta na tela, e nao ha 3000 caracteres anunciados num
-/// cartao de lista. O botao diz de qual produto ele e (`semanticsLabel`),
-/// porque "Ler mais, botao" repetido numa lista de doze cartoes nao diz nada.
-/// Expandido, o texto inteiro vira dado do mesmo `Text` e e lido ali.
-///
-/// A altura do cartao muda ao expandir, e o `ListView` mantem o deslocamento:
-/// o conteudo ABAIXO desce, e o topo deste cartao fica onde estava. Nada aqui
-/// rola a lista por conta propria, que seria o jeito de perder a posicao de
-/// quem esta lendo.
-class _ResumoDoProduto extends StatefulWidget {
-  const _ResumoDoProduto({required this.item});
+/// Funcao de nivel de biblioteca, e nao metodo do botao, porque o CARTAO
+/// INTEIRO tambem sai agora: dois chamadores, uma implementacao.
+Future<void> sairDaLoja(
+  BuildContext context,
+  ItemDaLoja item,
+  Uri destino,
+) async {
+  // O mensageiro e capturado ANTES do `await`: abrir o navegador da ao
+  // sistema a chance de tirar esta tela da arvore (a pessoa troca de aba, o
+  // sistema recicla), e ler `context` depois de um `await` e o defeito que o
+  // `use_build_context_synchronously` existe para pegar.
+  final mensageiro = ScaffoldMessenger.maybeOf(context);
 
-  final ItemDaLoja item;
+  // **Navegador do SISTEMA, nunca webview embutida.** A porta escolhe
+  // `LaunchMode.externalApplication` num lugar so, e devolve `false` em vez
+  // de lancar quando o aparelho nao tem o que responder. A URL vai como o
+  // servidor a mandou: nenhum parametro e acrescentado aqui.
+  final abriu = await SaidaDoApp.atual.abrirLink(destino);
+  if (abriu) return;
 
-  static const String lerMais = 'Ler mais';
-  static const String lerMenos = 'Ler menos';
-
-  @override
-  State<_ResumoDoProduto> createState() => _ResumoDoProdutoState();
+  // Nao abriu. Uma linha, e a vitrine fica onde estava: nao ha tela de erro,
+  // nao ha nova tentativa automatica e nao ha explicacao de por que o
+  // aparelho recusou -- a pessoa nao tem o que fazer com esse detalhe.
+  mensageiro?.showSnackBar(
+    const SnackBar(content: Text(VitrineDaLoja.falhaAoAbrirOLink)),
+  );
 }
 
-class _ResumoDoProdutoState extends State<_ResumoDoProduto> {
-  bool _expandido = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final item = widget.item;
-    final cabeInteiro = item.resumoCabeNoCartao;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          // A quebra de linha vai no valor, nos dois estados: `Text` a desenha.
-          _expandido || cabeInteiro ? item.resumo : item.trechoDoResumo,
-          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-        ),
-        // Nada escondido, nada de botao.
-        if (!cabeInteiro) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e1),
-          TextButton(
-            onPressed: () => setState(() => _expandido = !_expandido),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, BichuEspaco.e12),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              alignment: Alignment.centerLeft,
-            ),
-            child: Text(
-              _expandido ? _ResumoDoProduto.lerMenos : _ResumoDoProduto.lerMais,
-              semanticsLabel: _expandido
-                  ? 'Ler menos da descrição de ${item.titulo}'
-                  : 'Ler mais da descrição de ${item.titulo}',
-              style: textos.labelLarge?.copyWith(color: cores.textPrimary),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// O botao que leva para fora, com o aviso de saida antes.
+/// O botao que leva para fora.
 ///
 /// Recebe a [destino] **ja conferida** por [ItemDaLoja.destinoExterno], e nao a
 /// `String` do item: um widget que recebesse o texto cru poderia ser construido
 /// com um destino que ninguem conferiu, e a conferencia voltaria a depender de
 /// quem chama lembrar dela. Aqui o tipo cobra.
 ///
-/// **Publico porque a tela de detalhe o reusa**, e reusar e o ponto: o aviso
-/// de saida, o nome do destino, o `LaunchMode.externalApplication` (pela porta
-/// `SaidaDoApp`) e a regra de nao acrescentar parametro a URL sao a mesma
-/// decisao nos dois lugares. Reimplementar o botao na outra tela criaria um
-/// segundo caminho de saida do app, e e o segundo caminho que esquece o aviso.
+/// **Publico porque a tela de detalhe o reusa** -- e ela continua no codigo,
+/// parada e sem entrada, por decisao do cliente de 17/10/2026.
 ///
-/// A pendencia que a branch da tela de detalhe anotou aqui ESTA RESOLVIDA
-/// nesta mescla: a conferencia de `https` absoluto com host nao foi
-/// reimplementada, e a versao com ela e a que vale -- os dois chamadores
-/// (cartao e detalhe) so desenham o botao sob
-/// `if (item.destinoExterno case final Uri destino)`.
+/// O botao e FILHO do cartao e os dois levam ao mesmo lugar desde 17/10, entao
+/// nao ha mais gesto ambiguo a resolver: o teste de acerto do Flutter entrega
+/// o toque ao `OutlinedButton`, que o consome, e o cartao nao sai duas vezes.
 class BotaoDeSaidaDaLoja extends StatelessWidget {
   const BotaoDeSaidaDaLoja({
     required this.item,
@@ -804,60 +767,19 @@ class BotaoDeSaidaDaLoja extends StatelessWidget {
   /// `https` absoluto, com host. [CartaoDaLoja] nao desenha este widget sem um.
   final Uri destino;
 
-  Future<void> _sair(BuildContext context) async {
-    // O mensageiro e capturado ANTES de qualquer `await`: tanto o dialogo
-    // quanto a abertura do navegador dao ao sistema a chance de tirar esta
-    // tela da arvore (a pessoa troca de aba, o sistema recicla), e ler
-    // `context` depois de um `await` e o defeito que o
-    // `use_build_context_synchronously` existe para pegar.
-    final mensageiro = ScaffoldMessenger.maybeOf(context);
-
-    final confirmou = await showDialog<bool>(
-      context: context,
-      builder: (contexto) => AlertDialog(
-        title: const Text('Você vai sair do Bichu'),
-        content: Text(
-          'O produto abre no site ${item.parceiro.nome} '
-          '(${item.parceiro.host}), no navegador do seu aparelho. A compra é '
-          'feita lá, com o parceiro.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(contexto).pop(false),
-            child: const Text('Ficar aqui'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(contexto).pop(true),
-            child: Text(CartaoDaLoja.rotuloDeSaida(item.parceiro.nome)),
-          ),
-        ],
-      ),
-    );
-    if (confirmou != true) return;
-
-    // **Navegador do SISTEMA, nunca webview embutida.** A porta escolhe
-    // `LaunchMode.externalApplication` num lugar so, e devolve `false` em vez
-    // de lancar quando o aparelho nao tem o que responder. A URL vai como o
-    // servidor a mandou: nenhum parametro e acrescentado aqui.
-    final abriu = await SaidaDoApp.atual.abrirLink(destino);
-    if (abriu) return;
-
-    // Nao abriu. Uma linha, e a vitrine fica onde estava: nao ha tela de erro,
-    // nao ha nova tentativa automatica e nao ha explicacao de por que o
-    // aparelho recusou -- a pessoa nao tem o que fazer com esse detalhe.
-    mensageiro?.showSnackBar(
-      const SnackBar(content: Text(VitrineDaLoja.falhaAoAbrirOLink)),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       height: BichuAlvoDeToque.min,
       child: OutlinedButton(
-        onPressed: () => _sair(context),
-        child: Text(CartaoDaLoja.rotuloDeSaida(item.parceiro.nome)),
+        onPressed: () => sairDaLoja(context, item, destino),
+        child: Text(
+          CartaoDaLoja.rotuloDeSaida,
+          // "Compre agora, botao" repetido em doze cartoes nao diz de qual
+          // produto e nem para onde vai.
+          semanticsLabel: CartaoDaLoja.rotuloAcessivelDeSaida(item),
+        ),
       ),
     );
   }

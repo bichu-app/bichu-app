@@ -283,6 +283,27 @@ class ControladorDeSessao extends ChangeNotifier {
   /// um segundo. Este caminho **nao** toca essa coluna: ela e por pessoa, e
   /// empurra-la aqui derrubaria o tablet e o celular de quem ficou em casa.
   ///
+  /// Repoe o usuario da sessao com o que o servidor acabou de devolver.
+  ///
+  /// Quem chama e `Perfil` › `Meus dados`, depois de `PATCH /me`. **Nao abre
+  /// sessao e nao fecha nenhuma**: os tokens continuam os mesmos objetos, e por
+  /// isso nao ha `_aoEntrar`, nao ha limpeza e nao ha troca de estado -- um
+  /// `abrir()` aqui refaria o registro do aparelho a cada nome corrigido.
+  ///
+  /// Grava no deposito porque o usuario mora dentro da sessao guardada: sem
+  /// isto, fechar e reabrir o app traria de volta o nome antigo.
+  ///
+  /// Sem sessao aberta nao faz nada. Nao e caso teorico: a sessao pode cair
+  /// entre o PATCH e a volta dele (401 em `_renovar`), e criar sessao a partir
+  /// de uma resposta de perfil seria ressuscitar uma conta que acabou de sair.
+  Future<void> atualizarUsuario(Usuario usuario) async {
+    final atual = _sessao;
+    if (atual == null) return;
+    final nova = atual.comUsuario(usuario);
+    await _deposito.gravar(nova);
+    _mudar(EstadoDaSessao.logado, nova);
+  }
+
   /// A revogacao perdida **nao e retentada**, e isso e decisao e nao omissao
   /// (ADR-0002, emenda 1, secao 6): retentar exigiria guardar o refresh no
   /// aparelho ate a revogacao passar, o que manteria a credencial no disco

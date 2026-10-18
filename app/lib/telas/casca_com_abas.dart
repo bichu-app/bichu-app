@@ -5,6 +5,7 @@ import '../roteamento/rotas.dart';
 import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../widgets/barra_de_listagem.dart';
 import '../widgets/marca.dart';
 import 'gaveta_de_secoes.dart';
 
@@ -477,7 +478,7 @@ class _CascaComAbasState extends State<CascaComAbas> {
 /// Area segura nao e margem: notch, ilha dinamica, barra de gestos e teclado
 /// mudam a area utilizavel em tempo de execucao, e conteudo em coordenada fixa
 /// e defeito que so aparece no aparelho que ninguem tem em maos.
-class TelaDeAba extends StatelessWidget {
+class TelaDeAba extends StatefulWidget {
   const TelaDeAba({
     required this.titulo,
     required this.filhos,
@@ -522,9 +523,36 @@ class TelaDeAba extends StatelessWidget {
   final bool raizDeSecao;
 
   @override
+  State<TelaDeAba> createState() => _EstadoDaTelaDeAba();
+}
+
+class _EstadoDaTelaDeAba extends State<TelaDeAba> {
+  /// O SLOT UNICO DE ACAO da barra de topo (11.23.1), que a listagem preenche.
+  ///
+  /// Ele volta a ser do `Filtros` por decisao do cliente de 17/10/2026 ("suba
+  /// todos os filtros para a barra do titulo da pagina"), que **reverte** a
+  /// regra de 22/09 que o havia mandado para o corpo. Quem publica e
+  /// `BarraDeListagem`; quem desenha e esta casca. A tela que nao lista nada
+  /// nunca publica, e o slot continua vazio nela -- `Pets` e `Perfil` sao os
+  /// dois casos, e o portao da gaveta cobra isso.
+  final ValueNotifier<AcaoDeListagem?> _acaoDaListagem =
+      ValueNotifier<AcaoDeListagem?>(null);
+
+  @override
+  void dispose() {
+    _acaoDaListagem.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
+    final titulo = widget.titulo;
+    final reforco = widget.reforco;
+    final filhos = widget.filhos;
+    final tituloEmMarca = widget.tituloEmMarca;
+    final raizDeSecao = widget.raizDeSecao;
     // O gatilho so existe onde HA gaveta, e a gaveta mora na casca.
     //
     // `raizDeSecao` sozinho nao basta: `rotas.dart` usa `AbaPerfil()` como
@@ -542,82 +570,77 @@ class TelaDeAba extends StatelessWidget {
         raizDeSecao &&
         (ControleDaGaveta.maybeOf(context)?.temSubDestinos ?? false);
 
-    return Scaffold(
-      appBar: AppBar(
-        // A MARCA no lugar do texto quando `tituloEmMarca` (BICHUS-195/196).
-        // O `rotulo` continua indo para o leitor de tela: vetor sem nome e
-        // vetor mudo.
-        title: tituloEmMarca
-            ? MarcaLockup(largura: MarcaLockup.pisoDeLargura, rotulo: titulo)
-            : Text(titulo),
-        // 64 dp, e nao os 56 do padrao do M3.
-        //
-        // O design system 23.2 desenhou a casca com barra de topo de 64 dp, e
-        // `BarraDeConta` ja usa a mesma medida nas telas de conta. O tema nao
-        // fixa `toolbarHeight`, entao sem esta linha a raiz de aba nasce com
-        // 56 e diverge do quadro do Figma em toda tela do app.
-        //
-        // Raiz de aba **nao tem saida**: a variante e `Saida=Nenhuma` (23.4),
-        // e por isso aqui nao entra `SaidaDaTela`. Quem chega numa aba chegou
-        // pela barra de baixo.
-        toolbarHeight: BichuAlvoDeToque.critico,
-        // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
-        //
-        // O 11.23.1 desenha `[ saida 64x64 ][ 8 ][ titulo ] ... [ acao 64x64 ]`
-        // e da UMA acao a direita. Em `Pets` e em `Perto` essa acao e o
-        // `Filtros`, e ela CONTINUA sendo: o hamburguer ocupa o slot da
-        // saida, que na raiz de secao esta vazio por desenho (23.4).
-        //
-        // `leading` explicito tambem desliga a seta automatica do `AppBar`
-        // nesta tela -- o que aqui nao tira nada, porque a raiz de ramo nao
-        // tem o que desempilhar. Em `TelaDeAdocoes`, que usa este mesmo
-        // widget empilhado, `raizDeSecao` e falso e a seta continua sendo
-        // desenhada.
-        leading: comGaveta ? const BotaoDaGaveta() : null,
-        // 64 dp, e nao os 56 que o `AppBar` reserva por padrao.
-        //
-        // O 11.23.1 fixa o alvo da esquerda em 64 x 64 (`target.critico`), e
-        // sem esta linha o `AppBar` aperta o `IconButton` num
-        // `ConstrainedBox` de 56 e o alvo fica abaixo do piso. Medido: o
-        // gatilho saia com 56,0 dp de largura.
-        leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
-      ),
-      body: SafeArea(
-        // `addSemanticIndexes: false` **nao e** microotimizacao. O padrao do
-        // `ListView` e embrulhar cada filho direto num `IndexedSemantics`, e
-        // com ele o filho vira **um** no de semantica: tudo o que estiver
-        // dentro colapsa num rotulo so. Isso e o certo para uma lista de
-        // itens, onde "item 3 de 10" significa alguma coisa -- e esta lista
-        // nao e uma lista de itens, e o corpo rolavel de uma pagina.
-        //
-        // O que o padrao causava, medido na arvore de semantica do `Perfil`:
-        // a secao inteira de `Meus pets` virava um unico no **anunciado como
-        // botao**, de nome `Meus pets Seu primeiro pet entra aqui. Cadastre
-        // seu pet ... Cadastrar meu pet`. O titulo da secao entrava no nome
-        // acessivel do botao, e o botao deixava de existir como controle
-        // separado: quem usa TalkBack ou VoiceOver nao tinha como parar nele.
-        // E SC 4.1.2 (nome, papel, valor) falhando numa acao primaria -- nas
-        // quatro abas de entao, e agora seriam cinco.
-        //
-        // Cada secao volta a compor os proprios nos, que e o que o leitor de
-        // tela precisa para deslizar entre titulo, texto e acao.
-        //
-        // NAO REMOVA. `test/telas/casca_de_cinco_secoes_test.dart` reprova por
-        // dois caminhos independentes: a varredura do fonte deste arquivo, e a
-        // arvore de semantica com a acao primaria colapsada.
-        child: ListView(
-          addSemanticIndexes: false,
-          padding: const EdgeInsets.all(BichuEspaco.e4),
-          children: <Widget>[
-            if (reforco != null) ...<Widget>[
-              Text(
-                reforco!,
-                style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
-              ),
-              const SizedBox(height: BichuEspaco.e6),
-            ],
-            ...filhos,
+    // O corpo fica FORA do `ValueListenableBuilder`, pelo `child`: sem isto
+    // trocar o distintivo de filtros reconstruiria a lista inteira.
+    final corpo = SafeArea(
+      // `addSemanticIndexes: false` **nao e** microotimizacao. O padrao do
+      // `ListView` e embrulhar cada filho direto num `IndexedSemantics`, e
+      // com ele o filho vira **um** no de semantica: tudo o que estiver
+      // dentro colapsa num rotulo so. Isso e o certo para uma lista de
+      // itens, onde "item 3 de 10" significa alguma coisa -- e esta lista
+      // nao e uma lista de itens, e o corpo rolavel de uma pagina.
+      //
+      // O que o padrao causava, medido na arvore de semantica do `Perfil`:
+      // a secao inteira de `Meus pets` virava um unico no **anunciado como
+      // botao**, de nome `Meus pets Seu primeiro pet entra aqui. Cadastre
+      // seu pet ... Cadastrar meu pet`. O titulo da secao entrava no nome
+      // acessivel do botao, e o botao deixava de existir como controle
+      // separado: quem usa TalkBack ou VoiceOver nao tinha como parar nele.
+      // E SC 4.1.2 (nome, papel, valor) falhando numa acao primaria -- nas
+      // quatro abas de entao, e agora seriam cinco.
+      //
+      // Cada secao volta a compor os proprios nos, que e o que o leitor de
+      // tela precisa para deslizar entre titulo, texto e acao.
+      //
+      // NAO REMOVA. `test/telas/casca_de_cinco_secoes_test.dart` reprova por
+      // dois caminhos independentes: a varredura do fonte deste arquivo, e a
+      // arvore de semantica com a acao primaria colapsada.
+      child: ListView(
+        addSemanticIndexes: false,
+        padding: const EdgeInsets.all(BichuEspaco.e4),
+        children: <Widget>[
+          if (reforco != null) ...<Widget>[
+            Text(
+              reforco,
+              style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
+            ),
+            const SizedBox(height: BichuEspaco.e6),
           ],
+          ...filhos,
+        ],
+      ),
+    );
+
+    return SlotDaBarraDeListagem(
+      acao: _acaoDaListagem,
+      child: ValueListenableBuilder<AcaoDeListagem?>(
+        valueListenable: _acaoDaListagem,
+        child: corpo,
+        builder: (context, acao, corpo) => Scaffold(
+          appBar: AppBar(
+            // A MARCA no lugar do texto quando `tituloEmMarca`
+            // (BICHUS-195/196). O `rotulo` continua indo para o leitor de
+            // tela: vetor sem nome e vetor mudo.
+            title: tituloEmMarca
+                ? MarcaLockup(
+                    largura: MarcaLockup.pisoDeLargura,
+                    rotulo: titulo,
+                  )
+                : Text(titulo),
+            // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
+            toolbarHeight: BichuAlvoDeToque.critico,
+            // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
+            leading: comGaveta ? const BotaoDaGaveta() : null,
+            leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
+            // O SLOT UNICO DA DIREITA, que voltou a ser do `Filtros` em
+            // 17/10/2026. `null` quando a tela nao lista nada: uma lista com
+            // um widget vazio dentro faria o portao da gaveta achar uma acao
+            // onde nao ha nenhuma.
+            actions: acao == null
+                ? null
+                : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
+          ),
+          body: corpo,
         ),
       ),
     );

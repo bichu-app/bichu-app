@@ -982,6 +982,12 @@ export interface ProfessionalsTable {
   published_at: Date | null;
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
+  /**
+   * A versao para `If-Match`, acrescentada pela migracao `20261017000011`.
+   * Mesma forma de `store_partners` e `network_events`: ela cresce na propria
+   * clausula `WHERE` do `UPDATE`, e nao e lida para ser comparada em memoria.
+   */
+  version: Generated<number>;
 }
 
 export type TipoDeEntidade = 'professional' | 'organization';
@@ -1010,6 +1016,58 @@ export interface EntityVerificationsTable {
   reviewed_at: Date | null;
   rejection_reason: string | null;
   created_at: CriadoEm;
+}
+
+/** O `CHECK` `directory_suggestions_contato_conhecido` (`20261017000004`). */
+export type TipoDeContatoSugerido = 'phone' | 'website' | 'instagram';
+
+/** O `CHECK` `directory_suggestions_revisao_conhecida` (`20261017000004`). */
+export type RevisaoDaSugestao = 'pending' | 'approved' | 'declined';
+
+/**
+ * A fila de revisao de `Perto`: o que a comunidade SUGERIU para o diretorio
+ * (migracao `20261017000004`, operacao `suggestDirectoryEntry`).
+ *
+ * **Nao e `professionals`, e nao vira `professionals` por conta propria.** A
+ * emenda 1 do ADR-0011 tirou `'community'` de `professionals.source`: a entrada
+ * do diretorio nasce por convite e aceite, e o que esta tabela guarda e o
+ * pedido de revisao. Nenhuma escrita deste caminho toca `professionals`.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra --
+ * a mesma de `ProfessionalsTable` e de `NetworkEventsTable`: a coluna que
+ * guarda QUEM SUGERIU e vinculo entre duas pessoas, leva a marca
+ * `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao, e
+ * `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts` de `src/`
+ * pelo nome literal dela: declara-la aqui **reprova o build**.
+ *
+ * Quem a escreve e a funcao `directory_suggestions_registrar` da propria
+ * migracao, chamada por SQL cru -- aqui a autoria e `NOT NULL`, entao nao ha
+ * linha intermediaria para carimbar depois e a funcao faz o `INSERT` inteiro.
+ * O construtor tipado nao pode nem oferece a coluna, e o que nao esta no tipo
+ * nao atravessa a borda por descuido.
+ *
+ * **Sem `geo`, sem `street_address` e sem documento** (ADR-0006, ADR-0011
+ * secao 4): as ausencias estao escritas por extenso no cabecalho da migracao,
+ * para que ninguem complete a tabela achando que faltou.
+ */
+export interface DirectorySuggestionsTable {
+  /** UUIDv7 gerado pela aplicacao, como em `pets` e em `professionals`. */
+  id: string;
+  /** 128 bits em base64url. E ele que sai no recibo, e nunca o `id`. */
+  ref: string;
+  display_name: string;
+  kind: TipoDeProfissional;
+  city: string;
+  /** A UF. E por esta coluna que o estado da revisao se chama `review_status`. */
+  state: string;
+  neighborhood: string | null;
+  contact_kind: TipoDeContatoSugerido;
+  contact_value: string;
+  note: string | null;
+  review_status: Generated<RevisaoDaSugestao>;
+  created_at: Generated<Date>;
+  /** Nulo enquanto pendente, por `CHECK`. */
+  decided_at: Date | null;
 }
 
 /**
@@ -1354,6 +1412,48 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
+/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O pedido do OBJETO FISICO da plaquinha da coleira.
+ *
+ * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
+ * Nao guarda endereco nem valor, e as duas ausencias sao decisao de produto do
+ * cliente ainda em aberto, e nao esquecimento.
+ *
+ * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
+ * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
+ */
+export interface CollarTagRequestsTable {
+  id: string;
+  ref: string;
+  pet_id: string;
+  requested_by: string;
+  notes: string | null;
+  /**
+   * O endereco de entrega. **Dado pessoal**: nao sai em superficie publica,
+   * nao entra na trilha de auditoria e nao e geocodificado (ADR-0006) -- nao
+   * ha `lat`, nao ha `lon` e nenhum servico externo resolve o CEP.
+   */
+  recipient_name: string;
+  /** E.164 do Brasil (`+55` e 10 ou 11 digitos). Dado pessoal. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  status: Generated<DecisaoDoPedidoDePlaquinha>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -1408,6 +1508,7 @@ export interface Database {
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
   entity_verifications: EntityVerificationsTable;
+  directory_suggestions: DirectorySuggestionsTable;
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_categories: StoreCategoriesTable;
@@ -1425,6 +1526,7 @@ export interface Database {
   network_event_amenities: NetworkEventAmenitiesTable;
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
+  collar_tag_requests: CollarTagRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -1,0 +1,45 @@
+# ISCA de verificar_borda.py (secao 6). PRECISA REPROVAR.
+#
+# O ESTADO DE `admin-hml.bichu.app` EM 17/10, exatamente. O bloco do painel
+# serve `/v1/admin/*` e manda todo o resto de `/v1/*` para o 404 da borda --
+# incluindo `GET /v1/store/taxonomy`, que e rota PUBLICA e que o formulario de
+# produto da Loja pede para montar o select dos dois niveis da categoria. A
+# resposta era `nao encontrado` 404 e a tela inteira ia para erro.
+#
+# Esta isca so reprova se o portao ler de `admin/src` quais rotas publicas o
+# painel consome. Com uma lista escrita a mao dentro do portao, a proxima rota
+# publica entraria calada, que e como esta entrou.
+#
+# O bloco da aplicacao esta certo, de proposito: o 404 de `/v1/admin*` LA e
+# desenho (D33), e nao tem relacao com o que falta aqui.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	request_header -X-Internal-*
+
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		respond "nao encontrado" 404
+	}
+
+	handle {
+		reverse_proxy admin-web:8080
+	}
+}

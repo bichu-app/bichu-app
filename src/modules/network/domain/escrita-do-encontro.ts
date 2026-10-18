@@ -311,6 +311,50 @@ export function temContatoOuPagamento(valor: string): boolean {
 }
 
 /**
+ * O MESMO D59, **menos o endereco**, para o campo que tem regra propria de
+ * endereco: `place_name` (`errosDoNomeDoLugar`).
+ *
+ * ## Por que o detector inteiro nao serve aqui
+ *
+ * O redator do canal mediado redige CONVERSA entre desconhecidos, e ali
+ * qualquer palavra de logradouro e um endereco sendo passado: ele retira
+ * "Avenida Paulista" inteira, com `kind: 'address'`. No NOME DO LUGAR nao e
+ * endereco -- e como o lugar se chama --, e a decisao de 17/10/2026 e que ele
+ * passa, junto de "Rua 25 de Marco", "Praca 14 de Janeiro" e "Quadra 302
+ * Norte". Com o detector inteiro os quatro saiam recusados por
+ * `contact_or_payment_detected`: a recusa errada, e por um motivo que a frase
+ * nem nomeia.
+ *
+ * ## Por que telefone e e-mail sao lidos DIRETO, e nao pelo achado do redator
+ *
+ * Medido: em "Praca do Bairro (11) 98765-4321" o redator classifica o trecho
+ * como ENDERECO, e nao como telefone -- o padrao de endereco dele casa primeiro
+ * e come o numero. Descartar o achado de endereco e parar ai levaria o telefone
+ * embora junto, que e exatamente o que este campo nao pode deixar passar. Por
+ * isso `TELEFONE_COM_DDD` e `EMAIL` entram por cima, como ja entram em
+ * `errosDoEndereco` -- o outro campo cujo conteudo legitimo e endereco.
+ *
+ * **Nada mais sai**: telefone, e-mail, link, encurtador, dominio, perfil
+ * `@usuario`, chave PIX e dados bancarios continuam recusados aqui, e o
+ * endereco embutido no nome continua recusado pela regra do proprio campo, com
+ * `code: address_in_place_name`.
+ */
+export function temContatoOuPagamentoSemEndereco(valor: string): boolean {
+  const limpo = semDatas(valor.normalize('NFKC'));
+  const { base, letras } = normalizarParaConferencia(limpo);
+  const contato =
+    redigirCanalMediado(limpo).retirados.some((r) => r.kind !== 'address') ||
+    TELEFONE_COM_DDD.test(base) ||
+    EMAIL.test(base) ||
+    DOMINIO.test(base) ||
+    DOMINIO.test(letras) ||
+    DOMINIO_COM_CAMINHO.test(base) ||
+    ARROBA.test(base);
+  const pagamento = PAGAMENTO_POR_PALAVRA.test(letras) || PAGAMENTO_POR_NUMERO.some((padrao) => padrao.test(base));
+  return contato || pagamento;
+}
+
+/**
  * Telefone com DDD, nas formas em que se escreve: `(11) 91234-5678`,
  * `+55 11 91234 5678`, `11 3456-7890` e os 10 ou 11 digitos colados. O CEP
  * (`05416-001` ou `05416001`, 8 digitos) e o numero da casa ao lado dele

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../acessibilidade/anunciar.dart';
+import '../../api/estados_brasileiros.dart';
 import '../../api/modelos_localizacao.dart';
 import '../../dispositivo/localizacao.dart';
 import '../../escopo.dart';
@@ -8,6 +9,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/seletor_de_lista.dart';
 import 'antessala_de_localizacao.dart';
 import 'textos_da_localizacao.dart';
 
@@ -88,20 +90,31 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
 
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
-  final TextEditingController _uf = TextEditingController();
   final FocusNode _focoDoBairro = FocusNode();
+
+  /// A sigla escolhida na lista de estados, ou nulo.
+  ///
+  /// **Campo de estado, e nao `TextEditingController`** (cliente, 17/10/2026):
+  /// o estado passou a ser escolha numa lista de 27, e nao sigla digitada. O
+  /// que viaja continua sendo a SIGLA -- `Area.state` do contrato e de dois
+  /// caracteres, e o rotulo longo e so o que a pessoa le.
+  ///
+  /// Mora aqui, no estado desta peca, pelo mesmo motivo dos dois
+  /// controladores: e o que faz a escolha sobreviver ao vai e volta entre os
+  /// dois passos do formulario.
+  String? _uf;
 
   @override
   void initState() {
     super.initState();
-    for (final c in <TextEditingController>[_bairro, _cidade, _uf]) {
+    for (final c in <TextEditingController>[_bairro, _cidade]) {
       c.addListener(_publicar);
     }
   }
 
   @override
   void dispose() {
-    for (final c in <TextEditingController>[_bairro, _cidade, _uf]) {
+    for (final c in <TextEditingController>[_bairro, _cidade]) {
       c
         ..removeListener(_publicar)
         ..dispose();
@@ -113,7 +126,7 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   AreaDigitada? get _area => AreaDigitada.montar(
         cidade: _cidade.text,
         bairro: _bairro.text,
-        uf: _uf.text,
+        uf: _uf,
       );
 
   /// A pessoa comecou a descrever a area e deixou a cidade de fora.
@@ -128,7 +141,7 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// quem ainda nao comecou.
   bool get _faltaACidade =>
       _cidade.text.trim().isEmpty &&
-      (_bairro.text.trim().isNotEmpty || _uf.text.trim().isNotEmpty);
+      (_bairro.text.trim().isNotEmpty || _uf != null);
 
   void _publicar() {
     widget.aoMudar(montarOnde(ponto: _ponto, area: _area));
@@ -137,14 +150,29 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// O caminho de `Usar minha localizacao`.
   ///
   /// A antessala so aparece quando o dialogo do sistema **ainda abre**. Depois
-  /// de respondido, mostra-la seria pedir contexto para uma pergunta que nao
-  /// vai ser feita: no iOS `requestPermission` nao reabre nada.
+  /// de respondido em definitivo, mostra-la seria pedir contexto para uma
+  /// pergunta que nao vai ser feita: no iOS `requestPermission` nao reabre
+  /// nada.
+  ///
+  /// **`negada` entra aqui junto com `naoPedida`, e isso custou o defeito do
+  /// cliente de 17/10/2026.** No Android nao existe "nunca perguntei":
+  /// `checkPermission()` devolve `denied` tanto para quem nunca viu o dialogo
+  /// quanto para quem negou uma vez, e `LocationPermission.denied` vira
+  /// `PermissaoDeLocalizacao.negada`. Com a condicao antiga,
+  /// `PermissaoDeLocalizacao.naoPedida` era **inalcancavel no aparelho**: a
+  /// antessala nunca aparecia, `pedir()` nunca era chamado, o dialogo do
+  /// sistema nunca abria, e o botao respondia "Tudo bem. Diga o bairro e a
+  /// cidade" para sempre -- sem a pessoa ter como conceder nada.
+  ///
+  /// Quem **ja negou em definitivo** continua fora: ali o dialogo nao reabre
+  /// em nenhuma das duas plataformas, e o caminho e os ajustes do sistema.
   Future<void> _usarALocalizacao() async {
     final porta = Escopo.of(context).localizacao;
     var permissao = await porta.estado();
     if (!mounted) return;
 
-    if (permissao == PermissaoDeLocalizacao.naoPedida) {
+    if (permissao == PermissaoDeLocalizacao.naoPedida ||
+        permissao == PermissaoDeLocalizacao.negada) {
       final resposta = await AntessalaDeLocalizacao.mostrar(
         context,
         pontoDeUso: widget.pontoDeUso,
@@ -319,17 +347,42 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         BichuField(
           rotulo: TextosDaLocalizacao.rotuloCidade,
           controlador: _cidade,
-          opcional: true,
+          // **"(opcional)" so quando ela E opcional** (cliente, 17/10/2026).
+          //
+          // Sem ponto, a cidade e o UNICO campo desta peca que faz o "onde"
+          // existir (`Area.required: [city]`), e portanto o unico que destrava
+          // o envio -- e a tela a rotulava "(opcional)" junto dos outros dois.
+          // O resultado medido no emulador: formulario inteiro preenchido,
+          // tres campos marcados como dispensaveis, e o botao morto. Com
+          // ponto a cidade volta a ser mesmo opcional, porque ai o "onde" ja
+          // existe sem ela -- e o rotulo acompanha, em vez de mentir nos dois
+          // sentidos.
+          opcional: _ponto != null,
           capitalizacao: TextCapitalization.words,
           erro: _faltaACidade ? TextosDaLocalizacao.cidadeObrigatoria : null,
         ),
         const SizedBox(height: BichuEspaco.e4),
-        BichuField(
-          rotulo: TextosDaLocalizacao.rotuloUf,
-          controlador: _uf,
-          opcional: true,
-          limite: 2,
-          capitalizacao: TextCapitalization.characters,
+        // **Lista de 27, e nao sigla digitada** (cliente, 17/10/2026). Quem
+        // acha um animal numa cidade que nao e a sua nao tem por que saber a
+        // sigla, e "SAO" ou "S.P." digitados nao sao recusados pelo contrato
+        // (`Area.state` e so "dois caracteres") -- eles chegam gravados
+        // errados. A lista mostra o NOME e guarda a sigla.
+        //
+        // Continua opcional, e o rotulo diz a verdade: quem exige o `onde` e
+        // a CIDADE, e so ela (`Area.required: [city]`).
+        SeletorDeLista(
+          rotulo: TextosDaLocalizacao.rotuloEstado,
+          estadoInicial: TextosDaLocalizacao.escolherOEstado,
+          itens: estadosBrasileiros,
+          selecionado: _uf,
+          // Opcional dito em TEXTO, do mesmo jeito que raca e cor: o seletor
+          // nao tem "(opcional)" no rotulo, e inventar um aqui so para este
+          // campo deixaria dois formatos de "pode ficar vazio" na mesma tela.
+          ajuda: TextosDaLocalizacao.estadoEmBrancoFunciona,
+          aoSelecionar: (codigo) {
+            setState(() => _uf = codigo);
+            _publicar();
+          },
         ),
       ];
 
@@ -362,19 +415,27 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         MotivoDeNaoTerPonto.permissaoNegadaPermanentemente ||
         MotivoDeNaoTerPonto.servicoDesligado =>
           TextosDaLocalizacao.abrirAjustes,
-        MotivoDeNaoTerPonto.semFixNoPrazo => TextosDaLocalizacao.tentarDeNovo,
-        MotivoDeNaoTerPonto.permissaoNegada ||
-        MotivoDeNaoTerPonto.indisponivel =>
-          null,
+        // **`permissaoNegada` ganhou acao, e e o unico motivo que MUDOU de
+        // lado.** Negar uma vez e o estado mais recuperavel dos cinco: o
+        // dialogo do sistema ainda abre. Sem o botao, a pessoa que tocou em
+        // "Nao permitir" por engano nao tinha caminho de volta nesta tela --
+        // e so descobriria o caminho desinstalando o app.
+        MotivoDeNaoTerPonto.semFixNoPrazo ||
+        MotivoDeNaoTerPonto.permissaoNegada =>
+          TextosDaLocalizacao.tentarDeNovo,
+        // `indisponivel` continua sem acao, e continua certo: nao ha o que
+        // tentar de novo num aparelho sem localizacao. Botao que nao muda
+        // nada e pior que nenhum botao.
+        MotivoDeNaoTerPonto.indisponivel => null,
       };
 
   VoidCallback? _acaoDoMotivo(MotivoDeNaoTerPonto motivo) => switch (motivo) {
         MotivoDeNaoTerPonto.permissaoNegadaPermanentemente ||
         MotivoDeNaoTerPonto.servicoDesligado =>
           () => Escopo.of(context).localizacao.abrirAjustesDoSistema(),
-        MotivoDeNaoTerPonto.semFixNoPrazo => _usarALocalizacao,
-        MotivoDeNaoTerPonto.permissaoNegada ||
-        MotivoDeNaoTerPonto.indisponivel =>
-          null,
+        MotivoDeNaoTerPonto.semFixNoPrazo ||
+        MotivoDeNaoTerPonto.permissaoNegada =>
+          _usarALocalizacao,
+        MotivoDeNaoTerPonto.indisponivel => null,
       };
 }

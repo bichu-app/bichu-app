@@ -46,4 +46,63 @@ class DiretorioApi {
     final json = await _api.get('/directory/entries', query: recorte.query);
     return PaginaDoDiretorio.doJson(json);
   }
+
+  /// O caminho de `suggestDirectoryEntry`, exposto para a fila offline.
+  static const String caminhoDaSugestao = '/directory/suggestions';
+
+  /// O corpo de `suggestDirectoryEntry`, montado num lugar so.
+  ///
+  /// **O minimo que permite checar, e nada alem**: nome, atividade, cidade,
+  /// bairro opcional, um contato publico e um recado para quem revisa. Nao ha
+  /// parametro de documento (CRMV, CNPJ) nem de pessoa fisica, e a ausencia e
+  /// deliberada: documento e prova de quem o APRESENTA, mora em
+  /// `entity_verifications` e pedi-lo aqui seria coletar o documento de um
+  /// terceiro pela mao de um estranho.
+  ///
+  /// Sem coordenada e sem endereco (ADR-0006): cidade, estado e bairro sao
+  /// rotulo de texto, nunca fonte de ponto.
+  static Map<String, dynamic> corpoDaSugestao({
+    required String nome,
+    required AtividadeDoDiretorio atividade,
+    required String cidade,
+    required String uf,
+    required TipoDeContatoPublico tipoDeContato,
+    required String contato,
+    String? bairro,
+    String? recado,
+  }) {
+    return <String, dynamic>{
+      'display_name': nome,
+      'kind': atividade.codigo,
+      'city': cidade,
+      'state': uf,
+      if (bairro != null && bairro.isNotEmpty) 'neighborhood': bairro,
+      'public_contact': <String, dynamic>{
+        'kind': tipoDeContato.codigo,
+        'value': contato,
+      },
+      if (recado != null && recado.isNotEmpty) 'note': recado,
+    };
+  }
+
+  /// `POST /v1/directory/suggestions` (`suggestDirectoryEntry`), com conta.
+  ///
+  /// **Nao publica nada.** A resposta e um recibo com `state: pending`: a
+  /// sugestao entrou na fila de revisao do painel, e e isso que a tela diz. Um
+  /// texto de sucesso que sugerisse publicacao seria mentira sobre o nome de
+  /// uma clinica real.
+  ///
+  /// Nao trata recusa: 400, 401 e 429 sobem como `FalhaDeChamada`, e a tela
+  /// nomeia o campo recusado por `Problem.campo`.
+  Future<ReciboDaSugestao> sugerir(
+    Map<String, dynamic> corpo, {
+    String? idempotencyKey,
+  }) async {
+    final json = await _api.post(
+      caminhoDaSugestao,
+      corpo: corpo,
+      idempotencyKey: idempotencyKey,
+    );
+    return ReciboDaSugestao.doJson(json);
+  }
 }

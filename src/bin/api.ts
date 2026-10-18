@@ -83,6 +83,13 @@ import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-r
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
 import { criarTagService } from '../modules/tags/application/tag-service.js';
 import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
+import { criarPedidoDePlaquinhaRepository } from '../modules/tags/adapters/persistence/kysely-pedido-de-plaquinha.js';
+import {
+  FilaDePlaquinhasAdministrativa,
+  PedidoDePlaquinhaService,
+} from '../modules/tags/application/pedido-de-plaquinha-service.js';
+import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
@@ -98,7 +105,21 @@ import {
   criarNomeDoPet,
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
+import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
+import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
+import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
+// As duas conferencias de texto que `professionals` NAO reimplementa. A
+// composicao mora aqui, fora de `src/modules/`, porque
+// `arquitetura/fronteira-de-modulo` reprova um modulo importar `domain/` de
+// outro -- e escrever um segundo detector de D59 ao lado deste seria manter
+// dois, que divergem calados. Ver
+// `modules/professionals/ports/conferencias-de-texto.ts`.
+import { errosDeTextoDeUsuario } from '../modules/network/domain/encontro-da-comunidade.js';
+import { handleDoInstagram } from '../modules/network/domain/escrita-do-encontro.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import { criarTaxonomiaDaVitrineRepository } from '../modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
@@ -358,6 +379,19 @@ export async function main(): Promise<void> {
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
     baseDoPerfilDoInstagram: config.instagramProfileBaseUrl,
     registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
+  });
+
+  // BICHUS-189. A escrita administrativa do diretorio de `Perto`. Sem
+  // `avisos` e sem `urlDeMidia`: uma entrada de diretorio nao notifica ninguem
+  // e nao tem imagem -- nao ha coluna de foto nem de logotipo em
+  // `professionals`, e inventar uma seria decidir produto aqui.
+  const diretorioAdministrativo = new DiretorioAdministrativo({
+    repositorio: criarDiretorioAdministrativoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    ids,
+    clock: systemClock,
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -751,6 +785,23 @@ export async function main(): Promise<void> {
     chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   };
 
+  // O pedido do OBJETO FISICO da plaquinha (o destino que o botao `Fazer a tag
+  // da coleira` nunca teve). **Nao emite codigo**: emitir e `issuePetTag`, e o
+  // codigo e irreversivel (ADR-0004). O repositorio e um so para os dois lados,
+  // porque e a mesma tabela; o que difere e o caso de uso.
+  const repositorioDePedidosDePlaquinha = criarPedidoDePlaquinhaRepository({ db });
+  const pedidosDePlaquinha = new PedidoDePlaquinhaService({
+    repositorio: repositorioDePedidosDePlaquinha,
+    ids,
+  });
+  // A fila do painel usa a MESMA unidade de trabalho auditada das outras
+  // escritas administrativas (D49): decisao e trilha na mesma transacao.
+  const filaDePlaquinhas = new FilaDePlaquinhasAdministrativa({
+    repositorio: repositorioDePedidosDePlaquinha,
+    escrita: escritaAuditada,
+    clock: systemClock,
+  });
+
   // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o
   // que for registrado depois dele. A conferência em si roda no fim, quando
   // todas as rotas já existem.
@@ -794,6 +845,22 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+    });
+    // A SUGESTAO do diretorio: escrita da comunidade, em arquivo e em
+    // registrador proprios. Ela NAO escreve em `professionals` -- a emenda 1 do
+    // ADR-0011 tirou `'community'` de `professionals.source`, e o que esta
+    // operacao grava e a fila de revisao (`directory_suggestions`). A trilha e
+    // a do app (`trilha`, transacao propria), e nao a transacional do painel.
+    registrarRotaDeSugestaoDoDiretorio(escopo, {
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      sugestoes: new SugestaoDoDiretorio({
+        sugestoes: criarDirectorySuggestionRepository(db, ids),
+        trilha,
+        conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+      }),
+      contrato,
     });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
@@ -853,6 +920,11 @@ export async function main(): Promise<void> {
     });
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotaDePedidoDePlaquinha(escopo, {
+      pedidos: pedidosDePlaquinha,
+      autenticador: dependenciasDasRotasDeTag.autenticador,
+      contrato,
+    });
     registrarRotasDeTransferencia(escopo, {
       transferencias,
       autenticador: {
@@ -894,6 +966,16 @@ export async function main(): Promise<void> {
           registrarRotasDaLojaAdministrativa(administrativo, { catalogo: catalogoAdministrativo, contrato });
           // BICHUS-273/292. A escrita da Rede e a fila de pedidos.
           registrarRotasDaRedeAdministrativa(administrativo, { rede: redeAdministrativa, contrato });
+          // BICHUS-189. A escrita do diretorio de `Perto`: o menu que faltava
+          // no painel. Ate 17/10/2026 nao havia escrita nenhuma, e as entradas
+          // de qualquer destino vinham de `src/bin/seed.ts`.
+          registrarRotasDoDiretorioAdministrativo(administrativo, {
+            diretorio: diretorioAdministrativo,
+            contrato,
+          });
+          // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
+          // daqui sai so o que ela chama.
+          registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas });
         },
       );
     } else {

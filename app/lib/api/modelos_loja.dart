@@ -222,6 +222,7 @@ class ItemDaLoja {
     required this.urlDaImagem,
     required this.textoDaImagem,
     required this.urlDeDestino,
+    this.imagens = const <ImagemDoProduto>[],
     required this.parceiro,
     required this.precoEmCentavos,
     required this.consultadoEm,
@@ -258,6 +259,43 @@ class ItemDaLoja {
   /// tela e o caminho para alguem esquecer a reserva e deixar a imagem sem nome
   /// acessivel.
   final String? textoDaImagem;
+
+  /// `images`: TODAS as imagens prontas do item, na ordem do painel
+  /// (17/10/2026). A primeira e a mesma de [urlDaImagem].
+  ///
+  /// **Opcional no contrato, e por isso tem padrao vazio aqui.** O campo e
+  /// aditivo: `StoreItemSummary` nao o declara em `required`, e resposta de
+  /// servidor que ainda nao o emite continua valida. Lista vazia nao e erro --
+  /// e o que este app desenha quando so ha [urlDaImagem], que e exatamente o
+  /// comportamento de antes desta mudanca.
+  ///
+  /// **[urlDaImagem] continua sendo lido e nao foi substituido.** Ele e o campo
+  /// que o APK instalado le, e a capa do cartao sai dele quando esta lista vem
+  /// vazia. Trocar um pelo outro quebraria o app publicado, que foi o que
+  /// aconteceu neste produto com a unidade de preco.
+  final List<ImagemDoProduto> imagens;
+
+  /// Ha mais de uma foto para mostrar?
+  ///
+  /// **O que decide se o cartao vira carrossel.** Com uma foto so nao ha
+  /// indicador, nao ha gesto e nao ha `PageView`: um carrossel de um elemento e
+  /// um controle que promete navegacao e nao tem para onde ir.
+  bool get temGaleria => imagens.length > 1;
+
+  /// As fotos a desenhar no cartao, com a capa de reserva.
+  ///
+  /// Quando `images` vem vazia (servidor antigo, ou item da massa com imagem
+  /// externa), devolve a lista de um elemento montada a partir de
+  /// [urlDaImagem] -- a MESMA composicao que o servidor faz em `galeriaDoItem`.
+  /// Assim a tela tem um caminho so para desenhar foto, e nao dois.
+  List<ImagemDoProduto> get fotosDoCartao {
+    if (imagens.isNotEmpty) return imagens;
+    final capa = urlDaImagem;
+    if (capa == null) return const <ImagemDoProduto>[];
+    return <ImagemDoProduto>[
+      ImagemDoProduto(url: capa, textoAlternativo: textoDaImagem),
+    ];
+  }
 
   final String urlDeDestino;
   final ParceiroDaLoja parceiro;
@@ -427,6 +465,14 @@ class ItemDaLoja {
           : null,
       urlDaImagem: imagem is String ? imagem : null,
       textoDaImagem: texto is String ? texto : null,
+      // `images` e OPCIONAL no contrato: ausente e nulo sao o mesmo caso, e
+      // nenhum dos dois e erro. Item que nao e lista tambem cai aqui, em vez de
+      // explodir a pagina inteira por causa de um campo acessorio.
+      imagens: json['images'] is List
+          ? (json['images'] as List<dynamic>)
+              .map(ImagemDoProduto.doJson)
+              .toList(growable: false)
+          : const <ImagemDoProduto>[],
       urlDeDestino: destino,
       parceiro: ParceiroDaLoja.doJson(json['partner']),
       precoEmCentavos: preco is int ? preco : null,

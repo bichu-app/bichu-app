@@ -26,6 +26,14 @@ fino" valeu pela confianca do dia em que foi escrita.
      reprova; e CHAVE DESCONHECIDA em `x-edge-limits` reprova -- ate 23/09 este
      portao ignorava chave que nao conhecia, e numero declarado sem imposicao e
      o que a secao 4 do ADR-0016 chama de pior que nenhum.
+  6. Toda rota PUBLICA que `admin/src` consome precisa de rota no bloco do host
+     do painel. O painel so falava com `/v1/admin/*`, e o `handle /v1/*` do
+     bloco responde 404 DA BORDA a todo o resto -- entao quando o formulario de
+     produto da Loja passou a pedir `GET /v1/store/taxonomy`, que e publica, a
+     borda respondeu `nao encontrado` 404 e a tela inteira foi para erro. A
+     secao 4 confere que `/v1/admin*` nao vaza para fora do host do painel;
+     ninguem conferia a rota publica que falta DENTRO dele. A lista sai de
+     `admin/src`, nao esta escrita aqui: lista a mao envelhece calada.
 
 Regra que governa o arquivo inteiro: **quando nao consegue verificar, reprova**.
 Bloco ausente, numero ilegivel, zero caminho encontrado -- tudo reprovacao com o
@@ -553,6 +561,94 @@ def conferir_taxa_na_borda(contrato: dict[str, int], caddyfile: str) -> list[str
 
 
 # ---------------------------------------------------------------------------
+# 6. As rotas PUBLICAS que o backoffice consome tem rota no host do painel
+# ---------------------------------------------------------------------------
+#
+# O BURACO QUE ISTO FECHA, medido em `admin-hml.bichu.app` em 17/10. O bloco do
+# painel serve `/v1/admin/*` e responde 404 da borda a todo o resto de `/v1/*`.
+# Isso estava certo enquanto o painel so falava com a superficie administrativa.
+# Quando o formulario de produto da Loja passou a pedir `GET /v1/store/taxonomy`
+# -- rota PUBLICA, `security: []` no contrato, porque categoria e subcategoria
+# sao dado e nao `enum` --, a borda respondeu `nao encontrado` 404 e a tela
+# inteira foi para o estado de erro. Nenhum portao acusou: a secao 4 confere que
+# `/v1/admin*` nao vaza para FORA do host do painel, e ninguem conferia o
+# contrario, que e a rota publica que falta DENTRO dele.
+#
+# Repontar o painel para o host do app nao e saida: o `connect-src` do CSP do
+# painel e `'self'`.
+#
+# A LISTA NAO E ESCRITA AQUI, e de proposito. Uma lista a mao envelhece calada:
+# a proxima rota publica que o painel passar a consumir entraria sem ninguem
+# notar, que e exatamente como esta passou. Ela sai de `admin/src`, do mesmo
+# literal de caminho que o cliente tipado usa em tempo de execucao.
+
+
+def rotas_publicas_do_painel(admin_src: Path) -> list[str]:
+    """Caminhos que `admin/src` pede e que NAO estao sob `/admin/`.
+
+    O painel chama pelo cliente gerado do contrato (`openapi-fetch`), e todo
+    caminho e literal: `api.GET('/store/taxonomy', ...)`. Caminho montado por
+    concatenacao nao existe neste codigo -- parametro vai em `params.path` --,
+    entao o literal e a fonte certa. Se isso mudar, esta funcao para de achar e
+    a ausencia de alvo reprova, que e o lado certo de errar.
+    """
+    if not admin_src.is_dir():
+        raise Reprovacao(
+            f"nao achei `{admin_src}`. Sem o codigo do painel esta conferencia nao sabe quais "
+            "rotas publicas ele precisa, e aprovar sem saber e o estado de 17/10"
+        )
+    chamada = re.compile(r"\.(?:GET|POST|PUT|PATCH|DELETE)\(\s*'(/[^']*)'")
+    todas: set[str] = set()
+    for arq in sorted(admin_src.rglob("*.ts")) + sorted(admin_src.rglob("*.tsx")):
+        todas.update(chamada.findall(arq.read_text(encoding="utf-8")))
+    if not todas:
+        raise Reprovacao(
+            "nao achei nenhuma chamada de rota em `admin/src`. Ou o painel passou a montar o "
+            "caminho de outra forma -- e ai esta conferencia precisa aprender a forma nova --, ou "
+            "o parser parou de enxergar. Nos dois casos passar verde e nao olhar"
+        )
+    return sorted(r for r in todas if not r.startswith("/admin/"))
+
+
+def conferir_rotas_publicas_do_painel(rotas: list[str], caddyfile: str) -> list[str]:
+    linhas = _expandir_imports(_linhas_sem_comentario(caddyfile))
+    todos = blocos(linhas)
+    sites = [(c, corpo) for c, corpo in todos if c and not c.startswith(("(", "&("))]
+    admin = [corpo for c, corpo in sites if MARCA_DO_BLOCO_ADMIN in c]
+    if len(admin) != 1:
+        raise Reprovacao(
+            f"esperado exatamente 1 bloco de site com `{MARCA_DO_BLOCO_ADMIN}`, achei {len(admin)}"
+        )
+    handles = {c.split(None, 1)[1] if " " in c else "": b
+               for c, b in blocos(admin[0]) if c == "handle" or c.startswith("handle ")}
+    # Sem catch-all de `/v1/*` ninguem cai no 404 da borda, e a conferencia
+    # perde o objeto: ela existe por causa dele.
+    if "/v1/*" not in handles:
+        raise Reprovacao(
+            "o bloco do painel nao tem `handle /v1/*`. Esta conferencia existe porque esse "
+            "catch-all responde 404; sem ele, ou o arquivo mudou de forma, ou a regra mudou e "
+            "esta conferencia precisa mudar junto"
+        )
+    falhas = []
+    for rota in rotas:
+        caminho = f"/v1{rota}"
+        corpo = handles.get(caminho)
+        if corpo is None:
+            falhas.append(
+                f"`admin/src` pede `{rota}`, que e rota PUBLICA, e o bloco do painel nao tem "
+                f"`handle {caminho}`. Ela cai no `handle /v1/*` e recebe 404 DA BORDA -- o estado "
+                "de `admin-hml.bichu.app` em 17/10, com o formulario de produto da Loja inteiro "
+                "em erro. O CSP do painel e `connect-src 'self'`, entao pedir no outro host "
+                "tambem nao funciona"
+            )
+        elif not any(l.strip().startswith("reverse_proxy api:") for l in corpo):
+            falhas.append(
+                f"no bloco do painel, `handle {caminho}` existe e nao repassa a `api:`"
+            )
+    return falhas
+
+
+# ---------------------------------------------------------------------------
 # Autoteste
 # ---------------------------------------------------------------------------
 
@@ -718,6 +814,27 @@ def autoteste(raiz: Path) -> list[str]:
             falhas.append(f"contrato-com-limite-desconhecido.yaml: reprovou pelo motivo errado: {e}")
 
     # (h) sem bloco administrativo: nao ha o que conferir, e isso reprova.
+    # (h) secao 6: bloco do painel sem a rota PUBLICA que `admin/src` pede.
+    # O estado de `admin-hml.bichu.app` em 17/10. Se o portao aprovar isto, ele
+    # voltou a nao conferir rota publica no host do painel.
+    if texto := caddy("caddyfile-admin-sem-rota-publica"):
+        try:
+            publicas = rotas_publicas_do_painel(raiz / "admin" / "src")
+            if not publicas:
+                falhas.append(
+                    "`admin/src` nao pede nenhuma rota publica, entao esta isca nao tem o que "
+                    "provar. Se o painel passou a falar SO com `/v1/admin/*`, a secao 6 e esta "
+                    "isca saem juntas -- e ate la o portao nao esta conferindo nada"
+                )
+            elif not conferir_rotas_publicas_do_painel(publicas, texto):
+                falhas.append(
+                    "caddyfile-admin-sem-rota-publica: A ISCA PASSOU. O portao aprovou um bloco "
+                    "de painel que manda rota publica de `admin/src` para o 404 da borda, que e "
+                    "o estado medido em `admin-hml.bichu.app` em 17/10"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-admin-sem-rota-publica: reprovou pelo motivo errado: {e}")
+
     if texto := caddy("caddyfile-sem-bloco-admin"):
         try:
             conferir_superficie_admin(texto)
@@ -808,6 +925,18 @@ def main(argv: list[str]) -> int:
         falhas.extend(achados)
     except Reprovacao as e:
         print("  [REPROVA] `/v1/admin*` so no host administrativo (D33, D34)")
+        falhas.append(str(e))
+
+    try:
+        publicas = rotas_publicas_do_painel(raiz / "admin" / "src")
+        achados = conferir_rotas_publicas_do_painel(publicas, caddyfile)
+        print(f"  [{'ok' if not achados else 'REPROVA'}] rota no host do painel para as "
+              f"{len(publicas)} rota(s) PUBLICA(s) que `admin/src` consome")
+        for rota in publicas:
+            print(f"      {rota}")
+        falhas.extend(achados)
+    except Reprovacao as e:
+        print("  [REPROVA] rota no host do painel para rota publica de `admin/src`")
         falhas.append(str(e))
 
     print()
