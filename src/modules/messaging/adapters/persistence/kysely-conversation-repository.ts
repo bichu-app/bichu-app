@@ -37,6 +37,7 @@ import type {
   NovaMensagem,
   Pagina,
   PaginaDoAchador,
+  EspecieDoSistema,
 } from '../../ports/conversation-repository.js';
 import type {
   CaseId,
@@ -60,6 +61,9 @@ interface LinhaDaConversa {
   finder_display_name: string | null;
   tutor_deleted_at: Date | null;
   achador_deleted_at: Date | null;
+  nao_lida: boolean;
+  corpo_da_ultima: string | null;
+  ultima_mensagem_em: Date | null;
 }
 
 interface LinhaDaMensagem {
@@ -91,6 +95,12 @@ function comoConversa(linha: LinhaDaConversa): ConversaDoChamador {
     // `estadoDaConversa` e `participantesVisiveis`, no domínio.
     tutorDesabilitado: linha.tutor_deleted_at !== null,
     achadorDesabilitado: linha.achador_deleted_at !== null,
+    // A LEITURA (BICHUS-278). `nao_lida` sai do `EXISTS` da consulta e nao de
+    // uma comparacao aqui: comparar na aplicacao exigiria trazer as mensagens
+    // de cada linha da lista, que e o N+1 que a lista existe para evitar.
+    naoLida: linha.nao_lida,
+    corpoDaUltima: linha.corpo_da_ultima,
+    ultimaMensagemEm: linha.ultima_mensagem_em,
   };
 }
 
@@ -146,6 +156,31 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
     // LEFT e não INNER: o achador da plaquinha costuma não ter conta, e um
     // INNER aqui faria a conversa dele **desaparecer** da lista do tutor.
     .leftJoin('users as achador', 'achador.id', 'conversations.finder_user_id')
+    // A LEITURA DESTE LADO. `LEFT` e nao `INNER`, e a diferenca e o estado
+    // inicial: a linha so existe depois de a pessoa abrir a conversa uma vez, e
+    // um `INNER` faria toda conversa nunca aberta DESAPARECER da lista -- isto
+    // e, exatamente as que tem recado para ler.
+    //
+    // O papel entra no `ON` por igualdade com a coluna do lado, e nao por um
+    // `CASE`: `role = 'tutor' AND tutor_user_id = :eu` casa uma linha so, e
+    // deixa o predicado legivel para quem audita o SQL compilado.
+    .leftJoin('conversation_reads as leitura', (join) =>
+      join.on((eb) =>
+        eb.and([
+          eb('leitura.conversation_id', '=', eb.ref('conversations.id')),
+          eb.or([
+            eb.and([
+              eb('leitura.role', '=', 'tutor'),
+              eb('conversations.tutor_user_id', '=', chamador),
+            ]),
+            eb.and([
+              eb('leitura.role', '=', 'finder'),
+              eb('conversations.finder_user_id', '=', chamador),
+            ]),
+          ]),
+        ]),
+      ),
+    )
     .select((eb) => [
       'conversations.id',
       'conversations.case_id',
@@ -173,6 +208,44 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
         .else('finder')
         .end()
         .as('papel_do_chamador'),
+      // -------------------------------------------------------------------
+      // A LEITURA DESTE LADO (BICHUS-278)
+      //
+      // `papel_do_chamador` acima nao serve aqui: ele e um ALIAS do SELECT, e
+      // o Postgres nao o enxerga dentro de outra expressao do mesmo SELECT. O
+      // `CASE` e repetido de proposito -- e a MESMA expressao, e nao uma
+      // segunda regra, e `teto-da-leitura.test.ts` le o SQL compilado para
+      // garantir que as duas continuem iguais.
+      //
+      // `sender_role <> <meu papel>` e o que impede a propria mensagem de
+      // voltar como nao lida: sem ele, responder a alguem deixaria a conversa
+      // acesa no sino de quem respondeu.
+      //
+      // NAO HA `conversation_list_views` nesta expressao, e a ausencia e a
+      // regra: abrir a lista NAO marca item. Ver `contarParaOSino`, que e a
+      // unica consulta em que a lista vista entra.
+      sql<boolean>`EXISTS (
+        SELECT 1 FROM conversation_messages msg
+        WHERE msg.conversation_id = conversations.id
+          AND msg.sender_role <> (CASE WHEN conversations.tutor_user_id = ${chamador}
+                                       THEN 'tutor' ELSE 'finder' END)
+          AND (leitura.last_read_at IS NULL OR msg.created_at > leitura.last_read_at)
+      )`.as('nao_lida'),
+      // A PREVIA sai de `conversation_messages.body`, que esta JA REDIGIDO no
+      // banco -- e nunca de `found_reports.notes`, que guarda o recado do
+      // achador EM CLARO. Uma previa tirada de lá publicaria na lista o
+      // telefone que a conversa existe para nao deixar passar. O corte em 140
+      // e do dominio (`previaDaMensagem`), nao daqui.
+      sql<string | null>`(
+        SELECT msg.body FROM conversation_messages msg
+        WHERE msg.conversation_id = conversations.id
+        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
+      )`.as('corpo_da_ultima'),
+      sql<Date | null>`(
+        SELECT msg.created_at FROM conversation_messages msg
+        WHERE msg.conversation_id = conversations.id
+        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
+      )`.as('ultima_mensagem_em'),
     ])
     .where((eb) =>
       eb.or([
@@ -569,7 +642,11 @@ export function criarConversationRepository(db: Db): ConversationRepository {
     gravarMensagem: (mensagem: NovaMensagem) => inserir(db, mensagem),
 
     gravarMensagemDeSistema: (mensagem) =>
-      inserir(db, { ...mensagem, senderRole: 'system', senderUserId: null }),
+      inserir(
+        db,
+        { ...mensagem, senderRole: 'system', senderUserId: null },
+        mensagem.especie,
+      ),
 
     async contarMensagensDoParticipante(conversa, papel, desde): Promise<number> {
       const linha = await construtorDaContagemDoParticipante(
@@ -613,6 +690,92 @@ export function criarConversationRepository(db: Db): ConversationRepository {
     },
 
     /**
+     * O CONTADOR DO SINO (BICHUS-278).
+     *
+     * **É a única consulta deste arquivo em que `conversation_list_views`
+     * entra**, e isso é a regra inteira em uma frase: abrir a lista zera o
+     * NÚMERO e não toca na marca de item. A marca sai de `nao_lida`, na leitura
+     * comum, que não conhece esta tabela.
+     *
+     * A EXCEÇÃO NOMEADA está no `OR msg.system_kind IN (...)`: o aviso de
+     * plaquinha lida e o de achado continuam contando depois de a pessoa abrir a
+     * lista, e saem só quando a conversa deles é aberta (`last_read_at`). Eles
+     * são a coisa mais importante que o produto tem para dizer — alguém está com
+     * o animal na mão agora.
+     *
+     * **`system_kind` NULO cai na regra geral**, de propósito: são as mensagens
+     * de sistema gravadas antes da coluna existir, e não dá para classificá-las
+     * retroativamente. Tratá-las como aviso poria no sino para sempre linhas que
+     * talvez não sejam aviso, sem caminho para saírem.
+     */
+    async contarParaOSino(chamador): Promise<number> {
+      const linha = await sql<{ n: number | string }>`
+        SELECT count(*) AS n
+        FROM conversations c
+        LEFT JOIN conversation_reads leitura
+          ON leitura.conversation_id = c.id
+         AND ((leitura.role = 'tutor'  AND c.tutor_user_id  = ${chamador})
+           OR (leitura.role = 'finder' AND c.finder_user_id = ${chamador}))
+        LEFT JOIN conversation_list_views vista ON vista.user_id = ${chamador}
+        WHERE (c.tutor_user_id = ${chamador} OR c.finder_user_id = ${chamador})
+          AND EXISTS (
+            SELECT 1 FROM conversation_messages msg
+            WHERE msg.conversation_id = c.id
+              AND msg.sender_role <> (CASE WHEN c.tutor_user_id = ${chamador}
+                                           THEN 'tutor' ELSE 'finder' END)
+              AND (leitura.last_read_at IS NULL OR msg.created_at > leitura.last_read_at)
+              AND (msg.system_kind IN ('scan_notice', 'found_notice')
+                   OR vista.seen_at IS NULL
+                   OR msg.created_at > vista.seen_at)
+          )
+      `.execute(db);
+      const n = linha.rows[0]?.n ?? 0;
+      return Number(n);
+    },
+
+    /**
+     * A conta viu a área. **Não marca item nenhum**, e não recebe conversa.
+     *
+     * `ON CONFLICT ... DO UPDATE` e não um `SELECT` antes do `INSERT`: duas
+     * aberturas simultâneas (trocar de aba e voltar) perderiam a corrida.
+     */
+    async marcarListaVista(chamador, agora): Promise<void> {
+      await sql`
+        INSERT INTO conversation_list_views (user_id, seen_at)
+        VALUES (${chamador}, ${new Date(agora)})
+        ON CONFLICT (user_id) DO UPDATE SET seen_at = EXCLUDED.seen_at
+      `.execute(db);
+    },
+
+    /**
+     * Este lado ABRIU a conversa.
+     *
+     * O chamador está no `WHERE` da própria escrita (`SELECT ... WHERE` que
+     * alimenta o `INSERT`), e o PAPEL é derivado do lado em que ele está —
+     * nunca recebido por argumento. Conversa que não é dele seleciona zero
+     * linhas e nada é gravado; a recusa dele é o 404 que o serviço já deu antes.
+     *
+     * `GREATEST` no `DO UPDATE`: duas telas abertas na mesma conta podem gravar
+     * fora de ordem, e um instante MENOR sobrescrevendo um maior faria
+     * mensagens já lidas voltarem a não lidas.
+     */
+    async marcarConversaLida(conversa, chamador, agora): Promise<void> {
+      await sql`
+        INSERT INTO conversation_reads (conversation_id, role, last_read_at)
+        SELECT c.id,
+               (CASE WHEN c.tutor_user_id = ${chamador} THEN 'tutor' ELSE 'finder' END),
+               ${new Date(agora)}
+        FROM conversations c
+        WHERE c.id = ${conversa}
+          AND (c.tutor_user_id = ${chamador} OR c.finder_user_id = ${chamador})
+        ON CONFLICT (conversation_id, role)
+          DO UPDATE SET last_read_at = GREATEST(
+            conversation_reads.last_read_at, EXCLUDED.last_read_at
+          )
+      `.execute(db);
+    },
+
+    /**
      * `ON CONFLICT` sobre o índice parcial de denúncia aberta: a repetição do
      * mesmo lado soma ao item de fila que já existe, em vez de abrir outro.
      * O índice decide, e não um `SELECT` antes do `INSERT`.
@@ -633,7 +796,18 @@ export function criarConversationRepository(db: Db): ConversationRepository {
   };
 }
 
-async function inserir(db: Db, mensagem: NovaMensagem): Promise<MensagemGravada> {
+/**
+ * `especie` só é passada pela mensagem do Bichu, e por isso é o último
+ * parâmetro e não entra em `NovaMensagem`: o `CHECK`
+ * `conversation_messages_especie_so_do_sistema` recusa espécie em linha humana,
+ * e deixar o campo disponível para `gravarMensagem` convidaria ao erro que o
+ * banco então rejeitaria em produção.
+ */
+async function inserir(
+  db: Db,
+  mensagem: NovaMensagem,
+  especie: EspecieDoSistema | null = null,
+): Promise<MensagemGravada> {
   const linha = await db
     .insertInto('conversation_messages')
     .values({
@@ -644,6 +818,7 @@ async function inserir(db: Db, mensagem: NovaMensagem): Promise<MensagemGravada>
       body: mensagem.body,
       redactions: JSON.stringify(mensagem.redactions),
       photo_object_key: null,
+      system_kind: especie,
     })
     .returning([
       'id',

@@ -167,6 +167,19 @@ function bancada(cenario: Cenario = {}): Bancada {
   ];
 
   const repositorio: ConversationRepository = {
+    // BICHUS-278. Estas tres sao do lado COM CONTA, e as rotas do achador nao
+    // as chamam: o achador sem conta nao tem lista nem sino. Reprovam alto em
+    // vez de devolver zero -- um `0` calado aqui esconderia uma rota do achador
+    // que passasse a mexer na leitura do tutor, que seria defeito grave.
+    contarParaOSino: () => {
+      throw new Error('as rotas do achador nao contam o sino de ninguem');
+    },
+    marcarListaVista: () => {
+      throw new Error('o achador sem conta nao tem area de mensagens');
+    },
+    marcarConversaLida: () => {
+      throw new Error('a leitura do achador sem conta nao e gravada por aqui');
+    },
     buscarPeloTokenDoAchador: (resumo) => {
       argumentos.push(resumo);
       return Promise.resolve(eDoToken(resumo) ? conversa : undefined);

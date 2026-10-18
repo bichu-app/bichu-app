@@ -866,6 +866,50 @@ export interface ConversationMessagesTable {
   /** Chave de objeto, nunca URL. */
   photo_object_key: string | null;
   created_at: Generated<Date>;
+  /**
+   * Especie da mensagem do Bichu, para a EXCECAO do contador (BICHUS-278).
+   *
+   * `scan_notice` e `found_notice` NAO saem do contador quando a pessoa abre a
+   * lista -- sao a coisa mais importante que o produto tem para dizer. Nulo nas
+   * linhas gravadas antes da coluna: nao da para classificar retroativamente, e
+   * nulo cai na regra geral.
+   */
+  system_kind: EspecieDaMensagemDoSistema | null;
+}
+
+/**
+ * BICHUS-278. As tres especies de mensagem do Bichu.
+ *
+ * As duas primeiras sao AVISO e por isso tem tratamento proprio no contador; a
+ * terceira e explicacao de interface e sai do contador pela regra geral.
+ */
+export type EspecieDaMensagemDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
+
+/**
+ * BICHUS-278. Ate quando cada LADO leu a conversa.
+ *
+ * Chave por (conversa, PAPEL) e nao por usuario, pela mesma razao de
+ * `conversations.blocked_by_role`: o achador pode nao ter conta, e a maioria nao
+ * tem. Ausencia de linha significa **nunca abriu**, que e o estado em que toda
+ * mensagem esta nao lida -- e e por isso que nao ha `DEFAULT now()`.
+ *
+ * Escrito ao ABRIR A CONVERSA, nunca ao abrir a lista: "lido" e o item aberto.
+ */
+export interface ConversationReadsTable {
+  conversation_id: string;
+  role: 'tutor' | 'finder';
+  last_read_at: Date;
+}
+
+/**
+ * BICHUS-278. Quando a CONTA abriu a area de mensagens.
+ *
+ * Zera o contador do sino e **nao** marca item nenhum como lido. Por conta e
+ * nao por aparelho: o contador e o mesmo nos dois telefones da mesma pessoa.
+ */
+export interface ConversationListViewsTable {
+  user_id: string;
+  seen_at: Date;
 }
 
 /**
@@ -1715,6 +1759,8 @@ export interface Database {
   lost_cases: LostCasesTable;
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;
+  conversation_reads: ConversationReadsTable;
+  conversation_list_views: ConversationListViewsTable;
   conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;

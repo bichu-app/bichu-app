@@ -1138,7 +1138,8 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
 /// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
 /// a uniao. (antes: dd6582d172)
-const String _arvoreDasTelas = 'e675a974ef5ed14cbc6de3b783bd7de1b5fc2eca'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. Os dois paragrafos acima ficaram INTEIROS, um de cada lado da colisao, por serem justificativas de intencoes diferentes. (valores de ramo isolado, TODOS invalidos nesta uniao: 50b766d431, 3fa5040a93, 21a7386cb2, 31bc7c80, 6e82b4f1, 144331ca, 9e61895d, dd6582d172, 49d7f18b03; base 45b6093e7f)
+///
+const String _arvoreDasTelas = 'aed2ac48d875a4f4c0bf755b8b78591b3faeabda'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

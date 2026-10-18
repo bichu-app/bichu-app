@@ -70,6 +70,23 @@ export interface ConversaDoChamador {
    */
   readonly tutorDesabilitado: boolean;
   readonly achadorDesabilitado: boolean;
+  /**
+   * Há mensagem que ESTE lado ainda não leu (BICHUS-278).
+   *
+   * Não conta a mensagem do próprio chamador, e **não** é afetado por ele ter
+   * aberto a lista: "lido" é o item aberto. Ver a migração
+   * `20261018000014_leitura-da-conversa-por-participante.sql`.
+   */
+  readonly naoLida: boolean;
+  /**
+   * O corpo da última mensagem, **como está no banco** — isto é, já redigido.
+   *
+   * `null` quando a conversa não tem mensagem. O corte é do domínio
+   * (`previaDaMensagem`), e não da consulta: cortar no SQL faria o teto virar
+   * um número escrito em dois lugares.
+   */
+  readonly corpoDaUltima: string | null;
+  readonly ultimaMensagemEm: Date | null;
 }
 
 export interface MensagemGravada {
@@ -98,6 +115,18 @@ export interface NovaMensagem {
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
 }
+
+/**
+ * As três espécies de mensagem do Bichu (BICHUS-278).
+ *
+ * As duas primeiras são AVISO, e por isso não saem do contador quando a pessoa
+ * abre a lista. A terceira é explicação de interface e sai pela regra geral.
+ *
+ * Existe para que a espécie seja ARGUMENTO de quem grava, e não deduzida depois
+ * pelo texto: uma heurística sobre a microcopy quebraria no dia em que a frase
+ * mudasse, e quebraria em silêncio — o aviso sumiria do contador.
+ */
+export type EspecieDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
 
 /**
  * A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41).
@@ -189,9 +218,18 @@ export interface ConversationRepository {
 
   gravarMensagem(mensagem: NovaMensagem): Promise<MensagemGravada>;
 
-  /** Mensagem do Bichu. Sem remetente humano, e por isso sem chamador. */
+  /**
+   * Mensagem do Bichu. Sem remetente humano, e por isso sem chamador.
+   *
+   * `especie` é obrigatória desde a BICHUS-278: é ela que decide se o aviso
+   * sobrevive a uma passada de olho na lista. Obrigatória e não opcional de
+   * propósito — um default silencioso faria a próxima mensagem de sistema
+   * nascer fora do contador sem ninguém decidir isso.
+   */
   gravarMensagemDeSistema(
-    mensagem: Omit<NovaMensagem, 'senderRole' | 'senderUserId'>,
+    mensagem: Omit<NovaMensagem, 'senderRole' | 'senderUserId'> & {
+      readonly especie: EspecieDoSistema;
+    },
   ): Promise<MensagemGravada>;
 
   /** Quantas mensagens este papel mandou nesta conversa desde o instante dado. */
@@ -277,4 +315,47 @@ export interface ConversationRepository {
    * conversa (`accept_and_deduplicate`).
    */
   registrarDenuncia(denuncia: NovaDenuncia): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // A LEITURA, e o contador do sino (BICHUS-278)
+  //
+  // Três métodos e não um, porque são três fatos diferentes. Juntá-los faria
+  // abrir a lista marcar tudo como lido — o defeito exato que a regra proíbe.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Quantas conversas entram no contador do sino AGORA.
+   *
+   * **Não é "quantas estão não lidas".** Abrir a lista zera este número e deixa
+   * as marcas de item como estavam; o aviso de plaquinha lida e o de achado
+   * (`system_kind`) **não** saem daqui ao abrir a lista — só quando a conversa
+   * deles é aberta.
+   *
+   * Derivado na leitura, nunca materializado: duas fontes para o mesmo fato
+   * divergem no primeiro caminho que esquecer de decrementar uma delas.
+   */
+  contarParaOSino(chamador: UserId): Promise<number>;
+
+  /**
+   * A CONTA viu a área de mensagens. Zera o contador, **sem** marcar item.
+   *
+   * Idempotente por `ON CONFLICT`: chamar duas vezes seguidas grava o instante
+   * novo e responde igual. Não recebe lista de conversas de propósito — se
+   * recebesse, alguém acabaria passando todas e marcando-as como lidas.
+   */
+  marcarListaVista(chamador: UserId, agora: Instant): Promise<void>;
+
+  /**
+   * ESTE LADO abriu a conversa: marca o item como lido até `agora`.
+   *
+   * O `chamador` entra no `WHERE` da própria escrita, como em todo método deste
+   * arquivo: conversa que não é dele não é marcada. O PAPEL **não** vem por
+   * argumento — ele é derivado do lado em que o chamador está, pela mesma razão
+   * de `bloquearPeloChamador`.
+   */
+  marcarConversaLida(
+    conversa: ConversationId,
+    chamador: UserId,
+    agora: Instant,
+  ): Promise<void>;
 }

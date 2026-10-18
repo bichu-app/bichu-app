@@ -257,6 +257,20 @@ abstract final class MensagensDeErro {
           acao: 'Registrar que achei um pet',
           proximaAcao: ProximaAcao.registrarAchadoAvulso,
         ),
+      // `conversation-closed` (410). **A area de mensagens NAO passa por aqui**:
+      // ela trata o 410 como estado da conversa -- modo leitura, sem caixa de
+      // texto -- e nao como erro, porque "nao foi possivel" numa conversa que
+      // acabou faria a pessoa tentar de novo para sempre. Ver
+      // `telas/mensagens/tela_da_conversa.dart`.
+      //
+      // O texto existe porque este catalogo e exaustivo e o compilador cobra:
+      // ele e a rede de seguranca para um 410 que chegue por um caminho que
+      // ainda nao existe, e diz o estado em vez de prometer uma saida.
+      ProblemTipo.conversaEncerrada => const MensagemDeErro(
+          texto: 'Esta conversa está encerrada e não aceita mensagem nova. '
+              'Você continua lendo o que foi escrito.',
+          acao: 'Voltar para as mensagens',
+        ),
       ProblemTipo.reautenticacaoNecessaria => const MensagemDeErro(
           texto: 'Confirme sua senha. Esta ação não pode ser desfeita, então '
               'pedimos a senha de novo.',

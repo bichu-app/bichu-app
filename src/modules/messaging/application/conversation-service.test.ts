@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { AppError } from '../../../shared/http/errors.js';
+import { selarContador, TETO_DA_PREVIA } from '../domain/conversa-mediada.js';
 import { comoData } from '../../../shared/time/clock.js';
 import { ConversationService, type Chamador } from './conversation-service.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
@@ -50,6 +51,8 @@ interface Estado {
   readonly mensagensDoParticipante?: number | undefined;
   readonly casosDistintos?: number | undefined;
   readonly conversaDoAviso?: ConversationId | undefined;
+  /** BICHUS-278: o que `contarParaOSino` devolve. */
+  readonly naoLidasNoSino?: number | undefined;
 }
 
 function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoChamador {
@@ -67,6 +70,11 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
     casoEncerrado: false,
     nomeDoTutor: 'Leandro Panegassi',
     nomeDoAchador: 'Ana Paula Ribeiro',
+    // BICHUS-278. O padrao e "lida e sem mensagem": o caso que fala de leitura
+    // passa o que precisa por `parcial`, e os outros nao mudam de significado.
+    naoLida: false,
+    corpoDaUltima: null,
+    ultimaMensagemEm: null,
     ...parcial,
   };
 }
@@ -78,6 +86,8 @@ function bancada(estado: Estado = {}) {
   const bloqueios: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
   const denuncias: NovaDenuncia[] = [];
   const eventos: AuditEvent[] = [];
+  const listasVistas: { chamador: UserId; agora: Instant }[] = [];
+  const conversasLidas: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
 
   const conversa = estado.conversa === undefined ? undefined : conversaAberta(estado.conversa);
 
@@ -87,6 +97,17 @@ function bancada(estado: Estado = {}) {
       return Promise.resolve();
     },
     porAviso: () => Promise.resolve(estado.conversaDoAviso ?? CONVERSA),
+    // BICHUS-278. Os tres sao REGISTRADORES e nao no-ops: os casos de leitura
+    // conferem que `buscar` marca o item e que `listar` NAO marca nada.
+    contarParaOSino: () => Promise.resolve(estado.naoLidasNoSino ?? 0),
+    marcarListaVista: (chamador, agora) => {
+      listasVistas.push({ chamador, agora });
+      return Promise.resolve();
+    },
+    marcarConversaLida: (conversa_, chamador, agora) => {
+      conversasLidas.push({ conversa: conversa_, chamador, agora });
+      return Promise.resolve();
+    },
     listarDoChamador: () => Promise.resolve(conversa === undefined ? [] : [conversa]),
     buscarDoChamador: () => Promise.resolve(conversa),
     mensagens: () => Promise.resolve([]),
@@ -150,6 +171,8 @@ function bancada(estado: Estado = {}) {
     bloqueios,
     denuncias,
     eventos,
+    listasVistas,
+    conversasLidas,
   };
 }
 
@@ -411,6 +434,7 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
       recado: 'achei ela, me liga 11987654321',
       achadorComConta: null,
       avisoAnteriorId: null,
+      especie: 'scan_notice',
     });
 
     assert.equal(aberturas.length, 1, 'a conversa não foi aberta');
@@ -434,6 +458,7 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
       recado: null,
       achadorComConta: null,
       avisoAnteriorId: '018f3a2b-0000-7000-8000-00000000ffff' as FoundReportId,
+      especie: 'scan_notice',
     });
     assert.deepEqual(aberturas, [], 'abriu a segunda conversa para um aviso agrupado');
     assert.equal(gravadas.length, 1, 'o aviso agrupado precisa virar mensagem na que existe');
@@ -604,5 +629,192 @@ void describe('reportConversation: a denúncia do lado com conta', () => {
     const { servico } = bancada({});
 
     assert.equal(await servico.alvoDaDenuncia(CONVERSA, chamador(TUTOR)), undefined);
+  });
+});
+
+// ===========================================================================
+// BICHUS-278 — A LEITURA: "lido" é o ITEM ABERTO, não a lista vista.
+//
+// A exceção do aviso de plaquinha vive no SQL de `contarParaOSino` (pelo
+// `system_kind`) e é exercitada contra o banco de verdade; o que estes casos
+// pegam é a outra metade, que nenhum SQL pega: que `listar` **não** marca nada
+// e que `buscar` marca.
+// ===========================================================================
+
+void describe('BICHUS-278 — abrir a lista NÃO é abrir as conversas', () => {
+  void it('ISCA: `listar` não marca conversa nenhuma como lida', async () => {
+    const { servico, conversasLidas } = bancada({
+      conversa: { papelDoChamador: 'tutor', naoLida: true },
+    });
+    await servico.listar(chamador(TUTOR), PAGINA);
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'listar marcou conversa como lida; isso apaga a única pista de QUAL conversa guarda o recado',
+    );
+  });
+
+  void it('ISCA: `listar` também não marca a LISTA como vista', async () => {
+    // Zerar o contador é uma escrita com rota própria
+    // (`markMyConversationsSeen`). Pendurá-la no GET faria um `Atualizar`, ou
+    // um pré-carregamento, apagar o sino sem a pessoa ter olhado nada.
+    const { servico, listasVistas } = bancada({ conversa: {} });
+    await servico.listar(chamador(TUTOR), PAGINA);
+    assert.deepEqual(listasVistas, [], 'o GET da lista zerou o contador');
+  });
+
+  void it('o contador da página vem do repositório, e não da contagem dos itens', async () => {
+    // 23 no sino e UMA conversa na página: é o que acontece com quem tem 57 e
+    // vê 20. Somar a página mostraria 1.
+    const { servico } = bancada({
+      conversa: { naoLida: true },
+      naoLidasNoSino: 23,
+    });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.naoLidas, 23, 'o contador não veio do repositório');
+    assert.equal(pagina.items.length, 1);
+  });
+
+  void it('ISCA: `buscar` MARCA a conversa como lida — abrir o item é o que significa "lido"', async () => {
+    const { servico, conversasLidas } = bancada({
+      conversa: { papelDoChamador: 'tutor', naoLida: true },
+    });
+    await servico.buscar(CONVERSA, chamador(TUTOR), PAGINA);
+    assert.equal(conversasLidas.length, 1, 'abrir a conversa não marcou nada como lido');
+    assert.equal(conversasLidas[0]?.conversa, CONVERSA);
+    assert.equal(conversasLidas[0]?.chamador, TUTOR, 'marcou a leitura de outra conta');
+  });
+
+  void it('ISCA: paginar para TRÁS não marca como lida', async () => {
+    // Pedir mensagens antigas é a pessoa procurando o que já leu; marcar ali
+    // zeraria o contador sem ela ter visto a mensagem NOVA, que é o topo.
+    const { servico, conversasLidas } = bancada({ conversa: {} });
+    await servico.buscar(CONVERSA, chamador(TUTOR), {
+      limit: 20,
+      depoisDe: { criadaEm: comoData(AGORA), id: 'm-1' },
+    });
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'paginar para trás marcou como lida; o contador zeraria sem a pessoa ver a mensagem nova',
+    );
+  });
+
+  void it('`marcarListaVista` do serviço zera o contador e NÃO toca em item', async () => {
+    const { servico, listasVistas, conversasLidas } = bancada({ conversa: {} });
+    await servico.marcarListaVista(chamador(TUTOR));
+    assert.equal(listasVistas.length, 1, 'não marcou a lista como vista');
+    assert.equal(listasVistas[0]?.chamador, TUTOR);
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'marcar a lista como vista marcou itens como lidos — é exatamente o defeito que a regra proíbe',
+    );
+  });
+
+  void it('conversa de TERCEIRO responde 404 e não grava leitura nenhuma', async () => {
+    // A escrita acontece depois da leitura vinculada, e por isso ela não é um
+    // oráculo: sem conversa, nada é marcado.
+    const { servico, conversasLidas } = bancada({});
+    await assert.rejects(() => servico.buscar(CONVERSA, chamador(TUTOR), PAGINA));
+    assert.deepEqual(conversasLidas, [], 'gravou leitura de uma conversa que não é do chamador');
+  });
+});
+
+void describe('BICHUS-278 — a prévia não desfaz a redação', () => {
+  void it('a prévia sai do corpo JÁ REDIGIDO, com o marcador no lugar do telefone', async () => {
+    const { servico } = bancada({
+      conversa: {
+        // É este o valor que o banco guarda: o telefone já saiu.
+        corpoDaUltima: 'me liga no [telefone removido] que eu levo',
+        ultimaMensagemEm: comoData(AGORA),
+      },
+    });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    const previa = pagina.items[0]?.previaDaUltima ?? '';
+    assert.match(previa, /\[telefone removido\]/u);
+    assert.doesNotMatch(previa, /\d{4,}/u, 'a prévia trouxe de volta uma sequência de dígitos');
+  });
+
+  void it('ISCA: a prévia é CORTADA, e o corte não devolve o corpo inteiro', async () => {
+    const longo = `${'a'.repeat(400)} FIM`;
+    const { servico } = bancada({ conversa: { corpoDaUltima: longo } });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    const previa = pagina.items[0]?.previaDaUltima ?? '';
+    assert.ok(previa.length <= TETO_DA_PREVIA, `prévia com ${previa.length} caracteres`);
+    assert.doesNotMatch(previa, /FIM/u, 'a prévia trouxe o fim de um corpo de 400 caracteres');
+  });
+
+  void it('CONTRAPESO: conversa sem mensagem devolve prévia NULA, e não string vazia', async () => {
+    // Sem este contrapeso, uma função que devolvesse sempre `''` passaria nos
+    // dois casos acima.
+    const { servico } = bancada({ conversa: { corpoDaUltima: null } });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.items[0]?.previaDaUltima, null);
+    assert.equal(pagina.items[0]?.ultimaMensagemEm, null);
+  });
+
+  void it('`selarContador` corta em 9+, e zero não desenha nada', () => {
+    assert.equal(selarContador(0), null, 'zero virou selo; um `0` pintado chama o olho para nada');
+    assert.equal(selarContador(-3), null);
+    assert.equal(selarContador(1), '1');
+    assert.equal(selarContador(9), '9');
+    assert.equal(selarContador(10), '9+');
+    assert.equal(selarContador(237), '9+', 'três dígitos comem o espaço do título na barra');
+  });
+});
+
+void describe('BICHUS-278 — a espécie do aviso chega ao banco', () => {
+  void it('ISCA: a mensagem de abertura é gravada COM a espécie do aviso', async () => {
+    // É esta marca que faz o aviso de plaquinha sobreviver a uma passada de
+    // olho na lista. Sem ela, o recado sai do contador e ninguém sabe por quê.
+    const { servico, gravadas } = bancada({ conversa: {} });
+    await servico.abrirPorAviso({
+      foundReportId: AVISO,
+      petId: PET,
+      nomeDoPet: 'Aurora',
+      escaneadoEm: AGORA,
+      rotuloDaArea: 'Centro',
+      recado: 'está comigo',
+      achadorComConta: null,
+      avisoAnteriorId: null,
+      especie: 'scan_notice',
+    });
+    const abertura = gravadas.at(-1) as { especie?: string } | undefined;
+    assert.equal(abertura?.especie, 'scan_notice', 'a abertura foi gravada sem espécie');
+  });
+
+  void it('ISCA: o achado confirmado grava `found_notice`, e não `scan_notice`', async () => {
+    const { servico, gravadas } = bancada({ conversa: {} });
+    await servico.abrirPorAviso({
+      foundReportId: AVISO,
+      petId: PET,
+      nomeDoPet: 'Aurora',
+      escaneadoEm: AGORA,
+      rotuloDaArea: null,
+      recado: null,
+      achadorComConta: null,
+      avisoAnteriorId: null,
+      especie: 'found_notice',
+    });
+    const abertura = gravadas.at(-1) as { especie?: string } | undefined;
+    assert.equal(abertura?.especie, 'found_notice');
+  });
+
+  void it('CONTRAPESO: o aviso de dado retirado é `redaction_warning`, e NÃO aviso', async () => {
+    // Marcá-lo como aviso deixaria o sino de quem escreveu o telefone aceso
+    // por uma frase que ele acabou de ler na própria tela.
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+    });
+    await servico.enviar(CONVERSA, 'me liga no 11 98765-4321', chamador(TUTOR));
+    const sistema = gravadas.find(
+      (m) => (m as { senderRole?: string }).senderRole === 'system',
+    ) as { especie?: string } | undefined;
+    assert.equal(
+      sistema?.especie,
+      'redaction_warning',
+      'o aviso de dado retirado foi marcado como aviso de plaquinha/achado',
+    );
   });
 });

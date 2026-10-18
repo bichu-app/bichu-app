@@ -68,6 +68,32 @@ export const rotaDeListagemDeConversas = defineRoute({
   effects: [],
 });
 
+/**
+ * `POST /v1/me/conversations-seen` -- a area de mensagens foi VISTA.
+ *
+ * **`effects` vazio E teto declarado**, como `blockConversation`: a regra de
+ * `x-effects` e piso e nao teto (secao 5 do contrato). Esta rota escreve, e nao
+ * notifica ninguem nem gera trabalho humano.
+ *
+ * `accept_and_deduplicate` e **nao** `deny_429`, e isso e de produto: a tela
+ * chama isto a cada abertura da area, e trocar de aba e voltar e normal. Um 429
+ * aqui deixaria o sino ACESO para quem acabou de ler -- que e exatamente a
+ * mentira que este contador existe para evitar.
+ *
+ * **Em `/me` e nao em `/conversations/seen`**: `conversationId` e um `uuid` no
+ * caminho irmao, e depender da precedencia do roteador para `seen` nao ser lido
+ * como id e uma garantia que nao se escreve no contrato.
+ */
+export const rotaDeListaVista = defineRoute({
+  operationId: 'markMyConversationsSeen',
+  method: 'post',
+  path: '/me/conversations-seen',
+  effects: [],
+  rateLimit: [
+    { dimension: ['account'], limit: 240, window: '1h', onExceed: 'accept_and_deduplicate' },
+  ],
+});
+
 export const rotaDeDetalheDaConversa = defineRoute({
   operationId: 'getConversation',
   method: 'get',
@@ -311,6 +337,12 @@ function comoResposta(conversa: ConversaVisivel): Record<string, unknown> {
       display_name: p.displayName,
     })),
     messages: conversa.messages.map(comoMensagem),
+    // A LEITURA (BICHUS-278). Os tres saem do servico, que os leu do banco:
+    // nenhum deles e calculado aqui, e nenhum e calculado no cliente.
+    unread: conversa.naoLida,
+    last_message_preview: conversa.previaDaUltima,
+    last_message_at:
+      conversa.ultimaMensagemEm === null ? null : conversa.ultimaMensagemEm.toISOString(),
     next_cursor: conversa.nextCursor,
   };
 }
@@ -342,6 +374,10 @@ export function registrarRotasDeConversas(
       const pagina_ = await deps.conversas.listar(chamador, pagina);
       return reply.status(200).send({
         items: pagina_.items.map(comoResposta),
+        // O CONTADOR DO SINO, da conta INTEIRA e nao desta pagina: somar a
+        // pagina faria o sino mostrar 20 para quem tem 57. O numero vai SEM
+        // teto; o corte em `9+` e de apresentacao e mora no app.
+        unread_count: pagina_.naoLidas,
         next_cursor: pagina_.nextCursor,
       });
     },

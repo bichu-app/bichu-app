@@ -31,6 +31,7 @@ import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import type {
   ConversaDoChamador,
   ConversationRepository,
+  EspecieDoSistema,
   MensagemGravada,
   MotivoDaDenuncia,
   Pagina,
@@ -39,6 +40,7 @@ import {
   aceitaMensagem,
   estadoDaConversa,
   participantesVisiveis,
+  previaDaMensagem,
   type EstadoDaConversa,
   type ParticipanteVisivel,
   type SinaisDeEstado,
@@ -75,12 +77,26 @@ export interface ConversaVisivel {
   readonly participants: readonly ParticipanteVisivel[];
   readonly messages: readonly MensagemGravada[];
   readonly nextCursor: string | null;
+  /** `Conversation.unread` do contrato. Vem do banco, nunca de contagem local. */
+  readonly naoLida: boolean;
+  /** `Conversation.last_message_preview`, já cortado pelo domínio. */
+  readonly previaDaUltima: string | null;
+  readonly ultimaMensagemEm: Date | null;
 }
 
 /** A página de `GET /v1/conversations`, com o cursor da próxima. */
 export interface PaginaDeConversas {
   readonly items: readonly ConversaVisivel[];
   readonly nextCursor: string | null;
+  /**
+   * `ConversationPage.unread_count` do contrato: o contador do sino.
+   *
+   * **Não é `items.filter(naoLida).length`**, e a diferença é a regra: o
+   * contador conhece a lista vista e a exceção do aviso de plaquinha; a marca de
+   * item não. Além disso ele conta a conta INTEIRA, e não a página — somar a
+   * página faria o sino mostrar 20 para quem tem 57.
+   */
+  readonly naoLidas: number;
 }
 
 /** O que o aviso entrega ao abrir a conversa. */
@@ -99,7 +115,32 @@ export interface AvisoRegistrado {
    * lugares, e o tutor veria duas linhas para a mesma pessoa.
    */
   readonly avisoAnteriorId: FoundReportId | null;
+  /**
+   * Que AVISO é este (BICHUS-278): plaquinha lida, ou achado confirmado.
+   *
+   * Decide o `system_kind` da mensagem de abertura, e com isso se o aviso
+   * sobrevive a uma passada de olho na lista — os dois sobrevivem, e é por isso
+   * que os dois valores possíveis aqui são os dois que a exceção nomeia.
+   *
+   * **Argumento, e não dedução pelo texto.** Uma heurística sobre a microcopy
+   * da primeira mensagem quebraria no dia em que a frase mudasse, e quebraria em
+   * silêncio: o aviso sumiria do contador e ninguém saberia por quê.
+   *
+   * Quem decide é a composição (`src/bin/api.ts`), que é o único lugar do
+   * sistema que conhece os dois caminhos — `tags` e `lostfound` continuam
+   * indiferentes à conversa, como o comentário daquele arquivo já dizia.
+   */
+  readonly especie: EspecieDoAviso;
 }
+
+/**
+ * As duas espécies de AVISO. São as duas que não saem do contador quando a
+ * pessoa abre a lista.
+ *
+ * `redaction_warning` não está aqui de propósito: ela é explicação de
+ * interface, não aviso, e sai do contador pela regra geral.
+ */
+export type EspecieDoAviso = Extract<EspecieDoSistema, 'scan_notice' | 'found_notice'>;
 
 export interface DependenciasDaConversa {
   readonly repositorio: ConversationRepository;
@@ -169,10 +210,21 @@ export class ConversationService {
    * vista — não "esta conversa está vazia", e sim "esta vista não as carrega".
    */
   async listar(chamador: Chamador, pagina: Pagina): Promise<PaginaDeConversas> {
-    const conversas = await this.deps.repositorio.listarDoChamador(chamador.userId, pagina);
+    // As duas em paralelo: o contador é da CONTA inteira e não depende da
+    // página, então serializá-las só somaria latência na tela que o tutor abre
+    // com o telefone tocando.
+    const [conversas, naoLidas] = await Promise.all([
+      this.deps.repositorio.listarDoChamador(chamador.userId, pagina),
+      this.deps.repositorio.contarParaOSino(chamador.userId),
+    ]);
     return {
       items: conversas.map((c) => this.comoVisivel(c, [], null)),
       nextCursor: proximoDaLista(conversas, pagina.limit),
+      // **ESTA LINHA NÃO CHAMA `marcarListaVista`.** Ler a lista é um GET e
+      // declara `x-effects: []`; zerar o contador é uma escrita e tem rota
+      // própria. Pendurá-la aqui faria um `Atualizar`, ou um pré-carregamento,
+      // apagar o sino sem a pessoa ter olhado nada.
+      naoLidas,
     };
   }
 
@@ -184,6 +236,26 @@ export class ConversationService {
   ): Promise<ConversaVisivel> {
     const encontrada = await this.exigirDoChamador(conversa, chamador);
     const mensagens = await this.deps.repositorio.mensagens(conversa, chamador.userId, pagina);
+    // ABRIR A CONVERSA É O QUE SIGNIFICA "LIDO" (BICHUS-278).
+    //
+    // A escrita acontece DEPOIS da leitura vinculada, e por isso ela não é um
+    // oráculo: conversa de terceiro já saiu por 404 em `exigirDoChamador`, e
+    // nada é gravado. O `chamador` entra no `WHERE` da escrita de todo modo --
+    // duas chaves, como no resto deste arquivo.
+    //
+    // **A primeira página é a condição.** Paginar para trás (`cursor`) é a
+    // pessoa buscando mensagem ANTIGA; marcar ali faria o contador zerar sem a
+    // pessoa ter visto a mensagem nova, que é o topo da conversa.
+    if (pagina.depoisDe === undefined) {
+      await this.deps.repositorio.marcarConversaLida(
+        conversa,
+        chamador.userId,
+        this.deps.clock.now(),
+      );
+    }
+    // A conversa devolvida é a LIDA ANTES da marca, de propósito: é esse o
+    // estado que a pessoa está abrindo. Devolver `unread: false` aqui faria a
+    // tela não ter como destacar o que acabou de chegar.
     return this.comoVisivel(encontrada, mensagens, proximoCursor(mensagens, pagina.limit));
   }
 
@@ -222,6 +294,10 @@ export class ConversationService {
         conversationId: conversa,
         body: AVISO_DE_DADO_RETIRADO,
         redactions: [],
+        // Explicação de interface, e NÃO aviso: sai do contador pela regra
+        // geral. Marcá-la como aviso faria o sino de quem escreveu o telefone
+        // ficar aceso por uma frase que ele acabou de ler na própria tela.
+        especie: 'redaction_warning',
       });
     }
 
@@ -366,6 +442,9 @@ export class ConversationService {
       conversationId: conversa,
       body: mensagem.texto,
       redactions: mensagem.retirados,
+      // ESTA É A MENSAGEM QUE NÃO PODE SUMIR DO CONTADOR. Ela carrega o recado
+      // de quem está com o animal na mão, e é a razão de a exceção existir.
+      especie: aviso.especie,
     });
   }
 
@@ -443,7 +522,28 @@ export class ConversationService {
       }),
       messages: mensagens,
       nextCursor,
+      naoLida: conversa.naoLida,
+      // O CORTE ACONTECE AQUI, no caminho que as duas rotas atravessam, e não
+      // no SQL: o teto é um número e ele mora num lugar só. `previaDaMensagem`
+      // recebe o corpo COMO ESTÁ NO BANCO -- isto é, já redigido --, e por isso
+      // a prévia não tem de onde desfazer a redação.
+      previaDaUltima:
+        conversa.corpoDaUltima === null ? null : previaDaMensagem(conversa.corpoDaUltima),
+      ultimaMensagemEm: conversa.ultimaMensagemEm,
     };
+  }
+
+  /**
+   * `POST /v1/me/conversations-seen` -- a conta VIU a área de mensagens.
+   *
+   * Zera o contador e **não marca conversa nenhuma como lida**. É um método de
+   * uma linha e precisa continuar sendo: toda tentação de "aproveitar e marcar
+   * as da página" cabe exatamente aqui, e seria o defeito que a regra proíbe --
+   * o tutor abriria a área, veria o sino apagar, e perderia a marca de qual
+   * conversa guarda o recado.
+   */
+  async marcarListaVista(chamador: Chamador): Promise<void> {
+    await this.deps.repositorio.marcarListaVista(chamador.userId, this.deps.clock.now());
   }
 }
 

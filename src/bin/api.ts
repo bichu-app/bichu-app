@@ -553,7 +553,11 @@ export async function main(): Promise<void> {
     // aviso a uma porta de um metodo so. Quem liga os dois e esta linha.
     conversaDoAviso: {
       aoRegistrarAviso: async (aviso) => {
-        await conversas.abrirPorAviso(aviso);
+        // `scan_notice`: PLAQUINHA LIDA. Este aviso nao sai do contador do sino
+        // quando o tutor abre a lista -- so quando ele abre a conversa
+        // (BICHUS-278). A especie e decidida AQUI porque este arquivo e o unico
+        // que conhece os dois caminhos; `tags` continua indiferente a conversa.
+        await conversas.abrirPorAviso({ ...aviso, especie: 'scan_notice' });
       },
     },
     // O EMISSOR DO AVISO AO TUTOR. A MESMA fila de `alert.dispatch` e de
@@ -775,7 +779,9 @@ export async function main(): Promise<void> {
       // achado avulso abre no portao da decisao), e nao COMO.
       conversaDaCorrespondencia: {
         aoConfirmarCorrespondencia: async (aviso) => {
-          await conversas.abrirPorAviso(aviso);
+          // `found_notice`: ACHADO confirmado pela decisao humana do tutor.
+          // Mesma regra do `scan_notice`: nao sai do contador ao abrir a lista.
+          await conversas.abrirPorAviso({ ...aviso, especie: 'found_notice' });
         },
       },
     }),
