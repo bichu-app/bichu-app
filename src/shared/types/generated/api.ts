@@ -756,6 +756,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pets/{petId}/tag-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir a plaquinha da coleira de um pet
+         * @description Cria o pedido do tutor para UM pet dele e responde **200** com o estado
+         *     que o app ve. Pet de outra pessoa **nao existe**: a autorizacao esta na
+         *     clausula `WHERE` e a resposta e `404`, nunca `403` (ADR-0021).
+         *
+         *     **Idempotente sem chave de idempotencia**: ha no maximo um pedido
+         *     `pending` por pet (indice parcial unico no banco), e pedir de novo
+         *     devolve o pedido que ja existe em vez de encher a fila com a mesma
+         *     coisa. Depois de atendido, um pedido novo e aceito -- a segunda
+         *     plaquinha e um pedido legitimo.
+         *
+         *     **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
+         *     que o painel usa no caminho nao e projetado para o app, que nao tem o
+         *     que fazer com ele.
+         */
+        post: operations["requestCollarTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pets/{petId}/tags/{tagId}/qr.png": {
         parameters: {
             query?: never;
@@ -3485,6 +3519,100 @@ export interface paths {
          *     e nao recoloca o pedido na fila (ADR-0027 item 17 e 12.11). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
          */
         post: operations["declineAdminNetworkJoinRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de pedidos da plaquinha da coleira
+         * @description So existe no painel. Sem filtro, vem a fila de `pending`, do pedido
+         *     mais antigo para o mais novo.
+         *
+         *     **NAO LE PESSOA, e a ausencia e deliberada.** Nenhum campo do
+         *     solicitante sai aqui: nem nome, nem e-mail, nem identificador estavel.
+         *     A unica leitura de pessoa do backoffice v1 e a fila de pedidos de
+         *     encontro, coberta pelo RA-01 por decisao do cliente de 23/09 (D53 a
+         *     D57); abrir uma segunda seria decidir no lugar dele. E, enquanto
+         *     entrega e cobranca estiverem em aberto, o nome do solicitante nao
+         *     tornaria o pedido cumprivel -- faltaria o endereco do mesmo jeito.
+         *
+         *     **Nao traz o codigo da plaquinha.** O codigo e credencial ao portador
+         *     (ADR-0004) e hoje sai em duas superficies, as duas do tutor; uma
+         *     terceira, no painel, e decisao que o cliente ainda nao tomou. O que
+         *     identifica o pedido para quem atende e `ref` e o nome do pet.
+         */
+        get: operations["listAdminCollarTagRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/fulfillment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca que a plaquinha saiu
+         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
+         *     outros casos). Pedido que nao existe, ou de pet ja excluido, responde
+         *     `404`.
+         *
+         *     **Nao emite codigo nenhum.** Emitir e `issuePetTag`, e o codigo e
+         *     irreversivel: um painel que emitisse criaria plaquinha sem o tutor
+         *     pedir. Aqui so se registra que o objeto fisico saiu.
+         */
+        post: operations["fulfillAdminCollarTagRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa o pedido da plaquinha
+         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
+         *     outros casos). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+         *
+         *     **O que o tutor ve depois da recusa e decisao de produto em aberto** e
+         *     nao esta resolvida aqui: hoje `requestCollarTag` devolve o estado
+         *     verdadeiro, inclusive `declined`. A outra fila do painel esconde a
+         *     recusa por decisao do cliente de 23/09; essa decisao foi tomada para
+         *     encontro privado e nao para plaquinha, e copia-la seria decidir no
+         *     lugar dele.
+         */
+        post: operations["declineAdminCollarTagRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6553,6 +6681,69 @@ export interface components {
             limit: number;
             total: number;
         };
+        /**
+         * @description O corpo do pedido da plaquinha. **Um campo**, e a lista curta e
+         *     deliberada: endereco de entrega e valor sao decisao de produto do
+         *     cliente, ainda em aberto, e inventa-los aqui seria decidir no lugar
+         *     dele.
+         */
+        CollarTagRequestInput: {
+            /** @description Observacao livre do tutor. Opcional; pedir sem dizer nada e o caminho comum. */
+            notes?: string;
+        };
+        /**
+         * @description `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
+         *     FISICA saiu, e nao que o codigo foi emitido -- emitir e `issuePetTag`,
+         *     e o codigo e irreversivel (ADR-0004).
+         * @enum {string}
+         */
+        CollarTagRequestStatus: "pending" | "fulfilled" | "declined";
+        /**
+         * @description O pedido da plaquinha como o APP o ve. **Sem `ref`**: o identificador
+         *     opaco serve ao caminho do painel, e projeta-lo aqui daria ao app um
+         *     valor que ele nao tem o que fazer com. Sem UUID interno nenhum
+         *     (ADR-0010 item 6) -- o pet e o do caminho.
+         */
+        CollarTagRequest: {
+            status: components["schemas"]["CollarTagRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /** @description A observacao que o tutor escreveu, ou nulo. */
+            notes?: string | null;
+        };
+        /** @enum {string} */
+        AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
+        /**
+         * @description Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
+         *     projecao e minima e fechada: sai o nome de exibicao e a especie, que e
+         *     o que identifica qual plaquinha prensar.
+         *
+         *     **Nenhum campo do solicitante sai aqui**, e a ausencia e deliberada: a
+         *     unica leitura de pessoa do backoffice v1 e a outra fila (D53 a D57), e
+         *     abrir uma segunda e decisao do cliente. Tambem **nao traz o codigo da
+         *     plaquinha**, que e credencial ao portador (ADR-0004), e **nao traz
+         *     endereco**, que nao existe no pedido.
+         */
+        AdminCollarTagRequest: {
+            /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
+            ref: string;
+            pet: {
+                display_name: string;
+                species: string;
+            };
+            notes?: string | null;
+            status: components["schemas"]["AdminCollarTagRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+        };
+        AdminCollarTagRequestPage: {
+            items: components["schemas"]["AdminCollarTagRequest"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
         StoreTagPage: {
             items: components["schemas"]["StoreTagRef"][];
         };
@@ -7019,6 +7210,8 @@ export interface components {
         EventSlug: components["schemas"]["Slug"];
         /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
         JoinRequestRef: string;
+        /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+        CollarTagRequestRef: string;
         /**
          * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
          *     existente do backoffice: dois administradores editando o mesmo recurso
@@ -8277,6 +8470,36 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    requestCollarTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CollarTagRequestInput"];
+            };
+        };
+        responses: {
+            /** @description O estado do pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getPetTagQrImage: {
@@ -11695,6 +11918,91 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EventNotOpen"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminCollarTagRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AdminCollarTagRequestStatus"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como na outra fila que le pessoa (D56). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    fulfillAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido atendido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido recusado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

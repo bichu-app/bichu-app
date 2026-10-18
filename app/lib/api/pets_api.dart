@@ -244,6 +244,32 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     return TagEmitida.doJson(json);
   }
 
+  /// `POST /pets/{petId}/tag-requests`.
+  ///
+  /// O pedido do OBJETO FISICO da plaquinha. **Nao emite codigo**: emitir e
+  /// [emitirTag], e o codigo e irreversivel (ADR-0004).
+  ///
+  /// **Idempotente sem chave de idempotencia**: o servidor mantem no maximo um
+  /// pedido pendente por pet, e pedir de novo devolve o que ja existe. Por
+  /// isso esta chamada nao passa `idempotencyKey` -- uma chave aqui seria um
+  /// segundo mecanismo para a propriedade que o banco ja garante.
+  ///
+  /// **A autorizacao esta na clausula `WHERE` do servidor, e pet de outra
+  /// pessoa responde 404 e nunca 403** (ADR-0021): para quem pede, o pet de
+  /// outro tutor nao existe.
+  Future<PedidoDePlaquinha> solicitarPlaquinha({
+    required String petId,
+    String? observacao,
+  }) async {
+    final json = await _api.post(
+      '/pets/${Uri.encodeComponent(petId)}/tag-requests',
+      corpo: observacao == null || observacao.isEmpty
+          ? null
+          : <String, dynamic>{'notes': observacao},
+    );
+    return PedidoDePlaquinha.doJson(json);
+  }
+
   /// `POST /media/pet-photo-intents`.
   ///
   /// Caminho novo (ADR-0016): o `pet_id` saiu do caminho e entrou no corpo. O

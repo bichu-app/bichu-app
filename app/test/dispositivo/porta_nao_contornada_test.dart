@@ -898,10 +898,44 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `a2ee078f99dbc688f22d69472aaef2f91a48c6b8`
 /// (`feat/loja-detalhe-do-produto`).
 ///
+/// DESTRAVADO EM 17/10 (BICHUS-278, o pedido da plaquinha da coleira). O
+/// motivo, em uma frase: **o botao `Fazer a tag da coleira` nao estava
+/// quebrado, ele nao tinha destino**, e o cliente pediu o destino.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `pet/tela_solicitar_plaquinha.dart`: nasce, o formulario do pedido. Ela
+///     monta `SeletorDeLista`, `BichuField` e `BotaoPrimario` dentro de
+///     `BarraDeAcaoFixa` -- **tres componentes que ja existiam, nenhum widget
+///     novo**, que e a condicao para a tela nascer em codigo em vez de esperar
+///     o desenho;
+///   - `pet/tela_pet_cadastrado.dart`: o botao sai de `aoTocar: null` e passa a
+///     empurrar `Rotas.solicitarPlaquinha`. O `null` era o criterio 2 da
+///     BICHUS-62 sendo cumprido (acao sem destino nao se renderiza), e agora o
+///     destino existe: `POST /v1/pets/{petId}/tag-requests` e a tela acima;
+///   - `pet/tela_detalhe_do_pet.dart`: **so comentario de doc**. A linha que
+///     dizia que as tres acoes da barra fixa "apontam para tela que nao
+///     existe" ficou falsa para uma das tres, e deixa-la seria documentacao
+///     mentindo. A tela continua sem barra de acao fixa, e o codigo dela nao
+///     mudou.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria` e nenhuma ganhou importe
+/// de plugin de aparelho nem `dart:io` -- quem cobra isso e o portao
+/// ESTRUTURAL abaixo, que continua valendo e continua verde. Medido pelo
+/// indice temporario que este portao usa (`GIT_INDEX_FILE` + `read-tree HEAD`
+/// + `add -A -- app/lib/telas` + `write-tree` +
+/// `rev-parse <arvore>:app/lib/telas`), sobre a arvore de trabalho desta
+/// branch, a partir de `1cce9f2` (`origin/development`).
+///
+/// **Nota honesta:** nesta branch nenhuma suite rodou, por decisao de quem
+/// pediu a entrega. Este portao foi o UNICO caso executado isoladamente
+/// (`flutter test test/dispositivo/porta_nao_contornada_test.dart`), que e o
+/// que o procedimento de destravamento cobra. Anterior: `65dcb5c`.
+///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '65dcb5cd25c486a5e7d537aeaec19566828420d5'; // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095)
+const String _arvoreDasTelas = 'a0f1b4a3299933a349b03fbd3de03d7e0fd11591'; // BICHUS-278, 17/10: o pedido da plaquinha da coleira -- `pet/tela_solicitar_plaquinha.dart` nasce (o destino que o botao `Fazer a tag da coleira` nunca teve), `pet/tela_pet_cadastrado.dart` troca `aoTocar: null` pela rota nova, e `pet/tela_detalhe_do_pet.dart` corrige SO o comentario que afirmava que a acao nao tinha destino. Nenhum componente novo, nenhuma porta de aparelho encostada (antes: 65dcb5c)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

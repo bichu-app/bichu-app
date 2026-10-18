@@ -674,3 +674,38 @@ class AvisoDoAchadorCriado {
     );
   }
 }
+
+/// O pedido da plaquinha da coleira, como o app o ve.
+///
+/// **Solicitar nao e emitir.** [TagEmitida] e o CODIGO, irreversivel
+/// (ADR-0004) e visivel uma unica vez; este e o pedido do PLASTICO, e ele nao
+/// carrega codigo nenhum.
+///
+/// Sem `ref` e sem identificador: o `ref` serve ao caminho do painel, e o
+/// contrato nao o projeta para o app (ADR-0010 item 6).
+class PedidoDePlaquinha {
+  const PedidoDePlaquinha({
+    required this.status,
+    required this.solicitadoEm,
+    this.observacao,
+  });
+
+  /// `pending`, `fulfilled` ou `declined`, como o contrato os escreve.
+  final String status;
+
+  final DateTime? solicitadoEm;
+
+  final String? observacao;
+
+  /// Verdadeiro enquanto ninguem decidiu.
+  bool get aguardando => status == 'pending';
+
+  factory PedidoDePlaquinha.doJson(Map<String, dynamic> json) {
+    final quando = json['requested_at'];
+    return PedidoDePlaquinha(
+      status: json['status'] as String? ?? 'pending',
+      solicitadoEm: quando is String ? DateTime.tryParse(quando) : null,
+      observacao: json['notes'] as String?,
+    );
+  }
+}

@@ -1354,6 +1354,30 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
+/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O pedido do OBJETO FISICO da plaquinha da coleira.
+ *
+ * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
+ * Nao guarda endereco nem valor, e as duas ausencias sao decisao de produto do
+ * cliente ainda em aberto, e nao esquecimento.
+ *
+ * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
+ * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
+ */
+export interface CollarTagRequestsTable {
+  id: string;
+  ref: string;
+  pet_id: string;
+  requested_by: string;
+  notes: string | null;
+  status: Generated<DecisaoDoPedidoDePlaquinha>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -1425,6 +1449,7 @@ export interface Database {
   network_event_amenities: NetworkEventAmenitiesTable;
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
+  collar_tag_requests: CollarTagRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

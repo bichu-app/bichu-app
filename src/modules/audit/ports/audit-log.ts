@@ -249,6 +249,13 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.network_join_request.listed',
   'admin.network_join_request.approved',
   'admin.network_join_request.declined',
+  // A fila do pedido da plaquinha da coleira. SOLICITAR nao e EMITIR: emitir e
+  // `issuePetTag` (irreversivel, ADR-0004) e sai na trilha do app; o que entra
+  // aqui e a decisao do painel sobre o OBJETO FISICO. Nao ha `.listed`: a fila
+  // nao le pessoa, e `x-audit` em `GET` administrativo e so da leitura de
+  // pessoa, que anda junto do teto por `rows_returned` (D55/D56).
+  'admin.collar_tag_request.fulfilled',
+  'admin.collar_tag_request.declined',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

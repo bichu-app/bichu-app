@@ -377,6 +377,13 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['pending', 'approved', 'declined'],
   },
+  // BICHUS: o pedido do OBJETO FISICO da plaquinha. `fulfilled` quer dizer que
+  // a plaquinha saiu, e nao que o codigo foi emitido -- emitir e `pet_tags`, e
+  // e irreversivel (ADR-0004).
+  'public.collar_tag_requests.collar_tag_requests_decisao_conhecida': {
+    coluna: 'status',
+    valores: ['pending', 'fulfilled', 'declined'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -614,6 +621,13 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // So o recusado guarda desistencia (D54, 12.11).
   'public.network_event_join_requests.network_event_join_requests_desistencia_so_do_recusado':
     "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
+  // O identificador opaco do pedido da plaquinha, base64url. Mesma forma do
+  // `ref` do pedido de encontro, porque e a mesma necessidade.
+  'public.collar_tag_requests.collar_tag_requests_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // Decidido tem instante, nos dois sentidos.
+  'public.collar_tag_requests.collar_tag_requests_decidido_tem_instante':
+    "CHECK (((status = ANY (ARRAY['fulfilled'::text, 'declined'::text])) = (decided_at IS NOT NULL)))",
   // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
   // que torna "o ponto de evento da comunidade so aparece depois de revisao
   // humana" um estado do banco, porque `pending_review` nunca e visivel.

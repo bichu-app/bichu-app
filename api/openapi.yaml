@@ -1942,6 +1942,67 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  # ----------------------------------------------------------------------
+  # Pedido da plaquinha da coleira (o OBJETO FISICO)
+  #
+  # SOLICITAR NAO E EMITIR. `issuePetTag` cria o CODIGO, que e irreversivel
+  # (ADR-0004); esta operacao pede o plastico. O tutor que chega aqui ja tem o
+  # codigo -- a tela de `Pet cadastrado` emite a tag antes de oferecer o botao
+  # --, e o que falta e alguem prensar e entregar.
+  #
+  # **Sem endereco de entrega e sem valor**, e as duas ausencias sao
+  # deliberadas: as duas sao decisao de produto do cliente e nao foram tomadas.
+  # Sem endereco o administrador recebe um pedido que nao consegue cumprir; com
+  # valor entra cobranca, fora de escopo por decisao dele. O que entra no lugar
+  # e `notes`, texto livre e opcional.
+  # ----------------------------------------------------------------------
+
+  /pets/{petId}/tag-requests:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    post:
+      operationId: requestCollarTag
+      tags: [tags]
+      x-effects: []
+      summary: Pedir a plaquinha da coleira de um pet
+      description: |
+        Cria o pedido do tutor para UM pet dele e responde **200** com o estado
+        que o app ve. Pet de outra pessoa **nao existe**: a autorizacao esta na
+        clausula `WHERE` e a resposta e `404`, nunca `403` (ADR-0021).
+
+        **Idempotente sem chave de idempotencia**: ha no maximo um pedido
+        `pending` por pet (indice parcial unico no banco), e pedir de novo
+        devolve o pedido que ja existe em vez de encher a fila com a mesma
+        coisa. Depois de atendido, um pedido novo e aceito -- a segunda
+        plaquinha e um pedido legitimo.
+
+        **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
+        que o painel usa no caminho nao e projetado para o app, que nao tem o
+        que fazer com ele.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 3
+          window: 24h
+          on_exceed: deny_429
+          note: "tres por conta por dia, o mesmo numero das outras acoes de peso. Cada pedido vira trabalho fisico de alguem, e um teto alto aqui transforma a fila do painel em porta de abuso"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollarTagRequestInput' }
+      responses:
+        '200':
+          description: O estado do pedido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollarTagRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /pets/{petId}/tags/{tagId}/qr.png:
     parameters:
       - $ref: '#/components/parameters/PetId'
@@ -6720,6 +6781,144 @@ paths:
         '409': { $ref: '#/components/responses/EventNotOpen' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  # ----------------------------------------------------------------------
+  # A fila dos pedidos da plaquinha da coleira
+  #
+  # O LADO DO BACKEND ESTA AQUI; A TELA DO PAINEL NAO. A sessao Backoffice e
+  # dona do painel, e estas tres operacoes sao o que ela precisa chamar.
+  # ----------------------------------------------------------------------
+
+  /admin/tag-requests:
+    get:
+      operationId: listAdminCollarTagRequests
+      tags: [admin]
+      x-effects: []
+      summary: A fila de pedidos da plaquinha da coleira
+      description: |
+        So existe no painel. Sem filtro, vem a fila de `pending`, do pedido
+        mais antigo para o mais novo.
+
+        **NAO LE PESSOA, e a ausencia e deliberada.** Nenhum campo do
+        solicitante sai aqui: nem nome, nem e-mail, nem identificador estavel.
+        A unica leitura de pessoa do backoffice v1 e a fila de pedidos de
+        encontro, coberta pelo RA-01 por decisao do cliente de 23/09 (D53 a
+        D57); abrir uma segunda seria decidir no lugar dele. E, enquanto
+        entrega e cobranca estiverem em aberto, o nome do solicitante nao
+        tornaria o pedido cumprivel -- faltaria o endereco do mesmo jeito.
+
+        **Nao traz o codigo da plaquinha.** O codigo e credencial ao portador
+        (ADR-0004) e hoje sai em duas superficies, as duas do tutor; uma
+        terceira, no painel, e decisao que o cliente ainda nao tomou. O que
+        identifica o pedido para quem atende e `ref` e o nome do pet.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "contagem de requisicoes, aplicada pela borda. Nao e `rows_returned`: o teto por linhas e da leitura de pessoa (D56), e esta fila nao le pessoa"
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AdminCollarTagRequestStatus' }
+        - $ref: '#/components/parameters/AdminPage'
+        - name: limit
+          in: query
+          description: Teto de 50 por pagina, como na outra fila que le pessoa (D56).
+          schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
+      responses:
+        '200':
+          description: Pagina da fila.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollarTagRequestPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/tag-requests/{requestRef}/fulfillment:
+    parameters:
+      - $ref: '#/components/parameters/CollarTagRequestRef'
+    post:
+      operationId: fulfillAdminCollarTagRequest
+      tags: [admin]
+      x-effects: []
+      summary: Marca que a plaquinha saiu
+      description: |
+        So a partir de `pending` (`400`, `code: request_not_pending`, nos
+        outros casos). Pedido que nao existe, ou de pet ja excluido, responde
+        `404`.
+
+        **Nao emite codigo nenhum.** Emitir e `issuePetTag`, e o codigo e
+        irreversivel: um painel que emitisse criaria plaquinha sem o tutor
+        pedir. Aqui so se registra que o objeto fisico saiu.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.collar_tag_request.fulfilled, resource_kind: collar_tag_request }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      responses:
+        '200':
+          description: Pedido atendido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollarTagRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/tag-requests/{requestRef}/decline:
+    parameters:
+      - $ref: '#/components/parameters/CollarTagRequestRef'
+    post:
+      operationId: declineAdminCollarTagRequest
+      tags: [admin]
+      x-effects: []
+      summary: Recusa o pedido da plaquinha
+      description: |
+        So a partir de `pending` (`400`, `code: request_not_pending`, nos
+        outros casos). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+
+        **O que o tutor ve depois da recusa e decisao de produto em aberto** e
+        nao esta resolvida aqui: hoje `requestCollarTag` devolve o estado
+        verdadeiro, inclusive `declined`. A outra fila do painel esconde a
+        recusa por decisao do cliente de 23/09; essa decisao foi tomada para
+        encontro privado e nao para plaquinha, e copia-la seria decidir no
+        lugar dele.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.collar_tag_request.declined, resource_kind: collar_tag_request }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      responses:
+        '200':
+          description: Pedido recusado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollarTagRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /admin/media/catalog-image-intents:
     post:
       operationId: createAdminCatalogImageIntent
@@ -7089,6 +7288,12 @@ components:
       in: path
       required: true
       description: O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID.
+      schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
+    CollarTagRequestRef:
+      name: requestRef
+      in: path
+      required: true
+      description: O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID.
       schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
     IfMatch:
       name: If-Match
@@ -11203,6 +11408,96 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/AdminJoinRequest' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    CollarTagRequestInput:
+      type: object
+      description: |
+        O corpo do pedido da plaquinha. **Um campo**, e a lista curta e
+        deliberada: endereco de entrega e valor sao decisao de produto do
+        cliente, ainda em aberto, e inventa-los aqui seria decidir no lugar
+        dele.
+      additionalProperties: false
+      properties:
+        notes:
+          type: string
+          maxLength: 500
+          description: Observacao livre do tutor. Opcional; pedir sem dizer nada e o caminho comum.
+      required: []
+
+    CollarTagRequestStatus:
+      type: string
+      enum: [pending, fulfilled, declined]
+      description: |
+        `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
+        FISICA saiu, e nao que o codigo foi emitido -- emitir e `issuePetTag`,
+        e o codigo e irreversivel (ADR-0004).
+
+    CollarTagRequest:
+      type: object
+      description: |
+        O pedido da plaquinha como o APP o ve. **Sem `ref`**: o identificador
+        opaco serve ao caminho do painel, e projeta-lo aqui daria ao app um
+        valor que ele nao tem o que fazer com. Sem UUID interno nenhum
+        (ADR-0010 item 6) -- o pet e o do caminho.
+      required: [status, requested_at]
+      additionalProperties: false
+      properties:
+        status: { $ref: '#/components/schemas/CollarTagRequestStatus' }
+        requested_at: { type: string, format: date-time }
+        notes:
+          type: string
+          nullable: true
+          description: A observacao que o tutor escreveu, ou nulo.
+
+    AdminCollarTagRequestStatus:
+      type: string
+      enum: [pending, fulfilled, declined]
+
+    AdminCollarTagRequest:
+      type: object
+      description: |
+        Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
+        projecao e minima e fechada: sai o nome de exibicao e a especie, que e
+        o que identifica qual plaquinha prensar.
+
+        **Nenhum campo do solicitante sai aqui**, e a ausencia e deliberada: a
+        unica leitura de pessoa do backoffice v1 e a outra fila (D53 a D57), e
+        abrir uma segunda e decisao do cliente. Tambem **nao traz o codigo da
+        plaquinha**, que e credencial ao portador (ADR-0004), e **nao traz
+        endereco**, que nao existe no pedido.
+      required: [ref, pet, status, requested_at]
+      additionalProperties: false
+      properties:
+        ref:
+          type: string
+          description: Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID.
+        pet:
+          type: object
+          required: [display_name, species]
+          additionalProperties: false
+          properties:
+            display_name: { type: string }
+            species: { type: string }
+        notes:
+          type: string
+          nullable: true
+        status: { $ref: '#/components/schemas/AdminCollarTagRequestStatus' }
+        requested_at: { type: string, format: date-time }
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AdminCollarTagRequestPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminCollarTagRequest' }
         page: { type: integer }
         limit: { type: integer }
         total: { type: integer }
