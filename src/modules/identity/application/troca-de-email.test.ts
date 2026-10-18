@@ -56,6 +56,9 @@ function contaDe(email: string): Conta {
     email,
     emailVerifiedAt: dataFixa(AGORA),
     displayName: 'Tutora',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,

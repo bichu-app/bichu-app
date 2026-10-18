@@ -56,6 +56,7 @@ import 'modelos.dart';
 class DadosPessoais {
   const DadosPessoais({
     required this.usuario,
+    this.apelido,
     this.telefone,
     this.telefoneVerificado = false,
     this.cep,
@@ -66,6 +67,18 @@ class DadosPessoais {
 
   /// O mesmo corpo lido como [Usuario], para repor na sessao.
   final Usuario usuario;
+
+  /// `handle`: o apelido (`@`) da PROPRIA conta, ou nulo quando ela nao
+  /// escolheu nenhum.
+  ///
+  /// **Ele volta so em `GET /v1/me` e `PATCH /v1/me`**, as duas sobre quem
+  /// esta autenticado -- nao ha rota que o devolva para outra pessoa nesta
+  /// fatia (plano 4-C: o apelido nao aparece para terceiros antes da fatia E).
+  /// A tela de `Meus dados` precisa dele para mostrar o apelido atual: campo
+  /// que nao volta e campo que a tela abre vazio e sobrescreve.
+  ///
+  /// Nulo e um estado legitimo e permanente: nenhum fluxo obriga a escolher.
+  final String? apelido;
 
   /// `phone_e164`, na forma do contrato (`+5511987654321`). Nulo quando a
   /// conta nao tem telefone.
@@ -84,6 +97,7 @@ class DadosPessoais {
     final regiao = json['reference_area'] as Map<String, dynamic>?;
     return DadosPessoais(
       usuario: Usuario.doJson(json),
+      apelido: json['handle'] as String?,
       telefone: json['phone_e164'] as String?,
       telefoneVerificado: json['phone_verified'] as bool? ?? false,
       cep: regiao?['postal_code'] as String?,
@@ -117,6 +131,14 @@ class MeApi {
   /// chegando aqui e um 400 do servidor, e e assim que ele deve aparecer.
   Future<DadosPessoais> atualizar({
     String? nome,
+    /// O apelido (`@`) **normalizado**, ou `null` para nao mexer.
+    ///
+    /// **Nao existe caminho para APAGAR o apelido**, e a ausencia dessa porta e
+    /// a regra: `Handle` nao e `nullable` no contrato, e soltar um apelido de
+    /// volta ao pool e o furo do plano 4-C.7 -- quem o pegasse herdaria o que a
+    /// vizinhanca associava a quem o tinha. Trocar e permitido (1 vez a cada 60
+    /// dias, conferido no servidor); abandonar nao e.
+    String? apelido,
     String? telefone,
     String? cep,
     String? bairro,
@@ -133,6 +155,7 @@ class MeApi {
       '/me',
       corpo: <String, dynamic>{
         'display_name': ?nome,
+        'handle': ?apelido,
         'phone_e164': ?telefone,
         if (regiao.isNotEmpty) 'reference_area': regiao,
       },

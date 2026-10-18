@@ -102,6 +102,9 @@ function contaRecemCriada(): Conta {
     // o que a tira desse estado é o link que precisa sair daqui.
     emailVerifiedAt: null,
     displayName: 'Tutora',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
@@ -397,7 +400,10 @@ async function capturar(promessa: Promise<unknown>): Promise<AppError> {
 }
 
 function cadastroValido(): Parameters<ReturnType<typeof criarAuthService>['cadastrar']>[0] {
-  return { email: EMAIL, password: SENHA_BOA, displayName: 'Tutora' };
+  // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
+  // e bem longe do limite: esta bancada nao mede idade, e uma data colada no
+  // corte faria estes testes comecarem a falhar sozinhos com o passar do tempo.
+  return { email: EMAIL, password: SENHA_BOA, birthDate: '1990-05-12', displayName: 'Tutora' };
 }
 
 void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critérios 1, 2 e 8)', () => {
@@ -586,7 +592,10 @@ void describe('e-mail já cadastrado: 409 sem mensagem e sem token (BICHUS-147, 
   void it('senha fraca é recusada antes de qualquer envio', async () => {
     const bancada = montar({});
     const erro = await capturar(
-      bancada.servico.cadastrar({ email: EMAIL, password: '123', displayName: 'Tutora' }, CONTEXTO),
+      bancada.servico.cadastrar(
+        { email: EMAIL, password: '123', birthDate: '1990-05-12', displayName: 'Tutora' },
+        CONTEXTO,
+      ),
     );
 
     assert.equal(erro.status, 422);

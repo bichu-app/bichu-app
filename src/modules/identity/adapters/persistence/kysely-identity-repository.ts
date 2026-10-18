@@ -15,6 +15,7 @@
  */
 import { sql, type Insertable } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import type { Selectable } from 'kysely';
 import type { UsersTable } from '../../../../shared/db/schema.js';
 import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
@@ -35,6 +36,17 @@ import type {
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
+import { problemas } from '../../../../shared/http/errors.js';
+
+/**
+ * Uma troca de apelido a cada 60 dias (plano 4-C.7, `9d99ac0f`).
+ *
+ * O prazo não é cerimônia: ele é o que torna o apelido um identificador em que
+ * a vizinhança pode confiar. Sem ele, trocar de `@` todo dia é de graça, e
+ * reconhecer alguém pelo apelido deixa de valer.
+ */
+const DIAS_ENTRE_TROCAS_DE_APELIDO = 60;
+
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -46,12 +58,20 @@ function ehViolacaoDeUnicidade(erro: unknown): boolean {
   );
 }
 
+// `Selectable<UsersTable>` e nao `UsersTable`: as colunas que a aplicacao pode
+// OMITIR no `INSERT` sao declaradas como `ColumnType<...>` no esquema, e
+// `Pick` sobre o tipo cru trazia o `ColumnType` inteiro para ca em vez do tipo
+// LIDO. `handle` foi a primeira a expor isso -- ela e `ColumnType` porque o
+// `INSERT` de `users` acontece ANTES da linha de `handles` (a FK e circular:
+// `users.handle` aponta para `handles.handle` e `handles.user_id` aponta para
+// `users.id`), entao ela entra por um `UPDATE` depois.
 type LinhaDeConta = Pick<
-  UsersTable,
+  Selectable<UsersTable>,
   | 'id'
   | 'email'
   | 'email_verified_at'
   | 'display_name'
+  | 'handle'
   | 'phone_e164'
   | 'phone_verified_at'
   | 'reference_postal_code'
@@ -67,6 +87,7 @@ const COLUNAS_DA_CONTA = [
   'email',
   'email_verified_at',
   'display_name',
+  'handle',
   'phone_e164',
   'phone_verified_at',
   'reference_postal_code',
@@ -93,6 +114,7 @@ function paraConta(linha: LinhaSelecionada): Conta {
     email: linha.email,
     emailVerifiedAt: linha.email_verified_at,
     displayName: linha.display_name,
+    handle: linha.handle,
     phoneE164: linha.phone_e164,
     phoneVerifiedAt: linha.phone_verified_at,
     referencePostalCode: linha.reference_postal_code,
@@ -252,6 +274,13 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         id: userId,
         email: nova.email,
         display_name: nova.displayName ?? null,
+        // A data de nascimento entra na ESCRITA e em lugar nenhum mais: ela não
+        // está em `COLUNAS_DA_CONTA` (o `returning` abaixo), e por isso não
+        // volta nem para quem acabou de se cadastrar. Com idade mínima de 16 o
+        // titular pode ser adolescente, e a data existe para ter sido
+        // conferida, não para ser exibida — ver o cabeçalho da
+        // `20261018000005`.
+        birth_date: nova.birthDate,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
         // A conta nasce com a barreira do SEC-006 no segundo da criação: assim
@@ -272,6 +301,41 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .values(valores)
             .returning(COLUNAS_DA_CONTA)
             .executeTakeFirstOrThrow();
+
+          // O APELIDO REIVINDICA O ESPAÇO DE NOMES NA MESMA TRANSAÇÃO.
+          //
+          // `handles` primeiro e `users.handle` depois, e a ordem não é gosto:
+          // `users.handle` tem FK para `handles.handle`, então a ordem inversa
+          // reprovaria por chave estrangeira.
+          //
+          // **É AQUI QUE A DISPONIBILIDADE É DECIDIDA** (plano 4-C.5). Não há
+          // consulta antes, e não pode haver: a janela entre conferir e gravar
+          // é onde a corrida mora. Duas contas pedindo `@maria` ao mesmo tempo
+          // chegam as duas até este `INSERT`; uma viola `handles_pkey` ou
+          // `handles_esqueleto_unico`, e `recusaDeApelidoTomado` traduz.
+          //
+          // `handle_esqueleto` é calculado pelo BANCO, pelo gatilho
+          // `handles_esqueleto_derivado`, e não aqui: o esqueleto é derivado,
+          // sempre, e quem o mandasse errado de propósito contornaria o índice
+          // que separa os parecidos. O valor abaixo é descartado pelo gatilho.
+          if (nova.handle !== undefined) {
+            await trx
+              .insertInto('handles')
+              .values({
+                handle: nova.handle,
+                handle_esqueleto: nova.handle,
+                kind: 'pessoa',
+                user_id: userId,
+                claimed_at: agora,
+              })
+              .execute();
+
+            await trx
+              .updateTable('users')
+              .set({ handle: nova.handle })
+              .where('id', '=', userId)
+              .execute();
+          }
 
           await trx
             .insertInto('user_identities')
@@ -342,15 +406,113 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       // herda a confiança do antigo, e `can_open_lost_case` precisa cair junto.
       if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
 
-      const linha = await db
-        .updateTable('users')
-        .set(mudancas)
-        .where('id', '=', id)
-        .where('deleted_at', 'is', null)
-        .returning(COLUNAS_DA_CONTA)
-        .executeTakeFirst();
+      // O APELIDO NÃO ENTRA NO `mapa` ACIMA, e a ausência dele ali é
+      // deliberada: ele não é um `SET` a mais, é duas linhas de `handles` mais
+      // a coluna, e tudo isso na mesma transação da conta.
+      const apelidoNovo = campos.handle;
+      if (apelidoNovo === undefined) {
+        const linha = await db
+          .updateTable('users')
+          .set(mudancas)
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
 
-      return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      }
+
+      return await db.transaction().execute(async (trx) => {
+        const atual = await trx
+          .selectFrom('users')
+          .select(['handle'])
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .executeTakeFirst();
+        if (atual === undefined) return undefined;
+
+        const anterior = atual.handle;
+
+        // SALVAR O MESMO APELIDO NÃO É TROCA, e tratá-lo como troca gastaria a
+        // única troca de 60 dias de quem só mexeu no telefone com o campo de
+        // apelido preenchido na tela. `citext` compara sem caixa no banco; aqui
+        // a comparação é do valor já normalizado dos dois lados.
+        const ehTroca = anterior !== null && anterior.toLowerCase() !== apelidoNovo;
+
+        if (ehTroca) {
+          // UMA TROCA A CADA 60 DIAS (plano 4-C.7). Lido de `claimed_at` da
+          // linha viva, que é o carimbo de quando o apelido atual passou a
+          // valer -- e não de `users.updated_at`, que qualquer edição de
+          // telefone move.
+          const vivo = await trx
+            .selectFrom('handles')
+            .select(['claimed_at'])
+            .where('user_id', '=', id)
+            .where('kind', '=', 'pessoa')
+            .executeTakeFirst();
+
+          if (vivo !== undefined) {
+            const desde = new Date(vivo.claimed_at).getTime();
+            const dias = (Number(agora) - desde) / 86_400_000;
+            if (dias < DIAS_ENTRE_TROCAS_DE_APELIDO) {
+              const faltam = Math.ceil(DIAS_ENTRE_TROCAS_DE_APELIDO - dias);
+              throw problemas.validacao([
+                {
+                  field: 'handle',
+                  code: 'too_soon',
+                  message: `Você poderá trocar de apelido em ${String(faltam)} dias.`,
+                },
+              ]);
+            }
+          }
+
+          // O ANTERIOR FICA RESERVADO, E NÃO VOLTA AO POOL (plano 4-C.7).
+          //
+          // Este é o passo que não pode faltar: soltar `@maria` na hora deixa
+          // um estranho pegá-lo e **herdar tudo que a vizinhança associava a
+          // quem o tinha**, que é imitação servida pelo produto. A linha deixa
+          // de ser `pessoa` e passa a `reservado`, com o `user_id`
+          // **preservado** -- é o `user_id` que diz para quem ela está
+          // guardada nos 180 dias.
+          //
+          // O índice `handles_uma_pessoa_um_apelido` é parcial em
+          // `kind = 'pessoa'`, e é por isso que esta linha precisa mudar de
+          // `kind` ANTES do `INSERT` do apelido novo: com as duas como
+          // `pessoa`, o índice reprovaria.
+          await trx
+            .updateTable('handles')
+            .set({ kind: 'reservado' })
+            .where('user_id', '=', id)
+            .where('kind', '=', 'pessoa')
+            .execute();
+        }
+
+        if (anterior === null || ehTroca) {
+          await trx
+            .insertInto('handles')
+            .values({
+              handle: apelidoNovo,
+              // Descartado pelo gatilho `handles_esqueleto_derivado`, que o
+              // recalcula. Ver `criarContaLocal`.
+              handle_esqueleto: apelidoNovo,
+              kind: 'pessoa',
+              user_id: id,
+              claimed_at: agora,
+            })
+            .execute();
+          mudancas['handle'] = apelidoNovo;
+        }
+
+        const linha = await trx
+          .updateTable('users')
+          .set(mudancas)
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
+
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      });
     },
 
     async buscarContaPorEmail(email: string): Promise<Conta | undefined> {

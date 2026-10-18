@@ -125,11 +125,18 @@ void main() {
     testWidgets('o corpo carrega stay_signed_in true', (tester) async {
       await abrir(tester, Rotas.criarConta);
 
+      // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+      // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+      // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+      // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+      // sobre idade. Data fixa e longe do corte de 16 anos, para a suite nao
+      // comecar a falhar sozinha com o passar do tempo.
+      await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
       await tester.enterText(
-        find.byType(TextField).at(1),
+        find.byType(TextField).at(3),
         'marina@exemplo.com.br',
       );
-      await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+      await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
       // A unica caixa da F1.1 e a do aceite dos termos. Marca-la e o que
       // libera o cadastro; ela nao tem nada a ver com a sessao.
       //

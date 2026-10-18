@@ -137,11 +137,18 @@ void main() {
     WidgetTester tester, {
     required bool aceitar,
   }) async {
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+    // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+    // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+    // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+    // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+    // passaria a medir o bloqueio em vez do que ele quer medir.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+    await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
     if (aceitar) {
       await rolarAte(tester, caixaDeAceite);
       await tester.tap(caixaDeAceite);
@@ -396,11 +403,18 @@ void main() {
       // numa tela que criasse a conta sem o aceite, desde que a caixa
       // estivesse desenhada acima do botao.
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+      // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+      // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+      // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+      // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+      // passaria a medir o bloqueio em vez do que ele quer medir.
+      await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
       await tester.enterText(
-        find.byType(TextField).at(1),
+        find.byType(TextField).at(3),
         'marina@exemplo.com.br',
       );
-      await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+      await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
       await tester.pumpAndSettle();
 
       // A caixa comeca FORA da janela: sem isto o caso nao estaria medindo a

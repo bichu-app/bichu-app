@@ -153,7 +153,13 @@ function montar(): Bancada {
 async function recusaDe(email: string): Promise<AppError> {
   const bancada = montar();
   try {
-    await bancada.servico.cadastrar({ email, password: SENHA_BOA, displayName: 'Tutora' }, CONTEXTO);
+    // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
+    // e longe do corte: o que estes testes medem e o ENDERECO, e idade colada
+    // no limite faria a suite comecar a falhar sozinha com o tempo.
+    await bancada.servico.cadastrar(
+      { email, password: SENHA_BOA, birthDate: '1990-05-12', displayName: 'Tutora' },
+      CONTEXTO,
+    );
   } catch (erro) {
     assert.ok(erro instanceof AppError, 'o serviço fala por AppError, e não por Error cru');
     assert.deepEqual(bancada.eventos, [], 'nenhum evento de trilha para uma conta que não nasceu');
@@ -248,7 +254,12 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     const bancada = montar();
     await assert.rejects(
       bancada.servico.cadastrar(
-        { email: 'ana.paula+bichu@exemplo.com.br', password: SENHA_BOA, displayName: 'Tutora' },
+        {
+          email: 'ana.paula+bichu@exemplo.com.br',
+          password: SENHA_BOA,
+          birthDate: '1990-05-12',
+          displayName: 'Tutora',
+        },
         CONTEXTO,
       ),
       (erro: unknown) => {

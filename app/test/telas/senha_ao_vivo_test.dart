@@ -89,11 +89,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
+
+    // A DATA DE NASCIMENTO JA PREENCHIDA, PARA TODOS OS CASOS DESTE ARQUIVO.
+    //
+    // Ela entrou na F1.1 em 18/10/2026 (cliente: *"coloque maiores de 16
+    // anos"*), e **bloqueia o botao enquanto estiver incompleta**. Tres casos
+    // deste arquivo tocam em `Criar conta` e afirmam coisas sobre a SENHA: sem
+    // a data eles passariam a medir o bloqueio do botao, e a isca que diz "a
+    // tela nao exige o que o servidor nao exige" ficaria verde pelo motivo
+    // errado -- a requisicao nao sairia por causa da data, nao da senha.
+    //
+    // Preenchida aqui, no abridor, e nao em cada caso: os casos que NAO enviam
+    // nao se incomodam, e os que enviam deixam de depender de lembrar.
+    //
+    // Data fixa e longe do corte de 16 anos, para a suite nao comecar a falhar
+    // sozinha com o passar do tempo.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
+    await tester.pumpAndSettle();
   }
 
+  // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem e
+  // Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4). O apelido
+  // e OPCIONAL e fica vazio em todos os casos daqui -- e isso tambem prova,
+  // de lado, que apelido nulo nao impede o cadastro.
   final Finder campoNome = find.byType(TextField).at(0);
-  final Finder campoEmail = find.byType(TextField).at(1);
-  final Finder campoSenha = find.byType(TextField).at(2);
+  final Finder campoEmail = find.byType(TextField).at(3);
+  final Finder campoSenha = find.byType(TextField).at(4);
 
   /// O icone da linha daquela regra, que e o que diz o estado a quem enxerga.
   IconData iconeDa(WidgetTester tester, String texto) {

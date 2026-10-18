@@ -119,11 +119,16 @@ void main() {
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
 
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem e
+    // Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4). A data
+    // e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta, e sem ela
+    // este caso passaria a medir o bloqueio do botao em vez da recusa da senha.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'curta');
+    await tester.enterText(find.byType(TextField).at(4), 'curta');
     // Sem rolagem: o botao mora na barra fixa do rodape desde 23/09/2026.
     await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
     await tester.pumpAndSettle();
