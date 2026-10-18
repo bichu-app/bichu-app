@@ -616,11 +616,35 @@ class CartaoDaLoja extends StatelessWidget {
               // expansivel. Captura de tela e como isso circula.
               if (linhaDoPreco != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
-                Text(
-                  linhaDoPreco,
-                  style: textos.titleLarge?.copyWith(
-                    color: cores.textPrimary,
-                    fontWeight: FontWeight.w700,
+                // **O DESTAQUE E DO VALOR, e a linha continua INTEIRA.**
+                //
+                // `ItemDaLoja.linhaDoPreco` e uma string so de proposito (o
+                // criterio 15 da BICHUS-185: o numero nunca aparece sem o
+                // rotulo e a data). Desenhar so `precoFormatado` em corpo
+                // grande seria exatamente o que aquele comentario proibe.
+                //
+                // Entao o texto desenhado E a linha inteira, caractere por
+                // caractere: o que muda e o ESTILO dos primeiros
+                // `precoFormatado.length` caracteres. Um `Text.rich` com dois
+                // trechos e um no de texto so -- nao ha estado em que o valor
+                // apareca e o resto nao.
+                Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: linhaDoPreco.substring(0, item.precoFormatado!.length),
+                        style: textos.titleLarge?.copyWith(
+                          color: cores.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: linhaDoPreco.substring(item.precoFormatado!.length),
+                        style: textos.bodySmall?.copyWith(
+                          color: cores.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
