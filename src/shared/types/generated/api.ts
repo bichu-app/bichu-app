@@ -782,6 +782,13 @@ export interface paths {
          *     **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
          *     que o painel usa no caminho nao e projetado para o app, que nao tem o
          *     que fazer com ele.
+         *
+         *     **O endereco e obrigatorio e nao volta na resposta.** Ele e dado
+         *     pessoal, quem o enviou acabou de digita-lo, e devolve-lo seria uma
+         *     copia a mais numa resposta que nao precisa dela. Campo de endereco
+         *     faltando ou malformado responde `400` apontando **qual** campo, pelo
+         *     `errors[].field` de `validation-failed`: e isso que deixa o formulario
+         *     dizer o que falta, campo por campo, em vez de recusar calado.
          */
         post: operations["requestCollarTag"];
         delete?: never;
@@ -3537,13 +3544,14 @@ export interface paths {
          * @description So existe no painel. Sem filtro, vem a fila de `pending`, do pedido
          *     mais antigo para o mais novo.
          *
-         *     **NAO LE PESSOA, e a ausencia e deliberada.** Nenhum campo do
-         *     solicitante sai aqui: nem nome, nem e-mail, nem identificador estavel.
-         *     A unica leitura de pessoa do backoffice v1 e a fila de pedidos de
-         *     encontro, coberta pelo RA-01 por decisao do cliente de 23/09 (D53 a
-         *     D57); abrir uma segunda seria decidir no lugar dele. E, enquanto
-         *     entrega e cobranca estiverem em aberto, o nome do solicitante nao
-         *     tornaria o pedido cumprivel -- faltaria o endereco do mesmo jeito.
+         *     **Devolve o ENDERECO DE ENTREGA**, que e o que o administrador le para
+         *     enviar a plaquinha (decisao do cliente, 17/10). E dado pessoal, e por
+         *     isso: so nesta superficie, nunca em resposta sem conta, nunca na
+         *     trilha de auditoria e nunca geocodificado (ADR-0006).
+         *
+         *     **Nenhum PERFIL do solicitante sai aqui**: nem e-mail, nem telefone,
+         *     nem UUID, nem identificador estavel. A unica leitura de conta do
+         *     backoffice v1 segue sendo a fila de pedidos de encontro (D53 a D57).
          *
          *     **Nao traz o codigo da plaquinha.** O codigo e credencial ao portador
          *     (ADR-0004) e hoje sai em duas superficies, as duas do tutor; uma
@@ -6682,14 +6690,54 @@ export interface components {
             total: number;
         };
         /**
-         * @description O corpo do pedido da plaquinha. **Um campo**, e a lista curta e
-         *     deliberada: endereco de entrega e valor sao decisao de produto do
-         *     cliente, ainda em aberto, e inventa-los aqui seria decidir no lugar
-         *     dele.
+         * @description O corpo do pedido da plaquinha. O **endereco de entrega e
+         *     obrigatorio** (decisao do cliente, 17/10): sem ele a administracao nao
+         *     cumpre o pedido, e um pedido que nao se cumpre nao deveria poder
+         *     existir. `notes` segue opcional.
+         *
+         *     **Valor e cobranca continuam fora**, por decisao do cliente: nao ha
+         *     preco, nao ha forma de pagamento e nao ha status de cobranca.
          */
         CollarTagRequestInput: {
+            delivery_address: components["schemas"]["DeliveryAddress"];
             /** @description Observacao livre do tutor. Opcional; pedir sem dizer nada e o caminho comum. */
             notes?: string;
+        };
+        /**
+         * @description O endereco para onde a plaquinha e enviada. **Dado pessoal**, e o
+         *     tratamento vai junto da definicao:
+         *
+         *     - **nao sai em superficie publica**. Ele aparece para quem pediu e para
+         *       a administracao, e mais ninguem. Nenhuma resposta sem conta o
+         *       projeta;
+         *     - **nao entra na trilha de auditoria**. `audit.events` registra que
+         *       houve pedido e qual foi a decisao, pelo `ref`; o endereco nunca e
+         *       copiado para la;
+         *     - **nao e geocodificado, e o CEP nao e resolvido**. A ADR-0006 proibe,
+         *       e nao ha mapa nem busca de endereco neste produto. Todo campo e
+         *       DIGITADO, e nenhum servico externo completa nenhum outro: o servidor
+         *       nao tem como saber se o bairro confere com o CEP;
+         *     - **so o necessario para entregar**. Sem documento, sem data de
+         *       nascimento, sem telefone.
+         *
+         *     `state` e a sigla de dois caracteres, no mesmo formato de `Area.state`
+         *     -- **sem `enum`**, porque o conjunto das 27 siglas nao existe no
+         *     servidor e declara-lo aqui criaria a segunda fonte para divergir da
+         *     lista do app.
+         */
+        DeliveryAddress: {
+            /** @description Quem recebe, como vai na etiqueta. */
+            recipient_name: string;
+            /** @description CEP com oito digitos, **sem mascara e sem hifen**. Digitado, nunca resolvido. */
+            postal_code: string;
+            street: string;
+            /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. */
+            street_number: string;
+            /** @description O UNICO campo opcional do endereco; casa sem complemento e o caso comum. */
+            complement?: string;
+            neighborhood: string;
+            city: string;
+            state: string;
         };
         /**
          * @description `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
@@ -6715,14 +6763,23 @@ export interface components {
         AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
         /**
          * @description Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
-         *     projecao e minima e fechada: sai o nome de exibicao e a especie, que e
-         *     o que identifica qual plaquinha prensar.
+         *     projecao do pet e minima e fechada: sai o nome de exibicao e a
+         *     especie, que e o que identifica qual plaquinha prensar.
          *
-         *     **Nenhum campo do solicitante sai aqui**, e a ausencia e deliberada: a
-         *     unica leitura de pessoa do backoffice v1 e a outra fila (D53 a D57), e
-         *     abrir uma segunda e decisao do cliente. Tambem **nao traz o codigo da
-         *     plaquinha**, que e credencial ao portador (ADR-0004), e **nao traz
-         *     endereco**, que nao existe no pedido.
+         *     **O ENDERECO DE ENTREGA SAI AQUI**, e e o que o administrador le para
+         *     enviar a plaquinha (decisao do cliente, 17/10). Ele e o unico dado
+         *     pessoal desta resposta, e vem como `DeliveryAddress` -- a mesma forma
+         *     que o tutor digitou, sem geocodificacao e sem resolucao de CEP
+         *     (ADR-0006).
+         *
+         *     **Nenhum PERFIL do solicitante sai aqui**: nem e-mail, nem telefone,
+         *     nem UUID, nem identificador estavel, nem historico. O nome que aparece
+         *     e `delivery_address.recipient_name`, que e quem recebe a encomenda e
+         *     nao uma leitura de conta -- a unica leitura de pessoa do backoffice v1
+         *     segue sendo a outra fila (D53 a D57).
+         *
+         *     Tambem **nao traz o codigo da plaquinha**, que e credencial ao portador
+         *     (ADR-0004).
          */
         AdminCollarTagRequest: {
             /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
@@ -6731,6 +6788,7 @@ export interface components {
                 display_name: string;
                 species: string;
             };
+            delivery_address: components["schemas"]["DeliveryAddress"];
             notes?: string | null;
             status: components["schemas"]["AdminCollarTagRequestStatus"];
             /** Format: date-time */
@@ -8481,7 +8539,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["CollarTagRequestInput"];
             };

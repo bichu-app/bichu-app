@@ -14,6 +14,18 @@
  * Pelo mesmo motivo a decisao do painel nao confere nada sobre dono: quem
  * chega ate ela passou pela guarda do prefixo `/v1/admin`.
  *
+ * ## O ENDERECO E DADO PESSOAL, e este arquivo e onde ele toca o disco
+ *
+ * Tres coisas que NAO acontecem aqui, e cada uma e deliberada:
+ *
+ * - **nenhum `console`, nenhum `log`, nenhum `RAISE`** com conteudo de
+ *   endereco. O unico lugar onde ele aparece e o `INSERT`, parametrizado;
+ * - **nada e geocodificado e nenhum CEP e resolvido** (ADR-0006). Nao ha
+ *   chamada externa, nao ha `lat`/`lon` e nao ha `geography`;
+ * - **a leitura da fila e a unica que projeta endereco**, e ela so e
+ *   alcancavel pela superficie administrativa. `criarOuDevolverPendente`
+ *   devolve [PedidoDoTutor], que nao tem endereco nenhum.
+ *
  * ## `ON CONFLICT` e o indice parcial
  *
  * `collar_tag_requests_um_pendente_por_pet` e unico sobre `pet_id` **onde
@@ -29,6 +41,7 @@ import type { AdminAccountId } from '../../../../shared/types/brands.js';
 import type { TransacaoDeEscrita } from '../../../audit/ports/audit-log.js';
 import type {
   DecisaoDoPedidoDePlaquinha,
+  EnderecoDeEntrega,
   PaginaDaFilaDePlaquinhas,
   PedidoDePlaquinhaRepository,
   PedidoDoTutor,
@@ -47,6 +60,14 @@ interface LinhaDaFila {
   readonly ref: string;
   readonly pet_name: string;
   readonly pet_species: string;
+  readonly recipient_name: string;
+  readonly postal_code: string;
+  readonly street: string;
+  readonly street_number: string;
+  readonly complement: string | null;
+  readonly neighborhood: string;
+  readonly city: string;
+  readonly state: string;
   readonly notes: string | null;
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly requested_at: Date;
@@ -57,12 +78,26 @@ function comoPedidoDoTutor(linha: LinhaDoTutor): PedidoDoTutor {
   return { status: linha.status, solicitadoEm: linha.requested_at, observacao: linha.notes };
 }
 
+function comoEndereco(linha: LinhaDaFila): EnderecoDeEntrega {
+  return {
+    destinatario: linha.recipient_name,
+    cep: linha.postal_code,
+    logradouro: linha.street,
+    numero: linha.street_number,
+    complemento: linha.complement,
+    bairro: linha.neighborhood,
+    cidade: linha.city,
+    uf: linha.state,
+  };
+}
+
 function comoPedidoNaFila(linha: LinhaDaFila): PedidoNaFilaDePlaquinhas {
   return {
     id: linha.id,
     ref: linha.ref,
     petNome: linha.pet_name,
     petEspecie: linha.pet_species,
+    endereco: comoEndereco(linha),
     observacao: linha.notes,
     status: linha.status,
     solicitadoEm: linha.requested_at,
@@ -75,13 +110,25 @@ export function criarPedidoDePlaquinhaRepository(deps: {
 }): PedidoDePlaquinhaRepository {
   return {
     async criarOuDevolverPendente(entrada): Promise<PedidoDoTutor | undefined> {
-      const { id, ref, petId, solicitante, observacao } = entrada;
+      const { id, ref, petId, solicitante, endereco, observacao } = entrada;
 
       // O `INSERT` e o `SELECT` que o autoriza, numa instrucao. O `SELECT`
       // interno e quem decide se existe pedido a criar.
+      //
+      // Todo valor de endereco viaja PARAMETRIZADO. Nenhum deles e
+      // interpolado em texto de consulta, e nenhum e registrado: um endereco
+      // num log de consulta lenta sobreviveria a exclusao da conta.
       await sql`
-        INSERT INTO collar_tag_requests (id, ref, pet_id, requested_by, notes)
-        SELECT ${id}::uuid, ${ref}, p.id, ${solicitante}::uuid, ${observacao}
+        INSERT INTO collar_tag_requests (
+                 id, ref, pet_id, requested_by,
+                 recipient_name, postal_code, street, street_number,
+                 complement, neighborhood, city, state,
+                 notes)
+        SELECT ${id}::uuid, ${ref}, p.id, ${solicitante}::uuid,
+               ${endereco.destinatario}, ${endereco.cep}, ${endereco.logradouro},
+               ${endereco.numero}, ${endereco.complemento}, ${endereco.bairro},
+               ${endereco.cidade}, ${endereco.uf},
+               ${observacao}
           FROM pets p
          WHERE p.id = ${petId}::uuid
            AND p.owner_user_id = ${solicitante}::uuid
@@ -114,6 +161,8 @@ export function criarPedidoDePlaquinhaRepository(deps: {
 
       const pagina = await sql<LinhaDaFila>`
         SELECT r.id, r.ref, p.name AS pet_name, p.species_code AS pet_species,
+               r.recipient_name, r.postal_code, r.street, r.street_number,
+               r.complement, r.neighborhood, r.city, r.state,
                r.notes, r.status, r.requested_at, r.decided_at
           FROM collar_tag_requests r
           JOIN pets p ON p.id = r.pet_id AND p.deleted_at IS NULL
@@ -144,6 +193,8 @@ export function criarPedidoDePlaquinhaRepository(deps: {
       // bloquear o tutor editando o animal.
       const lida = await sql<LinhaDaFila>`
         SELECT r.id, r.ref, p.name AS pet_name, p.species_code AS pet_species,
+               r.recipient_name, r.postal_code, r.street, r.street_number,
+               r.complement, r.neighborhood, r.city, r.state,
                r.notes, r.status, r.requested_at, r.decided_at
           FROM collar_tag_requests r
           JOIN pets p ON p.id = r.pet_id AND p.deleted_at IS NULL
@@ -170,6 +221,8 @@ export function criarPedidoDePlaquinhaRepository(deps: {
         RETURNING r.id, r.ref,
                   (SELECT p.name FROM pets p WHERE p.id = r.pet_id) AS pet_name,
                   (SELECT p.species_code FROM pets p WHERE p.id = r.pet_id) AS pet_species,
+                  r.recipient_name, r.postal_code, r.street, r.street_number,
+                  r.complement, r.neighborhood, r.city, r.state,
                   r.notes, r.status, r.requested_at, r.decided_at
       `.execute(trx);
       const linha = atualizada.rows[0];

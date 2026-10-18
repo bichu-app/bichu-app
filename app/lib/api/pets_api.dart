@@ -257,15 +257,25 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   /// **A autorizacao esta na clausula `WHERE` do servidor, e pet de outra
   /// pessoa responde 404 e nunca 403** (ADR-0021): para quem pede, o pet de
   /// outro tutor nao existe.
+  ///
+  /// **O endereco e obrigatorio** (decisao do cliente, 17/10): sem ele a
+  /// administracao nao cumpre. Campo faltando responde 400 `validation-failed`
+  /// com o campo nomeado em `errors[].field`, e e dai que o formulario tira
+  /// qual campo cobrar.
+  ///
+  /// **O endereco nao volta na resposta**, e e de proposito: dado pessoal nao
+  /// e ecoado para quem acabou de digita-lo.
   Future<PedidoDePlaquinha> solicitarPlaquinha({
     required String petId,
+    required EnderecoDeEntrega endereco,
     String? observacao,
   }) async {
     final json = await _api.post(
       '/pets/${Uri.encodeComponent(petId)}/tag-requests',
-      corpo: observacao == null || observacao.isEmpty
-          ? null
-          : <String, dynamic>{'notes': observacao},
+      corpo: <String, dynamic>{
+        'delivery_address': endereco.paraJson(),
+        if (observacao != null && observacao.isNotEmpty) 'notes': observacao,
+      },
     );
     return PedidoDePlaquinha.doJson(json);
   }

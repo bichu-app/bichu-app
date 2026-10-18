@@ -628,6 +628,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // Decidido tem instante, nos dois sentidos.
   'public.collar_tag_requests.collar_tag_requests_decidido_tem_instante':
     "CHECK (((status = ANY (ARRAY['fulfilled'::text, 'declined'::text])) = (decided_at IS NOT NULL)))",
+  // O CEP, oito digitos sem mascara. **Formato, nunca existencia**: nada
+  // resolve CEP neste produto (ADR-0006), e o banco nao tem como saber se ele
+  // confere com bairro e cidade.
+  'public.collar_tag_requests.collar_tag_requests_cep_formato':
+    "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
   // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
   // que torna "o ponto de evento da comunidade so aparece depois de revisao
   // humana" um estado do banco, porque `pending_review` nunca e visivel.

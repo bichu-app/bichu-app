@@ -20,8 +20,15 @@
  * 2. **A trilha identifica o pedido pelo `id` interno e pelo `ref`, e NUNCA
  *    por quem pediu.** A assercao e sobre o evento inteiro serializado: um
  *    campo novo que amanha carregue dado do solicitante reprova aqui sem
- *    ninguem lembrar de incluir o nome dele. A fila nao le pessoa, e este e o
- *    instrumento que mantem isso verdade.
+ *    ninguem lembrar de incluir o nome dele.
+ *
+ * 2b. **O ENDERECO DE ENTREGA NAO ENTRA NA TRILHA.** Esta e a isca que o
+ *    cliente comprou junto do endereco: `audit.events` pode registrar que
+ *    houve pedido e qual foi a decisao, **nunca o endereco**. A varredura
+ *    procura cada um dos oito campos no evento serializado, com valores que
+ *    nao aparecem em mais lugar nenhum do arquivo -- um `before`/`after` que
+ *    passasse a copiar a linha inteira reprova aqui, e e esse o jeito mais
+ *    provavel de o endereco vazar para la sem ninguem notar.
  *
  * 3. **Pedido que nao esta `pending` responde 400 `request_not_pending`**, e
  *    nao 409 nem 200 calado. Atender duas vezes nao atende duas vezes.
@@ -61,6 +68,21 @@ const REF_DESCONHECIDO = 'bmFvRXhpc3RlRXN0ZVJlZkFx';
 /** O nome do solicitante, que NUNCA deve aparecer em lugar nenhum. */
 const NOME_DE_QUEM_PEDIU = 'Mariana Solicitante';
 
+/**
+ * O endereco do pedido. **Cada valor e unico neste arquivo**, para a varredura
+ * da isca 2b nao casar com outra coisa por acidente.
+ */
+const ENDERECO = {
+  destinatario: 'Mariana Destinataria',
+  cep: '01311000',
+  logradouro: 'Avenida Paulista Ficticia',
+  numero: '1578B',
+  complemento: 'apto 92 fundos',
+  bairro: 'Bela Vista Inventada',
+  cidade: 'Sao Paulo dos Testes',
+  uf: 'SP',
+} as const;
+
 const ATOR: AtorAdministrativo = {
   adminAccountId: ADMIN,
   ip: '203.0.113.7',
@@ -76,6 +98,7 @@ function pedido(
     ref: REF,
     petNome: 'Bidu',
     petEspecie: 'dog',
+    endereco: ENDERECO,
     observacao: 'coleira vermelha',
     status,
     solicitadoEm: comoData(AGORA),
@@ -171,6 +194,24 @@ void describe('a decisao do painel sobre o pedido da plaquinha', () => {
     assert.doesNotMatch(JSON.stringify(evento), new RegExp(NOME_DE_QUEM_PEDIU, 'i'));
   });
 
+  void it('2b. o ENDERECO DE ENTREGA nao entra na trilha, campo por campo', async () => {
+    const b = bancada('pending');
+    await b.fila.atender(rotaDeAtenderPedidoDePlaquinha.audit, ATOR, REF);
+    const serializado = JSON.stringify(b.eventos[0]);
+
+    // Os oito campos, um a um. Afirmar so "nao contem o CEP" deixaria passar
+    // um evento que copiasse logradouro e numero.
+    for (const valor of Object.values(ENDERECO)) {
+      assert.ok(
+        !serializado.includes(valor),
+        `o evento de trilha carrega um campo do endereco de entrega: ${valor}`,
+      );
+    }
+    // E o que ele PRECISA carregar continua la, para a isca nao ficar verde
+    // por um evento vazio.
+    assert.equal(b.eventos[0]?.resourceId, ID_INTERNO);
+  });
+
   void it('3. pedido ja atendido responde 400 `request_not_pending`', async () => {
     const b = bancada('fulfilled');
     await assert.rejects(
@@ -209,6 +250,7 @@ void describe('a decisao do painel sobre o pedido da plaquinha', () => {
     // o conjunto de campos e fechado e nenhum deles e a credencial.
     assert.deepEqual(Object.keys(atendido).sort(), [
       'decididoEm',
+      'endereco',
       'id',
       'observacao',
       'petEspecie',

@@ -22,17 +22,40 @@
 -- revogacao posterior deixar o pedido apontando para codigo morto.
 --
 -- ====================================================================
--- O QUE ESTA TABELA NAO TEM, E A AUSENCIA E DELIBERADA
+-- O ENDERECO DE ENTREGA ENTRA, E O VALOR CONTINUA FORA
 -- ====================================================================
 --
--- **Nao ha endereco de entrega e nao ha valor.** As duas sao decisao de
--- produto do cliente e nao foram tomadas: sem endereco o administrador recebe
--- um pedido que nao consegue cumprir, e com valor entra cobranca, que esta
--- fora de escopo por decisao dele. Inventar as colunas aqui seria decidir no
--- lugar dele, e migracao de coluna inventada custa mais do que a que falta.
+-- **O cliente decidiu em 17/10: o endereco entra.** A pergunta estava aberta
+-- e o motivo dela era exatamente este -- sem endereco, quem atende no painel
+-- recebe um pedido que nao consegue cumprir. As colunas de endereco nascem
+-- aqui, nesta mesma migracao e nao numa segunda: esta tabela nunca foi
+-- aplicada em banco nenhum, entao um `ALTER` sobre ela seria cerimonia sobre
+-- uma tabela que nao existe em lugar nenhum.
 --
--- Entra no lugar `notes`, texto livre e opcional do tutor, que e o minimo que
--- deixa o pedido dizer alguma coisa alem de "quero".
+-- **O valor continua fora.** Cobranca esta fora de escopo por decisao dele, e
+-- nao ha coluna de preco, de pagamento nem de status de cobranca.
+--
+-- ====================================================================
+-- ISTO E DADO PESSOAL, E A TABELA TRATA COMO TAL
+-- ====================================================================
+--
+-- 1. **So o necessario para entregar.** Sete campos de endereco e o nome de
+--    quem recebe, que e o que vai na etiqueta. Sem documento, sem data de
+--    nascimento, sem telefone, sem nada alem disso.
+-- 2. **Nada aqui e geocodificado.** Nao ha `lat`, nao ha `lon`, nao ha
+--    `geography` e nao ha indice espacial: a ADR-0006 proibe, e o cliente
+--    reafirmou nesta semana que nao ha mapa nem busca de endereco. O CEP e
+--    DIGITADO e guardado como digitado (so sem mascara); nenhuma consulta a
+--    servico externo o completa.
+-- 3. **O endereco nao sai em superficie publica.** Quem o le e o proprio
+--    solicitante e a administracao, e a autorizacao mora na clausula `WHERE`
+--    (404 e nunca 403, ADR-0021).
+-- 4. **O endereco nao entra na trilha de auditoria.** `audit.events` registra
+--    que houve pedido e qual foi a decisao, pelo `id` interno e pelo `ref`;
+--    o endereco nunca e copiado para la, nem em `before`/`after`, nem em
+--    `metadata`.
+-- 5. **Cai com o pet.** `ON DELETE CASCADE` em `pet_id` nao e so integridade:
+--    e o endereco saindo do banco quando o pet sai.
 
 -- Up Migration
 
@@ -64,6 +87,66 @@ CREATE TABLE collar_tag_requests (
   -- achador, e nao um numero novo.
   notes             text        CONSTRAINT collar_tag_requests_notes_tamanho
                                 CHECK (notes IS NULL OR char_length(notes) BETWEEN 1 AND 500),
+
+  -- -------------------------------------------------------------------------
+  -- O ENDERECO DE ENTREGA. Obrigatorio: sem ele o pedido nao se cumpre, e um
+  -- pedido que nao se cumpre nao deveria poder existir. Por isso `NOT NULL`
+  -- no banco, e nao so validacao de formulario -- a trava que vale e a que
+  -- nenhum cliente consegue contornar.
+  --
+  -- `complement` e a UNICA opcional, porque casa sem complemento e o caso
+  -- comum. Ela e a excecao declarada, e nao um campo que ficou de fora.
+  -- -------------------------------------------------------------------------
+
+  -- Quem recebe, como vai na etiqueta. E o minimo que falta ao endereco para
+  -- ele ser entregavel; nao e perfil, nao e identidade e nao e contato.
+  recipient_name    text        NOT NULL
+                                CONSTRAINT collar_tag_requests_recipient_tamanho
+                                CHECK (char_length(recipient_name) BETWEEN 2 AND 120),
+
+  -- OITO DIGITOS, sem mascara e sem hifen. Guardar "01311-000" e "01311000"
+  -- na mesma coluna daria dois enderecos iguais com dois valores diferentes, e
+  -- quem normaliza e a aplicacao, antes de gravar.
+  --
+  -- **O CEP nao e resolvido por ninguem.** Nao ha consulta a servico externo
+  -- que o complete (ADR-0006), e por isso ele nao tem relacao nenhuma com as
+  -- outras colunas: o banco nao sabe, e nao tem como saber, se o bairro
+  -- confere com o CEP.
+  postal_code       text        NOT NULL
+                                CONSTRAINT collar_tag_requests_cep_formato
+                                CHECK (postal_code ~ '^[0-9]{8}$'),
+
+  street            text        NOT NULL
+                                CONSTRAINT collar_tag_requests_logradouro_tamanho
+                                CHECK (char_length(street) BETWEEN 2 AND 120),
+
+  -- Texto, e nao inteiro: "s/n", "120A" e "KM 32" sao numeros de porta
+  -- legitimos, e uma coluna inteira recusaria endereco que existe.
+  street_number     text        NOT NULL
+                                CONSTRAINT collar_tag_requests_numero_tamanho
+                                CHECK (char_length(street_number) BETWEEN 1 AND 20),
+
+  complement        text        CONSTRAINT collar_tag_requests_complemento_tamanho
+                                CHECK (complement IS NULL OR char_length(complement) BETWEEN 1 AND 80),
+
+  neighborhood      text        NOT NULL
+                                CONSTRAINT collar_tag_requests_bairro_tamanho
+                                CHECK (char_length(neighborhood) BETWEEN 2 AND 80),
+
+  city              text        NOT NULL
+                                CONSTRAINT collar_tag_requests_cidade_tamanho
+                                CHECK (char_length(city) BETWEEN 2 AND 80),
+
+  -- DOIS CARACTERES, e nenhuma lista de siglas aqui.
+  --
+  -- O servidor nao tem lista de UF em lugar nenhum -- `Area.state` do contrato
+  -- tambem e so `minLength: 2, maxLength: 2` --, e a lista dos 27 vive no app
+  -- (`app/lib/api/estados_brasileiros.dart`). Escrever um `CHECK IN (...)` com
+  -- as 27 siglas criaria a SEGUNDA fonte, e as duas divergiriam no dia em que
+  -- uma mudasse. O formato e o que o banco sabe cobrar; o conjunto e do app.
+  state             text        NOT NULL
+                                CONSTRAINT collar_tag_requests_uf_tamanho
+                                CHECK (char_length(state) = 2),
 
   -- TRES valores, e a decisao e so do painel. `fulfilled` quer dizer "a
   -- plaquinha saiu", e nao "o codigo foi emitido" -- o codigo ja existia.
@@ -100,7 +183,13 @@ CREATE INDEX collar_tag_requests_fila
 CREATE INDEX collar_tag_requests_da_conta ON collar_tag_requests (requested_by);
 
 COMMENT ON TABLE collar_tag_requests IS
-  'Pedidos do OBJETO FISICO da plaquinha da coleira. Nao emite codigo: o codigo e de `pet_tags` e e irreversivel (ADR-0004). Sem endereco de entrega e sem valor -- as duas sao decisao de produto do cliente, ainda em aberto, e a ausencia e deliberada.';
+  'Pedidos do OBJETO FISICO da plaquinha da coleira. Nao emite codigo: o codigo e de `pet_tags` e e irreversivel (ADR-0004). CONTEM DADO PESSOAL (endereco de entrega): nao sai em superficie publica, nao entra na trilha de auditoria e nao e geocodificado (ADR-0006). Sem valor e sem cobranca, que seguem fora de escopo por decisao do cliente.';
+
+COMMENT ON COLUMN collar_tag_requests.postal_code IS
+  'CEP com oito digitos, sem mascara. DIGITADO pelo tutor: nenhum servico externo o resolve (ADR-0006), e o banco nao tem como conferir se ele confere com as demais colunas.';
+
+COMMENT ON COLUMN collar_tag_requests.state IS
+  'UF em dois caracteres. O CONJUNTO das 27 siglas vive no app (`app/lib/api/estados_brasileiros.dart`), e nao aqui: um CHECK com as siglas seria a segunda fonte para divergir.';
 
 COMMENT ON COLUMN collar_tag_requests.ref IS
   'Identificador opaco do pedido no caminho do painel, 128 bits em base64url. Nao e o UUID (ADR-0010 item 6).';

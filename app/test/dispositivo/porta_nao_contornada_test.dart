@@ -932,10 +932,27 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// (`flutter test test/dispositivo/porta_nao_contornada_test.dart`), que e o
 /// que o procedimento de destravamento cobra. Anterior: `65dcb5c`.
 ///
+/// DESTRAVADO DE NOVO EM 17/10, mesma historia, segunda rodada. O cliente
+/// respondeu a pergunta que estava aberta: **o endereco de entrega entra, e e
+/// obrigatorio** -- sem ele a administracao nao cumpre o pedido.
+///
+/// UM arquivo muda: `pet/tela_solicitar_plaquinha.dart`. Ele ganha os sete
+/// campos do endereco (`Quem recebe`, CEP, rua, numero, complemento, bairro,
+/// cidade) e o seletor de UF, que le a lista dos 27 de
+/// `app/lib/api/estados_brasileiros.dart` -- **a tela nao escreve a segunda
+/// lista**, e e por isso que ela pode cobrar a UF sem criar a fonte que
+/// divergiria. A recusa passa a dizer QUAL campo falta, no proprio campo.
+///
+/// Continua sem componente novo (`BichuField` e `SeletorDeLista`, os dois ja
+/// existiam), sem importe de plugin de aparelho e **sem consulta de CEP**: a
+/// ADR-0006 proibe geocodificacao, e digitar o CEP nao preenche campo nenhum.
+/// As outras duas telas do lote anterior nao mudaram nesta rodada. Anterior:
+/// `a0f1b4a`.
+///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = 'a0f1b4a3299933a349b03fbd3de03d7e0fd11591'; // BICHUS-278, 17/10: o pedido da plaquinha da coleira -- `pet/tela_solicitar_plaquinha.dart` nasce (o destino que o botao `Fazer a tag da coleira` nunca teve), `pet/tela_pet_cadastrado.dart` troca `aoTocar: null` pela rota nova, e `pet/tela_detalhe_do_pet.dart` corrige SO o comentario que afirmava que a acao nao tinha destino. Nenhum componente novo, nenhuma porta de aparelho encostada (antes: 65dcb5c)
+const String _arvoreDasTelas = '6224791e2336713e0358986f40f3ecaa7be1ef20'; // BICHUS-278, 17/10 (2a rodada): o cliente decidiu que o ENDERECO DE ENTREGA entra, e `pet/tela_solicitar_plaquinha.dart` ganha os sete campos do endereco mais a UF, que vem da lista dos 27 de `api/estados_brasileiros.dart` (mostra o nome, envia a sigla) -- nenhuma segunda lista. A recusa passa a dizer QUAL campo falta, campo por campo. Nenhum componente novo (`BichuField` e `SeletorDeLista`), nenhuma porta de aparelho encostada, nenhuma consulta de CEP (ADR-0006). As outras duas telas do lote anterior nao mudaram nesta rodada (antes: a0f1b4a)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

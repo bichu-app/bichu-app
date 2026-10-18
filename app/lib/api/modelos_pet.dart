@@ -675,6 +675,66 @@ class AvisoDoAchadorCriado {
   }
 }
 
+/// O endereco para onde a plaquinha e enviada (`DeliveryAddress`).
+///
+/// **Dado pessoal, e o minimo para entregar.** Sem documento, sem data de
+/// nascimento e sem telefone.
+///
+/// **Nada aqui e resolvido por ninguem** (ADR-0006): o CEP nao completa o
+/// bairro, a UF nao deduz a cidade, e nao ha latitude nem longitude. Todo
+/// campo e digitado. Nao ha, e nao deve haver, chamada a servico externo de
+/// CEP -- e decisao do cliente, por custo e por dependencia.
+///
+/// O `uf` e a sigla de dois caracteres. A lista dos 27 nomes vive em
+/// `estados_brasileiros.dart`, e e ela que o formulario mostra; o que viaja e
+/// a sigla.
+class EnderecoDeEntrega {
+  const EnderecoDeEntrega({
+    required this.destinatario,
+    required this.cep,
+    required this.logradouro,
+    required this.numero,
+    required this.bairro,
+    required this.cidade,
+    required this.uf,
+    this.complemento,
+  });
+
+  /// Quem recebe, como vai na etiqueta.
+  final String destinatario;
+
+  /// Oito digitos, **sem mascara**: o contrato declara `^[0-9]{8}$`.
+  final String cep;
+
+  final String logradouro;
+
+  /// Texto, e nao numero: `s/n`, `120A` e `KM 32` sao numeros de porta.
+  final String numero;
+
+  /// O unico campo opcional do endereco.
+  final String? complemento;
+
+  final String bairro;
+  final String cidade;
+
+  /// A sigla de dois caracteres.
+  final String uf;
+
+  Map<String, dynamic> paraJson() {
+    return <String, dynamic>{
+      'recipient_name': destinatario,
+      'postal_code': cep,
+      'street': logradouro,
+      'street_number': numero,
+      if (complemento != null && complemento!.isNotEmpty)
+        'complement': complemento,
+      'neighborhood': bairro,
+      'city': cidade,
+      'state': uf,
+    };
+  }
+}
+
 /// O pedido da plaquinha da coleira, como o app o ve.
 ///
 /// **Solicitar nao e emitir.** [TagEmitida] e o CODIGO, irreversivel

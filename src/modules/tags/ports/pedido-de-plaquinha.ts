@@ -14,13 +14,25 @@
  * isso nao ha `tagId` no pedido: qual tag ativa do pet vai para o plastico e
  * decisao de quem atende, no minuto em que atende.
  *
- * ## O que esta porta NAO tem
+ * ## O endereco de entrega, e o cuidado que ele exige
  *
- * Nao ha endereco de entrega e nao ha valor. As duas sao decisao de produto do
- * cliente e nao foram tomadas; inventa-las aqui seria decidir no lugar dele. A
- * consequencia esta dita onde ela importa: **sem endereco, quem atende nao
- * tem como cumprir o pedido**, e a fila do painel serve para enxergar a
- * demanda antes de a decisao existir, nao para despachar encomenda.
+ * O cliente decidiu em 17/10: **o endereco entra, e e obrigatorio**. Sem ele a
+ * administracao nao cumpre, que era o motivo da pergunta.
+ *
+ * Ele e DADO PESSOAL, e as quatro regras andam com o tipo:
+ *
+ * 1. **so o necessario para entregar** -- sete campos de endereco e o nome de
+ *    quem recebe. Sem documento, sem data de nascimento, sem telefone;
+ * 2. **nao sai em superficie publica**. [PedidoDoTutor], que e o que o app ve,
+ *    **nao tem endereco**: quem o enviou acabou de digita-lo, e devolve-lo
+ *    seria uma copia a mais. Quem o le e a administracao, por
+ *    [PedidoNaFilaDePlaquinhas];
+ * 3. **nao entra na trilha**. Nenhum campo de [EnderecoDeEntrega] e copiado
+ *    para `audit.events`, nem em `before`/`after`, nem em `metadata`;
+ * 4. **nao e geocodificado**. Nao ha `lat`, nao ha `lon` e nao ha resolucao de
+ *    CEP por servico externo (ADR-0006): todo campo e digitado.
+ *
+ * O valor continua fora: nao ha preco, nao ha pagamento e nao ha cobranca.
  */
 import type { AdminAccountId, PetId, UserId } from '../../../shared/types/brands.js';
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
@@ -28,7 +40,36 @@ import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 /** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
 export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
 
-/** O pedido como o APP o ve. Sem `ref` e sem UUID nenhum (ADR-0010 item 6). */
+/**
+ * O endereco de entrega, como o tutor o digitou.
+ *
+ * **Nenhum campo e resolvido por ninguem** (ADR-0006): `cep` nao completa
+ * `bairro`, `cidade` nao vem de `uf`, e nao ha latitude nem longitude. O que
+ * chega e o que a pessoa escreveu.
+ *
+ * `uf` e a sigla de dois caracteres. **O conjunto das 27 nao mora aqui nem no
+ * banco**: ele vive no app (`app/lib/api/estados_brasileiros.dart`), e uma
+ * segunda lista deste lado seria a segunda fonte para divergir.
+ */
+export interface EnderecoDeEntrega {
+  /** Quem recebe, como vai na etiqueta. */
+  readonly destinatario: string;
+  /** Oito digitos, sem mascara. Ja normalizado quando chega aqui. */
+  readonly cep: string;
+  readonly logradouro: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  readonly numero: string;
+  /** O unico opcional do endereco. */
+  readonly complemento: string | null;
+  readonly bairro: string;
+  readonly cidade: string;
+  readonly uf: string;
+}
+
+/**
+ * O pedido como o APP o ve. Sem `ref` e sem UUID nenhum (ADR-0010 item 6), e
+ * **sem endereco**: ver a regra 2 no cabecalho deste arquivo.
+ */
 export interface PedidoDoTutor {
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly solicitadoEm: Date;
@@ -38,12 +79,14 @@ export interface PedidoDoTutor {
 /**
  * O pedido como a FILA DO PAINEL o ve.
  *
- * `petNome` e `petEspecie` sao o que identifica qual plaquinha prensar.
- * **Nenhum campo do solicitante**, e a ausencia e deliberada: a unica leitura
- * de pessoa do backoffice v1 e a fila de pedidos de encontro, coberta pelo
- * RA-01 por decisao do cliente de 23/09 (D53 a D57). Abrir uma segunda e
- * decisao dele, e enquanto entrega estiver em aberto o nome do solicitante nao
- * tornaria o pedido cumprivel -- faltaria o endereco do mesmo jeito.
+ * `petNome` e `petEspecie` identificam qual plaquinha prensar; `endereco` e
+ * para onde ela vai, e e o unico dado pessoal desta projecao.
+ *
+ * **Nenhum PERFIL do solicitante entra aqui**: nem e-mail, nem telefone, nem
+ * UUID, nem identificador estavel, nem historico. O nome que aparece e o de
+ * quem recebe a encomenda, dentro do endereco, e nao uma leitura de conta -- a
+ * unica leitura de conta do backoffice v1 segue sendo a fila de pedidos de
+ * encontro (D53 a D57).
  */
 export interface PedidoNaFilaDePlaquinhas {
   /** Interno, para a trilha. Nunca projetado em resposta. */
@@ -51,6 +94,7 @@ export interface PedidoNaFilaDePlaquinhas {
   readonly ref: string;
   readonly petNome: string;
   readonly petEspecie: string;
+  readonly endereco: EnderecoDeEntrega;
   readonly observacao: string | null;
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly solicitadoEm: Date;
@@ -82,6 +126,7 @@ export interface PedidoDePlaquinhaRepository {
     readonly ref: string;
     readonly petId: PetId;
     readonly solicitante: UserId;
+    readonly endereco: EnderecoDeEntrega;
     readonly observacao: string | null;
   }): Promise<PedidoDoTutor | undefined>;
 

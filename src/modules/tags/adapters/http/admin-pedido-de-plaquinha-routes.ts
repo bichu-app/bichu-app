@@ -14,16 +14,28 @@
  * metodo nao seguro (403) e o papel de `adminRoles` (403). **Nenhuma
  * verificacao de papel mora aqui nem no caso de uso** (ADR-0027 item 7).
  *
- * ## A fila NAO LE PESSOA, e a ausencia e deliberada
+ * ## O ENDERECO SAI AQUI, e so aqui
  *
- * Nenhum campo do solicitante sai destas respostas. A unica leitura de pessoa
- * do backoffice v1 e a fila de pedidos de encontro, coberta pelo RA-01 por
- * decisao do cliente de 23/09 (D53 a D57); abrir uma segunda e decisao dele.
- * Por nao ler pessoa, o `GET` tambem nao declara `x-audit` nem teto por
- * `rows_returned` -- os dois andam juntos e sao da leitura de pessoa (D55/D56).
+ * Desde a decisao do cliente de 17/10, a fila devolve o endereco de entrega:
+ * e o que o administrador le para enviar a plaquinha. E o unico dado pessoal
+ * destas respostas, e por isso:
+ *
+ * - **so nesta superficie**. Nenhuma resposta sem conta o projeta, e o app nao
+ *   o recebe de volta (`CollarTagRequest` nao tem endereco);
+ * - **nunca na trilha**. `x-audit` das duas escritas registra `status` e
+ *   `ref`, e o caso de uso nao copia campo nenhum de endereco para
+ *   `audit.events`;
+ * - **nunca geocodificado** (ADR-0006). O que sai e o que o tutor digitou.
+ *
+ * **Nenhum PERFIL do solicitante sai destas respostas**: nem e-mail, nem
+ * telefone, nem UUID, nem identificador estavel. O nome que aparece e
+ * `delivery_address.recipient_name`, quem recebe a encomenda, e nao uma
+ * leitura de conta -- a unica leitura de conta do backoffice v1 segue sendo a
+ * fila de pedidos de encontro (D53 a D57), e e por isso que o `GET` daqui
+ * continua sem `x-audit` e sem teto por `rows_returned` (D55/D56).
  *
  * A fila tambem **nao traz o codigo da plaquinha**, que e credencial ao
- * portador (ADR-0004), nem endereco, que nao existe no pedido.
+ * portador (ADR-0004).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -114,6 +126,19 @@ function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<str
   return {
     ref: pedido.ref,
     pet: { display_name: pedido.petNome, species: pedido.petEspecie },
+    // `DeliveryAddress` como o contrato o declara. `complement` sai
+    // explicitamente nulo, e nao omitido: o schema o declara opcional, e
+    // omitir faria o painel distinguir "sem complemento" de "campo que sumiu".
+    delivery_address: {
+      recipient_name: pedido.endereco.destinatario,
+      postal_code: pedido.endereco.cep,
+      street: pedido.endereco.logradouro,
+      street_number: pedido.endereco.numero,
+      complement: pedido.endereco.complemento,
+      neighborhood: pedido.endereco.bairro,
+      city: pedido.endereco.cidade,
+      state: pedido.endereco.uf,
+    },
     notes: pedido.observacao,
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),

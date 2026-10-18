@@ -42,10 +42,21 @@
  *    lugar que exercita passaria a cobrar 50 no dia em que alguem escrevesse
  *    50.
  *
- * 5. **Corpo ausente e corpo vazio.** Pedir a plaquinha sem escrever nada e o
- *    caminho comum, e o contrato declara `requestBody.required: false`. Sem o
- *    gancho `corpoAusenteEhCorpoVazio`, o POST de um toque responderia 400
- *    `body must be object` -- o defeito que o aviso pela tag ja teve.
+ * 5. **O ENDERECO E OBRIGATORIO, e a recusa diz QUAL campo falta.** Esta e a
+ *    isca que o cliente comprou junto da decisao de 17/10: botao que recusa
+ *    sem explicar custou tempo a ele tres vezes num dia. O caso nao afirma
+ *    "responde 400": ele afirma que `errors[].field` nomeia o campo ausente,
+ *    um por um, para os sete obrigatorios. Um 400 generico passa na primeira
+ *    assercao e reprova nesta.
+ *
+ * 5b. **O ENDERECO NAO VOLTA NA RESPOSTA.** Dado pessoal nao e ecoado: quem o
+ *    enviou acabou de digita-lo. A varredura procura cada valor enviado no
+ *    corpo da resposta.
+ *
+ * 5c. **O CEP e normalizado, e nada mais e tocado.** `01311-000` e `01311000`
+ *    sao o mesmo lugar e precisam virar a mesma linha. O caso tambem afirma o
+ *    que NAO muda: nenhum outro campo e completado, porque nada resolve CEP
+ *    neste produto (ADR-0006).
  *
  * 6. **A observacao passa pelo schema do contrato.** 501 caracteres respondem
  *    400, e nao 500: sem `schema.body` o texto iria do corpo ao `INSERT` e
@@ -68,6 +79,7 @@ import type { IdGenerator } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, OpaqueToken, PetId, UserId } from '../../../../shared/types/brands.js';
 import type { Autenticador } from '../../ports/autenticador.js';
 import type {
+  EnderecoDeEntrega,
   PedidoDePlaquinhaRepository,
   PedidoDoTutor,
 } from '../../ports/pedido-de-plaquinha.js';
@@ -102,6 +114,36 @@ const TETO_POR_CONTA = 3;
 /** O teto de `notes` no contrato (`CollarTagRequestInput`). */
 const LIMITE_DA_OBSERVACAO = 500;
 
+/**
+ * Um endereco valido, no formato do contrato. Valores unicos neste arquivo,
+ * para a varredura da isca 5b nao casar com outra coisa por acidente.
+ */
+const ENDERECO_VALIDO = {
+  recipient_name: 'Mariana Destinataria',
+  postal_code: '01311000',
+  street: 'Avenida Paulista Ficticia',
+  street_number: '1578B',
+  complement: 'apto 92 fundos',
+  neighborhood: 'Bela Vista Inventada',
+  city: 'Sao Paulo dos Testes',
+  state: 'SP',
+} as const;
+
+/** Os sete obrigatorios. `complement` nao esta aqui, e e a unica excecao. */
+const CAMPOS_OBRIGATORIOS = [
+  'recipient_name',
+  'postal_code',
+  'street',
+  'street_number',
+  'neighborhood',
+  'city',
+  'state',
+] as const;
+
+function corpoValido(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { delivery_address: { ...ENDERECO_VALIDO }, ...extra };
+}
+
 function naoUsado(nome: string): never {
   throw new Error(`o duble nao implementa ${nome}: nenhum caso deste arquivo chega la`);
 }
@@ -109,15 +151,23 @@ function naoUsado(nome: string): never {
 interface Bancada {
   readonly app: RegistradorDeRotas;
   /** Todo pedido que chegou ao repositorio, na ordem. E o que o caso 4 mede. */
-  readonly criados: { readonly petId: PetId; readonly observacao: string | null }[];
+  readonly criados: {
+    readonly petId: PetId;
+    readonly endereco: EnderecoDeEntrega;
+    readonly observacao: string | null;
+  }[];
 }
 
 function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.now())): Bancada {
-  const criados: { petId: PetId; observacao: string | null }[] = [];
+  const criados: { petId: PetId; endereco: EnderecoDeEntrega; observacao: string | null }[] = [];
 
   const repositorio: PedidoDePlaquinhaRepository = {
     criarOuDevolverPendente: (entrada): Promise<PedidoDoTutor | undefined> => {
-      criados.push({ petId: entrada.petId, observacao: entrada.observacao });
+      criados.push({
+        petId: entrada.petId,
+        endereco: entrada.endereco,
+        observacao: entrada.observacao,
+      });
       // `undefined` para pet de outra pessoa: e exatamente o que o
       // `INSERT ... SELECT` do adaptador real produz quando a clausula
       // `WHERE` nao encontra linha.
@@ -169,7 +219,7 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
 function pedir(
   b: Bancada,
   pet: PetId,
-  corpo?: Record<string, unknown>,
+  corpo: Record<string, unknown> | undefined = corpoValido(),
 ): Promise<{ statusCode: number; body: string }> {
   return b.app.inject({
     method: 'POST',
@@ -177,6 +227,12 @@ function pedir(
     headers: { authorization: `Bearer ${TOKEN_DE_ACESSO}` },
     ...(corpo === undefined ? {} : { payload: corpo }),
   });
+}
+
+/** Os campos que o 400 de validacao nomeou. */
+function camposRecusados(body: string): string[] {
+  const corpo = JSON.parse(body) as { errors?: { field?: string }[] };
+  return (corpo.errors ?? []).map((e) => String(e.field));
 }
 
 void describe('POST /v1/pets/{petId}/tag-requests', () => {
@@ -225,7 +281,69 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     assert.equal(b.criados.length, TETO_POR_CONTA);
   });
 
-  void it('5. pedir sem corpo nenhum funciona: e o caminho comum', async () => {
+  void it('5. cada campo obrigatorio do endereco, faltando, e NOMEADO no 400', async () => {
+    for (const campo of CAMPOS_OBRIGATORIOS) {
+      const b = bancada();
+      const endereco: Record<string, unknown> = { ...ENDERECO_VALIDO };
+      delete endereco[campo];
+      const resposta = await pedir(b, MEU_PET, { delivery_address: endereco });
+
+      assert.equal(resposta.statusCode, 400, `faltando ${campo} deveria recusar`);
+      // A assercao que carrega o caso: um 400 generico passa na linha de cima
+      // e reprova aqui. E dela que o formulario tira "falta o CEP".
+      assert.ok(
+        camposRecusados(resposta.body).some((f) => f.includes(campo)),
+        `o 400 de ${campo} ausente nao nomeia o campo: ${resposta.body}`,
+      );
+      assert.equal(b.criados.length, 0);
+    }
+  });
+
+  void it('5a. corpo ausente recusa: sem corpo nao ha endereco', async () => {
+    const b = bancada();
+    const resposta = await pedir(b, MEU_PET, undefined);
+    assert.equal(resposta.statusCode, 400);
+    assert.equal(b.criados.length, 0);
+  });
+
+  void it('5a2. `complement` e o UNICO opcional, e sem ele o pedido passa', async () => {
+    const b = bancada();
+    const endereco: Record<string, unknown> = { ...ENDERECO_VALIDO };
+    delete endereco['complement'];
+    const resposta = await pedir(b, MEU_PET, { delivery_address: endereco });
+    assert.equal(resposta.statusCode, 200);
+    assert.equal(b.criados[0]?.endereco.complemento, null);
+  });
+
+  void it('5b. o endereco NAO volta na resposta, campo por campo', async () => {
+    const b = bancada();
+    const resposta = await pedir(b, MEU_PET);
+    assert.equal(resposta.statusCode, 200);
+    for (const valor of Object.values(ENDERECO_VALIDO)) {
+      assert.ok(
+        !resposta.body.includes(valor),
+        `a resposta ecoa um campo do endereco: ${valor}`,
+      );
+    }
+  });
+
+  void it('5c. o CEP e normalizado, e nenhum outro campo e tocado', async () => {
+    const b = bancada();
+    const resposta = await pedir(
+      b,
+      MEU_PET,
+      corpoValido({ delivery_address: { ...ENDERECO_VALIDO, postal_code: '01311-000' } }),
+    );
+    assert.equal(resposta.statusCode, 200);
+    const gravado = b.criados[0]?.endereco;
+    assert.equal(gravado?.cep, '01311000');
+    // Nada completa nada (ADR-0006): o que foi digitado e o que foi gravado.
+    assert.equal(gravado?.bairro, ENDERECO_VALIDO.neighborhood);
+    assert.equal(gravado?.cidade, ENDERECO_VALIDO.city);
+    assert.equal(gravado?.logradouro, ENDERECO_VALIDO.street);
+  });
+
+  void it('5d. pedir sem `notes` continua valendo: a observacao e opcional', async () => {
     const b = bancada();
     const resposta = await pedir(b, MEU_PET);
     assert.equal(resposta.statusCode, 200);
@@ -234,9 +352,11 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
 
   void it('6. observacao acima do limite responde 400, e nao 500', async () => {
     const b = bancada();
-    const resposta = await pedir(b, MEU_PET, {
-      notes: 'x'.repeat(LIMITE_DA_OBSERVACAO + 1),
-    });
+    const resposta = await pedir(
+      b,
+      MEU_PET,
+      corpoValido({ notes: 'x'.repeat(LIMITE_DA_OBSERVACAO + 1) }),
+    );
     assert.equal(resposta.statusCode, 400);
     // E o schema do contrato que recusou, nao o banco: nada chegou ao
     // repositorio.
@@ -246,7 +366,7 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
   void it('6b. observacao no limite passa, e chega inteira ao repositorio', async () => {
     const b = bancada();
     const texto = 'y'.repeat(LIMITE_DA_OBSERVACAO);
-    const resposta = await pedir(b, MEU_PET, { notes: texto });
+    const resposta = await pedir(b, MEU_PET, corpoValido({ notes: texto }));
     assert.equal(resposta.statusCode, 200);
     assert.equal(b.criados[0]?.observacao, texto);
   });

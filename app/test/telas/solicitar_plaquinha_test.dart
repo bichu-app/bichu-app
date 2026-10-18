@@ -46,10 +46,22 @@ import 'meus_pets_test.dart' show abrirOPerfil;
 //    servidor recusar por `minLength` do `CHECK` -- um 400 numa acao que a
 //    pessoa fez certo.
 //
-// 5. **NAO HA CAMPO DE ENDERECO E NAO HA PAGAMENTO**, e isso e afirmado e nao
-//    presumido. As duas perguntas sao decisao de produto do cliente e estao em
-//    aberto; um campo de endereco que apareca amanha sem decisao dele reprova
-//    aqui. A isca conta os campos de texto da tela: UM, a observacao.
+// 5. **O ENDERECO E OBRIGATORIO, E A RECUSA DIZ QUAL CAMPO FALTA.** Esta e a
+//    isca que o cliente comprou junto da decisao de 17/10: botao que recusa
+//    sem explicar custou tempo a ele tres vezes num dia. O caso NAO afirma
+//    "nao enviou": ele afirma que a mensagem de cada campo que falta aparece
+//    na tela, uma por uma.
+//
+// 5b. **O CEP NAO PREENCHE NADA.** Nao ha consulta a servico de CEP
+//    (ADR-0006). A isca digita um CEP e afirma que bairro e cidade seguem
+//    VAZIOS -- uma consulta que alguem acrescente amanha reprova aqui.
+//
+// 5c. **NAO HA PAGAMENTO**, e isso segue afirmado: cobranca continua fora de
+//    escopo por decisao do cliente.
+//
+// 5d. **A UF viaja como SIGLA, e a lista mostra o NOME.** A isca afirma os
+//    dois lados, porque mandar "São Paulo" em `state` quebraria o contrato
+//    (dois caracteres).
 //
 // 6. **404 NAO VIRA TELA MUDA.** Pet de outra pessoa responde 404 e nunca 403
 //    (ADR-0021), e a tela precisa DIZER algo: `_enviando` desligado e nada na
@@ -64,6 +76,40 @@ const String _idDoPet = '3f1d7a9e-0000-7000-8000-000000000001';
 class _Registro {
   final List<String> caminhos = <String>[];
   final List<String> corpos = <String>[];
+}
+
+/// Um endereco valido, nos rotulos da tela.
+const Map<String, String> _endereco = <String, String>{
+  'Quem recebe': 'Mariana Destinataria',
+  'CEP': '01311000',
+  'Rua': 'Avenida Paulista Ficticia',
+  'Número': '1578B',
+  'Bairro': 'Bela Vista Inventada',
+  'Cidade': 'Sao Paulo dos Testes',
+};
+
+/// Preenche os seis campos de texto do endereco e escolhe o estado.
+Future<void> _preencherOEndereco(WidgetTester tester) async {
+  for (final par in _endereco.entries) {
+    final campo = find.ancestor(
+      of: find.text(par.key),
+      matching: find.byType(BichuField),
+    );
+    await tester.ensureVisible(campo);
+    await tester.enterText(campo, par.value);
+    await tester.pumpAndSettle();
+  }
+  await _escolherOEstado(tester, 'São Paulo');
+}
+
+/// Abre o seletor de estado e escolhe pelo NOME.
+Future<void> _escolherOEstado(WidgetTester tester, String nome) async {
+  final seletor = find.ancestor(
+    of: find.text('Estado'),
+    matching: find.byType(SeletorDeLista),
+  );
+  await tocar(tester, seletor);
+  await tocar(tester, find.text(nome).last);
 }
 
 /// Uma rede com um pet do tutor e a rota do pedido da plaquinha.
@@ -138,6 +184,7 @@ void main() {
         (tester) async {
       final registro = _Registro();
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
 
       await tocar(tester, find.text('Pedir a plaquinha'));
 
@@ -150,6 +197,7 @@ void main() {
       final registro = _Registro();
       // Sem `extra`: link direto, nenhum pet pre-selecionado.
       await _abrirOFormulario(tester, registro: registro);
+      await _preencherOEndereco(tester);
 
       await tocar(tester, find.text('Pedir a plaquinha'));
 
@@ -162,8 +210,14 @@ void main() {
     testWidgets('4. observacao digitada viaja em `notes`', (tester) async {
       final registro = _Registro();
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
 
-      await tester.enterText(find.byType(BichuField), 'gravar BIDU');
+      final observacao = find.ancestor(
+        of: find.text('Observação'),
+        matching: find.byType(BichuField),
+      );
+      await tester.ensureVisible(observacao);
+      await tester.enterText(observacao, 'gravar BIDU');
       await tester.pumpAndSettle();
       await tocar(tester, find.text('Pedir a plaquinha'));
 
@@ -171,32 +225,116 @@ void main() {
       expect(corpo['notes'], 'gravar BIDU');
     });
 
-    testWidgets('4b. sem observacao, o POST vai SEM corpo', (tester) async {
+    testWidgets('4b. sem observacao, `notes` nao viaja', (tester) async {
       final registro = _Registro();
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
 
       await tocar(tester, find.text('Pedir a plaquinha'));
 
-      // Corpo vazio, e nao `{"notes":""}`: o contrato declara o corpo
-      // opcional, e `notes` vazio bateria no `CHECK` de tamanho do banco.
-      expect(registro.corpos.single, anyOf('', '{}'));
+      // Ausente, e nao `""`: `notes` vazio bateria no `CHECK` de tamanho do
+      // banco. O endereco, esse, viaja sempre.
+      final corpo = json.decode(registro.corpos.single) as Map<String, dynamic>;
+      expect(corpo.containsKey('notes'), isFalse);
+      expect(corpo['delivery_address'], isA<Map<String, dynamic>>());
+    });
+
+    testWidgets('4c. o endereco viaja com os nomes do contrato', (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      final corpo = json.decode(registro.corpos.single) as Map<String, dynamic>;
+      final endereco = corpo['delivery_address'] as Map<String, dynamic>;
+      expect(endereco['recipient_name'], 'Mariana Destinataria');
+      // **Sem mascara**: o contrato declara `^[0-9]{8}$`.
+      expect(endereco['postal_code'], '01311000');
+      expect(endereco['street'], 'Avenida Paulista Ficticia');
+      expect(endereco['street_number'], '1578B');
+      expect(endereco['neighborhood'], 'Bela Vista Inventada');
+      expect(endereco['city'], 'Sao Paulo dos Testes');
+      // 5d: a lista mostra "São Paulo"; o que viaja e `SP`.
+      expect(endereco['state'], 'SP');
+      // `complement` ficou vazio e NAO viaja: e o unico opcional.
+      expect(endereco.containsKey('complement'), isFalse);
     });
   });
 
-  group('ISCA — nao ha endereco e nao ha pagamento', () {
-    testWidgets('5. a tela tem UM campo de texto, e ele e a observacao',
+  group('ISCA — o endereco e obrigatorio, e a recusa diz qual campo falta', () {
+    testWidgets('5. cada campo que falta aparece dito na tela', (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+
+      // Formulario em branco, e o toque no botao.
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      // **A assercao que carrega a isca.** Recusar sem enviar passaria so com
+      // a linha de baixo; o que o cliente cobrou e a tela DIZER o que falta.
+      for (final texto in <String>[
+        'Diga quem recebe.',
+        'O CEP tem 8 dígitos.',
+        'Digite a rua.',
+        'Digite o número.',
+        'Digite o bairro.',
+        'Digite a cidade.',
+        'Escolha o estado.',
+      ]) {
+        await rolarAte(tester, find.text(texto));
+        expect(find.text(texto), findsOneWidget, reason: 'falta dizer: $texto');
+      }
+      expect(registro.caminhos, isEmpty);
+    });
+
+    testWidgets('5a. `Complemento` e o UNICO opcional: sem ele o pedido vai',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(registro.caminhos, hasLength(1));
+      expect(find.text('Pedido enviado.'), findsOneWidget);
+    });
+
+    testWidgets('5b. digitar o CEP NAO preenche bairro nem cidade',
         (tester) async {
       final registro = _Registro();
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
 
-      // As duas perguntas de produto (endereco de entrega e custo) estao em
-      // aberto com o cliente. Enquanto estiverem, campo novo aqui reprova.
-      expect(find.byType(BichuField), findsOneWidget);
-      expect(find.text('Observação'), findsOneWidget);
-      expect(find.textContaining('ndere', findRichText: true), findsNothing);
-      expect(find.textContaining('CEP'), findsNothing);
+      final cep = find.ancestor(
+        of: find.text('CEP'),
+        matching: find.byType(BichuField),
+      );
+      await tester.ensureVisible(cep);
+      await tester.enterText(cep, '01311000');
+      await tester.pumpAndSettle();
+
+      // Nao ha consulta a servico de CEP (ADR-0006). Se alguem acrescentar
+      // uma, estes dois campos deixam de estar vazios e a isca reprova.
+      for (final rotulo in <String>['Bairro', 'Cidade']) {
+        final campo = tester.widget<BichuField>(
+          find.ancestor(
+            of: find.text(rotulo),
+            matching: find.byType(BichuField),
+          ),
+        );
+        expect(campo.controlador.text, isEmpty, reason: '$rotulo foi preenchido sozinho');
+      }
+      expect(registro.caminhos, isEmpty);
+    });
+
+    testWidgets('5c. nao ha pagamento: nenhum valor e nenhuma cobranca',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+
+      // Cobranca segue fora de escopo por decisao do cliente.
       expect(find.textContaining('R\$'), findsNothing);
       expect(find.textContaining('agament'), findsNothing);
+      expect(find.textContaining('artão'), findsNothing);
     });
   });
 

@@ -17,6 +17,7 @@ import {
   type DeclaracaoDeTrilha,
 } from '../../audit/ports/trilha-administrativa.js';
 import type {
+  EnderecoDeEntrega,
   PaginaDaFilaDePlaquinhas,
   PedidoDePlaquinhaRepository,
   PedidoDoTutor,
@@ -57,6 +58,7 @@ export class PedidoDePlaquinhaService {
   async pedir(
     petId: PetId,
     solicitante: UserId,
+    endereco: EnderecoDeEntrega,
     observacao: string | null,
   ): Promise<PedidoDoTutor> {
     const pedido = await this.deps.repositorio.criarOuDevolverPendente({
@@ -64,6 +66,7 @@ export class PedidoDePlaquinhaService {
       ref: refDoPedido(this.deps.ids),
       petId,
       solicitante,
+      endereco,
       observacao,
     });
     if (pedido === undefined) throw problemas.naoEncontrado();
@@ -105,8 +108,11 @@ export class FilaDePlaquinhasAdministrativa {
    * A escrita e o evento da trilha na MESMA transacao, pela unidade de
    * trabalho de `EscritaAuditada`: falha da trilha desfaz a decisao (D49).
    *
-   * **Pelo `id` interno e pelo `ref`, nunca por quem pediu.** A trilha de uma
-   * fila nao e o lugar de guardar o nome de ninguem.
+   * **Pelo `id` interno e pelo `ref`, nunca por quem pediu e NUNCA pelo
+   * endereco.** A trilha registra que houve decisao e qual foi; o endereco de
+   * entrega e dado pessoal e nao e copiado para `audit.events` -- nem em
+   * `before`, nem em `after`, nem em `metadata`. `before`/`after` carregam so
+   * o `status`, que e o que mudou.
    */
   private async decidir(
     declaracao: DeclaracaoDeTrilha,

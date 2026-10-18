@@ -1373,6 +1373,22 @@ export interface CollarTagRequestsTable {
   pet_id: string;
   requested_by: string;
   notes: string | null;
+  /**
+   * O endereco de entrega. **Dado pessoal**: nao sai em superficie publica,
+   * nao entra na trilha de auditoria e nao e geocodificado (ADR-0006) -- nao
+   * ha `lat`, nao ha `lon` e nenhum servico externo resolve o CEP.
+   */
+  recipient_name: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
   status: Generated<DecisaoDoPedidoDePlaquinha>;
   requested_at: Generated<Date>;
   decided_at: Date | null;
