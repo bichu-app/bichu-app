@@ -41,7 +41,13 @@ import type {
   ParceiroAdministrativo,
   TagAdministrativa,
 } from '../domain/escrita-da-vitrine.js';
-import type { CategoriaDaVitrine, EspecieDoItem, EstadoDoPreco } from '../domain/item-da-vitrine.js';
+import type {
+  CategoriaDaVitrine,
+  EspecieDoItem,
+  EstadoDoPreco,
+  SubcategoriaDaVitrine,
+} from '../domain/item-da-vitrine.js';
+import type { ClassificacaoDoVocabulario } from '../domain/escrita-da-vitrine.js';
 
 /** Lancado pelo adaptador quando o `slug` ja e de outro recurso do mesmo tipo. */
 export class SlugOcupado extends Error {
@@ -63,6 +69,8 @@ export type OrdemDoPainel = 'curadoria' | 'nome' | 'atualizado' | 'validade';
 export interface RecorteDeItens {
   readonly q?: string | undefined;
   readonly category?: CategoriaDaVitrine | undefined;
+  /** O segundo nivel. Independe de `category`, como na leitura publica. */
+  readonly subcategory?: SubcategoriaDaVitrine | undefined;
   readonly partnerSlug?: string | undefined;
   readonly publicationState?: EstadoDePublicacao | undefined;
   readonly species?: EspecieDoItem | undefined;
@@ -171,6 +179,16 @@ export interface NovoItem {
   readonly title: string;
   readonly summary: string | null;
   readonly category: CategoriaDaVitrine | null;
+  /**
+   * O segundo nivel. `null` grava item sem segundo nivel, que e estado valido.
+   *
+   * **Com `category` nula ele tem de ser nulo tambem**: a chave estrangeira
+   * composta e `MATCH SIMPLE` e nao cobraria o par, e quem recusa a
+   * subcategoria solta e o `CHECK
+   * store_items_subcategoria_exige_categoria`. A aplicacao recusa antes, com
+   * `subcategory_without_category`.
+   */
+  readonly subcategory: SubcategoriaDaVitrine | null;
   readonly targetUrl: string | null;
   readonly preco: Preco | null;
   readonly sortOrder: number;
@@ -188,6 +206,15 @@ export interface MudancaDeItem {
   readonly title?: string;
   readonly summary?: string | null;
   readonly category?: CategoriaDaVitrine | null;
+  /**
+   * O segundo nivel. `null` tira a subcategoria; ausente nao mexe.
+   *
+   * **`undefined` e `null` sao coisas diferentes aqui**, e e por isso que o
+   * campo nao e so `SubcategoriaDaVitrine | null`: ausente preserva o que esta
+   * gravado, e `null` apaga. Colapsar os dois faria editar o titulo de um
+   * produto apagar a classificacao de segundo nivel dele.
+   */
+  readonly subcategory?: SubcategoriaDaVitrine | null;
   /**
    * O destino novo. **Os dois campos andam juntos de proposito**: o adaptador
    * grava `target_path` e `target_host` a partir dos dois, e um sem o outro
@@ -222,6 +249,22 @@ export interface TransacaoDoCatalogo {
   ): Promise<ParceiroAdministrativo | null>;
 
   itemPorSlug(slug: string): Promise<ItemAdministrativo | null>;
+  /**
+   * O que o vocabulario diz sobre um par `(categoria, subcategoria)`.
+   *
+   * Existe dentro da TRANSACAO, e nao numa porta de leitura separada com
+   * cache, de proposito: a resposta e usada para decidir uma GRAVACAO que a
+   * chave estrangeira do banco vai conferir de novo no mesmo instante. Uma
+   * leitura cacheada poderia aprovar uma subcategoria que outra migracao
+   * desativou, e a recusa voltaria como erro de integridade em vez de erro de
+   * campo.
+   *
+   * `subcategoria` nula pergunta so pela categoria.
+   */
+  conferirClassificacao(
+    categoria: CategoriaDaVitrine,
+    subcategoria: SubcategoriaDaVitrine | null,
+  ): Promise<ClassificacaoDoVocabulario>;
   /** Lanca `SlugOcupado`. */
   inserirItem(novo: NovoItem): Promise<ItemAdministrativo>;
   /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */

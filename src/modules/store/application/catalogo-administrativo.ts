@@ -38,6 +38,7 @@ import {
   dataDeConsultaNoFuturo,
   errosDaFalta,
   errosDeTexto,
+  errosDaClassificacao,
   errosDoDestino,
   errosDoSiteDoParceiro,
   estadoDePublicacao,
@@ -47,6 +48,7 @@ import {
   projetarItemAdministrativo,
   projetarParceiro,
   projetarTag,
+  SEM_CATEGORIA_PARA_CONFERIR,
   conferirRotulo,
   slugDoItem,
   sufixoCurto,
@@ -65,6 +67,7 @@ import {
 import {
   ESPECIES_DO_ITEM,
   type CategoriaDaVitrine,
+  type SubcategoriaDaVitrine,
   type EspecieDoItem,
   type EstadoDoPreco,
 } from '../domain/item-da-vitrine.js';
@@ -133,6 +136,8 @@ export interface CorpoDeItem {
   readonly title: string;
   readonly summary?: string;
   readonly category?: CategoriaDaVitrine;
+  /** Opcional. Ausente ou nula cria item sem segundo nivel, que e estado valido. */
+  readonly subcategory?: SubcategoriaDaVitrine | null;
   readonly target_url?: string;
   readonly price?: PrecoDoCorpo;
   readonly species?: readonly EspecieDoItem[];
@@ -171,6 +176,8 @@ export interface PatchDeItem {
   readonly title?: string;
   readonly summary?: string | null;
   readonly category?: CategoriaDaVitrine | null;
+  /** `null` tira a subcategoria; ausente nao mexe. */
+  readonly subcategory?: SubcategoriaDaVitrine | null;
   readonly target_url?: string | null;
   readonly price?: PrecoDoCorpo | null;
   readonly species?: readonly EspecieDoItem[];
@@ -275,6 +282,7 @@ function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
     title: i.title,
     summary: i.summary,
     category: i.category,
+    subcategory: i.subcategory,
     target_url: i.targetUrl,
     price:
       i.priceAmount === null
@@ -523,6 +531,7 @@ export class CatalogoAdministrativo {
   async listarItens(recorte: {
     q?: string | undefined;
     category?: CategoriaDaVitrine | undefined;
+    subcategory?: SubcategoriaDaVitrine | undefined;
     partnerSlug?: string | undefined;
     publicationState?: EstadoDePublicacao | undefined;
     priceStatus?: EstadoDoPreco | undefined;
@@ -582,6 +591,28 @@ export class CatalogoAdministrativo {
         if (destino.length > 0) throw problemas.validacao(destino);
       }
 
+      // A classificacao e conferida DENTRO da transacao, e nao no bloco de
+      // erros do corpo acima: ela depende do vocabulario gravado, e desde que
+      // a categoria deixou de ser `enum` do contrato (17/10) nao ha mais quem
+      // a recuse antes daqui a nao ser a chave estrangeira do banco -- que
+      // responderia erro de integridade onde o painel espera erro de campo.
+      //
+      // **Sem categoria nao ha vocabulario a consultar** (o rascunho da
+      // `20261017000002` pode nascer sem ela), e e por isso que a consulta e
+      // condicional: o que sobra para conferir e a coerencia dos dois niveis,
+      // e quem responde isso e `errosDaClassificacao` com
+      // `SEM_CATEGORIA_PARA_CONFERIR`.
+      const categoria = corpo.category ?? null;
+      const subcategoria = corpo.subcategory ?? null;
+      const classificacao = errosDaClassificacao(
+        categoria,
+        subcategoria,
+        categoria === null
+          ? SEM_CATEGORIA_PARA_CONFERIR
+          : await tx.conferirClassificacao(categoria, subcategoria),
+      );
+      if (classificacao.length > 0) throw problemas.validacao(classificacao);
+
       const inserir = (slug: string) =>
         tx.inserirItem({
           id: this.deps.ids.uuidv7(),
@@ -590,7 +621,8 @@ export class CatalogoAdministrativo {
           partnerHost: parceiro?.host ?? null,
           title: corpo.title.trim(),
           summary: corpo.summary?.trim() ?? null,
-          category: corpo.category ?? null,
+          category: categoria,
+          subcategory: subcategoria,
           targetUrl: corpo.target_url ?? null,
           preco: corpo.price === undefined ? null : precoDoCorpo(corpo.price),
           sortOrder: corpo.sort_order ?? 0,
@@ -656,6 +688,34 @@ export class CatalogoAdministrativo {
         hostDoParceiro = parceiro.host;
       }
 
+      // A classificacao e reconferida quando muda a CATEGORIA ou a
+      // SUBCATEGORIA -- e nao so quando a subcategoria vem no corpo.
+      //
+      // **Trocar a categoria sem mandar a subcategoria e o caso que decide
+      // esta condicao.** A subcategoria gravada pertence a categoria antiga;
+      // deixa-la para tras gravaria um par que a chave estrangeira composta
+      // recusa, e a pessoa receberia erro de banco no lugar de "essa
+      // subcategoria e de outra categoria".
+      //
+      // **`patch.category === null` LIMPA**, e por isso a escolha e por
+      // `undefined` e nao por `??`: com `??`, limpar a categoria cairia na
+      // categoria ATUAL e a conferencia passaria sobre um valor que o
+      // `UPDATE` nao vai gravar -- a subcategoria antiga ficaria solta, que e
+      // exatamente o buraco que a mescla dos dois lotes de 17/10 abriu.
+      if (patch.category !== undefined || patch.subcategory !== undefined) {
+        const categoria = patch.category === undefined ? atual.category : patch.category;
+        const subcategoria =
+          patch.subcategory === undefined ? atual.subcategory : patch.subcategory;
+        const erros = errosDaClassificacao(
+          categoria,
+          subcategoria,
+          categoria === null
+            ? SEM_CATEGORIA_PARA_CONFERIR
+            : await tx.conferirClassificacao(categoria, subcategoria),
+        );
+        if (erros.length > 0) throw problemas.validacao(erros);
+      }
+
       // O destino e reconferido quando muda ELE ou o parceiro: trocar o
       // parceiro de um item sem trocar o link deixaria o link apontando para o
       // site de outro parceiro.
@@ -682,6 +742,7 @@ export class CatalogoAdministrativo {
         ...(patch.title === undefined ? {} : { title: patch.title.trim() }),
         ...(patch.summary === undefined ? {} : { summary: patch.summary === null ? null : patch.summary.trim() }),
         ...(patch.category === undefined ? {} : { category: patch.category }),
+        ...(patch.subcategory === undefined ? {} : { subcategory: patch.subcategory }),
         // O destino volta ao adaptador quando muda ELE **ou o parceiro**, e os
         // dois casos mandam `partnerHost` junto: e com ele que o adaptador
         // decide se `target_host` fica nulo. Trocar o parceiro sem remandar o

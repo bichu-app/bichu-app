@@ -34,7 +34,12 @@ import type { Contrato } from '../../../../shared/http/contract.js';
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
-import type { CategoriaDaVitrine, EspecieDoItem, EstadoDoPreco } from '../../domain/item-da-vitrine.js';
+import type {
+  CategoriaDaVitrine,
+  EspecieDoItem,
+  EstadoDoPreco,
+  SubcategoriaDaVitrine,
+} from '../../domain/item-da-vitrine.js';
 import type { EstadoDePublicacao } from '../../domain/escrita-da-vitrine.js';
 import type {
   CatalogoAdministrativo,
@@ -259,6 +264,7 @@ interface QueryDeParceiros {
 interface QueryDeItens {
   readonly q?: string;
   readonly category?: CategoriaDaVitrine;
+  readonly subcategory?: SubcategoriaDaVitrine;
   readonly partner?: string;
   readonly publication_state?: EstadoDePublicacao;
   readonly species?: EspecieDoItem;
@@ -273,6 +279,7 @@ function filtrosAplicados(query: QueryDeItens): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();
   if (query.category !== undefined) aplicados['category'] = query.category;
+  if (query.subcategory !== undefined) aplicados['subcategory'] = query.subcategory;
   if (query.partner !== undefined) aplicados['partner'] = query.partner;
   if (query.publication_state !== undefined) aplicados['publication_state'] = query.publication_state;
   if (query.species !== undefined) aplicados['species'] = query.species;
@@ -382,6 +389,7 @@ export function registrarRotasDaLojaAdministrativa(
     const pagina = await catalogo.listarItens({
       ...(termo === undefined || termo === '' ? {} : { q: termo }),
       ...(query.category === undefined ? {} : { category: query.category }),
+      ...(query.subcategory === undefined ? {} : { subcategory: query.subcategory }),
       ...(query.partner === undefined ? {} : { partnerSlug: query.partner }),
       ...(query.publication_state === undefined ? {} : { publicationState: query.publication_state }),
       ...(query.species === undefined ? {} : { species: query.species }),

@@ -23,6 +23,7 @@ import {
   hostDoDestino,
   estadoDePublicacao,
   lerIfMatch,
+  errosDaClassificacao,
   projetarItemAdministrativo,
   projetarParceiro,
   conferirRotulo,
@@ -62,6 +63,9 @@ function item(ajustes: Partial<ItemAdministrativo> = {}): ItemAdministrativo {
     title: 'Racao para cao adulto, 10 kg',
     summary: 'Racao seca para caes adultos de porte medio.',
     category: 'food',
+    categoryLabel: 'Rações',
+    subcategory: 'racao_seca',
+    subcategoryLabel: 'Ração seca',
     targetUrl: 'https://lojadobairro.test/racao-adulto-10kg',
     imageUrl: null,
     species: ['dog'],
@@ -119,6 +123,9 @@ void describe('o preco no painel', () => {
         title: vencido.title,
         summary: vencido.summary ?? '',
         category: vencido.category ?? 'food',
+        categoryLabel: vencido.categoryLabel ?? 'Rações',
+        subcategory: vencido.subcategory,
+        subcategoryLabel: vencido.subcategoryLabel,
         imageUrl: null,
         imageAltText: null,
         species: ['dog'],
@@ -616,5 +623,131 @@ void describe('o vocabulario de tags', () => {
 
   void it('`&` e `+` nao sobram no slug do item, que usa a mesma derivacao', () => {
     assert.equal(slugDoItem('Ra\u00e7\u00e3o N&D Ocean'), 'racao-n-d-ocean');
+  });
+});
+
+/**
+ * A classificacao em dois niveis (decisao do cliente de 17/10/2026: "dois
+ * niveis, com subcategorias como a petlove").
+ *
+ * ## Por que estes casos existem, e o que eles substituem
+ *
+ * Ate 17/10 a categoria era `enum` no contrato, e **nao havia nada para
+ * testar aqui**: o esquema de corpo instalado a partir do contrato recusava
+ * valor desconhecido antes de a aplicacao ver. O vocabulario virou dado, o
+ * contrato passou a declarar `string` com formato, e a recusa por CAMPO
+ * mudou de casa -- veio para `errosDaClassificacao`.
+ *
+ * O que estes casos guardam, portanto, e a garantia que a troca de `enum` por
+ * tabela poderia ter perdido em silencio: o painel continua recebendo erro de
+ * CAMPO, com o codigo certo, e nao erro de integridade do banco.
+ */
+void describe('a classificacao em dois niveis', () => {
+  const ACHOU_TUDO = {
+    categoriaAtiva: true,
+    subcategoriaNaCategoria: true,
+    subcategoriaEmAlgumaCategoria: true,
+  };
+
+  void it('categoria ativa, sem subcategoria: nenhum erro -- o segundo nivel e OPCIONAL', () => {
+    assert.deepEqual(
+      errosDaClassificacao('food', null, {
+        categoriaAtiva: true,
+        subcategoriaNaCategoria: false,
+        subcategoriaEmAlgumaCategoria: false,
+      }),
+      [],
+    );
+  });
+
+  void it('categoria ativa com subcategoria dela: nenhum erro', () => {
+    assert.deepEqual(errosDaClassificacao('food', 'racao_seca', ACHOU_TUDO), []);
+  });
+
+  void it('categoria que nao esta no vocabulario: `unknown_category` no campo `category`', () => {
+    const erros = errosDaClassificacao('areia', null, {
+      categoriaAtiva: false,
+      subcategoriaNaCategoria: false,
+      subcategoriaEmAlgumaCategoria: false,
+    });
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0]?.field, 'category');
+    assert.equal(erros[0]?.code, 'unknown_category');
+  });
+
+  void it('subcategoria de OUTRA categoria: `subcategory_not_in_category`, e nao "nao existe"', () => {
+    // E o caso de trocar a categoria de um item e deixar a subcategoria
+    // antiga para tras. Dizer "nao existe" faria a pessoa procurar um erro de
+    // digitacao que nao esta la.
+    const erros = errosDaClassificacao('food', 'bifinhos', {
+      categoriaAtiva: true,
+      subcategoriaNaCategoria: false,
+      subcategoriaEmAlgumaCategoria: true,
+    });
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0]?.field, 'subcategory');
+    assert.equal(erros[0]?.code, 'subcategory_not_in_category');
+  });
+
+  void it('subcategoria que nao existe em nenhuma categoria: `unknown_subcategory`', () => {
+    const erros = errosDaClassificacao('food', 'arranhador', {
+      categoriaAtiva: true,
+      subcategoriaNaCategoria: false,
+      subcategoriaEmAlgumaCategoria: false,
+    });
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0]?.code, 'unknown_subcategory');
+  });
+
+  void it('categoria desconhecida E subcategoria solta: os DOIS erros, num 400 so', () => {
+    // Dois campos errados produzem duas entradas, e nao a primeira delas: o
+    // formulario do painel pinta os dois de uma vez, e uma recusa por vez
+    // faria a pessoa salvar duas.
+    const erros = errosDaClassificacao('areia', 'arranhador', {
+      categoriaAtiva: false,
+      subcategoriaNaCategoria: false,
+      subcategoriaEmAlgumaCategoria: false,
+    });
+    assert.deepEqual(
+      erros.map((e) => e.field),
+      ['category', 'subcategory'],
+    );
+  });
+
+  void it('ISCA NEGATIVA: subcategoria nula nao produz erro nem quando o codigo existe por ai', () => {
+    // Item sem segundo nivel e estado normal. Um `if` que olhasse
+    // `subcategoriaEmAlgumaCategoria` sem olhar antes se ha subcategoria
+    // transformaria "nao classifiquei" em erro de campo.
+    assert.deepEqual(
+      errosDaClassificacao('food', null, {
+        categoriaAtiva: true,
+        subcategoriaNaCategoria: false,
+        subcategoriaEmAlgumaCategoria: true,
+      }),
+      [],
+    );
+  });
+});
+
+/** Os rotulos resolvidos chegam a projecao do painel, do jeito que a tabela os tem. */
+void describe('os dois niveis na projecao do painel', () => {
+  void it('o codigo e o rotulo saem lado a lado, nos dois niveis', () => {
+    const projetado = projetarItemAdministrativo(item(), AGORA, URL_DE_MIDIA);
+    assert.equal(projetado.category, 'food');
+    assert.equal(projetado.category_label, 'Rações');
+    assert.equal(projetado.subcategory, 'racao_seca');
+    assert.equal(projetado.subcategory_label, 'Ração seca');
+  });
+
+  void it('item sem subcategoria sai com os dois campos do segundo nivel nulos', () => {
+    const projetado = projetarItemAdministrativo(
+      item({ subcategory: null, subcategoryLabel: null }),
+      AGORA,
+      URL_DE_MIDIA,
+    );
+    assert.equal(projetado.subcategory, null);
+    assert.equal(projetado.subcategory_label, null);
+    // A categoria continua obrigatoria: ela nunca e nula.
+    assert.equal(projetado.category_label, 'Rações');
   });
 });

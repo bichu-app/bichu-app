@@ -42,15 +42,51 @@ import { comoData } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 /**
- * As categorias que `store_items.category` admite, **espelhadas** do `CHECK` da
- * migracao `20260922000009`.
+ * O CODIGO da categoria do produto, primeiro dos dois niveis.
  *
- * Acrescentar valor aqui e sempre tres arquivos no mesmo commit (ADR-0023
- * secao 3): a migracao, a entrada por extenso em
- * `tests/integration/conjunto-exato-dos-checks.test.ts` e o `enum` do contrato.
+ * ## Era uma uniao de seis literais, e deixou de ser em 17/10/2026
+ *
+ * O cliente decidiu "dois niveis, com subcategorias como a petlove": 14
+ * categorias e 83 subcategorias. A lista continua FECHADA, e o que mudou e
+ * quem a fecha -- deixou de ser o `CHECK` da `20260922000023` espelhado aqui e
+ * no `enum` do contrato, e passou a ser a CHAVE ESTRANGEIRA de
+ * `store_items.category` contra `store_categories (code)` (migracao
+ * `20261017000003`).
+ *
+ * Tres razoes, e nenhuma e volume:
+ *
+ * 1. **A subcategoria pertence a uma categoria.** Uma uniao de literais sabe
+ *    dizer que `bifinhos` e valido; nao sabe dizer que ele e de `treats` e nao
+ *    de `food`. A chave estrangeira COMPOSTA sabe.
+ * 2. **A arvore varia por especie** (gato tem arranhador e areia), e uma uniao
+ *    de literais nao tem onde guardar isso.
+ * 3. **Cada ajuste seria mudanca de contrato das quatro aplicacoes** mais um
+ *    APK novo, para acrescentar uma linha de vocabulario.
+ *
+ * Mesma forma de `breed_code`, que tambem e `string` no contrato e tem a lista
+ * em `ref_breeds`. Quem recusa codigo desconhecido na ESCRITA e
+ * `errosDaClassificacao`, com `unknown_category`; na LEITURA, categoria
+ * desconhecida devolve lista vazia, como `tag` ja fazia.
  */
-export type CategoriaDaVitrine = 'food' | 'toy' | 'hygiene' | 'accessory' | 'health' | 'bed';
+export type CategoriaDaVitrine = string;
 
+/** O CODIGO da subcategoria. Unico dentro da categoria, nao globalmente. */
+export type SubcategoriaDaVitrine = string;
+
+/**
+ * As SEIS categorias que existiam antes de 17/10/2026, e que **continuam
+ * validas com os mesmos codigos**.
+ *
+ * **Nao e mais a lista fechada** -- ela mora em `store_categories`. Esta
+ * constante existe por dois motivos concretos:
+ *
+ * - a massa fixa de QA (`massa-da-vitrine.ts`) so usa estas seis, e
+ *   `massa-da-vitrine.test.ts` confere isso sem subir banco;
+ * - o APK publicado filtra e le por estes seis codigos, e e por isso que
+ *   nenhum deles foi trocado nem renomeado. O que mudou neles foi o ROTULO,
+ *   que agora e dado: `food` passou a se chamar "Racoes" porque existe
+ *   `treats` ("Petiscos e ossos") ao lado.
+ */
 export const CATEGORIAS_DA_VITRINE: readonly CategoriaDaVitrine[] = [
   'food',
   'toy',
@@ -138,6 +174,19 @@ export interface ItemDaVitrine {
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
   /**
+   * O rotulo da categoria, lido de `store_categories.label` na MESMA consulta
+   * que trouxe o item.
+   *
+   * Vem do banco e nao de um mapa em codigo porque o vocabulario e dado:
+   * renomear "Alimentacao" para "Racoes" foi um `UPDATE`, e um mapa aqui faria
+   * a mesma renomeacao exigir deploy -- e, no aplicativo, um APK.
+   */
+  readonly categoryLabel: string;
+  /** O segundo nivel. Nulo e estado normal: a subcategoria e opcional. */
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  /** O rotulo da subcategoria. Nulo junto com `subcategory`. */
+  readonly subcategoryLabel: string | null;
+  /**
    * A imagem principal, ja como URL publica: a primeira imagem PRONTA do item
    * (`store_item_images`, menor `position`), ou a URL externa da massa. Imagem
    * em processamento ou recusada nunca chega aqui (ADR-0027 item 10).
@@ -165,6 +214,9 @@ export interface ItemProjetado {
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
+  readonly category_label: string;
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  readonly subcategory_label: string | null;
   readonly image_url: string | null;
   readonly image_alt_text: string | null;
   readonly target_url: string;
@@ -254,6 +306,9 @@ export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado
     title: item.title,
     summary: item.summary,
     category: item.category,
+    category_label: item.categoryLabel,
+    subcategory: item.subcategory,
+    subcategory_label: item.subcategoryLabel,
     image_url: item.imageUrl,
     image_alt_text: item.imageAltText,
     target_url: item.targetUrl,

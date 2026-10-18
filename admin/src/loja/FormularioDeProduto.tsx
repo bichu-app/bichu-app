@@ -15,7 +15,17 @@ import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
 import { DialogoCriarTag } from './DialogoCriarTag.tsx';
 import { DialogoRenovarPreco } from './DialogoRenovarPreco.tsx';
-import { CATEGORIAS, dataCivilParaTexto, eCategoria, ESPECIES, hojeCivil, MAXIMO_DE_TAGS, type Especie } from './dominio.ts';
+import {
+  dataCivilParaTexto,
+  eCategoria,
+  eSubcategoriaDaCategoria,
+  ESPECIES,
+  hojeCivil,
+  MAXIMO_DE_TAGS,
+  subcategoriasDaCategoria,
+  type Especie,
+  type Taxonomia,
+} from './dominio.ts';
 import {
   avisoDeImagensSemEnvio,
   corpoDeAlteracao,
@@ -80,6 +90,23 @@ function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   };
 }
 
+/**
+ * A frase da opcao vazia do segundo select, e ela diz QUAL dos tres estados e.
+ *
+ * Tres, e nao dois: "escolha a categoria primeiro" (nada escolhido), "esta
+ * categoria ainda nao tem subcategoria" (arvore nao levantada -- o caso de
+ * gato, passaro, peixe e outros em 17/10) e "sem subcategoria" (ha opcoes e a
+ * pessoa pode nao escolher nenhuma). Uma frase so para os tres faria a tela
+ * parecer quebrada em dois deles.
+ */
+function rotuloVazioDaSubcategoria(taxonomia: Taxonomia | undefined, categoria: string): string {
+  if (categoria === '') return 'Escolha a categoria primeiro';
+  if (subcategoriasDaCategoria(taxonomia, categoria).length === 0) {
+    return 'Esta categoria ainda não tem subcategoria';
+  }
+  return 'Sem subcategoria';
+}
+
 function comparavel(v: ValoresDoProduto): string {
   return JSON.stringify({ ...v, imagens: v.imagens.map((im) => [im.uploadId ?? im.chave, im.alt]) });
 }
@@ -97,6 +124,7 @@ export default function FormularioDeProduto() {
   const [etag, setEtag] = useState<string>();
   const [parceiros, setParceiros] = useState<Parceiro[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [taxonomia, setTaxonomia] = useState<Taxonomia>();
   const [valores, setValores] = useState<ValoresDoProduto>(VALORES_VAZIOS);
   const [base, setBase] = useState<ValoresDoProduto>(VALORES_VAZIOS);
   const [errosDoServidorNaTela, setErrosDoServidorNaTela] = useState<ErrosDoProduto>({});
@@ -129,22 +157,29 @@ export default function FormularioDeProduto() {
     const sinal = controle.signal;
     const chave = chaveDaCarga;
     async function carregar() {
-      const [respostaDoItem, respostaDosParceiros, respostaDasTags] = await Promise.all([
+      const [respostaDoItem, respostaDosParceiros, respostaDasTags, respostaDaTaxonomia] = await Promise.all([
         itemSlug ? api.GET('/admin/store/items/{itemSlug}', { params: { path: { itemSlug } }, signal: sinal }) : Promise.resolve(undefined),
         carregarParceirosAtivos(api, sinal),
         api.GET('/admin/store/tags', { params: { query: { active: true, limit: 100 } }, signal: sinal }),
+        // O vocabulario dos dois niveis entra na MESMA carga do item e dos
+        // parceiros, e a falha dele reprova a carga junto: sem vocabulario nao
+        // ha como oferecer a categoria, e `category` e campo obrigatorio.
+        // Deixar o formulario abrir com o select vazio faria a pessoa achar
+        // que o produto nao tem categoria para escolher.
+        api.GET('/store/taxonomy', { signal: sinal }),
       ]);
       if (sinal.aborted) return;
       if (respostaDoItem && !respostaDoItem.data) {
         setCarga({ chave, fase: respostaDoItem.response.status === 404 ? 'nao-encontrado' : 'erro' });
         return;
       }
-      if (!respostaDosParceiros || !respostaDasTags.data) {
+      if (!respostaDosParceiros || !respostaDasTags.data || !respostaDaTaxonomia.data) {
         setCarga({ chave, fase: 'erro' });
         return;
       }
       setParceiros(respostaDosParceiros);
       setTags(respostaDasTags.data.items);
+      setTaxonomia(respostaDaTaxonomia.data);
       let doServidor = VALORES_VAZIOS;
       const rascunho = retomarRascunho<RascunhoDoProduto>(rotaDoRascunho);
       if (respostaDoItem?.data) {
@@ -459,20 +494,70 @@ export default function FormularioDeProduto() {
               data-cy="produto-categoria"
               id="f-categoria"
               value={valores.categoria}
-              onChange={(e) => mudar('categoria', eCategoria(e.target.value) ? e.target.value : '')}
+              // Trocar a categoria LIMPA a subcategoria, no mesmo `setValores`.
+              // Nao e zelo de tela: a subcategoria antiga pertence a categoria
+              // antiga, e o servidor recusaria o par com
+              // `subcategory_not_in_category`. Limpar junto faz a recusa nao
+              // ter como acontecer, em vez de ter mensagem bonita.
+              onChange={(e) => {
+                const escolhida = eCategoria(taxonomia, e.target.value) ? e.target.value : '';
+                setValores((v) => ({ ...v, categoria: escolhida, subcategoria: '' }));
+                setErrosDoServidorNaTela({});
+              }}
               aria-invalid={erro('f-categoria') ? true : undefined}
               aria-describedby={erro('f-categoria') ? 'f-categoria-erro' : undefined}
             >
               <option value="">Escolha a categoria</option>
-              {Object.entries(CATEGORIAS).map(([codigo, rotulo]) => (
-                <option key={codigo} value={codigo}>
-                  {rotulo}
+              {(taxonomia?.categories ?? []).map((categoria) => (
+                <option key={categoria.code} value={categoria.code}>
+                  {categoria.label}
                 </option>
               ))}
             </select>
             <Icone nome="expand" tamanho="s20" />
           </div>
           {erro('f-categoria') && <ErroDoCampo id="f-categoria-erro">{erro('f-categoria')}</ErroDoCampo>}
+        </div>
+
+        <div className={erro('f-subcategoria') ? 'field err' : 'field'}>
+          <label htmlFor="f-subcategoria">Subcategoria</label>
+          <div className="ordem sel campo-sel">
+            <select
+              data-cy="produto-subcategoria"
+              id="f-subcategoria"
+              value={valores.subcategoria}
+              // **Desabilitado enquanto nao ha categoria, e tambem quando a
+              // categoria escolhida nao tem arvore de segundo nivel
+              // levantada.** Sao dois estados diferentes e a frase da opcao
+              // unica diz qual e: um select habilitado e vazio parece defeito.
+              disabled={subcategoriasDaCategoria(taxonomia, valores.categoria).length === 0}
+              onChange={(e) =>
+                mudar(
+                  'subcategoria',
+                  eSubcategoriaDaCategoria(taxonomia, valores.categoria, e.target.value)
+                    ? e.target.value
+                    : '',
+                )
+              }
+              aria-invalid={erro('f-subcategoria') ? true : undefined}
+              aria-describedby={erro('f-subcategoria') ? 'f-subcategoria-erro' : 'f-subcategoria-ajuda'}
+            >
+              <option value="">{rotuloVazioDaSubcategoria(taxonomia, valores.categoria)}</option>
+              {subcategoriasDaCategoria(taxonomia, valores.categoria).map((sub) => (
+                <option key={sub.code} value={sub.code}>
+                  {sub.label}
+                </option>
+              ))}
+            </select>
+            <Icone nome="expand" tamanho="s20" />
+          </div>
+          {erro('f-subcategoria') ? (
+            <ErroDoCampo id="f-subcategoria-erro">{erro('f-subcategoria')}</ErroDoCampo>
+          ) : (
+            <p className="t-body-sm c-sec" id="f-subcategoria-ajuda">
+              Opcional. Produto sem subcategoria continua valendo.
+            </p>
+          )}
         </div>
 
         <fieldset className={erro('f-especies') ? 'field err' : 'field'} aria-describedby={erro('f-especies') ? 'f-especies-erro' : 'f-especies-ajuda'}>
