@@ -543,10 +543,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Entre para pedir'), findsOneWidget);
       expect(
-        find.text(
-          'Entre na sua conta para pedir. Depois de entrar, a gente envia o '
-          'pedido.',
-        ),
+        find.text('Depois de entrar, a gente envia o pedido.'),
         findsOneWidget,
       );
       expect(find.text('Agora não'), findsOneWidget);
@@ -637,10 +634,7 @@ void main() {
 
       expect(rede.chamadasA('GET /v1/network/events/$slugPrivado/private-details'), hasLength(1));
       expect(find.text('Pedido aprovado'), findsOneWidget);
-      expect(
-        find.text('Você pode participar. O local e os detalhes estão abaixo.'),
-        findsOneWidget,
-      );
+      expect(find.text('Você pode participar.'), findsOneWidget);
       // `per_dog` legado, exibido como "por pet".
       expect(find.text('R\$ 30 por pet'), findsOneWidget);
       await rolarAte(tester, find.text('ISCA-LUGAR Parque Villa-Lobos'));

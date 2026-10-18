@@ -430,8 +430,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   // **Logradouro publico, nunca residencia** (ADR-0027 item
                   // 13). A ajuda diz isso antes de a pessoa escrever o
                   // endereco de casa e levar um 400.
-                  ajuda: 'Um lugar público, com o nome que as pessoas usam. '
-                      'Sem endereço.',
+                  ajuda: 'Um lugar público. Sem endereço.',
                   exemplo: 'Praça da Harmonia',
                   capitalizacao: TextCapitalization.words,
                   habilitado: !enviando,

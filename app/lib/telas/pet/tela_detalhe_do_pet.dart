@@ -605,7 +605,7 @@ class _Conteudo extends StatelessWidget {
         _CartaoDeTexto(
           titulo: 'Sinais',
           texto: pet.sinaisParticulares,
-          vazio: TextosDoDetalhe.semSinais(pet.nome),
+          vazio: TextosDoDetalhe.semSinais,
         ),
 
         if (pet.cuidados != null && pet.cuidados!.isNotEmpty) ...<Widget>[

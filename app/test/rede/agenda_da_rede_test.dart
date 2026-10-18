@@ -258,13 +258,6 @@ void main() {
       // A ordem mora DENTRO da folha de filtros desde 17/10.
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'Mais perto usa a região do seu perfil. Os encontros sem mapa ficam '
-          'no fim, e os privados saem da lista.',
-        ),
-        findsOneWidget,
-      );
       await tester.ensureVisible(find.text('Mais perto'));
       await tester.tap(find.text('Mais perto'));
       await tester.pumpAndSettle();
@@ -454,13 +447,7 @@ void main() {
       await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
       await tester.pumpAndSettle();
       expect(find.text('Nenhum pedido ainda'), findsOneWidget);
-      expect(
-        find.text(
-          'Quando você pedir para participar de um encontro privado, ele '
-          'aparece aqui.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Seus pedidos aparecem aqui.'), findsOneWidget);
     });
   });
 
@@ -473,10 +460,7 @@ void main() {
       );
       expect(find.text('A Rede ainda não tem encontros'), findsOneWidget);
       expect(
-        find.text(
-          'Os encontros da comunidade em praças e parques aparecem aqui assim '
-          'que forem marcados.',
-        ),
+        find.text('Aparecem aqui assim que forem marcados.'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.tune), findsNothing);
