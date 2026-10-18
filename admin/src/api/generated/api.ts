@@ -4102,6 +4102,53 @@ export interface paths {
         patch: operations["updateAdminDirectoryEntry"];
         trace?: never;
     };
+    "/admin/postal-codes/{postalCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O endereco de um CEP, para poupar digitacao no cadastro
+         * @description Troca um CEP por **rua, bairro, cidade e UF -- texto**, que e exatamente
+         *     o que o operador digitaria. Serve o formulario de entrada do diretorio
+         *     de `Perto`, e serve qualquer formulario nosso com campo de CEP.
+         *
+         *     **ISTO NAO E GEOCODIFICACAO, e a distincao e o que autoriza a
+         *     operacao.** A ADR-0006 proibe transformar endereco em COORDENADA; aqui
+         *     o caminho e o contrario. A reserva (BrasilAPI) devolve
+         *     `location.coordinates` com latitude e longitude -- medido em 17/10/2026
+         *     --, e o adaptador le quatro campos e **ignora o resto de proposito**.
+         *     Nenhuma latitude, nenhuma longitude, nenhum ponto, nenhum indice
+         *     espacial, e nenhuma coluna onde guardar.
+         *
+         *     **O que sai do nosso servidor para o terceiro e so o CEP.** Oito
+         *     digitos, que sao um codigo postal publico e nao o endereco de ninguem:
+         *     sem numero e sem nome, ele aponta para um trecho de rua, nao para uma
+         *     casa. Nem conta, nem sessao, nem nome, nem token vao na chamada de
+         *     saida.
+         *
+         *     **Nenhum desfecho desta operacao impede um cadastro.** `404` quer dizer
+         *     "este CEP nao existe nas bases" e `503` quer dizer "nao conseguimos
+         *     consultar agora"; nos dois a tela continua inteira, com os campos
+         *     editaveis e o botao de salvar vivo. CEP e conveniencia de digitacao, e
+         *     servico de terceiro fora do ar nao pode travar o cadastro de uma
+         *     clinica.
+         *
+         *     **Nada e guardado aqui.** A operacao nao escreve linha nenhuma: quem
+         *     grava o endereco e `createAdminDirectoryEntry` /
+         *     `updateAdminDirectoryEntry`, com o que o operador confirmou na tela.
+         */
+        get: operations["lookupAdminPostalCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/directory/suggestions": {
         parameters: {
             query?: never;
@@ -5960,6 +6007,44 @@ export interface components {
             reason: string;
         };
         /**
+         * @description O que a busca de CEP devolve: **texto, nunca coordenada** (ADR-0006).
+         *
+         *     Os quatro campos sao os que um formulario preenche, e sao os mesmos
+         *     quatro que `app/lib/api/busca_de_cep.dart` ja lia das duas bases desde
+         *     17/10/2026 -- esta forma espelha a dele e nao inventa uma segunda.
+         *
+         *     **O que foi deixado de fora, e cada ausencia e deliberada:**
+         *
+         *     - `location.coordinates` da BrasilAPI (latitude e longitude). Ler isso
+         *       transformaria uma busca de texto num geocodificador, que e o que a
+         *       ADR-0006 proibe. Nao ha campo aqui, nao ha coluna no banco e o
+         *       adaptador nunca o le.
+         *     - `ibge`, `timezoneName` e `service`: nenhum tem campo em formulario
+         *       nenhum, e guardar dado sem finalidade e o oposto da minimizacao.
+         *     - `complemento` do ViaCEP. **Ele NAO e o complemento de quem preenche**:
+         *       vem como "ate 609 - lado impar" e descreve a FAIXA da rua. Jogar isso
+         *       num campo de complemento poria o conjunto de ninguem no endereco de
+         *       uma clinica.
+         */
+        PostalCodeAddress: {
+            /**
+             * @description O logradouro. **Pode vir vazio**, e isso nao e erro: CEP de cidade
+             *     inteira ("CEP geral") nao aponta para uma rua. A tela deixa o campo
+             *     para quem preenche.
+             */
+            street: string;
+            /** @description O bairro. Vazio pelo mesmo motivo de `street`. */
+            neighborhood: string;
+            city: string;
+            /**
+             * @description A UF, duas letras maiusculas. Quando a base nao devolve cidade ou
+             *     devolve UF que nao tem dois caracteres, a resposta nao e `200`: o
+             *     adaptador trata como "nao encontrado" em vez de entregar endereco
+             *     pela metade, que apagaria o que a pessoa ja tinha digitado.
+             */
+            state: string;
+        };
+        /**
          * @description A situacao da entrada. Espelha `professionals.status` e a entrada
          *     `public.professionals.professionals_status_check` do teste de conjunto
          *     exato. So `published` aparece em `Perto`.
@@ -6028,6 +6113,21 @@ export interface components {
             state?: string;
             neighborhood?: string;
             /**
+             * @description CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
+             *     de `CollarTagShippingAddress.postal_code`, copiado dele. O painel
+             *     recebe com mascara e manda assim.
+             *
+             *     `GET /v1/admin/postal-codes/{postalCode}` o troca por rua, bairro,
+             *     cidade e UF **para poupar digitacao**, e o resultado e editavel: o
+             *     servidor nao refaz a busca e nao confere o endereco contra o CEP.
+             *     Quem cadastra manda o que conferiu na tela.
+             */
+            postal_code?: string;
+            street?: string;
+            /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. Mesma decisao de `CollarTagShippingAddress.street_number`. */
+            street_number?: string;
+            complement?: string;
+            /**
              * @description Telefone **comercial** em E.164, publicado de proposito pela
              *     entidade que aceitou aparecer para ser contratada (ADR-0011 secao
              *     4). Deliberadamente diferente do telefone de conta de usuario, que
@@ -6051,6 +6151,10 @@ export interface components {
             city?: string | null;
             state?: string | null;
             neighborhood?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
             /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
             phone_e164?: string | null;
             /**
@@ -6080,6 +6184,10 @@ export interface components {
             city?: string | null;
             state?: string | null;
             neighborhood?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
             phone_e164?: string | null;
             status: components["schemas"]["DirectoryEntryStatus"];
             /**
@@ -13975,6 +14083,54 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    lookupAdminPostalCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description CEP com oito digitos, **sem mascara e sem hifen** -- o mesmo
+                 *     formato de `CollarTagShippingAddress.postal_code`, copiado dele.
+                 *     A mascara vive na tela.
+                 *
+                 *     CEP torto responde `400` e nao viaja: o ViaCEP devolve **HTML com
+                 *     status 400** nesse caso (medido em 17/10/2026), e deixar a forma
+                 *     ser conferida aqui poupa a chamada de saida inteira.
+                 */
+                postalCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco do CEP, em texto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostalCodeAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Os dois servicos falharam ou nao responderam no prazo de 4 s cada.
+             *     **A tela nao trava**: quem cadastra digita o endereco.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listAdminDirectorySuggestions: {

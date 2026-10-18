@@ -345,6 +345,7 @@ x-problem-types:
   - { slug: precondition-required,         status: 428, note: "ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`" }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
+  - { slug: postal-code-lookup-unavailable, status: 503, note: "BICHUS-9.2: os dois servicos publicos de CEP (ViaCEP e a reserva BrasilAPI) falharam ou nao responderam no prazo. Separado de `not-found`, que e 404, porque a saida da tela e a MESMA -- digitar o endereco a mao -- e a FRASE nao e: `not-found` diz 'este CEP nao existe' e este diz 'nao conseguimos consultar agora, tente de novo'. Nenhum dos dois impede salvar o cadastro" }
 
 x-edge-limits:
   # A protecao GROSSA que a borda aplica (ADR-0016, item 4). Ela esta declarada
@@ -7647,6 +7648,137 @@ paths:
         '412': { $ref: '#/components/responses/PreconditionFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ----------------------------------------------------------------------
+  # A BUSCA DE CEP -- UMA integracao, e ela e NOSSA
+  # ----------------------------------------------------------------------
+  #
+  # Decisao do cliente de 18/10/2026: *"voce deve usar sempre a mesma camada de
+  # servico que ja fez a integracao com as plataformas, reaproveitamento dos
+  # nossos endpoints"*. Antes disso o aplicativo falava com o ViaCEP direto
+  # (`app/lib/api/busca_de_cep.dart`), e o painel nao tinha busca nenhuma. Um
+  # segundo cliente de CEP em TypeScript seria a terceira implementacao da mesma
+  # regra -- ordem dos servicos, prazo, `{"erro":"true"}` com `true` como texto,
+  # HTML com 400 em CEP torto -- e tres copias divergem na primeira base que
+  # mudar de formato.
+  #
+  # A integracao vive em `src/modules/addresses/adapters/external/`, atras da
+  # porta `BuscaDeCep`. **Esta operacao e so a borda dela.**
+  #
+  # POR QUE ELA NASCE NA SUPERFICIE ADMINISTRATIVA, E NAO PUBLICA NEM NO APP --
+  # os tres caminhos foram medidos em 18/10 antes de escolher:
+  #
+  # 1. **`security: []` nao e exprimivel.** `src/tools/portao-contrato-publico.ts`
+  #    reprova `street`, `postal_code`, `street_number`, `address`, `cep` e `zip`
+  #    em QUALQUER resposta alcancavel sem conta (ADR-0010, "o que a rota publica
+  #    jamais exibe", item 2). A resposta desta operacao e exatamente um
+  #    logradouro, entao uma versao publica dela reprovaria nominalmente -- e
+  #    renomear os campos para escapar do portao seria trapaca, nao desenho.
+  # 2. **`bearerAuth` nao serve ao painel.** A guarda de `/v1/admin` recusa com
+  #    401 qualquer requisicao que traga `Authorization` (ADR-0027 item 2, D36),
+  #    e a conta do painel nao e conta do app: ela nao tem, e nao pode ter, um
+  #    Bearer. Uma operacao so com `bearerAuth` seria inalcancavel pelo unico
+  #    chamador que existe hoje.
+  # 3. **O chamador que existe hoje e o painel.** O formulario de entrada do
+  #    diretorio e o que passa a coletar CEP nesta entrega.
+  #
+  # O APP CONTINUA COMO ESTA NESTA ENTREGA, e a migracao dele e uma linha de
+  # fiacao: a mesma porta registrada numa `GET /v1/postal-codes/{postalCode}`
+  # com `security: [bearerAuth]`, sem tocar no adaptador. Ela NAO entra aqui
+  # porque operacao declarada sem chamador e divida de contrato, e porque o
+  # arquivo do app esta sendo editado por outra frente agora.
+  # ----------------------------------------------------------------------
+
+  /admin/postal-codes/{postalCode}:
+    get:
+      operationId: lookupAdminPostalCode
+      tags: [admin, directory]
+      # Nenhum efeito do catalogo do ADR-0016 cabe: nao notifica, nao gera
+      # trabalho humano, nao e consulta cara nossa, nao confere segredo, nao
+      # revela credencial e nao escreve nada. O teto existe assim mesmo, e por
+      # isso ele esta declarado abaixo -- mesma forma de `getReferenceData`,
+      # que tambem e leitura com `x-effects: []` e teto proprio.
+      x-effects: []
+      summary: O endereco de um CEP, para poupar digitacao no cadastro
+      description: |
+        Troca um CEP por **rua, bairro, cidade e UF -- texto**, que e exatamente
+        o que o operador digitaria. Serve o formulario de entrada do diretorio
+        de `Perto`, e serve qualquer formulario nosso com campo de CEP.
+
+        **ISTO NAO E GEOCODIFICACAO, e a distincao e o que autoriza a
+        operacao.** A ADR-0006 proibe transformar endereco em COORDENADA; aqui
+        o caminho e o contrario. A reserva (BrasilAPI) devolve
+        `location.coordinates` com latitude e longitude -- medido em 17/10/2026
+        --, e o adaptador le quatro campos e **ignora o resto de proposito**.
+        Nenhuma latitude, nenhuma longitude, nenhum ponto, nenhum indice
+        espacial, e nenhuma coluna onde guardar.
+
+        **O que sai do nosso servidor para o terceiro e so o CEP.** Oito
+        digitos, que sao um codigo postal publico e nao o endereco de ninguem:
+        sem numero e sem nome, ele aponta para um trecho de rua, nao para uma
+        casa. Nem conta, nem sessao, nem nome, nem token vao na chamada de
+        saida.
+
+        **Nenhum desfecho desta operacao impede um cadastro.** `404` quer dizer
+        "este CEP nao existe nas bases" e `503` quer dizer "nao conseguimos
+        consultar agora"; nos dois a tela continua inteira, com os campos
+        editaveis e o botao de salvar vivo. CEP e conveniencia de digitacao, e
+        servico de terceiro fora do ar nao pode travar o cadastro de uma
+        clinica.
+
+        **Nada e guardado aqui.** A operacao nao escreve linha nenhuma: quem
+        grava o endereco e `createAdminDirectoryEntry` /
+        `updateAdminDirectoryEntry`, com o que o operador confirmou na tela.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "60 por hora por conta do painel. O teto aqui NAO protege o nosso banco -- protege a cota de um servico gratuito de terceiro, consumida pelo nosso IP: sem teto, a rota e uma porta aberta para gastar a cota alheia em nome da casa, e o bloqueio que vem depois quebra a busca de CEP para todos de uma vez. 60 e numero de tela e nao de planilha: um cadastro usa um CEP, e sessenta cadastros numa hora numa unica conta ja e mais do que uma mesa faz. Por `account` e nao por `ip` porque a operacao exige sessao administrativa -- a conta existe e e exata -- e porque o painel inteiro sai de poucos enderecos, onde um teto por IP puniria a mesa toda pelo uso de uma pessoa. A chave e `admin:<conta>`, que nunca divide balde com o app (ADR-0027 item 20.2)"
+      parameters:
+        - name: postalCode
+          in: path
+          required: true
+          description: |
+            CEP com oito digitos, **sem mascara e sem hifen** -- o mesmo
+            formato de `CollarTagShippingAddress.postal_code`, copiado dele.
+            A mascara vive na tela.
+
+            CEP torto responde `400` e nao viaja: o ViaCEP devolve **HTML com
+            status 400** nesse caso (medido em 17/10/2026), e deixar a forma
+            ser conferida aqui poupa a chamada de saida inteira.
+          schema: { type: string, pattern: '^[0-9]{8}$' }
+      responses:
+        '200':
+          description: O endereco do CEP, em texto.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostalCodeAddress' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503':
+          description: |
+            Os dois servicos falharam ou nao responderam no prazo de 4 s cada.
+            **A tela nao trava**: quem cadastra digita o endereco.
+          content:
+            application/problem+json:
+              # SEM `example`, e a ausencia e medida. O exemplo que estava aqui
+              # carregava o `type` por extenso
+              # (`https://<dominio>/problems/postal-code-lookup-unavailable`), e
+              # `openapi-typescript` o copia como comentario para os TRES
+              # gerados -- `src/`, `admin/` e `web/`. Medido em 18/10/2026: o
+              # portao de portabilidade saiu de 10 para 13 achados por causa
+              # dele, um por arquivo gerado. O slug ja esta declarado em
+              # `x-problem-types`, que e a fonte do enum, entao o exemplo nao
+              # acrescentava informacao -- so o hostname literal.
+              schema: { $ref: '#/components/schemas/Problem' }
+
   # ----------------------------------------------------------------------
   # A FILA DE REVISAO DAS INDICACOES DO `Perto` (a queixa de 18/10/2026)
   # ----------------------------------------------------------------------
@@ -10668,6 +10800,50 @@ components:
             controle bidirecional tambem, como todo texto que uma pessoa
             escreve neste produto.
 
+    PostalCodeAddress:
+      type: object
+      description: |
+        O que a busca de CEP devolve: **texto, nunca coordenada** (ADR-0006).
+
+        Os quatro campos sao os que um formulario preenche, e sao os mesmos
+        quatro que `app/lib/api/busca_de_cep.dart` ja lia das duas bases desde
+        17/10/2026 -- esta forma espelha a dele e nao inventa uma segunda.
+
+        **O que foi deixado de fora, e cada ausencia e deliberada:**
+
+        - `location.coordinates` da BrasilAPI (latitude e longitude). Ler isso
+          transformaria uma busca de texto num geocodificador, que e o que a
+          ADR-0006 proibe. Nao ha campo aqui, nao ha coluna no banco e o
+          adaptador nunca o le.
+        - `ibge`, `timezoneName` e `service`: nenhum tem campo em formulario
+          nenhum, e guardar dado sem finalidade e o oposto da minimizacao.
+        - `complemento` do ViaCEP. **Ele NAO e o complemento de quem preenche**:
+          vem como "ate 609 - lado impar" e descreve a FAIXA da rua. Jogar isso
+          num campo de complemento poria o conjunto de ninguem no endereco de
+          uma clinica.
+      required: [street, neighborhood, city, state]
+      additionalProperties: false
+      properties:
+        street:
+          type: string
+          description: |
+            O logradouro. **Pode vir vazio**, e isso nao e erro: CEP de cidade
+            inteira ("CEP geral") nao aponta para uma rua. A tela deixa o campo
+            para quem preenche.
+        neighborhood:
+          type: string
+          description: O bairro. Vazio pelo mesmo motivo de `street`.
+        city: { type: string, minLength: 2, maxLength: 80 }
+        state:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: |
+            A UF, duas letras maiusculas. Quando a base nao devolve cidade ou
+            devolve UF que nao tem dois caracteres, a resposta nao e `200`: o
+            adaptador trata como "nao encontrado" em vez de entregar endereco
+            pela metade, que apagaria o que a pessoa ja tinha digitado.
+
     DirectoryEntryStatus:
       type: string
       description: |
@@ -10752,7 +10928,45 @@ components:
           minLength: 2
           maxLength: 2
           description: A UF, duas letras.
+        # ---------------------------------------------------------------
+        # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
+        # ---------------------------------------------------------------
+        # A decisao 9.2 de `api/contrato-de-escrita-do-diretorio.md` --
+        # "endereco de rua e numero entra no diretorio?" -- foi respondida pelo
+        # cliente: *"pode colocar o campo cep sim, ele e um usuario
+        # administrador, responsavel por cadastrar varias informacoes
+        # publicas"*.
+        #
+        # ELE AUTORIZOU QUEM PREENCHE, E NAO O QUE APARECE EM PUBLICO -- e as
+        # duas coisas sao diferentes. Os quatro campos entram aqui, no corpo do
+        # PAINEL, e **nenhum deles entrou em `DirectoryEntrySummary`**, que e o
+        # cartao que o aplicativo le em `Perto`. Exibir endereco completo e
+        # decisao de produto que nao foi tomada, e um profissional autonomo --
+        # adestrador, passeador, veterinario que atende em casa -- tem como
+        # "endereco" a casa dele.
+        #
+        # **TODOS OPCIONAIS**, e nenhum em `AdminDirectoryEntryMissingField`:
+        # quem nao tem endereco fixo continua cadastravel e publicavel.
         neighborhood: { type: string, minLength: 2, maxLength: 80 }
+        postal_code:
+          type: string
+          pattern: '^[0-9]{8}$'
+          description: |
+            CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
+            de `CollarTagShippingAddress.postal_code`, copiado dele. O painel
+            recebe com mascara e manda assim.
+
+            `GET /v1/admin/postal-codes/{postalCode}` o troca por rua, bairro,
+            cidade e UF **para poupar digitacao**, e o resultado e editavel: o
+            servidor nao refaz a busca e nao confere o endereco contra o CEP.
+            Quem cadastra manda o que conferiu na tela.
+        street: { type: string, minLength: 2, maxLength: 120 }
+        street_number:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. Mesma decisao de `CollarTagShippingAddress.street_number`.
+        complement: { type: string, minLength: 1, maxLength: 80 }
         phone_e164:
           type: string
           pattern: '^\+[1-9][0-9]{7,14}$'
@@ -10783,6 +10997,14 @@ components:
         city: { type: string, nullable: true, minLength: 2, maxLength: 80 }
         state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
         neighborhood: { type: string, nullable: true, minLength: 2, maxLength: 80 }
+        # Os quatro do endereco de rua (decisao 9.2, respondida em 18/10). `null`
+        # APAGA e ausente NAO MEXE, como os demais: e a distincao que separa
+        # "limpar o CEP" de "editar so o telefone". Nenhum deles e exigido para
+        # publicar -- ver o comentario em `AdminDirectoryEntryInput`.
+        postal_code: { type: string, nullable: true, pattern: '^[0-9]{8}$' }
+        street: { type: string, nullable: true, minLength: 2, maxLength: 120 }
+        street_number: { type: string, nullable: true, minLength: 1, maxLength: 20 }
+        complement: { type: string, nullable: true, minLength: 1, maxLength: 80 }
         phone_e164:
           type: string
           nullable: true
@@ -10820,6 +11042,13 @@ components:
         city: { type: string, nullable: true }
         state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
         neighborhood: { type: string, nullable: true }
+        # O endereco de rua SAI AQUI, nesta resposta do painel, e **nao sai em
+        # `DirectoryEntrySummary`**: a tela de edicao precisa mostrar o que
+        # gravou, e o aplicativo continua recebendo so bairro, cidade e UF.
+        postal_code: { type: string, nullable: true }
+        street: { type: string, nullable: true }
+        street_number: { type: string, nullable: true }
+        complement: { type: string, nullable: true }
         phone_e164: { type: string, nullable: true }
         status: { $ref: '#/components/schemas/DirectoryEntryStatus' }
         verification:

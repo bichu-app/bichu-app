@@ -4,9 +4,10 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
-import { CampoDeTelefone } from '../componentes/campos.tsx';
+import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
+import { cepDosOitoDigitos, cepEmOitoDigitos } from '../formato/cep.ts';
 import { telefoneDoE164, telefoneEmE164 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
@@ -33,12 +34,29 @@ interface Valores {
   cidade: string;
   uf: string;
   bairro: string;
+  /** Com mascara (`05435-000`). Os oito digitos saem de `cepEmOitoDigitos`, no `salvar`. */
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
   /** Com mascara brasileira. O E.164 sai de `telefoneEmE164`, no `salvar`. */
   telefone: string;
   situacao: StatusDaEntrada;
 }
 
-type Campo = 'e-nome' | 'e-slug' | 'e-atividade' | 'e-sobre' | 'e-cidade' | 'e-uf' | 'e-bairro' | 'e-telefone';
+type Campo =
+  | 'e-nome'
+  | 'e-slug'
+  | 'e-atividade'
+  | 'e-sobre'
+  | 'e-cidade'
+  | 'e-uf'
+  | 'e-bairro'
+  | 'e-cep'
+  | 'e-logradouro'
+  | 'e-numero'
+  | 'e-complemento'
+  | 'e-telefone';
 
 const ROTULOS: Record<Campo, string> = {
   'e-nome': 'Nome',
@@ -48,6 +66,10 @@ const ROTULOS: Record<Campo, string> = {
   'e-cidade': 'Cidade',
   'e-uf': 'UF',
   'e-bairro': 'Bairro',
+  'e-cep': 'CEP',
+  'e-logradouro': 'Rua',
+  'e-numero': 'Número',
+  'e-complemento': 'Complemento',
   'e-telefone': 'Telefone comercial',
 };
 
@@ -58,6 +80,10 @@ const ORDEM: Campo[] = [
   'e-sobre',
   'e-cidade',
   'e-uf',
+  'e-cep',
+  'e-logradouro',
+  'e-numero',
+  'e-complemento',
   'e-bairro',
   'e-telefone',
 ];
@@ -71,6 +97,10 @@ const VAZIO: Valores = {
   cidade: '',
   uf: '',
   bairro: '',
+  cep: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
   telefone: '',
   situacao: 'draft',
 };
@@ -86,6 +116,13 @@ const VAZIO: Valores = {
  * entrada nasce RASCUNHO, e o rascunho guarda trabalho incompleto. Quem cobra
  * os tres e a publicacao, e `missing_to_publish` diz o que falta antes de
  * alguem tentar.
+ *
+ * **CEP, rua, numero e complemento nao sao obrigatorios NUNCA**, nem no
+ * rascunho nem na publicacao, e isso nao e simetria com os de cima -- e
+ * produto. Um profissional autonomo (adestrador, passeador, veterinario que
+ * atende em casa) nao tem endereco comercial, e exigir o dele significaria
+ * exigir a casa dele. Nenhum dos quatro entra em `missing_to_publish`, e a
+ * regua do servidor concorda: no contrato eles sao opcionais nos dois corpos.
  */
 export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   const e: Partial<Record<Campo, string>> = {};
@@ -109,6 +146,17 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   if (bairro !== '' && (bairro.length < 2 || bairro.length > 80)) {
     e['e-bairro'] = 'Entre 2 e 80 caracteres.';
   }
+  // Os quatro do endereco: **so forma, e so no que foi digitado**. Vazio nao
+  // erra em nenhum deles.
+  if (v.cep.trim() !== '' && cepEmOitoDigitos(v.cep) === null) {
+    e['e-cep'] = 'O CEP tem oito dígitos. Por exemplo: 05435-000.';
+  }
+  const logradouro = v.logradouro.trim();
+  if (logradouro !== '' && (logradouro.length < 2 || logradouro.length > 120)) {
+    e['e-logradouro'] = 'Entre 2 e 120 caracteres.';
+  }
+  if (v.numero.trim().length > 20) e['e-numero'] = 'Até 20 caracteres.';
+  if (v.complemento.trim().length > 80) e['e-complemento'] = 'Até 80 caracteres.';
   if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
     e['e-telefone'] = 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
   }
@@ -125,6 +173,13 @@ function valoresDa(entrada: Entrada): Valores {
     cidade: entrada.city ?? '',
     uf: entrada.state ?? '',
     bairro: entrada.neighborhood ?? '',
+    // O CEP gravado tem oito digitos; o campo mostra a gramatica com hifen.
+    // Mesma regra do telefone, logo abaixo: exibir o que a escrita ja validou
+    // nao e completar em silencio o que a pessoa digitou.
+    cep: cepDosOitoDigitos(entrada.postal_code),
+    logradouro: entrada.street ?? '',
+    numero: entrada.street_number ?? '',
+    complemento: entrada.complement ?? '',
     // O que esta gravado e E.164; o campo mostra a gramatica brasileira. Isto
     // NAO e completar em silencio o que a pessoa digitou -- e exibir o que a
     // escrita ja validou, como o formulario do parceiro faz com `https://`.
@@ -150,9 +205,32 @@ function valoresDa(entrada: Entrada): Valores {
  *   e a decisao de como o painel marcaria o ponto esta pendente (9.4). Sem
  *   coordenada a entrada e publicavel e nao participa da ordenacao por
  *   distancia.
- * - **Nenhum endereco de rua.** Decisao 9.2 pendente: a regra de privacidade do
- *   produto proibe rua e CEP em superficie publica, e a excecao aberta para
- *   profissional cobriu cidade e bairro, nao a rua.
+ * ## O ENDERECO DE RUA PASSOU A EXISTIR EM 18/10/2026, E O QUE ISSO MUDOU
+ *
+ * A decisao 9.2 foi RESPONDIDA pelo cliente: *"pode colocar o campo cep sim,
+ * ele e um usuario administrador, responsavel por cadastrar varias informacoes
+ * publicas"*. Antes dela este cabecalho listava "nenhum endereco de rua" entre
+ * as ausencias deliberadas, e o campo de bairro dizia na ajuda que "a regra de
+ * privacidade do produto nao permite rua nem CEP em superficie publica".
+ *
+ * **O que ele revogou foi QUEM PREENCHE, e nao O QUE APARECE EM PUBLICO.** As
+ * duas coisas sao diferentes, e esta tela cobre so a primeira:
+ *
+ * - o painel coleta CEP, rua, numero e complemento, e grava os quatro;
+ * - **a saida do aplicativo nao mudou.** `DirectoryEntrySummary` -- o cartao
+ *   que `Perto` le -- continua com `city`, `state` e `neighborhood` e nada
+ *   mais de endereco. Medido em 18/10 contra `api/openapi.yaml` e contra a
+ *   consulta de leitura do diretorio: nenhuma das duas nomeia as colunas
+ *   novas. Exibir endereco completo e decisao do cliente, e ela nao foi
+ *   tomada.
+ * - a regra do ADR-0010 (item 2 de "o que a rota publica jamais exibe":
+ *   "endereco, CEP e numero de residencia") continua intacta e **nao foi
+ *   editada**: ela fala de rota PUBLICA, e nem o diretorio nem o painel sao
+ *   rota publica.
+ *
+ * **Os quatro campos sao opcionais, e isso e o ponto.** Um profissional
+ * autonomo tem como "endereco" a propria casa; um campo obrigatorio o tornaria
+ * incadastravel ou o obrigaria a publicar onde mora.
  * - **Nenhum site, e-mail, WhatsApp, rede social, horario de funcionamento nem
  *   foto.** Nenhuma dessas colunas existe em `professionals`. O padrao de site
  *   do produto (endereco completo com `https://`) nao tem onde ser aplicado
@@ -175,6 +253,10 @@ export default function FormularioDaEntrada() {
   const [base, setBase] = useState<Valores>(VAZIO);
   const [errosDoServidor, setErrosDoServidor] = useState<Partial<Record<Campo, string>>>({});
   const [erroDoTelefone, setErroDoTelefone] = useState(false);
+  const [erroDoCep, setErroDoCep] = useState(false);
+  const [buscaDoCep, setBuscaDoCep] = useState<
+    'ocioso' | 'buscando' | 'preenchido' | 'nao-encontrado' | 'indisponivel'
+  >('ocioso');
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean; informativo?: boolean }>();
@@ -234,6 +316,57 @@ export default function FormularioDaEntrada() {
     });
   }
 
+  /**
+   * A busca de CEP, **pelo NOSSO endpoint**.
+   *
+   * ## Nenhuma chamada a servico de fora sai deste navegador
+   *
+   * Decisao do cliente de 18/10/2026: *"voce deve usar sempre a mesma camada de
+   * servico que ja fez a integracao com as plataformas, reaproveitamento dos
+   * nossos endpoints"*. ViaCEP e BrasilAPI, a ordem entre eles e o prazo de 4 s
+   * vivem no servidor, atras de `GET /v1/admin/postal-codes/{postalCode}`. O
+   * painel chama pelo cliente gerado do contrato, como chama o resto.
+   *
+   * ## PREENCHE SO CAMPO VAZIO, e esta e a regra que importa
+   *
+   * O que o operador digitou **nunca** e sobrescrito. Um campo que "corrige" o
+   * que a pessoa escreveu e a forma mais curta de perder trabalho em silencio:
+   * quem cadastrou "Av. Paulista" e depois digitou o CEP veria o proprio texto
+   * virar o da base, sem aviso e sem desfazer.
+   *
+   * ## E NUNCA BLOQUEIA O ENVIO
+   *
+   * Esta funcao nao e esperada por `salvar`, nao desabilita botao nenhum e nao
+   * produz erro de campo. CEP e **conveniencia de digitacao**: servico de
+   * terceiro fora do ar nao pode impedir alguem de cadastrar uma clinica. Os
+   * tres desfechos que nao sao achado dizem a frase e param aí.
+   */
+  async function buscarEndereco(cep: string) {
+    setBuscaDoCep('buscando');
+    try {
+      const { data, response } = await api.GET('/admin/postal-codes/{postalCode}', {
+        params: { path: { postalCode: cep } },
+      });
+      if (!data) {
+        // 404 e "este CEP nao existe nas bases"; qualquer outra coisa e "nao
+        // conseguimos consultar agora". As duas terminam no mesmo lugar para
+        // quem preenche -- digitar -- e a frase nao e a mesma.
+        setBuscaDoCep(response.status === 404 ? 'nao-encontrado' : 'indisponivel');
+        return;
+      }
+      setValores((v) => ({
+        ...v,
+        logradouro: v.logradouro.trim() === '' ? data.street : v.logradouro,
+        bairro: v.bairro.trim() === '' ? data.neighborhood : v.bairro,
+        cidade: v.cidade.trim() === '' ? data.city : v.cidade,
+        uf: v.uf.trim() === '' ? data.state : v.uf,
+      }));
+      setBuscaDoCep('preenchido');
+    } catch {
+      setBuscaDoCep('indisponivel');
+    }
+  }
+
   function mostrar(doServidor: Partial<Record<Campo, string>>) {
     setErrosDoServidor(doServidor);
     requestAnimationFrame(() => resumo.current?.focus());
@@ -260,6 +393,10 @@ export default function FormularioDaEntrada() {
       const nome = valores.nome.trim();
       const telefone = valores.telefone.trim() === '' ? null : telefoneEmE164(valores.telefone);
       const uf = ou(valores.uf)?.toUpperCase() ?? null;
+      // Oito digitos, sem hifen: o contrato e o `CHECK` da coluna pedem assim,
+      // e a mascara e so da tela. Campo vazio vira `null`, que no `PATCH`
+      // APAGA o CEP e no `POST` simplesmente nao vai.
+      const cep = valores.cep.trim() === '' ? null : cepEmOitoDigitos(valores.cep);
 
       if (!editando) {
         const { data, error } = await api.POST('/admin/directory/entries', {
@@ -271,6 +408,12 @@ export default function FormularioDaEntrada() {
             ...(ou(valores.cidade) === null ? {} : { city: ou(valores.cidade) as string }),
             ...(uf === null ? {} : { state: uf }),
             ...(ou(valores.bairro) === null ? {} : { neighborhood: ou(valores.bairro) as string }),
+            ...(cep === null ? {} : { postal_code: cep }),
+            ...(ou(valores.logradouro) === null ? {} : { street: ou(valores.logradouro) as string }),
+            ...(ou(valores.numero) === null ? {} : { street_number: ou(valores.numero) as string }),
+            ...(ou(valores.complemento) === null
+              ? {}
+              : { complement: ou(valores.complemento) as string }),
             ...(telefone === null ? {} : { phone_e164: telefone }),
           },
         });
@@ -292,6 +435,18 @@ export default function FormularioDaEntrada() {
         ...(uf !== (entrada.state ?? null) ? { state: uf } : {}),
         ...(ou(valores.bairro) !== (entrada.neighborhood ?? null)
           ? { neighborhood: ou(valores.bairro) }
+          : {}),
+        // Compara os OITO DIGITOS, que e o que o servidor guarda: trocar
+        // `05435-000` por `05435000` no campo nao e mudanca de CEP.
+        ...(cep !== (entrada.postal_code ?? null) ? { postal_code: cep } : {}),
+        ...(ou(valores.logradouro) !== (entrada.street ?? null)
+          ? { street: ou(valores.logradouro) }
+          : {}),
+        ...(ou(valores.numero) !== (entrada.street_number ?? null)
+          ? { street_number: ou(valores.numero) }
+          : {}),
+        ...(ou(valores.complemento) !== (entrada.complement ?? null)
+          ? { complement: ou(valores.complemento) }
           : {}),
         // Compara o E.164, que e o que o servidor guarda: trocar `(11) 3061-2200`
         // por `11 3061 2200` nao e mudanca de telefone.
@@ -354,6 +509,11 @@ export default function FormularioDaEntrada() {
               ? 'Informe a UF para publicar.'
               : 'Use a sigla do estado, com duas letras.';
         } else if (erro.field === 'neighborhood') e['e-bairro'] = 'Entre 2 e 80 caracteres.';
+        else if (erro.field === 'postal_code') {
+          e['e-cep'] = 'O CEP tem oito dígitos. Por exemplo: 05435-000.';
+        } else if (erro.field === 'street') e['e-logradouro'] = 'Entre 2 e 120 caracteres.';
+        else if (erro.field === 'street_number') e['e-numero'] = 'Até 20 caracteres.';
+        else if (erro.field === 'complement') e['e-complemento'] = 'Até 80 caracteres.';
         else if (erro.field === 'phone_e164') {
           e['e-telefone'] =
             erro.code === 'required'
@@ -524,6 +684,73 @@ export default function FormularioDaEntrada() {
           ajuda="Duas letras. Por exemplo: SP."
         />
 
+        <CampoDeCep
+          id="e-cep"
+          dataCy="entrada-cep"
+          rotulo="CEP"
+          valor={valores.cep}
+          aoMudar={(v) => mudar({ cep: v })}
+          aoCompletar={(cep) => {
+            // `void`: a busca NAO e esperada por nada. Ela preenche o que
+            // estiver vazio quando responder, e o formulário segue inteiro e
+            // salvável enquanto ela acontece.
+            void buscarEndereco(cep);
+          }}
+          erro={erros['e-cep']}
+          erroDeForma={erroDoCep}
+          aoMudarErroDeForma={setErroDoCep}
+          ajuda="Opcional. Ao completar os oito dígitos, buscamos rua, bairro, cidade e UF e preenchemos o que estiver em branco. Nada do que você digitou é alterado, e você pode editar tudo depois."
+        />
+        {/* O desfecho da busca, DITO em voz alta e em `role="status"`: campo
+            que se preenche sozinho sem avisar parece defeito, e campo que não
+            se preenche sem explicar parece defeito também. Nenhuma destas
+            frases impede salvar. */}
+        {buscaDoCep !== 'ocioso' && (
+          <p className="t-body-sm c-sec" role="status" data-cy="entrada-cep-situacao">
+            {buscaDoCep === 'buscando'
+              ? 'Buscando o endereço do CEP…'
+              : buscaDoCep === 'preenchido'
+                ? 'Preenchemos os campos que estavam em branco. Confira e edite se precisar.'
+                : buscaDoCep === 'nao-encontrado'
+                  ? 'Não encontramos este CEP. Preencha o endereço abaixo; isso não impede salvar.'
+                  : 'Não conseguimos consultar o CEP agora. Preencha o endereço abaixo; isso não impede salvar.'}
+          </p>
+        )}
+
+        <CampoDeTexto
+          id="e-logradouro"
+          dataCy="entrada-logradouro"
+          rotulo="Rua"
+          valor={valores.logradouro}
+          aoMudar={(v) => mudar({ logradouro: v })}
+          maximo={120}
+          erro={erros['e-logradouro']}
+          ajuda="Opcional. Quem atende em casa ou não tem endereço fixo pode deixar em branco."
+        />
+
+        <CampoDeTexto
+          id="e-numero"
+          dataCy="entrada-numero"
+          rotulo="Número"
+          valor={valores.numero}
+          aoMudar={(v) => mudar({ numero: v })}
+          maximo={20}
+          semCorrecao
+          erro={erros['e-numero']}
+          ajuda="Opcional. Texto, e não só dígitos: s/n, 120A e KM 32 são números de porta."
+        />
+
+        <CampoDeTexto
+          id="e-complemento"
+          dataCy="entrada-complemento"
+          rotulo="Complemento"
+          valor={valores.complemento}
+          aoMudar={(v) => mudar({ complemento: v })}
+          maximo={80}
+          erro={erros['e-complemento']}
+          ajuda="Opcional. Sala, andar, conjunto."
+        />
+
         <CampoDeTexto
           id="e-bairro"
           dataCy="entrada-bairro"
@@ -532,7 +759,7 @@ export default function FormularioDaEntrada() {
           aoMudar={(v) => mudar({ bairro: v })}
           maximo={80}
           erro={erros['e-bairro']}
-          ajuda="Aparece no app. Não há campo de rua nem de CEP: a regra de privacidade do produto não os permite em superfície pública."
+          ajuda="Aparece no app, junto de cidade e UF. Rua, número e CEP ficam no cadastro e não vão para o cartão que o aplicativo mostra."
         />
 
         <CampoDeTelefone

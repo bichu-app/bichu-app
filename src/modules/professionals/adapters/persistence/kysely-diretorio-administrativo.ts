@@ -112,6 +112,10 @@ interface LinhaDaEntrada {
   city: string | null;
   state: string | null;
   neighborhood: string | null;
+  postal_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
   phone_e164: string | null;
   status: StatusDaEntrada;
   source: OrigemDaEntrada;
@@ -137,6 +141,10 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     city: l.city,
     state: l.state,
     neighborhood: l.neighborhood,
+    postalCode: l.postal_code,
+    street: l.street,
+    streetNumber: l.street_number,
+    complement: l.complement,
     phoneE164: l.phone_e164,
     status: l.status,
     source: l.source,
@@ -160,6 +168,13 @@ const COLUNAS = [
   'professionals.city as city',
   'professionals.state as state',
   'professionals.neighborhood as neighborhood',
+  // O endereco de rua (migracao `20261018000001`). Ele e selecionado AQUI, na
+  // consulta do painel, e nao na do aplicativo: a do aplicativo esta em
+  // `kysely-directory-repository.ts` e nao nomeia nenhuma destas quatro.
+  'professionals.postal_code as postal_code',
+  'professionals.street as street',
+  'professionals.street_number as street_number',
+  'professionals.complement as complement',
   'professionals.phone_e164 as phone_e164',
   'professionals.status as status',
   'professionals.source as source',
@@ -262,6 +277,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             city: nova.city,
             state: nova.state,
             neighborhood: nova.neighborhood,
+            postal_code: nova.postalCode,
+            street: nova.street,
+            street_number: nova.streetNumber,
+            complement: nova.complement,
             phone_e164: nova.phoneE164,
             status: nova.status,
             source: nova.source,
@@ -294,6 +313,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             ...(mudanca.city === undefined ? {} : { city: mudanca.city }),
             ...(mudanca.state === undefined ? {} : { state: mudanca.state }),
             ...(mudanca.neighborhood === undefined ? {} : { neighborhood: mudanca.neighborhood }),
+            ...(mudanca.postalCode === undefined ? {} : { postal_code: mudanca.postalCode }),
+            ...(mudanca.street === undefined ? {} : { street: mudanca.street }),
+            ...(mudanca.streetNumber === undefined ? {} : { street_number: mudanca.streetNumber }),
+            ...(mudanca.complement === undefined ? {} : { complement: mudanca.complement }),
             ...(mudanca.phoneE164 === undefined ? {} : { phone_e164: mudanca.phoneE164 }),
             ...(mudanca.status === undefined ? {} : { status: mudanca.status }),
             // So na transicao PARA publicado. Uma correcao de telefone numa

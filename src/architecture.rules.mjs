@@ -38,6 +38,19 @@ export const MODULES = [
   // e a unica tabela desta secao que identifica alguem, e manter a fronteira e
   // o que garante que nenhum outro modulo consiga le-la a nao ser por `ports/`.
   'network',
+  // 18/10/2026, decisao do cliente: *"voce deve usar sempre a mesma camada de
+  // servico que ja fez a integracao com as plataformas, reaproveitamento dos
+  // nossos endpoints"*. A busca de CEP e modulo proprio e nao um canto de
+  // `professionals` porque ela nao e do diretorio: ela e de QUEM TIVER um
+  // campo de CEP, e hoje isso ja seria `professionals` (o cadastro do
+  // diretorio), `tags` (o endereco de entrega da plaquinha) e `identity` (a
+  // area de referencia). Dentro de um dos tres, os outros dois teriam de
+  // importar `domain/` alheio -- que e exatamente o que esta fronteira
+  // existe para impedir --, e a integracao voltaria a ser copiada.
+  //
+  // **Nenhuma tabela.** Este modulo nao tem persistencia: o endereco que ele
+  // devolve e gravado por quem pediu, na tabela de quem pediu.
+  'addresses',
 ];
 
 /**
