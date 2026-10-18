@@ -1031,7 +1031,29 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// sobrevive a uniao -- foi exatamente assim que seis historias erraram o
 /// hash na integracao de 22/09.
 /// Anterior: `45b6093e7fd295e6ba36fb9b0081a8b08f7755b4`.
-const String _arvoreDasTelas = '26d2076350283395220e65985ba49c29387eed50'; // nome obrigatorio no cadastro (18/10/2026): `conta/tela_criar_conta.dart` exige o nome, bloqueia o botao sem ele e nao manda mais `display_name` nulo. (antes: 45b6093e7f)
+/// **Destravado de novo no MESMO DIA (18/10/2026)**, pela segunda metade da
+/// decisao do cliente: *"nao permitir atualizar o cadastro, se nao tiver
+/// algum nome cadastrado"*. Agora e
+/// `perfil/tela_dados_pessoais.dart`, em dois pontos e so dois:
+///
+/// - `_conferir` perdeu o `_nome.text.isNotEmpty &&` que deixava o campo
+///   VAZIO escapar da recusa -- era a porta pela qual `display_name: ""`
+///   saia no PATCH e zerava a coluna;
+/// - a frase `_TextosDosDados.nomeSoComEspaco` (*"Escreva o seu nome, ou
+///   deixe o campo vazio para tira-lo."*) virou `nomePrecisaDeTexto`, numa
+///   linha, porque a segunda metade dela passou a ser instrucao falsa.
+///
+/// **Nenhuma porta de aparelho encostada**: e validacao de formulario e uma
+/// constante de texto. Medido em `app/test/telas/dados_pessoais_exige_nome_test.dart`.
+///
+/// **FRONTEIRA DECLARADA:** este mesmo arquivo de tela foi mexido hoje por
+/// outra frente, no ramo `chore/remover-quatro-textos-18-10` (ainda nao
+/// mesclado), que retira de la a linha do e-mail e os textos de senha. Os
+/// dois pontos acima sao localizados e nao encostam nesses; quem mesclar
+/// **recalcula este hash sobre a arvore mesclada**, como o paragrafo
+/// anterior ja avisa.
+/// Anterior: `26d2076350283395220e65985ba49c29387eed50`.
+const String _arvoreDasTelas = 'f786eed4b250d1ca9ebb0c071d92626121a13165'; // nome nao pode ser apagado (18/10/2026): `perfil/tela_dados_pessoais.dart` recusa o campo de nome vazio e deixou de oferecer apaga-lo. (antes: 26d2076350)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
