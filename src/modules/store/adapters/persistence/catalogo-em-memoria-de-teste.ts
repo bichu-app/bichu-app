@@ -44,11 +44,58 @@ import {
   type TransacaoDoCatalogo,
 } from '../../ports/catalogo-administrativo.js';
 
-/** O item como o dublê o guarda: as ligacoes ficam fora, como no banco. */
-type ItemGuardado = Omit<ItemAdministrativo, 'species' | 'tags' | 'imagens' | 'partner'> & {
+/**
+ * O item como o dublê o guarda: as ligacoes ficam fora, como no banco.
+ *
+ * Os ROTULOS tambem ficam fora, e pelo mesmo motivo: no banco eles vem de
+ * `store_categories`/`store_subcategories` por juncao, nunca de coluna do
+ * item. Um dublê que guardasse o rotulo junto do item passaria verde sobre a
+ * renomeacao de categoria -- que e justamente o que ela precisa poder fazer
+ * sem tocar em item nenhum.
+ */
+type ItemGuardado = Omit<
+  ItemAdministrativo,
+  'species' | 'tags' | 'imagens' | 'partner' | 'categoryLabel' | 'subcategoryLabel'
+> & {
   /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
   readonly partnerId: string | null;
 };
+
+/**
+ * O vocabulario dos dois niveis que o dublê conhece.
+ *
+ * **E um RECORTE, e nao o vocabulario.** A autoridade e a migracao
+ * `20261017000003` (14 categorias, 83 subcategorias da arvore de cachorro), e
+ * quem confirma que a semente casa com ela e a suite de integracao. Aqui ficam
+ * os 14 codigos -- porque errar um codigo e o engano barato -- e as
+ * subcategorias das poucas categorias que os casos de uso exercitam.
+ */
+const VOCABULARIO: ReadonlyMap<string, { label: string; subs: ReadonlyMap<string, string> }> =
+  new Map([
+    [
+      'food',
+      {
+        label: 'Rações',
+        subs: new Map([
+          ['racao_seca', 'Ração seca'],
+          ['racao_umida', 'Ração úmida'],
+        ]),
+      },
+    ],
+    ['treats', { label: 'Petiscos e ossos', subs: new Map([['bifinhos', 'Bifinhos']]) }],
+    ['feeding', { label: 'Acessórios para alimentação', subs: new Map() }],
+    ['health', { label: 'Medicamentos', subs: new Map([['vermifugos', 'Vermífugos']]) }],
+    ['potty', { label: 'Tapetes higiênicos e banheiros', subs: new Map() }],
+    ['hygiene', { label: 'Higiene e limpeza', subs: new Map() }],
+    ['beauty', { label: 'Beleza', subs: new Map([['shampoos', 'Shampoos']]) }],
+    ['toy', { label: 'Brinquedos', subs: new Map([['mordedores', 'Mordedores']]) }],
+    ['bed', { label: 'Camas e casinhas', subs: new Map() }],
+    ['accessory', { label: 'Roupas e acessórios', subs: new Map() }],
+    ['collar', { label: 'Coleiras, guias e peitorais', subs: new Map() }],
+    ['transport', { label: 'Transporte', subs: new Map() }],
+    ['training', { label: 'Adestramento e comportamento', subs: new Map() }],
+    ['fencing', { label: 'Cercados, portões e escadas', subs: new Map() }],
+  ]);
 
 interface ImagemGuardada {
   readonly id: string;
@@ -115,6 +162,25 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     title: guardado.title,
     summary: guardado.summary,
     category: guardado.category,
+    // Os rotulos sao RESOLVIDOS na leitura, como a juncao do banco faz. Os
+    // `??` nao sao zelo: um item pode apontar para categoria que saiu do
+    // vocabulario, e nesse caso o codigo continua saindo e o rotulo cai para
+    // ele -- nunca para texto inventado.
+    //
+    // **Categoria nula nao tem rotulo**, e o dublê precisa dizer isso igual ao
+    // banco: lá a juncao e EXTERNA na leitura do painel, e devolve nulo para o
+    // rascunho sem categoria (`20261017000002`). Um dublê que devolvesse o
+    // codigo nulo coagido a texto esconderia o rascunho incompleto.
+    categoryLabel:
+      guardado.category === null
+        ? null
+        : (VOCABULARIO.get(guardado.category)?.label ?? guardado.category),
+    subcategory: guardado.subcategory,
+    subcategoryLabel:
+      guardado.category === null || guardado.subcategory === null
+        ? null
+        : (VOCABULARIO.get(guardado.category)?.subs.get(guardado.subcategory) ??
+          guardado.subcategory),
     // Como o banco: guarda o CAMINHO (com query e fragmento) e o host so
     // quando ele e um subdominio do parceiro; compoe os dois na leitura. O
     // duble refaz a conta em vez de devolver `guardado.targetUrl` inteira,
@@ -245,6 +311,26 @@ export function repositorioEmMemoria(
           const achado = porSlug(r.itens, slug);
           return Promise.resolve(achado === null ? null : montarItem(r, achado.id));
         },
+        conferirClassificacao: (categoria, subcategoria) => {
+          const encontrada = VOCABULARIO.get(categoria);
+          if (subcategoria === null) {
+            return Promise.resolve({
+              categoriaAtiva: encontrada !== undefined,
+              subcategoriaNaCategoria: false,
+              subcategoriaEmAlgumaCategoria: false,
+            });
+          }
+          return Promise.resolve({
+            categoriaAtiva: encontrada !== undefined,
+            subcategoriaNaCategoria: encontrada?.subs.has(subcategoria) ?? false,
+            // A varredura e pelo CODIGO em todas as categorias, como a consulta
+            // do adaptador real: e o que separa "e de outra categoria" de "nao
+            // existe", e sao duas mensagens diferentes no painel.
+            subcategoriaEmAlgumaCategoria: [...VOCABULARIO.values()].some((c) =>
+              c.subs.has(subcategoria),
+            ),
+          });
+        },
         async inserirItem(novo: NovoItem) {
           await Promise.resolve();
           if (porSlug(r.itens, novo.slug) !== null) throw new SlugOcupado('store_item');
@@ -255,6 +341,7 @@ export function repositorioEmMemoria(
             title: novo.title,
             summary: novo.summary,
             category: novo.category,
+            subcategory: novo.subcategory,
             targetUrl: novo.targetUrl,
             imageUrl: null,
             priceAmount: novo.preco?.amount ?? null,
@@ -280,6 +367,9 @@ export function repositorioEmMemoria(
             ...(m.title === undefined ? {} : { title: m.title }),
             ...(m.summary === undefined ? {} : { summary: m.summary }),
             ...(m.category === undefined ? {} : { category: m.category }),
+            // `in`, e nao `=== undefined`: aqui `null` APAGA a subcategoria e
+            // ausente preserva, e os dois precisam ser distinguidos.
+            ...('subcategory' in m ? { subcategory: m.subcategory ?? null } : {}),
             ...(m.destino === undefined ? {} : { targetUrl: m.destino.targetUrl }),
             ...(m.preco === undefined
               ? {}

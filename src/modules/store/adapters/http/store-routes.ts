@@ -62,9 +62,12 @@ import {
   projetarItem,
   type CategoriaDaVitrine,
   type EspecieDoItem,
+  type SubcategoriaDaVitrine,
 } from '../../domain/item-da-vitrine.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { OrdemDaVitrine, StoreRepository } from '../../ports/store-repository.js';
+import type { TaxonomiaDaVitrineRepository } from '../../ports/taxonomia-da-vitrine.js';
+import { casaIfNoneMatch } from '../../../../shared/http/if-match.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 
 /**
@@ -109,19 +112,40 @@ export const rotaDasTagsDaVitrine = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * O vocabulario dos DOIS niveis da categoria (decisao do cliente de 17/10).
+ *
+ * Mesma forma de `rotaDasTagsDaVitrine`, e nao de `getReferenceData`: as duas
+ * servem lista fechada da LOJA, e `reference-data` e do modulo de pets --
+ * servir `store_*` por ela cruzaria a fronteira de modulo que
+ * `src/architecture.rules.mjs` cobra.
+ */
+export const rotaDaTaxonomiaDaVitrine = defineRoute({
+  operationId: 'getStoreTaxonomy',
+  method: 'get',
+  path: '/store/taxonomy',
+  effects: [],
+  rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
 /** Os mesmos defaults que o contrato declara. Copiados de la, nao escolhidos aqui. */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const ORDEM_PADRAO: OrdemDaVitrine = 'curadoria';
 
+/** O mesmo teto de `reference-data`: a lista so muda por migracao. */
+const CACHE_DA_TAXONOMIA_EM_SEGUNDOS = 86_400;
+
 export interface DependenciasDasRotasDaVitrine {
   readonly vitrine: StoreRepository;
+  readonly taxonomia: TaxonomiaDaVitrineRepository;
   readonly clock: Clock;
 }
 
 interface QueryDaVitrine {
   readonly q?: string;
   readonly category?: CategoriaDaVitrine;
+  readonly subcategory?: SubcategoriaDaVitrine;
   readonly species?: EspecieDoItem;
   readonly tag?: string;
   readonly sort?: OrdemDaVitrine;
@@ -140,6 +164,7 @@ function recortesAplicados(query: QueryDaVitrine): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();
   if (query.category !== undefined) aplicados['category'] = query.category;
+  if (query.subcategory !== undefined) aplicados['subcategory'] = query.subcategory;
   if (query.species !== undefined) aplicados['species'] = query.species;
   if (query.tag !== undefined) aplicados['tag'] = query.tag;
   if (Object.keys(aplicados).length === 0) aplicados['scope'] = 'all';
@@ -168,6 +193,7 @@ export function registrarRotasDaVitrine(
       const pagina = await deps.vitrine.listarVitrine({
         ...(termo === undefined || termo === '' ? {} : { q: termo }),
         ...(query.category === undefined ? {} : { category: query.category }),
+        ...(query.subcategory === undefined ? {} : { subcategory: query.subcategory }),
         ...(query.species === undefined ? {} : { species: query.species }),
         ...(query.tag === undefined ? {} : { tag: query.tag }),
         sort,
@@ -205,5 +231,45 @@ export function registrarRotasDaVitrine(
 
   registrarRota(app, rotaDasTagsDaVitrine, {}, async (_request: FastifyRequest, reply: FastifyReply) =>
     reply.send({ items: await deps.vitrine.tagsVisiveis() }),
+  );
+
+  registrarRota(
+    app,
+    rotaDaTaxonomiaDaVitrine,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const taxonomia = await deps.taxonomia.carregar();
+
+      // O `ETag` e derivado da PROPRIA lista, e nao de um contador: o
+      // vocabulario so muda por migracao, e a quantidade de categorias e de
+      // subcategorias ativas e o que de fato muda quando ele muda. Um carimbo
+      // de tempo aqui faria o revalidador falhar a cada reinicio sem a lista
+      // ter mudado.
+      const assinatura = taxonomia.categories
+        .map((c) => `${c.code}:${c.subcategories.length}`)
+        .join(',');
+      const etag = `"loja-taxonomia-${String(taxonomia.categories.length)}-${String(assinatura.length)}"`;
+
+      void reply.header('Cache-Control', `public, max-age=${CACHE_DA_TAXONOMIA_EM_SEGUNDOS}`);
+      void reply.header('ETag', etag);
+
+      // Comparacao fraca, que ignora o sufixo que a borda poe no ETag, como em
+      // `reference-data`.
+      if (casaIfNoneMatch(request.headers['if-none-match'], etag)) {
+        return reply.status(304).send();
+      }
+
+      return reply.send({
+        categories: taxonomia.categories.map((categoria) => ({
+          code: categoria.code,
+          label: categoria.label,
+          subcategories: categoria.subcategories.map((sub) => ({
+            code: sub.code,
+            label: sub.label,
+            species: [...sub.species],
+          })),
+        })),
+      });
+    },
   );
 }

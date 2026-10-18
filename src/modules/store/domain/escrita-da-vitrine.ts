@@ -36,6 +36,7 @@ import {
   diasDeCalendario,
   estadoDoPreco,
   type CategoriaDaVitrine,
+  type SubcategoriaDaVitrine,
   type EspecieDoItem,
   type EstadoDoPreco,
 } from './item-da-vitrine.js';
@@ -117,6 +118,16 @@ export interface ItemAdministrativo {
   readonly title: string;
   readonly summary: string | null;
   readonly category: CategoriaDaVitrine | null;
+  /**
+   * O rotulo da categoria, lido de `store_categories` na mesma consulta.
+   * **Nulo junto com `category`**, que e anulavel no rascunho desde a
+   * `20261017000002`: sem codigo nao ha rotulo para resolver.
+   */
+  readonly categoryLabel: string | null;
+  /** O segundo nivel, OPCIONAL. Nulo e estado normal. */
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  /** O rotulo da subcategoria. Nulo junto com `subcategory`. */
+  readonly subcategoryLabel: string | null;
   readonly targetUrl: string | null;
   /**
    * URL do parceiro, so em dado da massa. O painel nunca a escreve (ADR-0027
@@ -356,6 +367,138 @@ export function errosDoSiteDoParceiro(campo: string, siteUrl: string): ProblemFi
  * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
  * do corpo e responde um 400 so.
  */
+/**
+ * O que o vocabulario de categorias respondeu sobre uma classificacao, lido
+ * pela transacao e entregue a esta funcao.
+ *
+ * E uma estrutura, e nao tres booleanos soltos nos parametros, porque os tres
+ * so fazem sentido juntos: "a subcategoria existe em outra categoria" nao quer
+ * dizer nada sem "ela nao existe nesta".
+ */
+export interface ClassificacaoDoVocabulario {
+  readonly categoriaAtiva: boolean;
+  /** A subcategoria existe e esta ativa DENTRO da categoria conferida. */
+  readonly subcategoriaNaCategoria: boolean;
+  /** A subcategoria existe e esta ativa em ALGUMA categoria -- talvez outra. */
+  readonly subcategoriaEmAlgumaCategoria: boolean;
+}
+
+/**
+ * O `achado` de quem NAO consultou o vocabulario, porque nao havia categoria
+ * para consultar (rascunho com `category` nula, `20261017000002`).
+ *
+ * Existe para que o caminho sem categoria nao precise inventar uma consulta
+ * nem o porto precise aceitar `null`: `errosDaClassificacao` devolve antes de
+ * olhar para qualquer campo desta estrutura. Os tres `false` sao a verdade --
+ * nada foi encontrado, porque nada foi procurado.
+ */
+export const SEM_CATEGORIA_PARA_CONFERIR: ClassificacaoDoVocabulario = {
+  categoriaAtiva: false,
+  subcategoriaNaCategoria: false,
+  subcategoriaEmAlgumaCategoria: false,
+};
+
+/**
+ * Os erros de campo da classificacao em dois niveis (decisao do cliente de
+ * 17/10: "dois niveis, com subcategorias como a petlove").
+ *
+ * ## Por que esta conferencia precisa existir na aplicacao
+ *
+ * Ate 17/10 a categoria era `enum` no contrato, e quem recusava valor
+ * desconhecido era o esquema de corpo instalado a partir dele -- esta camada
+ * nunca precisou conferir. Agora o vocabulario e DADO (`store_categories`), o
+ * contrato declara `string` com formato, e sem esta funcao a unica recusa
+ * restante seria a chave estrangeira do banco: o painel receberia erro de
+ * integridade em vez de erro de CAMPO, e a tela nao teria onde pintar a
+ * mensagem.
+ *
+ * A chave estrangeira continua la, e continua sendo a trava final. Esta funcao
+ * nao a substitui -- ela traduz a mesma regra para a linguagem do formulario.
+ *
+ * ## QUATRO recusas, e a quarta nasceu na mescla dos dois lotes de 17/10
+ *
+ * - `unknown_category`: categoria inexistente ou inativa.
+ * - `subcategory_not_in_category`: a subcategoria existe no vocabulario, mas
+ *   em OUTRA categoria. E o caso de trocar a categoria de um item e deixar a
+ *   subcategoria antiga para tras, e a mensagem precisa dizer isso -- "nao
+ *   existe" faria a pessoa procurar um erro de digitacao que nao esta la.
+ * - `unknown_subcategory`: nao existe em nenhuma, ou esta inativa.
+ * - `subcategory_without_category`: subcategoria COM a categoria nula.
+ *
+ * ## O BURACO QUE A QUARTA RECUSA FECHA
+ *
+ * As duas mudancas de 17/10 nasceram em branches que nao se enxergavam, e so
+ * JUNTAS abrem este caso:
+ *
+ * - a `20261017000002` deixou `store_items.category` ANULAVEL, para o rascunho
+ *   incompleto caber;
+ * - esta mudanca poe a subcategoria atras de uma chave estrangeira COMPOSTA
+ *   `(category, subcategory)`, e o `MATCH SIMPLE` do Postgres (o padrao) **nao
+ *   cobra a restricao quando qualquer coluna da chave e nula**.
+ *
+ * Resultado: rascunho com `category = NULL` e `subcategory = 'racao_seca'`
+ * passava pelo banco e pela aplicacao -- subcategoria SOLTA, pendurada em
+ * categoria nenhuma, que nenhuma tela sabe desenhar e que a publicacao
+ * descobriria tarde.
+ *
+ * **Nao fechamos isso somando `subcategory` ao `CHECK
+ * store_items_publicado_esta_completo`**, que era a saida obvia, por duas
+ * razoes: aquele `CHECK` e `NOT active OR (...)`, entao ele nao olha rascunho
+ * -- e o buraco E no rascunho; e somar a coluna la passaria a EXIGIR
+ * subcategoria para publicar, o oposto de "o segundo nivel e opcional". O que
+ * entrou foi um `CHECK` proprio,
+ * `store_items_subcategoria_exige_categoria` (`subcategory IS NULL OR category
+ * IS NOT NULL`), cobrado em rascunho E em publicado; esta recusa e a traducao
+ * dele para a linguagem do formulario.
+ *
+ * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
+ * do corpo e responde um 400 so, como `errosDoDestino` ja faz.
+ */
+export function errosDaClassificacao(
+  categoria: CategoriaDaVitrine | null,
+  subcategoria: SubcategoriaDaVitrine | null,
+  achado: ClassificacaoDoVocabulario,
+): ProblemFieldError[] {
+  // Sem categoria nao ha vocabulario a consultar: `achado` nao foi lido (ver
+  // `SEM_CATEGORIA_PARA_CONFERIR`) e a unica pergunta que resta e a coerencia
+  // dos dois niveis.
+  if (categoria === null) {
+    return subcategoria === null
+      ? []
+      : [
+          {
+            field: 'subcategory',
+            code: 'subcategory_without_category',
+            message: 'Escolha a categoria antes da subcategoria.',
+          },
+        ];
+  }
+  const erros: ProblemFieldError[] = [];
+  if (!achado.categoriaAtiva) {
+    erros.push({
+      field: 'category',
+      code: 'unknown_category',
+      message: 'Essa categoria não está no vocabulário da Loja.',
+    });
+  }
+  if (subcategoria !== null && !achado.subcategoriaNaCategoria) {
+    erros.push(
+      achado.subcategoriaEmAlgumaCategoria
+        ? {
+            field: 'subcategory',
+            code: 'subcategory_not_in_category',
+            message: 'Essa subcategoria é de outra categoria. Escolha uma da categoria selecionada.',
+          }
+        : {
+            field: 'subcategory',
+            code: 'unknown_subcategory',
+            message: 'Essa subcategoria não está no vocabulário da Loja.',
+          },
+    );
+  }
+  return erros;
+}
+
 export function errosDoDestino(
   campo: string,
   targetUrl: string,
@@ -556,11 +699,20 @@ export interface ItemAdministrativoProjetado {
   readonly title: string;
   readonly summary: string | null;
   readonly category: CategoriaDaVitrine | null;
+  /** Nulo junto com `category` (rascunho incompleto, `20261017000002`). */
+  readonly category_label: string | null;
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  readonly subcategory_label: string | null;
   readonly target_url: string | null;
   /**
    * O que ainda falta para publicar, na ordem dos campos da tela. Vazio quer
    * dizer "da para publicar". O painel o usa para dizer o que falta em vez de
    * so desabilitar o botao.
+   *
+   * `subcategory` NAO entra aqui: o segundo nivel e opcional. O que se cobra
+   * dos dois niveis e a coerencia (`subcategory` sem `category` nao existe), e
+   * quem cobra e `errosDaClassificacao` mais o `CHECK
+   * store_items_subcategoria_exige_categoria`.
    */
   readonly missing_to_publish: readonly FaltaDaPublicacao[];
   readonly species: readonly EspecieDoItem[];
@@ -622,6 +774,9 @@ export function projetarItemAdministrativo(
     title: item.title,
     summary: item.summary,
     category: item.category,
+    category_label: item.categoryLabel,
+    subcategory: item.subcategory,
+    subcategory_label: item.subcategoryLabel,
     target_url: item.targetUrl,
     missing_to_publish: faltaParaPublicar(item),
     species: [...item.species],

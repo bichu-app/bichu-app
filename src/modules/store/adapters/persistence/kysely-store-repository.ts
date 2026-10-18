@@ -52,6 +52,9 @@ interface LinhaDoItem {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
+  category_label: string;
+  subcategory: string | null;
+  subcategory_label: string | null;
   image_path: string | null;
   target_path: string;
   target_host: string | null;
@@ -106,11 +109,41 @@ export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
     // continua sendo o que sai na resposta, projetado logo abaixo -- o que
     // mudou foi por onde as duas tabelas se ligam, nao o que a tela recebe.
     .innerJoin('store_partners as p', 'p.id', 'i.partner_id')
+    // O rotulo da categoria vem na MESMA consulta, e a juncao e INTERNA de
+    // proposito: a chave estrangeira `store_items_categoria_existe` garante que
+    // a linha existe, entao uma juncao externa aqui prometeria um nulo que o
+    // banco nao admite -- e o nulo prometido viraria `?? ''` em algum lugar.
+    //
+    // A coluna `i.category` virou ANULAVEL na `20261017000002`, e a juncao
+    // segue interna AQUI pelo mesmo motivo que a do parceiro ao lado: esta
+    // leitura e so do item publicado (`i.active`), e publicado com categoria
+    // nula e estado que o `CHECK store_items_publicado_esta_completo` recusa.
+    // Na leitura do PAINEL, que mostra rascunho, as duas sao externas.
+    .innerJoin('store_categories as c', 'c.code', 'i.category')
+    // A da SUBcategoria e externa, porque a coluna e opcional. As duas
+    // condicoes vao no `on`, e nao num `where`: no `where`, item sem
+    // subcategoria sairia da lista.
+    .leftJoin('store_subcategories as sc', (juncao) =>
+      juncao
+        .onRef('sc.category_code', '=', 'i.category')
+        .onRef('sc.code', '=', 'i.subcategory'),
+    )
     .where('i.active', '=', true)
     .where('p.active', '=', true);
 
   if (recorte.category !== undefined) {
     consulta = consulta.where('i.category', '=', recorte.category);
+  }
+
+  // O segundo nivel. **Independe de `category`**: o par `(category,
+  // subcategory)` do item ja e coerente por chave estrangeira, entao filtrar
+  // so pela subcategoria nao precisa da categoria para ser correto.
+  //
+  // Subcategoria inexistente, inativa ou de outra categoria nao casa com item
+  // nenhum e a lista volta VAZIA, sem 400 -- a mesma regra de `tag`, pela mesma
+  // razao: o link antigo continua abrindo.
+  if (recorte.subcategory !== undefined) {
+    consulta = consulta.where('i.subcategory', '=', recorte.subcategory);
   }
 
   if (recorte.species !== undefined) {
@@ -163,6 +196,9 @@ const COLUNAS_DO_ITEM = [
   'i.title as title',
   'i.summary as summary',
   'i.category as category',
+  'c.label as category_label',
+  'i.subcategory as subcategory',
+  'sc.label as subcategory_label',
   'i.image_path as image_path',
   'i.target_path as target_path',
   'i.target_host as target_host',
@@ -251,6 +287,14 @@ export class KyselyStoreRepository implements StoreRepository {
       title: linha.title,
       summary: linha.summary,
       category: linha.category,
+      categoryLabel: linha.category_label,
+      subcategory: linha.subcategory,
+      // O rotulo so existe com a subcategoria, e a juncao externa ja devolve
+      // nulo nos dois quando ela falta. A conjuncao explicita existe para o
+      // caso de a subcategoria apontar para uma linha INATIVA: o codigo
+      // continua saindo (o item ja o usa), e um rotulo sem linha nao e
+      // inventado aqui.
+      subcategoryLabel: linha.subcategory === null ? null : linha.subcategory_label,
       imageUrl: principal !== undefined ? this.urlDeMidia(principal.chave) : externa,
       imageAltText:
         principal !== undefined ? principal.altText : externa === null ? null : linha.title,

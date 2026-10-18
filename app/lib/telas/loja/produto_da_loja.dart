@@ -497,7 +497,14 @@ class _Cabecalho extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final linhaDoPreco = item.linhaDoPreco;
-    final categoria = item.categoria;
+    // A CLASSIFICACAO, e nao mais so a categoria. O detalhe do produto nasceu
+    // no lote anterior de 17/10, quando a categoria era um `enum` do binario e
+    // `item.categoria` era o proprio valor com `rotulo`. Na mescla dos dois
+    // niveis ela virou DADO: `categoria` passou a ser o CODIGO (`String?`) e o
+    // rotulo chega na resposta. `linhaDaClassificacao` e o mesmo texto que o
+    // cartao da vitrine mostra -- "Racoes · Racao seca" --, para a pilula do
+    // detalhe e a linha da lista nunca divergirem.
+    final classificacao = item.linhaDaClassificacao;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,9 +520,9 @@ class _Cabecalho extends StatelessWidget {
         ),
         // A categoria, quando ha. Pilula neutra: a palavra e a informacao, e
         // nenhuma cor diz nada.
-        if (categoria != null) ...<Widget>[
+        if (classificacao != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),
-          _PilulaDaCategoria(rotulo: categoria.rotulo),
+          _PilulaDaCategoria(rotulo: classificacao),
         ],
         if (linhaDoPreco != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),

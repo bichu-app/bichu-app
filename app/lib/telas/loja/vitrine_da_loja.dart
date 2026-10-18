@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/falhas.dart';
@@ -130,6 +132,14 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
   PaginaDaLoja? _pagina;
   String? _textoDaFalha;
 
+  /// O vocabulario dos dois niveis (`GET /v1/store/taxonomy`).
+  ///
+  /// **Nao bloqueia a lista, e a falha dele nao e falha da tela.** Sem
+  /// vocabulario o grupo de filtro de categoria simplesmente nao aparece, e a
+  /// vitrine carrega igual: o rotulo de cada cartao vem do proprio item
+  /// (`category_label`), nao daqui.
+  TaxonomiaDaLoja _taxonomia = TaxonomiaDaLoja.vazia;
+
   /// Os itens de **todas** as paginas ja pedidas, na ordem em que chegaram.
   ///
   /// `_pagina.itens` tem so a ultima pagina, e desenhar a lista a partir dela
@@ -169,6 +179,7 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     if (_visivel) return;
     _visivel = true;
     _agendarCarga();
+    unawaited(_carregarTaxonomia());
   }
 
   void _agendarCarga() {
@@ -189,6 +200,28 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
   /// mostraria vinte itens do meio como se fossem a vitrine inteira -- e com
   /// um recorte pequeno a pagina 3 volta **vazia**, que e o "a lista ficou
   /// vazia sem motivo" que ninguem consegue reproduzir.
+  /// Pede o vocabulario UMA vez por tela, e em silencio.
+  ///
+  /// Nao entra em `_carregar`: aquele metodo roda a cada troca de recorte e a
+  /// cada volta para a aba, e o vocabulario so muda por migracao -- pedir de
+  /// novo seria carga que existe para ser descartada. A resposta e cacheavel
+  /// por 24 h, entao a segunda abertura do app nem sai do aparelho.
+  Future<void> _carregarTaxonomia() async {
+    if (!mounted || _taxonomia.categorias.isNotEmpty) return;
+    final escopo = Escopo.of(context);
+    try {
+      final taxonomia = await escopo.loja.taxonomia();
+      if (!mounted) return;
+      setState(() => _taxonomia = taxonomia);
+    } on FalhaDeChamada catch (_) {
+      // Silencio deliberado: o filtro de categoria deixa de ser oferecido, e
+      // nada mais na tela depende disto. Uma faixa de erro aqui falaria de uma
+      // lista que a pessoa nao pediu.
+    } on FormatException catch (erro) {
+      debugPrint('Resposta da taxonomia fora do contrato: $erro');
+    }
+  }
+
   Future<void> _carregar() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
@@ -341,34 +374,72 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     );
   }
 
-  /// O filtro: categoria, que e o unico recorte que a rota aceita alem da
-  /// busca. Nada mais entra aqui sem entrar antes no contrato.
+  /// O filtro: categoria e, **dentro dela**, subcategoria.
+  ///
+  /// ## Dois grupos, e o segundo so existe depois do primeiro
+  ///
+  /// O grupo de subcategoria **nao aparece** enquanto nao ha categoria
+  /// escolhida, e tambem nao aparece quando a categoria escolhida ainda nao
+  /// tem arvore de segundo nivel levantada (gato, passaro, peixe e outros, em
+  /// 17/10). Mostrar as 83 subcategorias de uma vez devolveria a pessoa ao
+  /// problema que os dois niveis existem para resolver; mostrar um grupo vazio
+  /// pareceria defeito.
+  ///
+  /// As opcoes vem de `GET /v1/store/taxonomy`, e nao de lista neste binario:
+  /// o vocabulario e dado desde 17/10, e um `enum` aqui faria acrescentar
+  /// subcategoria exigir um APK.
   ControleDeFiltro _controleDeFiltro() {
+    final subcategorias = _taxonomia.subcategoriasDe(_recorte.categoria);
     return ControleDeFiltro(
       grupos: <GrupoDeFiltro>[
-        GrupoDeFiltro(
-          chave: 'category',
-          titulo: 'Categoria',
-          selecionado: _recorte.categoria?.codigo,
-          opcoes: <OpcaoDeRecorte>[
-            for (final c in CategoriaDaLoja.values)
-              OpcaoDeRecorte(codigo: c.codigo, rotulo: c.rotulo),
-          ],
-        ),
+        // Sem vocabulario carregado o grupo nao nasce: um grupo de filtro sem
+        // opcao e um controle que nao faz nada.
+        if (_taxonomia.categorias.isNotEmpty)
+          GrupoDeFiltro(
+            chave: 'category',
+            titulo: 'Categoria',
+            selecionado: _recorte.categoria,
+            opcoes: <OpcaoDeRecorte>[
+              for (final c in _taxonomia.categorias)
+                OpcaoDeRecorte(codigo: c.codigo, rotulo: c.rotulo),
+            ],
+          ),
+        if (subcategorias.isNotEmpty)
+          GrupoDeFiltro(
+            chave: 'subcategory',
+            titulo: 'Subcategoria',
+            selecionado: _recorte.subcategoria,
+            opcoes: <OpcaoDeRecorte>[
+              for (final s in subcategorias)
+                OpcaoDeRecorte(codigo: s.codigo, rotulo: s.rotulo),
+            ],
+          ),
       ],
       aoEscolher: (chave, codigo) {
         Navigator.of(context).pop();
+        // Trocar a categoria LIMPA a subcategoria, e a regra mora em
+        // `RecorteDaLoja.com`: a subcategoria antiga pertence a categoria
+        // antiga, e o par produziria uma lista vazia que a pessoa nao sabe
+        // explicar.
         _trocarRecorte(
-          _recorte.com(
-            categoria: CategoriaDaLoja.porCodigo(codigo),
-            limparCategoria: codigo == null,
-            pagina: 1,
-          ),
+          chave == 'subcategory'
+              ? _recorte.com(
+                  subcategoria: codigo,
+                  limparSubcategoria: codigo == null,
+                  pagina: 1,
+                )
+              : _recorte.com(
+                  categoria: codigo,
+                  limparCategoria: codigo == null,
+                  pagina: 1,
+                ),
         );
       },
       aoLimpar: () {
         Navigator.of(context).pop();
-        _trocarRecorte(_recorte.com(limparCategoria: true, pagina: 1));
+        _trocarRecorte(
+          _recorte.com(limparCategoria: true, limparSubcategoria: true, pagina: 1),
+        );
       },
     );
   }
@@ -561,8 +632,25 @@ class CartaoDaLoja extends StatelessWidget {
                 ),
                 const SizedBox(height: BichuEspaco.e3),
               ],
+              // A classificacao vem ANTES do titulo, e em corpo menor: ela e o
+              // contexto do produto, nao o nome dele. Depois do titulo ela
+              // disputaria a leitura com o resumo, que e a frase que vende.
+              //
+              // **Ate 17/10/2026 o cartao nao mostrava categoria nenhuma** -- o
+              // dado chegava na resposta e nao aparecia em lugar nenhum da tela. A
+              // decisao dos dois niveis e o que trouxe a linha para ca.
+              if (item.linhaDaClassificacao case final String classificacao) ...<Widget>[
+                Text(
+                  classificacao,
+                  style: textos.labelMedium?.copyWith(color: cores.textSecondary),
+                ),
+                const SizedBox(height: BichuEspaco.e1),
+              ],
               Text(item.titulo, style: textos.titleMedium),
               const SizedBox(height: BichuEspaco.e1),
+              // O resumo com "Ler mais" (lote anterior de 17/10). O ramo dos
+              // dois niveis nasceu antes dele e trazia um `Text` simples aqui;
+              // o que ele acrescenta e a linha acima, nao a troca deste.
               _ResumoDoProduto(item: item),
               const SizedBox(height: BichuEspaco.e2),
               Text(

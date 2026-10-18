@@ -40,6 +40,9 @@ function item(ajustes: Partial<ItemDaVitrine> = {}): ItemDaVitrine {
     title: 'Ração úmida sachê frango',
     summary: 'Caixa com doze unidades de 85 g.',
     category: 'food',
+    categoryLabel: 'Rações',
+    subcategory: 'racao_umida',
+    subcategoryLabel: 'Ração úmida',
     imageUrl: null,
     imageAltText: null,
     species: ['dog'],
@@ -187,5 +190,47 @@ void describe('a projecao publica', () => {
         `a vitrine nao compara preco, e \`${proibido}\` apareceu`,
       );
     }
+  });
+});
+
+/**
+ * Os dois niveis na projecao PUBLICA (decisao do cliente de 17/10/2026).
+ *
+ * O cartao da Loja nao mostrava categoria nenhuma antes desta data -- o dado
+ * chegava na resposta e nao aparecia em lugar nenhum da tela. Agora a tela
+ * escreve "Rações · Ração seca", e o ROTULO vem da resposta: um mapa
+ * `codigo -> rotulo` no aplicativo faria renomear uma categoria exigir um APK.
+ */
+void describe('categoria e subcategoria na projecao publica', () => {
+  void it('codigo e rotulo saem lado a lado, nos dois niveis', () => {
+    const projetado = projetarItem(item(), AGORA);
+    assert.equal(projetado.category, 'food');
+    assert.equal(projetado.category_label, 'Rações');
+    assert.equal(projetado.subcategory, 'racao_umida');
+    assert.equal(projetado.subcategory_label, 'Ração úmida');
+  });
+
+  void it('item sem subcategoria: os dois campos do segundo nivel nulos, e isso e NORMAL', () => {
+    const projetado = projetarItem(item({ subcategory: null, subcategoryLabel: null }), AGORA);
+    assert.equal(projetado.subcategory, null);
+    assert.equal(projetado.subcategory_label, null);
+    assert.equal(projetado.category_label, 'Rações');
+  });
+
+  void it('o rotulo nao substitui o codigo: o filtro manda o CODIGO de volta', () => {
+    // Projetar so o rotulo deixaria a tela sem o que mandar em
+    // `?category=`/`?subcategory=`, e ela passaria a mandar texto traduzido.
+    const projetado = projetarItem(item(), AGORA);
+    assert.notEqual(projetado.category, projetado.category_label);
+    assert.match(projetado.category, /^[a-z][a-z0-9_]*$/);
+  });
+
+  void it('preco VENCIDO nao mexe na classificacao', () => {
+    // A omissao do preco e do vencimento; os dois niveis nao envelhecem.
+    const vencido = projetarItem(item({ priceCheckedAt: '2026-01-01' }), AGORA);
+    assert.equal(vencido.price_status, 'vencido');
+    assert.equal(vencido.price_amount, null);
+    assert.equal(vencido.category_label, 'Rações');
+    assert.equal(vencido.subcategory_label, 'Ração úmida');
   });
 });

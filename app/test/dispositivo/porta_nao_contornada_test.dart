@@ -901,7 +901,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = 'ee89095bf10661c42195741c819dabd1c9722054'; // BICHUS-278, 17/10: o lote da Loja -- `loja/produto_da_loja.dart` nasce e `loja/vitrine_da_loja.dart` ganha capa, `Ler mais`, o toque que leva ao detalhe e a saida pela porta `SaidaDoApp` (ver a nota acima)
+const String _arvoreDasTelas = '65dcb5cd25c486a5e7d537aeaec19566828420d5'; // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
