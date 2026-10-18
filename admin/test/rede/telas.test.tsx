@@ -338,9 +338,14 @@ describe('Rede: formulário novo', () => {
     expect(screen.getByText('Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.')).toBeInTheDocument();
     await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
     expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
-    const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_handle?: string };
+    // `instagram_url` com a URL COMPLETA, como a pessoa digitou: o campo de
+    // entrada deixou de ser `instagram_handle` em 17/10/2026
+    // (`NetworkEventInstagramUrlInput` em `api/openapi.yaml`, que diz
+    // "Substituiu `instagram_handle`"), e o painel nao normaliza nada antes
+    // de mandar -- quem guarda o handle canonico e o servidor.
+    const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_url?: string };
     expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
-    expect(corpo.instagram_handle).toBe('org.pet');
+    expect(corpo.instagram_url).toBe('https://www.instagram.com/Org.Pet/');
   });
 
   it('recusas do servidor nos links aparecem no campo, com o texto de cada código', async () => {
@@ -348,13 +353,18 @@ describe('Rede: formulário novo', () => {
       ['ticket_url', 'ticket_url_local_host', 'Link do convite ou ingresso', 'O link precisa ser de um site público.'],
       ['ticket_url', 'ticket_url_has_credentials', 'Link do convite ou ingresso', 'Tire o usuário e a senha do link.'],
       ['ticket_url', 'ticket_url_ip_literal', 'Link do convite ou ingresso', 'Use o endereço do site, e não um número de IP.'],
-      ['instagram_handle', 'instagram_handle_invalid', 'Instagram para dúvidas', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+      // `instagram_url_invalid`, e nao `instagram_handle_invalid`: o campo e os
+      // `code` passaram a ser de URL em 17/10/2026, e o apelido cru deixou de
+      // ser aceito (`api/openapi.yaml`, `NetworkEventInstagramUrlInput`).
+      ['instagram_url', 'instagram_url_invalid', 'Instagram para dúvidas', 'Falta o perfil no fim do endereço. Por exemplo: https://instagram.com/bichu.app'],
     ];
     for (const [field, code, rotulo, texto] of casos) {
       const duble = criarDuble({ recusaDeCampo: { field, code } });
       const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
       await usuario.type(await screen.findByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1');
-      await usuario.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet');
+      // URL completa: com `@org.pet` o painel recusa ANTES de chamar o
+      // servidor, e o caso deixaria de exercitar a recusa do servidor.
+      await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://instagram.com/org.pet');
       await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
       expect(await screen.findByText('Corrija 1 campo para salvar:')).toBeInTheDocument();
       const campo = screen.getByLabelText(rotulo);
@@ -545,7 +555,10 @@ describe('ISCA: cada campo editável do encontro sai para o servidor', () => {
     ['vacina', async (u) => u.click(screen.getAllByRole('radio', { name: 'Não' })[0] as HTMLElement), /events\/[^/]+$/],
     ['estrutura', async (u) => u.click(screen.getByRole('checkbox', { name: 'Bancos' })), /events\/[^/]+$/],
     ['link do convite', async (u) => u.type(screen.getByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1'), /events\/[^/]+$/],
-    ['Instagram', async (u) => u.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet'), /events\/[^/]+$/],
+    // URL completa do perfil: o apelido cru e recusado desde 17/10/2026
+    // (`NetworkEventInstagramUrlInput`), e com `@org.pet` o painel para no
+    // proprio formulario e nada sai para o servidor.
+    ['Instagram', async (u) => u.type(screen.getByLabelText('Instagram para dúvidas'), 'https://instagram.com/org.pet'), /events\/[^/]+$/],
     ['horário de início', () => Promise.resolve(void fireEvent.change(screen.getByLabelText('Início *'), { target: { value: '2026-10-11T08:00' } })), /relocation$/],
     ['fim', () => Promise.resolve(void fireEvent.change(screen.getByLabelText('Fim'), { target: { value: '2026-10-11T12:00' } })), /relocation$/],
     ['nome do lugar', async (u) => u.type(screen.getByLabelText('Nome do lugar *'), '!'), /relocation$/],

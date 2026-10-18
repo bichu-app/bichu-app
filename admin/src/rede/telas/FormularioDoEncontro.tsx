@@ -97,7 +97,13 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   notes: 'observacoes',
   street_address: 'endereco',
   ticket_url: 'linkDoConvite',
-  instagram_handle: 'instagram',
+  // `instagram_url`, e nao `instagram_handle`: o campo de ENTRADA virou a URL
+  // completa em 17/10/2026, e e esse o nome que o servidor poe no erro de
+  // campo (`errosDoInstagram('instagram_url', ...)` em
+  // `src/modules/network/application/rede-administrativa.ts`). Com a chave
+  // velha a recusa do Instagram caia fora do `map` e nunca chegava ao campo:
+  // a pessoa via o resumo do erro sem saber qual campo corrigir.
+  instagram_url: 'instagram',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',

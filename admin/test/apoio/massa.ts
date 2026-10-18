@@ -54,3 +54,33 @@ export function item(extra: Partial<Esquemas['AdminStoreItem']> = {}): Esquemas[
 export function pagina<T>(items: T[], total = items.length) {
   return { items, page: 1, limit: 50, total };
 }
+
+/**
+ * O vocabulario dos dois niveis, como `GET /v1/store/taxonomy` o entrega
+ * (`StoreTaxonomy` em `api/openapi.yaml`).
+ *
+ * A carga do formulario de produto pede a taxonomia JUNTO com o item, os
+ * parceiros e as tags, e a falha dela reprova a carga: sem vocabulario nao ha
+ * categoria para oferecer, e `category` e obrigatorio. Teste de tela da Loja
+ * que nao declara esta rota abre o formulario em "erro", e nenhum campo existe
+ * para encontrar.
+ */
+export function taxonomia(extra: Partial<Esquemas['StoreTaxonomy']> = {}): Esquemas['StoreTaxonomy'] {
+  return {
+    categories: [
+      {
+        code: 'food',
+        label: 'Rações',
+        subcategories: [
+          { code: 'racao_seca', label: 'Ração seca', species: ['dog'] },
+          { code: 'racao_umida', label: 'Ração úmida', species: ['dog'] },
+        ],
+      },
+      { code: 'treats', label: 'Petiscos e ossos', subcategories: [{ code: 'bifinhos', label: 'Bifinhos', species: ['dog'] }] },
+      { code: 'toy', label: 'Brinquedos', subcategories: [] },
+      { code: 'accessory', label: 'Roupas e acessorios', subcategories: [] },
+      { code: 'bed', label: 'Camas e casinhas', subcategories: [] },
+    ],
+    ...extra,
+  };
+}

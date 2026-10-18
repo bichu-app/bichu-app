@@ -161,7 +161,19 @@ void describe('varredura de envios vencidos', () => {
       const misturada: IntencaoVencida[] = [
         DO_ACHADO[0] as IntencaoVencida,
         { id: 'p-1', objectKey: comoObjectKey('pets/p/original/eee'), kind: 'pet_photo' },
-        { id: 'c-1', objectKey: comoObjectKey('products/x/original/fff'), kind: 'catalog_image' },
+        // `products/original/{nome}`, TRÊS segmentos: a imagem de catálogo não
+        // tem segmento de dono. Estava escrito `products/x/original/fff`, uma
+        // forma que este sistema nunca escreve e que `comoObjectKey` recusa com
+        // razão — o caso morria na montagem da massa, antes de medir qualquer
+        // coisa. Autoridades: ADR-0007 Emenda 1 item 2 (prefixo por categoria
+        // como PRIMEIRO segmento, derivada `{categoria}/{thumb|card}/{128
+        // bits}.{ext}`, "sem identificador de dono") e
+        // `src/modules/media/domain/chave-de-objeto.ts`, cujo único ramo de
+        // original de catálogo é `segmentos.length === 3 && categoria &&
+        // segmentos[1] === 'original'`. O único produtor dessa chave é
+        // `chaveDoOriginalDeCatalogo`, chamado em
+        // `src/modules/media/application/preparar-envio-de-catalogo.ts:45`.
+        { id: 'c-1', objectKey: comoObjectKey('products/original/fff'), kind: 'catalog_image' },
       ];
       const { deps, passos, restantes } = montar({ lista: misturada });
 

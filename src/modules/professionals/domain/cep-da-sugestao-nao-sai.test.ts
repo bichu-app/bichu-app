@@ -47,7 +47,10 @@ import { describe, it } from 'node:test';
 import { carregarContrato } from '../../../shared/http/contract.js';
 import { comoData } from '../../../shared/time/clock.js';
 import { CHAVES_PROIBIDAS_EM_RESPOSTA_PUBLICA } from '../../../shared/http/vazamento-publico.js';
-import { inspecionarCamposPublicos } from '../../../tools/portao-contrato-publico.js';
+import {
+  ehOperacaoSemConta,
+  inspecionarCamposPublicos,
+} from '../../../tools/portao-contrato-publico.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import { SugestaoDoDiretorio } from '../application/sugestao-do-diretorio.js';
@@ -197,10 +200,35 @@ void describe('ISCA — o CEP NAO sai em resposta', () => {
     );
   });
 
+  /**
+   * `ehOperacaoSemConta` NAO e opcional aqui, e a ausencia dele era o defeito
+   * deste caso.
+   *
+   * Ele entregava `[...contrato.operacoes.values()]` -- o contrato INTEIRO --
+   * a uma varredura cujo nome e "campos publicos". O resultado eram 10
+   * achados, e os 10 eram operacoes que EXIGEM credencial: `getMe` e
+   * `updateMe`, onde o CEP e o da propria pessoa dentro de `reference_area`, e
+   * as sete de `/admin/*`, onde o destinatario e exatamente o administrador
+   * que o cliente autorizou a ver o CEP para revisar a indicacao. Ou seja, o
+   * caso reprovava afirmando o contrario do que o titulo dele diz.
+   *
+   * A forma certa e a que o proprio portao usa (`portao-contrato-publico.ts`,
+   * `const semConta = [...contrato.operacoes.values()].filter(ehOperacaoSemConta)`)
+   * e a que o caso irmao desta mesma propriedade usa
+   * (`identity/adapters/http/localizacao-nao-vaza.test.ts`). `make
+   * verificar-contrato-publico` passa sobre ESTE contrato; era este caso que
+   * media outra coisa.
+   *
+   * A guarda de `semConta.length > 0` fica junto, pelo motivo que o caso irmao
+   * escreve: filtro que nao filtra termina verde e ninguem desconfia.
+   */
   void it('nenhuma resposta ALCANCAVEL SEM CONTA declara o CEP', () => {
-    const achados = inspecionarCamposPublicos(contrato.spec, [
-      ...contrato.operacoes.values(),
-    ]);
+    const semConta = [...contrato.operacoes.values()].filter(ehOperacaoSemConta);
+    assert.ok(
+      semConta.length > 0,
+      'REPROVA: o filtro nao devolveu operacao nenhuma. Sem conta a varredura abaixo nao olha nada e o caso vira verde vazio.',
+    );
+    const achados = inspecionarCamposPublicos(contrato.spec, semConta);
     assert.deepEqual(
       achados.filter((a) => a.campo === 'postal_code'),
       [],
