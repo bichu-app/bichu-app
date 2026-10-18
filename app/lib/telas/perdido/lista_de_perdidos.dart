@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/falhas.dart';
@@ -6,9 +8,11 @@ import '../../api/modelos_perdido.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
+import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
@@ -46,22 +50,50 @@ import 'cartao_do_perdido.dart';
 /// dois.
 ///
 /// ---------------------------------------------------------------------------
-/// ## A CIDADE É OBRIGATÓRIA NO CONTRATO, E É ISSO QUE DECIDE O ESTADO VAZIO
+/// ## A CIDADE É OBRIGATÓRIA NO CONTRATO, E ELA É DIGITÁVEL
 ///
 /// `city` é `required` em `listPublicLostPets`, e a obrigatoriedade é de
 /// privacidade: sem ela a operação seria um inventário nacional de animais
 /// perdidos, que é a listagem que o item 6 do ADR-0010 não quer existir.
 ///
-/// **A única fonte de cidade que este app tem é `Me.reference_area.city`**, que
-/// exige conta. Medido, e não suposto: não há lista de cidades no contrato desta
-/// operação (`applied_filters` devolve o que foi pedido, não o que existe), não
-/// há geocodificação (ADR-0006) e o app não tem porta de localização.
+/// **São três fontes, nesta ordem de precedência:**
 ///
-/// A consequência é honesta e **é decisão do cliente, não desta tela**: a ROTA é
-/// pública e alcançável sem conta (o teste de borda pede sem `Authorization` e
-/// recebe 200), mas a TELA não tem cidade para perguntar quando não há conta com
-/// região cadastrada. Nesses dois casos ela desenha **uma linha** e para — não
+/// 1. **O que a pessoa digitou na folha de filtro**, que ganha de tudo. Quem
+///    está em viagem, ou procurando na cidade vizinha onde o cachorro pode ter
+///    ido, precisa poder trocar — e a região do perfil não é forçada por cima
+///    disso (decisão do cliente, 18/10/2026).
+/// 2. **`Me.reference_area.city`**, o padrão de quem tem conta com região
+///    cadastrada. É só o padrão: ele preenche o campo e sai da frente.
+/// 3. **A última cidade escolhida neste aparelho** ([CidadeEscolhida]), para o
+///    visitante sem conta não redigitar a cada abertura. É a última da
+///    precedência de propósito: quem tem conta com região abre na região, e não
+///    na cidade da última busca. E ela chega **sem a tela esperar** — ver
+///    [_EstadoDaListaDePerdidos._lerOAparelho].
+///
+/// **Deslogado, a 1 e a 3 são as únicas**, e é isso que torna a seção útil para
+/// quem não tem conta — que é exatamente quem a vizinhança precisa que veja a
+/// lista. Sem nenhuma das três, a tela desenha **uma linha** e para: ela não
 /// inventa cidade, não pede coordenada e não afirma que não há perdidos.
+///
+/// ## O ESTADO (UF) NÃO VAI NO PEDIDO, E A FALTA É DO CONTRATO
+///
+/// **Medido em 18/10/2026 contra `api/openapi.yaml`:** `listPublicLostPets`
+/// declara `city`, `neighborhood`, `species`, `size`, `period`, `q`, `page` e
+/// `limit` — e **não declara `state`**. `listDirectoryEntries` e
+/// `listAdminDirectoryEntries` declaram (`UF, duas letras`), então o padrão
+/// existe no contrato; só não existe nesta operação.
+///
+/// A consequência é real e está nomeada no relatório: "São Paulo" não é único no
+/// Brasil, e "Campinas" existe em três estados. Sem `state`, um visitante que
+/// digita `Campinas` recebe os casos abertos das três.
+///
+/// **Por isso não há seletor de estado nesta folha**, e a ausência é a regra da
+/// casa e não esquecimento: controle cujo valor não tem para onde ir é controle
+/// sem desfecho, e o produto não os desenha. `api/estados_brasileiros.dart`
+/// continua existindo e não foi duplicado — ele não foi usado. Acrescentar
+/// `state` é **aditivo** (parâmetro opcional novo) e a coluna já existe
+/// (`lost_cases.last_seen_state`), mas é mudança de contrato mais trabalho de
+/// servidor, e isso é decisão do cliente.
 ///
 /// ---------------------------------------------------------------------------
 /// ## Paginação NUMERADA, e a escolha é do contrato
@@ -85,7 +117,25 @@ class ListaDePerdidos extends StatefulWidget {
   static const String vazio = 'Nenhum pet perdido na sua região agora.';
   static const String vazioFiltrado = 'Nenhum pet perdido com esse recorte.';
   static const String semCidade =
-      'Cadastre sua região no perfil para ver os pets perdidos por perto.';
+      'Escolha uma cidade para ver os pets perdidos por perto.';
+
+  /// O rótulo do campo de cidade, que é também o nome acessível dele.
+  static const String rotuloDaCidade = 'Cidade';
+  static const String exemploDaCidade = 'São Paulo';
+
+  /// A única linha que o campo mostra além do rótulo, e só quando o valor não
+  /// serve. `minLength: 2` é o do contrato.
+  static const String validacaoDaCidade =
+      'Escreva o nome da cidade, com dois caracteres ou mais.';
+
+  /// A porta do campo de cidade quando a lista ainda não existe.
+  ///
+  /// **Existe porque a folha de filtro mora atrás de um controle que a barra só
+  /// desenha quando há lista** (`BarraDeListagem.desenha` responde falso com
+  /// `total: 0` e nenhum recorte aplicado). Sem esta porta, quem não tem cidade
+  /// leria a linha única e não teria caminho nenhum para sair dela — que é o
+  /// beco que o critério 2 da BICHUS-62 proíbe.
+  static const String rotuloDeEscolherCidade = 'Escolher cidade';
   static const String falha = 'Não foi possível carregar os pets perdidos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
@@ -116,6 +166,28 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
   bool _falhaAoCarregarMais = false;
 
   final TextEditingController _buscaControlador = TextEditingController();
+
+  /// Onde a última cidade escolhida é guardada **neste aparelho**.
+  ///
+  /// **Vem do `Escopo`, e não é construída aqui.** O depósito em arquivo chama
+  /// `getApplicationDocumentsDirectory()`, um canal de plataforma que trava o
+  /// `pumpAndSettle` para sempre, sem mensagem, em teste de widget. Construído
+  /// aqui, ele travaria a suíte inteira na seção em que o aplicativo ABRE — e o
+  /// sintoma não aponta para a causa. Custou uma execução travada para
+  /// descobrir, e é a mesma armadilha que `DepositoDeIntencaoEmArquivo` tem.
+  CidadeEscolhida get _cidadeGuardada => Escopo.of(context).cidadeEscolhida;
+
+  /// A cidade que a PESSOA escolheu nesta sessão. Ganha de tudo.
+  String? _cidadeDigitada;
+
+  /// A cidade que estava guardada neste aparelho. **Último lugar da
+  /// precedência**: quem tem conta com região cadastrada abre na região, e não
+  /// na cidade da última busca (decisão do cliente, 18/10/2026).
+  String? _cidadeDoAparelho;
+
+  /// A leitura do aparelho já foi PEDIDA. Pedida, e não concluída: ver
+  /// [_lerOAparelho].
+  bool _pediuOAparelho = false;
 
   /// Cada carga ganha um número; resposta de carga velha é descartada. É a
   /// mesma guarda da agenda da `Rede`, e ela existe porque trocar o recorte
@@ -154,15 +226,58 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
     _cargaAgendada = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargaAgendada = false;
-      if (mounted) _carregar();
+      if (!mounted) return;
+      if (!_pediuOAparelho) {
+        _pediuOAparelho = true;
+        unawaited(_lerOAparelho());
+      }
+      _carregar();
     });
   }
+
+  /// Lê a cidade guardada no aparelho, **sem a tela esperar por ela**.
+  ///
+  /// ## O `unawaited` é a parte que importa, e não é descuido
+  ///
+  /// O depósito em arquivo chama `getApplicationDocumentsDirectory()`, que é
+  /// canal de plataforma. Canal de plataforma **pode não responder nunca**: em
+  /// teste de widget ele trava o `pumpAndSettle` para sempre, sem mensagem, e
+  /// num aparelho com armazenamento lento ou bloqueado ele demora.
+  ///
+  /// Esperá-lo antes da primeira carga faria a seção em que o aplicativo ABRE
+  /// ficar presa numa conveniência de digitação. A primeira versão disto
+  /// esperava, e travou cinco arquivos da suíte — cada um deles montando o
+  /// aplicativo por um caminho que não injeta o depósito. O sintoma era
+  /// `pumpAndSettle timed out`, que não aponta para a causa.
+  ///
+  /// Então a ordem é: a lista carrega com o que já tem (a região, ou nada), e a
+  /// cidade guardada chega **depois** — e só é usada se ainda não houver nada
+  /// melhor. Uma recarga a mais no arranque do visitante é barata; a seção
+  /// presa não é.
+  Future<void> _lerOAparelho() async {
+    // **Nunca lança**, e é `CidadeEscolhida` quem garante.
+    final guardada = await _cidadeGuardada.ler();
+    if (!mounted || guardada == null) return;
+    // Chegou tarde: a pessoa já escolheu, ou a região já é o padrão dela. Nos
+    // dois casos a guardada perdeu, e recarregar seria trocar a lista debaixo
+    // de quem está lendo.
+    if (_cidadeDigitada != null || _cidadeDaRegiao != null) return;
+    _cidadeDoAparelho = guardada;
+    await _carregar();
+  }
+
+  /// A cidade que vale agora, na precedência do cabeçalho: o que a pessoa
+  /// escolheu, depois a região do perfil, depois a guardada no aparelho.
+  String? get _cidadeEmUso =>
+      _cidadeDigitada ?? _cidadeDaRegiao ?? _cidadeDoAparelho;
 
   /// A região cadastrada do tutor. **A única fonte de cidade deste app.**
   RegiaoDeReferencia? get _regiao =>
       Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
 
-  String? get _cidade {
+  /// A cidade da região cadastrada. **Só o padrão**, e não uma imposição: quem
+  /// digitou outra continua nela (decisão do cliente, 18/10/2026).
+  String? get _cidadeDaRegiao {
     final c = _regiao?.cidade?.trim();
     return (c == null || c.isEmpty) ? null : c;
   }
@@ -174,7 +289,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
 
   Future<void> _carregar({bool maisUma = false}) async {
     if (!mounted) return;
-    final cidade = _cidade;
+    final cidade = _cidadeEmUso;
     if (cidade == null) {
       setState(() {
         _fase = _Fase.semCidade;
@@ -184,9 +299,14 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
       return;
     }
 
-    // O recorte nasce com a cidade da região, e a cidade **acompanha** a
-    // região: quem muda de cidade no perfil não deve continuar vendo a antiga.
+    // O recorte nasce com a cidade que vale (digitada, depois a da região) e a
+    // acompanha: quem troca a cidade na folha, ou muda a região no perfil, não
+    // deve continuar vendo a lista da antiga.
     final atual = (_recorte ?? RecorteDePerdidos(cidade: cidade)).copiar(cidade: cidade);
+    // **Guardada ANTES da chamada, e sem `await`.** Guardar depois perderia a
+    // cidade de quem fechou o aplicativo enquanto a lista carregava, e esperar
+    // a gravação atrasaria a lista por uma conveniência.
+    unawaited(_cidadeGuardada.guardar(cidade));
 
     final int geracao;
     if (maisUma) {
@@ -269,11 +389,34 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
     );
   }
 
-  ControleDeFiltro? _controleDeFiltro() {
+  /// O campo de cidade da folha. **Sempre presente**, e obrigatório: é a
+  /// pergunta sem a qual a rota não responde nada.
+  CampoDeTextoDoFiltro get _campoDaCidade => CampoDeTextoDoFiltro(
+        chave: 'city',
+        rotulo: ListaDePerdidos.rotuloDaCidade,
+        valor: _cidadeEmUso,
+        obrigatorio: true,
+        textoDeValidacao: ListaDePerdidos.validacaoDaCidade,
+        // Os dois números são do contrato (`minLength: 2, maxLength: 80`), e
+        // não escolhas desta tela.
+        limite: 80,
+        minimoDeCaracteres: 2,
+        exemplo: ListaDePerdidos.exemploDaCidade,
+      );
+
+  ControleDeFiltro _controleDeFiltro() {
     final base = _recorte;
-    if (base == null) return null;
     final bairro = _meuBairro;
+    if (base == null) {
+      // Sem lista ainda, a folha oferece a CIDADE e só ela: as pastilhas
+      // recortariam uma lista que não existe.
+      return ControleDeFiltro(
+        grupos: const <GrupoDeFiltro>[],
+        campos: <CampoDeTextoDoFiltro>[_campoDaCidade],
+      );
+    }
     return ControleDeFiltro(
+      campos: <CampoDeTextoDoFiltro>[_campoDaCidade],
       grupos: <GrupoDeFiltro>[
         // O bairro só entra quando há UM para oferecer, e o único que este app
         // conhece é o da própria região cadastrada. Uma lista de bairros da
@@ -324,10 +467,22 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
 
   /// O `Aplicar` da folha: **um** recorte, **uma** chamada à rota.
   void _aplicarAFolha(EscolhaDaFolha escolha) {
+    // A CIDADE PRIMEIRO, porque ela decide se há lista. `obrigatorio: true` na
+    // folha garante que ela não chega vazia: o `Aplicar` não habilita assim.
+    final cidade = escolha.filtros['city']?.trim();
+    if (cidade != null && cidade.isNotEmpty) {
+      _cidadeDigitada = cidade;
+    }
     final base = _recorte;
-    if (base == null) return;
+    if (base == null) {
+      // Primeira cidade escolhida: não há recorte anterior a copiar, e a carga
+      // monta um do zero com a cidade que acabou de valer.
+      _carregar();
+      return;
+    }
     _trocarRecorte(
       base.copiar(
+        cidade: _cidadeEmUso,
         bairro: escolha.filtros['neighborhood'],
         especie: Especie.de(escolha.filtros['species']),
         porte: Porte.de(escolha.filtros['size']),
@@ -355,9 +510,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
     return AnimatedBuilder(
       animation: sessao,
       builder: (context, _) {
-        // Entrar ou sair com a seção aberta troca a região, e a região é a
-        // cidade: sem isto quem acabou de entrar continuaria na linha única.
-        final cidade = _cidade;
+        // Entrar ou sair com a seção aberta troca a região, e a região é uma
+        // das fontes de cidade: sem isto quem acabou de entrar continuaria na
+        // linha única. Quem DIGITOU uma cidade não é afetado — a digitada ganha
+        // da região, e entrar não a sobrescreve.
+        final cidade = _cidadeEmUso;
         if (cidade == null && _fase != _Fase.semCidade) _agendarCarga();
         if (cidade != null && _fase == _Fase.semCidade) _agendarCarga();
 
@@ -405,7 +562,25 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
   List<Widget> _corpo() {
     switch (_fase) {
       case _Fase.semCidade:
-        return <Widget>[_UmaLinha(texto: ListaDePerdidos.semCidade)];
+        // UMA LINHA, E UMA SAÍDA. A linha diz o que falta; o botão abre a MESMA
+        // folha de filtro da lista cheia -- e não uma segunda folha, que
+        // divergiria da primeira na primeira edição.
+        //
+        // O botão existe porque a barra não nasce aqui: `desenha` responde
+        // falso com `total: 0` e nenhum recorte aplicado, e sem ele quem não
+        // tem cidade leria a linha e não teria caminho nenhum.
+        return <Widget>[
+          _UmaLinha(texto: ListaDePerdidos.semCidade),
+          const SizedBox(height: BichuEspaco.e4),
+          BotaoSecundario(
+            rotulo: ListaDePerdidos.rotuloDeEscolherCidade,
+            aoTocar: () => abrirFolhaDeFiltros(
+              context,
+              filtro: _controleDeFiltro(),
+              aoAplicar: _aplicarAFolha,
+            ),
+          ),
+        ];
       case _Fase.carregando:
         return <Widget>[
           Semantics(

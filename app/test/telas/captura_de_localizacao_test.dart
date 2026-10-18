@@ -62,6 +62,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
@@ -172,6 +173,11 @@ Future<_Caixa> _montar(
       sessao: sessao,
       guarda: guarda,
       cacheDeMeusPets: CacheDeMeusPets(),
+      // EM MEMORIA, e nao o deposito em arquivo do app: este caso monta o
+      // `Escopo` a mao, e o deposito em arquivo chama
+      // `getApplicationDocumentsDirectory()` -- canal de plataforma que trava o
+      // `pumpAndSettle` para sempre, sem mensagem.
+      cidadeEscolhida: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
       cofreDoQr: CofreDaImagemDoQr(),
       avisoDeCadastro:
           AvisoDeCadastro(deposito: DepositoDoAvisoEmMemoria()),

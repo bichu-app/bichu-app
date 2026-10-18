@@ -36,6 +36,7 @@ import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -581,6 +582,19 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// `BichuApp` aplica um `clamp` de 1 a 2 no proprio `builder`: um caso que
   /// montasse a arvore sozinho estaria exercitando outra coisa que nao o app.
   double? escala,
+  /// Onde a ultima cidade escolhida na listagem de perdidos e guardada.
+  ///
+  /// O padrao do app e `DepositoDaCidadeEmArquivo`, que chama
+  /// `getApplicationDocumentsDirectory()` -- o mesmo canal de plataforma do
+  /// deposito de intencao, e com o mesmo efeito: ele **trava o `pumpAndSettle`
+  /// para sempre, sem mensagem**. Por isso o padrao daqui e EM MEMORIA, e nao
+  /// o do app: sem esta injecao, todo caso que passa pela aba `Pets` -- que e
+  /// uma das cinco secoes -- trava.
+  ///
+  /// Quem precisa de uma cidade JA guardada, ou de um deposito que ESTOURA
+  /// (`DepositoDaCidadeQueFalha`, o aparelho com armazenamento bloqueado),
+  /// passa o seu: nenhum dos dois estados se produz passando pelo fluxo.
+  DepositoDaCidade? depositoDaCidade,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -608,6 +622,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         depositoDeIntencao: envelopeEmUso,
         clienteHttp: MockClient(rede),
         cacheDeMeusPets: cacheDeMeusPets,
+        depositoDaCidade: depositoDaCidade ?? DepositoDaCidadeEmMemoria(),
         cofreDoQr: cofreDoQr,
         depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
         depositoDeFotos: depositoDeFotos ?? DepositoDeFotosEmMemoria(),

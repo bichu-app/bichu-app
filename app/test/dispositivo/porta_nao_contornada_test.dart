@@ -1138,9 +1138,9 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// escrito acima. Este valor JA e o da uniao com `origin/development` em
 /// 87979b6d (o lote de oito, as imagens do profissional e a foto do proprio
 /// usuario entre eles): a colisao com 50b766d431 foi resolvida recalculando, e
-/// nao escolhendo um dos dois lados. (antes, por ramo isolado: 799b29b7b2;
+/// nao escolhendo um dos dois lados. O CAMPO DE CIDADE DIGITADA entrou depois da mescla, no mesmo ramo, e por isso este valor e o SEGUNDO desta frente. (antes, por ramo isolado: 799b29b7b2; depois da mescla e antes da cidade: 0f927ff7ee;
 /// no lado de development: 50b766d431)
-const String _arvoreDasTelas = '0f927ff7eeb777e7cef65d798e71a9fa96dfc861'; // MESCLA COM O LOTE DE OITO MAIS A LISTAGEM DE PERDIDOS (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA, reproduzindo o calculo deste portao (indice temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`). A prosa acima guarda o historico INTEIRO dos dois lados: nenhum paragrafo de development foi descartado na resolucao.
+const String _arvoreDasTelas = '31bc7c8038dc7fabc71837a9f3879b13b0fdc003'; // MESCLA COM O LOTE DE OITO MAIS A LISTAGEM DE PERDIDOS (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA, reproduzindo o calculo deste portao (indice temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`). A prosa acima guarda o historico INTEIRO dos dois lados: nenhum paragrafo de development foi descartado na resolucao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

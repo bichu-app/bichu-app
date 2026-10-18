@@ -9,6 +9,7 @@
 // com acento e pontuacao, e trocar a microcopy reprova -- que e o ponto.
 
 import 'package:bichu/api/modelos.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
@@ -214,6 +215,7 @@ Future<void> abrirPets(
   required Future<http.Response> Function(http.Request) rede,
   RegiaoDeReferencia? regiao,
   bool logado = true,
+  DepositoDaCidade? depositoDaCidade,
 }) async {
   await abrirOApp(
     tester,
@@ -221,6 +223,7 @@ Future<void> abrirPets(
     deposito: logado
         ? depositoLogado(regiaoDeReferencia: regiao ?? regiaoDeSaoPaulo)
         : null,
+    depositoDaCidade: depositoDaCidade,
   );
   await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
   await tester.pumpAndSettle();
@@ -242,6 +245,66 @@ Future<void> abrirMeusAchados(
   await tester.ensureVisible(porta);
   await tester.pumpAndSettle();
   await tester.tap(porta);
+  await tester.pumpAndSettle();
+}
+
+/// Abre a folha de filtro, digita [cidade] no campo `Cidade` e toca `Aplicar`.
+///
+/// O caminho de ENTRADA depende do estado: sem lista, a barra nao nasce
+/// (`desenha` responde falso com `total: 0`) e a porta e o botao
+/// `Escolher cidade` do corpo; com lista, e o icone `Icons.tune` do slot unico
+/// de acao da barra de topo. Este atalho tenta os dois, e e isso que o torna
+/// capaz de medir os dois estados com um caso cada.
+Future<void> escolherCidade(WidgetTester tester, String cidade) async {
+  final botao = find.text('Escolher cidade');
+  if (botao.evaluate().isNotEmpty) {
+    await tester.ensureVisible(botao);
+    await tester.pumpAndSettle();
+    await tester.tap(botao);
+  } else {
+    final icone = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.tune),
+    );
+    expect(
+      icone,
+      findsOneWidget,
+      reason: 'REPROVA: nao ha caminho nenhum para a folha de filtro. Sem ele '
+          'quem quer trocar de cidade nao tem como.',
+    );
+    await tester.tap(icone);
+  }
+  await tester.pumpAndSettle();
+
+  expect(
+    find.text('Cidade'),
+    findsOneWidget,
+    reason: 'REPROVA: a folha nao tem campo de cidade. Deslogado ele e a UNICA '
+        'fonte de cidade, e sem ele a rota nao e chamada.',
+  );
+
+  // **DENTRO DA FOLHA, e nao `find.byType(TextField).first`.** Com a lista
+  // cheia o campo de BUSCA tambem e um `TextField`, e vem antes na arvore: a
+  // primeira versao deste atalho digitava a cidade no campo de busca, o
+  // `Aplicar` ficava desabilitado por nao haver mudanca, e o caso reprovava
+  // dizendo que trocar de cidade nao chama a rota -- pelo motivo errado.
+  final campo = find.descendant(
+    of: find.byType(BottomSheet),
+    matching: find.byType(TextField),
+  );
+  expect(
+    campo,
+    findsOneWidget,
+    reason: 'REPROVA: a folha tem zero ou mais de um campo de texto, e este '
+        'atalho nao sabe em qual digitar.',
+  );
+  await tester.enterText(campo, cidade);
+  await tester.pumpAndSettle();
+
+  final aplicar = find.text('Aplicar');
+  await tester.ensureVisible(aplicar);
+  await tester.pumpAndSettle();
+  await tester.tap(aplicar);
   await tester.pumpAndSettle();
 }
 
@@ -398,7 +461,7 @@ void main() {
       );
       expect(
         find.text(
-          'Cadastre sua região no perfil para ver os pets perdidos por perto.',
+          'Escolha uma cidade para ver os pets perdidos por perto.',
         ),
         findsOneWidget,
       );
@@ -407,6 +470,252 @@ void main() {
         isEmpty,
         reason: 'REPROVA: a tela chamou a rota sem cidade, e o servidor '
             'responderia 400.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 1-B. A CIDADE DIGITADA (autorizada pelo cliente em 18/10/2026)
+  // -------------------------------------------------------------------------
+  group('a cidade e digitavel, e deslogado ela e a unica fonte', () {
+    testWidgets('ISCA: DESLOGADO, a cidade digitada chama a rota e desenha a '
+        'lista', (tester) async {
+      // DESLIGANDO: tire `campos:` de `_controleDeFiltro()` em
+      // `lib/telas/perdido/lista_de_perdidos.dart`, ou o bloco
+      // `for (final campo in widget.campos)` da folha em
+      // `lib/widgets/barra_de_listagem.dart`. Este caso reprova por nao achar
+      // o campo `Cidade`.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+
+      // Antes de digitar, NADA foi pedido: sem cidade a rota nao e chamada.
+      expect(
+        pedidos,
+        isEmpty,
+        reason: 'REPROVA: a tela chamou a rota sem cidade, e o servidor '
+            'responderia 400.',
+      );
+      expect(find.byType(CartaoDoPerdido), findsNothing);
+
+      await escolherCidade(tester, 'Campinas');
+
+      expect(pedidos, hasLength(1));
+      expect(pedidos.single.url.queryParameters['city'], 'Campinas');
+      expect(
+        pedidos.single.headers.containsKey('Authorization'),
+        isFalse,
+        reason: 'REPROVA: a listagem publica mandou credencial numa rota que '
+            'declara `security: []`.',
+      );
+      expect(find.text('Mel'), findsOneWidget);
+    });
+
+    testWidgets('ISCA: LOGADO, o padrao e a regiao E a pessoa pode trocar',
+        (tester) async {
+      // DESLIGANDO: troque a ordem do `??` em `_cidadeEmUso`
+      // (`lib/telas/perdido/lista_de_perdidos.dart`), para a regiao ganhar da
+      // digitada. O segundo pedido volta a `São Paulo` e este caso reprova --
+      // que e exatamente o "nao force a regiao do perfil" do pedido.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos, hasLength(1));
+      expect(
+        pedidos.first.url.queryParameters['city'],
+        'São Paulo',
+        reason: 'REPROVA: o padrao de quem tem conta deixou de ser '
+            '`Me.reference_area.city`.',
+      );
+
+      await escolherCidade(tester, 'Campinas');
+
+      expect(pedidos, hasLength(2));
+      expect(
+        pedidos.last.url.queryParameters['city'],
+        'Campinas',
+        reason: 'REPROVA: trocar a cidade na folha nao mudou a chamada. Quem '
+            'esta em viagem, ou procurando na cidade vizinha, ficou preso na '
+            'regiao do perfil.',
+      );
+      // E a pagina volta para a 1: o recorte e outro.
+      expect(pedidos.last.url.queryParameters['page'], '1');
+    });
+
+    testWidgets('ISCA: DESLOGADO, a cidade GUARDADA no aparelho e usada sem '
+        'redigitar', (tester) async {
+      // DESLIGANDO: tire `_cidadeDoAparelho` de `_cidadeEmUso`, ou o
+      // `_carregar()` do fim de `_lerOAparelho`, em
+      // `lib/telas/perdido/lista_de_perdidos.dart`. Este caso reprova por
+      // nenhuma chamada ter saido.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(
+        pedidos,
+        hasLength(1),
+        reason: 'REPROVA: a cidade guardada no aparelho nao foi usada, e o '
+            'visitante teria de redigitar a cada abertura.',
+      );
+      expect(pedidos.single.url.queryParameters['city'], 'Campinas');
+      expect(find.text('Mel'), findsOneWidget);
+    });
+
+    testWidgets('LOGADO: a regiao GANHA da cidade guardada no aparelho',
+        (tester) async {
+      // A precedencia e: digitada > regiao > guardada. Quem tem conta com
+      // regiao abre na regiao, e nao na cidade da ultima busca.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos, isNotEmpty);
+      for (final p in pedidos) {
+        expect(
+          p.url.queryParameters['city'],
+          'São Paulo',
+          reason: 'REPROVA: a cidade guardada no aparelho passou por cima da '
+              'regiao cadastrada.',
+        );
+      }
+    });
+
+    testWidgets('ISCA: o armazenamento FALHANDO nao derruba a tela',
+        (tester) async {
+      // `DepositoDaCidadeQueFalha` estoura nas duas pontas: e o aparelho com
+      // armazenamento bloqueado, o perfil restrito e o build sem o plugin
+      // registrado. A tela tem de abrir normalmente, com o campo vazio.
+      //
+      // DESLIGANDO: apague o `try`/`on Object` de `CidadeEscolhida.ler` em
+      // `lib/sessao/cidade_escolhida.dart`. A excecao escapa pelo
+      // `addPostFrameCallback` e este caso reprova.
+      await abrirPets(
+        tester,
+        logado: false,
+        depositoDaCidade: const DepositoDaCidadeQueFalha(),
+        rede: redeDosPerdidos(paginaDePerdidos(const <Map<String, dynamic>>[])),
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'REPROVA: a leitura do aparelho derrubou a secao em que o '
+            'aplicativo ABRE.',
+      );
+      expect(
+        find.text('Escolha uma cidade para ver os pets perdidos por perto.'),
+        findsOneWidget,
+      );
+      // E o caminho para escolher a cidade esta la, mesmo com o aparelho
+      // mudo: a conveniencia falhou, a funcao nao.
+      await escolherCidade(tester, 'Campinas');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('ISCA: `Aplicar` NAO habilita com a cidade abaixo do piso',
+        (tester) async {
+      // DESLIGANDO: tire o `if (!_camposServem) return false;` de `_mudou`, em
+      // `lib/widgets/barra_de_listagem.dart`. O `Aplicar` habilita, a rota e
+      // chamada sem cidade valida e volta 400 -- a pessoa leria falha de
+      // servidor onde falta um dado dela.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          pedidos: pedidos,
+        ),
+      );
+      await tester.tap(find.text('Escolher cidade'));
+      await tester.pumpAndSettle();
+
+      // Um caractere so: abaixo do `minLength: 2` do contrato. O campo e o da
+      // FOLHA, pelo mesmo motivo de `escolherCidade`.
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(TextField),
+        ),
+        'C',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Escreva o nome da cidade, com dois caracteres ou mais.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Aplicar'))
+            .onPressed,
+        isNull,
+        reason: 'REPROVA: o `Aplicar` habilitou com a cidade abaixo do piso do '
+            'contrato.',
+      );
+      expect(pedidos, isEmpty);
+    });
+
+    testWidgets('o estado (UF) NAO vai no pedido, porque a rota nao o declara',
+        (tester) async {
+      // MEDIDO em 18/10/2026 contra `api/openapi.yaml`: `listPublicLostPets`
+      // declara `city`, `neighborhood`, `species`, `size`, `period`, `q`,
+      // `page` e `limit`, e **nao** `state`. `listDirectoryEntries` declara
+      // (`UF, duas letras`), entao o padrao existe no contrato -- so nao nesta
+      // operacao. Desenhar um seletor de UF seria controle sem desfecho.
+      //
+      // Este caso e o registro executavel da medicao: no dia em que o contrato
+      // ganhar `state`, ele reprova e alguem liga as duas pontas.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          pedidos: pedidos,
+        ),
+      );
+      await escolherCidade(tester, 'Campinas');
+      expect(pedidos, hasLength(1));
+      expect(
+        pedidos.single.url.queryParameters.containsKey('state'),
+        isFalse,
+        reason: 'REPROVA: a tela mandou `state` numa operacao que nao o '
+            'declara.',
+      );
+      expect(
+        find.text('Estado'),
+        findsNothing,
+        reason: 'REPROVA: ha um seletor de estado na folha, e a rota nao aceita '
+            'estado. Controle cujo valor nao tem para onde ir e controle sem '
+            'desfecho.',
       );
     });
   });

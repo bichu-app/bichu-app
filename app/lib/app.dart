@@ -24,6 +24,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
@@ -56,6 +57,7 @@ class BichuApp extends StatefulWidget {
     this.localizacao,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
+    this.depositoDaCidade,
     this.cofreDoQr,
     this.depositoDeOportunidades,
     this.depositoDoAvisoDeCadastro,
@@ -161,6 +163,14 @@ class BichuApp extends StatefulWidget {
   /// servidor em sequencia.
   final CacheDeMeusPets? cacheDeMeusPets;
 
+  /// Onde a ultima cidade escolhida na listagem de perdidos e guardada.
+  ///
+  /// **Injetavel para teste, e aqui a injecao nao e conveniencia.** O padrao
+  /// chama `getApplicationDocumentsDirectory()`, que em teste de widget trava o
+  /// `pumpAndSettle` para sempre, sem mensagem -- a mesma armadilha do
+  /// deposito de intencao, e por isso a mesma saida.
+  final DepositoDaCidade? depositoDaCidade;
+
   /// Injetavel para teste, pelo mesmo motivo do [cacheDeMeusPets]: um caso
   /// precisa conseguir OLHAR dentro dele depois do logout, e o que ele guarda
   /// e uma credencial.
@@ -248,6 +258,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
   late final CacheDeMeusPets _cacheDeMeusPets;
+  late final CidadeEscolhida _cidadeEscolhida;
   late final CofreDaImagemDoQr _cofreDoQr;
   late final OportunidadesDeAviso _oportunidades;
   late final AvisoDeCadastro _avisoDeCadastro;
@@ -262,6 +273,10 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
     _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
+    // SEM limpeza ao sair, de proposito: o nome de uma cidade e do
+    // APARELHO e nao da conta, e sair da conta nao muda em que cidade este
+    // telefone esta. Ver o cabecalho de `cidade_escolhida.dart`.
+    _cidadeEscolhida = CidadeEscolhida(deposito: widget.depositoDaCidade);
     _cofreDoQr = widget.cofreDoQr ?? CofreDaImagemDoQr();
     _api = ApiClient(
       config: widget.config,
@@ -600,6 +615,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,
+      cidadeEscolhida: _cidadeEscolhida,
       cofreDoQr: _cofreDoQr,
       avisoDeCadastro: _avisoDeCadastro,
       child: MaterialApp.router(

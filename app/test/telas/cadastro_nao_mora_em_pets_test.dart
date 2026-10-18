@@ -255,15 +255,23 @@ void main() {
         reason: 'REPROVA: a casca honesta voltou. Com a rota registrada, '
             'dizer "em construcao" e afirmar sobre dado que a tela CARREGA.',
       );
-      // Deslogado, a lista nao inventa cidade: `city` e `required` no contrato
-      // e a unica fonte de cidade deste app e `Me.reference_area`. UMA linha.
+      // Deslogado e sem cidade guardada no aparelho, a lista nao inventa
+      // cidade: `city` e `required` no contrato. UMA linha, e uma SAIDA -- o
+      // campo de cidade digitada, que o cliente autorizou em 18/10/2026.
       expect(
         find.text(
-          'Cadastre sua região no perfil para ver os pets perdidos por perto.',
+          'Escolha uma cidade para ver os pets perdidos por perto.',
         ),
         findsOneWidget,
         reason: 'REPROVA: sem conta a tela ou inventou cidade ou afirmou que '
             'nao ha perdido. As duas sao afirmacao sem medida.',
+      );
+      expect(
+        find.text('Escolher cidade'),
+        findsOneWidget,
+        reason: 'REPROVA: a linha unica ficou sem saida. A barra nao nasce com '
+            '`total: 0`, entao sem este botao o visitante le o que falta e nao '
+            'tem caminho nenhum -- o beco que o criterio 2 proibe.',
       );
     });
   });
