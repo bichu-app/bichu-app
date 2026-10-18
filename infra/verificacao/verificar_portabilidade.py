@@ -32,8 +32,9 @@ from pathlib import Path
 # faria o portao acusar o proprio remedio.
 #
 # O SITE E VARRIDO EM `web/src/`, e nao em `web/` inteiro. O back-end varre
-# `src/` e deixa de fora os testes (que vivem em `tests/`, fora das raizes), a
-# configuracao e o `dist/`. O site e um subprojeto fechado (ADR-0028) que nao
+# `src/` e deixa de fora a configuracao e o `dist/`. Os TESTES do back-end
+# tambem ficam de fora, mas por NOME e nao por geografia -- ver
+# SUFIXOS_DE_TESTE, e o paragrafo la explica por que a geografia nao servia. O site e um subprojeto fechado (ADR-0028) que nao
 # tem essa separacao geografica: os testes (`web/tests/`), a configuracao
 # (`web/*.config.*`, `web/astro.config.mjs`), os scripts de build e medicao
 # (`web/scripts/`), o servidor minimo de bootstrap (`web/servidor.mjs`) e a
@@ -92,14 +93,100 @@ REGRAS_PROVEDOR = [
     (re.compile(r"[\"']bichu-media-(?:private|public)[\"']"), "nome de bucket em codigo"),
 ]
 
+# O motivo da regra generica e constante porque a lista de terceiros abaixo se
+# refere a ELE: escrito duas vezes a mao, um dos dois envelhece sozinho e a
+# dispensa passa a nao casar com regra nenhuma -- em silencio, do lado que
+# aprova.
+MOTIVO_URL_ABSOLUTA = "host literal em URL absoluta"
+
 REGRAS_HOSTNAME = [
     (re.compile(r"\bhttps?://localhost\b"), "literal `localhost`"),
     (re.compile(r"\bhttps?://127\.0\.0\.1\b"), "literal 127.0.0.1"),
     (re.compile(r"\bhttps?://0\.0\.0\.0\b"), "literal 0.0.0.0"),
     (re.compile(r"\bhttps?://(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)\d"), "literal de IP privado"),
     (re.compile(r"\bhttps?://[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|com\.br|app|net|org|dev|io)\b"),
-     "host literal em URL absoluta"),
+     MOTIVO_URL_ABSOLUTA),
 ]
+
+# Servico de TERCEIRO que o produto CONSULTA, e que nao e infraestrutura nossa.
+#
+# Este portao existe contra amarracao na NOSSA nuvem e no NOSSO dominio: o
+# ADR-0012 adiou a escolha de provedor e o cliente decidiu que o hostname e
+# variavel e comeca em `localhost`. O endereco de um servico que nao e nosso nao
+# e nenhuma das duas coisas. Ele nao muda quando trocamos de nuvem, nao muda
+# quando o dominio sai de `localhost`, e nao e valor de ambiente: e a IDENTIDADE
+# do servico que o cliente escolheu.
+#
+# A regra generica de URL absoluta manda "empurre o host para configuracao", e
+# para este caso essa e a mensagem errada. A regra do FCM, acima, ja tinha dito
+# isso de um endereco de terceiro com estas palavras: "o que este caso pede e o
+# contrario". No back-end o terceiro e confinado em `src/*/adapters/external/`,
+# isento por geografia -- e e exatamente por isso que `fcm-http-v1.ts` nao
+# acusa e `app/lib/api/busca_de_cep.dart` acusava: o app Flutter nao tem essa
+# camada, e o que falta nele e geografia, nao conserto.
+#
+# E dar essa geografia ao app nao era de graca: o unico ponto de uso da busca de
+# CEP mora em `app/lib/telas/`, cujo hash de arvore esta travado no portao de
+# portas de aparelho (`app/test/dispositivo/porta_nao_contornada_test.dart`).
+# Mover o arquivo trocaria o import de uma tela e pediria destravar AQUELE
+# portao -- com chave de issue e justificativa sobre porta de aparelho -- para
+# consertar ESTE. Um portao nao se paga com o saldo de outro.
+#
+# "Virar configuracao" tambem nao compraria portabilidade aqui: em app Flutter
+# `--dart-define` e resolvido no BUILD, entao repontar o servico pede recompilar
+# e publicar na loja exatamente como pede trocar a constante. O que se compraria
+# de verdade era uma entrada obrigatoria a mais no build e um caminho novo de
+# falha calada -- o campo de CEP parando de se preencher porque alguem esqueceu
+# o arquivo de configuracao. (O `MAP_TILES_URL` do mapa esta em
+# `app/config/mapa.json` por um motivo que NAO vale aqui: servidor de tiles se
+# auto-hospeda e se troca, e o bloco do mapa cai num estado visivel quando a
+# chave falta. Ver `app/lib/telas/rede/local_do_encontro.dart`.)
+#
+# A lista e de HOST EXATO, com o servico nomeado, e vale SO para
+# MOTIVO_URL_ABSOLUTA: dominio de provedor, `localhost`, loopback, bind e IP
+# privado continuam acusando mesmo que o host esteja aqui. Dominio NOSSO nunca
+# entra -- o autoteste recusa, porque host proprio nesta lista dispensaria
+# justamente o achado que o portao existe para dar.
+HOSTS_DE_TERCEIRO = {
+    # Busca de CEP do pedido da plaquinha, pedida pelo cliente em 17/10/2026
+    # ("pode implementar o via cep"), com a BrasilAPI so como reserva e nunca
+    # consultada antes dela. Medido no dia: as duas sem chave e sem cadastro.
+    # Ver `app/lib/api/busca_de_cep.dart`, que e o unico arquivo do app que
+    # sabe que estes dois servicos existem.
+    "viacep.com.br": "ViaCEP (busca de CEP, principal)",
+    "brasilapi.com.br": "BrasilAPI (busca de CEP, reserva)",
+}
+
+# Os dominios do produto. Servem para o autoteste recusar host nosso entre os
+# terceiros; nao sao regra de varredura.
+NOSSOS_DOMINIOS = ("bichu.app", "bichu.com.br")
+
+
+# O host inteiro, lido a partir de onde a regra casou. Nao casa `:` nem `/`,
+# entao porta e caminho ficam fora.
+_HOST_NA_POSICAO = re.compile(r"https?://([A-Za-z0-9.-]+)")
+
+
+def host_de_terceiro(linha: str, inicio: int) -> bool:
+    """O host que comeca em `inicio` e de um terceiro DECLARADO?
+
+    LE O HOST DA LINHA, e nao o texto que a regra generica casou -- e a
+    diferenca nao e estilo. A regra generica termina no TLD que ela conhece, e
+    `br` nao esta na lista dela: em `https://viacep.com.br/ws` ela casa
+    `https://viacep.com`, que e PREFIXO do host de verdade. Comparar esse
+    prefixo com a lista erraria duas vezes, e a segunda e a perigosa: nao
+    acharia `viacep.com.br`, que esta declarado, e acharia `viacep.com`, que e
+    o dominio de OUTRA PESSOA, caso alguem o declarasse algum dia.
+
+    Compara o host INTEIRO pelo mesmo motivo, do outro lado: casar por pedaco
+    deixaria passar `viacep.com.br.exemplo.com`, que nao e o ViaCEP e e o jeito
+    classico de escrever um host hostil parecido com um conhecido.
+    """
+    m = _HOST_NA_POSICAO.match(linha, inicio)
+    if m is None:
+        return False
+    return m.group(1).rstrip(".").lower() in HOSTS_DE_TERCEIRO
+
 
 # O par entre regra e linha de isca. Cada linha das iscas em
 # `tests/portabilidade/` traz `// isca: <motivo>` dizendo QUAL regra ela existe
@@ -135,9 +222,52 @@ def motivo_anotado(linha: str) -> str | None:
 # ela, mas a isencao segue como defesa: um lockfile numa raiz varrida nao acusa.)
 ARQUIVOS_GERADOS = ("package-lock.json",)
 
+# Teste nao e o sistema rodando, e este portao sempre quis deixar teste de fora.
+# Ele diz isso de `web/` com todas as letras no cabecalho acima ("base canonica
+# afirmada em teste", "host de mock local"), e dizia do back-end tambem -- mas
+# por GEOGRAFIA, afirmando que os testes "vivem em `tests/`, fora das raizes".
+#
+# ISSO NUNCA FOI VERDADE. Medido em 18/10/2026: 186 arquivos `*.test.ts` DENTRO
+# de `src/` contra 41 em `tests/`, porque a convencao do repositorio e teste
+# colado ao codigo que ele testa, e `tests/` guarda so os de integracao. O
+# portao varria os 186 havia meses sem ninguem notar, por um motivo que nao
+# tranquiliza: nenhum deles tinha URL ainda. O primeiro que teve -- a sugestao
+# do diretorio, 17/10, com hosts ficticios de clinica inventada -- virou oito
+# achados de uma vez, e o achado nao era defeito nenhum: era o portao cobrando
+# de um arquivo de teste a regra que ele proprio nao queria cobrar dali.
+#
+# A exclusao passa a ser pelo NOME, que e o MESMO criterio que o build usa:
+# `tsconfig.build.json` exclui `**/*.test.ts` da compilacao de producao. Um
+# arquivo com este nome nao esta no sistema que roda, e o que nao roda nao
+# amarra o que roda a host nenhum. Na SPA do backoffice o efeito e o mesmo por
+# outro caminho: modulo de teste nao e alcancavel a partir do entry, e o
+# empacotador nao o emite no pacote que vai ao navegador.
+#
+# A isencao vale porque os dois -- portao e build -- dizem a mesma coisa, e nao
+# porque `.test.` se parece com teste. Se o padrao do build mudar, este muda
+# junto, ou a justificativa cai.
+#
+# DITO EM VOZ ALTA: a isencao e do ARQUIVO INTEIRO, e nao so da regra generica
+# de hostname. Dominio de provedor e SDK em camada pura tambem deixam de ser
+# cobrados num `*.test.ts`. Nao e descuido e nao e novo: e exatamente o que a
+# geografia `tests/` ja dava aos 41 testes de integracao, e o argumento e o
+# mesmo -- o arquivo nao entra na compilacao de producao. O que muda e que
+# agora os 186 colados ao codigo recebem o mesmo tratamento que os 41, em vez
+# de depender de em que pasta alguem salvou o arquivo.
+#
+# Medido em 18/10/2026: a troca muda o veredito de exatamente 8 linhas, todas
+# massa de teste da sugestao do diretorio, com hosts de clinica inventada.
+#
+# As iscas de `tests/portabilidade/` NAO sao afetadas: nao tem este sufixo, nao
+# moram em raiz varrida, e o autoteste as le por caminho proprio.
+SUFIXOS_DE_TESTE = (".test.ts", ".test.tsx")
+
 
 def isento(rel: str) -> bool:
-    if rel.rsplit("/", 1)[-1] in ARQUIVOS_GERADOS:
+    nome = rel.rsplit("/", 1)[-1]
+    if nome in ARQUIVOS_GERADOS:
+        return True
+    if nome.endswith(SUFIXOS_DE_TESTE):
         return True
     for padrao in ISENTOS:
         if padrao.endswith("/") and "*" not in padrao and rel.startswith(padrao):
@@ -161,8 +291,18 @@ def achados_em(caminho: Path, rel: str) -> list[str]:
     for regras in (REGRAS_PROVEDOR, REGRAS_HOSTNAME):
         for regex, motivo in regras:
             for n, linha in enumerate(linhas, 1):
-                if regex.search(linha):
-                    achados.append(f"{rel}:{n}: {motivo} -> {linha.strip()[:90]}")
+                casadas = list(regex.finditer(linha))
+                if not casadas:
+                    continue
+                # So a regra generica aceita terceiro declarado, e so quando
+                # TODAS as URLs da linha sao de terceiro: uma linha que mistura
+                # o ViaCEP com um host nosso continua acusando, porque o que
+                # importa e o host que sobrou, nao o que foi explicado.
+                if motivo == MOTIVO_URL_ABSOLUTA and all(
+                    host_de_terceiro(linha, m.start()) for m in casadas
+                ):
+                    continue
+                achados.append(f"{rel}:{n}: {motivo} -> {linha.strip()[:90]}")
 
     # URL absoluta em migracao e o caso que protege o ponto irreversivel: o
     # banco guarda codigo e chave, nunca URL. Persistir URL transforma a troca
@@ -278,6 +418,50 @@ def autoteste(raiz: Path) -> list[str]:
                     "com a linha que existe para acorda-la. Ela foi afrouxada, ou "
                     f"a linha deixou de conter o defeito -> {linha.strip()[:90]}"
                 )
+
+    # HOSTS_DE_TERCEIRO e a unica coisa neste portao que faz um achado DEIXAR de
+    # sair, entao ela e conferida aqui junto com as iscas, e pelo mesmo motivo:
+    # o que aprova em silencio precisa de testemunha.
+    generica = next(
+        (regex for regex, motivo in REGRAS_HOSTNAME if motivo == MOTIVO_URL_ABSOLUTA),
+        None,
+    )
+    if generica is None:
+        falhas.append(
+            f'nenhuma regra de REGRAS_HOSTNAME tem o motivo "{MOTIVO_URL_ABSOLUTA}", '
+            "e HOSTS_DE_TERCEIRO so dispensa esse. A regra generica foi apagada ou "
+            "renomeada, e a lista de terceiros passou a dispensar nada -- ou, pior, "
+            "a existir sem que ninguem saiba o que ela solta"
+        )
+    for host, servico in sorted(HOSTS_DE_TERCEIRO.items()):
+        if any(host == nosso or host.endswith(f".{nosso}") for nosso in NOSSOS_DOMINIOS):
+            falhas.append(
+                f'HOSTS_DE_TERCEIRO: "{host}" ({servico}) e dominio NOSSO. A lista '
+                "existe para servico que nao e nosso; host proprio nela dispensa "
+                "exatamente o achado que o portao existe para dar"
+            )
+        for regex, motivo in REGRAS_PROVEDOR:
+            if regex.search(f"https://{host}"):
+                falhas.append(
+                    f'HOSTS_DE_TERCEIRO: "{host}" ({servico}) e casado pela regra '
+                    f'"{motivo}" de REGRAS_PROVEDOR. A lista so dispensa '
+                    f'"{MOTIVO_URL_ABSOLUTA}", entao esta entrada nao solta o que '
+                    "quem a escreveu achou que soltava: ou o host nao e de "
+                    "terceiro, ou a regra de provedor esta larga demais"
+                )
+        alvo = f"https://{host}/"
+        if generica is not None and not (
+            generica.search(alvo)
+            and any(
+                host_de_terceiro(alvo, m.start()) for m in generica.finditer(alvo)
+            )
+        ):
+            falhas.append(
+                f'HOSTS_DE_TERCEIRO: "{host}" ({servico}) nao e casado pela regra '
+                f'"{MOTIVO_URL_ABSOLUTA}", entao esta entrada nao dispensa achado '
+                "nenhum. Host errado, com erro de digitacao ou ja sem uso -- e, do "
+                "jeito que esta, uma permissao que ninguem conferiu porque nunca agiu"
+            )
 
     return falhas
 

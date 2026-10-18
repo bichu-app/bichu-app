@@ -139,6 +139,17 @@ class BuscaDeCep {
 
   static final RegExp _soDigitos = RegExp(r'[^0-9]');
 
+  // Os dois enderecos abaixo ficam ESCRITOS AQUI de proposito, e o portao de
+  // portabilidade sabe disso: os dois hosts estao declarados em
+  // `HOSTS_DE_TERCEIRO`, em `infra/verificacao/verificar_portabilidade.py`,
+  // que explica por que servico de terceiro nao e a amarracao que aquele
+  // portao existe para impedir (ele cuida da NOSSA nuvem e do NOSSO dominio,
+  // ADR-0012). Nao os troque por `--dart-define` sem ler o paragrafo de la: em
+  // app Flutter a configuracao e resolvida no build, entao repontar o servico
+  // pediria recompilar e publicar de qualquer jeito, e o que se ganharia era
+  // uma chave obrigatoria a mais e um caminho em que este campo para de se
+  // preencher calado. Este arquivo e o unico do app que sabe que eles existem.
+
   /// **Principal, por pedido do cliente de 17/10** ("pode implementar o via
   /// cep"). Medido no mesmo dia: sem chave, sem cadastro, `Access-Control-
   /// Allow-Origin: *`, e nenhum cabecalho de limite na resposta.
