@@ -831,11 +831,28 @@ export const TETO_DA_DESCRICAO_DO_ITEM = 3000;
 const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /**
+ * O que a normalizacao trata como espaco: o espaco que alguem digita -- barra
+ * de espaco, tabulacao, quebra de linha -- e os separadores de espaco Unicode.
+ *
+ * **Nao inclui `U+FEFF`, `U+2028` nem `U+2029`, que o `\s` do JavaScript
+ * inclui.** Esses tres sao INVISIVEIS, e sao da alcada de
+ * `INVISIVEL_OU_DE_CONTROLE`: aparar ou juntar um deles aqui esconderia do
+ * proprio detetor o caractere que ele existe para recusar. Com `\s`,
+ * `Ra<BOM>cao` chegava a `conferirRotulo` como `Ra cao` -- outro nome, outro
+ * `slug`, e nenhum erro. Tabulacao e quebra continuam espaco de proposito: e
+ * o que faz um rotulo so com elas ser recusado pelo PISO, e nao pelo
+ * invisivel.
+ */
+const ESPACO_DO_ROTULO = '[\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]';
+const ESPACO_NAS_PONTAS = new RegExp(`^(?:${ESPACO_DO_ROTULO})+|(?:${ESPACO_DO_ROTULO})+$`, 'gu');
+const ESPACO_REPETIDO = new RegExp(`(?:${ESPACO_DO_ROTULO})+`, 'gu');
+
+/**
  * O rotulo como vai ser gravado: pontas aparadas e espacos repetidos juntados.
  * E sobre ESTE valor que o tamanho e o conjunto de caracteres sao conferidos.
  */
 export function normalizarRotulo(rotulo: string): string {
-  return rotulo.trim().replace(/\s+/g, ' ');
+  return rotulo.replace(ESPACO_NAS_PONTAS, '').replace(ESPACO_REPETIDO, ' ');
 }
 
 /**

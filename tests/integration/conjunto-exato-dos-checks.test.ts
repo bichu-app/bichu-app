@@ -327,17 +327,16 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
   // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
   // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
-  // projeta. `pending_review` nao esta no `enum` administrativo de proposito:
-  // o encontro da comunidade nao existe na v1, e o `CHECK`
-  // `network_events_revisao_so_da_comunidade` impede o administrador de cair
-  // nele.
+  // projeta. `pending_review` SAIU do banco na 20261001000005 (ADR-0025 emenda
+  // 3, 17/10/2026): sem fila de moderacao nao ha estado de revisao, entao ele
+  // tambem nao esta no `enum` administrativo.
   'public.network_events.network_events_origem_conhecida': {
     coluna: 'origin',
     valores: ['admin', 'community'],
   },
   'public.network_events.network_events_publicacao_conhecida': {
     coluna: 'publication_status',
-    valores: ['pending_review', 'published', 'cancelled', 'removed'],
+    valores: ['published', 'cancelled', 'removed'],
   },
   // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
   // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
@@ -468,6 +467,16 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // 20.2): ela tem tabela propria, `catalog_upload_intents`. Esta tabela e do
     // app e volta a lista da `development`.
     valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
+  },
+  // BICHUS-245, migracao 20261001000006. O estado da higiene da foto do achado.
+  // `ausente` e o objeto que nunca chegou (intencao assinada, envio desistido,
+  // nenhum byte) e e desfecho FINAL, e nao falha: sem ele a varredura
+  // reenfileiraria para sempre a mesma intencao vazia. A coerencia entre este
+  // estado e os campos que ele governa esta em
+  // `upload_intents_higiene_coerente`, no outro registro.
+  'public.upload_intents.upload_intents_status_da_higiene': {
+    coluna: 'sanitize_status',
+    valores: ['pendente', 'pronta', 'recusada', 'ausente'],
   },
   // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio do painel.
   'public.catalog_upload_intents.catalog_upload_intents_proposito': {
@@ -637,11 +646,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // do `phone_e164` do perfil -- uma segunda redacao divergiria da primeira.
   'public.collar_tag_requests.collar_tag_requests_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
-  // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
-  // que torna "o ponto de evento da comunidade so aparece depois de revisao
-  // humana" um estado do banco, porque `pending_review` nunca e visivel.
-  'public.network_events.network_events_revisao_so_da_comunidade':
-    "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -706,10 +710,47 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
   // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
   // esquema `https` deixou de ser assunto do banco porque deixou de ser
-  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
-  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  // dado -- ele e constante da composicao.
+  //
+  // As duas formas abaixo DEIXARAM DE SER IGUAIS em 17/10/2026, e a diferenca
+  // e deliberada. `target_path` aceita `?` e `#` desde a `20261017000001`; o
+  // caminho da imagem, logo depois dela, continua sem os dois.
+  //
+  // A proibicao que estava aqui citava a consequencia 3 da BICHUS-185
+  // (parametro em link de saida e onde dado pessoal vaza) e acertava o risco,
+  // errava o INSTRUMENTO: proibir `?` na coluna nao impede dado pessoal de
+  // viajar, impede QUALQUER parametro -- e loja de verdade identifica o SKU
+  // exatamente assim (`/p?idsku=1197673`, no catalogo da Cobasi, foi o link
+  // legitimo que ficou bloqueado). A consequencia 3 continua valendo e
+  // continua tendo dono: ela e sobre o que o APLICATIVO acrescenta na saida, e
+  // isso e garantido na tela (`app/test/telas/loja_abre_no_navegador_test.dart`
+  // reprova se algum parametro aparecer), nao nesta coluna. O cabecalho da
+  // `20261017000001` tem o raciocinio por extenso.
+  //
+  // O que sobrou no `CHECK` nao e sobre privacidade: comeca em `/` e nao tem
+  // espaco em branco (`[[:space:]]` cobre espaco, tabulacao e quebra de
+  // linha), porque a coluna guarda um caminho e nao uma frase.
   'public.store_items.store_items_destino_e_caminho':
-    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+    "CHECK ((target_path ~ '^/[^[:space:]]*$'::text))",
+  // `image_path` CONTINUA sem `?` e sem `#`, e por isso ganhou comentario
+  // proprio: a `20261017000001` abriu o caminho do DESTINO, e so ele. Caminho
+  // de imagem de catalogo nao carrega identificador de produto, entao aqui a
+  // proibicao larga nao bloqueia nada legitimo e a consequencia 3 da
+  // BICHUS-185 segue sendo a razao dela.
+  'public.store_items.store_items_imagem_e_caminho':
+    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
+  // O host do destino quando ele e um SUBDOMINIO do parceiro
+  // (`20261017000001`): `www.cobasi.com.br` para o parceiro `cobasi.com.br`.
+  // NULO no caso comum, que e o host ser o do proprio parceiro. A forma e a
+  // MESMA de `store_partners.host`, logo abaixo, porque e o mesmo dado.
+  //
+  // O `CHECK` confere so a FORMA. O vinculo "e subdominio do parceiro" e da
+  // aplicacao (`errosDoDestino`), porque depende de OUTRA tabela e um `CHECK`
+  // nao enxerga `store_partners` -- e a comparacao de la e por sufixo COM
+  // FRONTEIRA DE ROTULO, senao `malcobasi.com.br` passaria por subdominio de
+  // `cobasi.com.br`.
+  'public.store_items.store_items_destino_e_so_host':
+    "CHECK (((target_host IS NULL) OR (target_host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text)))",
   // ------------------------------------------------------------------
   // A TAXONOMIA DOS DOIS NIVEIS DA LOJA (migracao `20261017000003`)
   // ------------------------------------------------------------------
@@ -738,8 +779,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // invalidaria todo cadastro anterior de uma vez.
   'public.store_items.store_items_subcategoria_formato':
     "CHECK (((subcategory IS NULL) OR (subcategory ~ '^[a-z][a-z0-9_]{1,39}$'::text)))",
-  'public.store_items.store_items_imagem_e_caminho':
-    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
   // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
   // convidaria um parametro a viajar junto, e parametro em link de saida e
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
@@ -919,6 +958,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ele devolve em `PATCH /v1/finder/found-report`.
   'public.upload_intents.upload_intents_foto_do_achador_tem_aviso_e_ref':
     "CHECK (((kind <> 'finder_photo'::text) OR ((found_report_id IS NOT NULL) AND (upload_ref IS NOT NULL))))",
+  // BICHUS-245, migracao 20261001000006. A coerencia entre o estado da higiene
+  // da foto e os dois campos que ele governa, nos DOIS sentidos: `pronta` tem
+  // chave da derivada e nao tem motivo; `recusada` tem motivo e nao tem chave;
+  // `pendente` e `ausente` nao tem nenhum dos dois. Sem os dois sentidos o
+  // banco aceitaria uma linha com os campos do outro estado, que e uma linha
+  // que nenhum codigo sabe ler. O CONJUNTO de `sanitize_status` nao esta aqui:
+  // ele e a lista fechada `upload_intents_status_da_higiene`, em LISTAS_FECHADAS.
+  'public.upload_intents.upload_intents_higiene_coerente':
+    "CHECK ((((sanitize_status = 'pronta'::text) AND (sanitized_key IS NOT NULL) AND (sanitize_rejection_reason IS NULL)) OR ((sanitize_status = 'recusada'::text) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NOT NULL)) OR ((sanitize_status = ANY (ARRAY['pendente'::text, 'ausente'::text])) AND (sanitized_key IS NULL) AND (sanitize_rejection_reason IS NULL))))",
   // BICHUS-41. `FinderUploadIntent.upload_ref`: 128 bits em base64url, 22
   // caracteres, o mesmo padrão que o contrato declara.
   'public.upload_intents.upload_intents_upload_ref_formato':

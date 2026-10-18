@@ -30,6 +30,7 @@ import type {
 } from '../../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio, ObjectStorage } from '../../../media/ports/object-storage.js';
 import { AvisoDoAchadorService } from '../../application/aviso-do-achador.js';
+import { TETO_DE_BYTES_DA_FOTO_DO_ACHADO } from '../../application/found-report-service.js';
 import type {
   AvisoDoAchador,
   EnriquecimentoDoAchador,
@@ -476,15 +477,24 @@ void describe('createFinderPhotoUploadIntent: referência opaca, nunca o id', ()
     exigirQueNaoVaza(resposta, 'POST /media/finder-photo-intents');
   });
 
-  void it('acima de 2 MB é recusado, e a quarta foto do aviso não sai', async () => {
+  void it('acima do teto único de envio é recusado, e a quarta foto do aviso não sai', async () => {
+    // O teto desta rota era 2 MB (SEC-009) e a unificação de 17/10/2026 o
+    // afrouxa para os 5 MB de toda a aplicação — o contrato diz isso na própria
+    // descrição da operação, e o que continua contendo volume aqui é o teto de
+    // TRÊS fotos por aviso, que não reabre e que a segunda metade deste caso
+    // mede. A constante vem do serviço de propósito: um `2_097_153` escrito
+    // aqui é o número que divergiu.
     const grande = bancada();
     const acima = await pedir(grande.app, {
       metodo: 'POST',
       url: '/media/finder-photo-intents',
-      corpo: { content_type: 'image/jpeg', byte_size: 2_097_153 },
+      corpo: { content_type: 'image/jpeg', byte_size: TETO_DE_BYTES_DA_FOTO_DO_ACHADO + 1 },
     });
     await grande.app.close();
-    assert.ok(acima.status === 400 || acima.status === 415, `acima de 2 MB passou: ${String(acima.status)}`);
+    assert.ok(
+      acima.status === 400 || acima.status === 415,
+      `acima do teto passou: ${String(acima.status)}`,
+    );
     assert.equal(grande.intencoes.length, 0);
 
     const cheio = bancada({ fotosJaPedidas: 3 });
