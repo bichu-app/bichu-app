@@ -901,7 +901,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = 'd1f761255dab3787c59a0e5c11343efbf2eeee29'; // BICHUS-278, 17/10: o registro de achado vira DOIS PASSOS a pedido do cliente (passo 1 o animal, passo 2 onde e quando), a cidade deixa de se dizer "(opcional)" quando e ela que destrava o envio, e saem os dois paragrafos que ele reprovou. Nenhuma porta de aparelho encostada: `CameraEGaleria` e `Localizacao` continuam chegando pelo `Escopo`, e a foto continua passando pela mesma porta -- o que mudou foi a ORDEM e a pagina em que cada bloco aparece (antes: 65dcb5cd25c486a5e7d537aeaec19566828420d5)
+const String _arvoreDasTelas = 'b92f57ea3041d3c01a860b73d385e5882a85ef35'; // BICHUS-278, 17/10: a previa da foto entra no cadastro de pet e no registro de achado (a peca desenha o arquivo e mora em `widgets/`, FORA de `lib/telas`, justamente para `dart:io` continuar proibido aqui), o campo de UF vira a lista de 27 estados, e a captura passa a PEDIR a permissao quando ela esta `negada` -- no Android `denied` tambem quer dizer "nunca perguntei". Nenhuma tela importa plugin de aparelho: camera e localizacao continuam chegando pelo `Escopo` (antes: d1f761255dab3787c59a0e5c11343efbf2eeee29)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
