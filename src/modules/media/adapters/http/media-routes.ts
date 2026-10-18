@@ -22,6 +22,10 @@ import type {
   CapaDeEncontroDaComunidade,
   CorpoDaIntencaoDeCapa,
 } from '../../application/capa-de-encontro-da-comunidade.js';
+import type {
+  CorpoDaIntencaoDeFoto,
+  FotoDoProprioUsuario,
+} from '../../application/foto-do-proprio-usuario.js';
 import type { FotoDoPet } from '../../ports/media-repository.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -55,6 +59,25 @@ export const rotaDeIntencaoDeCapaDeEncontro = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A FOTO DO PROPRIO USUARIO (cliente, 18/10/2026).
+ *
+ * Mora aqui pelo mesmo motivo da capa do encontro: o que esta rota faz e
+ * assinar envio, e quem sabe assinar e este modulo. A escrita que USA o
+ * `upload_id` e `PATCH /v1/me`, e e la que a conta do chamador e conferida de
+ * novo, na clausula `WHERE` -- e e la, e nao aqui, que a imagem deixa de ser
+ * candidata da varredura de envios vencidos.
+ *
+ * O mesmo teto de 20/h da foto de pet.
+ */
+export const rotaDeIntencaoDeFotoDoUsuario = defineRoute({
+  operationId: 'createMyPhotoUploadIntent',
+  method: 'post',
+  path: '/media/my-photo-intents',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDeConfirmacaoDeFoto = defineRoute({
   operationId: 'confirmPetPhoto',
   method: 'post',
@@ -79,6 +102,8 @@ export interface DependenciasDasRotasDeMidia {
   readonly midia: MediaService;
   /** ADR-0025 emenda 3: a autorizacao de envio da capa do encontro. */
   readonly capasDeEncontro: CapaDeEncontroDaComunidade;
+  /** 18/10/2026: a autorizacao de envio da foto do proprio usuario. */
+  readonly fotosDoUsuario: FotoDoProprioUsuario;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
   /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
@@ -199,6 +224,23 @@ export function registrarRotasDeMidia(
       const { uploadId, autorizacao } = await deps.capasDeEncontro.autorizar(
         dono,
         request.body as CorpoDaIntencaoDeCapa,
+      );
+      return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeIntencaoDeFotoDoUsuario,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDeFotoDoUsuario.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.fotosDoUsuario.autorizar(
+        dono,
+        request.body as CorpoDaIntencaoDeFoto,
       );
       return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
     },

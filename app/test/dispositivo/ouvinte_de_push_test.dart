@@ -30,8 +30,12 @@
 import 'dart:async';
 
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
+import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/widgets/aviso_que_chegou.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../telas/ajuda_de_tela.dart';
@@ -348,14 +352,95 @@ void main() {
       );
     });
 
-    test('os tres tipos sem tela neste build caem em `mostrarNoApp`, e nao '
+    test('`tagEscaneada` leva a secao `Pets`, e NAO cai em `mostrarNoApp`', () {
+      // O BURACO QUE ESTE CASO FECHA. Ate aqui `tagEscaneada` caia em
+      // `mostrarNoApp`, e `mostrarNoApp` e um `break` no `switch` da faixa: o
+      // toque no aviso mais urgente do produto nao levava a tela nenhuma.
+      //
+      // O destino ideal e a conversa com o achador, que nao existe neste app.
+      // O escolhido e a secao `Pets` -- a casa dos perdidos e dos achados, com
+      // os pets do tutor na tela -- porque as outras tres candidatas foram
+      // medidas e nao servem: `/pets/:petId` e enderecada pelo UUID interno do
+      // pet (ADR-0010 item 6 proibe isso em push), `/pets/perdido/caso` exige
+      // um `ResultadoDaAbertura` em `extra`, e `/t/:codigo` exige uma
+      // `TagResolvida`.
+      expect(
+        OuvinteDeAvisos.destinoDe(
+          const AvisoRecebido(
+            tipo: TipoDeAvisoRecebido.tagEscaneada,
+            referencia: 'st_abc',
+          ),
+        ),
+        DestinoDoAviso.areaDeMensagens,
+        reason:
+            'REPROVA: o toque no aviso de que alguem esta com o pet voltou a '
+            'nao levar a lugar nenhum. `mostrarNoApp` e um `break` na faixa.',
+      );
+      // O MESMO caso, dito pelo negativo. Sem esta linha, trocar o destino por
+      // um terceiro valor qualquer reprovaria pelo `expect` de cima com uma
+      // mensagem que fala de igualdade de enum; esta fala do defeito.
+      expect(
+        OuvinteDeAvisos.destinoDe(
+          const AvisoRecebido(
+            tipo: TipoDeAvisoRecebido.tagEscaneada,
+            referencia: 'st_abc',
+          ),
+        ),
+        isNot(DestinoDoAviso.mostrarNoApp),
+        reason:
+            'REPROVA: `tagEscaneada` caiu de novo em `mostrarNoApp`, que e o '
+            '`break` que engolia o aviso mais critico do produto.',
+      );
+    });
+
+    test('`tagEscaneada` SEM `ref` leva ao MESMO lugar: o pet sem caso aberto '
+        'e o tutor que menos sabe de nada', () {
+      // O push do pet sem caso aberto sai sem `ref` (nao existe chave publica
+      // opaca de pet). Se o destino dependesse de `ref`, o caso mais urgente
+      // do produto seria exatamente o que perderia o atalho.
+      expect(
+        OuvinteDeAvisos.destinoDe(
+          const AvisoRecebido(
+            tipo: TipoDeAvisoRecebido.tagEscaneada,
+            referencia: '',
+          ),
+        ),
+        DestinoDoAviso.areaDeMensagens,
+        reason:
+            'REPROVA: o destino de `tagEscaneada` passou a depender de `ref`, '
+            'e o push do pet SEM caso aberto sai sem `ref` -- nao existe '
+            'identificador publico de conversa nem de pet para mandar nele.',
+      );
+    });
+
+    test('o destino do aviso da plaquinha NAO e enderecado por identificador', () {
+      // A ISCA DA CORRECAO DE RUMO. A area de mensagens tem rota de conversa
+      // (`/mensagens/:conversaId`), e apontar o push para ela e a tentacao
+      // obvia agora que a tela existe. Nao da: `ConversationId` e
+      // `{type: string, format: uuid}` no contrato e `conversations` nao tem
+      // coluna `ref` nenhuma -- o ADR-0010 item 6 proibe UUID interno em
+      // superficie publica, e foi por isso que `/pets/:petId` foi recusada.
+      //
+      // Esta isca cobra a propriedade e nao o literal: a rota do destino nao
+      // pode ter parametro de caminho.
+      expect(
+        AvisoQueChegou.rotaDoAvisoDaPlaquinha.contains(':'),
+        isFalse,
+        reason:
+            'REPROVA: o destino do aviso da plaquinha passou a exigir um '
+            'identificador no caminho. O push nao tem identificador publico '
+            'para por ali -- nem de conversa, nem de pet, nem de caso quando '
+            'nao ha caso aberto.',
+      );
+      expect(AvisoQueChegou.rotaDoAvisoDaPlaquinha, startsWith('/'));
+    });
+
+    test('os dois tipos sem tela neste build caem em `mostrarNoApp`, e nao '
         'num destino parecido', () {
-      // A LACUNA, cobrada em vez de descrita. `tagEscaneada` e o aviso mais
-      // urgente do produto e o destino dele e a conversa com o achador, que
-      // nao existe neste app. Mandar o tutor para um lugar PARECIDO e pior que
-      // nao mandar: ele chega numa tela que nao diz quem esta com o animal.
+      // A LACUNA QUE SOBROU, cobrada em vez de descrita. Mandar o tutor para
+      // um lugar PARECIDO e pior que nao mandar: ele chega numa tela que nao
+      // responde a pergunta do aviso.
       for (final tipo in <TipoDeAvisoRecebido>[
-        TipoDeAvisoRecebido.tagEscaneada,
         TipoDeAvisoRecebido.possivelCorrespondencia,
         TipoDeAvisoRecebido.lembreteDeDesfecho,
       ]) {
@@ -460,4 +545,99 @@ void main() {
       );
     });
   });
+
+  // -----------------------------------------------------------------------
+  // ISCA 5 — o toque no aviso da plaquinha LEVA a algum lugar
+  // -----------------------------------------------------------------------
+  group('ISCA — o toque no aviso de que alguem esta com o pet', () {
+    testWidgets('leva ao destino do ponto unico, e nao cai num `break`', (
+      tester,
+    ) async {
+      // O BURACO QUE ESTE CASO FECHA, e ele nao e sobre estetica: ate aqui
+      // `tagEscaneada` caia em `mostrarNoApp`, `temDestino` escondia o botao, e
+      // `_ir` tinha um `break` no lugar da navegacao. O aviso mais critico do
+      // produto nao tinha para onde levar.
+      final porta = MensagensDePushDeTeste();
+      await abrirOApp(tester, rede: rede, mensagensDePush: porta);
+      addTearDown(porta.encerrar);
+
+      // Sai de `/pets` ANTES de medir. Sem este passo o caso passaria sozinho:
+      // `Pets` e a secao de aterrissagem do app, e "chegou em /pets" seria
+      // verdade com ou sem a navegacao do toque.
+      // `go` e nao `push`: trocar de SECAO num `StatefulShellRoute` e trocar
+      // de ramo, e `push` empilha sobre o ramo corrente sem mudar o endereco
+      // -- foi exatamente o que aconteceu na primeira escrita deste caso, e o
+      // `isNot` abaixo e o que o acusou em vez de deixa-lo passar sozinho.
+      GoRouter.of(
+        tester.element(find.byType(Scaffold).first),
+      ).go(Rotas.rede);
+      await tester.pumpAndSettle();
+      expect(
+        rotaAtual(tester),
+        isNot(AvisoQueChegou.rotaDoAvisoDaPlaquinha),
+        reason:
+            'a bancada precisa comecar FORA do destino para medir algo. '
+            '`Pets` e a secao de aterrissagem do app.',
+      );
+
+      porta.chegouComOAppAberto(mensagemDoServidor(tipo: 'tagEscaneada'));
+      await tester.pumpAndSettle();
+
+      final acao = find.text(AvisoQueChegou.rotuloDoAvisoDaPlaquinha);
+      expect(
+        acao,
+        findsOneWidget,
+        reason:
+            'REPROVA: a faixa do aviso da plaquinha nao oferece acao nenhuma. '
+            'O tutor le "alguem esta com o Thor" e nao tem para onde ir.',
+      );
+
+      await tester.tap(acao);
+      await tester.pumpAndSettle();
+
+      // Comparado contra a CONSTANTE, e nao contra `/pets`: quando
+      // `feat/area-de-mensagens-no-app` for mesclada e
+      // `rotaDoAvisoDaPlaquinha` virar `/mensagens`, este caso continua
+      // medindo a coisa certa sem ninguem tocar nele.
+      expect(
+        rotaAtual(tester),
+        AvisoQueChegou.rotaDoAvisoDaPlaquinha,
+        reason:
+            'REPROVA: o toque no aviso nao levou a lugar nenhum. Era isto o '
+            '`break` do `switch` de `_ir`.',
+      );
+      expect(
+        find.text('Alguém está com Thor'),
+        findsNothing,
+        reason:
+            'REPROVA: a faixa continuou em pe depois de levar a pessoa ao '
+            'destino. Quem tocou ja leu.',
+      );
+    });
+
+    testWidgets('o rotulo do tutor NAO e o do achador', (tester) async {
+      // "Vi este pet" e a fala de quem achou o animal de outra pessoa, no
+      // alerta de vizinhanca. Na faixa do tutor ele seria uma frase que nao
+      // faz sentido para quem a le -- e e o tipo de erro que faz o produto
+      // parecer que nao foi feito para ele.
+      final porta = MensagensDePushDeTeste();
+      await abrirOApp(tester, rede: rede, mensagensDePush: porta);
+      addTearDown(porta.encerrar);
+
+      porta.chegouComOAppAberto(mensagemDoServidor(tipo: 'tagEscaneada'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(AvisoQueChegou.rotuloDeVerAgora), findsNothing);
+      expect(
+        find.text(AvisoQueChegou.rotuloDoAvisoDaPlaquinha),
+        findsOneWidget,
+      );
+    });
+  });
+}
+
+/// O endereco em que o roteador esta AGORA, lido do roteador montado.
+String rotaAtual(WidgetTester tester) {
+  final roteador = GoRouter.of(tester.element(find.byType(Scaffold).first));
+  return roteador.routerDelegate.currentConfiguration.uri.path;
 }

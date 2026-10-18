@@ -93,6 +93,18 @@ export interface LocalDoDiretorio {
    * respostas decidem a mesma tela e a pessoa esta esperando nela.
    */
   readonly podeAvaliar: boolean;
+  /**
+   * A chave da derivada da FOTO do lugar (fachada ou ambiente), liberada para o
+   * aplicativo pelo cliente em 18/10/2026.
+   *
+   * **Mora aqui e nao em `EntradaDoDiretorio`, e a separacao e a decisao**: a
+   * listagem projeta `EntradaDoDiretorio` e por isso NAO tem como devolver a
+   * faixa de 1280 x 720 em vinte cartoes. A logo, que o cartao desenha, esta la;
+   * a faixa, que so o detalhe desenha, esta aqui.
+   *
+   * `null` quando nao ha foto, quando ela ainda processa e quando foi recusada.
+   */
+  readonly fotoPublicKey: string | null;
 }
 
 export interface RecorteDasAvaliacoes {

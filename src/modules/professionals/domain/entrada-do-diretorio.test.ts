@@ -23,12 +23,16 @@ import {
   GRADE_EM_METROS,
   projetarEntrada,
   type EntradaDoDiretorio,
+  urlDaDerivada,
 } from './entrada-do-diretorio.js';
 import {
   evidenciasAprovadas,
   nivelDerivado,
   type VerificacaoDaEntidade,
 } from './nivel-de-verificacao.js';
+
+/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio {
   return {
@@ -42,6 +46,7 @@ function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio 
     phoneE164: '+551130612200',
     verificacoes: [],
     distanciaEmMetros: null,
+    logoPublicKey: null,
     ...ajustes,
   };
 }
@@ -149,14 +154,19 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 });
 
 void describe('a projecao publica da entrada', () => {
-  void it('devolve dez campos, e nenhum a mais', () => {
-    const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }));
+  void it('devolve onze campos, e nenhum a mais', () => {
+    const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }), URL_DE_MIDIA);
+    // Eram dez ate 18/10/2026; `logo_url` entrou com a liberacao das imagens do
+    // profissional no aplicativo. **`photo_url` NAO esta aqui, e e o ponto desta
+    // lista fechada**: a faixa de 1280 x 720 pertence a pagina do local, e esta
+    // projecao e a que a LISTAGEM usa. Quem a acrescentar aqui reprova.
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
       'city',
       'display_name',
       'distance_m',
       'kind',
+      'logo_url',
       'neighborhood',
       'phone_e164',
       'slug',
@@ -165,8 +175,75 @@ void describe('a projecao publica da entrada', () => {
     ]);
   });
 
+  // -----------------------------------------------------------------------
+  // AS DUAS ISCAS DA LIBERACAO DAS IMAGENS NO APLICATIVO (18/10/2026)
+  // -----------------------------------------------------------------------
+
+  void it('ISCA: o ORIGINAL nao vaza para a resposta de leitura, em nenhuma categoria', () => {
+    // A chave do original tem a forma `{categoria}/original/{128 bits}` e mora
+    // no balde PRIVADO. Se ela chegasse a esta projecao, o aplicativo receberia
+    // ou um 403 na tela ou -- no dia em que alguem afrouxasse a politica do
+    // balde -- a foto COM EXIF, com a coordenada de onde ela foi tirada.
+    //
+    // `urlDaDerivada` recusa pela FORMA, e nao por confianca em quem chama: o
+    // tipo `string | null` nao distingue chave de original de chave de derivada,
+    // e a consulta e uma linha de SQL de distancia de um `JOIN` errado.
+    for (const original of [
+      'directory/original/KioqKioqKioqKioqKioqKg',
+      'people/original/KioqKioqKioqKioqKioqKg',
+      'pets/original/KioqKioqKioqKioqKioqKg',
+      'products/original/KioqKioqKioqKioqKioqKg',
+      'found-reports/abc/original/KioqKioqKioqKioqKioqKg',
+      'found-reports/abc/sanitized/KioqKioqKioqKioqKioqKg.jpeg',
+    ]) {
+      assert.equal(urlDaDerivada(original, URL_DE_MIDIA), null, original);
+      assert.equal(
+        projetarEntrada(entrada({ logoPublicKey: original }), URL_DE_MIDIA).logo_url,
+        null,
+        original,
+      );
+    }
+
+    // CONTRAPESO: a chave de DERIVADA produz a URL. Sem ele, as recusas acima
+    // passariam para uma projecao que nunca devolve imagem nenhuma -- e um
+    // recurso que nao mostra logo tambem "nao vaza o original".
+    assert.equal(
+      projetarEntrada(
+        entrada({ logoPublicKey: 'directory/card/KioqKioqKioqKioqKioqKg.jpeg' }),
+        URL_DE_MIDIA,
+      ).logo_url,
+      'https://img.bichu.test/directory/card/KioqKioqKioqKioqKioqKg.jpeg',
+    );
+  });
+
+  void it('ISCA: entrada SEM logo nao quebra a listagem -- o cartao sai sem imagem', () => {
+    // O modo de falhar que esta isca existe para impedir e o pior de todos nesta
+    // tela: uma entrada sem logo derrubando a PAGINA inteira, e a pessoa que
+    // procura um veterinario perto vendo lista vazia por causa de um campo
+    // opcional. Nulo tem de atravessar a projecao sem erro.
+    const semLogo = projetarEntrada(entrada({ logoPublicKey: null }), URL_DE_MIDIA);
+    assert.equal(semLogo.logo_url, null);
+    // O resto do cartao continua inteiro: nome, atividade e endereco publico.
+    assert.equal(semLogo.display_name, entrada().displayName);
+    assert.ok(semLogo.slug.length > 0);
+    assert.equal(semLogo.verification.level, 'none');
+
+    // E uma pagina MISTA -- algumas com logo, outras sem -- projeta inteira, na
+    // ordem, sem buraco: e assim que a listagem real chega.
+    const pagina = [
+      entrada({ logoPublicKey: 'directory/card/AAAAAAAAAAAAAAAAAAAAAA.jpeg' }),
+      entrada({ logoPublicKey: null }),
+      entrada({ logoPublicKey: 'directory/thumb/BBBBBBBBBBBBBBBBBBBBBB.jpeg' }),
+    ].map((e) => projetarEntrada(e, URL_DE_MIDIA));
+    assert.equal(pagina.length, 3);
+    assert.deepEqual(
+      pagina.map((p) => p.logo_url === null),
+      [false, true, false],
+    );
+  });
+
   void it('NAO devolve identificador interno: o endereco e o slug (ADR-0010)', () => {
-    const bruto = JSON.stringify(projetarEntrada(entrada()));
+    const bruto = JSON.stringify(projetarEntrada(entrada(), URL_DE_MIDIA));
     // Os nomes das colunas de vinculo NAO sao escritos aqui de proposito: o
     // portao de saida procura o literal em todo `src/`, e escreve-lo num teste
     // reprovaria o build. O que este caso afirma e mais forte que o nome: a
@@ -188,19 +265,19 @@ void describe('a projecao publica da entrada', () => {
   });
 
   void it('o selo sai derivado das provas, e nao copiado de um campo', () => {
-    assert.deepEqual(projetarEntrada(entrada({ verificacoes: [aprovada('cnpj')] })).verification, {
+    assert.deepEqual(projetarEntrada(entrada({ verificacoes: [aprovada('cnpj')] }), URL_DE_MIDIA).verification, {
       level: 'document_verified',
       evidence_kinds: ['cnpj'],
     });
-    assert.deepEqual(projetarEntrada(entrada()).verification, {
+    assert.deepEqual(projetarEntrada(entrada(), URL_DE_MIDIA).verification, {
       level: 'none',
       evidence_kinds: [],
     });
   });
 
   void it('leva a distancia ja na grade, e o nulo intacto', () => {
-    assert.equal(projetarEntrada(entrada({ distanciaEmMetros: 2740 })).distance_m, 2700);
-    assert.equal(projetarEntrada(entrada({ distanciaEmMetros: null })).distance_m, null);
+    assert.equal(projetarEntrada(entrada({ distanciaEmMetros: 2740 }), URL_DE_MIDIA).distance_m, 2700);
+    assert.equal(projetarEntrada(entrada({ distanciaEmMetros: null }), URL_DE_MIDIA).distance_m, null);
   });
 
   void it('cidade, UF e bairro saem como texto, e nao viram rotulo unico', () => {
@@ -208,14 +285,14 @@ void describe('a projecao publica da entrada', () => {
     // outra. Aqui os tres saem separados de proposito: a folha de filtros do
     // diretorio precisa compara-los, e um rotulo unico obrigaria a tela a
     // desmonta-lo de volta.
-    const projetada = projetarEntrada(entrada());
+    const projetada = projetarEntrada(entrada(), URL_DE_MIDIA);
     assert.equal(projetada.city, 'São Paulo');
     assert.equal(projetada.state, 'SP');
     assert.equal(projetada.neighborhood, 'Pinheiros');
   });
 
   void it('entrada sem lugar nenhum projeta nulos, e nao texto vazio', () => {
-    const projetada = projetarEntrada(entrada({ city: null, state: null, neighborhood: null }));
+    const projetada = projetarEntrada(entrada({ city: null, state: null, neighborhood: null }), URL_DE_MIDIA);
     assert.equal(projetada.city, null);
     assert.equal(projetada.neighborhood, null);
   });

@@ -1,6 +1,14 @@
 import { useRef, useState } from 'react';
 
-import { conferirArquivo, conferirDimensao, FalhaDeEnvio, MAXIMO_DE_IMAGENS, type Proposito } from './envio-de-imagem.ts';
+import {
+  conferirArquivo,
+  conferirDimensao,
+  DIMENSAO_MINIMA,
+  FalhaDeEnvio,
+  LIMITE_EM_MB,
+  MAXIMO_DE_IMAGENS,
+  type Proposito,
+} from './envio-de-imagem.ts';
 import { Icone } from './Icone.tsx';
 
 /**
@@ -96,7 +104,9 @@ export function Galeria({
   erro,
   titulo = 'Imagens do produto',
   principal = 'Principal',
-  ajuda = 'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 800 × 800 pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.',
+  // O teto e a minima vem de `envio-de-imagem.ts`: a ajuda nao repete numero
+  // que o contrato pode mudar.
+  ajuda = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.store_item.largura)} × ${String(DIMENSAO_MINIMA.store_item.altura)} pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.`,
   descricaoObrigatoria = true,
   marca,
 }: PropsDaGaleria) {

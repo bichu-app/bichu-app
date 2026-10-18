@@ -156,7 +156,11 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
-import { registrarIntencaoDeCapaDaComunidade } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import {
+  registrarIntencaoDeCapaDaComunidade,
+  registrarIntencaoDeFotoDoUsuario,
+} from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import { FotoDoProprioUsuario } from '../modules/media/application/foto-do-proprio-usuario.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
 import {
   captchaDeDesenvolvimentoLigado,
@@ -394,17 +398,26 @@ export async function main(): Promise<void> {
     registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
   });
 
-  // BICHUS-189. A escrita administrativa do diretorio de `Perto`. Sem
-  // `avisos` e sem `urlDeMidia`: uma entrada de diretorio nao notifica ninguem
-  // e nao tem imagem -- nao ha coluna de foto nem de logotipo em
-  // `professionals`, e inventar uma seria decidir produto aqui.
+  // BICHUS-189. A escrita administrativa do diretorio de `Perto`. Sem `avisos`:
+  // uma entrada de diretorio nao notifica ninguem.
+  //
+  // **COM `urlDeMidia` E COM `imagens` A PARTIR DE 18/10/2026.** O comentario
+  // anterior dizia que a entrada "nao tem imagem -- nao ha coluna de foto nem
+  // de logotipo em `professionals`, e inventar uma seria decidir produto aqui".
+  // Estava certo, e deixou de estar: o cliente decidiu o produto, com estas
+  // palavras -- *"coloque um campo no backoffice para subir uma imagem do logo
+  // e foto dos profissionais recomendados"* --, e a migracao `20261018000008`
+  // criou as duas colunas. `imagens` e o MESMO `registroDeImagemDeCatalogo`
+  // que a `Loja` e a `Rede` recebem: uma esteira so.
   const diretorioAdministrativo = new DiretorioAdministrativo({
     repositorio: criarDiretorioAdministrativoRepository({
       db,
       trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      imagens: registroDeImagemDeCatalogo,
     }),
     ids,
     clock: systemClock,
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   });
 
   // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`: a queixa do
@@ -423,10 +436,14 @@ export async function main(): Promise<void> {
     repositorio: criarFilaDeIndicacoesRepository({
       db,
       trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      imagens: registroDeImagemDeCatalogo,
     }),
     ids,
     clock: systemClock,
     conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+    // A entrada aprovada pela fila nasce sem imagem; a projecao e a mesma do
+    // painel, e por isso ela precisa da funcao.
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -479,6 +496,9 @@ export async function main(): Promise<void> {
     contrato,
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
+    // 18/10/2026: `Me.photo` precisa da URL da derivada. Mesma montagem da
+    // `Loja`, da `Rede` e do diretorio.
+    urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   };
 
   // A partir daqui `X-Reauth-Token` e conferido de verdade. Quem o chama e
@@ -539,6 +559,10 @@ export async function main(): Promise<void> {
         await conversas.abrirPorAviso(aviso);
       },
     },
+    // O EMISSOR DO AVISO AO TUTOR. A MESMA fila de `alert.dispatch` e de
+    // `media.process_upload`: o aviso da plaquinha nao ganha esteira propria.
+    // Quem consome `tag.scan_notify` e `bin/worker.ts`.
+    fila: criarJobQueue(db, ids),
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -653,6 +677,18 @@ export async function main(): Promise<void> {
         ids,
       }),
       registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      db,
+      ids,
+    }),
+    // 18/10/2026: a foto do proprio usuario. O MESMO preparador, com o prefixo
+    // `people/` e `purpose = user_photo` -- e com HEIC aceito na entrada,
+    // porque esta foto sai de um celular.
+    fotosDoUsuario: new FotoDoProprioUsuario({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDeFotoDoUsuario,
       db,
       ids,
     }),
@@ -884,6 +920,9 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+      // 18/10/2026: o cliente liberou a logo e a foto do profissional no
+      // aplicativo. A URL da derivada e montada na leitura, como nas outras.
+      urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
     });
     // A SUGESTAO do diretorio: escrita da comunidade, em arquivo e em
     // registrador proprios. Ela NAO escreve em `professionals` -- a emenda 1 do

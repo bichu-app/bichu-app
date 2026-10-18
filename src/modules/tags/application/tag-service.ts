@@ -31,6 +31,8 @@ import {
   type TagResolvida,
 } from '../ports/tag-repository.js';
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
+import { TRABALHO_DE_AVISO_AO_TUTOR } from '../ports/aviso-ao-tutor.js';
+import type { JobQueue } from '../../../shared/ports/job-queue.js';
 import type {
   AbsoluteUrl,
   FoundReportId,
@@ -110,6 +112,26 @@ export interface DependenciasDeTags {
    * dados do aviso e segue. Quem liga os dois é a composição, em `bin/api.ts`.
    */
   readonly conversaDoAviso: AberturaDeConversaPorAviso;
+  /**
+   * BICHUS — O EMISSOR DO AVISO AO TUTOR, e ele e o buraco central que faltava.
+   *
+   * Ate aqui `avisar` gravava o aviso, abria a conversa e devolvia
+   * `owner_notified: true` **sem enfileirar entrega nenhuma**: `owner_notified`
+   * registrava INTENCAO, nao entrega. O texto do push para este caso existia
+   * (`notifications/domain/conteudo-do-push.ts`, chave `tagEscaneada`) e nunca
+   * teve chamador.
+   *
+   * **Enfileirar, e nao enviar aqui.** Quem escaneou a plaquinha esta de pe, na
+   * rua, com o animal no colo, esperando a resposta: um provedor de push lento
+   * dentro desta requisicao viraria um botao que nao responde no momento mais
+   * critico do produto. E o mesmo arranjo do alerta de 5 km (`alert.dispatch`)
+   * e da aprovacao da `Rede` — a MESMA fila, o MESMO worker, o MESMO
+   * `PushSender`. Nao ha segunda esteira.
+   *
+   * `Pick` de um metodo so: este caminho enfileira e nunca reserva, completa
+   * nem falha trabalho.
+   */
+  readonly fila: Pick<JobQueue, 'enqueue'>;
 }
 
 /** A porta acima. O aviso já gravado, na forma que a abertura precisa. */
@@ -460,6 +482,20 @@ export function criarTagService(deps: DependenciasDeTags) {
         achadorComConta: chamador.userId ?? null,
         avisoAnteriorId: recente === undefined ? null : (recente.id as FoundReportId),
       });
+
+      // O AVISO SAI DAQUI, e so quando `owner_notified` e verdadeiro.
+      //
+      // Aviso agrupado a um recente do MESMO achador nao enfileira nada, e a
+      // condicao e literalmente a mesma expressao que vai para a resposta: o
+      // que o achador le na tela e o que o tutor recebe no telefone deixam de
+      // poder divergir, porque sao o mesmo booleano.
+      //
+      // O payload leva **so o identificador** (§11.5). Corpo renderizado numa
+      // linha de `jobs` congelaria a URL base do dia em que foi escrita, e e
+      // assim que `localhost` vaza para producao.
+      if (recente === undefined) {
+        await deps.fila.enqueue(TRABALHO_DE_AVISO_AO_TUTOR, { found_report_id: avisoId });
+      }
 
       return {
         finderToken,

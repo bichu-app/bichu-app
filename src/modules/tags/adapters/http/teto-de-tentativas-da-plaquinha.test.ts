@@ -170,6 +170,9 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
     clock,
     trilha,
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
+    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
+    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
+    fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,

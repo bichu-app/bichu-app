@@ -1097,6 +1097,31 @@ tbody tr:hover {
   border: var(--bichu-border-medium) dashed var(--bichu-cor-error);
 }
 
+/* Campo de UMA imagem (logo e foto do diretorio): previa a esquerda, seletor
+   e remover a direita. A previa tem largura propria porque este campo nao
+   vive na grade da galeria. */
+.campo-img {
+  display: grid;
+  grid-template-columns: minmax(0, 9.25rem) minmax(0, 1fr);
+  gap: var(--bichu-space-4);
+  align-items: start;
+}
+.campo-img-acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bichu-space-3);
+  min-width: 0;
+}
+.campo-img-acoes .input {
+  width: 100%;
+}
+@media (max-width: 32rem) {
+  .campo-img {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Dialogo */
 .scrim {
   position: fixed;

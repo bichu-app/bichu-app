@@ -37,6 +37,7 @@
  * que prova que o caso mede LIMITE, e não a capacidade de contar até quatro.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
@@ -294,14 +295,37 @@ const CORPO_MINIMO = {
   area: { city: 'São Paulo', neighborhood: 'Pinheiros' },
 };
 
-/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
-function tetoDoRecadoNoContrato(): number {
+/** O `maxLength` que o contrato declara, lido dele e não escrito aqui. */
+function tetoNoContrato(schema: string, campo: string): number {
   const spec = carregarContrato('api/openapi.yaml').spec as {
     components?: { schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }> };
   };
-  const teto = spec.components?.schemas?.['StrayFoundReportInput']?.properties?.['notes']?.maxLength;
-  assert.equal(typeof teto, 'number', 'o contrato não declara `maxLength` em StrayFoundReportInput.notes');
+  const teto = spec.components?.schemas?.[schema]?.properties?.[campo]?.maxLength;
+  assert.equal(typeof teto, 'number', `o contrato não declara \`maxLength\` em ${schema}.${campo}`);
   return teto as number;
+}
+
+/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
+function tetoDoRecadoNoContrato(): number {
+  return tetoNoContrato('StrayFoundReportInput', 'notes');
+}
+
+/**
+ * O teto de `found_reports.notes` lido do **CHECK da migração**, e não escrito
+ * aqui.
+ *
+ * É esta ponta que faz os casos abaixo medirem o defeito de verdade. Ler o teto
+ * do contrato e depois conferir o contrato contra si mesmo é tautologia: com o
+ * contrato de volta em 1000, um caso que envia `teto + 1` manda 1001 e continua
+ * sendo recusado -- ele acompanha o contrato em vez de prendê-lo. O número que
+ * manda é o da COLUNA, porque é ele que produz o erro de servidor, e o contrato
+ * é que tem de casar com ele.
+ */
+function tetoDaColunaNaMigracao(): number {
+  const sql = readFileSync('migrations/20260917000007_tags-e-avisos-do-achador.sql', 'utf8');
+  const achado = /CHECK \(notes IS NULL OR char_length\(notes\) <= (\d+)\)/.exec(sql);
+  assert.ok(achado, '`found_reports_notes_tamanho` não está mais escrito como esta leitura espera');
+  return Number(achado[1]);
 }
 
 void describe('as rotas existem e respondem o que o contrato declara', () => {
@@ -841,5 +865,95 @@ void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
       'a isca não conseguiu desligar a autorização: os casos de 404 deste arquivo ' +
         'passaram a medir outra coisa',
     );
+  });
+});
+
+
+/**
+ * O RECADO DO ENRIQUECIMENTO, nas duas bordas.
+ *
+ * `FoundReportEnrichment.message` declarava `maxLength: 1000` e grava em
+ * `found_reports.notes`, que SEMPRE recusou acima de 500
+ * (`found_reports_notes_tamanho`, migração 20260917000007). O texto entre 501 e
+ * 1000 passava pela validação e estourava no banco: quem avisa recebia **erro de
+ * servidor** em vez de recusa explicada, e o recado se perdia -- com o animal na
+ * mão de quem estava tentando ajudar.
+ *
+ * As DUAS bordas, e não só a de cima, porque é em `<=` contra `<` que o erro de
+ * comparação mora: um teto escrito como 499 recusaria 500 e passaria neste
+ * arquivo se só o 501 fosse medido.
+ *
+ * A recusa é medida **chamando a aplicação**, pelo `inject` do Fastify de
+ * verdade -- a tela não participa. O teto sai do contrato (`tetoNoContrato`) e
+ * não de um número escrito aqui: uma cópia deixaria de acusar mudança na spec.
+ */
+void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bordas', () => {
+  void it('500 exatos é ACEITO e chega gravado na resposta', async () => {
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto) },
+    });
+    await app.close();
+
+    assert.equal(teto, 500, 'o CHECK da coluna deixou de ser 500');
+    assert.equal(
+      tetoNoContrato('FoundReportEnrichment', 'message'),
+      teto,
+      'o contrato voltou a prometer mais do que a coluna aceita: é o defeito de novo',
+    );
+    assert.equal(resposta.status, 200);
+    // Gravado, e não apenas aceito: `notes` da resposta é `observacao` do que o
+    // repositório devolveu depois do `UPDATE`.
+    assert.equal(resposta.corpo['notes'], 'a'.repeat(teto));
+  });
+
+  void it('501 é RECUSADO pela validação, com o limite na mensagem, e não chega ao banco', async () => {
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.equal(
+      resposta.status,
+      400,
+      'o caractere a mais que a COLUNA aceita passou pela validação: ele vai estourar no banco como erro de servidor',
+    );
+    assert.equal(tipoDe(resposta.corpo), 'validation-failed');
+
+    // A recusa precisa DIZER O LIMITE: "inválido" manda a pessoa adivinhar
+    // quanto cortar de um texto que ela acabou de escrever.
+    const erros = resposta.corpo['errors'] as { field: string; code: string; message: string }[];
+    const doRecado = erros.find((e) => e.field === 'message');
+    assert.ok(doRecado, `o 400 não nomeia o campo \`message\`: ${resposta.bruto}`);
+    assert.equal(doRecado.code, 'maxLength');
+    assert.match(
+      doRecado.message,
+      new RegExp(String(teto)),
+      `a recusa não diz o limite de ${String(teto)}: ${doRecado.message}`,
+    );
+  });
+
+  void it('o 501 é recusado ANTES do repositório: nada foi gravado', async () => {
+    // Se a validação do contrato deixasse passar, o `UPDATE` iria ao banco e o
+    // 500 viria dele. Aqui o dobre devolveria 200 com o texto inteiro, e é por
+    // isso que o status acima prova a borda e não a sorte.
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.notEqual(resposta.corpo['notes'], 'a'.repeat(teto + 1));
+    assert.equal(resposta.status, 400);
   });
 });

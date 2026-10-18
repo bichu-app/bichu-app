@@ -57,6 +57,7 @@ import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { criarTrilhaTransacional } from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
+import { registroDeImagemDeCatalogo } from '../../src/modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarDirectoryRepository } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { criarFilaDeIndicacoesRepository } from '../../src/modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
 import { FilaDeIndicacoes } from '../../src/modules/professionals/application/fila-de-indicacoes.js';
@@ -194,9 +195,14 @@ before(async () => {
     repositorio: criarFilaDeIndicacoesRepository({
       db: banco.db,
       trilha: criarTrilhaTransacional({ ids, clock: relogio, ipHmacKey: config.ipHmacKey }),
+      // 18/10/2026: a porta da imagem de catalogo. A entrada aprovada pela fila
+      // nasce SEM imagem, entao nada aqui a exercita -- a porta esta na forma
+      // real porque a projecao da entrada passou a ser uma so.
+      imagens: registroDeImagemDeCatalogo,
     }),
     ids,
     clock: relogio,
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // O detector de verdade, pelo mesmo par que `src/bin/api.ts` passa. Um
     // dublê aqui faria o caso aprovar motivo que o produto recusa.
     conferencias: {
