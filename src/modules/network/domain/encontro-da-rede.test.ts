@@ -252,11 +252,15 @@ void describe('a projecao do encontro', () => {
 
   void it('as chaves do corpo publico sao EXATAMENTE as de `NetworkEventPublic`', () => {
     // Por campo A MAIS e que uma resposta se afasta do documento sem alarme.
+    // `cover_banner_url` entrou em `6973e88` (derivada de 1280 px para a capa
+    // de borda a borda do detalhe), no contrato e na projecao; esta lista ficou
+    // sem ele porque aquele commit mexeu no caso da derivada e nao neste.
     assert.deepEqual(Object.keys(projetarEncontro(encontro(), AGORA)).sort(), [
       'accepted_sizes',
       'admission',
       'amenities',
       'bring_items',
+      'cover_banner_url',
       'cover_image_url',
       'dog_age',
       'ends_at',
