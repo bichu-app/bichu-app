@@ -520,6 +520,12 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
 
 /// O cartao de um item da vitrine: **foto, titulo e preco, e nada mais**.
 ///
+/// A ordem, de cima para baixo: carrossel, a linha de apoio
+/// [rotuloDePrecoDeReferencia], o titulo, a linha do preco e `Compre agora`.
+/// A linha de apoio entrou em 18/10/2026, por pedido literal do cliente, e
+/// **acima do nome** -- posicao dele, nao escolha de desenho. Ela so nasce
+/// quando ha preco, e e `ExcludeSemantics`: ver a constante.
+///
 /// Decisao do cliente, 17/10/2026: *"Na listagem do produto, remova as
 /// informacoes adicionais, descricoes. Deixe apenas a foto, titulo e preco,
 /// como nos e-commerces tradicionais. Coloque o campo de preco em destaque"*.
@@ -589,6 +595,17 @@ class CartaoDaLoja extends StatelessWidget {
   /// botao" repetido em doze cartoes nao diz de qual produto e.
   static const String rotuloDeSaida = 'Compre agora';
 
+  /// A mensagem de apoio que fica **acima do nome do produto**.
+  ///
+  /// Literal do cliente (18/10/2026): *"vamos colocar a mensagem preco de
+  /// referencia, em cima do nome do produto"*.
+  ///
+  /// **Texto fixo do binario, e nao campo do servidor.** Nada foi acrescentado
+  /// ao contrato por causa desta linha: `openapi.yaml` esta intocado. A mesma
+  /// afirmacao ja viaja DENTRO de [ItemDaLoja.linhaDoPreco], montada no
+  /// modelo -- aqui ela so ganha forma visivel antes do titulo.
+  static const String rotuloDePrecoDeReferencia = 'Preço de referência';
+
   /// O nome acessivel do botao de saida: diz o produto e para onde leva.
   static String rotuloAcessivelDeSaida(ItemDaLoja item) =>
       '$rotuloDeSaida, ${item.titulo}, no site ${item.parceiro.nome}';
@@ -642,6 +659,51 @@ class CartaoDaLoja extends StatelessWidget {
                   altura: 160,
                 ),
                 const SizedBox(height: BichuEspaco.e3),
+              ],
+              // **"Preço de referência", ACIMA DO NOME** (18/10/2026, literal
+              // do cliente). A ordem do cartao passa a ser: carrossel, esta
+              // linha, titulo, linha do preco, `Compre agora`.
+              //
+              // **So nasce quando ha preco.** O rotulo e sobre o preco: num
+              // cartao sem valor -- `linhaDoPreco` nula, ou preco vencido, que
+              // desenha `precoNaoConfirmado` -- ele apontaria para nada, e
+              // "Preço de referência" sobre um cartao sem preco nenhum e pior
+              // que a ausencia da linha. Produto sem valor continua com foto,
+              // titulo e botao, exatamente como estava.
+              //
+              // **E APOIO, e nao competidor do destaque.** `bodySmall`
+              // (`caption`, 13/18, w400) em `textSecondary`, medido contra o
+              // resto do cartao: o titulo e 18/24 w600 e o valor e 22/28 w700.
+              // E o MESMO token em que estas mesmas palavras ja aparecem no
+              // rabo da linha do preco, duas linhas abaixo -- as duas
+              // aparicoes sao visivelmente a mesma coisa. Nenhum tamanho e
+              // nenhuma cor literal entram aqui: so token.
+              //
+              // **`ExcludeSemantics` e acessibilidade, nao economia.** O
+              // `ListView` da casca roda com `addSemanticIndexes: false`
+              // (ver `casca_com_abas.dart`), entao cada filho deste `Column` e
+              // um no de semantica PROPRIO. Um `Text` cru aqui seria anunciado
+              // solto, "Preço de referência", antes do nome e sem dizer de que
+              // preco fala -- quem nao ve ouviria o rotulo sem o valor. E nao
+              // precisa ser anunciado de novo: `linhaDoPreco` ja carrega
+              // "preço de referência" DENTRO do mesmo no de texto do numero
+              // ("R$ 99,90 · preço de referência, consultado em ..."), que e
+              // onde o leitor de tela precisa dele e onde ele nunca se separa
+              // do valor (criterio 15 da BICHUS-185). Esta linha e reforco
+              // VISUAL do que ja esta dito junto do preco.
+              if (linhaDoPreco != null) ...<Widget>[
+                ExcludeSemantics(
+                  child: Text(
+                    rotuloDePrecoDeReferencia,
+                    style: textos.bodySmall?.copyWith(
+                      color: cores.textSecondary,
+                    ),
+                  ),
+                ),
+                // `e1` e nao `e2`: a linha e rotulo DO titulo que vem abaixo, e
+                // 4 px a amarram nele. Com `e2` ela flutuaria entre o carrossel
+                // e o nome, sem pertencer a nenhum dos dois.
+                const SizedBox(height: BichuEspaco.e1),
               ],
               Text(item.titulo, style: textos.titleMedium),
               // O preco, quando ha. **Valor, rotulo e data no MESMO bloco e
