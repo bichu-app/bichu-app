@@ -45,7 +45,7 @@ import { sql } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { Instant } from '../../../../shared/types/brands.js';
-import type { TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
 import type {
   DecisaoDaVerificacao,
   TipoDeEvidencia,
@@ -105,6 +105,7 @@ const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
 )`;
 
 interface LinhaDaEntrada {
+  entity_kind: TipoDeEntidade;
   slug: string | null;
   kind: TipoDeProfissional;
   display_name: string;
@@ -136,6 +137,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     // falta. A string vazia e o que a projecao le como "sem endereco".
     slug: l.slug ?? '',
     kind: l.kind,
+    entityKind: l.entity_kind,
     displayName: l.display_name,
     about: l.about,
     city: l.city,
@@ -163,6 +165,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
 const COLUNAS = [
   'professionals.slug as slug',
   'professionals.kind as kind',
+  'professionals.entity_kind as entity_kind',
   'professionals.display_name as display_name',
   'professionals.about as about',
   'professionals.city as city',
@@ -272,6 +275,11 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             id: nova.id,
             slug: nova.slug,
             kind: nova.kind,
+            // Ausente vale `professional`, o mesmo `DEFAULT` da coluna. Escrito
+            // aqui, e nao deixado para o banco, para que o aceite da indicacao
+            // da comunidade -- que nao coleta tipo de entidade -- grave o mesmo
+            // valor que o painel grava.
+            entity_kind: nova.entityKind ?? 'professional',
             display_name: nova.displayName,
             about: nova.about,
             city: nova.city,
@@ -308,6 +316,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
           .set((eb) => ({
             ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
             ...(mudanca.kind === undefined ? {} : { kind: mudanca.kind }),
+            ...(mudanca.entityKind === undefined ? {} : { entity_kind: mudanca.entityKind }),
             ...(mudanca.displayName === undefined ? {} : { display_name: mudanca.displayName }),
             ...(mudanca.about === undefined ? {} : { about: mudanca.about }),
             ...(mudanca.city === undefined ? {} : { city: mudanca.city }),

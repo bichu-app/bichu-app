@@ -34,6 +34,7 @@ function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio 
   return {
     slug: 'clinica-veterinaria-santa-barbara',
     kind: 'clinic',
+    entityKind: 'professional',
     displayName: 'Clínica Veterinária Santa Bárbara',
     about: 'Pronto atendimento 24 horas.',
     city: 'São Paulo',
@@ -149,13 +150,19 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 });
 
 void describe('a projecao publica da entrada', () => {
-  void it('devolve dez campos, e nenhum a mais', () => {
+  void it('devolve onze campos, e nenhum a mais', () => {
+    // ERA DEZ ate 18/10/2026. `entity_kind` e o decimo primeiro, e e o UNICO
+    // acrescentado pelo eixo proprio do tipo de entidade
+    // (`20261018000012`) -- esta lista e o que impede a entrada de ONG de
+    // trazer carona: se a projecao passar a devolver quem convidou, quem e o
+    // titular, a coordenada ou o `id`, este caso cai antes de qualquer portao.
     const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }));
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
       'city',
       'display_name',
       'distance_m',
+      'entity_kind',
       'kind',
       'neighborhood',
       'phone_e164',
@@ -163,6 +170,18 @@ void describe('a projecao publica da entrada', () => {
       'state',
       'verification',
     ]);
+  });
+
+  void it('a entrada de ONG nao traz nem um campo a mais que a comum', () => {
+    // ISCA (b) do lote: a ONG passa pela MESMA projecao, e por isso nao ha
+    // caminho em que ela exponha algo que a entrada comum nao exponha. O que
+    // muda entre as duas e o VALOR de `entity_kind`, nunca o conjunto de
+    // chaves.
+    const ong = projetarEntrada(entrada({ entityKind: 'organization' }));
+    const comum = projetarEntrada(entrada({ entityKind: 'professional' }));
+    assert.deepEqual(Object.keys(ong).sort(), Object.keys(comum).sort());
+    assert.equal(JSON.stringify(ong).includes('created_by'), false);
+    assert.equal(JSON.stringify(ong).includes('claimed_by'), false);
   });
 
   void it('NAO devolve identificador interno: o endereco e o slug (ADR-0010)', () => {
@@ -218,5 +237,44 @@ void describe('a projecao publica da entrada', () => {
     const projetada = projetarEntrada(entrada({ city: null, state: null, neighborhood: null }));
     assert.equal(projetada.city, null);
     assert.equal(projetada.neighborhood, null);
+  });
+});
+
+/**
+ * O TIPO DE ENTIDADE, eixo proprio (`20261018000012`).
+ *
+ * Iscas desligadas no codigo de producao em 18/10/2026, conferidas no disco,
+ * suite rodada, arquivo restaurado:
+ *
+ * | o que foi desligado | `fail` |
+ * |---|---|
+ * | `projetarEntrada` deixando de copiar `entityKind` para `entity_kind` | 3 |
+ * | `entity_kind` saindo como `kind` (os dois eixos confundidos) | 2 |
+ */
+void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
+  void it('a ONG projeta organization, e a atividade dela continua sendo a atividade', () => {
+    // E este o par que o eixo proprio existe para permitir: uma ONG que atende
+    // como clinica e `organization` + `clinic`, e nao um terceiro valor de
+    // `kind` que teria obrigado o APK instalado a entender valor novo.
+    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kind: 'clinic' }));
+    assert.equal(projetada.entity_kind, 'organization');
+    assert.equal(projetada.kind, 'clinic');
+  });
+
+  void it('entrada comum projeta professional', () => {
+    const projetada = projetarEntrada(entrada({ entityKind: 'professional' }));
+    assert.equal(projetada.entity_kind, 'professional');
+  });
+
+  void it('os dois eixos saem SEMPRE os dois, e nenhum substitui o outro', () => {
+    // Contrapeso da isca acima: se a projecao passasse a derivar um do outro --
+    // por exemplo devolvendo `kind: 'organization'` --, o contrato quebraria
+    // exatamente pela regra que o eixo proprio evitou
+    // (`response-property-enum-value-added`), e o APK receberia em `kind` um
+    // valor que ele nao conhece.
+    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kind: 'vet' }));
+    assert.equal(projetada.kind, 'vet');
+    assert.notEqual(projetada.kind, 'organization');
+    assert.equal(projetada.entity_kind, 'organization');
   });
 });

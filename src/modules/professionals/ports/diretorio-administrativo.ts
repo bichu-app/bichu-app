@@ -27,7 +27,7 @@
  */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type { Instant } from '../../../shared/types/brands.js';
-import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type {
   EntradaAdministrativa,
   OrigemDaEntrada,
@@ -54,6 +54,7 @@ export type OrdemDoDiretorioAdministrativo = 'name' | 'updated';
 export interface RecorteDeEntradas {
   readonly q?: string | undefined;
   readonly kind?: TipoDeProfissional | undefined;
+  readonly entityKind?: TipoDeEntidade | undefined;
   readonly status?: StatusDaEntrada | undefined;
   readonly city?: string | undefined;
   readonly state?: string | undefined;
@@ -73,6 +74,14 @@ export interface NovaEntrada {
   readonly id: string;
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * **Opcional, e ausente vale `professional`.** Opcional de proposito: o aceite
+   * da indicacao da comunidade (`fila-de-indicacoes.ts`, de outro ramo) monta
+   * uma `NovaEntrada` e nao escolhe tipo de entidade, e exigir o campo aqui
+   * obrigaria aquele caminho a ter opiniao sobre algo que ele nao coleta. O
+   * adaptador aplica o padrao, que e o mesmo `DEFAULT` da coluna.
+   */
+  readonly entityKind?: TipoDeEntidade | undefined;
   readonly displayName: string;
   readonly about: string | null;
   readonly city: string | null;
@@ -99,6 +108,8 @@ export interface NovaEntrada {
 export interface MudancaDaEntrada {
   readonly slug?: string;
   readonly kind?: TipoDeProfissional;
+  /** Nao aceita `null`, como `slug`, `kind` e `displayName`: a coluna e NOT NULL. */
+  readonly entityKind?: TipoDeEntidade;
   readonly displayName?: string;
   readonly about?: string | null;
   readonly city?: string | null;

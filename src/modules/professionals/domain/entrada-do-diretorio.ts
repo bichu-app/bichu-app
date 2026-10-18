@@ -30,16 +30,30 @@ import {
 } from './nivel-de-verificacao.js';
 
 /**
- * A lista fechada de `professionals.kind`, **espelhada** em
- * `src/shared/db/schema.ts`.
+ * A lista fechada de `professionals.kind`: a ATIVIDADE, o que se contrata.
+ * **Espelhada** em `src/shared/db/schema.ts`.
  *
- * **Nao ha valor para ONG**, e a ausencia e decisao pendente do modelo e nao
- * esquecimento: `professionals` nao tem `entity_kind`, `kind` nao tem valor
- * para organizacao, e `organization` so existe como tipo de VERIFICACAO e como
- * tipo de CONTA. Acrescentar um valor aqui decidiria por conta propria que uma
- * ONG e um tipo de profissional, que e justamente a pergunta.
+ * **Continua sem valor para ONG, e a ausencia agora e desenho concluido.** O
+ * texto anterior aqui dizia "decisao pendente do modelo" e nomeava a coluna que
+ * faltava; desde `20261018000012` ela existe, e o tipo de entidade e eixo
+ * proprio (`TipoDeEntidade`). ONG nao entra nesta lista porque **uma ONG nao e
+ * uma atividade**: ela tem atividade (`clinic`, `vet`) E tipo de entidade
+ * (`organization`), os dois ao mesmo tempo. Acrescentar valor aqui tambem
+ * quebraria o contrato -- `oasdiff`, `response-property-enum-value-added`, 12
+ * erros medidos em 18/10.
  */
 export type TipoDeProfissional = 'vet' | 'groomer' | 'walker' | 'sitter' | 'trainer' | 'clinic';
+
+/**
+ * A lista fechada de `professionals.entity_kind`: o QUE a entrada e.
+ *
+ * Mesmo nome e mesmos valores de `entity_verifications.entity_kind`
+ * (`20260921000002`), que carrega `organization` desde antes de existir linha
+ * -- a revisao de 17/09 do ADR-0011 generalizou a verificacao para ENTIDADE
+ * exatamente para isso. Segunda convencao para o mesmo conceito e a convencao
+ * que diverge.
+ */
+export type TipoDeEntidade = 'professional' | 'organization';
 
 /**
  * A grade em que o produto quantiza a localizacao do usuario (ADR-0006).
@@ -54,6 +68,7 @@ export const GRADE_EM_METROS = 100;
 export interface EntradaDoDiretorio {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
   readonly about: string | null;
   readonly city: string | null;
@@ -78,6 +93,7 @@ export interface VerificacaoPublica {
 export interface EntradaPublica {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly city: string | null;
   readonly state: string | null;
@@ -104,6 +120,7 @@ export function projetarEntrada(entrada: EntradaDoDiretorio): EntradaPublica {
   return {
     slug: entrada.slug,
     kind: entrada.kind,
+    entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     city: entrada.city,
     state: entrada.state,

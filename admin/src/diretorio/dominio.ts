@@ -12,23 +12,54 @@
  * `enum` do contrato ganhar um valor, o compilador do painel reprova aqui em vez
  * de a tela mostrar um codigo cru.
  *
- * ## NAO HA ONG NESTA LISTA, E ISSO NAO E UM ESQUECIMENTO
+ * ## ONG NAO ESTA NESTA LISTA, E AGORA ISSO E DESENHO E NAO FALTA
  *
  * O cliente pediu "estabelecimentos, profissionais, ongs, etc". Os dois
  * primeiros estao aqui: estabelecimento e `clinic`, e profissional sao os
- * outros cinco. **ONG nao tem onde ser uma linha do diretorio hoje**:
- * `professionals` nao tem `entity_kind` e `kind` nao tem valor para
- * organizacao. Isso e a decisao 9.1 de
- * `api/contrato-de-escrita-do-diretorio.md`, e a migracao `20260922000021` ja
- * recusou resolve-la por conta propria -- acrescentar `ngo` a lista decidiria
- * que ONG e um tipo de profissional, que e justamente a pergunta aberta.
+ * outros cinco. **ONG nao e uma ATIVIDADE, e por isso nao entra aqui** -- ela
+ * e um TIPO DE ENTIDADE, que desde a `20261018000012` tem eixo proprio em
+ * `TIPOS_DE_ENTIDADE`, abaixo.
+ *
+ * O texto anterior aqui dizia que "ONG nao tem onde ser uma linha do diretorio
+ * hoje" porque `professionals` nao tinha `entity_kind`. Ela tem. A decisao 9.1
+ * de `api/contrato-de-escrita-do-diretorio.md` esta respondida, e a resposta
+ * nao foi alargar esta lista: acrescentar valor a um `enum` que sai em resposta
+ * quebraria o contrato (`oasdiff`, `response-property-enum-value-added`, 12
+ * erros medidos em 18/10) e afirmaria que organizacao e um tipo de
+ * profissional. Uma ONG tem as DUAS coisas: atividade (`clinic`) e tipo de
+ * entidade (`organization`).
  */
 import type { Esquemas } from '../api/cliente.ts';
 
 export type Entrada = Esquemas['AdminDirectoryEntry'];
 export type TipoDaEntrada = Esquemas['ProfessionalKind'];
+export type TipoDeEntidadeDaEntrada = Esquemas['EntityKind'];
 export type StatusDaEntrada = Esquemas['DirectoryEntryStatus'];
 export type FaltaParaPublicar = Esquemas['AdminDirectoryEntryMissingField'];
+
+/**
+ * O rotulo de cada TIPO DE ENTIDADE. **Mapa proprio, e nao linha em
+ * `ATIVIDADES`**: os dois eixos sao perguntas diferentes na tela ("o que e?" e
+ * "o que faz?"), e uma ONG responde as duas. Juntar os dois num seletor so
+ * seria repetir no painel o erro que o eixo proprio evitou no contrato.
+ *
+ * O `satisfies Record<...>` vale como trava do mesmo jeito que o de
+ * `ATIVIDADES`: se `EntityKind` ganhar um valor no contrato, o compilador
+ * reprova aqui em vez de a tela mostrar um codigo cru.
+ */
+export const TIPOS_DE_ENTIDADE = {
+  professional: 'Profissional ou estabelecimento',
+  organization: 'ONG',
+} as const satisfies Record<TipoDeEntidadeDaEntrada, string>;
+
+/**
+ * A ordem do seletor. `professional` primeiro porque e o padrao do contrato e o
+ * caso comum; `organization` e a excecao que o operador escolhe de proposito.
+ */
+export const ORDEM_DOS_TIPOS_DE_ENTIDADE: readonly TipoDeEntidadeDaEntrada[] = [
+  'professional',
+  'organization',
+];
 
 /** O rotulo de cada atividade, no singular e como o operador fala. */
 export const ATIVIDADES = {
