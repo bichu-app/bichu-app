@@ -89,6 +89,12 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
     revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
     rotacionar: () => naoDeveriaTerChegado('rotacionar'),
+    // 18/10/2026: os dois membros chegaram no merge `87979b6d` (commit
+    // `1d2ccac1`, a foto do proprio usuario) e este duble nao os ganhou, entao
+    // `tsc -p tsconfig.json` reprovava a suite INTEIRA antes de rodar um caso.
+    // Recusam como todos os outros: o que este arquivo afirma e uma ausencia.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
     atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
     buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
     regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
