@@ -901,7 +901,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '65dcb5cd25c486a5e7d537aeaec19566828420d5'; // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095)
+const String _arvoreDasTelas = '70c03e253d9b516767f215e8b65df56238483e06'; // BICHUS-278, 17/10: a identidade visual entra em DUAS telas a pedido do cliente -- `abas.dart` ganha o `MarcaLockup` no topo do `Perfil` deslogado e `escanear/tela_leitor_de_qr.dart` ganha a plaquinha (`Moldura` + `MarcaSimbolo`) acima do campo do estado `digitando`, escondida com o teclado aberto. Sao dois widgets de marca que ja existiam e nenhum asset novo; nenhuma porta de aparelho encostada -- as duas telas nao importam camera, galeria, permissao, localizacao nem `dart:io` (antes: 65dcb5c)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

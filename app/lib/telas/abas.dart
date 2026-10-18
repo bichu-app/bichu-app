@@ -8,6 +8,7 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
+import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
@@ -306,6 +307,22 @@ class AbaPerfil extends StatelessWidget {
             titulo: destino.rotulo,
             reforco: destino.reforcoDaPagina,
             filhos: <Widget>[
+              // A MARCA NO ALTO DA PORTA DE ENTRADA (pedido do cliente,
+              // 17/10/2026: "coloque a imagem da identidade visual na pagina
+              // do perfil para entrar").
+              //
+              // E o `MarcaLockup` que `widgets/marca.dart` ja desenha a partir
+              // de `design/marca/vetor/lockup-sem-descritor.svg`: a identidade
+              // que o repositorio ja tem, resolvida contra os papeis de cor do
+              // tema. Nao e asset novo -- nao pesa um byte no APK e acompanha
+              // claro e escuro sozinho, porque a tinta sai de `BichuCores` e
+              // nao de um PNG assado numa cor so.
+              //
+              // **Nao e a linguagem do site.** As pecas expressivas da pasta
+              // da marca (a ilustracao de tres pessoas, o cartao de frase
+              // manuscrita) sao do institucional; o que entra aqui e o
+              // logotipo, que e vocabulario do app e esta no §8.4.
+              const _MarcaDoPerfilDeslogado(),
               BotaoPrimario(
                 rotulo: 'Entrar',
                 aoTocar: () => context.push(Rotas.entrar),
@@ -374,6 +391,35 @@ class AbaPerfil extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// O logotipo no alto do `Perfil` deslogado.
+///
+/// **Decorativo, e por isso `ExcludeSemantics`.** Quem usa leitor de tela
+/// chega nesta tela ja ouvindo `Perfil` da barra de topo e a linha de reforco
+/// logo abaixo; um "Bichu" anunciado entre as duas e antes de `Entrar` so
+/// adiaria o unico conteudo que a tela tem, que sao os tres controles. A
+/// imagem aqui nao carrega informacao: ela nao diz nada que o texto ja nao
+/// diga, e esse e exatamente o criterio de decorativo do WCAG 1.1.1.
+///
+/// **Sem frase junto.** A tela nao ganhou nenhuma linha de texto nova; o
+/// cliente reprovou texto a mais em tela e o logotipo nao precisa de legenda.
+///
+/// A largura e 180 dp: uma vez e meia o piso medido de
+/// [MarcaLockup.pisoDeLargura] (§3.10), e cabe com folga nos 328 dp uteis de
+/// uma tela de 360 dp, que e a mais estreita que o produto mira.
+class _MarcaDoPerfilDeslogado extends StatelessWidget {
+  const _MarcaDoPerfilDeslogado();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: BichuEspaco.e8),
+        child: Center(child: MarcaLockup(largura: 180)),
+      ),
     );
   }
 }

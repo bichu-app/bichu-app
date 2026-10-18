@@ -17,6 +17,8 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/marca.dart';
+import '../../widgets/moldura.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../pet/textos_do_cadastro.dart';
 import 'codigo_lido_do_qr.dart';
@@ -665,6 +667,15 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
         faixa: _faixa,
         erroDoCampo: _erroDoCampo,
         aoMudar: _conferirEnquantoDigita,
+        // O TECLADO E MEDIDO AQUI, E NAO LA DENTRO, e a diferenca nao e de
+        // estilo. `Scaffold` com `resizeToAvoidBottomInset` -- que e o padrao
+        // -- ENCOLHE o corpo e entrega a ele um `MediaQuery` com
+        // `viewInsets.bottom` **zerado**, porque ja tratou o teclado. Quem
+        // perguntar pelo teclado de dentro do corpo recebe "fechado" com o
+        // teclado aberto na cara. Este `context` e o do `State`, acima do
+        // `Scaffold`, e e o unico ponto desta tela que ve o numero de verdade.
+        // Medido no emulador: de dentro do corpo a plaquinha nao sumia.
+        tecladoAberto: MediaQuery.viewInsetsOf(context).bottom > 0,
       ),
     };
   }
@@ -1209,6 +1220,7 @@ class _Digitacao extends StatelessWidget {
     required this.faixa,
     required this.erroDoCampo,
     required this.aoMudar,
+    required this.tecladoAberto,
   });
 
   final TextEditingController controlador;
@@ -1220,6 +1232,10 @@ class _Digitacao extends StatelessWidget {
 
   final ValueChanged<String> aoMudar;
 
+  /// Se o teclado esta na tela. **Vem de fora**, pelo motivo escrito em
+  /// `_corpo()`: daqui de dentro do `Scaffold` a resposta e sempre "nao".
+  final bool tecladoAberto;
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -1230,6 +1246,21 @@ class _Digitacao extends StatelessWidget {
           // escolhido: a saida fica por cima desta lista e o rotulo do campo
           // e a primeira coisa que ela cobria.
           const SizedBox(height: alturaDaSaidaSobreposta),
+          // A PLAQUINHA, acima do campo (pedido do cliente, 17/10/2026:
+          // "na pagina de digitar o codigo do pet, coloque uma imagem para
+          // deixar a pagina mais bonita e se conectar mais com o usuario").
+          //
+          // **Ela some com o teclado aberto, e isso e a parte que importa.**
+          // Esta e uma tela em que a pessoa DIGITA: decoracao que divide a
+          // altura util com o teclado empurra o campo para fora da dobra e
+          // troca bonito por inutilizavel. Com o teclado na tela a plaquinha
+          // sai da lista e o campo sobe para onde estava antes desta mudanca
+          // -- a tela fica como era enquanto se digita, e bonita quando se
+          // chega nela. Quem mede o teclado e `_corpo()`; ver o porque la.
+          if (!tecladoAberto) ...<Widget>[
+            const _PlaquinhaDaMarca(),
+            const SizedBox(height: BichuEspaco.e6),
+          ],
           BichuField(
             rotulo: TextosDoCadastro.digitarOCodigo,
             controlador: controlador,
@@ -1258,6 +1289,55 @@ class _Digitacao extends StatelessWidget {
             FaixaDeAviso(texto: faixa!.texto),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// A plaquinha da marca, acima do campo de codigo.
+///
+/// **De onde sai a imagem.** Nada de asset novo: e a [Moldura] -- a forma da
+/// plaquinha que o §1 do design system chama de "o que amarra o sistema",
+/// porque e o objeto que a pessoa tem na mao -- com o simbolo da marca que
+/// `widgets/marca.dart` desenha a partir de `design/marca/vetor/simbolo.svg`.
+/// Os dois ja estao no app. O APK nao cresce e as duas cores saem do tema, e
+/// nao de um PNG assado numa cor so.
+///
+/// **Por que a plaquinha e nao outra peca.** O codigo que se digita aqui esta
+/// impresso no verso de uma plaquinha; desenhar a propria plaquinha e a tela
+/// mostrando o objeto que a pessoa esta segurando. As pecas expressivas de
+/// `design/marca/referencia/` -- a ilustracao de tres pessoas, a frase
+/// manuscrita sobre mancha -- sao do site institucional e ficam de fora.
+///
+/// **Decorativa.** [Moldura] ja e `ExcludeSemantics`, entao o leitor de tela
+/// nao a anuncia: ela nao diz nada que o rotulo do campo logo abaixo nao
+/// diga. Nao ha frase nova junto dela.
+///
+/// Medido (formula de luminancia relativa da WCAG 2.1), o simbolo contra o
+/// fundo da moldura: **7,13:1 no tema claro** (`#9E0B3A` sobre `#F9ECF0`) e
+/// **7,02:1 no escuro** (`#E79DB4` sobre `#54031D`). Os dois passam com folga
+/// o piso de 3:1 do SC 1.4.11 para objeto grafico. A lingua e os tracos de
+/// brilho continuam Manteiga nos dois temas, pela excecao registrada no §4 de
+/// `design/marca/README.md`.
+class _PlaquinhaDaMarca extends StatelessWidget {
+  const _PlaquinhaDaMarca();
+
+  /// 96 dp de largura, 105,6 de altura pela proporcao da moldura. O simbolo
+  /// dentro dela fica nos 48 dp do piso de reducao medido no §3.10 -- o menor
+  /// tamanho em que a variante cheia ainda serve.
+  static const double _largura = 96;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    return Center(
+      child: Moldura(
+        largura: _largura,
+        estado: EstadoDaMoldura.repouso,
+        filho: ColoredBox(
+          color: cores.primaryContainer,
+          child: const Center(child: MarcaSimbolo(altura: 48)),
+        ),
       ),
     );
   }
