@@ -572,11 +572,24 @@ void main() {
       expect(post.single.body, isEmpty);
 
       expect(find.text('Pedido enviado'), findsOneWidget);
+      // **O texto ENCURTOU em 18/10/2026**, por pedido literal do cliente:
+      // *"remova todos esses textos descritivos das paginas, textos de apoio,
+      // explicacao, isso esta deixando o app poluido, cheio de informacao e
+      // feio em relacao ao designer"*. O commit e o `b6b6f31`, e o diff dele
+      // nesta linha e exatamente:
+      //
+      //   - 'Se o pedido for aprovado até o dia do encontro, o local e os
+      //     detalhes aparecem aqui.'
+      //   + 'Se for aprovado, o local aparece aqui.'
+      //
+      // A isca pedia a frase longa -- e, nela, `do evento` onde o codigo
+      // antigo dizia `do encontro`, o que mostra que ela ja nasceu de uma
+      // terceira redacao. A caixa do pedido **continua dizendo** o que vale
+      // para os dois casos (UX 28.7.3), que e o que o caso mede; o que saiu
+      // foi o paragrafo de apoio, e a decisao preservou de proposito erro,
+      // recusa e rotulo acessivel.
       expect(
-        find.text(
-          'Se o pedido for aprovado até o dia do evento, o local e os '
-          'detalhes aparecem aqui.',
-        ),
+        find.text('Se for aprovado, o local aparece aqui.'),
         findsOneWidget,
       );
 

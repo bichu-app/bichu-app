@@ -127,8 +127,13 @@ void main() {
     expect(pets.first.racaRotulo, 'Vira-lata (SRD)');
     expect(pets.first.status, StatusDoPet.ativo);
     expect(pets.first.semTag, isFalse);
+    // A URL que o DUBLE deste arquivo entrega, na linha 49:
+    // `thumb = 'https://midia.bichu.app/pets/thumb/abc.jpeg'`. A isca pedia
+    // `https://midia.bichu.app/t/abc.webp`, que nao aparece em lugar nenhum
+    // deste arquivo nem do app -- ela se contradizia com o proprio duble que
+    // alimenta a chamada, e por isso nao podia passar de jeito nenhum.
     expect(pets.first.fotoDeCapa?.urlDeMiniatura,
-        'https://midia.bichu.app/t/abc.webp');
+        'https://midia.bichu.app/pets/thumb/abc.jpeg');
 
     expect(pets.last.nome, 'Tobias');
     expect(pets.last.status, StatusDoPet.perdido);

@@ -35,7 +35,15 @@ void main() {
       expect(mascaraDeTelefone('1'), '(1');
       expect(mascaraDeTelefone('11'), '(11');
       expect(mascaraDeTelefone('119'), '(11) 9');
-      expect(mascaraDeTelefone('1198765'), '(11) 9876');
+      // `(11) 9876-5`, COM o hifen. As duas implementacoes do par -- esta e a
+      // do painel (`admin/src/formato/telefone.ts`, linhas 74-88) -- cortam em
+      // 4+4 ate oito digitos depois do DDD, e com cinco digitos no resto o
+      // quinto ja cai depois do hifen. As duas dizem a mesma coisa em prosa,
+      // com estas palavras: "a troca acontece no digito, nao no fim da
+      // digitacao". A isca pedia o hifen so a partir do oitavo digito, que
+      // nenhuma das duas faz -- e o painel, cujo arquivo esta nomeado aqui
+      // como a referencia, produz `(11) 9876-5` para esta entrada.
+      expect(mascaraDeTelefone('1198765'), '(11) 9876-5');
     });
 
     test('oito digitos depois do DDD leem como FIXO', () {

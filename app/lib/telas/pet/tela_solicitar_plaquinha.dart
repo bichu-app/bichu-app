@@ -108,10 +108,23 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   bool _enviado = false;
   MensagemDeErro? _faixa;
 
+  /// Ver o mesmo sinalizador em F1.4, F1.6 e na edicao do pet: `Escopo` e
+  /// `InheritedWidget`, e le-lo em `initState` e erro de framework -- o
+  /// `dependOnInheritedWidgetOfExactType` estoura antes de `initState`
+  /// terminar, a listagem nunca sai e a tela abre dizendo "servidor fora".
+  bool _iniciou = false;
+
   @override
   void initState() {
     super.initState();
     _petEscolhido = widget.petIdInicial;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_iniciou) return;
+    _iniciou = true;
     _carregarPets();
   }
 

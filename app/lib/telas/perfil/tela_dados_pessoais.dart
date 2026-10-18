@@ -148,7 +148,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         // **Mostra formatado, guarda E.164.** O que esta no campo e a
         // gramatica brasileira que se le; quem produz valor de contrato e
         // `telefoneEmE164`, na hora de enviar.
-        _telefone.text = mascaraDeTelefone(dados.telefone ?? '');
+        // `telefoneDoE164`, e nao `mascaraDeTelefone`: o que vem do servidor
+        // e E.164 (`+5511987654321`), e a mascara de DIGITACAO descarta o `+`
+        // e le os treze digitos como se fossem locais -- o campo abria com
+        // `(55) 11987-6543`, e um `Salvar` gravava `+5555119876543` por cima
+        // do telefone certo. Ver a prosa de `telefoneDoE164`.
+        _telefone.text = telefoneDoE164(dados.telefone);
         // **Mascarado na LEITURA tambem**, e nao so na digitacao: o
         // formatador do campo roda em `formatEditUpdate`, que nao e chamado
         // quando a tela escreve no controlador. Sem esta linha o CEP salvo

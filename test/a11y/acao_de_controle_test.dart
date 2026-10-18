@@ -249,7 +249,13 @@ void main() {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
       await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
-      await tocar(tester, find.byTooltip('Filtrar'));
+      // **`Filtrar e ordenar, Mais perto`**, e nao `Filtrar`. Desde 17/10 ha
+      // UM controle de recorte na barra, e o nome acessivel dele e composto
+      // pelo verbo mais o estado (`barra_de_listagem.dart`, linhas 313-331):
+      // sem filtro ativo e com ordem oferecida ele sai como `Filtrar e
+      // ordenar, Mais perto`. O `byTooltip('Filtrar')` achava zero e `tocar`
+      // estourava `Bad state: No element`.
+      await tocar(tester, find.byTooltip('Filtrar e ordenar, Mais perto'));
 
       // As pastilhas de atividade e de verificacao. `tocaveis` e nao contagem:
       // a folha fica sobre a casca e o que sobra embaixo na arvore nao e
@@ -262,7 +268,22 @@ void main() {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
       await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
-      await tocar(tester, find.byTooltip('Ordenar, Mais perto'));
+      // **A ordem passou a morar DENTRO da folha de filtros em 17/10**, e o
+      // controle proprio de ordenacao deixou de existir: nao ha mais um
+      // `Ordenar, Mais perto` na barra para tocar, e o `byTooltip` dele achava
+      // zero.
+      //
+      // Para este caso nao virar copia do de cima, ele varre a folha no OUTRO
+      // estado: com um filtro JA APLICADO. E ai que a folha ganha o `Limpar` e
+      // a pastilha nasce marcada -- controles que o caso de cima nao alcanca,
+      // e e isso que mantem as duas varreduras medindo coisas diferentes.
+      await tocar(tester, find.byTooltip('Filtrar e ordenar, Mais perto'));
+      await tocar(tester, find.text('Veterinário'));
+      await tocar(tester, find.text('Aplicar'));
+      await tocar(
+        tester,
+        find.byTooltip('Filtrar e ordenar, 1 filtro ativo, Mais perto'),
+      );
 
       exigirTodoBotaoComAcao(tester, tela: 'perto-ordenacao', tocaveis: true);
       handle.dispose();

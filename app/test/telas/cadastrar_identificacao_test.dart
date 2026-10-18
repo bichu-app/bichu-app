@@ -76,14 +76,43 @@ void main() {
   testWidgets('a ajuda da raca diz que vira-lata esta na lista', (tester) async {
     await abrirF13(tester);
 
-    // Sete palavras que removem o medo de quem tem um SRD diante de uma lista
-    // fechada. Se sumirem, quem mais se beneficia do codigo fechado e quem
-    // mais vai achar que o animal dele e uma excecao.
+    // **O PARAGRAFO DE APOIO SAIU EM 18/10/2026**, por pedido literal do
+    // cliente: *"remova todos esses textos descritivos das paginas, textos
+    // de apoio, explicacao, isso esta deixando o app poluido, cheio de
+    // informacao e feio em relacao ao designer"*. O commit e o `b6b6f31`, e
+    // ele apagou as proprias constantes de `textos_do_cadastro.dart` (41
+    // linhas), atualizando os casos da `Rede` e deixando os do cadastro para
+    // tras -- e por isso estes ficaram pedindo frases que o produto nao
+    // escreve mais.
+    //
+    // O caso **virou do avesso e nao foi apagado**: a ausencia da frase e
+    // afirmada, e junto com ela o que resolve o problema que a frase
+    // resolvia. A decisao preservou de proposito erro, validacao, rotulo
+    // acessivel e a ultima linha de estado vazio -- e quem cobra isso e
+    // `test/telas/limpeza_nao_leva_o_protegido_test.dart`, criado no mesmo
+    // commit.
+    //
+    // O que removia o medo de quem tem um SRD era a frase; o que o RESOLVE e
+    // `Vira-lata (SRD)` estar NA LISTA, e e isso que o caso afirma agora --
+    // pela lista fechada, que e o que o cruzamento le.
     expect(
       find.textContaining('Vira-lata está nela'),
-      findsOne,
-      reason: 'REPROVA: a ajuda da raca perdeu a mencao a vira-lata. E a '
-          'frase que mais trabalha nesta tela.',
+      findsNothing,
+      reason: 'REPROVA: o paragrafo de apoio da raca voltou a tela. O cliente '
+          'pediu a saida dele em 18/10.',
+    );
+    // A especie primeiro: o seletor de raca nasce DESABILITADO, porque a lista
+    // e por especie. Sem este toque o `InkWell` do seletor nao tem acao, a
+    // folha nao abre e a opcao nao existe para ser achada.
+    await rolarAte(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cão'));
+    await escolherRaca(tester, 'Vira-lata (SRD)');
+    expect(
+      tester.widget<SeletorDeLista>(find.byType(SeletorDeLista).first).selecionado,
+      'srd',
+      reason: 'REPROVA: `Vira-lata (SRD)` nao e escolhivel na lista fechada. '
+          'A frase saiu; a opcao nao pode sair com ela -- quem tem um SRD '
+          'precisa se achar na lista, e e a lista que o cruzamento usa.',
     );
   });
 
@@ -121,10 +150,25 @@ void main() {
         reason: 'REPROVA: `Outra` escolhida e o campo livre nao apareceu. Sem '
             'ele, quem tem um Akita nao consegue dizer o que o animal e.',
       );
-      // A ajuda diz ONDE o texto aparece. Ela deliberadamente NAO diz que o
-      // campo nao cruza: isso e verdade, e relevante para nos, e ruido para
-      // quem esta cadastrando o proprio cachorro.
-      expect(find.textContaining('Aparece na ficha'), findsOne);
+      // **O PARAGRAFO DE APOIO SAIU EM 18/10/2026**, por pedido literal do
+      // cliente: *"remova todos esses textos descritivos das paginas, textos
+      // de apoio, explicacao, isso esta deixando o app poluido, cheio de
+      // informacao e feio em relacao ao designer"*. O commit e o `b6b6f31`, e
+      // ele apagou as proprias constantes de `textos_do_cadastro.dart` (41
+      // linhas), atualizando os casos da `Rede` e deixando os do cadastro para
+      // tras -- e por isso estes ficaram pedindo frases que o produto nao
+      // escreve mais.
+      //
+      // O caso **virou do avesso e nao foi apagado**: a ausencia da frase e
+      // afirmada, e junto com ela o que resolve o problema que a frase
+      // resolvia. A decisao preservou de proposito erro, validacao, rotulo
+      // acessivel e a ultima linha de estado vazio -- e quem cobra isso e
+      // `test/telas/limpeza_nao_leva_o_protegido_test.dart`, criado no mesmo
+      // commit.
+      //
+      // Aqui a frase era a ajuda do campo livre. O que o caso mede de verdade
+      // -- que o campo APARECE, logo acima -- nao mudou.
+      expect(find.textContaining('Aparece na ficha'), findsNothing);
       expect(
         find.textContaining('cruzamento'),
         findsNothing,

@@ -129,7 +129,21 @@ void _exigirRotuloEAcao(
   required String onde,
 }) {
   final nos = _todosOsNos(tester);
-  final candidatos = nos.where((n) => n.label == rotulo).toList();
+  // **`label` OU `tooltip`.** O nome acessivel de um `IconButton` com
+  // `tooltip:` e publicado pelo Flutter no campo `SemanticsNode.tooltip`, e
+  // `label` fica VAZIO -- medido nesta arvore: o no do glifo sai como
+  // `label="" tooltip="Escanear uma tag" btn=true tap=true`. Os dois campos
+  // sao anunciados por TalkBack e por VoiceOver, e o icone de abrir o submenu
+  // da casca (`tooltip="Abrir o submenu desta seção"`), que o produto publica
+  // desde setembro, declara o nome dele exatamente assim.
+  //
+  // Olhar so `label` fazia esta isca reprovar um controle que TEM nome, e
+  // reprovar pelo motivo errado: a conclusao dela seria "apague o tooltip",
+  // que e o oposto do conserto. A pergunta continua a mesma -- o leitor de
+  // tela consegue dizer o nome disto? --, e agora ela olha onde a resposta
+  // esta.
+  final candidatos =
+      nos.where((n) => n.label == rotulo || n.tooltip == rotulo).toList();
 
   expect(
     candidatos,

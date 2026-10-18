@@ -364,7 +364,27 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     // A lista saiu da tela: o controle da `AppBar` sai junto. Sem isto a
     // barra de topo guardaria um `Filtros` que nao abre mais nada --
     // exatamente o toque sem desfecho que o criterio 2 proibe.
-    _slot?.publicar(null);
+    //
+    // **Depois do quadro, e nao aqui dentro** -- a mesma regra que o `build`
+    // logo abaixo ja seguia, e que este metodo violava. `dispose` roda com a
+    // arvore TRAVADA: mexer no `ValueNotifier` que a casca escuta marca esse
+    // ancestral sujo durante a desmontagem, e o Flutter afirma contra isso com
+    // `setState() or markNeedsBuild() called when widget tree was locked`.
+    //
+    // O notificador e da CASCA e vive mais que este estado, entao limpar
+    // depois do quadro e seguro; o `try` cobre o unico caso em que ele nao
+    // vive mais -- o app inteiro sendo descartado no mesmo quadro --, e ai nao
+    // ha barra de topo para limpar.
+    final slot = _slot;
+    if (slot != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          slot.publicar(null);
+        } on FlutterError {
+          // A casca foi embora junto: nao ha o que limpar.
+        }
+      });
+    }
     super.dispose();
   }
 

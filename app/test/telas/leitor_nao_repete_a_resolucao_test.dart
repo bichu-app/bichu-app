@@ -101,7 +101,17 @@ void main() {
       camera: CameraDeTeste(EstadoDaPermissao.concedida),
       leitorDeQr: leitor,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+    // **A porta de escanear virou ICONE NA BARRA em 18/10/2026** (pedido
+    // literal do cliente). Em `Pets` ela e `AcaoDeCriarNaBarra` com
+    // `Icons.qr_code_2` (`lib/telas/abas.dart`, linhas 119-122); o botao de
+    // largura total com esse texto so sobrou no `Perfil` DESLOGADO, e o
+    // `widgetWithText(OutlinedButton, ...)` achava zero.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ),
+    );
     await tester.pumpAndSettle();
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();
@@ -183,8 +193,13 @@ void main() {
             'tocar em nada, e e isso que o `push` existe para permitir. O '
             'portao fecha na ida e ABRE na volta.',
       );
+      // `textContaining`, e nao `text`: a tela escreve a frase inteira --
+      // `Este é o Nina.` --, e `find.text` compara a string TODA. Medido nesta
+      // arvore: depois da segunda leitura a tela mostra `Este é o Nina.`, ou
+      // seja, ela TROCOU de pet como o caso afirma; o que nao existia era um
+      // `Text` cujo conteudo fosse exatamente `Nina`.
       expect(
-        find.text('Nina'),
+        find.textContaining('Nina'),
         findsWidgets,
         reason:
             'REPROVA: a segunda plaquinha resolveu no servidor e a tela nao '

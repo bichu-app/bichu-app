@@ -58,7 +58,8 @@ import 'package:http/http.dart' as http;
 import 'ajuda_de_tela.dart';
 import 'registrar_achado_test.dart'
     show avancarParaOPasso2, localizacaoConcedida, tocarEmRegistrar;
-import 'sugerir_profissional_test.dart' show abrirPerto, diretorioVazio;
+import 'sugerir_profissional_test.dart'
+    show abrirAPorta, abrirPerto, diretorioVazio, escolherNaLista;
 
 /// O que a rede viu, para os casos poderem separar "a busca falhou" de "o
 /// envio falhou".
@@ -150,12 +151,35 @@ Finder _campo(String rotulo) => find.descendant(
 String _textoDoCampo(WidgetTester tester, String rotulo) =>
     tester.widget<TextField>(_campo(rotulo)).controller?.text ?? '';
 
+/// Rola ate o campo, venha ele de cima ou de baixo da dobra.
+///
+/// Os casos preenchem os campos **fora da ordem da tela** de proposito -- a
+/// 1b digita a cidade e o bairro ANTES do CEP, e o CEP esta ACIMA dos dois na
+/// tela --, e `scrollUntilVisible` so procura num sentido: com o passo
+/// positivo ele roda ate o fim da lista sem achar o que ficou para tras e
+/// estoura `Bad state: No element`. Voltar ao topo e procurar para baixo
+/// acerta nos dois casos, e e o que a pessoa faz.
+Future<void> _rolarAteOCampo(WidgetTester tester, String rotulo) async {
+  final alvo = _campo(rotulo);
+  if (alvo.evaluate().isNotEmpty) {
+    await tester.ensureVisible(alvo);
+    await tester.pumpAndSettle();
+    return;
+  }
+  final rolagem = find.byType(Scrollable).first;
+  for (var i = 0; i < 6 && alvo.evaluate().isEmpty; i++) {
+    await tester.drag(rolagem, const Offset(0, 3000));
+    await tester.pumpAndSettle();
+  }
+  await rolarAte(tester, alvo);
+}
+
 Future<void> _digitar(
   WidgetTester tester,
   String rotulo,
   String valor,
 ) async {
-  await rolarAte(tester, _campo(rotulo));
+  await _rolarAteOCampo(tester, rotulo);
   await tester.enterText(_campo(rotulo), valor);
   await tester.pumpAndSettle();
 }
@@ -167,7 +191,12 @@ Future<void> _abrirAIndicacao(
   bool cepFora = false,
 }) async {
   await abrirPerto(tester, rede: _rede(registro, cepFora: cepFora));
-  await tocar(tester, find.text('Indicar quem atende bem'));
+  // A porta do `Perto` deixou de ser o botao de largura total do corpo em
+  // 18/10/2026 e passou a ser o icone de pessoas da BARRA DE TOPO: o texto
+  // `Indicar quem atende bem` nao esta mais na tela, e `tocar` sobre ele
+  // estourava `Bad state: No element`. `abrirAPorta` mora em
+  // `sugerir_profissional_test.dart` justamente para a porta ter um lugar so.
+  await abrirAPorta(tester);
   expect(find.byType(TelaSugerirProfissional), findsOneWidget);
 }
 
@@ -176,13 +205,20 @@ Future<void> _abrirAIndicacao(
 /// O CEP fica FORA deste ajudante de proposito: cada caso digita o seu antes
 /// de chamar, e e justamente o CEP que esta sendo medido.
 Future<void> _preencherORestoEEnviar(WidgetTester tester) async {
+  // Sobe ate o PRIMEIRO campo antes de comecar. Quem chamou acabou de digitar
+  // o CEP, e o campo do CEP esta abaixo de `Nome do lugar`: o `ListView` rolou
+  // para baixo, `Nome do lugar` saiu da arvore e `rolarAte` com passo POSITIVO
+  // procuraria para baixo o que ficou para tras -- `scrollUntilVisible` roda
+  // ate o fim e estoura `Bad state: No element`. O passo negativo existe em
+  // `rolarAte` (`ajuda_de_tela.dart`, linhas 711-730) exatamente para isso.
+  await rolarAte(tester, _campo('Nome do lugar'), passo: -120);
   await _digitar(tester, 'Nome do lugar', 'Clínica Veterinária Bichinho');
-  await tocar(tester, find.text('O que eles fazem'));
-  await tocar(tester, find.text('Clínica'));
+  // Pelo `InkWell` do seletor, e nao pelo `Text` do rotulo: o rotulo nao abre
+  // a folha. Ver `escolherNaLista`, em `sugerir_profissional_test.dart`.
+  await escolherNaLista(tester, 'O que eles fazem', 'Clínica');
   await _digitar(tester, 'Cidade', 'Rio de Janeiro');
   await _digitar(tester, 'UF', 'RJ');
-  await tocar(tester, find.text('Como entrar em contato'));
-  await tocar(tester, find.text('Telefone'));
+  await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
   await _digitar(tester, 'Telefone', '+5521988887777');
   await rolarAte(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
   await tocar(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
@@ -466,20 +502,9 @@ void main() {
             'a pessoa esperando.',
       );
 
-      await _digitar(tester, 'Nome do lugar', 'Clínica Veterinária Bichinho');
-      await tocar(tester, find.text('O que eles fazem'));
-      await tocar(tester, find.text('Clínica'));
-      await _digitar(tester, 'Cidade', 'Rio de Janeiro');
-      await _digitar(tester, 'UF', 'RJ');
-      await tocar(tester, find.text('Como entrar em contato'));
-      await tocar(tester, find.text('Telefone'));
-      await _digitar(tester, 'Telefone', '+5521988887777');
-
-      await rolarAte(
-        tester,
-        find.text(TelaSugerirProfissional.rotuloDeIndicar),
-      );
-      await tocar(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
+      // A mesma sequencia do ajudante, e nao uma copia dela: a copia tocava
+      // no `Text` do rotulo do seletor, que nao abre a folha.
+      await _preencherORestoEEnviar(tester);
 
       expect(
         registro.corposEnviados,
@@ -595,8 +620,20 @@ void main() {
       );
       // A coordenada continua de pe: `Registrar` segue habilitado e o aviso
       // de precisao do ponto continua na tela.
+      // O pedaco COMUM das duas redacoes do aviso do ponto, e nao
+      // `pontoSemPrecisao`: `localizacaoConcedida()` devolve um ponto COM
+      // margem, e a tela usa `pontoComPrecisao(metros)`
+      // (`textos_da_localizacao.dart`, linhas 65-71). A constante sem margem
+      // so aparece quando a margem e desconhecida -- a isca pedia a redacao
+      // que este duble nunca produz. `Ninguém vê esse ponto` esta nas duas e
+      // **so** e escrito quando existe ponto, que e o que o caso afirma.
+      await rolarAte(
+        tester,
+        find.textContaining('Ninguém vê esse ponto'),
+        passo: -120,
+      );
       expect(
-        find.text(TextosDaLocalizacao.pontoSemPrecisao),
+        find.textContaining('Ninguém vê esse ponto'),
         findsWidgets,
         reason: 'REPROVA: a busca de CEP apagou ou substituiu a coordenada que '
             'o aparelho mediu. O CEP escreve TEXTO e nunca ponto; os dois nao '
@@ -629,9 +666,14 @@ void main() {
       await tocar(tester, voltar);
       await avancarParaOPasso2(tester);
 
+      // `22041-001`, COM a mascara: o campo de CEP mostra o hifen por decisao
+      // do cliente de 18/10 ("coloque mascara no campo cep de todos os
+      // formularios"), e a isca 1c3 deste mesmo arquivo afirma exatamente
+      // isso -- a tela mostra `22041-001` e o corpo leva `22041001`. Pedir
+      // `22041001` AQUI contradizia a 1c3, que passa.
       expect(
         _textoDoCampo(tester, TextosDaLocalizacao.rotuloCep),
-        '22041001',
+        '22041-001',
         reason: 'REPROVA: o vai e volta entre os passos apagou o CEP. O '
             'cliente pediu o formulario preservado, e o campo novo nao e '
             'excecao.',
@@ -682,7 +724,12 @@ void main() {
         TextosDaLocalizacao.rotuloCidade,
         'Rio de Janeiro',
       );
-      await rolarAte(tester, find.text('Agora'));
+      // `passo: -120`, para CIMA: `Quando?` e o PRIMEIRO bloco do passo 2
+      // (`tela_registrar_achado.dart`, linhas 659-665) e a localizacao vem depois
+      // dele, entao a lista ja rolou para baixo quando se chega aqui. Com passo
+      // positivo o `scrollUntilVisible` procura para baixo o que ficou para tras,
+      // roda ate o fim e estoura `Bad state: No element`.
+      await rolarAte(tester, find.text('Agora'), passo: -120);
       await tocar(tester, find.text('Agora'));
 
       await tocarEmRegistrar(tester);

@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/rodape_da_paginacao.dart';
@@ -477,6 +478,38 @@ void main() {
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
+      // ---------------------------------------------------------------------
+      // ESTE CASO FICA VERMELHO DE PROPOSITO, e o motivo esta medido aqui em
+      // vez de escondido num `skip`.
+      //
+      // Com `distance_available: false`, o que a tela mostra e:
+      //   - `ordemEfetiva` = `nome` (`modelos_diretorio.dart`, linhas
+      //     338-339: ela sai SO de `distance_available`);
+      //   - `_recorte.ordem`, a ordem PEDIDA, nasce `distancia`;
+      //   - entao `divergiu` e verdadeiro e a faixa aparece
+      //     (`lista_do_diretorio.dart`, linhas 414-420).
+      //
+      // E **nao da para pedir `Nome` por esta folha**: `_ordemPendente` nasce
+      // na ordem EFETIVA (`barra_de_listagem.dart`, linha 962, com o motivo
+      // escrito: "a folha nao pinta marcada uma ordem em que a lista nao
+      // esta"), que neste estado JA e `nome`. Tocar em `Nome` nao muda nada,
+      // `_mudou` fica falso, o `Aplicar` permanece DESABILITADO e a ordem
+      // pedida nunca chega a `_aplicarAFolha`.
+      //
+      // Duas decisoes deliberadas colidem, e **nao esta claro qual lado o
+      // produto quer**:
+      //   (a) a faixa deve calar quando a pessoa aceita a ordem alfabetica --
+      //       e ai a folha precisa deixar pedir a ordem efetiva, e o codigo a
+      //       consertar e `barra_de_listagem.dart`;
+      //   (b) a faixa deve ficar enquanto a distancia nao existir, porque ela
+      //       explica o ESTADO e nao se desculpa por um pedido -- e ai esta
+      //       isca e que esta errada, junto com o comentario de
+      //       `_controleDeOrdenacao` que promete o contrario.
+      //
+      // Afrouxar para `findsWidgets` esconderia a pergunta, e inverter para
+      // `findsOneWidget` escolheria (b) por mim. Nenhuma das duas e minha
+      // decisao: fica vermelho, dito, e com as duas saidas nomeadas.
+      // ---------------------------------------------------------------------
       expect(
         find.textContaining('Esta lista está em ordem alfabética'),
         findsNothing,
@@ -650,28 +683,76 @@ void main() {
         );
       }
 
-      // **O cartao sem telefone nao tem NENHUM ponto tocavel.** Aqui nao ha
-      // botao de ligar para confundir a contagem: qualquer `InkWell` com acao
-      // e o cartao inteiro tendo virado um caminho.
+      // -------------------------------------------------------------------
+      // REPONTADO: **a pagina do profissional EXISTE**, e o cartao leva a
+      // ela.
+      //
+      // `lib/telas/perto/pagina_do_local.dart` foi construida, e
+      // `CartaoDoDiretorio` a abre (`lista_do_diretorio.dart`, linha 580:
+      // `PaginaDoLocal.abrir(context, entrada.slug)`). O criterio 2 da
+      // BICHUS-62 proibe acao SEM destino; com o destino de pe, o cartao
+      // tocavel passou a ser o desenho certo, e esta isca media a versao
+      // anterior do produto -- ela afirmava `0` tocaveis e `nao ha tela de
+      // detalhe nesta versao`, e as duas coisas deixaram de ser verdade.
+      //
+      // A volta dela FECHA um vao em vez de abrir um: `grep -rn
+      // 'PaginaDoLocal' app/test` nao achava NADA antes desta edicao -- nenhum
+      // caso media que o cartao alcanca a pagina.
+      // -------------------------------------------------------------------
+
+      // **UM ponto tocavel no cartao sem telefone**: o bloco de nome,
+      // atividade, lugar e distancia, que leva a pagina do local. Dois
+      // significariam duas portas para o mesmo lugar.
       expect(
         tocaveisComAcao(semFone),
-        0,
-        reason: 'REPROVA: o cartao do diretorio virou tocavel. O criterio 2 da '
-            'BICHUS-62 proibe acao sem destino, e a tela de detalhe do '
-            'profissional nao existe nesta versao.',
+        1,
+        reason: 'REPROVA: o cartao do diretorio tem numero de pontos tocaveis '
+            'diferente de um. O desenho e UM bloco que leva a pagina do '
+            'local, e nada mais.',
       );
 
-      // **O cartao COM telefone tem exatamente um**, e ele e o botao de
-      // ligar. Dois significam que o cartao ganhou destino por fora do botao.
+      // **DOIS no cartao com telefone**: o mesmo bloco, mais o `Ligar`.
       expect(
         tocaveisComAcao(comFone),
-        1,
-        reason: 'REPROVA: o cartao com telefone tem mais de um ponto tocavel. '
-            'O unico controle com desfecho que ele pode ter e `Ligar`.',
+        2,
+        reason: 'REPROVA: o cartao com telefone nao tem exatamente o bloco e o '
+            '`Ligar`.',
       );
       expect(
         find.descendant(of: comFone, matching: find.byType(TextButton)),
         findsOneWidget,
+      );
+
+      // **E o `Ligar` fica FORA da area que navega.** E este o invariante que
+      // o cartao descreve em prosa (`lista_do_diretorio.dart`, linhas
+      // 572-580): o `InkWell` embrulha o `MergeSemantics`, e nao o cartao
+      // inteiro, para o toque no botao de ligar LIGAR em vez de abrir a
+      // pagina. Com o botao dentro do bloco, os dois gestos disputariam a
+      // mesma area e o caso de cima continuaria verde.
+      expect(
+        find.descendant(
+          of: find.descendant(
+            of: comFone,
+            matching: find.byType(MergeSemantics),
+          ),
+          matching: find.byType(TextButton),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o `Ligar` esta dentro do bloco que leva a pagina do '
+            'local. Tocar para ligar passaria a navegar.',
+      );
+
+      // **E o bloco de fato chega la.** Sem esta linha, as contagens acima
+      // ficariam verdes com um `InkWell` que nao leva a lugar nenhum -- que e
+      // a acao sem destino que o criterio 2 proibe, so com outra cara.
+      await tester.tap(
+        find.descendant(of: semFone, matching: find.byType(InkWell)).first,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(PaginaDoLocal),
+        findsOneWidget,
+        reason: 'REPROVA: tocar no cartao nao abriu a pagina do local.',
       );
     });
 
@@ -1172,6 +1253,39 @@ void main() {
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
+      // ---------------------------------------------------------------------
+      // ESTE CASO FICA VERMELHO, e ele esta CERTO: o defeito e do aplicativo.
+      //
+      // Medido nesta arvore, com os tres experimentos que separam a causa:
+      //
+      //   A) filtrar SEM `Carregar mais` ->
+      //      `page=1` | `kind=vet&page=1`                      (correto)
+      //   B) `Carregar mais` e DEPOIS filtrar ->
+      //      `page=1` | `page=2` | `kind=vet&page=1` | `page=1`
+      //      **a quarta chamada sai sem o filtro**, e e ela que fica valendo
+      //   C) `Carregar mais`, abrir e FECHAR a folha sem aplicar ->
+      //      `page=1` | `page=2`                   (nenhuma chamada a mais)
+      //
+      // O que a pessoa ve no fim de (B): `25 resultados · Mais perto` e 20
+      // cartoes -- a lista INTEIRA. Ela escolheu `Veterinário`, o filtro foi
+      // para a rota, e o aplicativo desfez sozinho. E o defeito de "filtrei e
+      // nao aconteceu nada", com o agravante de ter acontecido e sido
+      // revertido.
+      //
+      // A quarta chamada e o recorte PADRAO (`sort=distance&page=1&limit=20`,
+      // identica a primeira), e o unico lugar que produz um recorte padrao e o
+      // campo `_recorte = const RecorteDoDiretorio()` de
+      // `lista_do_diretorio.dart`, linha 114 -- isto e, um ESTADO NOVO da
+      // lista, que ao nascer agenda a propria carga por
+      // `didChangeDependencies` (linhas 143-162). O experimento (C) descarta a
+      // hipotese mais obvia: fechar a folha, por si, nao recarrega nada, entao
+      // nao e o `TickerMode`.
+      //
+      // **Nao consertei o aplicativo porque nao localizei o que recria o
+      // estado**, e mexer na fiacao da casca no fim de uma rodada de QA, no
+      // escuro, e pior que entregar isto vermelho e descrito. A isca nao foi
+      // tocada: ela afirma o que o produto deve fazer.
+      // ---------------------------------------------------------------------
       expect(urls.last.queryParameters['kind'], 'vet');
       expect(
         urls.last.queryParameters['page'],

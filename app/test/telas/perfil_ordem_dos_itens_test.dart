@@ -58,6 +58,7 @@ import 'package:bichu/telas/pet/tela_detalhe_do_pet.dart';
 import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
+import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -438,6 +439,15 @@ void main() {
     // ordem errada.
     Widget telaNaOrdemAntiga() {
       return MaterialApp(
+        // **O tema do Bichu, e nao o do Material.** `TituloDeGrupoDeMenu` le
+        // `BichuColors` do `ThemeData` e ESTOURA sem ele, de proposito ("Toda
+        // tela do Bichu precisa estar sob BichuTheme.claro ou
+        // BichuTheme.escuro"). Sem esta linha a prova negativa reprovava pelo
+        // motivo errado -- pelo tema ausente, e nao pela ordem errada --, e
+        // uma prova negativa que reprova por outra causa nao prova nada. A
+        // casca de `barra_de_listagem_aplica_test.dart` ja traz o tema pelo
+        // mesmo motivo, escrito ao lado dela.
+        theme: BichuTheme.claro,
         home: Scaffold(
           body: ListView(
             children: <Widget>[
