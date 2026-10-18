@@ -1806,9 +1806,16 @@ export interface paths {
         /**
          * Um item da vitrine, com todas as imagens
          * @description O detalhe do item: o mesmo `StoreItemSummary` da lista, mais **todas as
-         *     imagens prontas**, na ordem do painel (ADR-0027 item 16). A lista
-         *     continua trazendo so a principal, em `image_url`, para nao pesar a
-         *     vitrine.
+         *     imagens prontas**, na ordem do painel (ADR-0027 item 16).
+         *
+         *     **A lista TAMBEM traz as imagens desde 17/10/2026**, em
+         *     `StoreItemSummary.images` (campo aditivo e opcional, com `image_url`
+         *     intocado), e a vitrine desenha carrossel com elas. O que este detalhe
+         *     acrescenta ao resumo e `images` deixar de ser opcional -- aqui ele
+         *     sempre sai. O paragrafo que estava aqui dizia que a lista trazia so a
+         *     principal "para nao pesar a vitrine"; o peso real esta em BAIXAR as
+         *     imagens, e nao em receber os enderecos delas, e quem resolve isso e o
+         *     carregamento sob demanda no cliente.
          *
          *     Publica, pela mesma razao de `listStoreItems`, e com as mesmas regras:
          *     nenhum UUID sai, e o preco vencido **sai sem valor**, com
@@ -4886,6 +4893,42 @@ export interface components {
              */
             image_alt_text?: string | null;
             /**
+             * @description Todas as imagens prontas do item, na ordem do painel; a primeira e
+             *     a mesma de `image_url`. A vitrine desenha carrossel quando ha mais
+             *     de uma.
+             *
+             *     **ADITIVO, e `image_url` NAO foi tocado** (17/10/2026). O APK
+             *     instalado le `image_url` e nada mais; renomear ou remover aquele
+             *     campo quebraria o app que esta no bolso das pessoas, e isso ja
+             *     aconteceu neste produto com a unidade de preco. A licao esta
+             *     aplicada aqui: campo novo ao lado, o antigo intacto, e o cliente
+             *     velho continua desenhando uma imagem sem saber que ha oito.
+             *
+             *     **OPCIONAL de proposito.** Nao entra em `required`: resposta sem o
+             *     campo continua valida, e e o que permite ao servidor passar a
+             *     emiti-lo sem sincronizar a publicacao das quatro aplicacoes.
+             *
+             *     **`maxItems: 8` e o MESMO teto de `StoreItemDetail.images`, e a
+             *     igualdade e obrigatoria, nao estetica.** `StoreItemDetail` e
+             *     `allOf: [StoreItemSummary, {required: [images]}]`, e `allOf` e
+             *     intersecao: um teto menor aqui valeria TAMBEM para o detalhe e
+             *     encolheria a galeria do produto de 8 para o numero escrito aqui,
+             *     calado, sem ninguem ter pedido. Quem quiser limitar quantas imagens
+             *     o RESUMO devolve limita no servidor, que e onde a decisao nao
+             *     atravessa para a outra tela.
+             *
+             *     **Peso: a vitrine carrega SOB DEMANDA.** A derivada de produto e
+             *     uma so (`card`, 1024 px, teto de 500 KB), e nao ha miniatura de
+             *     produto no contrato nem no pipeline. Uma pagina cheia (20 itens)
+             *     que baixasse as 8 de cada cartao pediria ate 80 MB; o app desenha a
+             *     primeira imagem de cada cartao e so busca as seguintes quando a
+             *     pessoa arrasta, o que mantem a primeira pintura no peso de hoje.
+             *     `thumb_url` em `StoreItemImage` foi considerado e recusado: o
+             *     pipeline de produto nao emite `thumb`, e o campo sairia nulo em
+             *     toda imagem -- o endereco de um objeto que ninguem gravou.
+             */
+            images?: components["schemas"]["StoreItemImage"][];
+            /**
              * Format: uri
              * @description O destino no site do parceiro. **Nenhum identificador de pessoa
              *     entra aqui, em codificacao nenhuma** (consequencia 3 da
@@ -6447,6 +6490,13 @@ export interface components {
             /**
              * @description Todas as imagens prontas, na ordem do painel; a primeira e a
              *     mesma de `image_url`. Vazia e estado normal.
+             *
+             *     **O que este bloco acrescenta ao resumo e so `required`.**
+             *     Desde 17/10/2026 `StoreItemSummary` tambem declara `images`,
+             *     com o MESMO `maxItems: 8`; aqui o campo deixa de ser opcional,
+             *     porque o detalhe sempre o emite. A repeticao do teto e
+             *     deliberada: `allOf` e intersecao, e dois numeros diferentes nos
+             *     dois lugares fariam valer o menor nas duas telas.
              */
             images: components["schemas"]["StoreItemImage"][];
         };

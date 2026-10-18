@@ -32,7 +32,6 @@ import {
   hostDoDestinoDoItem,
   ordenarEspecies,
   type CategoriaDaVitrine,
-  type ImagemDaVitrine,
   type ItemDaVitrine,
   type TagDaVitrine,
 } from '../../domain/item-da-vitrine.js';
