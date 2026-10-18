@@ -7,14 +7,18 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/moldura.dart';
+import '../../widgets/qr_da_plaquinha.dart';
 import '../../widgets/saida_da_tela.dart';
+import '../perdido/tela_de_quem_e_o_caso.dart';
 import 'textos_do_detalhe.dart';
 
 /// T.1 — Detalhe do pet (UX, secao 7.6.3).
@@ -39,15 +43,32 @@ import 'textos_do_detalhe.dart';
 /// - **A acao principal da barra fixa.** A 7.6.3 manda uma, e ela depende do
 ///   estado: `Marcar como perdida` (BICHUS-21), `Fazer a tag da coleira` e
 ///   `Ver o caso` (F3.3). O criterio 2 da BICHUS-62 proibe renderizar acao sem
-///   destino, nem habilitada nem desabilitada. Entao esta tela **nao tem barra
-///   de acao fixa**, e isso e o criterio sendo cumprido, nao esquecido.
+///   destino, nem habilitada nem desabilitada. Entao esta tela **continua sem
+///   barra de acao fixa**, e isso e o criterio sendo cumprido, nao esquecido.
+///
+///   **O que mudou em 18/10, e o que nao mudou.** O cliente pediu
+///   `Marcar como perdido` **dentro da pagina do pet**, e ela entrou -- no
+///   CORPO, logo abaixo da linha de identificacao, e nao numa barra. A acao
+///   tem destino desde que a BICHUS-21 existe (`Rotas.marcarPerdido`), e o que
+///   a trazia para ca era um pedido, nao a falta de destino. `Ver o caso`
+///   continua sem destino alcancavel desta tela -- `Rotas.casoAberto` so monta
+///   com o `ResultadoDaAbertura` que F3.2 produz --, e por isso o estado de
+///   caso aberto aqui e **texto**, e nunca botao.
 ///
 ///   **`Fazer a tag da coleira` ganhou destino** (`TelaSolicitarPlaquinha`,
-///   alcancada de `Pet cadastrado`), e as outras duas continuam sem. Trazer a
-///   barra para ca por causa de uma das tres e historia propria: a 7.6.3 pede
-///   UMA acao escolhida pelo estado, e escolher entre uma que existe e duas que
-///   nao existem e desenho, nao conserto. O convite de
-///   [CartaoDePet.convitePlaquinha] tambem continua sendo so texto.
+///   alcancada de `Pet cadastrado`). Escolher UMA das tres pelo estado, numa
+///   barra, continua sendo desenho e nao conserto, e por isso a barra nao
+///   nasceu aqui. O convite de [CartaoDePet.convitePlaquinha] tambem continua
+///   sendo so texto.
+///
+/// ## O QR da plaquinha
+///
+/// Entrou no mesmo pedido de 18/10, abaixo dos campos. **O conteudo dele nao e
+/// escolha desta tela**: a imagem vem desenhada de
+/// `GET /pets/{petId}/tags/{tagId}/qr.png` e carrega `{base}/t/{codigo}`. O
+/// raciocinio inteiro -- por que um QR so serve a camera comum e o leitor do
+/// proprio app, por que o perfil publico `/@{slug}` nao serve, e por que o
+/// rotulo acessivel nao pode ser o codigo -- esta em `QrDaPlaquinha`.
 /// - **`Desativar a tag`** (criterio 1 da BICHUS-60), pelo mesmo teste e por
 ///   um motivo a mais: `revokePetTag` declara `reauth: []` com
 ///   `x-reauth-scope: tag_revocation`, e **o app nao tem reautenticacao**.
@@ -80,6 +101,19 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   Pet? _pet;
   String? _textoDaFalha;
 
+  /// O estado da imagem do QR. Nasce em [EstadoDoQrDaPlaquinha.carregando] e
+  /// nao em `semTag`: enquanto a lista de tags nao voltou, a tela nao sabe se
+  /// ha plaquinha, e afirmar que nao ha seria afirmar o que ela nao mediu.
+  EstadoDoQrDaPlaquinha _estadoDoQr = EstadoDoQrDaPlaquinha.carregando;
+
+  /// O provedor que o cofre devolveu. Ver `CofreDaImagemDoQr`: ele nao morre
+  /// com a tela, e quem o limpa e a lista `limpezasAoSair` da sessao.
+  ImageProvider? _qr;
+
+  /// `code_suffix` da tag em vigor. E tudo o que o app tem do codigo depois de
+  /// F1.6, e e com ele que o rotulo acessivel diz DE QUAL plaquinha e o QR.
+  String _sufixoDaTag = '';
+
   bool _iniciou = false;
 
   @override
@@ -103,6 +137,12 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
         _pet = pet;
         _fase = _Fase.carregado;
       });
+      // **Depois do pet, e nao junto.** O QR e informacao secundaria desta
+      // tela: uma chamada em paralelo que falhasse antes do `GET /pets` faria
+      // o bloco do QR aparecer com a decisao tomada sobre um pet que a tela
+      // ainda nao tinha. E ela nao e `await`-ada por quem chama: o detalhe nao
+      // espera a plaquinha para desenhar o animal.
+      await _carregarOQr(pet);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -127,6 +167,133 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
         _fase = _Fase.falha;
       });
     }
+  }
+
+  /// Busca a tag em vigor e, com o `tagId` dela, a IMAGEM do QR.
+  ///
+  /// ## Duas chamadas, e a primeira nao e desperdicio
+  ///
+  /// `GET /pets/{petId}` nao traz tag nenhuma: `Pet` tem `active_tag_count` e
+  /// mais nada sobre a plaquinha. O `tagId` -- que e o que falta para montar o
+  /// endereco de `qr.png` -- so sai de `GET /pets/{petId}/tags`.
+  ///
+  /// ## Por que a imagem vem do servidor, e nao de um gerador no aparelho
+  ///
+  /// Porque **o app nao tem o codigo**. Ele sai uma vez, em `issuePetTag`, na
+  /// F1.6, e o contrato manda nao persistir; a lista devolve so os quatro
+  /// ultimos. Um gerador de QR aqui nao teria o que codificar -- e o conteudo
+  /// correto, `{base}/t/{codigo}`, e desenhado por
+  /// `src/modules/tags/domain/qr-da-tag.ts`, que e tambem quem imprime a linha
+  /// legivel, das duas de uma funcao so.
+  ///
+  /// `Image.network` nao serve, e nao e questao de estilo: a rota e
+  /// `bearerAuth` e `reveals_credential`, e `Image.network` abre um
+  /// `HttpClient` proprio sem por onde passar cabecalho. Quem busca e
+  /// `ApiClient.baixarImagem`, que leva o `Bearer` **so** para a mesma origem
+  /// de `API_BASE_URL`.
+  Future<void> _carregarOQr(Pet pet) async {
+    final escopo = Escopo.of(context);
+    final api = escopo.api;
+    final pets = escopo.pets;
+    final cofre = escopo.cofreDoQr;
+
+    // `active_tag_count == 0` dispensa a chamada: nao ha tag para listar, e a
+    // area do QR ja sabe o que dizer. Economia de rede que nao muda o que a
+    // pessoa le -- a lista voltaria vazia e levaria ao mesmo estado.
+    if (pet.semTag) {
+      if (!mounted) return;
+      setState(() {
+        _qr = null;
+        _sufixoDaTag = '';
+        _estadoDoQr = EstadoDoQrDaPlaquinha.semTag;
+      });
+      return;
+    }
+
+    setState(() {
+      _qr = null;
+      _estadoDoQr = EstadoDoQrDaPlaquinha.carregando;
+    });
+
+    try {
+      final tags = await pets.listarTags(pet.id);
+      TagDoPet? ativa;
+      for (final tag in tags) {
+        if (tag.ativa && tag.id.isNotEmpty) {
+          ativa = tag;
+          break;
+        }
+      }
+      if (ativa == null) {
+        // A contagem dizia que havia tag e a lista nao trouxe nenhuma ativa.
+        // **Nao e falha**: e a mesma ausencia de `semTag`, descoberta um passo
+        // depois, e o texto que vale e o mesmo.
+        if (!mounted) return;
+        setState(() {
+          _sufixoDaTag = '';
+          _estadoDoQr = EstadoDoQrDaPlaquinha.semTag;
+        });
+        return;
+      }
+
+      // Copiada para um local FINAL antes do `await`: dentro da closure do
+      // `setState` a promocao de tipo de uma variavel mutavel se perde, e a
+      // saida seria um `!` que diz menos do que esta linha.
+      final TagDoPet tagAtiva = ativa;
+      final bytes = await api.baixarImagem(
+        pets.enderecoDaImagemDoQr(petId: pet.id, tagId: tagAtiva.id),
+      );
+      final provedor = await cofre.guardar(bytes);
+      if (!mounted) return;
+      setState(() {
+        _qr = provedor;
+        _sufixoDaTag = tagAtiva.sufixo;
+        _estadoDoQr = EstadoDoQrDaPlaquinha.pronto;
+      });
+    } on FalhaDeChamada {
+      // Os desfechos de `FalhaDeChamada` levam ao MESMO texto, pela mesma
+      // razao de F1.6: para quem esta com o celular na mao, "401", "sem sinal"
+      // e "410, tag revogada" produzem a mesma resposta -- tentar de novo. O
+      // que a tela nao pode fazer e ficar calada.
+      if (!mounted) return;
+      setState(() {
+        _qr = null;
+        _estadoDoQr = EstadoDoQrDaPlaquinha.falhou;
+      });
+    } on Object catch (erro, pilha) {
+      // O que nao e `FalhaDeChamada`: o cofre encosta no cache de imagem do
+      // Flutter, e `PlatformException` de decodificacao cai aqui. Sem este
+      // ramo o bloco ficaria girando para sempre.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao carregar o QR do pet');
+      if (!mounted) return;
+      setState(() {
+        _qr = null;
+        _estadoDoQr = EstadoDoQrDaPlaquinha.falhou;
+      });
+    }
+  }
+
+  /// `Marcar como perdido`, **reaproveitando o fluxo que ja existe**.
+  ///
+  /// ## Nada e reimplementado aqui
+  ///
+  /// O destino e o mesmo de `Perfil` > `Meus pets`: `Rotas.marcarPerdido`
+  /// (F3.1) com um `RascunhoDoCaso` do pet. F3.0, a escolha de quem e o caso,
+  /// **nao entra no caminho**, e isso nao e atalho: o cabecalho de
+  /// `TelaDeQuemEOCaso` justifica a tela por prevenir "o deslize de marcar o
+  /// pet errado quando ha mais de um", e aqui ha exatamente um -- o pet cuja
+  /// pagina esta aberta. E o mesmo ramo que `Meus pets` toma com um pet so.
+  ///
+  /// ## O e-mail confirmado continua sendo exigido, e a recusa e a que existe
+  ///
+  /// Ela **nao** e duplicada aqui. Abrir caso exige canal de contato
+  /// verificado, e quem diz isso e o servidor, em `blockers`: F3.2 desabilita
+  /// o envio e mostra `canalDeContatoNaoVerificado` com o texto da secao 9 do
+  /// UX e a saida `Confirmar meu e-mail`. Uma segunda recusa neste botao
+  /// seria uma segunda fonte da mesma regra -- e a deste lado envelheceria no
+  /// bolso de quem nao atualiza o app.
+  void _marcarComoPerdido(Pet pet) {
+    context.push(Rotas.marcarPerdido, extra: RascunhoDoCaso(pet: pet));
   }
 
   bool _ehForaDaConta(FalhaDeChamada falha) =>
@@ -219,6 +386,11 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
           pet: _pet!,
           aoEditar: _editar,
           aoExcluir: _excluir,
+          estadoDoQr: _estadoDoQr,
+          qr: _qr,
+          sufixoDaTag: _sufixoDaTag,
+          aoTentarOQr: () => _carregarOQr(_pet!),
+          aoMarcarPerdido: () => _marcarComoPerdido(_pet!),
         ),
     };
   }
@@ -277,11 +449,71 @@ class _Conteudo extends StatelessWidget {
     required this.pet,
     required this.aoEditar,
     required this.aoExcluir,
+    required this.estadoDoQr,
+    required this.qr,
+    required this.sufixoDaTag,
+    required this.aoTentarOQr,
+    required this.aoMarcarPerdido,
   });
 
   final Pet pet;
   final VoidCallback aoEditar;
   final VoidCallback aoExcluir;
+  final EstadoDoQrDaPlaquinha estadoDoQr;
+  final ImageProvider? qr;
+  final String sufixoDaTag;
+  final VoidCallback aoTentarOQr;
+  final VoidCallback aoMarcarPerdido;
+
+  /// Se o pet **ja** esta sendo procurado.
+  ///
+  /// Le os DOIS campos, e nao um: `status` e o que `TelaDeQuemEOCaso.elegiveis`
+  /// usa para tirar o animal da escolha, e `open_case_id` e o que a folha de
+  /// exclusao usa para avisar que a exclusao encerra o caso. Os dois dizem a
+  /// mesma coisa quando o servidor esta consistente; ler um so faria esta tela
+  /// oferecer `Marcar como perdido` no dia em que o outro chegasse preenchido
+  /// sozinho, e o desfecho seria um 409 `pet-already-lost` depois de duas
+  /// telas -- exatamente o que o criterio 13 existe para evitar.
+  bool get _jaProcurado =>
+      pet.status == StatusDoPet.perdido || pet.idDoCasoAberto != null;
+
+  /// A acao `Marcar como perdido`, ou o que a tela diz quando ela nao cabe.
+  ///
+  /// **Caso aberto NAO vira botao desabilitado.** O teto e de um caso aberto por
+  /// pet (criterio 8 da BICHUS-21) e o criterio 13 manda a tela refletir o teto
+  /// em vez de deixar a pessoa bater nele. `TelaDeQuemEOCaso` resolve isso do
+  /// jeito que esta tela copia: o animal **aparece**, dito em texto e fora de
+  /// qualquer controle, com a frase `TelaDeQuemEOCaso.jaProcurado`. Deixar um
+  /// botao ali -- mesmo desabilitado -- levaria a um 409 `pet-already-lost`
+  /// depois de duas telas, e um controle desabilitado sem motivo dito e o
+  /// desenho preguicoso que o criterio 5 recusa.
+  ///
+  /// **A frase e a que ja existe**, com o mesmo prefixo de nome que F3.0 usa.
+  /// Uma segunda redacao para o mesmo estado e como duas telas passam a dizer
+  /// coisas diferentes sobre o mesmo animal.
+  ///
+  /// **Nao ha `Ver o caso`.** Nao e esquecimento: `Rotas.casoAberto` so monta
+  /// `TelaCasoAberto` com um `ResultadoDaAbertura` em `extra` -- o desfecho que
+  /// F3.2 acabou de produzir -- e sem ele a rota cai no Perfil. Acao sem destino
+  /// e o que o criterio 2 da BICHUS-62 proibe, e continua proibido aqui.
+  List<Widget> _acaoDeMarcarPerdido() {
+    if (_jaProcurado) {
+      return <Widget>[
+        FaixaDeAviso(
+          peso: PesoDaFaixa.informativo,
+          texto: '${pet.nome}: ${TelaDeQuemEOCaso.jaProcurado}',
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+      ];
+    }
+    return <Widget>[
+      BotaoSecundario(
+        rotulo: TextosDoDetalhe.marcarComoPerdido,
+        aoTocar: aoMarcarPerdido,
+      ),
+      const SizedBox(height: BichuEspaco.e6),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -348,6 +580,27 @@ class _Conteudo extends StatelessWidget {
         ),
         const SizedBox(height: BichuEspaco.e6),
 
+        // 3b. A ACAO PRINCIPAL DA 7.6.3, pedida pelo cliente em 18/10:
+        // `Marcar como perdido` **dentro da pagina do pet**.
+        //
+        // O cabecalho desta classe dizia que a tela nao tem barra de acao fixa
+        // porque a 7.6.3 pede UMA acao escolhida pelo estado e duas das tres
+        // candidatas nao tinham destino. Isso nao mudou, e esta acao **nao e**
+        // a barra fixa: ela e um controle no corpo, no lugar em que o estado do
+        // animal acabou de ser lido. A tela continua sem barra, e as outras
+        // duas candidatas continuam sem destino.
+        //
+        // AQUI, e nao no fim: quem abre a pagina do pet porque o animal sumiu
+        // esta com pressa, e as acoes do fim sao as destrutivas -- `Editar` e
+        // `Excluir` --, deliberadamente longe de qualquer outro alvo. Pendurar
+        // a acao de perdido junto delas colocaria o caminho do resgate a 16 dp
+        // do botao de apagar o cadastro.
+        //
+        // `BotaoSecundario` e nao primario: e a MESMA variante do unico ponto
+        // de entrada que esta acao ja tinha. Duas aparencias para a mesma acao
+        // em duas telas e como elas divergem sem ninguem decidir.
+        ..._acaoDeMarcarPerdido(),
+
         // 4. Sinais, nunca truncado.
         _CartaoDeTexto(
           titulo: 'Sinais',
@@ -359,6 +612,27 @@ class _Conteudo extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e4),
           _CartaoDeTexto(titulo: 'Cuidados', texto: pet.cuidados),
         ],
+
+        // 5. O QR DA PLAQUINHA (cliente, 18/10): "traga tambem o qr-code
+        // para o usuario conseguir escanear".
+        //
+        // Abaixo dos campos e acima das destrutivas: ele e informacao do pet,
+        // e nao acao sobre ele. O conteudo do QR, o motivo de ele vir desenhado
+        // do servidor e o motivo de o rotulo acessivel nao ser o codigo estao
+        // em `QrDaPlaquinha`, porque e la que a proxima pessoa vai mexer.
+        const SizedBox(height: BichuEspaco.e6),
+        Semantics(
+          header: true,
+          child: Text(QrDaPlaquinha.titulo, style: textos.titleMedium),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        QrDaPlaquinha(
+          estado: estadoDoQr,
+          provedor: qr,
+          sufixo: sufixoDaTag,
+          nomeDoPet: pet.nome,
+          aoTentarDeNovo: aoTentarOQr,
+        ),
 
         // As acoes destrutivas, em texto, no fim, e separadas por mais de
         // 16 dp de qualquer outro alvo (7.6.3, acessibilidade).

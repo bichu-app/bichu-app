@@ -26,6 +26,7 @@
 library;
 
 import '../../api/modelos_pet.dart';
+import '../perdido/tela_de_quem_e_o_caso.dart';
 import 'textos_do_cadastro.dart';
 
 /// Os textos de T.1, da edicao e da exclusao.
@@ -34,6 +35,20 @@ abstract final class TextosDoDetalhe {
 
   static const String editar = 'Editar';
   static const String excluir = 'Excluir';
+
+  /// `Marcar como perdido`, trazida para a pagina do pet (cliente, 18/10).
+  ///
+  /// **E um apelido para o titulo de F3.0, e nao uma quarta copia da frase.**
+  /// `TelaDeQuemEOCaso.titulo` ja e `Marcar como perdido`, e `Perfil` >
+  /// `Meus pets` tem a mesma palavra num terceiro lugar. Escrever o literal
+  /// aqui criaria o dia em que uma das tres muda e as outras nao.
+  ///
+  /// **Nao e importado de `perfil/meus_pets.dart` de proposito**: aquela tela
+  /// esta sendo reescrita para virar so menus, e perder a acao. Prender o
+  /// rotulo da pagina do pet a uma constante que esta saindo faria esta tela
+  /// quebrar com a reescrita da outra. O destino -- F3.0/F3.1 -- nao esta
+  /// saindo de lugar nenhum.
+  static const String marcarComoPerdido = TelaDeQuemEOCaso.titulo;
 
   /// O titulo da tela de edicao. O nome nao entra: ele e o primeiro campo, e
   /// repeti-lo na barra gasta a largura que o 11.23.4 reserva para o titulo

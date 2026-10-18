@@ -474,6 +474,52 @@ class Pet {
   }
 }
 
+/// `PetTag`: a tag do pet como o **dono** a ve em `GET /v1/pets/{petId}/tags`.
+///
+/// **Ela nao tem o codigo, e a ausencia e o contrato.** A rota "nunca devolve
+/// o codigo em claro, nem para o dono: apenas os quatro ultimos caracteres,
+/// para que ele consiga identificar a plaquinha fisica". Quem quer o codigo
+/// inteiro de novo nao tem por onde: ele saiu uma vez, em [TagEmitida], na
+/// F1.6, e o contrato manda o cliente **nao** persistir aquele valor.
+///
+/// Por isso [TagDoPet] existe com tres campos e nao com quatro: o caminho de
+/// recuperacao do codigo e a IMAGEM (`qr.png`), que o servidor desenha, e nao
+/// um codigo guardado no aparelho. A consequencia de desenho esta na tela do
+/// detalhe: o rotulo acessivel do QR **nao pode** ser o codigo por extenso,
+/// porque o app nao o tem.
+class TagDoPet {
+  const TagDoPet({
+    required this.id,
+    required this.ativa,
+    required this.sufixo,
+    this.apelido,
+  });
+
+  final String id;
+
+  /// `status == 'active'`. O contrato fecha o enum em `active` e `revoked`, e
+  /// a tela so tem o que fazer com a primeira: tag revogada responde 410 no
+  /// `qr.png` ("A tag revogada. O QR nao e reimpresso"), entao pedir a imagem
+  /// dela seria pedir uma recusa.
+  final bool ativa;
+
+  /// `code_suffix`: os quatro ultimos caracteres. **Tudo o que o app tem** do
+  /// codigo depois da F1.6.
+  final String sufixo;
+
+  /// `label`: o apelido que distingue uma plaquinha da outra. Nao viaja no QR.
+  final String? apelido;
+
+  factory TagDoPet.doJson(Map<String, dynamic> json) {
+    return TagDoPet(
+      id: json['id'] as String? ?? '',
+      ativa: (json['status'] as String?) == 'active',
+      sufixo: json['code_suffix'] as String? ?? '',
+      apelido: json['label'] as String?,
+    );
+  }
+}
+
 /// `PetTagIssued`: a **unica** resposta do contrato que traz o codigo em claro.
 ///
 /// `GET /v1/pets/{petId}/tags` nunca mais devolve [codigo], nem para o dono:
