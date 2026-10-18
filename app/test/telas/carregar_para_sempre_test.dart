@@ -36,6 +36,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 void main() {
   setUp(AppConfig.limparParaTeste);
 
@@ -73,8 +75,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text(rotulo));
     await tester.pumpAndSettle();
   }

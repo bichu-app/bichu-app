@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// F1.1 — a validacao de senha **ao vivo**, no lugar do texto de ajuda fixo.
 ///
 /// Pedido do cliente em 22/09/2026: _"Voce deve substituir o texto 'Pelo menos
@@ -85,8 +87,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
   }

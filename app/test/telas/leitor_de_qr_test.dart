@@ -67,15 +67,7 @@ void main() {
       camera: camera ?? CameraDeTeste(permissao),
       leitorDeQr: leitor ?? LeitorDeQrDeTeste(),
     );
-    // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
-    // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
-    // voz alta que vai ate ela em vez de herdar a aterrissagem.
-    await abrirAAba(tester, 'Pets');
-    await tester.tap(find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
   }
 
   testWidgets('o leitor nao leva barra de topo NEM barra de abas, e ainda '

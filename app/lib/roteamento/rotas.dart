@@ -145,7 +145,28 @@ abstract final class Rotas {
   /// vira uma rota que nao existe.
   static String produtoDaLojaDe(String slug) =>
       '/loja/produtos/${Uri.encodeComponent(slug)}';
+
+  /// A tela da conta. **Deixou de ser ramo da casca em 19/10**, quando o
+  /// cliente tirou `Perfil` da barra de baixo e pos a porta dela na foto da
+  /// barra de topo. Ela e rota IRMA da casca: cobre a barra e tem `Voltar`,
+  /// como `Adocoes`, o leitor e o cadastro de pet.
   static const String perfil = '/perfil';
+
+  /// A AREA DE MENSAGENS: o endereco, e **nao** a tela.
+  ///
+  /// O slot `AuAu` da barra de baixo (19/10) aponta para ca. A tela, a lista e
+  /// o envio sao de outro agente e **nao existem nesta arvore** -- por isso
+  /// esta constante esta declarada e **nao esta registrada** como `GoRoute`
+  /// abaixo. Registrar uma rota sem tela daria erro no primeiro toque;
+  /// inventar a tela seria construir a secao de outra pessoa.
+  ///
+  /// Enquanto ela nao desce, o slot empurra `destinoProvisorio`, que e
+  /// [perfil] -- ver a entrada de mensagens em `CascaComAbas.destinos`.
+  ///
+  /// **O QUE FALTA LIGAR:** registrar aqui o `GoRoute` desta rota apontando
+  /// para a tela do outro agente, e apagar `destinoProvisorio` da entrada do
+  /// registro. Duas linhas, e nenhuma outra.
+  static const String mensagens = '/mensagens';
 
   /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
   ///
@@ -833,6 +854,20 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               ),
             ],
           ),
+          // O RAMO DA TELA DA CONTA. **Ele fica, e isso foi medido.**
+          //
+          // `Perfil` saiu da BARRA em 19/10 -- a porta dele virou a foto da
+          // barra de topo --, e a primeira tentativa tirou tambem o ramo,
+          // fazendo a tela uma rota irma da casca. Custou 107 casos: `Entrar`
+          // e `Criar conta` sao alcancadas desta tela e a saida delas devolve
+          // a ABA de onde a pessoa veio; com a conta empilhada, voltar de
+          // `Entrar` caia numa tela que cobre a casca e nao havia barra de
+          // baixo nenhuma na arvore.
+          //
+          // Como ramo, a barra continua visivel dentro da tela da conta, que
+          // e tambem o arranjo do Instagram -- a referencia que o cliente
+          // deu. Ele e o ULTIMO ramo, e a ordem e contrato com
+          // `CascaComAbas.ramosDoRegistro`.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(

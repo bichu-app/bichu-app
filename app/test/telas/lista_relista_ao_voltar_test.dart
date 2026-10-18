@@ -91,8 +91,7 @@ void main() {
       rede: servidor.responder,
       deposito: depositoLogado(),
     );
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   /// Percorre o assistente ate o fim e volta, **sem desmontar o Perfil**.
@@ -213,7 +212,7 @@ void main() {
 
       await tocar(tester, find.widgetWithText(NavigationDestination, 'Pets'));
       servidor.pets.add(petDoContrato(id: 'p-1', nome: 'Nina'));
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
 
       expect(
         find.text('Nina'),
@@ -254,7 +253,7 @@ void main() {
       // Desiste: a saida da propria tela do assistente, que em F1.3 e
       // `Voltar`.
       await tocar(tester, find.byTooltip('Voltar'));
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
 
       expect(servidor.pets, hasLength(1));
       expect(
@@ -291,7 +290,7 @@ void main() {
 
       servidor.leituraQuebrada = true;
       await tocar(tester, find.widgetWithText(NavigationDestination, 'Pets'));
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
 
       expect(
         find.text(MeusPets.tituloDoVazio),

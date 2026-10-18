@@ -334,7 +334,7 @@ void main() {
     testWidgets('Perfil > Meus pets', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
 
       // 9 -> 8 em 22/09/2026: saiu do Perfil o `TextButton` de "Termos de uso
       // e privacidade", que tinha `onPressed: null` e nao levava a lugar
@@ -342,7 +342,23 @@ void main() {
       // ficam so na F1.1, onde sao o objeto do aceite. O piso desce porque a
       // tela tem mesmo um controle a menos, e nao porque o portao passou a
       // olhar menos.
-      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 8);
+      // 8 -> 6 em 19/10, e a conta esta aqui porque este numero e um PISO
+      // escrito a mao: ele cai so quando a tela tem mesmo menos controle.
+      //
+      // A tela da conta deixou de ser aba e virou rota irma da casca, aberta
+      // pela foto da barra de topo. O que ela perdeu nao foi acao: perdeu a
+      // barra de baixo e o hamburguer da gaveta, que cobriam a casca e nao
+      // existem numa tela empilhada. O que ela ganhou foi o `Voltar`.
+      //
+      // Os seis, medidos na arvore de semantica, todos com acao de toque:
+      // `Cadastrar meu pet`, `Meus dados`, `Escanear uma tag`,
+      // `Sair da conta`, `Voltar` e a propria foto (`Sua conta`).
+      //
+      // **Nenhum destino da tela desapareceu**: os quatro primeiros sao
+      // exatamente os que a aba `Perfil` tinha, e os cartoes de pet -- o
+      // unico caminho ate o QR e `Marcar como perdido` -- continuam no corpo
+      // (sem pet nesta fixture, por isso nao contam como botao aqui).
+      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 6);
       handle.dispose();
     });
 
@@ -359,7 +375,7 @@ void main() {
     testWidgets('T.1 detalhe do pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
 
       // **3, e nao 7: a casca de abas NAO esta na arvore aqui.** T.1 e
@@ -378,7 +394,7 @@ void main() {
     testWidgets('a folha destrutiva de excluir o pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
       await rolarAte(tester, find.text(TextosDoDetalhe.excluir));
       await tocar(tester, find.text(TextosDoDetalhe.excluir));
@@ -394,7 +410,7 @@ void main() {
     testWidgets('a edicao do pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
       await rolarAte(tester, find.text(TextosDoDetalhe.editar));
       await tocar(tester, find.text(TextosDoDetalhe.editar));

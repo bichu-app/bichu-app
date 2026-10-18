@@ -154,10 +154,21 @@ void main() {
       exigirCamposSemanticosDistintos(CascaComAbas.destinos);
     });
 
-    test('os cinco campos sao os declarados, um por secao', () {
-      // Sem isto, a isca 3 passaria com os cinco declarando valores
+    test('os campos sao os declarados, um por secao', () {
+      // Sem isto, a isca 3 passaria com os destinos declarando valores
       // arbitrarios e distintos: distintos entre si e o criterio, mas o campo
       // precisa mesmo descrever o glifo que esta la.
+      //
+      // CINCO -> SEIS em 19/10: a secao de mensagens entrou na barra com
+      // `conversa`, e `Perfil` saiu da barra e **continua no registro** -- ele
+      // perdeu o slot, nao a entrada. O campo dele fica: a foto da barra de
+      // topo e a porta dele, e o glifo de conta continua declarado.
+      //
+      // `conversa` NAO divide campo com `comunidade`: `groups` desenha
+      // CABECAS e `chat` desenha um BALAO. A distincao importa mais nesta
+      // secao que nas outras, porque o rotulo dela e `AuAu` -- palavra de
+      // marca, que nao diz a funcao -- e o glifo passou a ser o unico sinal
+      // visivel que diz "mensagem".
       final porRotulo = <String, CampoSemantico>{
         for (final d in CascaComAbas.destinos) d.rotulo: d.campoSemantico,
       };
@@ -166,6 +177,7 @@ void main() {
         'Rede': CampoSemantico.comunidade,
         'Perto': CampoSemantico.lugar,
         'Loja': CampoSemantico.compra,
+        'AuAu': CampoSemantico.conversa,
         'Perfil': CampoSemantico.conta,
       });
     });

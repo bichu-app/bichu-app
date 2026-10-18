@@ -509,7 +509,18 @@ void main() {
   });
 
   group('o filtro de situação', () {
-    testWidgets('usa `BarraDeListagem`, sem copia, e o ícone vai para a barra',
+    // O ICONE DO FILTRO DESCEU PARA O CORPO (uniao de 18/10/2026).
+    //
+    // O que este caso provava antes: que `BotaoDeAcaoDaListagem` ficava na
+    // `AppBar` da casca, publicado no `SlotDaBarraDeListagem`. O cliente
+    // decidiu o contrario no ramo da navegacao -- busca, filtro e ordenacao
+    // vao para o topo do CORPO da listagem, e a barra de topo fica com
+    // hamburguer, titulo, foto e (em Rede e Perto) o icone de criar.
+    //
+    // O caso nao foi apagado nem afrouxado: ele continua cobrando que exista
+    // UM gatilho de filtro e que ele seja o componente da casa, so que no
+    // lugar onde ele passou a morar.
+    testWidgets('usa `BarraDeListagem`, sem copia, e o ícone fica no CORPO',
         (tester) async {
       await abrirMinhasIndicacoes(
         tester,
@@ -526,9 +537,8 @@ void main() {
             'de toda listagem deste app. Um filtro desenhado à mão aqui seria '
             'a segunda definição do controle.',
       );
-      // A barra (resumo e folha) fica no CORPO; o ícone que abre a folha vai
-      // para a `AppBar` DA CASCA, que é onde o `Filtros` do `Perto` mora desde
-      // 17/10 -- esta aba publica no slot dela, como a lista do diretório.
+      // A barra (resumo, campo de busca e gatilho da folha) fica no CORPO, e o
+      // gatilho com ela.
       expect(
         find.descendant(of: find.byType(AppBar), matching: barra),
         findsNothing,
@@ -538,10 +548,20 @@ void main() {
           of: find.byType(AppBar),
           matching: find.byType(BotaoDeAcaoDaListagem),
         ),
+        findsNothing,
+        reason: 'REPROVA: o ícone de filtrar voltou para a barra de topo. Ele '
+            'desceu para o corpo por decisão do cliente, e a barra de topo não '
+            'carrega controle de listagem.',
+      );
+      // No corpo o gatilho e `GatilhoDeRecorteNoCorpo`, e nao
+      // `BotaoDeAcaoDaListagem` (que continua existindo para a barra de topo):
+      // por isso a medida aqui e pelo GLIFO, como `barra_de_listagem_aplica`
+      // mede.
+      expect(
+        find.descendant(of: barra, matching: find.byIcon(Icons.tune)),
         findsOneWidget,
-        reason: 'REPROVA: o ícone de filtrar não está na barra de topo. Como '
-            'aba, esta lista publica no `SlotDaBarraDeListagem` da casca; um '
-            'slot próprio aqui desenharia o ícone dentro do corpo.',
+        reason: 'REPROVA: o ícone de filtrar não está na `BarraDeListagem` do '
+            'corpo. Sem ele não há caminho até a folha de filtro.',
       );
     });
 

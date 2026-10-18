@@ -46,6 +46,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// O menor gabarito suportado (design system, secao 13) com o teclado aberto.
 ///
 /// 270 dp de teclado e a medida da casa, a mesma registrada em
@@ -116,8 +118,7 @@ void main() {
     tester.view.viewInsets = FakeViewPadding.zero;
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text(rotulo));
     await tester.pumpAndSettle();
 

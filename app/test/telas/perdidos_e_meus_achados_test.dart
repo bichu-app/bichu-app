@@ -239,8 +239,11 @@ Future<void> abrirMeusAchados(
     rede: rede,
     deposito: logado ? depositoLogado() : null,
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  // A PORTA DA CONTA E A FOTO DA BARRA DE TOPO (uniao de 18/10/2026).
+  // Este ajudante nasceu num ramo anterior a saida de `Perfil` da barra de
+  // baixo e tocava o slot que nao existe mais. `irParaAConta` e a mesma
+  // porta que os outros dezesseis arquivos usam; o caso prova o mesmo.
+  await irParaAConta(tester);
   final porta = find.text('Meus achados');
   await tester.ensureVisible(porta);
   await tester.pumpAndSettle();
@@ -262,10 +265,12 @@ Future<void> escolherCidade(WidgetTester tester, String cidade) async {
     await tester.pumpAndSettle();
     await tester.tap(botao);
   } else {
-    final icone = find.descendant(
-      of: find.byType(AppBar),
-      matching: find.byIcon(Icons.tune),
-    );
+    // O GATILHO DE FILTRO MORA NO CORPO, e nao na `AppBar` (uniao de
+    // 18/10/2026). Este ajudante nasceu antes da decisao do cliente de levar
+    // busca, filtro e ordenacao para o topo do CORPO da listagem; procurar
+    // dentro da `AppBar` passou a nao achar nada. O caso prova o mesmo: que
+    // existe UM caminho ate a folha de filtro.
+    final icone = find.byIcon(Icons.tune);
     expect(
       icone,
       findsOneWidget,

@@ -11,6 +11,7 @@
 // a microcopy reprova -- que e o ponto.
 
 import 'dart:convert';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'dart:io';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
@@ -801,11 +802,19 @@ void main() {
       // por posicao, nao por comportamento -- o mesmo arranjo que
       // `tocarEmCarregarMais` neste arquivo e `abrirAGaveta` em
       // `gaveta_com_submenus_test.dart` ja usam.
-      final blocoQueNavega =
+      //
+      // **`ensureVisible` antes do toque, e a razao e de 19/10.** O gatilho de
+      // filtro voltou para o topo do CORPO (decisao do cliente), e com ele a
+      // lista desceu alguns dp. O primeiro cartao passou a nascer na dobra, e
+      // um `tap` seco acertava fora dele -- o caso reprovava dizendo que o
+      // cartao nao abre a pagina, quando o que falhava era o toque.
+      //
+      // O que o caso prova nao mudou: o cartao LEVA ao destino.
+      final alvoDoCartao =
           find.descendant(of: semFone, matching: find.byType(InkWell)).first;
-      await tester.ensureVisible(blocoQueNavega);
+      await tester.ensureVisible(alvoDoCartao);
       await tester.pumpAndSettle();
-      await tester.tap(blocoQueNavega);
+      await tester.tap(alvoDoCartao);
       await tester.pumpAndSettle();
       expect(
         find.byType(PaginaDoLocal),
@@ -1491,15 +1500,34 @@ void main() {
       ),
     );
 
+    // DUAS -> TRES em 19/10, e a terceira e a foto da conta.
+    //
+    // O cliente pos a foto da pessoa na barra de topo de **todas** as paginas
+    // e tirou `Perfil` da barra de baixo. A conta em 320 dp fecha porque a
+    // foto tem alvo de 48 dp, e nao 64: hamburguer 64 + indicar 64 +
+    // `Filtros` 64 + foto 48 = 240, e sobram 48,00 dp de titulo medidos --
+    // `Perto` pede 47,95. Passa por 0,05 dp, e foi `titleSpacing: 0` que
+    // devolveu os 16 dp do vao padrao para o titulo caber inteiro.
+    //
+    // **O teto segue sendo um teto**: um QUARTO controle leva o titulo a 0,00
+    // dp (medido), e e por isso que o numero esta travado aqui.
     final barra = tester.widget<AppBar>(find.byType(AppBar));
     expect(
       barra.actions ?? const <Widget>[],
       hasLength(2),
       reason: 'REPROVA: o lado direito da barra do `Perto` nao tem exatamente '
-          'duas acoes. Sao a porta de indicar (decisao de 18/10) e o acesso a '
-          'folha de filtro e ordem (decisao de 17/10). UMA significa que uma '
-          'das duas sumiu; TRES nao cabe: com o hamburguer na esquerda, tres '
-          'acoes de 64 dp deixam 64,0 dp de titulo em 320 dp.',
+          'DUAS acoes. Sao a porta de indicar (18/10) e a foto da conta '
+          '(19/10) -- o acesso a folha de filtro saiu da barra em 19/10 e '
+          'voltou para o topo do corpo, por decisao do cliente. UMA significa '
+          'que uma sumiu; TRES significa que o filtro voltou para a barra, e '
+          'ai o titulo do `Perto` perde os 64 dp de que ele ja nao tem folga.',
+    );
+    expect(
+      barra.actions!.last,
+      isA<AvatarDaConta>(),
+      reason: 'REPROVA: a foto da conta nao e o ULTIMO controle do lado '
+          'direito. Ela esta em todas as telas, sempre no mesmo lugar: '
+          'controle que varia por tela nao empurra o que nao varia.',
     );
 
     expect(

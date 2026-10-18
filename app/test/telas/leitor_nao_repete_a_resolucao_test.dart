@@ -37,7 +37,6 @@
 
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/escanear/tela_do_pet_da_tag.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -106,17 +105,7 @@ void main() {
     // `Icons.qr_code_2` (`lib/telas/abas.dart`, linhas 119-122); o botao de
     // largura total com esse texto so sobrou no `Perfil` DESLOGADO, e o
     // `widgetWithText(OutlinedButton, ...)` achava zero.
-    // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
-    // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
-    // voz alta que vai ate ela em vez de herdar a aterrissagem.
-    await abrirAAba(tester, 'Pets');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();
     return leitor;

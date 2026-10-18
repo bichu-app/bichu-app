@@ -46,6 +46,7 @@
 // esperados estao por extenso, com acento.
 
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/rede/criar_encontro.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
@@ -182,30 +183,39 @@ void main() {
   // igual, e este grupo reprova.
   // ---------------------------------------------------------------------
   group('ISCA 1 — a porta de criar continua alcançável', () {
-    testWidgets('Pets → escanear: o ícone de QR abre o leitor',
-        (tester) async {
+    testWidgets('escanear: a porta SAIU de `Pets` e abre o leitor pela tela '
+        'da conta', (tester) async {
+      // **O QUE ESTE CASO PROVAVA, E O QUE ELE PROVA AGORA.**
+      //
+      // Ele provava que o ícone de QR estava na barra de `Pets` e abria o
+      // leitor — a porta PRIMÁRIA de UX 27.5.6, posta ali em 18/10. O cliente
+      // reverteu em 19/10: *"leve o icone de qr-code de escanear para a
+      // pagina do perfil que tem relacao com as acoes do usuario."*
+      //
+      // Ele prova agora as duas metades, porque uma sem a outra é defeito: a
+      // porta **não está** mais em `Pets`, e o leitor **continua alcançável**
+      // pela tela da conta. A tela da conta já tinha `Escanear uma tag`, então
+      // isto unificou em vez de acrescentar — ficou UMA porta.
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
       // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
       // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
       await abrirAAba(tester, 'Pets');
 
-      final icone = _naBarra(Icons.qr_code_2);
       expect(
-        icone,
-        findsOneWidget,
-        reason: 'REPROVA: a barra de `Pets` não tem o ícone de QR code. Ele é '
-            'a porta PRIMÁRIA do leitor (UX 27.5.6), e o botão de contorno '
-            'que estava no corpo saiu: sem este ícone, quem acha um cachorro '
-            'na rua só chega ao leitor pelo menu do `Perfil` — uma porta onde '
-            'havia duas.',
+        _naBarra(Icons.qr_code_2),
+        findsNothing,
+        reason: 'REPROVA: o ícone de QR voltou à barra de `Pets`. Ele foi '
+            'para a tela da conta em 19/10, e ela já tinha a porta: repor '
+            'aqui devolve ao produto duas portas para o mesmo leitor.',
       );
 
-      await tocar(tester, icone);
+      await irAoLeitorDeQr(tester);
       expect(
         find.byType(TelaLeitorDeQr),
         findsOneWidget,
-        reason: 'REPROVA: o ícone de QR não levou ao leitor. Glifo que não '
-            'abre nada é pior que botão nenhum: ele promete.',
+        reason: 'REPROVA: a porta da tela da conta não levou ao leitor. Ela é '
+            'a ÚNICA desde 19/10: se ela não abre, o caminho de quem acha um '
+            'cachorro na rua está fechado.',
       );
     });
 
@@ -303,17 +313,22 @@ void main() {
   // vazio, não rótulo que não chega à árvore.
   // ---------------------------------------------------------------------
   group('ISCA 2 — o ícone não é mudo', () {
-    testWidgets('Pets: o ícone de QR se anuncia "Escanear uma tag"',
-        (tester) async {
+    testWidgets('a tela da conta: a porta do leitor se anuncia '
+        '"Escanear uma tag"', (tester) async {
+      // Este caso mudou de TELA, e não de exigência: o ícone de QR saiu da
+      // barra de `Pets` em 19/10 e virou a porta da tela da conta. O que ele
+      // cobra continua o mesmo — a porta do leitor não é muda para quem usa
+      // leitor de tela, e ela tem ação de toque.
+      //
+      // A foto que abre essa tela tem o anúncio dela cobrado em
+      // `navegacao_mensagens_e_avatar_test.dart` ("Sua conta").
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
-      // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
-      await abrirAAba(tester, 'Pets');
+      await irParaAConta(tester);
       _exigirRotuloEAcao(
         tester,
         rotulo: 'Escanear uma tag',
-        onde: 'a barra de Pets',
+        onde: 'a tela da conta',
       );
       handle.dispose();
     });
@@ -394,7 +409,10 @@ void main() {
         );
       }
 
-      exigirAlvo(Icons.qr_code_2, 'escanear, em Pets');
+      // `Icons.qr_code_2` saiu desta lista porque saiu da BARRA (19/10). O
+      // alvo da porta nova é medido onde ela mora agora: a foto da conta tem
+      // caso próprio em `navegacao_mensagens_e_avatar_test.dart`, e o item
+      // `Escanear uma tag` herda o piso de 64 dp de `ItemDeMenu`.
       await _irPara(tester, 'Rede');
       exigirAlvo(Icons.more_time, 'criar evento, na Rede');
       await _irPara(tester, 'Perto');
@@ -446,16 +464,28 @@ void main() {
       // autenticação da rota do leitor é OPCIONAL. Quem acha um animal na rua
       // é exatamente quem pode não ter conta nenhuma, e esconder o leitor
       // dessa pessoa é o oposto da cunha do produto.
+      // A exceção continua valendo, e só mudou de LUGAR: a porta não está
+      // mais em `Pets`, e sim na tela da conta — que é alcançável deslogado,
+      // pela foto da barra de topo. Se a tela da conta fosse só para quem tem
+      // sessão, esta mudança teria escondido o leitor de quem mais precisa
+      // dele, e é exatamente isso que este caso impede.
       await abrirOApp(tester, rede: _rede);
       // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente), e o
       // assunto deste caso e a barra de `Pets`. O caso vai ate ela em voz alta.
       await abrirAAba(tester, 'Pets');
       expect(
         _naBarra(Icons.qr_code_2),
+        findsNothing,
+        reason: 'REPROVA: o ícone de QR voltou à barra de `Pets`.',
+      );
+      await irAoLeitorDeQr(tester);
+      expect(
+        find.byType(TelaLeitorDeQr),
         findsOneWidget,
-        reason: 'REPROVA: deslogado, a porta do leitor desapareceu de `Pets`. '
-            'Ler uma plaquinha não exige conta, e a regra de "cadastrado e '
-            'validado" é para as ações de CRIAR — escanear não cria nada.',
+        reason: 'REPROVA: DESLOGADO, a porta do leitor não abre. Ler uma '
+            'plaquinha não exige conta, e a regra de "cadastrado e validado" '
+            'é para as ações de CRIAR — escanear não cria nada. Quem acha um '
+            'animal na rua é exatamente quem pode não ter conta nenhuma.',
       );
     });
 
@@ -542,11 +572,21 @@ void main() {
         findsOneWidget,
         reason: 'REPROVA: a barra de topo de `Pets` não está montada.',
       );
+      // O lado direito de `Pets` deslogado: a FOTO da conta, e nada mais.
+      // O ícone de QR saiu em 19/10 e `Pets` não tem ação de seção; a foto
+      // está em todas as telas, inclusive deslogada, porque a tela da conta é
+      // onde moram `Entrar` e `Criar conta`.
       expect(
         _naBarra(Icons.qr_code_2),
+        findsNothing,
+        reason: 'REPROVA: o ícone de QR voltou à barra de `Pets`.',
+      );
+      expect(
+        find.byType(AvatarDaConta),
         findsOneWidget,
         reason: 'REPROVA: deslogado, o lado direito da barra de `Pets` ficou '
-            'sem nada.',
+            'sem nada. A foto da conta fica em TODAS as telas (19/10), e '
+            'deslogada ela é a porta de `Entrar` e `Criar conta`.',
       );
     });
   });

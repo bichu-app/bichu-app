@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// F1.1 — o aceite dos termos: a caixa que o cliente pediu, e o REGISTRO dela.
 ///
 /// **O que este arquivo cobra, e por que nao e o widget.** O cliente pediu a
@@ -107,8 +109,7 @@ void main() {
     // A porta de `Criar conta` deslogada mora em `Perfil` (BICHUS-232). Ate
     // 22/09 este caso entrava pelo `Cadastrar meu pet` da secao de
     // aterrissagem, que saiu de la por misturar cadastro com a vizinhanca.
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
   }

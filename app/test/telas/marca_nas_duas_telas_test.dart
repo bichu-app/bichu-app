@@ -61,8 +61,10 @@ void main() {
     testWidgets('o lockup da marca esta na tela, em vetor', (tester) async {
       final semantica = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
-      await tester.tap(find.text('Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: `Perfil` saiu da barra de baixo e
+      // a porta da tela da conta virou a foto da barra de topo. O destino nao
+      // mudou, e e isso que estes casos continuam provando.
+      await irParaAConta(tester);
 
       expect(
         find.byType(MarcaLockup),
@@ -93,8 +95,10 @@ void main() {
         (tester) async {
       final semantica = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
-      await tester.tap(find.text('Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: `Perfil` saiu da barra de baixo e
+      // a porta da tela da conta virou a foto da barra de topo. O destino nao
+      // mudou, e e isso que estes casos continuam provando.
+      await irParaAConta(tester);
 
       expect(
         _anunciaAMarca,
@@ -113,8 +117,10 @@ void main() {
     testWidgets('a marca nao empurrou os tres controles para fora',
         (tester) async {
       await abrirOApp(tester, rede: _semServidor);
-      await tester.tap(find.text('Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: `Perfil` saiu da barra de baixo e
+      // a porta da tela da conta virou a foto da barra de topo. O destino nao
+      // mudou, e e isso que estes casos continuam provando.
+      await irParaAConta(tester);
 
       // O caso positivo junto do decorativo: portao que so proibe some do CI
       // tao rapido quanto portao que so aprova.
@@ -137,15 +143,7 @@ void main() {
   group('Digitar o codigo: a plaquinha, e o teclado manda nela', () {
     Future<void> abrirADigitacao(WidgetTester tester) async {
       await abrirOApp(tester, rede: _semServidor);
-      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
-      // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
-      // voz alta que vai ate ela em vez de herdar a aterrissagem.
-      await abrirAAba(tester, 'Pets');
-      await tester.tap(find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ));
-      await tester.pumpAndSettle();
+      await irAoLeitorDeQr(tester);
       await tester.tap(
         find.widgetWithText(BotaoPrimario, TextosDoCadastro.digitarOCodigo),
       );

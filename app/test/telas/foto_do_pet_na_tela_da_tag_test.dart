@@ -85,17 +85,7 @@ void main() {
     //
     // Dentro da `AppBar` de proposito: `Icons.qr_code_2` tambem aparece na
     // pagina do pet, e um `find.byIcon` solto ficaria verde com a barra vazia.
-    // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026 (pedido do cliente). A
-    // porta primaria do leitor mora em `Pets` (UX 27.5.6), e o caso diz em
-    // voz alta que vai ate ela em vez de herdar a aterrissagem.
-    await abrirAAba(tester, 'Pets');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     leitor.ler(qrDaPlaquinha);
     // `pumpAndSettle` nao serve com `Image.network` na arvore: o carregamento
     // da imagem nunca assenta num teste de widget. O que o caso mede e o que a

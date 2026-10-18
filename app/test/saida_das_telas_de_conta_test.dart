@@ -30,6 +30,8 @@ import 'package:bichu/widgets/marca.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'telas/ajuda_de_tela.dart';
+
 /// Piso de alvo de toque das acoes criticas: 64 dp de altura **e** largura
 /// (design system 6.5, pesquisa de UX 15.1). Botao de voltar e de fechar nao
 /// sao excecao: quem precisa sair de uma tela em que caiu por engano esta com
@@ -141,8 +143,7 @@ void main() {
   }
 
   Future<void> irAoPerfil(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   testWidgets('Entrar tem saida, e ela devolve a aba de onde a pessoa veio',

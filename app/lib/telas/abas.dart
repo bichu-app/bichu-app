@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
-import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/acao_de_criar_na_barra.dart';
 import '../widgets/botao_primario.dart';
@@ -92,38 +91,30 @@ class AbaPets extends StatelessWidget {
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
           raizDeSecao: true,
           titulo: destino.rotulo,
-          // A PORTA PRIMARIA DO LEITOR DE QR, AGORA NA BARRA DE TOPO
-          // (pedido do cliente em 18/10/2026: "ate o escanear poderia ser
-          // icones na barra superior ... e nao fique esse botao grande na
-          // pagina ocupando muito espaco"). O botao de contorno de largura
-          // total que morava no corpo saiu: 48 dp dele mais 24 dp de folga,
-          // 72 dp devolvidos ao corpo.
+          // **O LEITOR DE QR SAIU DESTA BARRA em 19/10**, e a decisao e
+          // dele: *"leve o icone de qr-code de escanear para a pagina do
+          // perfil que tem relacao com as acoes do usuario."*
           //
-          // **O GLIFO E O DE QR CODE, e ele foi escolhido por ele**: "o botao
-          // escanear uma tag, pode ser um icone de qr-code igual do
-          // whatsapp". `Icons.qr_code_2` e o quadrado com os tres marcadores
-          // de canto, da familia fechada do design system 10.1 (Material
-          // Symbols, embutida no Flutter) -- nenhum vetor novo, nada baixado,
-          // nada gerado. Ele nao colide com glifo nenhum em uso: `qr_code*`
-          // nao aparecia em `app/lib` antes desta mudanca.
+          // Ele morava aqui como `acaoDeCriar`, com `Icons.qr_code_2`, desde
+          // 18/10. O destino nao mudou e a porta nao foi duplicada: a tela da
+          // conta **ja tinha** `Escanear uma tag`, nos dois estados de sessao
+          // -- item de menu logado, botao secundario deslogado. Entao isto e
+          // UNIFICACAO e nao acrescimo: **ficou uma porta so**, na pagina que
+          // ele chama de "as acoes do usuario", alcancada pela foto da barra
+          // de topo.
           //
-          // **ELE CONTINUA VISIVEL DESLOGADO, e isso foi MEDIDO e nao
-          // suposto.** `tela_leitor_de_qr.dart` diz que a autenticacao da
-          // rota do leitor e **opcional**, e o token entra quando ha. Quem
-          // acha um cachorro na rua e exatamente quem pode nao ter conta
-          // nenhuma: esconder o leitor dessa pessoa e o oposto da cunha do
-          // produto. As outras duas acoes desta tarefa -- criar evento e
-          // indicar -- exigem sessao e por isso desaparecem deslogadas; esta
-          // nao.
+          // **E ela continua alcancavel SEM CONTA, que era o risco.** A
+          // autenticacao da rota do leitor e opcional e quem acha um animal
+          // na rua pode nao ter conta; se a tela da conta so existisse
+          // logada, esta mudanca teria escondido o leitor de quem mais
+          // precisa dele. Medido: o ramo DESLOGADO de `AbaPerfil` desenha
+          // `Escanear uma tag`, e a foto da barra de topo aparece deslogada.
           //
-          // `push` e nao `go`: o leitor cobre a casca inteira (o design
-          // system 11.11 manda a barra sumir no leitor de camera), e tela que
-          // cobre a casca precisa ter volta.
-          acaoDeCriar: AcaoDeCriarNaBarra(
-            icone: Icons.qr_code_2,
-            rotulo: 'Escanear uma tag',
-            aoTocar: () => context.push(Rotas.escanear),
-          ),
+          // **O custo esta no relatorio:** o leitor saiu de 1 toque (icone
+          // nesta barra) para 2 (foto -> `Escanear uma tag`).
+          //
+          // `Pets` fica sem acao de secao na barra, e o slot volta a ser nulo
+          // -- nao entra outro icone no lugar.
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
@@ -170,15 +161,21 @@ class AbaPets extends StatelessWidget {
             // O que saiu daqui foi a FORMA: um `BotaoSecundario` de largura
             // total, 48 dp de altura mais 24 dp de folga.
             //
-            // `Adoções` e sub-destino de `Pets`, com porta propria, e **nao** e
-            // item de `Perto` (UX 27.2.4). Em `Perto` fica a porta das ONGs,
-            // que leva para ca pre-filtrado e nao duplica listagem.
-            const _PortaDeSubDestino(
-              icone: Icons.volunteer_activism_outlined,
-              titulo: 'Adoções',
-              rota: Rotas.adocoes,
-            ),
-            const SizedBox(height: BichuEspaco.e6),
+            // **AS DUAS PORTAS DE `Adoções` SAIRAM (19/10).**
+            //
+            // Nao e casca vazia: **nao existe rota de adocao no contrato** --
+            // confirmado por duas leituras independentes. As portas prometiam
+            // e abriam uma tela que dizia estar em construcao, e o cliente
+            // mandou fechar os defeitos listados, com este na lista.
+            //
+            // **A ROTA E A TELA FICAM**, de proposito: link profundo e
+            // endereco e nao depende de haver porta. Quem some e so o
+            // controle que promete. Quando a rota do contrato existir, as duas
+            // portas voltam aqui e no rodape do `Perto`, e o inventario de
+            // `gaveta_de_secoes.dart` volta de `planejada` para `existe`.
+            //
+            // A isca de que elas nao voltam esta em
+            // `test/telas/portas_de_adocoes_test.dart`.
             // O `EstadoVazio` "Nenhum pet cadastrado ainda" era renderizado
             // **sem condicional nenhuma**, numa tela que nao sabia listar pet:
             // o tutor cadastrava e continuava lendo que nao tinha nenhum. E o
@@ -417,13 +414,14 @@ class AbaPerto extends StatelessWidget {
         // `Minhas indicacoes` tambem, oferecendo adocao a quem foi ver o
         // estado de uma indicacao.
         filhos: const <Widget>[
-          CorpoDoPerto(
-            rodapeDaListagem: _PortaDeSubDestino(
-              icone: Icons.favorite_outline,
-              titulo: 'Pets de ONGs para adoção',
-              rota: Rotas.adocoes,
-            ),
-          ),
+          // A SEGUNDA PORTA DE `Adoções` SAIU (18/10/2026, decisao do ramo da
+          // navegacao): nao existe rota de adocao no contrato e a porta abria uma
+          // tela em construcao. A rota e a tela ficam; so o controle sai.
+          //
+          // `CorpoDoPerto` (as DUAS abas da secao, mais novo que aquele ramo)
+          // FICA, agora sem rodape -- e por isso `rodapeDaListagem` virou
+          // opcional. Juntar os dois lados e isto: a estrutura nova, sem a porta.
+          CorpoDoPerto(),
         ],
       ),
     );
@@ -540,7 +538,16 @@ class AbaPerfil extends StatelessWidget {
 
         return TelaDeAba(
           raizDeSecao: true,
-          titulo: destino.rotulo,
+          // O TITULO E O NOME DA PESSOA (19/10), e nao a palavra `Perfil`.
+          //
+          // Pedido do cliente: *"a tela do usuario, deve ter como titulo da
+          // pagina na barra principal o slug do usuario"*. Slug de usuario nao
+          // existe e esta PROIBIDO de existir por ora (ADR-0025, item 2:
+          // nao expor slug de pessoa); o que existe e e dela e o nome de
+          // exibicao. `tituloDaTelaDaConta` e o PONTO DE TROCA unico: quando a
+          // fatia do apelido descer, ela passa a devolver o apelido e nenhuma
+          // tela muda.
+          titulo: tituloDaTelaDaConta(sessao.usuario?.nome),
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // -----------------------------------------------------------------
@@ -742,53 +749,6 @@ class TelaDeAdocoes extends StatelessWidget {
           explicacao: 'Os pets para adoção da sua região vão ficar aqui.',
         ),
       ],
-    );
-  }
-}
-
-/// A porta de um sub-destino: um caminho da secao, com nome e explicacao.
-///
-/// Existe como componente para que **nenhuma porta nasca muda**: o criterio 2
-/// da historia e que nenhum toque termine sem resposta, e a forma mais comum
-/// de quebrar isso e um `ListTile` com `onTap: null` que continua parecendo
-/// tocavel. Aqui a rota e obrigatoria e nao aceita nulo.
-class _PortaDeSubDestino extends StatelessWidget {
-  const _PortaDeSubDestino({
-    required this.icone,
-    required this.titulo,
-    required this.rota,
-  });
-
-  final IconData icone;
-  final String titulo;
-  final String rota;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Material(
-      color: cores.surfaceSunken,
-      borderRadius: BorderRadius.circular(BichuRaio.lg),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        onTap: () => context.push(rota),
-        child: Padding(
-          padding: const EdgeInsets.all(BichuEspaco.e4),
-          child: Row(
-            children: <Widget>[
-              // Decorativo: o titulo ao lado ja diz o que e, e icone com nome
-              // proprio seria anuncio duplo no leitor de tela.
-              Icon(icone, color: cores.textSecondary),
-              const SizedBox(width: BichuEspaco.e4),
-              Expanded(child: Text(titulo, style: textos.titleMedium)),
-              const SizedBox(width: BichuEspaco.e2),
-              Icon(Icons.chevron_right, color: cores.textSecondary),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

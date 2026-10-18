@@ -79,7 +79,7 @@ import 'minhas_indicacoes.dart';
 /// o filtro da aba que não está na frente. Mesma escolha da `Rede`, que troca
 /// o corpo por `_aba` pelo mesmo motivo.
 class CorpoDoPerto extends StatefulWidget {
-  const CorpoDoPerto({required this.rodapeDaListagem, super.key});
+  const CorpoDoPerto({this.rodapeDaListagem, super.key});
 
   /// O que vem depois da lista do diretório, na aba `Profissionais`.
   ///
@@ -88,7 +88,12 @@ class CorpoDoPerto extends StatefulWidget {
   /// casca). **Ele é da aba da LISTA, e não da seção:** pendurado fora das
   /// abas, apareceria embaixo de `Minhas indicações` também, oferecendo adoção
   /// a quem foi ver o estado de uma indicação.
-  final Widget rodapeDaListagem;
+  /// O rodape da aba da LISTA. **Opcional desde a uniao de 18/10/2026**:
+  /// a porta de `Adoções` saiu da casca (nao existe rota de adocao no
+  /// contrato e a tela estava em construcao), e sem ela a aba nao tem
+  /// rodape nenhum. Nulo nao desenha espaco: o `SizedBox` acima tambem
+  /// sai, senao a lista termina com um vao sem nada embaixo.
+  final Widget? rodapeDaListagem;
 
   @override
   State<CorpoDoPerto> createState() => _CorpoDoPertoState();
@@ -197,10 +202,11 @@ class _CorpoDoPertoState extends State<CorpoDoPerto>
   List<Widget> _corpoDaAba() {
     switch (_aba) {
       case AbaDoPerto.profissionais:
+        final Widget? rodape = widget.rodapeDaListagem;
         return <Widget>[
           const ListaDoDiretorio(),
-          const SizedBox(height: BichuEspaco.e6),
-          widget.rodapeDaListagem,
+          if (rodape != null) const SizedBox(height: BichuEspaco.e6),
+          ?rodape,
         ];
       case AbaDoPerto.indicacoes:
         return const <Widget>[MinhasIndicacoes()];

@@ -110,8 +110,7 @@ void main() {
     DepositoDeSessao? deposito,
   }) async {
     await abrirOApp(tester, rede: redeVazia(), deposito: deposito);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   group('ISCA — o Perfil nao fala de termos nem de privacidade', () {

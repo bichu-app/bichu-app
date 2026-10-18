@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// F1.1 — o NOME e obrigatorio no cadastro.
 ///
 /// ## A queixa, nas palavras do cliente (18/10/2026)
@@ -90,8 +92,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    // A PORTA DA CONTA E A FOTO DA BARRA DE TOPO (uniao de 18/10/2026).
+    // Este ajudante local tocava o slot `Perfil` da barra de baixo, que
+    // saiu por decisao do cliente. `irParaAConta` e a mesma porta dos
+    // outros arquivos; os cinco casos deste arquivo provam o mesmo.
+    await irParaAConta(tester);
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
   }

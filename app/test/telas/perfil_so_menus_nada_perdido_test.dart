@@ -171,8 +171,7 @@ Future<void> _abrirOPerfil(
     rede: _servidor,
     deposito: depositoLogado(emailVerificado: emailVerificado),
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  await irParaAConta(tester);
 }
 
 List<SemanticsNode> _todosOsNos(WidgetTester tester) {

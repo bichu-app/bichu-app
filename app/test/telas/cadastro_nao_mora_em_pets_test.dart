@@ -211,38 +211,43 @@ void main() {
       // por vacuidade -- a armadilha que este projeto ja pagou caro.
       await abrirAAba(tester, 'Pets');
 
-      // A PORTA CONTINUA EM `Pets`, e mudou de FORMA em 18/10/2026: ela virou
-      // o icone de QR da barra de topo, por pedido do cliente ("o botao
-      // escanear uma tag, pode ser um icone de qr-code igual do whatsapp").
-      // O que este caso cobra nao mudou -- que a porta primaria do leitor NAO
-      // saiu de `Pets` --, so o lugar onde se olha. `find.text` nao serve
-      // mais: o texto saiu da tela, e o nome acessivel vive no `tooltip`.
+      // **A PORTA DO LEITOR SAIU DE `Pets` EM 19/10, e este caso trocou de
+      // lado junto.**
+      //
+      // Ele cobrava que a porta primaria do leitor NAO saisse de `Pets` --
+      // primeiro como texto, depois (18/10) como o icone de QR na barra de
+      // topo. O cliente reverteu: *"leve o icone de qr-code de escanear para
+      // a pagina do perfil que tem relacao com as acoes do usuario."*
+      //
+      // O caso nao foi apagado: ele passou a assever a AUSENCIA. Sem isto,
+      // repor o icone em `Pets` devolveria ao produto duas portas para o
+      // mesmo leitor -- a tela da conta JA tinha `Escanear uma tag` -- e
+      // nenhum caso acusaria. Quem prova que a porta nova funciona, logada e
+      // deslogada, e `casca_de_cinco_secoes_test.dart`.
       expect(
         find.descendant(
           of: find.byType(AppBar),
           matching: find.byIcon(Icons.qr_code_2),
         ),
-        findsOneWidget,
-        reason: 'REPROVA: a porta primaria do leitor (UX 27.5.6) saiu de '
-            '`Pets`. Ela nao e desta mudanca, e ela continua visivel '
-            'DESLOGADO de proposito: ler uma plaquinha nao exige conta.',
+        findsNothing,
+        reason: 'REPROVA: o icone de QR voltou a barra de topo de `Pets`. Ele '
+            'foi para a tela da conta em 19/10, e ela ja tinha a porta: '
+            'repor aqui recria a segunda porta para o mesmo leitor.',
       );
-      expect(find.text('Adoções'), findsOneWidget,
-          reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
-      // A CASCA HONESTA DOS PERDIDOS SAIU, E A PREMISSA DELA CADUCOU
-      // (18/10/2026).
+      // **`Adoções` SAIU de `Pets` em 19/10, e este caso trocou de lado.**
       //
-      // Esta linha cobrava o texto "A lista de pets perdidos esta em
-      // construcao", e o motivo escrito era: *"o app nao chama rota de
-      // listagem, entao ele nao sabe se ha zero ou trezentos"*. Era verdade --
-      // `listPublicLostPets` estava no contrato e **nao tinha rota**, e era a
-      // ultima linha de `OPERACOES_AINDA_SEM_ROTA`.
-      //
-      // A rota existe agora, e o app a chama. O estado vazio nao sumiu: ele
-      // mudou de dono, como o da `Rede`. Quem o mostra e a propria lista, e so
-      // quando o servidor responde que nao ha caso aberto -- afirmacao medida.
-      // O que este caso cobra continua sendo o mesmo: **que a listagem de
-      // perdidos nao saiu de `Pets`**.
+      // Nao existe rota de adocao no contrato -- confirmado por duas leituras
+      // independentes -- e a porta abria uma tela que diz estar em
+      // construcao. A rota e a tela ficam, para link profundo; a porta sai.
+      // Quem prova que nenhum controle leva mais a ela e
+      // `portas_de_adocoes_test.dart`.
+      expect(find.text('Adoções'), findsNothing,
+          reason: 'REPROVA: a porta de `Adoções` voltou a `Pets`. Ela promete '
+              'uma tela em construcao, e a rota dela nao existe no contrato.');
+      // A LISTAGEM DE PERDIDOS CONTINUA EM `Pets` (ramo da listagem, 18/10), e
+      // esta linha voltou na uniao: o ramo da navegacao nasceu antes dela e
+      // nao a conhecia. O que este caso cobra e que a listagem de perdidos
+      // **nao saiu de `Pets`**, que e a secao de aterrissagem do produto.
       expect(
         find.byType(ListaDePerdidos),
         findsOneWidget,
@@ -322,8 +327,7 @@ void main() {
         rede: redeDePets(const <Map<String, dynamic>>[]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       exigirAcaoDeCadastrarViva(tester, pets: 0);
 
@@ -352,8 +356,7 @@ void main() {
         ]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       // O estado precisa ser mesmo o da lista cheia: e ele que estava
       // quebrado, e um caso que medisse o vazio duas vezes nao acusaria nada.
