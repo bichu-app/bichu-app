@@ -124,7 +124,13 @@ abstract final class TextosDaLocalizacao {
 
   static const String rotuloBairro = 'Bairro';
   static const String rotuloCidade = 'Cidade';
-  static const String rotuloUf = 'UF';
+  /// **"Estado", e nao "UF"** (cliente, 17/10/2026). A sigla continua sendo o
+  /// valor; o rotulo e a palavra que a pessoa usa.
+  static const String rotuloEstado = 'Estado';
+
+  static const String escolherOEstado = 'Escolher na lista';
+
+  static const String estadoEmBrancoFunciona = 'Em branco funciona.';
 
   /// A cidade e o unico campo exigido, e o contrato concorda
   /// (`Area.required: [city]`).

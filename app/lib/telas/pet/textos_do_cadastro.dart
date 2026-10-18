@@ -112,6 +112,9 @@ abstract final class TextosDoCadastro {
   /// Figma `91:41`.
   static const String nenhumaFotoAinda = 'Nenhuma foto ainda';
 
+  /// O rotulo que o leitor de tela anuncia sobre a previa.
+  static const String fotoEscolhidaDoPet = 'Foto escolhida do pet';
+
   static const String tirarFoto = 'Tirar foto';
 
   static const String escolherDaGaleria = 'Escolher da galeria';
