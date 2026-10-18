@@ -47,6 +47,7 @@ import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Conta, IdentityRepository, NovaConta } from '../ports/identity-repository.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
@@ -79,33 +80,11 @@ function naoDeveriaTerChegado(nome: string): never {
  * que gravasse a conta por outro caminho também reprova.
  */
 function repositorioQueRecusaTudo(): IdentityRepository {
-  return {
-    criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
-    criarTokenDeVerificacao: () => naoDeveriaTerChegado('criarTokenDeVerificacao'),
-    gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),
-    buscarContaPorEmail: () => naoDeveriaTerChegado('buscarContaPorEmail'),
-    buscarContaPorId: () => naoDeveriaTerChegado('buscarContaPorId'),
-    buscarRefreshPorHash: () => naoDeveriaTerChegado('buscarRefreshPorHash'),
-    revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
-    revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
-    rotacionar: () => naoDeveriaTerChegado('rotacionar'),
-    atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
-    buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
-    regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
-    registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),
-    invalidarSessoes: () => naoDeveriaTerChegado('invalidarSessoes'),
-    consumirTokenDeVerificacao: () => naoDeveriaTerChegado('consumirTokenDeVerificacao'),
-    conferirTokenDeVerificacao: () => naoDeveriaTerChegado('conferirTokenDeVerificacao'),
-    invalidarTokensPendentes: () => naoDeveriaTerChegado('invalidarTokensPendentes'),
-    marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
-    criarJanelaDeReautenticacao: () => naoDeveriaTerChegado('criarJanelaDeReautenticacao'),
-    consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
-    registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
-    contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
-    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
-    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
-    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
-  };
+  return new (class extends RepositorioQueRecusaTudo {
+    protected recusar(nome: string): never {
+      return naoDeveriaTerChegado(nome);
+    }
+  })();
 }
 
 function contaRecemCriada(displayName: string | null): Conta {
@@ -149,15 +128,21 @@ function montar(aceitandoEscrita = false): Bancada {
   const recebidas: NovaConta[] = [];
 
   const repositorio: IdentityRepository = aceitandoEscrita
-    ? {
-        ...repositorioQueRecusaTudo(),
-        criarContaLocal: (nova: NovaConta) => {
+    ? new (class extends RepositorioQueRecusaTudo {
+        protected recusar(nome: string): never {
+          return naoDeveriaTerChegado(nome);
+        }
+        override criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
           recebidas.push(nova);
           return Promise.resolve(contaRecemCriada(nova.displayName ?? null));
-        },
-        criarTokenDeVerificacao: () => Promise.resolve(),
-        gravarRefresh: () => Promise.resolve(),
-      }
+        }
+        override criarTokenDeVerificacao(): Promise<void> {
+          return Promise.resolve();
+        }
+        override gravarRefresh(): Promise<void> {
+          return Promise.resolve();
+        }
+      })()
     : repositorioQueRecusaTudo();
 
   const assinador: TokenSigner = aceitandoEscrita

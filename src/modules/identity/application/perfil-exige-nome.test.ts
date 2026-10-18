@@ -42,6 +42,7 @@ import type {
   Conta,
   IdentityRepository,
 } from '../ports/identity-repository.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
@@ -99,37 +100,19 @@ function montar(nomeAtual: string | null): Bancada {
   const eventos: AuditEvent[] = [];
   const gravados: CamposDoPerfil[] = [];
 
-  const base: IdentityRepository = {
-    criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
-    criarTokenDeVerificacao: () => naoDeveriaTerChegado('criarTokenDeVerificacao'),
-    gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),
-    buscarContaPorEmail: () => naoDeveriaTerChegado('buscarContaPorEmail'),
-    buscarContaPorId: () => Promise.resolve(conta(nomeAtual)),
-    buscarRefreshPorHash: () => naoDeveriaTerChegado('buscarRefreshPorHash'),
-    revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
-    revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
-    rotacionar: () => naoDeveriaTerChegado('rotacionar'),
-    atualizarPerfil: (_id: UserId, campos: CamposDoPerfil) => {
+  const base: IdentityRepository = new (class extends RepositorioQueRecusaTudo {
+    protected recusar(nome: string): never {
+      return naoDeveriaTerChegado(nome);
+    }
+    override buscarContaPorId(): Promise<Conta | undefined> {
+      return Promise.resolve(conta(nomeAtual));
+    }
+    override atualizarPerfil(_id: UserId, campos: CamposDoPerfil): Promise<Conta | undefined> {
       gravados.push(campos);
       const nome = campos.displayName;
       return Promise.resolve(conta(nome === undefined ? nomeAtual : nome));
-    },
-    buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
-    regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
-    registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),
-    invalidarSessoes: () => naoDeveriaTerChegado('invalidarSessoes'),
-    consumirTokenDeVerificacao: () => naoDeveriaTerChegado('consumirTokenDeVerificacao'),
-    conferirTokenDeVerificacao: () => naoDeveriaTerChegado('conferirTokenDeVerificacao'),
-    invalidarTokensPendentes: () => naoDeveriaTerChegado('invalidarTokensPendentes'),
-    marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
-    criarJanelaDeReautenticacao: () => naoDeveriaTerChegado('criarJanelaDeReautenticacao'),
-    consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
-    registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
-    contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
-    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
-    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
-    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
-  };
+    }
+  })();
 
   const assinador: TokenSigner = {
     emitir: (sub, agora: Instant, jti) => ({

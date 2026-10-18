@@ -34,6 +34,7 @@ import { criarServidor } from '../../../../shared/http/server.js';
 import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
 import { INSTANTE_FIXO, relogioParado } from '../../../../shared/time/relogio-de-teste.js';
 import type { IdentityRepository } from '../../ports/identity-repository.js';
+import { RepositorioQueRecusaTudo } from '../persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer } from '../../ports/mailer.js';
 import type { TokenSigner } from '../../ports/token-signer.js';
 import { criarAuthService } from '../../application/auth-service.js';
@@ -56,38 +57,11 @@ function naoUsado(nome: string): never {
  * nada. Qualquer chamada de porta é, por si só, a reprovação.
  */
 function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
-  const recusar = (nome: string) => () => naoUsado(nome);
-  return {
-    criarContaLocal: recusar('criarContaLocal'),
-    buscarContaPorId: recusar('buscarContaPorId'),
-    atualizarPerfil: recusar('atualizarPerfil'),
-    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
-    fotoDoPerfil: recusar('fotoDoPerfil'),
-    trocarFotoDoPerfil: recusar('trocarFotoDoPerfil'),
-    buscarContaPorEmail: recusar('buscarContaPorEmail'),
-    buscarCredencialLocalPorEmail: recusar('buscarCredencialLocalPorEmail'),
-    regravarCredencial: recusar('regravarCredencial'),
-    registrarLogin: recusar('registrarLogin'),
-    gravarRefresh: recusar('gravarRefresh'),
-    buscarRefreshPorHash: recusar('buscarRefreshPorHash'),
-    rotacionar: recusar('rotacionar'),
-    revogarFamilia: recusar('revogarFamilia'),
-    invalidarSessoes: recusar('invalidarSessoes'),
-    revogarTodasAsFamilias: recusar('revogarTodasAsFamilias'),
-    criarTokenDeVerificacao: recusar('criarTokenDeVerificacao'),
-    consumirTokenDeVerificacao: recusar('consumirTokenDeVerificacao'),
-    conferirTokenDeVerificacao: recusar('conferirTokenDeVerificacao'),
-    invalidarTokensPendentes: recusar('invalidarTokensPendentes'),
-    marcarEmailVerificado: recusar('marcarEmailVerificado'),
-    criarJanelaDeReautenticacao: recusar('criarJanelaDeReautenticacao'),
-    consumirJanelaDeReautenticacao: recusar('consumirJanelaDeReautenticacao'),
-    registrarPedidoDeExclusao: recusar('registrarPedidoDeExclusao'),
-    contasAExpurgar: recusar('contasAExpurgar'),
-    // `expurgarConta` saiu da porta em 17/10: nada apaga conta.
-    registrarPedidoDeTrocaDeEmail: recusar('registrarPedidoDeTrocaDeEmail'),
-    concluirTrocaDeEmail: recusar('concluirTrocaDeEmail'),
-    cancelarTrocaDeEmailPendente: recusar('cancelarTrocaDeEmailPendente'),
-  };
+  return new (class extends RepositorioQueRecusaTudo {
+    protected recusar(nome: string): never {
+      return naoUsado(nome);
+    }
+  })();
 }
 
 function montar(): RegistradorDeRotas {

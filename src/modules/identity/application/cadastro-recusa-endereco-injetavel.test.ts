@@ -29,6 +29,7 @@ import type { AbsoluteUrl, OpaqueToken } from '../../../shared/types/brands.js';
 import { INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { IdentityRepository } from '../ports/identity-repository.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
@@ -60,37 +61,11 @@ function naoDeveriaTerChegado(nome: string): never {
 
 /** Toda porta de escrita e de leitura recusa: o caminho não pode chegar a nenhuma. */
 function repositorioQueRecusaTudo(): IdentityRepository {
-  return {
-    criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
-    criarTokenDeVerificacao: () => naoDeveriaTerChegado('criarTokenDeVerificacao'),
-    gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),
-    buscarContaPorEmail: () => naoDeveriaTerChegado('buscarContaPorEmail'),
-    buscarContaPorId: () => naoDeveriaTerChegado('buscarContaPorId'),
-    buscarRefreshPorHash: () => naoDeveriaTerChegado('buscarRefreshPorHash'),
-    revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
-    revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
-    rotacionar: () => naoDeveriaTerChegado('rotacionar'),
-    atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
-    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
-    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
-    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
-    buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
-    regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
-    registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),
-    invalidarSessoes: () => naoDeveriaTerChegado('invalidarSessoes'),
-    consumirTokenDeVerificacao: () => naoDeveriaTerChegado('consumirTokenDeVerificacao'),
-    conferirTokenDeVerificacao: () => naoDeveriaTerChegado('conferirTokenDeVerificacao'),
-    invalidarTokensPendentes: () => naoDeveriaTerChegado('invalidarTokensPendentes'),
-    marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
-    criarJanelaDeReautenticacao: () => naoDeveriaTerChegado('criarJanelaDeReautenticacao'),
-    consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
-    registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
-    contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
-    // `expurgarConta` saiu da porta em 17/10: nada apaga conta.
-    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
-    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
-    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
-  };
+  return new (class extends RepositorioQueRecusaTudo {
+    protected recusar(nome: string): never {
+      return naoDeveriaTerChegado(nome);
+    }
+  })();
 }
 
 interface Bancada {

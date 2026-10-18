@@ -59,19 +59,16 @@ import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import { rotaDeCadastro, rotaDePedidoDeVerificacao } from '../adapters/http/routes.js';
 import type {
   Conta,
-  CredencialLocal,
-  IdentityRepository,
   NovaConta,
   NovoRefresh,
   NovoTokenDeVerificacao,
   PropositoDoToken,
-  RefreshArmazenado,
-  TokenConsumido,
 } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
 import { criarAuthService } from './auth-service.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const CONTA_NOVA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
 const EMAIL = 'tutora@exemplo.test';
@@ -116,115 +113,45 @@ function contaRecemCriada(): Conta {
   };
 }
 
-class RepositorioDeCadastro implements IdentityRepository {
+class RepositorioDeCadastro extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
   public readonly contasCriadas: NovaConta[] = [];
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly familiasAbertas: NovoRefresh[] = [];
 
   /** `undefined` é o que a unicidade do banco devolve quando o e-mail já tem conta. */
-  constructor(private readonly conta: Conta | undefined) {}
+  constructor(private readonly conta: Conta | undefined) {
+    super();
+}
 
-  criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
+  override criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
     this.contasCriadas.push(nova);
     return Promise.resolve(this.conta);
   }
 
-  criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+  override criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
     this.tokensGravados.push(novo);
     return Promise.resolve();
   }
 
-  gravarRefresh(novo: NovoRefresh): Promise<void> {
+  override gravarRefresh(novo: NovoRefresh): Promise<void> {
     this.familiasAbertas.push(novo);
     return Promise.resolve();
   }
 
-  buscarContaPorEmail(email: string): Promise<Conta | undefined> {
+  override buscarContaPorEmail(email: string): Promise<Conta | undefined> {
     return Promise.resolve(this.conta?.email === email ? this.conta : undefined);
   }
 
-  buscarContaPorId(): Promise<Conta | undefined> {
+  override buscarContaPorId(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
-  }
-
-  buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
-    return naoUsado('buscarRefreshPorHash');
-  }
-  revogarFamilia(): Promise<number> {
-    return naoUsado('revogarFamilia');
-  }
-  revogarTodasAsFamilias(): Promise<number> {
-    return naoUsado('revogarTodasAsFamilias');
-  }
-  rotacionar(): Promise<boolean> {
-    return naoUsado('rotacionar');
-  }
-  atualizarPerfil(): Promise<Conta | undefined> {
-    return naoUsado('atualizarPerfil');
-  }
-  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
-  fotoDoPerfil(): Promise<null> {
-    return naoUsado('fotoDoPerfil');
-  }
-
-  trocarFotoDoPerfil(): Promise<Conta | undefined> {
-    return naoUsado('trocarFotoDoPerfil');
-  }
-  buscarCredencialLocalPorEmail(): Promise<CredencialLocal | undefined> {
-    return naoUsado('buscarCredencialLocalPorEmail');
-  }
-  regravarCredencial(): Promise<void> {
-    return naoUsado('regravarCredencial');
-  }
-  registrarLogin(): Promise<void> {
-    return naoUsado('registrarLogin');
-  }
-  invalidarSessoes(): Promise<void> {
-    return naoUsado('invalidarSessoes');
-  }
-  consumirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    return naoUsado('consumirTokenDeVerificacao');
-  }
-  conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    return naoUsado('conferirTokenDeVerificacao');
-  }
-  invalidarTokensPendentes(): Promise<number> {
-    return naoUsado('invalidarTokensPendentes');
-  }
-  criarJanelaDeReautenticacao(): Promise<void> {
-    return naoUsado('criarJanelaDeReautenticacao');
-  }
-
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
-  }
-
-  marcarEmailVerificado(): Promise<void> {
-    return naoUsado('marcarEmailVerificado');
-  }
-
-  registrarPedidoDeExclusao(): Promise<undefined> {
-    return naoUsado('registrarPedidoDeExclusao');
-  }
-
-  contasAExpurgar(): Promise<readonly UserId[]> {
-    return naoUsado('contasAExpurgar');
   }
 
   expurgarConta(): Promise<boolean> {
     return naoUsado('expurgarConta');
-  }
-
-  registrarPedidoDeTrocaDeEmail(): Promise<void> {
-    return naoUsado('registrarPedidoDeTrocaDeEmail');
-  }
-
-  concluirTrocaDeEmail(): Promise<Conta | undefined> {
-    return naoUsado('concluirTrocaDeEmail');
-  }
-
-  cancelarTrocaDeEmailPendente(): Promise<void> {
-    return naoUsado('cancelarTrocaDeEmailPendente');
   }
 }
 
