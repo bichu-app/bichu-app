@@ -2920,6 +2920,187 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir conexao a partir de um convite
+         * @description Cria o pedido de conexao e responde **201** com a aresta no vocabulario
+         *     do app. A conexao e **SIMETRICA, com aceite**: nao existe "seguir", e
+         *     nao existe conexao de mao unica (decisao do cliente de 18/10/2026).
+         *
+         *     **O corpo carrega um TOKEN DE CONVITE, e nunca um identificador de
+         *     pessoa**, e isto e o coracao do desenho. A regra dele: *"o que nao pode
+         *     e ser publico, sem ter nenhum relacionamento"*. Aceitar aqui um apelido
+         *     seria busca de pessoas pela porta de tras e um oraculo de existencia de
+         *     apelido; aceitar um identificador de pessoa seria o endereco estavel e
+         *     compartilhavel que matou a descoberta por link. **Nao existe nenhum dos
+         *     dois, em nenhuma operacao deste contrato.**
+         *
+         *     O convite nasce de uma das duas formas, e as duas ja carregam a relacao
+         *     exigida: **conexao ancorada** no contexto (caso de pet encerrado como
+         *     devolvido, ou encontro em que os dois estiveram) e **codigo presencial**
+         *     lido cara a cara, com token rotativo de 5 minutos. **Nenhuma das duas
+         *     esta implementada**, entao hoje toda chamada desta operacao responde
+         *     **404** -- e isso e o desenho, nao uma lacuna.
+         *
+         *     **Idempotente.** Pedir de novo sobre uma aresta viva devolve o que ja
+         *     existe e nao cria linha nova. **A recusa e invisivel**: para quem pediu,
+         *     a recusada se projeta como `pending_sent` ate expirar, e nenhuma
+         *     resposta distingue recusado de nao respondido.
+         *
+         *     Token inexistente, expirado, de outra conta, apontando para a propria
+         *     conta, para conta desabilitada ou para quem bloqueou quem chama: o
+         *     **mesmo 404** (ADR-0021), nunca 403.
+         */
+        post: operations["requestConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os pedidos de conexao da propria conta
+         * @description Uma das **duas caixas de pedidos** da propria conta: `received` (o que
+         *     chegou e espera decisao) e `sent` (o que a conta enviou).
+         *
+         *     **Esta NAO e a lista de conexoes, e a lista de conexoes nao existe neste
+         *     contrato** -- nem de terceiro, nem do proprio dono. Pedido aceito **nao
+         *     aparece em nenhuma das duas caixas**, e e essa linha que impede a lista
+         *     de conexoes de nascer por descuido dentro de uma caixa de pedidos. O que
+         *     o dono tem sobre as proprias conexoes e a **contagem**, em
+         *     `getMyConnectionSummary`: contagem nao diz QUEM, e e essa diferenca que
+         *     a torna publicavel onde a lista nao e.
+         *
+         *     `received` traz so pendente vivo. `sent` traz pendente **e recusado**
+         *     dentro da validade, os dois com `state: pending_sent` -- e e assim que a
+         *     recusa fica silenciosa: a recusada desaparece quando a validade de 30
+         *     dias passa, exatamente como um pedido que ninguem respondeu. **Nao ha
+         *     valor `declined` em `ConnectionAppState`.**
+         *
+         *     **Sem busca, sem ordenacao escolhida e sem filtro de pessoa.** A ordem e
+         *     fixa (mais recentes primeiro) porque qualquer recorte por pessoa aqui
+         *     seria uma superficie de enumeracao.
+         */
+        get: operations["listMyConnectionRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os numeros das proprias conexoes
+         * @description **So numeros, e so da propria conta.** E o que permite a tela dizer
+         *     "voce tem 12 de 150" sem existir lista de conexoes em lugar nenhum.
+         *
+         *     `connection_limit` vem do servidor e nao e constante do aplicativo: o
+         *     teto e numero que se **sobe** depois (e nunca se desce), e um build
+         *     antigo com o numero gravado mostraria um limite que deixou de valer.
+         */
+        get: operations["getMyConnectionSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{connectionRef}/acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceitar um pedido de conexao
+         * @description **So o destinatario de um pendente vivo aceita**, e e este o unico
+         *     caminho que cria uma conexao: **sem aceite nao ha conexao**, e nenhum
+         *     dado de conectado (pets nomeados, vitrine, publicacoes, bairro) tem por
+         *     onde aparecer antes dele.
+         *
+         *     `ref` de aresta alheia, pendente expirado, pedido ja aceito, pedido que
+         *     a propria conta enviou, conta desabilitada de qualquer um dos dois lados
+         *     e par bloqueado: o **mesmo 404** (ADR-0021), nunca 403. Os predicados
+         *     moram na clausula `WHERE` do `UPDATE`.
+         *
+         *     Aceitar cria conexao para os **dois**, entao o teto de 150 e cobrado nos
+         *     dois lados (`400`, `code: connection_limit_reached` ou
+         *     `addressee_connection_limit_reached`). Linha que **ja existe** nunca e
+         *     recusada retroativamente: o teto vale para o pedido e o aceite novos.
+         */
+        post: operations["acceptConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{connectionRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Recusar, cancelar ou desfazer
+         * @description **Uma operacao para as tres**, e o corpo da resposta e **vazio nas
+         *     tres** (204). Do lado de fora as tres sao "esta aresta deixa de existir
+         *     para mim", e a diferenca e **derivada** do estado e do papel, no
+         *     servidor -- nunca recebida de quem chama. Um cliente que pudesse mandar
+         *     a intencao lavaria a recusa mandando "desfazer" num pendente.
+         *
+         *     **O 204 e o que mantem a recusa silenciosa.** Um corpo que dissesse
+         *     "recusado" seria o *"ela recusou voce"* que o desenho recusa, e e isso
+         *     que faz as pessoas aceitarem estranhos para nao criar atrito. O que de
+         *     fato aconteceu vai para a trilha, nunca para a resposta.
+         *
+         *     O que o servidor faz em cada caso: **recusa** (pendente, quem chama
+         *     recebeu) guarda a recusa e um descanso de 90 dias, porque apagar a linha
+         *     faria o proximo pedido nascer pendente e lavaria a recusa;
+         *     **cancelamento** (pendente, quem chama pediu) e **desfazer** (aceita,
+         *     qualquer um dos dois) apagam a linha. **Desfazer nao avisa ninguem.**
+         *
+         *     `ref` desconhecido, de aresta alheia, de aresta ja encerrada, de conta
+         *     desabilitada de qualquer lado e de par bloqueado: o mesmo 404.
+         */
+        delete: operations["endConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -4728,6 +4909,100 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
+         *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
+         *     nem qualquer forma de endereca-la: a regra do cliente de 18/10/2026 e
+         *     *"o que nao pode e ser publico, sem ter nenhum relacionamento"*, e um
+         *     campo que aceitasse pessoa reabriria o caminho que a decisao fechou.
+         *
+         *     Quem emite o token sao as duas formas de convite (conexao ancorada no
+         *     contexto e codigo presencial de 5 minutos), **nenhuma delas
+         *     implementada**. O token nao e enumeravel e nao e identificador estavel
+         *     de ninguem.
+         */
+        ConnectionInvite: {
+            /** @description O token do convite. Opaco, de uso unico e de vida curta. */
+            invite_token: string;
+        };
+        /**
+         * @description O estado da aresta no vocabulario do aplicativo.
+         *
+         *     **Nao existe `declined`**, pela mesma razao que `JoinRequestAppState`
+         *     tambem nao tem: a recusa e silenciosa. Para quem pediu, a aresta
+         *     recusada responde `pending_sent` ate a validade de 30 dias passar, e
+         *     depois desaparece -- indistinguivel de um pedido que ninguem respondeu.
+         *
+         *     **Nao existe `following` nem `follower`**: a conexao e simetrica e nao ha
+         *     "seguir" neste produto.
+         * @enum {string}
+         */
+        ConnectionAppState: "pending_sent" | "pending_received" | "connected";
+        /**
+         * @description Como a outra ponta da aresta e **nomeada**, e nada alem disso.
+         *
+         *     **Nunca carrega identificador interno** (ADR-0010 item 6): nem `id`, nem
+         *     UUID de nenhuma especie. O que identifica e `handle`, o apelido escolhido
+         *     pela pessoa, e ele e **opcional** -- com nulo a leitura cai para
+         *     `display_name`, e com os dois nulos quem desenha decide o texto.
+         *
+         *     **Nada de conectado entra aqui**: sem bairro, sem cidade, sem pets, sem
+         *     contagens, sem foto, sem publicacoes. Esta forma e a mesma no pedido
+         *     recebido e na conexao aceita, de proposito: o que muda com o aceite e o
+         *     que as OUTRAS superficies passam a mostrar, nao esta.
+         */
+        ConnectionPerson: {
+            /** @description O apelido (`@`), 5 a 20 caracteres, minusculas, digitos e hifen. Nulo quando a pessoa nao escolheu um. */
+            handle: string | null;
+            /** @description O nome de exibicao. Nulo nas contas que nasceram sem ele. */
+            display_name: string | null;
+        };
+        /**
+         * @description Uma aresta do grafo de conexao, **simetrica**, na perspectiva de quem
+         *     pergunta.
+         *
+         *     `ref` e opaco e e **DA ARESTA, nunca da pessoa** -- e esta e a diferenca
+         *     que sustenta a regra do cliente. Um identificador publico por PESSOA
+         *     seria um endereco estavel e compartilhavel, que *"vira endereco publico
+         *     no primeiro grupo em que alguem o cola"*, e foi exatamente por isso que
+         *     a descoberta por link morreu. Com `ref` por aresta, so quem e uma das
+         *     duas pontas o conhece, e a clausula `WHERE` da leitura cobra isso.
+         */
+        Connection: {
+            /** @description O identificador opaco da ARESTA. Nao e UUID e nao e de ninguem. */
+            ref: string;
+            state: components["schemas"]["ConnectionAppState"];
+            /** Format: date-time */
+            requested_at: string;
+            person: components["schemas"]["ConnectionPerson"];
+        };
+        /**
+         * @description Uma pagina de **pedidos** -- recebidos ou enviados. **Nunca de
+         *     conexoes**: aceito nao aparece aqui.
+         */
+        ConnectionRequestPage: {
+            items: components["schemas"]["Connection"][];
+            total: number;
+            page: number;
+            limit: number;
+        };
+        /**
+         * @description Os numeros das conexoes **da propria conta**, e nenhum nome.
+         *
+         *     Contagem existe onde lista nao pode porque contagem **nao diz quem**. E
+         *     o unico jeito de a tela do dono falar das proprias conexoes sem que
+         *     exista, em lugar nenhum, uma lista de pessoas.
+         */
+        ConnectionSummary: {
+            /** @description Conexoes aceitas, contando os dois lados. Conta desabilitada SAI desta contagem, e a linha nao e apagada -- reabilitar devolve a conexao. */
+            connected_count: number;
+            pending_sent_count: number;
+            requests_received_count: number;
+            /** @description Quantos pedidos ainda cabem na janela CORRIDA de 24 h. Corrida e nao "ate a meia-noite", senao 20 pedidos caberiam em dois minutos na virada do dia. */
+            remaining_requests_today: number;
+            /** @description O teto de conexoes, do servidor. Hoje 150. */
+            connection_limit: number;
+        };
         /** @description RFC 9457. O cliente decide por `type`, nunca pelo texto. */
         Problem: {
             /** Format: uri */
@@ -9683,6 +9958,14 @@ export interface components {
          */
         DirectoryEntrySlug: components["schemas"]["Slug"];
         /**
+         * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+         *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+         *     publico por pessoa seria endereco estavel e compartilhavel, que e
+         *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+         *     `AdminJoinRequest.ref`.
+         */
+        ConnectionRefParam: string;
+        /**
          * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
          *     UUID** e nao e derivado de quem escreveu: um identificador que
          *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
@@ -13149,6 +13432,149 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    requestConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionInvite"];
+            };
+        };
+        responses: {
+            /** @description O pedido, no vocabulario do app. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyConnectionRequests: {
+        parameters: {
+            query?: {
+                /** @description Qual caixa. Nao ha uma terceira, e nao ha "todas". */
+                direction?: "received" | "sent";
+                page?: number;
+                /** @description O teto de 20 e o mesmo teto de pedidos pendentes enviados, de proposito. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pagina de pedidos da caixa pedida. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyConnectionSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os numeros da propria conta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    acceptConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+                 *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+                 *     publico por pessoa seria endereco estavel e compartilhavel, que e
+                 *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+                 *     `AdminJoinRequest.ref`.
+                 */
+                connectionRef: components["parameters"]["ConnectionRefParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A conexao aceita. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    endConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+                 *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+                 *     publico por pessoa seria endereco estavel e compartilhavel, que e
+                 *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+                 *     `AdminJoinRequest.ref`.
+                 */
+                connectionRef: components["parameters"]["ConnectionRefParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A aresta foi encerrada. Sem corpo, nas tres semanticas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

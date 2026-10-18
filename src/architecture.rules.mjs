@@ -51,6 +51,20 @@ export const MODULES = [
   // **Nenhuma tabela.** Este modulo nao tem persistencia: o endereco que ele
   // devolve e gravado por quem pediu, na tabela de quem pediu.
   'addresses',
+  // Fatia F da frente de comunidade (18/10/2026). A conexao entre pessoas e
+  // modulo proprio e nao um canto de `network` nem de `identity`: `network` e
+  // de ENCONTROS (um lugar, uma data, um publico), e a conexao e uma aresta
+  // entre duas contas, com maquina de estados e aceite dos dois lados.
+  // Dentro de `identity` ela viraria um segundo dominio sem fronteira, e
+  // `identity` passaria a ter uma tabela que fala de DUAS contas.
+  //
+  // A razao mais forte e de privacidade, e e a mesma que fez `network` existir:
+  // `user_connections` e a tabela que diz quem conhece quem, e manter a
+  // fronteira e o que garante que nenhum outro modulo a leia a nao ser por
+  // `ports/` -- onde NAO existe operacao que devolva a LISTA de conexoes de
+  // alguem, so a contagem do proprio dono e o predicado "estes dois estao
+  // conectados?".
+  'connections',
 ];
 
 /**

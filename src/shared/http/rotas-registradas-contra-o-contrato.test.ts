@@ -54,6 +54,7 @@ import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
 import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-store-routes.js';
 import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
+import * as conexoes from '../../modules/connections/adapters/http/connection-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
@@ -105,6 +106,11 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
   // prefixo /v1/admin.
   redeAdministrativa,
+  // FATIA F (18/10). A conexao entre pessoas, SIMETRICA, com aceite. Modulo
+  // novo entra AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha
+  // ele reprova contando `defineRoute` no disco -- foi exatamente assim que a
+  // ausencia dela apareceu, na primeira execucao da suite desta fatia.
+  conexoes,
   // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
   // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
   // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`

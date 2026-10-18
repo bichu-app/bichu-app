@@ -1679,7 +1679,62 @@ export type OrigemDoEncontro = 'admin' | 'community';
  */
 export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
 
+/**
+ * FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com pedido e
+ * aceite, **uma linha por par**.
+ *
+ * `pair_low`/`pair_high` NAO estao declarados aqui, e a ausencia e a regra: eles
+ * sao derivados pelo gatilho `user_connections_par_derivado` e **o construtor
+ * tipado nao pode nem oferece as duas colunas**. O que nao esta no tipo nao
+ * atravessa a borda por descuido -- mesma forma da coluna de autoria de
+ * `DirectorySuggestionsTable`, que tambem nao esta declarada ali.
+ *
+ * (E o nome dela NAO e citado aqui de proposito: ela carrega a marca "nunca sai
+ * do servidor", e `portao-colunas-que-nao-saem` reprova o nome literal em todo
+ * `.ts` de `src/` -- inclusive em comentario. Custou uma reprovacao para
+ * lembrar.)
+ *
+ * `requester_user_id` e `addressee_user_id` **estao** aqui, e a diferenca
+ * importa: `src/` PRECISA das duas na clausula `WHERE`, porque toda leitura e
+ * toda escrita desta tabela e "a MINHA aresta", resolvida por igualdade com quem
+ * chama (ADR-0021). O que nao acontece e elas serem PROJETADAS: nenhuma leitura
+ * as seleciona para a resposta, e o que sai e `ref`, nome de exibicao e apelido.
+ *
+ * **Nao existe tabela nem coluna de "seguir"**, e nao existe leitura que devolva
+ * a LISTA de conexoes de alguem -- nem do proprio dono (plano 4-B).
+ */
+export interface UserConnectionsTable {
+  /** UUIDv7 gerado pela aplicacao. Nunca sai em resposta (ADR-0010 item 6). */
+  id: string;
+  /** 128 bits em base64url (22 caracteres). E ele que sai, e e DA ARESTA. */
+  ref: string;
+  requester_user_id: string;
+  addressee_user_id: string;
+  state: Generated<EstadoDaConexao>;
+  origin: OrigemDoPedidoDeConexao;
+  requested_at: Generated<Date>;
+  expires_at: Date;
+  responded_at: Date | null;
+  rest_until: Date | null;
+}
+
+/**
+ * O `CHECK` `user_connections_estado_conhecido`.
+ *
+ * **`bloqueado` NAO e valor daqui**: ele e `user_blocks` (fatia E), e e
+ * ferramenta pessoal, nao estado desta aresta. `nenhum` e a ausencia de linha.
+ */
+export type EstadoDaConexao = 'pending' | 'accepted' | 'declined';
+
+/**
+ * O `CHECK` `user_connections_origem_fechada`. Os tres caminhos que o desenho
+ * reconhece como relacao, e **nao ha quarto**: a descoberta por link morreu na
+ * decisao do cliente de 18/10/2026.
+ */
+export type OrigemDoPedidoDeConexao = 'anchored_case' | 'anchored_event' | 'presence_code';
+
 export interface Database {
+  user_connections: UserConnectionsTable;
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;
