@@ -374,13 +374,22 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     return null;
   }
 
+  /// Em qual dos dois passos a pessoa esta (0 ou 1).
+  ///
+  /// **O passo e a UNICA coisa que a divisao acrescentou ao estado.** Tudo o
+  /// que a pessoa preenche continua em [_rascunho] e em [_observacao], que
+  /// moram aqui, acima dos dois passos: nenhuma pagina guarda copia de nada,
+  /// e por isso nao ha par de paginas para discordar.
+  int _passo = 0;
+
+  // -------------------------------------------------------------------------
+  // O desenho
+  // -------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
     final agora = widget.agora();
-    final impedimento = _rascunho.impedimentoEm(agora);
-    final aviso = _avisoDoLugar;
 
     return Scaffold(
       appBar: const BarraDeConta(
@@ -390,185 +399,324 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
       body: SafeArea(
         top: false,
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.all(BichuEspaco.e4),
-          // Pelo mesmo motivo da BICHUS-62: o padrao do `ListView` embrulha
-          // cada filho direto num `IndexedSemantics`, e com ele cada bloco
-          // desta tela viraria UM no de semantica com tudo colapsado dentro.
-          // Este e o corpo rolavel de uma pagina, e nao uma lista de itens.
-          addSemanticIndexes: false,
+        // **`IndexedStack`, e nao `PageView` nem rota nova.** Os dois passos
+        // ficam MONTADOS; so um e desenhado. Isso e o que faz "ir ao 2, voltar
+        // ao 1 e avancar de novo" devolver o passo 2 preenchido: a captura de
+        // localizacao guarda bairro, cidade e UF em `TextEditingController`
+        // dentro do estado DELA, e desmontar aquele trecho -- que e o que uma
+        // rota nova ou um `if` fariam -- jogaria fora o que a pessoa digitou
+        // sem nada na tela dizendo que jogou.
+        //
+        // `RenderIndexedStack` so visita o filho do indice ao montar a
+        // semantica, entao o leitor de tela continua ouvindo UMA pagina.
+        child: IndexedStack(
+          index: _passo,
           children: <Widget>[
-            Semantics(
-              header: true,
-              child: Text(TextosDoAchado.chamada, style: textos.headlineSmall),
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            Text(
-              TextosDoAchado.soOQueDerParaVer,
-              style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
-            ),
-            if (_erroInicial != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e6),
-              FaixaDeAviso(texto: _erroInicial!),
-            ],
-            const SizedBox(height: BichuEspaco.e6),
-            _BlocoDaFoto(
-              foto: _rascunho.foto,
-              permissao: _permissaoDaCamera,
-              aoTirar: _tirarFoto,
-              aoEscolher: _escolherDaGaleria,
+            _Passo1(
+              rascunho: _rascunho,
+              racas: _racas,
+              cores: _cores,
+              permissaoDaCamera: _permissaoDaCamera,
+              erroInicial: _erroInicial,
+              aoMudar: () => setState(() {}),
+              aoTirarFoto: _tirarFoto,
+              aoEscolherFoto: _escolherDaGaleria,
               aoAbrirAjustes: () =>
                   Escopo.of(context).camera.abrirAjustesDoSistema(),
             ),
-            const SizedBox(height: BichuEspaco.e6),
-            GrupoSegmentado<Especie>(
-              rotulo: TextosDoAchado.rotuloDaEspecie,
-              selecionado: _rascunho.especie,
-              opcoes: <OpcaoSegmentada<Especie>>[
-                for (final e in Especie.values)
-                  OpcaoSegmentada<Especie>(valor: e, rotulo: e.rotulo),
-              ],
-              aoSelecionar: (escolha) => setState(() {
-                _rascunho.especie = escolha;
-                // Trocar de especie **apaga a raca escolhida**: a lista de
-                // racas e por especie, e um `shih_tzu` guardado sob `cat`
-                // viajaria para o servidor e sairia do cruzamento pela porta
-                // errada.
-                _rascunho.racaCodigo = null;
-              }),
+            _Passo2(
+              rascunho: _rascunho,
+              observacao: _observacao,
+              avisoDoLugar: _avisoDoLugar,
+              erro: _erro,
+              aoMudar: () => setState(() {}),
+              aoEscolherData: _escolherData,
             ),
-            const SizedBox(height: BichuEspaco.e6),
-            GrupoSegmentado<Porte>(
-              rotulo: TextosDoAchado.rotuloDoPorte,
-              selecionado: _rascunho.porte,
-              opcoes: <OpcaoSegmentada<Porte>>[
-                for (final p in Porte.values)
-                  OpcaoSegmentada<Porte>(valor: p, rotulo: p.rotulo),
-              ],
-              aoSelecionar: (escolha) =>
-                  setState(() => _rascunho.porte = escolha),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            SeletorDeLista(
-              rotulo: TextosDoAchado.rotuloDaRaca,
-              estadoInicial: TextosDoAchado.escolherNaLista,
-              ajuda: TextosDoAchado.listaSoSeVoceSouber,
-              itens: _racas,
-              // Desabilitado sem especie, porque a lista e POR especie, e
-              // desabilitado sem lista, porque nao ha o que escolher.
-              habilitado: _racas.isNotEmpty,
-              selecionado: _rascunho.racaCodigo,
-              aoSelecionar: (codigo) =>
-                  setState(() => _rascunho.racaCodigo = codigo),
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            SeletorDeLista(
-              rotulo: TextosDoAchado.rotuloDaCor,
-              estadoInicial: TextosDoAchado.escolherNaLista,
-              ajuda: TextosDoAchado.listaSoSeVoceSouber,
-              // **Rotulada em texto, nunca amostra de cor sem nome**
-              // (criterio 2). `SeletorDeLista` so conhece rotulo, e e por isso
-              // que ele e o componente certo aqui.
-              itens: _cores,
-              habilitado: _cores.isNotEmpty,
-              selecionado: _rascunho.corCodigo,
-              aoSelecionar: (codigo) =>
-                  setState(() => _rascunho.corCodigo = codigo),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            GrupoSegmentado<Sexo>(
-              rotulo: TextosDoAchado.rotuloDoSexo,
-              selecionado: _rascunho.sexo,
-              opcoes: <OpcaoSegmentada<Sexo>>[
-                for (final s in Sexo.values)
-                  OpcaoSegmentada<Sexo>(valor: s, rotulo: s.rotulo),
-              ],
-              aoSelecionar: (escolha) =>
-                  setState(() => _rascunho.sexo = escolha),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            Semantics(
-              header: true,
-              child: Text(
-                TextosDoAchado.rotuloDeOnde,
-                style: textos.titleMedium,
-              ),
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            // A PECA DA BICHUS-23, EMBUTIDA. Ver o cabecalho desta classe.
-            CapturaDeLocalizacao(
-              pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
-              aoMudar: (onde) => setState(() => _rascunho.onde = onde),
-            ),
-            if (aviso != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e4),
-              FaixaDeAviso(peso: PesoDaFaixa.informativo, texto: aviso),
-            ],
-            const SizedBox(height: BichuEspaco.e6),
-            GrupoDeOpcoes<QuandoFoiVisto>(
-              rotulo: TextosDoAchado.rotuloDeQuando,
-              selecionado: _rascunho.quando,
-              opcoes: <OpcaoDeLinha<QuandoFoiVisto>>[
-                for (final q in QuandoFoiVisto.values)
-                  OpcaoDeLinha<QuandoFoiVisto>(valor: q, rotulo: q.rotulo),
-              ],
-              aoSelecionar: (escolha) {
-                setState(() {
-                  _rascunho.quando = escolha;
-                  // Trocar de `Outra data` para outra opcao **apaga** a data
-                  // escolhida: deixa-la guardada gravaria o achado com a data
-                  // de um calendario que a pessoa ja abandonou.
-                  if (!escolha.pedeCalendario) _rascunho.dataEscolhida = null;
-                });
-                if (escolha.pedeCalendario) _escolherData();
-              },
-            ),
-            if (_rascunho.quando?.pedeCalendario ?? false) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e3),
-              _DataEscolhida(
-                data: _rascunho.dataEscolhida,
-                aoTrocar: _escolherData,
-              ),
-            ],
-            const SizedBox(height: BichuEspaco.e6),
-            BichuField(
-              rotulo: TextosDoAchado.rotuloDaObservacao,
-              controlador: _observacao,
-              // Opcional **em texto**, e nao por asterisco: asterisco falha
-              // para leitor de tela e para quem nao conhece a convencao.
-              opcional: true,
-              linhas: 3,
-              limite: RascunhoDoAchado.limiteDaObservacao,
-              exemplo: TextosDoAchado.exemploDaObservacao,
-              capitalizacao: TextCapitalization.sentences,
-            ),
-            if (_erro != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e6),
-              FaixaDeAviso(texto: _erro!.texto),
-            ],
           ],
         ),
       ),
-      bottomNavigationBar: BarraDeAcaoFixa(
+      bottomNavigationBar: _barra(cores, agora),
+    );
+  }
+
+  /// A barra de baixo, que muda com o passo -- e **sempre** diz o que falta.
+  ///
+  /// O motivo vem ACIMA do botao nos dois passos: quem usa leitor de tela
+  /// chegaria no botao desabilitado sem ter ouvido por que.
+  Widget _barra(BichuCores cores, DateTime agora) {
+    if (_passo == 0) {
+      final impedimento = _rascunho.impedimentoDoPasso1();
+      return BarraDeAcaoFixa(
         acoes: <Widget>[
-          // **O MOTIVO, VISIVEL, ACIMA DO BOTAO.** A ordem de leitura precisa
-          // entregar o motivo antes do controle: quem usa leitor de tela
-          // chegaria no botao desabilitado sem ter ouvido por que.
           if (impedimento != null)
-            _MotivoDoBloqueio(
-              texto: impedimento.texto,
-              cor: cores.textPrimary,
-            ),
+            _MotivoDoBloqueio(texto: impedimento.texto, cor: cores.textPrimary),
           BotaoPrimario(
-            rotulo: TextosDoAchado.registrar,
-            critico: true,
-            carregando: _fase == _Fase.enviando,
-            aoTocar: (impedimento != null || _fase == _Fase.enviando)
-                ? null
-                : _registrar,
+            rotulo: TextosDoAchado.continuar,
+            aoTocar:
+                impedimento != null ? null : () => setState(() => _passo = 1),
           ),
         ],
-      ),
+      );
+    }
+
+    final impedimento = _rascunho.impedimentoEm(agora);
+    return BarraDeAcaoFixa(
+      acoes: <Widget>[
+        if (impedimento != null)
+          _MotivoDoBloqueio(texto: impedimento.texto, cor: cores.textPrimary),
+        BotaoPrimario(
+          rotulo: TextosDoAchado.registrar,
+          critico: true,
+          carregando: _fase == _Fase.enviando,
+          aoTocar: (impedimento != null || _fase == _Fase.enviando)
+              ? null
+              : _registrar,
+        ),
+        // **Voltar nao perde nada**, e e por isso que ele pode ser um botao
+        // comum e nao uma pergunta de confirmacao.
+        OutlinedButton(
+          onPressed: _fase == _Fase.enviando
+              ? null
+              : () => setState(() => _passo = 0),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+          ),
+          child: const Text(TextosDoAchado.voltarAoPasso1),
+        ),
+      ],
+    );
+  }
+}
+
+/// **Passo 1: o animal.** Especie, raca, sexo, porte e foto, nesta ordem
+/// (cliente, 17/10/2026).
+///
+/// A especie vem primeiro porque a lista de racas e POR especie: perguntar a
+/// raca antes deixaria o campo desabilitado na primeira leitura, que e o
+/// defeito que esta tela acabou de pagar em outro campo.
+class _Passo1 extends StatelessWidget {
+  const _Passo1({
+    required this.rascunho,
+    required this.racas,
+    required this.cores,
+    required this.permissaoDaCamera,
+    required this.erroInicial,
+    required this.aoMudar,
+    required this.aoTirarFoto,
+    required this.aoEscolherFoto,
+    required this.aoAbrirAjustes,
+  });
+
+  final RascunhoDoAchado rascunho;
+  final List<ItemDeLista> racas;
+  final List<ItemDeLista> cores;
+  final EstadoDaPermissao permissaoDaCamera;
+  final String? erroInicial;
+
+  /// Avisa a tela de que o rascunho mudou. **O rascunho e da tela**, e este
+  /// passo so escreve nele -- nao ha segunda copia para sincronizar.
+  final VoidCallback aoMudar;
+
+  final VoidCallback aoTirarFoto;
+  final VoidCallback aoEscolherFoto;
+  final VoidCallback aoAbrirAjustes;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      // Pelo mesmo motivo da BICHUS-62: o padrao do `ListView` embrulha cada
+      // filho direto num `IndexedSemantics`, e com ele cada bloco desta tela
+      // viraria UM no de semantica com tudo colapsado dentro.
+      addSemanticIndexes: false,
+      children: <Widget>[
+        const IndicadorDePasso(
+          passo: 1,
+          total: 2,
+          titulo: TextosDoAchado.tituloDoPasso1,
+        ),
+        if (erroInicial != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e6),
+          FaixaDeAviso(texto: erroInicial!),
+        ],
+        const SizedBox(height: BichuEspaco.e6),
+        GrupoSegmentado<Especie>(
+          rotulo: TextosDoAchado.rotuloDaEspecie,
+          selecionado: rascunho.especie,
+          opcoes: <OpcaoSegmentada<Especie>>[
+            for (final e in Especie.values)
+              OpcaoSegmentada<Especie>(valor: e, rotulo: e.rotulo),
+          ],
+          aoSelecionar: (escolha) {
+            rascunho.especie = escolha;
+            // Trocar de especie **apaga a raca escolhida**: a lista de racas e
+            // por especie, e um `shih_tzu` guardado sob `cat` viajaria para o
+            // servidor e sairia do cruzamento pela porta errada.
+            rascunho.racaCodigo = null;
+            aoMudar();
+          },
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+        SeletorDeLista(
+          rotulo: TextosDoAchado.rotuloDaRaca,
+          estadoInicial: TextosDoAchado.escolherNaLista,
+          ajuda: TextosDoAchado.listaSoSeVoceSouber,
+          itens: racas,
+          // Desabilitado sem especie, porque a lista e POR especie, e
+          // desabilitado sem lista, porque nao ha o que escolher.
+          habilitado: racas.isNotEmpty,
+          selecionado: rascunho.racaCodigo,
+          aoSelecionar: (codigo) {
+            rascunho.racaCodigo = codigo;
+            aoMudar();
+          },
+        ),
+        const SizedBox(height: BichuEspaco.e4),
+        SeletorDeLista(
+          rotulo: TextosDoAchado.rotuloDaCor,
+          estadoInicial: TextosDoAchado.escolherNaLista,
+          ajuda: TextosDoAchado.listaSoSeVoceSouber,
+          // **Rotulada em texto, nunca amostra de cor sem nome** (criterio 2).
+          itens: cores,
+          habilitado: cores.isNotEmpty,
+          selecionado: rascunho.corCodigo,
+          aoSelecionar: (codigo) {
+            rascunho.corCodigo = codigo;
+            aoMudar();
+          },
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+        GrupoSegmentado<Sexo>(
+          rotulo: TextosDoAchado.rotuloDoSexo,
+          selecionado: rascunho.sexo,
+          opcoes: <OpcaoSegmentada<Sexo>>[
+            for (final s in Sexo.values)
+              OpcaoSegmentada<Sexo>(valor: s, rotulo: s.rotulo),
+          ],
+          aoSelecionar: (escolha) {
+            rascunho.sexo = escolha;
+            aoMudar();
+          },
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+        GrupoSegmentado<Porte>(
+          rotulo: TextosDoAchado.rotuloDoPorte,
+          selecionado: rascunho.porte,
+          opcoes: <OpcaoSegmentada<Porte>>[
+            for (final p in Porte.values)
+              OpcaoSegmentada<Porte>(valor: p, rotulo: p.rotulo),
+          ],
+          aoSelecionar: (escolha) {
+            rascunho.porte = escolha;
+            aoMudar();
+          },
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+        _BlocoDaFoto(
+          foto: rascunho.foto,
+          permissao: permissaoDaCamera,
+          aoTirar: aoTirarFoto,
+          aoEscolher: aoEscolherFoto,
+          aoAbrirAjustes: aoAbrirAjustes,
+        ),
+      ],
+    );
+  }
+}
+
+/// **Passo 2: onde e quando.** `Quando?`, a localizacao e a observacao, nesta
+/// ordem (cliente, 17/10/2026).
+class _Passo2 extends StatelessWidget {
+  const _Passo2({
+    required this.rascunho,
+    required this.observacao,
+    required this.avisoDoLugar,
+    required this.erro,
+    required this.aoMudar,
+    required this.aoEscolherData,
+  });
+
+  final RascunhoDoAchado rascunho;
+  final TextEditingController observacao;
+  final String? avisoDoLugar;
+  final MensagemDeErro? erro;
+  final VoidCallback aoMudar;
+  final VoidCallback aoEscolherData;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      addSemanticIndexes: false,
+      children: <Widget>[
+        const IndicadorDePasso(
+          passo: 2,
+          total: 2,
+          titulo: TextosDoAchado.tituloDoPasso2,
+        ),
+        const SizedBox(height: BichuEspaco.e6),
+        GrupoDeOpcoes<QuandoFoiVisto>(
+          rotulo: TextosDoAchado.rotuloDeQuando,
+          selecionado: rascunho.quando,
+          opcoes: <OpcaoDeLinha<QuandoFoiVisto>>[
+            for (final q in QuandoFoiVisto.values)
+              OpcaoDeLinha<QuandoFoiVisto>(valor: q, rotulo: q.rotulo),
+          ],
+          aoSelecionar: (escolha) {
+            rascunho.quando = escolha;
+            // Trocar de `Outra data` para outra opcao **apaga** a data
+            // escolhida: deixa-la guardada gravaria o achado com a data de um
+            // calendario que a pessoa ja abandonou.
+            if (!escolha.pedeCalendario) rascunho.dataEscolhida = null;
+            aoMudar();
+            if (escolha.pedeCalendario) aoEscolherData();
+          },
+        ),
+        if (rascunho.quando?.pedeCalendario ?? false) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e3),
+          _DataEscolhida(
+            data: rascunho.dataEscolhida,
+            aoTrocar: aoEscolherData,
+          ),
+        ],
+        const SizedBox(height: BichuEspaco.e6),
+        Semantics(
+          header: true,
+          child: Text(
+            TextosDoAchado.rotuloDeOnde,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(height: BichuEspaco.e4),
+        // A PECA DA BICHUS-23, EMBUTIDA. Ver o cabecalho desta tela.
+        CapturaDeLocalizacao(
+          pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+          aoMudar: (onde) {
+            rascunho.onde = onde;
+            aoMudar();
+          },
+        ),
+        if (avisoDoLugar != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          FaixaDeAviso(peso: PesoDaFaixa.informativo, texto: avisoDoLugar!),
+        ],
+        const SizedBox(height: BichuEspaco.e6),
+        BichuField(
+          rotulo: TextosDoAchado.rotuloDaObservacao,
+          controlador: observacao,
+          // Opcional **em texto**, e nao por asterisco: asterisco falha para
+          // leitor de tela e para quem nao conhece a convencao.
+          opcional: true,
+          linhas: 3,
+          limite: RascunhoDoAchado.limiteDaObservacao,
+          exemplo: TextosDoAchado.exemploDaObservacao,
+          capitalizacao: TextCapitalization.sentences,
+        ),
+        if (erro != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e6),
+          FaixaDeAviso(texto: erro!.texto),
+        ],
+      ],
     );
   }
 }

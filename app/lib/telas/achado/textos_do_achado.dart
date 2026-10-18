@@ -27,15 +27,6 @@ abstract final class TextosDoAchado {
   /// A frase de abertura, palavra por palavra do criterio 1.
   static const String chamada = 'Você achou um pet. Conte o que dá para ver.';
 
-  /// O convite que explica o resto do formulario.
-  ///
-  /// Ele existe porque a pessoa esta na rua com um animal e precisa saber, na
-  /// primeira leitura, que **nada alem do obvio e cobrado**. Sem esta linha,
-  /// um formulario de sete campos parece sete perguntas obrigatorias.
-  static const String soOQueDerParaVer =
-      'Ninguém espera que você saiba a raça, a idade ou o nome. Preencha o '
-      'que der.';
-
   // -- Foto -----------------------------------------------------------------
 
   static const String rotuloDaFoto = 'Foto';
@@ -44,13 +35,14 @@ abstract final class TextosDoAchado {
   static const String escolherDaGaleria = 'Escolher da galeria';
   static const String trocarAFoto = 'Trocar a foto';
 
-  /// O que a foto e, e para quem ela vai (criterio 9).
+  /// Quem ve a foto, numa linha (cliente, 17/10/2026).
   ///
-  /// Dito **antes** de a pessoa tirar a foto, e nao depois: quem vai fotografar
-  /// um animal na rua precisa saber que aquilo nao vai para uma lista publica.
-  static const String fotoSoNaConversa =
-      'A foto não aparece em lista nenhuma. Ela é mostrada só ao tutor, '
-      'dentro da conversa que o Bichu abre.';
+  /// **O paragrafo saiu; a afirmacao de privacidade ficou.** O cliente pediu
+  /// para tirar o texto da foto, e o que ele nomeou -- "a foto nao aparece em
+  /// lista nenhuma" -- saiu. O que sobra e o unico pedaco com peso de
+  /// privacidade: a quem a foto e mostrada. Apagar isso tambem seria apagar o
+  /// aviso de uso de dado, e esse apagamento nao e meu para fazer.
+  static const String fotoSoNaConversa = 'Mostrada só ao tutor, na conversa.';
 
   /// A orientacao de tamanho, numa linha (cliente, 17/10/2026).
   ///
@@ -114,6 +106,22 @@ abstract final class TextosDoAchado {
   static const String semCoordenada =
       'Sem o ponto no mapa, a busca por um tutor parecido vale na cidade '
       'inteira, e não no seu quarteirão.';
+
+  // -- Os dois passos -------------------------------------------------------
+
+  /// O titulo do passo 1, **palavra por palavra do cliente (17/10/2026)**.
+  ///
+  /// **PENDENTE DE CONFIRMACAO.** Ele ditou esta frase testando o registro de
+  /// ACHADO, e quem acha um animal na rua nao sabe se ele esta perdido --
+  /// pode ser abandonado, pode estar passeando solto. A frase e dele e esta
+  /// aqui como ele a escreveu; trocar "perdido" por "achou" e decisao dele.
+  static const String tituloDoPasso1 = 'Qual o animalzinho está perdido?';
+
+  /// O titulo do passo 2.
+  static const String tituloDoPasso2 = 'Onde e quando';
+
+  static const String continuar = 'Continuar';
+  static const String voltarAoPasso1 = 'Voltar';
 
   // -- O envio --------------------------------------------------------------
 

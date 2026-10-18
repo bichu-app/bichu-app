@@ -135,6 +135,10 @@ Future<void> preencherOMinimo(
   await tocar(tester, find.text('Cão'));
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
+  // **O formulario tem dois passos desde 17/10/2026** (pedido do cliente). O
+  // passo 1 e o animal; o `Quando?` e o `Onde?` moram no 2, e sem este toque
+  // os casos abaixo procurariam na pagina errada.
+  await avancarParaOPasso2(tester);
   if (digitarACidade) {
     await rolarAte(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
     await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
@@ -146,6 +150,14 @@ Future<void> preencherOMinimo(
   }
   await rolarAte(tester, find.text('Agora'));
   await tocar(tester, find.text('Agora'));
+}
+
+/// Toca em `Continuar` e leva a pessoa ao passo 2.
+Future<void> avancarParaOPasso2(WidgetTester tester) async {
+  final botao =
+      find.widgetWithText(BotaoPrimario, TextosDoAchado.continuar);
+  await rolarAte(tester, botao);
+  await tocar(tester, botao);
 }
 
 Future<void> tocarEmRegistrar(WidgetTester tester) async {

@@ -158,23 +158,42 @@ class RascunhoDoAchado {
         dataEscolhida: dataEscolhida,
       );
 
-  /// O que impede `Registrar`, na ordem em que a tela resolve.
+  /// O que impede **avancar do passo 1**, na ordem em que o passo 1 pergunta.
   ///
-  /// A ordem e a ordem da tela, de cima para baixo: quem le o motivo procura
-  /// o campo, e mandar a pessoa para o fim do formulario quando o primeiro
-  /// campo e que falta e mandar ela procurar.
-  ImpedimentoDeRegistrar? impedimentoEm(DateTime agora) {
+  /// **O passo 1 nao cobra campo do passo 2**, e e por isso que ele tem um
+  /// impedimento proprio: um `Continuar` que exigisse a localizacao obrigaria
+  /// a pessoa a adivinhar que o motivo esta numa pagina que ela ainda nao
+  /// viu. Raca, sexo e foto sao opcionais no contrato e nao entram aqui.
+  ImpedimentoDeRegistrar? impedimentoDoPasso1() {
     if (especie == null) return ImpedimentoDeRegistrar.semEspecie;
     if (porte == null) return ImpedimentoDeRegistrar.semPorte;
-    if (onde == null) return ImpedimentoDeRegistrar.semOnde;
+    return null;
+  }
+
+  /// O que impede `Registrar` **dentro do passo 2**.
+  ///
+  /// A ordem e a ordem do passo 2, de cima para baixo -- `Quando?` antes de
+  /// `Onde?`, como o cliente pediu em 17/10/2026. Quem le o motivo procura o
+  /// campo, e apontar para o fim da pagina quando falta o comeco e mandar a
+  /// pessoa procurar.
+  ImpedimentoDeRegistrar? impedimentoDoPasso2(DateTime agora) {
     if (quando == null) return ImpedimentoDeRegistrar.semQuando;
     final instante = instanteEm(agora);
     if (instante == null) return ImpedimentoDeRegistrar.semData;
     if (estaNoFuturo(instante, agora: agora)) {
       return ImpedimentoDeRegistrar.dataNoFuturo;
     }
+    if (onde == null) return ImpedimentoDeRegistrar.semOnde;
     return null;
   }
+
+  /// O que impede `Registrar`, olhando os dois passos.
+  ///
+  /// **O passo 1 vem primeiro mesmo quando a pessoa esta no 2**: um botao
+  /// final que reclamasse da localizacao enquanto a especie esta vazia mandaria
+  /// a pessoa consertar a pagina errada.
+  ImpedimentoDeRegistrar? impedimentoEm(DateTime agora) =>
+      impedimentoDoPasso1() ?? impedimentoDoPasso2(agora);
 
   bool podeRegistrarEm(DateTime agora) => impedimentoEm(agora) == null;
 

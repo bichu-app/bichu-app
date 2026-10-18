@@ -319,7 +319,17 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         BichuField(
           rotulo: TextosDaLocalizacao.rotuloCidade,
           controlador: _cidade,
-          opcional: true,
+          // **"(opcional)" so quando ela E opcional** (cliente, 17/10/2026).
+          //
+          // Sem ponto, a cidade e o UNICO campo desta peca que faz o "onde"
+          // existir (`Area.required: [city]`), e portanto o unico que destrava
+          // o envio -- e a tela a rotulava "(opcional)" junto dos outros dois.
+          // O resultado medido no emulador: formulario inteiro preenchido,
+          // tres campos marcados como dispensaveis, e o botao morto. Com
+          // ponto a cidade volta a ser mesmo opcional, porque ai o "onde" ja
+          // existe sem ela -- e o rotulo acompanha, em vez de mentir nos dois
+          // sentidos.
+          opcional: _ponto != null,
           capitalizacao: TextCapitalization.words,
           erro: _faltaACidade ? TextosDaLocalizacao.cidadeObrigatoria : null,
         ),
