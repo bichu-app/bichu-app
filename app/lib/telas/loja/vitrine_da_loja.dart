@@ -10,6 +10,7 @@ import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/carrossel_de_fotos.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
@@ -540,6 +541,41 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
 /// para `title-lg` com `w700`, nos tokens que ja existem: nenhuma cor nova,
 /// nenhum componente novo. Em `text-primary`, como estava -- preco em cor de
 /// acao pareceria um botao.
+///
+/// **ARRASTAR NAO SAI DA LOJA.** O carrossel entrou DENTRO do alvo de toque do
+/// cartao, e o cartao inteiro agora e o unico destino -- o site do parceiro.
+/// Sem cuidado, arrastar para ver a segunda foto abriria o navegador no meio
+/// do gesto. Nao abre: o `PageView` do carrossel e o alvo mais interno e
+/// reivindica o arrasto horizontal na arena de gestos do Flutter, enquanto o
+/// `InkWell` do cartao responde por `onTap`, que so dispara quando o dedo sobe
+/// sem ter virado arrasto. O autor do carrossel mediu isto no desenho ANTIGO,
+/// em que o cartao levava ao detalhe interno; foi MEDIDO DE NOVO depois desta
+/// mescla, porque o destino do cartao mudou e o gesto com ele. Ver
+/// `app/test/telas/loja_abre_no_navegador_test.dart`.
+///
+/// O botao `Compre agora` tambem e filho do cartao e consome o proprio toque;
+/// como ele leva ao MESMO destino, nao ha mais area de gesto ambigua.
+///
+/// **O cartao mostra as fotos, e a ficha nao tem mais entrada.** A descricao
+/// sem corte, o preco com historico e a ficha moram em `TelaDoProduto`, que
+/// ficou PARADA e nao apagada por decisao do cliente de 17/10: nada no
+/// aplicativo navega para ela.
+///
+/// As fotos passaram a vir na listagem em 17/10/2026, por campo ADITIVO
+/// (`StoreItemSummary.images`, opcional, com `image_url` intocado). O
+/// paragrafo que estava aqui dizia que trazer oito imagens por cartao pesaria
+/// a vitrine, e ele estava certo sobre os BYTES e errado sobre a causa: o que
+/// pesa e BAIXAR as oito, nao recebe-las na lista. Medido em 17/10/2026, para
+/// uma pagina cheia de 20 cartoes:
+///
+/// - o JSON da pagina vai de 12,9 KB para 32,7 KB (+19,9 KB) com 8 imagens por
+///   item -- ao lado de UMA derivada de 500 KB, e troco;
+/// - baixar as 8 de cada cartao pediria ate 78 MB, contra ate 9,8 MB da
+///   primeira pintura.
+///
+/// Por isso o carrossel **carrega sob demanda** (`PageView.builder`): a
+/// primeira pintura baixa uma imagem por cartao, exatamente como antes, e as
+/// outras sete so saem da rede se a pessoa arrastar. Ver [CarrosselDeFotos].
 class CartaoDaLoja extends StatelessWidget {
   const CartaoDaLoja({required this.item, super.key});
 
@@ -590,22 +626,20 @@ class CartaoDaLoja extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (item.urlDaImagem != null) ...<Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(BichuRaio.md),
-                  child: Image.network(
-                    item.urlDaImagem!,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    // Nome acessivel em portugues (criterio 11): o texto que o
-                    // administrador escreveu, e `Foto de <titulo>` quando ele nao
-                    // escreveu. A escolha e de `ItemDaLoja.nomeDaImagem`, e nao
-                    // daqui: ate 17/10/2026 esta linha montava a frase generica e
-                    // o texto do painel nunca chegava a ninguem.
-                    semanticLabel: item.nomeDaImagem,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
+              // **O CARROSSEL** (17/10/2026). Com uma foto ele desenha a
+              // mesma `Image` de antes, sem indicador e sem gesto; com varias
+              // vira `PageView` que carrega sob demanda. Nome acessivel por
+              // foto, pela reserva de `ImagemDoProduto.nomeDaImagem`.
+              //
+              // `fotosDoCartao` e nao `imagens`: o item que vem de servidor sem
+              // `images`, ou da massa com imagem externa, cai na lista de um
+              // elemento montada a partir de `image_url` -- e a tela tem um
+              // caminho so para desenhar foto.
+              if (item.fotosDoCartao.isNotEmpty) ...<Widget>[
+                CarrosselDeFotos(
+                  fotos: item.fotosDoCartao,
+                  titulo: item.titulo,
+                  altura: 160,
                 ),
                 const SizedBox(height: BichuEspaco.e3),
               ],

@@ -32,7 +32,6 @@ import {
   hostDoDestinoDoItem,
   ordenarEspecies,
   type CategoriaDaVitrine,
-  type ImagemDaVitrine,
   type ItemDaVitrine,
   type TagDaVitrine,
 } from '../../domain/item-da-vitrine.js';
@@ -213,8 +212,14 @@ const COLUNAS_DO_ITEM = [
 interface Complementos {
   readonly especies: ReadonlyMap<string, string[]>;
   readonly tags: ReadonlyMap<string, TagDaVitrine[]>;
-  /** So as PRONTAS, em ordem de `position`. */
-  readonly imagens: ReadonlyMap<string, { chave: string; altText: string }[]>;
+  /**
+   * So as PRONTAS, em ordem de `position`.
+   *
+   * `altText` e `string | null` porque a COLUNA e nula desde a migracao
+   * `20261017000002`: o tipo dizia `string` e o nulo do banco atravessava por
+   * baixo dele.
+   */
+  readonly imagens: ReadonlyMap<string, { chave: string; altText: string | null }[]>;
 }
 
 export class KyselyStoreRepository implements StoreRepository {
@@ -269,7 +274,7 @@ export class KyselyStoreRepository implements StoreRepository {
     return {
       especies: porItem(especies, (l: { species: string }) => l.species),
       tags: porItem(tags, (l: { slug: string; label: string }) => ({ slug: l.slug, label: l.label })),
-      imagens: porItem(imagens, (l: { public_key: string; alt_text: string }) => ({
+      imagens: porItem(imagens, (l: { public_key: string; alt_text: string | null }) => ({
         chave: l.public_key,
         altText: l.alt_text,
       })),
@@ -277,7 +282,8 @@ export class KyselyStoreRepository implements StoreRepository {
   }
 
   private comoItem(linha: LinhaDoItem, extra: Complementos): ItemDaVitrine {
-    const principal = extra.imagens.get(linha.id)?.[0];
+    const daPagina = extra.imagens.get(linha.id) ?? [];
+    const principal = daPagina[0];
     // O banco guarda caminho; o endereco externo e composto aqui, com o host do
     // parceiro que a juncao trouxe. Ver `enderecoNoParceiro`.
     const externa =
@@ -298,6 +304,13 @@ export class KyselyStoreRepository implements StoreRepository {
       imageUrl: principal !== undefined ? this.urlDeMidia(principal.chave) : externa,
       imageAltText:
         principal !== undefined ? principal.altText : externa === null ? null : linha.title,
+      // **A lista INTEIRA, e nao so a primeira.** Ela ja estava aqui: a
+      // consulta de `complementos` traz todas as imagens prontas de todos os
+      // itens da pagina ordenadas por `position`, e este mapeamento lia o
+      // indice 0 e jogava o resto fora. Projetar o que ja foi buscado nao
+      // acrescenta consulta nenhuma -- e por isso o carrossel da vitrine nao
+      // cria N+1.
+      imagens: daPagina.map((i) => ({ url: this.urlDeMidia(i.chave), altText: i.altText })),
       species: ordenarEspecies(extra.especies.get(linha.id) ?? []),
       tags: extra.tags.get(linha.id) ?? [],
       // O host do ITEM quando ele mora num subdominio do parceiro
@@ -356,11 +369,12 @@ export class KyselyStoreRepository implements StoreRepository {
       .executeTakeFirst()) as unknown as LinhaDoItem | undefined;
     if (linha === undefined) return null;
     const extra = await this.complementos([linha.id]);
-    const imagens: ImagemDaVitrine[] = (extra.imagens.get(linha.id) ?? []).map((i) => ({
-      url: this.urlDeMidia(i.chave),
-      altText: i.altText,
-    }));
-    return { item: this.comoItem(linha, extra), imagens };
+    // O item ja carrega a mesma lista em `imagens` (ver `comoItem`); ela
+    // continua saindo como campo proprio do detalhe porque `DetalheDaVitrine` e
+    // a porta que `projetarDetalhe` consome, e mudar a forma dessa porta mexeria
+    // numa tela que ja funciona.
+    const item = this.comoItem(linha, extra);
+    return { item, imagens: item.imagens };
   }
 
   async tagsVisiveis(): Promise<readonly TagDaVitrine[]> {

@@ -194,6 +194,21 @@ export interface ItemDaVitrine {
   readonly imageUrl: string | null;
   /** O texto alternativo da principal. A imagem externa da massa leva o titulo do item. */
   readonly imageAltText: string | null;
+  /**
+   * TODAS as imagens prontas do item, na ordem de `position` — e não só a
+   * primeira (17/10/2026).
+   *
+   * **Isto não custa consulta nova.** `complementos()` já buscava a lista
+   * inteira de cada item da página, numa consulta por página, e `comoItem`
+   * usava só o elemento 0; os outros sete eram lidos do banco, trazidos pela
+   * rede e descartados no mapeamento. O carrossel da vitrine não cria N+1
+   * nenhum: ele passa a projetar o que já estava na memória.
+   *
+   * Vazia é estado normal: item da massa com imagem externa não tem linha em
+   * `store_item_images`, e `projetarItem` compõe a galeria de um elemento a
+   * partir de [imageUrl] — a mesma regra que o detalhe já aplicava.
+   */
+  readonly imagens: readonly ImagemDaVitrine[];
   readonly species: readonly EspecieDoItem[];
   /** So tags ATIVAS. A inativa continua ligada ao item e some do app. */
   readonly tags: readonly TagDaVitrine[];
@@ -219,6 +234,21 @@ export interface ItemProjetado {
   readonly subcategory_label: string | null;
   readonly image_url: string | null;
   readonly image_alt_text: string | null;
+  /**
+   * `StoreItemSummary.images`, ADITIVO (17/10/2026): a vitrine desenha
+   * carrossel quando há mais de uma.
+   *
+   * **`image_url` continua saindo, intocado.** O APK instalado lê aquele campo
+   * e mais nada; renomeá-lo ou removê-lo quebraria o app que está no bolso das
+   * pessoas — já aconteceu neste produto com a unidade de preço. A primeira
+   * imagem desta lista é a mesma de `image_url`, de propósito: cliente velho e
+   * cliente novo desenham a mesma capa.
+   *
+   * O teto do contrato é 8, o MESMO de `StoreItemDetail.images`. A igualdade é
+   * obrigatória e não estética: o detalhe é `allOf` do resumo, e `allOf` é
+   * interseção — um teto menor aqui encolheria a galeria do detalhe calado.
+   */
+  readonly images: readonly ImagemProjetada[];
   readonly target_url: string;
   readonly partner: { readonly slug: string; readonly name: string; readonly host: string };
   readonly species: readonly EspecieDoItem[];
@@ -311,6 +341,7 @@ export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado
     subcategory_label: item.subcategoryLabel,
     image_url: item.imageUrl,
     image_alt_text: item.imageAltText,
+    images: galeriaDoItem(item, item.imagens),
     target_url: item.targetUrl,
     partner: { slug: item.partnerSlug, name: item.partnerName, host: item.partnerHost },
     species: [...item.species],
@@ -325,11 +356,50 @@ export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado
 /** Uma imagem do detalhe publico: so pronta, ja como URL. */
 export interface ImagemDaVitrine {
   readonly url: string;
-  readonly altText: string;
+  /**
+   * **Nulo é estado normal, e o tipo diz isso desde 17/10/2026.**
+   *
+   * `store_item_images.alt_text` perdeu o `NOT NULL` na migração
+   * `20261017000002` e `StoreItemImage.alt_text` é `[string, 'null']` no
+   * contrato; este campo era declarado `string` e mentia — o nulo do banco
+   * atravessava por baixo de um tipo que prometia texto. Quem desenha cai no
+   * título do produto (`ImagemDoProduto.nomeDaImagem`, no app).
+   */
+  readonly altText: string | null;
+}
+
+/** Uma imagem como a resposta publica a declara (`StoreItemImage`). */
+export interface ImagemProjetada {
+  readonly url: string;
+  readonly alt_text: string | null;
 }
 
 export interface DetalheProjetado extends ItemProjetado {
-  readonly images: readonly { readonly url: string; readonly alt_text: string }[];
+  readonly images: readonly ImagemProjetada[];
+}
+
+/**
+ * A galeria publica de um item, por UMA regra só.
+ *
+ * Ela existe porque o resumo e o detalhe passaram a projetar a mesma lista
+ * (17/10/2026), e duas cópias desta composição divergiriam no primeiro dia em
+ * que alguém mexesse numa delas: a tela do produto mostraria a imagem externa
+ * da massa e a vitrine mostraria uma galeria vazia, ou o contrário.
+ *
+ * **Item da massa com URL externa e sem imagem enviada traz a externa como a
+ * única imagem**, com o título do item de texto alternativo. Sem isto o
+ * carrossel nasceria vazio em toda a massa de QA, que não tem linha nenhuma em
+ * `store_item_images` (`src/bin/massa-da-vitrine.ts` grava só `image_path`).
+ */
+export function galeriaDoItem(
+  item: ItemDaVitrine,
+  imagens: readonly ImagemDaVitrine[],
+): readonly ImagemProjetada[] {
+  if (imagens.length > 0) {
+    return imagens.map((i) => ({ url: i.url, alt_text: i.altText }));
+  }
+  if (item.imageUrl === null) return [];
+  return [{ url: item.imageUrl, alt_text: item.imageAltText ?? item.title }];
 }
 
 /**
@@ -345,11 +415,9 @@ export function projetarDetalhe(
   imagens: readonly ImagemDaVitrine[],
   agora: Instant,
 ): DetalheProjetado {
-  const galeria =
-    imagens.length > 0
-      ? imagens.map((i) => ({ url: i.url, alt_text: i.altText }))
-      : item.imageUrl === null
-        ? []
-        : [{ url: item.imageUrl, alt_text: item.imageAltText ?? item.title }];
-  return { ...projetarItem(item, agora), images: galeria };
+  // **As imagens vêm do parâmetro, e não de `item.imagens`.** O detalhe lê a
+  // galeria por um caminho próprio no repositório (`detalhe()`), e trocar isto
+  // por `item.imagens` mudaria a fonte de uma tela que já funciona. A regra de
+  // composição é a mesma dos dois lados, e é por isso que ela mora numa função.
+  return { ...projetarItem(item, agora), images: galeriaDoItem(item, imagens) };
 }
