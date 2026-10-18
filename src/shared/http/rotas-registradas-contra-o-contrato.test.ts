@@ -62,6 +62,7 @@ import * as diretorioAdministrativo from '../../modules/professionals/adapters/h
 import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
+import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -115,6 +116,10 @@ const MODULOS: readonly Record<string, unknown>[] = [
   indicacoesAdministrativas,
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
+  // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
+  // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele
+  // reprova contando `defineRoute` no disco.
+  seguranca,
   saude,
 ];
 

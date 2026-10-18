@@ -39,6 +39,20 @@ export interface UsersTable {
    * O id **nunca sai em resposta**: o app recebe a URL da derivada.
    */
   photo_image_id: string | null;
+  /**
+   * O ENDERECO PUBLICO E OPACO DA PESSOA: 22 simbolos de base64url, 128 bits
+   * sorteados por linha (migracao `20261018000031`).
+   *
+   * Existe porque bloquear e denunciar precisam APONTAR para alguem e `users`
+   * nao tinha endereco nenhum: `id` e UUID interno e o ADR-0010 item 6 o
+   * proibe em saida publica. Desenho do ADR-0024 -- `id` primaria, endereco
+   * publico ao lado, nenhuma chave estrangeira sobre o endereco publico.
+   *
+   * **NAO e o apelido (`@`)**: aquele e alias escolhido e MUTAVEL, de outra
+   * fatia, e endereco mutavel nao serve de endereco estavel. Este e imutavel:
+   * nao ha caminho de escrita que o troque.
+   */
+  public_ref: string;
   display_name: string | null;
   phone_e164: string | null;
   phone_verified_at: Date | null;
@@ -1679,6 +1693,102 @@ export type OrigemDoEncontro = 'admin' | 'community';
  */
 export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
 
+/**
+ * `user_blocks` -- o BLOQUEIO, ferramenta pessoal e nao moderacao
+ * (`20261018000031`).
+ *
+ * **Nao entra na fila do painel**, de proposito: bloquear nao tem
+ * administrador, nao tem revisao e tem efeito imediato na leitura.
+ *
+ * Nenhuma resposta projeta nenhuma das duas colunas de pessoa, nem como
+ * contagem nem como existencia -- e e por isso que o bloqueado continua sem
+ * saber. O predicado de leitura e `bloqueio_entre(uuid, uuid)`, SIMETRICO.
+ */
+export interface UserBlocksTable {
+  id: string;
+  /** Quem bloqueou. Entra no `WHERE`; nunca sai em resposta. */
+  blocker_user_id: string;
+  /** Quem foi bloqueado. `ON DELETE CASCADE`: a linha morre com o expurgo. */
+  blocked_user_id: string;
+  created_at: Generated<Date>;
+}
+
+/**
+ * O que o administrador decidiu, nas tres tabelas de denuncia desta fatia.
+ *
+ * Mesma forma e mesmos dois valores das duas tabelas que ja existiam
+ * (`20261018000009`): a fila tem UM estado de espera (`resolved_at IS NULL`) e
+ * DOIS de saida. Nao ha `escalated` -- um terceiro valor convidaria a primeira
+ * pessoa com pressa a inventar um fluxo que ninguem desenhou.
+ */
+export type DecisaoDaModeracao = 'content_removed' | 'dismissed';
+
+/** As colunas que as tres tabelas de denuncia desta fatia compartilham. */
+interface DenunciaDaComunidade {
+  id: string;
+  /**
+   * Quem denunciou. SEM A MARCA do portao de saida, pela mesma decisao de
+   * `professional_review_reports.reporter_user_id`: `src/` precisa dela no
+   * `WHERE` para a ocultacao imediata, para os tetos e para recusar a denuncia
+   * do proprio conteudo. Nenhuma resposta a projeta.
+   */
+  reporter_user_id: string;
+  /** Relato opcional. Nao e o motivo: e contexto sobre o motivo escolhido. */
+  detail: string | null;
+  /** Quantas vezes a MESMA pessoa denunciou o MESMO alvo nesta linha aberta. */
+  repeat_count: Generated<number>;
+  created_at: Generated<Date>;
+  last_reported_at: Generated<Date>;
+  /** Nulo e "na fila". Escrito por quem modera. */
+  resolved_at: Date | null;
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao, para quem auditar. Nao chega a nenhum dos dois lados. */
+  resolution_reason: string | null;
+}
+
+/** Denuncia de PERFIL: cinco motivos, sobre quem a pessoa e. */
+export interface ProfileReportsTable extends DenunciaDaComunidade {
+  /** `SET NULL`: a denuncia SOBREVIVE ao expurgo da conta do denunciado. */
+  subject_user_id: string | null;
+  /** `users.public_ref` em COPIA. E ele o `target_ref` da fila. */
+  subject_ref: string;
+  reason: 'impersonation' | 'harassment' | 'pet_ransom_scam' | 'minor_suspected' | 'other';
+}
+
+/** Denuncia de FOTO: seis motivos, e o alvo e a esteira de imagem. */
+export interface PhotoReportsTable extends DenunciaDaComunidade {
+  image_id: string | null;
+  /** `catalog_images.public_key` em COPIA. E o `target_ref` E o `target_body`. */
+  image_public_key: string;
+  owner_user_id: string | null;
+  reason:
+    | 'nudity_or_sexual'
+    | 'child_at_risk'
+    | 'animal_violence'
+    | 'i_am_in_it'
+    | 'impersonation'
+    | 'other';
+}
+
+/** Denuncia de PUBLICACAO: cinco motivos, e a terceira lista e so deste produto. */
+export interface PublicationReportsTable extends DenunciaDaComunidade {
+  /**
+   * SEM chave estrangeira: `user_publications` e de outra fatia e nao existe
+   * nesta base. O `ALTER` de uma linha que a liga esta no fim da
+   * `20261018000032`.
+   */
+  publication_id: string | null;
+  publication_ref: string;
+  /** O texto denunciado, CONGELADO: editar depois nao muda o que foi julgado. */
+  publication_body: string | null;
+  reason:
+    | 'offensive_or_discriminatory'
+    | 'scam_or_animal_sale'
+    | 'false_lost_pet_info'
+    | 'spam_or_repetition'
+    | 'other';
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -1740,6 +1850,10 @@ export interface Database {
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
   collar_tag_requests: CollarTagRequestsTable;
+  user_blocks: UserBlocksTable;
+  profile_reports: ProfileReportsTable;
+  photo_reports: PhotoReportsTable;
+  publication_reports: PublicationReportsTable;
   'audit.events': AuditEventsTable;
 }
 

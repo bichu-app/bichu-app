@@ -1110,7 +1110,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// o mesmo hash. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**,
 /// pelo procedimento escrito acima. Ha pelo menos quatro valores diferentes
 /// em ramos abertos hoje, e valor de ramo isolado nao sobrevive a uniao.
-const String _arvoreDasTelas = '50b766d431b5c70fdd06aae82dbd1e8cd251a154'; // MESCLA DO LOTE DE OITO (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA, reproduzindo o calculo deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato nem de ramo isolado. Soma as duas frentes do lote que tocam esta pasta: (a) o aviso ao tutor do achado, e (b) a PINTURA das imagens -- a logo do profissional no cartao, a faixa 16:9 do local e o retrato da propria pessoa com o selo. Os dois paragrafos acima ficaram INTEIROS, um de cada lado da colisao, por serem justificativas de intencoes diferentes. (antes, por ramo isolado: dd6582d172 e 49d7f18b03; base 45b6093e7f)
+const String _arvoreDasTelas = '9e61895d373a751e361aac8ff48c9b213929a275'; // FATIA E da frente de comunidade (BICHUS-278, 18/10/2026): valor RECALCULADO nesta arvore, reproduzindo o calculo deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato. O que mudou: a pasta NOVA `app/lib/telas/seguranca/` com dois arquivos NOVOS -- a folha de denuncia e o "⋮" da barra do perfil. NENHUM arquivo de tela existente foi tocado: a mudanca do hash e por CRIACAO, e o criterio 10 segue valendo. (antes: 50b766d431b5c70fdd06aae82dbd1e8cd251a154)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -103,7 +103,19 @@ export interface DeclaracaoDeTrilha {
  * operacoes, e nao de cada operacao: 120 escritas em 10 minutos no total, e
  * nao 120 por operacao.
  */
-export type BaldeCompartilhado = 'admin_write' | 'admin_publication';
+export type BaldeCompartilhado =
+  | 'admin_write'
+  | 'admin_publication'
+  /**
+   * FATIA E da frente de comunidade: **20 denuncias por dia no total**, somadas
+   * as tres operacoes (perfil, foto e publicacao).
+   *
+   * E o unico balde compartilhado do APP -- os outros dois sao do painel -- e
+   * ele existe porque o teto total e da CONTA e nao de cada operacao. Sem ele,
+   * uma conta faria 5 de perfil + 20 de foto + 20 de publicacao, e o teto
+   * total que o desenho pediu simplesmente nao existiria.
+   */
+  | 'community_report';
 
 export interface RateLimitEntry {
   /**
