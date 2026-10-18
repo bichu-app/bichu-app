@@ -203,6 +203,19 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      // Os worktrees dos agentes. `workspace/` NAO e codigo deste projeto: sao
+      // ~147 arvores de trabalho de sessoes de agente, cada uma com o seu
+      // `node_modules`, somando 17 GB DENTRO do repositorio. Nao estao no
+      // tsconfig, nao estao rastreadas e nao estao nem no .gitignore -- e o
+      // ESLint nao le .gitignore, entao so este arquivo as mantem fora.
+      //
+      // SEM ESTA LINHA O LINT NAO REPROVA: ELE MORRE. `eslint .` percorria as
+      // 147 arvores e estourava o heap do V8 ("JavaScript heap out of memory")
+      // sem veredito nenhum. Lint que morre nao aprova nem reprova, e e pior
+      // que lint que falta: o alvo que o chamava seguia anunciando
+      // "8,34 s, 371 arquivos", medicao de 28/09, de quando `workspace/` ainda
+      // nao tinha worktree dentro.
+      'workspace/**',
       'src/shared/types/generated/**',
       // Saida de build do app iOS/Flutter: dependencia de terceiro vendorizada
       // pelo SwiftPM, nao codigo deste repositorio. Ja esta no .gitignore; o
