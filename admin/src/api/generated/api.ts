@@ -5873,6 +5873,14 @@ export interface components {
              *     `breed_code` em `outro_*`, pela mesma razao de `PetInput`.
              */
             breed_free_text?: string | null;
+            /**
+             * @description 40, o mesmo teto de `found_reports.ref_data_version` no banco
+             *     (`found_reports_ref_data_version_tamanho`, de 1 a 40). O contrato
+             *     nao declarava teto nenhum: 41 caracteres passavam pela validacao e
+             *     morriam no `CHECK` como erro de servidor, enquanto o caminho
+             *     equivalente de `PetInput` ja devolvia 400 (`pet-service.ts`
+             *     confere a versao contra `ref_data_versions` antes de gravar).
+             */
             ref_data_version?: string | null;
             size: components["schemas"]["PetSize"];
             primary_color_code?: string;
