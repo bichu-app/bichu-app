@@ -241,12 +241,13 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final erros = <String, String>{};
     final lido = _lido;
 
-    // O NOME pode ficar vazio no contrato (`display_name` nao tem `minLength`),
-    // e por isso apagar nao e erro -- e uma escolha que o servidor aceita. O
-    // que a tela recusa e o nome que e **so espaco**: ele passaria o contrato e
-    // apareceria como um branco no cartao de quem encontra o pet.
-    if (_nome.text.isNotEmpty && _nome.text.trim().isEmpty) {
-      erros[_CamposDosDados.nome] = _TextosDosDados.nomeSoComEspaco;
+    // O NOME NAO PODE MAIS FICAR VAZIO, por decisao do cliente de 18/10/2026:
+    // *"nao permitir atualizar o cadastro, se nao tiver algum nome
+    // cadastrado"*. `MeUpdate.display_name` ganhou `minLength: 1` e o servidor
+    // recusa vazio e so-espaco; esta linha e a conveniencia que para antes da
+    // ida a rede. Antes daqui apagar o nome era uma escolha OFERECIDA em texto.
+    if (_nome.text.trim().isEmpty) {
+      erros[_CamposDosDados.nome] = _TextosDosDados.nomePrecisaDeTexto;
     }
 
     final telefoneDigitado = _telefone.text.trim();
@@ -765,8 +766,7 @@ abstract final class _TextosDosDados {
   static const String suaRegiao = 'Sua região de referência';
 
   static const String nome = 'Nome';
-  static const String nomeSoComEspaco =
-      'Escreva o seu nome, ou deixe o campo vazio para tirá-lo.';
+  static const String nomePrecisaDeTexto = 'Digite o nome que você quer usar no Bichu.';
 
   static const String email = 'E-mail';
   static const String emailConfirmado = 'E-mail confirmado';

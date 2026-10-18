@@ -441,7 +441,7 @@ paths:
             examples:
               minimo:
                 summary: O minimo aceito
-                value: { email: "marina@exemplo.com.br", password: "girassol-de-agosto-9" }
+                value: { email: "marina@exemplo.com.br", password: "girassol-de-agosto-9", display_name: "Marina" }
               comAEscolhaDaCaixa:
                 summary: A tela F1.1 inteira, com a caixa marcada e a versao dos termos
                 value:
@@ -9128,11 +9128,28 @@ components:
 
     RegisterRequest:
       type: object
-      required: [email, password]
+      required: [email, password, display_name]
+      description: |
+        **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+        cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+        ele esta cadastrando sem esse campo"*.
+
+        **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+        que nao manda a chave passa a receber 400 `validation-failed` com
+        `errors[].field: display_name` e `code: required`. O APK em campo que
+        nao preenche o nome deixa de criar conta -- a correcao e APK novo, e nao
+        afrouxar o campo.
+
+        **`minLength: 1` nao esgota a regra, e de proposito.** O caso que escapa
+        do schema e o nome **so com espaco em branco** (`"   "`), que tem
+        comprimento 1 e nao tem nome nenhum dentro. Quem recusa esse e o
+        servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
+        nao tem como exprimir "sobra caractere depois de aparar", e inventar
+        `pattern` aqui faria a recusa do schema e a do servidor divergirem.
       properties:
         email: { type: string, format: email, maxLength: 254 }
         password: { $ref: '#/components/schemas/Password' }
-        display_name: { type: string, maxLength: 80 }
+        display_name: { type: string, minLength: 1, maxLength: 80 }
         accepted_terms_version: { type: string, maxLength: 20 }
         stay_signed_in:
           $ref: '#/components/schemas/StaySignedIn'
@@ -9242,7 +9259,21 @@ components:
         assincrona, em `POST /v1/me/email-change`. Aceitar aqui faria a
         resposta revelar se um endereco ja tem conta.
       properties:
-        display_name: { type: string, maxLength: 80 }
+        # **`minLength: 1` desde 18/10/2026**, por decisao do cliente: *"nao
+        # permitir atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+        #
+        # Antes desta linha `display_name: ""` era aceito e APAGAVA o nome, e a
+        # tela de `Meus dados` oferecia isso em texto ("deixe o campo vazio
+        # para tira-lo"). Conta sem nome aparece aos outros como "Tutor" ou
+        # "Quem achou" (`conversa-mediada.ts`), o que prejudica o
+        # reconhecimento do pet -- era a razao da decisao.
+        #
+        # Mesma divisao de trabalho do cadastro: o schema recusa `""`, e o
+        # **servidor** recusa o nome so com espaco (`"   "`), que passa por
+        # `minLength` e nao tem nome dentro. O servidor tambem recusa o PATCH
+        # que **omite** o nome quando a conta ainda nao tem nenhum -- e aceita
+        # o PATCH que o PREENCHE, que e a saida de quem esta nesse estado.
+        display_name: { type: string, minLength: 1, maxLength: 80 }
         phone_e164: { type: string, pattern: '^\+55\d{10,11}$' }
         reference_area:
           type: object

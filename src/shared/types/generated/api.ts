@@ -4525,11 +4525,29 @@ export interface components {
         PetSize: "P" | "M" | "G" | "GG";
         /** @enum {string} */
         Sex: "male" | "female" | "unknown";
+        /**
+         * @description **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+         *     cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+         *     ele esta cadastrando sem esse campo"*.
+         *
+         *     **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+         *     que nao manda a chave passa a receber 400 `validation-failed` com
+         *     `errors[].field: display_name` e `code: required`. O APK em campo que
+         *     nao preenche o nome deixa de criar conta -- a correcao e APK novo, e nao
+         *     afrouxar o campo.
+         *
+         *     **`minLength: 1` nao esgota a regra, e de proposito.** O caso que escapa
+         *     do schema e o nome **so com espaco em branco** (`"   "`), que tem
+         *     comprimento 1 e nao tem nome nenhum dentro. Quem recusa esse e o
+         *     servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
+         *     nao tem como exprimir "sobra caractere depois de aparar", e inventar
+         *     `pattern` aqui faria a recusa do schema e a do servidor divergirem.
+         */
         RegisterRequest: {
             /** Format: email */
             email: string;
             password: components["schemas"]["Password"];
-            display_name?: string;
+            display_name: string;
             accepted_terms_version?: string;
             stay_signed_in?: components["schemas"]["StaySignedIn"];
         };

@@ -137,6 +137,10 @@ void main() {
     WidgetTester tester, {
     required bool aceitar,
   }) async {
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
     await tester.enterText(
       find.byType(TextField).at(1),
       'marina@exemplo.com.br',
@@ -414,6 +418,9 @@ void main() {
       addTearDown(tester.view.reset);
 
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+      // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai.
+      await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
       await tester.enterText(
         find.byType(TextField).at(1),
         'marina@exemplo.com.br',
