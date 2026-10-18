@@ -59,6 +59,14 @@ type ItemGuardado = Omit<
 > & {
   /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
   readonly partnerId: string | null;
+  /**
+   * A coluna `store_items.target_host`, gravada na ESCRITA como no adaptador
+   * real: nula quando o host era o do proprio parceiro, e o subdominio quando
+   * o item mora num. Recalcula-la na leitura amarraria o endereco guardado ao
+   * host ATUAL do parceiro, e trocar o dominio de um parceiro deixaria de
+   * levar os itens junto -- o oposto do que a coluna existe para garantir.
+   */
+  readonly targetHost: string | null;
 };
 
 /**
@@ -183,17 +191,19 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
           guardado.subcategory),
     // Como o banco: guarda o CAMINHO (com query e fragmento) e o host so
     // quando ele e um subdominio do parceiro; compoe os dois na leitura. O
-    // duble refaz a conta em vez de devolver `guardado.targetUrl` inteira,
+    // duble refaz o CAMINHO em vez de devolver `guardado.targetUrl` inteira,
     // porque e o truncamento do caminho que ele precisa reproduzir -- um duble
     // que devolvesse a URL original passaria verde sobre o defeito que a
-    // gravacao teria.
+    // gravacao teria. O HOST, ao contrario, vem da coluna gravada na escrita:
+    // o parceiro de hoje resolve o nulo, e e isso que leva os itens junto
+    // quando o dominio do parceiro muda.
     //
     // Sem parceiro nao ha host, e o destino nao tem como ser lido de volta.
     targetUrl:
       parceiro === null || guardado.targetUrl === null
         ? null
         : enderecoNoParceiro(
-            hostDoDestinoDoItem(parceiro.host, hostDoDestino(guardado.targetUrl, parceiro.host)),
+            hostDoDestinoDoItem(parceiro.host, guardado.targetHost),
             caminhoDoDestino(guardado.targetUrl),
           ),
     imageUrl: guardado.imageUrl,
@@ -343,6 +353,12 @@ export function repositorioEmMemoria(
             category: novo.category,
             subcategory: novo.subcategory,
             targetUrl: novo.targetUrl,
+            // Nulo quando o host e o do proprio parceiro, que e o caso comum,
+            // e nulo tambem no rascunho sem destino ou sem parceiro.
+            targetHost:
+              novo.targetUrl === null || novo.partnerHost === null
+                ? null
+                : hostDoDestino(novo.targetUrl, novo.partnerHost),
             imageUrl: null,
             priceAmount: novo.preco?.amount ?? null,
             priceCurrency: novo.preco?.currency ?? null,
@@ -370,7 +386,17 @@ export function repositorioEmMemoria(
             // `in`, e nao `=== undefined`: aqui `null` APAGA a subcategoria e
             // ausente preserva, e os dois precisam ser distinguidos.
             ...('subcategory' in m ? { subcategory: m.subcategory ?? null } : {}),
-            ...(m.destino === undefined ? {} : { targetUrl: m.destino.targetUrl }),
+            // Os dois andam JUNTOS, como no adaptador real: caminho novo com
+            // host antigo levaria a pessoa ao caminho novo no dominio errado.
+            ...(m.destino === undefined
+              ? {}
+              : {
+                  targetUrl: m.destino.targetUrl,
+                  targetHost:
+                    m.destino.targetUrl === null || m.destino.partnerHost === null
+                      ? null
+                      : hostDoDestino(m.destino.targetUrl, m.destino.partnerHost),
+                }),
             ...(m.preco === undefined
               ? {}
               : m.preco === null

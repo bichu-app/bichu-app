@@ -155,7 +155,9 @@ async function chamar(
   };
 }
 
-const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.test' };
+// `site_url` e o campo do CORPO desde 17/10 (endereco completo, com `https://`);
+// `host` continua sendo o que a RESPOSTA e a coluna guardam, extraido dele.
+const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',
   partner_slug: 'loja-do-bairro',
