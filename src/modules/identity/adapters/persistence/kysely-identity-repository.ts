@@ -747,14 +747,10 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.map((linha) => linha.id as UserId);
     },
 
-    async expurgarConta(userId: UserId): Promise<boolean> {
-      const apagadas = await db
-        .deleteFrom('users')
-        .where('id', '=', userId)
-        .where('deleted_at', 'is not', null)
-        .executeTakeFirst();
-      return (apagadas.numDeletedRows ?? 0n) > 0n;
-    },
+    // `expurgarConta` saiu daqui em 17/10 junto da porta. Era o unico
+    // `deleteFrom('users')` de `src/`, e a decisao do cliente -- "nao delete os
+    // dados do usuario, apenas desabilite na plataforma" -- o tornou proibido em
+    // vez de adiado.
 
     async registrarPedidoDeTrocaDeEmail(
       userId: UserId,

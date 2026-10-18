@@ -280,6 +280,18 @@ class ApiClient {
     }
   }
 
+  /// O endereco absoluto de um caminho **desta** API.
+  ///
+  /// Existe para quem precisa da URL antes de ter a resposta -- o caso e
+  /// `qr.png`, cuja imagem e buscada por [baixarImagem] e cujo endereco so
+  /// aparece no corpo de `issuePetTag`, que a tela do detalhe nao chama. Sai
+  /// pelo **mesmo** [_url] que todas as outras chamadas: a base, o `/v1` e os
+  /// segmentos sao montados num lugar so, e nenhuma tela interpola `v1` a mao.
+  ///
+  /// E por isso que ele passa pela conferencia de origem de [baixarImagem] sem
+  /// precisar de excecao: o endereco nasce de `API_BASE_URL`.
+  Uri enderecoDe(String caminho) => _url(caminho, null);
+
   Uri _url(String caminho, Map<String, String>? query) {
     final limpo = caminho.startsWith('/') ? caminho.substring(1) : caminho;
     final base = config.apiBaseUrl;

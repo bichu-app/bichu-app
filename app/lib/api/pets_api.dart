@@ -227,6 +227,48 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     await _api.delete('/pets/${Uri.encodeComponent(petId)}');
   }
 
+  /// `GET /pets/{petId}/tags` (`operationId: listPetTags`).
+  ///
+  /// **Nao traz o codigo, e e por isso que esta chamada existe.** O contrato e
+  /// explicito: a rota "nunca devolve o codigo em claro, nem para o dono:
+  /// apenas os quatro ultimos caracteres". O que a tela do detalhe quer daqui
+  /// nao e o codigo -- e o `tagId`, que e o que falta para montar o endereco
+  /// de [enderecoDaImagemDoQr] e deixar o SERVIDOR desenhar o QR.
+  ///
+  /// A ordem e a do servidor. Quem precisa da tag em vigor filtra por
+  /// [TagDoPet.ativa]: o teto e de cinco por pet (ADR-0004) e revogada
+  /// responde 410 no `qr.png`.
+  Future<List<TagDoPet>> listarTags(String petId) async {
+    final json = await _api.get('/pets/${Uri.encodeComponent(petId)}/tags');
+    final itens = json['items'];
+    if (itens is! List) return const <TagDoPet>[];
+    return itens
+        .whereType<Map<String, dynamic>>()
+        .map(TagDoPet.doJson)
+        .toList(growable: false);
+  }
+
+  /// O endereco de `GET /pets/{petId}/tags/{tagId}/qr.png`.
+  ///
+  /// **O QR nao e desenhado no aparelho, e isso e medicao e nao preferencia.**
+  /// O conteudo dele e `{base}/t/{codigo}` (`src/modules/tags/domain/
+  /// qr-da-tag.ts`), e o codigo em claro **nao esta no app**: ele saiu uma vez
+  /// em `issuePetTag`, na F1.6, e o contrato manda nao persistir. Um gerador
+  /// de QR do lado de ca nao teria o que codificar.
+  ///
+  /// Montado por [ApiClient.enderecoDe], e nao por interpolacao com `v1` a
+  /// mao: a versao e o host vivem num lugar so, e e o que faz
+  /// [ApiClient.baixarImagem] aceitar este endereco pela conferencia de
+  /// mesma origem.
+  String enderecoDaImagemDoQr({required String petId, required String tagId}) {
+    return _api
+        .enderecoDe(
+          '/pets/${Uri.encodeComponent(petId)}'
+          '/tags/${Uri.encodeComponent(tagId)}/qr.png',
+        )
+        .toString();
+  }
+
   /// `POST /pets/{petId}/tags`.
   ///
   /// **A unica resposta do contrato que traz o codigo em claro.** O valor nao

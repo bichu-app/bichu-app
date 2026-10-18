@@ -141,34 +141,43 @@ void main() {
       );
 
       // -------------------------------------------------------------------
-      // ATUALIZADO PELA BICHUS-21 — e esta e a mudanca deliberada que a isca
-      // cobrava.
+      // ATUALIZADO EM 18/10/2026 — a acao MUDOU DE TELA, e a premissa caiu
+      // de novo.
       //
-      // Ate aqui este bloco exigia a AUSENCIA de `Marcar como perdido`, e o
-      // motivo estava escrito na propria mensagem de falha: *"a BICHUS-21 nao
-      // existe"*. Ela existe. A premissa caiu, e manter a proibicao passaria
-      // a cobrar o contrario do criterio 2 -- proibir uma acao que agora TEM
-      // destino e o mesmo tipo de erro que permitir uma que nao tem.
+      // Este bloco teve tres redacoes, e vale dizer por que. Ele nasceu
+      // exigindo a AUSENCIA de `Marcar como perdido`, com o motivo escrito na
+      // propria mensagem: *"a BICHUS-21 nao existe"*. A BICHUS-21 entregou a
+      // tela, a premissa caiu, e o bloco passou a exigir a PRESENCA.
       //
-      // O que NAO caiu, e por isso continua medido abaixo: a propriedade. A
-      // acao precisa ter callback e apontar para rota registrada; e ela
-      // precisa DESAPARECER quando nao ha pet elegivel, que e o criterio 2 na
-      // direcao original. Esse segundo caso mora em
-      // `test/telas/marcar_como_perdido_test.dart`, grupo `acao com destino`.
+      // Agora a acao saiu desta tela para a **pagina do pet**, e a exigencia
+      // volta a ser de ausencia -- por uma razao diferente da primeira, e e a
+      // diferenca que importa. Nao e mais "falta destino": e que a escolha de
+      // qual animal deixou de ser uma pergunta. F3.0 existia "para prevenir o
+      // deslize de marcar o pet errado quando ha mais de um" (criterio 1 da
+      // BICHUS-21), e na pagina de um animal so nao ha deslize possivel.
+      //
+      // **A ausencia aqui nao e a prova completa, e este arquivo nao finge
+      // que e.** Que a acao EXISTA na pagina do pet e cobrado pelo ramo que a
+      // levou para la, que e o dono daquela tela. O que este arquivo cobra e
+      // o que e desta tela: a acao nao ficou, e o CAMINHO ate a pagina que a
+      // hospeda continua existindo -- medido no toque do cartao, no caso
+      // `o toque no cartao leva a uma rota REGISTRADA` logo abaixo, e no
+      // inventario de `perfil_so_menus_nada_perdido_test.dart`.
       // -------------------------------------------------------------------
       expect(
         find.text(MeusPets.rotuloDeMarcarPerdido),
-        findsOneWidget,
-        reason: 'REPROVA: a conta tem um pet elegivel e a acao nao esta na '
-            'tela. A BICHUS-62 a segurou por nao haver destino; o destino '
-            'existe desde a BICHUS-21, e esconder a acao agora deixa o tutor '
-            'sem a porta que o criterio 11 daquela historia exige "visivel, '
-            'sem submenu escondido".',
+        findsNothing,
+        reason: 'REPROVA: a acao voltou a `Perfil` > `Meus pets`. Ela mora na '
+            'pagina do pet desde 18/10, e duas portas para o mesmo fluxo '
+            'fazem a escolha de qual animal voltar a ser uma pergunta '
+            'justamente onde ela nao precisa ser feita.',
       );
 
       // **Uma redacao, e nao tres.** A decisao do cliente de 21/09 nomeia a
       // acao, e o produto nao a chama de duas maneiras em telas diferentes:
-      // quem procura na memoria o que leu ontem nao acha.
+      // quem procura na memoria o que leu ontem nao acha. Continua valendo
+      // com a acao em outra tela -- continua valendo MAIS, porque agora ha
+      // duas telas em que alguem poderia reescrever a frase.
       for (final proibido in <String>['Marcar como perdida', 'Perdi meu pet']) {
         expect(
           find.text(proibido),
@@ -178,18 +187,27 @@ void main() {
         );
       }
 
-      // A acao aponta para rota registrada, e nao para um endereco inventado.
+      // As rotas do fluxo continuam registradas, e a desta tela tambem.
+      //
+      // Esta tela nao empurra mais para as duas primeiras -- quem empurra e a
+      // pagina do pet --, e elas continuam aqui porque e **daqui** que se
+      // chega aquela pagina: se o roteador perder uma delas, a porta de la vai
+      // empurrar para o vazio, e este arquivo e o que percorre o caminho
+      // inteiro a partir do cartao. `Rotas.detalheDoPet` entra na lista por
+      // isso mesmo: ela e o salto que este arquivo sustenta.
       final rotas = rotasRegistradasDoApp(tester);
       for (final rota in <String>[
         Rotas.escolherPetPerdido,
         Rotas.marcarPerdido,
+        Rotas.detalheDoPet,
       ]) {
         expect(
           rotas,
           contains(rota),
-          reason: 'REPROVA: a acao empurra para `$rota`, que o roteador nao '
-              'registra. Acao com destino inexistente e o defeito que este '
-              'grupo inteiro existe para pegar.',
+          reason: 'REPROVA: `$rota` nao esta registrada no roteador. Acao com '
+              'destino inexistente e o defeito que este grupo inteiro existe '
+              'para pegar, e tirar a acao desta tela nao pode ter levado o '
+              'fluxo embora do app.',
         );
       }
 

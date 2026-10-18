@@ -351,7 +351,11 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
   return {
     async casoAbertoPorShareToken(token: string): Promise<CaseId | null> {
       // `status = 'open'` no `WHERE`: um token de caso encerrado não vincula
-      // nada, e o achado da pessoa continua valendo como achado avulso.
+      // nada, e o achado da pessoa continua valendo como achado avulso. O caso
+      // de tutor com conta desabilitada cai no mesmo lugar, e o `null` é o
+      // melhor desenho possível aqui: o achado de quem quis ajudar continua
+      // gravado e visível para ele, só não aponta para um caso que não existe
+      // mais para ninguém de fora. Nenhum erro, nenhuma pista.
       //
       // Esta consulta NÃO leva dono, e a ausência é o desenho: o `share_token` é
       // a única chave do caso em superfície pública, e quem chega por ele é o
@@ -361,9 +365,20 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
       // trata `null` como "sem vínculo", não como erro).
       const linha = await db
         .selectFrom('lost_cases')
-        .select('id')
-        .where('share_token', '=', token)
-        .where('status', '=', 'open')
+        .innerJoin('pets', 'pets.id', 'lost_cases.pet_id')
+        .select('lost_cases.id as id')
+        .where('lost_cases.share_token', '=', token)
+        .where('lost_cases.status', '=', 'open')
+        // A JUNCAO EXISTE PARA ESTE PREDICADO, e so para ele.
+        //
+        // `lost_cases` nao tem `deleted_at`, e o caso herda o estado do dono por
+        // `pets`: o gatilho `users_desabilitada_marca_pets` (migracao
+        // `20261017000013`) marca os pets da conta desabilitada, e a leitura
+        // publica do caso ja le `pets.deleted_at` e responde 410. Sem esta
+        // clausula, o MESMO `share_token` que a pagina publica recusa continuaria
+        // vinculando achados novos ao caso -- a funcionalidade sobreviveria a
+        // pagina, que e exatamente o que o cliente mandou fechar.
+        .where('pets.deleted_at', 'is', null)
         .executeTakeFirst();
       return linha === undefined ? null : (linha.id as CaseId);
     },

@@ -80,13 +80,12 @@ import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { expurgarContasExcluidas } from '../../src/modules/identity/application/expurgar-contas-excluidas.js';
 import { PRAZO_DE_EXPURGO_EM_MS } from '../../src/modules/identity/application/auth-service.js';
 import type { AuditEvent, AuditLog } from '../../src/modules/audit/ports/audit-log.js';
-import type { Instant, ObjectKey, UserId } from '../../src/shared/types/brands.js';
-import { comoObjectKey } from '../../src/modules/media/domain/chave-de-objeto.js';
-import { loadAppConfig } from '../../src/shared/config/app-config.js';
-import { criarObjectStorage } from '../../src/modules/media/adapters/external/s3-object-storage.js';
-import { criarMediaRepository } from '../../src/modules/media/adapters/persistence/kysely-media-repository.js';
-import { criarApagadorDeObjetosDaConta } from '../../src/modules/media/application/apagar-objetos-da-conta.js';
-import type { Classe, ObjectStorage } from '../../src/modules/media/ports/object-storage.js';
+import type { Instant, UserId } from '../../src/shared/types/brands.js';
+// Os imports de MIDIA (`comoObjectKey`, `criarObjectStorage`,
+// `criarApagadorDeObjetosDaConta`, `ObjectStorage`) sairam em 17/10 junto do
+// bloco SEC-020 que eles serviam. O bloco conferia que os tres objetos da conta
+// saiam do balde no expurgo, e o cliente decidiu o contrario: "Mantenha a foto".
+// O que sobrou no lugar e a isca que exige que o apagador NAO seja chamado.
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
@@ -106,6 +105,7 @@ const CONVERSA = '0192f3a1-7c2b-7e3d-9a10-215000000101';
 const MENSAGEM = '0192f3a1-7c2b-7e3d-9a10-215000000102';
 /** Usada só pelo caso do e-mail livre, e limpa junto com as outras duas. */
 const CONTA_DO_EMAIL_LIVRE = '0192f3a1-7c2b-7e3d-9a10-215000000999';
+const APARELHO = '0192f3a1-7c2b-7e3d-9a10-215000000103';
 
 let cliente: Client;
 let banco: DbHandle;
@@ -164,10 +164,8 @@ after(async () => {
   await cliente?.end();
 });
 
-function codigoDoErro(erro: unknown): string {
-  const codigo = (erro as { code?: unknown } | null)?.code;
-  return typeof codigo === 'string' ? codigo : 'sem código';
-}
+// `codigoDoErro` saiu com o bloco que lia `23503`/`23514` das cascatas. Nenhuma
+// cascata dispara mais: nada apaga `users`.
 
 /**
  * A massa: tudo o que a exclusão precisa atravessar.
@@ -342,149 +340,147 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
     });
   });
 
-  void it('A EXCLUSÃO CONCLUI: o expurgo apaga a conta e tudo o que é dela', async () => {
+  /**
+   * ISCA PRINCIPAL DO DESENHO DE 17/10.
+   *
+   * Até 17/10 o caso daqui se chamava "A EXCLUSÃO CONCLUI: o expurgo apaga a
+   * conta e tudo o que é dela", e ele conferia dezoito tabelas vazias. Foi
+   * invertido, e a inversão é o registro de que a troca foi deliberada. A
+   * decisão do cliente, literal:
+   *
+   * > *"Mantenha a foto e não delete os dados do usuário, apenas desabilite na
+   * > plataforma e filtro as páginas para que esse usuário não seja mais
+   * > encontrado em nenhuma pagina ou funcionalidade"*
+   *
+   * O caso agora passa o relógio para DEPOIS do prazo -- o instante em que o
+   * desenho antigo apagava tudo -- e exige que **tudo continue lá**.
+   */
+  void it('ISCA: passado o prazo, NADA foi apagado -- a conta só está desabilitada', async () => {
     await comMassa(async () => {
       await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
 
-      const trilha = trilhaQueAnota();
-      let resultado;
-      try {
-        resultado = await expurgarContasExcluidas({
-          repositorio: repo,
-          trilha,
-          clock: { now: () => DEPOIS_DO_PRAZO },
-          apagarObjetosDaConta: SO_O_BANCO,
-        });
-      } catch (erro) {
-        assert.fail(
-          `o expurgo ESTOUROU com ${codigoDoErro(erro)}. É este o desfecho que a classe de ` +
-            '22/09 produz: 23514 quando um CHECK proíbe o nulo que a FK manda pôr, 23502 ' +
-            'quando a coluna é NOT NULL, 23503 quando um RESTRICT trava ou quando um SET ' +
-            'NULL revalida contra um pai que a cascata já levou. Mensagem: ' +
-            `${erro instanceof Error ? erro.message : String(erro)}`,
+      const resultado = await expurgarContasExcluidas({
+        repositorio: repo,
+        trilha: trilhaQueAnota(),
+        clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: SO_O_BANCO,
+      });
+
+      assert.equal(resultado.falhas, 0);
+      assert.equal(
+        resultado.expurgadas,
+        0,
+        'o expurgo expurgou alguma coisa. Desde 17/10 ele é inócuo de propósito.',
+      );
+
+      // AS SETE CADEIAS, uma por linha, e a conta na primeira. Uma asserção por
+      // tabela e não um laço: quando uma reprovar, o nome da tabela precisa
+      // estar na mensagem de quem lê a falha.
+      for (const [tabela, sql, parametros] of [
+        ['users', `select count(*)::text as n from users where id = $1`, [ACHADORA]],
+        ['pets', `select count(*)::text as n from pets where owner_user_id = $1`, [ACHADORA]],
+        ['pet_tags', `select count(*)::text as n from pet_tags where id = $1`, [TAG]],
+        ['pet_photos', `select count(*)::text as n from pet_photos where id = $1`, [FOTO]],
+        ['upload_intents', `select count(*)::text as n from upload_intents where id = $1`, [INTENCAO]],
+        ['lost_cases', `select count(*)::text as n from lost_cases where id = $1`, [CASO]],
+        ['found_reports', `select count(*)::text as n from found_reports where id = $1`, [AVISO]],
+        ['conversations', `select count(*)::text as n from conversations where id = $1`, [CONVERSA]],
+        ['conversation_messages', `select count(*)::text as n from conversation_messages where id = $1`, [MENSAGEM]],
+      ] as readonly [string, string, unknown[]][]) {
+        assert.equal(
+          await contar(sql, parametros),
+          '1',
+          `${tabela}: a linha SUMIU depois do prazo. Nada pode ser apagado -- a conta é ` +
+            `desabilitada e as leituras a filtram no WHERE.`,
         );
       }
 
-      // A varredura engole a falha de uma conta para não represar a fila, e é
-      // por isso que `falhas` precisa ser afirmado: sem esta linha, um 23503
-      // viraria uma rodada silenciosa que conta zero expurgadas e segue.
-      //
-      // Os números são relativos e não absolutos porque a pilha é compartilhada
-      // com os outros arquivos desta suíte, e `alcance-e-disparo.test.ts` também
-      // marca `users.deleted_at`. O que prova o caso são as linhas abaixo.
+      // A MARCA DE QUE A PESSOA SAIU CONTINUA, e ela é o que os filtros leem.
+      // Sem ela, "desabilitar" não é observável por nenhuma consulta e o
+      // desenho inteiro cai.
       assert.equal(
-        resultado.falhas,
-        0,
-        'o `DELETE` estourou. A mensagem está no log do worker, com o código do Postgres.',
-      );
-      assert.ok(
-        resultado.expurgadas >= 1,
-        'a rodada não expurgou nenhuma conta, e havia uma vencida.',
-      );
-
-      const { rows } = await cliente.query<Record<string, string>>(
-        `select (select count(*) from users                 where id = $1)::text as conta,
-                (select count(*) from pets                  where id = $2)::text as pet,
-                (select count(*) from pet_tags              where id = $3)::text as tag,
-                (select count(*) from pet_photos            where id = $4)::text as foto,
-                (select count(*) from upload_intents        where id = $5)::text as intencao,
-                (select count(*) from found_reports         where id = $6)::text as aviso,
-                (select count(*) from conversations         where id = $7)::text as conversa,
-                (select count(*) from conversation_messages where id = $8)::text as mensagem`,
-        [ACHADORA, PET_DA_ACHADORA, TAG, FOTO, INTENCAO, AVISO, CONVERSA, MENSAGEM],
-      );
-      // Exclusão que conclui sem apagar não é exclusão: é a promessa quebrada
-      // em silêncio, que é pior que a falha ruidosa.
-      assert.deepEqual(rows[0], {
-        conta: '0',
-        pet: '0',
-        tag: '0',
-        foto: '0',
-        intencao: '0',
-        aviso: '0',
-        conversa: '0',
-        mensagem: '0',
-      });
-    });
-  });
-
-  void it('o que é da OUTRA pessoa sobrevive: o caso da dona continua de pé', async () => {
-    await comMassa(async () => {
-      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
-      await expurgarContasExcluidas({
-        repositorio: repo,
-        trilha: trilhaQueAnota(),
-        clock: { now: () => DEPOIS_DO_PRAZO },
-        apagarObjetosDaConta: SO_O_BANCO,
-      });
-
-      const { rows } = await cliente.query<{ dona: string; caso: string; pet: string }>(
-        `select (select count(*) from users      where id = $1)::text as dona,
-                (select count(*) from lost_cases where id = $2)::text as caso,
-                (select count(*) from pets       where id = $3)::text as pet`,
-        [DONA, CASO, PET_DA_DONA],
-      );
-      assert.deepEqual(
-        rows[0],
-        { dona: '1', caso: '1', pet: '1' },
-        'a exclusão de uma conta apagou coisa de OUTRA pessoa. Isso é incidente, não defeito.',
-      );
-    });
-  });
-
-  void it('A PISTA DE OUTRA PESSOA SOME, e ninguém avisa a dona (estado de hoje)', async () => {
-    await comMassa(async () => {
-      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
-      await expurgarContasExcluidas({
-        repositorio: repo,
-        trilha: trilhaQueAnota(),
-        clock: { now: () => DEPOIS_DO_PRAZO },
-        apagarObjetosDaConta: SO_O_BANCO,
-      });
-
-      // Este caso AFIRMA o comportamento de hoje em vez de exigir outro, e é de
-      // propósito: a pergunta "o que acontece com a pista quando quem a deu
-      // exerce o direito de apagar a conta" está ABERTA com o cliente, com
-      // recomendação de anonimizar. Enquanto a decisão não vem, o que o produto
-      // faz é isto — a pista some junto, e a dona do pet não é avisada.
-      //
-      // Se um dia o aviso passar a sobreviver sem dono, este caso reprova e
-      // quem fez a troca lê aqui por quê. É a única forma de a mudança de
-      // política aparecer como mudança, e não como regressão.
-      assert.equal(
-        await contar(`select count(*)::text as n from found_reports where id = $1`, [AVISO]),
-        '0',
-        'a pista sobreviveu à exclusão de quem a deu. Se isso foi deliberado, a decisão do ' +
-          'cliente chegou e este caso precisa ser reescrito com ela.',
-      );
-    });
-  });
-
-  void it('CONTRAPESO: conta excluída ONTEM não é expurgada; o prazo é a janela de socorro', async () => {
-    await comMassa(async () => {
-      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
-
-      const resultado = await expurgarContasExcluidas({
-        repositorio: repo,
-        trilha: trilhaQueAnota(),
-        // Um dia depois do pedido, e não 31.
-        clock: { now: () => (AGORA + 24 * 60 * 60 * 1000) as Instant },
-        apagarObjetosDaConta: SO_O_BANCO,
-      });
-
-      // Sem este caso, a implementação mais simples que passa no caso principal
-      // é ignorar o prazo — e o prazo é o que dá socorro a quem clicou errado e
-      // a quem teve a conta tomada e excluída por outra pessoa.
-      assert.equal(resultado.falhas, 0);
-      assert.equal(
-        await contar(`select count(*)::text as n from users where id = $1`, [ACHADORA]),
+        await contar(
+          `select count(*)::text as n from users where id = $1 and deleted_at is not null and status = 'deletion_requested'`,
+          [ACHADORA],
+        ),
         '1',
-        'a conta foi expurgada um dia depois do pedido. O prazo de 30 dias deixou de valer.',
+        'a conta perdeu a marca de desabilitada. É ela que todo filtro de leitura consulta.',
       );
     });
   });
 
-  void it('CONTRAPESO: conta VIVA nunca entra na varredura', async () => {
+  /**
+   * ISCA: o expurgo não chama quem apaga arquivo.
+   *
+   * `apagarObjetosDaConta` continua sendo injetada por `src/bin/worker.ts`, que
+   * é de outra branch e não pôde ser editado nesta. Enquanto a fiação existir, a
+   * única coisa que garante que a foto fica é `expurgarContasExcluidas` IGNORAR
+   * a dependência -- e isso é o que este caso mede. Uma dublê que estoura ao ser
+   * chamada, e não um contador: se ela for chamada, o caso não tem como passar.
+   */
+  void it('ISCA: o expurgo NÃO chama o apagador de objeto -- a foto fica', async () => {
+    await comMassa(async () => {
+      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
+
+      const resultado = await expurgarContasExcluidas({
+        repositorio: repo,
+        trilha: trilhaQueAnota(),
+        clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: () => {
+          throw new Error(
+            'o expurgo chamou `apagarObjetosDaConta`. O cliente pediu "Mantenha a foto" ' +
+              'em 17/10, e esta chamada é exatamente o que apaga os objetos do balde (SEC-020).',
+          );
+        },
+      });
+
+      assert.equal(resultado.falhas, 0, 'a falha aqui é a chamada ao apagador: leia a mensagem acima');
+    });
+  });
+
+  /**
+   * ISCA: o gatilho de 20260928000007 não existe mais.
+   *
+   * Ele apagava `user_devices` no instante da exclusão lógica. Conferido pelo
+   * CATÁLOGO do banco e não pelo efeito: um caso que só olhasse a linha ficaria
+   * verde numa massa sem aparelho, e é justamente num banco recém-migrado que o
+   * gatilho voltaria sem ninguém ver.
+   */
+  void it('ISCA: nenhum gatilho de `users` apaga `user_devices`', async () => {
+    assert.equal(
+      await contar(
+        `select count(*)::text as n from pg_trigger
+          where tgrelid = 'users'::regclass
+            and not tgisinternal
+            and tgname = 'users_exclusao_logica_apaga_aparelhos'`,
+        [],
+      ),
+      '0',
+      'o gatilho `users_exclusao_logica_apaga_aparelhos` voltou. Ele apaga o cadastro de ' +
+        'aparelho e de token de push na exclusão lógica, e desde 17/10 nada é apagado: quem ' +
+        'tira o aparelho do alcance é `u.deleted_at IS NULL` em kysely-alcance-por-postgis.ts.',
+    );
+  });
+
+  void it('ISCA: `user_devices` sobrevive à exclusão lógica da conta', async () => {
+    await comMassa(async () => {
+      await cliente.query(
+        `insert into user_devices (id, user_id, platform, push_token, push_permission, registered_at)
+         values ($1, $2, 'android', $3, 'granted', now())`,
+        [APARELHO, ACHADORA, 'token-de-teste-que-nao-e-segredo'],
+      );
+
+      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
+
+      assert.equal(
+        await contar(`select count(*)::text as n from user_devices where id = $1`, [APARELHO]),
+        '1',
+        'a linha de `user_devices` foi apagada na exclusão lógica. Desde 17/10 ela é RETIDA.',
+      );
+    });
+  });
+
+  void it('CONTRAPESO: conta VIVA também não é tocada', async () => {
     await comMassa(async () => {
       const resultado = await expurgarContasExcluidas({
         repositorio: repo,
@@ -493,9 +489,6 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         apagarObjetosDaConta: SO_O_BANCO,
       });
 
-      // A cláusula é `deleted_at IS NOT NULL AND deleted_at <= $1`. Tirar a
-      // primeira metade faria a varredura apagar toda conta criada há mais de
-      // 30 dias, que é a base inteira.
       assert.equal(resultado.falhas, 0);
       assert.equal(
         await contar(`select count(*)::text as n from users where id in ($1, $2)`, [ACHADORA, DONA]),
@@ -504,7 +497,16 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
     });
   });
 
-  void it('a TRILHA sobrevive ao expurgo: é ela que torna o prazo verificável', async () => {
+  /**
+   * ISCA DA TRILHA, pelo avesso.
+   *
+   * `privacy.account_purged` era a única memória de que a conta tinha deixado de
+   * existir. Nada deixa de existir, então o evento não pode ser gravado: ele
+   * afirmaria à auditoria um apagamento que não aconteceu, que é a classe de
+   * defeito de leitura que o SEC-020 existia para corrigir -- agora com o sinal
+   * trocado.
+   */
+  void it('ISCA: `privacy.account_purged` NÃO é mais gravado -- nada foi expurgado', async () => {
     await comMassa(async () => {
       await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
       const trilha = trilhaQueAnota();
@@ -516,242 +518,43 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         apagarObjetosDaConta: SO_O_BANCO,
       });
 
-      const evento = trilha.eventos.find((e) => e.action === 'privacy.account_purged');
-      assert.ok(evento !== undefined, 'sem este evento ninguém consegue provar que a conta saiu');
-      assert.equal(evento.resourceId, ACHADORA);
-      assert.equal(evento.actorKind, 'system');
-      // `audit.events` não referencia `users`, de propósito (ADR-0010: 24
-      // meses, obrigação legal). O registro precisa poder sobreviver ao que ele
-      // registra, e uma chave estrangeira aqui apagaria a prova junto com o
-      // objeto da prova.
+      assert.equal(
+        trilha.eventos.filter((e) => e.action === 'privacy.account_purged').length,
+        0,
+        'a trilha afirma `privacy.account_purged` sem que nada tenha sido purgado. O evento ' +
+          'que prova apagamento não pode existir num desenho que não apaga.',
+      );
+    });
+  });
+
+  /**
+   * ISCA: a conta desabilitada NÃO entra.
+   *
+   * Pedida explicitamente pelo cliente. Mede o estado da conta pela cláusula que
+   * `autenticar()` aplica (`status !== 'active'` recusa), e mede também que a
+   * credencial CONTINUA LÁ: recusar apagando a senha seria apagar dado.
+   */
+  void it('ISCA: conta desabilitada não entra, e a credencial não foi apagada', async () => {
+    await comMassa(async () => {
+      await repo.registrarPedidoDeExclusao(ACHADORA, AGORA);
+
       assert.equal(
         await contar(
-          `select count(*)::text as n from information_schema.table_constraints
-            where constraint_schema = 'audit' and table_name = 'events'
-              and constraint_type = 'FOREIGN KEY'`,
-          [],
+          `select count(*)::text as n from users where id = $1 and status = 'active'`,
+          [ACHADORA],
         ),
         '0',
+        'a conta desabilitada continua `active`, e `autenticar()` recusa exatamente por ' +
+          'status: com ela ativa, o login passa.',
       );
-    });
-  });
-});
-
-/**
- * ===========================================================================
- * SEC-020 — O EXPURGO APAGA O ARQUIVO, E NÃO SÓ A LINHA
- * ===========================================================================
- *
- * ## Este bloco REPROVA hoje, e a reprovação é a entrega
- *
- * A pilha de integração não tem armazenamento de objeto. `compose.integracao.yaml`
- * sobe `db`, `mail`, `migracao`, `testes` e `api`, e zero ocorrências de `minio`,
- * `localstack`, `s3mock` ou `fake-gcs`. É deliberado e está escrito em
- * `infra/integracao/gerar-env-de-integracao.mjs`, com `OBJECT_STORAGE_ENDPOINT`
- * apontando de propósito para um host que não resolve.
- *
- * **O caso não se pula sozinho, e essa é a decisão inteira.** Um `skip` aqui
- * reproduziria exatamente o defeito que estamos consertando, um nível acima:
- * verde por ausência, lido como verde por verificação. Verificação que não
- * consegue verificar reprova, nunca aprova.
- *
- * Enquanto o armazenamento não existir nesta pilha, a mensagem da reprovação
- * diz **o motivo** — "não há armazenamento de objeto nesta pilha, logo o
- * apagamento físico não foi verificado" — e não "esperava 0, recebeu 1". Quem
- * ler a falha daqui a seis meses precisa entender o risco, não o número.
- *
- * ## O que ele passa a provar quando o armazenamento chegar
- *
- * Nada muda aqui. O caso põe TRÊS objetos de verdade (o original privado, e as
- * derivadas `card` e `thumb` no balde público), cria as linhas que apontam para
- * eles, exclui a conta, roda o expurgo e exige que `head()` responda ausência
- * nos três. Três e não um porque é a derivada PÚBLICA que vira o problema de
- * cache, e um caso que só olhasse o original deixaria justamente ela para trás.
- *
- * ## O que este bloco NÃO pode prometer, e precisa estar escrito
- *
- * As derivadas públicas são servidas com `max-age=31536000, immutable`, que é um
- * ano, e o ADR-0014 decidiu que não existe operação de invalidação neste
- * desenho. Apagar tira o objeto da origem; quem já tem a URL exata e uma cópia
- * em cache continua alcançando a imagem por até 12 meses. **Nenhuma asserção
- * deste arquivo prova o contrário, e nenhuma mensagem daqui pode dizer que o
- * dado foi "apagado completamente".**
- */
-void describe('SEC-020: a conta expurgada não deixa foto no armazenamento', () => {
-  const CONTA_COM_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000201' as UserId;
-  const PET_COM_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000202';
-  const INTENCAO_DA_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000203';
-  const FOTO_PRONTA = '0192f3a1-7c2b-7e3d-9a10-215000000204';
-
-  /**
-   * As três chaves, com o prefixo que o domínio produz.
-   *
-   * Escritas à mão e não geradas: o que este caso mede é o apagamento, e uma
-   * chave aleatória por execução deixaria lixo com nome diferente a cada
-   * rodada, num balde que ninguém varre.
-   */
-  // Pela PORTA (`comoObjectKey`) e não por `as ObjectKey`: a marca por `as` não
-  // confere nada, e a chave daqui vai para o `pathname` da URL do objeto, onde
-  // um `..` lê de fora do balde (BICHUS-134). Um caso que criasse a marca falsa
-  // estaria exercitando um caminho que a aplicação não tem.
-  const ORIGINAL = comoObjectKey('pets/expurgo-sec-020/original/AAAAAAAAAAAAAAAAAAAAAA');
-  const CARD = comoObjectKey('card/AAAAAAAAAAAAAAAAAAAAAB.webp');
-  const THUMB = comoObjectKey('thumb/AAAAAAAAAAAAAAAAAAAAAC.webp');
-
-  const OS_TRES: readonly { classe: Classe; chave: ObjectKey; rotulo: string }[] = [
-    { classe: 'privado', chave: ORIGINAL, rotulo: 'o original, no balde privado' },
-    { classe: 'publico', chave: CARD, rotulo: 'a derivada `card`, no balde PÚBLICO' },
-    { classe: 'publico', chave: THUMB, rotulo: 'a derivada `thumb`, no balde PÚBLICO' },
-  ];
-
-  /** Um WebP mínimo. O conteúdo não importa; o que importa é existir bytes. */
-  const BYTES = Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1');
-
-  function armazenamento(): ObjectStorage {
-    return criarObjectStorage(loadAppConfig().objectStorage);
-  }
-
-  /**
-   * A reprovação com MOTIVO, para o dia em que a pilha não tem armazenamento.
-   *
-   * Ela não é um `skip` disfarçado: o caso reprova, a suíte fica vermelha, e o
-   * texto diz o que não foi verificado e por quê.
-   */
-  function reprovarSemArmazenamento(erro: unknown): never {
-    assert.fail(
-      'NÃO HÁ ARMAZENAMENTO DE OBJETO NESTA PILHA, LOGO O APAGAMENTO FÍSICO NÃO FOI ' +
-        'VERIFICADO.\n\n' +
-        'A pilha de integração sobe `db`, `mail`, `migracao`, `testes` e `api`, e nenhum ' +
-        'serviço de objeto (`infra/integracao/compose.integracao.yaml`). ' +
-        '`OBJECT_STORAGE_ENDPOINT` aponta de propósito para um host que não resolve ' +
-        '(`infra/integracao/gerar-env-de-integracao.mjs`).\n\n' +
-        'ESTE CASO NÃO SE PULA SOZINHO, e a decisão está no §19 de docs/04-seguranca.md: ' +
-        'um `skip` aqui reproduziria o defeito que ele existe para consertar, um nível ' +
-        'acima — verde por ausência, lido como verde por verificação. Enquanto ele estiver ' +
-        'vermelho, o que se sabe é que a conta some do BANCO; o que NÃO se sabe é se a ' +
-        'foto do animal sai do balde. É o direito de eliminação da LGPD (art. 18, VI) sem ' +
-        'prova.\n\n' +
-        'O que destrava: um serviço de objeto na pilha de integração (BICHUS-245). Não ' +
-        'construa um segundo.\n\n' +
-        `Erro do armazenamento: ${erro instanceof Error ? erro.message : String(erro)}`,
-    );
-  }
-
-  async function porOsTresObjetos(): Promise<void> {
-    const balde = armazenamento();
-    try {
-      for (const objeto of OS_TRES) {
-        await balde.put(objeto.classe, objeto.chave, BYTES, 'image/webp');
-      }
-    } catch (erro) {
-      reprovarSemArmazenamento(erro);
-    }
-  }
-
-  async function comMassaDeFoto(corpo: () => Promise<void>): Promise<void> {
-    try {
-      await cliente.query(
-        `insert into users (id, email) values ($1, 'foto@expurgo.test')`,
-        [CONTA_COM_FOTO],
-      );
-      await cliente.query(
-        `insert into pets (id, owner_user_id, name, species_code, size_code)
-         values ($1, $2, 'Pipoca', 'cat', 'P')`,
-        [PET_COM_FOTO, CONTA_COM_FOTO],
-      );
-      await cliente.query(
-        `insert into upload_intents
-           (id, user_id, pet_id, kind, object_key, declared_type, max_bytes, expires_at,
-            confirmed_at)
-         values ($1, $2, $3, 'pet_photo', $4, 'image/jpeg', 1000000,
-                 now() + interval '1 hour', now())`,
-        [INTENCAO_DA_FOTO, CONTA_COM_FOTO, PET_COM_FOTO, ORIGINAL],
-      );
-      // A foto PRONTA, com as duas derivadas. É o estado em que os três objetos
-      // existem, e é o único que mede os três baldes.
-      await cliente.query(
-        `insert into pet_photos
-           (id, pet_id, upload_intent_id, status, original_key, thumb_key, card_key,
-            is_primary, created_at, processed_at)
-         values ($1, $2, $3, 'ready', $4, $5, $6, true, now(), now())`,
-        [FOTO_PRONTA, PET_COM_FOTO, INTENCAO_DA_FOTO, ORIGINAL, THUMB, CARD],
-      );
-      await corpo();
-    } finally {
-      await cliente.query('delete from users where id = $1', [CONTA_COM_FOTO]);
-    }
-  }
-
-  void it('os TRÊS objetos somem do balde quando a conta é expurgada', async () => {
-    await porOsTresObjetos();
-
-    await comMassaDeFoto(async () => {
-      await repo.registrarPedidoDeExclusao(CONTA_COM_FOTO, AGORA);
-
-      const balde = armazenamento();
-      const resultado = await expurgarContasExcluidas({
-        repositorio: repo,
-        trilha: trilhaQueAnota(),
-        clock: { now: () => DEPOIS_DO_PRAZO },
-        // O CAMINHO REAL, e não o `SO_O_BANCO` dos casos acima. É esta linha
-        // que separa este bloco daquele: aqui o armazenamento é o de verdade.
-        apagarObjetosDaConta: criarApagadorDeObjetosDaConta({
-          repositorio: criarMediaRepository(db),
-          armazenamento: balde,
-        }),
-      });
-
       assert.equal(
-        resultado.falhas,
-        0,
-        'o expurgo contou falha. Na ordem certa (objeto primeiro, linha depois) isso ' +
-          'significa que o apagamento do arquivo estourou e a conta NÃO foi apagada do ' +
-          'banco — que é o desfecho autocurável e correto, mas ainda é uma conta que ' +
-          'passou do prazo de 30 dias com a foto no balde.',
-      );
-
-      for (const objeto of OS_TRES) {
-        const cabecalho = await balde.head(objeto.classe, objeto.chave).catch(reprovarSemArmazenamento);
-        assert.equal(
-          cabecalho,
-          null,
-          `${objeto.rotulo} CONTINUA no armazenamento depois do expurgo da conta. A linha ` +
-            'do banco sumiu e levou junto o único ponteiro que existia para o arquivo: ' +
-            'ninguém sabe mais que ele existe nem de quem era, e só uma varredura do balde ' +
-            'inteiro o encontraria. É o SEC-020, e é o direito de eliminação da LGPD ' +
-            '(art. 18, VI) não sendo cumprido.',
-        );
-      }
-    });
-  });
-
-  void it('a trilha conta os objetos que saíram, junto das linhas', async () => {
-    await porOsTresObjetos();
-
-    await comMassaDeFoto(async () => {
-      await repo.registrarPedidoDeExclusao(CONTA_COM_FOTO, AGORA);
-      const trilha = trilhaQueAnota();
-
-      await expurgarContasExcluidas({
-        repositorio: repo,
-        trilha,
-        clock: { now: () => DEPOIS_DO_PRAZO },
-        apagarObjetosDaConta: criarApagadorDeObjetosDaConta({
-          repositorio: criarMediaRepository(db),
-          armazenamento: armazenamento(),
-        }),
-      });
-
-      const evento = trilha.eventos.find((e) => e.action === 'privacy.account_purged');
-      assert.ok(evento !== undefined, 'o expurgo não gravou `privacy.account_purged`');
-      // Sem `objects_deleted`, o evento conta linhas e é lido como se contasse
-      // dado pessoal — que é a leitura que sustentou o SEC-020 por meses.
-      assert.equal(
-        evento.metadata?.['objects_deleted'],
-        3,
-        'a trilha não registrou os três objetos (original, `card` e `thumb`). Quem auditar ' +
-          'o cumprimento do art. 18, VI vai encontrar a contagem de LINHAS e concluir, ' +
-          'errado, que o arquivo saiu junto.',
+        await contar(
+          `select count(*)::text as n from user_credentials where user_id = $1`,
+          [ACHADORA],
+        ),
+        '1',
+        'a credencial foi APAGADA. O login tem de ser recusado por ESTADO da conta, não por ' +
+          'ausência de senha -- apagar a senha é apagar dado do usuário.',
       );
     });
   });

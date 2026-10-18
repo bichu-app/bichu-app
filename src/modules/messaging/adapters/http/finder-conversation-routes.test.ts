@@ -89,6 +89,8 @@ interface Cenario {
   /** O banco que compara errado: devolve a conversa para qualquer resumo. */
   readonly bancoSemFiltro?: boolean;
   readonly mensagensDoAchadorEm24h?: number;
+  /** O TUTOR desabilitou a conta (17/10). */
+  readonly tutorDesabilitado?: boolean;
 }
 
 interface Bancada {
@@ -134,6 +136,8 @@ function bancada(cenario: Cenario = {}): Bancada {
     bloqueadaEm: cenario.bloqueada === true ? new Date(AGORA - DIA) : null,
     nomeDoTutor: `Leandro ${DO_TUTOR.sobrenome}`,
     nomeDoAchador: null,
+    tutorDesabilitado: cenario.tutorDesabilitado === true,
+    achadorDesabilitado: false,
     resumoDoToken: new Uint8Array(resumoCerto),
     tokenExpiraEm:
       cenario.tokenVencidoPeloAviso === true ? new Date(AGORA - DIA) : new Date(AGORA + 29 * DIA),
@@ -578,6 +582,55 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
     }
     // Distinguir contaria a quem escreve que o tutor o bloqueou.
     assert.equal(corpos[0], corpos[1]);
+  });
+
+  /**
+   * ISCA DO ENVIO TRAVADO, lado SEM CONTA (17/10).
+   *
+   * **Este é o lado que implementa o "não receber".** Quem desabilita a conta é
+   * o tutor; quem continuaria escrevendo é o achador, por token, sem login. Uma
+   * trava só no lado autenticado deixaria o buraco exatamente no caminho que não
+   * pede credencial -- e esse caminho é alcançável por qualquer um que tenha o
+   * link do e-mail.
+   *
+   * Isca a rodar (não rodada nesta branch): tirar `participanteDesabilitado` de
+   * `estadoDe` em `conversa-do-achador.ts` deve reprovar este caso, e os dois
+   * casos de `conversation-service.test.ts` continuariam verdes -- é por isso
+   * que ele existe aqui, e não por simetria.
+   */
+  void it('ISCA: tutor desabilitado trava o envio do ACHADOR por token, 410', async () => {
+    const { app, gravadas } = bancada({ tutorDesabilitado: true });
+    const resposta = await pedir(app, {
+      metodo: 'POST',
+      url: '/finder/conversation/messages',
+      corpo: { body: 'Oi' },
+    });
+    await app.close();
+    // 410 e não 403: a conversa EXISTE para quem apresenta o token, e o que
+    // mudou é o estado dela. E não 404: o ADR-0021 manda 404 para o que não deve
+    // existir, e esta conversa deve existir em modo leitura.
+    assert.equal(resposta.status, 410);
+    assert.equal(tipoDe(resposta.corpo), 'conversation-closed');
+    assert.equal(
+      gravadas.length,
+      0,
+      'gravou mensagem numa conversa cujo tutor desabilitou a conta',
+    );
+  });
+
+  void it('ISCA: o nome do tutor desabilitado NÃO sai na resposta do achador', async () => {
+    // Esta rota é `finderToken`, sem `bearerAuth`, e projeta o nome do tutor.
+    // Medido no inventário como a superfície por onde o nome de uma conta
+    // desabilitada chegaria a quem não tem conta nenhuma.
+    const { app } = bancada({ tutorDesabilitado: true });
+    const resposta = await pedir(app, { metodo: 'GET', url: '/finder/conversation' });
+    await app.close();
+    assert.doesNotMatch(
+      JSON.stringify(resposta.corpo),
+      new RegExp(DO_TUTOR.sobrenome, 'u'),
+      'o nome do tutor desabilitado continua saindo na resposta do achador. O cliente pediu ' +
+        'que o nome também não identifique.',
+    );
   });
 
   void it('INVARIANTE 1: a 201ª mensagem em 24 h é GRAVADA, e a conversa é retida em silêncio', async () => {
