@@ -47,6 +47,7 @@ const ITENS: ItemDaNavegacao[] = [
   // nao tem `pending_total`, e inventar uma soma na tela contaria o que a
   // listagem nao mostra, que e o defeito de "1 pendente" sobre fila vazia.
   { para: '/plaquinhas', rotulo: 'Plaquinhas', icone: 'tick', ativo: (c) => c === '/plaquinhas' || c.startsWith('/plaquinhas/') },
+  { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
 
 function iniciais(nome: string): string {

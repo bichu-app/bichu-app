@@ -313,6 +313,27 @@ export const ACOES_ADMINISTRATIVAS = [
   // encomenda e nao dado pessoal, e e justamente o campo cuja troca alguem vai
   // querer auditar depois.
   'admin.collar_tag_request.delivery_updated',
+  // 18/10/2026: o COMUNICADO -- o unico aviso do produto com alcance total.
+  //
+  // E a acao desta lista que mais precisa existir, e por um motivo que nenhuma
+  // das outras tem: o comunicado nao tem destinatario a quem perguntar depois.
+  // Uma escrita da Loja errada aparece na Loja; um comunicado errado chega a
+  // toda caixa e nao deixa rastro em nenhuma delas de QUEM o mandou. Sem esta
+  // linha, "quem disparou aquilo" nao tem resposta. Megafone sem trilha e o que
+  // vira incidente.
+  //
+  // `before`/`after`: nao ha `before` (o comunicado nasce, nao muda), e o
+  // `after` carrega `title`, `recipients_total` e o `ref`. **O CORPO NAO
+  // ENTRA**: ele e texto livre de pessoa, a trilha sobrevive a exclusao da
+  // conta de proposito, e o corpo ja vive em `notification_broadcasts`, que
+  // nao tem caminho de exclusao. A trilha responde quem e quando; a tabela
+  // responde o que.
+  //
+  // Nao ha `.deleted` nem `.updated`, e as ausencias sao a regra: comunicado
+  // disparado fica registrado, e o contrato nao declara `DELETE` nem `PATCH`.
+  // Nao ha `.previewed`: pre-visualizar nao e escrita, e uma trilha por tecla
+  // digitada afogaria a do disparo, que e a que importa.
+  'admin.broadcast.dispatched',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

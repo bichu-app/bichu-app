@@ -84,3 +84,36 @@ export function taxonomia(extra: Partial<Esquemas['StoreTaxonomy']> = {}): Esque
     ...extra,
   };
 }
+
+/**
+ * Um comunicado JA DISPARADO, na forma de `AdminBroadcast`.
+ *
+ * `dispatched_by` e o NOME DE EXIBICAO de quem disparou, e nao o e-mail nem o
+ * identificador: e o que o contrato entrega, e a pergunta que a lista responde
+ * e "quem mandou isto".
+ */
+export function comunicado(extra: Partial<Esquemas['AdminBroadcast']> = {}): Esquemas['AdminBroadcast'] {
+  return {
+    ref: 'cmb-20261018-01',
+    title: 'Mutirão de castração no sábado',
+    body: 'A prefeitura abriu 120 vagas para castração gratuita.\nAs inscrições vão até sexta.',
+    dispatched_at: '2026-10-18T13:40:00Z',
+    dispatched_by: 'Marina Rocha',
+    recipients_total: 1240,
+    ...extra,
+  };
+}
+
+/**
+ * A janela de disparo de `getAdminBroadcastDispatchWindow`: um `GET` sem corpo
+ * que nao escreve nada.
+ *
+ * **Nao carrega titulo nem corpo**, de proposito: o servidor nao precisa do
+ * rascunho para contar caixas, e quem renderiza o texto da previa e o painel.
+ * `daily_cap` vem daqui, e nao de uma constante do painel.
+ */
+export function janelaDeDisparo(
+  extra: Partial<Esquemas['AdminBroadcastDispatchWindow']> = {},
+): Esquemas['AdminBroadcastDispatchWindow'] {
+  return { would_reach: 1240, remaining_today: 3, daily_cap: 3, ...extra };
+}

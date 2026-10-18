@@ -814,6 +814,49 @@ telas:
           - path:requestRef
           - resp:status
 
+  # 18/10/2026. O COMUNICADO -- o unico aviso do produto com alcance total.
+  #
+  # As telas existem nesta mesma entrega: `admin/src/comunicados/`, uma lista do
+  # que ja saiu e um formulario com pre-visualizacao obrigatoria antes do
+  # disparo. Nao ha estado `salvo` nem `rascunho` na lista de estados, e as duas
+  # ausencias sao a regra: comunicado nao tem rascunho (a pre-visualizacao nao
+  # grava nada) e nao tem edicao nem exclusao (disparado fica registrado).
+  - tela: "Comunicados: lista e disparo"
+    prototipo: "nao ha prototipo; a tela nasceu com o backend, em 18/10/2026"
+    estados: [dados, paginada, carregando, vazia, erro, previa, teto, sessao12h]
+    operacoes:
+      - operationId: listAdminBroadcasts
+        situacao: contrato
+        usa:
+          - query:page
+          - query:limit
+          - resp:items[].ref
+          - resp:items[].title
+          - resp:items[].body
+          - resp:items[].dispatched_at
+          - resp:items[].dispatched_by
+          - resp:items[].recipients_total
+          - resp:page
+          - resp:limit
+          - resp:total
+      - operationId: getAdminBroadcastDispatchWindow
+        situacao: contrato
+        usa:
+          - resp:would_reach
+          - resp:remaining_today
+          - resp:daily_cap
+      - operationId: dispatchAdminBroadcast
+        situacao: contrato
+        usa:
+          - req:title
+          - req:body
+          - resp:ref
+          - resp:title
+          - resp:dispatched_at
+          - resp:dispatched_by
+          - resp:recipients_total
+          - problem:broadcast-daily-cap-reached
+
 correspondencias:
   # ====================================================================
   # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO

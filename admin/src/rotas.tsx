@@ -41,6 +41,7 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         // 18/10/2026: a fila da plaquinha da coleira e a entrega. O backend das
         // tres operacoes existia desde 17/10 e nenhuma tela as chamava.
         ...rotasDasPlaquinhas,
+        { path: 'comunicados', children: [{ index: true, lazy: async () => ({ Component: (await import('./comunicados/ListaDeComunicados.tsx')).default }) }, { path: 'novo', lazy: async () => ({ Component: (await import('./comunicados/FormularioDeComunicado.tsx')).default }) }] },
         { path: '*', element: <NaoEncontrada /> },
       ],
     },

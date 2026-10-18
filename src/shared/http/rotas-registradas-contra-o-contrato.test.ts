@@ -62,6 +62,8 @@ import * as diretorioAdministrativo from '../../modules/professionals/adapters/h
 import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
+import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -116,6 +118,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
   saude,
+  // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
+  caixaDeNotificacoes,
+  comunicadosAdministrativos,
 ];
 
 /**

@@ -22,6 +22,7 @@ export const STATUS_DO_PROBLEMA = {
   'community-event-limit-reached':   409, // teto de 3 encontros ATIVOS (ainda nao encerrados) criados pela comunidade, por conta (ADR-0025 emenda 3). O mesmo numero de `open-case-limit-reached`, e de proposito: as duas perguntas sao a mesma -- quantas acoes de peso uma conta mantem em aberto -- e dois numeros para ela obrigariam a defender os dois. Sem revisao humana, este teto e o de chamada sao a unica contencao de volume
   'open-case-limit-reached':         409, // teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa
   'pet-limit-reached':               409, // teto de pets DA CONTA
+  'broadcast-daily-cap-reached':     409, // teto de 3 comunicados por dia, contado da meia-noite UTC e aplicado no banco na mesma transacao da gravacao. 409 e nao 429: 429 e teto de CHAMADA, aplicado pela borda e que passa em um minuto; este e teto de PRODUTO, e a saida da pessoa e esperar amanha ou nao mandar -- tratar os dois com o mesmo tipo faria o painel oferecer 'tentar de novo' para o unico caso em que tentar de novo nao resolve
   'tag-limit-reached':               409, // teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada
   'contact-channel-unverified':      409,
   'pet-photo-missing':               409,
@@ -48,7 +49,7 @@ export const STATUS_DO_PROBLEMA = {
   'postal-code-lookup-unavailable':  503, // BICHUS-9.2: os dois servicos publicos de CEP (ViaCEP e a reserva BrasilAPI) falharam ou nao responderam no prazo. Separado de `not-found`, que e 404, porque a saida da tela e a MESMA -- digitar o endereco a mao -- e a FRASE nao e: `not-found` diz 'este CEP nao existe' e este diz 'nao conseguimos consultar agora, tente de novo'. Nenhum dos dois impede salvar o cadastro
 } as const;
 
-/** União fechada dos 38 tipos declarados no contrato. */
+/** União fechada dos 39 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */
