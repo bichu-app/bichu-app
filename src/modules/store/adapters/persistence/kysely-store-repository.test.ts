@@ -241,6 +241,19 @@ void describe('`escaparCuringas` procura o que a pessoa digitou, e não um padr�
   });
 });
 
+/**
+ * Só a cláusula `WHERE` do SQL compilado, sem as junções.
+ *
+ * As junções da taxonomia de dois níveis nomeiam `i.category` e `i.subcategory`
+ * em todo `SELECT` da vitrine, filtrado ou não; é no `WHERE` que se vê o que o
+ * recorte estreitou. Sem `WHERE`, devolve vazio -- e aí não há predicado nenhum
+ * a achar, que é a leitura certa.
+ */
+function whereDaVitrine(sql: string): string {
+  const corte = sql.indexOf(' where ');
+  return corte === -1 ? '' : sql.slice(corte + ' where '.length);
+}
+
 void describe('o item retirado e o parceiro desativado ficam fora pela cláusula WHERE', () => {
   void it('a consulta carrega os DOIS predicados de `active`', () => {
     // Filtrar depois, num `if`, é o que quebra no dia em que alguém esquece o
@@ -261,10 +274,16 @@ void describe('o item retirado e o parceiro desativado ficam fora pela cláusula
   });
 
   void it('a categoria entra no WHERE quando o recorte a traz, e só então', () => {
-    const comum = construtorDaVitrine(semBanco, RECORTE).compile().sql;
-    assert.doesNotMatch(comum, /"i"\."category"/);
+    // O recorte é medido no WHERE, e não no SQL inteiro: desde a taxonomia de
+    // dois níveis (`20261017000003`), `i.category` aparece SEMPRE nas junções
+    // que trazem o rótulo — a interna de `store_categories` e a externa de
+    // `store_subcategories`. Procurar a coluna no texto todo passaria a acusar
+    // as junções, que são o desenho, e deixaria de medir o que importa: o
+    // predicado que estreita a lista.
+    const comum = whereDaVitrine(construtorDaVitrine(semBanco, RECORTE).compile().sql);
+    assert.doesNotMatch(comum, /"i"\."category"/, `a categoria entrou no WHERE sem recorte: ${comum}`);
     const filtrada = construtorDaVitrine(semBanco, { ...RECORTE, category: 'food' }).compile();
-    assert.match(filtrada.sql, /"i"\."category"\s*=\s*\$\d+/);
+    assert.match(whereDaVitrine(filtrada.sql), /"i"\."category"\s*=\s*\$\d+/);
     assert.ok(filtrada.parameters.includes('food'));
   });
 

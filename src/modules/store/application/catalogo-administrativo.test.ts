@@ -837,10 +837,13 @@ void describe('escrita administrativa da Loja', () => {
         .catch((e: unknown) => e);
       assert.deepEqual(codigos(com3001), ['length']);
 
-      // 2999 letras + uma quebra = 3000 exatos.
+      // 2999 letras + uma quebra NO MEIO = 3000 exatos. A quebra tem de ficar
+      // no meio: o teto e medido (e o texto gravado) depois de `btrim`, como o
+      // `CHECK store_items_resumo_tem_tamanho` o mede, e uma quebra no FIM e
+      // espaco de borda -- ela sai, e 2999 seria o tamanho gravado.
       const noLimite = await m.catalogo.criarItem(AUTOR, {
         title: 'No limite com quebra',
-        summary: `${'a'.repeat(2999)}\n`,
+        summary: `${'a'.repeat(2998)}\na`,
       });
       assert.equal(noLimite.recurso.summary?.length, 3000);
 

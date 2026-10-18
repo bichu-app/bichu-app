@@ -211,6 +211,54 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
   return schema;
 }
 
+/**
+ * O MESMO schema do contrato, **sem nenhum `default`**.
+ *
+ * ## O defeito, medido
+ *
+ * O Fastify monta o Ajv com `useDefaults: true`. O Ajv entao ESCREVE no corpo
+ * recebido o `default` de todo campo ausente. Em `CommunityNetworkEventPatch`
+ * dois campos tem `default` no contrato, herdado das formas que a CRIACAO
+ * reusa -- `accepted_sizes` (`[P, M, G, GG]`) e `dog_age` (`any`) --, e numa
+ * CRIACAO o padrao e o certo: o encontro tem de nascer com porte e idade.
+ *
+ * Num `PATCH` ele e o contrario do que a operacao promete. Medido em 17/10/2026
+ * com `{"title": "...", "notes": "..."}`:
+ *
+ * ```
+ * PATCH /v1/network/events/x  {"title":"...","notes":"..."}
+ *   corpo visto pelo manipulador:
+ *     { title, notes, accepted_sizes: [P,M,G,GG], dog_age: 'any' }
+ * ```
+ *
+ * Duas consequencias, e as duas sao silenciosas:
+ *
+ * 1. **a edicao reescreve o que ninguem mandou**: quem aceitava so porte P e
+ *    corrige o titulo sai aceitando os quatro portes, com `200` e sem aviso;
+ * 2. **a trilha mente**: `fields` sai do `Object.keys` do corpo, e passa a
+ *    nomear campo que o autor nao tocou.
+ *
+ * ## Por que aqui, e nao no contrato nem no servidor
+ *
+ * No contrato o `default` esta certo onde ele nasceu -- a criacao o usa. Em
+ * `criarServidor`, `ajv: { useDefaults: false }` mudaria TODA rota de uma vez,
+ * inclusive as que hoje dependem do padrao sem saber; e a mesma pendencia que
+ * `corpo-fechado.ts` registra para `removeAdditional`, e fica registrada do
+ * mesmo jeito: **as outras operacoes de `PATCH` do produto continuam recebendo
+ * o padrao injetado**, e esta correcao vale onde esta instalada.
+ *
+ * O schema do contrato nao e alterado: a copia e so a que valida o corpo.
+ */
+function semPadroes(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(semPadroes);
+  if (typeof schema !== 'object' || schema === null) return schema;
+  return Object.fromEntries(
+    Object.entries(schema as Record<string, unknown>)
+      .filter(([chave]) => chave !== 'default')
+      .map(([chave, valor]) => [chave, semPadroes(valor)]),
+  );
+}
+
 interface QueryDaAgenda {
   readonly q?: string;
   readonly city?: string;
@@ -373,11 +421,15 @@ export function registrarRotasDaRede(
    * decida isso.
    */
   const corpoDaEdicao = corpoDe(deps.contrato, rotaDaEdicaoDoEncontro.operationId);
+  // Sem os `default` do contrato: num `PATCH` o padrao injetado reescreve campo
+  // que ninguem mandou e faz a trilha nomea-lo. Ver `semPadroes`. O guarda de
+  // campo desconhecido continua lendo o schema ORIGINAL -- a lista de nomes
+  // aceitos nao muda, e e nela que ele se baseia.
   registrarRota(
     app,
     rotaDaEdicaoDoEncontro,
     {
-      schema: { body: corpoDaEdicao },
+      schema: { body: semPadroes(corpoDaEdicao) as Record<string, unknown> },
       resolvedores: porConta.resolvedores,
       preValidation: [recusarCampoDesconhecido(corpoDaEdicao, rotaDaEdicaoDoEncontro.operationId)],
     },
