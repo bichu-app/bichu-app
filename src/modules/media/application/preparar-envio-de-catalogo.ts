@@ -23,6 +23,7 @@ import { chaveDoOriginalDeCatalogo } from '../domain/chave-de-objeto.js';
 import {
   CATEGORIA_DO_PROPOSITO,
   TETO_DE_BYTES_DO_CATALOGO,
+  TIPOS_DE_IMAGEM_DA_VITRINE,
   TIPOS_DE_IMAGEM_DE_CATALOGO,
   VALIDADE_DA_INTENCAO_DE_CATALOGO_EM_SEGUNDOS,
   type PreparadorDeEnvioDeCatalogo,
@@ -35,7 +36,15 @@ export function criarPreparadorDeEnvioDeCatalogo(deps: {
 }): PreparadorDeEnvioDeCatalogo {
   return {
     async preparar(contentType, byteSize, proposito) {
-      if (!(TIPOS_DE_IMAGEM_DE_CATALOGO as readonly string[]).includes(contentType)) {
+      // A LISTA DE TIPOS E POR PROPOSITO, e nao uma so, porque a ORIGEM e
+      // outra: a imagem de catalogo sai de um computador de mesa e a vitrine do
+      // usuario sai de um celular, onde foto de iPhone e HEIC. Uma lista unica
+      // obrigaria a escolher entre recusar HEIC (e tirar a vitrine de metade
+      // dos aparelhos) e aceitar HEIC no painel (onde ele nao existe e seria
+      // superficie a mais). SVG continua recusado nas duas, por IGUALDADE.
+      const aceitos: readonly string[] =
+        proposito === 'user_showcase' ? TIPOS_DE_IMAGEM_DA_VITRINE : TIPOS_DE_IMAGEM_DE_CATALOGO;
+      if (!aceitos.includes(contentType)) {
         throw problemas.tipoDeMidiaNaoAceito();
       }
       if (!Number.isInteger(byteSize) || byteSize <= 0 || byteSize > TETO_DE_BYTES_DO_CATALOGO) {

@@ -14,18 +14,36 @@
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
-import type { CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+import { comoObjectKey, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+
+/**
+ * A ÚNICA porta pela qual outro módulo obtém a marca `ObjectKey`.
+ *
+ * A marca é emitida por `comoObjectKey`, que mora em `media/domain` — e a
+ * fronteira da arquitetura proíbe um módulo de importar `domain/` alheio. Sem
+ * esta reexportação, quem precisasse da marca teria duas saídas, e as duas são
+ * piores: copiar a conferência (duas regras que concordam por enquanto) ou usar
+ * `as ObjectKey` sobre texto vindo de `SELECT` — que é exatamente o defeito da
+ * BICHUS-134, porque o `pathname` de uma URL RESOLVE `..` e uma chave como
+ * `card/../../x` sai do prefixo e do balde.
+ *
+ * Reexportar, e não reimplementar: a conferência continua tendo um dono só.
+ */
+export { comoObjectKey };
 import { TETO_DE_BYTES_DO_ENVIO } from '../domain/derivadas.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
 
-export type PropositoDaImagem = 'store_item' | 'network_event';
+export type PropositoDaImagem = 'store_item' | 'network_event' | 'user_showcase';
 
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
   store_item: 'products',
   network_event: 'events',
+  // A vitrine do usuario mora em `people/`, com a foto unica do perfil: as duas
+  // sao imagem de PESSOA e somem juntas no expurgo da conta.
+  user_showcase: 'people',
 };
 
 /**
@@ -33,6 +51,25 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
  * computador de mesa (`AdminCatalogImageIntentInput.content_type`).
  */
 export const TIPOS_DE_IMAGEM_DE_CATALOGO = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/**
+ * Os tipos aceitos na VITRINE DO USUARIO, e por que a lista e outra.
+ *
+ * A vitrine sai de um CELULAR, e nao de um computador de mesa: **HEIC entra**,
+ * porque foto de iPhone sai em HEIC e recusa-la na entrada tiraria a vitrine da
+ * mao de metade dos aparelhos. A extensao de SAIDA continua `.jpeg`
+ * (`FORMATO_DAS_DERIVADAS`) -- HEIC entra e nunca sai, e a conversao e nossa,
+ * no servidor.
+ *
+ * **SVG continua recusado**, aqui como em todo lugar, e por IGUALDADE e nunca
+ * por prefixo: `image/` aceitaria `image/svg+xml`, que e documento com script.
+ */
+export const TIPOS_DE_IMAGEM_DA_VITRINE = [
+  'image/jpeg',
+  'image/png',
+  'image/heic',
+  'image/webp',
+] as const;
 
 /**
  * O teto do envio, reexportado do PONTO ÚNICO (`domain/derivadas.ts`).
@@ -56,6 +93,12 @@ export const TETO_DE_BYTES_DO_CATALOGO = TETO_DE_BYTES_DO_ENVIO;
 export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
+  // 600 x 600, o MESMO minimo que o encontro da comunidade e a foto de pet
+  // (`DIMENSAO_MINIMA_DA_FOTO_DE_PET`) ja usam: duas regras com o mesmo
+  // proposito e numeros diferentes e o que ninguem consegue explicar depois.
+  // Abaixo disso a `card` de 1024 nao se preenche sem ampliar, e ampliar nao
+  // acrescenta informacao -- esconde da pessoa que a foto nao serve.
+  user_showcase: { largura: 600, altura: 600 },
 };
 
 /**

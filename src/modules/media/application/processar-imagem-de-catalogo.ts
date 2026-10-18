@@ -31,6 +31,7 @@ import {
   type ImagensDeCatalogoDoWorker,
 } from '../ports/imagem-de-catalogo.js';
 import {
+  DERIVADAS_DA_VITRINE_DO_USUARIO,
   DERIVADAS_DO_ENCONTRO,
   DERIVADAS_DO_PRODUTO,
   TETO_DE_BYTES_DA_DERIVADA,
@@ -49,6 +50,11 @@ import type { ObjectStorage } from '../ports/object-storage.js';
 const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaDerivada[]>> = {
   network_event: DERIVADAS_DO_ENCONTRO,
   store_item: DERIVADAS_DO_PRODUTO,
+  // A vitrine do usuario: `thumb` 320 x 320 para a GRADE (a celula tem 104 dp,
+  // que a 3x sao 312 px reais) e `card` 1024 x 1024 para a foto aberta. Nem a
+  // `thumb` de 176 nem a `card` de 512 da foto unica servem a grade -- a
+  // primeira seria ampliada 1,8x, a segunda e 1,6x dado demais, nove vezes.
+  user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
 };
 
 /** O texto que o painel mostra, por motivo. Nao e codigo de erro. */
@@ -99,9 +105,12 @@ export async function processarImagemDeCatalogo(
 
   const original = await deps.armazenamento.get('privado', imagem.originalKey);
   const inspecao = await deps.processador.inspecionar(original);
-  // HEIC passa na inspecao da foto do pet, que sai de celular; aqui a origem e
-  // um computador de mesa e o contrato aceita so JPEG, PNG e WebP.
-  if (typeof inspecao === 'string' || inspecao.formato === 'heic') {
+  // HEIC passa na inspecao da foto do pet, que sai de celular; na imagem de
+  // CATALOGO a origem e um computador de mesa e o contrato aceita so JPEG, PNG
+  // e WebP. A VITRINE DO USUARIO sai de um celular, entao HEIC entra nela --
+  // e nunca sai: a derivada e reescrita em JPEG (`FORMATO_DAS_DERIVADAS`).
+  const heicAceito = imagem.purpose === 'user_showcase';
+  if (typeof inspecao === 'string' || (inspecao.formato === 'heic' && !heicAceito)) {
     const motivo: MotivoDeRecusa = typeof inspecao === 'string' ? inspecao : 'formato_nao_aceito';
     await deps.imagens.marcarRecusada(imagem.id, TEXTO_DA_RECUSA[motivo]);
     return { tipo: 'recusada', imagemId: imagem.id, motivo };

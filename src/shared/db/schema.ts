@@ -476,7 +476,7 @@ export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
  * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
  * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
  */
-export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
+export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event' | 'user_showcase';
 
 export interface UploadIntentsTable {
   id: string;
@@ -1366,6 +1366,29 @@ export interface StoreItemTagsTable {
 }
 
 /** Ate 8 imagens por item; `position = 0` e a principal (ADR-0027 A.2.1). */
+/**
+ * A VITRINE DE FOTOS DO USUARIO (migracao `20261018000011`), no molde de
+ * `store_item_images` e `network_event_images`.
+ *
+ * **Visivel so ao dono.** Projetada em `GET /me/showcase` e em NENHUMA outra
+ * resposta: o ADR-0025 item 2 proibe avatar de pessoa na superficie da `Rede`,
+ * e `Conversation.participants` nunca traz foto. Nao ha coluna de
+ * visibilidade porque nao ha o que configurar.
+ */
+export interface UserShowcaseImagesTable {
+  user_id: string;
+  /** `catalog_images.id`, com `purpose = 'user_showcase'`. Identidade interna: nunca projetada. */
+  image_id: string;
+  /** `0` e a capa. Ate `8`: o teto de NOVE e este intervalo mais a unicidade por conta. */
+  position: number;
+  /**
+   * **Anulavel, e e a unica diferenca do molde.** Nao ha terceiro que leia esta
+   * vitrine, e legenda esta fora de proposito; nulo faz o leitor de tela cair
+   * no rotulo da grade. Quando vem, de 2 a 150 caracteres.
+   */
+  alt_text: string | null;
+}
+
 export interface StoreItemImagesTable {
   item_id: string;
   image_id: string;
@@ -1688,6 +1711,7 @@ export interface Database {
   store_tags: StoreTagsTable;
   store_item_tags: StoreItemTagsTable;
   store_item_images: StoreItemImagesTable;
+  user_showcase_images: UserShowcaseImagesTable;
   network_events: NetworkEventsTable;
   network_event_bring_items: NetworkEventBringItemsTable;
   network_event_sizes: NetworkEventSizesTable;

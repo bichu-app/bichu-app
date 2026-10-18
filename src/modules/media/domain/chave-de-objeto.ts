@@ -110,7 +110,21 @@ const LIMITE_DA_CHAVE = 1024;
  * `site/` e `partners/` ficam reservados: o site empacota as imagens dele no
  * container, e parceiro nao tem imagem. Nenhum codigo escreve neles hoje.
  */
-export const CATEGORIAS_DE_CATALOGO = ['products', 'events'] as const;
+/**
+ * `people/` e a categoria das imagens de PESSOA: a foto do perfil e as fotos da
+ * vitrine. Prefixo proprio, e nao `pets/` nem `products/`, pelo motivo que a
+ * Emenda 1 do ADR-0007 da: e o primeiro segmento que deixa uma politica de
+ * bucket, um ciclo de vida e uma varredura de expurgo tratarem imagem de
+ * pessoa de forma diferente de imagem de animal e de catalogo. A vitrine e a
+ * foto unica compartilham o prefixo de propósito -- as duas somem juntas no
+ * expurgo da conta.
+ *
+ * **O MESMO NOME que a frente `feat/imagem-do-profissional-e-foto-do-usuario`
+ * usa**, e isso e deliberado: aquela frente acrescenta `directory` e `people`
+ * na mesma linha e nao desceu ainda. Escrever `people` identico faz a mescla
+ * ser trivial em vez de duas categorias para a mesma coisa.
+ */
+export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'people'] as const;
 export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
 /** As categorias que tem derivada PUBLICA. Achado nao tem: a foto dele nunca e publica. */
 export const CATEGORIAS_PUBLICAS = ['pets', ...CATEGORIAS_DE_CATALOGO] as const;
