@@ -276,6 +276,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
             busca: _controleDeBusca(),
             filtro: _controleDeFiltro(),
             ordenacao: _controleDeOrdenacao(pagina),
+            aoAplicar: _aplicarAFolha,
           ),
         ..._corpo(),
       ],
@@ -345,23 +346,27 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
           ],
         ),
       ],
-      // Os dois grupos de uma vez, no `Aplicar`: uma chamada a rota, e a
-      // lista sempre de volta a `pagina: 1`. Trocar atividade e verificacao
-      // dava duas chamadas e duas voltas a primeira pagina.
-      aoAplicar: (escolhas) {
-        final atividade = escolhas['kind'];
-        final nivel = escolhas['verification_level'];
-        _trocarRecorte(
-          _recorte.com(
-            atividade: AtividadeDoDiretorio.porCodigo(atividade),
-            limparAtividade: atividade == null,
-            nivelMinimo:
-                nivel == null ? null : NivelDeVerificacao.porCodigo(nivel),
-            limparNivel: nivel == null,
-            pagina: 1,
-          ),
-        );
-      },
+    );
+  }
+
+  /// Os dois grupos **e a ordem** de uma vez, no `Aplicar`: uma chamada a
+  /// rota, e a lista sempre de volta a `pagina: 1`.
+  ///
+  /// Antes eram tres caminhos (cada grupo e a folha de ordem), e trocar
+  /// atividade, verificacao e ordem dava tres chamadas e tres voltas a
+  /// primeira pagina.
+  void _aplicarAFolha(EscolhaDaFolha escolha) {
+    final atividade = escolha.filtros['kind'];
+    final nivel = escolha.filtros['verification_level'];
+    _trocarRecorte(
+      _recorte.com(
+        atividade: AtividadeDoDiretorio.porCodigo(atividade),
+        limparAtividade: atividade == null,
+        nivelMinimo: nivel == null ? null : NivelDeVerificacao.porCodigo(nivel),
+        limparNivel: nivel == null,
+        ordem: OrdemDoDiretorio.porCodigo(escolha.ordem),
+        pagina: 1,
+      ),
     );
   }
 
@@ -385,9 +390,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
       ],
       efetiva: efetiva.codigo,
       porQueNaoEAPedida: divergiu ? ListaDoDiretorio.semLocalizacao : null,
-      aoEscolher: (codigo) => _trocarRecorte(
-        _recorte.com(ordem: OrdemDoDiretorio.porCodigo(codigo), pagina: 1),
-      ),
     );
   }
 

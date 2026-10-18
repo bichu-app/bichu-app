@@ -453,6 +453,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               busca: busca,
               filtro: filtro,
               ordenacao: ordenacao,
+              aoAplicar: _aplicarAFolha,
             );
 
         return Column(
@@ -506,6 +507,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                 busca: busca,
                 filtro: filtro,
                 ordenacao: ordenacao,
+                aoAplicar: _aplicarAFolha,
               ),
             ..._corpo(),
           ],
@@ -670,35 +672,42 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       }
     }
 
-    return ControleDeFiltro(
-      grupos: grupos,
-      // **Todos os grupos de uma vez, no `Aplicar`.** Antes cada pastilha
-      // fechava a folha e recarregava a agenda: trocar `Quando`, `Valor` e
-      // `Cidade` eram tres chamadas a rota, com a lista voltando a primeira
-      // pagina tres vezes. Agora e uma.
-      //
-      // So as chaves que o grupo da aba atual DECLAROU entram: `_Nada` e
-      // "nao mexer", e um grupo que esta aba nao oferece nao pode ter o
-      // recorte apagado por ela.
-      aoAplicar: (escolhas) {
-        Object? v(String chave, Object? Function(String?) de) =>
-            escolhas.containsKey(chave) ? de(escolhas[chave]) : const _Nada();
-        final maxKm = escolhas['max_km'];
-        _trocarRecorte(
-          _recorteCom(
-            estadoDoPedido: v('state', EstadoDoPedido.porCodigo),
-            quando: v('when', QuandoDaRede.porCodigo),
-            entrada: v('admission', TipoDeEntrada.porCodigo),
-            // Lista so de publicos: o filtro de visibilidade sai junto.
-            visibilidade: maxKm != null
-                ? null
-                : v('visibility', VisibilidadeDoEncontro.porCodigo),
-            cidade: v('city', (c) => c),
-            porte: v('size', Porte.de),
-            distanciaMaxima: v('max_km', DistanciaMaxima.porCodigo),
-          ),
-        );
-      },
+    return ControleDeFiltro(grupos: grupos);
+  }
+
+  /// **Todos os grupos E a ordem de uma vez, no `Aplicar`.**
+  ///
+  /// Antes cada pastilha fechava a folha e recarregava a agenda, e a ordem
+  /// tinha folha propria: trocar `Quando`, `Valor`, `Cidade` e a ordem eram
+  /// quatro chamadas a rota, com a lista voltando a primeira pagina quatro
+  /// vezes. Agora e uma.
+  ///
+  /// So as chaves que os grupos da aba atual DECLARARAM entram: `_Nada` e
+  /// "nao mexer", e um grupo que esta aba nao oferece nao pode ter o recorte
+  /// apagado por ela.
+  void _aplicarAFolha(EscolhaDaFolha escolha) {
+    final filtros = escolha.filtros;
+    Object? v(String chave, Object? Function(String?) de) =>
+        filtros.containsKey(chave) ? de(filtros[chave]) : const _Nada();
+    final maxKm = filtros['max_km'];
+    final ordem = escolha.ordem;
+    // `Distância` como ordem e a lista so de publicos, pela mesma razao do
+    // filtro `max_km`: `listNearbyNetworkEvents` nao devolve privado.
+    final porDistancia = ordem == OrdemPorPerto.distancia.codigo;
+    _trocarRecorte(
+      _recorteCom(
+        estadoDoPedido: v('state', EstadoDoPedido.porCodigo),
+        quando: v('when', QuandoDaRede.porCodigo),
+        entrada: v('admission', TipoDeEntrada.porCodigo),
+        // Lista so de publicos: o filtro de visibilidade sai junto.
+        visibilidade: maxKm != null || porDistancia
+            ? null
+            : v('visibility', VisibilidadeDoEncontro.porCodigo),
+        cidade: v('city', (c) => c),
+        porte: v('size', Porte.de),
+        distanciaMaxima: v('max_km', DistanciaMaxima.porCodigo),
+        ordem: ordem ?? const _Nada(),
+      ),
     );
   }
 
@@ -751,15 +760,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       porQueNaoEAPedida: pedida != null && pedida != _ordemEfetiva
           ? AgendaDaRede.ordemTrocadaPeloServidor
           : null,
-      aoEscolher: (codigo) {
-        final distancia = codigo == OrdemPorPerto.distancia.codigo;
-        _trocarRecorte(
-          _recorteCom(
-            ordem: codigo,
-            visibilidade: distancia ? null : const _Nada(),
-          ),
-        );
-      },
     );
   }
 

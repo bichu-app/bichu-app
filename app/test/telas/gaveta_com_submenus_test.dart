@@ -43,6 +43,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -441,12 +442,31 @@ void main() {
       );
     });
 
-    testWidgets('o slot UNICO de acao da direita continua LIVRE', (
-      tester,
-    ) async {
-      // O que a pergunta "o que saiu do lugar?" cobra: NADA saiu. Este caso
-      // reprova no dia em que alguem puser o hamburguer -- ou qualquer outra
-      // coisa -- no slot que o `Filtros` vai ocupar.
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 17/10/2026, POR DECISAO DO CLIENTE.**
+    //
+    // Nas palavras dele: *"suba todos os filtros para a barra do titulo da
+    // pagina e deixe o campo de busca sempre ocupando a area toda"*. Isto
+    // REVERTE a regra de 22/09 que mandou busca, filtro e ordenacao para o
+    // topo do CORPO da tela, e devolve ao slot unico da direita o `Filtros`
+    // que a UX 27.5.1 a 27.5.4 sempre lhe deu.
+    //
+    // O caso antigo cobrava que o slot ficasse VAZIO em toda secao. Ele nao
+    // foi apagado nem dispensado: virou a afirmacao nova, que e mais estreita
+    // e continua pegando o defeito que o original existia para pegar -- o
+    // hamburguer, ou qualquer outra coisa, caindo na direita.
+    //
+    // O que ele cobra agora:
+    //  - **no maximo UM** controle na direita, em qualquer secao (11.23.1);
+    //  - o que estiver la e o `Filtros`, e nunca o gatilho da gaveta;
+    //  - o gatilho da gaveta continua na ESQUERDA, inteiro.
+    //
+    // Por que nao "exatamente um em Rede, Perto e Loja": com `_semServidor`
+    // nenhuma das tres carrega lista, e a barra de listagem nao publica
+    // controle sobre o nada. Cobrar presenca aqui mediria a rede de mentira,
+    // e nao o leiaute. A presenca e medida onde ha dado:
+    // `test/telas/perto_com_dados_test.dart` e `test/rede/agenda_da_rede_test.dart`.
+    testWidgets('o slot UNICO de acao da direita tem no maximo UM controle, '
+        'e ele nao e o gatilho da gaveta', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
 
       for (final destino in CascaComAbas.destinos) {
@@ -456,14 +476,35 @@ void main() {
         await tester.pumpAndSettle();
 
         final barra = tester.widget<AppBar>(find.byType(AppBar));
+        final acoes = barra.actions ?? const <Widget>[];
         expect(
-          barra.actions ?? const <Widget>[],
-          isEmpty,
+          acoes.length,
+          lessThanOrEqualTo(1),
           reason:
-              'REPROVA: a secao "${destino.rotulo}" ocupou o slot de acao '
-              'da direita. Ele e UM so (11.23.1) e esta reservado ao '
-              '`Filtros` em `Pets` e em `Perto`; o hamburguer foi para a '
-              'esquerda justamente para nao disputa-lo.',
+              'REPROVA: a secao "${destino.rotulo}" pos ${acoes.length} '
+              'controles no slot de acao da direita. Ele e UM so (11.23.1), '
+              'e empilhar controle sobre controle na barra de titulo foi '
+              'exatamente o que o cliente mandou nao fazer.',
+        );
+        for (final acao in acoes) {
+          expect(
+            acao,
+            isA<BotaoDeAcaoDaListagem>(),
+            reason:
+                'REPROVA: a secao "${destino.rotulo}" pos no slot da direita '
+                'algo que nao e o `Filtros`. Ele e do filtro desde 17/10, e '
+                'o gatilho da gaveta tem o slot da ESQUERDA.',
+          );
+        }
+        // O gatilho da gaveta continua inteiro, e na ESQUERDA: ele e o
+        // `leading` da barra, nunca uma `action`. O caso do slot da esquerda,
+        // logo acima, mede a largura de 64 dp dele.
+        expect(
+          tester.widget<AppBar>(find.byType(AppBar)).leading,
+          anyOf(isNull, isA<BotaoDaGaveta>()),
+          reason:
+              'REPROVA: o slot da ESQUERDA de "${destino.rotulo}" deixou de '
+              'ser do gatilho da gaveta.',
         );
       }
     });

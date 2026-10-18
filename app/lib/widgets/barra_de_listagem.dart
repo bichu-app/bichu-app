@@ -22,7 +22,8 @@ import 'botao_primario.dart';
 /// ## Anatomia
 ///
 /// ```
-/// [ campo de busca ............... (x) ] [ filtro 48 ] [ ordem 48 ]
+/// barra de topo:  [ gaveta 64 ][ titulo ] ....... [ filtro e ordem 64 ]
+/// corpo:          [ campo de busca, LARGURA TOTAL .................. ]
 /// <n> resultados · <ordem que DE FATO valeu>
 /// [ faixa: por que a ordem pedida nao pode ser cumprida ]   (condicional)
 /// [ nota: o alcance real da busca ]                          (condicional)
@@ -42,12 +43,35 @@ import 'botao_primario.dart';
 /// listagem nao e uma delas, e tres alvos de 64 lado a lado com o campo de
 /// busca nao cabem em 320dp.
 ///
-/// **A barra fica no CORPO, no topo da lista, e nao na barra de topo.** O
-/// paragrafo 11.23.1 da **uma** acao de 64 x 64 na `AppBar`, e em `Pets` e em
-/// `Perto` essa acao e o `Filtros`. Sao tres controles agora, e dois deles nao
-/// caberiam. **Consequencia declarada: o `Filtros` sai da barra de topo e
-/// desce para o corpo**, junto com os outros dois; o slot unico da direita
-/// fica **livre**, que e o que o portao da gaveta cobra.
+/// ---------------------------------------------------------------------------
+/// ## O PADRAO DE LISTAGEM MUDOU POR DECISAO DO CLIENTE (17/10/2026)
+///
+/// Nas palavras dele: *"suba todos os filtros para a barra do titulo da pagina
+/// e deixe o campo de busca sempre ocupando a area toda"*.
+///
+/// **Isto REVERTE a regra registrada do projeto** de 22/09/2026 -- "busca,
+/// filtro e ordenacao no topo do CORPO da tela, nunca na barra do aplicativo"
+/// --, e a reversao e dele. Quem abrir este arquivo em tres meses e achar que
+/// a regra antiga foi quebrada por descuido esta lendo o commit errado: ela
+/// foi trocada de proposito, e este paragrafo e o registro.
+///
+/// O desenho que sai disto:
+///
+/// - **O acesso ao filtro (e a ordem) vai para o slot unico de acao da
+///   `AppBar`**, que e o que o paragrafo 11.23.1 sempre reservou a ele
+///   (UX 27.5.1 a 27.5.4). Ele cabe porque e **um** controle: a ordem entrou
+///   na mesma folha no lote anterior do mesmo dia, e a busca nao sobe.
+/// - **O campo de busca ocupa a largura TOTAL do corpo, sempre.** Ele nao
+///   encolhe mais para abrir espaco ao icone, porque nao ha mais icone ao
+///   lado dele.
+/// - **O gatilho da gaveta nao foi tocado.** Ele mora no slot da ESQUERDA, que
+///   na raiz de secao esta vazio por desenho (23.4). Nada se empilha: sao dois
+///   slots diferentes.
+///
+/// A publicacao e por [SlotDaBarraDeListagem], e nao por parametro de cada
+/// tela: a `AppBar` e da casca (`TelaDeAba`) e o estado do filtro e da
+/// listagem. Um parametro obrigaria cada uma das cinco secoes a repassar
+/// estado que nao e dela.
 ///
 /// ---------------------------------------------------------------------------
 /// ## NADA SE APLICA SOZINHO (decisao do cliente, 17/10/2026)
@@ -82,11 +106,22 @@ import 'botao_primario.dart';
 /// um estado que a propria pessoa acabou de mexer, e cujo estado desabilitado
 /// e a informacao que o cliente pediu que ficasse visivel.
 ///
-/// **O que a ordenacao faz, e por que ela nao mudou.** A folha de ordem tem
-/// **um** valor e uma opcao por linha: tocar numa linha E a decisao, e a folha
-/// fecha nesse toque. Nao existe estado intermediario para um botao de aplicar
-/// confirmar, e um `Aplicar` ali pediria dois toques para uma escolha so.
-/// Ordem tambem nao e filtro: ela nao tira nada da lista.
+/// **A ordenacao entrou na MESMA folha** (segundo pedido do cliente no mesmo
+/// dia: *"coloque o campo de ordenacao dentro da modal de filtro"*). Fora do
+/// corpo da tela ficou so a busca, e o icone unico abre filtro e ordem juntos.
+/// Com isso o `Aplicar` manda **um** recorte -- filtros e ordem --, e trocar
+/// os dois deixou de ser duas chamadas a rota com duas voltas a primeira
+/// pagina.
+///
+/// **Isto NAO briga com a regra registrada do projeto** ("busca, filtro e
+/// ordenacao no topo do corpo da tela, nunca na barra do aplicativo"): a regra
+/// decide que os tres nao sobem para a `AppBar`, e a folha e do corpo -- ela
+/// nasce de um controle que esta no corpo e cobre a tela por baixo da barra.
+/// O slot unico de acao da `AppBar` continua livre.
+///
+/// **A ordem nao se desmarca.** Uma lista sempre esta em alguma ordem: a
+/// pastilha marcada nao vira "qualquer uma" no segundo toque, e o `Limpar`
+/// nao a toca.
 ///
 /// ---------------------------------------------------------------------------
 /// ## O recorte ativo e o APLICADO, e nunca o digitado
@@ -165,7 +200,7 @@ import 'botao_primario.dart';
 /// - **Um item**: identico a lista cheia, com `1 resultado` no singular. A
 ///   barra nao some com pouca coisa: sumir e voltar conforme a contagem faz o
 ///   topo da tela pular a cada carregamento.
-class BarraDeListagem extends StatelessWidget {
+class BarraDeListagem extends StatefulWidget {
   const BarraDeListagem({
     required this.total,
     super.key,
@@ -174,6 +209,7 @@ class BarraDeListagem extends StatelessWidget {
     this.ordenacao,
     this.substantivo = const SubstantivoDaListagem(),
     this.buscaAcima = false,
+    this.aoAplicar,
   });
 
   /// Quantos itens o recorte atual tem **no servidor**, e nao quantos vieram
@@ -183,6 +219,19 @@ class BarraDeListagem extends StatelessWidget {
   final ControleDeBusca? busca;
   final ControleDeFiltro? filtro;
   final ControleDeOrdenacao? ordenacao;
+
+  /// Chamado **uma vez**, no `Aplicar` da folha, com o recorte inteiro:
+  /// a escolha de cada grupo de filtro e a ordem.
+  ///
+  /// **Mora aqui, e nao em [ControleDeFiltro] nem em [ControleDeOrdenacao]**,
+  /// porque a folha e uma so e o `Aplicar` dela e um so. Um callback em cada
+  /// controle daria duas chamadas a rota para um toque, e a segunda chegaria
+  /// com a lista da primeira ainda carregando.
+  ///
+  /// Sem ele o icone da folha **nao nasce**: um controle que abre uma folha
+  /// cujo botao nao leva a lugar nenhum e o toque sem desfecho que o criterio
+  /// 2 proibe.
+  final void Function(EscolhaDaFolha escolha)? aoAplicar;
 
   /// Como chamar o que esta listado. `Perto` lista `resultado`; `Meus pets`
   /// listaria `pet`.
@@ -208,10 +257,15 @@ class BarraDeListagem extends StatelessWidget {
   final bool buscaAcima;
 
   /// Ha pelo menos um controle com desfecho.
-  bool get _temControle =>
-      busca != null ||
-      (filtro?.temOpcao ?? false) ||
-      (ordenacao?.temEscolha ?? false);
+  bool get _temControle => busca != null || _temFolha;
+
+  /// A folha de filtro e ordem tem o que oferecer, e tem para onde mandar.
+  bool get _temFolha =>
+      aoAplicar != null &&
+      ((filtro?.temOpcao ?? false) || (ordenacao?.temEscolha ?? false));
+
+  @override
+  State<BarraDeListagem> createState() => _EstadoDaBarraDeListagem();
 
   /// A pessoa recortou a lista de alguma forma.
   ///
@@ -232,81 +286,17 @@ class BarraDeListagem extends StatelessWidget {
     ControleDeBusca? busca,
     ControleDeFiltro? filtro,
     ControleDeOrdenacao? ordenacao,
+    void Function(EscolhaDaFolha escolha)? aoAplicar,
   }) {
     final barra = BarraDeListagem(
       total: total,
       busca: busca,
       filtro: filtro,
       ordenacao: ordenacao,
+      aoAplicar: aoAplicar,
     );
     if (!barra._temControle) return false;
     return total != 0 || barra._recorteAtivo;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_temControle) return const SizedBox.shrink();
-    if (total == 0 && !_recorteAtivo) return const SizedBox.shrink();
-
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final aviso = ordenacao?.porQueNaoEAPedida;
-    final comCampo = busca != null && !buscaAcima;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            if (comCampo)
-              Expanded(child: CampoDeBuscaDaListagem(busca: busca!))
-            else
-              const Spacer(),
-            if (filtro?.temOpcao ?? false) ...<Widget>[
-              const SizedBox(width: BichuEspaco.e2),
-              _BotaoDeFolha(
-                icone: Icons.tune,
-                // O nome acessivel carrega o ESTADO, e nao so o verbo: quem
-                // usa leitor de tela nao ve o distintivo com o numero.
-                rotulo: filtro!.ativos == 0
-                    ? 'Filtrar'
-                    : 'Filtrar, ${filtro!.ativos} ${filtro!.ativos == 1 ? 'filtro ativo' : 'filtros ativos'}',
-                distintivo: filtro!.ativos == 0 ? null : '${filtro!.ativos}',
-                aoTocar: () => _abrirFiltros(context),
-              ),
-            ],
-            if (ordenacao?.temEscolha ?? false) ...<Widget>[
-              const SizedBox(width: BichuEspaco.e2),
-              _BotaoDeFolha(
-                icone: Icons.swap_vert,
-                // A ordem que o leitor de tela ouve e a EFETIVA, pela mesma
-                // razao da linha de resumo.
-                rotulo: 'Ordenar, ${ordenacao!.rotuloEfetivo}',
-                aoTocar: () => _abrirOrdenacao(context),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: BichuEspaco.e2),
-        Text(
-          _resumo,
-          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-        ),
-        if (aviso != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e3),
-          _FaixaDaOrdem(ordenacao: ordenacao!),
-        ],
-        if (comCampo && busca?.avisoDeAlcance != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e2),
-          Text(
-            busca!.avisoDeAlcance!,
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-        ],
-        const SizedBox(height: BichuEspaco.e4),
-      ],
-    );
   }
 
   /// `12 resultados · Nome`.
@@ -320,24 +310,135 @@ class BarraDeListagem extends StatelessWidget {
     return '$contagem · ${ordem.rotuloEfetivo}';
   }
 
-  Future<void> _abrirFiltros(BuildContext context) async {
+  /// O nome acessivel do unico controle de recorte, agora na `AppBar`.
+  String get _rotuloDaFolha {
+    final ordena = ordenacao?.temEscolha ?? false;
+    final filtra = filtro?.temOpcao ?? false;
+    final verbo = filtra && ordena
+        ? 'Filtrar e ordenar'
+        : ordena
+            ? 'Ordenar'
+            : 'Filtrar';
+    final ativos = filtro?.ativos ?? 0;
+    final estado = <String>[
+      if (ativos > 0)
+        '$ativos ${ativos == 1 ? 'filtro ativo' : 'filtros ativos'}',
+      // A ordem que o leitor de tela ouve e a EFETIVA, pela mesma razao da
+      // linha de resumo: a barra nunca anuncia a ordem PEDIDA.
+      if (ordena) ordenacao!.rotuloEfetivo,
+    ];
+    return estado.isEmpty ? verbo : '$verbo, ${estado.join(', ')}';
+  }
+
+  Future<void> _abrirFolha(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _FolhaDeFiltros(filtro: filtro!),
+      builder: (_) => _FolhaDeFiltros(
+        filtro: filtro,
+        ordenacao: ordenacao,
+        aoAplicar: aoAplicar!,
+      ),
+    );
+  }
+}
+
+class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
+  SlotDaBarraDeListagem? _slot;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final novo = SlotDaBarraDeListagem.maybeOf(context);
+    if (identical(novo, _slot)) return;
+    // Trocou de casca (ou achou uma pela primeira vez): o slot antigo nao
+    // pode ficar com o controle desta tela pendurado nele.
+    _slot?.publicar(null);
+    _slot = novo;
+  }
+
+  @override
+  void dispose() {
+    // A lista saiu da tela: o controle da `AppBar` sai junto. Sem isto a
+    // barra de topo guardaria um `Filtros` que nao abre mais nada --
+    // exatamente o toque sem desfecho que o criterio 2 proibe.
+    _slot?.publicar(null);
+    super.dispose();
+  }
+
+  /// O que a `AppBar` desenha agora, ou nulo quando nao ha folha a abrir.
+  ///
+  /// Nulo tambem quando a barra do corpo nao e desenhada: filtrar o nada e um
+  /// toque sem desfecho, e um icone que fica na barra de topo sobre uma lista
+  /// vazia e pior do que um que some com ela.
+  AcaoDeListagem? _acao(BuildContext context) {
+    final b = widget;
+    if (!b._temFolha) return null;
+    if (b.total == 0 && !b._recorteAtivo) return null;
+    final ativos = b.filtro?.ativos ?? 0;
+    return AcaoDeListagem(
+      rotulo: b._rotuloDaFolha,
+      distintivo: ativos == 0 ? null : '$ativos',
+      aoTocar: () => b._abrirFolha(context),
     );
   }
 
-  Future<void> _abrirOrdenacao(BuildContext context) async {
-    final escolhido = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (_) => _FolhaDeOrdenacao(ordenacao: ordenacao!),
+  @override
+  Widget build(BuildContext context) {
+    // **Publicado depois do quadro**, e nao durante: mexer num `ValueNotifier`
+    // que um ancestral escuta no meio do proprio `build` marca esse ancestral
+    // sujo durante a construcao, que e o erro que o Flutter afirma contra.
+    // `AcaoDeListagem` compara por VALOR (e ignora o fecho), entao publicar a
+    // cada quadro nao reconstroi a casca -- sem isso isto seria um laco.
+    final acao = _acao(context);
+    final slot = _slot;
+    if (slot != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) slot.publicar(acao);
+      });
+    }
+
+    final b = widget;
+    if (!b._temControle) return const SizedBox.shrink();
+    if (b.total == 0 && !b._recorteAtivo) return const SizedBox.shrink();
+
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final aviso = b.ordenacao?.porQueNaoEAPedida;
+    final comCampo = b.busca != null && !b.buscaAcima;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // **O campo ocupa a largura TOTAL, sempre** (decisao do cliente,
+        // 17/10/2026). Ele nao divide mais a linha com icone nenhum: os dois
+        // que ficavam aqui viraram um so e subiram para a `AppBar`. Nao ha
+        // `Row`, entao nao ha o que encolher -- nem com o teclado aberto, nem
+        // em 320 dp.
+        if (comCampo) ...<Widget>[
+          CampoDeBuscaDaListagem(busca: b.busca!),
+          const SizedBox(height: BichuEspaco.e2),
+        ],
+        Text(
+          b._resumo,
+          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+        ),
+        if (aviso != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e3),
+          _FaixaDaOrdem(ordenacao: b.ordenacao!),
+        ],
+        if (comCampo && b.busca?.avisoDeAlcance != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e2),
+          Text(
+            b.busca!.avisoDeAlcance!,
+            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+          ),
+        ],
+        const SizedBox(height: BichuEspaco.e4),
+      ],
     );
-    if (escolhido != null) ordenacao!.aoEscolher(escolhido);
   }
 }
 
@@ -423,6 +524,22 @@ class ControleDeBusca {
       'A busca olha só o que já está carregado nesta página.';
 }
 
+/// O que a folha devolve no `Aplicar`: o recorte inteiro, de uma vez.
+class EscolhaDaFolha {
+  const EscolhaDaFolha({required this.filtros, this.ordem});
+
+  /// A chave de cada grupo DECLARADO para o codigo escolhido, ou `null` para
+  /// "qualquer um". Grupo que a tela nao declarou nao aparece aqui, e quem
+  /// recebe nao deve apaga-lo do recorte por ausencia.
+  final Map<String, String?> filtros;
+
+  /// A ordem pedida, ou nulo quando a listagem nao oferece escolha de ordem.
+  ///
+  /// Uma lista sempre esta em ALGUMA ordem: este campo so e nulo quando nao ha
+  /// o que escolher, e nunca significa "sem ordem".
+  final String? ordem;
+}
+
 /// Uma opcao de recorte: o codigo que vai para a rota e o rotulo que a pessoa
 /// le.
 class OpcaoDeRecorte {
@@ -469,22 +586,16 @@ class GrupoDeFiltro {
   final String? dependeDe;
 }
 
-/// O icone de filtro e a folha que ele abre.
+/// Os grupos de filtro da folha.
+///
+/// **Nao carrega callback.** Quem aplica e a folha inteira, por
+/// [BarraDeListagem.aoAplicar]: um callback por grupo era o que havia antes, e
+/// com ele cada toque numa pastilha fechava a folha e recarregava a lista --
+/// que e exatamente a aplicacao automatica que o cliente recusou.
 class ControleDeFiltro {
-  const ControleDeFiltro({required this.grupos, required this.aoAplicar});
+  const ControleDeFiltro({required this.grupos});
 
   final List<GrupoDeFiltro> grupos;
-
-  /// Chamado **uma vez**, no `Aplicar`, com a escolha de todos os grupos
-  /// declarados: a chave do grupo para o codigo escolhido, ou `null` para
-  /// "qualquer um".
-  ///
-  /// Um callback por grupo era o que havia antes, e com ele cada toque numa
-  /// pastilha fechava a folha e recarregava a lista -- que e exatamente a
-  /// aplicacao automatica que o cliente recusou. Com o mapa inteiro de uma
-  /// vez, trocar tres filtros e **uma** chamada a rota, e a lista volta para
-  /// a primeira pagina uma vez, e nao tres.
-  final void Function(Map<String, String?> escolhas) aoAplicar;
 
   int get ativos => grupos.where((g) => g.selecionado != null).length;
 
@@ -492,12 +603,15 @@ class ControleDeFiltro {
   bool get temOpcao => grupos.any((g) => g.opcoes.isNotEmpty);
 }
 
-/// O icone de ordenacao e a folha que ele abre.
+/// A ordem da lista, e as ordens que a rota aceita.
+///
+/// **Nao carrega callback**, pela mesma razao de [ControleDeFiltro]: desde
+/// 17/10/2026 a ordem mora DENTRO da folha de filtros e sai no mesmo
+/// `Aplicar`.
 class ControleDeOrdenacao {
   const ControleDeOrdenacao({
     required this.opcoes,
     required this.efetiva,
-    required this.aoEscolher,
     this.porQueNaoEAPedida,
     this.nota,
   });
@@ -511,8 +625,6 @@ class ControleDeOrdenacao {
 
   /// **O codigo da ordem em que a lista esta**, e nao o da que foi pedida.
   final String efetiva;
-
-  final ValueChanged<String> aoEscolher;
 
   /// Por que a ordem pedida nao valeu. Nulo quando pedida e efetiva batem.
   ///
@@ -644,32 +756,96 @@ class _LupaQueAplica extends StatelessWidget {
   }
 }
 
-/// Um icone de 48 x 48 que abre uma folha, com nome acessivel obrigatorio.
+/// O controle que a listagem publica no slot unico da `AppBar`.
 ///
-/// `rotulo` e `aoTocar` sao exigidos: um `IconButton` sem rotulo e anunciado
-/// como "botão" e nada mais (SC 4.1.2), e um com `onPressed: null` e o
-/// controle mudo que o criterio 2 proibe.
-class _BotaoDeFolha extends StatelessWidget {
-  const _BotaoDeFolha({
-    required this.icone,
+/// **Compara por VALOR, e o fecho fica de fora da comparacao** ([aoTocar] e
+/// recriado a cada `build` da listagem). Sem isto, publicar a cada quadro
+/// trocaria o valor do notificador a cada quadro, a casca reconstruiria, a
+/// listagem publicaria de novo -- e o laco nao pararia.
+@immutable
+class AcaoDeListagem {
+  const AcaoDeListagem({
     required this.rotulo,
     required this.aoTocar,
     this.distintivo,
   });
 
-  final IconData icone;
+  /// O nome acessivel, com o ESTADO dentro: quem usa leitor de tela nao ve o
+  /// distintivo com o numero.
   final String rotulo;
+
   final VoidCallback aoTocar;
+
+  /// O numero de filtros ativos, ou nulo quando nao ha nenhum.
   final String? distintivo;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AcaoDeListagem &&
+      other.rotulo == rotulo &&
+      other.distintivo == distintivo;
+
+  @override
+  int get hashCode => Object.hash(rotulo, distintivo);
+}
+
+/// O canal entre a listagem (que tem o estado) e a casca (que tem a `AppBar`).
+///
+/// A listagem publica o controle; a casca o desenha no slot unico da direita.
+/// `null` quer dizer "nao ha o que desenhar", e e o estado em que a casca
+/// passa `actions: null` -- e nao uma lista com um widget vazio dentro, que
+/// deixaria o portao da gaveta achar uma acao onde nao ha nenhuma.
+class SlotDaBarraDeListagem extends InheritedWidget {
+  const SlotDaBarraDeListagem({
+    required this.acao,
+    required super.child,
+    super.key,
+  });
+
+  final ValueNotifier<AcaoDeListagem?> acao;
+
+  static SlotDaBarraDeListagem? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SlotDaBarraDeListagem>();
+
+  /// Publica (ou apaga) o controle, **sem reconstruir por valor igual**.
+  void publicar(AcaoDeListagem? nova) {
+    if (acao.value == nova) return;
+    acao.value = nova;
+  }
+
+  @override
+  bool updateShouldNotify(SlotDaBarraDeListagem antigo) =>
+      antigo.acao != acao;
+}
+
+/// Um icone de 64 x 64 que abre a folha, com nome acessivel obrigatorio.
+///
+/// 64 e nao 48: este e o slot unico de acao da `AppBar`, e o 11.23.1 fixa os
+/// dois alvos da barra de topo em 64 x 64. Enquanto ele morou no corpo, ao
+/// lado do campo de busca, 48 era a medida certa -- tres alvos de 64 lado a
+/// lado com o campo nao cabiam em 320 dp. Nao ha mais tres, e nao ha mais
+/// corpo.
+///
+/// `rotulo` e `aoTocar` sao exigidos: um `IconButton` sem rotulo e anunciado
+/// como "botão" e nada mais (SC 4.1.2), e um com `onPressed: null` e o
+/// controle mudo que o criterio 2 proibe.
+class BotaoDeAcaoDaListagem extends StatelessWidget {
+  const BotaoDeAcaoDaListagem({required this.acao, super.key});
+
+  final AcaoDeListagem acao;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
+    final icone = Icons.tune;
+    final rotulo = acao.rotulo;
+    final distintivo = acao.distintivo;
+    final aoTocar = acao.aoTocar;
 
     return SizedBox(
-      width: BichuAlvoDeToque.min,
-      height: BichuAlvoDeToque.min,
+      width: BichuAlvoDeToque.critico,
+      height: BichuAlvoDeToque.critico,
       child: IconButton(
         onPressed: aoTocar,
         tooltip: rotulo,
@@ -691,7 +867,7 @@ class _BotaoDeFolha extends StatelessWidget {
                     borderRadius: BorderRadius.circular(BichuRaio.full),
                   ),
                   child: Text(
-                    distintivo!,
+                    distintivo,
                     textAlign: TextAlign.center,
                     // O distintivo repete o que o `tooltip` ja diz, e dois
                     // anuncios do mesmo estado no mesmo controle e ruido.
@@ -743,19 +919,33 @@ class _FaixaDaOrdem extends StatelessWidget {
   }
 }
 
-/// A folha de filtros, que guarda a escolha PENDENTE e so aplica no botao.
+/// A folha de filtro E ordem, que guarda a escolha PENDENTE e so aplica no
+/// botao.
 ///
-/// Ela e `Stateful` por isso: a escolha vive aqui, em [_pendente], ate o
-/// `Aplicar`. Enquanto a folha esta aberta a tela nao e chamada nenhuma vez, e
-/// a lista atras dela continua sendo a lista do recorte anterior -- que e o
-/// desenho pedido, e nao um atraso.
+/// Ela e `Stateful` por isso: a escolha vive aqui, em [_pendente] e
+/// [_ordemPendente], ate o `Aplicar`. Enquanto a folha esta aberta a tela nao
+/// e chamada nenhuma vez, e a lista atras dela continua sendo a lista do
+/// recorte anterior -- que e o desenho pedido, e nao um atraso.
 class _FolhaDeFiltros extends StatefulWidget {
-  const _FolhaDeFiltros({required this.filtro});
+  const _FolhaDeFiltros({
+    required this.aoAplicar,
+    this.filtro,
+    this.ordenacao,
+  });
 
-  final ControleDeFiltro filtro;
+  final ControleDeFiltro? filtro;
+  final ControleDeOrdenacao? ordenacao;
+  final void Function(EscolhaDaFolha escolha) aoAplicar;
 
   static const String rotuloDeAplicar = 'Aplicar';
   static const String rotuloDeLimpar = 'Limpar';
+  static const String tituloDaOrdem = 'Ordenar por';
+
+  List<GrupoDeFiltro> get grupos =>
+      filtro?.grupos ?? const <GrupoDeFiltro>[];
+
+  /// A folha ordena quando ha mais de uma ordem para escolher.
+  bool get ordena => ordenacao?.temEscolha ?? false;
 
   @override
   State<_FolhaDeFiltros> createState() => _EstadoDaFolhaDeFiltros();
@@ -764,12 +954,16 @@ class _FolhaDeFiltros extends StatefulWidget {
 class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// A escolha de cada grupo declarado, como ela esta **nesta folha**.
   late final Map<String, String?> _pendente = <String, String?>{
-    for (final g in widget.filtro.grupos) g.chave: g.selecionado,
+    for (final g in widget.grupos) g.chave: g.selecionado,
   };
+
+  /// A ordem escolhida nesta folha. Comeca na EFETIVA, e nao na pedida: a
+  /// folha nao pinta marcada uma ordem em que a lista nao esta.
+  late String? _ordemPendente = widget.ordenacao?.efetiva;
 
   /// O que esta aplicado na lista agora.
   Map<String, String?> get _aplicado => <String, String?>{
-        for (final g in widget.filtro.grupos) g.chave: g.selecionado,
+        for (final g in widget.grupos) g.chave: g.selecionado,
       };
 
   /// Ha diferenca entre o que a folha mostra e o que a lista tem.
@@ -778,16 +972,18 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// mudanca pendente: o cliente pediu o botao habilitado e nenhum selo.
   bool get _mudou {
     final aplicado = _aplicado;
-    return _pendente.keys.any((c) => _pendente[c] != aplicado[c]);
+    if (_pendente.keys.any((c) => _pendente[c] != aplicado[c])) return true;
+    return _ordemPendente != widget.ordenacao?.efetiva;
   }
 
-  /// Ha alguma escolha pendente para o `Limpar` tirar.
+  /// Ha algum FILTRO pendente para o `Limpar` tirar. A ordem nao entra: uma
+  /// lista sempre esta em alguma ordem.
   bool get _temEscolha => _pendente.values.any((v) => v != null);
 
   /// Os grupos desenhados: com opcao, e com o pai ainda no valor aplicado.
   List<GrupoDeFiltro> get _visiveis {
     final aplicado = _aplicado;
-    return widget.filtro.grupos.where((g) {
+    return widget.grupos.where((g) {
       if (g.opcoes.isEmpty) return false;
       final pai = g.dependeDe;
       // Grupo dependente de um pai que a folha acabou de mexer: as opcoes
@@ -803,16 +999,19 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
       _pendente[grupo.chave] = codigo;
       // Mexer no pai solta o filho: a escolha guardada pertencia ao pai
       // anterior (ver `GrupoDeFiltro.dependeDe`).
-      for (final g in widget.filtro.grupos) {
+      for (final g in widget.grupos) {
         if (g.dependeDe == grupo.chave) _pendente[g.chave] = null;
       }
     });
   }
 
   void _aplicar() {
-    final escolhas = Map<String, String?>.unmodifiable(_pendente);
+    final escolha = EscolhaDaFolha(
+      filtros: Map<String, String?>.unmodifiable(_pendente),
+      ordem: widget.ordena ? _ordemPendente : null,
+    );
     Navigator.of(context).pop();
-    widget.filtro.aoAplicar(escolhas);
+    widget.aoAplicar(escolha);
   }
 
   @override
@@ -820,6 +1019,7 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
     final textos = Theme.of(context).textTheme;
     final cores = BichuColors.of(context).cores;
     final visiveis = _visiveis;
+    final ordenacao = widget.ordenacao;
 
     return SafeArea(
       child: Padding(
@@ -869,14 +1069,51 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
                       ),
                       const SizedBox(height: BichuEspaco.e6),
                     ],
+                    // A ORDEM, na mesma folha (pedido do cliente de 17/10).
+                    // Ela vem por ULTIMO: os filtros decidem o que entra na
+                    // lista, e a ordem so arruma o que sobrou.
+                    if (widget.ordena && ordenacao != null) ...<Widget>[
+                      Text(
+                        _FolhaDeFiltros.tituloDaOrdem,
+                        style: textos.titleMedium,
+                      ),
+                      if (ordenacao.nota != null) ...<Widget>[
+                        const SizedBox(height: BichuEspaco.e1),
+                        Text(
+                          ordenacao.nota!,
+                          style: textos.bodySmall
+                              ?.copyWith(color: cores.textSecondary),
+                        ),
+                      ],
+                      const SizedBox(height: BichuEspaco.e2),
+                      Wrap(
+                        spacing: BichuEspaco.e2,
+                        runSpacing: BichuEspaco.e2,
+                        children: <Widget>[
+                          for (final opcao in ordenacao.opcoes)
+                            _Pastilha(
+                              rotulo: opcao.rotulo,
+                              marcada: _ordemPendente == opcao.codigo,
+                              // **A ordem nao se desmarca.** Tocar na marcada
+                              // nao a tira: a lista sempre esta em alguma
+                              // ordem, e "nenhuma" nao e um estado possivel.
+                              aoTocar: () => setState(
+                                () => _ordemPendente = opcao.codigo,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: BichuEspaco.e6),
+                    ],
                   ],
                 ),
               ),
             ),
-            // **`Limpar` mexe na folha, e nao na lista.** Ele desmarca tudo e
-            // o `Aplicar` continua sendo o unico caminho com efeito: duas
-            // formas de recortar a lista a partir da mesma folha era o que
-            // havia antes, e uma delas aplicava sozinha.
+            // **`Limpar` mexe na folha, e nao na lista.** Ele desmarca os
+            // filtros e o `Aplicar` continua sendo o unico caminho com efeito:
+            // duas formas de recortar a lista a partir da mesma folha era o
+            // que havia antes, e uma delas aplicava sozinha. A ordem nao e
+            // tocada.
             if (_temEscolha)
               TextButton(
                 onPressed: () => setState(
@@ -942,71 +1179,6 @@ class _Pastilha extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FolhaDeOrdenacao extends StatelessWidget {
-  const _FolhaDeOrdenacao({required this.ordenacao});
-
-  final ControleDeOrdenacao ordenacao;
-
-  @override
-  Widget build(BuildContext context) {
-    final textos = Theme.of(context).textTheme;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(BichuEspaco.e6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('Ordenar por', style: textos.titleLarge),
-            if (ordenacao.nota != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e1),
-              Text(
-                ordenacao.nota!,
-                style: textos.bodySmall?.copyWith(
-                  color: BichuColors.of(context).cores.textSecondary,
-                ),
-              ),
-            ],
-            const SizedBox(height: BichuEspaco.e4),
-            for (final opcao in ordenacao.opcoes)
-              Semantics(
-                button: true,
-                // **A marca acompanha a ordem EFETIVA.** Marcar a pedida aqui
-                // seria a mesma mentira, escondida dentro da folha.
-                selected: opcao.codigo == ordenacao.efetiva,
-                label: opcao.rotulo,
-                onTap: () => Navigator.of(context).pop(opcao.codigo),
-                excludeSemantics: true,
-                child: InkWell(
-                  onTap: () => Navigator.of(context).pop(opcao.codigo),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minHeight: BichuAlvoDeToque.min,
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          opcao.codigo == ordenacao.efetiva
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                        ),
-                        const SizedBox(width: BichuEspaco.e4),
-                        Expanded(
-                          child: Text(opcao.rotulo, style: textos.bodyLarge),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
         ),
       ),
     );

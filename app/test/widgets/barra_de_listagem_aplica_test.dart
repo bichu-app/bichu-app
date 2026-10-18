@@ -27,26 +27,76 @@ Future<void> montar(
   ControleDeFiltro? filtro,
   ControleDeOrdenacao? ordenacao,
   bool buscaAcima = false,
+  void Function(EscolhaDaFolha)? aoAplicar,
 }) async {
   await tester.pumpWidget(
-    MaterialApp(
-      theme: BichuTheme.claro,
-      home: Scaffold(
-        body: BarraDeListagem(
-          total: total,
-          busca: busca,
-          filtro: filtro,
-          ordenacao: ordenacao,
-          buscaAcima: buscaAcima,
-        ),
+    _Casca(
+      child: BarraDeListagem(
+        total: total,
+        busca: busca,
+        filtro: filtro,
+        ordenacao: ordenacao,
+        buscaAcima: buscaAcima,
+        aoAplicar: aoAplicar ?? (_) {},
       ),
     ),
   );
   await tester.pumpAndSettle();
 }
 
+/// A casca minima que `TelaDeAba` oferece de verdade: o slot de acao da
+/// `AppBar` e o desenho do que a listagem publicar nele.
+///
+/// **Ela existe porque o controle de filtro saiu do corpo em 17/10/2026** e
+/// passou a morar na barra de titulo, por decisao do cliente. Montar a
+/// `BarraDeListagem` solta num `Scaffold` sem slot deixaria estes casos sem
+/// como abrir a folha -- e, pior, deixaria verde um componente que na tela de
+/// verdade nao publica nada.
+class _Casca extends StatefulWidget {
+  const _Casca({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Casca> createState() => _EstadoDaCasca();
+}
+
+class _EstadoDaCasca extends State<_Casca> {
+  final ValueNotifier<AcaoDeListagem?> _acao =
+      ValueNotifier<AcaoDeListagem?>(null);
+
+  @override
+  void dispose() {
+    _acao.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      // O tema do app, e nao o do Material: `BichuColors` vive no `ThemeData`
+      // e o componente estoura sem ele, de proposito.
+      theme: BichuTheme.claro,
+      home: SlotDaBarraDeListagem(
+        acao: _acao,
+        child: ValueListenableBuilder<AcaoDeListagem?>(
+          valueListenable: _acao,
+          builder: (context, acao, _) => Scaffold(
+            appBar: AppBar(
+              title: const Text('Listagem'),
+              actions: acao == null
+                  ? null
+                  : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
+            ),
+            body: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 ControleDeFiltro filtroDeDoisGrupos({
-  required void Function(Map<String, String?>) aoAplicar,
   String? atividade,
   String? nivel,
 }) {
@@ -70,7 +120,6 @@ ControleDeFiltro filtroDeDoisGrupos({
         ],
       ),
     ],
-    aoAplicar: aoAplicar,
   );
 }
 
@@ -85,10 +134,11 @@ void main() {
       await montar(
         tester,
         total: 3,
-        filtro: filtroDeDoisGrupos(aoAplicar: aplicadas.add),
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (e) => aplicadas.add(e.filtros),
       );
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Veterinário'));
       await tester.pumpAndSettle();
@@ -108,10 +158,11 @@ void main() {
       await montar(
         tester,
         total: 3,
-        filtro: filtroDeDoisGrupos(aoAplicar: aplicadas.add),
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (e) => aplicadas.add(e.filtros),
       );
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Passeador'));
       await tester.pumpAndSettle();
@@ -140,10 +191,11 @@ void main() {
       await montar(
         tester,
         total: 3,
-        filtro: filtroDeDoisGrupos(aoAplicar: aplicadas.add, atividade: 'vet'),
+        filtro: filtroDeDoisGrupos(atividade: 'vet'),
+        aoAplicar: (e) => aplicadas.add(e.filtros),
       );
 
-      await tester.tap(find.byTooltip('Filtrar, 1 filtro ativo'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
 
       // `BotaoPrimario` desenha um `FilledButton`; o `onPressed` dele e o
@@ -174,14 +226,11 @@ void main() {
       await montar(
         tester,
         total: 3,
-        filtro: filtroDeDoisGrupos(
-          aoAplicar: aplicadas.add,
-          atividade: 'vet',
-          nivel: 'contact',
-        ),
+        filtro: filtroDeDoisGrupos(atividade: 'vet', nivel: 'contact'),
+        aoAplicar: (e) => aplicadas.add(e.filtros),
       );
 
-      await tester.tap(find.byTooltip('Filtrar, 2 filtros ativos'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Limpar'));
       await tester.pumpAndSettle();
@@ -225,11 +274,11 @@ void main() {
               ],
             ),
           ],
-          aoAplicar: aplicadas.add,
         ),
+        aoAplicar: (e) => aplicadas.add(e.filtros),
       );
 
-      await tester.tap(find.byTooltip('Filtrar, 2 filtros ativos'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       expect(find.text('Subcategoria'), findsOneWidget);
 
@@ -249,6 +298,181 @@ void main() {
         'category': 'brinquedos',
         'subcategory': null,
       });
+    });
+  });
+
+  group('a ordenacao mora DENTRO da folha de filtros', () {
+    ControleDeOrdenacao ordem({String efetiva = 'curadoria', String? nota}) {
+      return ControleDeOrdenacao(
+        opcoes: const <OpcaoDeRecorte>[
+          OpcaoDeRecorte(codigo: 'curadoria', rotulo: 'Seleção do Bichu'),
+          OpcaoDeRecorte(codigo: 'preco', rotulo: 'Menor preço'),
+        ],
+        efetiva: efetiva,
+        nota: nota,
+      );
+    }
+
+    testWidgets('ISCA -- nao ha icone de ordenar fora da folha',
+        (tester) async {
+      // Pedido do cliente, 17/10/2026: *"coloque o campo de ordenacao dentro
+      // da modal de filtro"*. Fora do corpo da tela fica so a busca.
+      //
+      // ISCA: reponha o segundo `_BotaoDeFolha` com `Icons.swap_vert` no
+      // `build` da barra. Este caso reprova no icone a mais.
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        ordenacao: ordem(),
+      );
+
+      expect(find.byIcon(Icons.swap_vert), findsNothing);
+      expect(find.byIcon(Icons.tune), findsOneWidget);
+      // E o icone unico se chama pelos DOIS verbos: um controle chamado so
+      // "Filtrar" esconderia a ordem atras de uma palavra que nao a nomeia.
+      expect(
+        find.byTooltip('Filtrar e ordenar, Seleção do Bichu'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a ordem sai no MESMO Aplicar que os filtros', (tester) async {
+      final aplicadas = <EscolhaDaFolha>[];
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        ordenacao: ordem(),
+        aoAplicar: aplicadas.add,
+      );
+
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Veterinário'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Menor preço'));
+      await tester.pumpAndSettle();
+      expect(aplicadas, isEmpty);
+
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+
+      // UMA chamada com filtro e ordem: duas seriam duas idas a rota e duas
+      // voltas a primeira pagina para um toque so.
+      expect(aplicadas, hasLength(1));
+      expect(aplicadas.single.filtros['kind'], 'vet');
+      expect(aplicadas.single.ordem, 'preco');
+    });
+
+    testWidgets('so a ordem tambem habilita o Aplicar', (tester) async {
+      final aplicadas = <EscolhaDaFolha>[];
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        ordenacao: ordem(),
+        aoAplicar: aplicadas.add,
+      );
+
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      FilledButton botao() => tester.widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Aplicar'),
+          );
+      expect(botao().onPressed, isNull);
+
+      await tester.tap(find.text('Menor preço'));
+      await tester.pumpAndSettle();
+      expect(botao().onPressed, isNotNull);
+
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+      expect(aplicadas.single.ordem, 'preco');
+      expect(aplicadas.single.filtros, <String, String?>{
+        'kind': null,
+        'level': null,
+      });
+    });
+
+    testWidgets('a ordem NAO se desmarca, e o Limpar nao a toca',
+        (tester) async {
+      // Uma lista sempre esta em alguma ordem: "nenhuma" nao e um estado
+      // possivel, e por isso o segundo toque na pastilha marcada nao a tira.
+      final aplicadas = <EscolhaDaFolha>[];
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(atividade: 'vet'),
+        ordenacao: ordem(),
+        aoAplicar: aplicadas.add,
+      );
+
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Menor preço'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Menor preço'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Limpar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+
+      expect(aplicadas.single.ordem, 'preco');
+      expect(aplicadas.single.filtros['kind'], isNull);
+    });
+
+    testWidgets('a folha marca a ordem EFETIVA, e nao a pedida',
+        (tester) async {
+      // A barra nunca pinta marcada uma ordem em que a lista nao esta: o
+      // servidor pode ter devolvido outra, e a folha herda a mesma regra da
+      // linha de resumo.
+      await montar(
+        tester,
+        total: 3,
+        ordenacao: ordem(efetiva: 'preco', nota: 'De onde o preço sai.'),
+      );
+
+      expect(find.byTooltip('Ordenar, Menor preço'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      expect(find.text('Ordenar por'), findsOneWidget);
+      expect(find.text('De onde o preço sai.'), findsOneWidget);
+
+      // Sem nada pendente, o `Aplicar` nasce desabilitado tambem aqui.
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Aplicar'))
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('sem `aoAplicar` o icone da folha NAO nasce', (tester) async {
+      // Folha cujo botao nao leva a lugar nenhum e o toque sem desfecho que o
+      // criterio 2 proibe.
+      final controlador = TextEditingController();
+      addTearDown(controlador.dispose);
+      await tester.pumpWidget(
+        _Casca(
+          child: BarraDeListagem(
+            total: 3,
+            filtro: filtroDeDoisGrupos(),
+            ordenacao: ordem(),
+            busca: ControleDeBusca(
+              controlador: controlador,
+              alcance: AlcanceDaBusca.servidor,
+              termoAplicado: null,
+              aoAplicar: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.tune), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
     });
   });
 
@@ -406,6 +630,114 @@ void main() {
     });
   });
 
+  group('o filtro mora na BARRA DE TITULO, e a busca ocupa a area toda', () {
+    // **O PADRAO DE LISTAGEM MUDOU POR DECISAO DO CLIENTE (17/10/2026)**:
+    // *"suba todos os filtros para a barra do titulo da pagina e deixe o
+    // campo de busca sempre ocupando a area toda"*. Isto REVERTE a regra de
+    // 22/09 ("busca, filtro e ordenacao no topo do CORPO da tela, nunca na
+    // barra do aplicativo"). Quem ler estes casos em tres meses: a reversao
+    // e dele, e nao um defeito.
+
+    testWidgets('ISCA -- o controle de filtro nao fica no corpo', (tester) async {
+      // ISCA: devolva o `_BotaoDeFolha` ao `Row` do corpo da barra. Este caso
+      // reprova: passa a haver um `Icons.tune` fora da `AppBar`.
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (_) {},
+      );
+
+      expect(find.byIcon(Icons.tune), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.tune),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o controle de filtro nao esta na barra de titulo.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BarraDeListagem),
+          matching: find.byIcon(Icons.tune),
+        ),
+        findsNothing,
+        reason: 'REPROVA: sobrou um controle de filtro no corpo da tela.',
+      );
+    });
+
+    testWidgets('o alvo na barra e de 64 dp, e nao de 48', (tester) async {
+      // 11.23.1 fixa os dois alvos da barra de topo em 64 x 64. Enquanto o
+      // controle morou no corpo, 48 era a medida certa; nao ha mais corpo.
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (_) {},
+      );
+
+      final alvo = tester.getSize(
+        find.ancestor(
+          of: find.byIcon(Icons.tune),
+          matching: find.byType(SizedBox),
+        ).first,
+      );
+      expect(alvo.width, 64.0);
+      expect(alvo.height, 64.0);
+    });
+
+    testWidgets('o campo de busca ocupa a LARGURA TOTAL do corpo, em 320 dp',
+        (tester) async {
+      // "Sempre" inclui a tela mais estreita que o produto desenha. O campo
+      // nao divide mais a linha com icone nenhum, entao nao ha o que
+      // encolher.
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controlador = TextEditingController();
+      addTearDown(controlador.dispose);
+      await montar(
+        tester,
+        total: 3,
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (_) {},
+        busca: ControleDeBusca(
+          controlador: controlador,
+          alcance: AlcanceDaBusca.servidor,
+          termoAplicado: null,
+          aoAplicar: (_) {},
+        ),
+      );
+
+      final campo = tester.getSize(find.byType(CampoDeBuscaDaListagem));
+      final barra = tester.getSize(find.byType(BarraDeListagem));
+      expect(
+        campo.width,
+        barra.width,
+        reason: 'REPROVA: o campo de busca nao ocupa a area toda em 320 dp.',
+      );
+    });
+
+    testWidgets('sem barra desenhada, a barra de titulo fica sem controle',
+        (tester) async {
+      // Filtrar o nada e um toque sem desfecho, e um icone pendurado na
+      // barra de titulo sobre uma lista vazia e pior do que um que some com
+      // ela.
+      await montar(
+        tester,
+        total: 0,
+        filtro: filtroDeDoisGrupos(),
+        aoAplicar: (_) {},
+      );
+
+      expect(find.byIcon(Icons.tune), findsNothing);
+      expect(tester.widget<AppBar>(find.byType(AppBar)).actions, isNull);
+    });
+  });
+
   group('o recorte ativo e o APLICADO, e nunca o digitado', () {
     testWidgets('ISCA -- zero itens com termo APLICADO mantem a barra',
         (tester) async {
@@ -524,7 +856,6 @@ void main() {
             OpcaoDeRecorte(codigo: 'recentes', rotulo: 'Mais recente primeiro'),
           ],
           efetiva: 'proximos',
-          aoEscolher: (_) {},
         ),
         busca: ControleDeBusca(
           controlador: controlador,
@@ -535,7 +866,12 @@ void main() {
       );
 
       expect(find.text('0 resultados · Data mais próxima'), findsOneWidget);
-      expect(find.byTooltip('Ordenar, Data mais próxima'), findsOneWidget);
+      expect(
+        find.byTooltip('Ordenar, Data mais próxima'),
+        findsOneWidget,
+        reason: 'REPROVA: sem grupo de filtro, o icone unico da barra tem de '
+            'se chamar `Ordenar` -- e com a ordem EFETIVA no nome.',
+      );
     });
   });
 }

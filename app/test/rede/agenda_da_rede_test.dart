@@ -97,7 +97,7 @@ void main() {
       );
       expect(find.text('Tarde dos filhotes'), findsOneWidget);
       expect(find.text('1 encontro · Mais recente primeiro'), findsOneWidget);
-      expect(find.byTooltip('Ordenar, Mais recente primeiro'), findsNothing);
+      expect(find.byIcon(Icons.swap_vert), findsNothing);
     });
   });
 
@@ -244,8 +244,8 @@ void main() {
       await abrirRede(tester, rede: rede, comRegiao: false);
 
       expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
-      expect(find.byTooltip('Ordenar, Data mais próxima'), findsNothing);
-      await tester.tap(find.byTooltip('Filtrar'));
+      expect(find.byIcon(Icons.swap_vert), findsNothing);
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       expect(find.text('Distância'), findsNothing);
     });
@@ -255,7 +255,8 @@ void main() {
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede);
 
-      await tester.tap(find.byTooltip('Ordenar, Data mais próxima'));
+      // A ordem mora DENTRO da folha de filtros desde 17/10.
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       expect(
         find.text(
@@ -264,7 +265,10 @@ void main() {
         ),
         findsOneWidget,
       );
+      await tester.ensureVisible(find.text('Mais perto'));
       await tester.tap(find.text('Mais perto'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(
@@ -281,7 +285,7 @@ void main() {
   group('filtros do contrato', () {
     testWidgets('Próximos oferece os grupos da §24.17.3', (tester) async {
       await abrirRede(tester, rede: redeComAgenda());
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
 
       for (final t in <String>[
@@ -308,7 +312,7 @@ void main() {
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede, logado: false);
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pago'));
       await tester.pumpAndSettle();
@@ -319,7 +323,7 @@ void main() {
         'paid',
       );
 
-      await tester.tap(find.byTooltip('Filtrar, 1 filtro ativo'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Grande'));
       await tester.tap(find.text('Grande'));
@@ -335,7 +339,7 @@ void main() {
     testWidgets('Hoje manda when=today', (tester) async {
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede, logado: false);
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Hoje'));
       await tester.pumpAndSettle();
@@ -398,7 +402,7 @@ void main() {
         expect(tela, isNot(contains(proibido)));
       }
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       expect(find.text('Situação do pedido'), findsOneWidget);
       expect(find.text('Enviado'), findsOneWidget);
@@ -430,7 +434,7 @@ void main() {
       var q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
       expect(q['q'], 'border');
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aprovado'));
       await tester.pumpAndSettle();
@@ -475,7 +479,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byTooltip('Filtrar'), findsNothing);
+      expect(find.byIcon(Icons.tune), findsNothing);
     });
 
     testWidgets('vazio com busca: título com o termo e Limpar busca',
@@ -724,7 +728,7 @@ void main() {
       String opcao, {
       String caminho = 'GET /v1/network/events',
     }) async {
-      await tester.tap(find.byTooltip(RegExp('^Filtrar')));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text(opcao).last);
       await tester.tap(find.text(opcao).last);

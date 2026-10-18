@@ -469,9 +469,12 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byTooltip('Ordenar, Nome'));
+      // A ordem mora DENTRO da folha de filtros desde 17/10.
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Nome').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(
@@ -863,7 +866,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Veterinário'));
       await tester.pumpAndSettle();
@@ -875,7 +878,12 @@ void main() {
 
       expect(urls.last.queryParameters['kind'], 'vet');
       // E o distintivo passa a contar um filtro ativo, no nome acessivel.
-      expect(find.byTooltip('Filtrar, 1 filtro ativo'), findsOneWidget);
+      // O nome acessivel do controle da `AppBar` carrega os DOIS verbos e o
+      // estado: o distintivo com o numero nao e lido por leitor de tela.
+      expect(
+        find.byTooltip('Filtrar e ordenar, 1 filtro ativo, Mais perto'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a folha explica que o nivel de verificacao e PISO',
@@ -890,7 +898,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
 
       // A regra do contrato que ninguem adivinha olhando a lista: filtro por
@@ -926,7 +934,7 @@ void main() {
         },
       );
 
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Passeador'));
       await tester.pumpAndSettle();
@@ -966,8 +974,9 @@ void main() {
         find.byType(BarraDeListagem),
       );
       expect(barra.total, 0);
-      expect(find.byTooltip('Filtrar'), findsNothing);
-      expect(find.byTooltip('Ordenar, Mais perto'), findsNothing);
+      expect(find.byIcon(Icons.tune), findsNothing);
+      // A ordem mora na MESMA folha desde 17/10: nao ha icone proprio.
+      expect(find.byIcon(Icons.swap_vert), findsNothing);
       expect(find.text('Ainda não há profissionais por aqui'), findsOneWidget);
     });
 
@@ -1154,9 +1163,9 @@ void main() {
       expect(urls.last.queryParameters['page'], '2');
 
       // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais`.
-      await tester.ensureVisible(find.byTooltip('Filtrar'));
+      await tester.ensureVisible(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Veterinário'));
       await tester.pumpAndSettle();
