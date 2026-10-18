@@ -98,6 +98,20 @@ enum ProblemTipo {
   /// que o recurso de outro tutor existe, e a tela nao pode desfazer isso.
   naoEncontrado('not-found'),
 
+  /// A conversa mediada nao aceita mais mensagem. 410.
+  ///
+  /// **O corpo e FIXO, e os dois motivos chegam como este mesmo tipo**: a
+  /// conversa foi encerrada (ou o caso foi), OU a conta do outro lado foi
+  /// desabilitada. O contrato declara a fusao por extenso em
+  /// `#/x-problem-types`, e ela e de seguranca: distinguir contaria a uma
+  /// pessoa o que aconteceu com a conta de outra.
+  ///
+  /// Por isso a tela trata os dois com a MESMA saida -- modo leitura, sem
+  /// caixa de texto. Ela nao tem como escrever "a conta foi desabilitada", e
+  /// nao deve: o unico sinal desse caso e a despersonalizacao que o servidor
+  /// ja faz em `participants` (`Tutor` / `Quem achou`).
+  conversaEncerrada('conversation-closed'),
+
   /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
   limiteDeTentativas('rate-limited'),
 
