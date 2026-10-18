@@ -80,6 +80,19 @@ export interface PetPublico {
   readonly distinctiveMarks: string | null;
   readonly careNotes: string | null;
   readonly isLost: boolean;
+  /**
+   * A chave do objeto da foto de capa, ou nulo quando o pet nao tem uma pronta.
+   *
+   * **Chave, e nao URL.** Montar endereco e trabalho da borda, que conhece a
+   * base publica de midia; o repositorio devolve o que esta gravado. E a mesma
+   * divisao de `perfil-publico`, e ela e o que deixa as duas superficies
+   * publicas apontarem para o mesmo objeto sem duas bases divergirem.
+   *
+   * Nao e identificador interno: e a chave de um objeto publico no balde, a
+   * mesma que `PublicPetProfile.photo_url` ja publica (ADR-0010 item 6 fala de
+   * id de banco em saida publica, e isto nao e um).
+   */
+  readonly photoKey: string | null;
 }
 
 export interface ContextoDoDono {

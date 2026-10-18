@@ -158,6 +158,7 @@ function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
     baseDaTag: BASE_DA_TAG,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+    baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
    rasterizador: criarRasterizadorDeQr(),
   });

@@ -479,10 +479,17 @@ export function registrarRotasDeTags(
         primary_color: resolucao.pet.primaryColor,
         distinctive_marks: resolucao.pet.distinctiveMarks,
         care_notes: resolucao.pet.careNotes,
-        // A foto vem do módulo `media`, que não existe nesta entrega. Nulo é o
-        // valor verdadeiro; um endereço montado para um objeto que ninguém
-        // gravou daria uma imagem quebrada na tela de quem está com o animal.
-        photo_url: null,
+        // A FOTO, QUE AGORA VEM. Até 18/10 esta linha era `photo_url: null`
+        // fixo, com o comentário de que o módulo `media` não existia nesta
+        // entrega. Ele existe (`src/modules/media/`), o contrato declara o
+        // campo e o exemplo de 200 de `resolveTagCode` traz um endereço.
+        //
+        // A preocupação do comentário antigo continua respeitada, e é o `WHERE`
+        // da consulta que a respeita: só sai chave de foto com
+        // `status = 'ready'`, então endereço montado para objeto que ninguém
+        // gravou continua não existindo. Sem capa pronta o valor é nulo, e a
+        // tela do achador não promete foto nenhuma.
+        photo_url: resolucao.pet.photoUrl,
       },
       lost: {
         is_lost: resolucao.lost.isLost,

@@ -237,6 +237,20 @@ export function criarTagRepository(db: Db): TagRepository {
         .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
         .leftJoin('ref_breeds', 'ref_breeds.code', 'pets.breed_code')
         .leftJoin('ref_colors', 'ref_colors.code', 'pets.primary_color_code')
+        // A FOTO DE CAPA. Mesma juncao do perfil publico
+        // (`kysely-perfil-publico.ts`), e de proposito: as duas superficies
+        // publicas do mesmo pet tem de mostrar a MESMA imagem. `is_primary`
+        // escolhe a capa, `status = 'ready'` deixa de fora a que ainda esta
+        // sendo processada (endereco de objeto que ninguem gravou da quadro
+        // quebrado na mao de quem esta com o animal), e `deleted_at is null`
+        // deixa de fora a que o tutor removeu.
+        .leftJoin('pet_photos', (juncao) =>
+          juncao
+            .onRef('pet_photos.pet_id', '=', 'pets.id')
+            .on('pet_photos.is_primary', '=', true)
+            .on('pet_photos.status', '=', 'ready')
+            .on('pet_photos.deleted_at', 'is', null),
+        )
         .select([
           'pet_tags.id as tag_id',
           'pet_tags.status as tag_status',
@@ -252,6 +266,7 @@ export function criarTagRepository(db: Db): TagRepository {
           'pets.deleted_at',
           'ref_breeds.label as breed_label',
           'ref_colors.label as color_label',
+          'pet_photos.card_key as card_key',
         ])
         .where('pet_tags.code_hash', '=', Buffer.from(codeHash))
         .executeTakeFirst();
@@ -277,6 +292,7 @@ export function criarTagRepository(db: Db): TagRepository {
           distinctiveMarks: linha.distinctive_marks,
           careNotes: linha.care_notes,
           isLost: linha.pet_status === 'lost',
+          photoKey: linha.card_key,
         },
       };
     },
