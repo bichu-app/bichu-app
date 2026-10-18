@@ -94,6 +94,7 @@ interface LinhaDaEntrada {
   phone_e164: string | null;
   evidencias: TipoDeEvidencia[] | null;
   distancia_em_metros: number | null;
+  logo_public_key: string | null;
 }
 
 /**
@@ -128,6 +129,29 @@ const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
      and v.entity_kind = 'professional'
      and v.decision = 'approved'
 )`;
+
+/**
+ * A CHAVE DA DERIVADA de uma imagem da entrada, **so quando ela esta PRONTA**
+ * (18/10/2026, com a liberacao das imagens do profissional no aplicativo).
+ *
+ * `status = 'ready'` dentro da subconsulta, e nao um `if` na projecao: o que o
+ * aplicativo nao pode receber e uma chave que ainda nao existe no balde
+ * publico, e a forma de garantir isso e nao selecionar a linha. Com `if` na
+ * borda, qualquer leitura nova precisaria lembrar da regra.
+ *
+ * **`public_key`, nunca `original_key`.** A tabela `catalog_images` nao guarda
+ * chave de original -- ela vive em `catalog_upload_intents.object_key`, que esta
+ * consulta nao alcanca. Entao o original nao tem caminho ate aqui nem por
+ * descuido, e `urlDaDerivada` confere a FORMA da chave do outro lado.
+ */
+function CHAVE_DA_DERIVADA(coluna: 'logo_image_id' | 'photo_image_id') {
+  return sql<string | null>`(
+  select c.public_key
+    from catalog_images c
+   where c.id = professionals.${sql.raw(coluna)}
+     and c.status = 'ready'
+)`;
+}
 
 /** `EXISTS` de prova aprovada de documento. E a mesma regra de `nivelDerivado`. */
 const TEM_DOCUMENTO = sql<boolean>`EXISTS (
@@ -166,6 +190,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
       decision: aprovadas,
     })),
     distanciaEmMetros: l.distancia_em_metros,
+    logoPublicKey: l.logo_public_key,
   };
 }
 
@@ -405,6 +430,10 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         'phone_e164',
         EVIDENCIAS_APROVADAS.as('evidencias'),
         sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
+        // A LOGO, e SO a logo. `photo_image_id` nao e selecionado aqui de
+        // proposito: a faixa de 1280 x 720 em vinte cartoes multiplicaria o peso
+        // da primeira pintura da lista. A coluna nem chega a esta projecao.
+        CHAVE_DA_DERIVADA('logo_image_id').as('logo_public_key'),
       ]);
 
       // Entrada sem coordenada vai para o fim com `NULLS LAST`, e nao some.
@@ -455,6 +484,10 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
           'phone_e164',
           EVIDENCIAS_APROVADAS.as('evidencias'),
           sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
+          // AS DUAS no detalhe: a logo entra pela projecao comum da entrada, a
+          // foto em faixa sai em campo proprio de `LocalDoDiretorio`.
+          CHAVE_DA_DERIVADA('logo_image_id').as('logo_public_key'),
+          CHAVE_DA_DERIVADA('photo_image_id').as('photo_public_key'),
         ])
         .where('slug', '=', slug)
         .where('status', '=', 'published')
@@ -488,6 +521,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         pontuacao: comoPontuacao(rows[0]),
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: canal.rows[0]?.tem_canal ?? false,
+        fotoPublicKey: linha.photo_public_key,
       };
     },
 

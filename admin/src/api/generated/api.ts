@@ -5792,6 +5792,30 @@ export interface components {
              *     a media do cartao e a da pagina nunca discordarem.
              */
             rating?: components["schemas"]["DirectoryRating"];
+            /**
+             * Format: uri
+             * @description A LOGO da entidade, liberada para o aplicativo pelo cliente em
+             *     18/10/2026 ("pode liberar as imagens do profissional no app"). E
+             *     ela que o cartao desenha ao lado do nome.
+             *
+             *     **E a URL da DERIVADA publica, nunca do original.** O original mora
+             *     no armazenamento privado e nao e servido a cliente nenhum; a chave
+             *     da derivada tem 128 bits aleatorios no nome e a forma
+             *     `directory/{card|thumb}/{nome}.jpeg`. A URL e montada na leitura a
+             *     partir de `MEDIA_PUBLIC_BASE_URL` (ADR-0007 §11.1 proibicao 9).
+             *
+             *     **Nula e o estado normal**, em tres casos que a tela trata igual:
+             *     a entrada nao tem logo; a logo foi enviada e o worker ainda nao
+             *     terminou; a logo foi recusada nos bytes. Em nenhum deles o cartao
+             *     deixa de existir -- ele desenha o nome sem imagem.
+             *
+             *     **A FOTO EM FAIXA NAO ESTA AQUI, e a ausencia e medida.** Ela e
+             *     1280 x 720 e pertence a pagina do local (`DirectoryEntryDetail.
+             *     photo_url`): mandar a faixa em lista de ate 20 cartoes multiplicaria
+             *     o peso da primeira pintura, que neste projeto ja chegou a 9,8 MB por
+             *     excesso de imagem em lista. Logo na lista, foto no detalhe.
+             */
+            logo_url?: string | null;
             verification: components["schemas"]["DirectoryVerification"];
             /**
              * @description Distancia ate a localizacao de referencia de quem chama,
@@ -6397,9 +6421,14 @@ export interface components {
          *     interseccao para `allOf`, e um campo nulavel atravessa isso perdendo a
          *     nulabilidade. Os tres geradores leem este arquivo.
          *
-         *     **Nao ganhou nenhum campo de cadastro que nao exista no banco.** Site,
-         *     e-mail, WhatsApp, redes sociais, horario e foto nao sao colunas de
-         *     `professionals`; nao ha de onde preenche-los e eles nao estao aqui.
+         *     **A FOTO E A LOGO PASSARAM A EXISTIR**, e esta frase substitui a
+         *     anterior, que dizia que "foto nao e coluna de `professionals`". Era
+         *     verdade e deixou de ser: a migracao `20261018000002` criou
+         *     `logo_image_id` e `photo_image_id`, e o cliente liberou as duas para o
+         *     aplicativo em 18/10/2026. Site, e-mail, WhatsApp, redes sociais e
+         *     horario continuam sem coluna e continuam fora -- declarar campo que
+         *     ninguem pode preencher produziria uma tela com linhas vazias
+         *     permanentes.
          *
          *     **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
          *     quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
@@ -6421,6 +6450,31 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * Format: uri
+             * @description A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma
+             *     regra: derivada publica, nunca o original, nula quando nao ha, quando
+             *     ainda processa e quando foi recusada. A pagina a desenha ao lado do
+             *     nome, como o cartao.
+             */
+            logo_url?: string | null;
+            /**
+             * Format: uri
+             * @description A FOTO do lugar -- fachada ou ambiente --, liberada para o
+             *     aplicativo pelo cliente em 18/10/2026. Faixa 16:9, derivada
+             *     `banner` de 1280 x 720, e e a imagem que a pessoa olha GRANDE antes
+             *     de decidir se leva o animal ali.
+             *
+             *     **So no detalhe, e nunca na listagem.** Ela nao existe em
+             *     `DirectoryEntrySummary` de proposito: a faixa em ate 20 cartoes
+             *     multiplicaria o peso da primeira pintura, e a lista desenha a logo.
+             *
+             *     **E a URL da DERIVADA publica, nunca do original**, com a forma
+             *     `directory/{banner|card}/{nome}.jpeg`. Nula quando nao ha foto,
+             *     quando o worker ainda nao terminou e quando os bytes foram
+             *     recusados -- nos tres a pagina existe sem a faixa.
+             */
+            photo_url?: string | null;
             verification: components["schemas"]["DirectoryVerification"];
             /**
              * @description Arredondada a 100 m, que e a grade do ADR-0006. Nula quando a

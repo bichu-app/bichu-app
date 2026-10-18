@@ -910,6 +910,9 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+      // 18/10/2026: o cliente liberou a logo e a foto do profissional no
+      // aplicativo. A URL da derivada e montada na leitura, como nas outras.
+      urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
     });
     // A SUGESTAO do diretorio: escrita da comunidade, em arquivo e em
     // registrador proprios. Ela NAO escreve em `professionals` -- a emenda 1 do
