@@ -327,9 +327,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
   // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
   // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
-  // projeta. `pending_review` SAIU do banco na 20261001000005 (ADR-0025 emenda
-  // 3, 17/10/2026): sem fila de moderacao nao ha estado de revisao, entao ele
-  // tambem nao esta no `enum` administrativo.
+  // projeta.
+  //
+  // **`pending_review` NAO EXISTE MAIS, e a saida e a decisao do cliente de
+  // 17/10/2026** (ADR-0025 emenda 3, migracao `20261001000005`): "o usuario
+  // validado pode criar eventos sem aprovacao". Sem fila de moderacao o estado
+  // nao tem o que representar, e o `CHECK`
+  // `network_events_revisao_so_da_comunidade`, que existia so para amarra-lo a
+  // origem `community`, saiu na mesma migracao -- por isso ele tambem nao esta
+  // mais em CHECKS_QUE_NAO_SAO_LISTA_FECHADA. Sao TRES valores, e nao quatro.
   'public.network_events.network_events_origem_conhecida': {
     coluna: 'origin',
     valores: ['admin', 'community'],
@@ -744,6 +750,12 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // O detalhe da denuncia, pelo mesmo motivo do corpo da avaliacao.
   'public.professional_review_reports.professional_review_reports_detail_sem_html':
     "CHECK (((detail IS NULL) OR (detail !~ '[<>]'::text)))",
+  // `network_events_revisao_so_da_comunidade` ESTAVA AQUI, e a ausencia e a
+  // decisao. Ele amarrava `pending_review` a origem `community`, e a
+  // `20261001000005` derrubou os dois: o cliente desfez a fila de moderacao em
+  // 17/10/2026 (ADR-0025 emenda 3). Mantida a entrada, o caso "restricao
+  // declarada que o banco nao tem mais" reprovaria -- que e o portao certo,
+  // pedindo que alguem olhasse. Alguem olhou, e a resposta esta aqui.
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':
@@ -1039,6 +1051,26 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text)))",
   'public.professionals.professionals_titularidade_tem_marco':
     "CHECK ((((claim_status = 'unclaimed'::text) AND (claimed_at IS NULL) AND (claimed_by_user_id IS NULL)) OR ((claim_status <> 'unclaimed'::text) AND (claimed_at IS NOT NULL))))",
+  // ------------------------------------------------------------------
+  // A fila de revisao de `Perto` (migracao 20261017000004), e a versao da
+  // entrada do diretorio (20261017000011).
+  // ------------------------------------------------------------------
+  //
+  // **A `professionals_versao_positiva` da `20261017000011` nao entra em
+  // registro nenhum**, e a ausencia e a decisao -- a mesma que mantem fora o
+  // `network_events_versao_positiva` de onde a migracao a copiou: faixa
+  // numerica (`CHECK ((version > 0))`) nao menciona literal de texto, a
+  // classificacao do cabecalho nao a colhe, e declara-la aqui faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  //
+  // Os seis CHECKs de `char_length` da `20261017000004`
+  // (`..._nome_tamanho`, `..._cidade_tamanho`, `..._uf_tamanho`,
+  // `..._bairro_tamanho`, `..._contato_tamanho` e `..._recado_tamanho`) ficam
+  // fora pela mesma regra. As tres listas fechadas da tabela estao em
+  // LISTAS_FECHADAS; os DOIS que mencionam literal (`..._ref_formato` e
+  // `..._decisao_tem_instante`) estao mais acima neste mesmo registro, no
+  // bloco da INDICACAO DO DIRETORIO, junto com os outros tres da fila.
+  //
   // BICHUS-66. `cancellation_reason` e lista fechada, mas NAO e da forma
   // simples: a coluna e anulavel, entao a restricao e `IS NULL OR ... IN (...)`
   // e o catalogo a escreve como uma disjuncao. Ela cai aqui, onde a definicao
