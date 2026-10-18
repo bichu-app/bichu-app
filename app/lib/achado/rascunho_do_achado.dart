@@ -149,8 +149,15 @@ class RascunhoDoAchado {
   /// sempre -- que e exatamente o que o criterio 4 descreve.
   FotoLocal? foto;
 
-  /// O teto de `StrayFoundReportInput.notes` no contrato.
-  static const int limiteDaObservacao = 1000;
+  /// O teto de `StrayFoundReportInput.notes` no contrato: **500**.
+  ///
+  /// Era 1000 aqui, e o contrato dizia 500 -- a coluna `found_reports.notes`
+  /// nunca aceitou mais que isso (`found_reports_notes_tamanho`). O contador da
+  /// tela prometia 1000, a pessoa escrevia 700 sem nenhum aviso e o servidor
+  /// recusava o aviso inteiro no envio. Contador que promete o que o servidor
+  /// recusa e pior que contador nenhum: ele garante que a pessoa so descobre
+  /// depois de ter escrito.
+  static const int limiteDaObservacao = 500;
 
   DateTime? instanteEm(DateTime agora) => instanteDoAvistamento(
         quando,

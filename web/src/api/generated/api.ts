@@ -5252,6 +5252,13 @@ export interface components {
             pet_display_name?: string;
         };
         FoundReportEnrichment: {
+            /**
+             * @description 500, o mesmo teto de `found_reports.notes` no banco
+             *     (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+             *     entre 501 e 1000 passava pela validacao e morria no banco como erro
+             *     de servidor -- o recado se perdia com o animal na mao de quem ajuda.
+             *     Mesmo alinhamento que `StrayFoundReportInput.notes` ja tinha.
+             */
             message?: string;
             /**
              * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
@@ -5291,6 +5298,15 @@ export interface components {
          *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
          */
         FinderFoundReportEnrichment: {
+            /**
+             * @description **1000 de proposito, e nao os 500 da rota com conta.** Este `message`
+             *     NAO e gravado em `found_reports.notes`: ele entra na conversa mediada
+             *     como mensagem do achador (`aviso-do-achador.ts`, "para onde vai cada
+             *     campo"), isto e em `mediated_messages.body`, cujo CHECK aceita 4000.
+             *     O numero casa com `body` de `postFinderMessage`, que e o mesmo
+             *     destino. Apertar aqui para 500 nao corrigiria descasamento nenhum e
+             *     cortaria pela metade o recado de quem avisa SEM CONTA.
+             */
             message?: string;
             /**
              * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
