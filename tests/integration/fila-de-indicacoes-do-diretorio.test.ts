@@ -188,7 +188,11 @@ before(async () => {
       handleDoInstagram: (valor) => valor.replace(/^@/, '').toLowerCase() || null,
     },
   });
-  perto = criarDirectoryRepository(banco.db);
+  // O 2o argumento entrou em 18/10 com a avaliacao do local (o `ref` da
+  // avaliacao e 128 bits de CSPRNG). Passa-se o `ids` que este arquivo ja
+  // constroi sobre o relogio do teste, e nao `Date.now`: a fila e medida com
+  // tempo controlado, e dois geradores no mesmo caso seriam duas verdades.
+  perto = criarDirectoryRepository(banco.db, ids);
 });
 
 after(async () => {

@@ -318,6 +318,18 @@ export class FilaDeIndicacoes {
       // fariam o filtro por UF da listagem perder metade das linhas.
       state: indicacao.state.toUpperCase(),
       neighborhood: indicacao.neighborhood,
+      // O ENDERECO DE RUA NASCE VAZIO, e isso e consequencia da mescla de
+      // 18/10 e nao descuido: os quatro campos entraram em `NovaEntrada` pelo
+      // formulario do PAINEL, e o formulario da COMUNIDADE nunca os coletou --
+      // quem indica informa cidade, UF, bairro e um contato publico, e nada
+      // mais. A projecao da fila (`IndicacaoNaFila`) tambem nao carrega
+      // `postalCode`: o `postal_code` que a indicacao grava desde a 0015 fica
+      // na sugestao, para quem revisa ler, e nao atravessa esta fronteira.
+      // Quem aprova completa o endereco depois, pela edicao da entrada.
+      postalCode: null,
+      street: null,
+      streetNumber: null,
+      complement: null,
       phoneE164: telefone,
       status,
       source: ORIGEM_DO_PAINEL,

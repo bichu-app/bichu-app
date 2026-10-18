@@ -105,6 +105,13 @@ function cenario(): Observado {
         },
       },
       conferencias: CONFERENCIAS,
+      // A TRAVA DE CONTA VALIDADA entrou em 18/10 por outro ramo e virou
+      // dependencia obrigatoria. Estes casos sao sobre o CEP -- que e GRAVADO
+      // e NAO SAI --, e todos partem de uma conta que pode sugerir: sem o
+      // canal verificado a chamada pararia no 409 antes de chegar ao campo
+      // que este arquivo mede. Quem mede a trava em si e
+      // `directory-suggestion-routes.test.ts`, nos dois estados.
+      canal: { temCanalVerificado: () => Promise.resolve(true) },
     }),
   };
 }
