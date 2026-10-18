@@ -9259,7 +9259,21 @@ components:
         assincrona, em `POST /v1/me/email-change`. Aceitar aqui faria a
         resposta revelar se um endereco ja tem conta.
       properties:
-        display_name: { type: string, maxLength: 80 }
+        # **`minLength: 1` desde 18/10/2026**, por decisao do cliente: *"nao
+        # permitir atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+        #
+        # Antes desta linha `display_name: ""` era aceito e APAGAVA o nome, e a
+        # tela de `Meus dados` oferecia isso em texto ("deixe o campo vazio
+        # para tira-lo"). Conta sem nome aparece aos outros como "Tutor" ou
+        # "Quem achou" (`conversa-mediada.ts`), o que prejudica o
+        # reconhecimento do pet -- era a razao da decisao.
+        #
+        # Mesma divisao de trabalho do cadastro: o schema recusa `""`, e o
+        # **servidor** recusa o nome so com espaco (`"   "`), que passa por
+        # `minLength` e nao tem nome dentro. O servidor tambem recusa o PATCH
+        # que **omite** o nome quando a conta ainda nao tem nenhum -- e aceita
+        # o PATCH que o PREENCHE, que e a saida de quem esta nesse estado.
+        display_name: { type: string, minLength: 1, maxLength: 80 }
         phone_e164: { type: string, pattern: '^\+55\d{10,11}$' }
         reference_area:
           type: object
