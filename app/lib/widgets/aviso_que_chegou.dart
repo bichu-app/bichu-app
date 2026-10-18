@@ -43,8 +43,45 @@ class AvisoQueChegou extends StatelessWidget {
   ///
   /// Diferente de [rotuloDeVerAgora] de proposito: "Vi este pet" e a fala de
   /// quem ACHOU um animal de outra pessoa (o alerta de vizinhanca). Aqui quem
-  /// le e o TUTOR, e o que ele quer e chegar ao proprio pet.
+  /// le e o TUTOR, e o que ele quer e chegar a quem avisou.
   static const String rotuloDeVerMeusPets = 'Ver meus pets';
+
+  /// O rotulo quando a area de mensagens estiver na arvore. Ver
+  /// [rotaDoAvisoDaPlaquinha].
+  static const String rotuloDeVerAMensagem = 'Ver a mensagem';
+
+  // ---------------------------------------------------------------------
+  // O PONTO UNICO DO DESTINO DO AVISO DA PLAQUINHA.
+  //
+  // Sao DUAS LINHAS, e sao as unicas que mudam quando
+  // `feat/area-de-mensagens-no-app` for mesclada. Nada mais deste arquivo,
+  // nada de `avisos_recebidos.dart`, e nada dos testes -- a isca de widget
+  // compara contra estas constantes de proposito, e nao contra um literal.
+  //
+  // NA MESCLA, trocar exatamente estas duas linhas por:
+  //
+  //   static const String rotaDoAvisoDaPlaquinha = RotasDeMensagens.raiz;
+  //   static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerAMensagem;
+  //
+  // (`RotasDeMensagens` vive em `telas/mensagens/area_de_mensagens.dart`, da
+  // branch dele; `raiz` e `/mensagens`. Acrescentar o `import` junto.)
+  //
+  // **E a LISTA, e nao `RotasDeMensagens.conversaDe(id)`**: nao existe
+  // identificador publico de conversa, e o push nao pode carregar o UUID
+  // interno (ADR-0010 item 6). A medicao inteira esta em
+  // `DestinoDoAviso.areaDeMensagens`.
+  //
+  // Enquanto a branch nao chega, o destino e a secao `Pets` -- que existe
+  // nesta arvore, nao exige `extra`, nao exige identificador e e a casa dos
+  // perdidos e dos achados. Nao e o lugar certo; e um lugar de verdade, e e o
+  // que impede este caminho de voltar ao `break`.
+  // ---------------------------------------------------------------------
+
+  /// Para onde o toque no aviso da plaquinha leva, **nesta arvore**.
+  static const String rotaDoAvisoDaPlaquinha = Rotas.pets;
+
+  /// O rotulo do botao desse destino, **nesta arvore**.
+  static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerMeusPets;
 
   /// O rotulo da acao quando ha destino.
   static const String rotuloDeVerAgora = 'Vi este pet';
@@ -93,17 +130,14 @@ class _Faixa extends StatelessWidget {
           Rotas.registrarAchado,
           extra: RascunhoDoAchado(shareToken: aviso.referencia),
         );
-      case DestinoDoAviso.secaoDePets:
-        // `go` e nao `push`: a secao `Pets` e um ramo da casca com abas, e
-        // empilha-la sobre a tela corrente deixaria duas barras de aba na
-        // pilha. O tutor chega na casa dos perdidos e dos achados, com os pets
-        // dele na tela e o nome do pet do aviso fresco na cabeca -- o push que
-        // ele acabou de ler o nomeia.
+      case DestinoDoAviso.areaDeMensagens:
+        // `go` e nao `push`: o destino e uma raiz de secao, e empilha-la sobre
+        // a tela corrente deixaria duas barras de aba na pilha.
         //
-        // Nao ha `extra`: este destino nao e enderecado por chave, e e por
-        // isso que ele serve tambem ao pet sem caso aberto, cujo push sai sem
-        // `ref`. Ver as quatro razoes em `DestinoDoAviso.secaoDePets`.
-        context.go(Rotas.pets);
+        // **Sem `extra` e sem identificador**, e e isso que faz este destino
+        // servir tambem ao pet sem caso aberto, cujo push sai sem `ref`. Ver
+        // `AvisoQueChegou.rotaDoAvisoDaPlaquinha`.
+        context.go(AvisoQueChegou.rotaDoAvisoDaPlaquinha);
       case DestinoDoAviso.mostrarNoApp:
         // Nao ha para onde ir neste build, e a faixa acabou de ser fechada:
         // quem tocou ja leu. Ver a lacuna declarada em
@@ -122,7 +156,8 @@ class _Faixa extends StatelessWidget {
     // lugar amanha dizem a mesma coisa sem ninguem ter de lembrar.
     final rotuloDaAcao = switch (destino) {
       DestinoDoAviso.registrarAchado => AvisoQueChegou.rotuloDeVerAgora,
-      DestinoDoAviso.secaoDePets => AvisoQueChegou.rotuloDeVerMeusPets,
+      DestinoDoAviso.areaDeMensagens =>
+        AvisoQueChegou.rotuloDoAvisoDaPlaquinha,
       // Nao e renderizado: `temDestino` esconde o botao. O ramo existe porque
       // o `switch` e exaustivo, e exaustivo e o que faz um destino novo
       // aparecer aqui como erro de compilacao em vez de rotulo errado.

@@ -371,10 +371,25 @@ void main() {
             referencia: 'st_abc',
           ),
         ),
-        DestinoDoAviso.secaoDePets,
+        DestinoDoAviso.areaDeMensagens,
         reason:
             'REPROVA: o toque no aviso de que alguem esta com o pet voltou a '
             'nao levar a lugar nenhum. `mostrarNoApp` e um `break` na faixa.',
+      );
+      // O MESMO caso, dito pelo negativo. Sem esta linha, trocar o destino por
+      // um terceiro valor qualquer reprovaria pelo `expect` de cima com uma
+      // mensagem que fala de igualdade de enum; esta fala do defeito.
+      expect(
+        OuvinteDeAvisos.destinoDe(
+          const AvisoRecebido(
+            tipo: TipoDeAvisoRecebido.tagEscaneada,
+            referencia: 'st_abc',
+          ),
+        ),
+        isNot(DestinoDoAviso.mostrarNoApp),
+        reason:
+            'REPROVA: `tagEscaneada` caiu de novo em `mostrarNoApp`, que e o '
+            '`break` que engolia o aviso mais critico do produto.',
       );
     });
 
@@ -390,11 +405,34 @@ void main() {
             referencia: '',
           ),
         ),
-        DestinoDoAviso.secaoDePets,
+        DestinoDoAviso.areaDeMensagens,
         reason:
             'REPROVA: o destino de `tagEscaneada` passou a depender de `ref`, '
-            'e o push do pet SEM caso aberto sai sem `ref`.',
+            'e o push do pet SEM caso aberto sai sem `ref` -- nao existe '
+            'identificador publico de conversa nem de pet para mandar nele.',
       );
+    });
+
+    test('o destino do aviso da plaquinha NAO e enderecado por identificador', () {
+      // A ISCA DA CORRECAO DE RUMO. A area de mensagens tem rota de conversa
+      // (`/mensagens/:conversaId`), e apontar o push para ela e a tentacao
+      // obvia agora que a tela existe. Nao da: `ConversationId` e
+      // `{type: string, format: uuid}` no contrato e `conversations` nao tem
+      // coluna `ref` nenhuma -- o ADR-0010 item 6 proibe UUID interno em
+      // superficie publica, e foi por isso que `/pets/:petId` foi recusada.
+      //
+      // Esta isca cobra a propriedade e nao o literal: a rota do destino nao
+      // pode ter parametro de caminho.
+      expect(
+        AvisoQueChegou.rotaDoAvisoDaPlaquinha.contains(':'),
+        isFalse,
+        reason:
+            'REPROVA: o destino do aviso da plaquinha passou a exigir um '
+            'identificador no caminho. O push nao tem identificador publico '
+            'para por ali -- nem de conversa, nem de pet, nem de caso quando '
+            'nao ha caso aberto.',
+      );
+      expect(AvisoQueChegou.rotaDoAvisoDaPlaquinha, startsWith('/'));
     });
 
     test('os dois tipos sem tela neste build caem em `mostrarNoApp`, e nao '
@@ -512,7 +550,9 @@ void main() {
   // ISCA 5 — o toque no aviso da plaquinha LEVA a algum lugar
   // -----------------------------------------------------------------------
   group('ISCA — o toque no aviso de que alguem esta com o pet', () {
-    testWidgets('leva a secao `Pets`, e nao cai num `break`', (tester) async {
+    testWidgets('leva ao destino do ponto unico, e nao cai num `break`', (
+      tester,
+    ) async {
       // O BURACO QUE ESTE CASO FECHA, e ele nao e sobre estetica: ate aqui
       // `tagEscaneada` caia em `mostrarNoApp`, `temDestino` escondia o botao, e
       // `_ir` tinha um `break` no lugar da navegacao. O aviso mais critico do
@@ -534,14 +574,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         rotaAtual(tester),
-        isNot(Rotas.pets),
-        reason: 'a bancada precisa comecar FORA de /pets para medir algo.',
+        isNot(AvisoQueChegou.rotaDoAvisoDaPlaquinha),
+        reason:
+            'a bancada precisa comecar FORA do destino para medir algo. '
+            '`Pets` e a secao de aterrissagem do app.',
       );
 
       porta.chegouComOAppAberto(mensagemDoServidor(tipo: 'tagEscaneada'));
       await tester.pumpAndSettle();
 
-      final acao = find.text(AvisoQueChegou.rotuloDeVerMeusPets);
+      final acao = find.text(AvisoQueChegou.rotuloDoAvisoDaPlaquinha);
       expect(
         acao,
         findsOneWidget,
@@ -553,9 +595,13 @@ void main() {
       await tester.tap(acao);
       await tester.pumpAndSettle();
 
+      // Comparado contra a CONSTANTE, e nao contra `/pets`: quando
+      // `feat/area-de-mensagens-no-app` for mesclada e
+      // `rotaDoAvisoDaPlaquinha` virar `/mensagens`, este caso continua
+      // medindo a coisa certa sem ninguem tocar nele.
       expect(
         rotaAtual(tester),
-        Rotas.pets,
+        AvisoQueChegou.rotaDoAvisoDaPlaquinha,
         reason:
             'REPROVA: o toque no aviso nao levou a lugar nenhum. Era isto o '
             '`break` do `switch` de `_ir`.',
@@ -582,7 +628,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(AvisoQueChegou.rotuloDeVerAgora), findsNothing);
-      expect(find.text(AvisoQueChegou.rotuloDeVerMeusPets), findsOneWidget);
+      expect(
+        find.text(AvisoQueChegou.rotuloDoAvisoDaPlaquinha),
+        findsOneWidget,
+      );
     });
   });
 }

@@ -155,6 +155,19 @@ void describe('ISCA — o aviso ao tutor sai por push, e sai pobre', () => {
       // dentro da conversa mediada, e so la.
       assert.equal(m.imagemUrl, undefined);
       assert.deepEqual(Object.keys(m.dados).sort(), ['ref', 'tipo']);
+      // **NEM O ID DA CONVERSA**, e esta linha existe por causa de uma
+      // tentacao concreta: a area de mensagens do app ganhou a rota
+      // `/mensagens/:conversaId`, e mandar o `conversaId` no push abriria a
+      // conversa direto. Nao da -- `ConversationId` e `{format: uuid}` no
+      // contrato e `conversations` nao tem coluna `ref`: seria UUID interno em
+      // superficie publica (ADR-0010 item 6). O toque leva a LISTA, que nao
+      // precisa de identificador. A porteira do dominio tambem barra a chave
+      // pelo nome; esta asserccao barra o VALOR entrando por `ref`.
+      assert.equal(
+        'conversation_id' in m.dados || 'conversationId' in m.dados,
+        false,
+        'REPROVA: o push passou a carregar id de conversa.',
+      );
     }
   });
 
