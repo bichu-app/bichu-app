@@ -144,6 +144,7 @@ function tagAtiva(): TagResolvida {
       distinctiveMarks: 'Coleira vermelha.',
       careNotes: 'É medroso. Não corra atrás.',
       isLost: true,
+      photoKey: null,
     },
   };
 }
@@ -229,6 +230,7 @@ function montar(): Bancada {
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+    baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,
    rasterizador: criarRasterizadorDeQr(),
   });
 

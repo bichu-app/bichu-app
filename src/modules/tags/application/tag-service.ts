@@ -76,6 +76,15 @@ export interface DependenciasDeTags {
   /** Base das páginas públicas, de onde sai `conversation_url`. */
   readonly baseDaWeb: AbsoluteUrl;
   /**
+   * Base pública dos objetos de mídia, de onde sai `pet.photo_url`.
+   *
+   * É a MESMA de `projecaoDoPerfilPublico`, e entra por dependência pelo mesmo
+   * motivo das outras duas: aplicação não lê configuração. Separada de
+   * `baseDaWeb` porque o cliente decidiu hosts diferentes, e trocá-las faz uma
+   * foto apontar para uma página.
+   */
+  readonly baseDeMidia: AbsoluteUrl;
+  /**
    * Chave do índice cego: `code_hash` é HMAC-SHA-256 do código canônico com ela
    * (ADR-0004, Emenda 1, §3.1). Entra por dependência, e não por `import` de
    * configuração, pelo mesmo motivo do relógio: domínio e aplicação não leem
@@ -129,6 +138,18 @@ export interface ResolucaoDaTag {
     readonly primaryColor: string | null;
     readonly distinctiveMarks: string | null;
     readonly careNotes: string | null;
+    /**
+     * `TagResolution.pet.photo_url`. Nulo quando o pet nao tem foto de capa
+     * pronta -- e SO nesse caso.
+     *
+     * **Ele vinha nulo sempre, e isso era o defeito.** A borda escrevia
+     * `photo_url: null` fixo, com o comentario de que o modulo `media` nao
+     * existia nesta entrega. Ele existe; o contrato declara o campo desde
+     * sempre e o proprio exemplo de 200 de `resolveTagCode` traz um endereco.
+     * Quem escaneia a plaquinha e a pessoa que mais precisa confirmar que o
+     * animal no colo e o da tela.
+     */
+    readonly photoUrl: string | null;
   };
   readonly lost: { readonly isLost: boolean };
   readonly alreadyNotified: boolean;
@@ -179,6 +200,16 @@ function exigirCodigoNormalizado(bruto: string): TagCodeCanonical {
  * não sai: `pet_deceased` numa resposta pública faria alguém descobrir a morte
  * de um animal por uma página web (ADR-0004).
  */
+/**
+ * A chave do objeto virada endereço público, ou nulo.
+ *
+ * Mesma montagem de `projecaoDoPerfilPublico` (barra final da base removida
+ * antes de juntar), porque as duas superfícies têm de endereçar o mesmo objeto.
+ */
+function enderecoDaFoto(chave: string | null, baseDeMidia: AbsoluteUrl): string | null {
+  return chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
+}
+
 function recusarTagInativa(tag: TagResolvida): void {
   if (tag.status === 'revoked' || tag.petIndisponivel) throw problemas.tagRevogada();
 }
@@ -228,6 +259,7 @@ export function criarTagService(deps: DependenciasDeTags) {
           primaryColor: tag.pet.primaryColor,
           distinctiveMarks: tag.pet.distinctiveMarks,
           careNotes: tag.pet.careNotes,
+          photoUrl: enderecoDaFoto(tag.pet.photoKey, deps.baseDeMidia),
         },
         lost: { isLost: tag.pet.isLost },
         alreadyNotified: jaAvisou,

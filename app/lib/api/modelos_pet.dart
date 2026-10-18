@@ -634,10 +634,15 @@ class TagResolvida {
 
   /// `pet.photo_url`.
   ///
-  /// **Hoje ele vem `null` nesta rota, e isso e desenho do servidor, nao
-  /// pendencia.** O campo existe aqui porque o contrato o declara; a tela
-  /// trata a ausencia pela regra 5.4 do design system e **nunca** promete uma
-  /// foto que nao vai chegar.
+  /// **Ele vem preenchido desde 18/10, e a tela o desenha.** Ate ali o servidor
+  /// mandava `null` fixo nesta rota -- o contrato sempre declarou o campo, e o
+  /// exemplo de 200 de `resolveTagCode` sempre trouxe um endereco --, e o
+  /// sintoma era o do relato do cliente: escaneou a plaquinha, a tela abriu sem
+  /// a foto do pet.
+  ///
+  /// Continua anulavel, e o nulo continua tendo significado: pet sem foto de
+  /// capa pronta. Nesse caso a tela trata a ausencia pela regra 5.4 do design
+  /// system e **nunca** promete uma foto que nao vai chegar.
   final String? fotoUrl;
 
   final bool estaPerdido;
