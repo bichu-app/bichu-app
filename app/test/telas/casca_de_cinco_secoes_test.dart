@@ -705,7 +705,10 @@ void main() {
       // A porta e conferida ANTES do toque. Um `tap` direto tambem reprova
       // quando ela some, mas com "could not find any matching widgets", que
       // nao diz a quem ler o que quebrou nem por que importa.
-      final porta = find.widgetWithText(OutlinedButton, 'Escanear uma tag');
+      final porta = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      );
       expect(
         porta,
         findsOneWidget,

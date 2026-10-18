@@ -163,6 +163,7 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+    baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,
     rasterizador: criarRasterizadorDeQr(),
   });
   const autenticador: Autenticador = {

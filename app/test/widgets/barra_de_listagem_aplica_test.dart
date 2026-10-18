@@ -12,6 +12,7 @@
 // `test/telas/loja_com_dados_test.dart` e `test/rede/agenda_da_rede_test.dart`.
 
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +85,17 @@ class _EstadoDaCasca extends State<_Casca> {
           builder: (context, acao, _) => Scaffold(
             appBar: AppBar(
               title: const Text('Listagem'),
+              // **64 dp, como a casca de verdade.** `casca_com_abas.dart`,
+              // linha 653, fixa `toolbarHeight: BichuAlvoDeToque.critico` com
+              // o motivo escrito ao lado ("64 dp, e nao os 56 do padrao do
+              // M3"). Sem esta linha a casca de teste deixava o padrao do M3
+              // valer, e os 56 da barra ESMAGAVAM o `SizedBox(64, 64)` que o
+              // `BotaoDeAcaoDaListagem` declara -- a medida saia 56 e o caso
+              // do alvo de 64 reprovava um componente correto, por causa do
+              // andaime. Esta casca existe para ser "a casca minima que
+              // `TelaDeAba` oferece de verdade", e a altura da barra e parte
+              // disso.
+              toolbarHeight: BichuAlvoDeToque.critico,
               actions: acao == null
                   ? null
                   : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
@@ -486,7 +498,7 @@ void main() {
       return ControleDeBusca(
         controlador: controlador,
         alcance: AlcanceDaBusca.servidor,
-        rotulo: 'Buscar encontro',
+        rotulo: 'Buscar evento',
         termoAplicado: termoAplicado,
         minimoDeCaracteres: minimo,
         aoAplicar: aplicados.add,
@@ -600,10 +612,24 @@ void main() {
       );
 
       // O `(opcional)` saiu com o rotulo visivel.
-      expect(find.text('Buscar encontro (opcional)'), findsNothing);
-      expect(find.text('Buscar encontro'), findsNothing);
+      expect(find.text('Buscar evento (opcional)'), findsNothing);
+      // **O texto existe UMA vez, e DENTRO do campo.** `findsNothing` sobre
+      // `'Buscar evento'` nao podia passar: o `hintText` e desenhado pelo
+      // `InputDecorator` como um `Text` com esse mesmo texto, e a linha de
+      // baixo exige justamente que ele seja a dica -- a isca pedia a ausencia
+      // do que ela mesma cobra em seguida. O que ela quis dizer e que nao ha
+      // rotulo FORA do campo, e e isso que esta medido agora: exatamente um, e
+      // descendente do `TextField`.
+      expect(find.text('Buscar evento'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(TextField),
+          matching: find.text('Buscar evento'),
+        ),
+        findsOneWidget,
+      );
       final campo = tester.widget<TextField>(find.byType(TextField));
-      expect(campo.decoration?.hintText, 'Buscar encontro');
+      expect(campo.decoration?.hintText, 'Buscar evento');
     });
 
     testWidgets('sem rotulo visivel, o campo com texto CONTINUA com nome',
@@ -621,7 +647,7 @@ void main() {
       );
 
       expect(
-        find.bySemanticsLabel(RegExp('Buscar encontro')),
+        find.bySemanticsLabel(RegExp('Buscar evento')),
         findsWidgets,
         reason: 'REPROVA: campo com dica e sem rotulo ficou sem nome '
             'acessivel assim que recebeu texto.',
@@ -677,11 +703,21 @@ void main() {
         aoAplicar: (_) {},
       );
 
+      // **A caixa do PROPRIO controle**, e nao o `SizedBox` mais proximo do
+      // glifo: `find.ancestor(...).first` devolve o ancestral mais INTERNO, e
+      // o `IconButton` do Material tem `SizedBox` proprio dentro dele -- a
+      // medida que saia dali era 56, que nao e nem 48 nem 64 e nao
+      // corresponde a decisao nenhuma. A caixa que o produto declara e a
+      // primeira DESCENDENTE de `BotaoDeAcaoDaListagem`
+      // (`barra_de_listagem.dart`, linhas 846-848,
+      // `BichuAlvoDeToque.critico`), e e ela que o polegar acerta.
       final alvo = tester.getSize(
-        find.ancestor(
-          of: find.byIcon(Icons.tune),
-          matching: find.byType(SizedBox),
-        ).first,
+        find
+            .descendant(
+              of: find.byType(BotaoDeAcaoDaListagem),
+              matching: find.byType(SizedBox),
+            )
+            .first,
       );
       expect(alvo.width, 64.0);
       expect(alvo.height, 64.0);

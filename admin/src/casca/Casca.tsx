@@ -5,6 +5,7 @@ import { Banner } from '../componentes/basicos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone, MarcaDaNavegacao, type NomeDoIcone } from '../componentes/Icone.tsx';
 import { MenuDeAcoes } from '../componentes/MenuDeAcoes.tsx';
+import { useIndicacoesPendentes } from '../diretorio/fila.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 
 interface ItemDaNavegacao {
@@ -16,6 +17,9 @@ interface ItemDaNavegacao {
 }
 
 const eSubDaLoja = (c: string) => c.startsWith('/loja/parceiros') || c.startsWith('/loja/tags');
+
+/** O mesmo arranjo de `eSubDaLoja`: o item pai nao fica aceso quando o filho esta. */
+const ehSubDoPerto = (c: string) => c.startsWith('/perto/indicacoes');
 
 /**
  * A secao Rede e de outra frente (feat/backoffice-telas-rede): aqui so o item
@@ -29,7 +33,13 @@ const ITENS: ItemDaNavegacao[] = [
   // BICHUS-189. O diretorio de `Perto`: estabelecimentos, clinicas e
   // profissionais. O caminho e `/perto` e nao `/diretorio` porque e assim que a
   // secao se chama no aplicativo, e o painel fala a lingua do produto.
-  { para: '/perto', rotulo: 'Perto', icone: 'search', ativo: (c) => c === '/perto' || c.startsWith('/perto/') },
+  { para: '/perto', rotulo: 'Perto', icone: 'search', ativo: (c) => c === '/perto' || c.startsWith('/perto/') && !ehSubDoPerto(c) },
+  // 18/10/2026. A fila de indicacoes da comunidade: o menu que o cliente mediu
+  // que faltava ("no backoffice nao tem um menu para aprovar os profissionais
+  // que as pessoas estao indicando"). Sub-item de `Perto` pela mesma forma que
+  // Parceiros e Tags sao sub-itens da Loja: e o mesmo assunto, e nao uma secao
+  // nova.
+  { para: '/perto/indicacoes', rotulo: 'Indicações', icone: 'add', sub: true, ativo: (c) => c.startsWith('/perto/indicacoes') },
 ];
 
 function iniciais(nome: string): string {
@@ -45,7 +55,12 @@ function iniciais(nome: string): string {
  * de exibicao (BO-1) e abre o menu da conta.
  */
 export function Casca() {
-  const { nome, avisoDoTeto, sair, sairDeTodas } = useSessao();
+  const { nome, avisoDoTeto, sair, sairDeTodas, api } = useSessao();
+  // A CONTAGEM DO AVISO do menu. O numero vem do servidor (`pending_total`), e
+  // nao de uma soma na tela: ele passa pelo mesmo filtro de conta desabilitada
+  // da listagem e da leitura, e uma soma local contaria o que a fila nao mostra
+  // -- que e o defeito de dizer "1 pendente" sobre fila vazia.
+  const indicacoesPendentes = useIndicacoesPendentes(api);
   const { pathname } = useLocation();
   const [confirmarTodas, setConfirmarTodas] = useState(false);
   const [saindoDeTodas, setSaindoDeTodas] = useState(false);
@@ -61,6 +76,11 @@ export function Casca() {
         <ul>
           {ITENS.map((item) => {
             const ativo = item.ativo(pathname);
+            // So o item da fila carrega aviso, e so quando o servidor respondeu:
+            // `undefined` deixa o item sem numero, e isso e diferente de zero.
+            const aviso =
+              item.para === '/perto/indicacoes' && indicacoesPendentes ? indicacoesPendentes : undefined;
+            const rotulo = aviso === undefined ? item.rotulo : `${item.rotulo} (${aviso})`;
             return (
               <li key={item.para}>
                 <Link
@@ -68,10 +88,14 @@ export function Casca() {
                   className={item.sub ? 'navitem sub t-label' : 'navitem t-label-lg'}
                   aria-current={ativo ? 'page' : undefined}
                   data-cy={`nav-${item.rotulo.toLowerCase()}`}
-                  title={item.rotulo}
+                  title={rotulo}
                 >
                   <Icone nome={item.icone} />
-                  <span className="rot">{item.rotulo}</span>
+                  {/* O numero vai DENTRO de `.rot`: abaixo de 1024 a navegacao
+                      vira trilho de icones e `.rot` e escondido, e um aviso
+                      solto sobraria sem rotulo nenhum ao lado. O `title` leva o
+                      numero para quem ve so o icone. */}
+                  <span className="rot">{rotulo}</span>
                 </Link>
               </li>
             );

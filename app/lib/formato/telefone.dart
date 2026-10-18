@@ -88,6 +88,35 @@ String mascaraDeTelefone(String bruto) {
   return '($ddd) $prefixo-$sufixo';
 }
 
+/// O E.164 do servidor **na gramatica da tela**, para preencher o campo.
+///
+/// ## Por que ela precisa existir, e por que `mascaraDeTelefone` nao serve
+///
+/// `mascaraDeTelefone` le DIGITOS DIGITADOS, e nao E.164: ela descarta tudo o
+/// que nao e digito, inclusive o `+`, e ai `+5511987654321` entra como os treze
+/// digitos `5511987654321`, e cortado em onze vira `55119876543` -- `(55)
+/// 11987-6543`. O numero aparece ERRADO na tela, e, pior, um `Salvar` o
+/// reencoda para `+5555119876543` e grava um telefone que nao e o da pessoa.
+/// Foi assim que `tela_dados_pessoais.dart` abria: ela preenchia o campo com
+/// `mascaraDeTelefone(dados.telefone)`, e `dados.telefone` e E.164.
+///
+/// **O par desta funcao vive no painel** (`admin/src/formato/telefone.ts`,
+/// `telefoneDoE164`), e as regras sao as mesmas, de proposito: sem `+55` na
+/// frente, ou com uma quantidade nacional que nao e 10 nem 11, devolve o valor
+/// CRU -- mostrar o que o servidor mandou e melhor que mostrar uma mascara
+/// mentirosa sobre um numero que esta forma nao descreve.
+String telefoneDoE164(String? e164) {
+  if (e164 == null || e164.isEmpty) return '';
+  final digitos = _somenteDigitos(e164);
+  if (!digitos.startsWith(discagemDoBrasil)) return e164;
+  final nacional = digitos.substring(discagemDoBrasil.length);
+  if (nacional.length != _minimoDeDigitos &&
+      nacional.length != _maximoDeDigitos) {
+    return e164;
+  }
+  return mascaraDeTelefone(nacional);
+}
+
 /// O valor que vai para a API, ou `null` quando o que foi digitado nao serve.
 ///
 /// **A unica funcao deste arquivo que produz valor de contrato.** Ela nao

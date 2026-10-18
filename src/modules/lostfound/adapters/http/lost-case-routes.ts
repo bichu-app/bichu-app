@@ -21,6 +21,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import { corpoSemPadroes } from '../../../../shared/http/sem-padroes.js';
 import {
   executarComIdempotencia,
   exigenciaDeIdempotencia,
@@ -649,12 +650,22 @@ export function registrarRotasDeCasos(
    * `instanteDeVistoPorUltimo` é o MESMO da abertura — inclusive a recusa de
    * data no futuro, que aqui é mais provável do que lá: corrigir a data é
    * justamente onde o dedo escorrega para o mês que vem.
+   *
+   * **O corpo é validado SEM os `default` do contrato** (`corpoSemPadroes`). A
+   * operação reusa `LostCaseInput`, o mesmo `$ref` da criação, e lá
+   * `share_to_public_list` tem `default: true`: com o `useDefaults` do Ajv o
+   * padrão entra no corpo da edição e o caso que o tutor tirou da lista pública
+   * volta a aparecer nela quando ele corrige onde o pet foi visto — com `200` e
+   * sem aviso. O `undefined` que o repositório procura para manter o valor
+   * antigo só existe por causa desta chamada. Ver `sem-padroes.ts`.
    */
   registrarRota(
     app,
     rotaDeAtualizacaoDoCaso,
     {
-      schema: { body: corpoDe(deps.contrato, rotaDeAtualizacaoDoCaso.operationId) },
+      schema: {
+        body: corpoSemPadroes(corpoDe(deps.contrato, rotaDeAtualizacaoDoCaso.operationId)),
+      },
       resolvedores: { account: (request) => contaDoTeto(request, deps) },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {

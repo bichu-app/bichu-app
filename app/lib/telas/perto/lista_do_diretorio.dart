@@ -1,40 +1,42 @@
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../api/diretorio_api.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../escopo.dart';
-import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
-import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
+import 'pagina_do_local.dart';
 
 /// `Perto` — o diretorio de profissionais e estabelecimentos.
 ///
 /// A listagem de `GET /v1/directory/entries` (`listDirectoryEntries`), com o
 /// topo de listagem do app ([BarraDeListagem]).
 ///
+/// ## A tela de detalhe EXISTE desde 18/10/2026
+///
+/// O cartao e tocavel e leva a [PaginaDoLocal] (`Rotas.localDoPerto`). O
+/// pedido do cliente de 18/10 foi literal: que os locais do diretorio
+/// virassem clicaveis, com pagina propria, pontuacao de 1 a 5 e recomendacao
+/// em texto visivel aos outros usuarios. O paragrafo que dizia "nao ha tela de
+/// detalhe nesta versao" foi substituido por este, e nao apagado: ele era
+/// certo enquanto o destino nao existia.
+///
 /// ## O que esta tela NAO tem, e nenhuma das ausencias e esquecimento
 ///
-/// - **Nao ha tela de detalhe nesta versao.** O cartao nao e tocavel, nao tem
-///   seta e nao leva a lugar nenhum. O criterio 2 da BICHUS-62 proibe acao
-///   sem destino, e este app ja teve dois botoes apontando para o vazio.
 /// - **Nao ha foto, logotipo, horario, endereco de rua, site, e-mail, redes,
-///   lista de servicos, preco nem avaliacao.** A tabela nao tem essas
-///   colunas. Desenhar espaco para foto ensinaria quem le que a foto vem.
+///   lista de servicos nem preco.** A tabela nao tem essas colunas. Desenhar
+///   espaco para foto ensinaria quem le que a foto vem. **`avaliacao` saiu
+///   desta lista**: `DirectoryEntrySummary.rating` entrou no contrato em 18/10
+///   e o cartao mostra a media e a quantidade.
 /// - **Nao ha mapa** (decisao de 17/09): o Maps cobra por carregamento e o
 ///   componente criaria precedente contra o ADR-0010.
-/// - **Nao ha campo de busca.** O parametro `q` nao entrou no contrato, e
-///   filtrar as 20 entradas da pagina em memoria seria uma busca que funciona
-///   com 10 registros e mente com 200. Ver [DiretorioApi].
 ///
 /// ## A ordem, que e o ponto mais caro desta tela
 ///
@@ -278,28 +280,29 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **A porta de indicar, no CORPO e nao na `AppBar`.** O slot unico de
-        // acao da barra de topo continua livre (11.23.1), e os controles de
-        // listagem moram no corpo -- a porta de escrita mora no corpo pelo
-        // mesmo motivo: a barra tem UMA vaga e tres candidatos.
+        // **A PORTA DE INDICAR SUBIU PARA A BARRA DE TOPO** em 18/10/2026, e
+        // nao esta mais aqui. Pedido literal do cliente: "os itens de criacao,
+        // como evento e indicacao, ate o escanear poderia ser icones na barra
+        // superior ... e nao fique esse botao grande na pagina ocupando muito
+        // espaco".
         //
-        // **Acima da barra de listagem**, porque ela nao e um controle de
-        // recorte: nao muda o que a lista mostra. Dentro dos controles, ela
-        // pareceria um filtro.
+        // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no CORPO
+        // e nao na `AppBar`" --, e a reversao e decisao dele. Quem desenha e
+        // `AcaoDeCriarNaBarra`; quem a entrega a casca e `AbaPerto`, em
+        // `abas.dart`.
         //
-        // Habilitada sempre: quem explica o bloqueio de conta e a tela de
-        // destino, que mostra o motivo e a saida. Botao apagado aqui seria
-        // botao morto sem lugar onde escrever a explicacao.
-        Padding(
-          padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-          child: SizedBox(
-            width: double.infinity,
-            child: BotaoSecundario(
-              rotulo: ListaDoDiretorio.rotuloDeIndicar,
-              aoTocar: () => context.push(Rotas.sugerirProfissional),
-            ),
-          ),
-        ),
+        // **E ela deixou de aparecer para quem nao pode usa-la**, que era o
+        // segundo defeito que ele relatou no mesmo dia: a porta convidava
+        // deslogado e a tela de destino e que dizia "Entre para indicar". Ela
+        // agora exige conta E e-mail confirmado, e `podeCriarNaComunidade`,
+        // em `abas.dart`, e quem decide. `rotuloDeIndicar` continua aqui
+        // porque ele e o rotulo acessivel do icone e esta tela e a dona da
+        // palavra.
+        //
+        // O que saiu daqui foi um `BotaoSecundario` de largura total com 48 dp
+        // de altura, dentro de um `Padding` de 16 dp embaixo: 64 dp de altura
+        // devolvidos ao corpo da listagem.
+        //
         // A barra so aparece quando ha pagina: antes dela a tela nao sabe
         // quantos itens existem nem em que ordem eles vieram, e um controle
         // de ordenacao sobre nada ainda medido seria o controle que afirma.
@@ -488,19 +491,46 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
 
 /// O cartao de uma entrada do diretorio.
 ///
-/// **Nao e tocavel, e a ausencia e o desenho.** Nao ha tela de detalhe nesta
-/// versao; um `InkWell` aqui seria acao sem destino. Ele tambem nao tem seta
-/// de avanco, que e o desenho que promete destino sem ter um.
+/// **E TOCAVEL desde 18/10/2026, e a mudanca e uma decisao do cliente.**
 ///
-/// **A unica acao possivel e ligar**, e ela so existe quando o telefone
-/// existe. Cartao sem `phone_e164` nao ganha botao desabilitado: ganha
-/// nenhum botao.
+/// Ate 18/10 este comentario dizia o contrario, com estas palavras: "nao e
+/// tocavel, e a ausencia e o desenho -- nao ha tela de detalhe nesta versao;
+/// um `InkWell` aqui seria acao sem destino". Aquilo estava certo: o criterio
+/// 2 da BICHUS-62 proibe acao sem destino, e este app ja teve dois botoes
+/// apontando para o vazio. **O que mudou nao foi o criterio, foi o mundo** --
+/// em 18/10 o cliente pediu que os locais do `Perto` virassem clicaveis, com
+/// pagina de detalhes, pontuacao de 1 a 5 e recomendacoes em texto visiveis
+/// aos outros usuarios, "como acontece na playstore". AGORA EXISTE DESTINO:
+/// [PaginaDoLocal], em `Rotas.localDoPerto`. O `InkWell` abaixo nao contorna o
+/// criterio 2 -- ele passou a satisfaze-lo.
+///
+/// A seta de avanco continua **fora**: o cartao inteiro e o alvo, e uma seta
+/// ao lado de um alvo que ja ocupa a largura toda nao acrescenta destino
+/// nenhum, acrescenta um segundo ponto de toque para o mesmo lugar.
+///
+/// **Duas acoes, e as duas condicionais.** O cartao leva a pagina; `Ligar` so
+/// existe quando `phone_e164` existe. Cartao sem telefone nao ganha botao
+/// desabilitado: ganha nenhum botao. O botao de ligar fica FORA do `InkWell`
+/// de proposito: toque nele liga, e nao abre a pagina.
 class CartaoDoDiretorio extends StatelessWidget {
   const CartaoDoDiretorio({required this.entrada, super.key});
 
   final EntradaDoDiretorio entrada;
 
   static const String rotuloDeLigar = 'Ligar';
+
+  /// A media e a quantidade na mesma linha: `4,3 · 128 avaliações`.
+  ///
+  /// **Nula em dois casos, e nos dois o cartao nao desenha nada**: `rating`
+  /// ausente na resposta (o campo e opcional no contrato, de proposito) e
+  /// `count == 0`. Em nenhum deles aparece "0,0" nem estrela vazia -- zero se
+  /// le como "pessimo", e um local que ninguem avaliou nao e pessimo.
+  static String? pontuacaoEmTexto(PontuacaoDoLocal? pontuacao) {
+    if (pontuacao == null || !pontuacao.temAvaliacoes) return null;
+    final media = pontuacao.mediaEmTexto;
+    if (media == null) return null;
+    return '$media · ${pontuacao.quantidadeEmTexto}';
+  }
 
   /// A distancia em texto, ou nulo.
   ///
@@ -525,6 +555,7 @@ class CartaoDoDiretorio extends StatelessWidget {
     final distancia = distanciaEmTexto(entrada.distanciaEmMetros);
     final verificacao = entrada.verificacao.oQueFoiVerificado;
     final telefone = entrada.telefoneE164;
+    final pontuacao = pontuacaoEmTexto(entrada.pontuacao);
 
     return Container(
       width: double.infinity,
@@ -537,48 +568,80 @@ class CartaoDoDiretorio extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Nome, atividade, lugar e distancia sao UMA parada de foco: quem
-          // usa leitor de tela ouve a entrada inteira num deslize, em vez de
-          // quatro paradas para o mesmo objeto. O botao de ligar fica FORA do
-          // merge, porque ele e um controle e precisa da propria parada.
-          MergeSemantics(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(entrada.nome, style: textos.titleMedium),
-                if (atividade != null) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e1),
-                  Text(
-                    atividade,
-                    style: textos.bodyMedium
-                        ?.copyWith(color: cores.textSecondary),
-                  ),
+          // Nome, atividade, lugar, distancia e pontuacao sao UMA parada de
+          // foco: quem usa leitor de tela ouve a entrada inteira num deslize,
+          // em vez de cinco paradas para o mesmo objeto. O botao de ligar fica
+          // FORA do merge E fora do `InkWell`, porque ele e um controle com
+          // destino PROPRIO -- toque nele liga, e nao abre a pagina.
+          //
+          // O `InkWell` embrulha o merge, e nao o cartao inteiro, justamente
+          // para o botao de ligar nao ficar dentro de uma area tocavel que
+          // leva a outro lugar.
+          InkWell(
+            onTap: () => PaginaDoLocal.abrir(context, entrada.slug),
+            borderRadius: BorderRadius.circular(BichuRaio.md),
+            child: MergeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(entrada.nome, style: textos.titleMedium),
+                  if (atividade != null) ...<Widget>[
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      atividade,
+                      style: textos.bodyMedium
+                          ?.copyWith(color: cores.textSecondary),
+                    ),
+                  ],
+                  // A media e a quantidade, quando ha. **Cartao sem `rating` e
+                  // cartao com zero avaliacao nao desenham linha nenhuma**:
+                  // ver `pontuacaoEmTexto`.
+                  if (pontuacao != null) ...<Widget>[
+                    const SizedBox(height: BichuEspaco.e1),
+                    Row(
+                      children: <Widget>[
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.star,
+                            size: BichuEspaco.e4,
+                            color: cores.primary,
+                          ),
+                        ),
+                        const SizedBox(width: BichuEspaco.e1),
+                        Text(
+                          pontuacao,
+                          style: textos.bodyMedium
+                              ?.copyWith(color: cores.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (lugar != null) ...<Widget>[
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      lugar,
+                      style: textos.bodyMedium
+                          ?.copyWith(color: cores.textSecondary),
+                    ),
+                  ],
+                  if (distancia != null) ...<Widget>[
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      distancia,
+                      style: textos.bodyMedium
+                          ?.copyWith(color: cores.textSecondary),
+                    ),
+                  ],
+                  if (entrada.sobre != null && entrada.sobre!.isNotEmpty) ...[
+                    const SizedBox(height: BichuEspaco.e2),
+                    Text(entrada.sobre!, style: textos.bodyMedium),
+                  ],
+                  if (verificacao != null) ...<Widget>[
+                    const SizedBox(height: BichuEspaco.e2),
+                    _Selo(texto: verificacao),
+                  ],
                 ],
-                if (lugar != null) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e1),
-                  Text(
-                    lugar,
-                    style: textos.bodyMedium
-                        ?.copyWith(color: cores.textSecondary),
-                  ),
-                ],
-                if (distancia != null) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e1),
-                  Text(
-                    distancia,
-                    style: textos.bodyMedium
-                        ?.copyWith(color: cores.textSecondary),
-                  ),
-                ],
-                if (entrada.sobre != null && entrada.sobre!.isNotEmpty) ...[
-                  const SizedBox(height: BichuEspaco.e2),
-                  Text(entrada.sobre!, style: textos.bodyMedium),
-                ],
-                if (verificacao != null) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e2),
-                  _Selo(texto: verificacao),
-                ],
-              ],
+              ),
             ),
           ),
           if (telefone != null) ...<Widget>[

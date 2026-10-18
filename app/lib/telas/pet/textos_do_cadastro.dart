@@ -29,31 +29,12 @@ abstract final class TextosDoCadastro {
 
   static const String escolherNaLista = 'Escolher na lista';
 
-  /// **A frase que mais trabalha nesta tela.** O medo de quem tem um SRD
-  /// diante de uma lista fechada e nao se encontrar nela; dizer que vira-lata
-  /// esta na lista, antes de ela abrir, remove isso em sete palavras.
-  static const String ajudaDaRaca =
-      'A lista é a que o Bichu usa para comparar pets perdidos e achados. '
-      'Vira-lata está nela.';
-
   /// A opcao de saida. **`Outra`, e nao "Outro" nem "Não sei":** concorda com
   /// "raça", que e a palavra do rotulo, e quem cadastra o proprio pet sabe o
   /// que ele e, so nao achou o nome na lista.
   static const String opcaoOutraRaca = 'Outra';
 
   static const String rotuloDaRacaLivre = 'Qual raça?';
-
-  /// A ajuda diz **onde o texto aparece** e nao diz que ele nao cruza. Foi
-  /// escolha do UX: "este campo nao e usado na comparacao" e verdade, e
-  /// relevante para nos e e ruido para quem esta cadastrando o proprio
-  /// cachorro.
-  static String ajudaDaRacaLivre(String nome) {
-    final daPessoa = nome.trim();
-    if (daPessoa.isEmpty) {
-      return 'Escreva do seu jeito. Aparece na ficha e no cartaz.';
-    }
-    return 'Escreva do seu jeito. Aparece na ficha de $daPessoa e no cartaz.';
-  }
 
   /// Limite de `breed_free_text` no contrato.
   static const int limiteDaRacaLivre = 40;
@@ -95,11 +76,6 @@ abstract final class TextosDoCadastro {
     final pet = nome.trim();
     return pet.isEmpty ? 'Uma foto do seu pet' : 'Uma foto de $pet';
   }
-
-  /// UX F1.4.
-  static const String corpoDaFoto =
-      'A foto é o que faz alguém reconhecer seu pet na rua. Escolha uma em que '
-      'o rosto apareça bem.';
 
   /// A orientacao de tamanho, numa linha (cliente, 17/10/2026).
   ///
@@ -144,16 +120,6 @@ abstract final class TextosDoCadastro {
   /// "cor secundaria" e vocabulario de banco de dados.
   static const String rotuloDaSegundaCor = 'Segunda cor (opcional)';
 
-  /// A ajuda **tem que apontar para o campo de baixo**, e essa e a parte que
-  /// nao pode ser cortada por concisao: a lista fechada de duas posicoes
-  /// frustra exatamente quem tem o pet mais facil de reconhecer.
-  static String ajudaDasCores(String nome) {
-    final pet = nome.trim().isEmpty ? 'seu pet' : nome.trim();
-    return 'Escolha a cor que mais aparece. Se $pet tiver duas, a segunda vai '
-        'no campo de baixo. Manchas, coleira e detalhes vão em Sinais '
-        'particulares, logo abaixo.';
-  }
-
   static const String rotuloDosSinais = 'Sinais particulares';
 
   /// Figma `91:59` e UX F1.5: exemplo visivel no campo.
@@ -170,13 +136,6 @@ abstract final class TextosDoCadastro {
     final pet = nome.trim().isEmpty ? 'seu pet' : nome.trim();
     return 'Este texto aparece para quem encontrar $pet. Não existe opção de '
         'deixá-lo privado: o jeito de não publicar é não escrever.';
-  }
-
-  static String cuidadosOQueEscrever(String nome) {
-    final pet = nome.trim().isEmpty ? 'seu pet' : nome.trim();
-    return 'Escreva uma ou duas frases, só o que alguém precisa saber nos '
-        'primeiros minutos com $pet. Quem vai ler está de pé na rua, com '
-        '$pet no colo e uma mão livre.';
   }
 
   /// A prevencao de erro que vale mais que qualquer mensagem depois: o motivo

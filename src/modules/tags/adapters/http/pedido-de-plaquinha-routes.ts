@@ -36,6 +36,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { PetId, UserId } from '../../../../shared/types/brands.js';
 import type { Autenticador } from '../../ports/autenticador.js';
@@ -171,13 +172,23 @@ export function registrarRotaDePedidoDePlaquinha(
   app: RegistradorDeRotas,
   deps: DependenciasDoPedidoDePlaquinha,
 ): void {
+  const corpo = corpoDe(deps.contrato, rotaDePedidoDePlaquinha.operationId);
   registrarRota(
     app,
     rotaDePedidoDePlaquinha,
     {
       // O schema do contrato, e e ele quem nomeia o campo que falta no 400.
-      schema: { body: corpoDe(deps.contrato, rotaDePedidoDePlaquinha.operationId) },
+      schema: { body: corpo },
       resolvedores: { account: (request) => contaDoTeto(request, deps) },
+      // O corpo e FECHADO no contrato (`CollarTagRequestInput` e
+      // `DeliveryAddress` declaram os dois `additionalProperties: false`), e sem
+      // este guarda o Ajv do Fastify APAGAVA o campo desconhecido em silencio:
+      // medido em 18/10, `delivery_address` com um `cpf` dentro respondia 200.
+      // Responder sucesso a dado pessoal que ninguem gravou e o pior desfecho
+      // possivel desta rota. `registrarRota` instala o guarda sozinho so na
+      // superficie administrativa, entao aqui ele entra a mao -- mesma forma de
+      // `directory-suggestion-routes.ts`.
+      preValidation: [recusarCampoDesconhecido(corpo, rotaDePedidoDePlaquinha.operationId)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const conta = await contaDoChamador(request, deps);

@@ -2,18 +2,15 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/modelos_rede.dart';
 import '../../api/rede_api.dart';
 import '../../escopo.dart';
-import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
-import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
@@ -70,52 +67,49 @@ class AgendaDaRede extends StatefulWidget {
   /// inventa texto de secao.
   final String? reforcoDaSecao;
 
-  static const String tituloDoVazio = 'A Rede ainda não tem encontros';
+  static const String tituloDoVazio = 'A Rede ainda não tem eventos';
   static const String explicacaoDoVazio =
-      'Os encontros da comunidade em praças e parques aparecem aqui assim que '
-      'forem marcados.';
+      'Aparecem aqui assim que forem criados.';
   static const String tituloDoVazioDePedidos = 'Nenhum pedido ainda';
   static const String explicacaoDoVazioDePedidos =
-      'Quando você pedir para participar de um encontro privado, ele aparece '
-      'aqui.';
-  static const String tituloDoVazioDeEncerrados = 'Nenhum encontro encerrado';
+      'Seus pedidos aparecem aqui.';
+  static const String tituloDoVazioDeEncerrados = 'Nenhum evento encerrado';
   static const String explicacaoDoVazioDeEncerrados =
-      'Os encontros que já aconteceram ficam aqui.';
+      'Os eventos que já aconteceram ficam aqui.';
   static const String tituloDoVazioFiltrado =
-      'Nenhum encontro com esses filtros';
+      'Nenhum evento com esses filtros';
   static const String explicacaoDoVazioFiltrado =
       'Tente outra palavra, outro período ou menos filtros.';
   static const String textoDaFalha =
-      'Não conseguimos carregar os encontros agora.';
+      'Não conseguimos carregar os eventos agora.';
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String exemploDaBusca = 'passeio, praça, Pinheiros';
 
   /// O rotulo da porta de criar. **Diz o verbo da pessoa**, e nao o nome do
-  /// recurso: quem abre a `Rede` quer marcar um encontro, nao "criar um
-  /// NetworkEvent".
-  static const String rotuloDeMarcar = 'Marcar um encontro';
-  static const String notaDasCidades =
-      'As cidades abaixo são as que já apareceram na agenda. O filtro procura '
-      'na base inteira.';
-  static const String notaDaDistancia =
-      'Calculada a partir da região do seu perfil. Só entram os encontros '
-      'públicos que têm mapa.';
-  static const String notaDeMaisPerto =
-      'Mais perto usa a região do seu perfil. Os encontros sem mapa ficam no '
-      'fim, e os privados saem da lista.';
+  /// recurso: quem abre a `Rede` quer criar um evento, nao "criar um
+  /// NetworkEvent". A redacao foi pedida pelo cliente em 18/10; o dominio
+  /// continua chamando a coisa de `encontro` no codigo inteiro.
+  ///
+  /// **Esta constante e a UNICA fonte do rotulo da porta de criar.** Ate
+  /// 18/10 havia duas: esta (`Marcar um encontro`, definida e SEM USO depois
+  /// que a porta saiu do corpo) e o literal `'Criar evento'` da barra, em
+  /// `abas.dart`. A mescla do lote juntou as duas frentes e fechou a
+  /// pendencia que o ramo do icone deixou escrita: o valor e o do
+  /// vocabulario novo, e quem desenha a porta le DAQUI.
+  static const String rotuloDeMarcar = 'Criar evento';
   static const String ordemTrocadaPeloServidor =
       'A ordem escolhida não está disponível agora. A lista usa a ordem '
       'marcada acima.';
 
   /// "Carregar mais" (ATENCAO: a especificacao nao desenhou a paginacao da
   /// agenda; texto no padrao de 28.2, `Tentar de novo` refaz uma coisa so).
-  static const String rotuloDeCarregarMais = 'Carregar mais encontros';
+  static const String rotuloDeCarregarMais = 'Carregar mais eventos';
   static const String falhaAoCarregarMais =
-      'Não conseguimos carregar mais encontros agora.';
+      'Não conseguimos carregar mais eventos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
   static String tituloDoVazioComBusca(String termo) =>
-      'Nenhum encontro com “$termo”';
+      'Nenhum evento com “$termo”';
 
   @override
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
@@ -489,24 +483,22 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            // **A porta de criar encontro, no CORPO e nao na `AppBar`.** O
-            // slot unico de acao da barra de topo e da secao (11.23.1), e
-            // numa raiz de aba o slot da esquerda e a gaveta. Acima da
-            // `TabBar` porque a acao e da SECAO e nao de uma aba: em
-            // `Pedidos` ela continua querendo dizer a mesma coisa.
+            // **A PORTA DE CRIAR EVENTO SUBIU PARA A BARRA DE TOPO** em
+            // 18/10/2026, e nao esta mais aqui. Pedido literal do cliente:
+            // "os itens de criacao, como evento e indicacao, ate o escanear
+            // poderia ser icones na barra superior ... e nao fique esse botao
+            // grande na pagina ocupando muito espaco".
             //
-            // **Habilitada sempre, inclusive sem conta e sem e-mail
-            // confirmado.** Quem decide e explica o bloqueio e a tela de
-            // destino, que mostra o motivo e a saida que o resolve. Um botao
-            // apagado aqui seria um botao morto sem explicacao -- e sem lugar
-            // onde escrever uma.
-            Padding(
-              padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-              child: BotaoSecundario(
-                rotulo: AgendaDaRede.rotuloDeMarcar,
-                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
-              ),
-            ),
+            // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no
+            // CORPO e nao na `AppBar`" --, e a reversao e decisao dele. Quem
+            // desenha o icone e `AcaoDeCriarNaBarra`; quem o entrega a casca e
+            // `AbaRede`, em `abas.dart`, que e quem conhece a sessao: a porta
+            // so aparece com conta E e-mail confirmado, tambem por decisao
+            // dele no mesmo dia.
+            //
+            // O que saiu daqui foi um `BotaoSecundario` de largura total com
+            // 48 dp de altura, dentro de um `Padding` de 16 dp embaixo: 64 dp
+            // de altura devolvidos ao corpo da agenda.
             TabBar(
               controller: controlador,
               onTap: (i) => _trocarAba(abas[i]),
@@ -525,8 +517,8 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                         plural: 'pedidos',
                       )
                     : const SubstantivoDaListagem(
-                        singular: 'encontro',
-                        plural: 'encontros',
+                        singular: 'evento',
+                        plural: 'eventos',
                       ),
                 // O campo ja foi desenhado acima; a barra recebe o controle
                 // para saber do TERMO APLICADO, e nao para desenhar de novo.
@@ -545,10 +537,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   /// A busca. **Aplicada no toque, e nunca na tecla.**
   ///
-  /// O rotulo `Buscar encontro` virou a dica DENTRO do campo, e o
+  /// O rotulo `Buscar evento` virou a dica DENTRO do campo, e o
   /// `(opcional)` saiu: pedido do cliente de 17/10/2026, *"Tire o texto do
   /// app buscar encontro (opcional), coloque o texto no placeholder do campo
-  /// buscar"*. O nome acessivel continua sendo `Buscar encontro` --
+  /// buscar"*. O nome acessivel continua sendo `Buscar evento` --
   /// `BichuField.rotuloVisivel` explica como, e por que campo com dica e sem
   /// rotulo e campo mudo.
   ///
@@ -558,7 +550,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return ControleDeBusca(
       controlador: _buscaControlador,
       alcance: AlcanceDaBusca.servidor,
-      rotulo: 'Buscar encontro',
+      rotulo: 'Buscar evento',
       termoAplicado: _recorte.termoLimpo,
       // `minLength: 2` no contrato: um caractere so produziria 400, e agora
       // ele e estado da lupa em vez de um `setState` que engolia a tecla.
@@ -665,7 +657,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         GrupoDeFiltro(
           chave: 'city',
           titulo: 'Cidade',
-          nota: AgendaDaRede.notaDasCidades,
           selecionado: r.cidade,
           opcoes: <OpcaoDeRecorte>[
             for (final c in cidades) OpcaoDeRecorte(codigo: c, rotulo: c),
@@ -688,7 +679,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
           GrupoDeFiltro(
             chave: 'max_km',
             titulo: 'Distância',
-            nota: AgendaDaRede.notaDaDistancia,
             selecionado: r.distanciaMaxima?.codigo,
             opcoes: <OpcaoDeRecorte>[
               for (final d in DistanciaMaxima.values)
@@ -783,7 +773,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return ControleDeOrdenacao(
       opcoes: opcoes,
       efetiva: _ordemEfetiva,
-      nota: _podeMedir ? AgendaDaRede.notaDeMaisPerto : null,
       porQueNaoEAPedida: pedida != null && pedida != _ordemEfetiva
           ? AgendaDaRede.ordemTrocadaPeloServidor
           : null,
@@ -794,7 +783,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     if (_fase == _Fase.carregando) {
       return <Widget>[
         Semantics(
-          label: 'Carregando encontros',
+          label: 'Carregando eventos',
           liveRegion: true,
           child: const Column(
             children: <Widget>[

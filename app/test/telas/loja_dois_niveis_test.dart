@@ -28,6 +28,7 @@
 // as frases estao por extenso, com acento.
 
 import 'package:bichu/api/modelos_loja.dart';
+import 'package:bichu/telas/loja/produto_da_loja.dart';
 import 'package:bichu/telas/loja/vitrine_da_loja.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,7 +36,9 @@ import 'package:http/http.dart' as http;
 
 import 'ajuda_de_tela.dart';
 import 'loja_com_dados_test.dart'
-    show abrirLoja, itemDoContrato, paginaDoContrato, redeDaVitrine, taxonomiaDoContrato;
+    show abrirLoja, itemDoContrato, paginaDoContrato, taxonomiaDoContrato;
+import 'loja_detalhe_do_produto_test.dart'
+    show detalheDoContrato, redeDaLojaEDoDetalhe, tocarNoCartao;
 
 /// A rede que atende a vitrine e o vocabulario, e registra as URLs pedidas.
 Future<http.Response> Function(http.Request) redeComVocabulario(
@@ -56,6 +59,48 @@ Future<http.Response> Function(http.Request) redeComVocabulario(
   };
 }
 
+/// Abre o DETALHE de um produto com a classificacao pedida.
+///
+/// ## Por que o detalhe, e nao o cartao
+///
+/// A linha de classificacao **saiu do cartao da vitrine em 17/10/2026**: o
+/// cliente pediu o cartao com foto, titulo e preco (commit `13c71a3`, "cartao
+/// de vitrine so com foto, titulo e preco"), e `CartaoDaLoja.build`
+/// (`vitrine_da_loja.dart`, linhas 643-760) nao desenha `linhaDaClassificacao`
+/// em lugar nenhum -- a ordem do cartao, escrita la em 18/10, e "carrossel,
+/// `Preço de referência`, titulo, linha do preco, `Compre agora`". O unico uso
+/// de `linhaDaClassificacao` no app e `produto_da_loja.dart`, linha 508.
+///
+/// Os casos deste grupo foram REPONTADOS para la, e nao apagados: o que eles
+/// medem -- os dois niveis, o ponto medio, o rotulo do SERVIDOR, a reserva do
+/// mapa legado -- continua sendo verdade do produto, e continua medido. O que
+/// mudou foi a superficie. Medi-los no cartao so provaria a remocao, e o caso
+/// que afirmava AUSENCIA (`treats`) ficava verde sem medir nada: na vitrine
+/// nao ha linha de classificacao para ter ou nao ter o codigo cru.
+Future<void> _abrirODetalheClassificado(
+  WidgetTester tester, {
+  String category = 'food',
+  String? categoryLabel = 'Rações',
+  String? subcategory,
+  String? subcategoryLabel,
+}) async {
+  final item = itemDoContrato(
+    category: category,
+    categoryLabel: categoryLabel,
+    subcategory: subcategory,
+    subcategoryLabel: subcategoryLabel,
+  );
+  await abrirLoja(
+    tester,
+    rede: redeDaLojaEDoDetalhe(
+      itens: <Map<String, dynamic>>[item],
+      detalhe: <String, dynamic>{...detalheDoContrato(), ...item},
+      urls: <Uri>[],
+    ),
+  );
+  await tocarNoCartao(tester, 'Bola Pop');
+}
+
 void main() {
   // -------------------------------------------------------------------------
   // 1 e 2: O CARTAO ESCREVE A CLASSIFICACAO
@@ -67,33 +112,24 @@ void main() {
     // O `expect` abaixo reprova, e e exatamente o estado em que a tela estava
     // antes de 17/10: o dado chegava e nao aparecia.
     testWidgets('ISCA -- os dois niveis aparecem, separados por ponto medio', (tester) async {
-      await abrirLoja(
+      await _abrirODetalheClassificado(
         tester,
-        rede: redeDaVitrine(
-          paginaDoContrato(<Map<String, dynamic>>[
-            itemDoContrato(
-              category: 'food',
-              categoryLabel: 'Rações',
-              subcategory: 'racao_seca',
-              subcategoryLabel: 'Ração seca',
-            ),
-          ]),
-        ),
+        subcategory: 'racao_seca',
+        subcategoryLabel: 'Ração seca',
       );
 
+      await rolarAte(tester, find.text('Rações · Ração seca'));
       expect(find.text('Rações · Ração seca'), findsOneWidget);
     });
 
     testWidgets('produto sem subcategoria mostra so a categoria, sem separador solto', (tester) async {
-      await abrirLoja(
+      await _abrirODetalheClassificado(
         tester,
-        rede: redeDaVitrine(
-          paginaDoContrato(<Map<String, dynamic>>[
-            itemDoContrato(category: 'bed', categoryLabel: 'Camas e casinhas'),
-          ]),
-        ),
+        category: 'bed',
+        categoryLabel: 'Camas e casinhas',
       );
 
+      await rolarAte(tester, find.text('Camas e casinhas'));
       expect(find.text('Camas e casinhas'), findsOneWidget);
       expect(find.textContaining('Camas e casinhas ·'), findsNothing);
     });
@@ -102,15 +138,9 @@ void main() {
       // `food` se chamava "Alimentação" neste binario antes de 17/10. O
       // servidor manda "Rações", e e isso que a tela escreve: um mapa em
       // codigo aqui faria a renomeacao de uma categoria exigir um APK.
-      await abrirLoja(
-        tester,
-        rede: redeDaVitrine(
-          paginaDoContrato(<Map<String, dynamic>>[
-            itemDoContrato(category: 'food', categoryLabel: 'Rações'),
-          ]),
-        ),
-      );
+      await _abrirODetalheClassificado(tester);
 
+      await rolarAte(tester, find.text('Rações'));
       expect(find.text('Rações'), findsOneWidget);
       expect(find.text('Alimentação'), findsNothing);
     });
@@ -119,16 +149,18 @@ void main() {
       // Servidor mais antigo que o aplicativo -- aparelho que atualizou antes
       // do deploy. A linha nao desaparece: ela usa o rotulo que este binario
       // carrega, e so para os seis codigos que existiam antes.
-      await abrirLoja(
+      await _abrirODetalheClassificado(
         tester,
-        rede: redeDaVitrine(
-          paginaDoContrato(<Map<String, dynamic>>[
-            itemDoContrato(category: 'toy', categoryLabel: null),
-          ]),
-        ),
+        category: 'toy',
+        categoryLabel: null,
       );
 
-      expect(find.text('Brinquedo'), findsOneWidget);
+      // `Brinquedos`, no PLURAL: o mapa legado deste binario declara
+      // `'toy': 'Brinquedos'` (`lib/api/modelos_loja.dart`, linha 56), e
+      // `find.text` compara a string inteira -- `'Brinquedo'` nao casa com
+      // `'Brinquedos'`. A isca escreveu o rotulo no singular.
+      await rolarAte(tester, find.text('Brinquedos'));
+      expect(find.text('Brinquedos'), findsOneWidget);
     });
 
     testWidgets('ISCA -- codigo NOVO sem rotulo nao vira codigo cru na tela', (tester) async {
@@ -138,18 +170,31 @@ void main() {
       //
       // Para ver reprovar, em `modelos_loja.dart` troque o `null` final de
       // `rotuloDaCategoria` por `codigo`.
-      await abrirLoja(
+      // **No DETALHE, que e onde a linha existe.** Na vitrine este caso ficava
+      // verde sem medir nada: nao ha linha de classificacao no cartao, entao
+      // `findsNothing` sobre `treats` nao podia reprovar nem com o defeito
+      // ligado.
+      await _abrirODetalheClassificado(
         tester,
-        rede: redeDaVitrine(
-          paginaDoContrato(<Map<String, dynamic>>[
-            itemDoContrato(category: 'treats', categoryLabel: null),
-          ]),
-        ),
+        category: 'treats',
+        categoryLabel: null,
       );
 
       expect(find.text('treats'), findsNothing);
-      // E o cartao continua inteiro: o titulo esta la.
-      expect(find.text('Bola Pop'), findsOneWidget);
+      // E a pagina continua inteira: o titulo esta la. **Dentro da
+      // `TelaDoProduto`**, porque o cartao da vitrine fica montado atras dela
+      // no ramo da `Loja` e tambem escreve `Bola Pop` -- `find.text` solto
+      // acha os dois.
+      // DUAS: o titulo da pagina (`headlineSmall`, com `header: true`) e o
+      // da barra de topo. A pagina escreve os dois de proposito, e contar
+      // afirma mais que `findsWidgets` -- se um deles sumir, o caso reprova.
+      expect(
+        find.descendant(
+          of: find.byType(TelaDoProduto),
+          matching: find.text('Bola Pop'),
+        ),
+        findsNWidgets(2),
+      );
     });
   });
 
@@ -175,7 +220,14 @@ void main() {
       expect(find.text('Categoria'), findsOneWidget);
       expect(find.text('Subcategoria'), findsNothing);
 
+      // **`Aplicar` depois da pastilha**: ela nao recorta nada sozinha
+      // (cliente, 17/10), e `Aplicar` e "o unico caminho de saida com efeito"
+      // (`lib/widgets/barra_de_listagem.dart`, linhas 86-87). O caso irmao de
+      // `Perto` afirma os dois lados (`perto_com_dados_test.dart`, linhas
+      // 869-877).
       await tester.tap(find.text('Rações'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       expect(urls.last.queryParameters['category'], 'food');
 
@@ -191,6 +243,8 @@ void main() {
       expect(find.text('Vermífugos'), findsNothing);
 
       await tester.tap(find.text('Ração seca'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['category'], 'food');
@@ -212,7 +266,14 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+      // **`Aplicar` depois da pastilha**: ela nao recorta nada sozinha
+      // (cliente, 17/10), e `Aplicar` e "o unico caminho de saida com efeito"
+      // (`lib/widgets/barra_de_listagem.dart`, linhas 86-87). O caso irmao de
+      // `Perto` afirma os dois lados (`perto_com_dados_test.dart`, linhas
+      // 869-877).
       await tester.tap(find.text('Camas e casinhas'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.tune));
@@ -238,12 +299,21 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+      // **`Aplicar` depois da pastilha**: ela nao recorta nada sozinha
+      // (cliente, 17/10), e `Aplicar` e "o unico caminho de saida com efeito"
+      // (`lib/widgets/barra_de_listagem.dart`, linhas 86-87). O caso irmao de
+      // `Perto` afirma os dois lados (`perto_com_dados_test.dart`, linhas
+      // 869-877).
       await tester.tap(find.text('Rações'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Ração seca'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       expect(urls.last.queryParameters['subcategory'], 'racao_seca');
 
@@ -251,6 +321,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Medicamentos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['category'], 'health');
@@ -274,7 +346,17 @@ void main() {
       );
 
       expect(find.byType(CartaoDaLoja), findsOneWidget);
-      expect(find.text('Rações'), findsOneWidget);
+      // O rotulo que o ITEM trouxe sobreviveu a falha do vocabulario. Lido do
+      // MODELO do cartao, e nao por `find.text`: a linha de classificacao
+      // saiu do cartao em 17/10 (ver `_abrirODetalheClassificado`, acima), e
+      // procurar o texto na vitrine media a superficie errada. O que o caso
+      // afirma e que a falha de UMA chamada (`taxonomy`) nao apagou o dado da
+      // OUTRA (`items`).
+      expect(
+        tester.widget<CartaoDaLoja>(find.byType(CartaoDaLoja)).item
+            .rotuloDaCategoria,
+        'Rações',
+      );
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();

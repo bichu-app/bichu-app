@@ -129,7 +129,86 @@ after(async () => {
  * `PET_JA_EXCLUIDO` nasce com `deleted_at` em OUTRO instante, e ele é o caso que
  * prova a reversibilidade exata da propagação.
  */
+/** Erro do `pg` com o `code` do Postgres, que é o que interessa aqui. */
+function codigoDoErro(erro: unknown): string {
+  return typeof erro === 'object' && erro !== null && 'code' in erro
+    ? String(erro.code)
+    : `(sem code) ${erro instanceof Error ? erro.message : String(erro)}`;
+}
+
+/**
+ * Disputa de TRAVA, e não resultado de medição. Só estes dois são repetidos.
+ *
+ * `40P01` é impasse; `55P03` é o teto de `lock_timeout` de quem está do outro
+ * lado. Nenhuma asserção, nenhum `23503`, nenhum `23514` e nenhum outro
+ * `SQLSTATE` entra aqui: a repetição não pode esconder medição.
+ */
+const DISPUTA_DE_TRAVA = new Set(['40P01', '55P03']);
+const TENTATIVAS = 5;
+
+/**
+ * A massa. Dois tutores, e o de quem FICA existe para os contrapesos: sem ele, a
+ * implementação mais simples que passa nos casos principais é esconder tudo de
+ * todo mundo.
+ *
+ * `PET_JA_EXCLUIDO` nasce com `deleted_at` em OUTRO instante, e ele é o caso que
+ * prova a reversibilidade exata da propagação.
+ *
+ * ===========================================================================
+ * POR QUE ISTO REPETE EM `40P01`, E POR QUE ISSO NÃO AFROUXA NADA
+ * ===========================================================================
+ * Medido em 18/10, na suíte inteira, em 1 de 3 execuções e sem defeito nenhum
+ * atrás:
+ *
+ *   Process 823 waits for RowExclusiveLock on relation 20495
+ *     (conversation_messages); blocked by process 815.
+ *   Process 815 waits for AccessExclusiveLock on relation 19812 (users);
+ *     blocked by process 823.
+ *
+ * O outro lado é `chave-estrangeira-contra-restricao.test.ts`: a isca da quinta
+ * forma faz `alter table conversation_messages drop constraint
+ * ..._sender_user_id_fkey`, e aquela DDL toma `AccessExclusiveLock` nas DUAS
+ * tabelas -- a chave estrangeira tem gatilho dos dois lados. O cabeçalho de
+ * `comConversa`, naquele arquivo, descreve este impasse por extenso e diz que
+ * **não existe ordem de cadeado que o resolva**: as duas direções
+ * (filha→pai e pai→filha) já convivem na suíte. Ele se protege repetindo a
+ * transação vítima, que é o remédio que a documentação do Postgres indica para
+ * `40P01`. ESTE arquivo é a outra vítima possível, e não repetia.
+ *
+ * A limpeza também mudou, e por um motivo medido: quando o impasse matava esta
+ * sessão no `insert into pets`, as duas contas já estavam gravadas, o `delete`
+ * do `finally` disputava a mesma trava e podia morrer junto -- e o sintoma
+ * aparecia como `duplicate key value violates unique constraint "users_pkey"`
+ * no caso SEGUINTE, que não tinha nada a ver. Agora a limpeza roda ANTES de
+ * cada tentativa e o erro do CASO sempre vence o erro da limpeza.
+ */
 async function comMassa(corpo: () => Promise<void>): Promise<void> {
+  for (let tentativa = 1; ; tentativa += 1) {
+    try {
+      await montarERodar(corpo);
+      return;
+    } catch (erro) {
+      if (!DISPUTA_DE_TRAVA.has(codigoDoErro(erro)) || tentativa >= TENTATIVAS) throw erro;
+    }
+  }
+}
+
+/** A limpeza usa `delete` porque é massa de teste numa pilha efêmera, e não o
+ * caminho de produto -- que, desde 17/10, não apaga nada. */
+async function limparMassa(): Promise<void> {
+  await cliente.query('delete from users where id in ($1, $2)', [QUE_SAI, QUE_FICA]);
+}
+
+async function montarERodar(corpo: () => Promise<void>): Promise<void> {
+  // ANTES, e não só depois: uma tentativa morta no impasse pode ter deixado as
+  // duas contas gravadas, e aí o `insert` abaixo sairia `23505` -- que NÃO é
+  // disputa de trava e abortaria a repetição com o erro errado.
+  await limparMassa();
+  // `Error | undefined`, e nao `unknown`: `@typescript-eslint/only-throw-error`
+  // reprova `throw` de `unknown`, e com razao. O erro do `pg` JA e um `Error`
+  // com `code`, entao o objeto original atravessa inteiro e `codigoDoErro`
+  // continua lendo o `SQLSTATE`; o `new Error` e so a rede para o que nao for.
+  let doCaso: Error | undefined;
   try {
     await cliente.query(
       `insert into users (id, email, deleted_at, status) values
@@ -155,11 +234,20 @@ async function comMassa(corpo: () => Promise<void>): Promise<void> {
       ],
     );
     await corpo();
-  } finally {
-    // A limpeza usa `delete` porque é massa de teste numa pilha efêmera, e não
-    // o caminho de produto -- que, desde 17/10, não apaga nada.
-    await cliente.query('delete from users where id in ($1, $2)', [QUE_SAI, QUE_FICA]);
+  } catch (erro) {
+    doCaso = erro instanceof Error ? erro : new Error(String(erro));
   }
+  try {
+    await limparMassa();
+  } catch (erroDaLimpeza) {
+    // O erro do CASO manda. Um impasse na limpeza não pode apagar a asserção
+    // que reprovou: era assim que o impasse saía como `duplicate key` no caso
+    // seguinte em vez de no caso que o sofreu.
+    if (doCaso === undefined) {
+      doCaso = erroDaLimpeza instanceof Error ? erroDaLimpeza : new Error(String(erroDaLimpeza));
+    }
+  }
+  if (doCaso !== undefined) throw doCaso;
 }
 
 async function contar(sql: string, parametros: unknown[]): Promise<string> {

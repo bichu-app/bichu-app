@@ -1753,17 +1753,24 @@ export interface paths {
          *
          *     ## Dado pessoal: o minimo, e so de entidade
          *
-         *     `display_name`, `kind`, `city`/`state`, `neighborhood` e **um contato
-         *     publico** -- o que a entidade ja divulga para ser contratada. **Nao ha
-         *     campo de documento** (CRMV, CNPJ) e **nao ha campo de pessoa fisica**:
-         *     documento e prova de verificacao, mora em `entity_verifications` e so
-         *     entra por quem o apresenta; pedi-lo aqui seria coletar o documento de
-         *     um terceiro pela mao de um estranho.
+         *     `display_name`, `kind`, `city`/`state`, `neighborhood`, `postal_code` e
+         *     **um contato publico** -- o que a entidade ja divulga para ser
+         *     contratada. **Nao ha campo de documento** (CRMV, CNPJ) e **nao ha
+         *     campo de pessoa fisica**: documento e prova de verificacao, mora em
+         *     `entity_verifications` e so entra por quem o apresenta; pedi-lo aqui
+         *     seria coletar o documento de um terceiro pela mao de um estranho.
          *
-         *     **Sem coordenada e sem endereco** (ADR-0006): nao ha mapa nem
-         *     geocodificacao neste caminho. `city`, `state` e `neighborhood` sao
-         *     rotulo de texto. O ponto do mapa e trabalho do painel, com mapa de
-         *     toque, como a propria `listDirectoryEntries` descreve.
+         *     **Sem coordenada e sem logradouro** (ADR-0006): nao ha mapa nem
+         *     geocodificacao neste caminho. `city`, `state`, `neighborhood` e
+         *     `postal_code` sao texto, e o CEP **nao** e convertido em ponto -- nem
+         *     aqui nem no app, que ignora de proposito a coordenada que o servico de
+         *     CEP devolve. O ponto do mapa e trabalho do painel, com mapa de toque,
+         *     como a propria `listDirectoryEntries` descreve.
+         *
+         *     **O CEP e guardado para o REVISOR** (cliente, 18/10: "pode armazenar o
+         *     cep sim!") e **nunca publicado**: ver `DirectorySuggestionInput.
+         *     postal_code`. Nao ha operacao de leitura de `directory_suggestions`
+         *     neste contrato, e o recibo abaixo nao o devolve.
          *
          *     ## As conferencias de texto, porque ninguem mais confere antes da fila
          *
@@ -1772,8 +1779,329 @@ export interface paths {
          *     (`code: bidi_control`), como todo texto que a pessoa escreve. O contato
          *     publico e a UNICA posicao em que telefone, site ou perfil pode entrar,
          *     e ele e conferido pelo formato do proprio `public_contact.kind`.
+         *
+         *     ## Moderacao de palavras (`code: inappropriate_language`)
+         *
+         *     `display_name` e `note` recusam tambem xingamento e injuria, **na hora
+         *     da escrita** (pedido do cliente, 18/10/2026). A trava e do SERVIDOR: um
+         *     aviso de formulario evita que a pessoa perca o texto digitado, mas nao
+         *     protege nada, porque esta operacao atende chamada direta.
+         *
+         *     A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+         *     nem em `errors[]` nem em `detail`: devolve-la transformaria o `400` em
+         *     oraculo de quem quer descobrir o filtro. A mensagem e sempre a mesma e
+         *     diz o que fazer.
+         *
+         *     **Isto nao e a prova de contorno, e nao substitui a revisao.** A lista
+         *     pega palavra escrita por extenso; frase ofensiva sem palavra proibida,
+         *     palavra grudada em outra e troca de caractere nao prevista passam. A
+         *     protecao de fundo continua sendo a remocao pelo painel e a denuncia.
+         *
+         *     Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+         *     tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+         *     (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+         *     tolerancia. `city`, `state` e `neighborhood` nao passam pela moderacao.
          */
         post: operations["suggestDirectoryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A pagina de um profissional ou estabelecimento
+         * @description A tela de detalhe que o cartao de `Perto` passou a abrir. Mesmos campos
+         *     do cartao, mais a pontuacao agregada.
+         *
+         *     **EXIGE CONTA, pelo mesmo motivo de `listDirectoryEntries`** e nao por
+         *     um motivo novo: ela devolve `phone_e164`, e
+         *     `src/tools/portao-contrato-publico.ts` reprova esse campo em qualquer
+         *     operacao alcancavel sem conta. Afrouxar o `security` daqui reprova
+         *     nominalmente, igual lá.
+         *
+         *     **So entrada publicada.** `slug` de rascunho, oculto ou removido
+         *     responde `404`, e nao `403`: a autorizacao mora na clausula `WHERE`
+         *     (ADR-0021) e um `403` confirmaria que aquele endereco existe. Quem
+         *     chega por link de um perfil que saiu do ar le "nao encontramos",
+         *     que e a verdade que ele tem direito de saber.
+         *
+         *     **Nenhum campo novo de cadastro apareceu aqui.** Site, e-mail,
+         *     WhatsApp, redes sociais, horario de funcionamento e foto **nao
+         *     existem** em `professionals` -- nao ha coluna e nao ha painel que as
+         *     preencha. Esta operacao devolve o que ha. Declarar campo que ninguem
+         *     pode preencher produziria uma tela com seis linhas vazias permanentes,
+         *     que e pior do que uma tela curta.
+         *
+         *     ## A distancia, e por que ela e NULA aqui com mais frequencia
+         *
+         *     Mesma regra de `listDirectoryEntries`: `distance_m` arredondada a 100 m
+         *     (ADR-0006), nula quando a entrada nao tem coordenada ou quando quem
+         *     chama nao tem localizacao de referencia valida. **A coordenada nao
+         *     entra pela requisicao** -- o servidor usa a que ja guarda (BICHUS-92).
+         *     Nao ha geocodificacao neste produto: `city`, `state` e `neighborhood`
+         *     sao rotulo e filtro, jamais fonte de ponto.
+         */
+        get: operations["getDirectoryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * As avaliacoes que outras pessoas escreveram
+         * @description A lista que a pagina do local mostra, no formato que o cliente pediu:
+         *     quem escreveu, a nota, a data e o texto.
+         *
+         *     **A avaliacao de quem desabilitou a conta NAO E LISTADA, e nao vira
+         *     anonima.** O predicado e `conta_habilitada(uuid)` (migracao
+         *     `20261017000013`), que e o ponto unico da definicao e trata o NULO como
+         *     habilitado. A contagem e a media de `getDirectoryEntry` usam o MESMO
+         *     predicado, entao "128 avaliacoes" e a lista nunca discordam -- que e o
+         *     defeito que aparece quando a agregacao e o filtro da lista sao escritos
+         *     em dois lugares.
+         *
+         *     **`author_display_name` e nulavel**, e nulo nao e falha: conta sem nome
+         *     de exibicao e estado normal, e a tela escreve "Alguem da comunidade".
+         *     **Nenhuma outra coisa sobre o autor sai daqui** -- nem conta, nem
+         *     quantos pets tem, nem as outras avaliacoes dele. A BICHUS-174 proibe
+         *     expor vinculo entre duas pessoas, e uma lista de avaliacoes que
+         *     identificasse o autor de forma navegavel seria exatamente isso.
+         *
+         *     **A minha avaliacao tambem aparece nesta lista**, marcada com
+         *     `mine: true`, e nao em um bloco separado do servidor: a tela e que
+         *     decide tirá-la do fluxo e por o campo de edicao no lugar. Isso evita a
+         *     resposta em que a mesma avaliacao vem duas vezes.
+         *
+         *     **Texto vazio e normal.** Quem deu so a nota tem `body` nulo, e a lista
+         *     o inclui -- a nota e a avaliacao, e o texto e o opcional (decisao do
+         *     cliente, 18/10).
+         */
+        get: operations["listDirectoryEntryReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grava a minha avaliacao deste local, ou atualiza a que ja escrevi
+         * @description **`PUT` e nao `POST`, e a escolha e a regra de produto escrita no
+         *     metodo.** O cliente decidiu "uma avaliacao por pessoa por local, que
+         *     ela possa editar e apagar; enviar de novo ATUALIZA a dela, nao cria
+         *     segunda". Com `POST` o segundo envio seria `409` e a tela precisaria de
+         *     um segundo caminho ("ja existe, agora chame o outro verbo"); com `PUT`
+         *     o segundo envio e a propria edicao. O banco cobra o mesmo com
+         *     `UNIQUE (professional_id, author_user_id)`, entao a regra vale mesmo se
+         *     esta prosa for ignorada.
+         *
+         *     O corpo da resposta diz qual dos dois aconteceu em `created`, para a
+         *     tela escolher entre "Avaliacao publicada" e "Avaliacao atualizada".
+         *
+         *     ## Quem pode avaliar
+         *
+         *     **Conta com E-MAIL CONFIRMADO**, a mesma regua que o cliente definiu
+         *     para criar evento ("so usuarios com os dados validados conseguem criar
+         *     eventos"). Sem canal verificado: **`409`
+         *     `contact-channel-unverified`**, que e **o mesmo tipo de problema que
+         *     criar encontro devolve** -- reusado de proposito, e nao um codigo novo:
+         *     a regra e a mesma regra, e dois tipos para um conceito fariam o app
+         *     decidir por dois caminhos onde ha um. O que muda e o texto, e ele
+         *     precisa mudar ("confirme seu e-mail para propor um encontro" numa tela
+         *     de avaliar local manda a pessoa para o lugar errado).
+         *
+         *     **Este 409 e sobre QUEM CHAMA, nao sobre o recurso**, e por isso ele
+         *     nao contradiz o ADR-0021. A regra de `404` daquele ADR protege a
+         *     EXISTENCIA do recurso; aqui o recurso ja foi confirmado como existente
+         *     pela leitura, e o que falta e um atributo da propria conta de quem
+         *     pede. Responder `404` esconderia de alguem a razao pela qual o proprio
+         *     botao dele nao funciona.
+         *
+         *     **Na pratica isso e e-mail**, porque nada em `src/` grava
+         *     `phone_verified_at`: a coluna existe e so e zerada. O predicado e o
+         *     mesmo `OR` de `estadoParaCriarEncontro` (e-mail OU telefone
+         *     verificado), copiado dele e nao escolhido aqui.
+         *
+         *     **Visitante sem conta nao escreve e nao e surpreendido**: `401`, e a
+         *     tela nem oferece o campo (ela sabe se ha sessao antes de desenhar).
+         *
+         *     **A avaliacao APARECE NA HORA.** Nao ha fila de aprovacao, e a ausencia
+         *     e decisao do cliente de 18/10, pedida com estas palavras: "onde ficara
+         *     disponivel para outros usuarios, como acontece na playstore". **Nao
+         *     confundir com a INDICACAO de um local novo**, que continua passando por
+         *     revisao do administrador: aquela cria um negocio com nome e endereco,
+         *     esta opina sobre um que ja esta no ar.
+         *
+         *     O contrapeso de a publicacao ser imediata e a denuncia
+         *     (`reportDirectoryEntryReview`) e a remocao pelo administrador
+         *     (`removeAdminDirectoryReview`), que entram junto nesta mesma fatia
+         *     exatamente porque isto fala de negocio real com nome e endereco.
+         *
+         *     ## O TETO QUE NAO EXISTE, e a lacuna e declarada
+         *
+         *     O teto acima e por CONTA (20/h). Ele impede uma conta de escrever em
+         *     massa, e a unicidade `(local, autor)` ja limita a UMA avaliacao por
+         *     pessoa por local -- entao uma conta so nao consegue empilhar notas
+         *     contra um negocio.
+         *
+         *     **O que ele NAO cobre e o ataque por MUITAS contas contra UM local.**
+         *     Para isso o balde precisaria ser por ALVO, e nao por quem chama -- uma
+         *     entrada `[directory_entry]` em `x-rate-limit`. Ela nao entrou porque
+         *     `directory_entry` nao esta em `DIMENSOES_CONHECIDAS` de
+         *     `src/shared/http/aplicacao-de-teto.ts`, e aquele arquivo e explicito
+         *     sobre o que isso significa: **dimensao nova e decisao de politica, nao
+         *     detalhe de rota.** Foi a mesma razao que manteve `q` fora do contrato
+         *     ate 22/09.
+         *
+         *     Inventar a dimensao aqui decidiria sozinho uma politica de plataforma
+         *     -- e um teto por alvo tem um custo de produto real que precisa ser
+         *     aceito por quem decide: um local que vira assunto legitimo (uma boa
+         *     indicacao que circula num grupo) passa a recusar avaliacao de gente de
+         *     boa-fe. **Fica relatado e nao resolvido.** Enquanto nao houver, a
+         *     contencao desse caso e a denuncia e a remocao pelo administrador, que e
+         *     humana e posterior.
+         *
+         *     ## Avaliar perfil nao reivindicado e permitido
+         *
+         *     Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao
+         *     reivindicado e permitida e fica visivel: e o que da valor ao diretorio
+         *     antes de os profissionais chegarem". Como hoje NENHUMA entrada e
+         *     reivindicada, este e o unico caso que existe.
+         */
+        put: operations["putMyDirectoryEntryReview"];
+        post?: never;
+        /**
+         * Apaga a minha avaliacao deste local
+         * @description **So a minha**, e o dono e resolvido na clausula `WHERE` e nao num
+         *     ramo de permissao: a consulta apaga onde `author_user_id` e quem chama.
+         *     Nao ha caminho em que esta rota alcance a avaliacao de outra pessoa,
+         *     nem com o identificador dela na mao -- ela nao aceita identificador de
+         *     avaliacao nenhum.
+         *
+         *     **Apagar e do AUTOR, nunca do avaliado.** O ADR-0011 e explicito: o
+         *     profissional "ganha direito de resposta publica, uma por avaliacao, e
+         *     nunca o direito de apagar". Quem contesta denuncia, e quem remove e a
+         *     moderacao, com o motivo na trilha. Esta rota nao abre aquela porta: o
+         *     avaliado nao e o autor.
+         *
+         *     **Idempotente.** Nao ter avaliacao e chamar isto devolve `204`, e nao
+         *     `404`: o estado pedido ("eu nao tenho avaliacao aqui") e o estado
+         *     final, e um erro aqui faria a tela tratar como falha um toque duplo no
+         *     botao. O `404` fica reservado para o local que nao existe ou nao esta
+         *     publicado.
+         *
+         *     A media e a contagem do local caem junto, porque sao calculadas na
+         *     consulta e nao guardadas (ver `DirectoryRating`).
+         */
+        delete: operations["deleteMyDirectoryEntryReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews/{reviewRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia uma avaliacao para a moderacao
+         * @description O contrapeso de a avaliacao aparecer na hora. Sem ela, a unica resposta
+         *     a uma avaliacao caluniosa sobre um negocio com nome e endereco seria
+         *     esperar que alguem da equipe passasse por ali.
+         *
+         *     **A denuncia NAO esconde a avaliacao**, e isso e deliberado: se
+         *     esconder, uma denuncia e todo o custo de apagar a avaliacao de um
+         *     concorrente, e o primeiro uso que alguem daria a esta rota seria esse.
+         *     Ela enfileira para a moderacao, que decide e registra o motivo
+         *     (ADR-0011). Quem remove e `removeAdminDirectoryReview`.
+         *
+         *     **`202` e nao `200`**: o que esta rota promete e que o pedido foi
+         *     recebido, nao que alguem ja olhou. Prometer decisao seria mentir sobre
+         *     o que existe -- nao ha equipe de moderacao de plantao.
+         *
+         *     **Denunciar duas vezes a mesma avaliacao nao duplica a fila** e
+         *     tambem nao devolve erro: a segunda chamada responde `202` e incrementa
+         *     a contagem de repeticao, igual a `conversation_reports` (migracao
+         *     `20260928000009`). Erro aqui ensinaria a quem denuncia que ele ja
+         *     denunciou, o que nao e informacao dele e nao muda nada.
+         *
+         *     **A propria avaliacao nao pode ser denunciada por quem a escreveu**
+         *     (`400`, `code: own_review`): quem quer tirar a sua do ar usa o
+         *     `DELETE`, que e a porta certa e imediata.
+         */
+        post: operations["reportDirectoryEntryReview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3589,6 +3917,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/directory/reviews/{reviewRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove uma avaliacao do ar, com o motivo na trilha
+         * @description **Remocao e EXCLUSAO LOGICA**: `status` vai para `'removed'` e
+         *     `moderation_reason` guarda o motivo. A linha fica. O ADR-0011 manda a
+         *     remocao ser "decisao de moderacao nossa, registrada na trilha com o
+         *     motivo", e trilha que aponta para uma linha apagada nao e trilha.
+         *
+         *     A avaliacao sai imediatamente da lista, da media e da contagem --
+         *     porque as tres leem `status = 'published'` na mesma clausula.
+         *
+         *     **O motivo e OBRIGATORIO**, e e a diferenca entre moderacao e
+         *     arbitrio: quem remove escreve por que, e isso fica legivel para quem
+         *     auditar depois. Ele **nunca sai para o app**: nenhuma resposta de
+         *     leitura publica projeta `moderation_reason`.
+         *
+         *     **Nao ha rota de restaurar nesta fatia.** Ela e a continuacao obvia e
+         *     ficou de fora conscientemente; `status` aceita `'published'` de volta,
+         *     entao restaurar nao exige migracao nova.
+         */
+        delete: operations["removeAdminDirectoryReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/network/join-requests/{requestRef}/decline": {
         parameters: {
             query?: never;
@@ -3728,6 +4100,266 @@ export interface paths {
          *     recebe o numero com mascara brasileira e manda E.164.
          */
         patch: operations["updateAdminDirectoryEntry"];
+        trace?: never;
+    };
+    "/admin/postal-codes/{postalCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O endereco de um CEP, para poupar digitacao no cadastro
+         * @description Troca um CEP por **rua, bairro, cidade e UF -- texto**, que e exatamente
+         *     o que o operador digitaria. Serve o formulario de entrada do diretorio
+         *     de `Perto`, e serve qualquer formulario nosso com campo de CEP.
+         *
+         *     **ISTO NAO E GEOCODIFICACAO, e a distincao e o que autoriza a
+         *     operacao.** A ADR-0006 proibe transformar endereco em COORDENADA; aqui
+         *     o caminho e o contrario. A reserva (BrasilAPI) devolve
+         *     `location.coordinates` com latitude e longitude -- medido em 17/10/2026
+         *     --, e o adaptador le quatro campos e **ignora o resto de proposito**.
+         *     Nenhuma latitude, nenhuma longitude, nenhum ponto, nenhum indice
+         *     espacial, e nenhuma coluna onde guardar.
+         *
+         *     **O que sai do nosso servidor para o terceiro e so o CEP.** Oito
+         *     digitos, que sao um codigo postal publico e nao o endereco de ninguem:
+         *     sem numero e sem nome, ele aponta para um trecho de rua, nao para uma
+         *     casa. Nem conta, nem sessao, nem nome, nem token vao na chamada de
+         *     saida.
+         *
+         *     **Nenhum desfecho desta operacao impede um cadastro.** `404` quer dizer
+         *     "este CEP nao existe nas bases" e `503` quer dizer "nao conseguimos
+         *     consultar agora"; nos dois a tela continua inteira, com os campos
+         *     editaveis e o botao de salvar vivo. CEP e conveniencia de digitacao, e
+         *     servico de terceiro fora do ar nao pode travar o cadastro de uma
+         *     clinica.
+         *
+         *     **Nada e guardado aqui.** A operacao nao escreve linha nenhuma: quem
+         *     grava o endereco e `createAdminDirectoryEntry` /
+         *     `updateAdminDirectoryEntry`, com o que o operador confirmou na tela.
+         */
+        get: operations["lookupAdminPostalCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de indicacoes que a comunidade mandou para o Perto
+         * @description So existe no painel: nenhuma operacao do aplicativo lista indicacao de
+         *     ninguem, nem como contagem. Sem filtro, vem a fila de `pending`, da
+         *     indicacao mais antiga para a mais nova -- a unica ordem justa numa fila
+         *     de trabalho humano, e e a ordem do indice parcial
+         *     `directory_suggestions_fila_de_revisao`.
+         *
+         *     **A indicacao decidida nao sai da fila nem do banco**: com
+         *     `review_status=approved` ou `review_status=declined` ela continua
+         *     legivel, com o motivo da recusa e o endereco da entrada que a aprovacao
+         *     produziu. Recusar nao apaga.
+         *
+         *     **`pending_total` e a contagem do aviso do menu**, e ela ignora o filtro
+         *     de proposito: o numero que o item da navegacao mostra responde "quanto
+         *     trabalho esta esperando", nao "quantas linhas esta pagina trouxe". Ele
+         *     passa pelo MESMO filtro de conta desabilitada da listagem -- um numero
+         *     que contasse o que a lista nao mostra faria o painel apontar para uma
+         *     fila vazia.
+         *
+         *     **Nada de quem indicou.** Nem nome, nem contagem por entidade, nem a
+         *     existencia de uma conta por tras: a coluna da autoria nunca sai do
+         *     servidor (ADR-0011 secao 4). O que a fila mostra e a ENTIDADE indicada,
+         *     mais o recado que a pessoa escreveu para quem revisa.
+         */
+        get: operations["listAdminDirectorySuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma indicacao da fila
+         * @description A indicacao em qualquer estado da revisao, para a tela de decisao poder
+         *     mostrar o contato publico e o recado inteiros antes de alguem decidir.
+         *
+         *     **Nao ha `ETag` aqui**, e a ausencia e a mesma das outras duas filas: a
+         *     decisao nao e uma edicao campo a campo, e decidir o que ja foi decidido
+         *     responde `400` com `code: suggestion_not_pending`.
+         *
+         *     Indicacao que nao existe e indicacao de **conta desabilitada** respondem
+         *     o mesmo `404`, e o predicado esta no `WHERE` e nao num `if` depois da
+         *     leitura (ADR-0021): para esta rota ela nao existe, e nunca `403`.
+         */
+        get: operations["getAdminDirectorySuggestion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprova a indicacao, e a entrada do diretorio passa a existir
+         * @description **Aprovar e o ponto da fila inteira: aprovado quer dizer que aparece no
+         *     `Perto`.** A operacao faz tres coisas numa transacao, e a trilha e a
+         *     quarta: marca a indicacao `approved`, grava a entrada do diretorio e
+         *     liga uma na outra.
+         *
+         *     **A entrada e escrita pelo MESMO caminho de `createAdminDirectoryEntry`**
+         *     -- a mesma transacao, o mesmo `inserirEntrada`, o mesmo
+         *     `source: import` e `claim_status: unclaimed`. Nao ha segunda escrita de
+         *     entrada neste produto: duas escritas seriam duas definicoes de como uma
+         *     entrada nasce, e e isso que o ADR-0023 secao 2 proibe.
+         *
+         *     `source` continua `import` e **nunca `community`**: a emenda 1 do
+         *     ADR-0011 tirou esse valor do `CHECK` de `professionals.source`, e quem
+         *     grava aqui e o painel decidindo -- exatamente a mesma situacao de um
+         *     operador que digita a clinica na mao, que e o que `import` descreve.
+         *     A indicacao da comunidade e o que trouxe o nome ate a mesa; ela nao e o
+         *     aceite, e nenhum aceite e gravado por aqui.
+         *
+         *     ## O LOCAL JA EXISTE: `slug` e o que resolve a duplicata
+         *
+         *     `slug` e obrigatorio e e o endereco publico da entrada. **Se ja existir
+         *     entrada com esse `slug`, nada e criado e nada na entrada existente e
+         *     alterado**: a indicacao e marcada `approved` e ligada aquela entrada, e
+         *     a resposta volta com `entry_created: false`. E assim, e nao com `409`,
+         *     porque duplicata e o caso COMUM desta fila -- duas pessoas indicam a
+         *     mesma clinica, ou indicam uma que o painel ja cadastrou -- e um conflito
+         *     deixaria a indicacao presa em `pending` para sempre, sem caminho nenhum
+         *     de sair. O operador procura o nome em `Perto`, acha
+         *     `clinica-sao-jorge`, aprova com esse `slug` e a fila anda.
+         *
+         *     Com `slug` novo, a entrada e criada e a resposta volta com
+         *     `entry_created: true`. **Ela vai ao ar (`published`) quando estiver
+         *     completa** pela mesma regua de `missing_to_publish` -- endereco, cidade,
+         *     UF e um canal de contato --, e fica em `draft` quando nao estiver. Quem
+         *     fica em `draft` e, na pratica, a indicacao cujo contato publico e
+         *     `website` ou `instagram`: `professionals` so tem `phone_e164` como canal,
+         *     e inventar coluna para carregar os outros dois nao e trabalho desta
+         *     fila. Para esses casos o corpo aceita `phone_e164`, que e o telefone
+         *     COMERCIAL da entidade: informado, a entrada nasce no ar; omitido, ela
+         *     nasce rascunho e `entry.missing_to_publish` diz o que falta.
+         *
+         *     **Indicacao ja decidida responde `400`** (`code: suggestion_not_pending`):
+         *     aprovar duas vezes criaria uma segunda entrada do mesmo lugar, que e a
+         *     duplicata que esta operacao existe para evitar. Indicacao inexistente, ou
+         *     de conta desabilitada, responde `404` (ADR-0021).
+         *
+         *     **Sem geocodificacao** (ADR-0006): `city`, `state` e `neighborhood` da
+         *     indicacao sao copiados como ROTULO DE TEXTO, e nao viram ponto. A
+         *     entrada publicada sem coordenada simplesmente nao participa da ordem por
+         *     distancia, e `distance_available: false` ja sabe dizer isso.
+         *
+         *     **O recado de quem indicou (`note`) NAO e copiado para a entrada.** Ele
+         *     e para quem revisa, e publica-lo faria o diretorio carregar avaliacao da
+         *     comunidade -- outro modelo, que nao existe (ADR-0011 secao 5.4).
+         */
+        post: operations["approveAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa a indicacao, com o motivo escrito
+         * @description **O motivo e obrigatorio**, ao contrario das outras duas filas do painel
+         *     -- e a diferenca e de proposito. La o motivo seria mensagem para o tutor,
+         *     e mensagem e v2. Aqui o motivo e para o PROXIMO REVISOR: a mesma clinica
+         *     vai ser indicada outra vez, e sem o motivo escrito quem olhar depois
+         *     refaz a checagem que alguem ja fez -- "nao atende pet", "fechou",
+         *     "telefone de pessoa fisica". O motivo nao e publicado em lugar nenhum e
+         *     nao chega a quem indicou.
+         *
+         *     **A indicacao NAO e apagada.** Ela fica com `review_status: declined`,
+         *     `decided_at` preenchido e `decline_reason` gravado, e continua legivel
+         *     em `listAdminDirectorySuggestions` com
+         *     `review_status=declined`. A `20261017000004` ja recusa a propria descida
+         *     quando ha indicacao gravada, pelo mesmo motivo: o que a comunidade
+         *     escreveu, e a memoria de quem revisou, nao se descarta em silencio.
+         *
+         *     **Indicacao ja decidida responde `400`**
+         *     (`code: suggestion_not_pending`), e nao `409`: recusar o que foi aprovado
+         *     apagaria uma entrada que ja pode estar no ar. Reverter decisao nao e
+         *     operacao desta fila -- a entrada se retira por
+         *     `updateAdminDirectoryEntry` com `status: hidden`, que e onde essa decisao
+         *     mora.
+         *
+         *     Indicacao inexistente, ou de conta desabilitada, responde `404`
+         *     (ADR-0021).
+         */
+        post: operations["declineAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/tag-requests": {
@@ -5055,6 +5687,32 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * @description A pontuacao agregada, **para o cartao da lista mostrar a media e a
+             *     quantidade** -- o cliente pediu os dois "na lista e na pagina"
+             *     (18/10/2026).
+             *
+             *     **OPCIONAL, e a opcionalidade e deliberada e nao timidez.** O APK
+             *     publicado le esta resposta e nao conhece este campo; tornar o campo
+             *     obrigatorio seria mudanca de contrato para ele. Alem disso, uma
+             *     resposta que nao conseguiu agregar e melhor sem o campo do que com
+             *     media zero -- zero se le como "pessimo", e um local sem avaliacao
+             *     nao e pessimo. **O cartao sem `rating` nao desenha estrela
+             *     nenhuma**, e nao desenha "0,0".
+             *
+             *     **O custo da agregacao e por PAGINA e nao por entrada**, e isso
+             *     importa porque esta operacao ja carrega `x-effects:
+             *     [expensive_query]`: a contagem sai de um unico `GROUP BY` sobre
+             *     `professional_reviews (professional_id, status, created_at DESC)`
+             *     restrito aos no maximo 20 `professional_id` da pagina, e nao de 20
+             *     chamadas a `pontuacao_do_local`. Vinte chamadas a funcao seriam o
+             *     N+1 que uma lista paginada convida a escrever.
+             *
+             *     O recorte e o MESMO da pagina do local e da lista de avaliacoes
+             *     (`status = 'published'` e `conta_habilitada(author_user_id)`), para
+             *     a media do cartao e a da pagina nunca discordarem.
+             */
+            rating?: components["schemas"]["DirectoryRating"];
             verification: components["schemas"]["DirectoryVerification"];
             /**
              * @description Distancia ate a localizacao de referencia de quem chama,
@@ -5123,8 +5781,8 @@ export interface components {
         };
         /**
          * @description A sugestao da comunidade. **O minimo que permite checar**, e nada alem:
-         *     nome, atividade, cidade, bairro opcional, um contato publico e um
-         *     recado curto para quem revisa.
+         *     nome, atividade, cidade, bairro e CEP opcionais, um contato publico e
+         *     um recado curto para quem revisa.
          *
          *     **Nao tem** `crmv_number`, `cnpj`, `verification_level`, `status`,
          *     `slug`, `about`, `geo`, `street_address`, `source` nem
@@ -5132,6 +5790,15 @@ export interface components {
          *     de quem sugere. Verificacao e prova de quem a apresenta
          *     (`entity_verifications`); publicacao, nivel e ponto do mapa sao do
          *     painel.
+         *
+         *     **`postal_code` entrou em 18/10/2026 e `street_address` NAO**, e a
+         *     diferenca nao e descuido. O CEP e opcional, aponta para um trecho de
+         *     rua e nao para uma porta, e tem destinatario: o revisor do painel, que
+         *     precisa achar o estabelecimento para convida-lo. Logradouro e numero
+         *     apontam para a porta de um terceiro que nao pediu nada, e nao tem
+         *     destinatario nenhum -- o endereco publico da entrada continua sendo
+         *     trabalho do painel (ADR-0011). Nenhum dos dois sai em superficie
+         *     publica (ADR-0010).
          */
         DirectorySuggestionInput: {
             /**
@@ -5143,6 +5810,43 @@ export interface components {
             city: string;
             state: string;
             neighborhood?: string;
+            /**
+             * @description O CEP do estabelecimento, **oito digitos, sem mascara e sem
+             *     hifen** -- a MESMA forma de `TagRequestInput.postal_code`, e nao
+             *     uma segunda redacao dela. O campo do app so aceita digito, e uma
+             *     forma canonica no banco e o que faz duas sugestoes do mesmo lugar
+             *     serem comparaveis; `05435-000` e `05435000` guardados lado a lado
+             *     nao sao.
+             *
+             *     **OPCIONAL, e nao e exigencia nova.** Quem indica uma clinica de
+             *     outro bairro quase sempre nao sabe o CEP dela, e cobra-lo trocaria
+             *     uma indicacao por um campo inventado -- o mesmo juizo de
+             *     `neighborhood`. `required` nao mudou.
+             *
+             *     O app tambem o usa para BUSCAR bairro, cidade e estado em servico
+             *     publico (ViaCEP, com BrasilAPI de reserva) e preencher os campos,
+             *     **que seguem editaveis** -- decisao do cliente de 17/10. Isso e
+             *     texto e nao coordenada: **nada aqui e geocodificado** (ADR-0006),
+             *     e o servidor nao participa da busca nem a repete.
+             *
+             *     ## Guardado para o REVISOR, e nunca publicado
+             *
+             *     O cliente autorizou guardar em 18/10 ("pode armazenar o cep
+             *     sim!"), e o destinatario e a fila de revisao do painel: ela precisa
+             *     achar o estabelecimento para convida-lo (ADR-0011, convite e
+             *     aceite).
+             *
+             *     **Guardar para quem revisa nao e mostrar em publico, e a regra de
+             *     superficie publica continua inteira:** rua e CEP nao saem no
+             *     diretorio (ADR-0010, itens 4 e 5 -- bairro e cidade sao o teto).
+             *     `postal_code` ja esta nas duas listas de campo proibido em
+             *     resposta sem conta (`src/tools/portao-contrato-publico.ts` e
+             *     `src/shared/http/vazamento-publico.ts`), e nao ha operacao de
+             *     LEITURA de `directory_suggestions` neste contrato -- nem publica
+             *     nem com conta. O recibo desta operacao e
+             *     `additionalProperties: false` e nao o traz de volta.
+             */
+            postal_code?: string;
             public_contact: components["schemas"]["DirectorySuggestionContact"];
             /**
              * @description Opcional, **para quem revisa** e nao para o diretorio: por que a
@@ -5174,6 +5878,171 @@ export interface components {
             state: components["schemas"]["DirectorySuggestionState"];
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
+         *
+         *     **Nada de quem indicou**, em campo nenhum: nem nome, nem contagem por
+         *     entidade, nem a existencia de uma conta por tras. A coluna da autoria
+         *     leva a marca `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao
+         *     `20261017000004` (ADR-0011 secao 4, BICHUS-174), e o que nao chega ao
+         *     tipo do servidor nao tem como sair daqui. **Nada de `id`** (ADR-0010
+         *     item 6): o enderecamento e por `reference`.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state` aqui
+         *     e a UF, na mesma projecao, exatamente como na tabela.
+         *     `DirectorySuggestionReceipt` pode chamar o seu de `state` porque o
+         *     recibo do aplicativo nao devolve a UF.
+         */
+        AdminDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O mesmo que o aplicativo recebeu no recibo. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            /**
+             * @description O recado PARA QUEM REVISA. Sai aqui porque esta fila e justamente
+             *     quem revisa; ele **nao** e copiado para a entrada do diretorio na
+             *     aprovacao, e nao e publicado em lugar nenhum (ADR-0011 secao 5.4).
+             */
+            note?: string | null;
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description O motivo da recusa, escrito pelo administrador para o PROXIMO
+             *     revisor. Nulo em tudo que nao foi recusado. Nao e publicado e nao
+             *     chega a quem indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco publico da entrada do diretorio que a aprovacao produziu
+             *     -- ou da entrada que **ja existia** e a que a indicacao foi ligada.
+             *     Nulo em tudo que nao foi aprovado. E por ele que o painel pula da
+             *     fila para a entrada.
+             */
+            entry_slug?: string | null;
+        };
+        AdminDirectorySuggestionPage: {
+            items: components["schemas"]["AdminDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /** @description Quantas linhas o recorte desta chamada tem, com o filtro aplicado. */
+            total: number;
+            /**
+             * @description **A contagem do aviso do menu**, e ela IGNORA o filtro de proposito:
+             *     o numero que o item da navegacao mostra responde "quanto trabalho
+             *     esta esperando". Passa pelo mesmo filtro de conta desabilitada da
+             *     listagem e da leitura -- os tres lugares, porque filtrar em um so
+             *     faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito
+             *     que a fila da Rede ja produziu.
+             */
+            pending_total: number;
+        };
+        /**
+         * @description O corpo da aprovacao. **`slug` e o endereco publico da entrada**, e e
+         *     ele que resolve a duplicata: se ja existir entrada com esse `slug`, nada
+         *     e criado, nada na entrada existente e alterado, e a indicacao e ligada
+         *     aquela entrada (`entry_created: false`).
+         *
+         *     **Nao ha `city`, `state`, `kind` nem `display_name` aqui**: esses vem da
+         *     indicacao, e deixar o operador reescreve-los faria a aprovacao ser um
+         *     formulario de cadastro com outro nome -- para isso existe
+         *     `createAdminDirectoryEntry`. Corrigir a entrada depois de aprovada e
+         *     `updateAdminDirectoryEntry`.
+         *
+         *     **Nao ha `status`.** Publicar nao e parametro: a entrada vai ao ar
+         *     quando estiver completa pela regua de `missing_to_publish`, e fica em
+         *     `draft` quando nao estiver.
+         */
+        AdminDirectorySuggestionApproval: {
+            slug: components["schemas"]["Slug"];
+            /**
+             * @description O telefone COMERCIAL da entidade (ADR-0011 secao 4), opcional, e so
+             *     usado quando a entrada e criada agora. Existe porque
+             *     `professionals` so tem `phone_e164` como canal de contato: a
+             *     indicacao cujo contato publico e `website` ou `instagram` nao tem o
+             *     que copiar, e sem telefone a entrada nasce `draft` e nao aparece no
+             *     `Perto`. Informado, a entrada nasce no ar. Ignorado quando a
+             *     indicacao e ligada a uma entrada que ja existe -- alterar a entrada
+             *     existente e `updateAdminDirectoryEntry`, que tem `If-Match`.
+             */
+            phone_e164?: string;
+        };
+        /** @description A indicacao aprovada, a entrada do diretorio, e qual dos dois caminhos aconteceu. */
+        AdminDirectorySuggestionApproved: {
+            suggestion: components["schemas"]["AdminDirectorySuggestion"];
+            entry: components["schemas"]["AdminDirectoryEntry"];
+            /**
+             * @description `true` quando a entrada nasceu desta aprovacao; `false` quando a
+             *     indicacao foi ligada a uma entrada que ja existia, que e a
+             *     duplicata. A tela diz as duas coisas com palavras diferentes:
+             *     "entrada criada" e "ligada a entrada que ja estava no Perto".
+             */
+            entry_created: boolean;
+        };
+        /**
+         * @description O corpo da recusa. **O motivo e obrigatorio**, ao contrario das outras
+         *     duas filas do painel: ele e para o PROXIMO revisor, porque a mesma
+         *     entidade vai ser indicada outra vez. Nao e publicado e nao chega a quem
+         *     indicou.
+         */
+        AdminDirectorySuggestionDecline: {
+            /**
+             * @description Por que a indicacao foi recusada. Texto puro, com o mesmo teto do
+             *     recado da indicacao: contato e pagamento sao recusados (D59) e
+             *     controle bidirecional tambem, como todo texto que uma pessoa
+             *     escreve neste produto.
+             */
+            reason: string;
+        };
+        /**
+         * @description O que a busca de CEP devolve: **texto, nunca coordenada** (ADR-0006).
+         *
+         *     Os quatro campos sao os que um formulario preenche, e sao os mesmos
+         *     quatro que `app/lib/api/busca_de_cep.dart` ja lia das duas bases desde
+         *     17/10/2026 -- esta forma espelha a dele e nao inventa uma segunda.
+         *
+         *     **O que foi deixado de fora, e cada ausencia e deliberada:**
+         *
+         *     - `location.coordinates` da BrasilAPI (latitude e longitude). Ler isso
+         *       transformaria uma busca de texto num geocodificador, que e o que a
+         *       ADR-0006 proibe. Nao ha campo aqui, nao ha coluna no banco e o
+         *       adaptador nunca o le.
+         *     - `ibge`, `timezoneName` e `service`: nenhum tem campo em formulario
+         *       nenhum, e guardar dado sem finalidade e o oposto da minimizacao.
+         *     - `complemento` do ViaCEP. **Ele NAO e o complemento de quem preenche**:
+         *       vem como "ate 609 - lado impar" e descreve a FAIXA da rua. Jogar isso
+         *       num campo de complemento poria o conjunto de ninguem no endereco de
+         *       uma clinica.
+         */
+        PostalCodeAddress: {
+            /**
+             * @description O logradouro. **Pode vir vazio**, e isso nao e erro: CEP de cidade
+             *     inteira ("CEP geral") nao aponta para uma rua. A tela deixa o campo
+             *     para quem preenche.
+             */
+            street: string;
+            /** @description O bairro. Vazio pelo mesmo motivo de `street`. */
+            neighborhood: string;
+            city: string;
+            /**
+             * @description A UF, duas letras maiusculas. Quando a base nao devolve cidade ou
+             *     devolve UF que nao tem dois caracteres, a resposta nao e `200`: o
+             *     adaptador trata como "nao encontrado" em vez de entregar endereco
+             *     pela metade, que apagaria o que a pessoa ja tinha digitado.
+             */
+            state: string;
         };
         /**
          * @description A situacao da entrada. Espelha `professionals.status` e a entrada
@@ -5244,6 +6113,21 @@ export interface components {
             state?: string;
             neighborhood?: string;
             /**
+             * @description CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
+             *     de `CollarTagShippingAddress.postal_code`, copiado dele. O painel
+             *     recebe com mascara e manda assim.
+             *
+             *     `GET /v1/admin/postal-codes/{postalCode}` o troca por rua, bairro,
+             *     cidade e UF **para poupar digitacao**, e o resultado e editavel: o
+             *     servidor nao refaz a busca e nao confere o endereco contra o CEP.
+             *     Quem cadastra manda o que conferiu na tela.
+             */
+            postal_code?: string;
+            street?: string;
+            /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. Mesma decisao de `CollarTagShippingAddress.street_number`. */
+            street_number?: string;
+            complement?: string;
+            /**
              * @description Telefone **comercial** em E.164, publicado de proposito pela
              *     entidade que aceitou aparecer para ser contratada (ADR-0011 secao
              *     4). Deliberadamente diferente do telefone de conta de usuario, que
@@ -5267,6 +6151,10 @@ export interface components {
             city?: string | null;
             state?: string | null;
             neighborhood?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
             /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
             phone_e164?: string | null;
             /**
@@ -5296,6 +6184,10 @@ export interface components {
             city?: string | null;
             state?: string | null;
             neighborhood?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
             phone_e164?: string | null;
             status: components["schemas"]["DirectoryEntryStatus"];
             /**
@@ -5339,6 +6231,275 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description A pontuacao agregada de um local, no formato que a Play Store tornou
+         *     legivel: a media, quantas pessoas avaliaram e como as notas se
+         *     distribuem.
+         *
+         *     **CALCULADA NA CONSULTA, nao materializada.** Nao ha coluna
+         *     `rating_average` em `professionals` e nao ha gatilho que a mantenha. O
+         *     motivo e consistencia e nao preguica: media guardada tem quatro
+         *     caminhos de invalidacao (criar, editar, apagar, remover pela moderacao)
+         *     mais um quinto invisivel -- o autor desabilitar a conta, que muda a
+         *     media de todo local que ele avaliou sem tocar em nenhuma avaliacao. Um
+         *     gatilho em `professional_reviews` nao enxerga esse quinto caminho, e a
+         *     media ficaria errada em silencio, que e o pior defeito desta classe.
+         *     Com `AVG` sobre o indice de `(professional_id, status)` a conta sai da
+         *     mesma consulta da pagina, e a pagina le UM local.
+         *
+         *     **O recorte da conta e identico ao da lista** (`status = 'published'` e
+         *     `conta_habilitada(author_user_id)`), e isso e o que impede "128
+         *     avaliacoes" sobre uma lista que mostra 126.
+         *
+         *     **`average` e nulo quando `count` e zero**, e nao zero: zero e uma nota
+         *     possivel de se ler como "pessimo", e um local sem avaliacao nao e
+         *     pessimo. A tela escreve "Ainda sem avaliacoes" e nao desenha estrela
+         *     nenhuma.
+         */
+        DirectoryRating: {
+            /**
+             * Format: double
+             * @description A media das notas publicadas, **com uma casa decimal** (o servidor
+             *     arredonda; a tela nao decide). Nula quando `count` e zero.
+             */
+            average?: number | null;
+            /** @description Quantas avaliacoes publicadas o local tem. */
+            count: number;
+            /**
+             * @description Quantas avaliacoes em cada nota. **As cinco chaves vem sempre**,
+             *     inclusive com zero: a barra de uma nota que ninguem deu precisa
+             *     existir vazia, senao o grafico muda de forma e deixa de ser
+             *     comparavel entre locais.
+             */
+            histogram: {
+                1: number;
+                2: number;
+                3: number;
+                4: number;
+                5: number;
+            };
+        };
+        /**
+         * @description A pagina do local. **Os mesmos campos de `DirectoryEntrySummary`**,
+         *     mais `rating` e `my_review_ref`.
+         *
+         *     Ela repete os campos em vez de usar `allOf` com o resumo porque o
+         *     gerador de tipos de `src/`, `admin/` e `web/` produz uniao de
+         *     interseccao para `allOf`, e um campo nulavel atravessa isso perdendo a
+         *     nulabilidade. Os tres geradores leem este arquivo.
+         *
+         *     **Nao ganhou nenhum campo de cadastro que nao exista no banco.** Site,
+         *     e-mail, WhatsApp, redes sociais, horario e foto nao sao colunas de
+         *     `professionals`; nao ha de onde preenche-los e eles nao estao aqui.
+         *
+         *     **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
+         *     quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
+         *     (ADR-0010 item 6 e BICHUS-174).
+         */
+        DirectoryEntryDetail: {
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            display_name: string;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            about?: string | null;
+            /**
+             * @description Telefone **comercial** (ADR-0011 secao 4), e a unica acao de
+             *     contato que a pagina oferece. Mesmo aviso de
+             *     `DirectoryEntrySummary`: este campo so pode existir porque a
+             *     operacao exige conta -- ele esta na lista de proibidos de
+             *     `src/tools/portao-contrato-publico.ts`.
+             */
+            phone_e164?: string | null;
+            verification: components["schemas"]["DirectoryVerification"];
+            /**
+             * @description Arredondada a 100 m, que e a grade do ADR-0006. Nula quando a
+             *     entrada nao tem coordenada ou quando quem chama nao tem localizacao
+             *     de referencia valida. **Nunca sai o ponto.**
+             */
+            distance_m?: number | null;
+            rating: components["schemas"]["DirectoryRating"];
+            /**
+             * @description O `ref` da MINHA avaliacao deste local, ou nulo se eu nao avaliei.
+             *
+             *     Existe para a tela saber, **antes de montar**, se desenha o campo
+             *     vazio ou a minha avaliacao com `Editar` e `Apagar`. Sem ele a tela
+             *     teria de varrer a paginacao inteira das avaliacoes procurando
+             *     `mine: true`, e a minha pode estar na pagina 7.
+             */
+            my_review_ref?: string | null;
+            /**
+             * @description **Se EU posso avaliar agora**, e nao se a funcionalidade existe. E
+             *     falso para conta sem e-mail confirmado -- a mesma regua de criar
+             *     encontro.
+             *
+             *     Ele existe para a tela nao oferecer um campo que vai levar `403`.
+             *     **Nao substitui a checagem do servidor**: `putMyDirectoryEntryReview`
+             *     reavalia a condicao, porque um campo de resposta e uma dica de
+             *     interface e nunca a autorizacao.
+             */
+            can_review?: boolean;
+            /**
+             * @description Por que `can_review` e falso, para a tela escrever a frase certa e
+             *     oferecer a acao certa (confirmar o e-mail) em vez de um "nao e
+             *     possivel" sem saida. Nulo quando `can_review` e verdadeiro.
+             *
+             *     Enum de um valor so hoje, e aberto de proposito: quando houver
+             *     bloqueio por moderacao ele entra aqui e nao em um segundo booleano.
+             * @enum {string|null}
+             */
+            review_blocked_reason?: "unverified_channel" | null;
+        };
+        /**
+         * @description Uma avaliacao, como a lista e a pagina a mostram.
+         *
+         *     **Nao ha identificador do autor, de nenhuma forma.** Nem conta, nem
+         *     `slug`, nem ref opaco estavel entre locais. `ref` identifica a
+         *     AVALIACAO e e sorteado por linha: duas avaliacoes da mesma pessoa em
+         *     locais diferentes nao tem nada em comum na resposta. A BICHUS-174
+         *     proibe expor vinculo entre duas pessoas "inclusive como contagem e como
+         *     existencia", e um ref de autor permitiria montar o historico de
+         *     qualquer um.
+         */
+        DirectoryReview: {
+            /**
+             * @description O identificador opaco da avaliacao, usado por
+             *     `reportDirectoryEntryReview` e pela remocao do painel. **Nao e
+             *     UUID** (ADR-0010 item 6) e nao e derivado do autor.
+             */
+            ref: string;
+            /** @description A nota, inteira de 1 a 5. Nunca nula: a nota E a avaliacao. */
+            rating: number;
+            /**
+             * @description A recomendacao em texto. **Nula e estado normal e frequente**: o
+             *     cliente decidiu que o texto e opcional, e dar so a nota tem de
+             *     funcionar. A tela mostra o item com as estrelas e sem paragrafo.
+             *
+             *     **Texto puro, sem HTML e sem marcacao.** O servidor recusa `<` e
+             *     `>` no corpo (`400`) em vez de escapar na saida: escapar depende de
+             *     toda tela futura lembrar de escapar, e recusar na entrada vale uma
+             *     vez. Quem escrever "nota 10 <3" leva `400` -- custo aceito e
+             *     preferivel ao inverso.
+             */
+            body?: string | null;
+            /**
+             * @description O nome de exibicao de quem escreveu, **ou nulo**. Nulo e estado
+             *     normal (conta sem nome), e a tela escreve "Alguem da comunidade" em
+             *     vez de deixar a linha muda.
+             */
+            author_display_name?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a avaliacao foi publicada pela primeira vez.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Quando o autor a editou pela ultima vez, ou nulo se nunca editou.
+             *     **A tela diz "editada"**: uma avaliacao reescrita depois de quem
+             *     respondeu a ela ter lido a primeira versao e um formato conhecido
+             *     de ma-fe, e marcar a edicao e o que o torna visivel.
+             */
+            edited_at?: string | null;
+            /**
+             * @description Verdadeiro na avaliacao de quem chama. A tela a tira do fluxo e a
+             *     mostra no bloco de edicao, com `Editar` e `Apagar`.
+             */
+            mine: boolean;
+        };
+        DirectoryReviewPage: {
+            items: components["schemas"]["DirectoryReview"][];
+            page: number;
+            limit: number;
+            /**
+             * @description O total de avaliacoes publicadas do local, **o mesmo numero de
+             *     `DirectoryRating.count`**, porque as duas consultas usam o mesmo
+             *     recorte. Dois numeros diferentes na mesma tela e o defeito que a
+             *     duplicacao de recorte produz.
+             */
+            total: number;
+        };
+        /** @description O corpo de `putMyDirectoryEntryReview`. */
+        DirectoryReviewInput: {
+            /**
+             * @description **Inteira de 1 a 5**, e obrigatoria. Nota fora da faixa e `400`, e
+             *     o `CHECK` da tabela cobra o mesmo no banco -- duas recusas, porque
+             *     uma delas e a que sobra se a outra for contornada.
+             *
+             *     Nao ha meia estrela: o cliente pediu nota de 1 a 5 e meia estrela
+             *     mudaria o tipo da coluna depois de haver dado gravado.
+             */
+            rating: number;
+            /**
+             * @description **Opcional.** Enviar so a nota funciona, e e o caso comum.
+             *
+             *     O limite de 1500 e o limite da coluna, nao um numero de tela: o
+             *     `CHECK` em `professional_reviews.body` recusa 1501. Texto maior e
+             *     `400`.
+             *
+             *     **Sem HTML**: `<` e `>` sao recusados (`400`,
+             *     `code: html_not_allowed`). String vazia ou so com espaco e tratada
+             *     como ausente e grava nulo -- gravar `''` criaria duas
+             *     representacoes de "sem texto" e toda tela teria de conhecer as
+             *     duas.
+             */
+            body?: string | null;
+        };
+        /** @description A resposta de `putMyDirectoryEntryReview`. */
+        DirectoryReviewWritten: {
+            review: components["schemas"]["DirectoryReview"];
+            /**
+             * @description Verdadeiro quando esta foi a PRIMEIRA avaliacao desta pessoa neste
+             *     local; falso quando o envio atualizou a que ja existia.
+             *
+             *     A tela escolhe entre "Avaliacao publicada" e "Avaliacao
+             *     atualizada" com este campo. Sem ele ela teria de adivinhar pelo
+             *     estado que tinha antes, que e exatamente o estado que pode estar
+             *     velho.
+             */
+            created: boolean;
+            /**
+             * @description A pontuacao do local **ja com esta avaliacao dentro**. Vem na mesma
+             *     resposta para a tela nao precisar de uma segunda chamada so para
+             *     atualizar a media que o proprio toque acabou de mudar -- e porque
+             *     uma segunda chamada deixaria a media velha na tela se ela falhasse.
+             */
+            rating: components["schemas"]["DirectoryRating"];
+        };
+        /**
+         * @description O corpo de `reportDirectoryEntryReview`.
+         *
+         *     **Motivo de lista fechada e nao texto livre**, pelo mesmo desenho de
+         *     `conversation_reports` (migracao `20260928000009`): a fila de moderacao
+         *     precisa ser triada, e campo livre nao tria. O `detail` existe para o
+         *     caso que a lista nao cobre, e e opcional.
+         */
+        DirectoryReviewReportInput: {
+            /**
+             * @description `not_about_this_place` existe porque e o caso mais comum e mais
+             *     facil de verificar num diretorio: a pessoa avaliou o lugar errado.
+             *     `false_information` e o caso que motiva a rota existir -- negocio
+             *     real com nome e endereco, e uma afirmacao falsa sobre ele tem
+             *     consequencia fora do app.
+             * @enum {string}
+             */
+            reason: "spam" | "offensive" | "false_information" | "not_about_this_place" | "other";
+            /**
+             * @description Opcional, e o mesmo limite de `conversation_reports.detail`. Sem
+             *     HTML, como o corpo da avaliacao.
+             */
+            detail?: string | null;
+        };
+        /** @description O corpo de `removeAdminDirectoryReview`. */
+        DirectoryReviewRemovalInput: {
+            /**
+             * @description **Obrigatorio**: e a diferenca entre moderacao e arbitrio. Vai para
+             *     `professional_reviews.moderation_reason` e para a trilha, e **nunca
+             *     sai para o app** -- nenhuma leitura publica projeta esta coluna.
+             */
+            reason: string;
         };
         /**
          * @description O **codigo** da categoria do produto, primeiro dos dois niveis
@@ -7775,6 +8936,29 @@ export interface components {
         /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
         CollarTagRequestRef: string;
         /**
+         * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+         *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+         *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+         *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+         *     aprovacao.
+         */
+        DirectorySuggestionRef: string;
+        /**
+         * @description O endereco publico da entrada do diretorio, como
+         *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+         *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+         *     saida publica.
+         */
+        DirectoryEntrySlug: components["schemas"]["Slug"];
+        /**
+         * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+         *     UUID** e nao e derivado de quem escreveu: um identificador que
+         *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+         *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+         *     formato de `AdminJoinRequest.ref`.
+         */
+        DirectoryReviewRef: string;
+        /**
          * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
          *     existente do backoffice: dois administradores editando o mesmo recurso
          *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
@@ -8834,6 +10018,7 @@ export interface operations {
                     "application/json": components["schemas"]["Pet"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Slug ja usado ou reservado. */
             409: {
@@ -9125,6 +10310,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTag"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -10021,6 +11207,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Passou dos 7 dias. */
             410: {
@@ -10051,6 +11238,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -10307,6 +11495,220 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`): so
+             *     conta VALIDADA sugere. O tipo e o mesmo de `createNetworkEvent` e de
+             *     `openLostCase`, porque a pergunta e a mesma; o texto muda. A trava e
+             *     do SERVIDOR: a tela esconde o botao de quem nao validou, e o botao
+             *     escondido nao recusa quem chama a rota direto.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A entrada publicada, com a pontuacao agregada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryEntryDetail"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listDirectoryEntryReviews: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `recent` e o padrao, e e o padrao de proposito: numa pagina sem
+                 *     historico a avaliacao de ontem informa mais do que a melhor de
+                 *     2026. `rating_desc` e `rating_asc` existem porque o cliente pediu o
+                 *     formato da Play Store, e la a ordenacao e um controle visivel.
+                 *
+                 *     **Nao ha ordenacao por "mais util"**: nao ha voto de utilidade
+                 *     neste produto, e oferecer a ordem sem o voto ordenaria por nada.
+                 */
+                sort?: "recent" | "rating_desc" | "rating_asc";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma pagina de avaliacoes publicadas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryReviewPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    putMyDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description A avaliacao gravada, ja publicada. `created` distingue a primeira
+             *     da edicao.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryReviewWritten"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Sem canal de contato verificado
+             *     (`contact-channel-unverified`). **O mesmo tipo e o mesmo status de
+             *     `createNetworkEvent`**, porque e a mesma regra do cliente: so
+             *     quem tem os dados validados escreve. Declarado em linha e nao como
+             *     componente novo pelo mesmo motivo -- e assim que a operacao de
+             *     encontro o declara, e um componente aqui criaria a segunda forma de
+             *     dizer a mesma coisa.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deleteMyDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nao ha mais avaliacao minha neste local. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -10964,6 +12366,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostPetPage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -12484,6 +13887,42 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    removeAdminDirectoryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewRemovalInput"];
+            };
+        };
+        responses: {
+            /** @description A avaliacao saiu do ar e o motivo esta na trilha. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     declineAdminNetworkJoinRequest: {
         parameters: {
             query?: never;
@@ -12650,6 +14089,197 @@ export interface operations {
             409: components["responses"]["SlugTaken"];
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    lookupAdminPostalCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description CEP com oito digitos, **sem mascara e sem hifen** -- o mesmo
+                 *     formato de `CollarTagShippingAddress.postal_code`, copiado dele.
+                 *     A mascara vive na tela.
+                 *
+                 *     CEP torto responde `400` e nao viaja: o ViaCEP devolve **HTML com
+                 *     status 400** nesse caso (medido em 17/10/2026), e deixar a forma
+                 *     ser conferida aqui poupa a chamada de saida inteira.
+                 */
+                postalCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco do CEP, em texto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostalCodeAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Os dois servicos falharam ou nao responderam no prazo de 4 s cada.
+             *     **A tela nao trava**: quem cadastra digita o endereco.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminDirectorySuggestions: {
+        parameters: {
+            query?: {
+                /** @description Sem o parametro, vem a fila de `pending`. `state` nao serve de nome aqui: `state` e a UF da indicacao. */
+                review_status?: components["schemas"]["DirectorySuggestionState"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como nas outras duas filas do painel. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A indicacao. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionApproval"];
+            };
+        };
+        responses: {
+            /**
+             * @description A indicacao aprovada e a entrada do diretorio. `entry_created` diz
+             *     se a entrada nasceu agora ou se a indicacao foi ligada a uma que ja
+             *     existia.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionApproved"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionDecline"];
+            };
+        };
+        responses: {
+            /** @description A indicacao recusada, com o motivo gravado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

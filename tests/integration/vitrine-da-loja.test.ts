@@ -123,27 +123,58 @@ void describe('a vitrine da `Loja`, contra Postgres', () => {
     await cliente.end();
   });
 
-  void it('a coluna de origem da chave estrangeira é `partner_id`, e o alvo é `store_partners.id`', async () => {
-    const { rows } = await cliente.query<{ coluna: string; alvo: string; coluna_alvo: string }>(
-      `SELECT kcu.column_name AS coluna,
-              ccu.table_name  AS alvo,
-              ccu.column_name AS coluna_alvo
-         FROM information_schema.table_constraints tc
-         JOIN information_schema.key_column_usage kcu
-           ON kcu.constraint_name = tc.constraint_name
-         JOIN information_schema.constraint_column_usage ccu
-           ON ccu.constraint_name = tc.constraint_name
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'public'
-          AND tc.table_name = 'store_items'`,
+  void it('as chaves estrangeiras de `store_items` sao exatamente estas tres, com estas colunas', async () => {
+    // A CONSULTA MUDOU EM 18/10, E A LISTA ESPERADA MUDOU COM ELA.
+    //
+    // Ela lia `information_schema.key_column_usage` JUNTO com
+    // `constraint_column_usage` por `constraint_name` e mais nada. Para chave
+    // de UMA coluna aquilo funciona; para chave COMPOSTA e produto cartesiano:
+    // a `store_items_subcategoria_e_da_categoria` -- `(category, subcategory)
+    // -> store_subcategories (category_code, code)`, da migracao
+    // `20261017000003` -- saia como QUATRO linhas cruzando as duas colunas de
+    // origem com as duas de destino, e tres delas nomeavam pares que nao
+    // existem (`category -> store_subcategories.code`, por exemplo).
+    //
+    // Entao a pergunta passou a ser feita ao `pg_constraint`, com
+    // `WITH ORDINALITY` nas duas pontas: cada chave aparece UMA vez, com as
+    // colunas na ORDEM em que a restricao as declara. Isso e mais estrito que
+    // a lista antiga, e nao menos: inverter `(category, subcategory)` para
+    // `(subcategory, category)` reprova aqui agora, e antes nao reprovava.
+    const { rows } = await cliente.query<{ chave: string }>(
+      `SELECT con.conname || ': (' || origem.colunas || ') -> '
+              || alvo_ns.nspname || '.' || alvo.relname || ' (' || destino.colunas || ')' AS chave
+         FROM pg_constraint con
+         JOIN pg_class rel        ON rel.oid = con.conrelid
+         JOIN pg_namespace ns     ON ns.oid  = rel.relnamespace
+         JOIN pg_class alvo       ON alvo.oid = con.confrelid
+         JOIN pg_namespace alvo_ns ON alvo_ns.oid = alvo.relnamespace
+         CROSS JOIN LATERAL (
+           SELECT string_agg(a.attname, ', ' ORDER BY k.ord) AS colunas
+             FROM unnest(con.conkey) WITH ORDINALITY k(attnum, ord)
+             JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+         ) origem
+         CROSS JOIN LATERAL (
+           SELECT string_agg(a.attname, ', ' ORDER BY k.ord) AS colunas
+             FROM unnest(con.confkey) WITH ORDINALITY k(attnum, ord)
+             JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.attnum
+         ) destino
+        WHERE con.contype = 'f' AND ns.nspname = 'public' AND rel.relname = 'store_items'`,
     );
 
     // Lista, e não `length > 0`: uma chave estrangeira NOVA sobre `store_items`
     // que ninguém previu precisa aparecer aqui, e não ser diluída numa
-    // contagem.
+    // contagem. Foi o que aconteceu: as duas da taxonomia de 17/10 entraram e
+    // este caso as acusou -- elas estao declaradas em
+    // `chave-estrangeira-contra-restricao.test.ts`, com `NO ACTION`, que e a
+    // regra do vocabulario curado (categoria retirada fica `active = false`,
+    // nunca apagada).
     assert.deepEqual(
-      rows.map((r) => `${r.coluna} -> ${r.alvo}.${r.coluna_alvo}`).sort(),
-      ['partner_id -> store_partners.id'],
+      rows.map((r) => r.chave).sort(),
+      [
+        'store_items_categoria_existe: (category) -> public.store_categories (code)',
+        'store_items_partner_id_fkey: (partner_id) -> public.store_partners (id)',
+        'store_items_subcategoria_e_da_categoria: (category, subcategory) -> public.store_subcategories (category_code, code)',
+      ],
       'a chave estrangeira da vitrine mudou de forma. Apontar de volta para `slug` é o que o ' +
         'ADR-0024 decidiu não fazer, e o critério 2 da BICHUS-19 proíbe.',
     );

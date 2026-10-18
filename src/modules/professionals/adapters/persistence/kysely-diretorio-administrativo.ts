@@ -112,6 +112,10 @@ interface LinhaDaEntrada {
   city: string | null;
   state: string | null;
   neighborhood: string | null;
+  postal_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
   phone_e164: string | null;
   status: StatusDaEntrada;
   source: OrigemDaEntrada;
@@ -137,6 +141,10 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     city: l.city,
     state: l.state,
     neighborhood: l.neighborhood,
+    postalCode: l.postal_code,
+    street: l.street,
+    streetNumber: l.street_number,
+    complement: l.complement,
     phoneE164: l.phone_e164,
     status: l.status,
     source: l.source,
@@ -160,6 +168,13 @@ const COLUNAS = [
   'professionals.city as city',
   'professionals.state as state',
   'professionals.neighborhood as neighborhood',
+  // O endereco de rua (migracao `20261018000001`). Ele e selecionado AQUI, na
+  // consulta do painel, e nao na do aplicativo: a do aplicativo esta em
+  // `kysely-directory-repository.ts` e nao nomeia nenhuma destas quatro.
+  'professionals.postal_code as postal_code',
+  'professionals.street as street',
+  'professionals.street_number as street_number',
+  'professionals.complement as complement',
   'professionals.phone_e164 as phone_e164',
   'professionals.status as status',
   'professionals.source as source',
@@ -206,6 +221,25 @@ function comRecorte<T extends { where: unknown }>(consulta: T, recorte: RecorteD
   return c as unknown as T;
 }
 
+/**
+ * A transacao do diretorio, a partir de uma transacao do Kysely ja aberta.
+ *
+ * **Exportada de proposito, e nao por organizacao de arquivo**: a aprovacao da
+ * fila de indicacoes (`kysely-fila-de-indicacoes.ts`) precisa gravar a entrada
+ * do diretorio na MESMA transacao em que marca a indicacao aprovada, e ela faz
+ * isso chamando `inserirEntrada` daqui. Uma segunda escrita de entrada seria a
+ * segunda definicao de como uma entrada nasce -- `status`, `source`,
+ * `claim_status`, `version` e os dois carimbos --, e e isso que o ADR-0023
+ * secao 2 proibe. Quem compoe as duas transacoes e o adaptador da fila; este
+ * arquivo continua sem saber que a fila existe.
+ */
+export function criarTransacaoDoDiretorio(
+  trx: DbTransaction,
+  deps: DependenciasDoDiretorioAdministrativo,
+): TransacaoDoDiretorio {
+  return transacao(trx, deps);
+}
+
 function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrativo): TransacaoDoDiretorio {
   return {
     async entradaPorSlug(slug: string) {
@@ -243,6 +277,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             city: nova.city,
             state: nova.state,
             neighborhood: nova.neighborhood,
+            postal_code: nova.postalCode,
+            street: nova.street,
+            street_number: nova.streetNumber,
+            complement: nova.complement,
             phone_e164: nova.phoneE164,
             status: nova.status,
             source: nova.source,
@@ -275,6 +313,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             ...(mudanca.city === undefined ? {} : { city: mudanca.city }),
             ...(mudanca.state === undefined ? {} : { state: mudanca.state }),
             ...(mudanca.neighborhood === undefined ? {} : { neighborhood: mudanca.neighborhood }),
+            ...(mudanca.postalCode === undefined ? {} : { postal_code: mudanca.postalCode }),
+            ...(mudanca.street === undefined ? {} : { street: mudanca.street }),
+            ...(mudanca.streetNumber === undefined ? {} : { street_number: mudanca.streetNumber }),
+            ...(mudanca.complement === undefined ? {} : { complement: mudanca.complement }),
             ...(mudanca.phoneE164 === undefined ? {} : { phone_e164: mudanca.phoneE164 }),
             ...(mudanca.status === undefined ? {} : { status: mudanca.status }),
             // So na transicao PARA publicado. Uma correcao de telefone numa
@@ -294,6 +336,31 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
         .where('professionals.id', '=', id)
         .executeTakeFirstOrThrow();
       return comoEntrada(linha);
+    },
+
+    async removerAvaliacao(ref: string, motivo: string, agora) {
+      // EXCLUSAO LOGICA e numa consulta so: `status`, o motivo e o instante
+      // juntos, porque o `CHECK professional_reviews_moderacao_tem_motivo`
+      // recusa a linha em que `status <> 'published'` sem motivo. Duas
+      // atualizacoes separadas nao passariam pelo primeiro `UPDATE`.
+      //
+      // `status = 'published'` no `WHERE` torna a operacao IDEMPOTENTE no que
+      // importa: remover duas vezes nao reescreve o motivo da primeira, e a
+      // segunda chamada devolve `null` -> 404. O motivo original e de quem
+      // auditar, e sobrescreve-lo apagaria a decisao que de fato tirou a
+      // avaliacao do ar.
+      const linha = await trx
+        .updateTable('professional_reviews')
+        .set({
+          status: 'removed',
+          moderation_reason: motivo,
+          moderated_at: new Date(agora),
+        })
+        .where('ref', '=', ref)
+        .where('status', '=', 'published')
+        .returning(['id', 'rating'])
+        .executeTakeFirst();
+      return linha === undefined ? null : { id: linha.id, notaAntes: linha.rating };
     },
 
     registrarNaTrilha: (evento) => deps.trilha.recordIn(trx, evento),

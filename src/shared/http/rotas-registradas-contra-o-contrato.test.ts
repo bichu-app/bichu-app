@@ -56,6 +56,12 @@ import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
+import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
+import * as sugestaoDoDiretorio from '../../modules/professionals/adapters/http/directory-suggestion-routes.js';
+import * as diretorioAdministrativo from '../../modules/professionals/adapters/http/admin-directory-routes.js';
+import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -99,6 +105,16 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
   // prefixo /v1/admin.
   redeAdministrativa,
+  // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
+  // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
+  // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
+  // no disco -- foi exatamente assim que a ausencia delas apareceu.
+  cep,
+  sugestaoDoDiretorio,
+  diretorioAdministrativo,
+  indicacoesAdministrativas,
+  pedidoDePlaquinha,
+  plaquinhasAdministrativas,
   saude,
 ];
 

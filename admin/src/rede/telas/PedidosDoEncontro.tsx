@@ -187,7 +187,7 @@ export default function PedidosDoEncontro() {
   if (encontro === undefined) {
     return (
       <p className="t-body-sm c-sec" role="status">
-        Carregando o encontro…
+        Carregando o evento…
       </p>
     );
   }
@@ -195,7 +195,7 @@ export default function PedidosDoEncontro() {
     return (
       <>
         <Voltar />
-        <Banner tipo="erro">{encontro === 'erro' ? 'Não conseguimos carregar o encontro.' : 'Este encontro não existe mais.'}</Banner>
+        <Banner tipo="erro">{encontro === 'erro' ? 'Não conseguimos carregar o evento.' : 'Este evento não existe mais.'}</Banner>
       </>
     );
   }
@@ -221,7 +221,7 @@ export default function PedidosDoEncontro() {
         {encontro.publication_status !== 'removed' && (
           <Link className="btn sec" to={`/rede/${encontro.slug}`}>
             <Icone nome="edit" tamanho="s20" />
-            Editar encontro
+            Editar evento
           </Link>
         )}
       </header>
@@ -233,8 +233,8 @@ export default function PedidosDoEncontro() {
       <>
         {cabecalho}
         <div className="semres">
-          <p className="t-title">Este encontro é público.</p>
-          <p className="t-body c-sec">Qualquer pessoa pode ir, sem pedido. A fila de pedidos só existe em encontro privado.</p>
+          <p className="t-title">Este evento é público.</p>
+          <p className="t-body c-sec">Qualquer pessoa pode ir, sem pedido. A fila de pedidos só existe em evento privado.</p>
         </div>
       </>
     );
@@ -253,7 +253,7 @@ export default function PedidosDoEncontro() {
           aparecem. Quem for aprovado passa a ver no app o local e os detalhes. Não há como mandar mensagem pelo Bichu.
         </p>
         {fechado && <Banner tipo="alerta">{textoDeEncontroFechado(encontro)}</Banner>}
-        <Banner tipo="info">Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do encontro.</Banner>
+        <Banner tipo="info">Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do evento.</Banner>
         {aviso && (
           <Banner
             tipo={aviso.tipo}

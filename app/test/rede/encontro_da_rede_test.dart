@@ -146,7 +146,7 @@ void main() {
       expect(find.text('Adicionar ao calendário'), findsOneWidget);
 
       for (final t in <String>[
-        'Sobre o encontro',
+        'Sobre o evento',
         'Para quais cães',
         'Todos os portes',
         'Qualquer idade',
@@ -154,7 +154,7 @@ void main() {
         'O que levar',
         'Água',
         'Saquinhos para cocô',
-        'Cuidados no encontro',
+        'Cuidados no evento',
         'Recolha o cocô e leve o saquinho embora.',
         'Na área cercada, o cão pode ficar solto. Fora dela, na guia.',
         'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por '
@@ -425,13 +425,13 @@ void main() {
 
       expect(find.text('Cancelado'), findsOneWidget);
       expect(
-        find.text('A equipe do Bichu cancelou este encontro. Ele não vai acontecer.'),
+        find.text('A equipe do Bichu cancelou este evento. Ele não vai acontecer.'),
         findsOneWidget,
       );
-      await rolarAte(tester, find.text('Sobre o encontro'));
+      await rolarAte(tester, find.text('Sobre o evento'));
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
-      expect(tela, isNot(contains('Cuidados no encontro')));
+      expect(tela, isNot(contains('Cuidados no evento')));
       expect(tela, isNot(contains('Para quais cães')));
       expect(find.byKey(LocalDoEncontro.chaveDoMapa), findsNothing);
       // Ha coordenada, e ela nao e usada: a pergunta nem sai.
@@ -447,10 +447,10 @@ void main() {
         rede: redeDoEncontro(encontro: encontroPublico(status: 'ended')),
       );
       expect(find.text('Encerrado'), findsOneWidget);
-      await rolarAte(tester, find.text('Sobre o encontro'));
+      await rolarAte(tester, find.text('Sobre o evento'));
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
-      expect(tela, isNot(contains('Cuidados no encontro')));
+      expect(tela, isNot(contains('Cuidados no evento')));
     });
   });
 
@@ -503,7 +503,7 @@ void main() {
       expect(find.text(tituloPrivado), findsOneWidget);
       expect(find.text('Domingo, 4 de outubro'), findsOneWidget);
       expect(find.text('Privado'), findsOneWidget);
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(
         find.text(
           'O local e os detalhes aparecem se a equipe do Bichu aprovar o seu '
@@ -522,7 +522,7 @@ void main() {
       for (final proibido in <String>[
         'ISCA-',
         'Local',
-        'Sobre o encontro',
+        'Sobre o evento',
         'Horário de',
         'Das ',
         'Gratuito',
@@ -543,10 +543,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Entre para pedir'), findsOneWidget);
       expect(
-        find.text(
-          'Entre na sua conta para pedir. Depois de entrar, a gente envia o '
-          'pedido.',
-        ),
+        find.text('Depois de entrar, a gente envia o pedido.'),
         findsOneWidget,
       );
       expect(find.text('Agora não'), findsOneWidget);
@@ -575,11 +572,24 @@ void main() {
       expect(post.single.body, isEmpty);
 
       expect(find.text('Pedido enviado'), findsOneWidget);
+      // **O texto ENCURTOU em 18/10/2026**, por pedido literal do cliente:
+      // *"remova todos esses textos descritivos das paginas, textos de apoio,
+      // explicacao, isso esta deixando o app poluido, cheio de informacao e
+      // feio em relacao ao designer"*. O commit e o `b6b6f31`, e o diff dele
+      // nesta linha e exatamente:
+      //
+      //   - 'Se o pedido for aprovado até o dia do encontro, o local e os
+      //     detalhes aparecem aqui.'
+      //   + 'Se for aprovado, o local aparece aqui.'
+      //
+      // A isca pedia a frase longa -- e, nela, `do evento` onde o codigo
+      // antigo dizia `do encontro`, o que mostra que ela ja nasceu de uma
+      // terceira redacao. A caixa do pedido **continua dizendo** o que vale
+      // para os dois casos (UX 28.7.3), que e o que o caso mede; o que saiu
+      // foi o paragrafo de apoio, e a decisao preservou de proposito erro,
+      // recusa e rotulo acessivel.
       expect(
-        find.text(
-          'Se o pedido for aprovado até o dia do encontro, o local e os '
-          'detalhes aparecem aqui.',
-        ),
+        find.text('Se for aprovado, o local aparece aqui.'),
         findsOneWidget,
       );
 
@@ -591,7 +601,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(rede.chamadasA('DELETE /v1/network/events/$slugPrivado/join-request'), hasLength(1));
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(find.text('Pedir para participar'), findsOneWidget);
     });
 
@@ -637,10 +647,7 @@ void main() {
 
       expect(rede.chamadasA('GET /v1/network/events/$slugPrivado/private-details'), hasLength(1));
       expect(find.text('Pedido aprovado'), findsOneWidget);
-      expect(
-        find.text('Você pode participar. O local e os detalhes estão abaixo.'),
-        findsOneWidget,
-      );
+      expect(find.text('Você pode participar.'), findsOneWidget);
       // `per_dog` legado, exibido como "por pet".
       expect(find.text('R\$ 30 por pet'), findsOneWidget);
       await rolarAte(tester, find.text('ISCA-LUGAR Parque Villa-Lobos'));
@@ -680,7 +687,7 @@ void main() {
       await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
       await tester.tap(find.text('Pedir para participar'));
       await tester.pumpAndSettle();
-      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
       expect(find.text('Pedido enviado'), findsNothing);
       expect(
         find.text('Isso precisa de conexão. Tente de novo quando tiver sinal.'),
@@ -730,11 +737,11 @@ void main() {
         titulo: tituloPrivado,
       );
       expect(
-        find.text('A equipe do Bichu cancelou este encontro. Ele não vai acontecer.'),
+        find.text('A equipe do Bichu cancelou este evento. Ele não vai acontecer.'),
         findsOneWidget,
       );
       expect(find.text('Pedir para participar'), findsNothing);
-      expect(find.text('Encontro privado'), findsNothing);
+      expect(find.text('Evento privado'), findsNothing);
     });
 
     testWidgets('privado encerrado sem aprovação: sem caixa e sem pedir',
@@ -758,12 +765,12 @@ void main() {
       GoRouter.of(contexto).go(
         Rotas.encontroDaRedeDe(slugPrivado),
         extra: const RetomadaDoPedido(
-          MensagemDeErro(texto: 'Este encontro já aconteceu.'),
+          MensagemDeErro(texto: 'Este evento já aconteceu.'),
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Encontro privado'), findsOneWidget);
-      expect(find.text('Este encontro já aconteceu.'), findsOneWidget);
+      expect(find.text('Evento privado'), findsOneWidget);
+      expect(find.text('Este evento já aconteceu.'), findsOneWidget);
     });
     testWidgets('guarda: Agora não fecha a folha sem guardar nada', (tester) async {
       final rede = redePrivada();

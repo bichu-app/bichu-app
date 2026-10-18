@@ -9,7 +9,6 @@ import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
 import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
-import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -130,7 +129,6 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final podeReenviar = _restante <= 0 && !_reenviando;
 
@@ -196,12 +194,6 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
                 ),
                 child: const Text('Digitei o e-mail errado'),
               ),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            Text(
-              'Você pode cadastrar seu pet agora. A confirmação do e-mail não '
-              'impede isso.',
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
             ),
           ],
         ),

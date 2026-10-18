@@ -310,6 +310,27 @@ void main() {
 
     testWidgets('`Sair da conta` abre a MESMA folha de confirmacao',
         (tester) async {
+      // **Um gabarito de TELEFONE, e nao a janela de 800 x 600 do `flutter
+      // test`.**
+      //
+      // A folha de sair (`_FolhaDeSair`, em `abas.dart`, linha 893) e uma
+      // `Column` sem rolagem: com os 600 dp de altura do gabarito padrao ela
+      // recebe 201 dp de orcamento e precisa de 216, e o `RenderFlex
+      // overflowed by 15 pixels` reprova o caso antes de qualquer assercao.
+      // Nenhum telefone em retrato tem 800 x 600 -- o gabarito e o do
+      // `flutter test`, nao o do produto --, e a folha cabe com folga em
+      // 390 x 844.
+      //
+      // **Fica dito que o estouro e real na superficie curta**: a folha nao
+      // rola, entao numa janela baixa ha conteudo que nao se ve. Isso esta no
+      // relatorio desta rodada como achado, e nao foi consertado aqui porque
+      // mexer no desenho da folha de uma acao destrutiva no fim de uma rodada
+      // de QA e mudanca de produto, nao conserto de teste.
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final handle = tester.ensureSemantics();
       await _abrirOPerfil(tester);
 

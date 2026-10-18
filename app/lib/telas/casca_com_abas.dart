@@ -177,9 +177,9 @@ class CascaComAbas extends StatefulWidget {
     ),
     DestinoDeNavegacao(
       rotulo: 'Rede',
-      reforcoAcessivel: 'eventos e encontros da comunidade',
+      reforcoAcessivel: 'eventos da comunidade',
       reforcoDaPagina:
-          'Os eventos e encontros de quem tem pet aqui perto de você.',
+          'Os eventos de quem tem pet aqui perto de você.',
       icone: Icons.groups_outlined,
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
@@ -486,6 +486,7 @@ class TelaDeAba extends StatefulWidget {
     this.reforco,
     this.tituloEmMarca = false,
     this.raizDeSecao = false,
+    this.acaoDeCriar,
   });
 
   /// O **nome curto** da secao, igual ao rotulo da aba (UX 25.7.2 e 27.4.2).
@@ -521,6 +522,27 @@ class TelaDeAba extends StatefulWidget {
   /// **A composicao `Saida + titulo + hamburguer` nao existe neste app**, e e
   /// esta linha que garante isso por construcao, e nao por disciplina.
   final bool raizDeSecao;
+
+  /// A PORTA DE CRIAR DA SECAO, no lado direito da barra de topo.
+  ///
+  /// Pedido literal do cliente em 18/10/2026 ("os itens de criacao, como
+  /// evento e indicacao, ate o escanear poderia ser icones na barra superior
+  /// ... e nao fique esse botao grande na pagina ocupando muito espaco"). Quem
+  /// desenha e `AcaoDeCriarNaBarra`; quem diz QUAL e cada secao.
+  ///
+  /// **O lado direito deixou de ter UM slot, e passou a ter dois**, e isto
+  /// atravessa o 11.23.1 do design system de propria vontade: o paragrafo da
+  /// uma acao de 64 x 64 ali. Ele foi escrito antes de existirem duas acoes de
+  /// natureza diferente na mesma tela -- criar e da SECAO, filtrar e da LISTA
+  /// --, e a decisao de 18/10 poe as duas na barra. A conta cabe: com os
+  /// quatro cantos ocupados (hamburguer 64 + criar 64 + filtros 64) sobram
+  /// 128,0 dp de titulo em 320 dp, e o maior dos tres titulos que chegam a
+  /// esse arranjo e `Perto`, de quatro letras.
+  ///
+  /// **Criar vem ANTES de filtrar na ordem de leitura**, e nao e estetica:
+  /// criar e a acao da secao e filtrar e um controle da lista, entao a acao
+  /// mais ampla fica mais longe da borda e a mais estreita mais perto dela.
+  final Widget? acaoDeCriar;
 
   @override
   State<TelaDeAba> createState() => _EstadoDaTelaDeAba();
@@ -632,13 +654,22 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
             leading: comGaveta ? const BotaoDaGaveta() : null,
             leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
-            // O SLOT UNICO DA DIREITA, que voltou a ser do `Filtros` em
-            // 17/10/2026. `null` quando a tela nao lista nada: uma lista com
-            // um widget vazio dentro faria o portao da gaveta achar uma acao
-            // onde nao ha nenhuma.
-            actions: acao == null
+            // O LADO DIREITO: a porta de CRIAR da secao e, depois dela, o
+            // `Filtros` da listagem.
+            //
+            // `null` quando nao ha NENHUMA das duas: uma lista com um widget
+            // vazio dentro faria o portao da gaveta achar uma acao onde nao ha
+            // nenhuma, e `Perfil` e exatamente esse caso.
+            //
+            // A ordem e criar-depois-filtrar: a acao da SECAO fica mais longe
+            // da borda, o controle da LISTA mais perto. Quem decide se existe
+            // cada uma e a tela; a casca so desenha.
+            actions: (widget.acaoDeCriar == null && acao == null)
                 ? null
-                : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
+                : <Widget>[
+                    if (widget.acaoDeCriar != null) widget.acaoDeCriar!,
+                    if (acao != null) BotaoDeAcaoDaListagem(acao: acao),
+                  ],
           ),
           body: corpo,
         ),

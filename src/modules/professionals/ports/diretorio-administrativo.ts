@@ -78,6 +78,10 @@ export interface NovaEntrada {
   readonly city: string | null;
   readonly state: string | null;
   readonly neighborhood: string | null;
+  readonly postalCode: string | null;
+  readonly street: string | null;
+  readonly streetNumber: string | null;
+  readonly complement: string | null;
   readonly phoneE164: string | null;
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
@@ -100,6 +104,10 @@ export interface MudancaDaEntrada {
   readonly city?: string | null;
   readonly state?: string | null;
   readonly neighborhood?: string | null;
+  readonly postalCode?: string | null;
+  readonly street?: string | null;
+  readonly streetNumber?: string | null;
+  readonly complement?: string | null;
   readonly phoneE164?: string | null;
   readonly status?: StatusDaEntrada;
   /** `true` so na transicao para `published`: e ele que grava `published_at`. */
@@ -120,6 +128,23 @@ export interface TransacaoDoDiretorio {
     mudanca: MudancaDaEntrada,
     agora: Instant,
   ): Promise<EntradaAdministrativa | null>;
+  /**
+   * Tira uma avaliacao do ar, por `ref` publico, com o motivo.
+   *
+   * **EXCLUSAO LOGICA**: `status` vai para `'removed'` e `moderation_reason`
+   * guarda o motivo. A linha FICA, porque o ADR-0011 manda a remocao ser
+   * "registrada na trilha com o motivo", e trilha que aponta para uma linha
+   * apagada nao e trilha.
+   *
+   * Devolve o `id` interno (para a trilha) e a nota, ou `null` quando o `ref`
+   * nao e de avaliacao que esteja no ar. O `id` **nunca sai em resposta**.
+   */
+  removerAvaliacao(
+    ref: string,
+    motivo: string,
+    agora: Instant,
+  ): Promise<{ id: string; notaAntes: number } | null>;
+
   /** O ULTIMO passo de toda escrita, na MESMA transacao (ADR-0027 item 8). */
   registrarNaTrilha(evento: AuditEvent): Promise<void>;
 }

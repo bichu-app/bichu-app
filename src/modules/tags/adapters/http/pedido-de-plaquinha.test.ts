@@ -218,16 +218,30 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
   return { app, criados };
 }
 
+/**
+ * Marca de "NENHUM corpo foi enviado", e por que ela nao e `undefined`.
+ *
+ * `pedir(b, pet, undefined)` NAO manda requisicao sem corpo: parametro com
+ * valor padrao recebe o padrao justamente quando o argumento e `undefined`
+ * (semantica de ES), entao o terceiro argumento virava `corpoValido()` e a
+ * requisicao saia COMPLETA. O caso 5a afirmava 400 sobre um pedido valido, que
+ * responde 200 -- ele reprovava por nao conseguir dizer o que queria dizer, e
+ * nao por defeito do servidor. Medido em 18/10. Com a marca explicita a
+ * ausencia e inequivoca e o padrao continua valendo para quem omite o
+ * argumento.
+ */
+const SEM_CORPO = Symbol('sem corpo');
+
 function pedir(
   b: Bancada,
   pet: PetId,
-  corpo: Record<string, unknown> | undefined = corpoValido(),
+  corpo: Record<string, unknown> | typeof SEM_CORPO = corpoValido(),
 ): Promise<{ statusCode: number; body: string }> {
   return b.app.inject({
     method: 'POST',
     url: `${PREFIXO_DA_API}${PEDIDO.replace(':petId', pet)}`,
     headers: { authorization: `Bearer ${TOKEN_DE_ACESSO}` },
-    ...(corpo === undefined ? {} : { payload: corpo }),
+    ...(corpo === SEM_CORPO ? {} : { payload: corpo }),
   });
 }
 
@@ -303,7 +317,7 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
 
   void it('5a. corpo ausente recusa: sem corpo nao ha endereco', async () => {
     const b = bancada();
-    const resposta = await pedir(b, MEU_PET, undefined);
+    const resposta = await pedir(b, MEU_PET, SEM_CORPO);
     assert.equal(resposta.statusCode, 400);
     assert.equal(b.criados.length, 0);
   });
@@ -329,16 +343,43 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     }
   });
 
-  void it('5c. o CEP e normalizado, e nenhum outro campo e tocado', async () => {
-    const b = bancada();
-    const resposta = await pedir(
-      b,
+  /**
+   * O CEP COM MASCARA e recusado, e o CEP limpo e gravado como veio.
+   *
+   * Este caso afirmava o contrario -- que `01311-000` respondia 200 e era
+   * normalizado para `01311000` -- e reprovava com 400. A isca estava errada,
+   * e a prova esta no contrato: `DeliveryAddress.postal_code` declara
+   * `pattern: '^[0-9]{8}$'` e a descricao diz, com estas palavras, "CEP com
+   * oito digitos, **sem mascara e sem hifen**" (`api/openapi.yaml`). O Ajv do
+   * Fastify aplica esse padrao antes de o manipulador existir, entao o 400 e o
+   * comportamento CERTO, e o contrato manda nos quatro clientes.
+   *
+   * (O `replace(/\D/gu, '')` de `comoEnderecoDeEntrega` e, por consequencia,
+   * inalcancavel por esta rota: o schema recusa antes. Ele fica como defesa,
+   * mas nao e um caminho que se possa afirmar daqui.)
+   *
+   * O caso continua cobrindo as duas coisas que importam: a mascara NAO entra,
+   * e com o CEP valido nada mais e tocado (ADR-0006).
+   */
+  void it('5c. CEP com mascara e recusado e NOMEADO; o valido e gravado sem nada completar nada', async () => {
+    const comMascara = bancada();
+    const recusa = await pedir(
+      comMascara,
       MEU_PET,
       corpoValido({ delivery_address: { ...ENDERECO_VALIDO, postal_code: '01311-000' } }),
     );
+    assert.equal(recusa.statusCode, 400);
+    assert.ok(
+      camposRecusados(recusa.body).some((f) => f.includes('postal_code')),
+      `o 400 do CEP com mascara nao nomeia o campo: ${recusa.body}`,
+    );
+    assert.equal(comMascara.criados.length, 0);
+
+    const b = bancada();
+    const resposta = await pedir(b, MEU_PET);
     assert.equal(resposta.statusCode, 200);
     const gravado = b.criados[0]?.endereco;
-    assert.equal(gravado?.cep, '01311000');
+    assert.equal(gravado?.cep, ENDERECO_VALIDO.postal_code);
     // Nada completa nada (ADR-0006): o que foi digitado e o que foi gravado.
     assert.equal(gravado?.bairro, ENDERECO_VALIDO.neighborhood);
     assert.equal(gravado?.cidade, ENDERECO_VALIDO.city);

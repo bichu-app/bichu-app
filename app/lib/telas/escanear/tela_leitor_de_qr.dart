@@ -268,6 +268,23 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   Timer? _ofertaManual;
   Timer? _limparAviso;
   bool _resolvendo = false;
+
+  /// Ha uma rota EMPILHADA POR CIMA do leitor.
+  ///
+  /// **Este sinalizador e o conserto do laco que o cliente viu.** `_resolvendo`
+  /// sozinho nao bastava, e o motivo e de uma linha: ele era desligado ANTES do
+  /// `push`. Entre o desligamento e a tela do pet aparecer, o `MobileScanner`
+  /// continua entregando quadros do MESMO simbolo -- o leitor segue montado,
+  /// porque `push` nao o tira da arvore --, e cada quadro passava pelo portao
+  /// aberto, resolvia o codigo de novo e empilhava outra copia da tela. O
+  /// relato do cliente ("entrou em looping varias vezes, e depois de tudo abriu
+  /// uma tela") e exatamente isso: uma rajada de `GET /v1/tags/{code}` e uma
+  /// pilha de telas identicas para voltar uma a uma.
+  ///
+  /// Ele cobre QUALQUER rota sobreposta, e nao so a do pet: o registro de
+  /// achado tem o mesmo `push` a partir desta tela e tinha o mesmo vazamento.
+  bool _rotaSobreposta = false;
+
   bool _demorou = false;
   MensagemDeErro? _faixa;
   String? _avisoEfemero;
@@ -368,7 +385,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   void _aoLer(LeituraDeQr leitura) {
     // A camera entrega varios quadros por segundo e o mesmo simbolo chega
     // muitas vezes. Enquanto uma resolucao esta em curso, o resto e ruido.
-    if (_resolvendo) return;
+    if (_resolvendo || _rotaSobreposta) return;
 
     final codigo = codigoDeTagDoQr(
       leitura.conteudo,
@@ -521,10 +538,14 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       setState(() {
         _resolvendo = false;
         _tentativa = 0;
+        // FECHA O PORTAO ANTES DE ABRIR O `_resolvendo`, e no MESMO
+        // `setState`: a janela entre os dois e por onde o laco entrava.
+        _rotaSobreposta = true;
       });
       // `push`, e nao `go`: o leitor continua na pilha, e quem escaneou a
-      // plaquinha errada volta para a camera sem reabrir o fluxo.
-      await context.push(Rotas.petDaTagDe(codigo), extra: tag);
+      // plaquinha errada volta para a camera sem reabrir o fluxo. E porque ele
+      // continua na pilha que a camera precisa ficar calada ate ele voltar.
+      await _abrirSobreposta(Rotas.petDaTagDe(codigo), extra: tag);
     } on FalhaDeConexao {
       if (!mounted) return;
       setState(() {
@@ -564,6 +585,34 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       });
       if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
     }
+  }
+
+  /// Abre uma rota POR CIMA do leitor e mantem a camera calada enquanto ela
+  /// estiver na pilha.
+  ///
+  /// **O laco do cliente nascia na ausencia desta funcao.** `push` deixa o
+  /// leitor montado: o `MobileScanner` nao sai da arvore, nao e pausado, e
+  /// continua entregando o mesmo simbolo varias vezes por segundo enquanto a
+  /// tela do pet esta na frente. Com o unico portao (`_resolvendo`) ja aberto
+  /// antes do `push`, cada um desses quadros virava uma resolucao nova e um
+  /// `push` novo.
+  ///
+  /// **`noDuplicates` no controlador nao e a saida**, e o proprio
+  /// `leitor_de_qr.dart` ja explica por que: ele guarda o ultimo valor para
+  /// sempre, e quem le a plaquinha errada, volta para a certa e tenta a errada
+  /// de novo fica sem resposta na terceira. O que precisa calar e so a janela
+  /// em que ha tela por cima -- e e esta.
+  Future<void> _abrirSobreposta(String rota, {Object? extra}) async {
+    // Idempotente de proposito: `_resolver` ja fechou o portao no mesmo
+    // `setState` em que largou `_resolvendo`, e quem chama daqui de fora (o
+    // registro de achado) depende desta linha.
+    if (!_rotaSobreposta) setState(() => _rotaSobreposta = true);
+    await context.push(rota, extra: extra);
+    if (!mounted) return;
+    setState(() => _rotaSobreposta = false);
+    // A oferta de digitacao recomeca: a contagem anterior foi cancelada na ida,
+    // e quem voltou da tela errada esta procurando de novo.
+    if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
   }
 
   /// Nova tentativa automatica em 5 s, tres vezes, **com o estado visivel**.
@@ -776,7 +825,10 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           //
           // `push` e nao `go`: quem esta com um animal no colo e nao achou o
           // codigo precisa voltar para o leitor se mudar de ideia.
-          onPressed: () => context.push(Rotas.registrarAchado),
+          // Pelo portao, e nao direto: enquanto o registro de achado estiver
+          // por cima, a camera deste leitor continua viva atras dele e um
+          // simbolo no quadro empilharia a tela do pet sobre o formulario.
+          onPressed: () => _abrirSobreposta(Rotas.registrarAchado),
           child: const Text(MensagensDeErro.registrarAchado),
         ),
       ],
@@ -1257,11 +1309,37 @@ class _Digitacao extends StatelessWidget {
           // sai da lista e o campo sobe para onde estava antes desta mudanca
           // -- a tela fica como era enquanto se digita, e bonita quando se
           // chega nela. Quem mede o teclado e `_corpo()`; ver o porque la.
-          if (!tecladoAberto) ...<Widget>[
-            const _PlaquinhaDaMarca(),
-            const SizedBox(height: BichuEspaco.e6),
-          ],
+          // SLOT FIXO, E NAO UM `if` QUE TIRA DOIS FILHOS DA LISTA.
+          //
+          // **Aqui morava o defeito de o teclado nao abrir.** A lista era
+          // `[espaco, plaquinha, espaco, campo, ...]` com o teclado fechado e
+          // `[espaco, campo, ...]` com ele aberto. Nenhum filho tinha chave,
+          // entao o casamento de elementos e por POSICAO: na posicao 1 o
+          // `_PlaquinhaDaMarca` virava `BichuField`, os tipos nao batiam, e o
+          // Flutter DESMONTAVA a subarvore do campo e montava outra. Com ela ia
+          // embora o `State` do `TextField` -- e com o `State`, a conexao de
+          // entrada de texto com a plataforma.
+          //
+          // O efeito era circular e e exatamente o que o cliente descreveu: a
+          // pessoa toca no campo, o foco e pedido, o teclado comeca a subir,
+          // `viewInsets.bottom` passa de zero, esta lista se reconstroi sem a
+          // plaquinha, o campo e remontado, a conexao morre e o teclado desce;
+          // sem teclado o `viewInsets` volta a zero, a plaquinha volta, o campo
+          // e remontado de novo. O `FocusNode` e externo e sobrevive a tudo
+          // isso, entao o campo FICA com o foco e nenhum evento de mudanca de
+          // foco dispara -- e e so na mudanca de foco que o `EditableText`
+          // reabre a conexao. Resultado: foco sim, teclado nunca.
+          //
+          // O slot fixo mantem a lista com o MESMO comprimento e o MESMO tipo
+          // em cada posicao nos dois estados. O campo deixa de ser remontado, a
+          // conexao sobrevive, e a plaquinha continua sumindo com o teclado
+          // aberto, que e o que o pedido de 17/10 queria.
+          _EspacoDaPlaquinha(visivel: !tecladoAberto),
           BichuField(
+            // A chave e o cinto alem do suspensorio: com ela o casamento de
+            // elementos deixa de depender da posicao, e um filho novo acima do
+            // campo nunca mais o remonta por acidente.
+            key: const ValueKey<String>('campo-do-codigo-da-tag'),
             rotulo: TextosDoCadastro.digitarOCodigo,
             controlador: controlador,
             foco: foco,
@@ -1290,6 +1368,34 @@ class _Digitacao extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// O slot fixo da plaquinha: sempre presente na lista, visivel ou nao.
+///
+/// **Ele existe para o campo de codigo NAO ser remontado**, e o porque esta
+/// escrito por extenso em `_Digitacao`. Em resumo: tirar filhos de uma lista
+/// sem chave renumera as posicoes, e o `TextField` que cai numa posicao de
+/// outro tipo perde o `State` e, com ele, a conexao de entrada de texto -- que
+/// e o teclado. Um filho que continua na lista e encolhe para nada mantem as
+/// posicoes paradas e custa um `SizedBox`.
+///
+/// `Offstage` e `Visibility` resolveriam igual; `SizedBox.shrink` e o que nao
+/// deixa a plaquinha ocupando altura nem sendo medida com o teclado aberto.
+class _EspacoDaPlaquinha extends StatelessWidget {
+  const _EspacoDaPlaquinha({required this.visivel});
+
+  final bool visivel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visivel) return const SizedBox.shrink();
+    return const Column(
+      children: <Widget>[
+        _PlaquinhaDaMarca(),
+        SizedBox(height: BichuEspaco.e6),
+      ],
     );
   }
 }

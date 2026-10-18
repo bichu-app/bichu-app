@@ -129,7 +129,10 @@ void main() {
       leitorDeQr: leitor,
       depositoDaFila: fila,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+    await tester.tap(find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ));
     await tester.pumpAndSettle();
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();

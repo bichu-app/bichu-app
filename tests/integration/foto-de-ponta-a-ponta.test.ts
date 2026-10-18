@@ -80,6 +80,7 @@ import { systemClock } from '../../src/shared/time/clock.js';
 import type { MediaRepository } from '../../src/modules/media/ports/media-repository.js';
 import type { ObjectStorage } from '../../src/modules/media/ports/object-storage.js';
 import { comoObjectKey } from '../../src/modules/media/domain/chave-de-objeto.js';
+import { DERIVADAS_DA_FOTO_DE_PET } from '../../src/modules/media/domain/derivadas.js';
 import type { ObjectKey, PetId, UserId } from '../../src/shared/types/brands.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
@@ -349,10 +350,40 @@ void describe('BICHUS-245 — a foto sobe, chega e volta, pelo caminho do produt
           `o que voltou de \`${chave}\` não é imagem que este sistema aceite: ` +
             JSON.stringify(inspecao),
         );
-        assert.ok(
-          inspecao.largura <= (variante === 'card' ? 1024 : 160),
-          `a derivada \`${variante}\` voltou com ${String(inspecao.largura)} px de largura: ` +
-            `ela não foi reduzida, e o que subiu foi o original com outro nome`,
+        // A GEOMETRIA SAI DE `domain/derivadas.ts`, E NAO DE DOIS NUMEROS AQUI.
+        //
+        // Este caso comparava com `1024` e `160`, e a `thumb` voltava com 176
+        // px: ela deixou de ser "160 no lado maior SEM corte" e passou a ser
+        // 176 x 194 CORTADA na proporção da moldura (`BichuMoldura.proporcao`
+        // = 1,1), porque em foto retrato os 160 sem corte entregavam menos de
+        // 160 px de largura para uma moldura de 168 px. Está escrito em
+        // `src/modules/media/domain/derivadas.ts` linhas 166-173, e o caso
+        // `pet: thumb cobre 56 x 61,6 dp a 3x` de `derivadas.test.ts` (linha
+        // 148) cobra os 168 px mínimos e PASSA. O número velho aqui era o
+        // teste, não o produto.
+        //
+        // E a comparação virou IGUALDADE com a especificação, que é mais
+        // estrito que o `<=` de antes: com `altura` presente o `sharp` corta
+        // (`fit: 'cover'`), e o original desta massa (1600 x 1200) é maior que
+        // as duas derivadas nos dois eixos, então a saída é exatamente o
+        // pedido. Um `<=` deixaria passar a derivada que não foi gerada no
+        // tamanho combinado.
+        const especificacao = DERIVADAS_DA_FOTO_DE_PET.find((d) => d.variante === variante);
+        assert.ok(especificacao !== undefined, `sem especificação para \`${variante}\``);
+        assert.equal(
+          inspecao.largura,
+          especificacao.largura,
+          `a derivada \`${variante}\` voltou com ${String(inspecao.largura)} px de largura e ` +
+            `\`derivadas.ts\` pede ${String(especificacao.largura)}: ou ela não foi reduzida — e ` +
+            `o que subiu foi o original com outro nome —, ou a escada mudou de alvo sem este ` +
+            `caso saber.`,
+        );
+        assert.equal(
+          inspecao.altura,
+          especificacao.altura,
+          `a derivada \`${variante}\` voltou com ${String(inspecao.altura)} px de altura e ` +
+            `\`derivadas.ts\` pede ${String(especificacao.altura ?? 0)}: o corte na proporção da ` +
+            `moldura não aconteceu.`,
         );
       }
     },

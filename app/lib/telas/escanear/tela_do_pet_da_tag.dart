@@ -11,6 +11,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/moldura.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// O que a tela do codigo resolvido mostra, e por que ela tem **duas** formas
@@ -82,15 +83,32 @@ enum FormaDaTelaDaTag {
 /// atras" evita a perseguicao que faz o animal fugir de novo), e a linha de
 /// sinais e o que confirma que e o mesmo bicho que esta no colo.
 ///
-/// ## A foto, que nao vem
+/// ## A foto, que agora vem -- e o que acontece quando ela nao vem
 ///
-/// `photo_url` chega `null` nesta rota, por desenho do servidor. A tela **nao
-/// pode prometer foto**: nao ha moldura vazia, nao ha simbolo e nao ha
-/// ilustracao. O paragrafo 5.4 do design system decide isso e diz por que, e
-/// o motivo e de conversao e nao de estetica: *"uma ilustracao generica no
-/// lugar da foto faz o achador duvidar de que e o pet certo"*. No lugar da
-/// moldura sobem **o nome em `display-lg` e o cartao de sinais**, que e
-/// exatamente a regra que o paragrafo manda aplicar quando nao ha foto.
+/// **O contrato sempre declarou `pet.photo_url` nesta rota**, e o exemplo de
+/// 200 de `resolveTagCode` traz um endereco. Quem mandava `null` era o
+/// servidor, numa linha fixa (`tag-routes.ts`) escrita quando o modulo `media`
+/// ainda nao existia. Ele existe, a linha caiu, e o cliente achou o defeito
+/// pelo sintoma certo: escaneou a plaquinha e a tela abriu **sem a foto do
+/// pet**.
+///
+/// Com foto, ela e o PRIMEIRO elemento depois da faixa, e isso nao e
+/// hierarquia de gosto: quem esta com um animal no colo confirma pela cara do
+/// bicho antes de ler qualquer linha de sinais.
+///
+/// **Sem foto, nada muda em relacao ao que estava aqui**: nao ha moldura
+/// vazia, nao ha simbolo e nao ha ilustracao. O paragrafo 5.4 do design system
+/// decide isso e diz por que, e o motivo e de conversao e nao de estetica:
+/// *"uma ilustracao generica no lugar da foto faz o achador duvidar de que e o
+/// pet certo"*. No lugar da moldura sobem **o nome em `display-lg` e o cartao
+/// de sinais**, que e exatamente a regra que o paragrafo manda aplicar quando
+/// nao ha foto.
+///
+/// `Image.network` e nao a porta de arquivo: este endereco e de um objeto
+/// **publico** e nao leva credencial nenhuma, ao contrario do QR do tutor. E
+/// por isso tambem que nada aqui precisa de `dart:io` -- o portao de diretivas
+/// o proibe dentro de `lib/telas`, e e ele que ja fez uma tela desenhar o
+/// caminho do arquivo no lugar da imagem.
 class TelaDoPetDaTag extends StatelessWidget {
   const TelaDoPetDaTag({required this.tag, required this.codigo, super.key});
 
@@ -208,6 +226,10 @@ class TelaDoPetDaTag extends StatelessWidget {
               // muda tudo; na F2.2 o item 7 da F4.1 a poe acima da foto pela
               // mesma razao.
               ..._faixa(context, forma),
+              // A FOTO, quando ha uma. Ver a secao do cabecalho da classe:
+              // sem foto nao entra moldura nenhuma, e o nome em `display-lg`
+              // continua sendo o que sobe no lugar dela (5.4).
+              ..._foto(tag),
               Text(
                 switch (forma) {
                   // O dono ja sabe de quem e a tag: a faixa acabou de dizer.
@@ -246,6 +268,20 @@ class TelaDoPetDaTag extends StatelessWidget {
     );
   }
 
+  /// A foto do pet, ou nada.
+  ///
+  /// Lista vazia e **nao** um quadro vazio: ver a secao do cabecalho. A
+  /// decisao de mostrar ou nao e so sobre `photo_url` ter chegado, e nao sobre
+  /// quem esta olhando -- o dono tambem reconhece o proprio animal pela foto.
+  List<Widget> _foto(TagResolvida tag) {
+    final url = tag.fotoUrl;
+    if (url == null || url.trim().isEmpty) return const <Widget>[];
+    return <Widget>[
+      _FotoDoPetDaTag(url: url, nome: tag.nomeDoPet),
+      const SizedBox(height: BichuEspaco.e4),
+    ];
+  }
+
   List<Widget> _faixa(BuildContext context, FormaDaTelaDaTag forma) {
     final texto = switch (forma) {
       FormaDaTelaDaTag.modoDono =>
@@ -264,6 +300,51 @@ class TelaDoPetDaTag extends StatelessWidget {
       _FaixaDaTag(texto: texto, urgente: tag.estaPerdido),
       const SizedBox(height: BichuEspaco.e6),
     ];
+  }
+}
+
+/// A foto do pet no topo da tela da tag.
+///
+/// **`larguraFotoLg` e nao a pequena do cabecalho de caso**: la a foto confirma
+/// de qual dos pets do tutor e o caso que esta sendo aberto, e um retrato de
+/// 56 dp basta; aqui ela e o elemento com que uma pessoa na rua decide se o
+/// animal no colo e o da tela.
+///
+/// **Falha de rede nao vira quadro vazio.** `errorBuilder` devolve nada, e a
+/// moldura em `repouso` com filho vazio e um retangulo transparente -- sem
+/// borda, sem simbolo e sem ilustracao, que e o que o 5.4 exige. Quem escaneou
+/// a plaquinha sem sinal continua vendo o nome, os sinais e o cartao de
+/// manejo, que e a informacao que muda o que ela faz nos proximos trinta
+/// segundos.
+///
+/// O nome acessivel diz **de quem e a foto**: `Semantics(image: true)` sem
+/// rotulo faria o leitor de tela anunciar "imagem" e nada mais.
+class _FotoDoPetDaTag extends StatelessWidget {
+  const _FotoDoPetDaTag({required this.url, required this.nome});
+
+  final String url;
+  final String nome;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      image: true,
+      label: 'Foto de $nome',
+      child: Center(
+        child: Moldura(
+          largura: BichuMoldura.larguraFotoLg,
+          estado: EstadoDaMoldura.repouso,
+          filho: Image.network(
+            url,
+            fit: BoxFit.cover,
+            // O mesmo enquadramento do cabecalho do caso: focinho de animal
+            // fica acima do centro geometrico da foto.
+            alignment: const Alignment(0, -1 / 3),
+            errorBuilder: (context, erro, pilha) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
   }
 }
 

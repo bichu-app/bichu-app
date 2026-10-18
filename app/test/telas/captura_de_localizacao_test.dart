@@ -234,7 +234,33 @@ Future<void> _escolherOEstado(WidgetTester tester, String sigla) async {
       .rotulo;
   await rolarAte(tester, find.text(TextosDaLocalizacao.escolherOEstado));
   await tocar(tester, find.text(TextosDaLocalizacao.escolherOEstado));
-  await tocar(tester, find.text(nome).last);
+  // **A opcao e a do `ListTile` da folha, e a folha ROLA.**
+  //
+  // `find.text(nome).last` era ambiguo e errava calado: com `São Paulo`
+  // digitado no campo `Cidade`, o texto do CAMPO tambem casa, e a folha de 27
+  // itens so constroi o que cabe -- `São Paulo` e o 25o e nao esta montado.
+  // O toque ia para o campo atras da folha, escorregava para a lista e
+  // selecionava o estado que estivesse naquele ponto: medido, saiu `BA`.
+  // Procurar dentro do `ListTile` separa a opcao do campo, e rolar a folha
+  // constroi o item antes do toque.
+  final opcao = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text(nome),
+  );
+  if (opcao.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      opcao,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tocar(tester, opcao);
 }
 
 void main() {

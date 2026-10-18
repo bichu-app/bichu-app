@@ -182,7 +182,15 @@ Se você escreve para oi@bichu.app ou privacidade@bichu.app, tratamos o que voc�
 
 Não pedimos CPF, endereço completo, data de nascimento de pessoa, foto de rosto, biometria nem nenhum dado sensível do art. 11 da LGPD (saúde, origem racial, religião, opinião política e outros). Dado de saúde do **animal**, como uma medicação no cartão de manejo, não é dado sensível do tutor, mas passa pela mesma limpeza de contato antes de ser gravado.
 
-### 4.18 Funções que ainda não estão no ar
+### 4.18 A Loja e os links de parceiro
+
+A Loja é navegável **sem conta**, a lista é a mesma para todo mundo e **não é personalizada**: não guardamos o que você olhou nem em que produto você tocou.
+
+- Ao abrir um produto, o Bichu manda você para o **site do parceiro**, no navegador do seu aparelho, com o endereço exatamente como ele está no nosso catálogo. **Não acrescentamos nenhum identificador seu ao link** — nem e-mail, nem código de conta, nem nada que diga ao parceiro que foi você.
+- Dali em diante você está no site dele, e o que o parceiro faz com os seus dados é governado pela **política de privacidade do parceiro**, não por esta.
+- Preço, venda e disponibilidade não são assunto de dado pessoal: estão no item 13 dos [Termos de Uso](/termos), que diz que o Bichu não vende nada e não controla preço nem estoque.
+
+### 4.19 Funções que ainda não estão no ar
 
 Algumas partes do Bichu estão sendo construídas e **ainda não coletam nada**. Antes de cada uma entrar no ar, esta política será atualizada com o que ela trata, para quê e por quanto tempo:
 

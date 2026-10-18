@@ -76,6 +76,24 @@ class ApiClient {
     return _enviar('PATCH', caminho, corpo: corpo, exigeToken: exigeToken);
   }
 
+  /// `PUT`, **e sem `Idempotency-Key`**.
+  ///
+  /// A ausencia da chave nao e esquecimento: `PUT` e idempotente por
+  /// definicao, e o reenvio e exatamente o que o verbo promete tratar. A
+  /// operacao que trouxe este metodo e `putMyDirectoryEntryReview`, onde o
+  /// segundo envio **e a edicao** -- o contrato escolheu `PUT` em vez de
+  /// `POST` para que a regra "uma avaliacao por pessoa por local, que ela
+  /// possa editar" morasse no metodo, e o banco a cobra em
+  /// `UNIQUE (professional_id, author_user_id)`. Uma chave de idempotencia
+  /// aqui faria a segunda edicao devolver a resposta da primeira.
+  Future<Map<String, dynamic>> put(
+    String caminho, {
+    Object? corpo,
+    bool exigeToken = true,
+  }) {
+    return _enviar('PUT', caminho, corpo: corpo, exigeToken: exigeToken);
+  }
+
   Future<Map<String, dynamic>> delete(
     String caminho, {
     bool exigeToken = true,

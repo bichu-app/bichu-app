@@ -111,6 +111,24 @@ export const MINIMO_DA_CIDADE = 2;
 export const MAXIMO_DA_CIDADE = 80;
 export const MAXIMO_DO_BAIRRO = 80;
 
+// O endereco de rua (decisao 9.2, respondida em 18/10/2026). Os tetos sao os
+// do `CHECK` da migracao `20261018000001` e os do contrato, COPIADOS deles.
+export const MAXIMO_DO_LOGRADOURO = 120;
+export const MINIMO_DO_NUMERO = 1;
+export const MAXIMO_DO_NUMERO = 20;
+export const MINIMO_DO_COMPLEMENTO = 1;
+export const MAXIMO_DO_COMPLEMENTO = 80;
+
+/**
+ * Oito digitos, sem mascara e sem hifen.
+ *
+ * A MESMA forma do `CHECK professionals_cep_oito_digitos`, do `pattern` do
+ * contrato e do CEP do pedido da plaquinha. A mascara e do painel
+ * (`admin/src/formato/cep.ts`); o que chega aqui e sempre oito digitos, e o
+ * que nao for e `400`.
+ */
+export const FORMA_DO_CEP = /^[0-9]{8}$/;
+
 /** A entrada como o repositorio administrativo a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaAdministrativa {
   readonly slug: string;
@@ -120,6 +138,15 @@ export interface EntradaAdministrativa {
   readonly city: string | null;
   readonly state: string | null;
   readonly neighborhood: string | null;
+  /**
+   * O endereco de rua. Lido e escrito **so pela superficie administrativa**:
+   * `projetarEntrada` (a projecao do aplicativo, em `entrada-do-diretorio.ts`)
+   * nao os conhece, e por isso nao ha caminho em que eles saiam em `Perto`.
+   */
+  readonly postalCode: string | null;
+  readonly street: string | null;
+  readonly streetNumber: string | null;
+  readonly complement: string | null;
   readonly phoneE164: string | null;
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
@@ -148,6 +175,10 @@ export interface CriacaoDaEntrada {
   readonly city?: string;
   readonly state?: string;
   readonly neighborhood?: string;
+  readonly postal_code?: string;
+  readonly street?: string;
+  readonly street_number?: string;
+  readonly complement?: string;
   readonly phone_e164?: string;
 }
 
@@ -166,6 +197,10 @@ export interface EdicaoDaEntrada {
   readonly city?: string | null;
   readonly state?: string | null;
   readonly neighborhood?: string | null;
+  readonly postal_code?: string | null;
+  readonly street?: string | null;
+  readonly street_number?: string | null;
+  readonly complement?: string | null;
   readonly phone_e164?: string | null;
   readonly status?: StatusDaEntrada;
 }
@@ -318,6 +353,19 @@ export function errosDeTexto(
 }
 
 /** A UF, duas letras. O `CHECK` do banco mede so o tamanho; a tela precisa da recusa antes. */
+/**
+ * O CEP, oito digitos.
+ *
+ * A mensagem fala de oito digitos e nao do hifen de proposito: o painel manda
+ * sem mascara, e quem vier por outro caminho precisa saber o que a coluna
+ * aceita, nao o que a tela desenha.
+ */
+export function errosDoCep(campo: string, valor: string): ProblemFieldError[] {
+  return FORMA_DO_CEP.test(valor.trim())
+    ? []
+    : [{ field: campo, code: 'postal_code_invalid', message: 'O CEP tem oito dígitos.' }];
+}
+
 export function errosDaUf(campo: string, valor: string): ProblemFieldError[] {
   return /^[A-Za-z]{2}$/.test(valor.trim())
     ? []
@@ -381,6 +429,10 @@ export interface EntradaProjetada {
   readonly city: string | null;
   readonly state: string | null;
   readonly neighborhood: string | null;
+  readonly postal_code: string | null;
+  readonly street: string | null;
+  readonly street_number: string | null;
+  readonly complement: string | null;
   readonly phone_e164: string | null;
   readonly status: StatusDaEntrada;
   readonly verification: VerificacaoProjetada;
@@ -410,6 +462,13 @@ export function projetarEntradaAdministrativa(entrada: EntradaAdministrativa): E
     city: entrada.city,
     state: entrada.state,
     neighborhood: entrada.neighborhood,
+    // O endereco de rua sai NESTA projecao, que e a do painel: a tela de
+    // edicao precisa mostrar o que gravou. A projecao do aplicativo e outra
+    // funcao, em outro arquivo, e ela nao tem estes campos.
+    postal_code: entrada.postalCode,
+    street: entrada.street,
+    street_number: entrada.streetNumber,
+    complement: entrada.complement,
     phone_e164: entrada.phoneE164,
     status: entrada.status,
     verification: {
@@ -444,6 +503,23 @@ export function retratoDaEntrada(entrada: EntradaAdministrativa): Record<string,
     city: entrada.city,
     state: entrada.state,
     neighborhood: entrada.neighborhood,
+    // ---------------------------------------------------------------------
+    // O ENDERECO DE RUA NAO ENTRA NO RETRATO DA TRILHA, e a ausencia e regra.
+    // ---------------------------------------------------------------------
+    // O precedente e medido e e deste repositorio: o endereco de entrega do
+    // pedido da plaquinha sai "so nesta superficie, nunca em resposta sem
+    // conta, **nunca na trilha de auditoria** e nunca geocodificado"
+    // (contrato, `listAdminCollarTagRequests`, decisao do cliente de 17/10).
+    //
+    // Aqui vale o mesmo com uma razao a mais: o "endereco comercial" de um
+    // profissional autonomo -- adestrador, passeador, veterinario que atende
+    // em casa -- e a CASA dele, e a trilha e append-only por desenho. Copiar
+    // o endereco para dentro dela a cada edicao criaria um historico de
+    // enderecos residenciais que nenhuma correcao de cadastro alcanca.
+    //
+    // O que a trilha perde, dito em voz alta: ela registra QUE a entrada
+    // mudou e nao mostra o antes/depois dos quatro campos de endereco. Para
+    // os demais campos ela continua inteira.
     phone_e164: entrada.phoneE164,
     status: entrada.status,
   };

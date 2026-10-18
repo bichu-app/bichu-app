@@ -451,9 +451,33 @@ void main() {
       await irPara(tester, Rotas.perfil);
 
       expect(find.text('Confirme seu e-mail'), findsOneWidget);
-      final yDoAviso = tester.getTopLeft(find.text('Confirme seu e-mail')).dy;
-      final yDoEmail =
-          tester.getTopLeft(find.text('marina@exemplo.com.br')).dy;
+
+      // **As duas alturas no espaco do CONTEUDO, e nao no da tela.**
+      //
+      // Duas coisas mudaram em 18/10 e as duas batem aqui. A primeira: o
+      // `Perfil` virou so menus, e o e-mail deixou de ser linha propria -- ele
+      // e a LINHA DE APOIO do item `Meus dados`, que nesta arvore diz
+      // `marina@exemplo.com.br · E-mail confirmado`, entao o finder e
+      // `textContaining` e nao `text`. A segunda: com o cartao do pet no meio,
+      // o aviso e o item `Meus dados` NAO cabem juntos na dobra, e o `ListView`
+      // nao constroi o que nao cabe -- ler as duas alturas de tela exigia os
+      // dois montados ao mesmo tempo, e rolar ate um desmonta o outro.
+      //
+      // Somar o deslocamento da rolagem a cada leitura resolve sem afrouxar:
+      // "acima" passa a ser medido onde a palavra significa algo -- na ordem do
+      // conteudo --, e nao na janela que por acaso esta a vista.
+      final rolagem = find.byType(Scrollable).first;
+      double deslocamento() =>
+          tester.state<ScrollableState>(rolagem).position.pixels;
+
+      final yDoAviso =
+          tester.getTopLeft(find.text('Confirme seu e-mail')).dy +
+              deslocamento();
+      await rolarAte(tester, find.textContaining('marina@exemplo.com.br'));
+      final yDoEmail = tester
+              .getTopLeft(find.textContaining('marina@exemplo.com.br'))
+              .dy +
+          deslocamento();
       expect(
         yDoAviso,
         lessThan(yDoEmail),

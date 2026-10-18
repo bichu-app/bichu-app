@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -107,10 +108,23 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   bool _enviado = false;
   MensagemDeErro? _faixa;
 
+  /// Ver o mesmo sinalizador em F1.4, F1.6 e na edicao do pet: `Escopo` e
+  /// `InheritedWidget`, e le-lo em `initState` e erro de framework -- o
+  /// `dependOnInheritedWidgetOfExactType` estoura antes de `initState`
+  /// terminar, a listagem nunca sai e a tela abre dizendo "servidor fora".
+  bool _iniciou = false;
+
   @override
   void initState() {
     super.initState();
     _petEscolhido = widget.petIdInicial;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_iniciou) return;
+    _iniciou = true;
     _carregarPets();
   }
 
@@ -506,10 +520,17 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         chave: _CamposDoPedido.cep,
                         rotulo: _TextosDaPlaquinha.cep,
                         controlador: _cep,
-                        limite: 8,
+                        limite: limiteDoCep,
                         tipoDeTeclado: TextInputType.number,
-                        formatadores: <TextInputFormatter>[
-                          FilteringTextInputFormatter.digitsOnly,
+                        // **A mascara, e nao `digitsOnly`** (cliente, 18/10:
+                        // "coloque mascara no campo cep de todos os
+                        // formularios"). Ela ja descarta o que nao e digito,
+                        // entao `digitsOnly` ao lado seria a segunda regra
+                        // sobre a mesma tecla. `limite` e 9 e nao 8: o
+                        // `maxLength` do campo conta o HIFEN, e com 8 o
+                        // ultimo digito do CEP seria cortado em silencio.
+                        formatadores: const <TextInputFormatter>[
+                          MascaraDeCep(),
                         ],
                         // No oitavo digito a busca sai sozinha. Sem botao
                         // `Buscar`: um botao a mais e um passo a mais para

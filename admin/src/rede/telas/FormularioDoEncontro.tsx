@@ -97,7 +97,13 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   notes: 'observacoes',
   street_address: 'endereco',
   ticket_url: 'linkDoConvite',
-  instagram_handle: 'instagram',
+  // `instagram_url`, e nao `instagram_handle`: o campo de ENTRADA virou a URL
+  // completa em 17/10/2026, e e esse o nome que o servidor poe no erro de
+  // campo (`errosDoInstagram('instagram_url', ...)` em
+  // `src/modules/network/application/rede-administrativa.ts`). Com a chave
+  // velha a recusa do Instagram caia fora do `map` e nunca chegava ao campo:
+  // a pessoa via o resumo do erro sem saber qual campo corrigir.
+  instagram_url: 'instagram',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',
@@ -244,8 +250,8 @@ export default function FormularioDoEncontro() {
       setSalvando(true);
       const r = await rede.criar(montarCriacao(f));
       setSalvando(false);
-      if (r.ok) sair('Encontro publicado. Ele já aparece na Rede do app.');
-      else tratarFalha(r.falha, 'publicar o encontro');
+      if (r.ok) sair('Evento publicado. Ele já aparece na Rede do app.');
+      else tratarFalha(r.falha, 'publicar o evento');
       return;
     }
     if (!encontro || !etag) return;
@@ -312,7 +318,7 @@ export default function FormularioDoEncontro() {
   if (fase === 'carregando') {
     return (
       <p className="t-body-sm c-sec" role="status">
-        Carregando o encontro…
+        Carregando o evento…
       </p>
     );
   }
@@ -330,7 +336,7 @@ export default function FormularioDoEncontro() {
             ) : undefined
           }
         >
-          {fase === 'erro' ? 'Não conseguimos carregar o encontro.' : 'Este encontro não existe mais.'}
+          {fase === 'erro' ? 'Não conseguimos carregar o evento.' : 'Este evento não existe mais.'}
         </Banner>
       </>
     );
@@ -340,7 +346,7 @@ export default function FormularioDoEncontro() {
       <>
         <VoltarParaARede />
         <h1 className="t-headline">{encontro?.title}</h1>
-        <Banner tipo="info">Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.</Banner>
+        <Banner tipo="info">Este evento foi removido. Ele não aparece no app e não pode mais ser alterado.</Banner>
       </>
     );
   }
@@ -359,7 +365,7 @@ export default function FormularioDoEncontro() {
       }}
     >
       <VoltarParaARede />
-      <h1 className="t-headline">{editando ? encontro?.title : 'Novo encontro'}</h1>
+      <h1 className="t-headline">{editando ? encontro?.title : 'Novo evento'}</h1>
       {editando && encontro?.visibility === 'private' && (
         <Link className="btn sec" style={{ alignSelf: 'flex-start' }} to={`/rede/${encontro.slug}/pedidos`}>
           <Icone nome="groups" tamanho="s20" />
@@ -367,11 +373,11 @@ export default function FormularioDoEncontro() {
         </Link>
       )}
       {encontro?.timing === 'ended' && publicado && (
-        <Banner tipo="info">Este encontro já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.</Banner>
+        <Banner tipo="info">Este evento já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.</Banner>
       )}
       {cancelado && (
         <Banner tipo="info">
-          Este encontro foi cancelado. Você ainda pode corrigir título, descrição, fotos e detalhes; data, local e acesso não mudam mais.
+          Este evento foi cancelado. Você ainda pode corrigir título, descrição, fotos e detalhes; data, local e acesso não mudam mais.
         </Banner>
       )}
       {falha && <Banner tipo="erro">{falha}</Banner>}
@@ -445,7 +451,7 @@ export default function FormularioDoEncontro() {
         <div className="form">
           <GrupoDeOpcoes rotulo="Quem pode participar *">
             <Opcao nome="visibilidade" marcada={f.visibilidade === 'public'} aoMarcar={() => mudar('visibilidade', 'public')} titulo="Público">
-              Qualquer pessoa vê o encontro no app e pode ir.
+              Qualquer pessoa vê o evento no app e pode ir.
             </Opcao>
             <Opcao nome="visibilidade" marcada={f.visibilidade === 'private'} aoMarcar={() => mudar('visibilidade', 'private')} titulo="Privado">
               Quem quer ir faz um pedido, e você aprova ou recusa aqui. No app, o local e os detalhes só aparecem para quem for aprovado. Quem for recusado não é avisado.
@@ -567,7 +573,7 @@ export default function FormularioDoEncontro() {
         </Link>
         <button type="submit" className="btn pri" aria-busy={salvando || undefined}>
           {salvando && <span className="spin" aria-hidden="true" />}
-          {editando ? 'Salvar alterações' : 'Publicar encontro'}
+          {editando ? 'Salvar alterações' : 'Publicar evento'}
         </button>
       </div>
 
@@ -663,7 +669,7 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         </span>
       ) : (
         <span className="help" id={`${id}-ajuda`}>
-          Aparece na lista de encontros do app e no topo da página do encontro.
+          Aparece na lista de eventos do app e no topo da página do evento.
         </span>
       )}
       <span className="help contador" id={`${id}-contador`}>
@@ -766,7 +772,7 @@ function CampoDeObservacoes({ valor, aoMudar, erro }: { valor: string; aoMudar: 
         </span>
       ) : (
         <span className="help" id={`${id}-ajuda`}>
-          Aparece para todos, no fim da página do encontro. Não coloque telefone, e-mail, chave Pix nem dados de outra pessoa.
+          Aparece para todos, no fim da página do evento. Não coloque telefone, e-mail, chave Pix nem dados de outra pessoa.
         </span>
       )}
       <span className="help contador" id={`${id}-contador`}>

@@ -51,8 +51,12 @@ void main() {
 
   /// `GET /v1/tags/{code}` como o contrato o declara.
   ///
-  /// `photo_url` vai **nulo por padrao**, que e como esta rota responde hoje:
-  /// a foto nao e servida por aqui, de proposito. Um teste que mandasse uma
+  /// `photo_url` vai **nulo por padrao** porque os casos deste arquivo medem
+  /// outra coisa, e nao porque a rota responda sempre nulo -- ela passou a
+  /// mandar a foto em 18/10/2026, e quem mede isso e
+  /// `foto_do_pet_na_tela_da_tag_test.dart`. O grupo da ISCA 4 aqui continua
+  /// valendo com o mesmo texto: sem foto a tela nao promete moldura nenhuma.
+  /// Um teste que mandasse uma
   /// URL de foto por conveniencia estaria exercitando um servidor que nao
   /// existe.
   Future<http.Response> Function(http.Request) redeComTag({
@@ -132,7 +136,10 @@ void main() {
       leitorDeQr: leitor,
       deposito: logado ? depositoLogado() : null,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+    await tester.tap(find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ));
     await tester.pumpAndSettle();
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();

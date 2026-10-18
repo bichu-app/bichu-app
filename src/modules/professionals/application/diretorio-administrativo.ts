@@ -38,13 +38,19 @@ import {
   comoEtag,
   errosDaUf,
   errosDeTexto,
+  errosDoCep,
   errosDoTelefone,
   MAXIMO_DA_CIDADE,
   MAXIMO_DO_BAIRRO,
+  MAXIMO_DO_COMPLEMENTO,
+  MAXIMO_DO_LOGRADOURO,
   MAXIMO_DO_NOME,
+  MAXIMO_DO_NUMERO,
   MAXIMO_DO_SOBRE,
   MINIMO_DA_CIDADE,
+  MINIMO_DO_COMPLEMENTO,
   MINIMO_DO_NOME,
+  MINIMO_DO_NUMERO,
   MINIMO_DO_SOBRE,
   ORIGEM_DO_PAINEL,
   planejarEdicao,
@@ -168,6 +174,10 @@ function errosDaForma(campos: {
   city?: string | null | undefined;
   state?: string | null | undefined;
   neighborhood?: string | null | undefined;
+  postal_code?: string | null | undefined;
+  street?: string | null | undefined;
+  street_number?: string | null | undefined;
+  complement?: string | null | undefined;
   phone_e164?: string | null | undefined;
 }): ProblemFieldError[] {
   const erros: ProblemFieldError[] = [];
@@ -185,6 +195,25 @@ function errosDaForma(campos: {
   }
   if (campos.neighborhood !== undefined && campos.neighborhood !== null) {
     erros.push(...errosDeTexto('neighborhood', campos.neighborhood, MINIMO_DA_CIDADE, MAXIMO_DO_BAIRRO));
+  }
+  // O endereco de rua. Nenhum dos quatro e obrigatorio -- nem no rascunho, nem
+  // na publicacao --, e por isso a conferencia aqui e so de FORMA: o que veio
+  // tem de caber na coluna. `null` apaga e nao tem forma a conferir.
+  if (campos.postal_code !== undefined && campos.postal_code !== null) {
+    erros.push(...errosDoCep('postal_code', campos.postal_code));
+  }
+  if (campos.street !== undefined && campos.street !== null) {
+    erros.push(...errosDeTexto('street', campos.street, MINIMO_DA_CIDADE, MAXIMO_DO_LOGRADOURO));
+  }
+  if (campos.street_number !== undefined && campos.street_number !== null) {
+    erros.push(
+      ...errosDeTexto('street_number', campos.street_number, MINIMO_DO_NUMERO, MAXIMO_DO_NUMERO),
+    );
+  }
+  if (campos.complement !== undefined && campos.complement !== null) {
+    erros.push(
+      ...errosDeTexto('complement', campos.complement, MINIMO_DO_COMPLEMENTO, MAXIMO_DO_COMPLEMENTO),
+    );
   }
   if (campos.phone_e164 !== undefined && campos.phone_e164 !== null) {
     erros.push(...errosDoTelefone('phone_e164', campos.phone_e164));
@@ -277,6 +306,10 @@ export class DiretorioAdministrativo {
           // perder metade das linhas sem erro nenhum.
           state: aparado(corpo.state)?.toUpperCase() ?? null,
           neighborhood: aparado(corpo.neighborhood) ?? null,
+          postalCode: aparado(corpo.postal_code) ?? null,
+          street: aparado(corpo.street) ?? null,
+          streetNumber: aparado(corpo.street_number) ?? null,
+          complement: aparado(corpo.complement) ?? null,
           phoneE164: aparado(corpo.phone_e164) ?? null,
           status: STATUS_INICIAL,
           source: ORIGEM_DO_PAINEL,
@@ -321,6 +354,16 @@ export class DiretorioAdministrativo {
         ...(patch.neighborhood === undefined
           ? {}
           : { neighborhood: aparado(patch.neighborhood) ?? null }),
+        ...(patch.postal_code === undefined
+          ? {}
+          : { postal_code: aparado(patch.postal_code) ?? null }),
+        ...(patch.street === undefined ? {} : { street: aparado(patch.street) ?? null }),
+        ...(patch.street_number === undefined
+          ? {}
+          : { street_number: aparado(patch.street_number) ?? null }),
+        ...(patch.complement === undefined
+          ? {}
+          : { complement: aparado(patch.complement) ?? null }),
         ...(patch.phone_e164 === undefined ? {} : { phone_e164: aparado(patch.phone_e164) ?? null }),
       };
 
@@ -339,6 +382,12 @@ export class DiretorioAdministrativo {
         ...(normalizado.neighborhood === undefined
           ? {}
           : { neighborhood: normalizado.neighborhood }),
+        ...(normalizado.postal_code === undefined ? {} : { postalCode: normalizado.postal_code }),
+        ...(normalizado.street === undefined ? {} : { street: normalizado.street }),
+        ...(normalizado.street_number === undefined
+          ? {}
+          : { streetNumber: normalizado.street_number }),
+        ...(normalizado.complement === undefined ? {} : { complement: normalizado.complement }),
         ...(normalizado.phone_e164 === undefined ? {} : { phoneE164: normalizado.phone_e164 }),
         ...(normalizado.status === undefined ? {} : { status: normalizado.status }),
         gravaMarcoDePublicacao: decidido.plano.gravaMarcoDePublicacao,
@@ -361,6 +410,54 @@ export class DiretorioAdministrativo {
         ),
       );
       return this.escrito(alterada);
+    });
+  }
+
+  /**
+   * Tira uma avaliacao do ar, com o motivo na trilha.
+   *
+   * **O motivo e obrigatorio, e e a diferenca entre moderacao e arbitrio.**
+   * Quem remove escreve por que, e isso fica legivel para quem auditar depois.
+   * O contrato ja o exige (`minLength: 3`); aqui ele e aparado e reconferido,
+   * porque 500 espacos passam por `minLength`.
+   *
+   * **`resourceKind` e `professional_review`, nao `directory_entry`**, e por
+   * isso este metodo nao usa `this.evento()`: o alvo e a avaliacao, e uma
+   * investigacao que procurasse pela entrada do diretorio nao acharia a
+   * remocao.
+   *
+   * O `before`/`after` carrega a NOTA e nao o texto. A nota explica o efeito na
+   * media -- que e o que muda na tela de todo mundo -- e o texto de uma
+   * avaliacao removida por ser ofensivo nao precisa ser recopiado para a
+   * trilha, onde ficaria sem o mesmo controle de acesso.
+   */
+  async removerAvaliacao(autor: Autor, ref: string, motivo: string): Promise<void> {
+    const aparado = motivo.trim();
+    if (aparado.length < 3 || aparado.length > 500) {
+      throw problemas.validacao([
+        { field: 'reason', code: 'required', message: 'Escreva o motivo da remoção.' },
+      ]);
+    }
+
+    return this.deps.repositorio.emTransacao(async (tx) => {
+      const removida = await tx.removerAvaliacao(ref, aparado, this.agora());
+      // 404 e nao 403, e tambem quando a avaliacao JA estava removida: o `ref`
+      // de algo que nao esta no ar nao tem alvo, e o motivo da primeira remocao
+      // e de quem auditar -- sobrescreve-lo apagaria a decisao que valeu.
+      if (removida === null) throw problemas.naoEncontrado();
+
+      await tx.registrarNaTrilha({
+        actorKind: 'admin',
+        actorAdminId: autor.adminAccountId,
+        actorIp: autor.ip,
+        correlationId: autor.correlationId,
+        action: 'admin.directory_review.removed',
+        resourceKind: 'professional_review',
+        resourceId: removida.id,
+        before: { status: 'published', rating: removida.notaAntes },
+        after: { status: 'removed', reason: aparado },
+        metadata: { surface: 'admin', session: autor.sessao },
+      });
     });
   }
 }

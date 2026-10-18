@@ -417,6 +417,52 @@ export const problemas = {
     }),
 
   /**
+   * 409. Nenhum canal de contato verificado, na sugestão de entrada do `Perto`.
+   *
+   * **O tipo é o MESMO** de abrir caso de pet perdido e de propor encontro, pela
+   * mesma razão escrita acima: a régua de "conta validada" é uma só no produto, e
+   * um terceiro `type` para a mesma pergunta faria o app decidir por três onde há
+   * um conceito. O que muda é o texto, e aqui ele precisa mudar outra vez --
+   * "para avisar a vizinhança" e "para propor um encontro" mandam quem está
+   * sugerindo uma clínica para a tela errada.
+   *
+   * A regra é do cliente, dita duas vezes: sugerir cria TRABALHO HUMANO de
+   * revisão sobre um TERCEIRO que não pediu, e esconder o botão na tela não
+   * recusa o pedido -- quem chama a rota direto passa por cima da tela.
+   *
+   * **Na prática isso é e-mail**, porque nenhuma operação verifica telefone --
+   * nada em `src/` grava `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaSugestao: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para sugerir um lugar', {
+      detail: 'Uma sugestão fala de um estabelecimento que não pediu para aparecer. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
+   * 409. Avaliar um local do diretório exige canal de contato verificado.
+   *
+   * **Mesmo `type` de `canalDeContatoNaoVerificadoParaEncontro`, e isso é o
+   * desenho e não descuido**: a regra é literalmente a mesma regra do cliente
+   * — "só usuários com os dados validados" —, e dois `type` para um conceito
+   * fariam o app decidir por dois caminhos onde há um.
+   *
+   * O que muda é o **texto**, e ele precisa mudar: "confirme seu e-mail para
+   * propor um encontro" numa tela de avaliar um veterinário manda a pessoa
+   * para o lugar errado. É a mesma razão pela qual o irmão de cima existe
+   * separado de `canalDeContatoNaoVerificado`.
+   *
+   * **Na prática isso é e-mail**, porque nada em `src/` grava
+   * `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaAvaliar: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para avaliar', {
+      detail:
+        'A avaliação aparece com o seu nome na página de um negócio real. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
    * 409. A conta já tem três encontros ativos (ADR-0025 emenda 3).
    *
    * Separado de `open-case-limit-reached` porque a **saída é diferente**: lá a
@@ -687,6 +733,21 @@ export const problemas = {
       detail:
         'Este total não reinicia com o tempo, então esperar não libera outro. ' +
         'Se você precisa de mais, fale com a gente.',
+    }),
+
+  /**
+   * Os dois serviços públicos de CEP falharam, ou não responderam no prazo de
+   * 4 s cada (`lookupAdminPostalCode`).
+   *
+   * **Separado de `not-found`**, que é 404, porque a saída da tela é a mesma --
+   * digitar o endereço -- e a frase não é: "este CEP não existe" não é "não
+   * conseguimos consultar agora". Os dois são informativos e **nenhum dos dois
+   * impede o cadastro de ser salvo**: busca de CEP é conveniência de
+   * digitação.
+   */
+  buscaDeCepIndisponivel: (): AppError =>
+    new AppError('postal-code-lookup-unavailable', 'Não conseguimos consultar o CEP agora', {
+      detail: 'Tente de novo, ou preencha o endereço à mão.',
     }),
 
   interno: (cause?: unknown): AppError =>

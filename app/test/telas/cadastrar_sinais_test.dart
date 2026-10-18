@@ -86,16 +86,39 @@ void main() {
     testWidgets('a ajuda aponta para Sinais particulares', (tester) async {
       await abrirF15(tester);
 
-      // A parte que nao pode ser cortada por concisao. Sem ela, quem tem um
-      // tricolor tenta forcar a descricao no campo de cor, nao consegue, e vai
-      // embora achando que o cadastro nao descreve o animal dela.
+      // **O PARAGRAFO DE APOIO SAIU EM 18/10/2026**, por pedido literal do
+      // cliente: *"remova todos esses textos descritivos das paginas, textos
+      // de apoio, explicacao, isso esta deixando o app poluido, cheio de
+      // informacao e feio em relacao ao designer"*. O commit e o `b6b6f31`, e
+      // ele apagou as proprias constantes de `textos_do_cadastro.dart` (41
+      // linhas), atualizando os casos da `Rede` e deixando os do cadastro para
+      // tras -- e por isso estes ficaram pedindo frases que o produto nao
+      // escreve mais.
+      //
+      // O caso **virou do avesso e nao foi apagado**: a ausencia da frase e
+      // afirmada, e junto com ela o que resolve o problema que a frase
+      // resolvia. A decisao preservou de proposito erro, validacao, rotulo
+      // acessivel e a ultima linha de estado vazio -- e quem cobra isso e
+      // `test/telas/limpeza_nao_leva_o_protegido_test.dart`, criado no mesmo
+      // commit.
+      //
+      // O encaminhamento era a frase; o DESTINO dela continua na tela, e e ele
+      // que impede o tricolor de ficar sem onde ser descrito. O caso afirma os
+      // dois lados: a frase saiu, e `Sinais particulares` esta la.
       expect(
         find.textContaining('Manchas, coleira e detalhes vão em Sinais '
             'particulares'),
+        findsNothing,
+        reason: 'REPROVA: a ajuda das cores voltou a tela. O cliente pediu a '
+            'saida dela em 18/10.',
+      );
+      await rolarAte(tester, find.text(TextosDoCadastro.rotuloDosSinais));
+      expect(
+        find.text(TextosDoCadastro.rotuloDosSinais),
         findsOne,
-        reason: 'REPROVA: a ajuda das cores perdeu o encaminhamento para '
-            'Sinais particulares. A lista de duas posicoes frustra justamente '
-            'quem tem o pet mais facil de reconhecer.',
+        reason: 'REPROVA: `Sinais particulares` saiu da tela. A ajuda que '
+            'apontava para ele podia sair; o campo, nao -- sem ele quem tem um '
+            'tricolor nao tem onde descrever o animal.',
       );
     });
 

@@ -87,6 +87,29 @@ function repositorio(cenario: Cenario): DirectoryRepository {
         distanciaDisponivel: cenario.distanciaDisponivel ?? true,
       });
     },
+    // OS CINCO METODOS DA AVALIACAO (18/10/2026) EXISTEM AQUI E RECUSAM.
+    //
+    // **Nao sao corpos vazios**, e a diferenca e a razao pela qual o cabecalho
+    // da porta avisa contra dobre com metodo vazio: um `async () => undefined`
+    // faria estes casos passarem medindo nada. Este arquivo cobre
+    // `listDirectoryEntries` e so ela; qualquer caso que chegue a um destes
+    // metodos esta exercitando outra rota pelo dobre errado, e o `throw`
+    // reprova esse caso em vez de aprova-lo em silencio.
+    lerLocalPublicado: () => {
+      throw new Error('lerLocalPublicado nao e exercitado por este arquivo');
+    },
+    listarAvaliacoes: () => {
+      throw new Error('listarAvaliacoes nao e exercitado por este arquivo');
+    },
+    gravarMinhaAvaliacao: () => {
+      throw new Error('gravarMinhaAvaliacao nao e exercitado por este arquivo');
+    },
+    apagarMinhaAvaliacao: () => {
+      throw new Error('apagarMinhaAvaliacao nao e exercitado por este arquivo');
+    },
+    denunciarAvaliacao: () => {
+      throw new Error('denunciarAvaliacao nao e exercitado por este arquivo');
+    },
   };
 }
 

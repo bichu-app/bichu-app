@@ -6,6 +6,7 @@ import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../widgets/acao_de_criar_na_barra.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
@@ -17,6 +18,37 @@ import 'perfil/meus_pets.dart';
 import 'perto/lista_do_diretorio.dart';
 import 'rede/agenda_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
+
+/// Quem pode ver uma acao de CRIAR da comunidade.
+///
+/// **Regra unica, decidida pelo cliente em 18/10/2026**, nas palavras dele:
+/// *"assim como o marcar um encontro (evento), essas acoes so devem ser
+/// realizadas por usuarios cadastrados e validados, caso ao contrario o botao
+/// nem aparece"*. Sessao **e** e-mail confirmado; qualquer outro estado nao
+/// desenha nada -- nem botao, nem icone.
+///
+/// **Isto SUBSTITUI o comportamento anterior**, em que a porta aparecia sempre
+/// e a tela de destino explicava a recusa com a saida que a resolve. Os dois
+/// impedimentos (`semConta` e `semEmailConfirmado`) **continuam em
+/// `criar_encontro.dart` e `sugerir_profissional.dart` e nao foram tocados**:
+/// as rotas seguem alcancaveis por link profundo, e tela que recusa calada e
+/// pior do que tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+///
+/// **O caminho para validar nao depende desta porta, e isso foi conferido.** O
+/// `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com `Reenviar` em
+/// DUAS posicoes que nao saem da frente de ninguem: faixa de largura total no
+/// topo de `Pets` (posicao 1) e item destacado no topo de `Perfil` (posicao
+/// 2). Esconder a acao de criar nao fecha caminho nenhum de confirmacao.
+///
+/// **E ela NAO e a trava.** A trava de verdade e do servidor, e aqui vai o
+/// achado: `rotaDaCriacaoDeEncontro` e a rota da sugestao do diretorio exigem
+/// **conta** (teto por `account`, token obrigatorio) e **nao** exigem
+/// `email_verified` em lugar nenhum de `src/`. A metade "validado" desta regra
+/// existe **so no app**. Esta linha esconde a porta; ela nao recusa o pedido.
+bool podeCriarNaComunidade(ControladorDeSessao sessao) {
+  final usuario = sessao.usuario;
+  return sessao.logado && usuario != null && usuario.emailVerificado;
+}
 
 /// Secao 1 — `Pets`. A casa dos perdidos, dos achados e das adocoes.
 ///
@@ -36,7 +68,6 @@ class AbaPets extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.pets);
     final sessao = Escopo.of(context).sessao;
-    final textos = Theme.of(context).textTheme;
 
     return AnimatedBuilder(
       animation: sessao,
@@ -58,6 +89,38 @@ class AbaPets extends StatelessWidget {
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
           raizDeSecao: true,
           titulo: destino.rotulo,
+          // A PORTA PRIMARIA DO LEITOR DE QR, AGORA NA BARRA DE TOPO
+          // (pedido do cliente em 18/10/2026: "ate o escanear poderia ser
+          // icones na barra superior ... e nao fique esse botao grande na
+          // pagina ocupando muito espaco"). O botao de contorno de largura
+          // total que morava no corpo saiu: 48 dp dele mais 24 dp de folga,
+          // 72 dp devolvidos ao corpo.
+          //
+          // **O GLIFO E O DE QR CODE, e ele foi escolhido por ele**: "o botao
+          // escanear uma tag, pode ser um icone de qr-code igual do
+          // whatsapp". `Icons.qr_code_2` e o quadrado com os tres marcadores
+          // de canto, da familia fechada do design system 10.1 (Material
+          // Symbols, embutida no Flutter) -- nenhum vetor novo, nada baixado,
+          // nada gerado. Ele nao colide com glifo nenhum em uso: `qr_code*`
+          // nao aparecia em `app/lib` antes desta mudanca.
+          //
+          // **ELE CONTINUA VISIVEL DESLOGADO, e isso foi MEDIDO e nao
+          // suposto.** `tela_leitor_de_qr.dart` diz que a autenticacao da
+          // rota do leitor e **opcional**, e o token entra quando ha. Quem
+          // acha um cachorro na rua e exatamente quem pode nao ter conta
+          // nenhuma: esconder o leitor dessa pessoa e o oposto da cunha do
+          // produto. As outras duas acoes desta tarefa -- criar evento e
+          // indicar -- exigem sessao e por isso desaparecem deslogadas; esta
+          // nao.
+          //
+          // `push` e nao `go`: o leitor cobre a casca inteira (o design
+          // system 11.11 manda a barra sumir no leitor de camera), e tela que
+          // cobre a casca precisa ter volta.
+          acaoDeCriar: AcaoDeCriarNaBarra(
+            icone: Icons.qr_code_2,
+            rotulo: 'Escanear uma tag',
+            aoTocar: () => context.push(Rotas.escanear),
+          ),
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
@@ -76,14 +139,6 @@ class AbaPets extends StatelessWidget {
                 key: ValueKey<String>('aviso-inicio-${usuario.id}'),
                 usuario: usuario,
               ),
-            if (!logado) ...<Widget>[
-              Text(
-                'O Bichu dá uma identidade ao seu pet e aciona a vizinhança '
-                'quando ele some.',
-                style: textos.bodyLarge,
-              ),
-              const SizedBox(height: BichuEspaco.e6),
-            ],
             // `Cadastrar meu pet` NAO MORA AQUI (BICHUS-232, pedido do
             // cliente em 22/09 depois do primeiro teste em aparelho).
             //
@@ -99,29 +154,25 @@ class AbaPets extends StatelessWidget {
             // sao uma coisa so: tirar daqui sem tornar permanente la apagaria
             // o unico caminho do app para cadastrar o segundo pet.
             //
-            // A PORTA PRIMARIA DO LEITOR DE QR (UX 27.5.6).
+            // A PORTA PRIMARIA DO LEITOR DE QR (UX 27.5.6) **SUBIU PARA A
+            // BARRA DE TOPO** em 18/10/2026, e esta no `acaoDeCriar` acima.
             //
-            // Ela vive aqui e nao em `Perfil` porque quem acha um cachorro na
-            // rua nao pensa a palavra "Perfil" (Nielsen 2). `Escanear` deixou
-            // de ser aba -- o rotulo pede 71,57 dp num slot de 64,0 -- mas o
-            // caminho **nao ficou mais longe**: e um toque a partir da secao de
-            // aterrissagem, exatamente como era.
+            // Ela continua vivendo nesta secao e nao em `Perfil`, porque quem
+            // acha um cachorro na rua nao pensa a palavra "Perfil" (Nielsen
+            // 2), e continua a UM toque de distancia: o caminho nao ficou mais
+            // longo, mudou de lugar na tela. As DUAS portas do 27.5.6 seguem
+            // existindo -- esta, primaria, e a de conta em `Perfil`, que e
+            // item de menu. Nenhuma das duas fechou.
             //
-            // `push` e nao `go`: o leitor cobre a casca inteira (o design
-            // system 11.11 manda a barra sumir no leitor de camera), e tela que
-            // cobre a casca precisa ter volta.
-            BotaoSecundario(
-              rotulo: 'Escanear uma tag',
-              aoTocar: () => context.push(Rotas.escanear),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
+            // O que saiu daqui foi a FORMA: um `BotaoSecundario` de largura
+            // total, 48 dp de altura mais 24 dp de folga.
+            //
             // `Adoções` e sub-destino de `Pets`, com porta propria, e **nao** e
             // item de `Perto` (UX 27.2.4). Em `Perto` fica a porta das ONGs,
             // que leva para ca pre-filtrado e nao duplica listagem.
             const _PortaDeSubDestino(
               icone: Icons.volunteer_activism_outlined,
               titulo: 'Adoções',
-              descricao: 'Os pets da vizinhança que estão procurando uma casa.',
               rota: Rotas.adocoes,
             ),
             const SizedBox(height: BichuEspaco.e6),
@@ -139,8 +190,7 @@ class AbaPets extends StatelessWidget {
             // trezentos. Diz o que vai existir e que ainda nao existe (25.7.3).
             const EstadoVazio(
               titulo: 'A lista de pets perdidos está em construção',
-              explicacao: 'Aqui vão ficar os pets perdidos e achados da sua '
-                  'região, com a foto e o bairro onde foram vistos.',
+              explicacao: 'Os perdidos e achados da sua região vão ficar aqui.',
             ),
             // `Entrou como <e-mail>` e `Ja tenho conta` TAMBEM SAIRAM
             // (BICHUS-232). Os dois eram identidade e acao de conta dentro da
@@ -155,15 +205,15 @@ class AbaPets extends StatelessWidget {
   }
 }
 
-/// Secao 2 — `Rede`. Eventos e encontros da comunidade.
+/// Secao 2 — `Rede`. Eventos da comunidade.
 ///
 /// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Rede esta em
 /// construcao" era o certo enquanto nao havia tabela nem rota;
 /// `GET /network/events` existe, e a agenda e [AgendaDaRede]. O estado vazio
 /// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
-/// quando o servidor responde que nao ha encontro -- que e afirmacao medida, e
+/// quando o servidor responde que nao ha evento -- que e afirmacao medida, e
 /// nao afirmacao sobre dado que a tela nao carrega. E ele virou **dois**, como
-/// na `Loja`: "a Rede ainda nao tem encontro" e "nada com esse recorte" dizem
+/// na `Loja`: "a Rede ainda nao tem evento" e "nada com esse recorte" dizem
 /// coisas opostas.
 ///
 /// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
@@ -192,9 +242,60 @@ class AbaRede extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.rede);
-    return TelaDeAba(
-      raizDeSecao: true,
-      titulo: destino.rotulo,
+    final sessao = Escopo.of(context).sessao;
+
+    // `AnimatedBuilder` porque a visibilidade da porta de criar passou a
+    // depender da SESSAO: sem ele, quem entra ou confirma o e-mail com a
+    // `Rede` aberta continuaria sem o icone ate trocar de aba.
+    return AnimatedBuilder(
+      animation: sessao,
+      builder: (context, _) => TelaDeAba(
+        raizDeSecao: true,
+        titulo: destino.rotulo,
+        // A PORTA DE CRIAR EVENTO, na barra de topo (pedido do cliente em
+        // 18/10/2026). Ela saiu do corpo da agenda, onde era um
+        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
+        // folga, 64 dp devolvidos ao corpo.
+        //
+        // **"Criar evento", e nao "Marcar um encontro".** O vocabulario do app
+        // trocou "encontro" por "evento" em 18/10 e os rotulos novos dizem
+        // `Criar evento`. **A pendencia que este ramo deixou escrita esta
+        // FECHADA na mescla do lote de 18/10:** o literal saiu daqui e o
+        // rotulo vem de `AgendaDaRede.rotuloDeMarcar`, que o ramo do
+        // vocabulario passou a valer `Criar evento`. Era uma string aqui mais
+        // uma constante definida e sem uso la; agora e uma coisa so, e quem
+        // mudar a redacao muda num lugar.
+        //
+        // **O GLIFO: `Icons.more_time` -- o relogio com o sinal de mais.** Ele
+        // nao foi escolhido por gosto, e sim por eliminacao dentro da familia
+        // fechada do 10.1 (Material Symbols, a embutida no Flutter 3.47.4):
+        //
+        //   - calendario COM O SINAL DE MAIS, que seria o obvio, **nao existe**
+        //     nesta familia nesta versao (`calendar_add_on` nao esta la);
+        //   - `edit_calendar` (calendario com lapis) **ja esta em uso dentro da
+        //     propria `Rede`**, em `encontro_da_rede.dart`, significando
+        //     "adicionar ao meu calendario" -- dois sentidos no mesmo glifo na
+        //     mesma secao e a colisao que o cliente leu no aparelho em 22/09;
+        //   - `event_available` (calendario com visto) leria "vou participar",
+        //     que e outra acao que esta secao tem;
+        //   - `event` sozinho e o glifo decorativo de "quando" em quatro telas,
+        //     e diz "um evento", nunca "criar um".
+        //
+        // Sobra o sinal de mais sobre o objeto que a acao de fato produz: uma
+        // data e hora marcadas. Nenhum vetor novo, nada baixado, nada gerado.
+        //
+        // **So aparece com sessao E e-mail confirmado** (ver
+        // `podeCriarNaComunidade`). Deslogado, a barra da `Rede` fica com o
+        // titulo e o `Filtros` -- nao fica vazia --, e o caminho para entrar e
+        // a aba `Perfil`, que oferece `Entrar` e `Criar conta` e continua na
+        // barra de baixo em todo estado.
+        acaoDeCriar: podeCriarNaComunidade(sessao)
+            ? AcaoDeCriarNaBarra(
+                icone: Icons.more_time,
+                rotulo: AgendaDaRede.rotuloDeMarcar,
+                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
+              )
+            : null,
       // **O reforco desce para a agenda, e nao sai da tela.**
       //
       // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
@@ -203,8 +304,9 @@ class AbaRede extends StatelessWidget {
       // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
       // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
       // `text-secondary`, exatamente como aqui, so com a busca acima.
-      reforco: null,
-      filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
+        reforco: null,
+        filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
+      ),
     );
   }
 }
@@ -223,10 +325,11 @@ class AbaRede extends StatelessWidget {
 /// porque o conteudo da secao passou a existir, e porta para outra secao acima
 /// do conteudo proprio inverteria a ordem de leitura.
 ///
-/// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
-/// de listagem -- busca, filtro e ordenacao -- moram no corpo, no topo da
-/// lista (ver `BarraDeListagem`): o 11.23.1 da UMA acao na `AppBar`, e tres
-/// nao cabem numa. O `Filtros` desceu junto com os outros dois.
+/// **A barra de topo passou a ter DUAS acoes na direita**, e nao mais uma: a
+/// porta de INDICAR subiu para a barra em 18/10/2026 (pedido do cliente) e
+/// fica a esquerda do `Filtros`. Busca, filtro e ordenacao **nao mudaram de
+/// lugar nesta rodada**: a busca continua no corpo, em largura total, e o
+/// acesso a folha de filtro e ordem continua no slot que ganhou em 17/10.
 ///
 /// **Sem mapa**, por decisao de 17/09: o Maps cobra por carregamento de mapa e
 /// o componente criaria precedente contra o ADR-0010. E perfil de profissional
@@ -237,20 +340,69 @@ class AbaPerto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.perto);
-    return TelaDeAba(
-      raizDeSecao: true,
-      titulo: destino.rotulo,
-      reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[
-        ListaDoDiretorio(),
-        SizedBox(height: BichuEspaco.e6),
-        _PortaDeSubDestino(
-          icone: Icons.favorite_outline,
-          titulo: 'Pets de ONGs para adoção',
-          descricao: 'Abre a lista de Pets já filtrada em adoção.',
-          rota: Rotas.adocoes,
-        ),
-      ],
+    final sessao = Escopo.of(context).sessao;
+
+    // Mesma razao de `AbaRede`: a visibilidade da porta de indicar depende da
+    // sessao, e sem escutar o controlador ela so apareceria na troca de aba.
+    return AnimatedBuilder(
+      animation: sessao,
+      builder: (context, _) => TelaDeAba(
+        raizDeSecao: true,
+        titulo: destino.rotulo,
+        // A PORTA DE INDICAR, na barra de topo (pedido do cliente em
+        // 18/10/2026). Ela saiu do corpo da lista do diretorio, onde era um
+        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
+        // folga, 64 dp devolvidos ao corpo.
+        //
+        // **O GLIFO E O DE PESSOAS JUNTAS, e ele foi escolhido por ele**: "o
+        // icone de recomendar um profissional, pode ser igual do instagram, as
+        // 3 pessoas juntos, para adicionar uma nova recomendacao".
+        // `Icons.group_add` e esse desenho na familia fechada do 10.1 --
+        // nenhum vetor novo, nada baixado, nada gerado.
+        //
+        // **O SINAL DE ADICIONAR NAO E ENFEITE, e e ele que resolve a
+        // ambiguidade.** Pessoas juntas SEM o sinal leria "ver a lista de
+        // profissionais" -- que e justamente o que esta tela ja mostra, e um
+        // icone que repete o conteudo da tela nao oferece acao nenhuma.
+        // `group_add` ja traz o sinal embutido no proprio glifo, entao a
+        // leitura "adicionar" vem sem compor dois glifos (o 10.1 e o UX 27.3.1
+        // proibem composicao).
+        //
+        // **Ha uma vizinhanca para vigiar, e ela esta escrita aqui para nao
+        // ser descoberta no aparelho:** a aba `Rede` usa `groups` na barra de
+        // BAIXO, e as duas saem do mesmo campo de "pessoas juntas". Elas vivem
+        // em barras diferentes e em secoes diferentes, e o cliente pediu este
+        // glifo com estas palavras. Se ele ler as duas como a mesma coisa no
+        // aparelho, quem muda e esta linha, nao a aba.
+        //
+        // **So aparece com sessao E e-mail confirmado.** O defeito que ele
+        // relatou era exatamente este: *"o botao indicar quem atende bem, nem
+        // deveria aparecer para o usuario se ele nao estiver logado"* -- a
+        // porta convidava, e a tela de destino e que dizia "Entre para
+        // indicar". Deslogado a barra fica com o hamburguer, o titulo e o
+        // `Filtros`, e o caminho para entrar e a aba `Perfil`.
+        acaoDeCriar: podeCriarNaComunidade(sessao)
+            ? AcaoDeCriarNaBarra(
+                icone: Icons.group_add,
+                // A MESMA palavra da tela, e de uma fonte so: "Indicar", nunca
+                // "Cadastrar". A emenda 1 do ADR-0011 diz que a comunidade
+                // convida e avalia, nunca cria, e `Cadastrar` prometeria
+                // publicacao -- nada e publicado por esta porta.
+                rotulo: ListaDoDiretorio.rotuloDeIndicar,
+                aoTocar: () => context.push(Rotas.sugerirProfissional),
+              )
+            : null,
+        reforco: destino.reforcoDaPagina,
+        filhos: const <Widget>[
+          ListaDoDiretorio(),
+          SizedBox(height: BichuEspaco.e6),
+          _PortaDeSubDestino(
+            icone: Icons.favorite_outline,
+            titulo: 'Pets de ONGs para adoção',
+            rota: Rotas.adocoes,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -368,10 +520,31 @@ class AbaPerfil extends StatelessWidget {
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
-            // A POSICAO 2 (BICHUS-75, criterio 2): item destacado no TOPO da
-            // lista, antes do proprio endereco. Vem antes porque o criterio o
-            // chama de destacado, e um destaque abaixo da linha que ele
-            // comenta seria nota de rodape.
+            // -----------------------------------------------------------------
+            // A ORDEM DOS BLOCOS (18/10/2026, pedido do cliente)
+            //
+            // Literal: *"Coloque a secao meus pets como o primeiro item dessa
+            // pagina e depois traga os dados de conta. O sair da conta deve
+            // ser sempre a ultima opcao do menu"*.
+            //
+            // A ordem desta lista E a ordem na tela: `TelaDeAba` entrega
+            // `filhos` a um `ListView` vertical sem reordenacao nenhuma. Por
+            // isso ela esta escrita aqui de cima para baixo, e nao espalhada:
+            // 1) as faixas, 2) `Meus pets`, 3) o grupo `Conta`,
+            // 4) `Sair da conta` -- ultimo, sempre.
+            //
+            // **AS FAIXAS FICAM ACIMA DE `Meus pets`, e e escolha medida.**
+            // Elas nao sao itens: sao condicionais, e saem da arvore de quem
+            // confirmou o e-mail e nao negou o aviso -- para essa pessoa, que
+            // e o estado comum, `Meus pets` E o primeiro elemento da tela.
+            // Empurra-las para depois de uma lista de ate 20 cartoes as
+            // levaria para baixo da dobra, e a faixa de cadastro incompleto e
+            // justamente o caminho de quem ainda nao validou os dados: com as
+            // acoes de criar escondidas de quem nao validou, ela e o que sobra
+            // para a pessoa descobrir o que fazer. A POSICAO 2 da BICHUS-75
+            // (criterio 2) diz "item destacado no TOPO da lista", e um
+            // destaque abaixo do bloco que ele comenta seria nota de rodape.
+            // -----------------------------------------------------------------
             if (sessao.usuario != null)
               AvisoDeCadastroIncompleto(
                 key: ValueKey<String>('aviso-perfil-${sessao.usuario!.id}'),
@@ -381,6 +554,31 @@ class AbaPerfil extends StatelessWidget {
             // faixas ficam juntas, no alto: faixa nao e botao, e o cliente
             // nao reclamou delas -- ele reclamou da pilha de botoes.
             const _AvisoPorPertoDesligado(),
+            // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
+            // para os cartoes da BICHUS-62, agora o PRIMEIRO bloco da pagina.
+            // A chave e por conta para que a troca de usuario reconstrua o
+            // estado em vez de reaproveitar o que estava carregado para a
+            // anterior.
+            //
+            // **Continua CONTEUDO, e nao item de menu.** A lista de pets e o
+            // corpo da secao: um item `Meus pets` levaria a uma tela que nao
+            // existe, e inventar o endereco dela seria criar destino para uma
+            // tela que nao ha (e o que o registro de sub-destinos ja diz,
+            // palavra por palavra, sobre esta linha). E os cartoes sao o UNICO
+            // caminho do app ate `Rotas.detalheDoPet`, onde moram o QR da
+            // plaquinha e `Marcar como perdido`: troca-los por um item fecharia
+            // o caminho mais critico do produto. Subir o bloco para o topo
+            // ABRE esse caminho em vez de fecha-lo -- ele era o ultimo da
+            // pagina, abaixo de tres linhas de menu.
+            MeusPets(
+              key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
+              cache: Escopo.of(context).cacheDeMeusPets,
+            ),
+            // O VAO ENTRE BLOCOS, `e6`, que e o que a casca usa entre a linha
+            // de reforco e o corpo e o que `Meus pets` usa entre os cartoes e
+            // a acao permanente. Sem ele o hairline do primeiro `ItemDeMenu`
+            // encostava no bloco de cima e os dois grupos leem como um.
+            const SizedBox(height: BichuEspaco.e6),
             // -----------------------------------------------------------------
             // O MENU DA CONTA (18/10/2026, pedido do cliente)
             //
@@ -407,6 +605,11 @@ class AbaPerfil extends StatelessWidget {
             // confirmacao continuam escritos -- eram a unica informacao que
             // aquela linha dava, e sumir com ela seria perder conteudo em nome
             // de arrumar a forma.
+            //
+            // E a `Dados da conta` do pedido: o cliente nomeou o conteudo, nao
+            // o rotulo, e o rotulo `Meus dados` esta em tres portoes e na tela
+            // `/perfil/dados` que ele abre. Renomear seria mudar texto de tela
+            // sem ele pedir.
             ItemDeMenu(
               rotulo: 'Meus dados',
               apoio: _apoioDosDados(sessao),
@@ -421,25 +624,19 @@ class AbaPerfil extends StatelessWidget {
             // precisa ter volta. A porta PRIMARIA, em `Pets`, nao mudou de
             // forma: la ela e a acao da secao de aterrissagem, e quem achou um
             // cachorro na rua nao vai procurar menu.
+            //
+            // E o "resto dos itens no meio" do pedido: entre `Meus dados` e
+            // `Sair da conta`. Item novo neste menu entra AQUI, nunca depois
+            // do ultimo.
             ItemDeMenu(
               rotulo: 'Escanear uma tag',
               aoTocar: () => context.push(Rotas.escanear),
             ),
+            // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
+            // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois
+            // desta: era `Meus pets` que vinha depois dela, e era isso que
+            // fazia a pagina parecer quebrada no meio.
             _ItemDeSair(sessao: sessao),
-            // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
-            // para os cartoes da BICHUS-62. A chave e por conta para que a
-            // troca de usuario reconstrua o estado em vez de reaproveitar o
-            // que estava carregado para a anterior.
-            //
-            // **Continua CONTEUDO, e nao item de menu.** A lista de pets e o
-            // corpo da secao: um item `Meus pets` levaria a uma tela que nao
-            // existe, e inventar o endereco dela seria criar destino para uma
-            // tela que nao ha (e o que o registro de sub-destinos ja diz,
-            // palavra por palavra, sobre esta linha).
-            MeusPets(
-              key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
-              cache: Escopo.of(context).cacheDeMeusPets,
-            ),
           ],
         );
       },
@@ -505,13 +702,10 @@ class TelaDeAdocoes extends StatelessWidget {
   Widget build(BuildContext context) {
     return const TelaDeAba(
       titulo: 'Adoções',
-      reforco: 'Os pets da sua região que estão procurando uma casa, '
-          'incluindo os das ONGs parceiras.',
       filhos: <Widget>[
         EstadoVazio(
           titulo: 'A lista de adoções está em construção',
-          explicacao: 'Aqui vão ficar os pets para adoção da sua região, no '
-              'mesmo cartão e na mesma lista dos perdidos.',
+          explicacao: 'Os pets para adoção da sua região vão ficar aqui.',
         ),
       ],
     );
@@ -528,13 +722,11 @@ class _PortaDeSubDestino extends StatelessWidget {
   const _PortaDeSubDestino({
     required this.icone,
     required this.titulo,
-    required this.descricao,
     required this.rota,
   });
 
   final IconData icone;
   final String titulo;
-  final String descricao;
   final String rota;
 
   @override
@@ -556,21 +748,7 @@ class _PortaDeSubDestino extends StatelessWidget {
               // proprio seria anuncio duplo no leitor de tela.
               Icon(icone, color: cores.textSecondary),
               const SizedBox(width: BichuEspaco.e4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(titulo, style: textos.titleMedium),
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      descricao,
-                      style: textos.bodyMedium?.copyWith(
-                        color: cores.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: Text(titulo, style: textos.titleMedium)),
               const SizedBox(width: BichuEspaco.e2),
               Icon(Icons.chevron_right, color: cores.textSecondary),
             ],

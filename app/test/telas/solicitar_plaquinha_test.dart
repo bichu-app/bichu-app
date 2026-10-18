@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/tela_solicitar_plaquinha.dart';
 import 'package:bichu/widgets/bichu_field.dart';
@@ -101,12 +103,24 @@ const Map<String, String> _endereco = <String, String>{
   'Cidade': 'Sao Paulo dos Testes',
 };
 
+/// O campo do rotulo.
+///
+/// Pelo `rotulo` do proprio [BichuField], e nao por `find.text(rotulo)`: o
+/// campo OPCIONAL escreve na tela `'<rotulo> (opcional)'`
+/// (`lib/widgets/bichu_field.dart`, linha 131), e `find.text('Complemento')`
+/// nao acha nada. Procurar pelo texto fazia as iscas 4 e 5b estourarem
+/// `Bad state: No element` nos dois unicos campos opcionais da tela --
+/// `Complemento` e `Observação`.
+Finder _campoDoRotulo(String rotulo) {
+  return find.byWidgetPredicate(
+    (widget) => widget is BichuField && widget.rotulo == rotulo,
+    description: 'BichuField de rotulo "$rotulo"',
+  );
+}
+
 /// Escreve num campo pelo rotulo.
 Future<void> _digitar(WidgetTester tester, String rotulo, String valor) async {
-  final campo = find.ancestor(
-    of: find.text(rotulo),
-    matching: find.byType(BichuField),
-  );
+  final campo = _campoDoRotulo(rotulo);
   await tester.ensureVisible(campo);
   await tester.enterText(campo, valor);
   await tester.pumpAndSettle();
@@ -115,12 +129,7 @@ Future<void> _digitar(WidgetTester tester, String rotulo, String valor) async {
 /// O que esta escrito num campo, pelo rotulo.
 String _textoDoCampo(WidgetTester tester, String rotulo) {
   return tester
-      .widget<BichuField>(
-        find.ancestor(
-          of: find.text(rotulo),
-          matching: find.byType(BichuField),
-        ),
-      )
+      .widget<BichuField>(_campoDoRotulo(rotulo))
       .controlador
       .text
       .trim();
@@ -134,14 +143,43 @@ Future<void> _preencherOEndereco(WidgetTester tester) async {
   await _escolherOEstado(tester, 'São Paulo');
 }
 
-/// Abre o seletor de estado e escolhe pelo NOME.
+/// Abre o seletor de estado e escolhe pelo NOME, **dentro da folha**.
+///
+/// Dois cuidados, e os dois foram medidos: o toque vai na CAIXA do seletor e
+/// nao no bloco (o bloco inclui o rotulo, e o centro dele cai no texto -- o
+/// mesmo cuidado que `escolherRaca`, em `cadastrar_identificacao_test.dart`,
+/// escreve); e a folha de 27 itens **precisa rolar**, porque o `ListView` so
+/// constroi o que cabe. Sem rolar, `find.text(nome)` acha o texto do PROPRIO
+/// seletor, atras da folha, e o toque bate na folha.
 Future<void> _escolherOEstado(WidgetTester tester, String nome) async {
   final seletor = find.ancestor(
     of: find.text('Estado'),
     matching: find.byType(SeletorDeLista),
   );
-  await tocar(tester, seletor);
-  await tocar(tester, find.text(nome).last);
+  await tocar(
+    tester,
+    find.descendant(of: seletor, matching: find.byType(InkWell)),
+  );
+  // A opcao e a da LISTA, e nao o texto do campo: procurar dentro do
+  // `ListTile` e o que separa os dois.
+  final opcao = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text(nome),
+  );
+  if (opcao.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      opcao,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tocar(tester, opcao);
 }
 
 /// Uma rede com um pet do tutor, a rota do pedido e o ViaCEP.
@@ -231,7 +269,23 @@ void main() {
       await _abrirOFormulario(tester, registro: registro);
 
       expect(find.byType(TelaSolicitarPlaquinha), findsOneWidget);
-      expect(find.byType(SeletorDeLista), findsOneWidget);
+      // **Os DOIS seletores do formulario**, nomeados: o do pet e o do
+      // estado. A versao anterior desta linha pedia `findsOneWidget` sobre o
+      // TIPO, e ela se contradizia com o resto deste arquivo -- a 5d afirma a
+      // lista dos 27 estados, e `_escolherOEstado` acha o seletor de estado
+      // por `find.ancestor(of: find.text('Estado'))`. Nomear os dois afirma
+      // mais, e nao menos: contar tipos nao diz QUAL seletor abriu.
+      expect(
+        find.ancestor(of: find.text('Pet'), matching: find.byType(SeletorDeLista)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: find.text('Estado'),
+          matching: find.byType(SeletorDeLista),
+        ),
+        findsOneWidget,
+      );
       // Nada foi pedido so por abrir a tela.
       expect(registro.caminhos, isEmpty);
     });
@@ -270,13 +324,7 @@ void main() {
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
       await _preencherOEndereco(tester);
 
-      final observacao = find.ancestor(
-        of: find.text('Observação'),
-        matching: find.byType(BichuField),
-      );
-      await tester.ensureVisible(observacao);
-      await tester.enterText(observacao, 'gravar BIDU');
-      await tester.pumpAndSettle();
+      await _digitar(tester, 'Observação', 'gravar BIDU');
       await tocar(tester, find.text('Pedir a plaquinha'));
 
       final corpo = json.decode(registro.corpos.single) as Map<String, dynamic>;
@@ -500,6 +548,11 @@ void main() {
         statusDoPedido: 404,
         problemaDoPedido: 'not-found',
       );
+      // O endereco PRECISA estar preenchido para a rede ser chamada: a isca 5,
+      // neste mesmo arquivo, afirma que formulario em branco recusa e **nao
+      // chama** (`expect(registro.caminhos, isEmpty)`). Sem esta linha a isca
+      // 6 pedia um 404 de uma chamada que a isca 5 prova que nao sai.
+      await _preencherOEndereco(tester);
 
       await tocar(tester, find.text('Pedir a plaquinha'));
 
@@ -517,6 +570,8 @@ void main() {
         statusDoPedido: 429,
         problemaDoPedido: 'rate-limited',
       );
+      // Mesmo motivo da isca 6: sem endereco a chamada nao sai.
+      await _preencherOEndereco(tester);
 
       await tocar(tester, find.text('Pedir a plaquinha'));
 

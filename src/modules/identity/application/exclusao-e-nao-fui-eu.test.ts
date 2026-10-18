@@ -542,10 +542,27 @@ void describe('exclusão de conta (BICHUS-215, critério 3 — gatilho 3 do SEC-
     const mensagem = bancada.mensagens[0]!;
     assert.equal(mensagem.para, EMAIL);
     assert.match(mensagem.corpo, /plaquinhas/i);
-    assert.match(mensagem.corpo, /30 dias/);
+    // O PRAZO DE 30 DIAS NÃO PODE APARECER, e a ausência dele é a asserção.
+    //
+    // Era `assert.match(mensagem.corpo, /30 dias/)`, resíduo do desenho antigo.
+    // Em 17/10 o cliente decidiu por escrito: *"Mantenha a foto e nao delete os
+    // dados do usuario, apenas desabilite na plataforma"*. Autoridades na
+    // árvore: `migrations/20261017000013_conta-desabilitada-nao-apaga-aparelho.sql`
+    // (linhas 6-9, a decisão literal; a migração REVERTE o gatilho que apagava
+    // `user_devices`) e
+    // `src/modules/identity/application/expurgar-contas-excluidas.ts`, onde o
+    // expurgo é inócuo de propósito e não há mais `DELETE FROM users` em
+    // `src/`. Prometer apagamento em 30 dias num aviso ao titular, quando nada
+    // é apagado, é informação falsa sobre o tratamento dos próprios dados —
+    // defeito maior do que o texto antigo era útil.
+    assert.doesNotMatch(mensagem.corpo, /30 dias/);
+    // E o que entrou no lugar do prazo tem de estar dito: os dados ficam, e o
+    // apagamento definitivo passa a ser pedido por resposta ao e-mail.
+    assert.match(mensagem.corpo, /guardados e inacessiveis/i);
+    assert.match(mensagem.corpo, /apagamento definitivo/i);
     // "Se não foi você" é o que dá socorro a quem teve a conta tomada e
-    // excluída por outra pessoa. Sem esta frase, o prazo de 30 dias é um
-    // detalhe de infraestrutura e não uma janela de recuperação.
+    // excluída por outra pessoa. Sem esta frase, a desativação é um detalhe de
+    // infraestrutura e não uma janela de recuperação.
     assert.match(mensagem.corpo, /se nao foi voce/i);
   });
 

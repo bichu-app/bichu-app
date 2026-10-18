@@ -76,6 +76,23 @@ class _LocalizacaoQueConta implements Localizacao {
   @override
   Future<ResultadoDaCaptura> pontoAproximado({required Duration prazo}) async {
     vezesQueMediu += 1;
+    // **O motivo segue o ESTADO, como na porta de verdade.** Este duble
+    // devolvia `permissaoNegada` para QUALQUER estado nao concedido, inclusive
+    // para `negadaPermanentemente` -- e com isso o caso do contrapeso montava
+    // a recusa definitiva e recebia da porta a recusa de uma vez, lia a faixa
+    // de `Tentar de novo` e reprovava procurando `Abrir os ajustes`. O defeito
+    // era do andaime: a tela estava certa. `MotivoDeNaoTerPonto` tem um valor
+    // proprio para a recusa definitiva justamente porque os dois estados levam
+    // a saidas diferentes, e o duble da casa
+    // (`ajuda_de_tela.dart`, linhas 336-355) ja mapeia os cinco assim.
+    if (inicial == PermissaoDeLocalizacao.negadaPermanentemente) {
+      return const CapturaSemPonto(
+        MotivoDeNaoTerPonto.permissaoNegadaPermanentemente,
+      );
+    }
+    if (inicial == PermissaoDeLocalizacao.indisponivel) {
+      return const CapturaSemPonto(MotivoDeNaoTerPonto.indisponivel);
+    }
     if (inicial != PermissaoDeLocalizacao.concedida) {
       return const CapturaSemPonto(MotivoDeNaoTerPonto.permissaoNegada);
     }
@@ -222,6 +239,10 @@ void main() {
             'definitivo. O dialogo nao reabre nas duas plataformas, e o '
             'caminho dali sao os ajustes do sistema.',
       );
+      // Rola ate a faixa antes de ler, como o caso irmao deste arquivo ja faz
+      // com `Tentar de novo`: a faixa do motivo e desenhada abaixo do bloco de
+      // localizacao, fora da dobra.
+      await rolarAte(tester, find.text(TextosDaLocalizacao.abrirAjustes));
       expect(
         find.text(TextosDaLocalizacao.abrirAjustes),
         findsOneWidget,
@@ -265,6 +286,14 @@ void main() {
 
       final pedidosAntes = porta.vezesQuePediu;
       await tocar(tester, tentar);
+      // **A ANTESSALA VOLTA, e e assim de proposito.** `_usarALocalizacao`
+      // mostra a antessala quando a permissao e `naoPedida` ou `negada`
+      // (`captura_de_localizacao.dart`, linhas 300-313), e `negada` e
+      // justamente o estado deste caso: `pedir()` so e chamado DEPOIS de a
+      // pessoa confirmar ali. Sem esta linha a isca pedia que o app abrisse o
+      // dialogo do sistema sem explicar antes -- o oposto do que a antessala
+      // existe para fazer -- e a contagem ficava em um.
+      await _confirmarNaAntessala(tester);
       expect(
         porta.vezesQuePediu,
         greaterThan(pedidosAntes),

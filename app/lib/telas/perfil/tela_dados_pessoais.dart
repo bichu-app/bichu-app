@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
+import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/me_api.dart';
@@ -147,8 +148,24 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         // **Mostra formatado, guarda E.164.** O que esta no campo e a
         // gramatica brasileira que se le; quem produz valor de contrato e
         // `telefoneEmE164`, na hora de enviar.
-        _telefone.text = mascaraDeTelefone(dados.telefone ?? '');
-        _cep.text = dados.cep ?? '';
+        // `telefoneDoE164`, e nao `mascaraDeTelefone`: o que vem do servidor
+        // e E.164 (`+5511987654321`), e a mascara de DIGITACAO descarta o `+`
+        // e le os treze digitos como se fossem locais -- o campo abria com
+        // `(55) 11987-6543`, e um `Salvar` gravava `+5555119876543` por cima
+        // do telefone certo. Ver a prosa de `telefoneDoE164`.
+        _telefone.text = telefoneDoE164(dados.telefone);
+        // **Mascarado na LEITURA tambem**, e nao so na digitacao: o
+        // formatador do campo roda em `formatEditUpdate`, que nao e chamado
+        // quando a tela escreve no controlador. Sem esta linha o CEP salvo
+        // apareceria `01310100` e a digitacao produziria `01310-100` -- duas
+        // formas do mesmo campo na mesma tela.
+        //
+        // E ela e o que aguenta o valor TORTO que pode estar gravado:
+        // `MeUpdate.reference_area.postal_code` aceita `^\d{5}-?\d{3}$`, com
+        // hifen OPCIONAL, entao existe CEP com hifen no banco vindo de cliente
+        // antigo. `mascaraDeCep` descarta o que nao e digito e reformata, em
+        // vez de mostrar `01310--100`.
+        _cep.text = mascaraDeCep(dados.cep ?? '');
         _bairro.text = dados.bairro ?? '';
         _cidade.text = dados.cidade ?? '';
         _uf = (dados.uf != null && dados.uf!.length == 2) ? dados.uf : null;
@@ -456,15 +473,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(_TextosDosDados.reforco, style: textos.bodyLarge),
-          const SizedBox(height: BichuEspaco.e6),
           _grupo(_TextosDosDados.quemVoceE, textos),
           _campo(
             chave: _CamposDosDados.nome,
             rotulo: _TextosDosDados.nome,
             controlador: _nome,
             limite: 80,
-            ajuda: _TextosDosDados.ajudaDoNome,
             capitalizacao: TextCapitalization.words,
           ),
           // O E-MAIL, DE LEITURA. Ver o cabecalho desta classe.
@@ -479,7 +493,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             rotulo: _TextosDosDados.telefone,
             controlador: _telefone,
             limite: limiteDoTelefone,
-            ajuda: _TextosDosDados.ajudaDoTelefone,
             tipoDeTeclado: TextInputType.phone,
             exemplo: _TextosDosDados.exemploDoTelefone,
             // Mostra formatado; `telefoneEmE164` e quem envia.
@@ -497,11 +510,18 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             chave: _CamposDosDados.cep,
             rotulo: _TextosDosDados.cep,
             controlador: _cep,
-            limite: 8,
-            ajuda: _TextosDosDados.ajudaDoCep,
+            limite: limiteDoCep,
             tipoDeTeclado: TextInputType.number,
-            formatadores: <TextInputFormatter>[
-              FilteringTextInputFormatter.digitsOnly,
+            // **A mascara, e nao `digitsOnly`** (cliente, 18/10). `limite` e 9
+            // porque o `maxLength` do campo conta o hifen.
+            //
+            // **O que VAI para a API nao muda**: `_soDigitos(_cep.text)` tira
+            // o hifen antes de montar o corpo, e `MeUpdate.reference_area.
+            // postal_code` aceita `^\d{5}-?\d{3}$` -- com hifen opcional.
+            // Continuamos mandando SEM, para as quatro telas guardarem uma
+            // forma canonica so.
+            formatadores: const <TextInputFormatter>[
+              MascaraDeCep(),
             ],
             // No oitavo digito a busca sai sozinha, sem botao `Buscar`: um
             // botao a mais e um passo a mais, e nao buscar e desfecho valido.
@@ -741,16 +761,10 @@ abstract final class _CamposDosDados {
 abstract final class _TextosDosDados {
   static const String titulo = 'Meus dados';
 
-  static const String reforco =
-      'O nome que a vizinhança vê e o jeito de a gente te achar quando '
-      'alguém encontrar o seu pet.';
-
   static const String quemVoceE = 'Quem é você';
   static const String suaRegiao = 'Sua região de referência';
 
   static const String nome = 'Nome';
-  static const String ajudaDoNome =
-      'Como você aparece para quem encontra o seu pet.';
   static const String nomeSoComEspaco =
       'Escreva o seu nome, ou deixe o campo vazio para tirá-lo.';
 
@@ -767,8 +781,6 @@ abstract final class _TextosDosDados {
       'para oi@bichu.app.';
 
   static const String telefone = 'Telefone';
-  static const String ajudaDoTelefone =
-      'Com DDD. Celular tem 9 dígitos, fixo tem 8.';
   static const String exemploDoTelefone = '(11) 98765-4321';
   static const String telefoneIncompleto =
       'Faltam dígitos. Confira o DDD e o número, como em (11) 98765-4321.';
@@ -778,8 +790,6 @@ abstract final class _TextosDosDados {
   static const String telefoneConfirmado = 'Telefone confirmado.';
 
   static const String cep = 'CEP';
-  static const String ajudaDoCep =
-      'Preenche bairro e cidade sozinho. Tudo continua editável.';
   static const String cepTemOitoDigitos = 'O CEP tem 8 dígitos.';
   static const String cepNaoSeApaga =
       'O CEP não pode ser apagado por aqui. Para tirá-lo, escreva para '

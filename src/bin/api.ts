@@ -106,11 +106,18 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
+import { criarCanalDeContatoDoChamador } from '../modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { registrarRotaDeBuscaDeCep } from '../modules/addresses/adapters/http/postal-code-routes.js';
+import { criarBuscaDeCep } from '../modules/addresses/adapters/external/viacep-com-brasilapi.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
 import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
 import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+// 18/10/2026. A FILA DE REVISAO das indicacoes: o menu que faltava no painel.
+import { registrarRotasDaFilaDeIndicacoes } from '../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+import { criarFilaDeIndicacoesRepository } from '../modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
+import { FilaDeIndicacoes } from '../modules/professionals/application/fila-de-indicacoes.js';
 import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
 // As duas conferencias de texto que `professionals` NAO reimplementa. A
 // composicao mora aqui, fora de `src/modules/`, porque
@@ -394,6 +401,28 @@ export async function main(): Promise<void> {
     clock: systemClock,
   });
 
+  // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`: a queixa do
+  // cliente era que "no backoffice nao tem um menu para aprovar os
+  // profissionais que as pessoas estao indicando". A indicacao grava em
+  // `directory_suggestions` desde 17/10 e nunca houve quem lesse essa fila.
+  //
+  // A trilha e OUTRA instancia da mesma fabrica, e nao a de
+  // `diretorioAdministrativo`: `criarTrilhaTransacional` nao guarda estado
+  // entre chamadas, e compartilhar a instancia amarraria dois repositorios por
+  // um objeto que nenhum dos dois precisa dividir.
+  //
+  // `conferencias` e o MESMO par que a sugestao do aplicativo usa: o motivo da
+  // recusa passa pelo detector de D59 que ja existe, e nao por um segundo.
+  const filaDeIndicacoes = new FilaDeIndicacoes({
+    repositorio: criarFilaDeIndicacoesRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    ids,
+    clock: systemClock,
+    conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+  });
+
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
   // `/v1/admin` usa para conferir cookie, papel e janela de reautenticacao. A
   // conta e de `admin_accounts` (ADR-0027 item 20): nada do app entra aqui.
@@ -486,6 +515,10 @@ export async function main(): Promise<void> {
     // texto, porque nada deste arquivo é carregado por teste.
     baseDaTag: config.tagBaseUrl,
     baseDaWeb: config.webBaseUrl,
+    // De onde sai `pet.photo_url` na resolução da plaquinha. É a MESMA base do
+    // perfil público do pet (linhas de `baseDeMidia` acima): as duas
+    // superfícies públicas do mesmo animal apontam para o mesmo objeto.
+    baseDeMidia: config.mediaPublicBaseUrl,
     // `code_hash` é HMAC com esta chave, e não SHA-256 sem sal (ADR-0004,
     // Emenda 1, §3.1). Se ela for a mesma de `tagCodeKey`, `loadAppConfig()`
     // já recusou subir antes desta linha.
@@ -840,7 +873,7 @@ export async function main(): Promise<void> {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDoDiretorio(escopo, {
-      diretorio: criarDirectoryRepository(db),
+      diretorio: criarDirectoryRepository(db, ids),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
@@ -859,6 +892,9 @@ export async function main(): Promise<void> {
         sugestoes: criarDirectorySuggestionRepository(db, ids),
         trilha,
         conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+        // A trava de conta validada, no SERVIDOR: a mesma condicao de
+        // `estadoParaCriarEncontro`, porque "validado" e uma regua so.
+        canal: criarCanalDeContatoDoChamador(db),
       }),
       contrato,
     });
@@ -973,6 +1009,22 @@ export async function main(): Promise<void> {
             diretorio: diretorioAdministrativo,
             contrato,
           });
+          // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`. Fica ao
+          // lado da escrita do diretorio de proposito: aprovar uma indicacao
+          // GRAVA uma entrada, pela mesma transacao e pela mesma funcao.
+          registrarRotasDaFilaDeIndicacoes(administrativo, {
+            fila: filaDeIndicacoes,
+            contrato,
+          });
+
+          // A BUSCA DE CEP, uma integracao e uma so (decisao do cliente de
+          // 18/10). Ela nasce aqui, na superficie administrativa, porque o
+          // chamador que existe hoje e o formulario de entrada do diretorio --
+          // e porque resposta com logradouro e inexprimivel sem conta
+          // (`portao-contrato-publico`) e o painel nao tem Bearer (D36). O
+          // aplicativo passa a usar a MESMA porta quando a rota dele existir:
+          // o adaptador nao muda.
+          registrarRotaDeBuscaDeCep(administrativo, { cep: criarBuscaDeCep() });
           // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
           // daqui sai so o que ela chama.
           registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas });

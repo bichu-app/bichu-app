@@ -129,7 +129,10 @@ void main() {
           camera: CameraDeTeste(EstadoDaPermissao.negada),
         );
         await tester
-            .tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+            .tap(find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.qr_code_2),
+      ));
         await tester.pumpAndSettle();
         if (digitando) {
           await tester.tap(

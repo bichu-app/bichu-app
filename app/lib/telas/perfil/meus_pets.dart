@@ -12,6 +12,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../avisos/aviso_de_cadastro_incompleto.dart';
+import '../../widgets/item_de_menu.dart';
 import '../../widgets/moldura.dart';
 import '../casca_com_abas.dart';
 
@@ -100,8 +101,7 @@ class MeusPets extends StatefulWidget {
   static const String tituloDoVazio = 'Seu primeiro pet entra aqui.';
 
   static const String explicacaoDoVazio =
-      'Cadastre seu pet para gerar a plaquinha com QR e entrar na rede de quem '
-      'procura e de quem encontra.';
+      'Cadastre seu pet para gerar a plaquinha com QR.';
 
   /// A faixa do criterio 7, palavra por palavra.
   static const String faixaDeCache =
@@ -265,16 +265,46 @@ class _MeusPetsState extends State<MeusPets> {
     }
   }
 
+  /// ## O TITULO DESTA SECAO (corrigido em 18/10/2026)
+  ///
+  /// Ele era `Text(MeusPets.titulo, style: textos.titleLarge)` com um vao de
+  /// `e4`, e era o que estava **fora do padrao do app** -- a reclamacao do
+  /// cliente, palavra por palavra: "o layout do menu do perfil ficou estranho,
+  /// fora do padrao do app".
+  ///
+  /// Tres desvios medidos, nao opinados:
+  ///
+  /// 1. **`titleLarge` nao e peso de titulo de secao neste app.** Os tres
+  ///    lugares que titulam secao dentro do corpo de uma tela -- o cartao de
+  ///    texto e a secao com icone de `pet/tela_detalhe_do_pet.dart`,
+  ///    `rede/encontro_da_rede.dart` e `loja/produto_da_loja.dart` -- usam
+  ///    `titleMedium`. `titleLarge` no corpo e peso de **titulo de pagina ou
+  ///    de folha**: o `EstadoVazio` da casca, o nome do pet no cabecalho, o
+  ///    titulo da folha de `Sair da sua conta?`. Aqui ele punha um titulo de
+  ///    pagina dentro de uma pagina que ja tem titulo na barra de topo.
+  /// 2. **Sem `Semantics(header: true)`.** Os mesmos tres lugares declaram o
+  ///    papel de cabecalho. Esta era a unica secao do app que titulava sem
+  ///    ele: quem navega por cabecalho no leitor de tela nao parava aqui.
+  /// 3. **Dois cabecalhos com formas diferentes na MESMA tela.** O grupo
+  ///    `Conta` e desenhado por [TituloDeGrupoDeMenu] (`labelMedium` em
+  ///    `textMuted`, vao de `e2`); este era `titleLarge` com vao de `e4`. Dois
+  ///    irmaos na mesma lista com pesos diferentes leem como hierarquia onde
+  ///    nao ha nenhuma.
+  ///
+  /// A correcao e usar [TituloDeGrupoDeMenu], e nao inventar uma quarta forma:
+  /// a documentacao dele diz, desde que ele nasceu, que existe porque "`Conta`
+  /// e `Meus pets` sao coisas diferentes na mesma tela". Os dois grupos sempre
+  /// foram para ser titulados por ele; so um foi ligado. Ele ja carrega
+  /// `Semantics(header: true)` e o vao de `e2`, entao o `SizedBox` daqui saiu
+  /// -- vao de cabecalho e do cabecalho, e dois donos divergem.
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(MeusPets.titulo, style: textos.titleLarge),
-        const SizedBox(height: BichuEspaco.e4),
+        const TituloDeGrupoDeMenu(MeusPets.titulo),
         ..._corpo(cores),
       ],
     );

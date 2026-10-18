@@ -335,9 +335,23 @@ class ItemDaLoja {
     final bruto = urlDeDestino.trim();
     if (bruto.isEmpty) return null;
     final u = Uri.tryParse(bruto);
-    if (u == null || !u.isAbsolute) return null;
+    if (u == null) return null;
+    // **Sem `isAbsolute`, e isso nao e descuido.** Em Dart, `Uri.isAbsolute` e
+    // FALSO quando a URI tem fragmento -- e a definicao da linguagem, nao um
+    // detalhe: "an absolute URI has a scheme and no fragment". Com a
+    // conferencia aqui, `https://loja.exemplo.invalid/bola-pop#descricao` era
+    // recusado, e produto com `#` no `target_url` perdia o destino: o cartao
+    // nao fica tocavel e o `Compre agora` nao e desenhado. Ou seja, o link que
+    // o painel gravou nao abria, e nada falhava em lugar nenhum.
+    //
+    // O servidor passou a aceitar query e fragmento em 17/10/2026, entao o
+    // caso nao e teorico.
+    //
+    // As duas linhas abaixo ja dizem tudo o que importa, e dizem melhor: o
+    // esquema tem de ser `https` (o que recusa `http:`, `javascript:`,
+    // `intent:`, `tel:`, `file:` e `market:`, e tambem o caminho relativo, cujo
+    // esquema e vazio) e tem de haver host (o que recusa `https:///caminho`).
     if (u.scheme != 'https') return null;
-    // Sem host nao ha site: `https:///caminho` da `isAbsolute` verdadeiro.
     if (u.host.isEmpty) return null;
     return u;
   }

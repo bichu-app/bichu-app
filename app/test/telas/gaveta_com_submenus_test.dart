@@ -43,6 +43,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/acao_de_criar_na_barra.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:flutter/material.dart';
@@ -455,18 +456,36 @@ void main() {
     // e continua pegando o defeito que o original existia para pegar -- o
     // hamburguer, ou qualquer outra coisa, caindo na direita.
     //
+    // **E MUDOU DE NOVO EM 18/10/2026, PELA MESMA RAZAO: decisao dele.**
+    //
+    // Nas palavras dele: *"os itens de criacao, como evento e indicacao, ate o
+    // escanear poderia ser icones na barra superior ou um simbolo apenas de +
+    // para que o designer fique mais bonito e nao fique esse botao grande na
+    // pagina ocupando muito espaco"*. A direita deixou de ter UM slot e passou
+    // a ter DOIS, e isso atravessa o 11.23.1 de propria vontade -- a conta de
+    // largura esta escrita em `casca_com_abas.dart`. De novo o caso nao foi
+    // apagado nem dispensado: o teto subiu de um para dois, e a lista de quem
+    // pode ocupar a direita ganhou a porta de criar.
+    //
     // O que ele cobra agora:
-    //  - **no maximo UM** controle na direita, em qualquer secao (11.23.1);
-    //  - o que estiver la e o `Filtros`, e nunca o gatilho da gaveta;
+    //  - **no maximo DOIS** controles na direita, em qualquer secao;
+    //  - cada um deles e a porta de CRIAR ou o `Filtros`, e nunca o gatilho
+    //    da gaveta nem qualquer terceira coisa;
+    //  - quando ha os dois, **criar vem primeiro**: a acao da SECAO fica mais
+    //    longe da borda e o controle da LISTA mais perto;
     //  - o gatilho da gaveta continua na ESQUERDA, inteiro.
     //
-    // Por que nao "exatamente um em Rede, Perto e Loja": com `_semServidor`
-    // nenhuma das tres carrega lista, e a barra de listagem nao publica
-    // controle sobre o nada. Cobrar presenca aqui mediria a rede de mentira,
-    // e nao o leiaute. A presenca e medida onde ha dado:
-    // `test/telas/perto_com_dados_test.dart` e `test/rede/agenda_da_rede_test.dart`.
-    testWidgets('o slot UNICO de acao da direita tem no maximo UM controle, '
-        'e ele nao e o gatilho da gaveta', (tester) async {
+    // Por que nao "exatamente dois em Rede e Perto": com `_semServidor`
+    // nenhuma das duas carrega lista, e a barra de listagem nao publica
+    // controle sobre o nada -- e, desde 18/10, o app abre DESLOGADO neste
+    // ajudante, e as duas portas de criar da comunidade so existem com conta
+    // e e-mail confirmado. Cobrar presenca aqui mediria a rede de mentira e a
+    // sessao de mentira, e nao o leiaute. A presenca e medida onde ha dado e
+    // sessao: `test/telas/perto_com_dados_test.dart`,
+    // `test/rede/agenda_da_rede_test.dart` e
+    // `test/telas/criar_e_icone_na_barra_test.dart`.
+    testWidgets('o lado direito tem no maximo DOIS controles, os dois '
+        'previstos, e nenhum deles e o gatilho da gaveta', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
 
       for (final destino in CascaComAbas.destinos) {
@@ -479,21 +498,38 @@ void main() {
         final acoes = barra.actions ?? const <Widget>[];
         expect(
           acoes.length,
-          lessThanOrEqualTo(1),
+          lessThanOrEqualTo(2),
           reason:
               'REPROVA: a secao "${destino.rotulo}" pos ${acoes.length} '
-              'controles no slot de acao da direita. Ele e UM so (11.23.1), '
-              'e empilhar controle sobre controle na barra de titulo foi '
-              'exatamente o que o cliente mandou nao fazer.',
+              'controles no lado direito. Sao DOIS no maximo -- a porta de '
+              'criar e o `Filtros` --, e o terceiro nao cabe: com o '
+              'hamburguer na esquerda, tres alvos de 64 dp deixam 64,0 dp de '
+              'titulo em 320 dp.',
         );
         for (final acao in acoes) {
           expect(
             acao,
-            isA<BotaoDeAcaoDaListagem>(),
+            anyOf(
+              isA<BotaoDeAcaoDaListagem>(),
+              isA<AcaoDeCriarNaBarra>(),
+            ),
             reason:
-                'REPROVA: a secao "${destino.rotulo}" pos no slot da direita '
-                'algo que nao e o `Filtros`. Ele e do filtro desde 17/10, e '
-                'o gatilho da gaveta tem o slot da ESQUERDA.',
+                'REPROVA: a secao "${destino.rotulo}" pos no lado direito '
+                'algo que nao e a porta de criar nem o `Filtros`. O gatilho '
+                'da gaveta tem o slot da ESQUERDA, e nada mais sobe para a '
+                'barra -- a busca e os controles de recorte moram no corpo, '
+                'onde o cliente os quer.',
+          );
+        }
+        if (acoes.length == 2) {
+          expect(
+            acoes.first,
+            isA<AcaoDeCriarNaBarra>(),
+            reason:
+                'REPROVA: em "${destino.rotulo}" o `Filtros` ficou antes da '
+                'porta de criar. A ordem nao e estetica: criar e da SECAO e '
+                'filtrar e da LISTA, e a acao mais ampla fica mais longe da '
+                'borda.',
           );
         }
         // O gatilho da gaveta continua inteiro, e na ESQUERDA: ele e o

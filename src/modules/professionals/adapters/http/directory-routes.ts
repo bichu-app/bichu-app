@@ -44,6 +44,13 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { projetarEntrada, type TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import {
+  projetarAvaliacao,
+  projetarPontuacao,
+  validarDenuncia,
+  validarEntradaDaAvaliacao,
+  type OrdemDasAvaliacoes,
+} from '../../domain/avaliacao-do-local.js';
 import type { NivelDeVerificacao } from '../../domain/nivel-de-verificacao.js';
 import type { DirectoryRepository, OrdemDoDiretorio } from '../../ports/directory-repository.js';
 import type { Clock } from '../../../../shared/ports/index.js';
@@ -179,6 +186,112 @@ function filtrosAplicados(query: QueryDoDiretorio): Record<string, string> {
   return filtros;
 }
 
+/**
+ * `GET /v1/directory/entries/{slug}` -- a pagina do local.
+ *
+ * **Ela era uma das duas operacoes que o contrato declarou FORA** em 22/09,
+ * com a razao escrita por extenso: "este contrato ja carrega 42 operacoes
+ * declaradas e sem implementacao, e acrescentar duas para nao as implementar
+ * hoje aumenta exatamente a divida que essa conta mede". A razao era boa e
+ * deixou de valer: ela entra agora **com implementacao e com tela**.
+ *
+ * EXIGE CONTA pelo mesmo motivo da listagem e nao por um novo: devolve
+ * `phone_e164`, e `portao-contrato-publico.ts` reprova esse campo em operacao
+ * alcancavel sem conta.
+ *
+ * O teto e 300/h e nao 120/h: navegar entre locais e o uso normal da secao, e
+ * esta rota le UMA linha -- sem recorte geoespacial sobre a tabela inteira. Ela
+ * nao declara `expensive_query` por isso.
+ */
+export const rotaDoLocal = defineRoute({
+  operationId: 'getDirectoryEntry',
+  method: 'get',
+  path: '/directory/entries/:slug',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDasAvaliacoes = defineRoute({
+  operationId: 'listDirectoryEntryReviews',
+  method: 'get',
+  path: '/directory/entries/:slug/reviews',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * `PUT` e nao `POST`, e o metodo E a regra de produto.
+ *
+ * O cliente decidiu "uma avaliacao por pessoa por local, que ela possa editar e
+ * apagar; enviar de novo ATUALIZA a dela, nao cria segunda". Com `POST`, o
+ * segundo envio seria `409` e a tela precisaria de um segundo caminho; com
+ * `PUT`, o segundo envio E a edicao.
+ *
+ * ## O teto, e o numero
+ *
+ * **20/h por conta**, e e baixo de proposito: isto escreve na reputacao publica
+ * de um negocio real, com nome e endereco. Uma pessoa honesta avalia um ou dois
+ * locais por sessao e, reeditando o texto, chega a cinco.
+ *
+ * Por CONTA e nao por IP porque a rota exige conta -- e exige mais do que
+ * conta: exige e-mail confirmado. O custo de conseguir um balde novo e um
+ * e-mail novo confirmado, o que e exatamente a propriedade que falta num teto
+ * por IP sob o CGNAT das operadoras brasileiras.
+ *
+ * **O que este teto NAO cobre esta declarado no contrato**: muitas contas
+ * contra UM local. Isso exigiria balde por ALVO, e `directory_entry` nao esta
+ * em `DIMENSOES_CONHECIDAS` -- dimensao nova e decisao de politica e nao
+ * detalhe de rota, como aquele arquivo diz. Fica relatado e nao resolvido;
+ * enquanto isso, a contencao desse caso e a denuncia e a remocao humana.
+ */
+export const rotaDeGravarMinhaAvaliacao = defineRoute({
+  operationId: 'putMyDirectoryEntryReview',
+  method: 'put',
+  path: '/directory/entries/:slug/reviews/me',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeApagarMinhaAvaliacao = defineRoute({
+  operationId: 'deleteMyDirectoryEntryReview',
+  method: 'delete',
+  path: '/directory/entries/:slug/reviews/me',
+  effects: [],
+  // O MESMO orcamento do `PUT`: apagar e regravar nao pode ser o caminho que
+  // contorna o teto de escrita.
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A denuncia. **20 por DIA**, e a janela de 24 h e deliberada.
+ *
+ * Denuncia e um pedido de atencao humana, e atencao humana e o recurso mais
+ * escasso deste produto -- nao ha equipe de moderacao de plantao. Vinte por dia
+ * e mais do que qualquer pessoa de boa-fe encontra, e pouco o bastante para que
+ * uma conta nao encha a fila sozinha. O abuso aqui e volume no dia, nao rajada
+ * no minuto, e por isso a janela nao e de uma hora.
+ */
+export const rotaDeDenunciarAvaliacao = defineRoute({
+  operationId: 'reportDirectoryEntryReview',
+  method: 'post',
+  path: '/directory/entries/:slug/reviews/:reviewRef/reports',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '24h', onExceed: 'deny_429' }],
+});
+
+const TAMANHO_PADRAO_DAS_AVALIACOES = 10;
+const ORDEM_PADRAO_DAS_AVALIACOES: OrdemDasAvaliacoes = 'recent';
+
+function parametro(request: FastifyRequest, nome: string): string {
+  return (request.params as Record<string, string>)[nome] ?? '';
+}
+
+interface QueryDasAvaliacoes {
+  readonly sort?: OrdemDasAvaliacoes;
+  readonly page?: number;
+  readonly limit?: number;
+}
+
 export function registrarRotasDoDiretorio(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDoDiretorio,
@@ -226,6 +339,166 @@ export function registrarRotasDoDiretorio(
         distance_available: pagina.distanciaDisponivel,
         applied_filters: filtrosAplicados(query),
       });
+    },
+  );
+
+  // ----------------------------------------------------------------- o local
+
+  registrarRota(
+    app,
+    rotaDoLocal,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const local = await deps.diretorio.lerLocalPublicado(
+        parametro(request, 'slug'),
+        chamador,
+        deps.clock.now(),
+      );
+      // **404 E NAO 403** (ADR-0021). Rascunho, oculto, removido e inexistente
+      // sao a MESMA resposta: um 403 confirmaria que aquele endereco existe, a
+      // quem nao tem direito de saber.
+      if (local === undefined) throw problemas.naoEncontrado();
+
+      const entrada = projetarEntrada(local.entrada);
+      return reply.send({
+        ...entrada,
+        rating: projetarPontuacao(local.pontuacao),
+        my_review_ref: local.refDaMinhaAvaliacao,
+        can_review: local.podeAvaliar,
+        // O MOTIVO vem junto do booleano para a tela escrever a frase certa e
+        // oferecer a SAIDA (confirmar o e-mail), em vez de um "nao e possivel"
+        // sem caminho. Hoje ha um motivo so; o campo existe para o segundo nao
+        // nascer como um segundo booleano.
+        review_blocked_reason: local.podeAvaliar ? null : 'unverified_channel',
+      });
+    },
+  );
+
+  // ------------------------------------------------------- as avaliacoes
+
+  registrarRota(
+    app,
+    rotaDasAvaliacoes,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const query = (request.query ?? {}) as QueryDasAvaliacoes;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO_DAS_AVALIACOES;
+
+      const pagina = await deps.diretorio.listarAvaliacoes({
+        slug: parametro(request, 'slug'),
+        chamador,
+        sort: query.sort ?? ORDEM_PADRAO_DAS_AVALIACOES,
+        page,
+        limit,
+      });
+      if (pagina === undefined) throw problemas.naoEncontrado();
+
+      return reply.send({
+        items: pagina.itens.map(projetarAvaliacao),
+        page,
+        limit,
+        total: pagina.total,
+      });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeGravarMinhaAvaliacao,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+
+      // A VALIDACAO DE DOMINIO roda ANTES de tocar o banco, e ela e a segunda
+      // recusa: a primeira e o schema do contrato, instalado por
+      // `vigiarParametrosDasRotas`, e a terceira sao os `CHECK` da tabela.
+      const { entrada, erros } = validarEntradaDaAvaliacao(request.body);
+      if (entrada === undefined) throw problemas.validacao(erros);
+
+      const gravada = await deps.diretorio.gravarMinhaAvaliacao(
+        parametro(request, 'slug'),
+        chamador,
+        entrada,
+        deps.clock.now(),
+      );
+
+      if (gravada === 'local-ausente') throw problemas.naoEncontrado();
+      // **409 E NAO 403, e e o MESMO tipo de problema que criar encontro
+      // devolve.** A regra e a mesma regra do cliente ("so usuarios com os
+      // dados validados"), e dois tipos para um conceito fariam o app decidir
+      // por dois caminhos onde ha um. O que muda e o TEXTO, e ele precisa
+      // mudar: "confirme seu e-mail para propor um encontro" numa tela de
+      // avaliar local manda a pessoa para o lugar errado.
+      //
+      // Este 409 e sobre QUEM CHAMA e nao sobre o recurso, e por isso nao
+      // contradiz o ADR-0021: a existencia do local ja foi confirmada pela
+      // leitura, e o que falta e um atributo da propria conta de quem pede.
+      if (gravada === 'sem-canal-verificado') {
+        throw problemas.canalDeContatoNaoVerificadoParaAvaliar();
+      }
+
+      return reply.send({
+        review: projetarAvaliacao(gravada.avaliacao),
+        created: gravada.criada,
+        // A pontuacao JA COM esta avaliacao dentro, na mesma resposta: a tela
+        // nao precisa de uma segunda chamada para atualizar a media que o
+        // proprio toque acabou de mudar -- e uma segunda chamada deixaria a
+        // media velha na tela se ela falhasse.
+        rating: projetarPontuacao(gravada.pontuacao),
+      });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeApagarMinhaAvaliacao,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const existe = await deps.diretorio.apagarMinhaAvaliacao(parametro(request, 'slug'), chamador);
+      // O 404 e do LOCAL, nao da avaliacao: nao ter avaliacao e chamar isto e
+      // sucesso (o estado pedido e o estado final), e um erro faria a tela
+      // tratar como falha um toque duplo no botao.
+      if (!existe) throw problemas.naoEncontrado();
+      return reply.status(204).send();
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeDenunciarAvaliacao,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const { denuncia, erros } = validarDenuncia(request.body);
+      if (denuncia === undefined) throw problemas.validacao(erros);
+
+      const desfecho = await deps.diretorio.denunciarAvaliacao(
+        parametro(request, 'slug'),
+        parametro(request, 'reviewRef'),
+        chamador,
+        denuncia,
+        deps.clock.now(),
+      );
+
+      if (desfecho === 'ausente') throw problemas.naoEncontrado();
+      if (desfecho === 'propria') {
+        throw problemas.validacao([
+          {
+            field: 'reviewRef',
+            code: 'own_review',
+            message: 'Esta avaliação é sua. Para tirá-la do ar, apague-a.',
+          },
+        ]);
+      }
+
+      // **202 e nao 200**: o que esta rota promete e que o pedido foi recebido,
+      // nao que alguem ja olhou. Prometer decisao seria mentir sobre o que
+      // existe -- nao ha equipe de moderacao de plantao.
+      return reply.status(202).send();
     },
   );
 }

@@ -121,7 +121,7 @@ describe('validação do formulário', () => {
   it('dá a mensagem aprovada para cada campo', () => {
     const erros = validar({ ...formularioVazio(), portes: [] }, 'novo', AGORA).map((e) => e.mensagem);
     expect(erros).toEqual([
-      'Informe o título do encontro.',
+      'Informe o título do evento.',
       'Escreva uma descrição.',
       'Informe quando começa.',
       'Informe o nome do lugar.',
@@ -301,7 +301,12 @@ describe('plano de edição (as três operações)', () => {
     const erros = validar({ ...preenchido(), linkDoConvite: 'http://exemplo.com.br', instagram: '@com espaco' }, 'novo', AGORA);
     expect(erros.map((e) => [e.campo, e.mensagem])).toEqual([
       ['linkDoConvite', 'O link precisa começar com https://.'],
-      ['instagram', 'Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app'],
+      // `@com espaco` recusa pelo ESPACO, e nao por falta de `https://`: o
+      // espaco e conferido ANTES do esquema, no painel
+      // (`enderecos.ts`) e no servidor (`errosDoEnderecoCompleto`), que e
+      // quem decide. A frase de `not_https` e a de quem escreveu um endereco
+      // sem esquema, e esta entrada nunca chega la.
+      ['instagram', 'Confira o endereço: ele não pode ter espaço.'],
     ]);
   });
 
@@ -365,15 +370,15 @@ describe('plano de edição (as três operações)', () => {
     expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pair' }).acesso?.admission).toEqual({ kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_pair' } });
   });
 
-  it('ISCA: mudar só o valor diz "O valor do encontro muda para…" (QA r5)', () => {
+  it('ISCA: mudar só o valor diz "O valor do evento muda para…" (QA r5)', () => {
     const pago = encontroDeExemplo({ admission: { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit: 'per_pet' } } });
     const f = { ...formularioDoEncontro(pago), valor: '20' };
     const corpo = corpoDaMudanca(pago, f, planoDeEdicao(pago, f));
-    expect(corpo[0]).toBe('O valor do encontro muda para R$ 20 por pet, e o app mostra isso na hora.');
-    expect(corpo.join(' ')).not.toMatch(/O encontro o valor/);
+    expect(corpo[0]).toBe('O valor do evento muda para R$ 20 por pet, e o app mostra isso na hora.');
+    expect(corpo.join(' ')).not.toMatch(/O evento o valor/);
     const privadoEValor = { ...f, visibilidade: 'private' as const };
     expect(corpoDaMudanca(pago, privadoEValor, planoDeEdicao(pago, privadoEValor))[0]).toBe(
-      'O encontro agora é privado, e o valor muda para R$ 20 por pet. O app mostra isso na hora.',
+      'O evento agora é privado, e o valor muda para R$ 20 por pet. O app mostra isso na hora.',
     );
   });
 
@@ -383,8 +388,8 @@ describe('plano de edição (as três operações)', () => {
     expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_pet' } } });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
-      'O encontro agora é privado e agora é pago, e o app mostra isso na hora.',
-      'O link antigo do encontro para de funcionar.',
+      'O evento agora é privado e agora é pago, e o app mostra isso na hora.',
+      'O link antigo do evento para de funcionar.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);
   });
@@ -395,7 +400,7 @@ describe('plano de edição (as três operações)', () => {
     expect(corpoDaMudanca(original, f, plano)).toEqual([
       'O app passa a mostrar Parque da Aclimação, Cambuci. Quem usa o app não é avisado da mudança.',
       'O mapa deixa de aparecer no app, porque mostrava o lugar anterior.',
-      'O encontro agora é pago, e o app mostra isso na hora.',
+      'O evento agora é pago, e o app mostra isso na hora.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);
   });
@@ -419,11 +424,11 @@ describe('foto com upload_id nulo (conta apagada)', () => {
   it('alerta diz a posição quando é uma foto só, e usa o plural com mais de uma (UX 30.7 R1)', () => {
     const f = formularioDoEncontro(comOrfa);
     expect(avisoDeFotosSemEnvio(f)).toBe(
-      'A foto 1 veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.',
+      'A foto 1 veio de uma conta que não existe mais. Ela fica no evento enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do evento.',
     );
     const duas = { fotos: [...f.fotos, { ...f.fotos[0]!, chave: 'sem-envio-2' }] };
     expect(avisoDeFotosSemEnvio(duas)).toBe(
-      '2 fotos vieram de uma conta que não existe mais. Elas ficam no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do encontro.',
+      '2 fotos vieram de uma conta que não existe mais. Elas ficam no evento enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do evento.',
     );
     expect(avisoDeFotosSemEnvio({ fotos: [f.fotos[1]!] })).toBeNull();
   });
@@ -443,14 +448,14 @@ describe('foto com upload_id nulo (conta apagada)', () => {
 describe('bug 5: prazo do cancelado no app', () => {
   it('com fim: até o horário de fim, no fuso do encontro', () => {
     expect(textosDoCancelamento({ starts_at: '2026-10-11T12:00:00Z', ends_at: '2026-10-11T14:00:00Z', time_zone: 'America/Sao_Paulo' }).sucesso).toBe(
-      'Encontro cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.',
+      'Evento cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.',
     );
   });
   it('sem fim: até o fim do dia do início no fuso do encontro, e não no dia UTC', () => {
     // 01:30 UTC de 12/10 ainda e 11/10 em Sao Paulo.
     const t = textosDoCancelamento({ starts_at: '2026-10-12T01:30:00Z', ends_at: null, time_zone: 'America/Sao_Paulo' });
-    expect(t.corpo).toMatch(/^O encontro não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 11\/10\/2026\. /);
-    expect(t.sucesso).toBe('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 11/10/2026.');
+    expect(t.corpo).toMatch(/^O evento não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 11\/10\/2026\. /);
+    expect(t.sucesso).toBe('Evento cancelado. O app mostra o aviso de cancelado até o fim do dia 11/10/2026.');
     expect(t.corpo).not.toMatch(/horário previsto de fim/);
   });
 });
@@ -469,10 +474,10 @@ describe('lista', () => {
     expect(seloDoEncontro({ publication_status: 'removed', timing: 'ended' })).toBe('removido');
   });
   it('contagem e sem resultado com as variações da UX', () => {
-    expect(textoDaContagem(4, 4, 'todos', '')).toBe('4 encontros');
-    expect(textoDaContagem(1, 1, 'encerrados', 'parque')).toBe('1 encontro com “parque” em Encerrados');
-    expect(textoDaContagem(20, 57, 'todos', '')).toBe('Mostrando 20 de 57 encontros');
-    expect(textoSemResultado('encerrados', 'parque')).toEqual({ frase: 'Nenhum encontro com “parque” em Encerrados.', limpar: 'Limpar busca e filtro' });
+    expect(textoDaContagem(4, 4, 'todos', '')).toBe('4 eventos');
+    expect(textoDaContagem(1, 1, 'encerrados', 'parque')).toBe('1 evento com “parque” em Encerrados');
+    expect(textoDaContagem(20, 57, 'todos', '')).toBe('Mostrando 20 de 57 eventos');
+    expect(textoSemResultado('encerrados', 'parque')).toEqual({ frase: 'Nenhum evento com “parque” em Encerrados.', limpar: 'Limpar busca e filtro' });
     expect(textoSemResultado('todos', 'parque').limpar).toBe('Limpar busca');
     expect(textoSemResultado('agendados', '').limpar).toBe('Limpar filtro');
   });

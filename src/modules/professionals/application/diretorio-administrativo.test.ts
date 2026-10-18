@@ -68,6 +68,13 @@ function entradaSemeada(): EntradaAdministrativa {
     city: 'São Paulo',
     state: 'SP',
     neighborhood: 'Vila Mariana',
+    // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
+    // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
+    // continuar completa para publicar.
+    postalCode: null,
+    street: null,
+    streetNumber: null,
+    complement: null,
     phoneE164: '+551130612200',
     status: 'published',
     source: 'import',
@@ -136,6 +143,15 @@ function repositorioEmMemoria(): Memoria {
         Promise.resolve([...linhas.values()].find((l) => l.slug === slug) ?? null),
       idPorSlug: (slug) =>
         Promise.resolve([...linhas].find(([, l]) => l.slug === slug)?.[0] ?? null),
+      // A MODERACAO DA AVALIACAO (18/10/2026) NAO E EXERCITADA NESTE ARQUIVO.
+      //
+      // **Nao e corpo vazio**, e a diferenca importa: `() => null` faria um
+      // caso que chegasse aqui ver "nao encontrado" e passar como se tivesse
+      // medido a regra do 404. Este arquivo cobre a escrita da ENTRADA do
+      // diretorio; a remocao de avaliacao tem outro dobre, no arquivo dela.
+      removerAvaliacao: () => {
+        throw new Error('removerAvaliacao nao e exercitado por este arquivo');
+      },
       inserirEntrada(nova: NovaEntrada) {
         if ([...linhas.values()].some((l) => l.slug === nova.slug)) throw new SlugOcupado();
         const criada: EntradaAdministrativa = {
@@ -146,6 +162,10 @@ function repositorioEmMemoria(): Memoria {
           city: nova.city,
           state: nova.state,
           neighborhood: nova.neighborhood,
+          postalCode: nova.postalCode,
+          street: nova.street,
+          streetNumber: nova.streetNumber,
+          complement: nova.complement,
           phoneE164: nova.phoneE164,
           status: nova.status,
           source: nova.source,
@@ -360,8 +380,18 @@ void describe('alterar', () => {
   });
 
   void it('entrada inexistente e 404 (com versao apresentada)', async () => {
+    // `city` VALIDA de proposito. A isca nasceu com `city: 'X'`, copiado do caso
+    // do 428 acima, e media outra coisa: `X` tem UM caractere e o contrato pede
+    // `minLength: 2` (`api/openapi.yaml`, `AdminDirectoryEntryPatch.city`, linha
+    // 10997), entao a forma do campo e recusada ANTES da leitura do recurso
+    // (passo 2 antes do passo 4, no cabecalho de `diretorio-administrativo.ts`)
+    // e pela rota o Ajv da borda nem chegaria ao caso de uso. O que este caso
+    // afirma e o 404 do recurso ausente COM versao apresentada -- e para chegar
+    // la o corpo precisa ser um corpo que o contrato aceita.
     assert.equal(
-      await tipoDoErro(() => diretorio.alterarEntrada(AUTOR, 'nao-existe', '"1"', { city: 'X' })),
+      await tipoDoErro(() =>
+        diretorio.alterarEntrada(AUTOR, 'nao-existe', '"1"', { city: 'Campinas' }),
+      ),
       'not-found',
     );
   });
