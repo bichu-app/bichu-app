@@ -40,6 +40,12 @@ const List<String> arquivosDaHistoria = <String>[
   'lib/telas/rede/encontro_da_rede.dart',
   'lib/telas/rede/local_do_encontro.dart',
   'lib/telas/rede/pecas_da_rede.dart',
+  // O `Perfil` so com menus e a tela de dados pessoais (18/10/2026): o item de
+  // menu e um controle novo com borda, icone e dois niveis de texto, e o
+  // formulario tem bloco de leitura com fundo proprio -- exatamente o tipo de
+  // peca em que um hex ou um 12 solto entram sem ninguem notar.
+  'lib/widgets/item_de_menu.dart',
+  'lib/telas/perfil/tela_dados_pessoais.dart',
 ];
 
 /// Um achado do portao: o arquivo, a linha e o motivo.

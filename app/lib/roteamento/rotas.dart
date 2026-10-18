@@ -24,6 +24,7 @@ import '../telas/pet/tela_detalhe_do_pet.dart';
 import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
+import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
 import '../telas/perdido/tela_de_quem_e_o_caso.dart';
@@ -112,6 +113,19 @@ abstract final class Rotas {
   static String produtoDaLojaDe(String slug) =>
       '/loja/produtos/${Uri.encodeComponent(slug)}';
   static const String perfil = '/perfil';
+
+  /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
+  ///
+  /// **Endereco proprio, e nao bloco dentro da aba.** `Meus pets` mora dentro
+  /// de `Perfil` porque e a lista da secao; um formulario de edicao nao e
+  /// conteudo de secao -- ele tem barra de saida, acao fixa embaixo e um
+  /// desfecho. Com endereco, ele e tambem o destino do item `Meus dados` da
+  /// gaveta, que e a linha que a UX 27.5.5 listava como `Editar o perfil` e
+  /// que ate hoje nao tinha para onde ir.
+  ///
+  /// **Irma da casca, como as telas de conta**, e por isso ela tem saida
+  /// propria: ela cobre a barra de baixo, e o `escape` dela e [perfil].
+  static const String dadosPessoais = '/perfil/dados';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -632,6 +646,16 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           }
           return TelaEditarPet(pet: pet);
         },
+      ),
+      // `Perfil` > `Meus dados` (18/10/2026). Declarada ANTES da casca, como
+      // as outras telas que a cobrem: o caminho e `/perfil/dados` e a aba e
+      // `/perfil`, dois enderecos distintos, e `go_router` casa o mais
+      // especifico por ser exato. Cobre a casca de abas, e por isso tem saida
+      // propria -- o `Perfil` continua vivo no ramo de baixo e voltar devolve
+      // a pessoa onde ela estava.
+      GoRoute(
+        path: Rotas.dadosPessoais,
+        builder: (context, estado) => const TelaDadosPessoais(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

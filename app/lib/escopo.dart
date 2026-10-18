@@ -8,6 +8,7 @@ import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
+import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
@@ -37,6 +38,7 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.me,
     required this.diretorio,
     required this.loja,
     required this.achados,
@@ -68,6 +70,14 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// As rotas `tags: [me]` do contrato: os dados pessoais do tutor.
+  ///
+  /// Fica no escopo, como as outras camadas de API, e nao e construida dentro
+  /// da tela: um `MeApi` por tela seria uma segunda porta para a mesma rota, e
+  /// o teste de widget perderia o ponto de injecao que todas as outras telas
+  /// usam.
+  final MeApi me;
 
   /// O diretorio de `Perto` (`tags: [directory]` do contrato).
   final DiretorioApi diretorio;
@@ -229,6 +239,7 @@ class Escopo extends InheritedWidget {
       auth != anterior.auth ||
       pets != anterior.pets ||
       casos != anterior.casos ||
+      me != anterior.me ||
       achados != anterior.achados ||
       envioDeFoto != anterior.envioDeFoto ||
       buscaDeCep != anterior.buscaDeCep ||

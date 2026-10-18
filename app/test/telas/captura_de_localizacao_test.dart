@@ -45,6 +45,7 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
+import 'package:bichu/api/me_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
@@ -127,6 +128,8 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // As rotas `tags: [me]` entraram no escopo com `Perfil` > `Meus dados`.
+      me: MeApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.
       diretorio: DiretorioApi(api),
       // A vitrine de `Loja` entrou no escopo junto com a listagem dela.

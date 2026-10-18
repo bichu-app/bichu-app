@@ -5,7 +5,6 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../escopo.dart';
-import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -15,7 +14,6 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../avisos/aviso_de_cadastro_incompleto.dart';
 import '../../widgets/moldura.dart';
 import '../casca_com_abas.dart';
-import '../perdido/tela_de_quem_e_o_caso.dart';
 
 /// O cache de leitura de `GET /pets`, do criterio 7 da BICHUS-62.
 ///
@@ -60,27 +58,27 @@ class CacheDeMeusPets {
 ///
 /// Os cartoes da variante `lista` do paragrafo 11.3 contra `listMyPets`.
 ///
+/// ## O que esta tela PERDEU em 18/10/2026, e para onde foi
+///
+/// A acao `Marcar como perdido`. Ela entrou na BICHUS-21, quando a tela que
+/// ela abre passou a existir, e saiu agora para a **pagina do pet**, junto do
+/// QR da plaquinha. Nao e perda de funcao: e a escolha de qual animal
+/// deixando de ser uma pergunta. F3.0 existia "para prevenir o deslize de
+/// marcar o pet errado quando ha mais de um" (criterio 1), e na pagina de um
+/// animal so nao ha deslize possivel -- quem abriu a pagina da Nina ja
+/// respondeu "a Nina" ao tocar no cartao dela.
+///
+/// **O que esta tela passou a sustentar e a porta de entrada daquela.** Os
+/// cartoes sao o unico caminho do app ate `Rotas.detalheDoPet` (medido em
+/// 18/10: `Rotas.detalheDoPetDe` e empurrada deste arquivo e de mais nenhum
+/// lugar de `app/lib`), e com a acao de perdido e o QR morando la, esconder o
+/// cartao deixaria as duas sem porta. Por isso a reorganizacao do `Perfil` em
+/// menus, do mesmo dia, **nao** transformou esta lista em item de menu: um
+/// item levaria a uma tela de lista que nao existe, e os cartoes ja levam ao
+/// pet.
+///
 /// ## O que esta tela nao tem, e nao e esquecimento
 ///
-/// - **O caso aberto dominando a tela.** Ver abaixo.
-///
-/// ## O que esta tela GANHOU na BICHUS-21
-///
-/// A acao `Marcar como perdido`. Ela faltava por um motivo que deixou de
-/// existir: *"a tela que a acao abre e a BICHUS-21 e nao existe"* (criterio 2
-/// da BICHUS-62). A tela existe agora, e a acao ganhou destino.
-///
-/// **Ela nao mora no cartao, e a razao e de acessibilidade e nao de gosto.**
-/// Um botao dentro do cartao criaria duas paradas de foco no mesmo objeto --
-/// o cartao ja e UMA parada, com `excludeSemantics` e rotulo composto -- e um
-/// controle anunciado dentro de outro controle. A acao e da tela: um toque, e
-/// a escolha de qual animal acontece em F3.0, que existe para isso.
-///
-/// **Ela so aparece quando tem destino.** Sem pet elegivel -- conta vazia,
-/// lista que nao carregou, ou todos os animais ja com caso aberto (criterio 13
-/// da BICHUS-21) -- a acao nao e renderizada, nem desabilitada. E a mesma
-/// regra do criterio 2 da BICHUS-62 que segurava esta acao ate hoje, aplicada
-/// agora a favor dela.
 /// - **O caso aberto dominando a tela.** Ele saiu daqui em 21/09 e virou a
 ///   BICHUS-177, no topo de `Pets`. Quem tem caso aberto esta em panico e nao
 ///   navega; atras de um toque numa aba `Perfil` o estado do caso ficaria
@@ -305,7 +303,6 @@ class _MeusPetsState extends State<MeusPets> {
         ],
       _Fase.lista => <Widget>[
           ..._cartoes(),
-          ..._acaoDeMarcarPerdido(),
           const SizedBox(height: BichuEspaco.e6),
           // A ACAO PERMANENTE (BICHUS-232).
           //
@@ -326,7 +323,6 @@ class _MeusPetsState extends State<MeusPets> {
           ),
           const SizedBox(height: BichuEspaco.e4),
           ..._cartoes(),
-          ..._acaoDeMarcarPerdido(),
         ],
       _Fase.falhaSemCache => <Widget>[
           FaixaDeAviso(
@@ -338,46 +334,27 @@ class _MeusPetsState extends State<MeusPets> {
     };
   }
 
-  /// A acao `Marcar como perdido`, quando ela tem destino.
-  ///
-  /// Devolve lista vazia quando nao ha para onde ir. Ver o cabecalho da
-  /// classe: acao sem destino e o que o criterio 2 da BICHUS-62 proibe, e nao
-  /// deixa de ser proibido por a acao estar desabilitada -- um controle
-  /// desabilitado sem motivo dito e o desenho preguicoso que o criterio 5 da
-  /// BICHUS-21 recusa na tela seguinte.
-  List<Widget> _acaoDeMarcarPerdido() {
-    // Fase de carregamento e falha sem cache nao tem lista: a acao nasceria
-    // sobre uma lista que a tela nao sabe se existe.
-    if (_fase != _Fase.lista && _fase != _Fase.falhaComCache) {
-      return const <Widget>[];
-    }
-    final elegiveis = TelaDeQuemEOCaso.elegiveis(_pets);
-    if (elegiveis.isEmpty) return const <Widget>[];
-
-    return <Widget>[
-      const SizedBox(height: BichuEspaco.e4),
-      BotaoSecundario(
-        rotulo: MeusPets.rotuloDeMarcarPerdido,
-        aoTocar: () {
-          // **Um pet: F3.0 nao aparece.** O criterio 1 justifica a escolha
-          // "para prevenir o deslize de marcar o pet errado quando ha mais de
-          // um": com um animal nao ha deslize possivel, e uma tela de
-          // confirmacao seria o mesmo atrito que a pesquisa de UX recusa no
-          // `Quando?`. F3.1 ja mostra a foto e o nome no topo.
-          if (elegiveis.length == 1) {
-            context.push(
-              Rotas.marcarPerdido,
-              extra: RascunhoDoCaso(pet: elegiveis.first),
-            );
-            return;
-          }
-          // A lista INTEIRA, e nao so os elegiveis: F3.0 precisa dos que ja
-          // tem caso aberto para dize-lo (criterio 13).
-          context.push(Rotas.escolherPetPerdido, extra: _pets);
-        },
-      ),
-    ];
-  }
+  // A ACAO `Marcar como perdido` SAIU DESTA TELA (18/10/2026).
+  //
+  // Ela mora agora na PAGINA DO PET (`telas/pet/tela_detalhe_do_pet.dart`),
+  // junto do QR da plaquinha, e a razao e de produto e nao de arrumacao: a
+  // escolha de qual animal deixou de ser uma pergunta. Quem abre a pagina da
+  // Nina ja respondeu "a Nina" ao tocar no cartao dela, e a tela de escolha
+  // (F3.0) existia para prevenir o deslize de marcar o pet errado -- deslize
+  // que nao ha quando a acao esta na pagina de um animal so.
+  //
+  // O que ficou AQUI e o que sustenta aquela porta: **os cartoes**, que sao o
+  // caminho da tela inicial do `Perfil` ate a pagina de cada pet. Medido em
+  // 18/10: `Rotas.detalheDoPetDe` e empurrada daqui e de mais nenhum lugar de
+  // `app/lib`, entao esconder o cartao deixaria a pagina do pet -- e com ela o
+  // QR e a acao de perdido -- sem porta de entrada. E por isso que a lista
+  // continua CONTEUDO desta tela e nao virou item de menu: um item levaria a
+  // uma tela de lista que nao existe, e os cartoes ja levam ao pet.
+  //
+  // `MeusPets.rotuloDeMarcarPerdido` continua publicado logo acima, e nao e
+  // esquecimento: a redacao da acao e UMA no produto inteiro (decisao do
+  // cliente de 21/09), e enquanto a pagina do pet nao publicar a dela este e o
+  // unico lugar que a guarda. Esta tela **nao a renderiza mais**.
 
   /// `Cadastrar meu pet`, construida num lugar so.
   ///
