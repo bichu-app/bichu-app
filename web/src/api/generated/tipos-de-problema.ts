@@ -41,6 +41,7 @@ export const TIPOS_DE_PROBLEMA = {
   "precondition-required": 428,
   "rate-limited": 429,
   "internal": 500,
+  "postal-code-lookup-unavailable": 503,
 } as const;
 
 export type TipoDeProblema = keyof typeof TIPOS_DE_PROBLEMA;

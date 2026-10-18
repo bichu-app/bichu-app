@@ -689,6 +689,21 @@ export const problemas = {
         'Se você precisa de mais, fale com a gente.',
     }),
 
+  /**
+   * Os dois serviços públicos de CEP falharam, ou não responderam no prazo de
+   * 4 s cada (`lookupAdminPostalCode`).
+   *
+   * **Separado de `not-found`**, que é 404, porque a saída da tela é a mesma --
+   * digitar o endereço -- e a frase não é: "este CEP não existe" não é "não
+   * conseguimos consultar agora". Os dois são informativos e **nenhum dos dois
+   * impede o cadastro de ser salvo**: busca de CEP é conveniência de
+   * digitação.
+   */
+  buscaDeCepIndisponivel: (): AppError =>
+    new AppError('postal-code-lookup-unavailable', 'Não conseguimos consultar o CEP agora', {
+      detail: 'Tente de novo, ou preencha o endereço à mão.',
+    }),
+
   interno: (cause?: unknown): AppError =>
     new AppError('internal', 'Não foi possível concluir agora', {
       detail: 'Tente de novo em alguns instantes.',

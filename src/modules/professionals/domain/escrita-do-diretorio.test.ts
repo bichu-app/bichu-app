@@ -53,6 +53,13 @@ const COMPLETA: EntradaAdministrativa = {
   city: 'São Paulo',
   state: 'SP',
   neighborhood: 'Vila Mariana',
+  // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
+  // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
+  // continuar completa para publicar.
+  postalCode: null,
+  street: null,
+  streetNumber: null,
+  complement: null,
   phoneE164: '+551130612200',
   status: 'published',
   source: 'import',

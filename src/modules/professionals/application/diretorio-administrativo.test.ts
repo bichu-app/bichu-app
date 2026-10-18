@@ -68,6 +68,13 @@ function entradaSemeada(): EntradaAdministrativa {
     city: 'São Paulo',
     state: 'SP',
     neighborhood: 'Vila Mariana',
+    // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
+    // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
+    // continuar completa para publicar.
+    postalCode: null,
+    street: null,
+    streetNumber: null,
+    complement: null,
     phoneE164: '+551130612200',
     status: 'published',
     source: 'import',
@@ -146,6 +153,10 @@ function repositorioEmMemoria(): Memoria {
           city: nova.city,
           state: nova.state,
           neighborhood: nova.neighborhood,
+          postalCode: nova.postalCode,
+          street: nova.street,
+          streetNumber: nova.streetNumber,
+          complement: nova.complement,
           phoneE164: nova.phoneE164,
           status: nova.status,
           source: nova.source,

@@ -928,6 +928,29 @@ export interface ProfessionalsTable {
   state: string | null;
   neighborhood: string | null;
   /**
+   * O ENDERECO DE RUA, acrescentado pela migracao `20261018000001`.
+   *
+   * Os quatro existem porque a decisao 9.2 foi respondida pelo cliente em
+   * 18/10/2026: o painel passa a poder cadastrar CEP, logradouro, numero e
+   * complemento de uma entrada do diretorio.
+   *
+   * **Ele autorizou QUEM PREENCHE, e nao O QUE APARECE EM PUBLICO.** Estes
+   * quatro campos sao lidos e escritos pela superficie administrativa e
+   * **nenhuma consulta de leitura do diretorio do aplicativo os seleciona** --
+   * `DirectoryEntrySummary` continua com bairro, cidade e UF. Estar no tipo
+   * permite a ESCRITA; a ausencia na projecao publica e o que mantem a saida
+   * como estava.
+   *
+   * `postal_code` tem oito digitos sem mascara, pelo `CHECK
+   * professionals_cep_oito_digitos` -- mesmo formato de
+   * `collar_tag_requests.postal_code`. `street_number` e TEXTO: `s/n`, `120A`
+   * e `KM 32` sao numeros de porta.
+   */
+  postal_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
+  /**
    * `geography(Point,4326)`. `never` nos tres sentidos, como
    * `user_reference_locations.reference_point` e `found_reports.found_point`: o
    * tipo impede a coluna de ser selecionada crua ou inserida pelo construtor

@@ -78,6 +78,10 @@ export interface NovaEntrada {
   readonly city: string | null;
   readonly state: string | null;
   readonly neighborhood: string | null;
+  readonly postalCode: string | null;
+  readonly street: string | null;
+  readonly streetNumber: string | null;
+  readonly complement: string | null;
   readonly phoneE164: string | null;
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
@@ -100,6 +104,10 @@ export interface MudancaDaEntrada {
   readonly city?: string | null;
   readonly state?: string | null;
   readonly neighborhood?: string | null;
+  readonly postalCode?: string | null;
+  readonly street?: string | null;
+  readonly streetNumber?: string | null;
+  readonly complement?: string | null;
   readonly phoneE164?: string | null;
   readonly status?: StatusDaEntrada;
   /** `true` so na transicao para `published`: e ele que grava `published_at`. */

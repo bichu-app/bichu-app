@@ -108,6 +108,8 @@ import { criarDirectoryRepository } from '../modules/professionals/adapters/pers
 import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { registrarRotaDeBuscaDeCep } from '../modules/addresses/adapters/http/postal-code-routes.js';
+import { criarBuscaDeCep } from '../modules/addresses/adapters/external/viacep-com-brasilapi.js';
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
 import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
 import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
@@ -973,6 +975,14 @@ export async function main(): Promise<void> {
             diretorio: diretorioAdministrativo,
             contrato,
           });
+          // A BUSCA DE CEP, uma integracao e uma so (decisao do cliente de
+          // 18/10). Ela nasce aqui, na superficie administrativa, porque o
+          // chamador que existe hoje e o formulario de entrada do diretorio --
+          // e porque resposta com logradouro e inexprimivel sem conta
+          // (`portao-contrato-publico`) e o painel nao tem Bearer (D36). O
+          // aplicativo passa a usar a MESMA porta quando a rota dele existir:
+          // o adaptador nao muda.
+          registrarRotaDeBuscaDeCep(administrativo, { cep: criarBuscaDeCep() });
           // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
           // daqui sai so o que ela chama.
           registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas });
