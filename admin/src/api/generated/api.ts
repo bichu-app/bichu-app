@@ -1716,7 +1716,76 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Minhas indicações
+         * @description As indicações que **a propria conta** fez para o `Perto`, com o estado
+         *     de cada uma. Pedido literal do cliente em 18/10/2026: *"e a aba de
+         *     minhas indicacoes, com o status se esta pendente ou se ja foi aprovado
+         *     pelo administrador?"*.
+         *
+         *     ## O LADO QUE FALTAVA, e o que ele desfaz
+         *
+         *     `suggestDirectoryEntry` existe desde 17/10 e devolve um recibo com
+         *     `reference`, `state` e `created_at` -- e nada mais depois disso. A
+         *     `20261017000016` deu ao PAINEL as quatro operacoes da fila; nenhuma
+         *     operacao deste contrato lia `directory_suggestions` do lado de **quem
+         *     indicou**, e por isso a pessoa nao tinha como saber se alguem olhou.
+         *
+         *     **Isto REVERTE uma frase, e a reversao esta declarada.** O
+         *     `COMMENT ON COLUMN` de `decline_reason` dizia "nao chega a quem
+         *     indicou", e `AdminDirectorySuggestion.decline_reason` repetia. A partir
+         *     de 18/10/2026 **o motivo da recusa chega a quem indicou**, por esta
+         *     operacao: recusa sem motivo faz a mesma clinica ser indicada outra vez,
+         *     e e a unica forma de resposta que nao ensina nada a ninguem. A migracao
+         *     `20261018000003` reescreve aquele `COMMENT` e justifica a troca; quem
+         *     recusa passa a escrever **para a pessoa**, e nao so para o proximo
+         *     revisor.
+         *
+         *     ## A autorizacao esta no `WHERE`, e por isso nao ha `403`
+         *
+         *     A consulta passa pela funcao `indicacoes_do_autor(uuid)` da migracao
+         *     `20261018000003`, que tem a conta na propria clausula `WHERE`. Nao e um
+         *     filtro aplicado depois de ler e nao e um `if` sobre a linha lida: a
+         *     indicacao de outra conta **nao existe** para quem chama. Nao ha `403`
+         *     nesta operacao, e nao ha por que haver (ADR-0021).
+         *
+         *     **Conta desabilitada devolve lista vazia**, pela mesma funcao, que
+         *     delega a `conta_habilitada(uuid)` (`20261017000013`) -- o ponto unico da
+         *     definicao, nao copiado aqui.
+         *
+         *     ## Nada de quem indicou sai na resposta
+         *
+         *     **Nenhum identificador interno** (ADR-0010): sem `id`, e o enderecamento
+         *     e por `reference`, o mesmo opaco de 128 bits que o recibo devolveu. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` no
+         *     `COMMENT ON COLUMN` da `20261017000004` (ADR-0011 secao 4, BICHUS-174) e
+         *     **nao e projetada** pela funcao: ela e parametro e filtro, nunca saida.
+         *
+         *     ## `entry_slug` SO VEM PUBLICADO, e o nulo tem significado
+         *
+         *     Aprovada **nao** quer dizer no ar. Uma entrada nascida de indicacao cujo
+         *     contato publico e `website` ou `instagram` nasce `draft` -- ela nao tem
+         *     `phone_e164`, que e o canal unico de `professionals` --, e `Perto` so
+         *     lista `status = 'published'`. Por isso `entry_slug` e devolvido
+         *     **apenas quando a entrada esta publicada**: devolver o `slug` do
+         *     rascunho faria a tela oferecer um caminho para uma pagina que nao esta
+         *     no `Perto`.
+         *
+         *     Entao `review_status: approved` com `entry_slug: null` e um estado com
+         *     nome, e a tela o diz com palavras em vez de prometer link: aprovada,
+         *     ainda nao no `Perto`.
+         *
+         *     ## Sem busca e sem filtro no contrato, e a ausencia e medida
+         *
+         *     O padrao de listagem do projeto poe busca, filtro e ordenacao no corpo
+         *     da tela -- e os poe **sobre o que o contrato aceita**. Aqui o teto de
+         *     indicacoes por conta e **5 por 24 h** (`suggestDirectoryEntry`), e a
+         *     lista de uma pessoa nao chega ao tamanho em que filtrar no servidor
+         *     ganha de ler a pagina. `page` e `limit` existem porque a lista cresce
+         *     com o tempo; `q` e `state` nao existem porque filtrar no servidor uma
+         *     lista que cabe na tela e uma rota a mais para manter em troca de nada.
+         */
+        get: operations["listMyDirectorySuggestions"];
         put?: never;
         /**
          * Sugerir um estabelecimento ou profissional para o `Perto`
@@ -5878,6 +5947,89 @@ export interface components {
             state: components["schemas"]["DirectorySuggestionState"];
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Uma indicacao, como **quem a fez** a ve.
+         *
+         *     ## Nao e `AdminDirectorySuggestion`, e a diferenca nao e de organizacao
+         *
+         *     Sao duas audiencias com direitos diferentes sobre a mesma linha. O
+         *     painel ve `note` -- o recado PARA QUEM REVISA --, e esta projecao
+         *     **nao**: ele nao e conteudo da pessoa sobre a entidade, e devolve-lo
+         *     aqui faria a tela parecer um rascunho guardado. Esta projecao devolve
+         *     `entry_slug` **so publicado**; a do painel devolve sempre, porque o
+         *     painel precisa pular para o rascunho que ele mesmo vai completar.
+         *
+         *     Um `allOf` sobre a do painel acoplaria as duas: o dia em que o painel
+         *     ganhar um campo, a pessoa o receberia junto. A duplicacao aqui e
+         *     deliberada e e a fronteira.
+         *
+         *     ## Nada de identificador interno, e nada da autoria
+         *
+         *     **Sem `id`** (ADR-0010 item 6): o enderecamento e por `reference`. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` e nao e
+         *     projetada pela funcao que serve esta operacao.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state`
+         *     aqui e a UF, na mesma projecao, exatamente como na tabela e como em
+         *     `AdminDirectorySuggestion`.
+         */
+        MyDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description **O motivo da recusa, e ele CHEGA a quem indicou** -- decisao de
+             *     18/10/2026, que reverte a frase anterior deste contrato e o
+             *     `COMMENT ON COLUMN` da `20261017000016` (ver a descricao de
+             *     `listMyDirectorySuggestions` e o cabecalho da `20261018000003`).
+             *
+             *     Nulo em tudo que nao foi recusado. Continua fora da entrada do
+             *     diretorio e continua nao publicado para terceiros: quem o le e a
+             *     conta que indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco da entrada no `Perto`, **e so quando ela esta
+             *     publicada**.
+             *
+             *     Nulo com `review_status: approved` **tem significado**: a entrada
+             *     existe mas esta `draft`, e nao esta no `Perto`. Isso acontece
+             *     quando a indicacao foi aprovada sem telefone -- entrada nascida de
+             *     contato `website` ou `instagram` nasce rascunho, porque
+             *     `professionals` tem `phone_e164` como canal unico. A tela diz isso
+             *     com palavras e **nao oferece link**, porque link para rascunho leva
+             *     a pagina que nao esta la.
+             */
+            entry_slug?: string | null;
+        };
+        /**
+         * @description A pagina, **da mais recente para a mais antiga**. Sem `pending_total`:
+         *     aquele numero e o aviso do menu do PAINEL ("quanto trabalho esta
+         *     esperando"), e nao tem sentido na tela de quem indicou -- aqui o que
+         *     importa e o estado de cada uma, nao o tamanho de uma fila alheia.
+         */
+        MyDirectorySuggestionPage: {
+            items: components["schemas"]["MyDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /** @description Quantas indicacoes esta conta tem, ao todo. Alimenta "Mostrando 1 a 20 de 87" e o paginador. */
+            total: number;
         };
         /**
          * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
@@ -11461,6 +11613,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyDirectorySuggestions: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina das indicacoes da conta, **da mais recente para a mais
+             *     antiga** -- ao contrario da fila do painel, que e trabalho humano e
+             *     se atende do mais antigo.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyDirectorySuggestionPage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

@@ -41,14 +41,53 @@
  * A sugestao nasce `pending` pelo `DEFAULT` da tabela, e a funcao nao aceita o
  * valor como parametro. Nao ha caminho, nesta operacao, para uma sugestao
  * nascer de outro jeito.
+ *
+ * ## A LEITURA (`listarDoAutor`) passa por FUNCAO, e pelo mesmo motivo
+ *
+ * `indicacoes_do_autor(uuid)` (`20261018000003`). O nome da coluna de autoria
+ * nao esta escrito neste arquivo -- nem no `INSERT`, nem no `WHERE` --, e a
+ * razao e a mesma do paragrafo de cima: a varredura de
+ * `portao-colunas-que-nao-saem.ts` e de NOME LITERAL sobre todo `.ts` de
+ * `src/`, inclusive comentario.
+ *
+ * **E a funcao devolve TABELA, nao booleano**, ao contrario de
+ * `indicacao_com_autor_ativo` em `kysely-fila-de-indicacoes.ts`. A diferenca e
+ * de plano de execucao: um predicado opaco no `WHERE` impediria o planejador de
+ * usar o indice `directory_suggestions_do_autor`, e esta consulta e justamente
+ * por autoria. O cabecalho da `20261018000003` mede isso.
+ *
+ * ## A AUTORIZACAO E O `WHERE` DA FUNCAO, e nao um filtro desta camada
+ *
+ * `listarDoAutor` passa a conta como ARGUMENTO da funcao, e e lá dentro que ela
+ * entra na clausula `WHERE`. Nao ha, neste arquivo, um `if` sobre a linha lida
+ * nem um filtro aplicado depois: a indicacao de outra conta nunca chega a
+ * memoria deste processo. Um `if` depois da leitura responderia `403` onde o
+ * ADR-0021 manda `404`, e a linha ja estaria lida.
+ *
+ * **Conta desabilitada devolve zero linhas pela mesma funcao**, que delega a
+ * `conta_habilitada(uuid)` (`20261017000013`). Nao ha nada a conferir aqui, e
+ * conferir de novo seria a segunda definicao da regra.
+ *
+ * ## A contagem e uma SEGUNDA consulta, e nao `count(*) OVER ()`
+ *
+ * `total` sai de uma contagem propria sobre a mesma funcao. Uma janela na
+ * consulta das linhas devolveria o total junto -- e devolveria o total DA
+ * PAGINA quando o `LIMIT` cortasse, que e o defeito que faz o paginador parar
+ * no primeiro bloco. Duas consultas, e a segunda e sobre indice.
  */
 import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
+import type { TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import type { TipoDeContatoPublico } from '../../domain/sugestao-do-diretorio.js';
+import type { RevisaoDaIndicacao } from '../../domain/fila-de-indicacoes.js';
 import type {
   DirectorySuggestionRepository,
+  MinhaIndicacao,
+  PaginaDasMinhasIndicacoes,
+  RecorteDasMinhasIndicacoes,
   SugestaoAGravar,
   SugestaoGravada,
 } from '../../ports/directory-suggestion-repository.js';
@@ -56,6 +95,47 @@ import type {
 /** O que o `RETURNING` da funcao devolve. */
 interface LinhaDoRegistro {
   created_at: Date;
+}
+
+/**
+ * Uma linha de `indicacoes_do_autor(uuid)`.
+ *
+ * **A coluna da autoria nao esta aqui porque a funcao nao a projeta.** Ela e
+ * parametro e filtro, nunca saida -- e o `COMMENT ON FUNCTION` da
+ * `20261018000003` diz isso para quem for conferir.
+ */
+interface LinhaDaMinhaIndicacao {
+  ref: string;
+  display_name: string;
+  kind: TipoDeProfissional;
+  city: string;
+  state: string;
+  neighborhood: string | null;
+  contact_kind: TipoDeContatoPublico;
+  contact_value: string;
+  review_status: RevisaoDaIndicacao;
+  created_at: Date;
+  decided_at: Date | null;
+  decline_reason: string | null;
+  entry_slug: string | null;
+}
+
+function comoMinhaIndicacao(l: LinhaDaMinhaIndicacao): MinhaIndicacao {
+  return {
+    ref: l.ref,
+    displayName: l.display_name,
+    kind: l.kind,
+    city: l.city,
+    state: l.state,
+    neighborhood: l.neighborhood,
+    contatoKind: l.contact_kind,
+    contatoValue: l.contact_value,
+    reviewStatus: l.review_status,
+    createdAt: l.created_at,
+    decidedAt: l.decided_at,
+    declineReason: l.decline_reason,
+    entradaSlug: l.entry_slug,
+  };
 }
 
 export function criarDirectorySuggestionRepository(
@@ -92,6 +172,38 @@ export function criarDirectorySuggestionRepository(
         );
       }
       return { ref, createdAt: gravada.created_at };
+    },
+
+    async listarDoAutor(
+      recorte: RecorteDasMinhasIndicacoes,
+    ): Promise<PaginaDasMinhasIndicacoes> {
+      // A ORDEM E O INVERSO DA FILA DO PAINEL, e e deliberado: fila de
+      // trabalho humano se atende do mais antigo, lista do que EU fiz se le do
+      // mais novo. `ref` entra como desempate porque dois `created_at` iguais
+      // (mesma transacao, mesmo instante) dariam ordem instavel entre paginas,
+      // e paginador com ordem instavel repete ou pula linha.
+      // POR NOME, e nao `SELECT *`, pela mesma regra da casa que vale em
+      // `kysely-fila-de-indicacoes.ts`: a lista explicita e o que faz um campo
+      // novo na origem entrar nesta borda por decisao, e nao por descuido.
+      // Aqui a origem e uma funcao cuja saida ja exclui a autoria -- a lista
+      // nao e a protecao, e sim a segunda afirmacao da mesma coisa.
+      const linhas = await sql<LinhaDaMinhaIndicacao>`
+        SELECT ref, display_name, kind, city, state, neighborhood,
+               contact_kind, contact_value, review_status,
+               created_at, decided_at, decline_reason, entry_slug
+          FROM indicacoes_do_autor(${recorte.autor}::uuid)
+         ORDER BY created_at DESC, ref ASC
+         LIMIT ${recorte.limit} OFFSET ${(recorte.page - 1) * recorte.limit}
+      `.execute(db);
+
+      const contagem = await sql<{ total: string }>`
+        SELECT count(*) AS total FROM indicacoes_do_autor(${recorte.autor}::uuid)
+      `.execute(db);
+
+      return {
+        itens: linhas.rows.map(comoMinhaIndicacao),
+        total: Number(contagem.rows[0]?.total ?? 0),
+      };
     },
   };
 }

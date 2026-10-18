@@ -43,8 +43,10 @@ import type { UserId } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import {
   errosDaSugestao,
+  projetarMinhaIndicacao,
   projetarRecibo,
   type CorpoDaSugestaoDoDiretorio,
+  type PaginaDasMinhasIndicacoesProjetada,
   type ReciboDaSugestao,
 } from '../domain/sugestao-do-diretorio.js';
 import type { ConferenciasDeTexto } from '../ports/conferencias-de-texto.js';
@@ -175,5 +177,50 @@ export class SugestaoDoDiretorio {
     });
 
     return projetarRecibo(gravada);
+  }
+
+  /**
+   * `listMyDirectorySuggestions`: as indicacoes DA CONTA, com o estado de cada
+   * uma.
+   *
+   * ## Nao ha trava de conta validada aqui, e a assimetria e deliberada
+   *
+   * `sugerir` exige canal de contato verificado porque ESCREVER cria trabalho
+   * humano sobre um terceiro. Ler a propria lista nao cria nada e nao fala de
+   * ninguem: exigir validacao aqui esconderia da pessoa as indicacoes que ela
+   * **ja mandou** -- inclusive as que mandou quando estava validada --, e uma
+   * tela que esconde o que a pessoa fez e pior do que a que nao existia.
+   *
+   * ## Nao ha trilha de auditoria aqui, e isso tambem e decisao
+   *
+   * `audit.events` guarda o que ALTERA estado ou o que toca dado de terceiro.
+   * Ler a propria lista nao faz nem um nem outro; registrar cada abertura da
+   * tela encheria a trilha com o unico evento que nunca vai ser consultado, e
+   * a trilha fica mais dificil de ler quanto mais barulho ela tem.
+   *
+   * ## A autorizacao nao esta nesta camada
+   *
+   * `autor` vai para a porta e, dela, para a clausula `WHERE` da funcao
+   * `indicacoes_do_autor(uuid)`. **Nao ha `if` aqui**, e nao pode haver: um
+   * `if` sobre a linha lida responderia `403` onde o ADR-0021 manda `404`, e a
+   * linha de outra conta ja estaria na memoria do processo. Conta desabilitada
+   * recebe pagina vazia pelo mesmo `WHERE`.
+   */
+  async minhasIndicacoes(
+    autor: UserId,
+    pagina: { readonly page: number; readonly limit: number },
+  ): Promise<PaginaDasMinhasIndicacoesProjetada> {
+    const lida = await this.deps.sugestoes.listarDoAutor({
+      autor,
+      page: pagina.page,
+      limit: pagina.limit,
+    });
+
+    return {
+      items: lida.itens.map(projetarMinhaIndicacao),
+      page: pagina.page,
+      limit: pagina.limit,
+      total: lida.total,
+    };
   }
 }
