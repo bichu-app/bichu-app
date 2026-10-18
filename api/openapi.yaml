@@ -2455,9 +2455,11 @@ paths:
         envio de 3 MiB era aceito pelo app, prometido pelo contrato e recusado
         pelo servidor.
 
-        O original fica guardado no balde privado; o que a conversa mediada
-        serve e uma derivada **sem metadado nenhum** (o EXIF de foto de celular
-        carrega coordenada de GPS).
+        O que a conversa mediada serve e uma derivada **sem metadado nenhum**
+        (o EXIF de foto de celular carrega coordenada de GPS). O arquivo
+        enviado e **substituido** por essa derivada assim que ela existe: a
+        foto continua a mesma, e o que deixa de existir e a coordenada de onde
+        quem fotografou estava (cliente, 17/10/2026).
       security:
         - bearerAuth: []
       x-rate-limit:
@@ -2545,18 +2547,24 @@ paths:
         desta rota era 2 MB no SEC-009, e a unificacao o afrouxa: o que continua
         contendo volume aqui e o teto de tres fotos por aviso, que nao reabre.
 
-        O **original e guardado, inteiro, no balde privado**, e nao e servido a
-        ninguem -- nem por URL assinada, nem ao tutor. O que o tutor ve dentro
-        da conversa mediada e uma derivada **higienizada**: reescrita a partir
-        dos pixels, em JPEG, **sem metadado nenhum**. Isso importa aqui mais que
-        em qualquer outro caminho: foto de celular carrega coordenada de GPS no
-        EXIF, e num produto de pet perdido isso entregaria onde quem achou o
-        animal estava.
+        O arquivo enviado nunca e servido a ninguem -- nem por URL assinada,
+        nem ao tutor. O que o tutor ve dentro da conversa mediada e uma
+        derivada **higienizada**: reescrita a partir dos pixels, em JPEG,
+        **sem metadado nenhum**. Isso importa aqui mais que em qualquer outro
+        caminho: foto de celular carrega coordenada de GPS no EXIF, e num
+        produto de pet perdido isso entregaria onde quem achou o animal estava.
 
-        A descricao anterior prometia que "o arquivo original e apagado assim
-        que a derivada e gerada". Isso descrevia um worker que nunca existiu, e
-        apagar o original e precisamente o que nao se faz: e dele que sai
-        qualquer derivada futura, e um corte errado nao tem volta.
+        **O arquivo enviado e SUBSTITUIDO pela derivada higienizada** assim que
+        ela esta gravada, e so depois disso (cliente, 17/10/2026). A foto
+        continua existindo e continua a mesma imagem; o que deixa de existir e
+        a copia que carregava a coordenada de GPS. Nenhuma informacao do pet
+        e perdida.
+
+        Historico desta descricao, porque ela ja mentiu nos dois sentidos: ela
+        prometeu "o arquivo original e apagado assim que a derivada e gerada"
+        quando nenhum worker fazia isso; foi corrigida para "o original e
+        guardado, inteiro" quando o worker passou a existir sem apagar; e agora
+        diz a substituicao, que e a decisao do cliente de 17/10/2026.
       security:
         - finderToken: []
       x-rate-limit:

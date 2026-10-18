@@ -8,7 +8,10 @@
  *
  * 1. os BYTES decidem o formato, e o `declared_type` não é consultado;
  * 2. a derivada vai para o bucket **privado**, nunca para o público;
- * 3. o ORIGINAL continua lá — nenhuma exclusão acontece;
+ * 3. **o original É apagado, e NUNCA antes de a versão limpa estar gravada**
+ *    (decisão do cliente, 17/10/2026: *"pode apagar o original e guardar só o
+ *    arquivo 2"*) — é a invariante da JANELA DE PERDA, no `describe` próprio
+ *    mais abaixo;
  * 4. recusa é FINAL e com motivo; falha de armazenamento LANÇA, para a fila
  *    adiar.
  *
@@ -36,6 +39,10 @@ interface Cenario {
   readonly derivada?: MotivoDeRecusa | Derivada;
   readonly contentLength?: number;
   readonly getLanca?: boolean;
+  /** O armazenamento recusa a exclusão do original. */
+  readonly deleteLanca?: boolean;
+  /** O banco cai na hora de gravar `sanitized_key`. */
+  readonly marcarLanca?: boolean;
 }
 
 function montar(cenario: Cenario): {
@@ -57,6 +64,7 @@ function montar(cenario: Cenario): {
     paraHigienizar: () => Promise.resolve(foto),
     pendentes: () => Promise.resolve([]),
     marcarHigienizada: (id, chave) => {
+      if (cenario.marcarLanca === true) return Promise.reject(new Error('banco fora do ar'));
       eventos.push(`pronta:${id}:${chave}`);
       return Promise.resolve();
     },
@@ -88,9 +96,11 @@ function montar(cenario: Cenario): {
       eventos.push(`put:${classe}:${chave}`);
       return Promise.resolve();
     },
-    // `delete` NÃO é chamada por este caso de uso, e o registro aqui é o que
-    // deixa a asserção possível: o original fica.
+    // A ORDEM dos eventos é o que estes casos medem, e é por isso que `delete`
+    // entra na mesma lista que `put` e `pronta:` em vez de num contador
+    // próprio: a invariante não é "apagou", é "apagou DEPOIS".
     delete: (classe: string, chave: ObjectKey) => {
+      if (cenario.deleteLanca === true) return Promise.reject(new Error('balde fora do ar'));
       eventos.push(`delete:${classe}:${chave}`);
       return Promise.resolve();
     },
@@ -183,14 +193,119 @@ void describe('higiene da foto do achado: o caminho feliz', () => {
     assert.ok(put?.includes('found-reports/sem-conta/sanitized/'), `chave: ${String(put)}`);
   });
 
-  void it('NÃO apaga o original: nenhuma exclusão acontece', async () => {
-    // O contrato prometia que o original do achador era apagado. Ele não é, e
-    // não deve ser: é dele que sai qualquer derivada futura.
-    const { deps, eventos } = montar({});
-    await higienizarFotoDoAchado(deps, {
-      upload_intent_id: '22222222-2222-2222-2222-222222222222',
+  void describe('A JANELA DE PERDA: nunca existe um instante sem nenhuma cópia', () => {
+    // ======================================================================
+    // A isca que importa mais que todas as outras deste arquivo.
+    // ======================================================================
+    //
+    // O cliente decidiu (17/10/2026) que o original é apagado e a versão limpa
+    // fica no lugar: *"pode apagar o original e guardar só o arquivo 2"*. A
+    // troca é segura por UMA razão e só por ela — **a ordem**. A versão limpa
+    // sobe, é GRAVADA em `sanitized_key`, e só então o original sai.
+    //
+    // Invertida, a mesma operação perde a foto de quem achou um pet: apagado o
+    // original antes de a limpa estar gravada, um processo que morra no meio
+    // deixa a intenção em `'pendente'` com o original já fora do balde — e a
+    // readiação faz `head` nele, acha `null`, marca `'ausente'` (estado FINAL)
+    // e o aviso fica sem foto nenhuma, para sempre, sem erro em lugar nenhum.
+    //
+    // Nenhum teste de RESULTADO pega isso: as duas ordens terminam com a
+    // versão limpa no balde e a linha `'pronta'`. Só a ordem denuncia.
+    const ENVIO = '22222222-2222-2222-2222-222222222222';
+
+    void it('a ordem é: sobe a limpa, GRAVA a chave, e SÓ ENTÃO apaga o original', async () => {
+      const { deps, eventos } = montar({});
+      await higienizarFotoDoAchado(deps, { upload_intent_id: ENVIO });
+
+      const subiu = eventos.findIndex((e) => e.startsWith('put:privado:'));
+      const gravou = eventos.findIndex((e) => e.startsWith(`pronta:${ENVIO}:`));
+      const apagou = eventos.findIndex((e) => e === `delete:privado:${String(ORIGINAL)}`);
+
+      assert.ok(subiu >= 0, 'a versão limpa não subiu');
+      assert.ok(gravou >= 0, 'a chave da versão limpa não foi gravada');
+      assert.ok(apagou >= 0, 'o original NÃO foi apagado: a coordenada de GPS ficou no balde');
+      assert.ok(subiu < gravou, 'gravou a chave ANTES de a versão limpa subir');
+      assert.ok(
+        gravou < apagou,
+        'APAGOU O ORIGINAL ANTES DE GRAVAR A VERSÃO LIMPA: há uma janela em que a foto não existe',
+      );
     });
-    assert.ok(!eventos.some((e) => e.startsWith('delete:')), 'o original não se apaga');
+
+    void it('falha ANTES de gravar a limpa: o original NÃO é apagado', async () => {
+      // O banco cai na hora de gravar `sanitized_key`. Neste instante a única
+      // cópia alcançável é o original, e ele tem de ficar.
+      const { deps, eventos } = montar({ marcarLanca: true });
+
+      await assert.rejects(() => higienizarFotoDoAchado(deps, { upload_intent_id: ENVIO }));
+      assert.ok(
+        !eventos.some((e) => e.startsWith('delete:')),
+        'apagou o original com a versão limpa NÃO gravada: a foto foi perdida',
+      );
+    });
+
+    void it('falha DEPOIS de gravar a limpa: a limpa fica, e o trabalho não se diz feito', async () => {
+      // O armazenamento recusa a exclusão. A foto está SEGURA (as duas cópias
+      // existem), mas o metadado com a coordenada não saiu — então o caso de
+      // uso LANÇA em vez de devolver `higienizada`. Engolir a falha deixaria o
+      // arquivo com a coordenada no balde para sempre e sem nada acusando.
+      const { deps, eventos } = montar({ deleteLanca: true });
+
+      await assert.rejects(
+        () => higienizarFotoDoAchado(deps, { upload_intent_id: ENVIO }),
+        'engoliu a falha da exclusão: a coordenada de GPS fica no balde em silêncio',
+      );
+      // E a limpa continua gravada: a readiação encontra `'pronta'`.
+      assert.ok(eventos.some((e) => e.startsWith(`pronta:${ENVIO}:`)));
+    });
+
+    void it('a readiação com `pronta` CONSERTA o original que sobrou', async () => {
+      // É isto que torna o `throw` do caso anterior produtivo em vez de só
+      // ruidoso. `'pronta'` garante (pelo CHECK `upload_intents_higiene_coerente`)
+      // que a versão limpa está gravada, então apagar o original é seguro — e
+      // idempotente, porque o `delete` da porta trata 404 como sucesso.
+      const { deps, eventos } = montar({
+        foto: {
+          uploadIntentId: ENVIO,
+          dono: '11111111-1111-1111-1111-111111111111',
+          originalKey: ORIGINAL,
+          status: 'pronta',
+        },
+      });
+
+      const r = await higienizarFotoDoAchado(deps, { upload_intent_id: ENVIO });
+
+      assert.equal(r.tipo, 'ignorada');
+      assert.ok(
+        eventos.includes(`delete:privado:${String(ORIGINAL)}`),
+        'a readiação não apagou o original que sobrou: a coordenada de GPS fica para sempre',
+      );
+      // E não reprocessa: nada de `put` nem de `pronta:` numa linha já pronta.
+      assert.ok(!eventos.some((e) => e.startsWith('put:')), 'reprocessou uma foto já pronta');
+    });
+
+    for (const status of ['recusada', 'ausente'] as const) {
+      void it(`\`${status}\`: o original é a ÚNICA cópia, e NÃO é apagado`, async () => {
+        // A assimetria é a invariante inteira: nestes dois estados NÃO existe
+        // versão limpa (o CHECK exige `sanitized_key IS NULL` nos dois), então
+        // o original é a única cópia da foto. Apagá-lo aqui seria perder a foto
+        // — exatamente o defeito que esta correção existe para impedir.
+        const { deps, eventos } = montar({
+          foto: {
+            uploadIntentId: ENVIO,
+            dono: '11111111-1111-1111-1111-111111111111',
+            originalKey: ORIGINAL,
+            status,
+          },
+        });
+
+        await higienizarFotoDoAchado(deps, { upload_intent_id: ENVIO });
+
+        assert.ok(
+          !eventos.some((e) => e.startsWith('delete:')),
+          `apagou o original em \`${status}\`, onde ele é a única cópia que existe`,
+        );
+      });
+    }
   });
 
   void it('confere o CABEÇALHO antes de baixar os bytes', async () => {

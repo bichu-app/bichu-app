@@ -32,11 +32,13 @@ import type {
   FotosDoAchadoDoWorker,
   StatusDaHigiene,
 } from '../../ports/fotos-do-achado.js';
+import { ESPECIES_DO_ACHADO } from '../../ports/fotos-do-achado.js';
 
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Os dois `kind` do achado. Ver o cabeçalho sobre a ausência de `pet_photo`. */
-const ESPECIES_DO_ACHADO = ['found_report_photo', 'finder_photo'] as const;
+// Os dois `kind` do achado vêm da PORTA (`ESPECIES_DO_ACHADO`) e não de uma
+// `const` daqui. A cópia local que existia aqui era invisível para a varredura
+// de envios vencidos, que por isso apagava a foto do achado.
 
 interface LinhaDeEnvio {
   readonly id: string;

@@ -22,9 +22,12 @@
  * da URL do objeto, e o parser de URL resolve `..`: uma linha com
  * `card/../../x` lê de fora do bucket (BICHUS-134).
  */
+import { sql } from 'kysely';
+
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { JobKind } from '../../../../shared/ports/index.js';
 import type {
+  EspecieVencida,
   FotoDoPet,
   FotoParaProcessar,
   IntencaoVencida,
@@ -36,6 +39,7 @@ import type {
 } from '../../ports/media-repository.js';
 import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 import { comoObjectKey } from '../../domain/chave-de-objeto.js';
+import { ESPECIES_DO_ACHADO } from '../../ports/fotos-do-achado.js';
 
 /**
  * O nome do trabalho na fila, **tirado da porta** e não inventado aqui.
@@ -376,28 +380,64 @@ export function criarMediaRepository(db: Db): MediaRepository {
 
     async listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]> {
       // As DUAS tabelas de intencao: a do app (`upload_intents`) e a do painel
-      // (`catalog_upload_intents`, ADR-0027 A.3). Uma intencao confirmada vira
-      // `pet_photos` ou `catalog_images`; esta consulta so enxerga as que nunca
-      // viraram, e por isso nao ha risco de apagar o original de uma foto viva.
-      // Uma consulta so, com UNION ALL: a ordem por vencimento e o limite valem
-      // para as duas tabelas juntas.
+      // (`catalog_upload_intents`, ADR-0027 A.3). Uma consulta so, com UNION
+      // ALL: a ordem por vencimento e o limite valem para as duas juntas.
+      //
+      // O COMENTARIO QUE ESTAVA AQUI AFIRMAVA QUE "nao ha risco de apagar o
+      // original de uma foto viva", E ESTAVA ERRADO. Ele valia para os dois
+      // casos que alguem tinha na cabeca -- foto de pet e imagem de catalogo,
+      // que TEM operacao de confirmacao e portanto saem desta lista no momento
+      // em que viram foto. A foto do achado e o terceiro caso: ela NAO TEM
+      // confirmacao no contrato, de proposito, e por isso `confirmed_at` nunca
+      // deixa de ser nulo nela. Julgada pelo mesmo critterio, ela vencia e era
+      // apagada ~10 min depois de subir, SEMPRE.
+      //
+      // Entao o filtro e por ESPECIE e nao por confirmacao: `confirmed_at` nao
+      // e o ciclo de vida da foto do achado. O ciclo dela e `sanitize_status`
+      // (migracao `20261001000006`), e quem o move e a varredura de higiene.
       const vencimento = new Date(Number(agora));
       const linhas = await db
         .selectFrom('upload_intents')
-        .select(['id', 'object_key', 'expires_at'])
+        .select([
+          'id',
+          'object_key',
+          'expires_at',
+          // `kind` passa por `sql<EspecieVencida>` para que os DOIS bracos do
+          // UNION tenham o mesmo tipo: a coluna e `TipoDeEnvio` (tres valores) e
+          // o braco do catalogo acrescenta `'catalog_image'`. Sem alargar aqui,
+          // o Kysely recusa o `unionAll` -- e com razao, porque a forma das duas
+          // consultas tem de ser a mesma.
+          sql<EspecieVencida>`kind`.as('kind'),
+        ])
         .where('confirmed_at', 'is', null)
         .where('expires_at', '<', vencimento)
+        // AS DUAS ESPECIES DO ACHADO FICAM FORA. `kind` e NOT NULL, entao o
+        // `not in` nao tem a armadilha do NULL que faria a linha sumir calada.
+        .where('kind', 'not in', [...ESPECIES_DO_ACHADO])
         .unionAll(
           db
             .selectFrom('catalog_upload_intents')
-            .select(['id', 'object_key', 'expires_at'])
+            .select([
+              'id',
+              'object_key',
+              'expires_at',
+              // `catalog_upload_intents` nao tem coluna `kind`: a tabela guarda
+              // uma coisa so. A especie entra como literal para que os dois
+              // bracos do UNION tenham a mesma forma e o caso de uso possa
+              // decidir pela especie sem saber de que tabela a linha veio.
+              sql<EspecieVencida>`'catalog_image'`.as('kind'),
+            ])
             .where('confirmed_at', 'is', null)
             .where('expires_at', '<', vencimento),
         )
         .orderBy('expires_at')
         .limit(limite)
         .execute();
-      return linhas.map((l) => ({ id: l.id, objectKey: comoObjectKey(l.object_key) }));
+      return linhas.map((l) => ({
+        id: l.id,
+        objectKey: comoObjectKey(l.object_key),
+        kind: l.kind,
+      }));
     },
 
     /**
@@ -449,13 +489,34 @@ export function criarMediaRepository(db: Db): MediaRepository {
         },
       };
 
+      // AS DUAS CHAVES, e `sanitized_key` nao e detalhe: com a decisao do
+      // cliente de 17/10/2026 ("pode apagar o original e guardar so o arquivo
+      // 2"), a higiene APAGA o original da foto do achado assim que a versao
+      // sem metadado esta gravada. Logo `sanitized_key` passa a ser a UNICA
+      // copia que existe daquela foto.
+      //
+      // Ler so `object_key` era um furo antes e seria o furo PRINCIPAL agora:
+      // quem exerce o direito de apagamento (art. 18, VI) teria apagado a
+      // copia que a higiene ja apagou sozinha, e deixado no balde justamente a
+      // que sobrou -- com `privacy.account_purged` afirmando que os arquivos
+      // sairam.
+      //
+      // `sanitized_key` e nula enquanto a higiene nao terminou, e tambem em
+      // `'recusada'`/`'ausente'` (CHECK `upload_intents_higiene_coerente`), e
+      // nula na foto de pet, que nao passa por este caminho. O `continue`
+      // abaixo cobre os quatro casos sem perguntar qual deles e.
       const intencoes = await db
         .selectFrom('upload_intents')
-        .select('object_key')
+        .select(['object_key', 'sanitized_key'])
         .where('user_id', '=', dono)
         .execute();
       for (const linha of intencoes) {
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.object_key) });
+        // Mesmo balde do original, e de proposito: a chave da limpa e
+        // `found-reports/{dono}/sanitized/...`, o mesmo prefixo, no balde
+        // PRIVADO (criterio 9 da BICHUS-35).
+        if (linha.sanitized_key === null) continue;
+        objetos.push({ classe: 'privado', chave: comoObjectKey(linha.sanitized_key) });
       }
 
       const fotos = await db

@@ -27,8 +27,9 @@
  * - **UMA derivada, no tamanho de leitura na conversa.** A conversa mediada
  *   mostra a foto para o tutor decidir se é o animal dele; ela não tem galeria,
  *   cartaz nem miniatura. Duas derivadas seriam um objeto pago a mais.
- * - **O original não é apagado.** É dele que sai qualquer derivada futura, e
- *   cortar no servidor sem guardar o que sobrou não tem volta.
+ * - **O ORIGINAL É APAGADO, e a versão limpa fica no lugar dele** (decisão do
+ *   cliente, 17/10/2026 — ver [descartarOriginalComGps]). Era ele que
+ *   carregava a coordenada de GPS, porque é nele que o EXIF mora.
  *
  * ## Recusa é final; armazenamento fora do ar não é
  *
@@ -47,7 +48,10 @@ import {
   escadaDo,
 } from '../domain/derivadas.js';
 import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js';
-import type { FotosDoAchadoDoWorker } from '../ports/fotos-do-achado.js';
+import type {
+  FotoDoAchadoParaHigienizar,
+  FotosDoAchadoDoWorker,
+} from '../ports/fotos-do-achado.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
 /**
@@ -81,6 +85,59 @@ export type ResultadoDaHigiene =
   /** Já higienizada antes: o trabalho foi reentregue depois de um reinício. */
   | { readonly tipo: 'ignorada'; readonly envioId: string };
 
+/**
+ * APAGA O ORIGINAL, que é a cópia que carrega a coordenada de GPS.
+ *
+ * ## ISTO NÃO VIOLA A REGRA DE "NENHUM APAGAMENTO AUTOMÁTICO" — leia antes de
+ * "consertar"
+ *
+ * A regra do cliente (17/10/2026) é: *"você só deve apagar as informações, caso
+ * o usuário remova o pet ou delete a conta"*. Alguém vai ler esta função em
+ * três meses, ver um `delete` dentro de um worker, concluir que é apagamento
+ * automático de informação de achado e remover a chamada. **Não remova.**
+ *
+ * **Nenhuma informação do pet é perdida aqui.** O que sai é **uma das duas
+ * cópias do MESMO arquivo** — a que tem a coordenada de GPS no EXIF —, e ela só
+ * sai **depois** de a outra cópia, idêntica como imagem e sem o metadado, estar
+ * no balde **e gravada em `sanitized_key`**. A foto continua existindo, a
+ * mesma, visível para o tutor na conversa mediada. O que deixa de existir é o
+ * endereço aproximado de quem fotografou o animal.
+ *
+ * Decisão do cliente, nas palavras dele, depois de a troca ser explicada sem
+ * jargão: **"pode apagar o original e guardar só o arquivo 2"** (17/10/2026).
+ *
+ * ## A INVARIANTE, e é ela que fecha a janela de perda
+ *
+ * **O original só é apagado quando existe uma versão limpa GRAVADA.** Não "já
+ * enviada", não "provavelmente lá": gravada em `sanitized_key`, que é o que a
+ * leitura usa para achar a foto. É por isso que esta função é chamada **depois**
+ * de `marcarHigienizada` e nunca antes.
+ *
+ * `sanitize_status = 'pronta'` **é** a prova de que ela está gravada, e não uma
+ * suposição: o CHECK `upload_intents_higiene_coerente` (migração
+ * `20261001000006`) só admite `'pronta'` com `sanitized_key IS NOT NULL`. Então
+ * o banco é testemunha, e esta função aceita exatamente esse estado.
+ *
+ * ## Por que ela LANÇA em vez de engolir a falha
+ *
+ * Porque a alternativa é guardar a coordenada de GPS em silêncio. Se o
+ * armazenamento recusar a exclusão, a foto está **segura** (as duas cópias
+ * existem) e o trabalho **não terminou**: lançar deixa a fila readiar, e a
+ * readiação **conserta**, porque o caminho de reentrada desta função trata o
+ * `'pronta'` que ela vai encontrar. Engolir a falha deixaria o arquivo com a
+ * coordenada no balde para sempre, sem nada acusando — que é a classe de
+ * defeito que este módulo inteiro existe para não repetir.
+ *
+ * O `delete` da porta trata 404 como sucesso, então repetir é barato e a
+ * operação é idempotente.
+ */
+async function descartarOriginalComGps(
+  deps: DependenciasDaHigiene,
+  foto: FotoDoAchadoParaHigienizar,
+): Promise<void> {
+  await deps.armazenamento.delete('privado', foto.originalKey);
+}
+
 export async function higienizarFotoDoAchado(
   deps: DependenciasDaHigiene,
   carga: CargaDaHigiene,
@@ -90,7 +147,21 @@ export async function higienizarFotoDoAchado(
   // de envios vencidos a recolheu. Lançar aqui faria a fila tentar cinco vezes
   // uma linha que não existe mais.
   if (foto === null) return { tipo: 'ignorada', envioId: carga.upload_intent_id };
-  if (foto.status !== 'pendente') return { tipo: 'ignorada', envioId: foto.uploadIntentId };
+  if (foto.status !== 'pendente') {
+    // `'pronta'` NA REENTRADA É O CONSERTO, e é o que torna o `throw` de
+    // `descartarOriginalComGps` produtivo em vez de só ruidoso: a versão limpa
+    // está gravada (o CHECK garante), e o original pode ter sobrado de uma
+    // tentativa em que o armazenamento recusou a exclusão. Apagar de novo é
+    // idempotente -- o `delete` da porta trata 404 como sucesso --, então o
+    // caso comum (nada sobrou) custa uma chamada e não muda nada.
+    //
+    // `'recusada'` e `'ausente'` NÃO entram aqui, e a assimetria é a
+    // invariante: nos dois NÃO existe versão limpa, então o original é a ÚNICA
+    // cópia da foto. Apagá-lo ali seria perder a foto, que é precisamente o
+    // que esta correção existe para impedir.
+    if (foto.status === 'pronta') await descartarOriginalComGps(deps, foto);
+    return { tipo: 'ignorada', envioId: foto.uploadIntentId };
+  }
 
   // `Clock.now()` devolve `Instant` (milissegundos marcados); as colunas sao
   // `timestamptz`. `comoData` e o caminho declarado entre os dois, e a
@@ -138,6 +209,16 @@ export async function higienizarFotoDoAchado(
   // não está lá.
   await deps.armazenamento.put('privado', chave, derivada.bytes, derivada.contentType);
   await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);
+
+  // E SÓ AGORA O ORIGINAL, que é a cópia com a coordenada de GPS. Nesta ordem,
+  // nunca na inversa: a versão limpa já subiu (duas linhas acima) e já está
+  // GRAVADA em `sanitized_key` (uma linha acima), então não existe instante em
+  // que a foto não tenha nenhuma cópia -- nem se o processo morrer aqui.
+  //
+  // Lança se o armazenamento recusar, e isso é deliberado: ver
+  // `descartarOriginalComGps`. A foto está segura; o que falta é o metadado
+  // sair, e a readiação conserta.
+  await descartarOriginalComGps(deps, foto);
 
   return { tipo: 'higienizada', envioId: foto.uploadIntentId, bytes: derivada.bytes.length };
 }
