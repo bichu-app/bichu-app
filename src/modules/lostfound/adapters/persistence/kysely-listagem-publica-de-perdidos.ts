@@ -39,6 +39,60 @@
  * `padrao_de_busca`, que é a forma que o índice trigrama do diretório já usa
  * (migração `20260928000006`).
  *
+ * ## SEM JANELA A CONSULTA LÊ A CIDADE INTEIRA, E FALTA ÍNDICE
+ *
+ * `period` perdeu o `default: 30d` no contrato em 18/10/2026 (pedido do
+ * cliente), então a ausência de janela é janela aberta e o predicado de
+ * `last_seen_at` deixa de existir. O que isso custa foi MEDIDO, e não estimado:
+ * pilha de integração, Postgres 16, 6 000 casos abertos públicos em 10 cidades
+ * (600 em `Sao Paulo`) espalhados por 720 dias, `ANALYZE` feito,
+ * `EXPLAIN (ANALYZE, BUFFERS)` da MESMA consulta que este arquivo compila:
+ *
+ * ```
+ * contagem, janela de 30 d   Seq Scan   26 linhas     923 buffers   15,9 ms
+ * contagem, janela aberta    Seq Scan  600 linhas  15 113 buffers   58,8 ms
+ * página 1,  janela de 30 d  Seq Scan   26 linhas     839 buffers   10,3 ms
+ * página 1,  janela aberta   Seq Scan  600 linhas  15 114 buffers   57,5 ms
+ * ```
+ *
+ * **O plano já era `Seq Scan` nos dois casos**, e é aqui que a medição
+ * desmente a leitura rápida: `lost_cases_publicos_por_cidade`
+ * — `(last_seen_city, opened_at DESC) WHERE status = 'open' AND
+ * share_to_public_list` — NÃO SERVE esta consulta e nunca serviu. Dois motivos
+ * independentes: o predicado de cidade é `texto_para_busca(last_seen_city) =
+ * ...`, uma função sobre a coluna, que nenhum btree sobre a coluna crua
+ * alcança; e a ordenação do índice é `opened_at`, enquanto a janela e a ordem
+ * desta rota são `last_seen_at`. Tirar o `default` não degradou um plano bom:
+ * ele tornou visível quantas linhas o plano ruim já percorria.
+ *
+ * O que explica os 16x de buffers não é a varredura em si — ela lê as mesmas
+ * páginas de qualquer jeito —, é `conta_habilitada(owner_user_id)`, uma função
+ * por linha que consulta `users`. Com a janela, o Postgres a avalia depois do
+ * `last_seen_at` e ela roda 26 vezes; sem a janela, ela roda para as 600 da
+ * cidade.
+ *
+ * O índice que resolve é a migração **`20261019000003`**, que desce no mesmo
+ * trabalho que este comentário:
+ *
+ * ```
+ * CREATE INDEX lost_cases_publicos_por_cidade_e_visto
+ *   ON lost_cases (texto_para_busca(last_seen_city), last_seen_at DESC, share_token)
+ *   WHERE status = 'open' AND share_to_public_list;
+ *
+ * contagem, janela aberta   Bitmap Index Scan   4 320 buffers   8,7 ms
+ * página 1,  janela aberta  Bitmap Index Scan                  16,2 ms
+ * ```
+ *
+ * `texto_para_busca` é IMMUTABLE (`provolatile = 'i'`), então ela pode indexar;
+ * `conta_habilitada` é STABLE e por isso NÃO pode entrar no `WHERE` do índice.
+ * Além do índice, a contenção são os três tetos por `ip` da operação e a
+ * paginação de 20, que o contrato já declara.
+ *
+ * O índice ANTIGO continua lá e **não é duplicata deste**: ele foi criado na
+ * `20260918000003` para esta mesma lista, nunca a serviu pelos dois motivos
+ * acima, e por grep em `src/` não tem leitor nenhum hoje. A `20261019000003`
+ * explica por que ele não foi derrubado junto.
+ *
  * **CUSTO MEDIDO E NÃO ESCONDIDO:** não existe índice trigrama sobre
  * `texto_para_busca(pets.name)`. Com `q` preenchido, o predicado é uma
  * varredura dos casos abertos da cidade — que é um conjunto pequeno, porque os
@@ -114,15 +168,29 @@ export function construtorDaListagemPublicaDePerdidos(
     // 4. O pet existe e não está falecido nem arquivado.
     .where('pets.deleted_at', 'is', null)
     .where('pets.status', 'not in', STATUS_DE_PET_SEM_CASO_PUBLICO)
-    // A janela, sobre `last_seen_at` — que é quando o animal foi visto, e é o
-    // mesmo campo que a tela mostra. O contrato chama a janela de "desde a
-    // abertura do caso"; `opened_at` faria "últimas 24 h" esconder o caso
-    // aberto hoje de um animal visto anteontem, que é o oposto do que quem
-    // procura precisa ver.
-    .where('lost_cases.last_seen_at', '>=', inicioDaJanela(recorte.agora, recorte.janela))
     .where(
       sql<SqlBool>`texto_para_busca(lost_cases.last_seen_city) = texto_para_busca(${recorte.cidade})`,
     );
+
+  // A JANELA É CONDICIONAL, e a condição é o pedido do cliente de 18/10/2026:
+  // *"a página de pets não deve trazer nenhum item do filtro por padrão, como
+  // está atualmente por últimos 30 dias"*. Janela indefinida é janela ABERTA, e
+  // janela aberta é a AUSÊNCIA deste predicado — não um `>= epoch`, que
+  // pareceria o mesmo e continuaria carregando uma comparação de data por
+  // linha para o planejador considerar.
+  //
+  // Quando há janela, ela é sobre `last_seen_at` — que é quando o animal foi
+  // visto, e é o mesmo campo que a tela mostra. O contrato chamava a janela de
+  // "desde a abertura do caso"; `opened_at` faria "últimas 24 h" esconder o
+  // caso aberto hoje de um animal visto anteontem, que é o oposto do que quem
+  // procura precisa ver.
+  if (recorte.janela !== undefined) {
+    consulta = consulta.where(
+      'lost_cases.last_seen_at',
+      '>=',
+      inicioDaJanela(recorte.agora, recorte.janela),
+    );
+  }
 
   const bairro = recorte.bairro?.trim();
   if (bairro !== undefined && bairro !== '') {

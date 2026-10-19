@@ -20,6 +20,7 @@ import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
 import { selarContador, TETO_DA_PREVIA } from '../domain/conversa-mediada.js';
 import { comoData } from '../../../shared/time/clock.js';
+import { decodificarCursor } from '../domain/paginacao.js';
 import { ConversationService, type Chamador } from './conversation-service.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -53,6 +54,15 @@ interface Estado {
   readonly conversaDoAviso?: ConversationId | undefined;
   /** BICHUS-278: o que `contarParaOSino` devolve. */
   readonly naoLidasNoSino?: number | undefined;
+  /**
+   * A LISTA que `listarDoChamador` devolve, quando o caso precisa de mais de
+   * uma linha (a ordem e o cursor da pagina seguinte).
+   *
+   * Sem ela o duble devolve `[conversa]`, que e o que os casos antigos pedem.
+   */
+  readonly lista?: readonly Partial<ConversaDoChamador>[] | undefined;
+  /** O que `contarDoChamador` devolve: `ConversationPage.total`. */
+  readonly totalDoRecorte?: number | undefined;
 }
 
 function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoChamador {
@@ -75,6 +85,12 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
     naoLida: false,
     corpoDaUltima: null,
     ultimaMensagemEm: null,
+    // EMENDA 3 DO ADR-0010 (19/10/2026). O padrao e "nao e conexao aceita",
+    // que e o estado normal da conversa de achado: os dois chegam nulos, como
+    // a clausula `WHERE` da consulta os entrega. O caso que fala de conexao
+    // passa o que precisa por `parcial`.
+    apelidoDoOutro: null,
+    chaveDaFotoDoOutro: null,
     ...parcial,
   };
 }
@@ -90,6 +106,12 @@ function bancada(estado: Estado = {}) {
   const conversasLidas: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
 
   const conversa = estado.conversa === undefined ? undefined : conversaAberta(estado.conversa);
+  const lista: readonly ConversaDoChamador[] =
+    estado.lista === undefined
+      ? conversa === undefined
+        ? []
+        : [conversa]
+      : estado.lista.map((parcial) => conversaAberta(parcial));
 
   const repositorio: ConversationRepository = {
     abrirPorAviso: (abertura) => {
@@ -108,7 +130,13 @@ function bancada(estado: Estado = {}) {
       conversasLidas.push({ conversa: conversa_, chamador, agora });
       return Promise.resolve();
     },
-    listarDoChamador: () => Promise.resolve(conversa === undefined ? [] : [conversa]),
+    listarDoChamador: () => Promise.resolve(lista),
+    // O TOTAL do recorte, e um NUMERO PROPRIO e nao `lista.length`: e assim que
+    // esta bancada consegue distinguir "o servico le a contagem do repositorio"
+    // de "o servico conta a pagina". Com `lista.length` aqui, um `total:
+    // items.length` no servico ficaria verde com o defeito de pe.
+    contarDoChamador: () =>
+      Promise.resolve(estado.totalDoRecorte ?? (conversa === undefined ? 0 : 1)),
     buscarDoChamador: () => Promise.resolve(conversa),
     mensagens: () => Promise.resolve([]),
     gravarMensagem: (mensagem) => {
@@ -191,7 +219,7 @@ function chamador(userId: UserId): Chamador {
   return { userId, correlationId: 'corr-1', ip: '203.0.113.7' };
 }
 
-const PAGINA = { limit: 20, depoisDe: undefined };
+const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
 void describe('critério 13 — a redação roda ANTES de gravar, nos dois sentidos', () => {
   void it('o telefone que o tutor digitou não chega ao banco', async () => {
@@ -419,6 +447,94 @@ void describe('a conversa que sai do servidor', () => {
     assert.equal(pagina.items.length, 1);
     assert.deepEqual(pagina.items[0]?.messages, []);
     assert.equal(pagina.nextCursor, null, 'página curta não tem próxima');
+  });
+});
+
+/**
+ * A SEGUNDA PÁGINA da lista (18/10/2026).
+ *
+ * O `ORDER BY` da consulta tem bancada própria, que lê o SQL compilado
+ * (`adapters/persistence/ordem-da-lista-e-a-ultima-mensagem.test.ts`). **Ela
+ * não alcança este lado**: o cursor é CODIFICADO aqui, e um `proximoDaLista`
+ * que escrevesse `abertaEm` enquanto a consulta ordena pela última mensagem
+ * deixaria a primeira página perfeita e a segunda errada. São dois mecanismos,
+ * e cada um precisa da sua isca.
+ */
+void describe('o cursor da lista sai da ÚLTIMA MENSAGEM, e não da abertura', () => {
+  const ABERTA_EM = comoData(1_780_000_000_000 as Instant);
+  const ULTIMA_EM = comoData(1_789_000_000_000 as Instant);
+  const OUTRA = '018f3a2b-0000-7000-8000-0000000000f1' as ConversationId;
+
+  /** Duas linhas, página cheia (`limit: 2`): só assim há próxima página. */
+  const DUAS = [
+    { id: CONVERSA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
+    { id: OUTRA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
+  ];
+  const CHEIA = { limit: 2, depoisDe: undefined, termo: undefined };
+
+  void it('ISCA -- o cursor carrega o instante da última mensagem da última linha', async () => {
+    const { servico } = bancada({ conversa: {}, lista: DUAS });
+    const pagina = await servico.listar(chamador(TUTOR), CHEIA);
+
+    assert.ok(pagina.nextCursor !== null, 'página cheia tem próxima, e ela sumiu');
+    const posicao = decodificarCursor(pagina.nextCursor);
+    assert.ok(posicao !== undefined, `cursor ilegível: ${String(pagina.nextCursor)}`);
+    assert.equal(
+      posicao.criadaEm.toISOString(),
+      ULTIMA_EM.toISOString(),
+      'o cursor carrega a ABERTURA da conversa, e a consulta ordena pela última ' +
+        'mensagem. As duas divergindo, a página seguinte continua de um lugar que ' +
+        'não é onde a ordem parou: linhas são PULADAS e outras REPETIDAS. Com a ' +
+        'rolagem infinita de 10 em 10 isso acontece a cada dez linhas, e o sintoma ' +
+        'só aparece depois de a pessoa rolar.',
+    );
+    assert.equal(posicao.id, OUTRA, 'o cursor saiu da linha errada da página');
+  });
+
+  void it('conversa sem mensagem nenhuma cai na abertura, que é o único instante que ela tem', async () => {
+    const { servico } = bancada({
+      conversa: {},
+      lista: [
+        { id: CONVERSA, abertaEm: ABERTA_EM, ultimaMensagemEm: null },
+        { id: OUTRA, abertaEm: ABERTA_EM, ultimaMensagemEm: null },
+      ],
+    });
+    const pagina = await servico.listar(chamador(TUTOR), CHEIA);
+    assert.ok(pagina.nextCursor !== null, 'página cheia tem próxima, e ela sumiu');
+    const posicao = decodificarCursor(pagina.nextCursor);
+    assert.ok(posicao !== undefined, 'cursor ausente para página cheia');
+    assert.equal(
+      posicao.criadaEm.toISOString(),
+      ABERTA_EM.toISOString(),
+      'sem mensagem, o cursor ficou com instante nulo (ou inválido). O `coalesce` ' +
+        'da ordem tem a abertura como reserva, e o cursor precisa da MESMA reserva.',
+    );
+  });
+});
+
+/**
+ * `ConversationPage.total` (18/10/2026): quantas conversas o RECORTE tem.
+ */
+void describe('o total do recorte vem do repositório, e nunca da página', () => {
+  void it('ISCA -- `total` é a contagem do repositório, e não `items.length`', async () => {
+    const { servico } = bancada({ conversa: {}, totalDoRecorte: 57 });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+
+    assert.equal(pagina.items.length, 1, 'a bancada entrega UMA linha de propósito');
+    assert.equal(
+      pagina.total,
+      57,
+      'o `total` saiu com o tamanho da PÁGINA. A linha de resumo da listagem no ' +
+        'aplicativo (`<n> conversas`) diria 10 a quem tem 57, e a pessoa leria que a ' +
+        'busca não achou o resto.',
+    );
+  });
+
+  void it('`total` e `unread_count` são números diferentes, e não se confundem', async () => {
+    const { servico } = bancada({ conversa: {}, totalDoRecorte: 12, naoLidasNoSino: 3 });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.total, 12, 'o total do recorte foi trocado pelo contador do sino');
+    assert.equal(pagina.naoLidas, 3, 'o contador do sino foi trocado pelo total do recorte');
   });
 });
 

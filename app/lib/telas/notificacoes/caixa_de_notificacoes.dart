@@ -43,9 +43,14 @@
 ///   `BarraDeListagem`**: a caixa tem uma ordem so, decrescente de quando o
 ///   fato aconteceu, e ela vem pronta do servidor. Controle que recorta uma
 ///   caixa de 90 dias seria controle sem funcao.
-/// - **Sem `RefreshIndicator`.** Este app nao tem puxar-para-atualizar em
-///   lugar nenhum, e nao e aqui que ele nasce. Quem volta a tela recarrega
-///   abrindo-a; quem falhou tem `Tentar de novo` na faixa.
+/// - **COM arrastar-para-atualizar desde 18/10/2026.** Este paragrafo dizia o
+///   contrario -- *"Este app nao tem puxar-para-atualizar em lugar nenhum, e
+///   nao e aqui que ele nasce"* --, e era verdade quando foi escrito. O
+///   cliente mandou o gesto para o app inteiro: *"Crie uma acao no aplicativo
+///   de atualizar a pagina conforme o usuario puxa a pagina para baixo"*. Quem
+///   desenha e `widgets/arrastar_para_atualizar.dart`, e o gesto chama o MESMO
+///   `_carregar` do `Tentar de novo` da faixa -- que continua existindo,
+///   porque quem falhou precisa de um controle nomeado e nao so de um gesto.
 /// - **Sem rolagem infinita e sem paginacao numerada** (design system 11.20):
 ///   a pagina seguinte vem de um `Carregar mais` explicito, pelo
 ///   [RodapeDaPaginacao], que e o pe de toda listagem paginada do app.
@@ -84,7 +89,9 @@ import '../../api/notificacoes_api.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -160,6 +167,9 @@ enum _Fase { carregando, lista, falha }
 
 class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   _Fase _fase = _Fase.carregando;
+
+  /// A falha da lista foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   List<AvisoDaCaixa> _itens = const <AvisoDaCaixa>[];
   int _total = 0;
   int _pagina = 1;
@@ -209,6 +219,7 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     setState(() {
       _fase = _Fase.carregando;
       _falhaDaLista = null;
+      _faltaConta = false;
       _falhaDeMais = null;
       _falhaDaAcao = null;
     });
@@ -228,6 +239,8 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
       if (!mounted) return;
       setState(() {
         _fase = _Fase.falha;
+        // `next_action: sign_in` do servidor, e nao um `switch` em 401.
+        _faltaConta = faltaConta(falha);
         _falhaDaLista = MensagensDeErro.de(falha).texto;
       });
     } on FormatException {
@@ -334,7 +347,17 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
         titulo: TextosDaCaixa.titulo,
         saida: TipoDeSaida.voltar,
       ),
-      body: SafeArea(child: _corpo()),
+      // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
+      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
+      // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
+      // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
+      // `Tentar de novo` da faixa.
+      body: SafeArea(
+        child: ArrastarParaAtualizar(
+          aoAtualizar: _carregar,
+          child: _corpo(),
+        ),
+      ),
     );
   }
 
@@ -343,6 +366,13 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
       case _Fase.carregando:
         return const Center(child: CircularProgressIndicator());
       case _Fase.falha:
+        // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
+        if (_faltaConta) {
+          return const Padding(
+            padding: EdgeInsets.all(BichuEspaco.e4),
+            child: ConviteParaEntrar(secao: SecaoComConta.notificacoes),
+          );
+        }
         return Padding(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           child: FaixaDeAviso(

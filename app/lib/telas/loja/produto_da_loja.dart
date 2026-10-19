@@ -291,7 +291,9 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
       // que nao leva a lugar nenhum.
       if (item.destinoExterno case final Uri destino) ...<Widget>[
         const SizedBox(height: BichuEspaco.e6),
-        _Margem(child: BotaoDeSaidaDaLoja(item: item, destino: destino)),
+        _Margem(
+          child: BotaoDeSaidaDaLoja(item: item, destino: destino),
+        ),
       ],
     ];
   }
@@ -482,39 +484,28 @@ class _Miniatura extends StatelessWidget {
 // O resto da pagina
 // ---------------------------------------------------------------------------
 
-/// Titulo, parceiro, categoria e preco.
+/// Titulo, parceiro e categoria. **Sem preco desde 18/10/2026.**
 ///
-/// O preco sai da MESMA `ItemDaLoja.linhaDoPreco` que o cartao usa. Uma
-/// segunda formatacao aqui seria um segundo lugar para o numero aparecer com
-/// outra redacao.
+/// O preco saiu da secao `Loja` inteira por pedido literal do cliente --
+/// *"Retire o preco dos produtos da loja e o texto de 'preco de referencia'"*
+/// --, e "inteira" inclui esta pagina. Ela esta PARADA e sem entrada desde
+/// 17/10 (nada no aplicativo navega para ca), e e exatamente por isso que o
+/// preco saiu daqui tambem: deixado de pe, ele voltaria a tela no dia em que
+/// alguem reabrisse a rota, e a decisao do cliente precisaria ser aplicada uma
+/// segunda vez por alguem que nao a conhece.
 ///
-/// **18/10/2026: esta tela mudou SEM ser tocada em desenho.** O cliente
-/// mandou remover o rabo "preço de referência, consultado em ..." da linha do
-/// preco, e o rabo nasce em `ItemDaLoja.linhaDoPreco` -- que e justamente a
-/// funcao que esta pagina chama. A decisao de deixar a PAGINA parada continua
-/// valendo: nada do arranjo dela foi mexido. O que mudou aqui e so o que
-/// acompanha a funcao compartilhada: a linha passou a ser so o valor, e o no
-/// ganhou `semanticsLabel`.
+/// **O que saiu**, nos mesmos tres pedacos do cartao: o valor
+/// (`item.linhaDoPreco`), o `semanticsLabel` que carregava
+/// "Preco de referencia" junto dele, e o ramo de
+/// `VitrineDaLoja.precoNaoConfirmado` -- a clausula visual que acompanhava o
+/// preco vencido e que fica orfa sem valor nenhum na tela.
 ///
-/// **E aqui a semantica importa MAIS que no cartao.** O cartao da vitrine tem
-/// a linha visivel acima do nome do produto; esta pagina **nao tem** -- aquela
-/// linha e do cartao. Sem o `semanticsLabel`, o rabo teria levado a afirmacao
-/// embora desta pagina para TODO mundo, e nao so para quem usa leitor de tela.
-/// Com ele, quem nao ve continua ouvindo "preço de referência" junto do
-/// valor. Quem enxerga passa a ler so o numero, e essa metade e a decisao do
-/// cliente.
+/// **O que NAO saiu:** a clausula juridica dos termos. Ela continua inteira em
+/// `web/src/conteudo/juridico/termos.md`, e fala do que a plataforma e -- nao
+/// vende nada, precos sao referencia -- e nao do que esta pagina pinta.
 ///
-/// **A DATA TAMBEM CHEGA AQUI, pela mesma porta** (18/10/2026, tarde). Quando
-/// o cliente mandou devolver a data ao rotulo visivel do CARTAO,
-/// `CartaoDaLoja.rotuloAcessivelDoPreco` passou a montar afirmacao, valor e
-/// data; esta pagina chama a mesma funcao e por isso quem usa leitor de tela
-/// ouve a data aqui tambem, sem a pagina ser redesenhada.
-///
-/// **O que NAO acontece aqui e a metade visivel.** Esta pagina nao tem a linha
-/// de apoio -- ela e do cartao -- e o rabo nao volta a linha do preco. Entao a
-/// data existe nesta tela para quem ouve e nao para quem enxerga, e isso e
-/// consequencia de a pagina estar PARADA por decisao do cliente, nao desenho
-/// escolhido aqui. Esta anotado no relato da tarefa.
+/// O arranjo da pagina continua intocado no resto, como a decisao de 17/10
+/// manda: nada foi redesenhado aqui, so o preco deixou de ser desenhado.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.item});
 
@@ -524,7 +515,6 @@ class _Cabecalho extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final linhaDoPreco = item.linhaDoPreco;
     // A CLASSIFICACAO, e nao mais so a categoria. O detalhe do produto nasceu
     // no lote anterior de 17/10, quando a categoria era um `enum` do binario e
     // `item.categoria` era o proprio valor com `rotulo`. Na mescla dos dois
@@ -552,20 +542,8 @@ class _Cabecalho extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e3),
           _PilulaDaCategoria(rotulo: classificacao),
         ],
-        if (linhaDoPreco != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e3),
-          Text(
-            linhaDoPreco,
-            style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-            semanticsLabel: CartaoDaLoja.rotuloAcessivelDoPreco(item),
-          ),
-        ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e3),
-          Text(
-            VitrineDaLoja.precoNaoConfirmado,
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-        ],
+        // **O PRECO ERA DESENHADO AQUI**, e os dois ramos sairam em
+        // 18/10/2026 por pedido do cliente. Ver a prosa da classe.
       ],
     );
   }

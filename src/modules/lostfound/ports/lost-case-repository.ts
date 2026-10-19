@@ -76,6 +76,19 @@ export interface CasoGravado {
   readonly shareToPublicList: boolean;
   readonly openedAt: Date;
   readonly closedAt: Date | null;
+  /**
+   * O prazo de REABERTURA do encerramento vigente, ou `null` em caso aberto.
+   *
+   * A coluna existe desde a `20260918000003` e `encerrar` a grava (agora + 7
+   * dias), mas **nada a lia**: ela nao estava em `COLUNAS`, nao estava neste
+   * tipo e nao saia em resposta nenhuma. O contrato declara
+   * `LostCase.reopen_deadline` e promete, em `closeLostCase`, que *"encerrar e
+   * reversivel por 7 dias"* -- e sem este campo o aplicativo nao tinha como
+   * saber se a janela ainda esta aberta. Quem decide se da para reabrir e este
+   * valor, e nao uma conta de 7 dias refeita no cliente: numero de produto
+   * recalculado no app envelhece no bolso de quem nao atualiza.
+   */
+  readonly reopenDeadline: Date | null;
   readonly closureOutcome: DesfechoDoCaso | null;
   readonly closureChannel: CanalDoReencontro | null;
   readonly closureNote: string | null;
@@ -167,6 +180,34 @@ export interface LostCaseRepository extends DecisorDeCandidatos {
     readonly desfecho: DesfechoDoCaso;
     readonly canal: CanalDoReencontro | undefined;
     readonly nota: string | undefined;
+    readonly agora: Instant;
+  }): Promise<CasoGravado | null>;
+
+  /**
+   * Reabre o caso encerrado por engano (`reopenLostCase`).
+   *
+   * **`null` NÃO é uma resposta só, e é por isso que `reopenDeadline` passou a
+   * sair de `buscarDoTutor`.** Ele cobre quatro coisas com desfechos HTTP
+   * diferentes, e quem as separa é o serviço, relendo o caso:
+   *
+   * 1. não existe, ou não é do chamador → **404** (ADR-0021, e aqui vale duas
+   *    vezes: um 403 confirmaria que aquele pet esteve perdido);
+   * 2. já está aberto → **200** com o caso aberto, e não erro: é o reenvio da
+   *    fila offline, pela mesma razão escrita em `decidirCandidato`;
+   * 3. encerrado e **fora** da janela de 7 dias → **410**, que é o que o
+   *    contrato declara (*"Passou dos 7 dias"*);
+   * 4. encerrado, dentro da janela, mas o pet já tem OUTRO caso aberto →
+   *    **409 `pet-already-lost`**. Este é o único dos quatro que o contrato não
+   *    declara, e ele não é hipotético: encerrar, abrir de novo e tentar
+   *    reabrir o primeiro é uma sequência de dois toques.
+   *
+   * Os quatro predicados ficam no `WHERE`, e não num `if` antes: a autorização
+   * pela mesma regra de todo este arquivo, e os outros três porque reabrir é
+   * escrita e a fila offline reenvia em rajada quando o sinal volta.
+   */
+  reabrir(entrada: {
+    readonly caso: CaseId;
+    readonly dono: UserId;
     readonly agora: Instant;
   }): Promise<CasoGravado | null>;
 }

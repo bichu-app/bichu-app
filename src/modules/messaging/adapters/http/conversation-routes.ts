@@ -57,9 +57,10 @@ import type {
   MensagemGravada,
   MotivoDaDenuncia,
   Pagina,
+  PaginaDaLista,
 } from '../../ports/conversation-repository.js';
 import { decodificarCursor, limiteEfetivo } from '../../domain/paginacao.js';
-import type { ConversationId, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, ConversationId, UserId } from '../../../../shared/types/brands.js';
 
 export const rotaDeListagemDeConversas = defineRoute({
   operationId: 'listConversations',
@@ -206,6 +207,16 @@ export interface DependenciasDasRotasDeConversa {
   readonly contrato: Contrato;
   readonly idempotencia: Idempotencia;
   readonly clock: Clock;
+  /**
+   * O dominio das derivadas publicas. **A URL e montada aqui, nunca gravada**
+   * (§11.1 proibicao 9): gravar URL absoluta amarraria cada linha ao provedor
+   * do dia em que ela foi escrita.
+   *
+   * Entrou com a emenda 3 do ADR-0010 (19/10/2026), que e a primeira vez que
+   * esta superficie serve uma imagem. Mesma dependencia, com o mesmo nome, de
+   * `person-profile-routes.ts`.
+   */
+  readonly baseDeMidia: AbsoluteUrl;
 }
 
 /**
@@ -243,6 +254,28 @@ function paginaDaQuery(request: FastifyRequest): Pagina {
   return {
     limit: limiteEfetivo(limit),
     ...(posicao === undefined ? { depoisDe: undefined } : { depoisDe: posicao }),
+  };
+}
+
+/**
+ * A janela da LISTA: a de [paginaDaQuery], mais o `q` do contrato.
+ *
+ * O termo chega **sem espaço nas pontas**, e vazio vira `undefined`: `q=` e `q`
+ * ausente querem a mesma resposta (a lista inteira), e deixar a string vazia
+ * descer faria o repositório montar um `ILIKE '%%'` que casa tudo — mesma
+ * resposta por um caminho mais caro, e um `total` calculado por um predicado
+ * que ninguém pediu.
+ *
+ * **O piso de 2 caracteres é do contrato** (`ConversationSearch.minLength`) e é
+ * a validação da rota que o cobra. Repeti-lo aqui seria um segundo lugar com o
+ * mesmo número.
+ */
+function paginaDaListaDaQuery(request: FastifyRequest): PaginaDaLista {
+  const { q } = request.query as { q?: string };
+  const termo = typeof q === 'string' ? q.trim() : '';
+  return {
+    ...paginaDaQuery(request),
+    termo: termo === '' ? undefined : termo,
   };
 }
 
@@ -326,7 +359,11 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
  * Aqui a decisão de expor é sempre uma decisão — que é exatamente o que uma
  * conversa desenhada para não entregar telefone nem endereço exige.
  */
-function comoResposta(conversa: ConversaVisivel): Record<string, unknown> {
+function comoResposta(
+  conversa: ConversaVisivel,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
+  const base = baseDeMidia.replace(/\/$/, '');
   return {
     id: conversa.id,
     case_id: conversa.caseId,
@@ -335,6 +372,21 @@ function comoResposta(conversa: ConversaVisivel): Record<string, unknown> {
     participants: conversa.participants.map((p) => ({
       role: p.role,
       display_name: p.displayName,
+      // O APELIDO E A FOTO DO OUTRO LADO (emenda 3 do ADR-0010, 19/10/2026).
+      //
+      // **As duas chaves vem SEMPRE na resposta**, com nulo quando nao ha. A
+      // escolha e deliberada e e o contrario da de `PersonProfile.showcase`,
+      // que e OMITIDA: lista vazia afirmaria "ela nao tem foto", mas um
+      // `null` escalar nao afirma nada alem de "nao ha foto aqui" -- e chave
+      // que aparece e desaparece faz o cliente distinguir ausencia de nulo
+      // sem que a diferenca signifique algo.
+      //
+      // **Nenhum `if` de autorizacao nesta borda.** O recorte ja aconteceu na
+      // clausula `WHERE` da consulta (ADR-0021): o que chega aqui e nulo ou e
+      // de uma conexao aceita, e esta funcao nao tem como saber a diferenca --
+      // nem precisa.
+      handle: p.handle,
+      photo_icon_url: p.photoKey === null ? null : `${base}/${p.photoKey}`,
     })),
     messages: conversa.messages.map(comoMensagem),
     // A LEITURA (BICHUS-278). Os tres saem do servico, que os leu do banco:
@@ -370,10 +422,14 @@ export function registrarRotasDeConversas(
     {},
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
-      const pagina = paginaDaQuery(request);
+      const pagina = paginaDaListaDaQuery(request);
       const pagina_ = await deps.conversas.listar(chamador, pagina);
       return reply.status(200).send({
-        items: pagina_.items.map(comoResposta),
+        items: pagina_.items.map((c) => comoResposta(c, deps.baseDeMidia)),
+        // O TOTAL DO RECORTE, e nao o tamanho da pagina: a linha de resumo da
+        // listagem no aplicativo diz quantas conversas existem, e `items.length`
+        // diria `10` a quem tem 57.
+        total: pagina_.total,
         // O CONTADOR DO SINO, da conta INTEIRA e nao desta pagina: somar a
         // pagina faria o sino mostrar 20 para quem tem 57. O numero vai SEM
         // teto; o corte em `9+` e de apresentacao e mora no app.
@@ -394,7 +450,7 @@ export function registrarRotasDeConversas(
         chamador,
         paginaDaQuery(request),
       );
-      return reply.status(200).send(comoResposta(conversa));
+      return reply.status(200).send(comoResposta(conversa, deps.baseDeMidia));
     },
   );
 

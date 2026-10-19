@@ -6,12 +6,29 @@
  * "Sem telefone e sem endereço." A conversa existe justamente para que o tutor
  * não precise publicar o número dele e o achador não precise dizer onde mora.
  * A consequência de desenho é a que está escrita aqui: **a projeção de cada
- * lado é montada campo a campo, e os campos possíveis são dois** — o papel e um
- * nome de exibição. Não existe neste arquivo, e não pode passar a existir, um
- * caminho por onde telefone, e-mail, endereço ou identificador de conta
- * atravesse de um lado para o outro. Se a mediação dependesse de alguém lembrar
- * de não incluir o campo, ela seria uma convenção; aqui ela é a única forma
+ * lado é montada campo a campo**, e cada campo que existe nela foi uma decisão.
+ * Não existe neste arquivo, e não pode passar a existir, um caminho por onde
+ * telefone, e-mail, endereço ou **identificador interno de conta** atravesse de
+ * um lado para o outro. Se a mediação dependesse de alguém lembrar de não
+ * incluir o campo, ela seria uma convenção; aqui ela é a única forma
  * exprimível.
+ *
+ * **Eram dois campos (papel e nome) até 19/10/2026, e agora são quatro.** A
+ * emenda 3 do ADR-0010 é decisão do cliente e tem escopo fechado: *"a foto
+ * aparece SÓ quando as duas pessoas já aceitaram conexão"*. Entraram o
+ * **apelido** e a **chave da foto** do OUTRO lado, e as duas chegam aqui JÁ
+ * recortadas pela cláusula `WHERE` da consulta: fora da conexão aceita elas são
+ * nulas, e este arquivo não tem como pedi-las de novo.
+ *
+ * **O apelido não é o identificador que a frase acima proíbe.** Ele é alias
+ * público, escolhido pela pessoa e mutável (*"slug não tem relação com
+ * informações pessoais, e é um id que o usuário escolhe"*, cliente 18/10/2026);
+ * o que continua sem campo aqui é `users.id`, `users.public_ref` e qualquer
+ * UUID. E ele não reabre o item 7 do ADR-0010 (agrupar os pets de um mesmo
+ * tutor) no caminho que aquele item protege: o estranho que escaneou a
+ * plaquinha **não** é conexão aceita, e para ele o apelido é nulo — duas
+ * plaquinhas escaneadas por duas pessoas diferentes continuam sem nada que as
+ * ligue ao mesmo dono.
  *
  * ## Por que o nome de exibição é cortado no primeiro termo
  *
@@ -100,10 +117,38 @@ export function primeiroNomeOuApelido(nome: string | null, padrao: string): stri
   return primeiro.slice(0, 40);
 }
 
-/** Como o contrato declara cada item de `participants`: dois campos, e só. */
+/**
+ * Como o contrato declara cada item de `participants`.
+ *
+ * **Eram dois campos até 19/10/2026, e agora são quatro** — pela emenda 3 do
+ * ADR-0010, que é decisão do cliente e tem escopo fechado: *"a foto aparece SÓ
+ * quando as duas pessoas já aceitaram conexão"*.
+ *
+ * Os dois novos são **nulos em todo estado que não seja conexão aceita**, e
+ * nulos SEMPRE no lado de quem chama: ninguém precisa do próprio apelido nem da
+ * própria foto para ler a conversa, e mandá-los seria uma terceira superfície
+ * da foto do dono sem nenhum consumidor — cada superfície nova de foto de
+ * pessoa é uma a mais para alguém esquecer de proteger.
+ */
 export interface ParticipanteVisivel {
   readonly role: Exclude<Papel, 'system'>;
   readonly displayName: string;
+  /**
+   * O apelido deste participante, **só quando ele é o OUTRO lado E é conexão
+   * aceita de quem chama**. Nulo em todo o resto.
+   *
+   * É ele que dá ENDEREÇO ao toque no ícone: o perfil de outra pessoa é
+   * `getPersonProfile`, endereçado pelo apelido. Nunca `public_ref`, nunca UUID
+   * (ADR-0010 item 6).
+   */
+  readonly handle: string | null;
+  /**
+   * A CHAVE da derivada `thumb` da foto deste participante, pela mesma regra.
+   *
+   * Chave e não URL: a URL é montada na borda, com o domínio de mídia do
+   * ambiente. É a mesma divisão de `FotoDoPerfilDeOutraPessoa`.
+   */
+  readonly photoKey: string | null;
 }
 
 export interface NomesDaConversa {
@@ -115,6 +160,29 @@ export interface NomesDaConversa {
   readonly tutorDesabilitado: boolean;
   /** `users.deleted_at` do achador COM CONTA não é nulo (17/10). */
   readonly achadorDesabilitado: boolean;
+  /**
+   * **De que lado está quem chama.** Sai da consulta (`papel_do_chamador`), e
+   * não de um `if`.
+   *
+   * Ele entrou aqui com a emenda 3: o apelido e a foto são do **outro** lado, e
+   * sem saber qual é o lado de quem chama não há como dizer em qual dos dois
+   * itens eles entram. Obrigatório e não opcional de propósito — um default
+   * silencioso poria a foto do lado errado, que é afirmar que uma pessoa é
+   * outra.
+   */
+  readonly papelDoChamador: Exclude<Papel, 'system'>;
+  /**
+   * O apelido do OUTRO lado, **já recortado pela cláusula `WHERE` da consulta**
+   * (conexão aceita, par não bloqueado, as duas contas habilitadas).
+   *
+   * Nulo é o valor de todo o resto, e esta função **não repete o recorte**: dois
+   * lugares decidindo a mesma coisa divergem no primeiro que alguém ajustar, e
+   * o que o segundo lugar faria aqui é esconder o que o primeiro deixou passar
+   * — isto é, transformar um defeito de autorização num defeito invisível.
+   */
+  readonly apelidoDoOutro: string | null;
+  /** A chave da derivada `thumb` da foto do OUTRO lado, pela mesma regra. */
+  readonly chaveDaFotoDoOutro: string | null;
 }
 
 /**
@@ -141,15 +209,44 @@ export function participantesVisiveis(nomes: NomesDaConversa): readonly Particip
   // seria perder um dos dois caminhos, e o caminho do achador é justamente o que
   // não pede login.
   //
-  // Sobre o AVATAR: não existe campo de foto de participante em consulta, DTO,
-  // resposta nem contrato -- `Conversation.participants` tem dois campos, e a
-  // descrição do contrato proíbe foto de perfil por extenso. Não há o que pintar
-  // de cinza no servidor, e nada foi inventado aqui. Está no relatório.
+  // SOBRE O AVATAR, e esta nota mudou em 19/10/2026: a foto EXISTE agora, e
+  // existe num estado só -- conexão aceita (emenda 3 do ADR-0010). O que não
+  // mudou é o lado desabilitado: ele perde o nome aqui, e perde a foto na
+  // CONSULTA, porque `conta_habilitada` das duas pontas está dentro do próprio
+  // predicado de conexão aceita. Então o lado que saiu continua
+  // despersonalizado nos dois campos, sem um único `if` a mais aqui.
+  //
+  // E continua não havendo foto para o resto: conversa de achado com um
+  // estranho, pedido pendente, recusa, par bloqueado e achador sem conta
+  // recebem `photoKey` nulo, e a tela desenha a inicial -- que é o que está lá
+  // hoje.
   const tutor = nomes.tutorDesabilitado ? null : nomes.nomeDoTutor;
   const achador = nomes.achadorDesabilitado ? null : nomes.nomeDoAchador;
+  // O APELIDO E A FOTO SÃO DO OUTRO LADO, E DE MAIS NENHUM (emenda 3 do
+  // ADR-0010, 19/10/2026). O lado de quem chama recebe os dois nulos, e isso
+  // não é economia: a própria foto do dono já sai em `getMe`, e repeti-la aqui
+  // seria uma terceira superfície dela sem nenhum consumidor.
+  //
+  // O RECORTE NÃO ESTÁ AQUI, e a ausência é deliberada: `apelidoDoOutro` e
+  // `chaveDaFotoDoOutro` chegam JÁ recortados pela cláusula `WHERE` da consulta
+  // (ADR-0021) — conexão aceita, par não bloqueado, as duas contas habilitadas,
+  // foto `ready`. Um `if` de conexão aqui seria o segundo lugar onde a regra
+  // mora, e o segundo é o que alguém esquece de repetir no terceiro caminho.
+  const doOutro = (papel: Exclude<Papel, 'system'>) =>
+    papel === nomes.papelDoChamador
+      ? { handle: null, photoKey: null }
+      : { handle: nomes.apelidoDoOutro, photoKey: nomes.chaveDaFotoDoOutro };
   return [
-    { role: 'tutor', displayName: primeiroNomeOuApelido(tutor, 'Tutor') },
-    { role: 'finder', displayName: primeiroNomeOuApelido(achador, 'Quem achou') },
+    {
+      role: 'tutor',
+      displayName: primeiroNomeOuApelido(tutor, 'Tutor'),
+      ...doOutro('tutor'),
+    },
+    {
+      role: 'finder',
+      displayName: primeiroNomeOuApelido(achador, 'Quem achou'),
+      ...doOutro('finder'),
+    },
   ];
 }
 

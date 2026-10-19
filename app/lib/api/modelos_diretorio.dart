@@ -15,10 +15,14 @@ import 'falhas.dart';
 
 /// `#/components/schemas/ProfessionalKind` do contrato.
 ///
-/// **Nao ha valor para ONG**, e a ausencia e decisao pendente do modelo, nao
-/// esquecimento: `professionals` nao tem `entity_kind`. A porta das ONGs em
-/// `Perto` leva hoje a lista de `Pets` filtrada em adocao (UX 27.2.4), que e
-/// outra coisa.
+/// **Nao ha valor para ONG, e a ausencia deixou de ser decisao pendente.** Ate
+/// 18/10/2026 esta prosa dizia que `professionals` nao tinha `entity_kind`;
+/// desde a migracao `20261018000012` ela tem, e o contrato passou a declarar
+/// [TipoDeEntidade] como EIXO PROPRIO. ONG nao entra nesta lista por duas
+/// razoes, e a prosa de `EntityKind` no `openapi.yaml` nomeia as duas: valor
+/// novo em `enum` de RESPOSTA quebra o contrato (12 erros de `oasdiff`
+/// medidos), e uma ONG nao e uma ATIVIDADE -- ela tem atividade (`clinic`,
+/// `vet`) **e** tipo de entidade (`organization`) ao mesmo tempo.
 enum AtividadeDoDiretorio {
   vet('vet', 'Veterinário'),
   groomer('groomer', 'Banho e tosa'),
@@ -38,6 +42,44 @@ enum AtividadeDoDiretorio {
   static AtividadeDoDiretorio? porCodigo(String? codigo) {
     for (final a in AtividadeDoDiretorio.values) {
       if (a.codigo == codigo) return a;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/EntityKind` do contrato.
+///
+/// **O QUE a entrada e, e nao o que ela faz** -- eixo separado de
+/// [AtividadeDoDiretorio] de proposito. Uma ONG que atende como clinica tem
+/// `kind: clinic` e `entity_kind: organization`: um campo so nao expressava os
+/// dois, e foi por isso que o contrato abriu o segundo.
+///
+/// ## Por que [porCodigo] devolve NULO, e nao `profissional`
+///
+/// `professional` e o `DEFAULT` da coluna e o valor de toda linha que existia
+/// antes da migracao, e seria tentador cair nele na duvida. **Mas duas coisas
+/// diferentes chegariam aqui como a mesma**: a resposta de um servidor antigo,
+/// que nao manda o campo, e a resposta de um servidor NOVO que mandou um valor
+/// que esta versao do app nao conhece. A segunda e a que importa -- o `enum` e
+/// aditivo por construcao, e `glifoDoInscrito` (em
+/// `lib/widgets/icone_do_inscrito.dart`) precisa poder distinguir "nao sei o
+/// tipo" de "sei, e e profissional" para escolher o glifo de reserva. Engolir
+/// o desconhecido como `profissional` apagaria essa diferenca na porta.
+enum TipoDeEntidade {
+  profissional('professional'),
+  organizacao('organization');
+
+  const TipoDeEntidade(this.codigo);
+
+  /// O valor que vai e volta na API.
+  final String codigo;
+
+  /// O tipo, ou **nulo** para campo ausente, de outro tipo ou de valor que
+  /// esta versao do app nao conhece. Ver a prosa da classe.
+  static TipoDeEntidade? porCodigo(Object? codigo) {
+    if (codigo is! String) return null;
+    for (final t in TipoDeEntidade.values) {
+      if (t.codigo == codigo) return t;
     }
     return null;
   }
@@ -159,6 +201,7 @@ class EntradaDoDiretorio {
     required this.atividade,
     required this.nome,
     required this.verificacao,
+    this.tipoDeEntidade,
     this.cidade,
     this.estado,
     this.bairro,
@@ -175,6 +218,15 @@ class EntradaDoDiretorio {
   final AtividadeDoDiretorio? atividade;
   final String nome;
   final VerificacaoDaEntrada verificacao;
+
+  /// `entity_kind`: **o QUE a entrada e**, ao lado de [atividade], que e o que
+  /// ela faz. Nulo quando o campo nao veio ou trouxe valor desconhecido -- ver
+  /// [TipoDeEntidade.porCodigo].
+  ///
+  /// A tela nao escreve este campo em texto nenhum: quem o usa e o glifo de
+  /// reserva do lugar da imagem (`glifoDoInscrito`), que e o unico lugar onde
+  /// ONG aparece sem estar escrita.
+  final TipoDeEntidade? tipoDeEntidade;
 
   final String? cidade;
   final String? estado;
@@ -248,6 +300,11 @@ class EntradaDoDiretorio {
       nome: nome,
       atividade: AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
       verificacao: VerificacaoDaEntrada.doJson(json['verification']),
+      // **Obrigatorio no contrato, e ainda assim lido com tolerancia.** O
+      // campo e NOVO (migracao `20261018000012`): um servidor que nao subiu
+      // ainda nao o manda, e derrubar a listagem por causa dele nao melhora
+      // nada. Ausente e desconhecido viram nulo, e o nulo tem desenho.
+      tipoDeEntidade: TipoDeEntidade.porCodigo(json['entity_kind']),
       cidade: json['city'] as String?,
       estado: json['state'] as String?,
       bairro: json['neighborhood'] as String?,
@@ -801,6 +858,7 @@ class DetalheDoLocal {
     required this.verificacao,
     required this.pontuacao,
     required this.podeAvaliar,
+    this.tipoDeEntidade,
     this.cidade,
     this.estado,
     this.bairro,
@@ -817,6 +875,15 @@ class DetalheDoLocal {
   final AtividadeDoDiretorio? atividade;
   final String nome;
   final VerificacaoDaEntrada verificacao;
+
+  /// `entity_kind`: **o QUE a entrada e**, ao lado de [atividade], que e o que
+  /// ela faz. Nulo quando o campo nao veio ou trouxe valor desconhecido -- ver
+  /// [TipoDeEntidade.porCodigo].
+  ///
+  /// A tela nao escreve este campo em texto nenhum: quem o usa e o glifo de
+  /// reserva do lugar da imagem (`glifoDoInscrito`), que e o unico lugar onde
+  /// ONG aparece sem estar escrita.
+  final TipoDeEntidade? tipoDeEntidade;
 
   final String? cidade;
   final String? estado;
@@ -919,6 +986,9 @@ class DetalheDoLocal {
         json['review_blocked_reason'] as String?,
       ),
       minhaAvaliacaoRef: json['my_review_ref'] as String?,
+      // Mesma tolerancia da listagem: campo novo, ausente e desconhecido
+      // viram nulo, e o nulo tem desenho.
+      tipoDeEntidade: TipoDeEntidade.porCodigo(json['entity_kind']),
       cidade: json['city'] as String?,
       estado: json['state'] as String?,
       bairro: json['neighborhood'] as String?,

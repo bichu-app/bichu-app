@@ -166,6 +166,134 @@ abstract final class TextosDoAchado {
 
   static const String semFoto = 'Você registrou este achado sem foto.';
 
+  // -- O DESFECHO RICO (cliente, 18/10/2026) --------------------------------
+  //
+  // A queixa, palavra por palavra: *"Na pagina 'achado registrado' nao mostra
+  // muita informacao, nao tem foto do pet ou alguma informacao util"*.
+  //
+  // Ele estava certo: ate aqui a tela tinha titulo, dois paragrafos, a linha
+  // do estado da foto e -- so quando o servidor mandava um -- a regiao. Nenhuma
+  // imagem, e nada que respondesse as tres perguntas de quem acabou de achar um
+  // animal na rua com o bicho do lado.
+  //
+  // As tres perguntas, e os tres titulos de bloco abaixo: **o que acontece
+  // agora**, **quem foi avisado** e **o que fazer em seguida**.
+
+  /// O cabecalho do bloco do registro.
+  static const String tituloDoQueGuardamos = 'O que a gente guardou';
+
+  /// O estado do aviso em PALAVRA, nunca em cor sozinha (SC 1.4.1).
+  ///
+  /// **A mesma frase de `Meus achados`**, de proposito: o aviso recem-criado
+  /// aparece na lista do Perfil com este rotulo, e duas palavras para o mesmo
+  /// `status = 'open'` fariam a pessoa achar que sao dois estados.
+  static const String estadoEmAnalise = 'Em análise';
+
+  /// Quando o servidor nao mandou rotulo de area.
+  ///
+  /// **A mesma linha de `Meus achados`.** Ela nao repreende: o achado vale sem
+  /// bairro, e o que muda e como ele chega ao tutor -- o que ja esta dito em
+  /// [semRotuloDeArea], no formulario, onde ainda da para escrever o bairro.
+  static const String regiaoNaoInformada = 'Região não informada';
+
+  /// `Achado em dd/mm/aaaa`, com o nulo tratado por quem chama.
+  ///
+  /// **A mesma redacao e o mesmo formato de `Meus achados`**, e o mesmo motivo
+  /// para nao usar `intl`: `found_at` e anulavel no contrato e o nulo nao vira
+  /// data inventada -- a linha nao sai.
+  static String achadoEmTexto(DateTime quando) {
+    final local = quando.toLocal();
+    final dia = local.day.toString().padLeft(2, '0');
+    final mes = local.month.toString().padLeft(2, '0');
+    return 'Achado em $dia/$mes/${local.year}';
+  }
+
+  /// O que a pessoa escreveu para ajudar a reconhecer, com rotulo.
+  static const String rotuloDosSinais = 'Os sinais que você descreveu';
+
+  // -- Quem foi avisado -----------------------------------------------------
+
+  /// O cabecalho do bloco mais delicado da tela.
+  static const String tituloDeQuemFoiAvisado = 'Quem foi avisado';
+
+  /// **NINGUEM, e a tela diz isso com todas as letras.**
+  ///
+  /// ## O defeito que esta frase existe para nao repetir
+  ///
+  /// Houve um dia em que TRES lugares mentiam juntos sobre a mesma coisa: o
+  /// servidor devolvia `owner_notified: true` sem ter entregado nada, a tela do
+  /// achador afirmava em texto fixo que *"o tutor foi avisado"*, e o
+  /// desserializador do app ainda tinha `?? true` -- entao nem a resposta
+  /// honesta do servidor conseguia desmentir a tela. Os tres foram consertados
+  /// (`api/modelos_pet.dart` le `owner_notified` com `?? false`;
+  /// `escanear/tela_do_pet_da_tag.dart` tem dois desfechos e nao um) e o valor
+  /// hoje e **falso** ate o emissor existir.
+  ///
+  /// **E o envio de aviso no celular nao funciona.** Nao funciona em producao
+  /// -- falta permissao da conta de servico na VM -- e nao funciona **nenhum**
+  /// no iPhone deste build. Uma tela que prometesse o aviso faria o pior
+  /// desfecho possivel deste produto: a pessoa solta o animal na rua por
+  /// acreditar que alguem foi chamado.
+  ///
+  /// ## A redacao e a JA APROVADA, e nao uma nova
+  ///
+  /// `Ninguém foi avisado ainda` e palavra por palavra de
+  /// `TelaCasoAberto.avisoDaFila` (`perdido/resultado_da_abertura.dart`), onde
+  /// ela diz a mesma verdade sobre o outro lado do produto. A frase sobre o
+  /// que o tutor recebe reusa `Eles vão receber a foto de <nome> e os sinais`,
+  /// de `perdido/tela_alcance_do_alerta.dart` e da mesma
+  /// `resultado_da_abertura.dart` -- aqui sem nome, porque achado avulso e de
+  /// um animal que ninguem identificou ainda.
+  static const String ninguemFoiAvisado = 'Ninguém foi avisado ainda.';
+
+  /// O que o tutor recebe, e **quando**, sem prometer o aviso no celular.
+  static const String oQueOTutorRecebe =
+      'Se um tutor abrir um caso de um pet parecido, é a foto e os sinais que '
+      'você descreveu que ele vai receber. Quem confirma se é o mesmo animal é '
+      'o tutor, nunca o Bichu sozinho.';
+
+  /// **O aviso no celular NAO funciona, e a tela diz.**
+  ///
+  /// Sem esta linha, a frase acima deixaria a pessoa esperando um toque no
+  /// telefone que nao vai chegar -- e esperar sentado e o oposto do que ela
+  /// precisa fazer nas primeiras horas.
+  /// **E ELA CORRIGE, NA MESMA TELA, A PROMESSA DE [registradoCorpo].**
+  ///
+  /// Duas linhas acima a tela diz *"a gente te avisa"*. Sem esta frase, a
+  /// pessoa leria a promessa e esperaria o telefone tocar -- e esperar sentado
+  /// e o oposto do que ela precisa fazer nas primeiras horas. A promessa nao
+  /// foi apagada porque ela e verdadeira sobre o CANAL que existe (a caixa de
+  /// notificacoes do aplicativo); o que nao existe e a entrega no celular.
+  /// Esta linha diz qual dos dois e qual, e e por isso que ela nomeia a
+  /// promessa em vez de so negar o push.
+  static const String avisoNoCelularNaoFunciona =
+      'Quando a gente diz que te avisa, é aqui dentro do aplicativo: o aviso '
+      'no celular ainda não está funcionando no Bichu. Não espere um toque no '
+      'telefone, confira você mesmo por aqui.';
+
+  // -- O que fazer em seguida -----------------------------------------------
+
+  static const String tituloDoQueFazerAgora = 'O que fazer agora';
+
+  /// O passo 1, e e o unico que alcanca o tutor **sem depender de nada nosso**.
+  static const String passoDaPlaquinha =
+      'Olhe se o bicho tem plaquinha ou coleira com código. Escanear o QR da '
+      'plaquinha chega direto no tutor, na hora.';
+
+  /// O passo 2: a lista publica de perdidos existe desde 18/10 e e o lugar em
+  /// que a pessoa pode fazer a correspondencia com as proprias maos.
+  static const String passoDaListaDePerdidos =
+      'Procure o bicho na lista de pets perdidos, na seção Pets. Ela mostra '
+      'quem está sendo procurado, com foto e bairro.';
+
+  /// O passo 3, e ele e sobre o animal e nao sobre o app.
+  static const String passoDeCuidar =
+      'Deixe o animal num lugar seguro e volte aqui para acompanhar o achado. '
+      'Nada que você fez se perde.';
+
+  /// O rotulo da acao de escanear, no corpo da tela.
+  static const String escanearAPlaquinha = 'Escanear a plaquinha';
+
   static const String voltarParaOsPets = 'Voltar';
 
   /// A acao que leva ao registro que a pessoa acabou de criar.

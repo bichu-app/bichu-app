@@ -674,6 +674,40 @@ export const problemas = {
     }),
 
   /**
+   * 410. A janela de reabertura do caso passou (`reopenLostCase`).
+   *
+   * O contrato declara a resposta e o prazo: *"Encerrar e reversivel por **7
+   * dias**"* em `closeLostCase`, e o 410 de `reopenLostCase` diz *"Passou dos
+   * 7 dias"*.
+   *
+   * **O `type` é `lost-case-closed`, e o tipo NÃO é novo.** `x-problem-types` é
+   * uma lista fechada, o 410 de `reopenLostCase` aponta para o `Problem`
+   * genérico — sem `$ref` para uma resposta nomeada —, e nenhum dos quatro
+   * slugs de 410 do vocabulário significa "a janela venceu". Dos quatro, este é
+   * o único que fala do CASO; os outros três são da conversa do achador, da tag
+   * revogada e do token de uso único. Três construtores já compartilham
+   * `conversation-closed` neste mesmo arquivo pelo mesmo motivo, e é o `type`
+   * que o cliente lê: o app já nomeia este slug (`ProblemTipo.casoEncerrado`).
+   *
+   * **Sem `next_action`, e a ausência é a diferença que importa.**
+   * `casoPublicoEncerrado` carrega `register_stray_found_report` porque lá quem
+   * recebe o 410 é um estranho que abriu um cartaz e pode estar com um animal
+   * no colo. Aqui quem recebe é o **tutor autenticado**, do próprio caso:
+   * mandá-lo registrar um achado avulso do pet dele seria a saída errada. O que
+   * ele faz é abrir um caso novo, e isso a tela dele já oferece.
+   *
+   * O texto diz o prazo porque ele é a informação que falta a quem chegou
+   * tarde, e **não** promete nada sobre o caso antigo: ele continua encerrado,
+   * com o desfecho que foi gravado.
+   */
+  janelaDeReaberturaVencida: (): AppError =>
+    new AppError('lost-case-closed', 'Este caso não dá mais para reabrir', {
+      detail:
+        'A reabertura vale por 7 dias depois do encerramento, e esse prazo já ' +
+        'passou. Se o seu pet sumiu de novo, marque como perdido outra vez.',
+    }),
+
+  /**
    * 429 de janela que REABRE.
    *
    * ## O texto anterior mentia duas vezes

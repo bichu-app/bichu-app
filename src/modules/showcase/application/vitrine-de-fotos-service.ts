@@ -57,7 +57,16 @@ export interface CorpoDaVitrine {
 export interface DependenciasDaVitrine {
   readonly envios: PreparadorDeEnvioDeCatalogo;
   readonly vitrine: VitrineRepository;
-  /** Grava a intenção com autor de `users`. Uma instrução: não abre transação. */
+  /**
+   * Grava a intenção com autor de `users`. Uma instrução: não abre transação.
+   *
+   * **`purpose` entra na assinatura, e isso conserta um defeito medido** em
+   * 18/10/2026: sem ele, esta porta aceitava qualquer um dos registradores de
+   * `kysely-imagem-de-catalogo.ts`, `api.ts` ligou o da capa do encontro (que
+   * grava `network_event` literal), e `PUT /v1/me/showcase` passou a responder
+   * `404` para toda foto -- porque a confirmação procura o envio com
+   * `purpose = 'user_showcase'`. Com o literal no tipo, a troca não compila.
+   */
   readonly registrarIntencao: (
     db: DbExecutor,
     nova: {
@@ -67,6 +76,7 @@ export interface DependenciasDaVitrine {
       readonly declaredType: string;
       readonly maxBytes: number;
       readonly expiresAt: Date;
+      readonly purpose: typeof PROPOSITO_DA_VITRINE;
     },
   ) => Promise<void>;
   readonly db: DbExecutor;
@@ -123,6 +133,10 @@ export class VitrineDeFotos {
       declaredType: envio.contentType,
       maxBytes: envio.maxBytes,
       expiresAt: envio.autorizacao.expiraEm,
+      // O MESMO valor que assinou, e não um segundo literal: a divergência
+      // entre o propósito assinado e o propósito gravado é exatamente o
+      // defeito de 18/10/2026 (`201` aqui, `404` na confirmação).
+      purpose: PROPOSITO_DA_VITRINE,
     });
     return { uploadId: envio.uploadId, autorizacao: envio.autorizacao };
   }

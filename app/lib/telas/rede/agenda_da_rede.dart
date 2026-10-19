@@ -1,3 +1,4 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 import 'dart:collection';
 
@@ -135,7 +136,16 @@ class _ItemDaAgenda {
 enum _Fase { carregando, lista, falha }
 
 class _AgendaDaRedeState extends State<AgendaDaRede>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   AbaDaRede _aba = AbaDaRede.proximos;
   RecorteDaRede _recorte = const RecorteDaRede();
   _Fase _fase = _Fase.carregando;
@@ -469,8 +479,20 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // a barra nao e desenhada em alguns deles. Abas dentro da barra
             // sumiriam junto, e quem filtrou ate o vazio em `Encerrados`
             // ficaria sem como voltar para `Próximos`.
+            // **O GATILHO DE FILTRO E ORDEM VEM NA FRENTE DA BUSCA, na
+            // mesma linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
+            // sozinho aqui e o gatilho com rotulo abaixo das abas, desenhado
+            // pela barra; agora a linha e uma so e sobe inteira, acima do
+            // reforco e das abas, e a barra deixa de desenhar o gatilho por
+            // causa de `buscaAcima`.
             if (comControles) ...<Widget>[
-              CampoDeBuscaDaListagem(busca: busca),
+              LinhaDeBuscaDaListagem(
+                total: _total,
+                busca: busca,
+                filtro: filtro,
+                ordenacao: ordenacao,
+                aoAplicar: _aplicarAFolha,
+              ),
               const SizedBox(height: BichuEspaco.e4),
             ],
             // **Vazio nao desenha** (18/10/2026): a `Rede` manda
@@ -487,15 +509,23 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            // **A PORTA DE CRIAR EVENTO SUBIU PARA A BARRA DE TOPO** em
-            // 18/10/2026, e nao esta mais aqui. Pedido literal do cliente:
-            // "os itens de criacao, como evento e indicacao, ate o escanear
-            // poderia ser icones na barra superior ... e nao fique esse botao
-            // grande na pagina ocupando muito espaco".
+            // **A PORTA DE CRIAR EVENTO NAO ESTA MAIS AQUI**, e ela mudou
+            // de lugar DUAS vezes, as duas por decisao do cliente.
             //
-            // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no
-            // CORPO e nao na `AppBar`" --, e a reversao e decisao dele. Quem
-            // desenha o icone e `AcaoDeCriarNaBarra`; quem o entrega a casca e
+            // Em 18/10/2026 ela subiu para a BARRA DE TOPO: "os itens de
+            // criacao, como evento e indicacao, ate o escanear poderia ser
+            // icones na barra superior ... e nao fique esse botao grande na
+            // pagina ocupando muito espaco". Isso REVERTEU o que estava
+            // escrito nesta linha em 17/10 -- "no CORPO e nao na `AppBar`".
+            //
+            // Em 19/10/2026 ela SAIU DA BARRA e virou acao FLUTUANTE, para o
+            // sino de notificacao entrar no lugar: *"O botao criar sai da
+            // barra"*. **Ela nao voltou para esta linha**, e a diferenca e o
+            // que ele recusou em 18/10: o botao de LARGURA TOTAL que ocupava
+            // 64 dp de linha aqui. A acao flutuante fica por cima, no canto,
+            // e o corpo da agenda continua comecando na primeira linha.
+            //
+            // Quem desenha e `AcaoDeCriarFlutuante`; quem a entrega a casca e
             // `AbaRede`, em `abas.dart`, que e quem conhece a sessao: a porta
             // so aparece com conta E e-mail confirmado, tambem por decisao
             // dele no mesmo dia.

@@ -252,8 +252,13 @@ class BarraDeListagem extends StatefulWidget {
   /// exato caso que a secao de lista vazia manda ela ficar -- a pessoa buscou
   /// e nao sobrou nada.
   ///
-  /// Quem passa `true` desenha [CampoDeBuscaDaListagem] onde quiser, e decide
-  /// se ele aparece com [BarraDeListagem.desenha].
+  /// Quem passa `true` desenha [LinhaDeBuscaDaListagem] onde quiser, e decide
+  /// se ela aparece com [BarraDeListagem.desenha].
+  ///
+  /// **Desde 18/10/2026 isto leva o GATILHO embora junto com o campo.** Os
+  /// dois viraram uma linha so por pedido do cliente (*"colocar na frente do
+  /// campo de busca e nao embaixo"*), e a linha nao pode se partir entre dois
+  /// lugares da tela: com `true`, a barra nao desenha mais o gatilho.
   final bool buscaAcima;
 
   /// Ha pelo menos um controle com desfecho.
@@ -432,13 +437,13 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
   /// vazia e pior do que um que some com ela.
   AcaoDeListagem? _acao(BuildContext context) {
     final b = widget;
-    if (!b._temFolha) return null;
-    if (b.total == 0 && !b._recorteAtivo) return null;
-    final ativos = b.filtro?.ativos ?? 0;
-    return AcaoDeListagem(
-      rotulo: b._rotuloDaFolha,
-      distintivo: ativos == 0 ? null : '$ativos',
-      aoTocar: () => b._abrirFolha(context),
+    return acaoDeRecorte(
+      context,
+      total: b.total,
+      busca: b.busca,
+      filtro: b.filtro,
+      ordenacao: b.ordenacao,
+      aoAplicar: b.aoAplicar,
     );
   }
 
@@ -483,33 +488,41 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **O campo ocupa a largura TOTAL, sempre** (decisao do cliente,
-        // 17/10/2026). Ele nao divide mais a linha com icone nenhum: os dois
-        // que ficavam aqui viraram um so e subiram para a `AppBar`. Nao ha
-        // `Row`, entao nao ha o que encolher -- nem com o teclado aberto, nem
-        // em 320 dp.
-        if (comCampo) ...<Widget>[
-          CampoDeBuscaDaListagem(busca: b.busca!),
-          const SizedBox(height: BichuEspaco.e2),
-        ],
-        // O GATILHO DE FILTRO E ORDEM, no corpo e logo abaixo da busca.
+        // A LINHA DE BUSCA: **o gatilho de recorte NA FRENTE do campo**, na
+        // mesma linha (decisao do cliente, 18/10/2026): *"os campos de filtro
+        // nao devem vir com o texto, apenas com o icone, e colocar na frente
+        // do campo de busca e nao embaixo"*.
         //
-        // **Com rotulo visivel, e nao so o glifo.** Na `AppBar` ele era um
-        // icone de 64 dp cujo nome vivia no `tooltip`; aqui ha largura, e um
-        // controle que diz o que faz por escrito e melhor para todo mundo --
-        // nao so para quem usa leitor de tela. O distintivo de filtros ativos
-        // continua no proprio rotulo, pelo `_rotuloDaFolha`, que ja dizia
-        // "Filtrar e ordenar, 2 filtros ativos".
+        // Isto REVERTE duas coisas de 17 e 19/10, e as duas reversoes sao
+        // dele: o campo em largura TOTAL (ele agora divide a linha com um
+        // alvo de 48 dp) e o gatilho com rotulo pintado logo ABAIXO da busca
+        // (ele agora e so o glifo, e vem antes). Quem ler isto em tres meses:
+        // nenhuma das reversoes e defeito.
         //
-        // **Nao e botao de largura total**: o cliente reprovou botao grande
-        // ocupando o corpo (18/10). Ele se ajusta ao texto.
-        if (acao != null) ...<Widget>[
+        // Quem desenha a linha e [LinhaDeBuscaDaListagem], e nao esta `Row`
+        // direto, porque a `Rede` e a listagem publica de perdidos a desenham
+        // FORA da barra ([buscaAcima]) e precisam da MESMA linha.
+        if (comCampo)
+          LinhaDeBuscaDaListagem(
+            total: b.total,
+            busca: b.busca!,
+            filtro: b.filtro,
+            ordenacao: b.ordenacao,
+            aoAplicar: b.aoAplicar,
+          ),
+        // **SEM CAMPO AQUI, o gatilho fica sozinho e continua no corpo.**
+        //
+        // Com [buscaAcima] a tela ja desenhou a linha inteira (campo mais
+        // gatilho) acima de si, e repetir o gatilho aqui o faria aparecer
+        // duas vezes. Sem busca nenhuma, nao ha linha a dividir: o gatilho e
+        // o unico controle, e ele se alinha a esquerda.
+        if (!comCampo && !b.buscaAcima && acao != null)
           Align(
             alignment: Alignment.centerLeft,
             child: GatilhoDeRecorteNoCorpo(acao: acao),
           ),
+        if (comCampo || (!b.buscaAcima && acao != null))
           const SizedBox(height: BichuEspaco.e3),
-        ],
         Text(
           b._resumo,
           style: textos.bodySmall?.copyWith(color: cores.textSecondary),
@@ -1022,10 +1035,25 @@ class SlotDaBarraDeListagem extends InheritedWidget {
 /// a tela que ainda quiser um controle de canto; o que mudou e quem a
 /// `BarraDeListagem` desenha por padrao.
 ///
-/// O rotulo vem de `AcaoDeListagem.rotulo`, que ja carrega o estado por
-/// extenso ("Filtrar e ordenar, 2 filtros ativos"): no corpo ha largura para
-/// ele ser PINTADO, e nao so anunciado no `tooltip`. Um controle que diz o que
-/// faz por escrito e melhor para todo mundo, e nao so para quem nao ve.
+/// **SO O ICONE, SEM ROTULO PINTADO, E NA FRENTE DA BUSCA (18/10/2026).**
+///
+/// Pedido literal do cliente: *"os campos de filtro nao devem vir com o texto,
+/// apenas com o icone, e colocar na frente do campo de busca e nao embaixo"*.
+/// Isto REVERTE o rotulo pintado que este gatilho tinha desde 19/10, e a
+/// reversao e dele.
+///
+/// O nome acessivel nao se perdeu com o texto: ele vive no `tooltip`, que e
+/// como este app sempre declarou nome de controle de icone (o gatilho da
+/// gaveta e a foto da conta fazem igual), e e por isso que os portoes o
+/// procuram por `byTooltip`. O rotulo longo continua carregando o estado por
+/// extenso ("Filtrar e ordenar, 2 filtros ativos"), e agora ele e a UNICA
+/// forma de o estado ser anunciado -- por isso o distintivo com o numero
+/// continua pintado sobre o glifo, para quem ve.
+///
+/// A medida e **48 x 48**, quadrada: o piso do SC 2.5.8, e o mesmo do campo de
+/// busca ao lado. Nao e o piso critico de 64 da barra de topo -- ali o
+/// controle disputa a borda com o titulo e com o polegar que segura o
+/// aparelho; aqui ele esta no corpo, com folga em volta.
 class GatilhoDeRecorteNoCorpo extends StatelessWidget {
   const GatilhoDeRecorteNoCorpo({required this.acao, super.key});
 
@@ -1033,41 +1061,148 @@ class GatilhoDeRecorteNoCorpo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
     final distintivo = acao.distintivo;
 
-    return OutlinedButton.icon(
-      onPressed: acao.aoTocar,
-      icon: const Icon(Icons.tune),
-      // O alvo de 48 dp do SC 2.5.8. Nao e o piso critico de 64 da barra de
-      // topo: ali o controle disputa a borda com o titulo e com o polegar que
-      // segura o aparelho; aqui ele esta no corpo, com folga em volta.
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, BichuAlvoDeToque.min),
-      ),
-      // **O rotulo pintado e curto; o longo e o nome acessivel.** Pintar
-      // "Filtrar e ordenar, 2 filtros ativos" encheria a linha, entao o
-      // numero aparece entre parenteses e a frase inteira vai para o
-      // `tooltip` -- que e como este app sempre declarou nome acessivel de
-      // controle (o gatilho da gaveta e a foto da conta fazem igual), e e por
-      // isso que os portoes o procuram por `byTooltip`.
-      //
-      // `ExcludeSemantics` no texto pintado: sem ele o leitor de tela
-      // anunciaria "Filtrar (2)" e depois a frase inteira, dois nomes para o
-      // mesmo controle.
-      label: Tooltip(
-        message: acao.rotulo,
-        child: ExcludeSemantics(
-          child: Text(
-            distintivo == null ? _verbo : '$_verbo ($distintivo)',
-          ),
+    return Tooltip(
+      message: acao.rotulo,
+      child: OutlinedButton(
+        onPressed: acao.aoTocar,
+        // Quadrado e TRAVADO em 48: sem `fixedSize` o `OutlinedButton` herda
+        // a largura minima de 64 dp do tema e rouba 16 dp da busca.
+        // `padding: zero` porque nao ha mais texto para afastar da borda.
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.square(BichuAlvoDeToque.min),
+          fixedSize: const Size.square(BichuAlvoDeToque.min),
+          padding: EdgeInsets.zero,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            const Icon(Icons.tune),
+            if (distintivo != null)
+              Positioned(
+                right: -BichuEspaco.e2,
+                top: -BichuEspaco.e2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BichuEspaco.e1,
+                  ),
+                  constraints: const BoxConstraints(minWidth: BichuEspaco.e4),
+                  decoration: BoxDecoration(
+                    color: cores.primary,
+                    borderRadius: BorderRadius.circular(BichuRaio.full),
+                  ),
+                  child: Text(
+                    distintivo,
+                    textAlign: TextAlign.center,
+                    // O distintivo repete o que o `tooltip` ja diz, e dois
+                    // anuncios do mesmo estado no mesmo controle e ruido.
+                    semanticsLabel: '',
+                    style: textos.labelSmall?.copyWith(
+                      color: cores.onActionFill,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
+}
 
-  /// A primeira palavra do rotulo longo: `Filtrar`, `Ordenar` ou
-  /// `Filtrar e ordenar`. Sai do mesmo texto, para nao haver duas verdades.
-  String get _verbo => acao.rotulo.split(',').first;
+/// A LINHA DE BUSCA DA LISTAGEM: o gatilho de recorte **na frente** do campo.
+///
+/// Ela existe pelo pedido do cliente de 18/10/2026 -- *"colocar na frente do
+/// campo de busca e nao embaixo"* --, e e publica pela mesma razao que
+/// [CampoDeBuscaDaListagem] e: a `Rede` e a listagem publica de perdidos
+/// desenham a busca FORA da barra (ver [BarraDeListagem.buscaAcima]), acima
+/// das abas e do reforco da secao, e o gatilho tem de subir junto. Duas copias
+/// desta `Row` divergiriam na primeira edicao.
+///
+/// Quem passa [BarraDeListagem.buscaAcima] desenha ESTA linha, e nao
+/// [CampoDeBuscaDaListagem] sozinho: a barra para de desenhar o gatilho nesse
+/// arranjo, justamente para ele nao aparecer duas vezes.
+///
+/// O gatilho **nao nasce** quando nao ha folha a abrir, nem quando a lista esta
+/// vazia sem recorte: a decisao e a mesma de [BarraDeListagem.desenha], e sai
+/// do mesmo lugar.
+class LinhaDeBuscaDaListagem extends StatelessWidget {
+  const LinhaDeBuscaDaListagem({
+    required this.total,
+    required this.busca,
+    super.key,
+    this.filtro,
+    this.ordenacao,
+    this.aoAplicar,
+  });
+
+  final int total;
+  final ControleDeBusca busca;
+  final ControleDeFiltro? filtro;
+  final ControleDeOrdenacao? ordenacao;
+  final void Function(EscolhaDaFolha escolha)? aoAplicar;
+
+  @override
+  Widget build(BuildContext context) {
+    final acao = acaoDeRecorte(
+      context,
+      total: total,
+      busca: busca,
+      filtro: filtro,
+      ordenacao: ordenacao,
+      aoAplicar: aoAplicar,
+    );
+
+    return Row(
+      // O gatilho e o campo tem alturas proprias (48 dp e a do `BichuField`),
+      // e `center` e o que mantem o glifo na linha do texto da busca.
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        if (acao != null) ...<Widget>[
+          GatilhoDeRecorteNoCorpo(acao: acao),
+          const SizedBox(width: BichuEspaco.e2),
+        ],
+        // `Expanded` e nao largura total: o campo divide a linha com UM alvo
+        // de 48 dp mais 8 dp de respiro, e sobra o resto -- medido em 320 dp,
+        // que e a tela mais estreita que o produto desenha.
+        Expanded(child: CampoDeBuscaDaListagem(busca: busca)),
+      ],
+    );
+  }
+}
+
+/// O que o gatilho de recorte desenha agora, ou nulo quando nao ha folha.
+///
+/// **Uma verdade so**: [BarraDeListagem] e [LinhaDeBuscaDaListagem] chamam
+/// esta funcao, e nao cada uma a sua copia da decisao. Nulo quando nao ha
+/// folha com desfecho, e nulo quando a lista esta vazia sem recorte -- filtrar
+/// o nada e o toque sem desfecho que o criterio 2 proibe.
+AcaoDeListagem? acaoDeRecorte(
+  BuildContext context, {
+  required int total,
+  ControleDeBusca? busca,
+  ControleDeFiltro? filtro,
+  ControleDeOrdenacao? ordenacao,
+  void Function(EscolhaDaFolha escolha)? aoAplicar,
+}) {
+  final b = BarraDeListagem(
+    total: total,
+    busca: busca,
+    filtro: filtro,
+    ordenacao: ordenacao,
+    aoAplicar: aoAplicar,
+  );
+  if (!b._temFolha) return null;
+  if (total == 0 && !b._recorteAtivo) return null;
+  final ativos = filtro?.ativos ?? 0;
+  return AcaoDeListagem(
+    rotulo: b._rotuloDaFolha,
+    distintivo: ativos == 0 ? null : '$ativos',
+    aoTocar: () => b._abrirFolha(context),
+  );
 }
 
 class BotaoDeAcaoDaListagem extends StatelessWidget {

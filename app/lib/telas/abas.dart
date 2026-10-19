@@ -5,7 +5,7 @@ import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_tokens.g.dart';
-import '../widgets/acao_de_criar_na_barra.dart';
+import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
@@ -263,10 +263,17 @@ class AbaRede extends StatelessWidget {
       builder: (context, _) => TelaDeAba(
         raizDeSecao: true,
         titulo: destino.rotulo,
-        // A PORTA DE CRIAR EVENTO, na barra de topo (pedido do cliente em
-        // 18/10/2026). Ela saiu do corpo da agenda, onde era um
-        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
-        // folga, 64 dp devolvidos ao corpo.
+        // A PORTA DE CRIAR EVENTO, **flutuante no corpo** desde 19/10/2026.
+        //
+        // **ELA SAIU DA BARRA DE TOPO, e a decisao e dele.** Com o sino de
+        // notificacao entrando na barra, o lado direito ficaria com quatro
+        // controles e o titulo nao caberia; eu perguntei qual sairia e ele
+        // respondeu *"O botao criar sai da barra"*. Quem desenha agora e
+        // `AcaoDeCriarFlutuante`, no `floatingActionButton` da casca.
+        //
+        // **Ela tambem nao volta a ser o botao de largura total** que ele
+        // recusou em 18/10: aquele comia 64 dp de linha no topo da agenda, e
+        // este nao ocupa linha nenhuma do fluxo.
         //
         // **"Criar evento", e nao "Marcar um encontro".** O vocabulario do app
         // trocou "encontro" por "evento" em 18/10 e os rotulos novos dizem
@@ -296,12 +303,15 @@ class AbaRede extends StatelessWidget {
         // data e hora marcadas. Nenhum vetor novo, nada baixado, nada gerado.
         //
         // **So aparece com sessao E e-mail confirmado** (ver
-        // `podeCriarNaComunidade`). Deslogado, a barra da `Rede` fica com o
-        // titulo e o `Filtros` -- nao fica vazia --, e o caminho para entrar e
-        // a aba `Perfil`, que oferece `Entrar` e `Criar conta` e continua na
-        // barra de baixo em todo estado.
+        // `podeCriarNaComunidade`), e a porta NAO MUDOU DE REGRA ao mudar de
+        // lugar: deslogado, nao ha acao flutuante nenhuma no corpo da `Rede`.
+        // O `AnimatedBuilder` acima continua sendo o que faz o controle
+        // aparecer sem trocar de aba quando a pessoa entra ou confirma o
+        // e-mail. O caminho para entrar e a aba `Perfil`, que oferece
+        // `Entrar` e `Criar conta` e continua na barra de baixo em todo
+        // estado.
         acaoDeCriar: podeCriarNaComunidade(sessao)
-            ? AcaoDeCriarNaBarra(
+            ? AcaoDeCriarFlutuante(
                 icone: Icons.more_time,
                 rotulo: AgendaDaRede.rotuloDeMarcar,
                 aoTocar: () => context.push(Rotas.criarEncontroDaRede),
@@ -360,10 +370,22 @@ class AbaPerto extends StatelessWidget {
       builder: (context, _) => TelaDeAba(
         raizDeSecao: true,
         titulo: destino.rotulo,
-        // A PORTA DE INDICAR, na barra de topo (pedido do cliente em
-        // 18/10/2026). Ela saiu do corpo da lista do diretorio, onde era um
-        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
-        // folga, 64 dp devolvidos ao corpo.
+        // A PORTA DE INDICAR, **flutuante no corpo** desde 19/10/2026.
+        //
+        // **ELA SAIU DA BARRA DE TOPO pela decisao dele** (*"O botao criar
+        // sai da barra"*), para o sino de notificacao entrar no lugar.
+        //
+        // **E o `Perto` e a secao que mais ganhou com isso, sem que o
+        // problema dela tenha sido resolvido.** Ela e o unico rotulo de CINCO
+        // letras das quatro secoes e a unica que sai CORTADA a 200% de
+        // escala. Com `criar` fora da barra e o sino dentro, o deficit caiu
+        // de 28,90 para **12,90 dp** -- e nao chegou a zero. Isso esta no
+        // relatorio como pergunta fechada para o cliente, e a conta inteira
+        // esta em `casca_com_abas.dart`. **Nao afirme aqui que o titulo
+        // passou a caber: ele nao passou.**
+        //
+        // Ela tambem nao volta a ser o botao de largura total que ele recusou
+        // em 18/10 no corpo da lista.
         //
         // **O GLIFO E O DE PESSOAS JUNTAS, e ele foi escolhido por ele**: "o
         // icone de recomendar um profissional, pode ser igual do instagram, as
@@ -390,10 +412,12 @@ class AbaPerto extends StatelessWidget {
         // relatou era exatamente este: *"o botao indicar quem atende bem, nem
         // deveria aparecer para o usuario se ele nao estiver logado"* -- a
         // porta convidava, e a tela de destino e que dizia "Entre para
-        // indicar". Deslogado a barra fica com o hamburguer, o titulo e o
-        // `Filtros`, e o caminho para entrar e a aba `Perfil`.
+        // indicar". Deslogado nao ha acao flutuante no corpo, e a barra fica
+        // com o hamburguer, o titulo e a foto da conta -- o sino tambem some
+        // sem sessao. O caminho para entrar e a foto, que leva a tela da
+        // conta.
         acaoDeCriar: podeCriarNaComunidade(sessao)
-            ? AcaoDeCriarNaBarra(
+            ? AcaoDeCriarFlutuante(
                 icone: Icons.group_add,
                 // A MESMA palavra da tela, e de uma fonte so: "Indicar", nunca
                 // "Cadastrar". A emenda 1 do ADR-0011 diz que a comunidade

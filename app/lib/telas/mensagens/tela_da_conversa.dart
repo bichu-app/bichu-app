@@ -51,6 +51,7 @@ import '../../api/modelos_conversa.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -85,6 +86,14 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   /// Por que a tela nao carregou. Nulo quando carregou.
   String? _falhaDeCarga;
 
+  /// A falha de carga foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  ///
+  /// **Esta tela e o destino do toque na notificacao**: quem foi deslogada
+  /// chega aqui direto, sem passar pela area de mensagens, e sem isto leria
+  /// `Nao conseguimos carregar suas mensagens. Toque em Tentar de novo.` --
+  /// um conselho impossivel de seguir sem conta.
+  bool _faltaConta = false;
+
   /// Por que o ENVIO falhou. Nulo quando nao falhou.
   ///
   /// Separado de [_falhaDeCarga] de propósito: sao duas falhas com duas saidas
@@ -113,6 +122,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     setState(() {
       _carregando = true;
       _falhaDeCarga = null;
+      _faltaConta = false;
     });
     try {
       final conversa = await _api.buscar(widget.conversaId);
@@ -137,15 +147,23 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
         // 404 e NUNCA 403 (ADR-0021), porque um 403 confirmaria que aquele id
         // existe. A tela diz que nao esta disponivel e manda voltar -- ela nao
         // diz "nao e sua", que seria a confirmacao pelo texto.
-        _falhaDeCarga = falha.problem.status == 404
-            ? TextosDasMensagens.conversaIndisponivel
-            : TextosDasMensagens.naoConseguimosCarregar;
+        // `next_action: sign_in` do servidor, e **antes** do 404: medido,
+        // `/v1/conversations/{id}` sem token responde `401 unauthenticated`,
+        // e nao 404 -- o 404 e para conversa que existe e nao e sua.
+        _faltaConta = faltaConta(falha);
+        _falhaDeCarga = _faltaConta
+            ? null
+            : falha.problem.status == 404
+                ? TextosDasMensagens.conversaIndisponivel
+                : TextosDasMensagens.naoConseguimosCarregar;
       });
-    } on FalhaDeChamada {
+    } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _carregando = false;
-        _falhaDeCarga = TextosDasMensagens.naoConseguimosCarregar;
+        _faltaConta = faltaConta(falha);
+        _falhaDeCarga =
+            _faltaConta ? null : TextosDasMensagens.naoConseguimosCarregar;
       });
     } on FormatException {
       if (!mounted) return;
@@ -260,7 +278,9 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
             // A CAIXA DE TEXTO SO EXISTE EM CONVERSA ABERTA. Em modo leitura
             // ela nao e desabilitada -- ela **nao e construida**. Um campo
             // cinza convida ao toque e nao explica nada.
-            if (!_carregando && _falhaDeCarga == null)
+            // A CAIXA TAMBEM NAO EXISTE SEM CONTA: ela e um controle sem
+            // desfecho, e o envio responderia o mesmo 401.
+            if (!_carregando && _falhaDeCarga == null && !_faltaConta)
               if (_emLeitura) const _AvisoDeConversaEncerrada() else _caixa(),
           ],
         ),
@@ -271,6 +291,17 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   Widget _corpo() {
     if (_carregando) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    // SEM CONTA NAO E ERRO, e nao tem `Tentar de novo`. Ver
+    // `widgets/convite_para_entrar.dart`.
+    if (_faltaConta) {
+      return ListView(
+        padding: const EdgeInsets.all(BichuEspaco.e4),
+        children: const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.umaConversa),
+        ],
+      );
     }
 
     final falha = _falhaDeCarga;

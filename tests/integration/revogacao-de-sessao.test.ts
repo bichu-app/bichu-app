@@ -341,7 +341,7 @@ before(async () => {
 
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
-    corpo: { email, password: senhas[0] },
+    corpo: { email, password: senhas[0], display_name: 'Conta de Teste', birth_date: '1990-01-01' },
   });
   assert.equal(
     cadastro.status,

@@ -17,6 +17,11 @@
  * `fila_de_moderacao`, e nenhuma conta do app alcança denúncia nenhuma — nem a
  * própria. Uma leitura da própria denúncia é onde o prazo prometido nasceria.
  *
+ * **Há, desde 19/10/2026, UMA leitura: `quemEuBloqueei`.** Ela é de bloqueio e
+ * não de denúncia, e a diferença é a razão de ela ser aceitável aqui: bloquear
+ * é ato de quem chama, sem administrador e sem revisão, e a lista é o registro
+ * dos próprios atos. Denúncia continua sem leitura nenhuma.
+ *
  * Não há `apagarDenuncia` nem `apagarBloqueio`: a denúncia é prova de que houve
  * resposta e vive 24 meses; o bloqueio se desfaz por `desbloquear`, que é outra
  * coisa.
@@ -41,7 +46,53 @@ export interface EntradaDaDenuncia {
   readonly relato: string | null;
 }
 
+/**
+ * UMA LINHA DA LISTA DE QUEM EU BLOQUEEI.
+ *
+ * **Quatro campos, e o recorte foi decidido** (contrato: `BlockedPerson`). Os
+ * três de pessoa são exatamente os três que a emenda 2 do ADR-0010 já libera a
+ * qualquer chamador com conta em `getPersonProfile`; `bloqueadoEm` é o ato de
+ * quem chama, e não dado da outra pessoa.
+ *
+ * **Não há foto**, e a ausência é a emenda 3 do ADR-0010 lida ao pé da letra: a
+ * foto saiu para UMA superfície, a conversa mediada, e **só entre conexões
+ * aceitas**. Bloqueado é o oposto de conexão aceita. Não há contagem de pet nem
+ * de conexão: esta linha não é um perfil, e a pergunta dela é "qual das pessoas
+ * que eu bloqueei é esta".
+ */
+export interface PessoaQueEuBloqueei {
+  readonly publicRef: RefPublicoDaPessoa;
+  /** Anulável: o bloqueio é endereçado por `public_ref`, não pelo apelido. */
+  readonly handle: string | null;
+  readonly displayName: string | null;
+  /** `user_blocks.created_at` da linha de quem chama. */
+  readonly bloqueadoEm: Instant;
+}
+
+/** Uma página da lista de quem eu bloqueei. */
+export interface PaginaDeBloqueios {
+  readonly items: readonly PessoaQueEuBloqueei[];
+  readonly total: number;
+}
+
 export interface SafetyRepository {
+  /**
+   * **QUEM EU BLOQUEEI. Nunca quem me bloqueou.**
+   *
+   * A autorização é a igualdade `blocker_user_id = chamador` na cláusula
+   * `WHERE` (ADR-0021), e é ela que faz a leitura ser ASSIMÉTRICA sobre um
+   * predicado simétrico. `bloqueio_entre` **não serve aqui e não é chamada**:
+   * ela é simétrica e devolveria as duas metades do par, e a segunda metade é o
+   * oráculo *"ela te bloqueou"*.
+   *
+   * Ordem fixa, mais recentes primeiro. Sem busca e sem filtro: recorte por
+   * pessoa aqui seria superfície de enumeração.
+   */
+  quemEuBloqueei(
+    chamador: UserId,
+    pagina: { readonly page: number; readonly limit: number },
+  ): Promise<PaginaDeBloqueios>;
+
   /**
    * Bloqueia, **idempotente**: bloquear de novo não cria linha e não é erro.
    *

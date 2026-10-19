@@ -62,7 +62,7 @@ function resumo(valor: string): Buffer {
 
 async function criarConta(nome: string): Promise<UserId> {
   const id = randomUUID() as UserId;
-  await cliente.query('INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)', [
+  await cliente.query(`INSERT INTO users (id, email, display_name, public_ref) VALUES ($1, $2, $3, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     id,
     `bichus41-${id}@${DOMINIO_DE_TESTE}`,
     nome,

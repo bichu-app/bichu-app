@@ -147,7 +147,7 @@ void describe('uma avaliação por pessoa, e a faixa da nota, no banco', () => {
       [autorId, 'autor'],
       [outroAutorId, 'outro'],
     ] as const) {
-      await cliente.query(`INSERT INTO users (id, email) VALUES ($1, $2)`, [
+      await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
         id,
         `${PREFIXO}${local}@exemplo.invalid`,
       ]);

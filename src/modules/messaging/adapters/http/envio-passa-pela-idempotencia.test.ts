@@ -139,6 +139,10 @@ function bancada(): Bancada {
     contrato: carregarContrato('api/openapi.yaml'),
     idempotencia: idempotenciaEmMemoria(),
     clock,
+    // Emenda 3 do ADR-0010 (19/10/2026). Este arquivo mede a idempotencia do
+    // ENVIO, que nao projeta participante nenhum, e por isso a base e um valor
+    // de teste reconhecivel em vez do dominio real.
+    baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],
   });
 
   return { app, envios: () => chamadas };
@@ -232,6 +236,7 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
       contrato,
       idempotencia: idempotenciaEmMemoria(),
       clock,
+      baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],
     });
     await app.ready();
 

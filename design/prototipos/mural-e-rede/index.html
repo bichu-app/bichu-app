@@ -1,0 +1,1298 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mural e Rede — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+:root{
+  /* Tokens de design/tokens.json, tema claro (bichu_tokens.g.dart) */
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --surface-inverse:#1C1B19;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --text-on-inverse:#FAFAF8;
+  --urgency:#9B330D; --urgency-container:#FBEEE9; --on-urgency-container:#8E2E0B;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --info:#1B5FA8; --info-container:#DCEAF8;
+  --outline:#DFDED8; --outline-control:#827F73;
+  --community-fill:#A9CFBB; --action-fill:#E7B93E; --accent-fill:#E8A7A0;
+  --disabled-surface:#F4F3F1; --on-disabled:#827F73;
+  /* espaco */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px;
+  --e10:40px; --e12:48px; --e16:64px;
+  /* raio */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px; --alvo-critico:64px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#2A2824; color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- painel de controle ---------------- */
+.painel{
+  position:sticky; top:0; z-index:50;
+  background:#1C1B19; color:#FAFAF8;
+  padding:10px var(--e5) 8px;
+  border-bottom:1px solid #3A3833;
+  max-height:46vh; overflow-y:auto;
+}
+.painel h1{font-size:15px;margin:0 0 1px;font-weight:700;letter-spacing:.01em}
+.painel .sub{font-size:11.5px;color:#B5B2A8;margin:0 0 8px}
+.linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.linha .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8E8B82;margin-right:var(--e1)}
+.chip{
+  font:inherit;font-size:12px;font-weight:600;
+  background:#312F2A;color:#E8E6DE;border:1px solid #46433C;
+  border-radius:var(--r-full);padding:6px 12px;cursor:pointer;
+}
+.chip:hover{background:#3C3933}
+.chip[aria-pressed="true"]{background:#FAFAF8;color:#1C1B19;border-color:#FAFAF8}
+.aviso{
+  font-size:11.5px;line-height:1.5;color:#C9C6BC;background:#262420;
+  border-left:3px solid var(--action-fill);padding:8px 10px;border-radius:0 6px 6px 0;
+  margin-top:var(--e2);
+}
+
+/* ---------------- palco ---------------- */
+.palco{display:flex;flex-wrap:wrap;gap:var(--e8);padding:var(--e8) var(--e5) 80px;justify-content:center;align-items:flex-start}
+.caso{display:none}
+.caso.ativo{display:block}
+.rotulo-tela{
+  color:#E8E6DE;font-size:13px;font-weight:600;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:8px;
+}
+.rotulo-tela .w{color:#8E8B82;font-weight:400;font-size:11px}
+.nota-tela{color:#A8A59B;font-size:11.5px;line-height:1.5;max-width:420px;margin:0 0 var(--e3)}
+
+/* ---------------- aparelho ---------------- */
+.aparelho{
+  width:var(--tela,375px);
+  height:720px;
+  background:var(--surface);
+  border-radius:var(--r-xl);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
+  position:relative;
+}
+
+/* ---------------- barra de topo ---------------- */
+.topo{
+  height:var(--alvo-critico);min-height:var(--alvo-critico);
+  background:var(--surface);
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--outline);
+  /* titleSpacing: 0 -- decisao de 19/10 que devolveu os 16 dp do vao padrao */
+}
+.topo .ham{width:64px;height:64px;display:grid;place-items:center;flex:0 0 64px}
+.topo .tit{
+  flex:1 1 auto;min-width:0;
+  font-size:22px;font-weight:600;line-height:28px; /* titleLg */
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topo .acao{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px;position:relative}
+.topo .foto{
+  width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--community-fill);color:var(--text-primary);
+  display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.topo .foto.vazia{background:var(--surface-sunken);color:var(--text-muted)}
+.selo{
+  position:absolute;top:8px;right:8px;min-width:8px;height:8px;
+  background:var(--primary);border-radius:var(--r-full);
+  border:2px solid var(--surface);
+}
+
+/* ---------------- corpo ---------------- */
+.corpo{flex:1 1 auto;overflow-y:auto;padding:var(--e4);position:relative}
+.corpo.sem-pad{padding:0}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+  color:var(--text-primary);
+  /* se a fonte nao carregar (sem rede) aparece o NOME do glifo, que e
+     exatamente o nome proposto -- falha que informa em vez de enganar */
+  max-width:28px;overflow:hidden;font-size:24px;
+}
+.ms.cheio{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.ms.p{font-size:20px;max-width:24px}
+.ms.g{font-size:28px;max-width:32px}
+
+/* ---------------- barra de baixo ---------------- */
+.baixo{
+  height:80px;min-height:80px;display:flex;
+  background:var(--surface);border-top:1px solid var(--outline);
+}
+.baixo a{
+  flex:1 1 0;min-width:0;text-decoration:none;color:var(--text-muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:0 2px;
+}
+.baixo a .lab{
+  font-size:12px;line-height:16px;font-weight:500;
+  width:100%;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:clip;
+}
+.baixo a[aria-current="page"]{color:var(--primary)}
+.baixo a[aria-current="page"] .ms{color:var(--primary)}
+.baixo a[aria-current="page"] .lab{font-weight:600}
+.baixo .pilula{
+  width:56px;height:28px;border-radius:var(--r-full);
+  display:grid;place-items:center;
+}
+.baixo a[aria-current="page"] .pilula{background:var(--primary-container)}
+
+/* ---------------- abas ---------------- */
+.abas{display:flex;border-bottom:1px solid var(--outline);margin-bottom:var(--e4)}
+.abas button{
+  flex:1 1 0;min-width:0;background:none;border:0;cursor:pointer;
+  font:inherit;font-size:14px;font-weight:600;color:var(--text-secondary);
+  height:var(--alvo-min);padding:0 4px;
+  border-bottom:2px solid transparent;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.abas button[aria-selected="true"]{color:var(--primary);border-bottom-color:var(--primary)}
+
+/* ---------------- barra de listagem ---------------- */
+.listagem{margin-bottom:var(--e2)}
+.listagem .linha1{display:flex;gap:var(--e2);align-items:center}
+.gatilho{
+  width:48px;height:48px;flex:0 0 48px;border-radius:var(--r-md);
+  border:1px solid var(--outline-control);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;position:relative;
+}
+.gatilho .dist{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--primary);color:var(--on-primary);
+  font-size:10px;font-weight:700;line-height:1;
+  min-width:18px;height:18px;border-radius:var(--r-full);
+  display:grid;place-items:center;padding:0 4px;border:2px solid var(--surface);
+}
+.busca{
+  flex:1 1 auto;min-width:0;height:48px;
+  border:1px solid var(--outline-control);border-radius:var(--r-md);
+  background:var(--surface);display:flex;align-items:center;
+  padding:0 var(--e2) 0 var(--e3);gap:var(--e2);
+}
+.busca input{
+  flex:1 1 auto;min-width:0;border:0;outline:0;background:none;
+  font:inherit;font-size:16px;color:var(--text-primary);
+}
+.busca input::placeholder{color:var(--text-muted)}
+.busca .lupa{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;
+  border-radius:var(--r-sm);border:0;background:none;cursor:pointer}
+.resumo{font-size:14px;line-height:20px;color:var(--text-secondary);margin:var(--e2) 0 var(--e4)}
+
+/* ---------------- cartao de publicacao ---------------- */
+.pub{
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  background:var(--surface);overflow:hidden;margin-bottom:var(--e4);
+}
+.pub header{display:flex;align-items:center;gap:var(--e3);padding:var(--e3) var(--e3) var(--e2)}
+.pub .av{
+  width:40px;height:40px;flex:0 0 40px;border-radius:var(--r-full);
+  background:var(--community-fill);display:grid;place-items:center;
+  font-weight:700;font-size:15px;color:var(--text-primary);overflow:hidden;
+}
+.pub .av.b{background:var(--accent-fill)}
+.pub .av.c{background:var(--action-fill)}
+.pub .quem{flex:1 1 auto;min-width:0}
+.pub .nome{font-size:15px;font-weight:600;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pub .meta{font-size:13px;line-height:18px;color:var(--text-muted)}
+.pub .mais{width:40px;height:40px;flex:0 0 40px;border:0;background:none;cursor:pointer;display:grid;place-items:center;border-radius:var(--r-sm)}
+.pub .txt{padding:0 var(--e3) var(--e3);font-size:16px;line-height:24px;white-space:pre-wrap}
+.pub .img{
+  width:100%;aspect-ratio:1/1;background:var(--surface-sunken);
+  display:grid;place-items:center;position:relative;border-top:1px solid var(--outline);
+}
+.pub .img .dv{
+  position:absolute;bottom:8px;right:8px;
+  background:rgba(28,27,25,.82);color:#FAFAF8;
+  font-size:10.5px;font-weight:600;letter-spacing:.02em;
+  padding:4px 8px;border-radius:var(--r-full);
+}
+.pub .img .ilu{font-size:56px;opacity:.5}
+.pub footer{
+  display:flex;align-items:center;gap:var(--e2);
+  padding:var(--e2) var(--e3);border-top:1px solid var(--outline);
+  font-size:13px;color:var(--text-muted);
+}
+
+/* ---------------- estado vazio ---------------- */
+.vazio{
+  background:var(--surface-sunken);border:1px solid var(--outline);
+  border-radius:var(--r-lg);padding:var(--e6);
+}
+.vazio h3{font-size:22px;line-height:28px;font-weight:600;margin:0 0 var(--e2)}
+.vazio p{font-size:18px;line-height:28px;color:var(--text-secondary);margin:0}
+.vazio .acao{margin-top:var(--e6)}
+.botao{
+  display:block;width:100%;min-height:var(--alvo-min);
+  background:var(--primary);color:var(--on-primary);
+  border:0;border-radius:var(--r-md);cursor:pointer;
+  font:inherit;font-size:16px;font-weight:600;padding:12px var(--e4);
+}
+.botao.sec{background:var(--surface);color:var(--primary);border:1px solid var(--primary)}
+.ilustra{
+  width:100%;height:132px;border-radius:var(--r-md);
+  background:linear-gradient(135deg,var(--community-fill) 0%,var(--accent-fill) 100%);
+  display:grid;place-items:center;margin-bottom:var(--e5);
+}
+.ilustra .ms{font-size:52px;max-width:60px;color:#1C1B19;opacity:.65}
+
+/* ---------------- esqueleto ---------------- */
+@keyframes brilho{0%{opacity:.55}50%{opacity:1}100%{opacity:.55}}
+.sk{background:var(--surface-sunken);border-radius:var(--r-sm);animation:brilho 1.2s ease-in-out infinite}
+.sk.circ{border-radius:var(--r-full)}
+
+/* ---------------- botao flutuante ---------------- */
+.fab{
+  position:absolute;right:var(--e4);bottom:calc(80px + var(--e4));
+  height:56px;min-width:56px;border-radius:var(--r-full);
+  background:var(--primary);color:var(--on-primary);
+  border:0;cursor:pointer;display:flex;align-items:center;gap:var(--e2);
+  padding:0 var(--e5);font:inherit;font-size:15px;font-weight:600;
+  box-shadow:0 6px 18px rgba(28,27,25,.28);
+}
+.fab .ms{color:var(--on-primary)}
+
+/* ---------------- cartao de encontro / diretorio ---------------- */
+.cartao{
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  overflow:hidden;margin-bottom:var(--e4);background:var(--surface);
+}
+.cartao .capa{
+  width:100%;aspect-ratio:16/9;background:var(--surface-sunken);
+  display:grid;place-items:center;position:relative;
+}
+.cartao .capa .dv{position:absolute;bottom:8px;right:8px;background:rgba(28,27,25,.82);
+  color:#FAFAF8;font-size:10.5px;font-weight:600;padding:4px 8px;border-radius:var(--r-full)}
+.cartao .corpo2{padding:var(--e3)}
+.cartao h4{margin:0 0 var(--e1);font-size:16px;line-height:22px;font-weight:600}
+.cartao .l{font-size:14px;line-height:20px;color:var(--text-secondary)}
+.pastilha{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:12px;font-weight:600;line-height:16px;
+  padding:4px 10px;border-radius:var(--r-full);margin-top:var(--e2);
+}
+.pastilha.ok{background:var(--success-container);color:var(--success)}
+.pastilha.esp{background:var(--info-container);color:var(--info)}
+.pastilha.fim{background:var(--surface-sunken);color:var(--text-muted)}
+.pastilha.urg{background:var(--urgency-container);color:var(--on-urgency-container)}
+.dir{display:flex;gap:var(--e3);padding:var(--e3);border:1px solid var(--outline);
+  border-radius:var(--r-lg);margin-bottom:var(--e3);background:var(--surface);align-items:flex-start}
+.dir .mini{width:56px;height:56px;flex:0 0 56px;border-radius:var(--r-md);
+  background:var(--surface-sunken);display:grid;place-items:center;position:relative}
+.dir .mini .dv{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
+  background:rgba(28,27,25,.82);color:#FAFAF8;font-size:9px;font-weight:600;
+  padding:2px 5px;border-radius:var(--r-full);white-space:nowrap}
+
+/* ---------------- folha (modal) ---------------- */
+.folha{
+  position:absolute;inset:0;background:rgba(28,27,25,.64);
+  display:flex;align-items:flex-end;
+}
+.folha .f{
+  width:100%;max-height:88%;overflow-y:auto;background:var(--surface);
+  border-radius:var(--r-xl) var(--r-xl) 0 0;padding:var(--e4) var(--e4) var(--e6);
+}
+.folha .alca{width:32px;height:4px;border-radius:2px;background:var(--outline);margin:0 auto var(--e4)}
+.folha h3{margin:0 0 var(--e4);font-size:22px;line-height:28px;font-weight:600}
+.grupo{margin-bottom:var(--e6)}
+.grupo .gt{font-size:14px;font-weight:600;line-height:18px;margin-bottom:var(--e2)}
+.grupo .gh{font-size:13px;line-height:18px;color:var(--text-muted);margin:0 0 var(--e2)}
+.opcoes{display:flex;flex-wrap:wrap;gap:var(--e2)}
+.op{
+  font:inherit;font-size:14px;font-weight:500;cursor:pointer;
+  background:var(--surface);color:var(--text-primary);
+  border:1px solid var(--outline-control);border-radius:var(--r-full);
+  padding:9px 14px;min-height:40px;
+}
+.op[aria-pressed="true"]{background:var(--primary-container);color:var(--on-primary-container);border-color:var(--primary)}
+.op:disabled{background:var(--disabled-surface);color:var(--on-disabled);border-color:var(--outline);cursor:not-allowed}
+.folha .rodape{display:flex;gap:var(--e3);margin-top:var(--e2)}
+.folha .rodape .botao{flex:1 1 0}
+.botao:disabled{background:var(--disabled-surface);color:var(--on-disabled);cursor:not-allowed}
+.so-conta{font-size:12px;line-height:16px;color:var(--text-muted);margin-top:var(--e1)}
+
+/* ---------------- compositor ---------------- */
+.comp textarea{
+  width:100%;min-height:132px;resize:vertical;
+  border:1px solid var(--outline-control);border-radius:var(--r-md);
+  padding:var(--e3);font:inherit;font-size:16px;line-height:24px;
+  background:var(--surface);color:var(--text-primary);
+}
+.comp .conta{display:flex;justify-content:space-between;align-items:center;margin-top:var(--e2);font-size:13px;color:var(--text-muted)}
+.anexo{
+  display:flex;align-items:center;gap:var(--e2);margin-top:var(--e3);
+  border:1px dashed var(--outline-control);border-radius:var(--r-md);
+  padding:var(--e3);background:var(--surface-alt);cursor:pointer;
+  font-size:14px;font-weight:600;color:var(--text-secondary);width:100%;
+  font-family:inherit;
+}
+.quem-ve{
+  margin-top:var(--e4);background:var(--info-container);color:var(--text-primary);
+  border-radius:var(--r-md);padding:var(--e3);font-size:13px;line-height:19px;
+  display:flex;gap:var(--e2);align-items:flex-start;
+}
+.quem-ve .ms{color:var(--info);flex:0 0 20px}
+
+/* ---------------- quadro de medicao ---------------- */
+.quadro{
+  background:var(--surface);border-radius:var(--r-lg);padding:var(--e5);
+  width:min(880px,100%);
+}
+.quadro h2{margin:0 0 var(--e2);font-size:22px;font-weight:700}
+.quadro p.int{margin:0 0 var(--e4);font-size:14px;line-height:21px;color:var(--text-secondary)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--outline);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.v-ok{color:var(--success);font-weight:700}
+.v-no{color:var(--urgency);font-weight:700}
+.legenda{font-size:12px;line-height:18px;color:var(--text-muted);margin-top:var(--e4)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;
+  background:var(--surface-sunken);padding:1px 5px;border-radius:4px}
+.regua{
+  height:22px;background:var(--surface-sunken);border-radius:4px;position:relative;
+  min-width:150px;overflow:hidden;
+}
+.regua .barra{position:absolute;inset:0 auto 0 0;background:var(--community-fill)}
+.regua .barra.estoura{background:var(--accent-fill)}
+.regua .teto{position:absolute;top:0;bottom:0;width:2px;background:var(--primary)}
+.regua .vl{position:relative;z-index:2;font-size:11px;font-weight:700;line-height:22px;padding-left:6px;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<div class="painel">
+  <h1>Mural e Rede — protótipo de desenho</h1>
+  <p class="sub">Bichu · 19/10/2026 · substitui o Figma por autorização do cliente de 23/09 (a conta não tem cota)</p>
+
+  <div class="linha">
+    <span class="rot">Largura</span>
+    <button class="chip" data-w="320" aria-pressed="false">320 dp</button>
+    <button class="chip" data-w="375" aria-pressed="true">375 dp</button>
+    <button class="chip" data-w="412" aria-pressed="false">412 dp</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Mural</span>
+    <button class="chip" data-t="m-cheio" aria-pressed="true">com publicações</button>
+    <button class="chip" data-t="m-vazio" aria-pressed="false">vazio</button>
+    <button class="chip" data-t="m-sem-conexao" aria-pressed="false">sem conexão</button>
+    <button class="chip" data-t="m-carregando" aria-pressed="false">carregando</button>
+    <button class="chip" data-t="m-deslogado" aria-pressed="false">deslogado</button>
+    <button class="chip" data-t="m-publicar" aria-pressed="false">publicar</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Rede</span>
+    <button class="chip" data-t="r-eventos" aria-pressed="false">aba Eventos</button>
+    <button class="chip" data-t="r-filtro" aria-pressed="false">o filtro</button>
+    <button class="chip" data-t="r-comunidade" aria-pressed="false">aba Comunidade</button>
+    <button class="chip" data-t="r-deslogado" aria-pressed="false">Rede deslogada</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Medidas</span>
+    <button class="chip" data-t="q-barra" aria-pressed="false">barra de baixo e título</button>
+    <button class="chip" data-t="q-abas" aria-pressed="false">as duas abas</button>
+    <button class="chip" data-t="q-glifos" aria-pressed="false">os glifos</button>
+  </div>
+
+</div>
+
+<div class="palco" id="palco">
+
+<div class="aviso" style="width:min(880px,100%);flex:1 0 100%">
+  <strong>Este HTML não é o instrumento de medida.</strong> Todo número desta página saiu da
+  bancada em Flutter do próprio projeto (<code>app/test/telas/casca_de_cinco_secoes_test.dart</code>),
+  com a <code>Inter</code> real dos <code>assets/fonts/</code> — a mesma que reproduz
+  <code>larguraMedidaPelaUx</code> casa por casa. Se os glifos aparecerem como palavras
+  (<code>dynamic_feed</code>), a fonte Material Symbols não carregou por falta de rede: os
+  nomes que você está lendo são exatamente os propostos.
+</div>
+
+
+<!-- ================================================================ -->
+<!-- MURAL COM PUBLICACOES                                            -->
+<!-- ================================================================ -->
+<section class="caso ativo" id="m-cheio">
+  <p class="rotulo-tela">Mural · com publicações <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Só publica quem tem conta com e-mail confirmado
+    (<code>podeCriarNaComunidade</code>). Só aparece quem é <strong>conexão aceita</strong> —
+    e é isso que faz a foto de quem publicou ser permitida aqui.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Mural</span>
+      <span class="acao"><span class="ms">notifications</span><span class="selo"></span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+
+      <article class="pub">
+        <header>
+          <span class="av">M</span>
+          <span class="quem">
+            <span class="nome">Marina</span>
+            <span class="meta">há 2 h</span>
+          </span>
+          <button class="mais" aria-label="Mais ações nesta publicação"><span class="ms">more_vert</span></button>
+        </header>
+        <p class="txt">Fomos no encontro da Praça Pereira Coutinho hoje e o Thor fez três amigos novos. Quem perdeu, perdeu.</p>
+        <div class="img">
+          <span class="ms ilu">image</span>
+          <span class="dv">card 1024 · cacheWidth = px pintados</span>
+        </div>
+        <footer><span class="ms p">schedule</span> publicado há 2 h · só para conexões</footer>
+      </article>
+
+      <article class="pub">
+        <header>
+          <span class="av b">R</span>
+          <span class="quem">
+            <span class="nome">Rodrigo</span>
+            <span class="meta">há 5 h</span>
+          </span>
+          <button class="mais" aria-label="Mais ações nesta publicação"><span class="ms">more_vert</span></button>
+        </header>
+        <p class="txt">Alguém sabe de um veterinário que atende sábado à tarde aqui na Vila Mariana? O de sempre fechou.</p>
+        <footer><span class="ms p">schedule</span> publicado há 5 h · só para conexões</footer>
+      </article>
+
+      <article class="pub">
+        <header>
+          <span class="av c">A</span>
+          <span class="quem">
+            <span class="nome">Ana Clara</span>
+            <span class="meta">ontem</span>
+          </span>
+          <button class="mais" aria-label="Mais ações nesta publicação"><span class="ms">more_vert</span></button>
+        </header>
+        <p class="txt">Obrigada a todo mundo que compartilhou. A Nina voltou pra casa ontem à noite. 💛</p>
+        <footer><span class="ms p">schedule</span> publicado ontem · só para conexões</footer>
+      </article>
+
+    </div>
+    <button class="fab"><span class="ms">post_add</span> Publicar</button>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- MURAL VAZIO                                                      -->
+<!-- ================================================================ -->
+<section class="caso" id="m-vazio">
+  <p class="rotulo-tela">Mural · vazio <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Tem conexões; <strong>ninguém publicou</strong>. A frase não culpa a pessoa
+    e não promete aviso — o envio de push está bloqueado em produção.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Mural</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+      <div class="vazio">
+        <div class="ilustra"><span class="ms">forum</span></div>
+        <h3>Ninguém publicou ainda</h3>
+        <p>Suas 12 conexões não publicaram nada por enquanto. Quando alguma publicar,
+           aparece aqui — e você pode ser a primeira.</p>
+        <div class="acao"><button class="botao">Escrever a primeira</button></div>
+      </div>
+    </div>
+    <button class="fab"><span class="ms">post_add</span> Publicar</button>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- MURAL SEM CONEXAO                                                -->
+<!-- ================================================================ -->
+<section class="caso" id="m-sem-conexao">
+  <p class="rotulo-tela">Mural · sem conexão nenhuma <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Estado diferente do vazio, e de propósito: aqui o que falta não é
+    publicação, é <strong>gente</strong>. A saída não pode ser "buscar pessoas" — não existe busca
+    de pessoas no produto (Emenda 2 do ADR-0010: <em>"esta emenda não cria caminho de
+    descoberta"</em>). A única saída honesta é o lugar onde se conhece gente: a Rede.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Mural</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+      <div class="vazio">
+        <div class="ilustra"><span class="ms">diversity_1</span></div>
+        <h3>Seu Mural começa com uma conexão</h3>
+        <p>O Mural mostra o que as suas conexões publicam. Você ainda não tem nenhuma.
+           Nos encontros da vizinhança você conhece quem anda com cachorro no mesmo quarteirão
+           que você.</p>
+        <div class="acao">
+          <button class="botao">Ver os encontros da Rede</button>
+          <div style="height:12px"></div>
+          <button class="botao sec">Publicar mesmo assim</button>
+          <p class="so-conta">Sua publicação fica guardada e aparece para quem você aceitar depois.</p>
+        </div>
+      </div>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- MURAL CARREGANDO                                                 -->
+<!-- ================================================================ -->
+<section class="caso" id="m-carregando">
+  <p class="rotulo-tela">Mural · carregando <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Esqueleto na forma do cartão que vai chegar, 1200 ms
+    (<code>BichuMovimento.skeleton</code>). Sem texto e sem número: o app ainda não sabe se há
+    zero ou trezentas publicações, e a regra da casa é a tela não afirmar coisa sobre dado que
+    ela não carrega.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Mural</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+      <div class="pub" style="border-color:var(--outline)">
+        <header>
+          <span class="sk circ" style="width:40px;height:40px;flex:0 0 40px"></span>
+          <span class="quem">
+            <span class="sk" style="display:block;width:46%;height:15px;margin-bottom:6px"></span>
+            <span class="sk" style="display:block;width:26%;height:12px"></span>
+          </span>
+        </header>
+        <div style="padding:0 var(--e3) var(--e3)">
+          <span class="sk" style="display:block;width:100%;height:14px;margin-bottom:8px"></span>
+          <span class="sk" style="display:block;width:82%;height:14px"></span>
+        </div>
+        <div class="sk" style="width:100%;aspect-ratio:1/1;border-radius:0"></div>
+      </div>
+      <div class="pub">
+        <header>
+          <span class="sk circ" style="width:40px;height:40px;flex:0 0 40px"></span>
+          <span class="quem">
+            <span class="sk" style="display:block;width:38%;height:15px;margin-bottom:6px"></span>
+            <span class="sk" style="display:block;width:22%;height:12px"></span>
+          </span>
+        </header>
+        <div style="padding:0 var(--e3) var(--e4)">
+          <span class="sk" style="display:block;width:100%;height:14px;margin-bottom:8px"></span>
+          <span class="sk" style="display:block;width:64%;height:14px"></span>
+        </div>
+      </div>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- MURAL DESLOGADO                                                  -->
+<!-- ================================================================ -->
+<section class="caso" id="m-deslogado">
+  <p class="rotulo-tela">Mural · deslogado <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Mesma forma dos dois guardas que <strong>já existem na árvore</strong> —
+    <code>EstadoVazio</code> com título <em>"Entre para…"</em>, explicação do motivo e um
+    <code>BotaoPrimario</code> de largura total (<code>pagina_do_local.dart:719</code>,
+    <code>encontro_da_rede.dart:391</code>). Não é uma terceira forma: a barra de baixo e a de
+    cima <strong>ficam</strong>, o sino e a foto saem, e não há botão de publicar.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Mural</span>
+      <span class="acao"><span class="foto vazia"><span class="ms p">person</span></span></span>
+    </div>
+    <div class="corpo">
+      <div class="vazio">
+        <div class="ilustra"><span class="ms">lock</span></div>
+        <h3>Entre para ver o seu Mural</h3>
+        <p>O Mural mostra o que as suas conexões publicam, e por isso ele só existe depois que
+           você tem conta e conexões. Nada do que a vizinhança publica aparece para quem não
+           tem relação com ela.</p>
+        <div class="acao"><button class="botao">Entrar ou criar conta</button></div>
+      </div>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- PUBLICAR                                                         -->
+<!-- ================================================================ -->
+<section class="caso" id="m-publicar">
+  <p class="rotulo-tela">Mural · publicar <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Texto <strong>livre</strong>, por decisão dele (<em>"deixe o texto livre
+    na timeline"</em>): nenhum filtro de palavra no app, a moderação é do backoffice. 280
+    caracteres é o teto que <code>publication_reports.publication_body</code> já cobra. Sem marcar
+    pet: ver a pergunta 3 do documento.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">close</span></span>
+      <span class="tit">Publicar</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo comp">
+      <textarea placeholder="O que aconteceu hoje com o seu bicho?">Fomos no encontro da Praça Pereira Coutinho hoje e o Thor fez três amigos novos.</textarea>
+      <div class="conta">
+        <span>Texto livre. Quem modera é a administração.</span>
+        <span>81/280</span>
+      </div>
+      <button class="anexo"><span class="ms">add_a_photo</span> Juntar uma foto <span style="font-weight:400;color:var(--text-muted)">(opcional, até 5 MiB)</span></button>
+      <div class="quem-ve">
+        <span class="ms p">visibility</span>
+        <span><strong>Quem vê:</strong> só as suas 12 conexões aceitas. Não vai para o seu
+          perfil público, não vai para a web e não aparece para quem não é conexão.</span>
+      </div>
+      <div style="height:var(--e6)"></div>
+      <button class="botao">Publicar</button>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- REDE · EVENTOS                                                   -->
+<!-- ================================================================ -->
+<section class="caso" id="r-eventos">
+  <p class="rotulo-tela">Rede · aba Eventos <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">O padrão de listagem em vigor: gatilho de filtro <strong>só ícone</strong>,
+    48 dp, <strong>antes</strong> da busca, na mesma linha. O criar virou botão flutuante no
+    canto direito — e é isso que devolve ao título os 64 dp que o faziam sair com reticência.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Rede</span>
+      <span class="acao"><span class="ms">notifications</span><span class="selo"></span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <button class="gatilho" aria-label="Filtrar e ordenar, 1 filtro ativo">
+            <span class="ms">tune</span><span class="dist">1</span>
+          </button>
+          <div class="busca">
+            <input placeholder="Buscar encontro" value="">
+            <button class="lupa" aria-label="Buscar"><span class="ms p">search</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="abas">
+        <button aria-selected="true">Eventos</button>
+        <button aria-selected="false">Comunidade</button>
+      </div>
+      <p class="resumo">6 encontros · próximos primeiro</p>
+
+      <article class="cartao">
+        <div class="capa"><span class="ms" style="font-size:40px;max-width:46px;opacity:.45">image</span>
+          <span class="dv">card 1024×576</span></div>
+        <div class="corpo2">
+          <h4>Cãominhada no Ibirapuera</h4>
+          <p class="l">sábado, 25/10, 9h · Ibirapuera, Moema</p>
+          <span class="pastilha ok"><span class="ms p" style="font-size:14px;max-width:16px">check_circle</span> Seu pedido foi aceito</span>
+        </div>
+      </article>
+
+      <article class="cartao">
+        <div class="capa"><span class="ms" style="font-size:40px;max-width:46px;opacity:.45">image</span>
+          <span class="dv">card 1024×576</span></div>
+        <div class="corpo2">
+          <h4>Encontro de filhotes na Pereira Coutinho</h4>
+          <p class="l">domingo, 26/10, 16h · Praça Pereira Coutinho, Vila Mariana</p>
+          <span class="pastilha esp"><span class="ms p" style="font-size:14px;max-width:16px">hourglass_top</span> Pedido esperando resposta</span>
+        </div>
+      </article>
+
+      <article class="cartao">
+        <div class="capa"><span class="ms" style="font-size:40px;max-width:46px;opacity:.45">image</span>
+          <span class="dv">card 1024×576</span></div>
+        <div class="corpo2">
+          <h4>Feira de adoção do bairro</h4>
+          <p class="l">sábado, 01/11, 10h · Praça Benedito Calixto, Pinheiros</p>
+        </div>
+      </article>
+    </div>
+    <button class="fab" title="Marcar um encontro"><span class="ms">more_time</span> Marcar</button>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- REDE · FILTRO                                                    -->
+<!-- ================================================================ -->
+<section class="caso" id="r-filtro">
+  <p class="rotulo-tela">Rede · a folha de filtrar e ordenar <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Onde <code>Próximos</code> e <code>Encerrados</code> foram morar.
+    Nada se aplica sozinho: <code>Aplicar</code> nasce desabilitado e só habilita quando a
+    escolha pendente difere da aplicada. <code>Só onde eu pedi</code> substitui a aba
+    <code>Meus pedidos</code> — e <strong>só nasce com sessão</strong>.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Rede</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo" style="filter:blur(.6px)">
+      <div class="listagem"><div class="linha1">
+        <button class="gatilho"><span class="ms">tune</span><span class="dist">1</span></button>
+        <div class="busca"><input placeholder="Buscar encontro"><button class="lupa"><span class="ms p">search</span></button></div>
+      </div></div>
+      <div class="abas">
+        <button aria-selected="true">Eventos</button>
+        <button aria-selected="false">Comunidade</button>
+      </div>
+      <p class="resumo">6 encontros · próximos primeiro</p>
+    </div>
+    <div class="folha">
+      <div class="f">
+        <div class="alca"></div>
+        <h3>Filtrar e ordenar</h3>
+
+        <div class="grupo">
+          <p class="gt">Quando</p>
+          <p class="gh">Era aba. Virou filtro: é a mesma lista de encontros, numa janela de tempo diferente.</p>
+          <div class="opcoes">
+            <button class="op" aria-pressed="true">Próximos</button>
+            <button class="op" aria-pressed="false">Encerrados</button>
+            <button class="op" aria-pressed="false">Todos</button>
+          </div>
+        </div>
+
+        <div class="grupo">
+          <p class="gt">Meu envolvimento</p>
+          <p class="gh">Era a aba <code>Meus pedidos</code>. Cabe aqui porque a lista continua sendo
+            de <strong>encontros</strong> — e o cartão já sabe mostrar o estado do pedido.</p>
+          <div class="opcoes">
+            <button class="op" aria-pressed="false">Só onde eu pedi</button>
+          </div>
+          <p class="so-conta">Sem conta esta opção não aparece — não fica desabilitada.</p>
+        </div>
+
+        <div class="grupo">
+          <p class="gt">Cidade</p>
+          <p class="gh">Cidade informada, nunca coordenada: não há geocodificação no produto (ADR-0006).</p>
+          <div class="opcoes">
+            <button class="op" aria-pressed="true">São Paulo</button>
+            <button class="op" aria-pressed="false">Qualquer uma</button>
+          </div>
+        </div>
+
+        <div class="grupo">
+          <p class="gt">Ordem</p>
+          <p class="gh">Na mesma folha, por pedido dele de 17/10. A ordem não se desmarca.</p>
+          <div class="opcoes">
+            <button class="op" aria-pressed="true">Data mais próxima</button>
+            <button class="op" aria-pressed="false">Mais perto de mim</button>
+          </div>
+        </div>
+
+        <div class="rodape">
+          <button class="botao sec">Limpar</button>
+          <button class="botao" disabled>Aplicar</button>
+        </div>
+      </div>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- REDE · COMUNIDADE                                                -->
+<!-- ================================================================ -->
+<section class="caso" id="r-comunidade">
+  <p class="rotulo-tela">Rede · aba Comunidade <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">Profissionais, estabelecimentos e ONGs — o que hoje é a seção
+    <code>Perto</code>. <code>Minhas indicações</code> <strong>não</strong> virou filtro, e a
+    razão está na nota abaixo da lista: é outra entidade. Virou porta, e só com sessão.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Rede</span>
+      <span class="acao"><span class="ms">notifications</span></span>
+      <span class="acao"><span class="foto">L</span></span>
+    </div>
+    <div class="corpo">
+      <div class="listagem"><div class="linha1">
+        <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        <div class="busca"><input placeholder="Buscar profissional"><button class="lupa" aria-label="Buscar"><span class="ms p">search</span></button></div>
+      </div></div>
+      <div class="abas">
+        <button aria-selected="false">Eventos</button>
+        <button aria-selected="true">Comunidade</button>
+      </div>
+      <p class="resumo">24 locais · por nome</p>
+
+      <div class="dir">
+        <span class="mini"><span class="ms">storefront</span><span class="dv">thumb 176</span></span>
+        <span style="flex:1 1 auto;min-width:0">
+          <h4 style="margin:0 0 2px;font-size:16px;font-weight:600">Clínica Vet Vila Mariana</h4>
+          <p class="l" style="margin:0">Veterinário · Vila Mariana</p>
+          <span class="pastilha ok"><span class="ms p" style="font-size:14px;max-width:16px">verified</span> Contato verificado</span>
+        </span>
+      </div>
+
+      <div class="dir">
+        <span class="mini"><span class="ms">content_cut</span><span class="dv">thumb 176</span></span>
+        <span style="flex:1 1 auto;min-width:0">
+          <h4 style="margin:0 0 2px;font-size:16px;font-weight:600">Banho &amp; Tosa do Léo</h4>
+          <p class="l" style="margin:0">Banho e tosa · Moema</p>
+        </span>
+      </div>
+
+      <div class="dir">
+        <span class="mini"><span class="ms">volunteer_activism</span><span class="dv">thumb 176</span></span>
+        <span style="flex:1 1 auto;min-width:0">
+          <h4 style="margin:0 0 2px;font-size:16px;font-weight:600">ONG Patas do Bem</h4>
+          <p class="l" style="margin:0">ONG · Pinheiros</p>
+          <span class="pastilha ok"><span class="ms p" style="font-size:14px;max-width:16px">verified</span> Documento verificado</span>
+        </span>
+      </div>
+
+      <div class="vazio" style="padding:var(--e4);margin-top:var(--e2)">
+        <h3 style="font-size:16px;line-height:22px;margin-bottom:4px">Minhas indicações</h3>
+        <p style="font-size:14px;line-height:20px">Ver o que você indicou e em que pé está cada uma.</p>
+        <div class="acao" style="margin-top:var(--e4)">
+          <button class="botao sec">Abrir minhas indicações</button>
+        </div>
+        <p class="so-conta">Porta, e não filtro: uma indicação em análise ainda não é um local da
+          lista — não há o que filtrar. Sem conta, esta porta não aparece.</p>
+      </div>
+    </div>
+    <button class="fab" title="Indicar quem atende bem"><span class="ms">group_add</span> Indicar</button>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- REDE DESLOGADA                                                   -->
+<!-- ================================================================ -->
+<section class="caso" id="r-deslogado">
+  <p class="rotulo-tela">Rede · deslogada <span class="w" data-w-eco></span></p>
+  <p class="nota-tela">A Rede <strong>não</strong> ganha tela de deslogado: as duas listas são
+    públicas e já respondem sem conta. O que desaparece é o que exige conta — o botão flutuante,
+    a opção <code>Só onde eu pedi</code> e a porta de <code>Minhas indicações</code>. Controle sem
+    desfecho não nasce desabilitado: não nasce.</p>
+  <div class="aparelho">
+    <div class="topo">
+      <span class="ham"><span class="ms">menu</span></span>
+      <span class="tit">Rede</span>
+      <span class="acao"><span class="foto vazia"><span class="ms p">person</span></span></span>
+    </div>
+    <div class="corpo">
+      <div class="listagem"><div class="linha1">
+        <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        <div class="busca"><input placeholder="Buscar encontro"><button class="lupa" aria-label="Buscar"><span class="ms p">search</span></button></div>
+      </div></div>
+      <div class="abas">
+        <button aria-selected="true">Eventos</button>
+        <button aria-selected="false">Comunidade</button>
+      </div>
+      <p class="resumo">6 encontros · próximos primeiro</p>
+
+      <article class="cartao">
+        <div class="capa"><span class="ms" style="font-size:40px;max-width:46px;opacity:.45">image</span>
+          <span class="dv">card 1024×576</span></div>
+        <div class="corpo2">
+          <h4>Cãominhada no Ibirapuera</h4>
+          <p class="l">sábado, 25/10, 9h · Ibirapuera, Moema</p>
+          <span class="pastilha fim"><span class="ms p" style="font-size:14px;max-width:16px">lock</span> Entre para pedir para ir</span>
+        </div>
+      </article>
+
+      <article class="cartao">
+        <div class="capa"><span class="ms" style="font-size:40px;max-width:46px;opacity:.45">image</span>
+          <span class="dv">card 1024×576</span></div>
+        <div class="corpo2">
+          <h4>Encontro de filhotes na Pereira Coutinho</h4>
+          <p class="l">domingo, 26/10, 16h · Praça Pereira Coutinho, Vila Mariana</p>
+          <span class="pastilha fim"><span class="ms p" style="font-size:14px;max-width:16px">lock</span> Entre para pedir para ir</span>
+        </div>
+      </article>
+
+      <div class="vazio" style="padding:var(--e4)">
+        <h3 style="font-size:16px;line-height:22px;margin-bottom:4px">O ponto no mapa fica para quem tem conta</h3>
+        <p style="font-size:14px;line-height:20px">A agenda é aberta. O ponto exato do encontro só
+          sai em resposta autenticada (Emenda 1 do ADR-0010).</p>
+        <div class="acao" style="margin-top:var(--e4)"><button class="botao">Entrar ou criar conta</button></div>
+      </div>
+    </div>
+    <nav class="baixo">
+      <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+      <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">groups</span></span><span class="lab">Rede</span></a>
+      <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+      <a href="#"><span class="pilula"><span class="ms">shopping_bag</span></span><span class="lab">Loja</span></a>
+      <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+    </nav>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- QUADRO: BARRA DE BAIXO E TITULO                                  -->
+<!-- ================================================================ -->
+<section class="caso" id="q-barra">
+  <div class="quadro">
+    <h2>A barra de baixo e o título, medidos</h2>
+    <p class="int">Bancada: <code>NavigationBar</code> de cinco destinos com o tema do app,
+      <code>Inter</code> real dos <code>assets/fonts/</code>, <code>textScaler 2.0</code> (200 %),
+      <code>devicePixelRatio 3</code>. A mesma bancada reproduz a tabela versionada
+      <code>larguraMedidaPelaUx</code> casa por casa — <code>Pets</code> 39,20 ·
+      <code>Rede</code> 45,08 · <code>Perto</code> 47,95 · <code>Loja</code> 37,15 ·
+      <code>Perfil</code> 47,47 — e é por isso que ela é a autoridade aqui.</p>
+
+    <h3 style="font-size:15px;margin:0 0 8px">Os cinco rótulos no slot de 64,00 dp (tela de 320 dp)</h3>
+    <table>
+      <thead><tr><th>Rótulo</th><th>Pede</th><th>Folga</th><th>Veredicto</th><th>Régua (teto 64,00)</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Pets</strong></td><td class="n">39,20 dp</td><td class="n">24,80</td><td class="v-ok">CABE</td>
+          <td><div class="regua"><div class="barra" style="width:61%"></div><div class="teto" style="left:100%"></div><div class="vl">39,20</div></div></td></tr>
+        <tr><td><strong>Rede</strong></td><td class="n">45,08 dp</td><td class="n">18,92</td><td class="v-ok">CABE</td>
+          <td><div class="regua"><div class="barra" style="width:70%"></div><div class="teto" style="left:100%"></div><div class="vl">45,08</div></div></td></tr>
+        <tr><td><strong>Mural</strong></td><td class="n">50,90 dp</td><td class="n">13,10</td><td class="v-ok">CABE</td>
+          <td><div class="regua"><div class="barra" style="width:80%"></div><div class="teto" style="left:100%"></div><div class="vl">50,90</div></div></td></tr>
+        <tr><td><strong>Loja</strong></td><td class="n">37,15 dp</td><td class="n">26,85</td><td class="v-ok">CABE</td>
+          <td><div class="regua"><div class="barra" style="width:58%"></div><div class="teto" style="left:100%"></div><div class="vl">37,15</div></div></td></tr>
+        <tr><td><strong>AuAu</strong></td><td class="n">49,33 dp</td><td class="n">14,67</td><td class="v-ok">CABE</td>
+          <td><div class="regua"><div class="barra" style="width:77%"></div><div class="teto" style="left:100%"></div><div class="vl">49,33</div></div></td></tr>
+      </tbody>
+    </table>
+    <p class="legenda"><strong>Os cinco passam em 320, 375 e 412 dp, em uma linha cada.</strong>
+      Em 1 linha e sem corte. <code>Mural</code> é o terceiro mais largo dos cinco e sobra
+      13,10 dp — a palavra dele cabe com folga, como ele previu.</p>
+
+    <h3 style="font-size:15px;margin:24px 0 8px">O que NÃO cabe na barra de baixo, e por quanto</h3>
+    <table>
+      <thead><tr><th>Rótulo</th><th>Pede</th><th>Excede</th><th>Veredicto</th><th>Observação</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Comunidade</strong></td><td class="n">113,25 dp</td><td class="n">+49,25</td><td class="v-no">NÃO CABE</td>
+          <td>Reprova em 320, 375 <em>e</em> 412 dp. É por isso que a seção ficou
+            <code>Rede</code> e <code>Comunidade</code> virou aba.</td></tr>
+        <tr><td>Mensagens</td><td class="n">103,67 dp</td><td class="n">+39,67</td><td class="v-no">NÃO CABE</td>
+          <td>Reprovada em 18/10; é a origem de <code>AuAu</code>.</td></tr>
+        <tr><td>Mensagem</td><td class="n">98,79 dp</td><td class="n">+34,79</td><td class="v-no">NÃO CABE</td><td></td></tr>
+        <tr><td>Conversa</td><td class="n">85,22 dp</td><td class="n">+21,22</td><td class="v-no">NÃO CABE</td><td></td></tr>
+        <tr><td>Encontros</td><td class="n">90,56 dp</td><td class="n">+26,56</td><td class="v-no">NÃO CABE</td><td>Já reprovada em 2026-09 (virou <code>Rede</code>).</td></tr>
+        <tr><td>Vizinhos</td><td class="n">77,55 dp</td><td class="n">+13,55</td><td class="v-no">NÃO CABE</td><td>Cabe só em 412 dp. Reprova em 320 e 375.</td></tr>
+        <tr><td>Grupos</td><td class="n">65,28 dp</td><td class="n">+1,28</td><td class="v-no">NÃO CABE</td><td>Falha em 320 dp por 1,28 dp. Passa em 375 e 412.</td></tr>
+        <tr><td>Bichos</td><td class="n">60,43 dp</td><td class="n">3,57 de folga</td><td class="v-ok">cabe</td><td>Caberia, se algum dia fizer falta uma sexta palavra.</td></tr>
+        <tr><td>Juntos</td><td class="n">60,99 dp</td><td class="n">3,01 de folga</td><td class="v-ok">cabe</td><td>Idem.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:15px;margin:24px 0 8px">O título da página, a 200 %</h3>
+    <p class="int">Composição real: hamburguer 64 + título + sino 48 + foto 48, com
+      <code>titleSpacing: 0</code> — o <code>criar</code> saiu da barra e virou botão flutuante
+      (19/10), e é essa saída que devolve 64 dp ao título.</p>
+    <table>
+      <thead><tr><th>Tela</th><th>Criar na barra?</th><th>Orçamento</th><th><code>Rede</code> (138,32)</th><th><code>Mural</code> (172,90)</th></tr></thead>
+      <tbody>
+        <tr><td class="n">320 dp</td><td>não (flutuante)</td><td class="n">160,00 dp</td>
+          <td class="v-ok">INTEIRO · 21,68 de folga</td><td class="v-no">CORTA · faltam 12,90</td></tr>
+        <tr><td class="n">375 dp</td><td>não (flutuante)</td><td class="n">215,00 dp</td>
+          <td class="v-ok">INTEIRO</td><td class="v-ok">INTEIRO</td></tr>
+        <tr><td class="n">412 dp</td><td>não (flutuante)</td><td class="n">252,00 dp</td>
+          <td class="v-ok">INTEIRO</td><td class="v-ok">INTEIRO</td></tr>
+        <tr><td class="n">320 dp</td><td><em>sim</em> (arranjo antigo)</td><td class="n">96,00 dp</td>
+          <td class="v-no">CORTA · faltam 42,32</td><td class="v-no">CORTA · faltam 76,90</td></tr>
+      </tbody>
+    </table>
+    <p class="legenda"><strong>O achado:</strong> <code>Mural</code> pede <strong>172,90 dp</strong>
+      como título — exatamente o mesmo que <code>Perto</code> pedia, e pelo mesmo motivo (cinco
+      letras). Em 320 dp a 200 % ele <strong>corta</strong>, por 12,90 dp; em 375 e 412 dp sai
+      inteiro. A reticência <strong>não resolve</strong>: <code>Mura…</code> mede os mesmos
+      172,90 dp (o <code>…</code> é tão largo quanto o <code>l</code> que ele substitui), então o
+      corte real entrega <code>Mur…</code> (138,32 dp). O nome inteiro continua indo para o leitor
+      de tela.<br><br>
+      <strong>Consequência para quem for construir:</strong> o portão
+      <code>gaveta_com_submenus_test.dart</code> tem hoje a exceção
+      <code>deficitDeCincoLetras = destino.rotulo == 'Perto'</code>, com o déficit anotado em
+      28,90 dp. Com <code>Perto</code> deixando de ser seção e <code>Mural</code> entrando, a
+      exceção <strong>muda de dono</strong> e o número vira <strong>12,90 dp</strong> — porque o
+      <code>criar</code> saiu da barra. São duas linhas no portão, e elas não são opcionais: sem
+      isso a suíte reprova no primeiro <code>flutter test</code>.</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- QUADRO: AS ABAS                                                  -->
+<!-- ================================================================ -->
+<section class="caso" id="q-abas">
+  <div class="quadro">
+    <h2><code>Eventos</code> e <code>Comunidade</code>, lado a lado</h2>
+    <p class="int">Bancada: <code>TabBar</code> não rolável (o que a <code>Rede</code> usa hoje,
+      <code>agenda_da_rede.dart:483</code>), dentro do corpo com margem de 16 dp de cada lado,
+      <code>Inter</code> real. Duas abas dividem o corpo em dois slots iguais.</p>
+    <table>
+      <thead><tr><th>Escala</th><th>Tela</th><th>Corpo</th><th>Slot</th><th><code>Eventos</code></th><th><code>Comunidade</code></th><th>Veredicto</th></tr></thead>
+      <tbody>
+        <tr><td class="n">100 %</td><td class="n">320</td><td class="n">288,00</td><td class="n">144,00</td><td class="n">69,81</td><td class="n">110,62</td><td class="v-ok">as duas CABEM</td></tr>
+        <tr><td class="n">100 %</td><td class="n">375</td><td class="n">343,00</td><td class="n">171,50</td><td class="n">69,81</td><td class="n">110,62</td><td class="v-ok">as duas CABEM</td></tr>
+        <tr><td class="n">100 %</td><td class="n">412</td><td class="n">380,00</td><td class="n">190,00</td><td class="n">69,81</td><td class="n">110,62</td><td class="v-ok">as duas CABEM</td></tr>
+        <tr><td class="n">130 %</td><td class="n">320</td><td class="n">288,00</td><td class="n">144,00</td><td class="n">90,75</td><td class="n">143,80</td><td class="v-ok">CABEM · folga de 0,20 dp</td></tr>
+        <tr><td class="n">130 %</td><td class="n">375</td><td class="n">343,00</td><td class="n">171,50</td><td class="n">90,75</td><td class="n">143,80</td><td class="v-ok">as duas CABEM</td></tr>
+        <tr><td class="n">130 %</td><td class="n">412</td><td class="n">380,00</td><td class="n">190,00</td><td class="n">90,75</td><td class="n">143,80</td><td class="v-ok">as duas CABEM</td></tr>
+        <tr><td class="n">200 %</td><td class="n">320</td><td class="n">288,00</td><td class="n">144,00</td><td class="n">139,62</td><td class="n">221,24</td><td class="v-no"><code>Comunidade</code> CORTA · +77,24</td></tr>
+        <tr><td class="n">200 %</td><td class="n">375</td><td class="n">343,00</td><td class="n">171,50</td><td class="n">139,62</td><td class="n">221,24</td><td class="v-no"><code>Comunidade</code> CORTA · +49,74</td></tr>
+        <tr><td class="n">200 %</td><td class="n">412</td><td class="n">380,00</td><td class="n">190,00</td><td class="n">139,62</td><td class="n">221,24</td><td class="v-no"><code>Comunidade</code> CORTA · +31,24</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:15px;margin:24px 0 8px">A comparação que decide: as TRÊS abas de hoje</h3>
+    <table>
+      <thead><tr><th>Escala</th><th>Tela</th><th>Slot</th><th><code>Próximos</code></th><th><code>Meus pedidos</code></th><th><code>Encerrados</code></th><th>Veredicto</th></tr></thead>
+      <tbody>
+        <tr><td class="n">100 %</td><td class="n">320</td><td class="n">96,00</td><td class="n">80,95</td><td class="n">122,59</td><td class="n">99,76</td><td class="v-no">DUAS cortam</td></tr>
+        <tr><td class="n">130 %</td><td class="n">320</td><td class="n">96,00</td><td class="n">105,23</td><td class="n">159,37</td><td class="n">129,68</td><td class="v-no">TRÊS cortam</td></tr>
+        <tr><td class="n">130 %</td><td class="n">412</td><td class="n">126,67</td><td class="n">105,23</td><td class="n">159,37</td><td class="n">129,68</td><td class="v-no">DUAS cortam</td></tr>
+        <tr><td class="n">200 %</td><td class="n">412</td><td class="n">126,67</td><td class="n">161,89</td><td class="n">245,18</td><td class="n">199,51</td><td class="v-no">TRÊS cortam</td></tr>
+      </tbody>
+    </table>
+
+    <p class="legenda"><strong>A resposta à pergunta, em uma frase:</strong>
+      <code>Eventos</code> + <code>Comunidade</code> <strong>cabem</strong> em 320 dp até 130 %
+      de escala de texto, e a 200 % <code>Comunidade</code> corta por 77,24 dp. Isso
+      <strong>não</strong> é motivo para mudar o nome: as três abas de hoje já cortam
+      <strong>duas</strong> em 320 dp a 100 %, que é o tamanho padrão de texto — ou seja, a
+      composição nova é melhor do que a que está no ar, em toda escala. Duas abas também é o
+      único arranjo em que a palavra que o cliente escolheu caberia.<br><br>
+      <strong>Se ele quiser as duas abas inteiras também a 200 %</strong>, há um caminho que não
+      mexe no nome: deixar a <code>TabBar</code> rolável
+      (<code>isScrollable: true</code>), que dá a cada aba a largura do próprio texto em vez de
+      metade da tela. É uma linha, e muda o desenho (as abas deixam de ocupar a largura toda).
+      <strong>É decisão dele</strong>, e está na lista de perguntas.</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- QUADRO: GLIFOS                                                   -->
+<!-- ================================================================ -->
+<section class="caso" id="q-glifos">
+  <div class="quadro">
+    <h2>Os cinco glifos, e a colisão que cada um evita</h2>
+    <p class="int">Todos da família embutida do Flutter 3.47.4 (Material Symbols), conferidos um
+      por um em <code>packages/flutter/lib/src/material/icons.dart</code> da instalação desta
+      máquina. Nenhum vetor baixado, nenhum ícone gerado. Precedente seguido:
+      <code>Icons.more_time</code> foi escolhido porque <code>calendar_add_on</code> não existe
+      nesta versão e <code>edit_calendar</code> já significa outra coisa na mesma seção.</p>
+    <table>
+      <thead><tr><th>Slot</th><th>Glifo</th><th>Existe?</th><th>Colisão de sentido evitada</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Pets</strong><br><span class="ms g">pets</span></td>
+          <td><code>pets_outlined</code><br><code>pets</code></td>
+          <td class="v-ok">sim</td>
+          <td><strong>Não muda.</strong> Já está no ar e é a pata na seção dos animais.</td>
+        </tr>
+        <tr>
+          <td><strong>Rede</strong><br><span class="ms g">groups</span></td>
+          <td><code>groups_outlined</code><br><code>groups</code></td>
+          <td class="v-ok">sim</td>
+          <td><strong>Não muda</strong>, e isso é a decisão. Recusei trocar por
+            <code>place</code> (o glifo que era do <code>Perto</code>): o pino promete mapa e
+            distância, e <strong>não há geocodificação</strong> (ADR-0006) — a seção trabalha com
+            cidade informada. Trazer o pino para cá faria o glifo prometer o que o produto não
+            faz. Recusei <code>diversity_1</code> e <code>diversity_3</code>, que leem
+            "diversidade e inclusão" (vocabulário de campanha), e <code>public</code>, que é o
+            globo de "público/web" e brigaria com a regra de superfície pública do ADR-0010.</td>
+        </tr>
+        <tr>
+          <td><strong>Mural</strong><br><span class="ms g">dynamic_feed</span></td>
+          <td><code>dynamic_feed_outlined</code><br><code>dynamic_feed</code></td>
+          <td class="v-ok">sim (os dois)</td>
+          <td><strong>O único slot novo.</strong> Cartões empilhados = muitas publicações de
+            muita gente, que é o que o Mural é. As seis que recusei, e cada uma por um uso que
+            <em>já existe nesta árvore</em>:
+            <ul style="margin:6px 0 0;padding-left:18px">
+              <li><code>photo_library</code> — é a <strong>galeria de fotos do encontro</strong>
+                (<code>encontro_da_rede.dart:779</code>). Leria "fotos do evento".</li>
+              <li><code>forum</code> — é <strong>"outras avaliações"</strong> na página do local
+                (<code>pagina_do_local.dart:809</code>). Leria "avaliações".</li>
+              <li><code>article</code> / <code>notes</code> — <code>notes_outlined</code> é
+                <strong>"observações/descrição"</strong> em <em>três</em> telas (local, encontro,
+                produto). Leria "texto descritivo".</li>
+              <li><code>chat</code> — <strong>está no mesmo rodapé</strong>, é o
+                <code>AuAu</code>. Dois balões numa barra de cinco.</li>
+              <li><code>campaign</code> — megafone lê "comunicado", e o produto
+                <strong>tem</strong> comunicado da administração
+                (<code>AdminBroadcastDraft</code>). Colisão direta.</li>
+              <li><code>feed</code>, <code>newspaper</code>, <code>rss_feed</code>,
+                <code>grid_view</code> — uma folha com linhas lê "documento"; jornal lê "notícia
+                editorial", que o Mural não é (é gente que você conhece); <code>rss_feed</code> é
+                idioma de web; <code>grid_view</code> é o botão de <em>trocar o modo de
+                exibição</em>, um controle, não um lugar.</li>
+            </ul></td>
+        </tr>
+        <tr>
+          <td><strong>Loja</strong><br><span class="ms g">shopping_bag</span></td>
+          <td><code>shopping_bag_outlined</code><br><code>shopping_bag</code></td>
+          <td class="v-ok">sim</td>
+          <td><strong>Não muda.</strong> Recusei <code>storefront</code>: ele já é o
+            <strong>estabelecimento</strong> da aba Comunidade (duas telas), e na mesma barra em
+            que a Rede agora mora isso leria "a loja é um estabelecimento da vizinhança".</td>
+        </tr>
+        <tr>
+          <td><strong>AuAu</strong><br><span class="ms g">chat</span></td>
+          <td><code>chat_outlined</code><br><code>chat</code></td>
+          <td class="v-ok">sim</td>
+          <td><strong>Não muda, e aqui o glifo carrega o sentido</strong> — <code>AuAu</code> é
+            palavra de marca e não diz "mensagem" para quem abre o app pela primeira vez. Já
+            escolhido e construído em <code>casca_com_abas.dart:412</code>; confirmei as recusas:
+            <code>forum</code> está tomado pelas avaliações e em 24 dp os dois balões se fundem;
+            <code>chat_bubble</code> é o balão vazio de comentário solto;
+            <code>question_answer</code> lê FAQ; <code>sms</code> lê SMS de operadora;
+            <code>mark_unread_chat_alt</code> é um <em>estado</em> (não lido), não um lugar;
+            <code>maps_ugc</code> é "avaliar um lugar no mapa".</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="legenda">O botão flutuante de cada aba da Rede mantém o glifo que já foi escolhido e
+      aprovado no aparelho: <code>Icons.more_time</code> para marcar encontro e
+      <code>Icons.group_add</code> para indicar quem atende bem. O do Mural é
+      <code>Icons.post_add</code> — sinal de mais sobre uma folha de texto, que é o objeto que a
+      ação produz; recusei <code>add_a_photo</code> (prometeria que a publicação <em>exige</em>
+      foto, e ela não exige) e <code>edit</code>/<code>create</code> (o lápis lê "editar o que já
+      existe").</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var palco = document.getElementById('palco');
+  var casos = palco.querySelectorAll('.caso');
+
+  function mostrar(id){
+    casos.forEach(function(c){ c.classList.toggle('ativo', c.id === id); });
+    document.querySelectorAll('.chip[data-t]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.t === id));
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.t); });
+  });
+
+  function largura(w){
+    document.querySelectorAll('.aparelho').forEach(function(a){ a.style.setProperty('--tela', w+'px'); });
+    document.querySelectorAll('[data-w-eco]').forEach(function(s){ s.textContent = '· '+w+' dp'; });
+    document.querySelectorAll('.chip[data-w]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.w === w));
+    });
+  }
+  document.querySelectorAll('.chip[data-w]').forEach(function(b){
+    b.addEventListener('click', function(){ largura(b.dataset.w); });
+  });
+  largura('375');
+
+  /* As abas e as pastilhas de filtro respondem ao toque, para dar o que clicar. */
+  document.querySelectorAll('.abas').forEach(function(g){
+    g.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click', function(){
+        g.querySelectorAll('button').forEach(function(o){ o.setAttribute('aria-selected','false'); });
+        b.setAttribute('aria-selected','true');
+        if (b.textContent.trim() === 'Comunidade') mostrar('r-comunidade');
+        if (b.textContent.trim() === 'Eventos') mostrar('r-eventos');
+      });
+    });
+  });
+
+  /* `Aplicar` so habilita quando a escolha pendente difere da aplicada. */
+  document.querySelectorAll('.folha .grupo').forEach(function(g){
+    g.querySelectorAll('.op').forEach(function(o){
+      o.addEventListener('click', function(){
+        var multi = g.querySelector('.gt').textContent.indexOf('envolvimento') >= 0;
+        if (!multi) g.querySelectorAll('.op').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+        o.setAttribute('aria-pressed', multi
+          ? String(o.getAttribute('aria-pressed') !== 'true') : 'true');
+        var aplicar = document.querySelector('.folha .rodape .botao:not(.sec)');
+        if (aplicar) aplicar.disabled = false;
+      });
+    });
+  });
+
+  document.querySelectorAll('.gatilho').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar('r-filtro'); });
+  });
+  document.querySelectorAll('.fab').forEach(function(b){
+    b.addEventListener('click', function(){
+      if (b.textContent.indexOf('Publicar') >= 0) mostrar('m-publicar');
+    });
+  });
+})();
+</script>
+</body>
+</html>

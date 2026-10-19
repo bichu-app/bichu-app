@@ -514,7 +514,23 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
               handle_esqueleto: apelidoNovo,
               kind: 'pessoa',
               user_id: id,
-              claimed_at: agora,
+              // `new Date`, E NAO `agora`. `agora` e `Instant` -- milissegundos
+              // desde a epoca, um NUMERO --, e `timestamptz` nao o le: o
+              // Postgres recusa com `22008 date/time field value out of range:
+              // "1792376135079"` e a rota devolve 500. Medido em 18/10/2026,
+              // `PATCH /v1/me` com `handle`, que e o campo do apelido na pagina
+              // de edicao do perfil: TODO salvamento que escolhesse ou trocasse
+              // apelido morria aqui.
+              //
+              // O tipo nao pegou porque `HandlesTable.claimed_at` aceitava
+              // `number` na escrita. Aceitava para nada: ninguem grava epoch
+              // aqui de proposito, e o unico efeito era deixar este erro
+              // compilar. O tipo passou a aceitar so `Date` (shared/db/schema.ts).
+              //
+              // `criarContaLocal` ja fazia certo (`const agora = new
+              // Date(nova.agora)`), e a divergencia entre os dois caminhos da
+              // MESMA coluna e o que fez o defeito aparecer so na edicao.
+              claimed_at: new Date(Number(agora)),
             })
             .execute();
           mudancas['handle'] = apelidoNovo;

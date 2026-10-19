@@ -181,6 +181,7 @@ import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/p
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
 import {
   registrarIntencaoDeCapaDaComunidade,
+  registrarIntencaoDaVitrineDoUsuario,
   registrarIntencaoDeFotoDoUsuario,
 } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { FotoDoProprioUsuario } from '../modules/media/application/foto-do-proprio-usuario.js';
@@ -196,6 +197,11 @@ import { ConexaoEntrePessoas } from '../modules/connections/application/conexao-
 import { criarConnectionsRepository } from '../modules/connections/adapters/persistence/kysely-connections-repository.js';
 import { nenhumConviteExiste } from '../modules/connections/ports/convite-de-conexao.js';
 import { semBloqueioConhecido } from '../modules/connections/ports/leitor-de-bloqueio.js';
+import { criarLeitorDeConexao } from '../modules/connections/application/leitor-de-conexao.js';
+// FATIA G (19/10/2026). O perfil de OUTRA pessoa, pelo apelido.
+import { registrarRotasDePessoa } from '../modules/people/adapters/http/person-profile-routes.js';
+import { PerfilDePessoa } from '../modules/people/application/perfil-de-pessoa.js';
+import { criarPerfilDePessoaRepository } from '../modules/people/adapters/persistence/kysely-perfil-de-pessoa.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
@@ -744,7 +750,17 @@ export async function main(): Promise<void> {
         ids,
       }),
       vitrine: criarVitrineRepository(db, ids),
-      registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      // `registrarIntencaoDaVitrineDoUsuario`, E NAO a da capa do encontro.
+      //
+      // Era `registrarIntencaoDeCapaDaComunidade` aqui, e isso gravava
+      // `purpose = 'network_event'` na intencao da VITRINE. A assinatura das
+      // duas funcoes era identica, entao a troca compilou. Medido em
+      // 18/10/2026 contra a pilha de integracao: `POST
+      // /v1/me/showcase/photo-intents` devolvia `201` e `PUT /v1/me/showcase`
+      // devolvia `404` para a mesma `upload_id` -- nenhuma foto de vitrine
+      // podia ser salva, porque a confirmacao procura `purpose =
+      // 'user_showcase'`.
+      registrarIntencao: registrarIntencaoDaVitrineDoUsuario,
       db,
       clock: systemClock,
     }),
@@ -1122,6 +1138,39 @@ export async function main(): Promise<void> {
       },
       contrato,
     });
+    // FATIA G (19/10/2026). O PERFIL DE OUTRA PESSOA, pelo apelido.
+    //
+    // **Nenhuma porta entra desligada aqui, e a diferenca com a fatia F e o
+    // ponto:** `requestConnection` depende de um emissor de convite que nao
+    // existe, e por isso ela responde 404 a qualquer token; esta leitura
+    // depende de `handles`, `users`, `pets`, `user_connections` e
+    // `user_showcase_images`, e as cinco estao em `origin/development`
+    // (migracoes `...021`, `...030`, `...031`, `...032` e `...040`). Ela
+    // funciona de ponta a ponta no dia em que sobe.
+    //
+    // **`criarLeitorDeConexao` e a primeira implementacao de
+    // `connections/ports/conexao.ts`**, que estava declarada e sem ninguem do
+    // outro lado desde 18/10. Ela entrega TRES LEITURAS e nenhuma escrita: o
+    // repositorio inteiro tem `pedir`, `aceitar` e `encerrar`, e nada disso
+    // atravessa a porta.
+    //
+    // **O bloqueio NAO entra por porta aqui, e e de proposito:** o predicado
+    // de bloqueio desta fatia e a funcao SQL `bloqueio_entre`, chamada na
+    // clausula `WHERE` das duas consultas -- que e a forma que a propria
+    // `src/architecture.rules.mjs` registra para ele. Por isso `people` nao
+    // recebe `semBloqueioConhecido`: ele nao tem um leitor de bloqueio
+    // desligado para ligar depois.
+    registrarRotasDePessoa(escopo, {
+      perfis: new PerfilDePessoa({
+        perfis: criarPerfilDePessoaRepository(db),
+        conexoes: criarLeitorDeConexao(conexoesDaComunidade),
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      baseDeMidia: config.mediaPublicBaseUrl,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.
     registrarRotaDoPerfilPublico(escopo, {
@@ -1179,6 +1228,9 @@ export async function main(): Promise<void> {
       contrato,
       idempotencia: criarIdempotencia(db),
       clock: systemClock,
+      // A foto do participante que e conexao aceita (emenda 3 do ADR-0010,
+      // 19/10/2026). Mesma base das outras derivadas publicas.
+      baseDeMidia: config.mediaPublicBaseUrl,
     });
     registrarRotasDoAchador(escopo, {
       conversas: conversaDoAchador,
