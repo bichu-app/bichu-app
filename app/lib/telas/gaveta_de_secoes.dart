@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
 import 'conexoes/tela_pedidos_de_conexao.dart';
+import 'seguranca/tela_de_bloqueados.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -442,6 +443,34 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.pedidosDeConexao,
+      ),
+      // **SEGUNDA LINHA NOVA (19/10/2026), pela mesma razao da de cima**: a UX
+      // 27.5.5 fechou em 21/09 e nao tem linha para esta -- bloquear alguem e
+      // decisao de 18/10 e a lista e decisao de 19/10. Ela nasce `existe`: a
+      // tela (`TelaDeBloqueados`) e a rota (`/perfil/bloqueados`) entram no
+      // mesmo commit desta linha.
+      //
+      // **ESTA PORTA E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO, e e por isso
+      // que ela nao e conveniencia.** O bloqueio e SIMETRICO no servidor, e a
+      // simetria fecha o perfil da pessoa bloqueada tambem para quem a
+      // bloqueou (`404`) -- que e exatamente onde o `Desbloquear` do
+      // `MenuDoPerfil` mora. Sem esta linha, bloquear era irreversivel pelo
+      // aplicativo. Decisao do cliente, 19/10/2026: a lista mora aqui, e o
+      // desbloqueio acontece nela.
+      //
+      // **Em `Perfil` e nao em `Rede`**, pela mesma razao de `Meus achados` e
+      // da caixa de pedidos: a lista e das MINHAS decisoes -- `listMyBlocks`
+      // exige conta e a autorizacao mora no `WHERE` --, e o "meu" mora em
+      // `Perfil`.
+      //
+      // **Depois de `Pedidos de conexao` e antes de `Meus dados`**: as duas
+      // linhas de cima sao sobre OUTRAS PESSOAS e ficam juntas; `Meus dados`
+      // abre o grupo do que e sobre a propria conta.
+      SubDestino(
+        rotulo: TelaDeBloqueados.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pessoasBloqueadas,
       ),
       SubDestino(
         // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou

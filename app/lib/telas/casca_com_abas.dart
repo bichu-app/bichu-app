@@ -993,7 +993,49 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
                     largura: MarcaLockup.pisoDeLargura,
                     rotulo: titulo,
                   )
-                : Text(titulo),
+                // **A ABREVIACAO E DELIBERADA E MEDIDA, e nao acidente de
+                // leiaute** (19/10/2026).
+                //
+                // A 200% de escala de texto, em 320 dp, com o arranjo que as
+                // secoes de comunidade tem (hamburguer 64 + porta de criar +
+                // foto 48), `Perto` **nao cabe**. Medido, logado, com a `Inter`
+                // de verdade:
+                //
+                //   orcamento pela reserva do portao: 160,00 dp
+                //   `Pets`, `Rede` e `Loja`:          138,32 dp -> cabem
+                //   `Perto`:                          172,90 dp -> NAO cabe
+                //
+                // **O hamburguer FICA.** O cliente pediu em 17/10 *"padronize
+                // todas as telas, tornando o menu esquerdo fixo"*, e tira-lo
+                // para ganhar 64 dp contrariaria aquilo em TODAS as telas para
+                // resolver uma largura em UMA. O rotulo tambem nao encurta: ja
+                // e so `Perto`, o nome curto que ele escolheu, e nao ha o que
+                // abreviar no texto.
+                //
+                // Entao a 200% o titulo corta -- e as tres linhas abaixo sao o
+                // que faz esse corte ser uma DECISAO:
+                //
+                // - `maxLines: 1` e `softWrap: false` garantem que o titulo
+                //   **nunca quebre o arranjo nem empurre controle**: sem eles,
+                //   um titulo mais longo ganharia uma segunda linha dentro de
+                //   uma barra de 64 dp de altura;
+                // - `overflow: ellipsis` e a reticencia EXPLICITA. Ela e o
+                //   padrao do `AppBar` hoje, e por isso mesmo esta escrita
+                //   aqui: padrao de componente muda de versao, e o dia em que
+                //   mudasse o titulo passaria a ser cortado em seco sem
+                //   ninguem ver;
+                // - `semanticsLabel: titulo` e o que separa o PINTADO do
+                //   ANUNCIADO. **Abreviar o pintado nao pode abreviar o
+                //   anunciado**: quem usa leitor de tela continua ouvindo
+                //   `Perto` inteiro, e nao `Pert...`. O portao de orcamento
+                //   cobra as duas coisas.
+                : Text(
+                    titulo,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    semanticsLabel: titulo,
+                  ),
             // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
             toolbarHeight: BichuAlvoDeToque.critico,
             // **OS 16 dp QUE A FOTO CUSTOU, DEVOLVIDOS AO TITULO.**

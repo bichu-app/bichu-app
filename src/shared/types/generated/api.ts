@@ -5718,6 +5718,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quem esta conta bloqueou
+         * @description **A lista de quem EU bloqueei. Nunca de quem me bloqueou.**
+         *
+         *     A diferenca e a operacao inteira. `bloqueio_entre` e SIMETRICA, e uma
+         *     leitura que usasse aquela funcao devolveria as duas metades do par --
+         *     e a segunda metade e o oraculo *"ela te bloqueou"*, que e o que gera
+         *     retaliacao. Aqui a autorizacao e a igualdade `blocker_user_id = quem
+         *     chama` na clausula `WHERE` (ADR-0021), e e ela que faz a leitura ser
+         *     assimetrica sobre um predicado simetrico.
+         *
+         *     **Por que esta operacao existe.** O bloqueio e simetrico, entao quem
+         *     bloqueou tambem passa a receber `404` no perfil da pessoa bloqueada --
+         *     e o "Desbloquear" morava dentro do menu daquele perfil. Sem esta
+         *     lista, bloquear era **irreversivel pelo aplicativo**. Decisao do
+         *     cliente de 19/10/2026: a lista mora na gaveta do `Perfil` e o
+         *     desbloqueio acontece ali, por `unblockUser`, que ja existe e nao muda.
+         *
+         *     ## O QUE CADA LINHA MOSTRA, E POR QUE SO ISSO
+         *
+         *     Quatro chaves, e a lista e FECHADA (`additionalProperties: false`):
+         *
+         *     | Chave | Por que ela esta aqui |
+         *     |---|---|
+         *     | `public_ref` | e o endereco que `unblockUser` recebe. Sem ele a linha nao tem botao |
+         *     | `display_name` | e o que a propria pessoa que bloqueou reconhece |
+         *     | `handle` | e o identificador ESTAVEL: `display_name` muda, e dois homonimos bloqueados ficariam indistinguiveis |
+         *     | `blocked_at` | e o ato de QUEM CHAMA, e nao dado da outra pessoa. Ele da a ordem fixa da lista |
+         *
+         *     **Nenhum desses quatro e campo novo de pessoa.** `handle`,
+         *     `public_ref` e `display_name` sao exatamente os tres que a **emenda 2
+         *     do ADR-0010** (19/10/2026) ja libera a QUALQUER chamador com conta em
+         *     `getPersonProfile`. Esta lista nao abre nada que aquela emenda nao
+         *     tenha aberto, e por isso ela **nao pede emenda nova**.
+         *
+         *     ## O QUE ELA NAO MOSTRA, E CADA AUSENCIA TEM DONO
+         *
+         *     - **a foto.** A **emenda 3 do ADR-0010** (19/10/2026) liberou a foto de
+         *       perfil em UMA superficie, o participante da conversa mediada, e
+         *       **apenas entre conexoes aceitas**. Uma lista de bloqueados e o
+         *       oposto de conexao aceita: a pessoa bloqueou justamente para nao ter
+         *       vinculo. Foto aqui seria emenda nova, e nao ha decisao que a
+         *       sustente;
+         *     - **`pets_count` e `connections_count`.** Sao os sinais de CONFIANCA do
+         *       perfil, e a pergunta desta tela nao e "quem e esta pessoa" -- e "qual
+         *       das pessoas que eu bloqueei e esta". Contagem nao identifica, logo
+         *       nao serve ao unico proposito da linha;
+         *     - **`connection_state`.** O desbloqueio **nao devolve** a conexao (ver
+         *       `unblockUser`), e um estado de conexao aqui convidaria a uma
+         *       religacao que a operacao nao faz;
+         *     - **quem me bloqueou, em qualquer forma** -- nem lista, nem contagem,
+         *       nem existencia. E o oraculo, e ele nao tem representacao nesta
+         *       superficie.
+         *
+         *     ## OS DOIS FILTROS DA LEITURA, e eles nao sao os mesmos do perfil
+         *
+         *     - **`conta_habilitada`**: a linha de uma conta DESABILITADA nao vem. E
+         *       a decisao do cliente de 17/10 (*conta desabilitada "nao e mais
+         *       encontrada em nenhuma pagina ou funcionalidade"*), e aqui ela nao
+         *       deixa nada preso: conta desabilitada nao aparece em superficie
+         *       nenhuma, entao o bloqueio dela nao tem efeito a desfazer -- e a
+         *       linha **volta** com a conta, porque ela nunca foi apagada;
+         *     - **`perfil_ocultado_para_quem_denunciou` NAO entra**, e a ausencia e
+         *       deliberada. Aquela funcao existe para que quem denunciou pare de ver
+         *       as superficies DO ALVO. Esta lista nao e superficie do alvo: e o
+         *       registro dos atos de quem chama, e a linha so existe porque quem
+         *       chama a criou. Esconde-la seria esconder de alguem o proprio ato --
+         *       e devolveria exatamente o beco sem saida que esta operacao existe
+         *       para fechar.
+         *
+         *     **Sem busca, sem filtro e sem ordenacao escolhida.** A ordem e fixa,
+         *     mais recentes primeiro. Qualquer recorte por pessoa aqui seria
+         *     superficie de enumeracao, que este produto nao tem.
+         */
+        get: operations["listMyBlocks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{userRef}/reports": {
         parameters: {
             query?: never;
@@ -11504,6 +11594,86 @@ export interface components {
              */
             reason: "offensive_or_discriminatory" | "scam_or_animal_sale" | "false_lost_pet_info" | "spam_or_repetition" | "other";
             detail?: string;
+        };
+        /**
+         * @description **UMA PESSOA QUE ESTA CONTA BLOQUEOU.** Nunca uma pessoa que bloqueou
+         *     esta conta -- essa metade do par simetrico nao tem representacao em
+         *     superficie nenhuma deste contrato.
+         *
+         *     **A lista de propriedades e FECHADA, e o recorte foi decidido.** Os
+         *     tres campos de pessoa daqui sao exatamente os tres que a **emenda 2 do
+         *     ADR-0010** (19/10/2026) libera a qualquer chamador com conta em
+         *     `getPersonProfile`: `handle`, `public_ref` e `display_name`. Esta lista
+         *     **nao abre nada de novo**, e e por isso que ela nao precisou de emenda.
+         *
+         *     **A foto NAO esta aqui.** A emenda 3 do ADR-0010 abriu a foto de
+         *     perfil em uma unica superficie -- o participante da conversa mediada,
+         *     e **so entre conexoes aceitas**. Bloqueado e o oposto de conexao
+         *     aceita, e foto aqui seria emenda nova sem decisao que a sustente.
+         *
+         *     **Nada de `pets_count`, `connections_count` nem `connection_state`.**
+         *     Os dois primeiros sao sinal de confianca de um PERFIL, e esta linha nao
+         *     e um perfil: a pergunta dela e "qual das pessoas que eu bloqueei e
+         *     esta", e contagem nao responde isso. O terceiro convidaria a uma
+         *     religacao que `unblockUser` nao faz -- desbloquear devolve
+         *     visibilidade, e nao a conexao.
+         */
+        BlockedPerson: {
+            /**
+             * @description `users.public_ref`: o MESMO endereco opaco que `blockUser` e
+             *     `unblockUser` recebem. **Nao e UUID** (ADR-0010 item 6).
+             *
+             *     Ele e o que faz a linha ter botao: sem ele a tela teria um nome e
+             *     nenhuma forma de chamar o desbloqueio.
+             */
+            public_ref: string;
+            /**
+             * @description O apelido. **Anulavel aqui**, ao contrario de
+             *     `PersonProfile.handle`: o bloqueio e enderecado por `public_ref` e
+             *     nao pelo apelido, entao e possivel ter bloqueado alguem que nao
+             *     tem apelido -- e omitir a linha dessa pessoa a deixaria bloqueada
+             *     para sempre.
+             *
+             *     Ele vem porque e o identificador **ESTAVEL**: `display_name` muda
+             *     quando a pessoa quiser, e duas pessoas bloqueadas com o mesmo nome
+             *     de exibicao ficariam indistinguiveis na hora de escolher qual
+             *     desbloquear.
+             */
+            handle: string | null;
+            /**
+             * @description O nome de exibicao -- **primeiro nome ou apelido, nunca sobrenome**
+             *     (ADR-0010 item 3). Anulavel pela mesma razao de
+             *     `PersonProfile.display_name`: a coluna e anulavel em `users`, e
+             *     sumir com a linha por falta de nome deixaria o bloqueio sem volta.
+             *
+             *     Com os dois nulos a tela escreve um texto proprio dela, que nao
+             *     vem do servidor.
+             */
+            display_name: string | null;
+            /**
+             * Format: date-time
+             * @description Quando **quem chama** bloqueou. E o ato de quem le, e nao dado da
+             *     outra pessoa: `user_blocks.created_at` da linha cujo
+             *     `blocker_user_id` e o proprio chamador.
+             *
+             *     Ele existe por duas razoes e nenhuma e decorativa: ele e a ordem
+             *     fixa da lista (mais recentes primeiro) e e a unica coisa que
+             *     permite a pessoa reconhecer um bloqueio que ela nao lembra de ter
+             *     feito.
+             */
+            blocked_at: string;
+        };
+        /**
+         * @description Uma pagina de pessoas que **esta conta** bloqueou.
+         *
+         *     `total` e a contagem das linhas de quem chama, e nao de nada mais: ela
+         *     nao conta quem bloqueou quem chama, e nao existe campo que o faca.
+         */
+        MyBlockPage: {
+            items: components["schemas"]["BlockedPerson"][];
+            total: number;
+            page: number;
+            limit: number;
         };
     };
     responses: {
@@ -18423,6 +18593,33 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyBlocks: {
+        parameters: {
+            query?: {
+                page?: number;
+                /** @description O mesmo teto de pagina da outra caixa desta casa (`listMyConnectionRequests`). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pagina de quem esta conta bloqueou. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyBlockPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
     };

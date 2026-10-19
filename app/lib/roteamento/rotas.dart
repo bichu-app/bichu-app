@@ -28,6 +28,7 @@ import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
 import '../telas/conexoes/tela_pedidos_de_conexao.dart';
+import '../telas/seguranca/tela_de_bloqueados.dart';
 import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
 import '../telas/pessoa/tela_perfil_de_pessoa.dart';
@@ -267,6 +268,18 @@ abstract final class Rotas {
   /// casaria `/achados` como id vazio, e `achados` sob `perfil` diz o que a
   /// lista e -- a MINHA, e nao a da vizinhanca.
   static const String meusAchados = '/perfil/achados';
+
+  /// `Perfil` > `Pessoas bloqueadas` (19/10/2026, decisao do cliente).
+  ///
+  /// **ESTE E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO.** O bloqueio e simetrico
+  /// no servidor, e a simetria fecha o perfil da pessoa bloqueada tambem para
+  /// quem a bloqueou (`404`) -- que e onde o `Desbloquear` do `MenuDoPerfil`
+  /// mora. Sem este endereco, bloquear era irreversivel pelo aplicativo.
+  ///
+  /// `/perfil/bloqueados`, irma de `dadosPessoais` e de `meusAchados`: a lista
+  /// e das MINHAS decisoes, e o "meu" mora em `Perfil`. Ela EMPURRA e cobre a
+  /// casca, com barra de saida e volta.
+  static const String pessoasBloqueadas = '/perfil/bloqueados';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -926,6 +939,15 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.pedidosDeConexao,
         builder: (context, estado) =>
             TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
+      ),
+      // PESSOAS BLOQUEADAS (19/10/2026). A porta e construida AQUI a partir do
+      // `ApiClient` do `Escopo`, como a da vitrine e as do perfil de pessoa:
+      // acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de teste
+      // que o constroi.
+      GoRoute(
+        path: Rotas.pessoasBloqueadas,
+        builder: (context, estado) =>
+            TelaDeBloqueados(seguranca: SegurancaApi(Escopo.of(context).api)),
       ),
       // O PERFIL DE OUTRA PESSOA (19/10/2026, fatia G). Irma das de cima: ela
       // EMPURRA e cobre a casca, e voltar devolve a pessoa onde ela estava.
