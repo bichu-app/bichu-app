@@ -6256,15 +6256,26 @@ export interface components {
             /**
              * @description A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
              *
-             *     **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
-             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
-             *     Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
-             *     terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
-             *     pessoas (ADR-0025 item 2, que proibe avatar por nome) e
-             *     `Conversation.participants` continua dizendo por extenso que nunca
-             *     traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
-             *     pessoa fisica e **depende de decisao do cliente**, nao de
-             *     implementacao.
+             *     **Esta e a resposta que a traz INTEIRA, com estado.** Quem a ve e o
+             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia:
+             *     `status` e `rejection_reason` sao assunto entre ele e quem modera,
+             *     e nao saem em lugar nenhum alem daqui.
+             *
+             *     Nenhuma superficie publica e nenhuma listagem a carregam: o
+             *     `checkin_count` da `Rede` continua sendo um inteiro sem pessoas
+             *     (ADR-0025 item 2, que proibe avatar por nome).
+             *
+             *     **A DECISAO DO CLIENTE CHEGOU EM 19/10/2026**, e esta linha era a
+             *     pendencia dela: *"a foto aparece SO quando as duas pessoas ja
+             *     aceitaram conexao"*. Existe agora **uma** outra superficie, e so
+             *     uma, que mostra esta foto a outra pessoa:
+             *     `Conversation.participants.photo_icon_url`, numa derivada MENOR
+             *     (`thumb` de 176 px) e **sem estado nenhum** -- nem `status`, nem
+             *     `rejection_reason`. Ela sai apenas entre conexoes aceitas, com o
+             *     predicado no `WHERE` da consulta (ADR-0021). Para quem nao e
+             *     conexao aceita, inclusive o estranho que escaneou a plaquinha,
+             *     continua nao saindo -- e e por isso que a emenda protege o motivo
+             *     da regra em vez de revoga-lo (emenda 3 do ADR-0010).
              *
              *     Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
              *     inteira sem foto.
@@ -7157,14 +7168,115 @@ export interface components {
             pet_display_name?: string;
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
+            /**
+             * @description Os dois lados humanos da conversa, montados campo a campo.
+             *
+             *     ## EMENDA DE 19/10/2026 (decisao do cliente): a foto entra, e SO
+             *     ## entre conexoes aceitas
+             *
+             *     **A regra nao foi revogada, foi EMENDADA com uma excecao
+             *     nomeada.** A regra continua escrita em `display_name` abaixo, com
+             *     as mesmas palavras de sempre -- participante nao traz sobrenome
+             *     completo, nem telefone, nem e-mail, nem foto de perfil. A excecao,
+             *     e e a unica, e a palavra do cliente:
+             *
+             *     > "a foto aparece SO quando as duas pessoas ja aceitaram conexao"
+             *
+             *     **Em conversa de achado com um estranho, e em qualquer conversa com
+             *     quem nao e conexao aceita, a foto NAO sai** -- fica a inicial do
+             *     nome, que e o que esta la hoje. E ai que o motivo original da regra
+             *     continua inteiro: o golpe do falso achador. Quem avisa que achou um
+             *     pet pode nao ter conta, a conversa e o canal que ATRAVESSA o
+             *     bloqueio, e rosto e insumo de engenharia social. A emenda abre a
+             *     foto exatamente onde o golpe nao mora -- entre duas pessoas que ja
+             *     se aceitaram -- e a mantem fechada onde ele mora.
+             *
+             *     Os dois campos da excecao sao `handle` e `photo_icon_url`. Os dois
+             *     sao **nulos** fora dela, e o recorte mora na clausula `WHERE` da
+             *     consulta (ADR-0021), nunca num `if` de borda: a consulta que traria
+             *     a foto de quem nao e conexao aceita **nao existe**.
+             *
+             *     **`FinderConversation.participants` NAO ganhou nenhum dos dois**, e
+             *     a ausencia e estrutural e nao esquecimento. Aquele schema serve o
+             *     achador SEM CONTA -- quem nao tem conta nao tem conexao com
+             *     ninguem, e nao ha chamador de quem medir a aresta. Schema separado
+             *     e a unica forma de a regra existir para a maquina; uma descricao
+             *     dizendo "nao vale para o achador" nao e contrato.
+             */
             participants: {
                 /** @enum {string} */
                 role: "tutor" | "finder" | "system";
                 /**
                  * @description Primeiro nome ou apelido. **Nunca** sobrenome completo,
                  *     telefone, e-mail nem foto de perfil.
+                 *
+                 *     **A excecao de 19/10/2026 nao e deste campo.** Ela sao
+                 *     `handle` e `photo_icon_url`, abaixo, e vale so para conexao
+                 *     aceita. Este campo continua sendo o primeiro nome e nada
+                 *     mais, nos quatro estados -- e continua caindo para o rotulo
+                 *     neutro (`Tutor` / `Quem achou`) no lado despersonalizado.
                  */
                 display_name: string;
+                /**
+                 * @description O apelido desta pessoa, **e so quando ela e conexao aceita de
+                 *     quem chama** (emenda de 19/10/2026).
+                 *
+                 *     Ele sai porque o toque na foto precisa de um ENDERECO: o
+                 *     perfil de outra pessoa e `getPersonProfile`, enderecado pelo
+                 *     apelido por decisao do cliente de 18/10/2026 (*"slug nao tem
+                 *     relacao com informacoes pessoais, e um id que o usuario
+                 *     escolhe"*). **Nunca `users.public_ref`, nunca UUID**
+                 *     (ADR-0010 item 6): aquele e o endereco de denunciar e
+                 *     bloquear, e viaja no CORPO das tres rotas de seguranca, nao
+                 *     no icone de uma lista.
+                 *
+                 *     **Nulo em quatro estados, e a fusao e a regra** (ADR-0021,
+                 *     um valor por motivo viraria um oraculo): nao e conexao
+                 *     aceita; e conexao e o par esta bloqueado; o outro lado nao
+                 *     tem conta (o achador da plaquinha, que e o caminho
+                 *     principal); ou e conexao e **nao escolheu apelido** --
+                 *     nenhum fluxo obriga a escolher (plano 4-C.8). Com nulo o
+                 *     icone fica DECORATIVO e nao se anuncia como botao: toque que
+                 *     nao leva a lugar nenhum e o que o criterio 2 da BICHUS-62
+                 *     proibe.
+                 */
+                handle?: string | null;
+                /**
+                 * Format: uri
+                 * @description A foto desta pessoa, **e so quando ela e conexao aceita de
+                 *     quem chama** (emenda de 19/10/2026).
+                 *
+                 *     **A derivada e a `thumb` de 176 x 176 px, e nao a `card` de
+                 *     512.** O icone da conversa pinta **40 dp**, que a 3x sao 120
+                 *     px reais: a de 176 cobre isso sem ampliar, e a de 512 seria
+                 *     4,3x mais dado do que a celula pinta -- numa lista de dez
+                 *     linhas por pagina, dez vezes. A tela desenha com
+                 *     `ImagemDaRede`, que passa `cacheWidth` pela largura PINTADA;
+                 *     a medicao que criou aquele componente foi 88 MiB numa pagina
+                 *     sem `cacheWidth` contra 2,15 MiB com ele.
+                 *
+                 *     **Um campo e nao um objeto, de proposito.** `MyPhoto`, que o
+                 *     DONO recebe, tem `status` e `rejection_reason`, e nenhum dos
+                 *     dois e assunto de terceiro: motivo de recusa de uma foto e
+                 *     entre o dono e quem modera. Foto que nao esta `ready` nao sai
+                 *     -- a consulta a recusa no `WHERE` --, entao nao ha estado a
+                 *     desenhar. E a mesma razao pela qual a foto que uma conexao ve
+                 *     no perfil de outra pessoa e menor que a que o dono ve da
+                 *     propria: terceiro recebe o que ele desenha, e nada do estado
+                 *     interno.
+                 *
+                 *     **NAO e a galeria de fotos do perfil**, que sai so em
+                 *     `getPersonProfile` e nao e referenciada daqui por `$ref`
+                 *     nenhum. Esta e a foto UNICA da pessoa
+                 *     (`users.photo_image_id`, `catalog_images.purpose =
+                 *     'user_photo'`), a mesma que o dono recebe em `getMe` --
+                 *     numa derivada menor.
+                 *
+                 *     Nulo nos mesmos quatro estados de `handle`, mais um quinto:
+                 *     a conexao aceita que nao tem foto pronta. Os cinco sao o
+                 *     mesmo nulo.
+                 */
+                photo_icon_url?: string | null;
             }[];
             messages: components["schemas"]["Message"][];
             /**

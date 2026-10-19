@@ -80,11 +80,37 @@
 /// pagina seguinte nao chega -- rolagem que falha em silencio e uma lista que
 /// simplesmente para de crescer.
 ///
-/// ## NENHUM AVATAR DE FOTO, E O PEDIDO DO CLIENTE NAO CABE
+/// ## A FOTO ENTROU EM 19/10/2026, E SO ENTRE CONEXOES ACEITAS
+///
+/// **ESTE PARAGRAFO SUBSTITUI A RECUSA QUE ESTAVA AQUI**, e a recusa continua
+/// escrita abaixo porque o motivo dela continua valendo. Quem abrir este
+/// arquivo e achar que a regra foi quebrada por descuido esta lendo o commit
+/// errado: este paragrafo e o registro.
 ///
 /// O cliente pediu em 18/10: *"na conversa, traga a foto do usuario como icone
-/// das conversas"*. **Nao ha foto de terceiro neste produto**, e a ausencia foi
-/// medida em tres lugares independentes:
+/// das conversas, e a imagem clicada levando ao perfil"*. Esta frente recusou a
+/// foto, com as tres medidas abaixo, e **estava certa**. O conflito foi levado
+/// ao cliente com as tres citacoes na mesa, e a decisao dele, de 19/10/2026:
+///
+/// > "a foto aparece SO quando as duas pessoas ja aceitaram conexao"
+///
+/// Em conversa de achado com um estranho, e em qualquer conversa com quem nao e
+/// conexao aceita, **nao aparece** -- fica a inicial que ja estava aqui. E
+/// emenda deliberada e nao revogacao: o motivo das tres medidas abaixo e o
+/// golpe do falso achador, e ele mora exatamente no estado em que a foto
+/// continua nao entrando. Esta e a **emenda 3 do ADR-0010**.
+///
+/// Os cinco estados sem foto, medidos no CORPO da resposta (ver
+/// `tests/integration/foto-na-conversa-entre-conexoes.test.ts`): nao-conexao,
+/// pedido pendente ou recusado, achador sem conta, par bloqueado e conta
+/// desabilitada do outro lado.
+///
+/// **O que o servidor faz, e que esta tela nao repete:** o recorte esta na
+/// clausula `WHERE` da consulta (ADR-0021). `photo_icon_url` chega nulo ou
+/// chega de uma conexao aceita, e esta tela nao tem como saber a diferenca --
+/// nem precisa.
+///
+/// ## AS TRES MEDIDAS DA RECUSA ORIGINAL, que a emenda estreitou e nao apagou:
 ///
 /// 1. **O contrato proibe, por extenso e em dois pontos.**
 ///    `Conversation/properties/participants` e
@@ -107,12 +133,24 @@
 ///    (rosto e insumo de engenharia social), e e o canal que **atravessa o
 ///    bloqueio**.
 ///
-/// **O que ficou de fora, dito em voz alta:** a foto. O icone da conversa
-/// continua sendo a marca neutra -- a inicial do `display_name` --, e o lado
-/// despersonalizado (`Tutor` / `Quem achou`) ganha a marca em cinza desligado.
+/// **O que a emenda de 19/10 mudou nas tres:** nada do motivo, e so o alcance.
+/// (1) o contrato continua dizendo que o participante nao traz foto de perfil,
+/// e agora tem a excecao escrita ao lado, nomeada, com os dois campos novos;
+/// (2) o ADR-0025 decisao 2 **nao foi tocado** -- o escopo dele e a superficie
+/// da `Rede`, e a `Rede` continua sem avatar; (3) a recomendacao da frente de
+/// perfil (*"nao entre nunca"*) foi levada ao cliente e ele decidiu o
+/// contrario, com o risco na mesa -- e a decisao dele vale, estreitada ao
+/// estado em que o risco nao existe.
 ///
-/// **O que foi entregue do pedido:** o TOQUE. O icone e um controle, e o
-/// destino dele mora num ponto unico e nomeado, [PortaDoPerfilDoParticipante].
+/// **O icone agora desenha a foto quando ela vem, e a inicial quando nao vem.**
+/// O lado despersonalizado (`Tutor` / `Quem achou`) continua com a marca em
+/// cinza desligado, e continua sem foto -- o servidor nao a manda.
+///
+/// **O TOQUE** continua num ponto unico e nomeado,
+/// [PortaDoPerfilDoParticipante], e ele esta LIGADO desde 19/10: o destino e
+/// `Rotas.perfilDe(apelido)`, e a fiacao mora em `roteamento/rotas.dart`
+/// (`ligarPortaDoPerfilDoParticipante`). Com apelido nulo o destino e nulo e o
+/// icone volta a ser decorativo.
 library;
 
 import 'package:flutter/material.dart';
@@ -128,6 +166,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
 
 /// Os enderecos da area de mensagens, num lugar so.
 ///
@@ -210,8 +249,14 @@ abstract final class RotasDeMensagens {
 abstract final class PortaDoPerfilDoParticipante {
   /// O endereco do perfil de [outro], ou `null` quando ele nao existe.
   ///
-  /// Nasce devolvendo `null` porque e essa a medida de hoje. Ver o doc da
-  /// classe: o destino nao existe em `origin/development`.
+  /// **LIGADA EM 19/10/2026**, na mescla com a frente de perfil: o destino e
+  /// `Rotas.perfilDe(outro.handle)`, e quem liga e
+  /// `ligarPortaDoPerfilDoParticipante`, em `roteamento/rotas.dart`. Este
+  /// arquivo continua sem conhecer `Rotas`, que e o ponto do tipo.
+  ///
+  /// **Continua nascendo `null`**, e isso nao e sobra: o `null` de fabrica e o
+  /// que faz toda bancada de teste de widget desenhar o icone decorativo sem
+  /// montar o roteador, e e o que a isca religa e desliga para provar o toque.
   static String? Function(ParticipanteDaConversa outro) destino = _semDestino;
 
   /// O default, nomeado para a isca poder voltar a ele num `addTearDown`.
@@ -904,20 +949,59 @@ class LinhaDaConversa extends StatelessWidget {
   }
 }
 
-/// O ICONE DA CONVERSA: a marca neutra do participante. **Nunca uma foto.**
+/// O ICONE DA CONVERSA: a FOTO quando ela vem, e a marca neutra quando nao.
 ///
-/// O contrato declara em dois lugares que `participants` nao traz foto de
-/// perfil, e por isso nao existe caminho neste widget por onde uma imagem
-/// chegue: ele recebe uma **letra**. O cabecalho deste arquivo tem a medida
-/// inteira, e diz por que o pedido do cliente de 18/10 (*"traga a foto do
-/// usuario como icone das conversas"*) nao cabe.
+/// **A foto entrou em 19/10/2026** (emenda 3 do ADR-0010, decisao do cliente:
+/// *"a foto aparece SO quando as duas pessoas ja aceitaram conexao"*). O
+/// cabecalho deste arquivo tem a medida inteira, inclusive os cinco estados em
+/// que ela NAO aparece.
 ///
-/// [desligada] pinta a marca em cinza desligado. E a leitura do pedido do
+/// **ESTA TELA NAO DECIDE NADA SOBRE QUEM PODE VER.** Ela desenha o que veio:
+/// `participante.photoIconUrl` nulo e a marca neutra, nao-nulo e a foto. O
+/// recorte mora na clausula `WHERE` da consulta do servidor (ADR-0021), e um
+/// `if` de conexao aqui seria o segundo lugar onde a regra mora -- e o segundo
+/// e o que fica desatualizado.
+///
+/// ## A DERIVADA, e por que ela e a `thumb` de 176 px
+///
+/// A marca desenhada tem [tamanho] dp, **40 por padrao**. A 3x isso sao **120
+/// px reais**, e essa e a unica medida que decide a derivada:
+///
+/// | derivada | px | contra 120 px pintados |
+/// |---|---|---|
+/// | `thumb` de `user_photo` | 176 | 1,47x -- cobre sem ampliar |
+/// | `card` de `user_photo` | 512 | **4,27x** dado demais |
+/// | `thumb` da vitrine | 320 | 2,67x dado demais |
+///
+/// A vitrine usa 320 porque a celula DELA tem 104 dp (312 px a 3x); aqui a
+/// celula tem 40 dp, e 320 seria desperdicio multiplicado por dez linhas de
+/// pagina. O servidor serve `thumb_key`, e esta tela nao escolhe: ela recebe a
+/// URL pronta.
+///
+/// **Quem pinta e [ImagemDaRede], nunca `Image.network` cru.** Aquele
+/// componente passa `cacheWidth` pela largura PINTADA, que e o numero que
+/// decide o custo em memoria: o `ui.Image` custa `largura x altura x 4` bytes
+/// da imagem DECODIFICADA, e nao os bytes do JPEG. A medicao que criou o
+/// componente foi **88 MiB numa pagina sem `cacheWidth` contra 2,15 MiB com
+/// ele**. Com 40 dp a 3x, cada foto desta lista custa 120 x 120 x 4 = **57,6
+/// KiB** decodificados; dez linhas somam 576 KiB. Com a `card` de 512 e sem
+/// `cacheWidth` seriam 512 x 512 x 4 = 1 MiB por linha, 10 MiB na pagina --
+/// que e o defeito dos 9,8 MB da `Loja` outra vez.
+///
+/// [desligada] pinta a MARCA em cinza desligado. E a leitura do pedido do
 /// cliente (*"a foto deve trazer um avatar padrao cinza, como se tivesse
-/// desabilitado"*) num schema que nao tem foto: o lado desabilitado aparece
-/// **despersonalizado**, o que o servidor ja faz devolvendo `Tutor` / `Quem
-/// achou`, e a forma acompanha. A tela **nao sabe** se e conta desabilitada ou
-/// conversa encerrada, e nao deve saber.
+/// desabilitado"*): o lado desabilitado aparece **despersonalizado**, o que o
+/// servidor ja faz devolvendo `Tutor` / `Quem achou` **e** `photo_icon_url`
+/// nulo -- `conta_habilitada` das duas pontas esta dentro do predicado de
+/// conexao da consulta. Entao conta desabilitada cai na marca em cinza por
+/// construcao, sem esta tela saber que a conta esta desabilitada.
+///
+/// **[desligada] NAO apaga uma foto que veio**, e isso e decisao: `desligada` e
+/// `!status.aceitaMensagem`, isto e, conversa encerrada OU bloqueada. Par
+/// bloqueado ja chega sem foto (o servidor recorta); o que sobra e a conversa
+/// ENCERRADA entre duas conexoes -- caso resolvido, pet devolvido --, e pintar
+/// o rosto de uma conexao ativa em cinza afirmaria algo sobre a conta dela que
+/// nao e verdade. O que terminou foi a conversa, nao a pessoa.
 ///
 /// ---------------------------------------------------------------------------
 /// ## O TOQUE, quando ha destino
@@ -968,23 +1052,50 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    final marca = Container(
-      width: tamanho,
-      height: tamanho,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: desligada ? cores.disabledSurface : cores.primaryContainer,
-        shape: BoxShape.circle,
-      ),
-      child: Text(
-        inicial.isEmpty ? '·' : inicial,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: desligada ? cores.onDisabled : cores.primary,
-        ),
-      ),
-    );
-
     final quemEle = participante;
+    // A FOTO, QUANDO ELA VEM (emenda 3 do ADR-0010, 19/10/2026).
+    //
+    // Nulo e o estado normal: conversa de achado com um estranho, pedido
+    // pendente, achador sem conta, par bloqueado e conta desabilitada do outro
+    // lado -- os cinco chegam nulos do servidor, e a tela nao os distingue.
+    final foto = quemEle?.photoIconUrl;
+    final marca = foto == null
+        ? Container(
+            width: tamanho,
+            height: tamanho,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: desligada ? cores.disabledSurface : cores.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              inicial.isEmpty ? '·' : inicial,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: desligada ? cores.onDisabled : cores.primary,
+              ),
+            ),
+          )
+        : ImagemDaRede(
+            url: foto,
+            // DECORATIVA, e de proposito: o rotulo acessivel do icone esta no
+            // `Semantics` de fora (`rotuloDaPortaDoPerfil` quando ha destino,
+            // `rotuloDaMarcaNeutra` quando nao ha). Rotular a imagem tambem
+            // faria o leitor de tela anunciar a mesma pessoa duas vezes na
+            // mesma parada de foco -- e o nome dela ja esta na linha.
+            descricao: null,
+            // 40 dp, e `ImagemDaRede` multiplica pelo fator de pixel do
+            // aparelho: 120 px a 3x. E este numero que vira `cacheWidth`.
+            largura: tamanho,
+            proporcao: 1,
+            // Circulo, como a marca que ela substitui: metade do lado.
+            raio: tamanho / 2,
+            // O retrato de uma pessoa falhando pede outro desenho que uma
+            // fachada falhando. A derivada pode nao existir ainda, o leitor de
+            // midia pode estar fora, a rede do celular pode cair no meio -- e o
+            // lugar do icone continua la.
+            simboloDeFalha: Icons.person_outline,
+          );
+
     final destino = quemEle == null
         ? null
         : PortaDoPerfilDoParticipante.destino(quemEle);

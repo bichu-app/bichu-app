@@ -532,6 +532,18 @@ export class ConversationService {
         nomeDoAchador: conversa.nomeDoAchador,
         tutorDesabilitado: conversa.tutorDesabilitado,
         achadorDesabilitado: conversa.achadorDesabilitado,
+        // O LADO DE QUEM CHAMA sai da CONSULTA (`papel_do_chamador`), e nunca
+        // de uma comparacao aqui: o id do chamador nao volta para a aplicacao,
+        // e um `if` daqui poderia discordar do `WHERE`.
+        papelDoChamador: conversa.papelDoChamador,
+        // JA RECORTADOS (emenda 3 do ADR-0010, 19/10/2026). O predicado de
+        // conexao aceita mora no `WHERE` das subconsultas que produzem estes
+        // dois campos (ADR-0021). **Nao ha `if` de conexao neste servico**, e a
+        // ausencia e a regra: um segundo lugar decidindo a mesma coisa esconde
+        // o que o primeiro deixou passar, e um `LeitorDeConexao` chamado por
+        // conversa seriam dez idas ao banco por pagina da lista.
+        apelidoDoOutro: conversa.apelidoDoOutro,
+        chaveDaFotoDoOutro: conversa.chaveDaFotoDoOutro,
       }),
       messages: mensagens,
       nextCursor,

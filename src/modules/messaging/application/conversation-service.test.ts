@@ -85,6 +85,12 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
     naoLida: false,
     corpoDaUltima: null,
     ultimaMensagemEm: null,
+    // EMENDA 3 DO ADR-0010 (19/10/2026). O padrao e "nao e conexao aceita",
+    // que e o estado normal da conversa de achado: os dois chegam nulos, como
+    // a clausula `WHERE` da consulta os entrega. O caso que fala de conexao
+    // passa o que precisa por `parcial`.
+    apelidoDoOutro: null,
+    chaveDaFotoDoOutro: null,
     ...parcial,
   };
 }

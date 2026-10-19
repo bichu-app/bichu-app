@@ -1215,6 +1215,9 @@ export async function main(): Promise<void> {
       contrato,
       idempotencia: criarIdempotencia(db),
       clock: systemClock,
+      // A foto do participante que e conexao aceita (emenda 3 do ADR-0010,
+      // 19/10/2026). Mesma base das outras derivadas publicas.
+      baseDeMidia: config.mediaPublicBaseUrl,
     });
     registrarRotasDoAchador(escopo, {
       conversas: conversaDoAchador,

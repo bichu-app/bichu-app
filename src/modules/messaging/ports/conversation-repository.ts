@@ -94,6 +94,39 @@ export interface ConversaDoChamador {
    */
   readonly corpoDaUltima: string | null;
   readonly ultimaMensagemEm: Date | null;
+  /**
+   * **O APELIDO DO OUTRO LADO, e so quando ele e CONEXAO ACEITA de quem chama**
+   * (emenda 3 do ADR-0010, decisao do cliente de 19/10/2026).
+   *
+   * `null` funde cinco estados, e a fusao e a regra (ADR-0021): nao e conexao
+   * aceita, o par esta bloqueado, o outro lado nao tem conta, o outro lado
+   * desabilitou a conta, ou e conexao e nao escolheu apelido -- nenhum fluxo
+   * obriga a escolher (plano 4-C.8).
+   *
+   * **O recorte e a clausula `WHERE` da subconsulta que produz este campo**, e
+   * nao um `if` de camada acima. Chamar a leitura de um caminho novo devolve
+   * `null` em vez de apelido: e esta metade que sobrevive a alguem mexer no
+   * servico, e e ela que a isca de SQL mede.
+   */
+  readonly apelidoDoOutro: string | null;
+  /**
+   * **A CHAVE da derivada `thumb` (176 x 176) da foto do OUTRO LADO**, pela
+   * mesma regra e no mesmo `WHERE` de [apelidoDoOutro].
+   *
+   * CHAVE e nao URL: o banco guarda a chave do objeto e a URL e montada na
+   * borda, com o dominio de midia do ambiente. Gravar URL absoluta amarraria a
+   * linha ao provedor do dia em que ela foi escrita (§11.1 proibicao 9).
+   *
+   * `thumb` e nao `card`: o icone da conversa pinta 40 dp, que a 3x sao 120 px
+   * reais -- a de 176 cobre sem ampliar, e a `card` de 512 seria 4,3x mais dado
+   * do que a celula pinta, dez vezes por pagina.
+   *
+   * `null` nos cinco estados de [apelidoDoOutro], mais um sexto: a conexao
+   * aceita cuja foto nao esta `ready`. Foto em `processing` carrega o EXIF do
+   * celular ate o trabalhador reescrever a derivada, e servi-la entregaria a
+   * coordenada de onde ela foi tirada (ADR-0010 item 4).
+   */
+  readonly chaveDaFotoDoOutro: string | null;
 }
 
 export interface MensagemGravada {

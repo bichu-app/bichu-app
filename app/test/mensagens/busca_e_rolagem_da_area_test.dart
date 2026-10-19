@@ -463,8 +463,18 @@ void main() {
     tearDown(PortaDoPerfilDoParticipante.soltar);
 
     testWidgets(
-      'ISCA: NENHUMA imagem na lista -- o contrato nao manda foto de terceiro',
+      'ISCA: NENHUMA imagem quando a resposta nao traz foto (nao-conexao)',
       (tester) async {
+        // **ESTE CASO MUDOU DE NOME E DE MOTIVO EM 19/10/2026, e nao de
+        // comportamento.** Ele dizia "o contrato nao manda foto de terceiro", e
+        // isso deixou de ser verdade: a emenda 3 do ADR-0010 abriu a foto entre
+        // CONEXOES ACEITAS, por decisao do cliente. O que ele mede continua
+        // valendo e importa MAIS que antes -- `conversas(3)` nao traz
+        // `photo_icon_url`, que e o corpo da conversa de achado com um
+        // estranho, e ali a tela nao pode desenhar imagem nenhuma.
+        //
+        // O contrapeso dele vive em `foto_na_conversa_test.dart`: sem aquele
+        // arquivo, este passaria num mundo em que a foto nunca aparece.
         final servidor = ServidorDeConversas(
           <String, http.Response Function(http.Request)>{
             'GET /v1/conversations': (_) =>
@@ -476,10 +486,12 @@ void main() {
         expect(
           find.byType(Image),
           findsNothing,
-          reason: 'REPROVA: a lista desenhou imagem. `Conversation.participants` '
-              'declara, em dois pontos do contrato, que `display_name` nunca e '
-              'foto de perfil, e a ADR-0025 item 2 proibe avatar de terceiro. '
-              'Nao ha de onde a foto viesse: ela so poderia ter sido inventada.',
+          reason: 'REPROVA: a lista desenhou imagem para quem NAO e conexao '
+              'aceita. `photo_icon_url` veio nulo nas tres conversas, e nulo e '
+              'o estado do estranho que escaneou a plaquinha -- a tela nao tem '
+              'de onde tirar foto ali, e uma imagem desenhada so poderia ter '
+              'sido inventada. E o golpe do falso achador que esta ausencia '
+              'protege.',
         );
         expect(find.byType(CircleAvatar), findsNothing);
         expect(find.byType(FadeInImage), findsNothing);

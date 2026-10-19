@@ -524,7 +524,41 @@ final GlobalKey<NavigatorState> _navegadorRaiz = GlobalKey<NavigatorState>(
 /// e exatamente o defeito que o cliente encontrou no simulador. Quem abre
 /// tela de conta usa `push` ou `pushReplacement`; `go` fica para troca de aba
 /// e para o fim de um fluxo. Ver `SaidaDaTela`.
+/// **LIGA O TOQUE NA FOTO DA CONVERSA AO PERFIL DAQUELA PESSOA.**
+///
+/// A frente de mensagens deixou o ponto unico (`PortaDoPerfilDoParticipante`) e
+/// nasceu com ele devolvendo `null`, porque a tela de perfil de TERCEIRO era de
+/// outro ramo. A frente de perfil entregou a tela e [Rotas.perfilDe]. Esta
+/// funcao e a costura, e ela mora **aqui** por uma razao: `rotas.dart` e o
+/// unico arquivo que conhece as duas pontas. `area_de_mensagens.dart` nao
+/// importa `Rotas` -- se importasse, a area de mensagens deixaria de ser
+/// plugavel onde quem monta a barra quiser.
+///
+/// **NAO e a linha de uma expressao so que o plano previa.** O plano escrevia
+/// `(outro) => Rotas.perfilDe(outro.handle)`, e isso nao compila: o apelido e
+/// **anulavel** no contrato, e `Rotas.perfilDe` recebe `String`. O nulo nao e
+/// borda rara -- ele e o estado NORMAL (nao-conexao, par bloqueado, achador sem
+/// conta, conexao que nao escolheu apelido), e com ele o icone tem de ficar
+/// decorativo em vez de abrir `/pessoa/null`.
+///
+/// Funcao nomeada e nao uma atribuicao solta dentro de [criarRoteador]: e ela
+/// que a isca da fiacao chama, e um efeito escondido no meio de uma fabrica de
+/// 400 linhas nao se exercita sem montar o roteador inteiro.
+void ligarPortaDoPerfilDoParticipante() {
+  PortaDoPerfilDoParticipante.destino = (outro) {
+    final apelido = outro.handle;
+    // Vazio tratado como ausente, como no modelo: `Rotas.perfilDe('')`
+    // devolveria `/pessoa/`, que e a rota de outra coisa.
+    if (apelido == null || apelido.isEmpty) return null;
+    return Rotas.perfilDe(apelido);
+  };
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
+  // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
+  // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
+  // ha o que desfazer quando o roteador e recriado.
+  ligarPortaDoPerfilDoParticipante();
   return GoRouter(
     navigatorKey: _navegadorRaiz,
     initialLocation: Rotas.abertura,

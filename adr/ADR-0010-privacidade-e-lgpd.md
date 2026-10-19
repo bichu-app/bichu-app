@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1 e 2
+**Status:** aceito, com emendas 1, 2 e 3
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -12,6 +12,14 @@ exceção de escopo fechado — a **contagem** de pets de uma pessoa sai no perf
 dela em resposta **autenticada** (`getPersonProfile`). Nome, miniatura, slug e
 link de pet continuam proibidos, e o item 7 continua inteiro em superfície
 alcançável sem conta. Ver o fim do documento.
+
+**Emenda 3, 19/10/2026 (decisão do cliente):** a **foto de perfil** de uma
+pessoa passa a sair para **outra** pessoa em uma superfície, e só nela: o
+participante da **conversa mediada**, e **apenas quando as duas já aceitaram
+conexão**. O apelido viaja junto, pelo mesmo predicado, porque é ele que dá
+endereço ao toque. Para quem **não** é conexão aceita — inclusive o estranho
+que escaneou a plaquinha — nada disso sai, e é ali que o motivo da regra
+anterior continua inteiro. Ver o fim do documento.
 
 ## Contexto
 
@@ -256,3 +264,152 @@ foto é assunto entre o dono e quem modera.
   não cria caminho de descoberta, e a operação responde o mesmo **404** de
   inexistente para apelido que não é de pessoa, conta desabilitada e par
   bloqueado (ADR-0021, nunca 403).
+
+
+---
+
+# Emenda 3 — 19/10/2026: a foto na conversa, e só entre conexões aceitas
+
+**Decisão do cliente, 19/10/2026.** A pergunta foi um conflito, e não um
+pedido: ele havia pedido, em 18/10, *"a foto do usuário como ícone das
+conversas, e a imagem clicada levando ao perfil"*. A frente de mensagens
+**recusou a foto, e estava certa.** Três registros independentes a proibiam:
+
+1. **o contrato, por extenso e em DOIS pontos** — `Conversation.participants` e
+   `FinderConversation.participants` declaravam `display_name` como *"Primeiro
+   nome ou apelido. **Nunca** sobrenome completo, telefone, e-mail nem foto de
+   perfil"*;
+2. **o ADR-0025, decisão 2** — *"não existe campo com pessoas, em forma
+   nenhuma: nem nome, nem primeiro nome, nem apelido, nem `slug`, nem avatar"*;
+3. **o plano da comunidade, recusando esta superfície por nome** — *"o avatar
+   **não** entra na conversa mediada, e eu recomendo que **não entre nunca**"*,
+   por três razões: o achador pode não ter conta (canal assimétrico), a conversa
+   vive sob a sombra do **golpe do falso achador** (rosto é insumo de engenharia
+   social), e ela é o canal que **atravessa o bloqueio**.
+
+O conflito foi levado ao cliente com as três citações na mesa. A decisão dele,
+literal:
+
+> "a foto aparece SÓ quando as duas pessoas já aceitaram conexão"
+
+E o complemento, também dele: em conversa de achado, e em qualquer conversa com
+quem não é conexão aceita, **não aparece** — fica a inicial ou o glifo genérico
+que já estava lá.
+
+## Por que isto é emenda e não revogação
+
+**O motivo da regra continua protegido, porque a exceção é exatamente o seu
+complemento.** O golpe do falso achador é praticado por um **estranho**: alguém
+que diz ter achado o pet e quer extorquir o tutor. Esse estranho não é conexão
+aceita de ninguém — se fosse, o tutor já o conheceria — e para ele a foto
+continua não saindo. A emenda abre o rosto onde as duas pessoas já se
+reconheceram, e o mantém fechado onde elas não se reconheceram.
+
+As três razões do plano da comunidade sobrevivem inteiras, e cada uma é atendida
+por um predicado e não por uma convenção:
+
+| Razão | Como a emenda a atende |
+|---|---|
+| o achador pode **não ter conta** | o caminho dele é `FinderConversation`, **schema próprio sem os dois campos**. Quem não tem conta não tem conexão, e não há chamador de quem medir a aresta |
+| **golpe do falso achador** | o estranho não é `accepted`, e o predicado está no `WHERE` da consulta: a consulta que traria a foto dele **não existe** |
+| a conversa **atravessa o bloqueio** | `NOT bloqueio_entre`, simétrico, **dentro** do mesmo predicado. Bloquear desfaz a conexão, mas são duas escritas, e este predicado cobre a corrida entre elas |
+
+## O que exatamente passa a sair, e onde
+
+**Dois campos, em `Conversation.participants[]`, e em mais nenhuma resposta
+deste contrato:**
+
+- **`photo_icon_url`** — a derivada **`thumb` de 176 × 176** da foto única da
+  pessoa (`users.photo_image_id`, `catalog_images.purpose = 'user_photo'`).
+  **Não é a `card` de 512** que o dono recebe em `getMe`: o ícone da conversa
+  pinta 40 dp, 120 px reais a 3x, e a de 512 seria 4,27× mais dado do que a
+  célula pinta — dez vezes por página de lista;
+- **`handle`** — o apelido, **anulável**. Ele sai porque o toque precisa de um
+  endereço: o perfil de outra pessoa é `getPersonProfile`, endereçado pelo
+  apelido (decisão do cliente de 18/10). **O item 6 não é emendado**: não sai
+  `users.id`, não sai `users.public_ref` e não sai nenhum UUID.
+
+**Sem estado nenhum.** `MyPhoto`, que o dono recebe, tem `status` e
+`rejection_reason`; nenhum dos dois é assunto de terceiro — motivo de recusa de
+uma foto é entre o dono e quem modera. Foto que não está `ready` simplesmente
+não sai, e por isso não há estado a desenhar. É a mesma redução que a emenda 2
+fez em `PersonShowcasePhoto`.
+
+## Os cinco estados em que ela NÃO sai, e eles foram medidos
+
+Medidos no **corpo real da resposta**, contra Postgres, em
+`tests/integration/foto-na-conversa-entre-conexoes.test.ts` — porque nenhum
+portão deste repositório confere o corpo da resposta:
+
+| Estado | `handle` | `photo_icon_url` |
+|---|---|---|
+| conversa de achado com **não-conexão** (com conta, com nome, com foto pronta) | `null` | `null` |
+| **pedido pendente** ou recusado | `null` | `null` |
+| **achador sem conta** | o schema não tem o campo | o schema não tem o campo |
+| **par bloqueado**, com a aresta `accepted` de pé | `null` | `null` |
+| **conta desabilitada** do outro lado | `null` | `null` |
+
+E o estado em que ela sai, nos **dois sentidos** do par: conexão aceita,
+`https://<mídia>/thumb/<chave>-176.jpg`.
+
+**O próprio lado de quem chama recebe os dois nulos**, e isso é decisão: a foto
+do dono já sai em `getMe`, e repeti-la aqui seria uma terceira superfície dela
+sem nenhum consumidor — cada superfície nova de foto de pessoa é uma a mais para
+alguém esquecer de proteger.
+
+## Onde a autorização mora, e por que isto não é um `if`
+
+ADR-0021. O predicado de conexão aceita está na **cláusula `WHERE` das
+subconsultas** que produzem os dois campos
+(`messaging/adapters/persistence/kysely-conversation-repository.ts`), e não num
+`if` do serviço nem da borda: chamar a leitura de um caminho novo devolve `NULL`
+em vez de foto. É esta metade que sobrevive a alguém mexer no caso de uso.
+
+**Nenhuma leitura nova de conexão em TypeScript.** `LeitorDeConexao` não é
+chamado daqui, e isso é decisão: a lista carrega dez conversas por página, e
+perguntar a aresta por conversa seriam dez idas ao banco por rolada — além de
+mover o recorte para a memória, que é o que o ADR-0021 proíbe. O predicado tem a
+**mesma forma** do que `construtorDaVitrineDeConexao` usa para a vitrine da
+emenda 2, e cada um é lido por uma isca de SQL própria.
+
+## Uma contradição literal na decisão, e como ela foi resolvida
+
+A frase do cliente tem duas metades, e **medida contra o produto elas se
+tocam**: *"a foto aparece SÓ quando as duas pessoas já aceitaram conexão"* e
+*"em conversa de achado... não aparece"*.
+
+**Toda conversa deste produto é conversa de achado.**
+`conversations.found_report_id` é `NOT NULL` e `UNIQUE`, não existe
+`POST /conversations` e não existe mensagem direta entre desconhecidos: a
+conversa mediada nasce sempre de um aviso de plaquinha ou de um achado avulso.
+Lida ao pé da letra, a segunda metade esvaziaria a primeira — a foto não
+apareceria em lugar nenhum, e a decisão não teria efeito.
+
+**A leitura aplicada, e ela está declarada aqui porque não é óbvia:** a regra
+que governa é a primeira, que é a que o cliente destacou — **conexão aceita**. A
+segunda metade é o complemento dela no caso comum: a conversa de achado é, quase
+sempre, com um estranho, e ali a foto não aparece. As duas pessoas que são
+conexões e que, por acaso, estão numa conversa de achado (um amigo achou o pet)
+recebem a foto.
+
+**Pendência de confirmação com o cliente**, nestes termos: *"toda conversa do
+Bichu nasce de um aviso de achado — não existe mensagem direta. Entendi que a
+foto aparece quando as duas pessoas são conexões aceitas, inclusive se a
+conversa for de um achado; e não aparece com quem não é conexão. Confirma?"*
+
+## O que esta emenda NÃO decide, e portanto continua proibido
+
+- **o ADR-0025 decisão 2 não foi tocado.** O escopo dele é a superfície da
+  `Rede`, e a `Rede` continua sem avatar, sem nome e sem apelido de quem fez
+  check-in. Nada aqui o alcança;
+- **nenhuma outra superfície ganha foto de pessoa.** `getMe` continua sendo a
+  única resposta que a traz inteira, com estado; esta é a única que a mostra a
+  outra pessoa, e numa derivada menor e sem estado;
+- **a vitrine não entra na conversa.** Ela sai só em `getPersonProfile`, pela
+  emenda 2, e `Conversation` não a alcança por `$ref` nenhum — o portão
+  `vitrine-nao-sai-para-terceiro.test.ts` cobra isso e não foi afrouxado;
+- **o apelido não abre caminho de descoberta.** Ele sai de uma conversa que quem
+  chama já tem, de uma pessoa que já o aceitou. Não existe busca de pessoas, não
+  existe rota de disponibilidade de apelido e a descoberta por link está morta;
+- **nenhum identificador interno.** O item 6 continua inteiro: nem `users.id`,
+  nem `users.public_ref`, nem UUID de espécie nenhuma em `participants`.

@@ -57,8 +57,25 @@ const String idDaMensagem = '0192f3a1-7b2c-7def-8a01-00000000aaaa';
 // FIXTURES, campo por campo do contrato
 // ---------------------------------------------------------------------------
 
-Map<String, dynamic> participante(String papel, String nome) =>
-    <String, dynamic>{'role': papel, 'display_name': nome};
+/// Um item de `Conversation.participants`, com os QUATRO campos do contrato.
+///
+/// `handle` e `photo_icon_url` entraram em 19/10/2026 (emenda 3 do ADR-0010), e
+/// **o padrao dos dois e nulo**, que e o estado normal: o servidor so os manda
+/// quando o outro lado e conexao aceita de quem chama. Quem quer o estado de
+/// conexao pede os dois por nome -- foto sem apelido e apelido sem foto sao
+/// estados REAIS do contrato, e precisam ser pedidos em vez de acontecer por
+/// descuido.
+Map<String, dynamic> participante(
+  String papel,
+  String nome, {
+  String? apelido,
+  String? foto,
+}) => <String, dynamic>{
+      'role': papel,
+      'display_name': nome,
+      'handle': apelido,
+      'photo_icon_url': foto,
+    };
 
 Map<String, dynamic> mensagem({
   String id = idDaMensagem,
@@ -91,6 +108,14 @@ Map<String, dynamic> conversa({
   bool naoLida = false,
   String? previa,
   String? ultimaEm,
+  // A EMENDA 3 DO ADR-0010 (19/10/2026), no ACHADOR -- que e o outro lado
+  // visto pelo tutor, e e ele que a linha da lista desenha.
+  //
+  // **Nulos por padrao**, e esse e o corpo que o servidor manda na conversa de
+  // achado com um estranho: o estado normal do produto. Quem quer medir a
+  // conexao aceita pede os dois por nome.
+  String? apelidoDoAchador,
+  String? fotoDoAchador,
 }) => <String, dynamic>{
   'id': id,
   'case_id': null,
@@ -98,7 +123,12 @@ Map<String, dynamic> conversa({
   'status': estado,
   'participants': <Map<String, dynamic>>[
     participante('tutor', nomeDoTutor),
-    participante('finder', nomeDoAchador),
+    participante(
+      'finder',
+      nomeDoAchador,
+      apelido: apelidoDoAchador,
+      foto: fotoDoAchador,
+    ),
   ],
   // A LISTA manda `messages: []`, como o servidor faz. O detalhe manda cheio.
   'messages': mensagens ?? <Map<String, dynamic>>[],

@@ -103,6 +103,10 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
     contrato: undefined as unknown as DependenciasDasRotasDeConversa['contrato'],
     idempotencia: undefined as unknown as DependenciasDasRotasDeConversa['idempotencia'],
     clock: undefined as unknown as DependenciasDasRotasDeConversa['clock'],
+    // Entrou com a emenda 3 do ADR-0010 (19/10/2026). Os resolvedores de teto
+    // nao a tocam -- eles precisam do chamador e de mais nada --, e por isso
+    // ela segue a mesma forma dos vizinhos deste objeto.
+    baseDeMidia: undefined as unknown as DependenciasDasRotasDeConversa['baseDeMidia'],
   };
 }
 
