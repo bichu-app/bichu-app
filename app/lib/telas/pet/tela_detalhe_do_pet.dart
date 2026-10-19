@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
+import '../../api/modelos_caso.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
@@ -123,6 +124,16 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   /// criterio 2 da BICHUS-62 proibe. Enquanto a leitura nao volta, o link nao
   /// aparece; ele e informacao secundaria e nao vale segurar a tela por ele.
   bool _temPedidoDePlaquinha = false;
+
+  /// Se o encerramento do caso esta em curso. Mantem o rotulo do botao
+  /// visivel (paragrafo 11.20) e tira a acao dele.
+  bool _encerrandoOCaso = false;
+
+  /// O que deu errado ao encerrar, se deu. **Separado de [_textoDaFalha]**: um
+  /// `POST` que falhou nao transforma o detalhe inteiro em tela de erro -- o
+  /// pet carregou, e quem o leu continua lendo. Eram dois estados diferentes
+  /// no mesmo campo, e o primeiro apagaria a pagina do segundo.
+  String? _erroAoEncerrar;
 
   bool _iniciou = false;
 
@@ -335,6 +346,109 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     context.push(Rotas.marcarPerdido, extra: RascunhoDoCaso(pet: pet));
   }
 
+  /// `Encontrei meu pet`: a ACAO INVERSA, pedida pelo cliente em 18/10/2026.
+  ///
+  /// ## Ela encerra o caso, e nao "desmarca" o pet
+  ///
+  /// Nao existe no contrato uma operacao que mexa em `pets.status` para tirar o
+  /// `lost`. O que existe e `POST /lost-cases/{caseId}/close`
+  /// (`closeLostCase`), e e **ela** que e a inversa de abrir: a abertura criou
+  /// um caso, e o fim do caso e o que devolve o animal ao estado anterior.
+  /// Procurar um `PATCH /pets/{id}` com `status: active` seria inventar rota.
+  ///
+  /// ## O desfecho e `reunited`, e o botao diz isso em portugues
+  ///
+  /// `outcome` e obrigatorio e o contrato escreve por que: *"o desfecho e o
+  /// instrumento de medicao do produto: sem ele a metrica de reencontro nao
+  /// existe"*. Dos tres valores, este botao manda **um** -- `reunited` --
+  /// porque e o que o rotulo promete. `not_found` ("desisti de procurar") e
+  /// `false_alarm` ("abri por engano") sao outras duas perguntas, e
+  /// `false_alarm` o contrato so oferece com o caso tendo menos de 6 h e nenhum
+  /// aviso ou candidato -- tres numeros que esta tela nao tem em maos (eles
+  /// saem de `GET /lost-cases/{caseId}`). Um menu de tres opcoes nao foi
+  /// pedido, e enfiar `reunited` num botao chamado "desmarcar" gravaria
+  /// "reencontrado" sobre casos que ninguem resolveu.
+  ///
+  /// `reunion_channel` nao vai: ver `CasosApi.encerrarCaso`. Esta tela nao sabe
+  /// se o animal voltou pela tag, pelo alerta, pelo cartaz ou sozinho, e
+  /// inventar o canal poria atribuicao falsa numa metrica de produto.
+  ///
+  /// ## Depois do 200, a tela LE o pet de novo
+  ///
+  /// Porque a resposta e `LostCase`, e nao `Pet`: ela nao diz nada sobre
+  /// `status` nem sobre `open_case_id`, que sao os dois campos que esta tela le
+  /// para decidir o que mostrar. Virar o estado local sem reler seria a tela
+  /// afirmando um pet que ela nao mediu -- e se o servidor tivesse encerrado o
+  /// caso sem mudar o pet, a proxima abertura da pagina contaria outra
+  /// historia.
+  ///
+  /// **A falha da releitura nao vira falha do encerramento**, e a ordem dos
+  /// `setState` e o que garante isso: o caso FOI encerrado, e dizer "nao deu"
+  /// sobre o que deu seria a mentira que custa mais neste produto.
+  Future<void> _encontreiMeuPet(Pet pet) async {
+    final caseId = pet.idDoCasoAberto;
+    // **Sem `caseId` nao ha o que encerrar.** O botao so e desenhado com caso
+    // aberto, e esta guarda e o cinto: `status: lost` sem `open_case_id` e um
+    // servidor inconsistente, e montar `/lost-cases//close` seria 404.
+    if (caseId == null || caseId.isEmpty) return;
+
+    final escopo = Escopo.of(context);
+    setState(() {
+      _encerrandoOCaso = true;
+      _erroAoEncerrar = null;
+    });
+
+    try {
+      await escopo.casos.encerrarCaso(
+        caseId: caseId,
+        desfecho: DesfechoDoCaso.reencontrado,
+      );
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _encerrandoOCaso = false;
+        _erroAoEncerrar = MensagensDeErro.de(falha).texto;
+      });
+      return;
+    } on Object catch (erro, pilha) {
+      // O `catch (FalhaDeChamada)` acima parece exaustivo e nao e: corpo 200
+      // fora do contrato estoura `TypeError` dentro de `CasoDePerdido.doJson`.
+      // Sem este ramo o botao ficaria girando para sempre com o erro engolido.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao encerrar o caso do pet');
+      if (!mounted) return;
+      setState(() {
+        _encerrandoOCaso = false;
+        _erroAoEncerrar = MensagensDeErro.servidorFora;
+      });
+      return;
+    }
+
+    // **O pet nao pode sobreviver como `Perdido` no cache de `Meus pets`.**
+    // Mesma razao da exclusao: a lista recarrega ao voltar a ficar visivel, mas
+    // se esse `GET` falhar ela cai no cache -- e a pessoa veria, de volta na
+    // lista, o selo de perdido num animal que ela acabou de dizer que voltou.
+    escopo.cacheDeMeusPets.limpar();
+
+    if (!mounted) return;
+    anunciar(context, TextosDoDetalhe.casoEncerrado(pet.nome));
+
+    try {
+      final atualizado = await escopo.pets.buscarPet(widget.petId);
+      if (!mounted) return;
+      setState(() {
+        _pet = atualizado;
+        _encerrandoOCaso = false;
+      });
+    } on Object {
+      // A releitura falhou DEPOIS de o caso ter sido encerrado. O botao para de
+      // girar e o erro **nao** aparece: nao houve erro na acao que a pessoa
+      // pediu. O que fica na tela e o pet do jeito que ele estava, e a proxima
+      // abertura o le de novo.
+      if (!mounted) return;
+      setState(() => _encerrandoOCaso = false);
+    }
+  }
+
   bool _ehForaDaConta(FalhaDeChamada falha) =>
       falha is FalhaDaApi &&
       (falha.problem.tipo == ProblemTipo.naoEncontrado ||
@@ -430,6 +544,9 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
           sufixoDaTag: _sufixoDaTag,
           aoTentarOQr: () => _carregarOQr(_pet!),
           aoMarcarPerdido: () => _marcarComoPerdido(_pet!),
+          aoEncontrarOPet: () => _encontreiMeuPet(_pet!),
+          encerrandoOCaso: _encerrandoOCaso,
+          erroAoEncerrar: _erroAoEncerrar,
           temPedidoDePlaquinha: _temPedidoDePlaquinha,
           aoAcompanharPlaquinha: () =>
               context.push(Rotas.acompanharPlaquinhaDe(_pet!.id)),
@@ -496,6 +613,9 @@ class _Conteudo extends StatelessWidget {
     required this.sufixoDaTag,
     required this.aoTentarOQr,
     required this.aoMarcarPerdido,
+    required this.aoEncontrarOPet,
+    required this.encerrandoOCaso,
+    required this.erroAoEncerrar,
     required this.temPedidoDePlaquinha,
     required this.aoAcompanharPlaquinha,
   });
@@ -508,6 +628,14 @@ class _Conteudo extends StatelessWidget {
   final String sufixoDaTag;
   final VoidCallback aoTentarOQr;
   final VoidCallback aoMarcarPerdido;
+
+  /// `Encontrei meu pet`: a acao inversa (cliente, 18/10/2026).
+  final VoidCallback aoEncontrarOPet;
+
+  final bool encerrandoOCaso;
+
+  /// O que deu errado ao encerrar, se deu. Nulo e o estado normal.
+  final String? erroAoEncerrar;
 
   /// Se ha pedido da plaquinha para este pet. Ver o campo de mesmo nome no
   /// estado da tela: `false` tambem e o que a leitura que falhou produz.
@@ -526,31 +654,95 @@ class _Conteudo extends StatelessWidget {
   bool get _jaProcurado =>
       pet.status == StatusDoPet.perdido || pet.idDoCasoAberto != null;
 
-  /// A acao `Marcar como perdido`, ou o que a tela diz quando ela nao cabe.
+  /// A ACAO DE ESTADO DO ANIMAL, nas DUAS direcoes e com **aparencia
+  /// diferente em cada uma** (cliente, 18/10/2026).
   ///
-  /// **Caso aberto NAO vira botao desabilitado.** O teto e de um caso aberto por
-  /// pet (criterio 8 da BICHUS-21) e o criterio 13 manda a tela refletir o teto
-  /// em vez de deixar a pessoa bater nele. `TelaDeQuemEOCaso` resolve isso do
-  /// jeito que esta tela copia: o animal **aparece**, dito em texto e fora de
-  /// qualquer controle, com a frase `TelaDeQuemEOCaso.jaProcurado`. Deixar um
-  /// botao ali -- mesmo desabilitado -- levaria a um 409 `pet-already-lost`
-  /// depois de duas telas, e um controle desabilitado sem motivo dito e o
-  /// desenho preguicoso que o criterio 5 recusa.
+  /// O cliente pediu as tres coisas de uma vez: *"nao tem uma opcao de
+  /// desmarcar como perdido ou que foi encontrado"* e *"esse botao deve ter um
+  /// padrao visual diferente quando estiver perdido e quando nao estiver"*.
   ///
-  /// **A frase e a que ja existe**, com o mesmo prefixo de nome que F3.0 usa.
-  /// Uma segunda redacao para o mesmo estado e como duas telas passam a dizer
-  /// coisas diferentes sobre o mesmo animal.
+  /// ## O QUE MUDOU, E O QUE NAO MUDOU
   ///
-  /// **Nao ha `Ver o caso`.** Nao e esquecimento: `Rotas.casoAberto` so monta
-  /// `TelaCasoAberto` com um `ResultadoDaAbertura` em `extra` -- o desfecho que
-  /// F3.2 acabou de produzir -- e sem ele a rota cai no Perfil. Acao sem destino
-  /// e o que o criterio 2 da BICHUS-62 proibe, e continua proibido aqui.
-  List<Widget> _acaoDeMarcarPerdido() {
+  /// O paragrafo que estava aqui justificava a AUSENCIA de botao com caso
+  /// aberto, e a justificativa continua valendo **para a acao que ela falava
+  /// de**: `Marcar como perdido` nao vira botao desabilitado com caso aberto --
+  /// o teto e de um caso por pet (criterio 8 da BICHUS-21) e o criterio 13
+  /// manda a tela refletir o teto em vez de deixar a pessoa bater nele, que
+  /// seria um 409 `pet-already-lost` depois de duas telas.
+  ///
+  /// O que entrou nao e aquela acao habilitada de novo: e **outra acao**, com
+  /// outro destino (`closeLostCase`), que so existe com caso aberto. O estado
+  /// que antes nao tinha controle nenhum passou a ter o controle dele.
+  ///
+  /// **`Ver o caso` continua sem existir**, e continua nao sendo esquecimento:
+  /// `Rotas.casoAberto` so monta `TelaCasoAberto` com um `ResultadoDaAbertura`
+  /// em `extra` -- o desfecho que F3.2 acabou de produzir -- e sem ele a rota
+  /// cai no Perfil. Acao sem destino e o que o criterio 2 da BICHUS-62 proibe.
+  ///
+  /// ## OS DOIS PADROES VISUAIS, E POR QUE SAO ESSES
+  ///
+  /// | Estado | Faixa | Botao | Alvo |
+  /// |---|---|---|---|
+  /// | Nao perdido | nenhuma | [BotaoSecundario], contorno de 2 px | 48 dp |
+  /// | Perdido | urgencia, preenchimento solido | [BotaoPrimario] | 64 dp |
+  ///
+  /// **A diferenca nao e troca de cor por gosto, e os dois lados saem do
+  /// sistema.** Secundario e a variante do unico ponto de entrada que
+  /// `Marcar como perdido` ja tinha (`Perfil` > `Meus pets`), e duas aparencias
+  /// para a MESMA acao em duas telas e como elas divergem sem ninguem decidir.
+  /// Primario com `critico: true` e o alvo de 64 dp do paragrafo 6.5, escrito
+  /// para exatamente esta situacao: *pessoa em pe, com um animal em um dos
+  /// bracos, usando o polegar da outra mao*. Quem toca em `Encontrei meu pet`
+  /// esta, com alguma sorte, segurando o bicho.
+  ///
+  /// **Dois sinais, nunca so a cor** (WCAG 2.1 SC 1.4.1): os rotulos sao
+  /// diferentes (`Marcar como perdido` / `Encontrei meu pet`) e a faixa diz o
+  /// estado em texto, entao quem nao distingue a cor recebe a mesma informacao.
+  ///
+  /// **A faixa de estado ficou, e trocou de peso.** O texto e o mesmo
+  /// `TelaDeQuemEOCaso.jaProcurado` com o mesmo prefixo de nome que F3.0 usa --
+  /// uma segunda redacao faria duas telas dizerem coisas diferentes sobre o
+  /// mesmo animal --, mas o peso passou a ser o de urgencia, que e o que o 6.4
+  /// manda: um pet marcado como perdido e o momento mais importante do produto,
+  /// e ele nao chega com a tinta de um aviso qualquer.
+  List<Widget> _acaoDeEstadoDoPet(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
     if (_jaProcurado) {
       return <Widget>[
-        FaixaDeAviso(
-          peso: PesoDaFaixa.informativo,
-          texto: '${pet.nome}: ${TelaDeQuemEOCaso.jaProcurado}',
+        // A faixa de urgencia, com `liveRegion` para o leitor de tela anuncia-la
+        // assim que ela aparece -- inclusive depois de o caso ser aberto noutra
+        // tela e a pessoa voltar para ca.
+        Semantics(
+          liveRegion: true,
+          container: true,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(BichuEspaco.e4),
+            decoration: BoxDecoration(
+              color: cores.urgency,
+              borderRadius: BorderRadius.circular(BichuRaio.lg),
+            ),
+            child: Text(
+              '${pet.nome}: ${TelaDeQuemEOCaso.jaProcurado}',
+              style: textos.titleMedium?.copyWith(color: cores.onUrgency),
+            ),
+          ),
+        ),
+        const SizedBox(height: BichuEspaco.e4),
+        // O ERRO DO ENCERRAMENTO, **acima** do botao que o produziu e so quando
+        // ha um. Em faixa de `erro` e nao `informativo`: ha acao a tomar, que e
+        // tentar de novo, e o botao logo abaixo e onde se toma.
+        if (erroAoEncerrar != null) ...<Widget>[
+          FaixaDeAviso(texto: erroAoEncerrar!),
+          const SizedBox(height: BichuEspaco.e4),
+        ],
+        BotaoPrimario(
+          rotulo: TextosDoDetalhe.encontreiMeuPet,
+          critico: true,
+          carregando: encerrandoOCaso,
+          aoTocar: aoEncontrarOPet,
         ),
         const SizedBox(height: BichuEspaco.e6),
       ];
@@ -629,8 +821,11 @@ class _Conteudo extends StatelessWidget {
         ),
         const SizedBox(height: BichuEspaco.e6),
 
-        // 3b. A ACAO PRINCIPAL DA 7.6.3, pedida pelo cliente em 18/10:
-        // `Marcar como perdido` **dentro da pagina do pet**.
+        // 3b. A ACAO DE ESTADO DO ANIMAL, pedida pelo cliente em 18/10:
+        // `Marcar como perdido` **dentro da pagina do pet**, e -- no mesmo
+        // pedido -- a INVERSA dela, `Encontrei meu pet`, para quando ha caso
+        // aberto. Qual das duas aparece, e com que aparencia, esta decidido e
+        // justificado em `_acaoDeEstadoDoPet`.
         //
         // O cabecalho desta classe dizia que a tela nao tem barra de acao fixa
         // porque a 7.6.3 pede UMA acao escolhida pelo estado e duas das tres
@@ -645,14 +840,22 @@ class _Conteudo extends StatelessWidget {
         // a acao de perdido junto delas colocaria o caminho do resgate a 16 dp
         // do botao de apagar o cadastro.
         //
-        // `BotaoSecundario` e nao primario: e a MESMA variante do unico ponto
-        // de entrada que esta acao ja tinha. Duas aparencias para a mesma acao
-        // em duas telas e como elas divergem sem ninguem decidir.
-        ..._acaoDeMarcarPerdido(),
+        // `Marcar como perdido` sai em `BotaoSecundario` e nao em primario: e
+        // a MESMA variante do unico ponto de entrada que esta acao ja tinha
+        // (`Perfil` > `Meus pets`). Duas aparencias para a MESMA acao em duas
+        // telas e como elas divergem sem ninguem decidir -- e e por isso que o
+        // padrao visual diferente que o cliente pediu distingue os dois
+        // ESTADOS, e nunca a mesma acao em dois lugares.
+        ..._acaoDeEstadoDoPet(context),
 
         // 4. Sinais, nunca truncado.
+        //
+        // **O ROTULO VIROU `Sinais particulares`** (cliente, 18/10/2026): ele
+        // leu `Sinais` aqui e perguntou o que era. Ver
+        // `TextosDoDetalhe.rotuloDosSinais` -- a constante e a do formulario
+        // que preenche o campo, e nao uma segunda redacao.
         _CartaoDeTexto(
-          titulo: 'Sinais',
+          titulo: TextosDoDetalhe.rotuloDosSinais,
           texto: pet.sinaisParticulares,
           vazio: TextosDoDetalhe.semSinais,
         ),

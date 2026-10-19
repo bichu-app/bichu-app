@@ -79,7 +79,44 @@ abstract final class TextosDoDetalhe {
       'Ou ele foi excluído, ou o endereço é de outra conta. Volte para Meus '
       'pets para ver os seus.';
 
+  // -- A ACAO INVERSA DE `Marcar como perdido` (cliente, 18/10/2026) ---------
+
+  /// `Encontrei meu pet`: a acao que faltava.
+  ///
+  /// O cliente mediu a falta com estas palavras: *"no perfil do cachorro, o
+  /// botao de marcar como perdido esta funcionando. Mas nao tem uma opcao de
+  /// desmarcar como perdido ou que foi encontrado."*
+  ///
+  /// **`Encontrei meu pet` e nao `Desmarcar como perdido`.** As duas descrevem
+  /// o mesmo toque e pedem coisas diferentes de quem le: a segunda descreve o
+  /// efeito no banco, e a primeira descreve o que aconteceu na vida da pessoa.
+  /// A operacao do contrato tambem nao e um desmarcar -- ela ENCERRA o caso com
+  /// desfecho declarado (`outcome: reunited`), e o desfecho e o que o contrato
+  /// chama de instrumento de medicao do produto.
+  static const String encontreiMeuPet = 'Encontrei meu pet';
+
+  /// O que a tela diz depois de o caso encerrar.
+  ///
+  /// **Afirma no passado porque, quando esta frase aparece, o servidor
+  /// respondeu 200.** Nao e tela de sucesso antes do sucesso, que e o que o
+  /// criterio 2 da BICHUS-31 proibe.
+  static String casoEncerrado(String nome) =>
+      '${_o(nome)} está de volta. O caso foi encerrado e quem estava ajudando '
+      'foi avisado.';
+
   // -- Sinais e vazios ------------------------------------------------------
+
+  /// O rotulo do campo de sinais **no detalhe**.
+  ///
+  /// `Sinais particulares`, e nao `Sinais`: o cliente leu `Sinais` nesta tela e
+  /// PERGUNTOU o que era (18/10/2026). O nome do campo no contrato e
+  /// `distinctive_marks`, e o formulario que o preenche sempre o chamou de
+  /// `Sinais particulares` -- quem cadastrava escrevia num campo com um nome e
+  /// relia noutro.
+  ///
+  /// **E a constante do cadastro, e nao um literal novo**: duas redacoes para o
+  /// mesmo campo sao duas redacoes que divergem na primeira manutencao.
+  static const String rotuloDosSinais = TextosDoCadastro.rotuloDosSinais;
 
   static const String semSinais = 'Nenhum sinal cadastrado.';
 

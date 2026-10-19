@@ -271,6 +271,19 @@ abstract final class MensagensDeErro {
               'Você continua lendo o que foi escrito.',
           acao: 'Voltar para as mensagens',
         ),
+      // `lost-case-closed` (410). **A pagina publica do caso NAO passa por
+      // aqui**, pela mesma razao da conversa encerrada: la o 410 e ESTADO e nao
+      // erro, e a tela diz o estado com a saida que o contrato nomeia em
+      // `next_action` (`register_stray_found_report`). Ver
+      // `telas/perdido/tela_do_caso_publico.dart`.
+      //
+      // O texto existe porque este catalogo e exaustivo e o compilador cobra, e
+      // ele diz o que o contrato permite dizer: o link nao leva mais a caso
+      // aberto, sem contar qual dos cinco motivos foi.
+      ProblemTipo.casoEncerrado => const MensagemDeErro(
+          texto: 'Este link não leva mais a um caso aberto.',
+          acao: 'Registrar um achado',
+        ),
       ProblemTipo.reautenticacaoNecessaria => const MensagemDeErro(
           texto: 'Confirme sua senha. Esta ação não pode ser desfeita, então '
               'pedimos a senha de novo.',

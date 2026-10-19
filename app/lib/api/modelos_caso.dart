@@ -188,6 +188,55 @@ class DisparoDoAlerta {
   }
 }
 
+/// `#/components/schemas/LostCaseClosure/properties/outcome` do contrato.
+///
+/// **Nao ha valor `desconhecido` aqui, ao contrario de `StatusDoPet`.** A
+/// diferenca e a direcao: aquele enum LE o que o servidor manda, e precisa
+/// sobreviver a um valor que este build nao conhece; este ESCREVE no corpo de
+/// um pedido, e um valor que o contrato nao declara seria 400. Enum de entrada e
+/// enum de saida nao se parecem.
+enum DesfechoDoCaso {
+  /// O animal voltou. **E o unico que conta no numerador da metrica de
+  /// reencontro**, que o contrato chama de instrumento de medicao do produto.
+  reencontrado('reunited'),
+
+  /// A procura terminou sem o animal. Conta no denominador.
+  naoEncontrado('not_found'),
+
+  /// O caso foi aberto por engano, e o animal nunca esteve perdido.
+  ///
+  /// **Sai do numerador E do denominador** da metrica, e e por isso que ele
+  /// existe: sem ele o tutor responde "voltou" e um caso que nunca foi perdido
+  /// entra na conta de reencontro.
+  ///
+  /// O contrato o oferece **somente** quando o caso tem menos de 6 horas e
+  /// nenhum aviso ou candidato. Nenhuma tela deste app tem esses tres numeros
+  /// em maos hoje -- eles sairiam de `GET /lost-cases/{caseId}` --, e por isso
+  /// nenhuma o envia.
+  abertoPorEngano('false_alarm');
+
+  const DesfechoDoCaso(this.valor);
+
+  final String valor;
+}
+
+/// `#/components/schemas/LostCaseClosure/properties/reunion_channel`.
+///
+/// **So faz sentido com [DesfechoDoCaso.reencontrado]**, e e o que torna a
+/// metrica de reencontro atribuivel a um canal. Nenhuma tela deste app o manda
+/// hoje: ver a prosa de `CasosApi.encerrarCaso`.
+enum CanalDoReencontro {
+  pelaTag('tag_scan'),
+  peloAlerta('bichu_alert'),
+  peloCartazOuLink('poster_or_link'),
+  porContaPropria('on_my_own'),
+  outro('other');
+
+  const CanalDoReencontro(this.valor);
+
+  final String valor;
+}
+
 /// `LostCase`: o caso aberto.
 class CasoDePerdido {
   const CasoDePerdido({

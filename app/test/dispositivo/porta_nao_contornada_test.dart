@@ -1170,12 +1170,43 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// nao escolhendo um dos dois lados. O CAMPO DE CIDADE DIGITADA entrou depois da mescla, no mesmo ramo, e por isso este valor e o SEGUNDO desta frente. (antes, por ramo isolado: 799b29b7b2; depois da mescla e antes da cidade: 0f927ff7ee;
 /// no lado de development: 50b766d431)
 ///
+/// DESTRAVADO EM 18/10 (O PET PERDIDO: pagina interna, acao inversa e os dois
+/// padroes visuais). Quatro pedidos do cliente, nestas palavras: *"quando o pet
+/// esta perdido, deve ter uma pagina interna do pet e um botao caso a pessoa
+/// encontrou o animal"*; *"nao tem uma opcao de desmarcar como perdido ou que
+/// foi encontrado"*; *"esse botao deve ter um padrao visual diferente quando
+/// estiver perdido e quando nao estiver"*; e o campo rotulado `Sinais` passar a
+/// ler `Sinais particulares` -- ele leu `Sinais` na tela e PERGUNTOU o que era.
 ///
+/// Quatro arquivos desta pasta mudam:
+/// `perdido/tela_do_caso_publico.dart` (NOVO, a pagina interna do perdido sobre
+/// `getPublicLostCase`, com `Encontrei este animal` levando ao fluxo de achado
+/// que JA existe -- `Rotas.registrarAchado` com o `share_token` no rascunho,
+/// que e o que o contrato manda usar em `can_report_sighting`);
+/// `perdido/lista_de_perdidos.dart` (UMA edicao: `aoTocar` do cartao, que era
+/// nulo porque a tela de destino nao existia);
+/// `perdido/cartao_do_perdido.dart` (SO PROSA: o paragrafo que dizia que aquela
+/// tela "nao existe no app" deixou de ser verdade);
+/// `pet/tela_detalhe_do_pet.dart` (`_acaoDeMarcarPerdido` virou
+/// `_acaoDeEstadoDoPet`, com os dois padroes -- secundario de 48 dp quando nao
+/// perdido, primario `critico` de 64 dp mais faixa de urgencia quando perdido
+/// -- e o `Encontrei meu pet` sobre `closeLostCase`);
+/// `pet/textos_do_detalhe.dart` (os textos novos e o rotulo dos sinais, que
+/// reusa a constante do formulario em vez de criar uma segunda redacao).
 ///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Quem desenha
+/// imagem de servidor continua sendo `widgets/imagem_da_rede.dart`, FORA de
+/// `lib/telas`.
 ///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre `origin/development` em `f8c74714`, e
+/// **nao** copiado de ramo nem de relato. Valor de ramo isolado nao sobrevive a
+/// uniao. (antes: 145640db9f)
 ///
-///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+const String _arvoreDasTelas = '1015211855c9e1d2346aab2f0c120e1d0e4a1e0b'; // O PET PERDIDO (18/10/2026): valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`) sobre a arvore de trabalho desta entrega, com `origin/development` em f8c74714 -- nao copiado de ramo nem de relato. As justificativas de todos os destravamentos anteriores ficaram INTEIRAS acima. Valor de ramo isolado NAO sobrevive a uniao: a quem mesclar, recalcule.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/modelos.dart';
@@ -8,6 +9,7 @@ import '../../api/modelos_perdido.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -616,7 +618,23 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         return <Widget>[
           for (var i = 0; i < _itens.length; i++) ...<Widget>[
             if (i > 0) const SizedBox(height: BichuEspaco.e4),
-            CartaoDoPerdido(perdido: _itens[i], agora: _agora),
+            // O TOQUE PASSOU A TER DESTINO (cliente, 18/10/2026: *"quando o
+            // pet esta perdido, deve ter uma pagina interna do pet"*).
+            //
+            // O cabecalho de `CartaoDoPerdido` dizia que `aoTocar` era nulo
+            // porque "a tela do caso publico por token nao existe no app", e
+            // era verdade: `getPublicLostCase` era consumida so pelo SITE.
+            // Agora existe (`TelaDoCasoPublico`), e o destino e o endereco do
+            // proprio `share_url` -- **nunca `/pets/:petId`**, que e enderecada
+            // por UUID interno (ADR-0010, item 6), e cujo id esta
+            // deliberadamente ausente desta projecao.
+            CartaoDoPerdido(
+              perdido: _itens[i],
+              agora: _agora,
+              aoTocar: () => context.push(
+                Rotas.casoPublicoDe(_itens[i].shareToken),
+              ),
+            ),
           ],
           const SizedBox(height: espacoAcimaDoRodape),
           RodapeDaPaginacao(
