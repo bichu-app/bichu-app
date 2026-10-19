@@ -1175,7 +1175,22 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **Destravado pelos TRES ITENS DE NAVEGACAO de 18/10/2026** (pedido do
+/// cliente: glifo em todo subitem da gaveta, `Meus dados` fora de `Pets` e de
+/// `Perto`, e a margem direita da foto da barra de topo). Mexeu em dois
+/// arquivos de `lib/telas`: `gaveta_de_secoes.dart` (o campo `icone` com a
+/// assercao que cobra glifo em item vivo, os quatro glifos, a saida de
+/// `Meus dados` dos globais e a guarda do filete) e `casca_com_abas.dart` (a
+/// margem INTERNA de 16 dp no alvo da foto, mais a chave do circulo para o
+/// portao poder medir desenho e alvo separados).
+///
+/// Valor **recalculado pelo procedimento deste proprio portao** sobre a
+/// arvore de trabalho -- `GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse <arvore>:app/lib/telas` --, e nao copiado de ramo nem de
+/// relato. Anterior: `145640db9f`.
+const String _arvoreDasTelas = '818971c53b28134a269f4eacbcef664bae6c74a5'; // NAVEGACAO DE 18/10/2026 (icones na gaveta, `Meus dados` fora de Pets/Perto, margem da foto); antes: UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

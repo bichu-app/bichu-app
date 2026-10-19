@@ -1295,12 +1295,55 @@ class AvatarDaConta extends StatelessWidget {
   /// O alvo de toque, em dp.
   static const double alvo = 48;
 
+  /// A chave do CIRCULO desenhado, dentro do alvo.
+  ///
+  /// Existe para o portao poder medir as duas coisas separadamente: o ALVO de
+  /// toque (que e o widget inteiro, 48 dp, e encosta na borda da tela) e o
+  /// DESENHO (o circulo de 32 dp, que fica a `layout.margem-celular` da
+  /// borda). Sem esta separacao, um caso que medisse so o widget diria que a
+  /// margem e zero: o caso que ja media a foto (`navegacao_mensagens_e_avatar`)
+  /// confere o TAMANHO do alvo, e alvo de 48 dp encostado na borda passa por
+  /// ele -- foi assim que os 8,00 dp do desenho ficaram sem portao.
+  static const Key chaveDoCirculo = ValueKey<String>('conta/avatar/circulo');
+
   @override
   Widget build(BuildContext context) {
     return IconButton(
       // `tooltip` vira o nome acessivel (11.23.3), como no gatilho da gaveta.
       tooltip: rotuloAcessivel,
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
+      // A MARGEM DA DIREITA, DENTRO DO PROPRIO ALVO. **Zero dp de custo para
+      // o titulo**, e e por isso que ela e assimetrica em vez de um `Padding`
+      // por fora.
+      //
+      // Medido em 320 dp a 200%, logado, antes: o alvo de 48 dp ia de 272 a
+      // 320 -- `margemDireita` de **0,00 dp** -- e o circulo de 32 dp ficava
+      // centrado nele, a **8,00 dp** da borda da tela. Os vizinhos da mesma
+      // barra tem 20,00 dp de ar em volta do glifo (hamburguer e `criar` sao
+      // alvos de 64 com glifo de 24 centrado), e `layout.margem-celular` do
+      // design system fixa a margem lateral da tela em **16 dp**, que e a
+      // mesma do corpo (`EdgeInsets.all(e4)`). A foto era o unico controle da
+      // tela encostado na borda, e foi isso que o cliente leu como desalinho.
+      //
+      // **O `Padding` por fora foi medido e recusado**: com
+      // `EdgeInsets.only(right: 8)` o circulo chega aos 16,00 dp, o alvo
+      // inteiro anda para 264..312 e o lado direito passa a custar 56 dp --
+      // o titulo de `Rede` e `Perto` cai de 144,00 para 136,00 dp e **`Rede`
+      // (138,32 dp a 200%) passa a sair com reticencia**. Pagar a margem com
+      // o titulo e desfazer o `titleSpacing: 0` de 19/10 pelo outro lado.
+      //
+      // Aqui o alvo continua 272..320 -- 48 x 48, que e o piso do M3 e do
+      // SC 2.5.8 e o que o briefing desta foto fixou (o 11.23.1 pede 64 em
+      // controle de canto, e a excecao esta explicada no cabecalho desta
+      // classe) -- e o circulo anda para 272..304: 16,00 dp de margem visual,
+      // orcamento de titulo intacto. O alvo deixa de ser
+      // concentrico com o glifo -- os 16 dp a mais ficam ENTRE o circulo e a
+      // borda da tela, onde nao ha outro controle para roubar o toque.
+      padding: const EdgeInsets.only(
+        right: BichuLayout.margemCelular,
+        top: BichuEspaco.e2,
+        bottom: BichuEspaco.e2,
+      ),
       onPressed: aoTocar,
       icon: _MarcaNeutra(inicial: inicial),
     );
@@ -1326,6 +1369,7 @@ class _MarcaNeutra extends StatelessWidget {
 
     return ExcludeSemantics(
       child: Container(
+        key: AvatarDaConta.chaveDoCirculo,
         width: 32,
         height: 32,
         decoration: BoxDecoration(

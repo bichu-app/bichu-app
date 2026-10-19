@@ -811,13 +811,27 @@ void main() {
           // app com conta) cortava `Rede` e `Perto` com reticencia.
           //
           // O pior caso e o de quem tem sessao, e e ele que o portao mede.
+          //
+          // **A SEGUNDA CHAMADA DE `abrirOApp` SAIU DAQUI (18/10/2026).**
+          // Havia um `await abrirOApp(tester, rede: _semServidor, escala: 2)`
+          // logo abaixo, SEM deposito, e ele lia como "e agora deslogado" --
+          // o defeito que esta correcao dizia ter fechado, escrito de novo
+          // na linha seguinte. Ele nao chegava a desfazer a sessao, e isto
+          // esta MEDIDO: `pumpWidget` com o mesmo tipo de widget reaproveita
+          // o `State`, e com ele o escopo e o roteador, entao o arranjo
+          // medido continuava sendo o de quem tem conta -- e dele que sai o
+          // `criar` de `Rede` e de `Perto`, que o caso precisa ver.
+          //
+          // A linha ficava verde pelo motivo errado, e uma mudanca qualquer
+          // no arranque do app a faria medir o arranjo mais vazio sem que
+          // nenhum caso reprovasse. Medido depois de tirar: `Rede` continua
+          // com tres controles na barra e `Perto` continua cortada.
           await abrirOApp(
             tester,
             rede: _semServidor,
             deposito: depositoLogado(),
             escala: 2,
           );
-          await abrirOApp(tester, rede: _semServidor, escala: 2);
           await irParaASecao(tester, 'Pets');
           await tester.tap(
             find.widgetWithText(NavigationDestination, destino.rotulo),
@@ -1355,6 +1369,11 @@ void main() {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: '/loja/carrinho',
+        // A assercao de `SubDestino` cobra glifo de todo item VIVO, e este
+        // fixture e vivo de proposito (`viraItem` e o que ele afirma logo
+        // abaixo). O glifo nao e do registro: inventar endereco e o assunto
+        // deste caso, inventar desenho nao.
+        icone: Icons.shopping_cart_outlined,
       );
       expect(inventado.viraItem, isTrue);
       expect(
@@ -2032,6 +2051,443 @@ void main() {
             'uma secao perdeu os atalhos dela.',
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. CADA SUBITEM TEM GLIFO, E NENHUM GLIFO DIZ DUAS COISAS NA MESMA SECAO
+  //
+  // Pedido do cliente de 18/10/2026, literal: *"nos subitens dos menus voce
+  // deve colocar icones tambem, para deixar o aplicativo mais bonito"*. E a
+  // restricao que vem com ele, que nao e estetica: *houve colisao lida no
+  // aparelho em 22/09* -- `edit_calendar` significando duas coisas dentro da
+  // `Rede` --, e por isso o portao nao se contenta com "tem icone".
+  //
+  // Os tres casos sao independentes de proposito:
+  //   (a) a gaveta MONTADA pinta um glifo em cada linha -- prova de tela, e
+  //       nao de registro; reprova se `leading` sair de `ItemDaGaveta`;
+  //   (b) o glifo pintado e o que o registro declara -- sem isto, pintar
+  //       sempre o mesmo icone passaria pelo caso (a);
+  //   (c) dentro de uma secao, dois itens nunca dividem o mesmo glifo.
+  group('8. cada subitem pinta um glifo, e nenhum glifo colide', () {
+    /// A lista que a gaveta de [rotaDaSecao] pinta, na ordem dela.
+    ///
+    /// **Reproduz o recorte da gaveta, inclusive o por ROTA:** global cuja
+    /// rota a secao ja oferece nao e pintado duas vezes. Uma lista a mao aqui
+    /// mediria outra gaveta.
+    List<SubDestino> pintadosDe(String rotaDaSecao) {
+      final itens = RegistroDeSubDestinos.itensDe(rotaDaSecao);
+      final jaOferecidas = itens.map((i) => i.rota).toSet();
+      return <SubDestino>[
+        ...itens,
+        ...RegistroDeSubDestinos.globais.where(
+          (g) => !jaOferecidas.contains(g.rota),
+        ),
+      ];
+    }
+
+    for (final destino in secoesDaBarra) {
+      testWidgets(
+        'a gaveta de "${destino.rotulo}" pinta um glifo em cada linha',
+        (tester) async {
+          await abrirOApp(
+            tester,
+            rede: _semServidor,
+            deposito: depositoLogado(),
+          );
+          await irParaASecao(tester, destino.rotulo);
+          await abrirAGaveta(tester);
+
+          final pintados = pintadosDe(destino.rota);
+          expect(
+            pintados,
+            isNotEmpty,
+            reason:
+                'REPROVA: a gaveta de "${destino.rotulo}" nao pinta linha '
+                'nenhuma. Sem item nao ha glifo para conferir, e o caso '
+                'passaria por vazio.',
+          );
+          for (final item in pintados) {
+            final linha = find.byKey(
+              ItemDaGaveta.chaveDe(destino.rota, item.rotulo),
+            );
+            await tester.scrollUntilVisible(
+              linha,
+              BichuEspaco.e16,
+              scrollable: rolavelDaGaveta,
+            );
+            await tester.ensureVisible(linha);
+            await tester.pumpAndSettle();
+            // O GLIFO DA FRENTE, e nao a seta da direita. `find.byIcon` sobre
+            // a linha inteira acharia `chevron_right` tambem e o caso ficaria
+            // verde com a affordance no lugar do icone do item.
+            // A chave de `ItemDaGaveta` esta NO `ListTile`, e por isso o
+            // `linha` ja e ele.
+            final tile = tester.widget<ListTile>(linha);
+            expect(
+              tile.leading,
+              isA<Icon>(),
+              reason:
+                  'REPROVA: a linha "${item.rotulo}" da gaveta de '
+                  '"${destino.rotulo}" nao tem glifo no `leading`. O cliente '
+                  'pediu icone em TODO subitem em 18/10/2026; uma linha so de '
+                  'texto no meio de linhas com glifo e o desalinho que o '
+                  'pedido veio fechar.',
+            );
+          }
+        },
+      );
+    }
+
+    for (final destino in secoesDaBarra) {
+      testWidgets(
+        'o glifo pintado em "${destino.rotulo}" e o que o registro declara',
+        (tester) async {
+          await abrirOApp(
+            tester,
+            rede: _semServidor,
+            deposito: depositoLogado(),
+          );
+          await irParaASecao(tester, destino.rotulo);
+          await abrirAGaveta(tester);
+
+          for (final item in pintadosDe(destino.rota)) {
+            final linha = find.byKey(
+              ItemDaGaveta.chaveDe(destino.rota, item.rotulo),
+            );
+            await tester.scrollUntilVisible(
+              linha,
+              BichuEspaco.e16,
+              scrollable: rolavelDaGaveta,
+            );
+            await tester.ensureVisible(linha);
+            await tester.pumpAndSettle();
+            final tile = tester.widget<ListTile>(linha);
+            expect(
+              (tile.leading! as Icon).icon,
+              item.icone,
+              reason:
+                  'REPROVA: a linha "${item.rotulo}" pinta um glifo que nao e '
+                  'o que o registro declara para ela. Um `leading` fixo '
+                  'passaria pelo caso de presenca e deixaria as seis linhas '
+                  'da gaveta com o mesmo desenho.',
+            );
+          }
+        },
+      );
+    }
+
+    test('nenhuma secao tem dois itens com o MESMO glifo', () {
+      // A regra que a colisao de 22/09 deixou: um glifo, um sentido, dentro
+      // da secao. A conta e por `codePoint` e nao por identidade de objeto --
+      // `Icons.pets` e um `IconData` novo a cada leitura em algumas versoes,
+      // e comparar por objeto aprovaria duas linhas iguais.
+      final colisoes = <String>[];
+      for (final rotaDaSecao in RegistroDeSubDestinos.porSecao.keys) {
+        final itens = RegistroDeSubDestinos.itensDe(rotaDaSecao);
+        final jaOferecidas = itens.map((i) => i.rota).toSet();
+        final pintados = <SubDestino>[
+          ...itens,
+          ...RegistroDeSubDestinos.globais.where(
+            (g) => !jaOferecidas.contains(g.rota),
+          ),
+        ];
+        final porGlifo = <int, List<String>>{};
+        for (final item in pintados) {
+          porGlifo.putIfAbsent(item.icone!.codePoint, () => <String>[])
+              .add(item.rotulo);
+        }
+        for (final entrada in porGlifo.entries) {
+          if (entrada.value.length > 1) {
+            colisoes.add('$rotaDaSecao: ${entrada.value.join(' = ')}');
+          }
+        }
+      }
+      expect(
+        colisoes,
+        isEmpty,
+        reason:
+            'REPROVA: dois itens da MESMA secao dividem o mesmo glifo:\n'
+            '  ${colisoes.join('\n  ')}\n'
+            'E a colisao que o cliente leu no aparelho em 22/09: o mesmo '
+            'desenho significando duas viagens diferentes na mesma lista. '
+            'Troque o glifo, dentro da familia embutida (Material Symbols, '
+            'design system 10.1) -- nenhum vetor novo, nada baixado.',
+      );
+    });
+
+    test('CONTRAPROVA: o conferidor de colisao ACHA uma colisao plantada', () {
+      // Sem esta prova negativa, o caso acima ficaria verde no dia em que a
+      // conta por `codePoint` parasse de agrupar.
+      const a = SubDestino(
+        rotulo: 'Um',
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: '/um',
+        icone: Icons.qr_code_scanner,
+      );
+      const b = SubDestino(
+        rotulo: 'Outro',
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: '/outro',
+        icone: Icons.qr_code_scanner,
+      );
+      final porGlifo = <int, List<String>>{};
+      for (final item in <SubDestino>[a, b]) {
+        porGlifo.putIfAbsent(item.icone!.codePoint, () => <String>[])
+            .add(item.rotulo);
+      }
+      expect(
+        porGlifo.values.where((l) => l.length > 1),
+        isNotEmpty,
+        reason:
+            'REPROVA: duas linhas com o MESMO glifo passaram pelo '
+            'conferidor. O caso acima nao reprova nada.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. `Meus dados` NAO E GLOBAL (18/10/2026)
+  //
+  // Pedido do cliente, literal: *"o menu `Meus dados` dentro da pagina Pets e
+  // Perto nao faz sentido nenhum com o contexto dessa secao"*. Ele aparecia
+  // nas duas porque estava em [RegistroDeSubDestinos.globais], o grupo que
+  // toda secao mostra -- e nao no inventario de `Pets` nem no de `Perto`.
+  //
+  // **Os dois lados sao cobrados.** Tirar um item de menu e facil de fazer
+  // errado de duas maneiras opostas: deixando a viagem inalcancavel, ou
+  // deixando-a onde ele mandou tirar. O caso (b) cobra a primeira e o (a) a
+  // segunda.
+  group('9. `Meus dados` saiu de `Pets` e de `Perto`, e nao ficou orfao', () {
+    for (final rotulo in <String>['Pets', 'Perto', 'Rede', 'Loja']) {
+      testWidgets('(a) a gaveta de "$rotulo" NAO oferece `Meus dados`', (
+        tester,
+      ) async {
+        await abrirOApp(
+          tester,
+          rede: _semServidor,
+          deposito: depositoLogado(),
+        );
+        await irParaASecao(tester, rotulo);
+        await abrirAGaveta(tester);
+        final vistos = await textosDaGavetaInteira(tester);
+        expect(
+          vistos,
+          isNot(contains('Meus dados')),
+          reason:
+              'REPROVA: a gaveta de "$rotulo" oferece `Meus dados`. O cliente '
+              'disse em 18/10/2026 que o item "nao faz sentido nenhum com o '
+              'contexto dessa secao": os dados da conta sao do `Perfil`, que '
+              'tem endereco proprio. Global e o destino que vale em QUALQUER '
+              'secao, e este nao e.\n'
+              'A gaveta mostrou: ${vistos.join(' · ')}',
+        );
+        // E a gaveta NAO ficou vazia, que era a objecao que criou o grupo
+        // global. Sem esta metade, apagar os globais inteiros passaria.
+        expect(
+          vistos,
+          contains('Escanear uma tag'),
+          reason:
+              'REPROVA: a gaveta de "$rotulo" perdeu `Escanear uma tag` '
+              'junto. Ela e o global que SOBROU, e e ela que mantem a gaveta '
+              'fixa defensavel: ler a plaquinha de um bicho na rua faz '
+              'sentido em qualquer secao e nao exige conta.',
+        );
+      });
+    }
+
+    testWidgets('(b) `Meus dados` continua na gaveta do `Perfil`, e NAVEGA', (
+      tester,
+    ) async {
+      // A metade que impede a correcao de virar beco: a tela
+      // `/perfil/dados` tem de continuar alcancavel por menu, e o lugar dela
+      // e a secao da conta.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+      await irParaAConta(tester);
+      await abrirAGaveta(tester);
+      final alvo = find.byKey(
+        ItemDaGaveta.chaveDe(Rotas.perfil, 'Meus dados'),
+      );
+      await tester.scrollUntilVisible(
+        alvo,
+        BichuEspaco.e16,
+        scrollable: rolavelDaGaveta,
+      );
+      await tester.ensureVisible(alvo);
+      await tester.pumpAndSettle();
+      expect(
+        alvo,
+        findsOneWidget,
+        reason:
+            'REPROVA: `Meus dados` nao esta na gaveta do `Perfil`. Ele saiu '
+            'dos globais em 18/10/2026 por pedido do cliente, e sair dos '
+            'globais E do submenu da conta no mesmo movimento deixaria '
+            '`/perfil/dados` sem porta de menu nenhuma.',
+      );
+      await tester.tap(alvo);
+      await tester.pumpAndSettle();
+      final roteador = GoRouter.of(tester.element(find.byType(Scaffold).first));
+      expect(
+        roteador.routerDelegate.currentConfiguration.matches.last
+            .matchedLocation,
+        Rotas.dadosPessoais,
+        reason:
+            'REPROVA: o item `Meus dados` da gaveta do `Perfil` existe e nao '
+            'abre `/perfil/dados`. Item que nao navega e acao sem destino '
+            '(criterio 2 da BICHUS-62).',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. A MARGEM DA FOTO, E O ORCAMENTO DO TITULO NA MESMA MEDIDA
+  //
+  // Pedido do cliente (18/10/2026): *"o icone do perfil na barra superior,
+  // acho que esta faltando uma margem do lado direito, esta desalinhado"*.
+  //
+  // **MEDIDO, em 320 dp a 200%, logado, antes do conserto:** o alvo de 48 dp
+  // da foto ia de 272,00 a 320,00 -- encostado na borda, 0,00 dp de folga --
+  // e o circulo de 32 dp ficava centrado nele, a **8,00 dp** da borda da
+  // tela. Os vizinhos da mesma barra tem 20,00 dp de ar em volta do glifo
+  // (hamburguer e `criar` sao alvos de 64 com glifo de 24 centrado) e
+  // `layout.margem-celular` fixa a margem lateral da tela em 16 dp, que e a
+  // mesma do corpo. A foto era o unico controle encostado na borda.
+  //
+  // **O CONSERTO NAO PODE SAIR DO TITULO, e e por isso que este grupo mede as
+  // duas coisas juntas.** Medido: com um `Padding(right: 8)` por fora, o
+  // circulo chega aos 16,00 dp e o lado direito passa a custar 56 dp -- o
+  // orcamento de `Rede` e `Perto` cai de 144,00 para 136,00 e **`Rede`
+  // (138,32 dp) passa a sair com reticencia**. A margem veio de DENTRO do
+  // alvo: o alvo continua 272..320 e o circulo andou para 272..304.
+  //
+  // Um caso que medisse so a margem aprovaria a versao que corta `Rede`; um
+  // que medisse so o titulo aprovaria a volta da margem de 8,00. Os dois
+  // numeros ficam no mesmo caso para que a troca entre eles nao passe calada.
+  group('10. a foto tem margem, e ela nao foi tirada do titulo', () {
+    for (final destino in secoesDaBarra) {
+      testWidgets(
+        'em "${destino.rotulo}": 16,00 dp de margem na foto e o orcamento do '
+        'titulo intacto',
+        (tester) async {
+          tester.view.physicalSize = const Size(960, 2000);
+          tester.view.devicePixelRatio = 3;
+          addTearDown(tester.view.reset);
+          // LOGADO: e o arranjo mais cheio, e o unico em que `Rede` e `Perto`
+          // desenham a porta de criar. Deslogado a barra sobra espaco e o
+          // caso aprovaria a versao que corta o titulo de quem tem conta.
+          await abrirOApp(
+            tester,
+            rede: _semServidor,
+            deposito: depositoLogado(),
+            escala: 2,
+          );
+          await irParaASecao(tester, destino.rotulo);
+
+          final barra = tester.getRect(find.byType(AppBar));
+          final alvoDaFoto = tester.getRect(find.byType(AvatarDaConta));
+          final circulo = tester.getRect(
+            find.byKey(AvatarDaConta.chaveDoCirculo),
+          );
+
+          // (1) A MARGEM QUE O CLIENTE PEDIU, no DESENHO.
+          expect(
+            barra.right - circulo.right,
+            BichuLayout.margemCelular,
+            reason:
+                'REPROVA: o circulo da foto esta a '
+                '${(barra.right - circulo.right).toStringAsFixed(2)} dp da '
+                'borda da tela em "${destino.rotulo}", e nao aos '
+                '${BichuLayout.margemCelular.toStringAsFixed(2)} dp de '
+                '`layout.margem-celular`. Media 8,00 dp antes de 18/10/2026 '
+                'e o cliente leu isso como desalinho -- era o unico controle '
+                'da barra encostado na borda, com os vizinhos a 20,00 dp.',
+          );
+
+          // (2) A MARGEM VEIO DE DENTRO DO ALVO, e nao do orcamento.
+          expect(
+            alvoDaFoto.width,
+            AvatarDaConta.alvo,
+            reason:
+                'REPROVA: o alvo da foto mede '
+                '${alvoDaFoto.width.toStringAsFixed(2)} dp de largura em '
+                '"${destino.rotulo}", e nao ${AvatarDaConta.alvo}. Encolher o '
+                'alvo para ganhar margem desce abaixo do piso do M3 e do '
+                'SC 2.5.8; alarga-lo custa titulo.',
+          );
+          expect(
+            barra.right - alvoDaFoto.right,
+            0.0,
+            reason:
+                'REPROVA: o ALVO da foto saiu da borda '
+                '(${(barra.right - alvoDaFoto.right).toStringAsFixed(2)} dp '
+                'de folga) em "${destino.rotulo}". A margem tem de ser '
+                'INTERNA: um `Padding` por fora empurra o alvo e o lado '
+                'direito passa a custar 56 dp -- medido, `Rede` (138,32 dp) '
+                'sai com reticencia a 200%.',
+          );
+
+          // (3) O ORCAMENTO DO TITULO, medido do leiaute e nao de uma conta.
+          //
+          // De onde o titulo COMECA ate onde o primeiro controle do lado
+          // direito COMECA. Nada de somar larguras imaginadas: se um controle
+          // mudar de tamanho, este numero muda com ele.
+          final titulo = find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(destino.rotulo),
+          );
+          expect(titulo, findsOneWidget);
+          final acoes = find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byType(IconButton),
+          );
+          final bordasEsquerdas = <double>[
+            for (var i = 0; i < acoes.evaluate().length; i++)
+              tester.getRect(acoes.at(i)).left,
+          ]..sort();
+          // O hamburguer e o primeiro da lista e nao e acao: o titulo ja
+          // comeca depois dele.
+          final primeiraAcao = bordasEsquerdas.last == bordasEsquerdas.first
+              ? barra.right
+              : bordasEsquerdas[1];
+          final orcamento = primeiraAcao - tester.getRect(titulo).left;
+          final comPortaDeCriar = acoes.evaluate().length == 3;
+          expect(
+            orcamento,
+            comPortaDeCriar ? 144.0 : 208.0,
+            reason:
+                'REPROVA: o titulo de "${destino.rotulo}" recebe '
+                '${orcamento.toStringAsFixed(2)} dp em 320 dp a 200%, e o '
+                'medido em 18/10/2026 e '
+                '${comPortaDeCriar ? '144,00 (hamburguer 64 + criar 64 + foto 48)' : '208,00 (hamburguer 64 + foto 48)'}'
+                '. A margem da foto NAO podia mexer neste numero: fechar os '
+                '8 dp de margem com o orcamento do titulo e desfazer o '
+                '`titleSpacing: 0` de 19/10 pelo outro lado.',
+          );
+
+          // (4) E o titulo continua inteiro onde ja estava inteiro.
+          //
+          // `Perto` e a excecao medida e ela esta cobrada no grupo 3: ela
+          // pede 172,90 dp contra os 144,00 do orcamento -- deficit de
+          // **28,90 dp**, o mesmo de antes da margem, porque a margem custou
+          // 0,00 dp. Fechar aquele deficit exige tirar um controle que o
+          // cliente pos na barra, e e decisao dele.
+          final paragrafo = tester.renderObject<RenderParagraph>(titulo);
+          expect(
+            paragrafo.didExceedMaxLines,
+            destino.rotulo == 'Perto' ? isTrue : isFalse,
+            reason: destino.rotulo == 'Perto'
+                ? 'REPROVA: "Perto" NAO foi cortada. Se a barra ganhou '
+                      'espaco, refaca a conta do deficit de 28,90 dp em vez '
+                      'de apagar esta excecao.'
+                : 'REPROVA: o titulo "${destino.rotulo}" passou a ser CORTADO '
+                      'com reticencia. A margem da foto nao pode ter sido '
+                      'paga com titulo: significado que some com reticencia '
+                      'nao foi transferido para lugar nenhum (UX 27.4.2).',
+          );
+        },
+      );
+    }
   });
 
   // -------------------------------------------------------------------------
