@@ -1500,7 +1500,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = '201cb4ec32ee39e427d3645c699d0e9d8da537d5'; // LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) DEPOIS do conserto do ACHADO DA MESCLA: os dois itens vivos novos da gaveta (`Pedidos de conexao` e `Bloqueados`) nasceram sem glifo porque a assercao que o exige veio de OUTRO ramo, e a uniao sem conflito quebrava `const_eval_throws_exception`. Ver `gaveta_de_secoes.dart`. Substitui f11be6f92fdf8472232005651e0257cdffd72763.
+const String _arvoreDasTelas = 'c46ae91fdb80c21c16742669fb38d8d1e83a2e4c'; // LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

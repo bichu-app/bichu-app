@@ -2805,7 +2805,20 @@ void main() {
           // 19/10 e **nao chegou a zero**. A margem da foto continua custando
           // 0,00 dp. Fechar os 12,90 que faltam exige tirar outro controle da
           // barra ou encurtar o rotulo, e as duas coisas sao decisao dele.
-          final paragrafo = tester.renderObject<RenderParagraph>(titulo);
+          // ACHADO DA MESCLA DE 19/10/2026: desce ao `RichText`, como o
+          // grupo 3 deste mesmo arquivo ja fazia.
+          //
+          // A frente `bloqueados-e-titulo` passou a declarar
+          // `semanticsLabel` no titulo da barra (para o nome ANUNCIADO nao
+          // abreviar junto com o pintado). Com `semanticsLabel`, o `Text`
+          // embrulha o paragrafo e `find.text` passa a devolver
+          // `RenderSemanticsAnnotations` -- o cast para `RenderParagraph`
+          // estoura com `_TypeError`. Este caso e da frente da MARGEM DA
+          // FOTO, que nao tinha o rotulo de semantica na base dela, e por
+          // isso nenhum dos dois ramos reprovava sozinho.
+          final paragrafo = tester.renderObject<RenderParagraph>(
+            find.descendant(of: titulo, matching: find.byType(RichText)),
+          );
           expect(
             paragrafo.didExceedMaxLines,
             destino.rotulo == 'Perto' ? isTrue : isFalse,

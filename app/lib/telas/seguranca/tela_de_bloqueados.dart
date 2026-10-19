@@ -7,6 +7,7 @@ import '../../api/modelos_seguranca.dart';
 import '../../api/seguranca_api.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 
 /// **PESSOAS BLOQUEADAS** — a lista de quem esta conta bloqueou, e o único
@@ -162,8 +163,17 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
 
     return Scaffold(
       appBar: AppBar(title: const Text(TelaDeBloqueados.titulo)),
-      body: RefreshIndicator(
-        onRefresh: _carregar,
+      // ACHADO DA MESCLA DE 19/10/2026: era `RefreshIndicator` cru.
+      //
+      // A frente `estado-deslogado-nas-secoes` trouxe o ponto unico do gesto
+      // (`widgets/arrastar_para_atualizar.dart`) e o portao
+      // `nenhuma tela usa RefreshIndicator cru`, que le `lib/` do disco. Esta
+      // tela nasceu noutra frente, com o indicador colado dentro, e as duas
+      // nao se cruzam em nenhuma linha -- o git mesclou sem conflito e o
+      // portao reprovou sobre a UNIAO. A conversao e a mesma que
+      // `tela_pedidos_de_conexao.dart` recebeu em 18/10.
+      body: ArrastarParaAtualizar(
+        aoAtualizar: _carregar,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
