@@ -33,6 +33,7 @@ import 'package:bichu/api/modelos_conversa.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/mensagens/area_de_mensagens.dart';
 import 'package:bichu/telas/mensagens/tela_da_conversa.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,9 +112,13 @@ Map<String, dynamic> paginaDeConversas(
   List<Map<String, dynamic>> itens, {
   String? proximoCursor,
   int naoLidas = 0,
+  int? total,
 }) => <String, dynamic>{
   'items': itens,
   'unread_count': naoLidas,
+  // `total` do contrato: quantas o RECORTE tem no servidor. Sem `total`
+  // explicito, o tamanho da lista -- que e o caso da pagina unica.
+  'total': total ?? itens.length,
   'next_cursor': proximoCursor,
 };
 
@@ -199,6 +204,7 @@ Future<void> abrirAMensagens(
   required ServidorDeConversas servidor,
   String rotaInicial = RotasDeMensagens.area,
   ValueChanged<int>? aoContar,
+  List<RouteBase> rotasExtra = const <RouteBase>[],
 }) async {
   final api = apiDe(servidor);
   final roteador = GoRouter(
@@ -223,12 +229,38 @@ Future<void> abrirAMensagens(
           conversas: api,
         ),
       ),
+      // ROTAS QUE A ARVORE AINDA NAO TEM, para a isca que mede um destino.
+      //
+      // Existe por `PortaDoPerfilDoParticipante`: a tela de perfil de terceiro
+      // nao esta nesta arvore (ela e de `feat/comunidade-perfil-e-conexao`), e
+      // a isca do toque no icone precisa de ALGUM destino para provar que o
+      // toque navega. Declarada pela isca e nao aqui: a bancada nao deve ter
+      // opiniao sobre o endereco de uma tela que nao existe.
+      ...rotasExtra,
     ],
   );
   addTearDown(roteador.dispose);
   await tester.pumpWidget(
     MaterialApp.router(theme: BichuTheme.claro, routerConfig: roteador),
   );
+  await tester.pumpAndSettle();
+}
+
+/// ROLA ATE O FIM da lista, que e o que pede a pagina seguinte.
+///
+/// **No `ListView`, e nunca em `Scrollable.first`.** Medido: o campo de busca
+/// tem um `Scrollable` proprio dentro dele (o `EditableText`), ele vem ANTES
+/// da lista na arvore, e o gesto ia para ele -- a lista nao rolava, a pagina
+/// seguinte nao era pedida, e a isca reprovava como se a tela estivesse errada.
+///
+/// **`fling` e nao `drag`**: a rolagem infinita dispara num `ScrollController`
+/// que escuta a POSICAO, e o `fling` leva a lista ao fim de uma vez. O
+/// `pumpAndSettle` espera a chamada que o gatilho disparou.
+///
+/// Num lugar so porque quatro iscas precisam do mesmo gesto: duas copias
+/// divergiriam no dia em que a folga do gatilho mudasse.
+Future<void> rolarAteOFim(WidgetTester tester) async {
+  await tester.fling(find.byType(ListView), const Offset(0, -3000), 4000);
   await tester.pumpAndSettle();
 }
 
@@ -801,11 +833,16 @@ void main() {
         );
         expect(find.byType(ElevatedButton), findsNothing);
         expect(find.byType(OutlinedButton), findsNothing);
+        // E A BARRA DE LISTAGEM NAO NASCE no vazio SEM recorte: buscar o nada
+        // e um controle sem desfecho, e a decisao e do componente
+        // (`BarraDeListagem.desenha`). O caso em que ela FICA -- a pessoa
+        // buscou e nao sobrou nada -- esta em `busca_da_area_test.dart`.
+        expect(find.byType(BarraDeListagem), findsNothing);
       },
     );
 
     testWidgets(
-      'nada de busca, filtro nem ordenacao: nao ha o que recortar',
+      'TEM busca, e nao tem filtro nem ordenacao: so a busca existe na rota',
       (tester) async {
         final servidor = ServidorDeConversas(
           <String, http.Response Function(http.Request)>{
@@ -815,8 +852,17 @@ void main() {
         );
         await abrirAMensagens(tester, servidor: servidor);
 
-        expect(find.byType(TextField), findsNothing);
-        expect(find.byIcon(Icons.search), findsNothing);
+        // O CAMPO EXISTE (decisao do cliente, 18/10). Isto REVERTE o caso
+        // anterior deste arquivo, que afirmava o contrario.
+        expect(find.byType(TextField), findsOneWidget);
+        // E ele e o do COMPONENTE COMPARTILHADO, e nao um `TextField` solto:
+        // o padrao de listagem manda reaproveitar, e uma copia divergiria.
+        expect(find.byType(BarraDeListagem), findsOneWidget);
+        expect(find.byType(CampoDeBuscaDaListagem), findsOneWidget);
+        // FILTRO E ORDENACAO NAO: `listConversations` nao declara recorte de
+        // lista fechada e a ordem e uma so, e a `BarraDeListagem` nao desenha
+        // gatilho sem desfecho.
+        expect(find.byType(GatilhoDeRecorteNoCorpo), findsNothing);
         expect(find.byIcon(Icons.filter_list), findsNothing);
         expect(find.byIcon(Icons.swap_vert), findsNothing);
       },
@@ -853,10 +899,13 @@ void main() {
         // 400 na abertura da tela.
         final primeira = servidor.chamadasA('GET /v1/conversations').first;
         expect(primeira.url.queryParameters.containsKey('cursor'), isFalse);
-        expect(primeira.url.queryParameters['limit'], '20');
+        // DEZ, e o numero e do cliente (18/10): *"trazendo as 10 ultimas
+        // conversas e incrementando por 10"*.
+        expect(primeira.url.queryParameters['limit'], '10');
 
-        await tester.tap(find.text('Carregar mais conversas'));
-        await tester.pumpAndSettle();
+        // O BOTAO SAIU: a segunda pagina vem da ROLAGEM.
+        expect(find.text('Carregar mais conversas'), findsNothing);
+        await rolarAteOFim(tester);
 
         final segunda = servidor.chamadasA('GET /v1/conversations').last;
         expect(segunda.url.queryParameters['cursor'], 'cursor-da-pagina-2');

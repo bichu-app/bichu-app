@@ -3596,9 +3596,26 @@ paths:
       tags: [conversations]
       x-effects: []
       summary: Minhas conversas
+      description: |
+        A lista sai **da atividade mais recente para a mais antiga**: a chave de
+        ordem e `coalesce(last_message_at, opened_at)`, e nao `opened_at`.
+
+        A diferenca e de produto, e nao de gosto: a conversa que o tutor precisa
+        achar e a que acabou de receber recado, e nao a que nasceu por ultimo.
+        Conversa sem mensagem visivel cai na abertura dela, que e o unico
+        instante que ela tem -- e por isso a chave e um `coalesce` e nao uma
+        coluna. O `cursor` carrega essa MESMA chave, entao a pagina seguinte
+        continua de onde a anterior parou.
+
+        `q` recorta por **nome do pet** e pelo **nome de exibicao do outro
+        lado**, dentro das conversas de quem chamou. Ele nao e busca de pessoas:
+        a autorizacao continua no `WHERE` (ADR-0021), nenhuma conversa de
+        terceiro entra no recorte, e um termo que nao casa nada responde `200`
+        com `items: []` -- nunca `404`.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/ConversationSearch'
       responses:
         '200':
           description: Conversas.
@@ -10276,6 +10293,20 @@ components:
       name: cursor
       in: query
       schema: { type: string, maxLength: 256 }
+    # O termo da busca da area de mensagens.
+    #
+    # `minLength: 2` como na `Rede` e na `Loja`: uma letra casaria quase toda a
+    # lista e a pessoa leria o resultado como se a busca nao tivesse funcionado.
+    # O piso vira estado do controle no aplicativo (a lupa nao habilita), e nao
+    # um 400 que a tela precisa traduzir.
+    ConversationSearch:
+      name: q
+      in: query
+      required: false
+      description: |
+        Recorta por nome do pet e por nome de exibicao do outro lado, **dentro
+        das conversas de quem chamou**. Nao e busca de pessoas.
+      schema: { type: string, minLength: 2, maxLength: 80 }
     Limit:
       name: limit
       in: query
@@ -12467,11 +12498,23 @@ components:
 
     ConversationPage:
       type: object
-      required: [items, unread_count]
+      required: [items, unread_count, total]
       properties:
         items:
           type: array
           items: { $ref: '#/components/schemas/Conversation' }
+        total:
+          type: integer
+          minimum: 0
+          description: |
+            Quantas conversas o recorte atual tem **no servidor** -- isto e, com
+            `q` aplicado e sem `limit`. Nao e `items.length`.
+
+            Ele existe porque a linha de resumo da listagem (`<n> conversas`) e
+            de um componente compartilhado por toda pagina com registros, e
+            alimenta-lo com o tamanho da pagina faria a tela dizer `10` a quem
+            tem 57. **Nada a ver com `unread_count`**: este conta o recorte,
+            aquele conta o sino.
         unread_count:
           type: integer
           minimum: 0

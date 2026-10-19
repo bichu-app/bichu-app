@@ -1171,11 +1171,50 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// no lado de development: 50b766d431)
 ///
 ///
+/// DESTRAVADO EM 18/10 (a BUSCA, a ROLAGEM INFINITA e o TOQUE NO ICONE da area
+/// de mensagens -- os quatro pedidos do cliente para a aba `AuAu`). **UM
+/// arquivo desta pasta muda**: `mensagens/area_de_mensagens.dart`.
 ///
+/// O que mudou nele, e por que cada parte e pedido dele por escrito:
 ///
+/// - **O campo de busca**, pelo componente compartilhado `BarraDeListagem`
+///   (*"adicione um campo de busca/filtro na secao de mensagens"*). Sem copia:
+///   `widgets/barra_de_listagem.dart` **nao foi tocado** por esta frente, e
+///   nem precisou -- nao ha filtro nem ordenacao aqui, porque
+///   `listConversations` nao declara recorte de lista fechada, e o proprio
+///   componente nao desenha gatilho sem desfecho.
+/// - **A rolagem infinita de dez em dez** (*"trazendo as 10 ultimas conversas
+///   e incrementando por 10"*): o botao `Carregar mais conversas` saiu, e
+///   entrou um `ScrollController` com gatilho de folga mais um segundo gatilho
+///   para a lista que nao enche a tela -- sem ele, `maxScrollExtent` em zero
+///   deixaria o cursor sem consumidor e a lista pararia em dez, em silencio.
+/// - **O toque no icone da conversa** (*"faca a imagem ser clicada levando o
+///   usuario para o perfil do usuario"*), num ponto unico e nomeado,
+///   `PortaDoPerfilDoParticipante`. Ele nasce devolvendo `null` porque a tela
+///   de perfil de TERCEIRO nao existe em `origin/development` -- ela e de
+///   `feat/comunidade-perfil-e-conexao`, por decisao do cliente --, e com
+///   `null` o icone continua decorativo em vez de se anunciar como um botao
+///   que nao leva a lugar nenhum.
+/// - **A FOTO NAO ENTROU**, e o cabecalho daquele arquivo tem a medida: o
+///   contrato proibe foto de perfil em `participants` por extenso e em dois
+///   pontos, o ADR-0025 item 2 proibe avatar de terceiro, e o desenho da
+///   frente de perfil recusa esta superficie por nome.
 ///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os importes novos
+/// do arquivo sao `widgets/barra_de_listagem.dart` e nada mais -- o
+/// `widgets/botao_primario.dart` SAIU junto com o botao de carregar mais. A
+/// CAMERA continua atras da porta: esta frente nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada (entre elas a que deixa o gatilho de
+/// filtro so-icone na `BarraDeListagem`), e valor de ramo isolado nao
+/// sobrevive a uniao. (antes: 145640db9f)
+const String _arvoreDasTelas = '4930ba4dc4b3f15343ffcaa9d37b02040c2fe749'; // BUSCA, ROLAGEM E TOQUE NA AREA DE MENSAGENS (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

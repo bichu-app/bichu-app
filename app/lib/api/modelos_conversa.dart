@@ -401,10 +401,23 @@ class PaginaDeConversas {
   const PaginaDeConversas({
     required this.items,
     required this.unreadCount,
+    required this.total,
     this.nextCursor,
   });
 
   final List<Conversa> items;
+
+  /// `total` do contrato: quantas conversas o RECORTE tem **no servidor**.
+  ///
+  /// **Nem `items.length` nem [unreadCount]**, e os tres sao numeros
+  /// diferentes: o primeiro e o tamanho desta pagina (dez), o segundo e o sino
+  /// da conta inteira, e este e quantas conversas satisfazem a busca desta
+  /// chamada.
+  ///
+  /// E ele que alimenta a linha de resumo da `BarraDeListagem` (`12
+  /// conversas`). Com `items.length` ali, a tela diria `10` a quem tem 57 --
+  /// e a pessoa leria que a busca nao achou o resto.
+  final int total;
 
   /// `unread_count` do contrato: o numero do **sino**, da conta inteira.
   ///
@@ -427,18 +440,26 @@ class PaginaDeConversas {
     final itens = json['items'];
     final cursor = json['next_cursor'];
     final contador = json['unread_count'];
+    final quantas = json['total'];
+    final lidos = itens is! List
+        ? const <Conversa>[]
+        : <Conversa>[
+            for (final item in itens)
+              if (Conversa.doJson(item) case final Conversa c) c,
+          ];
     return PaginaDeConversas(
       nextCursor: cursor is String ? cursor : null,
+      // `total` e `required` no contrato. Ausente ou de tipo inesperado, cai
+      // no tamanho da lista LIDA: e a unica afirmacao verdadeira que sobra --
+      // "ha pelo menos estas" --, e zero apagaria a barra de listagem inteira
+      // numa tela que tem conversas na frente da pessoa. O caso existe de
+      // verdade: o APK publicado le esta resposta e nao conhece `total`.
+      total: quantas is int && quantas >= 0 ? quantas : lidos.length,
       // `unread_count` e `required` no contrato. Ausente ou de tipo
       // inesperado, zero: um sino apagado e melhor que um sino com numero
       // inventado.
       unreadCount: contador is int && contador > 0 ? contador : 0,
-      items: itens is! List
-          ? const <Conversa>[]
-          : <Conversa>[
-              for (final item in itens)
-                if (Conversa.doJson(item) case final Conversa c) c,
-            ],
+      items: lidos,
     );
   }
 }

@@ -36,6 +36,7 @@ import type {
   NovaDenuncia,
   NovaMensagem,
   Pagina,
+  PaginaDaLista,
   PaginaDoAchador,
   EspecieDoSistema,
 } from '../../ports/conversation-repository.js';
@@ -113,6 +114,68 @@ function comoMensagem(linha: LinhaDaMensagem): MensagemGravada {
     photoObjectKey: linha.photo_object_key,
     createdAt: linha.created_at,
   };
+}
+
+/**
+ * A ULTIMA MENSAGEM da conversa, como subconsulta correlacionada.
+ *
+ * Num lugar só porque ela aparece em TRÊS: as duas projeções (`corpo_da_ultima`
+ * e `ultima_mensagem_em`) e a CHAVE DE ORDEM da lista. Escrita três vezes, a
+ * ordem divergiria da prévia no primeiro `ORDER BY` que alguém ajustasse — e o
+ * sintoma seria uma lista ordenada por uma mensagem que não é a mostrada.
+ */
+const ULTIMA_MENSAGEM = (coluna: 'body' | 'created_at') => sql`(
+        SELECT msg.${sql.raw(coluna)} FROM conversation_messages msg
+        WHERE msg.conversation_id = conversations.id
+        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
+      )`;
+
+/**
+ * A CHAVE DE ORDEM E DE CURSOR da lista: `coalesce(última mensagem, abertura)`.
+ *
+ * **Decisão do cliente de 18/10/2026**, literal: *"ordene por última
+ * mensagem"*. Até aqui a lista ordenava por `conversations.opened_at`, que é
+ * quando a conversa NASCEU — e a conversa que o tutor abre o aplicativo para
+ * achar é a que acabou de receber recado, não a que nasceu por último.
+ *
+ * **O `coalesce` não é defensivo, é a regra.** Conversa sem mensagem visível
+ * existe (ela nasce do aviso da plaquinha e a primeira mensagem pode não ter
+ * sido gravada ainda), e `NULL` em `ORDER BY ... DESC` iria para o TOPO no
+ * Postgres (`NULLS FIRST` é o default do `DESC`) — a lista abriria com as
+ * conversas sem nada escrito. A abertura é o único instante que elas têm.
+ *
+ * **O cursor carrega esta mesma expressão**, e é por isso que ela é uma
+ * constante e não dois textos parecidos: um cursor sobre `opened_at` com a
+ * ordem sobre outra chave pula e repete linhas, e o sintoma aparece só na
+ * segunda página — depois de a pessoa rolar.
+ *
+ * Custo medido e dito em voz alta: a chave é uma subconsulta, então o índice de
+ * `(opened_at, id)` não a atende. Materializá-la em coluna
+ * (`conversations.last_message_at`) é uma MIGRAÇÃO, e o número do carimbo é
+ * distribuído por quem coordena — não foi pedido aqui, e a lista é por
+ * chamador, o que a mantém pequena.
+ */
+const CHAVE_DA_ORDEM = sql`coalesce(${ULTIMA_MENSAGEM('created_at')}, conversations.opened_at)`;
+
+/**
+ * O recorte de `q`: nome do pet, ou nome de exibição do outro lado.
+ *
+ * **É um `AND` sobre o `WHERE` do chamador, e nunca o substitui.** A
+ * autorização mora naquele predicado (ADR-0021); este só estreita o que já era
+ * dele, e por isso não existe arranjo em que o termo alargue a leitura.
+ *
+ * `ilike` com `%termo%` e não `to_tsquery`: o alvo é um nome curto de pet ou de
+ * pessoa, e busca textual com radical em cima de nome próprio casa pior que
+ * substring. `%` e `_` do termo são escapados — sem isso um `_` digitado
+ * casaria qualquer caractere, e a pessoa leria o resultado como defeito.
+ *
+ * O nome do achador sai do MESMO `coalesce` da projeção, e não de uma das duas
+ * colunas: buscar por `found_reports.finder_display_name` apenas deixaria de
+ * achar quem tem conta e não preencheu o formulário do aviso — isto é, o
+ * achado avulso inteiro.
+ */
+function comoLike(termo: string): string {
+  return `%${termo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
 /**
@@ -236,16 +299,12 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
       // achador EM CLARO. Uma previa tirada de lá publicaria na lista o
       // telefone que a conversa existe para nao deixar passar. O corte em 140
       // e do dominio (`previaDaMensagem`), nao daqui.
-      sql<string | null>`(
-        SELECT msg.body FROM conversation_messages msg
-        WHERE msg.conversation_id = conversations.id
-        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
-      )`.as('corpo_da_ultima'),
-      sql<Date | null>`(
-        SELECT msg.created_at FROM conversation_messages msg
-        WHERE msg.conversation_id = conversations.id
-        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
-      )`.as('ultima_mensagem_em'),
+      sql<string | null>`${ULTIMA_MENSAGEM('body')}`.as('corpo_da_ultima'),
+      // A MESMA subconsulta que a CHAVE_DA_ORDEM usa, e nao uma copia: ver o
+      // doc de `ULTIMA_MENSAGEM`. Aqui ela sai NULA quando nao ha mensagem --
+      // `last_message_at` e anulavel no contrato, e o `coalesce` da ordem e da
+      // ordem, nao da projecao.
+      sql<Date | null>`${ULTIMA_MENSAGEM('created_at')}`.as('ultima_mensagem_em'),
     ])
     .where((eb) =>
       eb.or([
@@ -272,20 +331,62 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
     .where('conversations.moderation_removed_at', 'is', null);
 }
 
-/** `GET /v1/conversations`. A mesma leitura, paginada por `opened_at`. */
-export function construtorDaListaDoChamador(db: Db, chamador: UserId, pagina: Pagina) {
-  const base = construtorDaLeituraDoChamador(db, chamador)
-    .orderBy('conversations.opened_at', 'desc')
+/**
+ * `GET /v1/conversations`. A mesma leitura, ordenada pela ÚLTIMA MENSAGEM.
+ *
+ * A chave é `CHAVE_DA_ORDEM` — `coalesce(última mensagem, abertura)` — e não
+ * `conversations.opened_at`, por decisão do cliente de 18/10/2026. Ver o doc
+ * daquela constante, que é onde a razão mora.
+ *
+ * `q` entra como `AND` sobre o predicado do chamador, nunca no lugar dele.
+ */
+export function construtorDaListaDoChamador(db: Db, chamador: UserId, pagina: PaginaDaLista) {
+  let base = construtorDaLeituraDoChamador(db, chamador)
+    .orderBy(CHAVE_DA_ORDEM, 'desc')
     .orderBy('conversations.id', 'desc')
     .limit(pagina.limit);
+  const termo = pagina.termo;
+  if (termo !== undefined && termo !== '') base = base.where(recorteDoTermo(termo));
   const depois = pagina.depoisDe;
   if (depois === undefined) return base;
   // Tupla e não `AND` de duas comparações: `(a, b) < (x, y)` é a comparação
-  // lexicográfica que o Postgres resolve com o índice, e a versão escrita à mão
+  // lexicográfica que o Postgres resolve de uma vez, e a versão escrita à mão
   // com `OR` erra no empate de milissegundo, que é justamente quando ela importa.
+  //
+  // **A tupla carrega a CHAVE DA ORDEM**, e não `opened_at`: cursor sobre uma
+  // chave e ordem sobre outra pula e repete linhas, e o sintoma só aparece na
+  // segunda página — depois de a pessoa rolar.
   return base.where(
-    sql<boolean>`(conversations.opened_at, conversations.id) < (${depois.criadaEm}, ${depois.id})`,
+    sql<boolean>`(${CHAVE_DA_ORDEM}, conversations.id) < (${depois.criadaEm}, ${depois.id})`,
   );
+}
+
+/**
+ * `ConversationPage.total`: quantas conversas o recorte tem, sem `limit`.
+ *
+ * **Passa pelo MESMO construtor da lista**, e por isso pelo mesmo `WHERE` do
+ * chamador: uma contagem escrita à parte seria um segundo lugar onde a
+ * autorização mora, e o segundo lugar é o que esquece.
+ */
+export function construtorDaContagemDoChamador(
+  db: Db,
+  chamador: UserId,
+  termo: string | undefined,
+) {
+  const base = construtorDaLeituraDoChamador(db, chamador);
+  const comTermo =
+    termo === undefined || termo === '' ? base : base.where(recorteDoTermo(termo));
+  return comTermo.clearSelect().clearOrderBy().select(sql<number | string>`count(*)`.as('n'));
+}
+
+/** O predicado de `q`, num lugar só: a lista e a contagem leem o mesmo. */
+function recorteDoTermo(termo: string) {
+  const alvo = comoLike(termo);
+  return sql<boolean>`(
+    "pets"."name" ILIKE ${alvo}
+    OR "tutor"."display_name" ILIKE ${alvo}
+    OR coalesce("found_reports"."finder_display_name", "achador"."display_name") ILIKE ${alvo}
+  )`;
 }
 
 /** `GET /v1/conversations/{id}`. O id é filtro A MAIS, nunca no lugar do dono. */
@@ -665,6 +766,15 @@ export function criarConversationRepository(db: Db): ConversationRepository {
     async listarDoChamador(chamador, pagina): Promise<readonly ConversaDoChamador[]> {
       const linhas = await construtorDaListaDoChamador(db, chamador, pagina).execute();
       return (linhas as unknown as LinhaDaConversa[]).map(comoConversa);
+    },
+
+    async contarDoChamador(chamador, termo): Promise<number> {
+      const linha = await construtorDaContagemDoChamador(
+        db,
+        chamador,
+        termo,
+      ).executeTakeFirstOrThrow();
+      return Number(linha.n);
     },
 
     async buscarDoChamador(conversa, chamador): Promise<ConversaDoChamador | undefined> {

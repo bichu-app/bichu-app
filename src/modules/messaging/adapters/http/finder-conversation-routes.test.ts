@@ -231,6 +231,7 @@ function bancada(cenario: Cenario = {}): Bancada {
     abrirPorAviso: () => Promise.reject(new Error('fora desta bancada')),
     porAviso: () => Promise.reject(new Error('fora desta bancada')),
     listarDoChamador: () => Promise.reject(new Error('fora desta bancada')),
+    contarDoChamador: () => Promise.reject(new Error('fora desta bancada')),
     buscarDoChamador: () => Promise.reject(new Error('fora desta bancada')),
     mensagens: () => Promise.reject(new Error('fora desta bancada')),
     contarCasosDistintosDaConta: () => Promise.reject(new Error('o token não tem série de casos')),

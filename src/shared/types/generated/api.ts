@@ -1834,7 +1834,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Minhas conversas */
+        /**
+         * Minhas conversas
+         * @description A lista sai **da atividade mais recente para a mais antiga**: a chave de
+         *     ordem e `coalesce(last_message_at, opened_at)`, e nao `opened_at`.
+         *
+         *     A diferenca e de produto, e nao de gosto: a conversa que o tutor precisa
+         *     achar e a que acabou de receber recado, e nao a que nasceu por ultimo.
+         *     Conversa sem mensagem visivel cai na abertura dela, que e o unico
+         *     instante que ela tem -- e por isso a chave e um `coalesce` e nao uma
+         *     coluna. O `cursor` carrega essa MESMA chave, entao a pagina seguinte
+         *     continua de onde a anterior parou.
+         *
+         *     `q` recorta por **nome do pet** e pelo **nome de exibicao do outro
+         *     lado**, dentro das conversas de quem chamou. Ele nao e busca de pessoas:
+         *     a autorizacao continua no `WHERE` (ADR-0021), nenhuma conversa de
+         *     terceiro entra no recorte, e um termo que nao casa nada responde `200`
+         *     com `items: []` -- nunca `404`.
+         */
         get: operations["listConversations"];
         put?: never;
         post?: never;
@@ -7124,6 +7141,17 @@ export interface components {
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
             /**
+             * @description Quantas conversas o recorte atual tem **no servidor** -- isto e, com
+             *     `q` aplicado e sem `limit`. Nao e `items.length`.
+             *
+             *     Ele existe porque a linha de resumo da listagem (`<n> conversas`) e
+             *     de um componente compartilhado por toda pagina com registros, e
+             *     alimenta-lo com o tamanho da pagina faria a tela dizer `10` a quem
+             *     tem 57. **Nada a ver com `unread_count`**: este conta o recorte,
+             *     aquele conta o sino.
+             */
+            total: number;
+            /**
              * @description Quantas conversas entram no **contador do sino** agora.
              *
              *     **Nao e "quantas estao nao lidas"**, e a diferenca e a regra de
@@ -11594,6 +11622,11 @@ export interface components {
         /** @description Token opaco do caso, o mesmo que o link compartilhavel carrega. */
         ShareToken: string;
         Cursor: string;
+        /**
+         * @description Recorta por nome do pet e por nome de exibicao do outro lado, **dentro
+         *     das conversas de quem chamou**. Nao e busca de pessoas.
+         */
+        ConversationSearch: string;
         Limit: number;
         /**
          * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
@@ -14238,6 +14271,11 @@ export interface operations {
             query?: {
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Recorta por nome do pet e por nome de exibicao do outro lado, **dentro
+                 *     das conversas de quem chamou**. Nao e busca de pessoas.
+                 */
+                q?: components["parameters"]["ConversationSearch"];
             };
             header?: never;
             path?: never;

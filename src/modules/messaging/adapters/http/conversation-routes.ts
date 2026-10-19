@@ -57,6 +57,7 @@ import type {
   MensagemGravada,
   MotivoDaDenuncia,
   Pagina,
+  PaginaDaLista,
 } from '../../ports/conversation-repository.js';
 import { decodificarCursor, limiteEfetivo } from '../../domain/paginacao.js';
 import type { ConversationId, UserId } from '../../../../shared/types/brands.js';
@@ -247,6 +248,28 @@ function paginaDaQuery(request: FastifyRequest): Pagina {
 }
 
 /**
+ * A janela da LISTA: a de [paginaDaQuery], mais o `q` do contrato.
+ *
+ * O termo chega **sem espaço nas pontas**, e vazio vira `undefined`: `q=` e `q`
+ * ausente querem a mesma resposta (a lista inteira), e deixar a string vazia
+ * descer faria o repositório montar um `ILIKE '%%'` que casa tudo — mesma
+ * resposta por um caminho mais caro, e um `total` calculado por um predicado
+ * que ninguém pediu.
+ *
+ * **O piso de 2 caracteres é do contrato** (`ConversationSearch.minLength`) e é
+ * a validação da rota que o cobra. Repeti-lo aqui seria um segundo lugar com o
+ * mesmo número.
+ */
+function paginaDaListaDaQuery(request: FastifyRequest): PaginaDaLista {
+  const { q } = request.query as { q?: string };
+  const termo = typeof q === 'string' ? q.trim() : '';
+  return {
+    ...paginaDaQuery(request),
+    termo: termo === '' ? undefined : termo,
+  };
+}
+
+/**
  * O balde do teto: a conversa E o participante, nunca um dos dois.
  *
  * Só a conta seria o balde errado na direção cara: quem está combinando a
@@ -370,10 +393,14 @@ export function registrarRotasDeConversas(
     {},
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
-      const pagina = paginaDaQuery(request);
+      const pagina = paginaDaListaDaQuery(request);
       const pagina_ = await deps.conversas.listar(chamador, pagina);
       return reply.status(200).send({
         items: pagina_.items.map(comoResposta),
+        // O TOTAL DO RECORTE, e nao o tamanho da pagina: a linha de resumo da
+        // listagem no aplicativo diz quantas conversas existem, e `items.length`
+        // diria `10` a quem tem 57.
+        total: pagina_.total,
         // O CONTADOR DO SINO, da conta INTEIRA e nao desta pagina: somar a
         // pagina faria o sino mostrar 20 para quem tem 57. O numero vai SEM
         // teto; o corte em `9+` e de apresentacao e mora no app.
