@@ -71,8 +71,8 @@
  * `last_seen_at` e ela roda 26 vezes; sem a janela, ela roda para as 600 da
  * cidade.
  *
- * O índice que resolve FOI MEDIDO e NÃO EXISTE (criá-lo é migração, e migração
- * carimbada não entrou neste trabalho):
+ * O índice que resolve é a migração **`20261019000003`**, que desce no mesmo
+ * trabalho que este comentário:
  *
  * ```
  * CREATE INDEX lost_cases_publicos_por_cidade_e_visto
@@ -85,8 +85,13 @@
  *
  * `texto_para_busca` é IMMUTABLE (`provolatile = 'i'`), então ela pode indexar;
  * `conta_habilitada` é STABLE e por isso NÃO pode entrar no `WHERE` do índice.
- * A contenção enquanto o índice não existe são os três tetos por `ip` da
- * operação e a paginação de 20, que o contrato já declara.
+ * Além do índice, a contenção são os três tetos por `ip` da operação e a
+ * paginação de 20, que o contrato já declara.
+ *
+ * O índice ANTIGO continua lá e **não é duplicata deste**: ele foi criado na
+ * `20260918000003` para esta mesma lista, nunca a serviu pelos dois motivos
+ * acima, e por grep em `src/` não tem leitor nenhum hoje. A `20261019000003`
+ * explica por que ele não foi derrubado junto.
  *
  * **CUSTO MEDIDO E NÃO ESCONDIDO:** não existe índice trigrama sobre
  * `texto_para_busca(pets.name)`. Com `q` preenchido, o predicado é uma
