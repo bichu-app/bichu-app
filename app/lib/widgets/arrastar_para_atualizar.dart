@@ -18,10 +18,10 @@ import 'package:flutter/material.dart';
 ///
 /// ## Por que um componente, e nao `RefreshIndicator` em cada tela
 ///
-/// Sao **onze** superficies. Copiado onze vezes, o gesto divergiria na
+/// Sao **doze** superficies. Copiado doze vezes, o gesto divergiria na
 /// primeira correcao: uma tela com rotulo de leitor de tela e dez sem, uma com
 /// `onRefresh` que nao espera a resposta e dez que esperam. O que precisa valer
-/// nas onze esta aqui:
+/// nas doze esta aqui:
 ///
 /// 1. **`onRefresh` tem de ESPERAR a busca.** O `RefreshIndicator` gira
 ///    enquanto o `Future` nao completa; um `onRefresh` que devolvesse antes
@@ -50,10 +50,19 @@ import 'package:flutter/material.dart';
 ///    acessivel`, em `test/widgets/arrastar_para_atualizar_test.dart`). Quem
 ///    tiver aparelho Android na mao e o unico que pode fechar essa lacuna.
 ///
-///    O que **nao** muda com isso: a fisica mora aqui, e nao nos onze
-///    `ListView`. Onze `physics:` escritos a mao seriam onze chances de
+///    O que **nao** muda com isso: a fisica mora aqui, e nao nos doze
+///    `ListView`. Doze `physics:` escritos a mao seriam doze chances de
 ///    esquecer, e nenhuma delas visivel num teste que so procure o indicador
 ///    na arvore.
+///
+/// ## A DECIMA SEGUNDA chegou depois, e o recorte de 18/10 e que estava curto
+///
+/// O lote daquele dia pegou **listagem**, e `achado/tela_do_achado.dart`
+/// (`/achados/:id`) ficou de fora por ser tela de ITEM UNICO. O criterio nunca
+/// foi "ser lista": e haver uma busca a refazer. Ela le o achado do servidor e
+/// tem `_carregar`, entao ela entra -- e e justamente a tela em que a pessoa
+/// volta no dia seguinte para ver se o estado do registro mudou, que e o uso
+/// que o gesto serve.
 ///
 /// ## Onde ele NAO entra, e por que nao
 ///
