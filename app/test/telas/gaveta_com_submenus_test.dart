@@ -43,7 +43,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
-import 'package:bichu/widgets/acao_de_criar_na_barra.dart';
+import 'package:bichu/widgets/acao_de_criar_flutuante.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:flutter/material.dart';
@@ -551,33 +551,67 @@ void main() {
     //    longe da borda e o controle da LISTA mais perto;
     //  - o gatilho da gaveta continua na ESQUERDA, inteiro.
     //
-    // Por que nao "exatamente dois em Rede e Perto": com `_semServidor`
-    // nenhuma das duas carrega lista, e a barra de listagem nao publica
-    // controle sobre o nada -- e, desde 18/10, o app abre DESLOGADO neste
-    // ajudante, e as duas portas de criar da comunidade so existem com conta
-    // e e-mail confirmado. Cobrar presenca aqui mediria a rede de mentira e a
-    // sessao de mentira, e nao o leiaute. A presenca e medida onde ha dado e
-    // sessao: `test/telas/perto_com_dados_test.dart`,
-    // `test/rede/agenda_da_rede_test.dart` e
-    // `test/telas/criar_e_icone_na_barra_test.dart`.
-    testWidgets('o lado direito tem no maximo DOIS controles, os dois '
-        'previstos, e nenhum deles e o gatilho da gaveta', (tester) async {
-      await abrirOApp(tester, rede: _semServidor);
+    // **ESTE CASO PASSOU A RODAR LOGADO EM 19/10, e a troca e um conserto.**
+    //
+    // Ele rodava com o ajudante no estado de arranque, que e DESLOGADO desde
+    // 18/10. Deslogado a porta de criar nao existe em `Rede` nem em `Perto`
+    // -- `podeCriarNaComunidade` exige conta e e-mail confirmado --, entao a
+    // afirmacao "`criar` nao esta na barra" era VERDADEIRA POR VACUIDADE: ela
+    // ficaria verde com a porta devolvida ao `actions`, porque o arranjo
+    // medido nem a desenhava. Medido: com `criar` de volta no `actions` e o
+    // caso deslogado, ele passou.
+    //
+    // E e a mesma armadilha que a frente da gaveta acabou de achar aqui ao
+    // lado. Por isso ha, logo no inicio do laco, uma linha que PROVA que a
+    // sessao e a que eu penso -- e nao um comentario dizendo que e.
+    //
+    // O arranjo deslogado nao ficou sem portao: quem cobra que o sino
+    // DESAPARECE sem conta e
+    // `test/telas/navegacao_mensagens_e_avatar_test.dart`, grupo (b2).
+    testWidgets('o lado direito e o SINO e a FOTO, nesta ordem, e `criar` '
+        'nao esta mais nele', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _semServidor,
+        deposito: depositoLogado(),
+      );
+      // **A PROVA DE QUE A SESSAO E A QUE EU PENSO, e ela e POSITIVA.**
+      //
+      // A `Rede` e a aba de arranque e tem porta de criar. Se a porta estiver
+      // CONSTRUIDA, a sessao tem conta e e-mail confirmado -- e e exatamente
+      // essa a condicao de `podeCriarNaComunidade`. Sem esta linha, tudo o
+      // que este caso afirma sobre `criar` nao estar na barra ficaria verde
+      // por vacuidade, porque deslogado a porta nem existe.
+      //
+      // **A medida NAO e circular:** aqui ela prova que a porta EXISTE; o
+      // laco abaixo prova que ela nao esta no `actions`. Sao dois fatos
+      // diferentes, e e a conjuncao deles que e a decisao do cliente.
+      //
+      // Nao serve medir a inicial da foto: `depositoLogado()` nao da nome ao
+      // usuario, entao a foto desenha o glifo de pessoa nos DOIS estados --
+      // medido, e foi o que derrubou a primeira versao desta linha.
+      expect(
+        find.byType(AcaoDeCriarFlutuante),
+        findsOneWidget,
+        reason:
+            'REPROVA: este caso NAO esta no estado que ele pensa -- a porta '
+            'de criar da `Rede` nao esta construida, e ela exige conta E '
+            'e-mail confirmado. Sem sessao, afirmar que `criar` nao esta na '
+            'barra nao prova nada: ele nao esta em lugar nenhum.',
+      );
 
       // **O QUE ESTE CASO PROVAVA, E O QUE ELE PROVA AGORA.**
       //
-      // Ele provava DOIS controles no maximo a direita -- a porta de criar e
-      // o `Filtros` --, e dizia que o terceiro nao caberia. Em 19/10 o
-      // cliente pos um terceiro ali: a foto da pessoa, em todas as paginas.
+      // Ele provava um teto de TRES controles -- `criar`, `Filtros` e a foto
+      // --, medido em 48,00 dp de titulo sobrando para o `Perto`, que pedia
+      // 47,95: passava por 0,05 dp. Em 19/10 o cliente decidiu o que sai para
+      // o sino entrar: *"O botao criar sai da barra"*.
       //
-      // O caso nao foi afrouxado, ele foi REMEDIDO. A foto tem alvo de 48 dp,
-      // e nao 64, e a conta em 320 dp fecha: hamburguer 64 + criar 64 +
-      // `Filtros` 64 + foto 48 = 240, e sobram **48,00 dp de titulo**
-      // medidos. O maior titulo que chega a esse arranjo e `Perto`, de 47,95
-      // dp. Passa por 0,05 dp -- e e por isso que este caso agora trava o
-      // teto em TRES e exige que o terceiro seja a foto: um quarto controle,
-      // ou a foto a 64 dp, zera o titulo. Medido: com um quarto controle o
-      // titulo vai a **0,00 dp**.
+      // O caso nao foi afrouxado, ele foi APERTADO. O lado direito deixou de
+      // variar de secao para secao -- sino 48 + foto 48, sempre --, entao o
+      // "no maximo tres" virou uma contagem EXATA de dois, mais a ordem, mais
+      // a ausencia da porta de criar. Um teto frouxo aqui deixaria passar uma
+      // barra que perdesse o sino, que e o controle que acabou de entrar.
       for (final destino in secoesDaBarra) {
         await tester.tap(
           find.widgetWithText(NavigationDestination, destino.rotulo),
@@ -586,15 +620,6 @@ void main() {
 
         final barra = tester.widget<AppBar>(find.byType(AppBar));
         final acoes = barra.actions ?? const <Widget>[];
-        expect(
-          acoes.length,
-          lessThanOrEqualTo(3),
-          reason:
-              'REPROVA: a secao "${destino.rotulo}" pos ${acoes.length} '
-              'controles no lado direito. Sao TRES no maximo -- a porta de '
-              'criar, o `Filtros` e a foto da conta --, e o quarto nao cabe: '
-              'medido, ele leva o titulo a 0,00 dp em 320 dp.',
-        );
         for (final acao in acoes) {
           expect(
             acao,
@@ -603,21 +628,54 @@ void main() {
               // mais**: o `Filtros` saiu da barra em 19/10 e voltou para o
               // topo do corpo. Ele fica aqui porque a tela que quiser um
               // controle de canto ainda pode usa-lo -- e, se voltar a
-              // aparecer, o teto de tres e a conta de largura abaixo e que
-              // respondem.
+              // aparecer, o teto e a conta de largura abaixo e que respondem.
               isA<BotaoDeAcaoDaListagem>(),
-              isA<AcaoDeCriarNaBarra>(),
               isA<SinoDeNotificacoes>(),
               isA<AvatarDaConta>(),
             ),
             reason:
                 'REPROVA: a secao "${destino.rotulo}" pos no lado direito '
-                'algo que nao e a porta de criar, o `Filtros` nem a foto da '
-                'conta. O gatilho da gaveta tem o slot da ESQUERDA, e nada '
-                'mais sobe para a barra -- a busca e os controles de recorte '
-                'moram no corpo, onde o cliente os quer.',
+                'algo que nao e o sino nem a foto da conta. O gatilho da '
+                'gaveta tem o slot da ESQUERDA, e nada mais sobe para a '
+                'barra -- a busca, os controles de recorte e a porta de '
+                'criar moram no corpo, onde o cliente os quer.',
+          );
+          // **A ISCA (a) DESTE PORTAO: `criar` NAO VOLTA A BARRA.**
+          //
+          // Decisao dele em 19/10, com a conta na mesa: *"O botao criar sai
+          // da barra"*. `AcaoDeCriarFlutuante` e o widget da porta de criar, e
+          // ele mora no `floatingActionButton` da casca. Um `isNot` sobre a
+          // lista de permitidos acima nao bastaria: a lista e um `anyOf`, e
+          // acrescentar um tipo a ela e a maneira mais facil de reabrir a
+          // barra sem nenhum caso reprovar.
+          //
+          // DESLIGAMENTO: volte `if (widget.acaoDeCriar != null)
+          // widget.acaoDeCriar!,` ao `actions` de `TelaDeAba`.
+          expect(
+            acao,
+            isNot(isA<AcaoDeCriarFlutuante>()),
+            reason:
+                'REPROVA: a porta de criar voltou a barra de topo de '
+                '"${destino.rotulo}". Ela saiu dali em 19/10 por decisao do '
+                'cliente -- *"O botao criar sai da barra"* -- para o sino '
+                'entrar no lugar, e e essa troca que devolveu o titulo '
+                'inteiro ao `Perto`.',
           );
         }
+        // **DOIS CONTROLES, e exatamente dois.** O sino e a foto. O teto de
+        // tres de 19/10 virou uma contagem exata quando `criar` saiu: o lado
+        // direito deixou de variar de secao para secao, e contar "no maximo"
+        // deixaria passar uma barra que perdesse o sino.
+        expect(
+          acoes.length,
+          2,
+          reason:
+              'REPROVA: a secao "${destino.rotulo}" tem ${acoes.length} '
+              'controles no lado direito, e o arranjo de 19/10 e DOIS: o '
+              'sino e a foto. Menos que isso perdeu um deles; mais que isso '
+              'devolveu a barra um controle que o cliente mandou para o '
+              'corpo.',
+        );
         // **A FOTO E SEMPRE A ULTIMA.** Ela e o controle que nao muda de
         // tela; os que variam ficam antes dela. Sem esta linha, a ordem do
         // lado direito dancaria de secao para secao.
@@ -630,19 +688,18 @@ void main() {
               'lugar: controle que varia por tela nao empurra o que nao '
               'varia.',
         );
-        final variaveis =
-            acoes.where((a) => a is! AvatarDaConta).toList();
-        if (variaveis.length == 2) {
-          expect(
-            variaveis.first,
-            isA<AcaoDeCriarNaBarra>(),
-            reason:
-                'REPROVA: em "${destino.rotulo}" o `Filtros` ficou antes da '
-                'porta de criar. A ordem nao e estetica: criar e da SECAO e '
-                'filtrar e da LISTA, e a acao mais ampla fica mais longe da '
-                'borda.',
-          );
-        }
+        // **O SINO VEM ANTES DA FOTO**, e a razao e a mesma de sempre: a
+        // foto e o controle que nao varia e fecha a barra. Esta linha
+        // substitui a que ordenava `criar` antes do `Filtros` -- nenhum dos
+        // dois esta mais aqui.
+        expect(
+          acoes.first,
+          isA<SinoDeNotificacoes>(),
+          reason:
+              'REPROVA: em "${destino.rotulo}" o sino nao e o primeiro '
+              'controle do lado direito. Ele entrou no slot que `criar` '
+              'deixou, e a foto continua fechando a barra.',
+        );
         // O gatilho da gaveta continua inteiro, e na ESQUERDA: ele e o
         // `leading` da barra, nunca uma `action`. O caso do slot da esquerda,
         // logo acima, mede a largura de 64 dp dele.
@@ -900,43 +957,84 @@ void main() {
           final disponivel =
               barra.right - tester.getRect(titulo).left - reservaDeAcao;
 
-          // **NENHUM TITULO E CORTADO HOJE, e isto e medido.** A foto
-          // entrou na barra em 19/10 e `titleSpacing: 0` devolveu os 16 dp
-          // que ela custou; as quatro secoes pintam o titulo inteiro.
           // -----------------------------------------------------------------
-          // `Perto` A 200%: DEFICIT MEDIDO, E A ATRIBUICAO FOI CORRIGIDA.
+          // O ARRANJO DE 19/10 COM O SINO: `criar` SAIU DA BARRA E `Perto`
+          // AINDA CORTA. OS NUMEROS SAO MEDIDOS, NAO CALCULADOS.
           //
-          // Medido no app de verdade, LOGADO, em 320 dp a 200%, com o arranjo
-          // que a secao tem hoje (hamburguer 64 + criar 64 + foto 48):
+          // Decisao do cliente, com a conta na mesa: *"O botao criar sai da
+          // barra"*. O lado direito passou a ser sino 48 + foto 48, e a
+          // esquerda continua com o hamburguer de 64. Medido no app de
+          // verdade, LOGADO, em 320 dp a 200% de escala:
           //
-          //   orcamento do titulo:  144,00 dp
-          //   `Pets` e `Loja`:      138,32 dp -> cabem (5,68 de folga)
-          //   `Perto`:              ~172,90 dp -> NAO cabe, faltam 28,90
+          //   titulo comeca em:           64,00 dp (depois do hamburguer,
+          //                               com `titleSpacing: 0`)
+          //   reserva do lado direito:    96,00 dp (sino 48 + foto 48)
+          //   ORCAMENTO DO TITULO:       160,00 dp
           //
-          // **A causa nao e o `Filtros`, e eu atribui errado antes.** A conta
-          // antiga deste portao reservava 64 dp para o gatilho de `Filtros` e
-          // **nunca contava a porta de criar**: ela devolvia 144,00 por um
-          // caminho errado e ficava verde. Tirar o `Filtros` da barra (19/10)
-          // nao mudou nada para `Perto`, porque o que ocupa a barra dela e
-          // `criar` + foto -- e sempre foi.
+          //   `Pets`, `Rede` e `Loja`:   138,32 dp -> cabem (21,68 de folga)
+          //   `Perto`:                   172,90 dp -> NAO cabe, faltam 12,90
           //
-          // `Perto` e a unica: e o unico rotulo de CINCO letras entre as
-          // quatro secoes. Fechar os 28,90 dp exige tirar `criar` da barra
-          // dela ou encurtar o rotulo, e as duas coisas sao decisao do
-          // cliente -- o rotulo ja e o nome curto que ele escolheu.
+          // **O deficit CAIU de 28,90 para 12,90 dp e nao chegou a zero.** O
+          // arranjo anterior (criar 64 + foto 48) dava 144,00 dp de orcamento;
+          // tirar `criar` devolveu 64 e o sino levou 48, saldo de +16,00. Nao
+          // ha como fechar os 12,90 que faltam sem mexer em algo que nao e
+          // meu: o hamburguer tem o piso de 64 dp do 11.23.1 (e caso proprio
+          // acima que o mede), o sino e a foto estao no piso de 48 dp do
+          // SC 2.5.8, `titleSpacing` ja esta em zero e a margem interna da
+          // foto custa 0,00 dp de orcamento. **Sobra tirar outro controle da
+          // barra ou encurtar o rotulo, e as duas coisas sao decisao do
+          // cliente** -- `Perto` ja e o nome curto que ele escolheu, e e o
+          // unico rotulo de CINCO letras entre as quatro secoes.
           //
-          // O caso trava os dois lados: as outras tres continuam inteiras, e
-          // `Perto` reprova se passar a pedir mais do que ja pede.
+          // O caso trava os tres lados: as outras tres continuam inteiras,
+          // `Perto` reprova se pedir mais do que ja pede, e o ORCAMENTO em si
+          // esta assertado logo abaixo -- se um controle voltar para a barra,
+          // ele desaba e o caso reprova em vez de so cortar mais um titulo.
           final deficitDeCincoLetras = destino.rotulo == 'Perto';
+
+          // **O ORCAMENTO MEDIDO, preso em 160,00 dp.**
+          //
+          // Esta linha e a isca de que `criar` saiu da barra, dita em numero:
+          // com a porta de criar de volta em `actions` o orcamento cai para
+          // 96,00 dp e este caso reprova. Ele tambem reprova se o sino sair
+          // (sobe para 208,00) ou se um quarto controle entrar.
+          //
+          // **O NUMERO VEM DA CONSTRICAO QUE O `AppBar` DEU AO TITULO, e nao
+          // de `disponivel`.** Isto consertou um portao cego MEU, achado ao
+          // provar esta propria isca: `disponivel` soma a largura dos
+          // `IconButton` da barra, e a porta de criar deixou de ser um -- ela
+          // e um `FloatingActionButton`. Com `criar` devolvido ao `actions`,
+          // `disponivel` continuava dizendo 160,00 enquanto o titulo de
+          // `Rede` saia cortado de verdade: verde pelo motivo errado, e
+          // exatamente a classe de defeito que este grupo existe para pegar.
+          //
+          // `paragrafo.constraints.maxWidth` e o espaco que o leiaute
+          // entregou ao titulo. Ele nao depende de eu adivinhar de que TIPO
+          // sao os controles do lado direito.
+          //
+          // DESLIGAMENTO: volte `if (widget.acaoDeCriar != null)
+          // widget.acaoDeCriar!,` ao `actions` de `TelaDeAba`.
+          expect(
+            paragrafo.constraints.maxWidth,
+            160.0,
+            reason:
+                'REPROVA: o titulo de "${destino.rotulo}" recebeu '
+                '${paragrafo.constraints.maxWidth.toStringAsFixed(2)} dp de '
+                'orcamento em 320 dp a 200%, e o arranjo de 19/10 mede '
+                '160,00 -- hamburguer 64 a esquerda, sino 48 e foto 48 a '
+                'direita. Menos que isso significa que um controle voltou '
+                'para a barra de topo; mais, que um saiu dela. Os dois mudam '
+                'quais titulos cabem.',
+          );
           expect(
             paragrafo.didExceedMaxLines,
             deficitDeCincoLetras ? isTrue : isFalse,
             reason: deficitDeCincoLetras
                 ? 'REPROVA: "${destino.rotulo}" NAO foi cortado a 200%, e o '
-                      'deficit medido de 28,90 dp dizia que seria. Se a barra '
-                      'ganhou espaco -- um controle saiu, ou o rotulo mudou '
-                      '--, apague esta excecao e volte a cobrar o titulo '
-                      'inteiro nas quatro secoes.'
+                      'deficit medido de 12,90 dp dizia que seria. Se a barra '
+                      'ganhou espaco -- outro controle saiu, ou o rotulo '
+                      'mudou --, apague esta excecao e volte a cobrar o '
+                      'titulo inteiro nas quatro secoes.'
                 : 'REPROVA: o titulo "${destino.rotulo}" foi CORTADO com '
                       'reticencia na barra de topo. O cliente encarregou o '
                       'titulo de carregar o significado que o rotulo de '
@@ -2350,7 +2448,7 @@ void main() {
   // da foto ia de 272,00 a 320,00 -- encostado na borda, 0,00 dp de folga --
   // e o circulo de 32 dp ficava centrado nele, a **8,00 dp** da borda da
   // tela. Os vizinhos da mesma barra tem 20,00 dp de ar em volta do glifo
-  // (hamburguer e `criar` sao alvos de 64 com glifo de 24 centrado) e
+  // (o hamburguer e um alvo de 64 com glifo de 24 centrado) e
   // `layout.margem-celular` fixa a margem lateral da tela em 16 dp, que e a
   // mesma do corpo. A foto era o unico controle encostado na borda.
   //
@@ -2451,34 +2549,42 @@ void main() {
               ? barra.right
               : bordasEsquerdas[1];
           final orcamento = primeiraAcao - tester.getRect(titulo).left;
-          final comPortaDeCriar = acoes.evaluate().length == 3;
+          // **UM NUMERO SO PARA AS QUATRO SECOES, desde 19/10.** O ramo
+          // `comPortaDeCriar ? 144,00 : 208,00` saiu porque o lado direito
+          // deixou de variar de secao para secao: `criar` desceu para o corpo
+          // (*"O botao criar sai da barra"*) e o sino entrou, e ele e
+          // INCONDICIONAL. Agora toda secao tem hamburguer 64 a esquerda e
+          // sino 48 + foto 48 a direita, e o orcamento e 160,00 dp em todas.
+          //
+          // Saldo da troca: +64 de `criar` que saiu, -48 do sino que entrou,
+          // 144,00 -> 160,00.
           expect(
             orcamento,
-            comPortaDeCriar ? 144.0 : 208.0,
+            160.0,
             reason:
                 'REPROVA: o titulo de "${destino.rotulo}" recebe '
                 '${orcamento.toStringAsFixed(2)} dp em 320 dp a 200%, e o '
-                'medido em 18/10/2026 e '
-                '${comPortaDeCriar ? '144,00 (hamburguer 64 + criar 64 + foto 48)' : '208,00 (hamburguer 64 + foto 48)'}'
-                '. A margem da foto NAO podia mexer neste numero: fechar os '
-                '8 dp de margem com o orcamento do titulo e desfazer o '
-                '`titleSpacing: 0` de 19/10 pelo outro lado.',
+                'medido em 19/10/2026 e 160,00 (hamburguer 64 + sino 48 + '
+                'foto 48). A margem da foto NAO podia mexer neste numero: '
+                'fechar os 8 dp de margem com o orcamento do titulo e '
+                'desfazer o `titleSpacing: 0` de 19/10 pelo outro lado.',
           );
 
           // (4) E o titulo continua inteiro onde ja estava inteiro.
           //
           // `Perto` e a excecao medida e ela esta cobrada no grupo 3: ela
-          // pede 172,90 dp contra os 144,00 do orcamento -- deficit de
-          // **28,90 dp**, o mesmo de antes da margem, porque a margem custou
-          // 0,00 dp. Fechar aquele deficit exige tirar um controle que o
-          // cliente pos na barra, e e decisao dele.
+          // pede 172,90 dp contra os 160,00 do orcamento -- deficit de
+          // **12,90 dp**. Ele caiu de 28,90 quando `criar` saiu da barra em
+          // 19/10 e **nao chegou a zero**. A margem da foto continua custando
+          // 0,00 dp. Fechar os 12,90 que faltam exige tirar outro controle da
+          // barra ou encurtar o rotulo, e as duas coisas sao decisao dele.
           final paragrafo = tester.renderObject<RenderParagraph>(titulo);
           expect(
             paragrafo.didExceedMaxLines,
             destino.rotulo == 'Perto' ? isTrue : isFalse,
             reason: destino.rotulo == 'Perto'
                 ? 'REPROVA: "Perto" NAO foi cortada. Se a barra ganhou '
-                      'espaco, refaca a conta do deficit de 28,90 dp em vez '
+                      'espaco, refaca a conta do deficit de 12,90 dp em vez '
                       'de apagar esta excecao.'
                 : 'REPROVA: o titulo "${destino.rotulo}" passou a ser CORTADO '
                       'com reticencia. A margem da foto nao pode ter sido '

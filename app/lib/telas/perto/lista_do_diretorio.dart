@@ -287,10 +287,17 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
         // superior ... e nao fique esse botao grande na pagina ocupando muito
         // espaco".
         //
-        // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no CORPO
-        // e nao na `AppBar`" --, e a reversao e decisao dele. Quem desenha e
-        // `AcaoDeCriarNaBarra`; quem a entrega a casca e `AbaPerto`, em
-        // `abas.dart`.
+        // Isto REVERTEU o que estava escrito nesta linha em 17/10 -- "no
+        // CORPO e nao na `AppBar`" --, e a reversao e decisao dele.
+        //
+        // **E em 19/10 ela SAIU DA BARRA e virou acao FLUTUANTE**, para o
+        // sino de notificacao entrar no lugar: *"O botao criar sai da
+        // barra"*. **Ela nao voltou para esta linha**: o que ele recusou em
+        // 18/10 foi o botao de LARGURA TOTAL que ocupava 64 dp de linha aqui,
+        // e a acao flutuante nao ocupa linha nenhuma do fluxo.
+        //
+        // Quem desenha e `AcaoDeCriarFlutuante`; quem a entrega a casca e
+        // `AbaPerto`, em `abas.dart`.
         //
         // **E ela deixou de aparecer para quem nao pode usa-la**, que era o
         // segundo defeito que ele relatou no mesmo dia: a porta convidava

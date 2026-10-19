@@ -32,6 +32,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/rede/criar_encontro.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/acao_de_criar_flutuante.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -97,21 +98,28 @@ Future<void> abrirAgenda(
 }
 
 /// Abre o formulário pela PORTA REAL da seção, que desde 18/10/2026 é o ícone
-/// da barra de topo e não mais o botão de largura total do corpo.
+/// da ação flutuante do corpo, e não mais o ícone da barra de topo nem o botão
+/// de largura total que veio antes dele.
 ///
 /// Ela mora numa função, e não copiada em cada caso, por um motivo que já
 /// custou caro aqui: quando o cliente mudou a forma da porta, dez casos deste
 /// arquivo deixaram de ter o que tocar ao mesmo tempo. Com a porta numa função
 /// só, a próxima mudança de forma custa uma edição.
 ///
-/// **O glifo é procurado DENTRO da `AppBar`.** `Icons.more_time` pode aparecer
-/// em outro lugar da árvore amanhã, e um `find.byIcon` solto acharia o outro e
-/// ficaria verde com a barra vazia.
+/// **ELA MUDOU DE FORMA OUTRA VEZ EM 19/10/2026**, e esta função é o lugar
+/// único que a mudança custou: o ícone saiu da barra de topo e virou ação
+/// FLUTUANTE no corpo, por decisão dele -- *"O botao criar sai da barra"* --
+/// para o sino de notificação entrar na barra.
+///
+/// **O glifo é procurado DENTRO de `AcaoDeCriarFlutuante`.** `Icons.more_time`
+/// pode aparecer em outro lugar da árvore amanhã, e um `find.byIcon` solto
+/// acharia o outro e ficaria verde com a porta ausente -- **ou acharia um
+/// ícone de volta NA BARRA**, que é exatamente o que o cliente mandou tirar.
 Future<void> abrirAPorta(WidgetTester tester) async {
   await tocar(
     tester,
     find.descendant(
-      of: find.byType(AppBar),
+      of: find.byType(AcaoDeCriarFlutuante),
       matching: find.byIcon(Icons.more_time),
     ),
   );
@@ -129,6 +137,16 @@ void main() {
   //      virou ícone na barra. Isto REVERTE a regra de 17/10 que este arquivo
   //      cobrava ("a porta NÃO está na AppBar"), do mesmo jeito que o
   //      `Filtros` reverteu em 17/10 a regra de 22/09.
+  //
+  //      **E EM 19/10 ELA SAIU DA BARRA, pela terceira vez em três dias e de
+  //      novo por decisão dele:** *"O botao criar sai da barra"*. Eu lhe
+  //      mostrei que, com o sino de notificação na barra, o lado direito
+  //      ficaria com quatro controles e o título não caberia, e perguntei o
+  //      que sairia. A porta virou ação FLUTUANTE no corpo -- o que ele
+  //      recusou em 18/10 era o botão de LARGURA TOTAL, que comia 64 dp de
+  //      linha; a ação flutuante não ocupa linha nenhuma do fluxo. Este
+  //      arquivo volta a cobrar "a porta NÃO está na AppBar", agora com a
+  //      ação medida onde ela passou a morar.
   //   2. *"essas ações só devem ser realizadas por usuários cadastrados e
   //      validados, caso ao contrário o botão nem aparece"* — a porta só
   //      existe com conta E e-mail confirmado.
@@ -141,24 +159,39 @@ void main() {
   // abaixo passaram a medir o que agora é verdade: a porta **não aparece**.
   // -------------------------------------------------------------------------
   group('a porta de criar evento', () {
-    testWidgets('está na BARRA DE TOPO da Rede e abre o formulário',
-        (tester) async {
+    testWidgets('é FLUTUANTE no corpo da Rede, não está na barra, e abre o '
+        'formulário', (tester) async {
       await abrirAgenda(
         tester,
         rede: redeDaCriacao(enviados: <Map<String, dynamic>>[]),
       );
 
+      // **A metade que mudou em 19/10, dita por ausência.** Sem ela, pôr a
+      // ação flutuante SEM tirar o ícone da barra deixaria este caso verde e
+      // a pessoa com duas cópias da mesma porta -- e o sino sem o espaço que
+      // ele foi buscar.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.more_time),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o ícone de criar evento continua na barra de topo. '
+            'Ele saiu dali por decisão do cliente em 19/10 -- *"O botao criar '
+            'sai da barra"* --, para o sino de notificação entrar no lugar.',
+      );
+
       final porta = find.descendant(
-        of: find.byType(AppBar),
+        of: find.byType(AcaoDeCriarFlutuante),
         matching: find.byIcon(Icons.more_time),
       );
       expect(
         porta,
         findsOneWidget,
-        reason: 'REPROVA: a barra da Rede não oferece como criar um evento. O '
-            'botão do corpo saiu por pedido do cliente, então este ícone é o '
-            'único caminho do app: sem ele a rota de criar existe sem ninguém '
-            'poder alcançá-la.',
+        reason: 'REPROVA: a Rede não oferece como criar um evento. O botão do '
+            'corpo saiu em 18/10 e o ícone da barra saiu em 19/10, então esta '
+            'ação flutuante é o único caminho do app: sem ela a rota de criar '
+            'existe sem ninguém poder alcançá-la.',
       );
 
       await tocar(tester, porta);
@@ -224,7 +257,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(AppBar),
+          of: find.byType(AcaoDeCriarFlutuante),
           matching: find.byIcon(Icons.more_time),
         ),
         findsNothing,
@@ -247,7 +280,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(AppBar),
+          of: find.byType(AcaoDeCriarFlutuante),
           matching: find.byIcon(Icons.more_time),
         ),
         findsNothing,
@@ -269,7 +302,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(AppBar),
+          of: find.byType(AcaoDeCriarFlutuante),
           matching: find.byIcon(Icons.more_time),
         ),
         findsOneWidget,

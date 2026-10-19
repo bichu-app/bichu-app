@@ -107,7 +107,7 @@ class SubDestino {
   /// **Nulo so em linha que a gaveta nao pinta** -- a assercao do construtor
   /// nao deixa um item vivo passar sem ele. Nenhum vetor novo, nada baixado,
   /// nada gerado e nenhuma dependencia: a mesma regra que
-  /// `AcaoDeCriarNaBarra` ja segue.
+  /// `AcaoDeCriarFlutuante` ja segue.
   ///
   /// **Um glifo por sentido, dentro da secao.** Dois itens da mesma secao com
   /// o mesmo desenho e a colisao que o cliente leu no aparelho em 22/09
@@ -857,8 +857,7 @@ class ItemDaGaveta extends StatelessWidget {
       //
       // `textPrimary` e nao `textSecondary`: o glifo e a identidade do item,
       // do mesmo peso que o rotulo, enquanto a seta a direita e so a
-      // affordance -- e e ela que fica apagada. A mesma tinta que
-      // `AcaoDeCriarNaBarra` usa no glifo dela.
+      // affordance -- e e ela que fica apagada.
       leading: Icon(item.icone!, color: cores.textPrimary),
       // **`title` e mais nada.** Nao ha `subtitle` aqui, e a ausencia e a
       // decisao: as seis linhas de apoio ("Leia o QR da coleira de um pet.")

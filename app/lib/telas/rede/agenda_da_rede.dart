@@ -487,15 +487,23 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            // **A PORTA DE CRIAR EVENTO SUBIU PARA A BARRA DE TOPO** em
-            // 18/10/2026, e nao esta mais aqui. Pedido literal do cliente:
-            // "os itens de criacao, como evento e indicacao, ate o escanear
-            // poderia ser icones na barra superior ... e nao fique esse botao
-            // grande na pagina ocupando muito espaco".
+            // **A PORTA DE CRIAR EVENTO NAO ESTA MAIS AQUI**, e ela mudou
+            // de lugar DUAS vezes, as duas por decisao do cliente.
             //
-            // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no
-            // CORPO e nao na `AppBar`" --, e a reversao e decisao dele. Quem
-            // desenha o icone e `AcaoDeCriarNaBarra`; quem o entrega a casca e
+            // Em 18/10/2026 ela subiu para a BARRA DE TOPO: "os itens de
+            // criacao, como evento e indicacao, ate o escanear poderia ser
+            // icones na barra superior ... e nao fique esse botao grande na
+            // pagina ocupando muito espaco". Isso REVERTEU o que estava
+            // escrito nesta linha em 17/10 -- "no CORPO e nao na `AppBar`".
+            //
+            // Em 19/10/2026 ela SAIU DA BARRA e virou acao FLUTUANTE, para o
+            // sino de notificacao entrar no lugar: *"O botao criar sai da
+            // barra"*. **Ela nao voltou para esta linha**, e a diferenca e o
+            // que ele recusou em 18/10: o botao de LARGURA TOTAL que ocupava
+            // 64 dp de linha aqui. A acao flutuante fica por cima, no canto,
+            // e o corpo da agenda continua comecando na primeira linha.
+            //
+            // Quem desenha e `AcaoDeCriarFlutuante`; quem a entrega a casca e
             // `AbaRede`, em `abas.dart`, que e quem conhece a sessao: a porta
             // so aparece com conta E e-mail confirmado, tambem por decisao
             // dele no mesmo dia.
