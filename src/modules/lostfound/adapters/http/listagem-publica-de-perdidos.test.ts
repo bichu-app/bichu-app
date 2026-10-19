@@ -201,16 +201,61 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.equal(resposta.corpo['total'], 0);
   });
 
-  void it('o recorte chega à porta com a janela padrão do contrato, `30d`', async () => {
+  /**
+   * ISCA do contrato: `period` perdeu o `default: 30d` em `api/openapi.yaml`
+   * (cliente, 18/10/2026), e é por isso que a ausência chega INDEFINIDA à
+   * porta.
+   *
+   * Este é o caso que mede o Ajv, e não o nosso `??`. O Fastify monta o Ajv com
+   * `useDefaults: true`, então enquanto o contrato declarava o `default` era o
+   * VALIDADOR quem escrevia `period: '30d'` na query de quem não mandou nada —
+   * antes de o manipulador existir. Tirar o `?? JANELA_PADRAO` da aplicação
+   * sozinho não teria mudado nada aqui.
+   *
+   * Reponha `default: 30d` no `period` de `listPublicLostPets` no contrato e
+   * este caso reprova pelo nome, porque o esquema de `querystring` sai de lá.
+   */
+  void it('ISCA: `period` ausente chega INDEFINIDO à porta — janela aberta', async () => {
     const bancada = montar({ itens: [], total: 0 });
     await pedirSemConta(bancada, URL_DA_LISTA);
     const recorte = bancada.recortes[0];
-    assert.equal(recorte?.janela, '30d');
+    assert.equal(
+      recorte?.janela,
+      undefined,
+      `a janela deveria chegar indefinida, e chegou \`${String(recorte?.janela)}\`. ` +
+        'Se for `30d`, o `default` voltou ao contrato e o Ajv o está injetando.',
+    );
     assert.equal(recorte?.cidade, 'São Paulo');
     assert.equal(recorte?.pagina, 1);
     assert.equal(recorte?.limite, 20);
     // O relógio é injetado: a janela não lê `Date.now()`.
     assert.equal(recorte?.agora.getTime(), AGORA);
+  });
+
+  void it('ISCA: sem `period`, `applied_filters` NÃO cita `period`', async () => {
+    // É por `applied_filters` que a tela escreve a linha do recorte e conta os
+    // filtros ativos. Um `period` aqui faria a página de pets abrir dizendo
+    // "1 filtro ativo" sem ninguém ter escolhido nada, que é o defeito literal
+    // que o cliente reclamou.
+    const bancada = montar({ itens: [], total: 0 });
+    const resposta = await pedirSemConta(bancada, URL_DA_LISTA);
+    assert.deepEqual(resposta.corpo['applied_filters'], { city: 'São Paulo' });
+  });
+
+  void it('CONTRAPESO: `period=30d` PEDIDO continua valendo e aparece', async () => {
+    // A janela não foi removida do produto: ela deixou de ser imposta. Sem este
+    // caso, apagar `period` da consulta passaria pelas duas iscas acima.
+    const bancada = montar({ itens: [], total: 0 });
+    const resposta = await pedirSemConta(
+      bancada,
+      '/v1/public/lost-pets?city=S%C3%A3o%20Paulo&period=30d',
+    );
+    assert.equal(resposta.status, 200, JSON.stringify(resposta.corpo));
+    assert.equal(bancada.recortes[0]?.janela, '30d');
+    assert.deepEqual(resposta.corpo['applied_filters'], {
+      city: 'São Paulo',
+      period: '30d',
+    });
   });
 
   void it('`applied_filters` devolve o recorte que de fato valeu', async () => {

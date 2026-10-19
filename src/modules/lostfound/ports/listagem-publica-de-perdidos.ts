@@ -30,7 +30,16 @@
  */
 import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 
-/** A janela de `period`, como o contrato a declara. */
+/**
+ * A janela de `period`, como o contrato a declara.
+ *
+ * **Nao ha membro para "janela aberta", e a ausencia e a decisao.** Janela
+ * aberta e a AUSENCIA de janela (`undefined` em [RecorteDePerdidos.janela]), e
+ * nao um valor a mais: um `'all'` aqui seria um segundo jeito de dizer o que a
+ * ausencia ja diz, e `HORAS_DA_JANELA` -- o `Record<JanelaDePerdidos, number>`
+ * do adaptador -- nao tem numero de horas para ele. Um membro sem hora num
+ * mapa de horas e a dobra onde o proximo leitor erra.
+ */
 export type JanelaDePerdidos = '24h' | '7d' | '30d';
 
 /**
@@ -43,7 +52,21 @@ export interface RecorteDePerdidos {
   readonly bairro?: string | undefined;
   readonly especie?: EspecieDoCaso | undefined;
   readonly porte?: PorteDoCaso | undefined;
-  readonly janela: JanelaDePerdidos;
+  /**
+   * A janela PEDIDA, ou **indefinida quando ninguem pediu nenhuma**.
+   *
+   * Indefinida e **janela aberta**: o adaptador nao poe predicado de data
+   * nenhum. Decisao do cliente de 18/10/2026 (*"a pagina de pets nao deve
+   * trazer nenhum item do filtro por padrao, como esta atualmente por ultimos
+   * 30 dias"*), e ela vale desde o contrato: `period` perdeu o `default: 30d`
+   * em `api/openapi.yaml` no mesmo commit que este campo virou opcional.
+   *
+   * Nao ha padrao a repor nesta camada. Repor um aqui seria o servidor
+   * escolhendo o recorte que a pessoa nao escolheu -- o mesmo defeito que o
+   * `default` do contrato cometia um nivel acima, agora escondido em
+   * TypeScript em vez de YAML.
+   */
+  readonly janela?: JanelaDePerdidos | undefined;
   /** Busca parcial por **nome do pet**, e nunca por código de tag. */
   readonly termo?: string | undefined;
   readonly pagina: number;
