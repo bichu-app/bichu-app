@@ -5944,8 +5944,32 @@ paths:
           schema: { $ref: '#/components/schemas/PetSize' }
         - name: period
           in: query
-          description: Janela desde a abertura do caso.
-          schema: { type: string, enum: [24h, 7d, 30d], default: 30d }
+          description: |
+            Janela desde a ultima vez que o animal foi visto.
+
+            **SEM `default`, e a ausencia dele e a decisao do cliente de
+            18/10/2026**, nas palavras dele: *"a pagina de pets nao deve trazer
+            nenhum item do filtro por padrao, como esta atualmente por ultimos
+            30 dias"*. `period` ausente e **janela ABERTA**: o servidor nao
+            recorta por data nenhuma, e `applied_filters` nao cita `period`.
+
+            O `default: 30d` que estava aqui nao era documentacao: o Ajv que o
+            Fastify monta tem `useDefaults: true`, entao ele ESCREVIA `30d` na
+            query de quem nao mandou nada. O app parou de mandar `period` em
+            `991d0ddc` e a lista continuou recortada em 30 dias, porque quem
+            recebe a ausencia e o servidor.
+
+            **Nao ha valor de enum para "janela aberta", e isso e deliberado.**
+            Um `all` no enum seria um segundo jeito de dizer o que a ausencia
+            ja diz, e ele voltaria em `applied_filters` -- a tela leria um
+            filtro aplicado numa pagina que ninguem filtrou, que e exatamente o
+            defeito reclamado.
+
+            CUSTO MEDIDO: sem janela a consulta le a cidade inteira em vez dos
+            ultimos 30 dias (ver o cabecalho de
+            `kysely-listagem-publica-de-perdidos.ts`). A contencao de hoje sao
+            os tres tetos por `ip` desta operacao e a paginacao de 20.
+          schema: { type: string, enum: [24h, 7d, 30d] }
         - name: q
           in: query
           description: |

@@ -39,16 +39,25 @@ const semBanco = new Kysely<Database>({
 
 const AGORA = new Date('2026-10-18T12:00:00.000Z');
 
+/**
+ * O recorte MÍNIMO: só a cidade, que é o único obrigatório do contrato.
+ *
+ * **Sem `janela`, e essa é a forma que a página de pets abre** desde o pedido
+ * do cliente de 18/10/2026. O recorte com janela virou um caso à parte
+ * (`RECORTE_COM_JANELA`), para o mínimo ser o que a rota de fato recebe quando
+ * ninguém escolheu nada.
+ */
 const RECORTE_MINIMO: RecorteDePerdidos = {
   cidade: 'São Paulo',
-  janela: '30d',
   pagina: 1,
   limite: 20,
   agora: AGORA,
 };
 
+const RECORTE_COM_JANELA: RecorteDePerdidos = { ...RECORTE_MINIMO, janela: '30d' };
+
 const RECORTE_CHEIO: RecorteDePerdidos = {
-  ...RECORTE_MINIMO,
+  ...RECORTE_COM_JANELA,
   bairro: 'Vila Mariana',
   especie: 'dog',
   porte: 'P',
@@ -230,6 +239,43 @@ void describe('os quatro predicados de publicação estão no `WHERE`', () => {
   });
 });
 
+void describe('a ausência de `period` é janela ABERTA, e não 30 dias', () => {
+  /**
+   * ISCA: a prova de ponta desta camada. Reponha `janela: '30d'` em
+   * `RECORTE_MINIMO` (ou volte o `.where('lost_cases.last_seen_at', ...)` para
+   * fora do `if` no adaptador) e este caso reprova pelo nome.
+   *
+   * Por que ler o SQL e não o resultado: o predicado que não existe não
+   * aparece em contagem nenhuma. A única forma de afirmar "a consulta não
+   * recorta por data" é olhar a cláusula que ela compila.
+   */
+  void it('ISCA: recorte sem janela não compila predicado de `last_seen_at`', () => {
+    const onde = clausulaWhere(sqlDaPagina(RECORTE_MINIMO));
+    assert.doesNotMatch(
+      onde,
+      /"lost_cases"\."last_seen_at"/,
+      `janela aberta não pode recortar por data. WHERE compilado: ${onde}`,
+    );
+  });
+
+  void it('CONTRAPESO: com janela, o predicado de `last_seen_at` está lá', () => {
+    // Sem este caso, tirar a janela de TODA consulta passaria pela isca acima.
+    assert.match(
+      clausulaWhere(sqlDaPagina(RECORTE_COM_JANELA)),
+      /"lost_cases"\."last_seen_at" >= \$/,
+    );
+  });
+
+  void it('a cidade continua recortando mesmo sem janela: não é listagem nacional', () => {
+    // O ADR-0010 não quer um inventário nacional de animais perdidos. Janela
+    // aberta abre a JANELA, e não a geografia.
+    assert.match(
+      clausulaWhere(sqlDaPagina(RECORTE_MINIMO)),
+      /texto_para_busca\(lost_cases\.last_seen_city\) = texto_para_busca\(\$/,
+    );
+  });
+});
+
 void describe('a janela sai do relógio injetado, e não do `now()` do banco', () => {
   void it('`24h`, `7d` e `30d` recuam as horas que o contrato declara', () => {
     assert.equal(
@@ -241,6 +287,9 @@ void describe('a janela sai do relógio injetado, e não do `now()` do banco', (
   });
 
   void it('o SQL não chama `now()`: dois relógios na mesma decisão é falha falsa', () => {
-    assert.doesNotMatch(sqlDaPagina(RECORTE_MINIMO), /now\(\)/i);
+    // `RECORTE_COM_JANELA` e não `RECORTE_MINIMO`: o mínimo não tem janela, e
+    // uma consulta sem predicado de data nenhum passaria por este caso sem
+    // provar nada sobre de onde a data vem.
+    assert.doesNotMatch(sqlDaPagina(RECORTE_COM_JANELA), /now\(\)/i);
   });
 });

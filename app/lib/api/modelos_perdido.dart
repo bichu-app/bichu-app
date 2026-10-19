@@ -28,7 +28,23 @@ library;
 
 import 'modelos_pet.dart';
 
-/// A janela de `period`, como o contrato a declara.
+/// A janela de `period`, como o contrato a declara:
+/// `#/paths/~1public~1lost-pets/get/parameters/4/schema`.
+///
+/// O ponteiro traz o INDICE do parametro porque `period` e declarado em linha
+/// na operacao, e nao em `#/components/parameters` -- RFC 6901 nao tem outra
+/// forma de enderecar um item de lista. Reordenar os parametros de
+/// `listPublicLostPets` no contrato quebra este ponteiro, e
+/// `verificar-conformidade-do-app.mjs` reprova com `ponteiro-nao-resolve`
+/// nomeando-o, que e o jeito certo de descobrir.
+///
+/// **A lista fechada tem TRES valores, e nao ha um quarto para "janela
+/// aberta".** Janela aberta e a AUSENCIA de `period` na consulta, e nao um
+/// valor a mais -- `RecorteDePerdidos.janela` nula nao manda o parametro, e o
+/// servidor perdeu o `default: 30d` que repunha 30 dias por conta propria
+/// (`api/openapi.yaml`, 19/10/2026). Um `all` aqui voltaria em
+/// `applied_filters` e a tela abriria dizendo "1 filtro ativo" sem ninguem ter
+/// escolhido nada, que e o defeito que o cliente reclamou em 18/10.
 enum JanelaDePerdidos {
   umDia('24h', '24 horas'),
   seteDias('7d', '7 dias'),

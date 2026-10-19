@@ -14,8 +14,10 @@
  * e recorte sem resultado é uma página vazia com `total: 0` — nunca um erro.
  *
  * O que esta camada faz é só o que a borda não deve fazer: aplicar os padrões
- * do contrato (`period`, `page`, `limit`) num lugar só e montar o
- * `applied_filters` que a tela usa para dizer o recorte.
+ * do contrato (`page` e `limit` — `period` não tem mais padrão nenhum, ver
+ * `PAGINA_INICIAL` abaixo) num lugar só e montar o `applied_filters` que a tela
+ * usa para dizer o recorte. Janela ausente não entra no `applied_filters`, e é
+ * assim que a tela sabe que a página abriu sem filtro.
  */
 import { comoData, type Clock } from '../../../shared/time/clock.js';
 import type { components } from '../../../shared/types/generated/api.js';
@@ -52,8 +54,20 @@ export interface PedidoDePerdidos {
   readonly limit?: number | undefined;
 }
 
-/** Os padrões são os do contrato, COPIADOS de lá e não escolhidos aqui. */
-export const JANELA_PADRAO: JanelaDePerdidos = '30d';
+/**
+ * Os padrões são os do contrato, COPIADOS de lá e não escolhidos aqui.
+ *
+ * **Não há `JANELA_PADRAO`, e a ausência dela é a correção.** Ela existia e
+ * valia `'30d'`, copiada do `default: 30d` que o contrato declarava em
+ * `period`. O cliente pediu o contrário em 18/10/2026 — *"a página de pets não
+ * deve trazer nenhum item do filtro por padrão, como está atualmente por
+ * últimos 30 dias"* — e o `default` saiu do contrato no mesmo commit. Repor o
+ * padrão aqui deixaria a ausência significar 30 dias de novo, com a diferença
+ * de ninguém mais achar isso lendo o YAML.
+ *
+ * `page` e `limit` continuam com padrão porque o contrato continua declarando
+ * o deles: paginação ausente é página 1 de 20, e isso ninguém reclamou.
+ */
 export const PAGINA_INICIAL = 1;
 export const TAMANHO_PADRAO = 20;
 
@@ -85,7 +99,8 @@ export class ListagemPublicaDePerdidosService {
   ) {}
 
   async pagina(pedido: PedidoDePerdidos): Promise<PublicLostPetPage> {
-    const janela = pedido.period ?? JANELA_PADRAO;
+    // `pedido.period` SEM `??`: a ausência é janela aberta, e não 30 dias.
+    const janela = pedido.period;
     const pagina = pedido.page ?? PAGINA_INICIAL;
     const limite = pedido.limit ?? TAMANHO_PADRAO;
     const bairro = aparado(pedido.neighborhood);
