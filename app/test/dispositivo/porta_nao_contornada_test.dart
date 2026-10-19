@@ -1204,6 +1204,32 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// porta, porque ela para antes de pedir os bytes. O portao estrutural de
 /// diretivas deste mesmo arquivo responde por isso e passou.
 ///
+/// DESTRAVADO EM 18/10 (o botao `Ligar` curto e o GLIFO DO TIPO no lugar da
+/// imagem ausente). Dois pedidos do cliente no mesmo dia, e dois arquivos
+/// desta pasta mudam:
+///
+/// - `perto/lista_do_diretorio.dart`: o botao de ligar passou a ler so
+///   `Ligar`, com o icone de telefone, e **o nome do local saiu do rotulo
+///   VISIVEL sem sair do nome ACESSIVEL** -- quem publica `Ligar para <nome>`
+///   agora e um `Semantics` com `onTap` redeclarado (sem ele,
+///   `excludeSemantics: true` apagaria a acao do `TextButton`, que e o defeito
+///   2 de `test/a11y/acao_de_controle_test.dart`). E o cartao sem logo deixou
+///   de desenhar nada no lugar dela: ele desenha o glifo do TIPO.
+/// - `perto/pagina_do_local.dart`: o mesmo rotulo curto no `BotaoPrimario`
+///   (por `rotulo` + `nomeAcessivel`, que nasceram para isto) e o mesmo glifo
+///   num quadrado ao lado do nome, **so quando nao ha `photo_url`**. A faixa
+///   16:9 vazia foi TENTADA e medida: ela empurrava `Informações` para fora da
+///   arvore do `ListView` em toda entrada sem foto.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os dois importes
+/// novos sao locais -- `widgets/icone_do_inscrito.dart`, que nasceu FORA de
+/// `lib/telas` justamente porque o cartao e a pagina precisam do mesmo glifo,
+/// e `widgets/moldura.dart`, por `BichuMoldura.larguraFotoSm`. A CAMERA
+/// continua atras da porta: este ramo nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
+///
+///
 /// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
 /// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
 /// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
@@ -1242,7 +1268,18 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas dos dois lados ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = 'dd731286dc70e5beb66c24768801ed02c93b8dd3'; // LOTE DE 19/10/2026 (filtros-por-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: b476e764be1341b9fc408499e416ebb2bc0aae94, ac5e2a7c5f7e610f85955bb1631db0c14f6c5a4c. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo dd731286dc] LOTE DE 19/10/2026 (filtros-por-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: b476e764be1341b9fc408499e416ebb2bc0aae94, ac5e2a7c5f7e610f85955bb1631db0c14f6c5a4c. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// [lado do ramo, valor de ramo 8f0eeca8b1] UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = 'f2c3b9209ae248af53da714481c47236dfb26233'; // LOTE DE 19/10/2026 (ate perto-ligar-e-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: dd731286dc70e5beb66c24768801ed02c93b8dd3, 8f0eeca8b1977b7cbe4b8261b1a34d17545e628a. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
