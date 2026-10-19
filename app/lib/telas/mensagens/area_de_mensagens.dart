@@ -56,6 +56,7 @@ import '../../escopo.dart';
 import '../../formato/quando.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
 
@@ -291,7 +292,17 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text(TextosDasMensagens.titulo)),
-      body: SafeArea(child: _corpo()),
+      // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
+      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
+      // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
+      // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
+      // `Tentar de novo` da faixa.
+      body: SafeArea(
+        child: ArrastarParaAtualizar(
+          aoAtualizar: _carregar,
+          child: _corpo(),
+        ),
+      ),
     );
   }
 

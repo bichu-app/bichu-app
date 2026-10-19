@@ -1,3 +1,4 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 import 'dart:collection';
 
@@ -135,7 +136,16 @@ class _ItemDaAgenda {
 enum _Fase { carregando, lista, falha }
 
 class _AgendaDaRedeState extends State<AgendaDaRede>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   AbaDaRede _aba = AbaDaRede.proximos;
   RecorteDaRede _recorte = const RecorteDaRede();
   _Fase _fase = _Fase.carregando;

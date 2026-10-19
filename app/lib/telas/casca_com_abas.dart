@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
+import '../widgets/arrastar_para_atualizar.dart';
 import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
@@ -899,9 +900,27 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   final ValueNotifier<AcaoDeListagem?> _acaoDaListagem =
       ValueNotifier<AcaoDeListagem?>(null);
 
+  /// A BUSCA QUE O ARRASTO REFAZ, publicada pelo corpo da secao.
+  ///
+  /// Pedido do cliente, 18/10/2026: *"Crie uma acao no aplicativo de atualizar
+  /// a pagina conforme o usuario puxa a pagina para baixo"*.
+  ///
+  /// **Mora na casca porque a ROLAGEM e da casca.** O `ListView` das cinco
+  /// secoes e montado aqui embaixo, e `RefreshIndicator` precisa de rolavel
+  /// descendente: posto dentro de `ListaDePerdidos` ou de `VitrineDaLoja` ele
+  /// nao veria rolagem nenhuma e o gesto nao dispararia. Quem conhece a busca
+  /// e o corpo, e ele a publica por [SlotDeAtualizacao] -- o mesmo arranjo de
+  /// [_acaoDaListagem], e pela mesma razao.
+  ///
+  /// **Nulo nao aceita o gesto**, e nao e detalhe: `Perfil` deslogado nao tem
+  /// rota a chamar, e uma roda que gira sem buscar nada e pior que gesto
+  /// nenhum.
+  final RecargaDaSecao _recargaDaSecao = RecargaDaSecao();
+
   @override
   void dispose() {
     _acaoDaListagem.dispose();
+    _recargaDaSecao.dispose();
     super.dispose();
   }
 
@@ -956,7 +975,19 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
       // NAO REMOVA. `test/telas/casca_de_cinco_secoes_test.dart` reprova por
       // dois caminhos independentes: a varredura do fonte deste arquivo, e a
       // arvore de semantica com a acao primaria colapsada.
-      child: ListView(
+      // **O ARRASTAR-PARA-ATUALIZAR EMBRULHA ESTE `ListView`**, e nao o
+      // `Scaffold`: o `RefreshIndicator` precisa do rolavel como descendente.
+      // Ele fica DENTRO do `SafeArea` para a roda nao nascer debaixo da barra
+      // de status.
+      //
+      // **E PERMANENTE, e nao condicional** -- `.doSlot` le a busca no momento
+      // do arrasto. Desenha-lo so quando ha busca publicada remontava a secao
+      // inteira a cada publicacao, e com ela uma carga de rede nova: 22 casos
+      // da suite reprovaram assim. A medicao esta no construtor, em
+      // `widgets/arrastar_para_atualizar.dart`.
+      child: ArrastarParaAtualizar.doSlot(
+        recarga: _recargaDaSecao,
+        child: ListView(
         addSemanticIndexes: false,
         padding: const EdgeInsets.all(BichuEspaco.e4),
         children: <Widget>[
@@ -975,10 +1006,13 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ],
           ...filhos,
         ],
+        ),
       ),
     );
 
-    return SlotDaBarraDeListagem(
+    return SlotDeAtualizacao(
+      recarga: _recargaDaSecao,
+      child: SlotDaBarraDeListagem(
       acao: _acaoDaListagem,
       child: ValueListenableBuilder<AcaoDeListagem?>(
         valueListenable: _acaoDaListagem,
@@ -1092,6 +1126,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ),
           body: corpo,
         ),
+      ),
       ),
     );
   }

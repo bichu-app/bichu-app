@@ -1279,7 +1279,57 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = 'f2c3b9209ae248af53da714481c47236dfb26233'; // LOTE DE 19/10/2026 (ate perto-ligar-e-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: dd731286dc70e5beb66c24768801ed02c93b8dd3, 8f0eeca8b1977b7cbe4b8261b1a34d17545e628a. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo f2c3b9209a] LOTE DE 19/10/2026 (ate perto-ligar-e-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: dd731286dc70e5beb66c24768801ed02c93b8dd3, 8f0eeca8b1977b7cbe4b8261b1a34d17545e628a. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DESTRAVADO EM 18/10 PELOS TRES PEDIDOS DO CLIENTE desta rodada -- o
+/// desfecho do achado com foto e informacao util, a retirada do preco da
+/// `Loja` e o arrastar-para-atualizar no app inteiro. Cinco arquivos desta
+/// pasta mudam, e nenhum deles por causa da camera:
+///
+/// - `achado/tela_achado_registrado.dart`: a foto do pet (por `PreviaDaFoto`,
+///   que mora FORA de `lib/telas` -- a tela continua sem `dart:io`), tres
+///   blocos de informacao e a acao de escanear a plaquinha;
+/// - `achado/textos_do_achado.dart`: os textos dos tres blocos, com
+///   `Ninguém foi avisado ainda` reusado de `TelaCasoAberto.avisoDaFila`;
+/// - `loja/vitrine_da_loja.dart` e `loja/produto_da_loja.dart`: o preco, a
+///   linha `Preço de referência` e a clausula orfa do preco vencido sairam
+///   das duas telas da secao;
+/// - `casca_com_abas.dart`: o `ListView` das cinco secoes passou a ser
+///   embrulhado por `ArrastarParaAtualizar.doSlot`, e `TelaDeAba` ganhou o
+///   `RecargaDaSecao` que o corpo de cada secao publica. **Alteracao minima**:
+///   um importe, um campo, o descarte dele e o embrulho.
+///
+/// Mais seis arquivos desta pasta ganharam o gesto, cada um em duas linhas
+/// (`with PublicaAAtualizacao` + `aoArrastarParaAtualizar`), ou no embrulho do
+/// proprio rolavel: `perdido/lista_de_perdidos.dart`,
+/// `rede/agenda_da_rede.dart`, `perto/lista_do_diretorio.dart`,
+/// `perto/minhas_indicacoes.dart`, `perfil/meus_pets.dart`,
+/// `mensagens/area_de_mensagens.dart`,
+/// `notificacoes/caixa_de_notificacoes.dart`, `perfil/meus_achados.dart`,
+/// `perfil/vitrine_de_fotos.dart` e `conexoes/tela_pedidos_de_conexao.dart`
+/// (este ultimo tinha um `RefreshIndicator` cru, e foi convertido).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io` -- quem desenha o
+/// arquivo do aparelho continua sendo `widgets/previa_da_foto.dart`, fora
+/// desta pasta, e e exatamente por isso que ela existe.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor e de RAMO ISOLADO -- `feat/achado-rico-e-loja-sem-preco` sobre
+/// `origin/development` em f8c74714 -- e valor de ramo isolado NAO sobrevive a
+/// uniao. (antes: 145640db9f; e, dentro desta mesma frente, 216959f0cc antes de eu desfazer a reformatacao automatica que o `dart format` havia aplicado a 111 arquivos que esta tarefa nao toca)
+/// [lado do ramo, valor de ramo 6a089b729b] TRES PEDIDOS DE 18/10/2026: valor medido pelo procedimento deste proprio portao sobre o ramo isolado, nao copiado de relato.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = 'fcd3d1b1f76bbbba40380daa188cc0817969732a'; // LOTE DE 19/10/2026 (ate achado-rico-e-loja-sem-preco): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: f2c3b9209ae248af53da714481c47236dfb26233, 6a089b729b6c275ee46105fda9738069d886ec72. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

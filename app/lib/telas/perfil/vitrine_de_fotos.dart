@@ -6,6 +6,7 @@ import '../../api/vitrine_api.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/imagem_da_rede.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
@@ -130,10 +131,17 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
 
     return Scaffold(
       appBar: AppBar(title: const Text(VitrineDeFotosDoUsuario.tituloDaTela)),
+      // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
+      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
+      // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
+      // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
+      // `Tentar de novo` da faixa.
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(BichuEspaco.e4),
-          children: [
+        child: ArrastarParaAtualizar(
+          aoAtualizar: _carregar,
+          child: ListView(
+            padding: const EdgeInsets.all(BichuEspaco.e4),
+            children: [
             // A ORIENTACAO DE TAMANHO, uma linha, VISIVEL NA TELA e antes de
             // qualquer envio — o cliente pediu expressamente. Ela vem de
             // `orientacaoDeTamanhoDaImagem`, o ponto unico: o teto de 5 MB
@@ -155,6 +163,7 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
               _atalhoDosPets(cores, textos),
             ],
           ],
+        ),
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -161,8 +162,13 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
 
     return Scaffold(
       appBar: AppBar(title: const Text(TelaDePedidosDeConexao.titulo)),
-      body: RefreshIndicator(
-        onRefresh: _carregar,
+      // **ERA UM `RefreshIndicator` CRU, e passou a ser o componente.** Esta
+      // era a UNICA tela do app com o gesto, escrita antes de ele existir em
+      // lugar nenhum; o cliente mandou o gesto para o app inteiro em
+      // 18/10/2026, e manter o cru aqui deixaria uma tela com rotulo de leitor
+      // de tela diferente das outras dez.
+      body: ArrastarParaAtualizar(
+        aoAtualizar: _carregar,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
