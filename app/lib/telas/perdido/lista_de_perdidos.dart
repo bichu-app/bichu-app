@@ -1,3 +1,4 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -153,7 +154,17 @@ class ListaDePerdidos extends StatefulWidget {
 
 enum _Fase { carregando, lista, falha, semCidade }
 
-class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
+class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
 
   List<PerdidoPublico> _itens = const <PerdidoPublico>[];

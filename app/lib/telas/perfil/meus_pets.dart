@@ -8,6 +8,7 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -122,7 +123,17 @@ class MeusPets extends StatefulWidget {
 /// branco", e nenhum deles e "lista vazia por falha".
 enum _Fase { carregando, lista, falhaComCache, falhaSemCache }
 
-class _MeusPetsState extends State<MeusPets> {
+class _MeusPetsState extends State<MeusPets>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
   List<Pet> _pets = const <Pet>[];
   String? _textoDaFalha;
