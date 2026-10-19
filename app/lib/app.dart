@@ -20,6 +20,7 @@ import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
@@ -42,6 +43,7 @@ import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
+import 'telas/atualizacao/portao_de_versao.dart';
 import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
@@ -267,6 +269,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final VigiaDeAviso _vigiaDeAviso;
   late final OuvinteDeAvisos _avisosRecebidos;
 
+  /// A consulta ao veredito de versao (19/10/2026). Fica aqui, e nao no
+  /// `Escopo`, porque **um unico widget a consome** -- o portao de versao, no
+  /// `builder` abaixo. Nenhuma tela chama esta porta, e nenhuma deve: o
+  /// veredito nao e informacao de tela, e a decisao de fechar o aplicativo
+  /// mora num lugar so.
+  late final VersaoApi _versao;
+
   @override
   void initState() {
     super.initState();
@@ -286,6 +295,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       tokenDeAcesso: () => _sessao.tokenValido(),
     );
     _auth = AuthApi(_api);
+    _versao = VersaoApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
     // A porta das conexoes, do mesmo `ApiClient` das outras (uniao 18/10/2026).
@@ -649,7 +659,19 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
           );
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: escala),
-            child: filho ?? const SizedBox.shrink(),
+            // O PORTAO DE VERSAO EMBRULHA TODA ROTA, e e por isso que ele
+            // esta no `builder` e nao numa rota: instalado como rota, ele
+            // seria contornavel por um deep link apontando para outra. Aqui
+            // nao ha rota a que escapar.
+            //
+            // Ele nasce LIBERADO e nao espera resposta nenhuma para pintar o
+            // app: `PortaoDeVersao` so troca de estado se o servidor disser
+            // explicitamente que esta versao nao serve.
+            child: PortaoDeVersao(
+              versaoApi: _versao,
+              versaoDoApp: widget.config.versaoDoApp,
+              child: filho ?? const SizedBox.shrink(),
+            ),
           );
         },
       ),

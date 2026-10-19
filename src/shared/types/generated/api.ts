@@ -3805,6 +3805,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app/version-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Veredito de versao para o aplicativo que esta chamando
+         * @description **O aplicativo manda a propria versao e o SERVIDOR decide.** A resposta
+         *     e um VEREDITO, nunca o numero minimo: o app nao compara nada.
+         *
+         *     POR QUE A COMPARACAO NAO PODE FICAR NO APP. Comparar versao e onde se
+         *     erra -- `1.10.0` contra `1.9.0` sai invertido em qualquer comparacao de
+         *     texto, e um app publicado com essa conta errada so se conserta com
+         *     outro app publicado. No servidor ela se conserta sem binario novo. Por
+         *     isso esta resposta **nao** tem campo `minimum_version`: um campo desses
+         *     seria o convite para o app comparar de novo, e dois comparadores sao
+         *     dois resultados que um dia divergem.
+         *
+         *     POR QUE ESTA OPERACAO NAO E `GET /health`, que tambem e publica e
+         *     tambem e chamada sem conta:
+         *
+         *     1. `/health` e a sonda do balanceador e do orquestrador, e e a UNICA
+         *        operacao publica dispensada de `x-rate-limit` exatamente por isso
+         *        (a dispensa esta escrita no proprio lint). Carregar nela um
+         *        parametro de versao obrigatorio mudaria o contrato do que o
+         *        orquestrador chama a cada 10 segundos, e um parametro obrigatorio
+         *        novo numa sonda e uma sonda que passa a responder 400.
+         *     2. `/health` existe para NAO expor nada: ela nao tem parametro nenhum
+         *        hoje, e a identidade de build que ela devolve e para comparar
+         *        destino (criterio 12 da BICHUS-13), nao para o aplicativo ler.
+         *     3. Os dois tetos sao opostos. A sonda nao pode ser limitada; esta aqui
+         *        precisa ser.
+         *
+         *     O QUE ELA NAO DEVOLVE, e isto e ADR-0010: nenhum identificador
+         *     interno, nenhuma contagem, nenhum nome de host, nenhuma versao de
+         *     dependencia. Dois campos, e os dois sao configuracao publica.
+         *
+         *     AUSENCIA NAO BLOQUEIA. A politica mora em configuracao do servidor
+         *     (tabela `app_version_policy`); quando ela nao diz nada sobre a
+         *     plataforma que pediu -- linha ausente, ou `minimum_version` nula --, o
+         *     veredito e `supported`. O bloqueio so acontece quando o servidor diz
+         *     explicitamente que aquela versao nao serve. Desligar o mecanismo e um
+         *     `UPDATE` de uma coluna, sem subir imagem nenhuma.
+         */
+        get: operations["getAppVersionStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -5796,6 +5851,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Versao de aplicativo em TRES numeros (`MAIOR.MENOR.CORRECAO`), sem
+         *     sufixo e sem `v`.
+         *
+         *     O `pattern` e o mesmo que o `CHECK` da tabela `app_version_policy`
+         *     cobra na ESCRITA. Os dois existem e nao sao redundantes: este recusa o
+         *     que o aplicativo manda, aquele recusa o que a pessoa do deploy
+         *     escreve. Quem troca o numero a mao, de madrugada, erra por digitacao, e
+         *     o lugar de pegar isso e no `INSERT`/`UPDATE` -- nao na primeira
+         *     requisicao de um aparelho de verdade.
+         *
+         *     **Sem rotulo de pre-lancamento, e nao por economia:** ordenar
+         *     `1.2.0-rc.1` contra `1.2.0` e a parte da comparacao semantica que mais
+         *     se erra, e nenhum build deste produto usa sufixo. O dia em que usar,
+         *     quem muda o formato muda os dois lugares juntos.
+         * @example 1.4.2
+         */
+        AppVersion: string;
+        /**
+         * @description O veredito do servidor sobre a versao que chamou.
+         *
+         *     `verdict` e obrigatorio **e** e o unico campo que decide algo. O
+         *     aplicativo le este campo e nada mais; ele nao recalcula, nao compara e
+         *     nao deduz. Veredito que ele nao reconheca e tratado como `supported`,
+         *     porque veredito desconhecido nao e ordem de fechar o app.
+         */
+        AppVersionStatus: {
+            /**
+             * @description - `supported`: esta versao serve. **E o valor que a ausencia de
+             *       politica produz** -- linha ausente, `minimum_version` nula, ou
+             *       plataforma sobre a qual nada foi escrito.
+             *     - `update_recommended`: ha versao nova e esta ainda funciona. O
+             *       aplicativo AVISA, de forma dispensavel, e nao impede nada.
+             *     - `update_required`: esta versao nao serve mais. O aplicativo
+             *       fecha o uso. **E o unico valor que bloqueia**, e ele so sai
+             *       daqui quando a configuracao do servidor o diz explicitamente.
+             * @enum {string}
+             */
+            verdict: "supported" | "update_recommended" | "update_required";
+            /**
+             * Format: uri
+             * @description Para onde mandar a pessoa. **Nula enquanto nao houver loja**, e
+             *     hoje ela e nula: o APK vai por arquivo e o iOS por cabo (decisao de
+             *     23/09; a conta Apple nao andou).
+             *
+             *     Nula, o aplicativo **nao desenha botao**: botao que leva a lugar
+             *     nenhum e pior que nenhum botao, e a tela explica o que fazer em
+             *     palavras. Nao e campo opcional por comodidade -- e o estado de hoje
+             *     dito em voz alta.
+             *
+             *     Ela sai aqui, e nao de `--dart-define` do build, por um motivo
+             *     so: no dia da publicacao na loja o endereco e conhecido DEPOIS de
+             *     o binario existir, e um endereco de loja embutido no binario
+             *     precisaria de outro binario para ser corrigido.
+             * @example null
+             */
+            store_url?: string | null;
+        };
         /**
          * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
          *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
@@ -16009,6 +16122,51 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getAppVersionStatus: {
+        parameters: {
+            query: {
+                /**
+                 * @description A plataforma do binario que esta perguntando. Separada porque a
+                 *     politica e por plataforma: hoje so o Android e publicado (decisao
+                 *     de 23/09) e o iOS esta dormente, e uma politica unica bloquearia o
+                 *     iOS de provisionamento gratuito junto.
+                 */
+                platform: "android" | "ios";
+                /**
+                 * @description A versao do binario que esta perguntando (`versionName` do Android,
+                 *     `CFBundleShortVersionString` do iOS), em tres numeros.
+                 *
+                 *     Fora do formato responde 400, e nao bloqueio: o app trata 400 como
+                 *     "nao consegui perguntar" e libera o uso. A alternativa -- deduzir
+                 *     bloqueio de um valor que nao se entende -- trancaria a base por um
+                 *     erro de digitacao de build.
+                 */
+                version: components["schemas"]["AppVersion"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description O veredito para a versao que chamou. **Tres estados distintos, e
+             *     nao um booleano**: `update_required` fecha o app, e
+             *     `update_recommended` so avisa e pode ser dispensado pela pessoa.
+             *     Um campo booleano nao conseguiria carregar os dois.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVersionStatus"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     health: {

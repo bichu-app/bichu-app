@@ -35,6 +35,8 @@ import { rateLimitDriver } from '../shared/config/app-config.js';
 import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
 import { vigiarParametrosDasRotas } from '../shared/http/validacao-de-parametros.js';
 import { registrarSaude } from '../shared/http/health.js';
+import { registrarRotaDoVereditoDeVersao } from '../modules/app-release/adapters/http/version-status-routes.js';
+import { criarLeituraDaPoliticaDeVersao } from '../modules/app-release/adapters/persistence/kysely-politica-de-versao.js';
 import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.js';
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../modules/identity/adapters/external/rs256-token-signer.js';
@@ -1243,6 +1245,15 @@ export async function main(): Promise<void> {
     } else {
       app.log.warn('ADMIN_ORIGIN ausente: o prefixo /v1/admin nao foi registrado');
     }
+    // O VEREDITO DE VERSAO (pedido do cliente, 19/10/2026). Fica ao lado da
+    // sonda porque as duas sao `tags: [ops]`, e DELIBERADAMENTE separada dela:
+    // o motivo inteiro esta no cabecalho de `version-status-routes.ts`.
+    //
+    // Sem autenticador, e sem nada do escopo de identidade: a rota responde
+    // sem conta e nao fala de pessoa nenhuma.
+    registrarRotaDoVereditoDeVersao(escopo, {
+      politica: criarLeituraDaPoliticaDeVersao(db),
+    });
     registrarSaude(escopo, {
       version: config.version,
       // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que
