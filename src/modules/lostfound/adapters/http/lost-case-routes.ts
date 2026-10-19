@@ -184,6 +184,42 @@ export const rotaDeEncerramento = defineRoute({
 });
 
 /**
+ * A REABERTURA do caso encerrado por engano (`reopenLostCase`).
+ *
+ * **A operação não é nova; a rota é.** `reopenLostCase` está em
+ * `api/openapi.yaml` desde o começo e era uma linha de
+ * `OPERACOES_AINDA_SEM_ROTA`: o contrato prometia a quatro clientes que
+ * *"encerrar e reversivel por 7 dias"*, nomeava a operação, e ela respondia
+ * 404. Promessa escrita no contrato e não cumprida é defeito, e não pendência
+ * de produto.
+ *
+ * **`effects` e o teto são os do contrato, copiados dele.** A operação declara
+ * `x-effects: [notifies]` e `account 60/1h deny_429`; com efeito não vazio
+ * `defineRoute` torna a ausência de `rateLimit` erro de compilação (ADR-0016),
+ * e o portão de subida derruba a aplicação se a rota divergir do documento.
+ *
+ * **`notifies` está declarado e esta rota não avisa ninguém** — e a divergência
+ * é do contrato, não desta linha. Quem reenvia o aviso à vizinhança é
+ * `POST /alerts`, com teto de um por dia; reabrir por engano não pode acordar
+ * os vizinhos de novo. O mesmo vale do outro lado: `closeLostCase` também
+ * declara `notifies`, e nada no servidor manda mensagem de sistema ao encerrar
+ * (a conversa vira modo leitura por `estadoDaConversa`, DERIVADO do estado do
+ * caso na leitura, sem gravar nada). Está escrito aqui porque é o tipo de coisa
+ * que, não escrita, volta como uma tela afirmando que alguém foi avisado.
+ *
+ * **Sem `Idempotency-Key`**, porque o contrato não o declara nesta operação —
+ * e ela não precisa: reabrir um caso já aberto devolve 200 com o caso aberto,
+ * que é a resposta certa para o reenvio da fila offline.
+ */
+export const rotaDeReabertura = defineRoute({
+  operationId: 'reopenLostCase',
+  method: 'post',
+  path: '/lost-cases/:caseId/reopen',
+  effects: ['notifies'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
  * A decisão humana sobre uma correspondência (BICHUS-86, critérios 4, 5 e 12).
  *
  * **Os dois tetos vêm do contrato**, que declara `x-effects: [notifies]` e
@@ -395,6 +431,13 @@ function comoRespostaDoCaso(
     unread_message_count: 0,
     share_url: links.shareUrl,
     poster_url: links.posterUrl,
+    // `LostCase.reopen_deadline`, que o contrato declara e **nada emitia**. Sem
+    // ele o aplicativo não tem como saber se a janela de 7 dias ainda está
+    // aberta, e a alternativa seria o app refazer a conta de 7 dias em cima de
+    // `closed_at` -- número de produto recalculado no cliente, que envelhece no
+    // bolso de quem não atualiza. Nulo em caso aberto: é o prazo DAQUELE
+    // encerramento, e `reabrir` o devolve a `NULL`.
+    reopen_deadline: caso.reopenDeadline === null ? null : caso.reopenDeadline.toISOString(),
     closed_at: caso.closedAt === null ? null : caso.closedAt.toISOString(),
     resolution:
       caso.closureOutcome === null
@@ -795,6 +838,36 @@ export function registrarRotasDeCasos(
         corpo.note,
         chamador,
       );
+      return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+    },
+  );
+
+  /**
+   * `POST /v1/lost-cases/:caseId/reopen` — o desfazer do encerramento.
+   *
+   * **Sem `schema.body`, e a ausência é do contrato**: `reopenLostCase` não
+   * declara `requestBody`. `corpoDe` lançaria aqui, de propósito — ele existe
+   * para que uma rota que espera corpo sem o contrato declarar um morra na
+   * subida em vez de validar contra nada.
+   *
+   * O `caseId` ausente vira **404 e não 400**, pela mesma razão escrita na
+   * decisão do candidato: a forma já foi conferida contra `format: uuid` por
+   * `vigiarParametrosDasRotas`, e o que sobra é o segmento não ter chegado —
+   * ausência de segmento não é valor malformado.
+   *
+   * Os quatro desfechos (200, 404, 409 e 410) são decididos na camada de
+   * aplicação, e não aqui: ver `LostCaseService.reabrir`.
+   */
+  registrarRota(
+    app,
+    rotaDeReabertura,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const caseId = caseIdDoCaminho(request);
+      if (caseId === undefined) throw problemas.naoEncontrado();
+
+      const caso = await deps.casos.reabrir(caseId, chamador);
       return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
     },
   );

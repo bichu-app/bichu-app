@@ -271,3 +271,60 @@ class RecorteDePerdidos {
 
   static const Object _naoMexer = Object();
 }
+
+/// `#/components/schemas/PublicLostCase`: a visão pública de UM caso, pelo
+/// `share_token`.
+///
+/// `allOf` sobre `PublicLostPet` no contrato, e por isso [perdido] está aqui
+/// inteiro em vez de ter os campos repetidos: o cartão da listagem e esta
+/// página desenham a **mesma** projeção, e duas cópias dos sete campos
+/// divergiriam na primeira manutenção.
+///
+/// ## `podeAvisarQueViu` é do SERVIDOR, e a tela não o deduz
+///
+/// `can_report_sighting` é falso **só para o próprio tutor** — e verdadeiro
+/// para qualquer outra conta **e para quem chama sem conta**. O contrato diz
+/// por escrito por quê: *"a conta é pedida no toque, não na leitura. Esconder o
+/// botão de quem não entrou esconderia justamente de quem chegou pelo cartaz."*
+///
+/// Deduzir isto no app seria impossível sem o `user_id` do tutor, que esta
+/// projeção não tem e nunca deve ter (ADR-0010, item 6).
+class CasoPerdidoPublico {
+  const CasoPerdidoPublico({
+    required this.perdido,
+    required this.podeAvisarQueViu,
+    this.descricao,
+    this.notasDeCuidado,
+    this.urlDoCartaz,
+  });
+
+  /// Os campos de `PublicLostPet`, que é o que o cartão da listagem já lê.
+  final PerdidoPublico perdido;
+
+  /// `can_report_sighting`. Ver o cabeçalho da classe.
+  ///
+  /// **Lido sem `??` para `false`**: o contrato o declara `boolean` sem
+  /// `nullable`, e um padrão falso aqui esconderia a ação de quem tem direito a
+  /// ela no dia em que o campo chegasse ausente por defeito de servidor — que é
+  /// o pior desfecho possível, porque quem perde a ação é o achador. O padrão é
+  /// `true`, e quem é o tutor recebe `false` explícito.
+  final bool podeAvisarQueViu;
+
+  /// `description`: o texto do tutor.
+  final String? descricao;
+
+  /// `care_notes`: o mesmo cartão de manejo da página do achador por QR.
+  final String? notasDeCuidado;
+
+  final String? urlDoCartaz;
+
+  factory CasoPerdidoPublico.doJson(Map<String, dynamic> json) {
+    return CasoPerdidoPublico(
+      perdido: PerdidoPublico.doJson(json),
+      podeAvisarQueViu: json['can_report_sighting'] as bool? ?? true,
+      descricao: json['description'] as String?,
+      notasDeCuidado: json['care_notes'] as String?,
+      urlDoCartaz: json['poster_url'] as String?,
+    );
+  }
+}

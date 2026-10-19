@@ -104,6 +104,24 @@ export type AuditAction =
    */
   | 'lost_case.updated'
   | 'lost_case.closed'
+  /**
+   * O tutor REABRIU o caso que ele havia encerrado (`reopenLostCase`).
+   *
+   * **Separada de `lost_case.opened`**, e a separação é o que torna a métrica
+   * de reencontro auditável: um caso reaberto não é um caso novo, e contá-lo
+   * como abertura inflaria o denominador. A pergunta de investigação que só
+   * esta ação responde é "este desfecho `reunited` foi desfeito?" — e ela
+   * importa porque `closeLostCase` é um toque único, sem confirmação até agora,
+   * numa tela que a pessoa abre em pânico.
+   *
+   * O metadado carrega o desfecho DESFEITO (`undone_outcome`) e o prazo que
+   * valia (`reopen_deadline`). Nunca coordenada, como no resto do módulo.
+   *
+   * Está aqui também porque o `node-pg-migrate` DESCARTA `RAISE NOTICE` e
+   * `WARNING`: contagem e diagnóstico deste módulo vão para `audit.events`, que
+   * é o único lugar onde alguém os encontra depois.
+   */
+  | 'lost_case.reopened'
   | 'lost_case.alert_dispatched'
   /**
    * O tutor pediu o REENVIO do alerta (`POST /v1/lost-cases/{id}/alerts`).

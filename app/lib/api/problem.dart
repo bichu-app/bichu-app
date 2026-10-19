@@ -112,6 +112,25 @@ enum ProblemTipo {
   /// ja faz em `participants` (`Tutor` / `Quem achou`).
   conversaEncerrada('conversation-closed'),
 
+  /// O link publico de um caso nao leva mais a caso aberto. 410.
+  ///
+  /// **O corpo cobre CINCO situacoes com a mesma resposta** (`x-problem-types`,
+  /// slug `lost-case-closed`): caso encerrado, pet excluido, pet falecido, pet
+  /// arquivado e token desconhecido. A fusao e de privacidade, e a tela nao
+  /// pode desfaze-la -- distinguir contaria a um estranho o que aconteceu com o
+  /// animal de outra pessoa, ou se aquele token um dia existiu.
+  ///
+  /// **Nao e 404, e a diferenca e de produto**: link impresso num cartaz nao
+  /// pode terminar numa pagina sem saida (mesma razao da tag revogada,
+  /// ADR-0004). O contrato declara a saida em `next_action`:
+  /// `register_stray_found_report` -- quem chegou por um cartaz antigo e esta
+  /// vendo um animal parecido registra o achado avulso, e o cruzamento por
+  /// atributos faz o resto.
+  ///
+  /// **Separado de [conversaEncerrada]** de proposito, e a nota do contrato diz
+  /// por que: *"a tela e outra: quem abre o cartaz nao esta numa conversa"*.
+  casoEncerrado('lost-case-closed'),
+
   /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
   limiteDeTentativas('rate-limited'),
 

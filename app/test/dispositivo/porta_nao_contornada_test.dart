@@ -1170,10 +1170,50 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// nao escolhendo um dos dois lados. O CAMPO DE CIDADE DIGITADA entrou depois da mescla, no mesmo ramo, e por isso este valor e o SEGUNDO desta frente. (antes, por ramo isolado: 799b29b7b2; depois da mescla e antes da cidade: 0f927ff7ee;
 /// no lado de development: 50b766d431)
 ///
+/// DESTRAVADO EM 18/10 (O PET PERDIDO: pagina interna, acao inversa e os dois
+/// padroes visuais). Quatro pedidos do cliente, nestas palavras: *"quando o pet
+/// esta perdido, deve ter uma pagina interna do pet e um botao caso a pessoa
+/// encontrou o animal"*; *"nao tem uma opcao de desmarcar como perdido ou que
+/// foi encontrado"*; *"esse botao deve ter um padrao visual diferente quando
+/// estiver perdido e quando nao estiver"*; e o campo rotulado `Sinais` passar a
+/// ler `Sinais particulares` -- ele leu `Sinais` na tela e PERGUNTOU o que era.
 ///
+/// Quatro arquivos desta pasta mudam:
+/// `perdido/tela_do_caso_publico.dart` (NOVO, a pagina interna do perdido sobre
+/// `getPublicLostCase`, com `Encontrei este animal` levando ao fluxo de achado
+/// que JA existe -- `Rotas.registrarAchado` com o `share_token` no rascunho,
+/// que e o que o contrato manda usar em `can_report_sighting`);
+/// `perdido/lista_de_perdidos.dart` (UMA edicao: `aoTocar` do cartao, que era
+/// nulo porque a tela de destino nao existia);
+/// `perdido/cartao_do_perdido.dart` (SO PROSA: o paragrafo que dizia que aquela
+/// tela "nao existe no app" deixou de ser verdade);
+/// `pet/tela_detalhe_do_pet.dart` (`_acaoDeMarcarPerdido` virou
+/// `_acaoDeEstadoDoPet`, com os dois padroes -- secundario de 48 dp quando nao
+/// perdido, primario `critico` de 64 dp mais faixa de urgencia quando perdido
+/// -- e o `Encontrei meu pet` sobre `closeLostCase`);
+/// `pet/textos_do_detalhe.dart` (os textos novos e o rotulo dos sinais, que
+/// reusa a constante do formulario em vez de criar uma segunda redacao).
 ///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Quem desenha
+/// imagem de servidor continua sendo `widgets/imagem_da_rede.dart`, FORA de
+/// `lib/telas`.
 ///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre `origin/development` em `f8c74714`, e
+/// **nao** copiado de ramo nem de relato. Valor de ramo isolado nao sobrevive a
+/// uniao. (antes: 145640db9f)
 ///
+/// DESTRAVADO EM 19/10 (REABRIR O CASO DE PERDIDO: a folha de confirmacao e o
+/// desfazer). O contrato prometia, na descricao de `closeLostCase`, que
+/// *"Encerrar e reversivel por 7 dias"*, e nomeava a operacao que faz a
+/// reversao -- `reopenLostCase`, `POST /v1/lost-cases/{caseId}/reopen`, com um
+/// `410` cuja descricao e *"Passou dos 7 dias"*. Ela **nunca ganhou rota**: era
+/// uma linha de `OPERACOES_AINDA_SEM_ROTA`, e o caminho respondia 404. Entao
+/// `Encontrei meu pet` -- que a branch anterior entregou -- era UM TOQUE, sem
+/// confirmacao e sem desfazer, numa tela que se abre em panico.
 ///
 /// DESTRAVADO EM 18/10 (a FOTO DO PERFIL DE QUEM NAO TEM NOME, defeito
 /// relatado pelo cliente contra homologacao). UM arquivo desta pasta muda:
@@ -1340,7 +1380,44 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = '5d91124f9101c6b972982385a340418daa4fdca6'; // LOTE DE 19/10/2026 (ate estado-deslogado-nas-secoes): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: fcd3d1b1f76bbbba40380daa188cc0817969732a, e6dcbd496e15b81b3ef34181ce62c59da45e07ed. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo 5d91124f91] LOTE DE 19/10/2026 (ate estado-deslogado-nas-secoes): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: fcd3d1b1f76bbbba40380daa188cc0817969732a, e6dcbd496e15b81b3ef34181ce62c59da45e07ed. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DOIS arquivos desta pasta mudam:
+/// `pet/tela_detalhe_do_pet.dart` (a folha de confirmacao antes do
+/// `closeLostCase` -- `_confirmarEncerramento` mais a `_FolhaDoEncerramento`,
+/// que NAO e a `FolhaDestrutiva`: encerrar nao apaga nada e volta por 7 dias,
+/// e o 24.17.6 separa os dois casos --, mais a oferta de `Reabrir o caso`
+/// sobre `reopenLostCase`, condicionada ao `reopen_deadline` da RESPOSTA e
+/// nunca a uma janela de 7 dias refeita no aparelho);
+/// `pet/textos_do_detalhe.dart` (os textos da folha e da reabertura, e a
+/// CORRECAO da frase de sucesso, que afirmava *"quem estava ajudando foi
+/// avisado"* -- falso nos dois niveis: nada e enviado ao encerrar, a conversa
+/// vira modo leitura por derivacao na leitura, e o push esta bloqueado em
+/// producao e inexistente no iPhone do cliente).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. O unico importe
+/// novo e `formato/quando.dart` (para `QuandoNaLista.diaEMes`, que formata o
+/// prazo), e ele mora FORA de `lib/telas`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre a arvore de trabalho desta entrega, e
+/// **nao** copiado de ramo nem de relato. HA OUTRAS TRES BRANCHES tocando
+/// `app/lib/telas` nesta rodada, com valores concorrentes: valor de ramo
+/// isolado NAO sobrevive a uniao. (antes: 1015211855c9e1d2346aab2f0c120e1d0e4a1e0b)
+///
+/// [lado do ramo, valor de ramo 4d66551db6] REABRIR O CASO DE PERDIDO (19/10/2026): valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`) sobre a arvore de trabalho desta entrega -- nao copiado de ramo nem de relato. As justificativas de todos os destravamentos anteriores ficaram INTEIRAS acima. Valor de ramo isolado NAO sobrevive a uniao: a quem mesclar, recalcule.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = '32769dcfb795143f98d911f430c0b2dae2fbdd58'; // LOTE DE 19/10/2026 (ate reabrir-caso-de-perdido): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 5d91124f9101c6b972982385a340418daa4fdca6, 4d66551db6fef958f5c0f42a84913e48bfcc0481. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

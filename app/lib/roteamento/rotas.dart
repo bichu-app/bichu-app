@@ -38,6 +38,7 @@ import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
 import '../telas/perdido/tela_de_quem_e_o_caso.dart';
 import '../telas/perdido/tela_de_retomada.dart';
+import '../telas/perdido/tela_do_caso_publico.dart';
 import '../telas/perdido/tela_onde_e_quando.dart';
 import '../telas/achado/resultado_do_achado.dart';
 import '../telas/achado/tela_achado_registrado.dart';
@@ -261,6 +262,34 @@ abstract final class Rotas {
   /// O endereco de F2.2/F2.3 para [codigo].
   static String petDaTagDe(String codigo) =>
       '/t/${Uri.encodeComponent(codigo)}';
+
+  /// `/p/<share_token>`: a PAGINA INTERNA de um pet perdido, na visao de quem
+  /// nao e o tutor (cliente, 18/10/2026).
+  ///
+  /// **`/p/` e nao um caminho novo**: e o mesmo que o `share_url` de todo caso
+  /// ja carrega (`PublicLostPet.share_url`, e as paginas publicas da web em
+  /// `/p/{shareToken}`). Inventar um segundo endereco para a mesma pagina faria
+  /// o link que ja circula no grupo do bairro nao ter onde chegar quando os App
+  /// Links e os Universal Links entrarem -- que e a mesma razao de `/t/<codigo>`
+  /// existir como endereco antes deles.
+  ///
+  /// **O token atravessa o endereco, ao contrario da resolucao da tag.** Ele e
+  /// opaco, nao e UUID e nao e ordenavel (ADR-0010, item 6), e e tudo o que a
+  /// leitura precisa: `GET /public/lost-cases/{shareToken}` monta a tela
+  /// inteira. Por isso esta rota **nao** depende de `extra` e funciona por link
+  /// direto, que e o caso de quem recebeu o link e nao tem o app aberto.
+  static const String casoPublico = '/p/:shareToken';
+
+  /// O nome do parametro de caminho, num lugar so.
+  static const String parametroDoShareToken = 'shareToken';
+
+  /// O endereco da pagina publica do caso de [shareToken].
+  ///
+  /// `Uri.encodeComponent` porque o token vem da resposta do servidor, e nao
+  /// desta classe: montar caminho com interpolacao crua e como um token com
+  /// barra vira uma rota que nao existe. Mesma regra de [petDaTagDe].
+  static String casoPublicoDe(String shareToken) =>
+      '/p/${Uri.encodeComponent(shareToken)}';
 
   static const String entrar = '/entrar';
   static const String criarConta = '/criar-conta';
@@ -553,6 +582,31 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               estado.pathParameters[Rotas.parametroDoCodigoDaTag] ?? '';
           if (codigo.isEmpty) return const TelaLeitorDeQr();
           return TelaDoPetDaTag(tag: tag, codigo: codigo);
+        },
+      ),
+      // A PAGINA INTERNA DO PET PERDIDO (cliente, 18/10/2026).
+      //
+      // **Irma da casca, e nao filha dela**: ela e alcancada por link externo
+      // -- o `share_url` que circula fora do app -- e quem chega por um cartaz
+      // nao chega "dentro da aba Pets". Uma barra de abas abaixo dela
+      // ofereceria quatro saidas a quem esta com um animal no colo. `Voltar`
+      // devolve a listagem para quem chegou por ela.
+      //
+      // **Sem `extra`, e isso e o ponto**: a leitura e sempre do servidor, com
+      // o token do caminho. Uma tela que aceitasse o caso pronto em `extra`
+      // desenharia `can_report_sighting` sem perguntar a ninguem -- e no
+      // aparelho compartilhado a segunda pessoa a entrar herdaria a leitura da
+      // primeira. Ver o cabecalho de `TelaDoCasoPublico`.
+      GoRoute(
+        path: Rotas.casoPublico,
+        builder: (context, estado) {
+          final token =
+              estado.pathParameters[Rotas.parametroDoShareToken] ?? '';
+          // Token vazio nao e caso nenhum. **Volta para a listagem**, e nao
+          // para uma tela que afirma um pet que ninguem leu: tela de conteudo
+          // sem conteudo e o defeito que o criterio 2 da BICHUS-31 proibe.
+          if (token.isEmpty) return const AbaPets();
+          return TelaDoCasoPublico(shareToken: token);
         },
       ),
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem

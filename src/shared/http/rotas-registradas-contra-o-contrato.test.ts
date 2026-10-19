@@ -187,7 +187,9 @@ const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
  * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
  * duas delas servidas pela borda (a lista acima), sobrando 11. Cinco delas
  * ganharam rota depois (as tres do caso de perdido e as duas da conversa do lado
- * com conta), e a divida esta em SEIS.
+ * com conta), e a divida esta em SEIS. Com `reopenLostCase`, que o contrato
+ * prometia como reversao por 7 dias e nunca ganhou rota, a divida esta em
+ * CINCO.
  *
  * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
  * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
@@ -206,7 +208,12 @@ const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   // DECIDIR sobre um candidato que nao tinha como ver, e so o achador tinha
   // bloqueio e denuncia). Quem implementa uma linha daqui tira a linha no mesmo
   // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
-  'reopenLostCase',
+  // `reopenLostCase` SAIU desta lista: ela ganhou rota
+  // (`rotaDeReabertura`, em `lost-case-routes.ts`) no commit que fechou o
+  // desfazer do encerramento. O contrato prometia, em `closeLostCase`, que
+  // "encerrar e reversivel por 7 dias" e nomeava a operacao -- e ela respondia
+  // 404. Quem implementa uma linha daqui tira a linha no mesmo commit, e e
+  // esta lista exata nos dois sentidos que cobra o contrario.
   'snoozeLostCaseReminder',
   // `listPublicLostPets` SAIU desta lista: ela ganhou rota
   // (`listagem-publica-de-perdidos-routes.ts`) no commit que encheu a aba

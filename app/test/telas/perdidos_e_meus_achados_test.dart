@@ -11,6 +11,7 @@
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
+import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
@@ -838,14 +839,53 @@ void main() {
           find.byType(CartaoDoPerdido).evaluate().single.widget as CartaoDoPerdido;
       expect(cartao.perdido.shareToken, tokenDeMel);
       expect(umUuid.hasMatch(cartao.perdido.shareToken), isFalse);
-      // E o cartao NAO promete toque: `/pets/:petId` e endereçada por UUID
-      // interno, e a tela do caso publico por token e do SITE, nao do app.
+      // **O CARTAO PASSOU A PROMETER TOQUE** (cliente, 18/10/2026: *"quando o
+      // pet esta perdido, deve ter uma pagina interna do pet"*). O que estava
+      // aqui era `expect(cartao.aoTocar, isNull)` com o motivo escrito ao lado:
+      // *"se for outro, confira que ele existe antes de prometer"*. O destino
+      // agora existe -- `TelaDoCasoPublico`, sobre `getPublicLostCase` --, e o
+      // que este caso continua cobrando e a OUTRA metade da mesma frase: que o
+      // endereco **nao carrega UUID interno**.
+      //
+      // DESLIGANDO: troque o destino de `lista_de_perdidos.dart` por
+      // `Rotas.detalheDoPetDe(...)` com qualquer id. Este caso reprova.
       expect(
         cartao.aoTocar,
-        isNull,
-        reason: 'REPROVA: o cartao publico ganhou toque. Se o destino for '
-            '`/pets/:petId`, ele carrega UUID interno; se for outro, confira '
-            'que ele existe antes de prometer.',
+        isNotNull,
+        reason: 'REPROVA: o cartao da listagem de perdidos voltou a nao levar '
+            'a lugar nenhum. O cliente pediu a pagina interna do pet perdido, '
+            'e sem toque no cartao ela nao tem porta.',
+      );
+      await tocar(tester, find.byType(CartaoDoPerdido));
+
+      final pagina = find.byType(TelaDoCasoPublico);
+      expect(
+        pagina,
+        findsOneWidget,
+        reason: 'REPROVA: o toque no cartao nao abriu a pagina publica do '
+            'caso. Sem ela os `expect` abaixo nao medem nada.',
+      );
+      final token = tester.widget<TelaDoCasoPublico>(pagina).shareToken;
+      expect(
+        token,
+        tokenDeMel,
+        reason: 'REPROVA: a pagina nao foi enderecada pelo `share_token` do '
+            'cartao.',
+      );
+      expect(
+        umUuid.hasMatch(token),
+        isFalse,
+        reason: 'REPROVA: o endereco da pagina publica carrega UUID interno '
+            '(ADR-0010, item 6). `PublicLostPet` nao traz `pet_id` nem '
+            '`case_id` de proposito -- o contrato diz que ela "nunca deve '
+            'possuir" --, e a chave deste caminho e o token opaco.',
+      );
+      final enderecos = textosNaTela(tester).where(umUuid.hasMatch).toList();
+      expect(
+        enderecos,
+        isEmpty,
+        reason: 'REPROVA: UUID interno na pagina publica do caso. '
+            'Achados: $enderecos',
       );
     });
   });

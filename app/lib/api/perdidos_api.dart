@@ -48,4 +48,35 @@ class PerdidosApi {
     );
     return PaginaDePerdidos.doJson(json);
   }
+
+  /// O caminho de `getPublicLostCase`, relativo a `/v1`.
+  ///
+  /// `Uri.encodeComponent` porque o token vem da resposta do servidor, e não
+  /// desta classe: montar caminho com interpolação crua é como um token com
+  /// barra vira um caminho que não existe. Mesma regra de `Rotas.produtoDaLojaDe`.
+  static String caminhoDoCaso(String shareToken) =>
+      '/public/lost-cases/${Uri.encodeComponent(shareToken)}';
+
+  /// `GET /public/lost-cases/{shareToken}` (`getPublicLostCase`).
+  ///
+  /// **Autenticação OPCIONAL, e aqui ela não é folga: ela decide um campo.**
+  /// O contrato declara `security: [bearerAuth, {}]`, e a única diferença que o
+  /// token faz é `can_report_sighting`, que é falso só para o próprio tutor. Por
+  /// isso `exigeToken` fica no padrão (`true`): o cliente manda o `Bearer`
+  /// quando há sessão e o omite quando não há, que é exatamente o que a
+  /// operação pede.
+  ///
+  /// **Não é `exigeToken: false`**, ao contrário de [listar]. Aquela rota
+  /// declara `security: []` — token nenhum, nunca —, e mandar um lá faria a
+  /// borda recusar sessão velha numa listagem que tem de funcionar sem conta.
+  /// Aqui o token é PREVISTO, e omiti-lo faria o tutor receber a leitura do
+  /// vizinho na própria página do caso dele.
+  ///
+  /// Não trata falha: 410 é "o caso foi encerrado" e 404 é "não existe",
+  /// e a tela tem texto diferente para cada um. Um `catch` aqui apagaria a
+  /// distinção.
+  Future<CasoPerdidoPublico> buscarCaso(String shareToken) async {
+    final json = await _api.get(caminhoDoCaso(shareToken));
+    return CasoPerdidoPublico.doJson(json);
+  }
 }
