@@ -1500,7 +1500,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = 'f11be6f92fdf8472232005651e0257cdffd72763'; // LOTE DE 19/10/2026 (ate bloqueados-e-titulo): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 1959197b9604bfd136bfc160a099ed66427da947, 8b070d9dc099578cf31f6125aca8de592fa655ff. Valor de ramo isolado NAO sobrevive a uniao.
+const String _arvoreDasTelas = '201cb4ec32ee39e427d3645c699d0e9d8da537d5'; // LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) DEPOIS do conserto do ACHADO DA MESCLA: os dois itens vivos novos da gaveta (`Pedidos de conexao` e `Bloqueados`) nasceram sem glifo porque a assercao que o exige veio de OUTRO ramo, e a uniao sem conflito quebrava `const_eval_throws_exception`. Ver `gaveta_de_secoes.dart`. Substitui f11be6f92fdf8472232005651e0257cdffd72763.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

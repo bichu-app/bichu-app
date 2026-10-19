@@ -527,10 +527,30 @@ abstract final class RegistroDeSubDestinos {
       // **`destino` e nao `conteudoDaSecao`**: a tela tem `Scaffold`, barra de
       // saida e endereco proprio. Ela nao e um bloco da aba.
       SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `person_add_alt_outlined` (0xf276): uma PESSOA sendo acrescentada, que
+        // e exatamente o que um pedido de conexao e. Nao colide nesta secao.
         rotulo: TelaDePedidosDeConexao.titulo,
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.pedidosDeConexao,
+        icone: Icons.person_add_alt_outlined,
       ),
       // **SEGUNDA LINHA NOVA (19/10/2026), pela mesma razao da de cima**: a UX
       // 27.5.5 fechou em 21/09 e nao tem linha para esta -- bloquear alguem e
@@ -555,10 +575,30 @@ abstract final class RegistroDeSubDestinos {
       // linhas de cima sao sobre OUTRAS PESSOAS e ficam juntas; `Meus dados`
       // abre o grupo do que e sobre a propria conta.
       SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `block_outlined` (0xeed1): o glifo universal de bloqueio. Nao colide
+        // nesta secao, e nao divide sentido com nenhum outro item dela.
         rotulo: TelaDeBloqueados.titulo,
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.pessoasBloqueadas,
+        icone: Icons.block_outlined,
       ),
       SubDestino(
         // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou
