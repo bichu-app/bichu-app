@@ -11,6 +11,7 @@
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -419,7 +420,6 @@ void main() {
       );
       expect(pedidos, hasLength(1));
       expect(pedidos.single.url.queryParameters['city'], 'São Paulo');
-      expect(pedidos.single.url.queryParameters['period'], '30d');
       expect(pedidos.single.url.queryParameters['limit'], '20');
       expect(
         pedidos.single.headers.containsKey('Authorization'),
@@ -427,6 +427,74 @@ void main() {
         reason: 'REPROVA: a listagem publica mandou credencial. A rota declara '
             '`security: []`, e token vencido passaria a derrubar a tela de '
             'quem mais precisa dela.',
+      );
+    });
+
+    testWidgets(
+        'ISCA: a pagina de pets abre SEM FILTRO NENHUM, e sem `period`',
+        (tester) async {
+      // PEDIDO DO CLIENTE, 18/10/2026: *"a pagina de pets nao deve trazer
+      // nenhum item do filtro por padrao, como esta atualmente por ultimos 30
+      // dias"*.
+      //
+      // DESLIGANDO: em `lib/api/modelos_perdido.dart`, volte
+      // `this.janela = JanelaDePerdidos.trintaDias` no construtor de
+      // `RecorteDePerdidos` (ou faca `JanelaDePerdidos.de` devolver
+      // `trintaDias` no lugar de nulo). As DUAS medidas deste caso reprovam:
+      // `period=30d` reaparece na consulta e o gatilho volta a se chamar
+      // "Filtrar, 1 filtro ativo" na primeira abertura.
+      //
+      // **Ele mede a CONSULTA e o NOME do controle, e nao um texto de apoio.**
+      // O que o cliente ve e um filtro que ninguem escolheu ja valendo; as
+      // duas medidas sao as duas caras disso -- o recorte que foi pedido ao
+      // servidor e o estado que a tela anuncia.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+
+      expect(pedidos, hasLength(1));
+      expect(
+        pedidos.single.url.queryParameters.containsKey('period'),
+        isFalse,
+        reason: 'REPROVA: a pagina de pets mandou `period='
+            '${pedidos.single.url.queryParameters['period']}` sem ninguem '
+            'ter escolhido janela. Quem decide o que fazer com a ausencia e o '
+            'servidor, pelo `default` da rota -- o app parou de escolher '
+            'por ele.',
+      );
+
+      // O gatilho de recorte se chama pelo VERBO e so: sem "1 filtro ativo",
+      // porque nao ha filtro ativo. Esta e a forma de medir o distintivo sem
+      // depender de um literal que pode mudar de palavra: o nome com estado
+      // tem a palavra "ativo" dentro, e o sem estado nao tem.
+      final gatilho = find.byType(GatilhoDeRecorteNoCorpo);
+      expect(
+        gatilho,
+        findsOneWidget,
+        reason: 'REPROVA: a pagina de pets abriu sem o gatilho de filtro. Sem '
+            'ele as medidas abaixo seriam sobre um controle que nao existe.',
+      );
+      // O `Tooltip` e DESCENDENTE do gatilho (ele o constroi), e nao
+      // ancestral: `GatilhoDeRecorteNoCorpo` e quem envolve o botao.
+      final nome = tester
+          .widget<Tooltip>(
+            find.descendant(of: gatilho, matching: find.byType(Tooltip)),
+          )
+          .message;
+      expect(
+        nome,
+        'Filtrar',
+        reason: 'REPROVA: o gatilho de filtro da pagina de pets abriu se '
+            'chamando "$nome". Com filtro nenhum aplicado o nome e o verbo e '
+            'so -- qualquer estado no nome quer dizer que algo foi filtrado '
+            'sem ninguem pedir.',
       );
     });
 

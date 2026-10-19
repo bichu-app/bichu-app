@@ -454,7 +454,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         GrupoDeFiltro(
           chave: 'period',
           titulo: 'Perdido desde',
-          selecionado: base.janela.codigo,
+          // **Nasce SEM pastilha marcada** (cliente, 18/10/2026): nulo e
+          // "qualquer janela", e e o estado em que a pagina de pets abre.
+          selecionado: base.janela?.codigo,
           opcoes: <OpcaoDeRecorte>[
             for (final j in JanelaDePerdidos.values)
               OpcaoDeRecorte(codigo: j.codigo, rotulo: j.rotulo),
@@ -486,8 +488,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         bairro: escolha.filtros['neighborhood'],
         especie: Especie.de(escolha.filtros['species']),
         porte: Porte.de(escolha.filtros['size']),
-        // `period` tem padrão no contrato: limpar a pastilha volta para `30d`,
-        // e não para "sem janela" — não existe listagem sem janela.
+        // **Limpar a pastilha deixa a janela NULA**, e `period` sai da
+        // consulta. Era o contrário até 18/10/2026: a tela repunha `30d`, e a
+        // lista voltava recortada sem ninguém ter pedido. Quem decide o que
+        // fazer com a ausência é o servidor, pelo `default: 30d` que o
+        // contrato declara na rota — o app parou de escolher por ele.
         janela: JanelaDePerdidos.de(escolha.filtros['period']),
         pagina: 1,
       ),
@@ -501,7 +506,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         base.bairro != null ||
         base.especie != null ||
         base.porte != null ||
-        base.janela != JanelaDePerdidos.trintaDias;
+        base.janela != null;
   }
 
   @override
@@ -534,8 +539,18 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            // **O GATILHO DE FILTRO VEM NA FRENTE DA BUSCA, na mesma
+            // linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
+            // sozinho aqui e o gatilho com rotulo logo abaixo, desenhado pela
+            // barra; agora a linha e uma so e sobe inteira, e a barra deixa de
+            // desenhar o gatilho por causa de `buscaAcima`.
             if (comControles) ...<Widget>[
-              CampoDeBuscaDaListagem(busca: busca),
+              LinhaDeBuscaDaListagem(
+                total: _total,
+                busca: busca,
+                filtro: filtro,
+                aoAplicar: _aplicarAFolha,
+              ),
               const SizedBox(height: BichuEspaco.e4),
             ],
             if (_fase == _Fase.lista)
