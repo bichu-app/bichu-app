@@ -1175,7 +1175,40 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DESTRAVADO EM 18/10 (o botao `Ligar` curto e o GLIFO DO TIPO no lugar da
+/// imagem ausente). Dois pedidos do cliente no mesmo dia, e dois arquivos
+/// desta pasta mudam:
+///
+/// - `perto/lista_do_diretorio.dart`: o botao de ligar passou a ler so
+///   `Ligar`, com o icone de telefone, e **o nome do local saiu do rotulo
+///   VISIVEL sem sair do nome ACESSIVEL** -- quem publica `Ligar para <nome>`
+///   agora e um `Semantics` com `onTap` redeclarado (sem ele,
+///   `excludeSemantics: true` apagaria a acao do `TextButton`, que e o defeito
+///   2 de `test/a11y/acao_de_controle_test.dart`). E o cartao sem logo deixou
+///   de desenhar nada no lugar dela: ele desenha o glifo do TIPO.
+/// - `perto/pagina_do_local.dart`: o mesmo rotulo curto no `BotaoPrimario`
+///   (por `rotulo` + `nomeAcessivel`, que nasceram para isto) e o mesmo glifo
+///   num quadrado ao lado do nome, **so quando nao ha `photo_url`**. A faixa
+///   16:9 vazia foi TENTADA e medida: ela empurrava `Informações` para fora da
+///   arvore do `ListView` em toda entrada sem foto.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os dois importes
+/// novos sao locais -- `widgets/icone_do_inscrito.dart`, que nasceu FORA de
+/// `lib/telas` justamente porque o cartao e a pagina precisam do mesmo glifo,
+/// e `widgets/moldura.dart`, por `BichuMoldura.larguraFotoSm`. A CAMERA
+/// continua atras da porta: este ramo nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
+/// a uniao. (antes: 145640db9f)
+///
+const String _arvoreDasTelas = '8f0eeca8b1977b7cbe4b8261b1a34d17545e628a'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

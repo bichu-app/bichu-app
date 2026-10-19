@@ -16,7 +16,9 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/grupo_de_opcoes.dart';
+import '../../widgets/icone_do_inscrito.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 import 'lista_do_diretorio.dart';
@@ -130,6 +132,13 @@ class PaginaDoLocal extends StatefulWidget {
   static const String explicacaoSemAvaliacoes =
       'Seja a primeira pessoa a contar como foi o atendimento aqui.';
 
+  /// O rotulo **VISIVEL** do botao de contato: so `Ligar`.
+  ///
+  /// Pedido do cliente em 18/10/2026: *"os botoes de ligar para devem ser
+  /// apenas 'Ligar' com o icone, nao devem trazer repetidamente o nome da
+  /// clinica"*. Nesta pagina o nome e o TITULO, a poucos dp acima do botao:
+  /// repeti-lo dentro dele era a terceira vez que a mesma tela dizia a mesma
+  /// palavra.
   static const String rotuloDeLigar = 'Ligar';
 
   static const String rotuloDaNota = 'Sua nota';
@@ -206,11 +215,16 @@ class PaginaDoLocal extends StatefulWidget {
       ? 'Esta é a única avaliação deste local.'
       : 'Você viu todas as $total avaliações deste local.';
 
-  /// `Ligar para a Clínica Pata Firme`, e nao `Ligar`.
+  /// `Ligar para a Clínica Pata Firme` — o nome **ACESSIVEL**, e nao o visivel.
   ///
-  /// O nome acessivel leva PARA QUEM e a ligacao: `Ligar` sozinho e um
-  /// controle indistinguivel para quem navega por leitor de tela e chegou nele
-  /// sem ver a tela inteira.
+  /// **O rotulo visivel encurtou em 18/10/2026; este NAO.** O nome acessivel
+  /// leva PARA QUEM e a ligacao: `Ligar` sozinho e um controle indistinguivel
+  /// para quem navega por leitor de tela e chegou nele sem ver a tela inteira
+  /// (WCAG 2.1 SC 4.1.2). Ele chega ao botao por `nomeAcessivel`, e nao por
+  /// `rotulo`.
+  ///
+  /// O SC 2.5.3 continua satisfeito: [rotuloDeLigar] e PREFIXO desta string,
+  /// entao quem usa comando de voz diz "Ligar" e acerta o controle.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
   /// O rotulo da faixa do local, para quem nao ve a imagem.
@@ -781,6 +795,14 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       // **Local sem foto nao tem faixa vazia**: `fotoUrl` e nulo em tres casos
       // normais (sem foto, ainda processando, recusada nos bytes) e a pagina
       // abre no nome, exatamente como antes de a foto existir.
+      //
+      // **Sem foto a pagina continua abrindo no nome, e NAO numa faixa 16:9
+      // vazia.** Quem desenha o tipo nesse caso e o quadrado do
+      // [_Cabecalho] -- ver a prosa dele. Um retangulo cinza de borda a borda
+      // e da altura de uma faixa empurraria `Informações` e a media para
+      // baixo da dobra em toda entrada sem foto, que e a maioria delas; foi
+      // medido aqui, com `Atende cão e gato.` saindo da arvore do `ListView`
+      // ao tentar.
       if (detalhe.fotoUrl case final String foto) ...<Widget>[
         _FaixaDoLocal(url: foto, nome: detalhe.nome),
         const SizedBox(height: BichuEspaco.e4),
@@ -1018,6 +1040,26 @@ class _FaixaDoLocal extends StatelessWidget {
 }
 
 /// Nome, atividade, lugar, distancia, **o que foi verificado** e `Ligar`.
+///
+/// ## O quadrado do TIPO, ao lado do nome
+///
+/// Pedido do cliente em 18/10/2026: *"tem que colocar o icone de clinica,
+/// estabelecimento, profissional, caso a foto/logo da empresa nao tenha sido
+/// cadastrada"*. Ele entra AQUI, e nao no lugar da faixa, por duas razoes:
+///
+/// 1. **medida**: um `IconeDoInscrito` em 16:9 de borda a borda no topo
+///    empurrava `Informações` e a media para fora da arvore do `ListView` numa
+///    pagina sem foto -- o caso `local SEM foto nao tem faixa vazia` deixou de
+///    achar `Atende cão e gato.` na primeira tentativa desta entrega. A pagina
+///    sem foto tem de abrir no nome, e esse era o motivo original de nao haver
+///    faixa vazia;
+/// 2. **o mesmo desenho da lista**: no cartao do `Perto` o glifo fica num
+///    quadrado de `larguraFotoSm` ao lado do nome, e e o mesmo quadrado aqui.
+///    Duas geometrias para o mesmo conceito divergem na primeira edicao.
+///
+/// **So quando nao ha faixa.** Com `photo_url`, a foto do lugar ja esta
+/// desenhada acima e o tipo esta escrito em palavras na linha da atividade:
+/// um terceiro lugar dizendo a mesma coisa seria ruido.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.detalhe, required this.aoLigar});
 
@@ -1045,10 +1087,31 @@ class _Cabecalho extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Semantics(
-                header: true,
-                child: Text(detalhe.nome, style: textos.headlineSmall),
-              ),
+              if (detalhe.fotoUrl == null)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    IconeDoInscrito(
+                      atividade: detalhe.atividade,
+                      tipoDeEntidade: detalhe.tipoDeEntidade,
+                      largura: BichuMoldura.larguraFotoSm,
+                      raio: BichuRaio.sm,
+                    ),
+                    const SizedBox(width: BichuEspaco.e3),
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child:
+                            Text(detalhe.nome, style: textos.headlineSmall),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Semantics(
+                  header: true,
+                  child: Text(detalhe.nome, style: textos.headlineSmall),
+                ),
               if (atividade != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
                 Text(
@@ -1091,7 +1154,11 @@ class _Cabecalho extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: BotaoPrimario(
-              rotulo: PaginaDoLocal.ligarPara(detalhe.nome),
+              // VISIVEL `Ligar`, com o telefone; ANUNCIADO `Ligar para <nome>`.
+              // Ver `rotuloDeLigar` e `ligarPara`.
+              rotulo: PaginaDoLocal.rotuloDeLigar,
+              nomeAcessivel: PaginaDoLocal.ligarPara(detalhe.nome),
+              icone: Icons.call_outlined,
               aoTocar: () => aoLigar(telefone),
             ),
           ),
