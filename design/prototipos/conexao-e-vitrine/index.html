@@ -1,0 +1,1964 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perfil, conexão e vitrine — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================================
+   PROTÓTIPO DE DESENHO — NÃO É CÓDIGO DE PRODUÇÃO.
+   Tokens MEDIDOS em design/tokens.json (destino app/lib/theme/bichu_tokens.g.dart).
+   Linguagem "Sério" do APP: sem blob, sem manuscrito, sem patinha.
+   Nenhuma imagem: toda foto é BLOCO NEUTRO rotulado com o peso que ela custaria.
+   O rótulo de bytes é o argumento, não enfeite.
+   =========================================================================== */
+:root{
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --error:#8E2E0B; --error-container:#FBEEE9;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --info:#1B5FA8; --info-container:#DCEAF8;
+  --warning-container:#F4F3F1;
+  --outline:#DFDED8; --outline-control:#827F73; --focus-ring:#9E0B3A;
+  --disabled-surface:#F4F3F1; --on-disabled:#827F73;
+  --community-fill:#A9CFBB; --on-community-fill:#1C1B19;
+  --action-fill:#E7B93E; --on-action-fill:#1C1B19;
+  --scrim:#1C1B19A3;
+
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px; --e10:40px; --e12:48px;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px;
+  --fonte-titulo:'Plus Jakarta Sans',system-ui,sans-serif;
+  --fonte:'Inter',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --primary:#E79DB4; --primary-pressed:#ECBBCB; --on-primary:#17150F;
+    --primary-container:#54031D; --on-primary-container:#ECBBCB;
+    --surface:#17150F; --surface-alt:#201D15; --surface-sunken:#2B271C;
+    --text-primary:#F3F0E7; --text-secondary:#BEB9AB; --text-muted:#BEB9AB;
+    --error:#E89273; --error-container:#3D1406;
+    --success:#A9CFBB; --success-container:#0E3A21;
+    --info:#7FB3E3; --info-container:#12304F;
+    --warning-container:#2B271C;
+    --outline:#38342A; --outline-control:#6E6857; --focus-ring:#E79DB4;
+    --disabled-surface:#201D15; --on-disabled:#7E7866;
+    --scrim:#000000B8;
+  }
+}
+:root[data-theme="dark"]{
+  --primary:#E79DB4; --primary-pressed:#ECBBCB; --on-primary:#17150F;
+  --primary-container:#54031D; --on-primary-container:#ECBBCB;
+  --surface:#17150F; --surface-alt:#201D15; --surface-sunken:#2B271C;
+  --text-primary:#F3F0E7; --text-secondary:#BEB9AB; --text-muted:#BEB9AB;
+  --error:#E89273; --error-container:#3D1406;
+  --success:#A9CFBB; --success-container:#0E3A21;
+  --info:#7FB3E3; --info-container:#12304F;
+  --warning-container:#2B271C;
+  --outline:#38342A; --outline-control:#6E6857; --focus-ring:#E79DB4;
+  --disabled-surface:#201D15; --on-disabled:#7E7866;
+  --scrim:#000000B8;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--surface-alt); color:var(--text-primary);
+  font-family:var(--fonte); font-size:16px; line-height:24px;
+  padding:var(--e6) var(--e4) var(--e12);
+}
+h1{font-family:var(--fonte-titulo); font-weight:800; font-size:32px; line-height:38px; letter-spacing:-.02em; margin:0 0 var(--e2)}
+.intro{color:var(--text-secondary); max-width:66ch; margin:0 0 var(--e4)}
+.intro code, .legenda code{background:var(--surface-sunken); padding:0 4px; border-radius:4px; font-size:.92em}
+.aviso-topo{
+  max-width:66ch; background:var(--warning-container); border:1px solid var(--outline);
+  border-left:4px solid var(--primary); border-radius:var(--r-md);
+  padding:var(--e3) var(--e4); margin:0 0 var(--e6); font-size:14px; line-height:20px;
+}
+.barra-tema{display:flex; gap:var(--e2); margin-bottom:var(--e6)}
+.barra-tema button{
+  font:600 14px/18px var(--fonte); letter-spacing:.01em; min-height:var(--alvo-min);
+  padding:0 var(--e4); border-radius:var(--r-full); cursor:pointer;
+  background:transparent; color:var(--primary); border:1px solid var(--outline-control);
+}
+.barra-tema button[aria-pressed="true"]{background:var(--primary); color:var(--on-primary); border-color:transparent}
+
+.telas{display:flex; flex-wrap:wrap; gap:var(--e8); align-items:flex-start}
+.coluna{flex:1 1 360px; min-width:0; max-width:400px}
+.coluna > h2{font-family:var(--fonte-titulo); font-weight:700; font-size:22px; line-height:28px; margin:0 0 var(--e1)}
+.coluna > p{color:var(--text-secondary); font-size:14px; line-height:20px; margin:0 0 var(--e4)}
+.coluna > p b{color:var(--text-primary)}
+
+.aparelho{
+  width:100%; max-width:360px; background:var(--surface);
+  border:1px solid var(--outline); border-radius:var(--r-xl); overflow:hidden;
+}
+.appbar{
+  display:flex; align-items:center; gap:var(--e3); min-height:56px;
+  padding:0 var(--e4); border-bottom:1px solid var(--outline); background:var(--surface);
+}
+.appbar .titulo{font-weight:600; font-size:22px; line-height:28px; flex:1 1 auto; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.appbar .glifo{width:24px; height:24px; color:var(--text-secondary); flex:0 0 auto}
+.corpo{padding:var(--e4)}
+
+/* ---- bloco neutro: toda "foto" deste protótipo. O rótulo é o peso. ---- */
+.bloco{
+  background:var(--surface-sunken); border:1px solid var(--outline);
+  background-image:repeating-linear-gradient(135deg, transparent 0 7px, rgba(128,128,128,.10) 7px 8px);
+  display:flex; align-items:flex-end; justify-content:center;
+  color:var(--text-muted); font:700 10px/12px var(--fonte); letter-spacing:.06em;
+  text-transform:uppercase; padding-bottom:3px; text-align:center; overflow:hidden;
+}
+
+/* ---- cabeçalho do perfil: capa + identidade + selo ---- */
+.cab{display:flex; gap:var(--e4); align-items:flex-start}
+.capa-casca{position:relative; flex:0 0 auto; width:96px; height:96px}
+.capa{width:96px; height:96px; border-radius:var(--r-full)}
+.selo-validado{
+  position:absolute; right:-2px; bottom:-2px; width:28px; height:28px; border-radius:var(--r-full);
+  background:var(--success); color:#FAFAF8; border:2px solid var(--surface);
+  display:flex; align-items:center; justify-content:center; font:800 14px/1 var(--fonte);
+}
+:root[data-theme="dark"] .selo-validado{color:#17150F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .selo-validado{color:#17150F}}
+.cab .ident{min-width:0; flex:1 1 auto; padding-top:var(--e1)}
+.cab .nome{font-family:var(--fonte-titulo); font-weight:700; font-size:22px; line-height:28px; margin:0}
+.cab .desde{color:var(--text-secondary); font-size:14px; line-height:20px; margin:var(--e1) 0 0}
+.cab .lugar{color:var(--text-muted); font-size:13px; line-height:18px; margin:2px 0 0}
+
+/* ---- linha de confiança: os sinais que decidem se a pessoa confia ---- */
+.confianca{
+  display:flex; gap:var(--e2); flex-wrap:wrap; margin:var(--e5) 0 0;
+  padding:var(--e3); background:var(--surface-sunken); border-radius:var(--r-md);
+}
+.sinal{flex:1 1 86px; min-width:0; text-align:center}
+.sinal b{display:block; font-family:var(--fonte-titulo); font-weight:800; font-size:20px; line-height:24px}
+.sinal small{display:block; color:var(--text-secondary); font-size:12px; line-height:16px; margin-top:2px}
+.sinal.vazio b{color:var(--text-muted)}
+
+.secao{font-weight:700; font-size:12px; line-height:16px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--text-muted); margin:var(--e6) 0 var(--e2);
+  display:flex; align-items:baseline; gap:var(--e2)}
+.secao .acessorio{margin-left:auto; color:var(--primary); font-weight:600;
+  font-size:13px; letter-spacing:0; text-transform:none}
+
+/* ---- A VITRINE: grade 3x3. 104 dp por célula em moldura de 360 dp. ---- */
+.vitrine{display:grid; grid-template-columns:repeat(3,1fr); gap:var(--e2)}
+.vitrine .bloco{aspect-ratio:1/1; border-radius:var(--r-sm)}
+.vitrine .bloco.capa-marcada{outline:2px solid var(--primary); outline-offset:-2px}
+.vitrine .mais{
+  aspect-ratio:1/1; border-radius:var(--r-sm); border:1px dashed var(--outline-control);
+  background:none; color:var(--primary); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:2px; cursor:pointer;
+  font:600 12px/16px var(--fonte);
+}
+.vitrine .mais span:first-child{font-size:24px; line-height:24px; font-weight:400}
+
+/* ---- vitrine coberta: o estado que faz o desenho ---- */
+.coberta{position:relative; border-radius:var(--r-md); overflow:hidden}
+.coberta .vitrine{filter:blur(6px); opacity:.5; pointer-events:none}
+.coberta .cortina{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:var(--e1); text-align:center;
+  padding:var(--e4); background:color-mix(in srgb, var(--surface) 78%, transparent);
+}
+.coberta .cortina b{font-weight:600; font-size:16px; line-height:20px}
+.coberta .cortina small{color:var(--text-secondary); font-size:13px; line-height:18px; max-width:30ch}
+
+/* ---- pets: cartões que apontam para a página do pet, sem copiar foto ---- */
+.pets{display:flex; gap:var(--e2); overflow:hidden}
+.pet{flex:1 1 0; min-width:0; text-align:center}
+.pet .bloco{aspect-ratio:1/1.1; border-radius:var(--r-md); margin-bottom:var(--e1)}
+.pet b{display:block; font-weight:600; font-size:14px; line-height:18px; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap}
+.pet small{display:block; color:var(--text-secondary); font-size:12px; line-height:16px}
+.pet .perdido{color:var(--error); font-weight:600}
+.pets-contagem{
+  display:flex; align-items:center; gap:var(--e3); padding:var(--e3) var(--e4);
+  background:var(--surface-sunken); border-radius:var(--r-md);
+}
+.pets-contagem b{font-weight:600; font-size:16px}
+.pets-contagem small{display:block; color:var(--text-secondary); font-size:13px; line-height:18px}
+
+/* ---- linhas de atividade (eventos, indicações, devolução) ---- */
+.linha{display:flex; gap:var(--e3); align-items:flex-start; padding:var(--e3) 0;
+  border-bottom:1px solid var(--outline)}
+.linha:last-child{border-bottom:0}
+.linha .pastilha{flex:0 0 auto; width:32px; height:32px; border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center; font:800 13px/1 var(--fonte)}
+.linha .pastilha.com{background:var(--community-fill); color:var(--on-community-fill)}
+.linha .pastilha.ac{background:var(--action-fill); color:var(--on-action-fill)}
+.linha .texto{min-width:0; flex:1 1 auto}
+.linha .texto b{display:block; font-weight:600; font-size:15px; line-height:20px}
+.linha .texto small{display:block; color:var(--text-secondary); font-size:13px; line-height:18px}
+
+/* ---- botões ---- */
+.botao-primario, .botao-secundario, .botao-perigo{
+  display:flex; align-items:center; justify-content:center; gap:var(--e2);
+  width:100%; min-height:var(--alvo-min); border-radius:var(--r-full);
+  font:600 16px/20px var(--fonte); letter-spacing:.01em; cursor:pointer; padding:var(--e3) var(--e4);
+}
+.botao-primario{background:var(--primary); color:var(--on-primary); border:0}
+.botao-secundario{background:transparent; color:var(--primary); border:1px solid var(--outline-control)}
+.botao-perigo{background:transparent; color:var(--error); border:1px solid var(--error)}
+.par-de-botoes{display:flex; gap:var(--e2)}
+.par-de-botoes > *{flex:1 1 0}
+.rodape-acoes{display:flex; flex-direction:column; gap:var(--e2); margin-top:var(--e6)}
+.nota{font-size:13px; line-height:18px; color:var(--text-muted); margin:var(--e2) 0 0}
+.nota.destaque{color:var(--text-secondary)}
+
+/* ---- faixa de estado ---- */
+.faixa{border:1px solid var(--outline); border-radius:var(--r-lg);
+  padding:var(--e3) var(--e4); margin-bottom:var(--e5); background:var(--warning-container)}
+.faixa.info{background:var(--info-container); border-color:transparent}
+.faixa.erro{background:var(--error-container); border-color:transparent}
+.faixa.ok{background:var(--success-container); border-color:transparent}
+.faixa b{display:block; font-weight:600; font-size:16px; line-height:22px}
+.faixa p{margin:var(--e1) 0 0; font-size:14px; line-height:20px; color:var(--text-secondary)}
+
+/* ---- folha (bottom sheet) ---- */
+.folha{border-top:1px solid var(--outline); background:var(--surface);
+  border-radius:var(--r-xl) var(--r-xl) 0 0; padding:var(--e5) var(--e4) var(--e4); margin-top:-1px}
+.folha .alca{width:40px; height:4px; border-radius:2px; background:var(--outline);
+  margin:0 auto var(--e4)}
+.folha h3{font-family:var(--fonte-titulo); font-weight:700; font-size:20px; line-height:26px; margin:0 0 var(--e1)}
+.folha > p{color:var(--text-secondary); font-size:14px; line-height:20px; margin:0 0 var(--e4)}
+.opcao{display:flex; align-items:center; gap:var(--e3); min-height:var(--alvo-min);
+  padding:var(--e2) 0; border-bottom:1px solid var(--outline); cursor:pointer;
+  background:none; border-left:0; border-right:0; border-top:0; width:100%;
+  text-align:left; color:inherit; font:inherit}
+.opcao .radio{flex:0 0 auto; width:20px; height:20px; border-radius:var(--r-full);
+  border:2px solid var(--outline-control)}
+.opcao[aria-checked="true"] .radio{border-color:var(--primary); background:
+  radial-gradient(circle, var(--primary) 0 5px, transparent 5px)}
+.opcao .rot{flex:1 1 auto; min-width:0}
+.opcao .rot b{display:block; font-weight:600; font-size:15px; line-height:20px}
+.opcao .rot small{display:block; color:var(--text-secondary); font-size:13px; line-height:18px}
+.opcao.perigo .rot b{color:var(--error)}
+
+/* ---- regra de envio: o limite VISÍVEL na tela ---- */
+.regra-envio{background:var(--surface-sunken); border-radius:var(--r-md);
+  padding:var(--e3) var(--e4); margin:var(--e4) 0}
+.regra-envio ul{margin:0; padding-left:var(--e5); color:var(--text-secondary);
+  font-size:13px; line-height:20px}
+.regra-envio li strong{color:var(--text-primary)}
+
+/* ---- estado vazio / 404 ---- */
+.vazio{text-align:center; padding:var(--e12) var(--e4)}
+.vazio .marca-vazia{width:72px; height:72px; border-radius:var(--r-md); margin:0 auto var(--e4)}
+.vazio b{display:block; font-family:var(--fonte-titulo); font-weight:700; font-size:20px; line-height:26px}
+.vazio p{color:var(--text-secondary); font-size:14px; line-height:20px; margin:var(--e2) 0 0}
+
+/* ---- caixa de pedidos ---- */
+.pedido{display:flex; gap:var(--e3); align-items:center; padding:var(--e3) 0;
+  border-bottom:1px solid var(--outline)}
+.pedido .av{flex:0 0 auto; width:48px; height:48px; border-radius:var(--r-full)}
+.pedido .q{flex:1 1 auto; min-width:0}
+.pedido .q b{display:block; font-weight:600; font-size:15px; line-height:20px}
+.pedido .q small{display:block; color:var(--text-secondary); font-size:13px; line-height:18px}
+.pedido .bt{display:flex; gap:var(--e1); flex:0 0 auto}
+.pedido .bt button{min-width:40px; min-height:40px; border-radius:var(--r-full);
+  border:1px solid var(--outline-control); background:transparent; cursor:pointer;
+  font:700 14px/1 var(--fonte); color:var(--text-secondary)}
+.pedido .bt button.sim{background:var(--primary); color:var(--on-primary); border-color:transparent}
+
+/* ---- legenda e tabelas ---- */
+.legenda{max-width:88ch; margin-top:var(--e12); border-top:1px solid var(--outline); padding-top:var(--e8)}
+.legenda h2{font-family:var(--fonte-titulo); font-weight:800; font-size:26px; line-height:32px; margin:var(--e8) 0 var(--e3)}
+.legenda h2:first-child{margin-top:0}
+.legenda h3{font-weight:600; font-size:18px; line-height:24px; margin:var(--e6) 0 var(--e2)}
+.legenda p, .legenda li{color:var(--text-secondary)}
+.legenda p{margin:0 0 var(--e3)}
+.legenda ul{margin:0 0 var(--e3); padding-left:var(--e5)}
+.legenda li{margin-bottom:var(--e2)}
+.legenda strong{color:var(--text-primary)}
+table{border-collapse:collapse; width:100%; font-size:13px; line-height:19px; margin:0 0 var(--e4)}
+th,td{text-align:left; vertical-align:top; padding:var(--e2) var(--e3); border-bottom:1px solid var(--outline)}
+th{color:var(--text-muted); font-weight:700; font-size:11px; letter-spacing:.07em; text-transform:uppercase}
+td{color:var(--text-secondary)}
+td strong{color:var(--text-primary)}
+.sim-nao{font-weight:700}
+.sim-nao.s{color:var(--success)}
+.sim-nao.n{color:var(--error)}
+
+
+/* ---- caixa de notificacoes ---- */
+.aviso{display:flex; gap:var(--e3); padding:var(--e3) var(--e4); border-bottom:1px solid var(--outline);
+  align-items:flex-start; margin:0 calc(-1 * var(--e4))}
+.aviso.naolido{background:var(--primary-container)}
+.aviso .pino{flex:0 0 auto; width:8px; height:8px; border-radius:var(--r-full); background:var(--primary); margin-top:7px}
+.aviso .pino.vazio{background:transparent}
+.aviso .ic{flex:0 0 auto; width:36px; height:36px; border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center; font:800 13px/1 var(--fonte)}
+.aviso .ic.urg{background:var(--error-container); color:var(--error)}
+.aviso .ic.com{background:var(--community-fill); color:var(--on-community-fill)}
+.aviso .ic.ac{background:var(--action-fill); color:var(--on-action-fill)}
+.aviso .ic.sis{background:var(--surface-sunken); color:var(--text-secondary)}
+.aviso .tx{flex:1 1 auto; min-width:0}
+.aviso .tx b{display:block; font-weight:600; font-size:15px; line-height:20px}
+.aviso .tx small{display:block; color:var(--text-secondary); font-size:13px; line-height:18px}
+.aviso .tx time{display:block; color:var(--text-muted); font-size:12px; line-height:16px; margin-top:2px}
+.aviso .fixo{font:700 10px/14px var(--fonte); letter-spacing:.06em; text-transform:uppercase;
+  color:var(--error); display:block; margin-bottom:2px}
+/* ---- TIMELINE: cartao COMPACTO. A miniatura de 96 dp e a decisao de peso. ---- */
+.pub{display:flex; gap:var(--e3); padding:var(--e4) 0; border-bottom:1px solid var(--outline)}
+.pub:last-child{border-bottom:0}
+.pub .av{flex:0 0 auto; width:40px; height:40px; border-radius:var(--r-full)}
+.pub .conteudo{flex:1 1 auto; min-width:0}
+.pub .cab-pub{display:flex; align-items:baseline; gap:var(--e2); flex-wrap:wrap}
+.pub .cab-pub b{font-weight:600; font-size:15px; line-height:20px}
+.pub .cab-pub time{color:var(--text-muted); font-size:12px; line-height:16px}
+.pub .fato{font-size:15px; line-height:21px; color:var(--text-secondary); margin:2px 0 0}
+.pub .fato strong{color:var(--text-primary); font-weight:600}
+.pub .anexo{display:flex; gap:var(--e3); align-items:center; margin-top:var(--e2)}
+.pub .anexo .bloco{flex:0 0 auto; width:96px; height:96px; border-radius:var(--r-md)}
+.pub .anexo .meta{min-width:0; font-size:13px; line-height:18px; color:var(--text-secondary)}
+.pub.fixada{background:var(--urgencia-fundo, var(--error-container)); border-radius:var(--r-lg);
+  padding:var(--e4); margin-bottom:var(--e3); border-bottom:0}
+.pub.fixada .etiqueta{display:inline-block; font:700 11px/16px var(--fonte); letter-spacing:.07em;
+  text-transform:uppercase; color:var(--error); margin-bottom:var(--e1)}
+.abas{display:flex; border-bottom:1px solid var(--outline)}
+.aba{flex:1 1 0; min-height:var(--alvo-min); border:0; background:none; cursor:pointer;
+  font:600 15px/20px var(--fonte); color:var(--text-secondary); padding:var(--e3) var(--e2);
+  border-bottom:2px solid transparent}
+.aba[aria-selected="true"]{color:var(--primary); border-bottom-color:var(--primary)}
+.aba .bolha{display:inline-block; min-width:18px; height:18px; border-radius:var(--r-full);
+  background:var(--primary); color:var(--on-primary); font:700 11px/18px var(--fonte);
+  margin-left:var(--e1); padding:0 5px}
+@media (max-width:420px){ body{padding:var(--e4) var(--e4) var(--e8)} .aparelho{border-radius:var(--r-lg)} }
+</style>
+</head>
+<body>
+
+<h1>Perfil da pessoa, conexão de vizinhança e vitrine</h1>
+<p class="intro">
+  Protótipo de <strong>desenho</strong>, no lugar do Figma (sem cota). Cor, tipo, espaço,
+  raio e alvo de toque vêm medidos de <code>design/tokens.json</code> — a linguagem
+  “Sério” do app, não a linguagem ilustrada do site. Moldura de <strong>360&nbsp;dp</strong>,
+  a mais estreita que o produto mira.
+</p>
+<div class="aviso-topo">
+  <strong>Nada aqui é código de produção.</strong> Não há contrato, migração, rota nem tela
+  de verdade nesta frente. Toda “foto” é um <strong>bloco neutro</strong> rotulado com o peso
+  em bytes que ela custaria — o rótulo é o argumento sobre peso de tela, não enfeite.
+  Nenhuma imagem foi gerada nem baixada.
+</div>
+
+<div class="barra-tema" role="group" aria-label="Tema">
+  <button type="button" data-tema="light" aria-pressed="false">Claro</button>
+  <button type="button" data-tema="dark" aria-pressed="false">Escuro</button>
+  <button type="button" data-tema="auto" aria-pressed="true">Sistema</button>
+</div>
+
+<div class="telas">
+
+<!-- ========================= 1. PERFIL PRÓPRIO ========================= -->
+<section class="coluna">
+  <h2>1. Meu perfil</h2>
+  <p>O que a <b>própria pessoa</b> vê. <b>O título da barra é o apelido</b>, pedido dele em
+     18/10. A capa é a <b>mesma imagem</b> que serve de avatar — um conceito, não dois.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span class="titulo">@maria-beatriz</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </div>
+    <div class="corpo">
+      <div class="cab">
+        <div class="capa-casca">
+          <div class="bloco capa">176px<br>~22 KB</div>
+          <div class="selo-validado" title="E-mail confirmado">✓</div>
+        </div>
+        <div class="ident">
+          <p class="nome">Maria Beatriz</p>
+          <p class="desde">@maria-beatriz · desde set/2026</p>
+          <p class="lugar">Pinheiros, São Paulo</p>
+        </div>
+      </div>
+
+      <div class="confianca">
+        <div class="sinal"><b>2</b><small>pets</small></div>
+        <div class="sinal"><b>5</b><small>encontros</small></div>
+        <div class="sinal"><b>3</b><small>indicações</small></div>
+        <div class="sinal"><b>1</b><small>devolução</small></div>
+      </div>
+
+      <div class="secao">Vitrine <span class="acessorio">8 de 9</span></div>
+      <div class="vitrine">
+        <div class="bloco capa-marcada">capa<br>320px ~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div>
+        <button type="button" class="mais"><span>+</span><span>Enviar</span></button>
+      </div>
+      <p class="nota">Grade pinta <strong>8&nbsp;×&nbsp;35&nbsp;KB&nbsp;=&nbsp;280&nbsp;KB</strong>.
+         Cheia com 9 são 315&nbsp;KB. A foto grande (1024&nbsp;px) só baixa ao toque.</p>
+
+      <div class="secao">Meus pets</div>
+      <div class="pets">
+        <div class="pet"><div class="bloco">176px ~20 KB</div><b>Thor</b><small>Cão, grande</small></div>
+        <div class="pet"><div class="bloco">176px ~20 KB</div><b>Nina</b><small class="perdido">Perdida</small></div>
+        <div class="pet"><div class="bloco" style="border-style:dashed">+</div><b>Cadastrar</b><small>&nbsp;</small></div>
+      </div>
+      <p class="nota">A foto do pet vem de <code>pet_photos</code>, <strong>não é copiada</strong>
+         para a vitrine. O cartão abre a página do pet, que continua sendo o único lugar dela.</p>
+
+      <div class="secao">Na comunidade</div>
+      <div class="linha">
+        <div class="pastilha com">R</div>
+        <div class="texto"><b>Encontro na Praça Benedito Calixto</b><small>12/out · confirmada</small></div>
+      </div>
+      <div class="linha">
+        <div class="pastilha ac">P</div>
+        <div class="texto"><b>Indicou Clínica Vet Pinheiros</b><small>set/2026 · aceita</small></div>
+      </div>
+      <div class="rodape-acoes">
+        <button type="button" class="botao-secundario">Mostrar meu código</button>
+      </div>
+      <p class="nota destaque"><strong>Não há link de perfil e não há busca de pessoas.</strong>
+         O código é lido <strong>cara a cara</strong> e vale 5 minutos — ver a legenda, item
+         <em>Descoberta</em>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 2. VITRINE EM EDIÇÃO ========================= -->
+<section class="coluna">
+  <h2>2. Enviar e escolher a capa</h2>
+  <p>O limite de entrada fica <b>visível na tela</b>, antes de escolher o arquivo —
+     é a regra que ele já decidiu, não uma mensagem de erro depois.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Vitrine</span>
+    </div>
+    <div class="corpo">
+      <div class="secao">8 fotos · cabe 1</div>
+      <div class="vitrine">
+        <div class="bloco capa-marcada">capa<br>320px</div>
+        <div class="bloco">320px</div><div class="bloco">320px</div>
+        <div class="bloco">320px</div><div class="bloco">320px</div><div class="bloco">320px</div>
+        <div class="bloco">320px</div><div class="bloco">320px</div>
+        <button type="button" class="mais"><span>+</span><span>Enviar</span></button>
+      </div>
+    </div>
+    <div class="folha">
+      <div class="alca"></div>
+      <h3>Enviar uma foto</h3>
+      <p>Esta foto aparece para quem você aceitou como conexão.</p>
+      <div class="regra-envio">
+        <ul>
+          <li>Até <strong>5 MB</strong> por arquivo</li>
+          <li>JPEG, PNG, WebP ou <strong>HEIC</strong> do iPhone</li>
+          <li>Mínimo <strong>600 × 600</strong>; abaixo disso a foto é recusada com motivo</li>
+          <li>Tiramos a <strong>localização</strong> do arquivo antes de guardar</li>
+        </ul>
+      </div>
+      <div class="faixa info" style="margin-bottom:var(--e4)">
+        <b>Foto com outras pessoas?</b>
+        <p>Só envie se quem aparece concordou. Quem aparece numa foto pode pedir
+           que ela saia, mesmo sem ter conta no Bichu.</p>
+      </div>
+      <button type="button" class="opcao" aria-checked="false" role="radio">
+        <span class="radio"></span><span class="rot"><b>Escolher da galeria</b></span>
+      </button>
+      <button type="button" class="opcao" aria-checked="false" role="radio">
+        <span class="radio"></span><span class="rot"><b>Tirar agora</b></span>
+      </button>
+      <div class="rodape-acoes">
+        <button type="button" class="botao-primario">Continuar</button>
+      </div>
+    </div>
+  </div>
+  <p class="nota" style="max-width:360px">Tocar e segurar uma foto da grade abre:
+     <strong>Usar como capa</strong>, <strong>Mover</strong>, <strong>Remover</strong>.
+     Remover apaga o objeto no armazenamento em 30 dias (ADR-0007), não na hora.</p>
+</section>
+
+<!-- ========================= 3. OUTRA PESSOA — SEM CONEXÃO ========================= -->
+<section class="coluna">
+  <h2>3. Outra pessoa · <b>sem conexão</b></h2>
+  <p>O que um estranho logado vê. <b>Os quatro sinais de confiança aparecem</b> —
+     é para isso que o perfil existe. A vitrine <b>não</b>. Os pets viram
+     <b>contagem e espécie</b>, sem nome, sem foto, sem link.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Perfil</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </div>
+    <div class="corpo">
+      <div class="cab">
+        <div class="capa-casca">
+          <div class="bloco capa">176px<br>~22 KB</div>
+          <div class="selo-validado" title="E-mail confirmado">✓</div>
+        </div>
+        <div class="ident">
+          <p class="nome">Joana</p>
+          <p class="desde">No Bichu desde mar/2026</p>
+          <p class="lugar">São Paulo</p>
+        </div>
+      </div>
+
+      <div class="confianca">
+        <div class="sinal"><b>2</b><small>cães</small></div>
+        <div class="sinal"><b>7</b><small>encontros</small></div>
+        <div class="sinal"><b>4</b><small>indicações</small></div>
+        <div class="sinal"><b>2</b><small>devoluções</small></div>
+      </div>
+      <p class="nota">Nome, mês de entrada e selo: é a projeção <strong>D53</strong> que o
+         cliente já aprovou para ver pessoa, mais a capa, que é a decisão nova.
+         <strong>Só a cidade</strong> — o bairro é de conexão, porque bairro estreita a casa
+         a algumas quadras.</p>
+
+      <div class="secao">Vitrine</div>
+      <div class="coberta">
+        <div class="vitrine">
+          <div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div>
+          <div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div>
+        </div>
+        <div class="cortina">
+          <b>9 fotos</b>
+          <small>A Joana mostra a vitrine para as conexões dela.</small>
+        </div>
+      </div>
+      <p class="nota">A cortina é desenhada <strong>sem baixar imagem nenhuma</strong>: o servidor
+         manda a contagem, não as chaves. Custo: <strong>0 KB</strong>.</p>
+
+      <div class="secao">Pets</div>
+      <div class="pets-contagem">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-secondary);flex:0 0 auto"><path d="M12 20s-7-4.5-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.5-7 9-7 9z"/></svg>
+        <div><b>2 cães</b><small>Nomes e páginas aparecem para conexões</small></div>
+      </div>
+
+      <div class="rodape-acoes">
+        <button type="button" class="botao-primario">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Pedir conexão
+        </button>
+      </div>
+      <p class="nota">O <strong>“⋮” do topo</strong> é o acesso à denúncia e ao bloqueio:
+         visível sem rolar, em <strong>todos</strong> os estados, <strong>um toque</strong>
+         para abrir. Ver a tela 8.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 4. PEDIDO ENVIADO ========================= -->
+<section class="coluna">
+  <h2>4. Outra pessoa · <b>pedido enviado</b></h2>
+  <p>Nada mais se abre por pedir. O estado é <b>reversível por quem pediu</b>, e
+     expira em 30 dias sem resposta.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Perfil</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </div>
+    <div class="corpo">
+      <div class="faixa">
+        <b>Pedido enviado</b>
+        <p>A Joana decide se aceita. Você não é avisado de uma recusa — e isso é
+           de propósito, para que recusar não custe nada a ela.</p>
+      </div>
+      <div class="cab">
+        <div class="capa-casca">
+          <div class="bloco capa">176px<br>~22 KB</div>
+          <div class="selo-validado">✓</div>
+        </div>
+        <div class="ident">
+          <p class="nome">Joana</p>
+          <p class="desde">No Bichu desde mar/2026</p>
+          <p class="lugar">São Paulo</p>
+        </div>
+      </div>
+      <div class="confianca">
+        <div class="sinal"><b>2</b><small>cães</small></div>
+        <div class="sinal"><b>7</b><small>encontros</small></div>
+        <div class="sinal"><b>4</b><small>indicações</small></div>
+        <div class="sinal"><b>2</b><small>devoluções</small></div>
+      </div>
+
+      <div class="secao">Vitrine</div>
+      <div class="coberta">
+        <div class="vitrine">
+          <div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div>
+          <div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div><div class="bloco">&nbsp;</div>
+        </div>
+        <div class="cortina"><b>9 fotos</b><small>Ainda fechada. Pedir não abre.</small></div>
+      </div>
+
+      <div class="rodape-acoes">
+        <button type="button" class="botao-secundario">Cancelar pedido</button>
+      </div>
+      <p class="nota">Tetos: <strong>20</strong> pedidos pendentes e <strong>10</strong> novos por
+         dia. Recusado três vezes pela mesma pessoa em 30 dias, o app não deixa pedir de novo
+         por 90 dias — e ela nunca soube que você tentou.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 5. CONECTADO ========================= -->
+<section class="coluna">
+  <h2>5. Outra pessoa · <b>conectado</b></h2>
+  <p>Só aqui a vitrine abre, os pets ganham nome e página, e aparece
+     <b>o que vocês têm em comum</b> — que é o sinal de confiança mais forte do bairro.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Joana</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </div>
+    <div class="corpo">
+      <div class="cab">
+        <div class="capa-casca">
+          <div class="bloco capa">176px<br>~22 KB</div>
+          <div class="selo-validado">✓</div>
+        </div>
+        <div class="ident">
+          <p class="nome">Joana</p>
+          <p class="desde">No Bichu desde mar/2026</p>
+          <p class="lugar">Pinheiros, São Paulo</p>
+        </div>
+      </div>
+      <div class="confianca">
+        <div class="sinal"><b>2</b><small>cães</small></div>
+        <div class="sinal"><b>7</b><small>encontros</small></div>
+        <div class="sinal"><b>4</b><small>indicações</small></div>
+        <div class="sinal"><b>2</b><small>devoluções</small></div>
+      </div>
+      <div class="faixa ok" style="margin-top:var(--e5)">
+        <b>Conectados desde out/2026</b>
+        <p>Vocês estiveram nos mesmos 2 encontros.</p>
+      </div>
+
+      <div class="secao">Vitrine <span class="acessorio">9</span></div>
+      <div class="vitrine">
+        <div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div>
+        <div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div><div class="bloco">320px<br>~35 KB</div>
+      </div>
+      <p class="nota">Pior caso de primeira pintura: <strong>9 × 35 KB = 315 KB</strong>.
+         Toque abre a grande, <strong>uma por vez</strong>, até 450 KB.</p>
+
+      <div class="secao">Pets da Joana</div>
+      <div class="pets">
+        <div class="pet"><div class="bloco">176px ~20 KB</div><b>Mel</b><small>Cão, médio</small></div>
+        <div class="pet"><div class="bloco">176px ~20 KB</div><b>Bidu</b><small>Cão, pequeno</small></div>
+        <div class="pet" style="visibility:hidden"><div class="bloco"></div><b>&nbsp;</b><small>&nbsp;</small></div>
+      </div>
+
+      <div class="rodape-acoes">
+        <button type="button" class="botao-secundario">Desfazer conexão</button>
+      </div>
+      <p class="nota"><strong>A lista de conexões da Joana não aparece aqui, para ninguém.</strong>
+         Lista de quem conhece quem é a lista de presença do ADR-0025 por outro caminho.
+         Só o dono vê a própria lista.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 6. BLOQUEIO, OS DOIS LADOS ========================= -->
+<section class="coluna">
+  <h2>6. Bloqueio · <b>os dois lados</b></h2>
+  <p>Em cima, quem bloqueou. Embaixo, quem foi bloqueado — e ele vê
+     <b>exatamente o mesmo</b> que veria se o perfil nunca tivesse existido.</p>
+  <div class="aparelho" style="margin-bottom:var(--e4)">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Perfil</span>
+    </div>
+    <div class="corpo">
+      <div class="faixa erro">
+        <b>Você bloqueou esta pessoa</b>
+        <p>Ela não encontra o seu perfil, não pede conexão e não vê a sua vitrine.
+           Ela não foi avisada.</p>
+      </div>
+      <div class="cab">
+        <div class="capa-casca"><div class="bloco capa" style="filter:grayscale(1);opacity:.55">0 KB</div></div>
+        <div class="ident">
+          <p class="nome">Joana</p>
+          <p class="desde">Bloqueada em 18/out</p>
+        </div>
+      </div>
+      <div class="rodape-acoes">
+        <button type="button" class="botao-secundario">Desbloquear</button>
+        <button type="button" class="botao-perigo">Denunciar perfil</button>
+      </div>
+      <p class="nota">Bloquear <strong>desfez a conexão</strong> e apagou os pedidos
+         pendentes nas <strong>duas</strong> direções. Desbloquear <strong>não</strong>
+         devolve a conexão: ela precisa ser pedida e aceita de novo.</p>
+    </div>
+  </div>
+
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Perfil</span>
+    </div>
+    <div class="corpo">
+      <div class="vazio">
+        <div class="bloco marca-vazia">404</div>
+        <b>Perfil não encontrado</b>
+        <p>Este link não leva a nenhum perfil.</p>
+        <div class="rodape-acoes" style="margin-top:var(--e6)">
+          <button type="button" class="botao-secundario">Voltar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota" style="max-width:360px"><strong>É a mesma tela, o mesmo texto e o mesmo
+     código HTTP de um perfil que não existe.</strong> Um 404 diferente seria um oráculo:
+     quem fosse bloqueado descobriria pela diferença, e descobrir é o que gera retaliação.</p>
+</section>
+
+<!-- ========================= 7. CAIXA DE PEDIDOS ========================= -->
+<section class="coluna">
+  <h2>7. Pedidos recebidos</h2>
+  <p>O único lugar, além do perfil e da lista de conexões, onde a capa de outra
+     pessoa aparece. <b>Três superfícies, e ponto.</b></p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Pedidos</span>
+    </div>
+    <div class="corpo">
+      <div class="pedido">
+        <div class="bloco av">176px<br>~22 KB</div>
+        <div class="q"><b>Joana</b><small>desde mar/2026 · 2 encontros em comum</small></div>
+        <div class="bt"><button type="button" class="sim">✓</button><button type="button">✕</button></div>
+      </div>
+      <div class="pedido">
+        <div class="bloco av">176px<br>~22 KB</div>
+        <div class="q"><b>Rafael</b><small>desde out/2026 · sem nada em comum</small></div>
+        <div class="bt"><button type="button" class="sim">✓</button><button type="button">✕</button></div>
+      </div>
+      <div class="pedido">
+        <div class="bloco av" style="filter:grayscale(1);opacity:.5">0 KB</div>
+        <div class="q"><b>Conta sem nome de exibição</b><small>desde out/2026 · e-mail não confirmado</small></div>
+        <div class="bt"><button type="button" class="sim">✓</button><button type="button">✕</button></div>
+      </div>
+      <p class="nota">A terceira linha é o caso honesto: conta nova, sem nome, sem selo e sem
+         nada em comum. <strong>O servidor nunca preenche o nome nulo com o e-mail</strong> (D53).
+         A lista é o próprio aviso.</p>
+      <p class="nota">Capa de 176 px custa ~22 KB. A lista pagina em <strong>20</strong> e
+         carrega sob demanda: <strong>até 440 KB</strong>, nunca a lista inteira.</p>
+    </div>
+    <div class="folha">
+      <div class="alca"></div>
+      <h3>Denunciar esta foto</h3>
+      <p><strong>Toque e segure</strong> numa foto da vitrine, ou “⋮” com a foto aberta.
+         Ela sai da sua vista agora.</p>
+      <button type="button" class="opcao" role="radio" aria-checked="true"><span class="radio"></span><span class="rot"><b>Nudez ou conteúdo sexual</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Criança em situação de risco</b><small>Vai para o topo da fila</small></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Violência ou maus-tratos a animal</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Apareço nesta foto e não autorizei</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Não é quem diz ser</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Outro motivo</b></span></button>
+      <div class="rodape-acoes">
+        <button type="button" class="botao-primario">Enviar denúncia</button>
+        <button type="button" class="botao-secundario">Bloquear esta pessoa também</button>
+      </div>
+      <p class="nota"><strong>A ocultação imediata é o que faz a denúncia valer sem prazo
+         prometido.</strong> A remoção para todos exige um administrador — e hoje não existe
+         fila de moderação nenhuma no repositório.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ========================= 8. DENUNCIAR PERFIL (SUTIL) ========================= -->
+<section class="coluna">
+  <h2>8. Denunciar perfil · <b>dois toques</b></h2>
+  <p>Decisão do cliente: a opção existe no perfil, <b>de forma sutil</b>. Sutil é
+     <b>discreto e previsível</b> — não é escondido. Em cima, o que “⋮” abre.
+     Embaixo, os motivos.</p>
+
+  <div class="aparelho" style="margin-bottom:var(--e4)">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Joana</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary)"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </div>
+    <div class="corpo" style="padding-bottom:0">
+      <div class="cab">
+        <div class="capa-casca"><div class="bloco capa">176px<br>~22 KB</div><div class="selo-validado">&#10003;</div></div>
+        <div class="ident"><p class="nome">Joana</p><p class="desde">No Bichu desde mar/2026</p></div>
+      </div>
+    </div>
+    <div class="folha">
+      <div class="alca"></div>
+      <h3>Joana</h3>
+      <p>Toque 1 de 2. O mesmo menu, no mesmo lugar, em todos os estados do perfil.</p>
+      <button type="button" class="opcao"><span class="rot"><b>Compartilhar este perfil</b></span></button>
+      <button type="button" class="opcao"><span class="rot"><b>Bloquear</b><small>Ela deixa de encontrar voc&#234;. N&#227;o &#233; avisada.</small></span></button>
+      <button type="button" class="opcao perigo"><span class="rot"><b>Denunciar perfil</b><small>Sobre quem a pessoa &#233;</small></span></button>
+      <p class="nota">Denunciar <strong>perfil</strong> e denunciar <strong>foto</strong> s&#227;o
+         duas coisas: foto se denuncia <strong>na foto</strong> (tela 7), porque o dano est&#225;
+         ali e o administrador precisa saber <em>qual</em> imagem.</p>
+    </div>
+  </div>
+
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      <span class="titulo">Denunciar</span>
+    </div>
+    <div class="folha" style="border-top:0; margin-top:0">
+      <h3>Por que voc&#234; est&#225; denunciando?</h3>
+      <p>Escolha o mais pr&#243;ximo. N&#227;o h&#225; campo de texto livre.</p>
+      <button type="button" class="opcao" role="radio" aria-checked="true"><span class="radio"></span><span class="rot"><b>N&#227;o &#233; quem diz ser</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Est&#225; incomodando ou amea&#231;ando</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Golpe ou cobran&#231;a para devolver um pet</b></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Parece ser menor de 16 anos</b><small>Vai para o topo da fila</small></span></button>
+      <button type="button" class="opcao" role="radio" aria-checked="false"><span class="radio"></span><span class="rot"><b>Outro motivo</b></span></button>
+      <div class="rodape-acoes">
+        <button type="button" class="botao-primario">Enviar den&#250;ncia</button>
+      </div>
+      <div class="faixa ok" style="margin:var(--e5) 0 0">
+        <b>Recebemos a sua den&#250;ncia</b>
+        <p>Um administrador vai revisar. <strong>A Joana n&#227;o &#233; avisada e nunca saber&#225;
+           que voc&#234; denunciou.</strong> N&#227;o mandamos aviso do resultado.</p>
+      </div>
+      <div class="rodape-acoes" style="margin-top:var(--e3)">
+        <button type="button" class="botao-secundario">Bloquear a Joana tamb&#233;m</button>
+      </div>
+      <p class="nota"><strong>Nenhum prazo &#233; prometido, porque n&#227;o temos um.</strong>
+         Depois de enviada, o “⋮” mostra <em>Den&#250;ncia enviada</em> desabilitado — &#233; o que
+         impede a mesma pessoa de denunciar cinco vezes.</p>
+    </div>
+  </div>
+  <p class="nota" style="max-width:360px"><strong>1 toque para achar, 2 para chegar aos
+     motivos, 4 para concluir.</strong> O quarto toque &#233; um “Enviar” explícito de
+     prop&#243;sito: den&#250;ncia que dispara no toque do motivo n&#227;o tem desfazer, e o erro
+     custa &#224; pessoa denunciada.</p>
+</section>
+
+
+<!-- ========================= 9. TIMELINE ========================= -->
+<section class="coluna">
+  <h2>9. Timeline · <b>fatos, não mural</b></h2>
+  <p>Publicação é <b>gerada pelo servidor a partir de um fato do produto</b>. Sem texto
+     livre na v1. Cartão <b>compacto</b>, com miniatura de 96&nbsp;dp — não foto de
+     largura inteira, e o motivo é peso.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <span class="titulo">Comunidade</span>
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21a2 2 0 004 0"/></svg>
+    </div>
+    <div class="abas" role="tablist">
+      <button type="button" class="aba" role="tab" aria-selected="true">Timeline</button>
+      <button type="button" class="aba" role="tab" aria-selected="false">Avisos <span class="bolha">2</span></button>
+    </div>
+    <div class="corpo">
+      <div class="pub fixada">
+        <div class="conteudo">
+          <span class="etiqueta">Perdido perto de voc&#234; &#183; fixado 48 h</span>
+          <div class="cab-pub"><b>Pedro</b> <time>h&#225; 3 h</time></div>
+          <p class="fato">perdeu a <strong>Lua</strong> em <strong>Pinheiros</strong>.</p>
+          <div class="anexo">
+            <div class="bloco">288px<br>~30 KB</div>
+            <div class="meta">C&#227;o, m&#233;dio, caramelo<br><strong>Ver o caso</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pub">
+        <div class="bloco av">96px<br>10 KB</div>
+        <div class="conteudo">
+          <div class="cab-pub"><b>Joana</b> <time>h&#225; 5 h</time></div>
+          <p class="fato">p&#244;s uma foto nova na vitrine.</p>
+          <div class="anexo"><div class="bloco">288px<br>~30 KB</div><div class="meta">&nbsp;</div></div>
+        </div>
+      </div>
+
+      <div class="pub">
+        <div class="bloco av">96px<br>10 KB</div>
+        <div class="conteudo">
+          <div class="cab-pub"><b>Marcos</b> <time>ontem</time></div>
+          <p class="fato">indicou a <strong>Cl&#237;nica Vet Pinheiros</strong>, e ela aceitou.</p>
+        </div>
+      </div>
+
+      <div class="pub">
+        <div class="bloco av">96px<br>10 KB</div>
+        <div class="conteudo">
+          <div class="cab-pub"><b>Ana</b> <time>ontem</time></div>
+          <p class="fato">reencontrou o <strong>Bob</strong>. O caso foi encerrado.</p>
+          <div class="anexo"><div class="bloco">288px<br>~30 KB</div><div class="meta">&nbsp;</div></div>
+        </div>
+      </div>
+
+      <div class="pub">
+        <div class="bloco av">96px<br>10 KB</div>
+        <div class="conteudo">
+          <div class="cab-pub"><b>Joana</b> <time>2 dias</time></div>
+          <p class="fato">cadastrou a <strong>Mel</strong>.</p>
+          <div class="anexo"><div class="bloco">288px<br>~30 KB</div><div class="meta">C&#227;o, m&#233;dio</div></div>
+        </div>
+      </div>
+      <p class="nota"><strong>Primeira pintura: 4 cart&#245;es vis&#237;veis &#215; (30 + 10) KB = 160 KB.</strong>
+         P&#225;gina inteira de 20, rolada at&#233; o fim: <strong>800 KB</strong>. Foto de largura
+         inteira a 1024 px custaria <strong>9 MB</strong> — o defeito da Loja pela terceira vez.</p>
+    </div>
+  </div>
+  <p class="nota" style="max-width:360px"><strong>A aba “Avisos” &#233; outra coisa, e a
+     separa&#231;&#227;o &#233; o desenho.</strong> Aviso &#233; <em>seu</em>, urgente e acion&#225;vel
+     (“algu&#233;m escaneou a plaquinha do Thor”). Publica&#231;&#227;o &#233; de terceiro e informativa.
+     Misturar as duas enterra a urgente.</p>
+</section>
+
+
+<!-- ========================= 10. CAIXA DE NOTIFICAÇÕES ========================= -->
+<section class="coluna">
+  <h2>10. O sino · <b>só o que é dirigido a você</b></h2>
+  <p>Três caixas, três semânticas. <b>Post de amigo não entra aqui</b> — entra na Petline.
+     E o sino não fica vazio, porque o <b>alerta de vizinhança não depende de amigo nenhum</b>.</p>
+  <div class="aparelho">
+    <div class="appbar">
+      <svg class="glifo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span class="titulo">Notificações</span>
+      <span style="font:600 13px/18px var(--fonte); color:var(--primary)">Marcar lidas</span>
+    </div>
+    <div class="corpo">
+      <div class="aviso naolido">
+        <span class="pino"></span>
+        <span class="ic urg">!</span>
+        <span class="tx">
+          <span class="fixo">não some ao abrir a lista</span>
+          <b>Algu&#233;m leu a plaquinha do Thor</b>
+          <small>Pinheiros &#183; toque para ver o recado</small>
+          <time>h&#225; 12 min</time>
+        </span>
+      </div>
+      <div class="aviso naolido">
+        <span class="pino"></span>
+        <span class="ic urg">!</span>
+        <span class="tx"><b>2 pets perdidos perto de voc&#234;</b>
+          <small>Agrupado por tipo, janela de 24 h</small><time>h&#225; 2 h</time></span>
+      </div>
+      <div class="aviso naolido">
+        <span class="pino"></span>
+        <span class="ic com">+</span>
+        <span class="tx"><b>3 pessoas pediram conex&#227;o</b><small>Joana, Rafael e mais 1</small><time>h&#225; 5 h</time></span>
+      </div>
+      <div class="aviso">
+        <span class="pino vazio"></span>
+        <span class="ic com">R</span>
+        <span class="tx"><b>O encontro na Pra&#231;a Benedito Calixto mudou de lugar</b>
+          <small>Voc&#234; confirmou presen&#231;a</small><time>ontem</time></span>
+      </div>
+      <div class="aviso">
+        <span class="pino vazio"></span>
+        <span class="ic ac">P</span>
+        <span class="tx"><b>Sua indica&#231;&#227;o foi aceita</b><small>Cl&#237;nica Vet Pinheiros</small><time>ontem</time></span>
+      </div>
+      <div class="aviso">
+        <span class="pino vazio"></span>
+        <span class="ic ac">P</span>
+        <span class="tx"><b>Sua plaquinha foi postada</b><small>Pedido de 10/out</small><time>2 dias</time></span>
+      </div>
+      <div class="aviso">
+        <span class="pino vazio"></span>
+        <span class="ic sis">B</span>
+        <span class="tx"><b>Mudamos os termos de uso</b><small>Comunicado do Bichu</small><time>3 dias</time></span>
+      </div>
+      <p class="nota"><strong>Nenhuma linha aqui é post de amigo.</strong> As três primeiras
+         existiriam igual numa conta com <strong>zero</strong> conexões — é isso que mantém o
+         sino vivo e o aviso do pet confiável.</p>
+    </div>
+  </div>
+</section>
+
+</div><!-- /telas -->
+
+<!-- ============================ LEGENDA ============================ -->
+<div class="legenda">
+
+<h2>Peso de tela, medido e orçado</h2>
+<p>A vitrine da Loja chegou a <strong>9,8 MB de primeira pintura</strong>
+   (<code>app/lib/telas/loja/vitrine_da_loja.dart</code>, medição de 17/10). A lição
+   registrada lá é a frase que decide esta tela: <em>o que pesa é baixar as oito, não
+   recebê-las na lista</em>. Grade de 3 colunas em moldura de 360 dp dá célula de
+   <strong>104 dp</strong>; a 3× de densidade, <strong>312 px</strong>.</p>
+<table>
+  <thead><tr><th>Tela</th><th>Pior caso</th><th>Conta</th><th>Como evita</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Meu perfil</strong></td><td><strong>≈ 377 KB</strong></td>
+      <td>9 × 35 KB (grade) + 22 KB (capa) + 2 × 20 KB (pets)</td>
+      <td>Derivada dimensionada pela célula, não pela tela cheia</td></tr>
+  <tr><td><strong>Perfil conectado</strong></td><td><strong>≈ 377 KB</strong></td>
+      <td>idem</td><td>idem</td></tr>
+  <tr><td><strong>Perfil sem conexão</strong></td><td><strong>22 KB</strong></td>
+      <td>só a capa; a cortina é CSS</td>
+      <td>O servidor manda a <em>contagem</em>, não as chaves das fotos</td></tr>
+  <tr><td><strong>Foto aberta</strong></td><td><strong>≤ 450 KB</strong></td>
+      <td>1 × <code>card</code> 1024 px</td>
+      <td>Uma por vez, por toque; <code>allowImplicitScrolling:false</code></td></tr>
+  <tr><td><strong>Lista de conexões / pedidos</strong></td><td><strong>≤ 440 KB</strong></td>
+      <td>20 × 22 KB por página</td><td>Paginação em 20 + carregamento sob demanda</td></tr>
+  <tr><td style="color:var(--error)"><strong>Se usasse <code>card</code> na grade</strong></td>
+      <td style="color:var(--error)"><strong>4,05 MB</strong></td>
+      <td>9 × 450 KB</td><td style="color:var(--error)">Não evita — é o defeito da Loja outra vez</td></tr>
+  </tbody>
+</table>
+<p><strong>Teto proposto como portão:</strong> a tela de perfil pinta <strong>no máximo
+   400 KB</strong> e a página de lista <strong>no máximo 500 KB</strong>. Número em teste,
+   não em prosa — é o que faltou na Loja.</p>
+<h3>O achado que isto produz</h3>
+<p>As derivadas existentes <strong>não servem a grade</strong>. Medido em
+   <code>src/modules/media/domain/derivadas.ts</code>: a foto de usuário da branch
+   <code>feat/imagem-do-profissional-e-foto-do-usuario</code> gera <code>card</code> 512×512 e
+   <code>thumb</code> 176×176. A 312 px de célula real, <code>thumb</code> é ampliada 1,8×
+   (fica mole) e <code>card</code> é 1,6× maior do que precisa. <strong>A vitrine pede uma
+   terceira geometria, ~320 px.</strong> Isso é um <em>parâmetro novo</em> no arquivo que já
+   centraliza as cinco esteiras — <strong>não</strong> é uma segunda esteira.</p>
+
+
+
+<h2>Três caixas de entrada, e nenhuma coisa em duas</h2>
+<p>Pedido do cliente, 18/10: <em>"na barra principal crie um ícone de notificação para alertar
+   o usuário sobre os posts dos seus amigos e sobre informações sistêmicas e comunicados de
+   eventos, etc."</em> Com ele o produto passa a ter <strong>três</strong> superfícies de
+   entrada, e sem uma fronteira escrita elas se sobrepõem.</p>
+<table>
+  <thead><tr><th>Superfície</th><th>Semântica</th><th>Indicador</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Mensagens</strong> (barra inferior)</td><td>conversa com uma pessoa</td><td>contador de mensagens não lidas</td></tr>
+  <tr><td><strong>Sino</strong> (barra superior)</td><td><strong>dirigido a você</strong>, pessoal e acionável</td><td>contador de avisos não lidos</td></tr>
+  <tr><td><strong>Petline</strong></td><td><strong>de terceiro</strong>, informativo</td><td><strong>ponto, sem número</strong></td></tr>
+  </tbody>
+</table>
+<p><strong>Três afordâncias diferentes de propósito.</strong> Número pede ação e cria dívida;
+   ponto diz “tem coisa nova” e não cobra nada. Pôr número na Petline faria o produto cobrar da
+   pessoa que ela leia o que os vizinhos postaram, que é o laço que transforma comunidade em
+   obrigação.</p>
+
+<h3>A tabela: cada aviso, e em qual superfície</h3>
+<table>
+  <thead><tr><th>O que aconteceu</th><th>Vai para</th><th>Por quê</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Plaquinha do seu pet foi lida</strong></td><td><strong>Sino</strong> + push</td><td>É o aviso que não pode ser perdido</td></tr>
+  <tr><td><strong>Achado registrado sobre o seu pet</strong></td><td><strong>Sino</strong> + push, e abre <strong>Mensagens</strong></td><td>O aviso é no sino; a conversa é a outra caixa. Não é duplicação: são dois objetos</td></tr>
+  <tr><td>Possível correspondência com o seu caso</td><td>Sino</td><td>Dirigido a você, e exige decisão sua</td></tr>
+  <tr><td><strong>Pet perdido perto de você</strong></td><td><strong>Sino + Petline</strong></td><td><strong>A única duplicação deliberada</strong> — ver abaixo</td></tr>
+  <tr><td>Seu caso foi encerrado como devolvido</td><td>Sino</td><td>É sobre o seu pet</td></tr>
+  <tr><td><em>De um amigo:</em> caso devolvido</td><td>Petline</td><td>Mesmo fato, sujeito diferente: notícia de terceiro</td></tr>
+  <tr><td>Mensagem nova na conversa mediada</td><td><strong>Mensagens</strong> + push</td><td>É conversa, e conversa tem caixa própria</td></tr>
+  <tr><td>Pedido de conexão recebido</td><td>Sino</td><td>Dirigido a você, e acionável</td></tr>
+  <tr><td>Seu pedido de conexão foi aceito</td><td>Sino</td><td>idem. <strong>A recusa não gera aviso</strong>, por desenho</td></tr>
+  <tr><td>Pedido de participação em evento, e a resposta</td><td>Sino</td><td>Dirigido a você</td></tr>
+  <tr><td>Evento que você confirmou mudou ou foi cancelado</td><td>Sino</td><td>Dirigido a você, e muda o seu sábado</td></tr>
+  <tr><td>Evento <em>novo</em> no seu bairro</td><td>Petline</td><td>Não é dirigido a você: é oferta</td></tr>
+  <tr><td>Sua indicação foi aprovada ou recusada</td><td>Sino</td><td>Dirigido a você</td></tr>
+  <tr><td><em>De um amigo:</em> indicação aceita</td><td>Petline</td><td>Notícia de terceiro</td></tr>
+  <tr><td>Pedido de plaquinha mudou de estado</td><td>Sino</td><td>É o seu pedido</td></tr>
+  <tr><td><strong>Foto nova de amigo</strong></td><td><strong>Petline</strong></td><td>Não é dirigido a você — ver o veredito</td></tr>
+  <tr><td><strong>Pet novo de amigo</strong></td><td><strong>Petline</strong></td><td>idem</td></tr>
+  <tr><td>Comunicado do Bichu</td><td>Sino</td><td>Dirigido a todos, e é à pessoa que ele fala</td></tr>
+  <tr><td>Mudança de termos ou de privacidade</td><td>Sino</td><td>idem, e tem consequência jurídica</td></tr>
+  <tr><td colspan="3"><em>Acrescentados por mim:</em></td></tr>
+  <tr><td>E-mail não confirmado / devolvido pelo provedor</td><td>Sino</td><td>Já existe <code>email_deliverable</code>, e hoje só vira faixa na tela</td></tr>
+  <tr><td>Sua foto ou seu perfil foi removido pela moderação</td><td>Sino</td><td>A pessoa precisa saber que perdeu conteúdo, e por quê</td></tr>
+  <tr><td><strong>Denúncia que você fez</strong></td><td><strong>nenhuma</strong></td><td>Decidido antes: nenhum aviso de resultado, e nenhum prazo prometido</td></tr>
+  <tr><td><strong>Denúncia contra você</strong></td><td><strong>nenhuma</strong></td><td>Decidido antes: o denunciado vê nada. Avisar é retaliação</td></tr>
+  <tr><td>Entrou numa sessão de outro aparelho</td><td>Sino</td><td>Sinal de segurança, e o produto já revoga sessão</td></tr>
+  </tbody>
+</table>
+<p><strong>A única duplicação deliberada é o pet perdido perto de você</strong>, e a justificativa
+   é que ele é o único item cujo custo de ser perdido é <strong>irreversível</strong>. Em tudo o
+   mais, redundância é ruído; aqui ela é a funcionalidade. No sino ele é linha acionável; na
+   Petline é o cartão fixado por 48 h.</p>
+
+<h3>Veredito: “post de amigo” é da Petline, e não do sino</h3>
+<p>Ele pôs “os posts dos seus amigos” dentro do sino. <strong>Recomendo que não</strong>, e o
+   argumento é de volume, não de gosto.</p>
+<ul>
+  <li><strong>A conta.</strong> O teto desenhado é de <strong>150 conexões</strong>. Se cada uma
+      publicar uma vez por semana, são <strong>≈ 21 avisos por dia</strong> no sino. O aviso de
+      que leram a plaquinha do Thor chegaria <strong>na vigésima segunda posição</strong>. Não é
+      que o sino fique feio: é que o único aviso que não pode ser perdido passa a ser perdido.</li>
+  <li><strong>O próprio Instagram, que é a referência dele, faz essa separação.</strong> O sino
+      de lá mostra o que é <em>dirigido a você</em> — curtiram, comentaram, pediram para seguir
+      — e <strong>post de amigo vai para o feed</strong>. A semelhança que ele quer já é essa.</li>
+  <li><strong>Afordância errada.</strong> Um número que só zera quando você lê o que os vizinhos
+      postaram transforma a comunidade em lição de casa.</li>
+</ul>
+<p><strong>E o sino não fica vazio — esta é a parte que importa, porque sino sempre vazio ensina
+   a ignorar o sino.</strong> A razão é estrutural e não otimista: <strong>o alerta de
+   vizinhança não depende de amigo nenhum</strong>. Ele é geográfico, já existe no produto
+   (ADR-0010, legítimo interesse) e chega a uma conta com <strong>zero</strong> conexões.
+   Somando o que é pessoal e não-social — plaquinha lida, achado, correspondência, pedido de
+   plaquinha, evento que mudou, indicação respondida, e-mail devolvido, comunicado —
+   <strong>o sino de uma conta sem nenhuma conexão continua tendo conteúdo real</strong>. O que
+   ele não tem é conteúdo <em>inventado</em>, e é isso que mantém o aviso do pet confiável.</p>
+
+<h3>O contador, e o que é “lido”</h3>
+<ul>
+  <li><strong>O número é a contagem de avisos não lidos do sino</strong>, e de nada mais. Nunca
+      soma mensagem nem Petline.</li>
+  <li><strong>“Lido” é o item aberto</strong>, não a lista vista.</li>
+  <li><strong>Abrir a lista e não abrir o item:</strong> o <strong>número some</strong>, e os
+      itens <strong>continuam marcados como não lidos</strong> (fundo e pino). São duas
+      perguntas diferentes: o número responde <em>“tem coisa nova desde que eu olhei?”</em>, e
+      olhar responde isso; o pino responde <em>“eu já tratei disto?”</em>, e só tratar responde.</li>
+  <li><strong>Uma exceção nomeada:</strong> o aviso de <strong>plaquinha lida</strong> e o de
+      <strong>achado</strong> <em>não</em> saem do contador ao abrir a lista — eles contam até
+      serem abertos. É o mesmo princípio do cartão fixado: o item que não pode ser perdido
+      recebe a regra que não deixa perdê-lo.</li>
+  <li><strong>“Marcar todas como lidas” existe</strong>, e é explícito. Um gesto deliberado pode
+      limpar o que o automático não limpa.</li>
+  <li><strong>O número exibe até <code>9+</code>.</strong> Não é estética: eu já medi que a barra
+      tem <strong>216 dp</strong> de título em tela de 320 dp, e uma pílula de três dígitos
+      come o espaço do apelido.</li>
+</ul>
+
+<h3>Agrupamento e teto</h3>
+<ul>
+  <li><strong>Agrupa por (tipo, autor quando houver, janela de 24 h)</strong>, no máximo
+      <strong>uma linha por combinação por dia</strong>. “3 pessoas pediram conexão”,
+      “2 pets perdidos perto de você”.</li>
+  <li><strong>Na Petline, dez fotos de um amigo são UM cartão:</strong> “Joana pôs 3 fotos
+      novas”, com no máximo um cartão por autor, por tipo, por dia. Isso também é o que impede
+      uma pessoa sozinha de ocupar a página de 20.</li>
+  <li><strong>Nunca se agrupa plaquinha lida nem achado.</strong> Cada um é um animal e uma ação
+      distintos, e “2 avisos de plaquinha” esconde qual pet.</li>
+  <li><strong>Teto da caixa:</strong> página de <strong>30</strong>, por cursor de tempo.
+      Retenção de <strong>90 dias</strong>, alinhada à das leituras de tag.</li>
+  <li><strong>Peso:</strong> a linha do sino é <strong>texto e um ícone desenhado</strong>, sem
+      imagem nenhuma. <strong>0 KB de imagem por página</strong> — e isso é decisão, não acaso:
+      pôr avatar aqui traria o avatar para uma quarta superfície, que é exatamente a conta que a
+      separação entre vitrine e avatar espalhado já recusou.</li>
+</ul>
+
+<h3>Aviso sistêmico: medido, não existe caminho nenhum</h3>
+<p>Conferido na árvore:</p>
+<ul>
+  <li><code>notification_deliveries</code> é <strong>telemetria de entrega do provedor de
+      e-mail</strong>, e o comentário da tabela diz isso por extenso. <strong>Não é caixa de
+      entrada.</strong></li>
+  <li><strong>Não existe rota de listar notificações</strong> para o app, em nenhuma forma.</li>
+  <li><strong>Não existe nada de comunicado</strong>: nenhuma rota, nenhuma tabela, nenhuma tela
+      de painel. Busca por <code>broadcast</code>, <code>comunicado</code>,
+      <code>announcement</code> e <code>anuncio</code> no contrato não traz nada.</li>
+</ul>
+<p><strong>Então o sino não tem onde buscar o que mostrar, e o comunicado é trabalho novo em
+   três lugares:</strong> a caixa (tabela e rota de leitura), a <strong>escrita pelo
+   backoffice</strong> (tela, rota de admin, trilha de auditoria) e o disparo. O comunicado é,
+   além disso, o <strong>único item do sino sem autor e com alcance total</strong> — e por isso
+   precisa das mesmas travas que a Rede já tem para o administrador: papel fechado, trilha, e
+   reautenticação para o que alcança todo mundo. <strong>Comunicado é poder de megafone, e
+   megafone sem trilha é o que vira incidente.</strong></p>
+
+<h2>Timeline — o grafo, o que se publica e o peso</h2>
+<p>Pedido do cliente em 18/10: <em>"vamos criar a seção de timeline, onde as
+   publicações/notificações dos usuários que ele segue e são amigos apareça."</em>
+   Ele falou de <strong>seguir</strong> e de <strong>amigos</strong>, que são dois grafos
+   diferentes. Reabro a recomendação com a timeline na mesa.</p>
+
+<h3>Um grafo ou dois — o custo de privacidade de cada um, em uma linha</h3>
+<table>
+  <thead><tr><th>Cenário</th><th>Custo de privacidade</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Só amizade</strong> (simétrica, com aceite)</td>
+      <td>Nenhum além do já mapeado: a timeline é leitura entre pessoas que se aceitaram, e o mapa não muda em um item</td></tr>
+  <tr><td><strong>Os dois</strong> (seguir sem aceite + amizade)</td>
+      <td style="color:var(--error)">Um estranho passa a receber um fluxo <strong>datado</strong> dos atos de outra pessoa sem que ela aceite nada</td></tr>
+  </tbody>
+</table>
+<p><strong>Recomendo UM grafo: só amizade simétrica.</strong> E o argumento decisivo não é
+   preferência, é que a timeline <em>transforma</em> o grafo assimétrico em algo pior do que
+   ele era no perfil.</p>
+<ul>
+  <li><strong>Uma timeline seguida é a lista de presença com hora.</strong> O ADR-0025 decisão
+      2 recusou a lista de presença porque ela diz <em>quem</em> esteve. Uma linha do tempo que
+      diz “a Maria confirmou presença no Encontro da Praça Benedito Calixto” diz
+      <strong>onde a Maria vai estar, e quando</strong> — e entrega isso a quem só precisou
+      apertar “seguir”. É estritamente pior do que o que já foi recusado por escrito.</li>
+  <li><strong>O que “seguir” serviria aqui já está resolvido, e melhor.</strong> O alcance que
+      importa neste produto é o do <em>pet perdido</em>, e ele já existe como
+      <strong>alerta geolocalizado a tutores próximos</strong> (ADR-0010, legítimo interesse,
+      com oposição por desligar a localização). Proximidade é mais precisa que “quem me segue”
+      para um cachorro que sumiu a três quadras. O grafo assimétrico seria um mecanismo novo
+      para um problema que já tem mecanismo melhor.</li>
+  <li><strong>Dois grafos são duas camadas de visibilidade para sempre.</strong> Cada
+      publicação nova passaria a precisar da pergunta “isto vaza para seguidor?”, e é
+      exatamente o tipo de regra que vira disciplina de quem projeta — que é o que o
+      ADR-0025 chamou de defeito esperando acontecer.</li>
+</ul>
+<p><strong>Se ele quiser os dois mesmo assim, a guarda é uma só e precisa ser dura:</strong>
+   seguir <strong>nunca</strong> carrega publicação com lugar ou data de encontro — só
+   “foto nova” e “pet cadastrado”. Eventos, check-in e caso de perdido ficam restritos à
+   amizade. E fica dito que isso cria duas camadas a manter para sempre.</p>
+<p><strong>O custo de só-amizade, que eu já tinha escrito e que a timeline agrava:</strong>
+   a timeline de quem tem zero conexões é uma tela vazia. A resposta <strong>não</strong> é
+   afrouxar o grafo: é a <strong>publicação de pet perdido entrar por proximidade</strong>, e
+   não por conexão — ela é fixada no topo para quem está no bairro, conectado ou não, pelo
+   mesmo critério do alerta que já existe. Assim a timeline nasce com conteúdo no dia um,
+   sem nenhum grafo assimétrico.</p>
+
+<h3>O que pode ser publicado — e o veredito sobre texto livre</h3>
+<p><strong>A publicação é gerada pelo SERVIDOR a partir de um fato que o produto já conhece.</strong>
+   A pessoa não escreve a publicação; ela faz a coisa, e a coisa vira linha.</p>
+<table>
+  <thead><tr><th>Fato</th><th>Publica?</th><th>Por quê</th></tr></thead>
+  <tbody>
+  <tr><td>Pet perdido, caso aberto</td><td class="sim-nao s">sim</td><td>É o fluxo crítico. Entra <strong>por proximidade</strong> e fica fixado 48 h</td></tr>
+  <tr><td>Caso encerrado como devolvido</td><td class="sim-nao s">sim</td><td>É a boa notícia, e é o que faz as pessoas voltarem</td></tr>
+  <tr><td>Pet cadastrado</td><td class="sim-nao s">sim</td><td>Ato fundador, alegre, e não diz onde ninguém está</td></tr>
+  <tr><td>Foto nova na vitrine</td><td class="sim-nao s">sim</td><td>Já existe na fatia D; custo novo zero</td></tr>
+  <tr><td>Indicação de profissional <em>aceita</em></td><td class="sim-nao s">sim</td><td>Recomendação de vizinho é o núcleo da confiança. Só depois do aceite (ADR-0011 emenda 1)</td></tr>
+  <tr><td><strong>Check-in em encontro</strong></td><td class="sim-nao n">não</td><td><strong>ADR-0025 decisão 2.</strong> Seria a lista de presença como linha do tempo, com hora</td></tr>
+  <tr><td><strong>Nova conexão</strong> (“Fulano e Beltrano agora são amigos”)</td><td class="sim-nao n">não</td><td>É a lista de conexões por outro caminho, e ela nunca aparece a ninguém</td></tr>
+  <tr><td>Avaliação do Perto</td><td class="sim-nao n">não na v1</td><td>Avaliação fala de um negócio; publicá-la identifica quem avaliou a um público que ele não escolheu</td></tr>
+  </tbody>
+</table>
+<p><strong>Texto livre: LIBERADO pelo cliente em 18/10</strong> — <em>"deixe o texto livre na
+   timeline"</em>. <strong>Eu havia recomendado que não, e a razão era uma só: a moderação não
+   tinha dono.</strong> Ele decidiu que <em>"quem modera vai ser o administrador"</em>, com fila
+   no backoffice. <strong>A razão caiu, então a recomendação cai junto</strong> — não há mérito
+   em defender uma recusa cujo fundamento deixou de existir.</p>
+<p><strong>O que NÃO cai é o limite declarado do filtro.</strong> A lista de 32 palavras
+   <strong>não cobre injúria racial</strong> — o próprio arquivo diz isso por extenso, porque as
+   palavras colidem com vocabulário de animal, de cor e de gentílico — e
+   <strong>não pega frase ofensiva sem palavra proibida</strong>. O cliente aceitou isso por
+   escrito: <em>"vamos começar com um modelo de moderação mais simples e conforme for
+   aumentamos."</em> <strong>Então o produto não pode prometer mais do que a lista entrega:</strong>
+   nada de “seu texto foi verificado”, nenhum selo de conteúdo revisado. A proteção de verdade é
+   a <strong>denúncia mais a remoção pelo administrador</strong>, e o filtro é o primeiro degrau,
+   não a garantia.</p>
+
+<h3>Onde o texto passa pelo filtro — e por que o lugar importa</h3>
+<p>Medido hoje: a moderação <strong>não estava ligada</strong> no caminho de escrita da avaliação
+   do Perto, <strong>embora o cabeçalho do módulo afirmasse que estava</strong>. Já foi
+   consertado, e o buraco não pode se repetir aqui.</p>
+<ul>
+  <li><strong>A chamada mora no DOMÍNIO</strong>, na função que cria a publicação — não na rota e
+      não na tela. É o mesmo argumento da conversa mediada, que despersonaliza no domínio porque
+      é o único ponto por onde as duas vistas passam.</li>
+  <li><strong>O teste é do caminho de escrita, não da lista.</strong> Testar que a lista reprova
+      uma palavra é testar a lista; o que faltou na avaliação era um teste que
+      <strong>publica</strong> com palavra proibida e <strong>espera recusa</strong>.</li>
+  <li><strong>E proponho um portão que cobra COERÊNCIA, não cobertura</strong> — ver abaixo.</li>
+</ul>
+<h3>O portão do texto livre — coerência, e não cobertura</h3>
+<p><strong>Minha proposta anterior estava errada, e a decisão do cliente a corrige.</strong> Eu
+   havia proposto reprovar todo campo de texto livre sem filtro. Isso
+   <strong>reprovaria uma decisão que ele acabou de tomar</strong>:
+   <em>"vamos deixar desligado e ir acompanhando, caso identifiquemos muitos problemas,
+   adicionamos a moderação."</em> Ele recusou ligar o filtro na descrição do caso de perdido, no
+   nome de exibição e nos campos de evento. Hoje o filtro fica <strong>só na indicação e na
+   avaliação</strong>, e a maioria dos campos de texto livre está
+   <strong>deliberadamente descoberta</strong>. Portão que reprova decisão do cliente não é
+   portão, é obstáculo.</p>
+<p><strong>O que ele deve cobrar é que cada campo tenha uma decisão escrita — qualquer uma.</strong>
+   Duas listas, e todo campo de texto livre está em exatamente uma:</p>
+<table>
+  <thead><tr><th>Lista</th><th>Significa</th><th>O portão confere</th></tr></thead>
+  <tbody>
+  <tr><td><code>COBERTO_PELO_FILTRO</code></td><td>o caminho de escrita chama <code>errosDeModeracao</code></td><td><strong>que a chamada existe de verdade</strong></td></tr>
+  <tr><td><code>DESCOBERTO_POR_DECISAO</code></td><td>fica sem filtro, de propósito</td><td>que há <strong>motivo, responsável e data</strong></td></tr>
+  </tbody>
+</table>
+<ol>
+  <li><strong>Campo em nenhuma das duas → REPROVA</strong>, nomeando o campo e pedindo que alguém
+      decida. É o que impede o próximo campo de nascer descoberto <strong>por esquecimento</strong>
+      em vez de por decisão — a única coisa que eu queria do portão original.</li>
+  <li><strong>Campo na lista de cobertos cujo caminho NÃO chama o filtro → REPROVA</strong>,
+      dizendo que a prosa diverge do código. <strong>É exatamente o defeito da avaliação do
+      Perto.</strong> Sem este caso o portão não pegaria o único buraco que já aconteceu.</li>
+  <li><strong>Campo na lista de descobertos → PASSA</strong>, e o portão imprime a entrada com
+      motivo, dono e data.</li>
+</ol>
+<p><strong>A lista de descobertos documenta a decisão dele em vez de contrariá-la</strong>, e vira
+   o instrumento de acompanhamento que ele pediu: quando aparecerem “muitos problemas”, ela já diz
+   <strong>onde olhar</strong>, desde quando e quem decidiu.</p>
+<p><strong>A forma já existe nesta casa.</strong> <code>.github/quality-gates.yml</code> guarda as
+   dispensas com motivo, responsável e data, e <code>make verificar-dispensas</code> reprova
+   dispensa vencida — o comentário do arquivo já diz o princípio:
+   <em>“visível, datada, e EXPIRA SOZINHA”</em>. <strong>A diferença:</strong> descoberto
+   <strong>não expira e não reprova</strong> por prazo, porque ele decidiu acompanhar e não
+   corrigir em data marcada; carrega uma <strong>data de reler</strong>, e passada a data o portão
+   <strong>imprime nota sem reprovar</strong> — como <code>verificar-numero-de-adr</code> já faz
+   ao anunciar o buraco do 0026 sem derrubar nada.</p>
+<p><strong>O efeito concreto nesta frente:</strong> o texto da publicação entra como
+   <code>COBERTO</code>, e os campos vizinhos seguem <code>DESCOBERTO_POR_DECISAO</code>, com a
+   data de 18/10 e o motivo nas palavras dele. <strong>O produto não insinua em superfície nenhuma
+   que o conteúdo é revisado</strong> — nem em selo, nem em mensagem de sucesso.
+   <strong>A proteção real continua sendo denúncia e remoção, agora com dono.</strong></p>
+
+<h3>Como fica a publicação com texto</h3>
+<ul>
+  <li><strong>A fatia K deixa de existir</strong> e é absorvida pela J. Separá-las era artificial:
+      mesma tabela, mesmo filtro, mesma denúncia. <strong>J passa de 5–7 para 7–9 dias.</strong></li>
+  <li><strong>Duas formas, e recomendo as duas juntas:</strong> (a) <strong>texto no fato</strong>
+      — a pessoa acrescenta uma linha à publicação que o servidor gerou; e (b)
+      <strong>publicação de texto puro</strong>, sem fato por baixo. A (b) é a que o bairro mais
+      usa de verdade — <em>“alguém viu um gato preto na Rua Aurora, coleira vermelha?”</em> — e
+      separá-la custaria uma fatia inteira para a mesma mecânica.</li>
+  <li><strong>280 caracteres</strong>, e não os 140 que eu tinha proposto. O motivo não é gosto:
+      <strong>280 é o teto que o produto já usa</strong> em <code>pets.care_notes</code>, e dois
+      tetos de texto livre com números diferentes é o que ninguém consegue explicar depois.
+      140 também não cabe o caso de uso real acima.</li>
+  <li><strong>Sem formatação, sem link clicável, sem menção.</strong> Link clicável em texto de
+      terceiro é o vetor de golpe mais barato que existe, e menção traria o apelido para uma
+      superfície nova sem passar pela tabela dos três níveis.</li>
+</ul>
+
+<h3>Denunciar publicação: a mesma mecânica, uma terceira lista</h3>
+<p><strong>Mesma folha, mesmo comportamento</strong> — ocultação imediata para quem denunciou,
+   remoção para todos só pelo administrador, denunciado não avisado, sem prazo prometido. O
+   <strong>ponto de acesso é o próprio cartão</strong> (“⋮” do cartão), pelo mesmo princípio da
+   foto: denuncia-se onde o dano está.</p>
+<p><strong>Terceira lista de motivos, porque as outras duas não servem a texto.</strong>
+   “Nudez” e “maus-tratos a animal” são de imagem; “não é quem diz ser” é de perfil.</p>
+<table>
+  <thead><tr><th>Denúncia de <strong>publicação</strong> (5)</th></tr></thead>
+  <tbody>
+  <tr><td>Ofensa ou discriminação</td></tr>
+  <tr><td>Golpe, cobrança ou venda de animal</td></tr>
+  <tr><td>Informação falsa sobre um pet perdido</td></tr>
+  <tr><td>Propaganda ou repetição</td></tr>
+  <tr><td>Outro motivo</td></tr>
+  </tbody>
+</table>
+<p><em>“Informação falsa sobre um pet perdido”</em> é específico deste produto: um avistamento
+   inventado manda a pessoa para o bairro errado e custa horas de busca.
+   <strong>Os alvos de denúncia passam a ser cinco</strong> — perfil, foto e publicação, que são
+   meus, mais avaliação e conversa, que a fila já recebe.</p>
+
+
+<h3>Notificação não entra na timeline — e o buraco que isso revela</h3>
+<p><strong>São duas coisas, e viram duas abas.</strong> Aviso é <em>seu</em>, urgente e
+   acionável. Publicação é de terceiro e informativa. Um fluxo único faz o aviso importante
+   se perder entre fotos de cachorro, que é o defeito clássico.</p>
+<p><strong>Medido nesta árvore, e eu confiro antes de afirmar:</strong> a fila <code>jobs</code>
+   conhece <strong>só tipos de imagem</strong> (<code>pet_photo</code>,
+   <code>found_report_photo</code>, <code>finder_photo</code>, <code>catalog_image</code>);
+   o aviso do achador calcula e grava <code>ownerNotified</code> mas <strong>não enfileira
+   trabalho de notificação nenhum</strong>; e a entrega por push está ligada em
+   <code>src/bin/worker.ts</code> <strong>só</strong> para o alerta geolocalizado de perdido.
+   Ou seja: <code>owner_notified</code> registra intenção, não entrega.</p>
+<p><strong>A timeline NÃO deve ser o lugar onde esse aviso finalmente aparece</strong>, e a
+   razão é de prioridade e não de desenho: a timeline depende da moderação (fatia E), da
+   conexão (F) e do perfil a terceiros (G). Amarrar o aviso mais crítico do produto à fatia
+   mais tardia atrasa o conserto do buraco central por semanas. <strong>O aviso ao tutor
+   precisa de caminho próprio e mais curto</strong> — push, e-mail e um sino na barra — e
+   <strong>não depende de nada desta frente</strong>. Por isso ele vira fatia independente,
+   no grupo que vai direto para a <code>development</code>.</p>
+
+<h3>Ordem, volume e peso</h3>
+<p><strong>Ordem: tempo decrescente.</strong> Três razões: relevância exige sinal que não
+   temos (não há curtida, comentário nem tempo de leitura, e não vai haver); relevância
+   esconderia o <strong>pet perdido de ontem</strong> atrás da foto bonita de hoje, e perdido
+   é justamente o item cujo valor <em>decai</em> com o tempo; e ordem por tempo é auditável e
+   explicável, relevância não é.</p>
+<p><strong>Uma exceção, e ela é regra nomeada e não “relevância”:</strong> caso de perdido
+   aberto no bairro de quem lê fica <strong>fixado no topo por 48 h</strong>.</p>
+<p><strong>Página de 20, por cursor de tempo</strong> — nunca <code>offset</code>, que duplica
+   e pula item quando entra publicação nova durante a rolagem.</p>
+<table>
+  <thead><tr><th>Medida</th><th>Bytes</th><th>Conta</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Primeira pintura</strong> (≈3 cartões visíveis, com texto)</td><td><strong>120 KB</strong></td><td>3 × (30 KB miniatura + 10 KB avatar)</td></tr>
+  <tr><td><strong>Página inteira rolada</strong> (20 cartões)</td><td><strong>800 KB</strong> + ~6 KB</td><td>20 × 40 KB de imagem, mais 20 × 280 bytes de texto</td></tr>
+  <tr><td style="color:var(--error)"><strong>Se o cartão fosse foto de largura inteira</strong></td><td style="color:var(--error)"><strong>9 MB</strong></td><td>20 × 450 KB (<code>card</code> 1024 px)</td></tr>
+  </tbody>
+</table>
+<p><strong>A miniatura de 96 dp é a decisão de peso, e ela também é a decisão de produto.</strong>
+   Um fluxo de fotos sangradas <em>é</em> o Instagram, e nós decidimos copiar a forma do
+   perfil e não construir um feed de fotos. O cartão compacto mantém a timeline falando de
+   <strong>fatos</strong> — “a Ana reencontrou o Bob”, “o Pedro perdeu a Lua em Pinheiros” —
+   que é o que a lente de confiança da comunidade pede. Carregamento sob demanda é
+   obrigatório, pelo motivo já registrado em
+   <code>app/lib/widgets/carrossel_de_fotos.dart</code>.</p>
+<p><strong>Teto proposto como portão:</strong> primeira pintura da timeline <strong>≤ 250 KB</strong>,
+   página inteira <strong>≤ 1 MB</strong>.</p>
+
+
+<h2>O apelido (<code>@</code>) — identificador escolhido, único</h2>
+<p>Pedido do cliente, 18/10: <em>"a tela do usuário deve ter como título da página na barra
+   principal o slug do usuário."</em> <strong>Medido: slug de pessoa não existe.</strong>
+   <code>users</code> não tem a coluna; a única operação que define slug é
+   <code>updatePetPublicProfile</code>, é <strong>de pet</strong>, e o próprio código registra
+   que <em>"também não está implementada"</em>.</p>
+<p><strong>Decidido por ele, e não se reabre:</strong> <em>"slug não tem relação com
+   informações pessoais, é um id que o usuário escolhe e você deve verificar para garantir que
+   não tem dois iguais."</em> O apelido é <strong>identificador escolhido</strong>, não deriva
+   de nome, e-mail, telefone nem de atributo nenhum da pessoa, e <strong>não é tratado como
+   dado pessoal</strong>. A <em>visibilidade</em> dele continua obedecendo à tabela dos três
+   níveis e à régua dele — <strong>nada público sem relacionamento</strong> —, o que é
+   coerente: um identificador escolhido não precisa ser público para ser único.</p>
+
+
+<h3>A faixa: 5 a 20, e o teto é da forma normalizada</h3>
+<p><strong>Decidido por ele:</strong> <em>"esse id deve ser curto, no máximo 20 caracteres"</em>
+   e <em>"deve ter uma quantidade mínima de 5 caracteres"</em>. <strong>Faixa final: 5 a 20.</strong></p>
+<p><strong>O piso de 5 resolve dois problemas de uma vez.</strong> Mata os apelidos de 1 e 2
+   caracteres, que são recurso escasso e alvo de acúmulo; e <strong>reduz muito a confusão
+   visual</strong>, porque quanto mais curto o apelido, menos letras é preciso trocar para
+   imitá-lo — <code>@leo</code> e <code>@1eo</code> diferem em um caractere de três, e isso é
+   bem mais fácil de passar despercebido do que numa cadeia de cinco a vinte.</p>
+<p><strong>O teto de 20 é do apelido NORMALIZADO — e, por construção, ele é idêntico ao que a
+   pessoa digita.</strong> Como o conjunto de caracteres já é ASCII restrito, normalizar é só
+   minúsculo e aparo: maiúscula para minúscula é <strong>um para um</strong>, e espaço nem é
+   aceito. <strong>Digitado e normalizado nunca divergem em comprimento</strong>, e isso é um
+   ganho de ter recusado acento e separador extra — com acento, <code>á</code> normalizado
+   viraria <code>a</code> ou <code>a&#769;</code> conforme a forma Unicode, e o comprimento
+   passaria a depender da forma.</p>
+<p><strong>O esqueleto NÃO tem regra de comprimento.</strong> Ele perde o hífen e fica mais
+   curto; existe só para comparar colisão, nunca para validar tamanho. Confundir os dois seria
+   recusar <code>@ana-maria</code> (9 normalizado, 8 de esqueleto) por um motivo inexistente.</p>
+<p><strong>Banco, contrato e tela cobram a MESMA faixa, e isso é requisito e não zelo:</strong>
+   <code>CHECK</code> na coluna, <code>minLength: 5</code> / <code>maxLength: 20</code> mais o
+   <code>pattern</code> no contrato, e o mesmo regex no campo da tela. Hoje mesmo esta casa
+   pagou por essa divergência: o recado do achado aceitava <strong>1000</strong> no contrato e
+   a coluna recusava acima de <strong>500</strong>, e a pessoa recebia erro de servidor em vez
+   de recusa explicada.</p>
+<p><strong>A mensagem da tela diz a faixa, e só.</strong> Sem parágrafo de apoio:
+   <em>“De 5 a 20 caracteres: letras minúsculas, números e hífen.”</em> e, quando curto demais,
+   <em>“Mínimo de 5 caracteres.”</em> O caso do nome curto legítimo — Ana, Léo, Zé — é resolvido
+   <strong>pelas três sugestões</strong> que o servidor já devolve, derivadas do que a pessoa
+   digitou (<code>@ana-silva</code>, <code>@ana-sp</code>, <code>@ana-2</code>). Orientação por
+   exemplo, não por explicação.</p>
+
+<h3>Os 20 caracteres cabem na barra? Medido: não, no caso médio</h3>
+<p>Em tela de <strong>320&nbsp;dp</strong>, a barra gasta 16 de margem, 24 do glifo de voltar,
+   12 de intervalo, 24 do glifo de ação e 16 do outro lado — <strong>sobram 216&nbsp;dp</strong>
+   para o título. O título é <code>title-lg</code>: Inter semibold <strong>22&nbsp;px</strong>.</p>
+<table>
+  <thead><tr><th>Caso</th><th>Largura do <code>@</code> + 20 caracteres</th><th>Cabe em 216 dp?</th></tr></thead>
+  <tbody>
+  <tr><td>Médio (~0,52 em)</td><td>≈ <strong>240 dp</strong></td><td class="sim-nao n">não</td></tr>
+  <tr><td>Largo (<code>@wwww…</code>, ~0,78 em)</td><td>≈ 357 dp</td><td class="sim-nao n">não</td></tr>
+  <tr><td>Estreito (<code>@iiii…</code>, ~0,26 em)</td><td>≈ 120 dp</td><td class="sim-nao s">sim</td></tr>
+  </tbody>
+</table>
+<p><strong>Como a tela se comporta — dois passos, e nunca quebra de linha:</strong></p>
+<ol>
+  <li><strong>Reduz um degrau</strong>, de <code>title-lg</code> (22 px) para <code>title</code>
+      (18 px), que são degraus que o sistema já tem. A 18 px o caso médio dá
+      <strong>≈ 197 dp</strong> e <strong>cabe</strong>.</li>
+  <li><strong>Só então corta, com reticência no fim.</strong> Vale para o caso largo, que é raro
+      e não deve pagar por si o preço de ninguém.</li>
+</ol>
+<p><strong>Quebrar em duas linhas está fora:</strong> mudaria a altura da barra, e a altura da
+   barra é compartilhada por todas as telas.</p>
+<p><strong>E cortar na barra não custa informação</strong>, porque o apelido aparece
+   <strong>inteiro</strong> logo abaixo, no cabeçalho do perfil, em tamanho de corpo, onde
+   sempre cabe. A barra é reforço do contexto, não a única leitura.</p>
+
+<h3>Unicidade: é do banco, e insensível a caixa</h3>
+<p><strong><code>@Leandro</code> e <code>@leandro</code> não podem coexistir</strong>, e quem
+   garante isso é o <strong>índice</strong>, não o aplicativo.</p>
+<ul>
+  <li><strong>Como:</strong> o apelido é guardado <strong>já normalizado</strong> — minúsculo e
+      aparado — numa coluna <code>citext</code>, com <strong>índice único global</strong> sobre
+      ela. Global e não só entre contas vivas, copiando <code>pets_slug_unico</code>:
+      reaproveitar um apelido entrega a um estranho um endereço que já foi de outra pessoa.</li>
+  <li><strong>Segundo índice, sobre a forma reduzida:</strong> ver “confusão visual” abaixo.
+      São dois índices, e o segundo é o que trabalha de verdade.</li>
+  <li><strong>Em corrida, o banco recusa e a tela trata.</strong> Duas pessoas pedindo
+      <code>@leandro</code> no mesmo instante: as duas escritas vão ao banco, uma viola o
+      índice, o servidor traduz a violação em erro de campo, e a tela diz “esse apelido já é de
+      alguém”. <strong>Não existe “conferir antes e confiar”</strong> — a janela entre a
+      conferência e a escrita é exatamente onde a corrida mora, e um produto que confia na
+      conferência prévia entrega o mesmo apelido a duas pessoas no dia em que duas pessoas
+      quiserem o mesmo apelido.</li>
+</ul>
+
+<h3>Confusão visual — restringir <em>e</em> recusar normalizado</h3>
+<p>Unicidade não cobre <code>@leandro</code>, <code>@1eandro</code> e <code>@leandrо</code> com
+   “о” cirílico: para o banco são três coisas diferentes. <strong>Recomendo os dois freios
+   juntos, e não a terceira opção</strong> — deixar para a denúncia é descobrir o dano depois
+   que ele aconteceu.</p>
+<ol>
+  <li><strong>Conjunto mínimo de caracteres:</strong>
+      <code>^[a-z0-9][a-z0-9-]{3,18}[a-z0-9]$</code> — <strong>5 a 20</strong>, letras latinas
+      minúsculas, dígitos e <strong>um separador só, o hífen</strong>. A classe de caracteres é
+      a mesma de <code>pets.slug</code>; <strong>o comprimento diverge de propósito</strong>
+      (o pet aceita 3 a 30), e a divergência fica dita para não virar surpresa.
+      <strong>Sendo ASCII puro, o “о” cirílico é impossível de digitar aqui</strong>, e com ele
+      somem os homóglifos de Unicode inteiros.
+      <strong>Recuso ponto e sublinhado</strong>: “mínimo” quer dizer <em>menos</em>
+      separadores, não três. Com ponto, sublinhado e hífen juntos,
+      <code>@maria.silva</code>, <code>@maria_silva</code> e <code>@maria-silva</code>
+      conviveriam, e cada separador novo multiplica as grafias confundíveis do mesmo nome.</li>
+  <li><strong>Recusa por forma reduzida.</strong> Antes de aceitar, o apelido vira um esqueleto
+      — tira o hífen e mapeia <code>0</code>→<code>o</code>, <code>1</code>→<code>l</code>,
+      <code>5</code>→<code>s</code>, <code>3</code>→<code>e</code> — e é recusado se o esqueleto
+      bater com um já existente. Assim <code>@maria-silva</code>, <code>@mariasilva</code> e
+      <code>@mar1a-silva</code> <strong>não coexistem</strong>. O esqueleto também tem índice
+      único, pelo mesmo motivo do anterior: regra que não é índice é regra que alguém esquece.</li>
+</ol>
+<p><strong>O que isto não resolve, e precisa estar dito:</strong> nada impede alguém de se
+   chamar <code>@clinica-vet-pinheiros</code> sem ser a clínica. Os dois freios travam o caso
+   <em>mecânico</em>; o caso <em>humano</em> só tem um remédio, e é a denúncia de perfil com o
+   motivo <em>“Não é quem diz ser”</em> mais a remoção pelo administrador.
+   <strong>Dependência registrada: o apelido não pode aparecer para outra pessoa antes da
+   fatia E.</strong> Mostrá-lo a terceiros sem canal de retirada é criar o dano e não a saída.</p>
+<p>O <strong>selo de validado</strong> anda junto do apelido onde ele aparecer, porque é o
+   diferenciador barato contra imitação — e o texto do selo precisa dizer a verdade: significa
+   <strong>“confirmou o e-mail”</strong>, nunca “é quem diz ser”.</p>
+
+<h3>Verificar disponibilidade é enumeração — por isso a rota não existe</h3>
+<p>Uma rota que responde “esse apelido existe?” deixa varrer a base, que é o dano que este plano
+   já evitou matando a descoberta por link. <strong>A resposta mais simples é não ter a
+   rota:</strong> a disponibilidade é decidida <strong>no envio</strong>, pelo próprio índice,
+   e não existe superfície separada para abusar.</p>
+<ul>
+  <li><strong>Teto:</strong> <strong>10 tentativas por hora</strong> e <strong>30 por dia</strong>,
+      por conta — a mesma família dos tetos que as intenções de mídia já usam. Enumerar passa a
+      custar uma conta, e conta custa um e-mail confirmado.</li>
+  <li><strong>O custo de experiência é real, e a troca é dele:</strong> sem conferência a cada
+      tecla, a pessoa digita, toca em “Salvar” e só então descobre que o apelido é de alguém.
+      <strong>Mitigação que não custa nada:</strong> quando estiver tomado, o servidor devolve
+      <strong>três sugestões livres</strong> derivadas do que ela digitou
+      (<code>@maria-2</code>, <code>@maria-sp</code>, <code>@mariab</code>). Isso tira quase toda
+      a dor de não ter resposta ao vivo, e as sugestões vêm do que ela escolheu, não do e-mail
+      nem do nome dela.</li>
+  <li>O que vaza, mesmo assim, é <strong>que um apelido está tomado</strong> — e não
+      <em>quem</em> o tem. Como o apelido não deriva de identidade, saber que
+      <code>@maria</code> existe não diz que a Maria Silva tem conta.</li>
+</ul>
+
+<h3>Trocar de apelido</h3>
+<p><strong>Pode trocar: 1 vez a cada 60 dias. E o apelido anterior NÃO volta ao pool na
+   hora.</strong> Ele fica <strong>reservado para a mesma conta por 180 dias</strong>.</p>
+<p>Soltar na hora é o furo: eu troco de <code>@maria</code> para <code>@mariab</code>, um
+   estranho pega <code>@maria</code> no minuto seguinte e <strong>herda tudo que a vizinhança
+   associava a mim</strong> — que é imitação servida pelo próprio produto. Depois dos 180 dias
+   ele volta ao pool; o risco residual existe e fica dito, mas seis meses é tempo de sobra para
+   a referência esfriar, e queimar o apelido para sempre encolheria o espaço de nomes sem
+   ninguém para administrá-lo. <strong>Conta excluída:</strong> reservado 30 dias, que é o prazo
+   de expurgo que o ADR-0010 já usa.</p>
+
+<h3>Um espaço de nomes só, com os pets</h3>
+<p><strong>O apelido é único também contra <code>pets.slug</code>.</strong> O site publica o pet
+   em <code>/@{slug}</code> (ADR-0028), e o <code>@</code> é <strong>um símbolo só na cabeça de
+   quem lê</strong>. Uma pessoa com <code>@thor</code> no app enquanto <code>/@thor</code>
+   mostra o cachorro de outro é o mal-entendido de que o golpe vive. Desenho: uma tabela
+   <code>handles</code> com o apelido normalizado como chave, o esqueleto ao lado e um
+   <code>kind</code> (<code>pessoa</code> | <code>pet</code> | <code>reservado</code>), que
+   <code>users</code> e <code>pets</code> referenciam. Ela também é onde as reservadas moram,
+   em vez de virarem constante espalhada.</p>
+
+<h3>Reservadas — refeitas para o piso de 5</h3>
+<p><strong>O piso de 5 matou 18 palavras da lista</strong>, e reservar palavra que o piso já
+   proíbe é regra morta — regra morta confunde quem lê depois. Saíram <code>t</code>,
+   <code>v1</code>, <code>me</code>, <code>api</code>, <code>app</code>, <code>web</code>,
+   <code>img</code>, <code>pet</code>, <code>tag</code>, <code>sair</code>, <code>pets</code>,
+   <code>rede</code>, <code>loja</code>, <code>blog</code>, <code>time</code>,
+   <code>root</code>, <code>oi</code>, <code>selo</code>, <code>vip</code>, <code>pix</code>,
+   <code>null</code>, <code>true</code>, <code>test</code>, <code>user</code>.</p>
+<table>
+  <thead><tr><th>Grupo</th><th>O que sobrou</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Caminho do produto</strong></td><td><code>public</code>, <code>media</code>, <code>static</code>, <code>assets</code>, <code>health</code>, <code>cartaz</code>, <code>login</code>, <code>entrar</code>, <code>conta</code>, <code>perfil</code>, <code>perto</code>, <code>achado</code>, <code>perdido</code>, <code>plaquinha</code>, <code>evento</code>, <code>eventos</code>, <code>diretorio</code>, <code>busca</code>, <code>termos</code>, <code>privacidade</code>, <code>sobre</code></td></tr>
+  <tr><td><strong>Imitação da plataforma</strong></td><td><code>bichu</code> <strong>e qualquer apelido que CONTENHA <code>bichu</code></strong>, <code>oficial</code>, <code>equipe</code>, <code>suporte</code>, <code>atendimento</code>, <code>ajuda</code>, <code>moderacao</code>, <code>moderador</code>, <code>seguranca</code>, <code>admin</code>, <code>administrador</code>, <code>sistema</code>, <code>contato</code>, <code>noreply</code>, <code>no-reply</code></td></tr>
+  <tr><td><strong>Autoridade falsa e golpe</strong></td><td><code>verificado</code>, <code>validado</code>, <code>premium</code>, <code>premio</code>, <code>recompensa</code>, <code>sorteio</code>, <code>ganhador</code>, <code>pagamento</code>, <code>cobranca</code></td></tr>
+  <tr><td><strong>Técnicas</strong></td><td><code>false</code>, <code>teste</code>, <code>usuario</code>, <code>anonimo</code>, <code>deleted</code>, <code>excluido</code>, <code>undefined</code></td></tr>
+  </tbody>
+</table>
+<p><strong>Para <code>bichu</code> a regra é CONTÉM, e não começa-com.</strong> O prefixo
+   deixaria passar <code>@suporte-bichu</code> e <code>@oi-bichu</code>, que é a forma que o
+   golpe tem de verdade. O custo é recusar um <code>@bichuchi</code> legítimo, que é raro e tem
+   saída por administrador.</p>
+<p><strong>A reservada é conferida sobre o ESQUELETO</strong>, senão <code>@b1chu-suporte</code>
+   passa pela lista inteira.</p>
+<p><strong>Acrescentar palavra depois não revoga apelido já dado</strong> — só bloqueia novos, e
+   a colisão existente vira item para um administrador olhar. Revogar em silêncio tiraria da
+   pessoa a identidade dela sem ela ter feito nada.</p>
+
+<h3>Contas que já existem — ENCERRADO, e a coluna é anulável</h3>
+<p>Decisão do cliente: <em>"as contas que não tem ainda são de teste, você não precisa se
+   preocupar."</em> <strong>Não há estratégia de migração</strong>: sem geração automática, sem
+   pedir no próximo acesso, sem estado intermediário. <strong>E a oferta de apagar foi
+   recusada</strong>, então as contas continuam lá — uma delas carrega a evidência de um
+   defeito de varredura, e apagar conta hoje seria SQL na mão.</p>
+<p><strong>O que isso exige do desenho, e é pequeno mas precisa estar certo:</strong> a coluna
+   nasce <strong>anulável</strong>, e <strong>nada no caminho crítico exige apelido</strong>.
+   A tela da conta cai para o <strong>nome de exibição</strong> quando o apelido é nulo — que é
+   o que a tela já faz hoje —, e o apelido substitui o título quando existir.
+   <strong>Não há fluxo que obrigue a escolher apelido para seguir usando o app</strong>, e
+   nenhuma leitura pode estourar com nulo. Gerar automático está descartado de qualquer forma:
+   derivar do e-mail <strong>vaza o e-mail</strong>, e a parte local costuma ser o nome
+   completo da pessoa e o login dela.</p>
+<p><strong>Quem não tem apelido simplesmente não é referido por apelido</strong>, e isso não
+   atrapalha nada — a descoberta é ancorada no contexto ou por código presencial, nunca por
+   apelido digitado.</p>
+
+<h3>Em qual coluna o apelido entra</h3>
+<p><strong>Dono: sempre. Com conta e sem conexão: sim. Conectado: sim. Sem conta: nunca.</strong></p>
+<p>Sim na coluna do meio porque <strong>é como a pessoa é referida</strong>: um pedido de conexão
+   que diz só “Joana” é ambíguo, e ambiguidade é o que a imitação explora. E, como aquela coluna
+   só se alcança por um caminho que já exige relação, o apelido <strong>não</strong> vira
+   identificador público — que é o que ele vetou.</p>
+<p><strong>O apelido nunca é URL.</strong> Não existe <code>/@{apelido}</code> de pessoa, em
+   superfície nenhuma. É isso que mantém o ADR-0005 (slug mutável com histórico e 301) e o
+   ADR-0024 (endereço público separado da chave interna) <strong>fora do escopo</strong>: sem
+   endereço público não há endereço a preservar nem chave estrangeira a desviar.</p>
+
+
+<h2>Os três níveis de visibilidade</h2>
+<p>Decisão do cliente, 18/10: <em>"se elas forem amigas não tem problema, o que não pode é ser
+   público, sem ter nenhum relacionamento."</em> O eixo que ele desenhou é
+   <strong>relação contra público</strong> — e não "logado contra deslogado". A tabela abaixo
+   é esse eixo aplicado campo a campo.</p>
+<table>
+  <thead><tr><th>&nbsp;</th><th>Sem conta</th><th>Com conta, sem conexão</th><th>Conectado</th><th>Bloqueado</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Como se chega a esta tela</strong></td>
+      <td class="sim-nao n">não se chega</td>
+      <td>pedido recebido · contexto em comum · QR lido presencialmente</td>
+      <td>as três acima, mais o aceite</td>
+      <td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Nome de exibição</strong></td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Apelido (<code>@</code>)</strong></td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Capa (a foto)</strong></td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Selo de validado</strong></td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Mês de entrada</strong></td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Lugar</strong></td><td class="sim-nao n">—</td><td><strong>só a cidade</strong></td><td>bairro e cidade</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Sinais de confiança</strong> (contagens)</td><td class="sim-nao n">—</td><td class="sim-nao s">sim</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Pets</strong></td><td class="sim-nao n">—</td><td>contagem por espécie</td><td>nome, miniatura, página</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Vitrine</strong></td><td class="sim-nao n">—</td><td>só a contagem</td><td>as até 9 fotos</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Timeline / publicações</strong></td><td class="sim-nao n">—</td><td class="sim-nao n">não</td><td class="sim-nao s">sim</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Encontros em comum</strong></td><td class="sim-nao n">—</td><td class="sim-nao n">não</td><td>só o número</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>Lista de conexões</strong></td><td class="sim-nao n">—</td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td><td class="sim-nao n">404</td></tr>
+  <tr><td><strong>E-mail, telefone, CEP, coordenada</strong></td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td></tr>
+  <tr><td><strong>Qualquer UUID</strong></td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td><td class="sim-nao n">nunca</td></tr>
+  </tbody>
+</table>
+<p><strong>A coluna “sem conta” é vazia inteira, e isso é a arquitetura e não uma escolha de
+   tela:</strong> não existe rota de perfil de pessoa alcançável sem conta, em estado nenhum.
+   É o que mantém os dez itens do ADR-0010 intactos para a superfície pública.</p>
+<p><strong>E a coluna do meio não é “qualquer um com conta”.</strong> É a leitura mais
+   importante desta tabela. Com a descoberta por link morta (abaixo), <strong>não existe
+   caminho pelo qual uma conta arbitrária alcance um perfil arbitrário</strong>. Só se chega à
+   coluna do meio por três caminhos, e <strong>os três já são uma relação</strong>: a pessoa
+   mandou um pedido, vocês participaram do mesmo contexto no produto, ou vocês estavam
+   fisicamente juntos e um leu o código do outro. É assim que o nível do meio deixa de ser
+   “público sem relacionamento” e passa a ser “relação ainda sem aceite”.</p>
+<p><strong>Duas linhas apertaram em relação ao desenho anterior.</strong> <em>Lugar</em> passou
+   a ser <strong>só a cidade</strong> sem conexão: bairro é o que estreita a casa a algumas
+   quadras, que é o argumento do próprio ADR-0025, e quem chegou por contexto ou por QR já
+   sabe onde a pessoa anda sem precisar que o produto conte. E <em>timeline</em> é de
+   conectados, sem meio-termo.</p>
+
+<h3>O que os sinais de confiança NÃO são</h3>
+<ul>
+  <li><strong>Não são nota nem estrela.</strong> Reputação numérica de pessoa cria o incentivo
+      de farmar o número, e “4,2 de 5” sobre um vizinho não é informação, é rótulo.</li>
+  <li><strong>São contagens de ato verificado pelo servidor</strong>: encontro em que fez
+      check-in, indicação que foi <em>aceita</em> pelo profissional, caso em que foi o achador
+      e o tutor confirmou o desfecho. Nenhum deles é autodeclarado.</li>
+  <li><strong>Devolução é a mais forte e a mais delicada.</strong> Ela só conta quando o
+      <em>tutor</em> encerrou o caso como devolvido. Zero devoluções é o normal e não pode
+      parecer defeito — por isso o número aparece sem cor e sem medalha.</li>
+</ul>
+
+<h2>O que a vitrine acrescenta de confiança — e o que não acrescenta</h2>
+<p><strong>Acrescenta:</strong> reconhecimento presencial. Numa praça, o que faz o vizinho
+   confiar é ter visto a cara antes. Uma capa com selo de e-mail confirmado converte um
+   handle em alguém que se reconhece no portão. Nove fotos mostram <em>contexto</em> — a
+   pessoa com o cachorro, no bairro, ao longo do tempo — e contexto é o que distingue
+   uma conta de três dias de uma vizinha de dois anos.</p>
+<p><strong>Não acrescenta:</strong> da terceira foto em diante, o ganho de confiança é
+   praticamente zero e o que cresce é só volume. Isto é crítica de desenho, e a conclusão
+   prática é: <strong>o teto de 9 é generoso de propósito, mas o valor está nas 3
+   primeiras.</strong> O produto deve pedir <strong>uma</strong>, aceitar até nove, e nunca
+   cobrar as nove. Não há contador de “perfil 60% completo”, porque isso transforma foto
+   em dever de casa.</p>
+<p><strong>O que ficou de fora de propósito:</strong> legenda livre em cada foto (é texto de
+   usuário publicado, e texto publicado pede a moderação que não existe); curtida; comentário;
+   contador de visualizações; <em>marcar pessoa na foto</em>. A última é a mais importante:
+   marcação de rosto é tratamento de <strong>dado biométrico</strong> (LGPD art. 11), que é
+   dado sensível e muda a base legal da plataforma inteira. <strong>Recomendo que nunca
+   exista</strong>, e que a recusa fique escrita, não esquecida.</p>
+
+<h2>Pets e pessoa, sem duplicar nada</h2>
+<p>O pet já tem página própria, foto própria em <code>pet_photos</code> (com capa imposta
+   pelo banco, <code>pet_photos_uma_principal</code>) e caso de perdido. <strong>A vitrine
+   da pessoa não recebe foto de pet, e a página do pet não recebe foto da pessoa.</strong>
+   O perfil da pessoa <em>referencia</em> o pet: miniatura vinda de <code>pet_photos</code> e um
+   toque que abre a página do pet. Um lugar para a foto, dois lugares que a mostram.</p>
+<p>A gradação por estado é o que resolve a colisão com o <strong>item 7 do ADR-0010</strong>:
+   quem não é conexão vê <em>“2 cães”</em>, que diz “é tutora de verdade” sem entregar o
+   agrupamento de dois animais identificáveis a um nome e a um bairro. Quem é conexão vê
+   os nomes — e passou por um aceite para isso.</p>
+
+<h2>Conexão: simétrica, e o porquê</h2>
+<p><strong>Recomendação: simétrica — pedido e aceite.</strong> Ele disse “parecido com
+   Instagram”, e a semelhança que vale a pena copiar é a <strong>forma da tela</strong>
+   (cabeçalho de perfil, grade de fotos, capa). O <strong>grafo</strong> do Instagram é
+   outra coisa, e é o que não serve aqui.</p>
+<ul>
+  <li><strong>Confiança só existe recíproca.</strong> Seguidor não carrega informação:
+      qualquer um segue qualquer um, de graça. Uma conexão aceita é uma afirmação
+      <em>das duas partes</em> — “nos conhecemos” — e é exatamente esse o sinal que a pessoa
+      do outro lado do portão precisa quando decide entregar um cachorro. Contagem de
+      seguidores é vaidade; contagem de conexões mútuas é referência de bairro.</li>
+  <li><strong>Já está registrado como o mecanismo preferido deste produto, duas vezes.</strong>
+      ADR-0025, <em>Fase seguinte</em> item 3, propõe recuperar a prova social por
+      “presença mútua entre pessoas que <em>ambas</em> confirmaram presença <em>e ambas</em>
+      pediram para se ver, que é um fluxo de consentimento recíproco e não um interruptor”.
+      E o ADR-0011 emenda 1 trocou criação pela comunidade por <strong>convite com
+      aceite</strong>, com o cliente dizendo que não era algo a decidir. Simétrica é a
+      terceira aplicação do mesmo princípio, não uma invenção.</li>
+  <li><strong>Assimétrico inverte o risco no fluxo mais crítico.</strong> Seguir sem aceite
+      deixa um estranho montar uma lista de tutoras do bairro, com rosto, sem que nenhuma
+      delas tenha feito nada. Num produto cujo caso mais sério é animal levado, a lista de
+      seguidos <em>é</em> a lista de alvos.</li>
+  <li><strong>Escala de bairro não precisa de aresta de mão única.</strong> Assimétrico
+      existe para suportar milhões de arestas em direção a poucos. Aqui o grafo é pequeno
+      e real: as pessoas se encontram na praça.</li>
+  <li><strong>Recusar fica barato.</strong> A recusa é silenciosa e o pedido simplesmente
+      expira para quem pediu. Nenhum “ela recusou você”, que é o que faz as pessoas
+      aceitarem estranhos para não criar atrito.</li>
+</ul>
+<p><strong>O custo, sem maquiar:</strong> cresce mais devagar, não tem laço de descoberta, e
+   não existe “perfil popular”. Um perfil sem conexões fica mudo, então as três primeiras
+   conexões de cada pessoa são o momento mais frágil do desenho — e a resposta para isso é
+   evento e achado, onde as pessoas já se cruzam, <strong>não</strong> um motor de sugestão.</p>
+
+<h3>Estados e o que cada um faz</h3>
+<table>
+  <thead><tr><th>Estado</th><th>Quem vê</th><th>Como sai dele</th></tr></thead>
+  <tbody>
+  <tr><td><code>nenhum</code></td><td>os dois, igual</td><td>pedido</td></tr>
+  <tr><td><code>pendente</code></td><td>quem pediu vê “enviado”; quem recebeu vê na caixa</td><td>aceite, recusa, cancelamento, ou <strong>expira em 30 dias</strong></td></tr>
+  <tr><td><code>conectado</code></td><td>os dois</td><td>desfazer (qualquer um dos dois), ou bloqueio</td></tr>
+  <tr><td><code>recusado</code></td><td><strong>ninguém</strong> — guardado só para o descanso de 90 dias após 3 recusas</td><td>decai sozinho</td></tr>
+  <tr><td><code>bloqueado</code></td><td>só quem bloqueou; o outro recebe 404</td><td>desbloquear (não devolve a conexão)</td></tr>
+  </tbody>
+</table>
+<p><strong>Bloquear com pedido pendente:</strong> o bloqueio apaga pedido pendente nas
+   <em>duas</em> direções e desfaz a conexão, em silêncio. Um bloqueio que deixasse um pedido
+   vivo seria um canal aberto por descuido.</p>
+<p><strong>Perfil privado existe?</strong> <strong>Sim, e é o padrão — é o único modo.</strong>
+   Não há perfil aberto em v1: a vitrine é sempre só para conexões. Um interruptor
+   “perfil público” é o caso que o ADR-0025 recusou por extenso — escolha cujo valor
+   errado é irreversível para quem errar, tomada por quem não está pensando em modelo de
+   ameaça. Se ele quiser perfil aberto depois, é decisão própria, com texto próprio.</p>
+<p><strong>Tetos:</strong> <strong>150</strong> conexões (é bairro, não plateia; número que se
+   sobe depois e não se desce), <strong>20</strong> pedidos pendentes enviados,
+   <strong>10</strong> pedidos novos por dia, <strong>9</strong> fotos na vitrine.</p>
+<h3>Descoberta: o link morreu. Ficaram o contexto e o código presencial</h3>
+<p><strong>A regra dele mata a descoberta por link, e eu concordo.</strong> Um link que abre
+   para qualquer pessoa é exatamente “público, sem nenhum relacionamento”. Mesmo exigindo
+   conta, um endereço estável e compartilhável vira endereço público no primeiro grupo de
+   WhatsApp em que alguém o cola. <strong>A fatia sai.</strong></p>
+<p>No lugar dela entram dois caminhos, e <strong>os dois já carregam a relação que ele
+   exige</strong>:</p>
+<ul>
+  <li><strong>Conexão ancorada no contexto.</strong> Caso de pet encerrado como devolvido, e
+      encontro em que os dois estiveram. O convite nasce <em>ali</em>, e o contexto é o próprio
+      sinal de confiança — “quem achou a Nina” é uma relação melhor do que qualquer link.
+      <strong>E ele não desanonimiza ninguém antes da hora:</strong> os dois lados são
+      perguntados em separado e a identidade só aparece <strong>se os dois disserem sim</strong>.
+      É o mecanismo que a <em>Fase seguinte</em> item 3 do ADR-0025 já descreveu — consentimento
+      recíproco, não interruptor — aplicado ao achado em vez do encontro. A conversa mediada
+      continua despersonalizada do começo ao fim.</li>
+  <li><strong>Código presencial.</strong> “Mostrar meu código” e “Ler um código”, cara a cara.
+      Exige <strong>co-presença física</strong>, que é a relação mais difícil de falsificar que
+      existe, e é o padrão que o produto já usa na plaquinha. O código carrega um
+      <strong>token curto e rotativo</strong> (5 minutos), e não um identificador estável — assim
+      a captura de tela do código de alguém não vira link permanente. Não é enumerável, pela
+      mesma razão que fez o código da plaquinha ter 128 bits aleatórios (ADR-0004).</li>
+</ul>
+<p><strong>Continua sem busca de pessoas por nome e sem motor de sugestão.</strong></p>
+<p><strong>O que se perde, e é real:</strong> convidar quem não está perto de você e com quem
+   você não tem história no produto — a irmã em outra cidade, o amigo que ainda vai baixar o
+   app. Era a única coisa que o link comprava, e o custo é crescimento mais lento. Num produto
+   de vizinhança a perda é pequena e está na mensagem; se ele quiser recuperá-la depois, é
+   decisão própria e com texto próprio.</p>
+
+<h2>Os quatro freios obrigatórios</h2>
+<h3>Bloquear</h3>
+<p>Unilateral, silencioso, aplicado na <strong>leitura do servidor</strong> e nunca num
+   <code>if</code> de tela — mesmo argumento do ADR-0025 (“enquanto o dado sair da API, ele
+   sai para qualquer cliente, inclusive o que ninguém escreveu”). O bloqueado recebe 404
+   idêntico ao de perfil inexistente.</p>
+<p><strong>A exceção que ele precisa decidir, e eu recomendo:</strong> o bloqueio
+   <strong>não</strong> fecha a conversa mediada de um caso de pet aberto. A alternativa é um
+   cachorro que não volta porque duas pessoas se desentenderam. A conversa mediada já
+   redige telefone, e-mail e endereço, já rotula os participantes como
+   <code>Tutor</code>/<code>Quem achou</code> e já proíbe foto por extenso em dois pontos do
+   contrato — ela é o canal mais blindado do produto, e é exatamente por isso que é o único
+   que deve atravessar o bloqueio.</p>
+<h3>Denunciar pessoa e denunciar foto, com remoção pelo administrador</h3>
+<p><strong>O acesso, decidido pelo cliente: sutil. E sutil não é escondido.</strong> Quem precisa
+   denunciar está desconfortável e não vai caçar o botão. O lugar é o <strong>“⋮” da barra de
+   topo do perfil</strong> — onde todo aplicativo põe ação secundária, visível sem rolar, no
+   mesmo lugar em <strong>todos</strong> os estados, inclusive no de bloqueado.
+   <strong>1 toque para achar, 2 para chegar aos motivos, 4 para concluir.</strong></p>
+<ul>
+  <li><strong>Não é botão no topo do perfil.</strong> Um “Denunciar” ao lado do nome lê como
+      acusação oferecida a todo mundo: barateia o ato, deixa o perfil hostil e disputa atenção
+      com a ação principal, que é pedir conexão.</li>
+  <li><strong>Não é três toques de profundidade.</strong> Enterrar em Ajustes → Privacidade →
+      Denunciar é o padrão em que a pessoa desiste.</li>
+  <li><strong>O quarto toque é um “Enviar” explícito</strong>, de propósito: denúncia que
+      dispara no toque do motivo não tem desfazer, e o erro custa a quem foi denunciado.</li>
+</ul>
+<p><strong>Perfil e foto são duas denúncias, em dois lugares.</strong> Perfil se denuncia no
+   “⋮” do perfil, e é sobre <em>quem a pessoa é</em>. Foto se denuncia <strong>na foto</strong>
+   — toque e segure na grade, ou “⋮” com a foto aberta — porque o dano está ali e o
+   administrador precisa saber <em>qual</em> imagem.</p>
+<p><strong>Motivos em lista curta e fechada, sem campo de texto livre</strong>, porque campo
+   livre vira desabafo e não se tria.</p>
+<table>
+  <thead><tr><th>Denúncia de <strong>perfil</strong> (5)</th><th>Denúncia de <strong>foto</strong> (6)</th></tr></thead>
+  <tbody>
+  <tr><td>Não é quem diz ser</td><td>Nudez ou conteúdo sexual</td></tr>
+  <tr><td>Está incomodando ou ameaçando</td><td>Criança em situação de risco <em>(topo da fila)</em></td></tr>
+  <tr><td>Golpe ou cobrança para devolver um pet</td><td>Violência ou maus-tratos a animal</td></tr>
+  <tr><td>Parece ser menor de 16 anos <em>(topo da fila)</em></td><td>Apareço nesta foto e não autorizei</td></tr>
+  <tr><td>Outro motivo</td><td>Não é quem diz ser</td></tr>
+  <tr><td>&nbsp;</td><td>Outro motivo</td></tr>
+  </tbody>
+</table>
+<p><em>“Golpe ou cobrança para devolver um pet”</em> é específico deste produto: o golpe do
+   falso achador está nomeado no ADR-0010, e é o abuso que mais importa triar aqui.</p>
+<p><strong>O que a pessoa denunciada vê: nada.</strong> Nenhum aviso, nenhum selo, nenhuma
+   mudança no perfil dela e nenhuma mudança no que ela consegue fazer. Denúncia que avisa o
+   denunciado é retaliação, e o silêncio é mecanismo, não omissão.</p>
+<p><strong>O que o denunciante vê:</strong> confirmação na hora, a frase de que a outra pessoa
+   não é avisada — que é o que faz denunciar parecer seguro —, e depois disso o “⋮” passa a
+   mostrar <em>Denúncia enviada</em> desabilitado, que é o que impede a mesma pessoa de
+   denunciar cinco vezes. <strong>Nenhum prazo é prometido, porque não temos um.</strong>
+   Logo abaixo vem <strong>Bloquear também</strong>, em um toque: o bloqueio é o que dá alívio
+   imediato, já que a denúncia sozinha não muda nada que a pessoa veja.</p>
+<p><strong>Tetos, assimétricos de propósito:</strong></p>
+<ul>
+  <li><strong>1 denúncia aberta por par.</strong> Denunciar de novo soma em
+      <code>repeat_count</code> e não cria linha — é o que
+      <code>professional_review_reports</code> já faz com índice único parcial.</li>
+  <li><strong>5 denúncias de perfil por dia</strong> e <strong>20 no total por dia</strong>, por conta.</li>
+  <li><strong>Nenhum teto de quantas pessoas distintas denunciam o mesmo alvo</strong> — esse
+      número é o sinal, não o abuso. A defesa contra denúncia coordenada não é teto, é
+      <strong>peso</strong>: denúncia de conta sem e-mail confirmado ou com poucos dias de vida
+      <strong>não ordena a fila</strong>. Criar dez contas e denunciar é barato; fazê-las
+      valerem alguma coisa, não.</li>
+</ul>
+<p>Duas consequências separadas, e a separação é o mecanismo: <strong>ocultação imediata para
+   quem denunciou</strong> (acontece na hora, sem depender de ninguém) e <strong>remoção para
+   todos</strong>, que exige administrador. O precedente a copiar:
+   <code>DELETE /v1/admin/directory/reviews/{reviewRef}</code> — exclusão lógica com
+   <code>moderation_reason</code> obrigatório, trilha de auditoria, sem rota de restaurar.</p>
+<p><strong>O custo que não dá para esconder:</strong> hoje <strong>não existe fila de
+   moderação</strong> no repositório. <code>conversation_reports</code> grava a denúncia e
+   nenhuma rota de painel escreve o <code>resolved_at</code>; a tabela <code>human_work</code>
+   é citada numa migração e <strong>nunca foi criada</strong>. Esta frente constrói a primeira
+   fila de moderação de verdade do produto, e uma fila sem alguém que a trabalhe é uma
+   promessa falsa. <strong>Quem modera e em quanto tempo é decisão dele, e precisa estar
+   respondida antes de a vitrine ser visível a qualquer terceiro.</strong></p>
+<h3>Consentimento de quem aparece na foto</h3>
+<p><strong>O que o produto assume:</strong> quem envia declara ter o consentimento de todas as
+   pessoas identificáveis na foto. A declaração fica na própria folha de envio (tela 2), e não
+   escondida nos termos — aviso que ninguém lê não é consentimento informado.</p>
+<p><strong>O que os termos precisam passar a dizer</strong> (texto para o jurídico, não escrito
+   por mim no repositório):</p>
+<ul>
+  <li>que quem envia é <strong>responsável</strong> pelo consentimento de quem aparece, e que o
+      Bichu não verifica;</li>
+  <li>que <strong>quem aparece numa foto pode pedir a remoção dela mesmo sem ter conta</strong>,
+      por um canal nomeado — é o mesmo direito de oposição que o ADR-0011 já deu ao
+      profissional cadastrado por terceiro, e pela mesma razão;</li>
+  <li>que a plataforma <strong>não faz reconhecimento facial, não marca pessoas e não agrupa
+      por rosto</strong>, em nenhuma hipótese (isso mantém a frente fora do art. 11 da LGPD);</li>
+  <li>que foto removida sai das derivadas públicas na hora e do armazenamento em 30 dias
+      (ADR-0007), e que a chave da derivada é trocada, não reaproveitada.</li>
+</ul>
+<h3>Idade — decidida em 16 anos, e fora desta frente</h3>
+<p><code>users</code> tem 20 colunas e <strong>nenhuma é de idade ou nascimento</strong>
+   (<code>migrations/20260917000001_identidade-e-sessao.sql</code>). <code>registerUser</code>
+   aceita só <code>accepted_terms_version</code>. A tela de criar conta tem uma caixa de aceite
+   e <strong>nenhuma declaração de maioridade</strong>.
+   <code>web/src/conteudo/juridico/termos.md</code> diz que o Bichu é para maiores de 18 e que
+   quem cria conta declara ter — e
+   <code>web/src/conteudo/juridico/privacidade.md</code> <strong>confessa por escrito</strong>:
+   “Hoje o cadastro não confere a idade.”</p>
+<p>Enquanto a foto é visível só ao dono, essa lacuna é tolerável. <strong>No instante em que
+   uma foto de pessoa fica visível a outra pessoa, ela deixa de ser.</strong> Uma vitrine de
+   rostos sem nenhum freio de idade é rosto de criança à vista de estranho, e isso não se
+   conserta depois: LGPD art. 14 trata dado de criança e adolescente com melhor interesse e
+   exige consentimento de um dos pais para menor de 13 — e com piso de 16, adolescentes de 16 e 17 passam a existir no produto, o que torna a denúncia <em>“parece ser menor de 16 anos”</em> um caminho necessário e não decorativo.</p>
+<p><strong>DECIDIDO pelo cliente em 18/10: idade mínima de 16 anos</strong>, com data de
+   nascimento obrigatória no cadastro, guardada como data e não como um “sim, sou maior”.
+   Data e não caixa de seleção porque a caixa não deixa nada para auditar, e porque data
+   permite mudar o piso depois sem pedir o dado outra vez. <strong>Os termos passam a
+   divergir</strong> enquanto disserem 18, e precisam ser atualizados junto.</p>
+<p><strong>Esta fatia saiu desta frente.</strong> Ela fecha uma lacuna que já existe hoje,
+   independente de vitrine, e por isso está sendo construída em separado, direto na
+   <code>development</code>. Não é mais bloqueio desta frente — ela só precisa estar no ar
+   antes de qualquer foto de pessoa ficar visível a terceiro.</p>
+
+<h3>Conta desabilitada dentro das conexões</h3>
+<p><strong>A conexão desaparece, e a contagem desaparece com ela. Sem fantasma, sem
+   placeholder.</strong> É o que <code>conta_habilitada(uuid)</code> já faz em toda leitura, e
+   a decisão do cliente de 17/10 está escrita no comentário da função: conta desabilitada
+   “não é mais encontrada em nenhuma página ou funcionalidade”. Um placeholder
+   “conta indisponível” contaria a terceiro que aquela pessoa existiu e saiu, que é
+   informação sobre ela; e uma contagem que não bate com a lista é pior que as duas.
+   <strong>A linha não é apagada</strong>, então reabilitar a conta devolve a conexão intacta.</p>
+<p>Exceção que segue a regra já existente: na <strong>conversa mediada</strong> a linha fica e
+   o nome é trocado por rótulo neutro, porque uma conversa que perde um lado no meio é pior
+   do que uma conversa com um lado anônimo. Esse comportamento <strong>não muda</strong>.</p>
+
+<h2>Vitrine e avatar são duas decisões, não uma</h2>
+<p>É a separação mais importante do desenho, porque o risco de cada uma é diferente.</p>
+<table>
+  <thead><tr><th>&nbsp;</th><th>A vitrine</th><th>O avatar espalhado</th></tr></thead>
+  <tbody>
+  <tr><td><strong>O que é</strong></td><td>Até 9 fotos, numa tela, atrás de um aceite</td><td>A capa redonda ao lado de um nome, em qualquer lista</td></tr>
+  <tr><td><strong>Superfícies</strong></td><td><strong>1</strong></td><td>Tantas quantas alguém puser</td></tr>
+  <tr><td><strong>Risco</strong></td><td>Contido: uma tela, um estado, um portão</td><td>Multiplica: cada tela nova é uma decisão de privacidade que ninguém revisita</td></tr>
+  <tr><td><strong>Decisões que toca</strong></td><td>ADR-0010 item 7 (gradação dos pets)</td><td>ADR-0025 item 2, contrato da conversa (2 pontos), ADR-0010 itens 1–10</td></tr>
+  </tbody>
+</table>
+<p><strong>Onde o avatar aparece na v1: três lugares, e a lista é fechada.</strong>
+   (1) o próprio perfil; (2) o perfil de outra pessoa; (3) a lista de conexões e de pedidos.</p>
+<p><strong>Onde o avatar NÃO aparece, e cada “não” tem dono:</strong></p>
+<ul>
+  <li><strong>Rede / encontros</strong> — ADR-0025 item 2 proíbe avatar por nome, e
+      <code>src/modules/network/domain/encontro-da-rede.test.ts</code> tem um teste que
+      <em>reprova</em> se <code>avatar</code> ou <code>display_name</code> aparecer na projeção.</li>
+  <li><strong>Conversa mediada</strong> — o contrato proíbe por extenso em
+      <code>api/openapi.yaml</code> nos schemas <code>FinderConversation</code> e
+      <code>Conversation</code>, e <code>conversa-mediada.ts</code> despersonaliza no domínio,
+      não na tela.</li>
+  <li><strong>Avaliação do Perto</strong> — a avaliação fala de um negócio e é lida por quem
+      não conhece o autor; pôr rosto ali é identificar quem avaliou a um público que ele
+      não escolheu.</li>
+  <li><strong>Qualquer superfície alcançável sem conta</strong> — página pública do pet, do
+      caso, cartaz, <code>/t/{codigo}</code>, listagem de perdidos. Sem exceção.</li>
+</ul>
+<p>Essas quatro recusas são o que mantém o desenho dentro do que já está decidido. Cada uma
+   que ele quiser abrir é um pedido separado, com emenda separada.</p>
+
+</div><!-- /legenda -->
+
+<script>
+(function(){
+  var raiz = document.documentElement;
+  var bts = document.querySelectorAll('.barra-tema button');
+  function aplicar(t){
+    if (t === 'auto') raiz.removeAttribute('data-theme');
+    else raiz.setAttribute('data-theme', t);
+    bts.forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.tema === t)); });
+  }
+  bts.forEach(function(b){ b.addEventListener('click', function(){ aplicar(b.dataset.tema); }); });
+})();
+</script>
+</body>
+</html>
