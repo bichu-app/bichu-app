@@ -225,7 +225,7 @@ before(async () => {
   await cliente.connect();
 
   for (const [nome, id] of Object.entries(CONTAS)) {
-    await cliente.query('INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)', [
+    await cliente.query(`INSERT INTO users (id, email, display_name, public_ref) VALUES ($1, $2, $3, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
       id,
       `p19-${nome}-${id}@${DOMINIO}`,
       `Conta ${nome}`,
@@ -472,7 +472,7 @@ void describe('P19.3 -- a recusa nao se distingue do pendente, byte a byte', () 
     const pendente2 = randomUUID();
     const recusado2 = randomUUID();
     for (const [id, status] of [[pendente2, 'pending'], [recusado2, 'declined']] as const) {
-      await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [id, `p19-extra-${id}@${DOMINIO}`]);
+      await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [id, `p19-extra-${id}@${DOMINIO}`]);
       await cliente.query(
         `INSERT INTO network_event_join_requests (id, ref, event_id, user_id, status, decided_at)
          VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 = 'pending' THEN NULL ELSE now() END)`,

@@ -191,9 +191,9 @@ after(async () => {
 async function comMassa(corpo: () => Promise<void>): Promise<void> {
   try {
     await cliente.query(
-      `insert into users (id, email, deleted_at, status, deletion_requested_at) values
-         ($1, 'achadora@expurgo.test', null, 'active', null),
-         ($2, 'dona@expurgo.test',     null, 'active', null)`,
+      `insert into users (id, email, deleted_at, status, deletion_requested_at, public_ref) values
+         ($1, 'achadora@expurgo.test', null, 'active', null, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')),
+         ($2, 'dona@expurgo.test',     null, 'active', null, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
       [ACHADORA, DONA],
     );
     await cliente.query(
@@ -329,7 +329,8 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
       // `users_email_unico_ativo` é parcial `WHERE deleted_at IS NULL`. Sem o
       // `deleted_at` na marcação, quem excluiu a conta ficaria impedido de
       // criar outra com o próprio endereço até o expurgo — 30 dias depois.
-      await cliente.query(`insert into users (id, email) values ($1, 'achadora@expurgo.test')`, [
+      await cliente.query(`insert into users (id, email, public_ref)
+           values ($1, 'achadora@expurgo.test', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
         CONTA_DO_EMAIL_LIVRE,
       ]);
       assert.equal(

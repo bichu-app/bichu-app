@@ -18,7 +18,7 @@
  *
  * ## As quatro perguntas, e o defeito que cada uma pega
  *
- * 1. **A semente esta inteira?** 14 categorias e 83 subcategorias, e os SEIS
+ * 1. **A semente esta inteira?** 15 categorias e 83 subcategorias, e os SEIS
  *    codigos antigos entre elas. O defeito: uma mescla que perde metade do
  *    `INSERT` e deixa o painel sem categoria para oferecer.
  * 2. **O APK publicado continua respondido?** Os seis codigos que ele filtra
@@ -76,7 +76,15 @@ const CODIGOS_QUE_O_APK_PUBLICADO_USA = [
   'toy',
 ] as const;
 
-const TOTAL_DE_CATEGORIAS = 14;
+// 15, e nao 14: a `20261018000013` acrescentou `clothing` ("Roupas") ao LADO de
+// "Acessorios", por decisao do cliente de 18/10/2026 -- *"sim nos dois, pode
+// despachar"*, com os dois passos na mesa (o rotulo volta ao plural simples, e
+// as roupas saem para categoria propria). O 14 e o numero de 17/10.
+const TOTAL_DE_CATEGORIAS = 15;
+// Continua 83 ATIVAS, medido: a mesma `20261018000013` desativou as seis
+// subcategorias de roupa que estavam em `accessory` e inseriu seis equivalentes
+// em `clothing` (89 linhas no total, 83 ativas). O numero nao mudou por
+// coincidencia, mudou porque a troca foi um-para-um.
 const TOTAL_DE_SUBCATEGORIAS = 83;
 
 let cliente: pg.Client;
@@ -159,7 +167,7 @@ void describe('a categoria da Loja em dois niveis, contra Postgres', () => {
   // 1 e 2: a semente, e o que o APK publicado precisa encontrar
   // -----------------------------------------------------------------------
 
-  void it('a semente traz as 14 categorias, todas com rotulo e ordem', async () => {
+  void it('a semente traz as 15 categorias, todas com rotulo e ordem', async () => {
     const { rows } = await cliente.query<{ total: string; sem_rotulo: string }>(
       `SELECT count(*) AS total,
               count(*) FILTER (WHERE btrim(label) = '') AS sem_rotulo
@@ -169,7 +177,7 @@ void describe('a categoria da Loja em dois niveis, contra Postgres', () => {
     assert.equal(Number(rows[0]?.sem_rotulo), 0);
   });
 
-  void it('a ordem de exibicao nao tem empate: 14 valores distintos de `sort_order`', async () => {
+  void it('a ordem de exibicao nao tem empate: 15 valores distintos de `sort_order`', async () => {
     // Empate na ordem faz a lista do painel e a do app sairem diferentes entre
     // si e diferentes de si mesmas entre duas chamadas.
     const { rows } = await cliente.query<{ distintas: string }>(
@@ -216,8 +224,13 @@ void describe('a categoria da Loja em dois niveis, contra Postgres', () => {
       `SELECT code, label FROM store_categories
         WHERE code IN ('toy', 'accessory') ORDER BY code`,
     );
+    // "Acessorios", e NAO "Roupas e acessorios": o rotulo largo durou de 17/10
+    // a 18/10 e foi desfeito pela `20261018000013`, que o chama de atropelo por
+    // extenso -- o lote de dois niveis reassentou o rotulo na semente e
+    // ESTREITOU a decisao do cliente sem desfaze-la. Com `clothing` existindo ao
+    // lado, "Acessorios" descreve o que sobrou (`bandanas` e companhia).
     assert.deepEqual(rows, [
-      { code: 'accessory', label: 'Roupas e acessórios' },
+      { code: 'accessory', label: 'Acessórios' },
       { code: 'toy', label: 'Brinquedos' },
     ]);
   });

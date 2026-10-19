@@ -134,7 +134,18 @@ RUN set -eu; \
 FROM base AS dev
 ENV NODE_ENV=development
 COPY --from=deps-full --chown=node:node /app/node_modules ./node_modules
-COPY --chown=node:node package.json package-lock.json tsconfig.json tsconfig.build.json eslint.config.mjs ./
+# `tsconfig.integracao.json` ENTRA AQUI, e esquecer isto reprovaria a esteira.
+#
+# Ele e o projeto que `infra/integracao/executar-suite.mjs` compila, e a esteira
+# roda aquele executor com `docker compose run --rm ferramentas` -- um servico
+# SEM volume da arvore, de proposito: o que ele prova e a imagem. Entao todo
+# arquivo que o executor abre precisa estar COPIADO aqui, e nao montado.
+#
+# O caminho de worktree engana: `compose.integracao.yaml` monta `../..:/app` por
+# cima da imagem, e la o arquivo apareceria mesmo sem este COPY. Passaria na
+# maquina e reprovaria na esteira com "File tsconfig.integracao.json not found",
+# que e a forma mais caro de descobrir um COPY que falta.
+COPY --chown=node:node package.json package-lock.json tsconfig.json tsconfig.build.json tsconfig.integracao.json eslint.config.mjs ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node tests ./tests
 COPY --chown=node:node api ./api

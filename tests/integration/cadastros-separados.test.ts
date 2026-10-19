@@ -4,8 +4,8 @@
  *
  * Dois fatos do banco, perguntados ao catalogo e nao lidos das migracoes:
  *
- * 1. **Nenhuma tabela `admin_*`, nem `catalog_upload_intents`, tem chave
- *    estrangeira para `users`.** E o que torna a separacao do esquema e nao de
+ * 1. **Nenhuma tabela `admin_*` tem chave estrangeira para `users`.** E o que
+ *    torna a separacao do esquema e nao de
  *    uma recusa escrita em cada porta. A consulta roda contra o banco real e
  *    contra uma isca (tabela `admin_*` criada com FK para `users` dentro de uma
  *    transacao desfeita), e a isca PRECISA ser acusada. Com zero tabelas
@@ -33,13 +33,29 @@ let cliente: Client;
 
 /**
  * As chaves estrangeiras que saem de uma tabela do painel e chegam em `users`.
- * `catalog_upload_intents` entra pelo nome: e do painel sem ter o prefixo.
+ *
+ * **`catalog_upload_intents` SAIU desta varredura, e a saida e decisao e nao
+ * conveniencia.** Ela entrava "pelo nome: e do painel sem ter o prefixo", e
+ * isso era verdade em 28/09, quando o unico autor possivel era
+ * `admin_account_id`. Em 17/10 a `20261001000005` (ADR-0025 emenda 3) deu a ela
+ * um SEGUNDO autor possivel, `user_id uuid REFERENCES users (id) ON DELETE
+ * CASCADE`, porque a capa do encontro da comunidade e enviada por uma conta do
+ * APP pela esteira unica de imagem; a `20261018000008` (18/10) somou a foto do
+ * usuario pela mesma porta. A tabela deixou de ser "do painel" e passou a ser
+ * a ESTEIRA COMPARTILHADA, com exatamente um dos dois autores preenchido --
+ * invariante que o `CHECK catalog_upload_intents_um_autor` impoe no banco.
+ *
+ * A D42 e o P21 (b) sao sobre SEPARACAO DE CADASTROS: `admin_accounts` nao tem
+ * chave estrangeira para `users` e nada do app a referencia (ADR-0027, secao 5,
+ * item 20). Manter `catalog_upload_intents` aqui faria este portao exigir que
+ * uma decisao registrada fosse desfeita -- e a decisao de 17/10 e posterior a
+ * este arquivo.
  */
 async function chavesDoPainelParaUsers(): Promise<{ tabelasDoPainel: number; violacoes: string[] }> {
   const tabelas = await cliente.query<{ total: string }>(
     `select count(*) as total
        from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where c.relkind = 'r' and (c.relname like 'admin\\_%' or c.relname = 'catalog_upload_intents')`,
+      where c.relkind = 'r' and c.relname like 'admin\\_%'`,
   );
   const r = await cliente.query<{ chave: string }>(
     `select n.nspname || '.' || rel.relname || '.' || con.conname as chave
@@ -49,7 +65,7 @@ async function chavesDoPainelParaUsers(): Promise<{ tabelasDoPainel: number; vio
        join pg_class alvo   on alvo.oid = con.confrelid
        join pg_namespace na on na.oid   = alvo.relnamespace
       where con.contype = 'f'
-        and (rel.relname like 'admin\\_%' or rel.relname = 'catalog_upload_intents')
+        and rel.relname like 'admin\\_%'
         and na.nspname = 'public' and alvo.relname = 'users'
       order by 1`,
   );
@@ -117,7 +133,8 @@ void describe('a 000006 aborta, nomeando a linha, se user_roles tiver papel de p
     await cliente.query('BEGIN');
     try {
       await cliente.query('alter table user_roles drop constraint user_roles_role_check');
-      await cliente.query(`insert into users (id, email) values ($1, 'guarda-000006@exemplo.invalid')`, [conta]);
+      await cliente.query(`insert into users (id, email, public_ref)
+         values ($1, 'guarda-000006@exemplo.invalid', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [conta]);
       await cliente.query(`insert into user_roles (user_id, role) values ($1, 'admin')`, [conta]);
       await cliente.query('SAVEPOINT guarda');
 
