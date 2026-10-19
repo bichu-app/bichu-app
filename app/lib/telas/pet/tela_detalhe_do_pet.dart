@@ -8,6 +8,7 @@ import '../../api/modelos_caso.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../formato/quando.dart';
 import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -134,6 +135,36 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   /// pet carregou, e quem o leu continua lendo. Eram dois estados diferentes
   /// no mesmo campo, e o primeiro apagaria a pagina do segundo.
   String? _erroAoEncerrar;
+
+  /// O caso que ESTA TELA acabou de encerrar, enquanto a janela de reabertura
+  /// estiver aberta. Nulo e o estado normal.
+  ///
+  /// ## Por que ele vive na memoria desta tela, e nao numa leitura
+  ///
+  /// **Nao ha como descobrir, pelo contrato, o caso recem-encerrado de um pet.**
+  /// `Pet` declara `open_case_id`, e so: depois do encerramento ele e nulo, e
+  /// nenhum campo aponta para o caso que fechou. `GET /lost-cases/{caseId}`
+  /// existe e serve, mas precisa do id -- que e exatamente o que a tela
+  /// deixaria de ter. A resposta de `closeLostCase` e `LostCase` e traz as duas
+  /// coisas que faltam, `id` e `reopen_deadline`, e e dela que este campo sai.
+  ///
+  /// **Consequencia honesta, e esta escrita de proposito:** quem sai da pagina
+  /// e volta perde a oferta de reabrir, embora o servidor continue aceitando a
+  /// reabertura pelos 7 dias. O caminho que resolveria isso e um campo novo no
+  /// contrato (algo como `Pet.recently_closed_case`) ou uma listagem dos casos
+  /// do pet, e nenhum dos dois existe -- inventar rota seria pior que a
+  /// limitacao. O desfazer que o defeito medido pedia e o do toque por engano,
+  /// e esse acontece com a tela na frente da pessoa.
+  CasoDePerdido? _casoEncerradoAgora;
+
+  /// Se a reabertura esta em curso. Mesmo papel de [_encerrandoOCaso].
+  bool _reabrindoOCaso = false;
+
+  /// O que deu errado ao REABRIR, se deu. **Campo proprio, e nao
+  /// [_erroAoEncerrar]**: os dois erros aparecem em lugares diferentes da tela
+  /// e um deles sobreviveria ao outro no mesmo campo -- a faixa do
+  /// encerramento ficaria explicando uma reabertura que falhou.
+  String? _erroAoReabrir;
 
   bool _iniciou = false;
 
@@ -392,14 +423,26 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     // servidor inconsistente, e montar `/lost-cases//close` seria 404.
     if (caseId == null || caseId.isEmpty) return;
 
+    // **NADA ACONTECE SEM A FOLHA CONFIRMAR**, e isto e o fecho do defeito
+    // medido: `Encontrei meu pet` era UM TOQUE que encerrava o caso, sem
+    // confirmacao e sem desfazer. O `POST` mora depois deste `if`; cancelar, o
+    // gesto de voltar do sistema e o arrasto para baixo nao chegam nele
+    // (`_confirmarEncerramento` traduz nulo para `false`).
+    if (!await _confirmarEncerramento(pet)) return;
+    if (!mounted) return;
+
     final escopo = Escopo.of(context);
     setState(() {
       _encerrandoOCaso = true;
       _erroAoEncerrar = null;
     });
 
+    final CasoDePerdido encerrado;
     try {
-      await escopo.casos.encerrarCaso(
+      // A resposta e GUARDADA, e nao descartada: `LostCase` traz `id` e
+      // `reopen_deadline`, que sao as duas unicas coisas que tornam o desfazer
+      // possivel -- nenhum campo de `Pet` aponta para o caso que fechou.
+      encerrado = await escopo.casos.encerrarCaso(
         caseId: caseId,
         desfecho: DesfechoDoCaso.reencontrado,
       );
@@ -431,6 +474,13 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
 
     if (!mounted) return;
     anunciar(context, TextosDoDetalhe.casoEncerrado(pet.nome));
+    // A oferta de reabrir nasce AQUI, da resposta do encerramento. Ela e
+    // condicionada ao prazo na hora de desenhar, e nao aqui: a tela pode ficar
+    // aberta mais que a janela.
+    setState(() {
+      _casoEncerradoAgora = encerrado;
+      _erroAoReabrir = null;
+    });
 
     try {
       final atualizado = await escopo.pets.buscarPet(widget.petId);
@@ -446,6 +496,138 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       // abertura o le de novo.
       if (!mounted) return;
       setState(() => _encerrandoOCaso = false);
+    }
+  }
+
+  /// A FOLHA DE CONFIRMACAO do encerramento. Devolve **se a pessoa confirmou**.
+  ///
+  /// ## Por que ela existe
+  ///
+  /// `Encontrei meu pet` chamava `closeLostCase` no primeiro toque. Encerrar
+  /// tira o pet da lista publica, fecha a pagina publica do caso e poe as
+  /// conversas abertas em modo leitura -- e nada disso estava escrito em
+  /// lugar nenhum antes do toque. O criterio e o 11.9 do design system: acao de
+  /// consequencia alta confirma antes, e a folha diz o que vai acontecer.
+  ///
+  /// ## Por que NAO e a [FolhaDestrutiva]
+  ///
+  /// Porque isto nao e destruicao. O 24.17.6 e explicito na distincao, e a
+  /// `encontro_da_rede.dart` ja a aplica com estas palavras: *"Secundaria e nao
+  /// Perigo: desistir nao apaga nada da pessoa e pode ser refeito"*. Encerrar o
+  /// caso **nao apaga nada** e e reversivel por 7 dias (`reopenLostCase`, que
+  /// agora existe). Um icone de alerta em `error` e um botao `urgency` sobre a
+  /// melhor noticia do produto -- o animal voltou -- seria a tinta errada, e
+  /// alem de feia e imprecisa: ela diz "cuidado, isto nao volta" sobre algo que
+  /// volta.
+  ///
+  /// A INVERSAO das acoes continua, porem, e por outro motivo: a confirmacao e
+  /// a de baixo, e `Ainda nao encontrei` e a de cima com o alvo grande. Quem
+  /// fecha a folha no susto, sem ler, acerta o botao que nao encerra.
+  ///
+  /// ## O TEXTO NAO AFIRMA QUE ALGUEM FOI AVISADO
+  ///
+  /// Ver `TextosDoDetalhe.oQueAconteceAoEncerrar`: a frase da conversa diz que
+  /// ela **para de aceitar mensagem** e que quem ajudou ve isso ao abrir a
+  /// conversa. Nao diz "sera notificado", porque nao e verdade -- nenhuma
+  /// mensagem de sistema e gravada no encerramento, o estado da conversa e
+  /// DERIVADO na leitura, e o push nao sai (bloqueado em producao por permissao
+  /// da conta de servico, e inexistente no iPhone do cliente). Esta casa ja
+  /// pagou por tres lugares afirmando juntos um aviso que nao acontecia.
+  Future<bool> _confirmarEncerramento(Pet pet) async {
+    final confirmou = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (contexto) => _FolhaDoEncerramento(
+        titulo: TextosDoDetalhe.tituloDoEncerramento(pet.nome),
+        corpo: TextosDoDetalhe.corpoDoEncerramento(pet.nome),
+        oQueAcontece: TextosDoDetalhe.oQueAconteceAoEncerrar(pet.nome),
+        rotuloDeConfirmar: TextosDoDetalhe.confirmarEncerramento,
+        rotuloAcessivelDeConfirmar:
+            TextosDoDetalhe.confirmarEncerramentoAcessivel(pet.nome),
+        rotuloDeCancelar: TextosDoDetalhe.naoEncontreiAinda,
+      ),
+    );
+    // Nulo e o gesto de voltar e o arrasto para baixo. Os dois sao cancelar.
+    // Um `?? true` nesta linha transformaria o gesto de voltar do sistema num
+    // confirmador de encerramento, e seria invisivel na revisao -- e o
+    // cabecalho de `FolhaDestrutiva` ja registra exatamente este risco.
+    return confirmou ?? false;
+  }
+
+  /// `Reabrir o caso`: o desfazer que o contrato prometia e que nao existia.
+  ///
+  /// ## Depois do 200, a tela RELE o pet -- pela mesma razao do encerramento
+  ///
+  /// A resposta e `LostCase`, e nao `Pet`: ela nao diz nada sobre `status` nem
+  /// sobre `open_case_id`, que sao os dois campos que esta tela le para decidir
+  /// o que mostrar. Virar o estado local sem reler seria a tela afirmando um
+  /// pet que ela nao mediu. E o cache de `Meus pets` e limpo pelo motivo
+  /// inverso do encerramento: a lista guarda o pet como `Ativo`, e a pessoa
+  /// veria, de volta nela, um animal sem selo de perdido que acabou de voltar
+  /// a ser procurado.
+  ///
+  /// ## A falha da releitura NAO vira falha da reabertura
+  ///
+  /// Mesma ordem de `setState` do encerramento, e pelo mesmo motivo: o caso FOI
+  /// reaberto, e dizer "nao deu" sobre o que deu e a mentira que custa mais
+  /// neste produto.
+  ///
+  /// ## A oferta de reabrir SAI da tela depois do 200
+  ///
+  /// `_casoEncerradoAgora` volta a nulo: o caso esta aberto, e o prazo daquele
+  /// encerramento nao existe mais (o servidor devolve `reopen_deadline: null`).
+  /// Manter o botao ofereceria uma segunda reabertura de um caso aberto.
+  Future<void> _reabrirOCaso(CasoDePerdido caso) async {
+    final escopo = Escopo.of(context);
+    setState(() {
+      _reabrindoOCaso = true;
+      _erroAoReabrir = null;
+    });
+
+    try {
+      await escopo.casos.reabrirCaso(caso.id);
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _reabrindoOCaso = false;
+        _erroAoReabrir = MensagensDeErro.de(falha).texto;
+      });
+      return;
+    } on Object catch (erro, pilha) {
+      // Corpo 200 fora do contrato estoura `TypeError` dentro de
+      // `CasoDePerdido.doJson`. Sem este ramo o botao giraria para sempre com
+      // o erro engolido -- o mesmo ramo que o encerramento tem, e pela mesma
+      // razao.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao reabrir o caso do pet');
+      if (!mounted) return;
+      setState(() {
+        _reabrindoOCaso = false;
+        _erroAoReabrir = MensagensDeErro.servidorFora;
+      });
+      return;
+    }
+
+    escopo.cacheDeMeusPets.limpar();
+
+    if (!mounted) return;
+    anunciar(context, TextosDoDetalhe.casoReaberto(_pet?.nome ?? ''));
+    setState(() {
+      _casoEncerradoAgora = null;
+      _erroAoEncerrar = null;
+    });
+
+    try {
+      final atualizado = await escopo.pets.buscarPet(widget.petId);
+      if (!mounted) return;
+      setState(() {
+        _pet = atualizado;
+        _reabrindoOCaso = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() => _reabrindoOCaso = false);
     }
   }
 
@@ -547,6 +729,13 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
           aoEncontrarOPet: () => _encontreiMeuPet(_pet!),
           encerrandoOCaso: _encerrandoOCaso,
           erroAoEncerrar: _erroAoEncerrar,
+          casoEncerradoAgora: _casoEncerradoAgora,
+          reabrindoOCaso: _reabrindoOCaso,
+          erroAoReabrir: _erroAoReabrir,
+          aoReabrirOCaso: () {
+            final caso = _casoEncerradoAgora;
+            if (caso != null) _reabrirOCaso(caso);
+          },
           temPedidoDePlaquinha: _temPedidoDePlaquinha,
           aoAcompanharPlaquinha: () =>
               context.push(Rotas.acompanharPlaquinhaDe(_pet!.id)),
@@ -616,6 +805,10 @@ class _Conteudo extends StatelessWidget {
     required this.aoEncontrarOPet,
     required this.encerrandoOCaso,
     required this.erroAoEncerrar,
+    required this.casoEncerradoAgora,
+    required this.reabrindoOCaso,
+    required this.erroAoReabrir,
+    required this.aoReabrirOCaso,
     required this.temPedidoDePlaquinha,
     required this.aoAcompanharPlaquinha,
   });
@@ -636,6 +829,18 @@ class _Conteudo extends StatelessWidget {
 
   /// O que deu errado ao encerrar, se deu. Nulo e o estado normal.
   final String? erroAoEncerrar;
+
+  /// O caso que ESTA SESSAO DE TELA encerrou, se encerrou. Ver o campo de mesmo
+  /// nome no estado: ele e a unica fonte do `id` e do `reopen_deadline` que a
+  /// reabertura precisa, porque `Pet` nao aponta para o caso que fechou.
+  final CasoDePerdido? casoEncerradoAgora;
+
+  final bool reabrindoOCaso;
+
+  /// O que deu errado ao REABRIR, se deu. Nulo e o estado normal.
+  final String? erroAoReabrir;
+
+  final VoidCallback aoReabrirOCaso;
 
   /// Se ha pedido da plaquinha para este pet. Ver o campo de mesmo nome no
   /// estado da tela: `false` tambem e o que a leitura que falhou produz.
@@ -748,9 +953,69 @@ class _Conteudo extends StatelessWidget {
       ];
     }
     return <Widget>[
+      // A OFERTA DE DESFAZER, **acima** do `Marcar como perdido` e so enquanto
+      // a janela de 7 dias estiver aberta.
+      //
+      // Ela vem antes porque e a acao que quem acabou de tocar por engano
+      // procura, e porque as duas sao vizinhas perigosas: `Marcar como perdido`
+      // abriria um caso NOVO -- perdendo os candidatos, as conversas e o
+      // historico do caso encerrado --, e reabrir devolve o que existia. Entre
+      // as duas ha o `space/6` do sistema, e nao o `space/2`: alvos de efeito
+      // diferente com pouca folga produzem toque errado (11.1).
+      ...?_ofertaDeReabrir(context),
       BotaoSecundario(
         rotulo: TextosDoDetalhe.marcarComoPerdido,
         aoTocar: aoMarcarPerdido,
+      ),
+      const SizedBox(height: BichuEspaco.e6),
+    ];
+  }
+
+  /// A oferta de REABRIR, ou `null` quando ela nao se aplica.
+  ///
+  /// **Tres condicoes, e as tres sao medidas e nao supostas:**
+  ///
+  /// 1. esta tela encerrou um caso agora ([casoEncerradoAgora] nao e nulo);
+  /// 2. o servidor mandou um `reopen_deadline` e ele esta **no futuro**
+  ///    (`janelaDeReaberturaAberta`). A conta e contra a data da RESPOSTA, e
+  ///    nunca uma janela de 7 dias refeita aqui sobre `closed_at`;
+  /// 3. o pet voltou a nao estar procurado -- este ramo e o do `else` de
+  ///    `_jaProcurado`, entao a condicao e estrutural.
+  ///
+  /// Ausencia de prazo **nao** vira oferta: ver a prosa de
+  /// `CasoDePerdido.prazoDeReabertura`. Um `?? ` generoso aqui desenharia um
+  /// botao que o servidor recusa com 410, e a pessoa ouviria "nao da mais" de
+  /// um botao que o app acabou de oferecer.
+  List<Widget>? _ofertaDeReabrir(BuildContext context) {
+    final caso = casoEncerradoAgora;
+    if (caso == null) return null;
+    // O relogio entra na comparacao aqui, e no instante em que a tela e
+    // desenhada: a pagina pode ficar aberta mais tempo que a janela.
+    if (!caso.janelaDeReaberturaAberta(DateTime.now())) return null;
+    final prazo = caso.prazoDeReabertura;
+    if (prazo == null) return null;
+
+    return <Widget>[
+      // A faixa explica a oferta ANTES do botao, com o prazo que saiu da
+      // resposta. Informativa e nao de erro: encerrar sem querer nao e falha
+      // de ninguem, e a faixa de erro aqui acusaria a pessoa.
+      Semantics(
+        liveRegion: true,
+        container: true,
+        child: FaixaDeAviso(
+          peso: PesoDaFaixa.informativo,
+          texto: TextosDoDetalhe.podeReabrirAte(QuandoNaLista.diaEMes(prazo)),
+        ),
+      ),
+      const SizedBox(height: BichuEspaco.e4),
+      if (erroAoReabrir != null) ...<Widget>[
+        FaixaDeAviso(texto: erroAoReabrir!),
+        const SizedBox(height: BichuEspaco.e4),
+      ],
+      BotaoSecundario(
+        rotulo: TextosDoDetalhe.reabrirOCaso,
+        carregando: reabrindoOCaso,
+        aoTocar: aoReabrirOCaso,
       ),
       const SizedBox(height: BichuEspaco.e6),
     ];
@@ -1058,6 +1323,164 @@ class _AcaoEmTexto extends StatelessWidget {
                 color: destrutiva ? cores.error : cores.primary,
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// A FOLHA DE CONFIRMACAO do encerramento do caso (11.9, sem o 11.9.1).
+///
+/// ## Ela NAO e a [FolhaDestrutiva], e a diferenca e de contrato
+///
+/// O 11.9.1 -- icone de alerta em `error`, botao `urgency`, titulo de
+/// destruicao -- e para o que **nao volta**. Encerrar o caso nao apaga nada e
+/// e reversivel por 7 dias (`reopenLostCase`). O 24.17.6 separa os dois, e a
+/// `encontro_da_rede.dart` ja escreve a regra: *"Secundaria e nao Perigo:
+/// desistir nao apaga nada da pessoa e pode ser refeito"*.
+///
+/// ## O que ela MANTEM do 11.9.1: a inversao das acoes
+///
+/// | Posicao | Acao | Alvo |
+/// |---|---|---|
+/// | **Primeira, mais alta** | **Ainda nao encontrei**, contorno | **64 dp** |
+/// | Abaixo, separada por `space/4` | Encerrar o caso, primario | 48 dp |
+///
+/// Quem fecha a folha no susto, sem ler, acerta o botao que nao encerra. O
+/// botao que age nao e o maior nem o mais alto, e isso e proposital.
+///
+/// ## O gesto de voltar equivale a cancelar, nunca a confirmar
+///
+/// `Navigator.pop` sem valor devolve nulo, e `_confirmarEncerramento` traduz
+/// nulo para `false`. Um `?? true` la transformaria o gesto de voltar do
+/// sistema num confirmador de encerramento.
+///
+/// ## Sem estado de carregando aqui, e a ausencia e decisao
+///
+/// A folha FECHA ao confirmar, e o `POST` roda na pagina -- com o rotulo do
+/// botao girando la e a faixa de erro acima dele. Um segundo lugar com
+/// `carregando` e `erro` daria duas respostas para "o encerramento falhou", e
+/// a da folha seria a que ninguem revisita: ela some.
+class _FolhaDoEncerramento extends StatelessWidget {
+  const _FolhaDoEncerramento({
+    required this.titulo,
+    required this.corpo,
+    required this.oQueAcontece,
+    required this.rotuloDeConfirmar,
+    required this.rotuloAcessivelDeConfirmar,
+    required this.rotuloDeCancelar,
+  });
+
+  final String titulo;
+  final String corpo;
+
+  /// O que vai acontecer, em lista. **Cada linha e uma consequencia medida**;
+  /// ver `TextosDoDetalhe.oQueAconteceAoEncerrar`, inclusive por que nenhuma
+  /// delas diz que alguem sera avisado.
+  final List<String> oQueAcontece;
+
+  final String rotuloDeConfirmar;
+
+  /// O nome acessivel do botao que age. Ele tem de dizer **sobre o que** e:
+  /// quem navega por leitor de tela chega no botao sem o contexto que a pessoa
+  /// vidente tem da folha inteira na frente dela.
+  final String rotuloAcessivelDeConfirmar;
+
+  final String rotuloDeCancelar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Semantics(
+      // O equivalente do `role=alertdialog`: a folha nomeia a propria rota e
+      // prende o foco dentro dela.
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: titulo,
+      // **A folha ROLA**, pelo mesmo motivo da destrutiva: a lista cresce, a
+      // fonte do sistema em 200% estoura o conteudo minimo, e o que estoura e
+      // o FIM da coluna -- que e onde moram as duas acoes.
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: BichuEspaco.e4,
+            right: BichuEspaco.e4,
+            bottom: MediaQuery.of(context).viewPadding.bottom + BichuEspaco.e4,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Semantics(
+                header: true,
+                child: Text(
+                  titulo,
+                  style: textos.titleLarge?.copyWith(color: cores.textPrimary),
+                ),
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              Text(corpo, style: textos.bodyMedium),
+              const SizedBox(height: BichuEspaco.e3),
+              ...oQueAcontece.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // O marcador entra como no decorativo: um `Text('•')`
+                      // proprio viraria uma parada de leitor de tela que
+                      // anuncia "bala" e nada mais.
+                      ExcludeSemantics(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: BichuEspaco.e2),
+                          child: Text('•', style: textos.bodyMedium),
+                        ),
+                      ),
+                      Expanded(child: Text(item, style: textos.bodyMedium)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+
+              // ----------------------------------------------------------
+              // As acoes, INVERTIDAS. Cancelar em cima, e com o alvo grande.
+              // ----------------------------------------------------------
+              SizedBox(
+                width: double.infinity,
+                height: BichuAlvoDeToque.critico,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(rotuloDeCancelar),
+                ),
+              ),
+              const SizedBox(height: BichuEspaco.e4),
+              Semantics(
+                button: true,
+                label: rotuloAcessivelDeConfirmar,
+                excludeSemantics: true,
+                // `excludeSemantics: true` apaga a arvore do filho e leva junto
+                // a acao que o `FilledButton` publica. Sem este `onTap` o no
+                // sai com `btn=true tap=false`, e
+                // `test/a11y/acao_de_controle_test.dart` reprova -- com razao:
+                // quem usa leitor de tela ouviria que existe um botao e nao
+                // teria como aciona-lo.
+                onTap: () => Navigator.of(context).pop(true),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: BichuAlvoDeToque.min,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text(rotuloDeConfirmar, style: textos.labelLarge),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

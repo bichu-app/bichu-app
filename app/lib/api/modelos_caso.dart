@@ -251,6 +251,7 @@ class CasoDePerdido {
     this.descricao,
     this.urlDeCompartilhar,
     this.urlDoCartaz,
+    this.prazoDeReabertura,
   });
 
   final String id;
@@ -270,6 +271,33 @@ class CasoDePerdido {
   final DisparoDoAlerta alerta;
   final String? urlDeCompartilhar;
   final String? urlDoCartaz;
+
+  /// `reopen_deadline`: ate quando este encerramento da para desfazer.
+  ///
+  /// **Nulo e o estado normal de um caso ABERTO**, e nulo tambem e o que chega
+  /// de um servidor que nao manda o campo. A tela trata os dois igual -- sem
+  /// prazo, sem oferta de reabrir -- e isso e deliberado: `?? ` com um valor
+  /// de verdade aqui seria a terceira repeticao do defeito que esta casa ja
+  /// pagou, em que o servidor devolvia `owner_notified: true`, a tela afirmava
+  /// isso em texto fixo E o desserializador tinha `?? true`. Tres lugares
+  /// mentindo juntos, e nenhum deles media nada.
+  ///
+  /// **O app NAO recalcula a janela.** Os 7 dias sao numero de produto: o
+  /// contrato os escreve em `closeLostCase` ("Encerrar e reversivel por 7
+  /// dias"), o servidor os grava em `reopen_deadline`, e refazer a conta sobre
+  /// `closed_at` aqui poria uma segunda fonte no bolso de quem nao atualiza o
+  /// aplicativo. Quem decide se da para reabrir e esta data.
+  final DateTime? prazoDeReabertura;
+
+  /// Se a janela de reabertura esta aberta **neste instante**.
+  ///
+  /// `agora` entra como argumento, e nao sai de `DateTime.now()` aqui dentro:
+  /// a tela precisa poder medir isto com um relogio de bancada, e um relogio
+  /// escondido num getter e um teste que so passa no dia certo.
+  bool janelaDeReaberturaAberta(DateTime agora) {
+    final prazo = prazoDeReabertura;
+    return prazo != null && prazo.isAfter(agora);
+  }
 
   factory CasoDePerdido.doJson(Map<String, dynamic> json) {
     final vistoEm = json['last_seen_at'] as String?;
@@ -291,6 +319,11 @@ class CasoDePerdido {
       ),
       urlDeCompartilhar: json['share_url'] as String?,
       urlDoCartaz: json['poster_url'] as String?,
+      // SEM `??` de valor: campo ausente e prazo ausente, e prazo ausente nao
+      // oferece reabrir. Ver a prosa de [prazoDeReabertura].
+      prazoDeReabertura: DateTime.tryParse(
+        json['reopen_deadline'] as String? ?? '',
+      ),
     );
   }
 }

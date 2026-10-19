@@ -1206,7 +1206,42 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// **nao** copiado de ramo nem de relato. Valor de ramo isolado nao sobrevive a
 /// uniao. (antes: 145640db9f)
 ///
-const String _arvoreDasTelas = '1015211855c9e1d2346aab2f0c120e1d0e4a1e0b'; // O PET PERDIDO (18/10/2026): valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`) sobre a arvore de trabalho desta entrega, com `origin/development` em f8c74714 -- nao copiado de ramo nem de relato. As justificativas de todos os destravamentos anteriores ficaram INTEIRAS acima. Valor de ramo isolado NAO sobrevive a uniao: a quem mesclar, recalcule.
+/// DESTRAVADO EM 19/10 (REABRIR O CASO DE PERDIDO: a folha de confirmacao e o
+/// desfazer). O contrato prometia, na descricao de `closeLostCase`, que
+/// *"Encerrar e reversivel por 7 dias"*, e nomeava a operacao que faz a
+/// reversao -- `reopenLostCase`, `POST /v1/lost-cases/{caseId}/reopen`, com um
+/// `410` cuja descricao e *"Passou dos 7 dias"*. Ela **nunca ganhou rota**: era
+/// uma linha de `OPERACOES_AINDA_SEM_ROTA`, e o caminho respondia 404. Entao
+/// `Encontrei meu pet` -- que a branch anterior entregou -- era UM TOQUE, sem
+/// confirmacao e sem desfazer, numa tela que se abre em panico.
+///
+/// DOIS arquivos desta pasta mudam:
+/// `pet/tela_detalhe_do_pet.dart` (a folha de confirmacao antes do
+/// `closeLostCase` -- `_confirmarEncerramento` mais a `_FolhaDoEncerramento`,
+/// que NAO e a `FolhaDestrutiva`: encerrar nao apaga nada e volta por 7 dias,
+/// e o 24.17.6 separa os dois casos --, mais a oferta de `Reabrir o caso`
+/// sobre `reopenLostCase`, condicionada ao `reopen_deadline` da RESPOSTA e
+/// nunca a uma janela de 7 dias refeita no aparelho);
+/// `pet/textos_do_detalhe.dart` (os textos da folha e da reabertura, e a
+/// CORRECAO da frase de sucesso, que afirmava *"quem estava ajudando foi
+/// avisado"* -- falso nos dois niveis: nada e enviado ao encerrar, a conversa
+/// vira modo leitura por derivacao na leitura, e o push esta bloqueado em
+/// producao e inexistente no iPhone do cliente).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. O unico importe
+/// novo e `formato/quando.dart` (para `QuandoNaLista.diaEMes`, que formata o
+/// prazo), e ele mora FORA de `lib/telas`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre a arvore de trabalho desta entrega, e
+/// **nao** copiado de ramo nem de relato. HA OUTRAS TRES BRANCHES tocando
+/// `app/lib/telas` nesta rodada, com valores concorrentes: valor de ramo
+/// isolado NAO sobrevive a uniao. (antes: 1015211855c9e1d2346aab2f0c120e1d0e4a1e0b)
+///
+const String _arvoreDasTelas = '4d66551db6fef958f5c0f42a84913e48bfcc0481'; // REABRIR O CASO DE PERDIDO (19/10/2026): valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`) sobre a arvore de trabalho desta entrega -- nao copiado de ramo nem de relato. As justificativas de todos os destravamentos anteriores ficaram INTEIRAS acima. Valor de ramo isolado NAO sobrevive a uniao: a quem mesclar, recalcule.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -61,7 +61,14 @@ Map<String, dynamic> _petPerdido() =>
     petDoContrato(status: 'lost', casoAberto: _idDoCaso);
 
 /// `LostCase` como a resposta de `closeLostCase` o declara.
-Map<String, dynamic> _casoDoContrato({String status = 'closed'}) {
+///
+/// `prazoDeReabertura` entra como ARGUMENTO, e nao como data fixa: e o unico
+/// eixo que o grupo da reabertura move. Nulo e o caso sem prazo, que e
+/// exatamente o estado que **nao** pode virar oferta de reabrir.
+Map<String, dynamic> _casoDoContrato({
+  String status = 'closed_reunited',
+  String? prazoDeReabertura,
+}) {
   return <String, dynamic>{
     'id': _idDoCaso,
     'pet_id': _idDoPet,
@@ -71,8 +78,25 @@ Map<String, dynamic> _casoDoContrato({String status = 'closed'}) {
     'area_label': 'Vila Mariana, São Paulo',
     'has_location': false,
     'alert': <String, dynamic>{'reach_status': 'queued', 'radius_m': 5000},
+    // O contrato declara `reopen_deadline` em `LostCase`, e e dele que a tela
+    // tira a janela. `null` quando o cenario quer um caso sem prazo.
+    'reopen_deadline': prazoDeReabertura,
   };
 }
+
+/// Um prazo de reabertura **no futuro**, longe o bastante para a janela estar
+/// aberta em qualquer dia em que a suite rodar.
+///
+/// `DateTime.now()` e nao uma data fixa, de proposito: uma data literal de 2026
+/// venceria no ano seguinte e a isca da reabertura ficaria VERMELHA sozinha, num
+/// dia em que ninguem mudou nada. O eixo que o teste controla e "futuro" ou
+/// "passado", e nao o calendario.
+String _prazoNoFuturo() =>
+    DateTime.now().toUtc().add(const Duration(days: 6)).toIso8601String();
+
+/// Um prazo JA VENCIDO. O par do de cima.
+String _prazoNoPassado() =>
+    DateTime.now().toUtc().subtract(const Duration(days: 1)).toIso8601String();
 
 /// `PublicLostCase`: a projecao publica do caso, pelo `share_token`.
 ///
@@ -103,6 +127,11 @@ class _Registro {
 
   /// Os corpos enviados a `POST /lost-cases/{id}/close`.
   final List<Map<String, dynamic>> encerramentos = <Map<String, dynamic>>[];
+
+  /// Quantas vezes `POST /lost-cases/{id}/reopen` foi chamada. CONTADA, e nao
+  /// inferida do desfecho da tela: uma tela que reabrisse sem chamar nada
+  /// pareceria identica a uma que reabriu, e o contrario tambem.
+  final List<http.Request> reaberturas = <http.Request>[];
 
   Iterable<String> get caminhos => pedidos.map((r) => r.url.path);
 }
@@ -145,7 +174,13 @@ Future<http.Response> Function(http.Request) _redeDoDetalhe(
   _Registro registro, {
   required Map<String, dynamic> primeiro,
   Map<String, dynamic>? depois,
+  /// O pet da TERCEIRA leitura em diante: o estado depois de REABRIR.
+  Map<String, dynamic>? depoisDaReabertura,
   int statusDoEncerramento = 200,
+  /// O `reopen_deadline` que `closeLostCase` devolve. Nulo e caso sem prazo.
+  String? prazoDeReabertura,
+  /// O status de `reopenLostCase`. 410 e a janela vencida.
+  int statusDaReabertura = 200,
 }) {
   var leituras = 0;
   return (req) async {
@@ -159,11 +194,29 @@ Future<http.Response> Function(http.Request) _redeDoDetalhe(
       if (statusDoEncerramento != 200) {
         return problema('internal-error', statusDoEncerramento);
       }
-      return json200(_casoDoContrato());
+      return json200(_casoDoContrato(prazoDeReabertura: prazoDeReabertura));
+    }
+    if (caminho == '/v1/lost-cases/$_idDoCaso/reopen' && req.method == 'POST') {
+      registro.reaberturas.add(req);
+      if (statusDaReabertura != 200) {
+        // `lost-case-closed` e o `type` que o servidor devolve no 410 da janela
+        // vencida -- o mesmo slug de `x-problem-types`.
+        return problema('lost-case-closed', statusDaReabertura);
+      }
+      // O caso REABERTO: `status: open`, e sem prazo (o servidor zera
+      // `reopen_deadline` ao reabrir).
+      return json200(_casoDoContrato(status: 'open'));
     }
     if (caminho == '/v1/pets/$_idDoPet' && req.method == 'GET') {
       leituras += 1;
-      return json200(leituras == 1 ? primeiro : (depois ?? primeiro));
+      // TRES leituras, e nao duas, porque o fluxo tem tres estados: a abertura
+      // da pagina, a releitura depois de ENCERRAR, e a releitura depois de
+      // REABRIR. Com duas, o cenario da reabertura ficava impossivel de montar:
+      // o pet voltava a `lost` ja na releitura do encerramento, e a oferta de
+      // reabrir -- que so existe com o pet NAO procurado -- nunca aparecia.
+      if (leituras == 1) return json200(primeiro);
+      if (leituras == 2) return json200(depois ?? primeiro);
+      return json200(depoisDaReabertura ?? depois ?? primeiro);
     }
     if (caminho == '/v1/pets' && req.method == 'GET') {
       return json200(<String, dynamic>{
@@ -183,7 +236,10 @@ Future<void> _abrirODetalhe(
   required _Registro registro,
   required Map<String, dynamic> primeiro,
   Map<String, dynamic>? depois,
+  Map<String, dynamic>? depoisDaReabertura,
   int statusDoEncerramento = 200,
+  String? prazoDeReabertura,
+  int statusDaReabertura = 200,
 }) async {
   await abrirOApp(
     tester,
@@ -192,10 +248,23 @@ Future<void> _abrirODetalhe(
       registro,
       primeiro: primeiro,
       depois: depois,
+      depoisDaReabertura: depoisDaReabertura,
       statusDoEncerramento: statusDoEncerramento,
+      prazoDeReabertura: prazoDeReabertura,
+      statusDaReabertura: statusDaReabertura,
     ),
   );
   await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
+}
+
+/// Toca em `Encontrei meu pet` e **CONFIRMA na folha**.
+///
+/// A folha e obrigatoria desde o trabalho da reabertura: o toque no botao abre
+/// a confirmacao, e o `POST` so sai do botao de dentro dela. Os casos que
+/// medem o encerramento passam por aqui; o grupo da folha mede a folha em si.
+Future<void> _encerrarConfirmando(WidgetTester tester) async {
+  await tocar(tester, find.text('Encontrei meu pet'));
+  await tocar(tester, find.text('Encerrar o caso'));
 }
 
 void main() {
@@ -477,7 +546,7 @@ void main() {
           primeiro: _petPerdido(),
           depois: petDoContrato(),
         );
-        await tocar(tester, find.text('Encontrei meu pet'));
+        await _encerrarConfirmando(tester);
 
         expect(
           registro.encerramentos,
@@ -509,7 +578,7 @@ void main() {
           primeiro: _petPerdido(),
           depois: petDoContrato(),
         );
-        await tocar(tester, find.text('Encontrei meu pet'));
+        await _encerrarConfirmando(tester);
 
         // A resposta de `closeLostCase` e `LostCase`, e nao `Pet`: ela nao diz
         // nada sobre `status` nem `open_case_id`, que sao os dois campos que
@@ -543,7 +612,7 @@ void main() {
           primeiro: _petPerdido(),
           statusDoEncerramento: 500,
         );
-        await tocar(tester, find.text('Encontrei meu pet'));
+        await _encerrarConfirmando(tester);
 
         expect(
           find.text('Encontrei meu pet'),
@@ -686,6 +755,363 @@ void main() {
           reason: 'REPROVA: a palavra sozinha ficou na tela. Ela e a pergunta '
               'do cliente de volta, e duas redacoes para o mesmo campo na '
               'mesma pagina e pior que uma errada.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // GRUPO 8 — A FOLHA DE CONFIRMACAO ANTES DE ENCERRAR
+  //
+  // O defeito que este grupo trava: `Encontrei meu pet` chamava `closeLostCase`
+  // NO PRIMEIRO TOQUE. Sem confirmacao, e -- enquanto `reopenLostCase` nao
+  // tinha rota -- sem desfazer nenhum.
+  //
+  // PARA VER REPROVANDO: tire o `if (!await _confirmarEncerramento(pet)) return;`
+  // de `_encontreiMeuPet` em `tela_detalhe_do_pet.dart` (o estado anterior a
+  // esta entrega). O primeiro caso perde a folha, o segundo passa a ver o
+  // `POST` sair sem confirmacao, e o terceiro perde o texto que mede.
+  //
+  // **A medida e a arvore montada e a rede CONTADA**, e nunca o texto do
+  // codigo: uma varredura de fonte casaria com a mencao ao proprio mecanismo
+  // dentro de um comentario -- ja aconteceu neste repositorio.
+  // -------------------------------------------------------------------------
+  group('a folha confirma antes de encerrar, e diz a verdade', () {
+    testWidgets(
+      'ISCA (d) — o toque ABRE A FOLHA e NAO encerra nada ainda',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+
+        // A folha esta na frente: o botao que age tem rotulo PROPRIO, e nao o
+        // do botao da pagina. Se os dois tivessem o mesmo texto, `find.text`
+        // acharia dois e este caso nao distinguiria folha de pagina.
+        expect(
+          find.text('Encerrar o caso'),
+          findsOneWidget,
+          reason: 'REPROVA: o toque em `Encontrei meu pet` nao abriu folha de '
+              'confirmacao nenhuma. Encerrar tira o pet da lista publica, '
+              'fecha a pagina publica do caso e poe as conversas abertas em '
+              'modo leitura -- e nada disso estava escrito em lugar nenhum '
+              'antes do toque. O 11.9 do design system manda confirmar acao de '
+              'consequencia alta ANTES, dizendo o que vai acontecer.',
+        );
+        expect(
+          find.text('Ainda não encontrei'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao oferece saida. Quem abriu por engano '
+              'precisa de um caminho que nao encerre, e ele e o alvo grande e '
+              'mais alto (11.9): quem fecha no susto acerta o botao que nao '
+              'age.',
+        );
+        // **A ASSERCAO QUE IMPEDE ESTE CASO DE SER VACUO.** Sem ela, uma tela
+        // que abrisse a folha E encerrasse junto passaria: a folha estaria na
+        // arvore e o caso ficaria verde sobre um defeito pior que o original.
+        expect(
+          registro.encerramentos,
+          isEmpty,
+          reason: 'REPROVA: o `POST` de encerrar saiu ANTES de alguem '
+              'confirmar. A folha viraria enfeite -- e seria pior que nao '
+              'existir, porque anunciaria uma protecao que nao protege.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA (d) — cancelar na folha NAO encerra, e o caso segue aberto',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+        await tocar(tester, find.text('Ainda não encontrei'));
+
+        expect(
+          registro.encerramentos,
+          isEmpty,
+          reason: 'REPROVA: cancelar na folha encerrou o caso. Cancelar e o '
+              'caminho de quem abriu a folha por engano, e ele nao pode chegar '
+              'ao `POST`.',
+        );
+        expect(
+          find.text('Encontrei meu pet'),
+          findsOneWidget,
+          reason: 'REPROVA: a pagina perdeu a acao depois de cancelar. Nada '
+              'aconteceu, e a tela tem de continuar oferecendo o que oferecia.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA (d) — o texto da folha NAO afirma que alguem foi ou sera avisado',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+        await tocar(tester, find.text('Encontrei meu pet'));
+
+        // O QUE A FOLHA TEM DE DIZER: a consequencia real sobre as conversas.
+        // Medido no servidor nesta branch: `LostCaseService.encerrar` nao toca
+        // em conversa nenhuma e nao grava mensagem de sistema (embora o
+        // contrato prometa uma); o que acontece e `estadoDaConversa` devolver
+        // `closed` na proxima LEITURA daquela conversa, derivado do estado do
+        // caso. Ninguem recebe nada.
+        expect(
+          find.textContaining('param de aceitar mensagem nova'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao diz o que acontece com as conversas '
+              'abertas. E a consequencia que atinge OUTRA pessoa, e ela tem de '
+              'estar escrita antes do toque.',
+        );
+        expect(
+          find.textContaining('7 dias'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao diz que da para reabrir, nem por '
+              'quanto tempo. E o que torna a decisao reversivel para quem esta '
+              'lendo, e o contrato promete exatamente este prazo.',
+        );
+
+        // O QUE A FOLHA NAO PODE DIZER. O push esta bloqueado em producao (a
+        // conta de servico da VM nao tem a permissao) e nao funciona no iPhone
+        // do cliente (provisionamento gratuito). Nenhuma mensagem de sistema e
+        // gravada. Houve neste projeto um defeito em que o servidor devolvia
+        // `owner_notified: true`, a tela afirmava isso em texto fixo E o
+        // desserializador tinha `?? true` -- tres lugares mentindo juntos.
+        //
+        // **Cada palavra abaixo foi conferida contra o texto que a folha
+        // realmente monta**, e nao e lista decorativa: `avisad` casa
+        // "avisado"/"avisada", `notificad` casa "notificado"/"notificada".
+        for (final proibida in <String>[
+          'avisad',
+          'notificad',
+          'será avisado',
+          'foi avisado',
+          'recebem o aviso',
+        ]) {
+          expect(
+            find.textContaining(proibida),
+            findsNothing,
+            reason: 'REPROVA: a folha afirma um aviso que NAO acontece '
+                '(encontrei "$proibida"). Nada e enviado ao encerrar: a '
+                'conversa vira modo leitura por derivacao na leitura, nenhuma '
+                'mensagem de sistema e gravada, e o push esta bloqueado em '
+                'producao e inexistente no iPhone do cliente. Afirmar o aviso '
+                'aqui repetiria o defeito dos tres lugares mentindo juntos.',
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'o aviso da PAGINA, depois do 200, tambem nao afirma que avisaram alguem',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+        );
+        await _encerrarConfirmando(tester);
+
+        expect(registro.encerramentos, hasLength(1));
+        // A frase de sucesso dizia "quem estava ajudando foi avisado", e era
+        // falsa pelos dois motivos acima. Ela esta medida aqui porque uma folha
+        // honesta ao lado de um aviso que mente, na MESMA tela, e so mover a
+        // mentira de lugar.
+        expect(
+          find.textContaining('foi avisado'),
+          findsNothing,
+          reason: 'REPROVA: a tela afirma, depois do encerramento, que quem '
+              'estava ajudando foi avisado. Nada foi enviado a ninguem.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // GRUPO 9 — O DESFAZER (`reopenLostCase`)
+  //
+  // O contrato prometia, em `closeLostCase`, que "encerrar e reversivel por 7
+  // dias", e nomeava a operacao -- que **nao tinha rota** e respondia 404.
+  //
+  // PARA VER REPROVANDO: devolva `null` a `_casoEncerradoAgora` depois do 200
+  // em `_encontreiMeuPet` (ou tire o `...?_ofertaDeReabrir(context)` de
+  // `_acaoDeEstadoDoPet`). O primeiro caso perde o botao e o segundo perde a
+  // chamada.
+  // -------------------------------------------------------------------------
+  group('o tutor que encerrou por engano consegue desfazer', () {
+    testWidgets(
+      'ISCA — com a janela ABERTA, a pagina oferece `Reabrir o caso`',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+          prazoDeReabertura: _prazoNoFuturo(),
+        );
+        await _encerrarConfirmando(tester);
+
+        expect(
+          registro.encerramentos,
+          hasLength(1),
+          reason: 'REPROVA: o cenario nao encerrou nada, e sem encerramento nao '
+              'ha o que reabrir -- este caso mediria o vazio.',
+        );
+        expect(
+          find.text('Reabrir o caso'),
+          findsOneWidget,
+          reason: 'REPROVA: depois de encerrar, a pagina nao oferece desfazer. '
+              'O contrato promete que "encerrar e reversivel por 7 dias" e a '
+              'folha acabou de repetir a promessa a quem tocou -- uma promessa '
+              'que a tela faz e nao cumpre e pior que nenhuma. O toque por '
+              'engano e o defeito medido: um toque, sem volta.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — o toque CHAMA `reopenLostCase` e a tela volta a `Encontrei meu pet`',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          // Depois de ENCERRAR o pet volta a `active`: e nesse estado que a
+          // oferta de reabrir e desenhada.
+          depois: petDoContrato(),
+          // Depois de REABRIR ele volta a `lost`, que e o que o servidor grava.
+          depoisDaReabertura: _petPerdido(),
+          prazoDeReabertura: _prazoNoFuturo(),
+        );
+        await _encerrarConfirmando(tester);
+        await tocar(tester, find.text('Reabrir o caso'));
+
+        expect(
+          registro.reaberturas,
+          hasLength(1),
+          reason: 'REPROVA: o toque em `Reabrir o caso` nao chamou '
+              '`reopenLostCase`. A operacao e a inversa de encerrar, e ela '
+              'existe no contrato desde o comeco -- procurar outra rota seria '
+              'inventar rota.',
+        );
+        expect(
+          registro.reaberturas.single.url.path,
+          '/v1/lost-cases/$_idDoCaso/reopen',
+          reason: 'REPROVA: o caminho chamado nao e o do contrato. O `caseId` '
+              'sai da resposta de `closeLostCase` -- `Pet` nao tem campo que '
+              'aponte para o caso que fechou.',
+        );
+        expect(
+          find.text('Reabrir o caso'),
+          findsNothing,
+          reason: 'REPROVA: o caso foi reaberto e a tela continua oferecendo '
+              'reabri-lo. O servidor zera `reopen_deadline` ao reabrir, e um '
+              'segundo toque bateria num caso que ja esta aberto.',
+        );
+        expect(
+          find.text('Encontrei meu pet'),
+          findsOneWidget,
+          reason: 'REPROVA: depois de reabrir, a pagina nao voltou a oferecer '
+              'o encerramento. O animal voltou a ser procurado, e a pagina dele '
+              'tem de refletir isso -- a tela RELE o pet justamente por isso.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — SEM prazo na resposta, a pagina NAO oferece reabrir',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+          // `reopen_deadline: null`: o caso encerrado sem prazo gravado.
+        );
+        await _encerrarConfirmando(tester);
+
+        expect(registro.encerramentos, hasLength(1));
+        expect(
+          find.text('Reabrir o caso'),
+          findsNothing,
+          reason: 'REPROVA: a tela ofereceu reabrir sem prazo nenhum na '
+              'resposta. Um `?? ` generoso no desserializador, ou uma janela de '
+              '7 dias refeita no app sobre `closed_at`, desenharia um botao que '
+              'o servidor recusa com 410 -- e a pessoa ouviria "nao da mais" de '
+              'um botao que o app acabou de oferecer. E a mesma classe do '
+              '`?? true` de `owner_notified`.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — prazo JA VENCIDO na resposta tambem nao oferece reabrir',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+          prazoDeReabertura: _prazoNoPassado(),
+        );
+        await _encerrarConfirmando(tester);
+
+        expect(registro.encerramentos, hasLength(1));
+        // O PAR do caso de cima. Sem ele, "nunca oferece" aprovaria os dois, e
+        // a oferta de reabrir seria codigo morto -- a isca da janela aberta e
+        // quem cobra o contrario.
+        expect(
+          find.text('Reabrir o caso'),
+          findsNothing,
+          reason: 'REPROVA: a tela ofereceu reabrir com o prazo VENCIDO. A '
+              'comparacao e contra a data que o servidor mandou, e o 410 de '
+              '`reopenLostCase` ("Passou dos 7 dias") e o que esse botao '
+              'receberia.',
+        );
+      },
+    );
+
+    testWidgets(
+      'a reabertura que FALHA com 410 nao apaga a pagina nem some com o pet',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+          prazoDeReabertura: _prazoNoFuturo(),
+          statusDaReabertura: 410,
+        );
+        await _encerrarConfirmando(tester);
+        await tocar(tester, find.text('Reabrir o caso'));
+
+        expect(registro.reaberturas, hasLength(1), reason: 'REPROVA: a tentativa nem saiu.');
+        expect(
+          find.text('Marcar como perdido'),
+          findsOneWidget,
+          reason: 'REPROVA: o 410 virou tela de erro e apagou a pagina do pet. '
+              'O pet carregou, e quem o estava lendo continua lendo: a falha e '
+              'da acao, e nao da leitura.',
         );
       },
     );

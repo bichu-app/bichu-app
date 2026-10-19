@@ -51,6 +51,22 @@ abstract final class QuandoNaLista {
     return '${local.day} ${_mes(local)}';
   }
 
+  /// `12 out`: dia e mes, sem hora e sem ano.
+  ///
+  /// **Para PRAZO, e nao para linha de listagem.** [de] trata instante no
+  /// futuro como "hoje" e devolve a hora, o que esta certo para uma mensagem
+  /// que ja chegou e errado para uma data-limite: o prazo de reabertura de um
+  /// caso encerrado hoje cai daqui a sete dias, e "14:02" nao e um prazo.
+  ///
+  /// Reusa `_mes` em vez de repetir os doze nomes: duas tabelas de meses
+  /// divergem na primeira manutencao. **Converte para a hora local** pelo mesmo
+  /// motivo de [de] -- o prazo que o servidor manda em UTC vira o dia de quem
+  /// segura o telefone.
+  static String diaEMes(DateTime instante) {
+    final local = instante.toLocal();
+    return '${local.day} ${_mes(local)}';
+  }
+
   static String _hora(DateTime d) =>
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 

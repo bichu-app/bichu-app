@@ -100,9 +100,116 @@ abstract final class TextosDoDetalhe {
   /// **Afirma no passado porque, quando esta frase aparece, o servidor
   /// respondeu 200.** Nao e tela de sucesso antes do sucesso, que e o que o
   /// criterio 2 da BICHUS-31 proibe.
+  ///
+  /// ## A SEGUNDA FRASE FOI CORRIGIDA, e a correcao e o ponto
+  ///
+  /// Ela dizia *"quem estava ajudando foi avisado"*. Isso era **falso em dois
+  /// niveis, medidos nesta branch**:
+  ///
+  /// 1. **Nada e enviado a ninguem ao encerrar.** `LostCaseService.encerrar`
+  ///    nao toca em conversa nenhuma, e nao existe no servidor caminho que
+  ///    grave mensagem de sistema no encerramento -- embora o contrato o
+  ///    prometa (*"Ao encerrar, toda conversa aberta recebe a mensagem de
+  ///    sistema que avisa quem ajudou"*). O que acontece e que a conversa passa
+  ///    a `closed`, DERIVADO do estado do caso a cada leitura
+  ///    (`estadoDaConversa`, com o sinal `casoEncerrado`): ela vira modo
+  ///    leitura. Nada e gravado, e ninguem e acordado.
+  /// 2. **O push nao sai.** O envio esta bloqueado em producao por falta de
+  ///    permissao da conta de servico na VM, e no iPhone do cliente nao
+  ///    funciona nenhum (provisionamento gratuito, sem capacidade de
+  ///    notificacao).
+  ///
+  /// Esta casa ja pagou por esta classe de defeito: o servidor devolvia
+  /// `owner_notified: true`, a tela afirmava isso em texto fixo E o
+  /// desserializador tinha `?? true` -- tres lugares mentindo juntos. A frase
+  /// agora diz o que **de fato** acontece, no tempo certo: a conversa para de
+  /// receber mensagem. Quem ajudou descobre quando abrir a conversa, e e isso
+  /// que o texto promete.
   static String casoEncerrado(String nome) =>
-      '${_o(nome)} está de volta. O caso foi encerrado e quem estava ajudando '
-      'foi avisado.';
+      '${_o(nome)} está de volta. O caso foi encerrado e as conversas abertas '
+      'não recebem mais mensagem.';
+
+  // -- A FOLHA DE CONFIRMACAO DO ENCERRAMENTO -------------------------------
+  //
+  // Antes dela, `Encontrei meu pet` era UM TOQUE sem volta aparente: ele
+  // chamava `closeLostCase` direto, e a operacao de desfazer que o contrato
+  // promete (`reopenLostCase`) nao tinha rota no servidor. A folha e a metade
+  // de tela deste trabalho; a rota e a outra.
+
+  /// O titulo da folha. Pergunta, e nao afirmacao: quem abriu a folha ainda
+  /// nao decidiu nada.
+  static String tituloDoEncerramento(String nome) =>
+      'Encontrou ${_o(nome)}?';
+
+  /// O corpo da folha: **o que vai acontecer**, e nada mais.
+  ///
+  /// Uma frase por consequencia, no futuro, porque nada aconteceu ainda.
+  static String corpoDoEncerramento(String nome) =>
+      'Encerrar o caso tira ${_o(nome)} da lista pública de pets perdidos e '
+      'encerra a busca.';
+
+  /// As consequencias, em lista. **Cada linha e uma coisa que foi MEDIDA.**
+  ///
+  /// A primeira: o caso sai da lista publica e a pagina publica dele deixa de
+  /// abrir (`getPublicLostCase` responde 410 em caso encerrado).
+  ///
+  /// A segunda: as conversas abertas viram modo leitura. **Ela NAO diz que
+  /// alguem foi avisado**, e a diferenca nao e de estilo -- e o que o texto
+  /// afirma sobre o mundo. O que o servidor faz ao encerrar e deixar
+  /// `estadoDaConversa` devolver `closed` na proxima leitura daquela conversa:
+  /// ninguem recebe nada, e quem estava ajudando descobre quando voltar lá.
+  /// Nenhuma mensagem de sistema e gravada (o contrato promete uma e o servidor
+  /// nao a grava), e o push esta bloqueado em producao e nao funciona no
+  /// iPhone do cliente. Escrever "sera avisado" aqui seria repetir, de novo, o
+  /// defeito dos tres lugares mentindo juntos.
+  ///
+  /// A terceira: a janela de 7 dias. O numero esta aqui porque e o do contrato
+  /// e do servidor -- `reopen_deadline` grava `agora + 7 dias` --, e ele e o
+  /// que torna a decisao reversivel para quem esta lendo.
+  static List<String> oQueAconteceAoEncerrar(String nome) => <String>[
+        '${_o(nome)} sai da lista pública de pets perdidos, e a página pública '
+            'do caso deixa de abrir.',
+        'As conversas abertas do caso param de aceitar mensagem nova e ficam '
+            'em modo leitura. Quem estava ajudando vê isso ao abrir a conversa.',
+        'Dá para reabrir o caso por 7 dias, se você encerrar sem querer.',
+      ];
+
+  /// O rotulo do botao que confirma. Diz a ACAO, e nao "Confirmar".
+  static const String confirmarEncerramento = 'Encerrar o caso';
+
+  /// O nome acessivel do botao de confirmar: ele precisa dizer SOBRE O QUE e.
+  ///
+  /// Quem navega por leitor de tela chega no botao sem o contexto que a pessoa
+  /// vidente tem da folha inteira na frente dela.
+  static String confirmarEncerramentoAcessivel(String nome) =>
+      'Encerrar o caso de ${_o(nome)}';
+
+  /// O rotulo de cancelar, nesta folha. `Agora não` e nao `Cancelar`: quem
+  /// abriu a folha por engano nao esta cancelando um pedido, esta dizendo que
+  /// o animal ainda nao voltou.
+  static const String naoEncontreiAinda = 'Ainda não encontrei';
+
+  // -- A REABERTURA (`reopenLostCase`) --------------------------------------
+
+  /// `Reabrir o caso`: o desfazer que o contrato prometia e nao existia.
+  static const String reabrirOCaso = 'Reabrir o caso';
+
+  /// A faixa que explica a oferta de reabrir, com o prazo.
+  ///
+  /// **O prazo sai da RESPOSTA** (`reopen_deadline`), e nao de uma conta de 7
+  /// dias refeita no aparelho: numero de produto escrito no binario continua
+  /// sendo dito por versao antiga do app depois de o servidor mudar o valor. E
+  /// a mesma regra do `Retry-After` e do teto de pets.
+  static String podeReabrirAte(String dia) =>
+      'Encerrou sem querer? Dá para reabrir este caso até $dia.';
+
+  /// O que a tela diz depois de o caso REABRIR.
+  ///
+  /// **Nao promete alerta novo**, e a ausencia e medida: reabrir nao dispara
+  /// nada. Quem quer avisar a vizinhanca de novo usa o reenvio do alerta, que
+  /// tem teto de um por dia e e um toque explicito.
+  static String casoReaberto(String nome) =>
+      'O caso ${_de(nome)} está aberto de novo. O alerta não foi reenviado.';
 
   // -- Sinais e vazios ------------------------------------------------------
 
