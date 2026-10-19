@@ -863,25 +863,29 @@ class TelaDeAba extends StatefulWidget {
   /// esta linha que garante isso por construcao, e nao por disciplina.
   final bool raizDeSecao;
 
-  /// A PORTA DE CRIAR DA SECAO, no lado direito da barra de topo.
+  /// A PORTA DE CRIAR DA SECAO, **flutuante no corpo** da tela.
   ///
-  /// Pedido literal do cliente em 18/10/2026 ("os itens de criacao, como
-  /// evento e indicacao, ate o escanear poderia ser icones na barra superior
-  /// ... e nao fique esse botao grande na pagina ocupando muito espaco"). Quem
-  /// desenha e `AcaoDeCriarNaBarra`; quem diz QUAL e cada secao.
+  /// **ELA SAIU DA BARRA DE TOPO EM 19/10/2026, e quem decidiu foi ele.** Eu
+  /// lhe mostrei a conta -- com o sino na barra, quatro controles, e o titulo
+  /// de `Perto` saindo com reticencia -- e perguntei qual sairia. Palavras
+  /// dele: **"O botao criar sai da barra"**. Entao `criar` desce para o corpo
+  /// como acao flutuante e o sino entra no lugar dela.
   ///
-  /// **O lado direito deixou de ter UM slot, e passou a ter dois**, e isto
-  /// atravessa o 11.23.1 do design system de propria vontade: o paragrafo da
-  /// uma acao de 64 x 64 ali. Ele foi escrito antes de existirem duas acoes de
-  /// natureza diferente na mesma tela -- criar e da SECAO, filtrar e da LISTA
-  /// --, e a decisao de 18/10 poe as duas na barra. A conta cabe: com os
-  /// quatro cantos ocupados (hamburguer 64 + criar 64 + filtros 64) sobram
-  /// 128,0 dp de titulo em 320 dp, e o maior dos tres titulos que chegam a
-  /// esse arranjo e `Perto`, de quatro letras.
+  /// **Isto nao desfaz o pedido de 18/10.** O que ele recusou naquele dia foi
+  /// o `BotaoSecundario` de LARGURA TOTAL dentro do corpo, que empurrava a
+  /// lista 64 dp para baixo em `Rede` e em `Perto`. A acao flutuante nao ocupa
+  /// linha nenhuma do fluxo: ela fica por cima, no canto, e o conteudo
+  /// continua comecando na primeira linha. Quem desenha e
+  /// `AcaoDeCriarFlutuante`; quem diz QUAL e cada secao.
   ///
-  /// **Criar vem ANTES de filtrar na ordem de leitura**, e nao e estetica:
-  /// criar e a acao da secao e filtrar e um controle da lista, entao a acao
-  /// mais ampla fica mais longe da borda e a mais estreita mais perto dela.
+  /// **Ela nao cobre a barra de baixo**, e isso e por construcao e nao por
+  /// margem escolhida a mao: este `Scaffold` e filho do `body` do `Scaffold`
+  /// da casca, e a barra de baixo e irma desse `body`. O canto inferior deste
+  /// `Scaffold` termina onde a barra comeca.
+  ///
+  /// **O que ela cobre e o FIM DO CORPO**, e isso foi medido e pago: a lista
+  /// recebe [_folgaDaAcaoFlutuante] de respiro extra no pe quando esta acao
+  /// existe. Ver a conta ali.
   final Widget? acaoDeCriar;
 
   @override
@@ -916,6 +920,26 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   /// rota a chamar, e uma roda que gira sem buscar nada e pior que gesto
   /// nenhum.
   final RecargaDaSecao _recargaDaSecao = RecargaDaSecao();
+
+  /// O RESPIRO EXTRA NO PE DA LISTA quando ha acao flutuante.
+  ///
+  /// **Medido, e nao arredondado por gosto.** O `FloatingActionButton` padrao
+  /// mede 56 dp e o `Scaffold` o assenta a 16 dp da borda inferior do proprio
+  /// corpo: ele ocupa os ultimos **72 dp** do corpo, no canto da direita. Sem
+  /// este respiro, o ultimo item da lista fica embaixo dele -- e o ultimo item
+  /// de `Perto` e um cartao de profissional com o controle de telefone no
+  /// canto direito, que e exatamente onde a acao flutuante pousa.
+  ///
+  /// O `padding` do `ListView` ja da 16 dp no pe (`EdgeInsets.all(e4)`), entao
+  /// o que falta sao os 56 dp do desenho: `e16 + e2 - e4 = 56`. Escrito como
+  /// `e12 + e2` (48 + 8), que sao dois degraus da escala -- numero solto aqui
+  /// seria medida escolhida a mao, e o portao de tokens cobra isso.
+  ///
+  /// **Nao e `Padding` por fora do `ListView`.** O respiro precisa ser
+  /// ROLAVEL: por fora, ele viraria uma faixa morta permanente no pe da tela,
+  /// e a acao flutuante continuaria pousada sobre o ultimo item sempre que a
+  /// lista fosse mais longa que a tela.
+  static const double _folgaDaAcaoFlutuante = BichuEspaco.e12 + BichuEspaco.e2;
 
   @override
   void dispose() {
@@ -989,7 +1013,17 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
         recarga: _recargaDaSecao,
         child: ListView(
         addSemanticIndexes: false,
-        padding: const EdgeInsets.all(BichuEspaco.e4),
+        // A MARGEM DA PAGINA, mais o respiro do que flutua por cima dela.
+        // Ver `_folgaDaAcaoFlutuante`: sem isto o ultimo item da lista nasce
+        // embaixo da acao de criar.
+        padding: EdgeInsets.fromLTRB(
+          BichuEspaco.e4,
+          BichuEspaco.e4,
+          BichuEspaco.e4,
+          widget.acaoDeCriar == null
+              ? BichuEspaco.e4
+              : BichuEspaco.e4 + _folgaDaAcaoFlutuante,
+        ),
         children: <Widget>[
           // **Vazio tambem nao desenha** (18/10/2026). As cinco secoes passaram
           // a mandar `reforcoDaPagina: ''` por pedido do cliente, e sem o
@@ -1046,26 +1080,37 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             // centrado, entao ha 20 dp de ar dentro do proprio alvo e o texto
             // nao encosta nele.
             //
-            // **Isto nao reverte nenhuma decisao dele.** `Filtros` continua
-            // na barra (17/10), a porta de criar continua na barra (18/10) e
-            // a foto continua em todas as telas (19/10). O que mudou foi um
-            // vao do componente, e e a unica folga que havia sem tirar algo
-            // que ele pediu. Ver o relatorio: nao ha espaco para um QUARTO
-            // controle neste lado, medido em 0,00 dp de titulo.
+            // **E O `titleSpacing: 0` FICA, e com o arranjo de 19/10 ele e
+            // mais necessario, nao menos.**
+            //
+            // Com `criar` fora da barra e o sino dentro dela, o lado direito
+            // e sino 48 + foto 48 = 96 e o titulo comeca em 64 (depois do
+            // hamburguer). Orcamento MEDIDO em 320 dp a 200%, logado:
+            // **160,00 dp**.
+            //
+            //   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (21,68 de folga)
+            //   `Perto`:                172,90 dp -> **AINDA NAO CABE**
+            //
+            // **O deficit do `Perto` caiu de 28,90 para 12,90 dp e nao chegou
+            // a zero**, e isso esta no relatorio como pergunta fechada para o
+            // cliente. Tirar o `criar` devolveu 64 dp e o sino levou 48:
+            // saldo de +16,00. Nao ha de onde tirar os 12,90 que faltam sem
+            // mexer em algo que nao e meu -- o hamburguer tem piso de 64 dp
+            // (11.23.1), o sino e a foto estao no piso de 48 (SC 2.5.8),
+            // `titleSpacing` ja esta em zero e a margem interna da foto custa
+            // 0,00 dp. Sobra tirar outro controle da barra ou encurtar o
+            // rotulo, e as duas coisas sao decisao dele.
+            //
+            // O caso de orcamento de `gaveta_com_submenus_test.dart` prende
+            // os 160,00 e o deficit: ele reprova se um controle voltar para a
+            // barra e reprova se `Perto` passar a pedir mais.
             titleSpacing: 0,
             // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
             leading: comGaveta ? const BotaoDaGaveta() : null,
             leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
-            // O LADO DIREITO: a porta de CRIAR da secao e, depois dela, o
-            // `Filtros` da listagem.
+            // O LADO DIREITO: o SINO e, depois dele, a foto. **Dois
+            // controles, e so dois.**
             //
-            // `null` quando nao ha NENHUMA das duas: uma lista com um widget
-            // vazio dentro faria o portao da gaveta achar uma acao onde nao ha
-            // nenhuma, e `Perfil` e exatamente esse caso.
-            //
-            // A ordem e criar-depois-filtrar: a acao da SECAO fica mais longe
-            // da borda, o controle da LISTA mais perto. Quem decide se existe
-            // cada uma e a tela; a casca so desenha.
             // A FOTO DA PESSOA FECHA O LADO DIREITO, em toda tela de secao.
             //
             // Ela e a ULTIMA, e a ordem tem razao: ela e o controle mais
@@ -1078,36 +1123,34 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             // e era o `null` que fazia o portao da gaveta afirmar que `Perfil`
             // e `Pets` nao tinham acao nenhuma a direita.
             actions: <Widget>[
-              if (widget.acaoDeCriar != null) widget.acaoDeCriar!,
-              // **O `Filtros` SAIU DAQUI em 19/10** (*"qualquer coisa, pense
-              // em outro lugar para colocar o filtro da pagina"*). Ele voltou
-              // para o topo do CORPO, que e a casa original dele, e quem o
-              // desenha agora e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem`
-              // continua publicando no slot -- publicando NULO --, porque e
-              // essa publicacao que limpa a barra quando a lista sai da tela.
+              // **O `criar` SAIU DAQUI em 19/10, e o SINO ENTROU no lugar
+              // dele.** Decisao dele, com a conta na mesa: eu lhe mostrei que
+              // com quatro controles o titulo nao cabia e perguntei o que
+              // sairia. Palavras dele: *"O botao criar sai da barra"*. A porta
+              // de criar e agora o `floatingActionButton` deste mesmo
+              // `Scaffold`, logo abaixo.
               //
-              // **O SINO NAO ESTA MONTADO, e a razao foi MEDIDA.**
+              // **O `Filtros` tambem nao esta aqui** (19/10: *"qualquer
+              // coisa, pense em outro lugar para colocar o filtro da
+              // pagina"*): ele voltou para o topo do CORPO, e quem o desenha
+              // e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem` continua
+              // publicando no slot -- publicando NULO --, porque e essa
+              // publicacao que limpa a barra quando a lista sai da tela.
               //
-              // Os 64 dp que o `Filtros` devolveu NAO cobriram o sino, e o
-              // motivo e que os dois controles nao sao equivalentes:
-              // `Filtros` era CONDICIONAL -- so aparecia onde havia lista
-              // para filtrar -- e o sino e INCONDICIONAL, em toda tela de
-              // seccao. Nas secoes que tambem tem porta de criar (`Rede` e
-              // `Perto`), o arranjo fica hamburguer 64 + criar 64 + sino 48 +
-              // foto 48 = 224, e o titulo recebe **96,00 dp** medidos.
-              // `Rede` e `Perto` pedem 138,32 dp a 200% e **saem com
-              // reticencia** -- medido no app de verdade, logado, e reprovado
-              // pelo caso de orcamento de `gaveta_com_submenus_test.dart`.
+              // **O SINO E INCONDICIONAL na barra, e CONDICIONAL na tela.**
+              // Ele e montado em toda tela de secao; quem decide se aparece e
+              // ele proprio, pela sessao (`SizedBox.shrink` sem conta). A
+              // diferenca importa para o portao: `actions` tem sempre dois
+              // itens, e o que varia e o que o segundo pinta.
               //
-              // Sem o sino, as mesmas secoes recebem 144,00 dp e cabem com
-              // 5,68 dp de folga.
-              //
-              // `SinoDeNotificacoes` esta CONSTRUIDO logo abaixo -- glifo,
-              // alvo de 48 dp, rotulo acessivel com a contagem crua, oculto
-              // sem sessao -- e espera uma decisao do cliente: fechar os
-              // 42,32 dp que faltam exige tirar um dos tres controles que ele
-              // mesmo pos na barra. Montar aqui e uma linha.
-              //      const SinoDeNotificacoes(),
+              // **`naoLidas` vai NULO, e nao zero.** O numero existe no
+              // servidor (`GET /v1/me/notifications/count`, ja embrulhado em
+              // `NotificacoesApi.contar()`), mas **nada em `lib/` chama essa
+              // operacao**: nao ha objeto de contagem no app para esta linha
+              // ler. Nulo e "ninguem contou ainda" e nao pinta distintivo;
+              // zero seria a afirmacao de que nao ha aviso nenhum, e o app
+              // nao tem como saber disso. Ver `SinoDeNotificacoes.naoLidas`.
+              const SinoDeNotificacoes(),
               AvatarDaConta(
                 inicial: _inicialDaSessao(context),
                 // `go`, e nao `push`: a tela da conta continua sendo RAMO da
@@ -1125,6 +1168,22 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             ],
           ),
           body: corpo,
+          // A PORTA DE CRIAR DA SECAO, no corpo e flutuante (19/10: *"O botao
+          // criar sai da barra"*).
+          //
+          // **`endFloat`, que e o default, e e ele que resolve as duas
+          // colisoes.** No canto inferior DIREITO a acao nao briga com o
+          // puxar-para-atualizar que outra frente esta acrescentando -- aquele
+          // gesto comeca no topo da lista e desenha o indicador centrado no
+          // alto -- e nao fica sobre a primeira coluna de texto de nenhum
+          // cartao. `centerDocked` levaria a acao para cima da barra de baixo
+          // e `startFloat` a poria sobre o comeco da linha dos cartoes.
+          //
+          // `null` nas secoes que nao criam nada (`Pets`, `Loja`, `Perfil`) e
+          // em toda tela empilhada: `Scaffold` com `floatingActionButton:
+          // null` nao reserva espaco nenhum, e o respiro do pe da lista
+          // tambem desaparece junto.
+          floatingActionButton: widget.acaoDeCriar,
         ),
       ),
       ),
@@ -1154,21 +1213,30 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
 /// leitor de QR e a excecao conhecida, e por outro motivo: ler uma plaquinha
 /// nao exige conta.
 ///
-/// ## O contador vem de FORA, e hoje nao vem
+/// ## O contador vem de FORA, e hoje nao vem -- MEDIDO em 19/10
 ///
-/// **Nao existe contagem global no contrato**: `unread_message_count` e campo
-/// de `LostCase`, de um caso, e nao do app. A caixa de notificacoes e a
-/// contagem no servidor estao sendo construidas por outro agente.
+/// **A rota existe e a camada de API existe; o que nao existe e quem chama.**
+/// Medido nesta arvore: `GET /v1/me/notifications/count` esta no contrato,
+/// `NotificacoesApi.contar()` o embrulha e devolve
+/// `ContagemDeAvisos.naoLidos` (de `unread_total`). E **nenhuma linha de
+/// `lib/` chama `contar()`** -- a busca por `NotificacoesApi` em `lib/` acha
+/// so a propria classe e a caixa, que usa `listar`, `marcarListaVista`,
+/// `marcarTodasComoLidas` e `marcarComoLido`.
 ///
-/// Entao o espaco existe e o numero **nao e inventado**. Contador que mostra
-/// zero quando ha coisa e pior que contador ausente, e calcular no app seria
-/// adivinhar.
+/// Ou seja: nao ha **objeto de contagem** no app de onde esta barra possa ler
+/// um numero. Entao o espaco existe e o numero **nao e inventado**. Contador
+/// que mostra zero quando ha coisa e pior que contador ausente, e somar no
+/// aparelho seria adivinhar -- e divergiria entre dois aparelhos da mesma
+/// pessoa, que e o que `notificacoes_api.dart` proibe por escrito.
 ///
-/// **O QUE FALTA LIGAR, numa linha:** passar [naoLidas] a partir do callback
-/// `aoContarNaoLidas` da area de mensagens (branch
-/// `feat/area-de-mensagens-no-app`, nao mesclada) no ponto unico que a monta
-/// -- a linha `const SinoDeNotificacoes()` em `TelaDeAba.actions`, que passa a
-/// receber o numero cru.
+/// **O QUE FALTA LIGAR, e nao e uma linha:** falta um objeto de contagem
+/// unico no app (no `Escopo`, como as outras camadas), que chame
+/// [NotificacoesApi.contar] e notifique. Ele precisa de politica de
+/// atualizacao -- quando buscar, e o que acontece depois de
+/// `markNotificationsListSeen` derrubar o numero no servidor -- e politica de
+/// atualizacao e decisao de produto, nao de quem monta a barra. Com ele de
+/// pe, esta barra muda em UMA linha: `const SinoDeNotificacoes()` passa a
+/// `SinoDeNotificacoes(naoLidas: <o numero>)`.
 ///
 /// **O numero vai INTEIRO para quem usa leitor de tela.** `9+` e apresentacao:
 /// o distintivo pintado encurta porque nao cabe, o nome acessivel nunca.
@@ -1214,14 +1282,20 @@ class SinoDeNotificacoes extends StatelessWidget {
     return IconButton(
       tooltip: rotuloCom(naoLidas),
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
-      // O DESTINO, ligado na uniao de 18/10/2026: a caixa desceu junto e
-      // `rotas.dart` a registra. **Isto nao monta o sino** -- a linha que o
-      // montaria (`const SinoDeNotificacoes()` em `TelaDeAba.actions`)
-      // continua comentada de proposito, porque montar corta o titulo de
-      // `Rede` e `Perto` e a decisao de qual controle sai da barra e do
-      // cliente e esta pendente. O que mudou aqui e so para onde ele leva no
-      // dia em que for montado: antes a tela da conta, agora a caixa.
-      onPressed: () => GoRouter.of(context).go(Rotas.notificacoes),
+      // O DESTINO: a caixa de avisos, registrada em `rotas.dart` como rota
+      // IRMA da casca (ela cobre a barra de baixo, de proposito).
+      //
+      // **`push`, e nao `go`, e a diferenca e medida em para onde a pessoa
+      // volta.** A caixa sai por `SaidaDaTela`, que desempilha quando ha o
+      // que desempilhar e so cai no `escape` quando nao ha. Com `go` nao
+      // haveria pilha: fechar a caixa jogaria quem veio de `Perto` no escape
+      // da tela, e a pessoa perderia a secao em que estava. Com `push` ela
+      // volta exatamente para a secao de onde tocou o sino.
+      //
+      // Isto NAO contradiz o `go` da foto, logo acima: a tela da conta e RAMO
+      // da casca -- trocar de ramo e o que mantem a barra de baixo visivel
+      // dentro dela --, e a caixa nao e ramo nenhum.
+      onPressed: () => GoRouter.of(context).push(Rotas.notificacoes),
       // O glifo SIMPLES, e nao o `notifications_active` nem um sino com
       // badge embutido: o distintivo e desenhado aqui por cima, entao o
       // estado vazio e o cheio usam o MESMO glifo e nao ha dois desenhos
@@ -1330,12 +1404,55 @@ class AvatarDaConta extends StatelessWidget {
   /// O alvo de toque, em dp.
   static const double alvo = 48;
 
+  /// A chave do CIRCULO desenhado, dentro do alvo.
+  ///
+  /// Existe para o portao poder medir as duas coisas separadamente: o ALVO de
+  /// toque (que e o widget inteiro, 48 dp, e encosta na borda da tela) e o
+  /// DESENHO (o circulo de 32 dp, que fica a `layout.margem-celular` da
+  /// borda). Sem esta separacao, um caso que medisse so o widget diria que a
+  /// margem e zero: o caso que ja media a foto (`navegacao_mensagens_e_avatar`)
+  /// confere o TAMANHO do alvo, e alvo de 48 dp encostado na borda passa por
+  /// ele -- foi assim que os 8,00 dp do desenho ficaram sem portao.
+  static const Key chaveDoCirculo = ValueKey<String>('conta/avatar/circulo');
+
   @override
   Widget build(BuildContext context) {
     return IconButton(
       // `tooltip` vira o nome acessivel (11.23.3), como no gatilho da gaveta.
       tooltip: rotuloAcessivel,
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
+      // A MARGEM DA DIREITA, DENTRO DO PROPRIO ALVO. **Zero dp de custo para
+      // o titulo**, e e por isso que ela e assimetrica em vez de um `Padding`
+      // por fora.
+      //
+      // Medido em 320 dp a 200%, logado, antes: o alvo de 48 dp ia de 272 a
+      // 320 -- `margemDireita` de **0,00 dp** -- e o circulo de 32 dp ficava
+      // centrado nele, a **8,00 dp** da borda da tela. Os vizinhos da mesma
+      // barra tem 20,00 dp de ar em volta do glifo (hamburguer e `criar` sao
+      // alvos de 64 com glifo de 24 centrado), e `layout.margem-celular` do
+      // design system fixa a margem lateral da tela em **16 dp**, que e a
+      // mesma do corpo (`EdgeInsets.all(e4)`). A foto era o unico controle da
+      // tela encostado na borda, e foi isso que o cliente leu como desalinho.
+      //
+      // **O `Padding` por fora foi medido e recusado**: com
+      // `EdgeInsets.only(right: 8)` o circulo chega aos 16,00 dp, o alvo
+      // inteiro anda para 264..312 e o lado direito passa a custar 56 dp --
+      // o titulo de `Rede` e `Perto` cai de 144,00 para 136,00 dp e **`Rede`
+      // (138,32 dp a 200%) passa a sair com reticencia**. Pagar a margem com
+      // o titulo e desfazer o `titleSpacing: 0` de 19/10 pelo outro lado.
+      //
+      // Aqui o alvo continua 272..320 -- 48 x 48, que e o piso do M3 e do
+      // SC 2.5.8 e o que o briefing desta foto fixou (o 11.23.1 pede 64 em
+      // controle de canto, e a excecao esta explicada no cabecalho desta
+      // classe) -- e o circulo anda para 272..304: 16,00 dp de margem visual,
+      // orcamento de titulo intacto. O alvo deixa de ser
+      // concentrico com o glifo -- os 16 dp a mais ficam ENTRE o circulo e a
+      // borda da tela, onde nao ha outro controle para roubar o toque.
+      padding: const EdgeInsets.only(
+        right: BichuLayout.margemCelular,
+        top: BichuEspaco.e2,
+        bottom: BichuEspaco.e2,
+      ),
       onPressed: aoTocar,
       icon: _MarcaNeutra(inicial: inicial),
     );
@@ -1361,6 +1478,7 @@ class _MarcaNeutra extends StatelessWidget {
 
     return ExcludeSemantics(
       child: Container(
+        key: AvatarDaConta.chaveDoCirculo,
         width: 32,
         height: 32,
         decoration: BoxDecoration(

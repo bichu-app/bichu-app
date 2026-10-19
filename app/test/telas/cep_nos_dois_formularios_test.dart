@@ -191,11 +191,14 @@ Future<void> _abrirAIndicacao(
   bool cepFora = false,
 }) async {
   await abrirPerto(tester, rede: _rede(registro, cepFora: cepFora));
-  // A porta do `Perto` deixou de ser o botao de largura total do corpo em
-  // 18/10/2026 e passou a ser o icone de pessoas da BARRA DE TOPO: o texto
-  // `Indicar quem atende bem` nao esta mais na tela, e `tocar` sobre ele
-  // estourava `Bad state: No element`. `abrirAPorta` mora em
-  // `sugerir_profissional_test.dart` justamente para a porta ter um lugar so.
+  // A porta do `Perto` mudou de forma duas vezes: deixou de ser o botao de
+  // largura total do corpo em 18/10/2026 e virou icone da BARRA DE TOPO, e em
+  // 19/10 saiu da barra e virou ACAO FLUTUANTE no corpo (decisao do cliente:
+  // *"O botao criar sai da barra"*). O texto `Indicar quem atende bem` nao
+  // esta na tela em nenhuma das duas, e `tocar` sobre ele estourava `Bad
+  // state: No element`. `abrirAPorta` mora em
+  // `sugerir_profissional_test.dart` justamente para a porta ter um lugar so
+  // -- e e por isso que as duas mudancas custaram UMA edicao aqui: nenhuma.
   await abrirAPorta(tester);
   expect(find.byType(TelaSugerirProfissional), findsOneWidget);
 }

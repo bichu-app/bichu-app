@@ -1417,7 +1417,32 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = '32769dcfb795143f98d911f430c0b2dae2fbdd58'; // LOTE DE 19/10/2026 (ate reabrir-caso-de-perdido): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 5d91124f9101c6b972982385a340418daa4fdca6, 4d66551db6fef958f5c0f42a84913e48bfcc0481. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo 32769dcfb7] LOTE DE 19/10/2026 (ate reabrir-caso-de-perdido): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 5d91124f9101c6b972982385a340418daa4fdca6, 4d66551db6fef958f5c0f42a84913e48bfcc0481. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **Destravado pelos TRES ITENS DE NAVEGACAO de 18/10/2026** (pedido do
+/// cliente: glifo em todo subitem da gaveta, `Meus dados` fora de `Pets` e de
+/// `Perto`, e a margem direita da foto da barra de topo). Mexeu em dois
+/// arquivos de `lib/telas`: `gaveta_de_secoes.dart` (o campo `icone` com a
+/// assercao que cobra glifo em item vivo, os quatro glifos, a saida de
+/// `Meus dados` dos globais e a guarda do filete) e `casca_com_abas.dart` (a
+/// margem INTERNA de 16 dp no alvo da foto, mais a chave do circulo para o
+/// portao poder medir desenho e alvo separados).
+///
+/// Valor **recalculado pelo procedimento deste proprio portao** sobre a
+/// arvore de trabalho -- `GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse <arvore>:app/lib/telas` --, e nao copiado de ramo nem de
+/// relato. Anterior: `145640db9f`.
+/// [lado do ramo, valor de ramo 66fb4850a1] SINO NA BARRA E `criar` FLUTUANTE (19/10/2026, decisao do cliente: *"O botao criar sai da barra"*): `casca_com_abas.dart` monta `SinoDeNotificacoes` no `actions`, tira a porta de criar de la e a desenha no `floatingActionButton`, com respiro de 72 dp no pe da lista; `abas.dart` passa a entregar `AcaoDeCriarFlutuante` (o arquivo do widget mudou de nome e mora em `app/lib/widgets`, fora desta arvore). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 818971c53b). Antes dele: NAVEGACAO DE 18/10/2026 (icones na gaveta, `Meus dados` fora de Pets/Perto, margem da foto); antes: UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = '1959197b9604bfd136bfc160a099ed66427da947'; // LOTE DE 19/10/2026 (ate sino-na-barra-e-criar-flutuante): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 32769dcfb795143f98d911f430c0b2dae2fbdd58, 66fb4850a1e3e6e20263a8760faf960db81867d9. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

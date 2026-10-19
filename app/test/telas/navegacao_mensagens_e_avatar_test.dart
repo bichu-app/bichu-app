@@ -11,6 +11,11 @@
 //   2. A secao de mensagens entrou no slot que era do `Perfil`.
 //   3. A foto aparece na barra de topo de toda tela de secao.
 //   4. A gaveta ficou FIXA, inclusive nas secoes que nao tem submenu proprio.
+//   5. **O SINO DE NOTIFICACOES ENTROU NA BARRA** (grupo (b2)), e com ele
+//      entrou a unica porta da caixa de avisos. Ele estava construido e
+//      comentado desde 18/10 por falta de espaco, e desceu quando o cliente
+//      decidiu o que sai: *"O botao criar sai da barra"*. Um sino que exista
+//      e nao abra nada deixa a caixa inalcancavel sem erro nenhum na tela.
 //
 // Cada grupo abaixo e uma isca: ele falha quando a coisa que ele afirma for
 // desligada. Nenhum deles confere PRESENCA sozinha -- o grupo da barra mede
@@ -24,6 +29,7 @@
 // rota de verdade, e e o unico caso deste arquivo que muda.
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
+import 'package:bichu/telas/notificacoes/caixa_de_notificacoes.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/telas/pet/tela_detalhe_do_pet.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
@@ -353,6 +359,257 @@ void main() {
             find.text('Entrar').evaluate().isNotEmpty,
         isTrue,
         reason: 'REPROVA: a foto deslogada nao leva a uma tela com `Entrar`.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // (b2) O SINO DE NOTIFICACOES — A ISCA (c) DE 19/10
+  //
+  // Pedido dele (19/10): *"na barra principal crie um icone de notificacao
+  // para alertar o usuario sobre os posts dos seus amigos e sobre informacoes
+  // sistemicas e comunicados de eventos, etc."*
+  //
+  // O sino estava CONSTRUIDO e COMENTADO desde 18/10, parado por falta de
+  // espaco na barra. Ele desceu quando o cliente decidiu o que sai: *"O botao
+  // criar sai da barra"*. Este grupo e reaproveitado da branch
+  // `feat/navegacao-mensagens-e-avatar` (commit `0f34de5d`), que ja o havia
+  // escrito -- a ordem, o alvo, o rotulo e a prova do numero nao inventado sao
+  // dela. **O que foi acrescentado aqui** e o destino: naquela branch
+  // `RotasDaCaixa` nao existia e o toque caia na tela da conta; hoje a caixa
+  // existe e o caso exige chegar nela.
+  //
+  // DESLIGAMENTO: comente `const SinoDeNotificacoes(),` no `actions` de
+  // `TelaDeAba` (`app/lib/telas/casca_com_abas.dart`), que e como ele estava
+  // ate hoje. Os casos deste grupo reprovam.
+  group('(b2) o sino de notificacoes', () {
+    testWidgets('o sino esta na barra, ANTES da foto, em toda secao',
+        (tester) async {
+      // O lado direito e sino + foto, e a ordem importa: a foto e o controle
+      // mais estavel da barra e fecha ela.
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.byType(NavigationDestination).at(i));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(SinoDeNotificacoes),
+          findsOneWidget,
+          reason: 'REPROVA: a secao do slot $i abriu sem o sino. Ele e da '
+              'barra principal, em toda tela de secao.',
+        );
+        // O GLIFO, e nao so o widget: `SinoDeNotificacoes` devolve
+        // `SizedBox.shrink` quando nao ha sessao, e um caso que olhasse so o
+        // tipo ficaria verde com a barra sem sino nenhum pintado.
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byIcon(Icons.notifications_outlined),
+          ),
+          findsOneWidget,
+          reason: 'REPROVA: no slot $i o sino esta na arvore e nao PINTA '
+              'nada. Com sessao ele desenha o glifo; sem sessao ele encolhe, '
+              'e este caso esta logado.',
+        );
+
+        final barra = tester.widget<AppBar>(find.byType(AppBar));
+        final acoes = barra.actions ?? const <Widget>[];
+        final posSino = acoes.indexWhere((a) => a is SinoDeNotificacoes);
+        final posFoto = acoes.indexWhere((a) => a is AvatarDaConta);
+        expect(
+          posSino,
+          isNonNegative,
+          reason: 'REPROVA: no slot $i o sino nao esta no `actions` da barra.',
+        );
+        expect(
+          posSino < posFoto,
+          isTrue,
+          reason: 'REPROVA: no slot $i o sino esta DEPOIS da foto. Ele entrou '
+              'no slot que a porta de criar deixou, que vinha antes dela.',
+        );
+      }
+    });
+
+    testWidgets('ISCA: o sino LEVA a caixa de avisos', (tester) async {
+      // **A isca que mais importa deste grupo.** Um sino que existe e nao
+      // abre nada e um controle que promete: a tela continua montando, a
+      // suite continua verde e a caixa de avisos fica inalcancavel -- ela nao
+      // tem nenhuma outra porta no app.
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+
+      await tester.tap(find.byIcon(Icons.notifications_outlined));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(CaixaDeNotificacoes),
+        findsOneWidget,
+        reason: 'REPROVA: tocar no sino nao abriu a caixa de avisos '
+            '(`${RotasDaCaixa.caixa}`). O sino e a UNICA porta dela: sem este '
+            'toque a tela existe, a rota existe e ninguem chega la.',
+      );
+    });
+
+    testWidgets('o sino NAO aparece sem sessao', (tester) async {
+      // Notificacao e sobre o que aconteceu com a SUA rede, e sem conta nao
+      // ha rede nem o que contar. E a mesma regua das acoes de criar. O
+      // leitor de QR e a excecao conhecida, e por outro motivo.
+      await abrirOApp(tester, rede: _semPet);
+
+      expect(
+        find.byType(SinoDeNotificacoes),
+        findsOneWidget,
+        reason: 'REPROVA: o widget do sino nao esta na arvore nem para '
+            'decidir se aparece. Ele e montado SEMPRE; quem decide se pinta e '
+            'ele proprio, pela sessao.',
+      );
+      expect(
+        find.byIcon(Icons.notifications_outlined),
+        findsNothing,
+        reason: 'REPROVA: o sino APARECE deslogado. Sem conta nao ha rede '
+            'nem o que contar, e um sino que nunca tem numero e um controle '
+            'que promete.',
+      );
+      // **A PROVA DE QUE O ESTADO E O QUE EU PENSO, e ela e POSITIVA.**
+      //
+      // Sem ela este caso ficaria verde num app logado em que o sino sumiu
+      // por outro motivo -- e `abrirOApp` sem deposito e exatamente o ponto
+      // em que um descuido de arranque deixa a sessao de pe sem ninguem
+      // notar. **Nao serve medir o glifo de pessoa da foto:**
+      // `depositoLogado()` nao da nome ao usuario, entao a foto desenha o
+      // mesmo glifo nos DOIS estados.
+      //
+      // O que distingue de verdade: a tela da conta oferece `Entrar` a quem
+      // nao tem sessao, e `Sair da conta` a quem tem.
+      await tester.tap(find.byType(AvatarDaConta));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Entrar'),
+        findsWidgets,
+        reason: 'REPROVA: este caso NAO esta deslogado -- a tela da conta nao '
+            'oferece `Entrar`. Entao a ausencia do sino, medida acima, nao '
+            'prova nada sobre a regra de sessao.',
+      );
+      expect(
+        find.widgetWithText(ItemDeMenu, 'Sair da conta'),
+        findsNothing,
+        reason: 'REPROVA: este caso NAO esta deslogado -- a tela da conta '
+            'oferece `Sair da conta`.',
+      );
+    });
+
+    testWidgets('alvo de 48 dp e rotulo acessivel "Notificações"',
+        (tester) async {
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+
+      final tamanho = tester.getSize(find.byType(SinoDeNotificacoes));
+      expect(
+        tamanho.width,
+        greaterThanOrEqualTo(SinoDeNotificacoes.alvo),
+        reason: 'REPROVA: o sino mede ${tamanho.width} dp de largura, abaixo '
+            'do piso de ${SinoDeNotificacoes.alvo} dp (SC 2.5.8).',
+      );
+      expect(
+        tamanho.height,
+        greaterThanOrEqualTo(SinoDeNotificacoes.alvo),
+        reason: 'REPROVA: o sino mede ${tamanho.height} dp de altura.',
+      );
+      expect(
+        find.byTooltip(SinoDeNotificacoes.rotuloBase),
+        findsOneWidget,
+        reason: 'REPROVA: o sino nao anuncia '
+            '"${SinoDeNotificacoes.rotuloBase}". Um sino com bolinha '
+            'vermelha nao diz nada para quem nao ve -- e e o nome acessivel '
+            'que o distingue do balao de `AuAu` na barra de baixo.',
+      );
+    });
+
+    testWidgets('o nome acessivel CHEGA a arvore de semantica, e nao fica '
+        'vazio', (tester) async {
+      // **Rotulo de semantica VAZIO ja passou vacuamente neste
+      // repositorio.** Por isso este caso nao pergunta "o tooltip existe no
+      // fonte": ele varre a arvore de semantica e exige um no cujo nome seja
+      // EXATAMENTE a palavra. Nenhum no sem nome satisfaz isso.
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+
+      final nos = todosOsNos(tester).where(
+        (n) =>
+            n.label == SinoDeNotificacoes.rotuloBase ||
+            n.tooltip == SinoDeNotificacoes.rotuloBase,
+      ).toList();
+      expect(
+        nos,
+        isNotEmpty,
+        reason: 'REPROVA: nao ha no de semantica chamado exatamente '
+            '"${SinoDeNotificacoes.rotuloBase}". O glifo do sino e a unica '
+            'pista do que o controle faz, e sem este nome quem usa TalkBack '
+            'ou VoiceOver ouve so "botao" (SC 4.1.2).',
+      );
+      for (final no in nos) {
+        final dados = no.getSemanticsData();
+        expect(
+          dados.flagsCollection.isButton,
+          isTrue,
+          reason: 'REPROVA: o sino nao se anuncia como botao.',
+        );
+        expect(
+          dados.hasAction(SemanticsAction.tap),
+          isTrue,
+          reason: 'REPROVA: o sino anuncia-se como botao e NAO carrega a acao '
+              'de toque. O leitor de tela oferece um controle que nao ativa.',
+        );
+      }
+      handle.dispose();
+    });
+
+    test('a contagem vai INTEIRA para o leitor de tela, e `9+` so no pintado',
+        () {
+      // O numero cru e o que importa para quem ouve: "12 novas" e informacao,
+      // "9+ novas" e a apresentacao vazando para o anuncio. **Um numero
+      // sozinho nao diz nada**, e e por isso que o rotulo carrega a palavra.
+      expect(SinoDeNotificacoes.rotuloCom(null), 'Notificações');
+      expect(SinoDeNotificacoes.rotuloCom(0), 'Notificações');
+      expect(SinoDeNotificacoes.rotuloCom(1), 'Notificações, 1 nova');
+      expect(SinoDeNotificacoes.rotuloCom(12), 'Notificações, 12 novas');
+
+      expect(SinoDeNotificacoes.distintivoDe(null), isNull);
+      expect(
+        SinoDeNotificacoes.distintivoDe(0),
+        isNull,
+        reason: 'REPROVA: zero pintou distintivo. **Nulo nao e zero**: nulo e '
+            '"ninguem contou ainda" e zero seria a afirmacao de que nao ha '
+            'nada -- e o app nao tem como saber disso, porque nada em `lib/` '
+            'chama `NotificacoesApi.contar()`.',
+      );
+      expect(SinoDeNotificacoes.distintivoDe(9), '9');
+      expect(
+        SinoDeNotificacoes.distintivoDe(12),
+        '9+',
+        reason: 'REPROVA: o distintivo pintado nao encurtou. O circulo nao '
+            'cresce, e por isso o pintado encurta e o anunciado nunca.',
+      );
+    });
+
+    testWidgets('SEM FONTE, o sino nao pinta numero nenhum', (tester) async {
+      // **A isca do numero inventado.** MEDIDO em 19/10: a rota existe
+      // (`GET /v1/me/notifications/count`) e `NotificacoesApi.contar()` a
+      // embrulha, mas **nenhuma linha de `lib/` a chama** -- nao ha objeto de
+      // contagem no app para a barra ler. Enquanto nao houver, o sino fica
+      // SEM numero: contador que mostra zero quando ha coisa e pior que
+      // contador ausente, e somar no aparelho divergiria entre dois aparelhos
+      // da mesma pessoa.
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+
+      expect(
+        find.descendant(
+          of: find.byType(SinoDeNotificacoes),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o sino pinta um numero sem fonte que o produza. '
+            'Quando a contagem descer, o numero entra por `naoLidas` na linha '
+            'de `TelaDeAba.actions`; ate la, nao se inventa.',
       );
     });
   });

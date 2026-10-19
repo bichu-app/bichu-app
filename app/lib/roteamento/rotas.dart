@@ -186,11 +186,14 @@ abstract final class Rotas {
   ///
   /// Mesmo valor de `RotasDaCaixa.caixa`, pela razao da constante acima.
   ///
-  /// **O SINO NAO ESTA MONTADO**, de proposito: montar corta o titulo de
-  /// `Rede` e `Perto`, e a decisao de qual controle sai da barra e do cliente
-  /// e esta pendente. A rota fica registrada de qualquer forma -- sem ela, o
-  /// dia em que ele decidir vira uma segunda rodada de fiacao, e o endereco
-  /// nao responderia nem por link direto.
+  /// **O SINO ESTA MONTADO desde 19/10/2026**, e o que destravou foi a
+  /// decisao do cliente sobre quem sai da barra para ele entrar: *"O botao
+  /// criar sai da barra"*. A rota ja estava registrada desde 18/10, com o
+  /// sino parado, e foi essa antecipacao que fez a ligacao caber numa linha.
+  ///
+  /// **O sino e a UNICA porta desta rota pelo app.** Ela continua
+  /// alcancavel por link direto, e `CaixaDeNotificacoes` desenha a propria
+  /// saida por isso.
   static const String notificacoes = '/notificacoes';
 
   /// `Pedidos de conexao` (18/10/2026): as duas caixas, recebidos e enviados.
@@ -882,8 +885,9 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               estado.pathParameters[RotasDeMensagens.parametroDaConversa]!,
         ),
       ),
-      // A CAIXA DE NOTIFICACOES. Registrada mesmo com o sino comentado, pela
-      // razao escrita em `Rotas.notificacoes`.
+      // A CAIXA DE NOTIFICACOES. Rota IRMA da casca: ela cobre a barra de
+      // baixo, de proposito, e o sino chega nela por `push` -- ver a razao em
+      // `SinoDeNotificacoes`.
       GoRoute(
         path: RotasDaCaixa.caixa,
         builder: (context, estado) => const CaixaDeNotificacoes(),
