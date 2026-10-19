@@ -469,8 +469,20 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // a barra nao e desenhada em alguns deles. Abas dentro da barra
             // sumiriam junto, e quem filtrou ate o vazio em `Encerrados`
             // ficaria sem como voltar para `Próximos`.
+            // **O GATILHO DE FILTRO E ORDEM VEM NA FRENTE DA BUSCA, na
+            // mesma linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
+            // sozinho aqui e o gatilho com rotulo abaixo das abas, desenhado
+            // pela barra; agora a linha e uma so e sobe inteira, acima do
+            // reforco e das abas, e a barra deixa de desenhar o gatilho por
+            // causa de `buscaAcima`.
             if (comControles) ...<Widget>[
-              CampoDeBuscaDaListagem(busca: busca),
+              LinhaDeBuscaDaListagem(
+                total: _total,
+                busca: busca,
+                filtro: filtro,
+                ordenacao: ordenacao,
+                aoAplicar: _aplicarAFolha,
+              ),
               const SizedBox(height: BichuEspaco.e4),
             ],
             // **Vazio nao desenha** (18/10/2026): a `Rede` manda

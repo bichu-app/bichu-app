@@ -1175,7 +1175,6 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-///
 /// DESTRAVADO EM 18/10 (a FOTO DO PERFIL DE QUEM NAO TEM NOME, defeito
 /// relatado pelo cliente contra homologacao). UM arquivo desta pasta muda:
 /// `perfil/tela_dados_pessoais.dart`, e a mudanca sao duas coisas -- uma
@@ -1211,7 +1210,39 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
 /// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
 /// a uniao. (antes: 145640db9f)
-const String _arvoreDasTelas = 'b476e764be1341b9fc408499e416ebb2bc0aae94'; // FOTO DO PERFIL SEM NOME (18/10/2026): valor MEDIDO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de relato. Valor de ramo isolado NAO sobrevive a uniao: quem mesclar recalcula.
+/// [lado da uniao, valor de ramo b476e764be] FOTO DO PERFIL SEM NOME (18/10/2026): valor MEDIDO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de relato. Valor de ramo isolado NAO sobrevive a uniao: quem mesclar recalcula.
+///
+/// DESTRAVADO EM 18/10 (BICHUS-62, os dois pedidos do cliente sobre o filtro
+/// das listagens). **Duas** telas desta pasta mudam, e as duas pela mesma
+/// razao: a linha de busca passou a levar o gatilho de filtro junto.
+/// `perdido/lista_de_perdidos.dart` e `rede/agenda_da_rede.dart` desenham a
+/// busca FORA da barra (`BarraDeListagem.buscaAcima`), e trocaram
+/// `CampoDeBuscaDaListagem` por `LinhaDeBuscaDaListagem` -- o campo com o
+/// gatilho so-icone na frente dele, na mesma linha. A listagem de perdidos tem
+/// mais tres edicoes, todas da janela de `period` que deixou de nascer em 30
+/// dias: a pastilha nasce sem selecao, limpar a pastilha nao repoe `30d`, e
+/// "recorte ativo" passou a ser "ha janela" em vez de "a janela nao e 30d".
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo em tela
+/// nenhuma -- `LinhaDeBuscaDaListagem` mora em `widgets/barra_de_listagem.dart`,
+/// que as duas telas JA importavam --, nenhum canal de plataforma, nenhuma
+/// permissao, nenhum `dart:io`. A camera continua atras da porta: este ramo nao
+/// encosta em `escanear/`.
+///
+/// Valor REPRODUZIDO por `git rev-parse HEAD:app/lib/telas` sobre o commit
+/// desta frente, e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a
+/// arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas`, e valor de
+/// ramo isolado nao sobrevive a uniao. (antes: 145640db9f)
+/// [lado do ramo, valor de ramo ac5e2a7c5f] BICHUS-62, 18/10/2026: o gatilho de filtro so-icone na frente da busca, e a pagina de pets sem janela por padrao. A justificativa esta inteira acima, e a da UNIAO DAS QUATORZE ficou junto com as anteriores.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas dos dois lados ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = 'dd731286dc70e5beb66c24768801ed02c93b8dd3'; // LOTE DE 19/10/2026 (filtros-por-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: b476e764be1341b9fc408499e416ebb2bc0aae94, ac5e2a7c5f7e610f85955bb1631db0c14f6c5a4c. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

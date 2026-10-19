@@ -55,11 +55,19 @@ enum JanelaDePerdidos {
   final String codigo;
   final String rotulo;
 
-  static JanelaDePerdidos de(String? codigo) {
+  /// A janela de um codigo, ou **nulo** quando nao ha codigo.
+  ///
+  /// **Nulo, e nao `trintaDias`** (cliente, 18/10/2026): *"a pagina de pets
+  /// nao deve trazer nenhum item do filtro por padrao, como esta atualmente
+  /// por ultimos 30 dias"*. Antes, limpar a pastilha de `Perdido desde`
+  /// voltava para `30d`, e a lista nascia recortada sem ninguem ter pedido.
+  /// Agora "nenhuma escolha" e um valor que o recorte sabe guardar, e ele nao
+  /// manda `period` nenhum.
+  static JanelaDePerdidos? de(String? codigo) {
     for (final j in JanelaDePerdidos.values) {
       if (j.codigo == codigo) return j;
     }
-    return JanelaDePerdidos.trintaDias;
+    return null;
   }
 }
 
@@ -188,7 +196,7 @@ class RecorteDePerdidos {
     this.bairro,
     this.especie,
     this.porte,
-    this.janela = JanelaDePerdidos.trintaDias,
+    this.janela,
     this.termo,
     this.pagina = 1,
   });
@@ -197,7 +205,14 @@ class RecorteDePerdidos {
   final String? bairro;
   final Especie? especie;
   final Porte? porte;
-  final JanelaDePerdidos janela;
+  /// A janela PEDIDA, ou nulo quando ninguem pediu nenhuma.
+  ///
+  /// **Nasce nula** (cliente, 18/10/2026): a pagina de pets abre sem filtro
+  /// nenhum aplicado. Nula, `period` fica FORA da consulta -- e e o servidor
+  /// que decide o que fazer com a ausencia, pelo `default: 30d` que o contrato
+  /// declara na rota. Mandar `30d` daqui era o app escolhendo um recorte que a
+  /// pessoa nao escolheu.
+  final JanelaDePerdidos? janela;
 
   /// Busca parcial por **nome do pet**. Nunca por código de tag: quando o
   /// texto digitado tem a forma de um código, o caminho é `GET /v1/tags/{code}`,
@@ -223,7 +238,7 @@ class RecorteDePerdidos {
     if (bairro != null && bairro!.trim().isNotEmpty) 'neighborhood': bairro!.trim(),
     if (especie != null) 'species': especie!.valor,
     if (porte != null) 'size': porte!.valor,
-    'period': janela.codigo,
+    'period': ?janela?.codigo,
     'q': ?termoLimpo,
     'page': '$pagina',
     'limit': '$limite',
@@ -234,7 +249,11 @@ class RecorteDePerdidos {
     Object? bairro = _naoMexer,
     Object? especie = _naoMexer,
     Object? porte = _naoMexer,
-    JanelaDePerdidos? janela,
+    // **Sentinela, e nao `JanelaDePerdidos?`**: com a janela podendo ser nula
+    // de verdade, `janela ?? this.janela` nao consegue LIMPA-LA -- passar nulo
+    // seria indistinguivel de nao passar nada, e tirar a pastilha de `Perdido
+    // desde` deixaria a janela anterior valendo.
+    Object? janela = _naoMexer,
     Object? termo = _naoMexer,
     int? pagina,
   }) {
@@ -244,7 +263,7 @@ class RecorteDePerdidos {
       bairro: v<String>(bairro, this.bairro),
       especie: v<Especie>(especie, this.especie),
       porte: v<Porte>(porte, this.porte),
-      janela: janela ?? this.janela,
+      janela: v<JanelaDePerdidos>(janela, this.janela),
       termo: v<String>(termo, this.termo),
       pagina: pagina ?? this.pagina,
     );
