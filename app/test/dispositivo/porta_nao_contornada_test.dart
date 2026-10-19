@@ -1175,7 +1175,28 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+/// DESTRAVADO EM 18/10 (BICHUS-62, os dois pedidos do cliente sobre o filtro
+/// das listagens). **Duas** telas desta pasta mudam, e as duas pela mesma
+/// razao: a linha de busca passou a levar o gatilho de filtro junto.
+/// `perdido/lista_de_perdidos.dart` e `rede/agenda_da_rede.dart` desenham a
+/// busca FORA da barra (`BarraDeListagem.buscaAcima`), e trocaram
+/// `CampoDeBuscaDaListagem` por `LinhaDeBuscaDaListagem` -- o campo com o
+/// gatilho so-icone na frente dele, na mesma linha. A listagem de perdidos tem
+/// mais tres edicoes, todas da janela de `period` que deixou de nascer em 30
+/// dias: a pastilha nasce sem selecao, limpar a pastilha nao repoe `30d`, e
+/// "recorte ativo" passou a ser "ha janela" em vez de "a janela nao e 30d".
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo em tela
+/// nenhuma -- `LinhaDeBuscaDaListagem` mora em `widgets/barra_de_listagem.dart`,
+/// que as duas telas JA importavam --, nenhum canal de plataforma, nenhuma
+/// permissao, nenhum `dart:io`. A camera continua atras da porta: este ramo nao
+/// encosta em `escanear/`.
+///
+/// Valor REPRODUZIDO por `git rev-parse HEAD:app/lib/telas` sobre o commit
+/// desta frente, e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a
+/// arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas`, e valor de
+/// ramo isolado nao sobrevive a uniao. (antes: 145640db9f)
+const String _arvoreDasTelas = 'ac5e2a7c5f7e610f85955bb1631db0c14f6c5a4c'; // BICHUS-62, 18/10/2026: o gatilho de filtro so-icone na frente da busca, e a pagina de pets sem janela por padrao. A justificativa esta inteira acima, e a da UNIAO DAS QUATORZE ficou junto com as anteriores.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
