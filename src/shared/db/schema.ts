@@ -137,8 +137,18 @@ export interface HandlesTable {
    * nos 180 dias (plano 4-C.7).
    */
   user_id: string | null;
-  /** Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui. */
-  claimed_at: ColumnType<Date, number | Date | string | undefined, number | Date | string>;
+  /**
+   * Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui.
+   *
+   * **A ESCRITA ACEITA `Date` E NADA MAIS**, e o estreitamento é a correção de
+   * um defeito medido em 18/10/2026: o tipo aceitava `number`, `atualizarPerfil`
+   * passava o `Instant` (milissegundos desde a época) e o Postgres recusava com
+   * `22008 date/time field value out of range` -- `PATCH /v1/me` com `handle`
+   * devolvia 500 em toda troca e toda escolha de apelido. `number` não servia
+   * para nada aqui: ninguém grava epoch nesta coluna de propósito, e o único
+   * efeito de aceitá-lo era deixar o erro compilar.
+   */
+  claimed_at: ColumnType<Date, Date | undefined, Date>;
 }
 
 export interface UserIdentitiesTable {

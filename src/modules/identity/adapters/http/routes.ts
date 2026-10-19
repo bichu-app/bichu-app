@@ -724,6 +724,20 @@ export function registrarRotasDeIdentidade(
       //
       // `undefined` nao mexe; `null` tira a foto; `upload_id` troca.
       if (corpo.photo_upload_id !== undefined) {
+        // A TRAVA DO NOME ANTES DA FOTO, e a ordem e o conserto.
+        //
+        // A trava ("nao atualiza o cadastro sem nome", cliente 18/10/2026)
+        // morava so em `atualizarMeuPerfil`, que roda DEPOIS e em outra
+        // transacao. O efeito medido na pilha de integracao em 18/10/2026: um
+        // `PATCH /v1/me` com so `photo_upload_id` -- que e exatamente o que o
+        // app manda ao subir a foto do perfil -- de uma conta sem nome
+        // CONFIRMAVA a foto, comitava, e depois devolvia
+        // `400 display_name required`. O `GET /v1/me` seguinte ja trazia
+        // `photo.status: "processing"`: o app dizia "nao deu" e a foto estava
+        // gravada. Em homologacao ha 2 contas sem nome, de 7.
+        //
+        // Cobrada aqui, nada e escrito e a resposta nomeia o campo a preencher.
+        await deps.auth.exigirNomeJaCadastrado(conta.id, corpo.display_name);
         await deps.auth.trocarMinhaFoto(conta.id, corpo.photo_upload_id, contextoDe(request));
       }
 

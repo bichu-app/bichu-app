@@ -179,6 +179,7 @@ import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/p
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
 import {
   registrarIntencaoDeCapaDaComunidade,
+  registrarIntencaoDaVitrineDoUsuario,
   registrarIntencaoDeFotoDoUsuario,
 } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { FotoDoProprioUsuario } from '../modules/media/application/foto-do-proprio-usuario.js';
@@ -742,7 +743,17 @@ export async function main(): Promise<void> {
         ids,
       }),
       vitrine: criarVitrineRepository(db, ids),
-      registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      // `registrarIntencaoDaVitrineDoUsuario`, E NAO a da capa do encontro.
+      //
+      // Era `registrarIntencaoDeCapaDaComunidade` aqui, e isso gravava
+      // `purpose = 'network_event'` na intencao da VITRINE. A assinatura das
+      // duas funcoes era identica, entao a troca compilou. Medido em
+      // 18/10/2026 contra a pilha de integracao: `POST
+      // /v1/me/showcase/photo-intents` devolvia `201` e `PUT /v1/me/showcase`
+      // devolvia `404` para a mesma `upload_id` -- nenhuma foto de vitrine
+      // podia ser salva, porque a confirmacao procura `purpose =
+      // 'user_showcase'`.
+      registrarIntencao: registrarIntencaoDaVitrineDoUsuario,
       db,
       clock: systemClock,
     }),

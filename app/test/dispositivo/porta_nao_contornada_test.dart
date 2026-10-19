@@ -1175,7 +1175,43 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DESTRAVADO EM 18/10 (a FOTO DO PERFIL DE QUEM NAO TEM NOME, defeito
+/// relatado pelo cliente contra homologacao). UM arquivo desta pasta muda:
+/// `perfil/tela_dados_pessoais.dart`, e a mudanca sao duas coisas -- uma
+/// constante de texto (`fotoPrecisaDoNome`) e uma guarda local no comeco de
+/// `_enviarAFoto`.
+///
+/// **O que o defeito era, medido e nao suposto.** O terceiro passo do envio da
+/// foto e `PATCH /v1/me` com `photo_upload_id`, e a decisao do cliente de
+/// 18/10/2026 -- *"nao permitir atualizar o cadastro, se nao tiver algum nome
+/// cadastrado"* -- vale para ele. Medido contra a pilha efemera de integracao,
+/// no commit `f8c74714` (o mesmo de `hml.bichu.app`), com uma conta de
+/// `display_name` nulo, que e o estado de 2 das 7 contas de homologacao:
+/// `400 {"errors":[{"field":"display_name","code":"required"}]}`. Do lado de ca
+/// isso chegava como `DesfechoDoEnvio.recusada`, que vira **"O envio foi
+/// recusado. Tente outra foto."** -- e nenhuma outra foto resolve. A pessoa
+/// trocava de arquivo a esmo sem descobrir que faltava o NOME.
+///
+/// A guarda nao afrouxa a trava do servidor: ela conta o que falta, antes de
+/// gastar a leitura do arquivo e dois pedidos de rede, e marca o campo do nome
+/// como o `Salvar` ja marcava. Medida em
+/// `test/telas/foto_do_usuario_e_selo_test.dart`, no grupo `o envio da propria
+/// foto sem nome na conta`, com contrapeso.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo, nenhum canal
+/// de plataforma, nenhuma permissao, nenhum `dart:io`. A camera continua atras
+/// da porta `CameraEGaleria` -- esta mudanca, alias, faz a tela ler MENOS da
+/// porta, porque ela para antes de pedir os bytes. O portao estrutural de
+/// diretivas deste mesmo arquivo responde por isso e passou.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
+/// a uniao. (antes: 145640db9f)
+const String _arvoreDasTelas = 'b476e764be1341b9fc408499e416ebb2bc0aae94'; // FOTO DO PERFIL SEM NOME (18/10/2026): valor MEDIDO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de relato. Valor de ramo isolado NAO sobrevive a uniao: quem mesclar recalcula.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

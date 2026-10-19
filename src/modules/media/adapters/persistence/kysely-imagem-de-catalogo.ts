@@ -123,6 +123,56 @@ export async function registrarIntencaoDeFotoDoUsuario(
     .execute();
 }
 
+/**
+ * A intencao de envio da VITRINE DE FOTOS DO USUARIO (18/10/2026).
+ *
+ * QUARTA FUNCAO, E ELA EXISTE PORQUE A AUSENCIA DELA ERA UM DEFEITO MEDIDO.
+ *
+ * Ate 18/10/2026 `api.ts` ligava a vitrine a
+ * `registrarIntencaoDeCapaDaComunidade`, que grava `purpose = 'network_event'`
+ * LITERAL. As duas funcoes tem a MESMA assinatura, entao a troca compilou e
+ * nenhum teste de unidade a enxergou. O resultado, medido contra a pilha de
+ * integracao: `POST /v1/me/showcase/photo-intents` respondia `201` com a chave
+ * certa (`people/original/...`) e a linha ia para o banco com
+ * `purpose = network_event`; `PUT /v1/me/showcase` procura o envio com
+ * `WHERE u.purpose = 'user_showcase'` (`kysely-vitrine.ts`), nao achava, e
+ * devolvia `404` -- isto e, **nenhuma foto de vitrine podia ser salva**.
+ *
+ * `purpose` chega pelo parametro, e com o tipo FECHADO no literal: e isso que
+ * faz esta funcao nao poder ser ligada no lugar das outras tres nem elas no
+ * lugar dela sem o compilador reclamar. Era a conferencia que faltava, e ela
+ * nao e um comentario.
+ */
+export async function registrarIntencaoDaVitrineDoUsuario(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+    readonly purpose: 'user_showcase';
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      // Do parametro, e nao um literal escrito aqui: o MESMO valor que o caso
+      // de uso usou para assinar (`PROPOSITO_DA_VITRINE`) e o que vai para a
+      // linha. Dois literais em dois arquivos foi o que divergiu.
+      purpose: nova.purpose,
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

@@ -719,6 +719,51 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
+  /**
+   * A TRAVA DO NOME, numa função só, para os DOIS atos de `PATCH /v1/me`.
+   *
+   * Decisão do cliente de 18/10/2026: *"não permitir atualizar o cadastro, se
+   * não tiver algum nome cadastrado"*. Ela vale para o corpo inteiro, e a foto
+   * faz parte do cadastro.
+   *
+   * ## POR QUE ELA PRECISOU SAIR DE DENTRO DE `atualizarMeuPerfil`
+   *
+   * Porque a rota faz dois atos, e eles estão em transações diferentes:
+   * `trocarMinhaFoto` primeiro, `atualizarMeuPerfil` depois. Com a trava só no
+   * segundo, um `PATCH` de conta sem nome **confirmava a foto, comitava, e
+   * depois devolvia 400**. Medido em 18/10/2026 na pilha de integração: a
+   * resposta era
+   * `400 {"errors":[{"field":"display_name","code":"required"}]}` e o `GET
+   * /v1/me` seguinte já trazia `photo.status: "processing"` -- a foto gravada
+   * por um pedido que o servidor disse ter recusado. É o pior dos dois mundos:
+   * o app diz "não deu" e o estado mudou.
+   *
+   * Chamada ANTES do primeiro ato, nada é escrito e a resposta é a mesma.
+   *
+   * `nomeNoCorpo` é o `display_name` do `PATCH`: presente (mesmo vazio) é o
+   * caso 1 -- quem está preenchendo o nome, e esse `PATCH` é justamente a saída
+   * de quem está sem nome, então a leitura não acontece e a regra de forma fica
+   * com `atualizarMeuPerfil`. Ausente é o caso 2, e aí a conta precisa já ter
+   * nome.
+   */
+  async function exigirNomeJaCadastrado(
+    userId: UserId,
+    nomeNoCorpo: string | null | undefined,
+  ): Promise<void> {
+    if (nomeNoCorpo !== undefined) return;
+    const antes = await deps.repositorio.buscarContaPorId(userId);
+    if (antes === undefined) throw problemas.naoAutenticado();
+    if ((antes.displayName ?? '').trim().length === 0) {
+      throw problemas.validacao([
+        {
+          field: 'display_name',
+          code: 'required',
+          message: 'Diga como você quer ser chamado para continuar.',
+        },
+      ]);
+    }
+  }
+
   return {
     async cadastrar(
       entrada: EntradaDeCadastro,
@@ -1322,19 +1367,11 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           : { handle: verificarApelido(campos.handle) }),
       };
 
-      if (campaNome === undefined) {
-        const antes = await deps.repositorio.buscarContaPorId(userId);
-        if (antes === undefined) throw problemas.naoAutenticado();
-        if ((antes.displayName ?? '').trim().length === 0) {
-          throw problemas.validacao([
-            {
-              field: 'display_name',
-              code: 'required',
-              message: 'Diga como você quer ser chamado para continuar.',
-            },
-          ]);
-        }
-      }
+      // A MESMA trava que a rota já cobrou antes da foto (`exigirNomeJaCadastrado`).
+      // Ela continua AQUI, e não só na rota, porque é invariante do caso de uso:
+      // quem chamar `atualizarMeuPerfil` por outro caminho não pode escapar
+      // dela. Na rota ela roda primeiro para nada ser escrito antes da recusa.
+      await exigirNomeJaCadastrado(userId, campaNome);
 
       const conta = await deps.repositorio.atualizarPerfil(userId, camposParaGravar, agora);
       if (conta === undefined) throw problemas.naoAutenticado();
@@ -1354,6 +1391,16 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
 
       return conta;
     },
+
+    /**
+     * A trava do nome, exposta para a ROTA cobrá-la antes do primeiro ato.
+     *
+     * `PATCH /v1/me` faz dois atos em transações diferentes (a foto, depois os
+     * campos). Com a trava só no segundo, um `PATCH` de conta sem nome comitava
+     * a foto e devolvia 400 -- resposta de recusa com efeito gravado. Ver o
+     * cabeçalho de `exigirNomeJaCadastrado`.
+     */
+    exigirNomeJaCadastrado,
 
     /** A foto do perfil desta conta, para a resposta `Me`. */
     async minhaFoto(userId: UserId): Promise<FotoDoPerfil | null> {
