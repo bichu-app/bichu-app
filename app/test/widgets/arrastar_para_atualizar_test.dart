@@ -44,10 +44,22 @@
 //        que a medicao e da busca, e nao do widget.
 //  5. No mesmo arquivo, apague o `ScrollConfiguration` que impoe
 //     `AlwaysScrollableScrollPhysics`.
-//     -> **NAO REPROVA NADA DE WIDGET, e isso esta medido.** Ver o comentario
-//        dentro de `a lista de UM item tambem aceita o arrasto`. O unico caso
-//        que reprova e o de FONTE, `o componente impoe a fisica e o rotulo
-//        acessivel`.
+//     -> reprova o caso de FONTE `o componente impoe a fisica e o rotulo
+//        acessivel`. **Nenhum caso de widget reprova com a fisica AUSENTE, e
+//        isso continua medido** -- ver o comentario dentro de `a lista de UM
+//        item tambem aceita o arrasto`.
+//  5b. No mesmo arquivo, troque
+//     `const AlwaysScrollableScrollPhysics().applyTo(heranca.getScrollPhysics(context))`
+//     por `const AlwaysScrollableScrollPhysics()` (a forma SEM PAI, que e o
+//     defeito que o lote de 19/10 carregava).
+//     -> reprova `ISCA: a fisica do gesto tem PAI -- a secao DESCANSA depois
+//        do arrasto` aqui, e `ISCA: a rolada ate o fim DESCANSA no conteudo, e
+//        a pagina pedida FICA na tela` em
+//        `test/mensagens/busca_e_rolagem_da_area_test.dart`, junto com os
+//        quatro casos de rolagem e busca daquela pasta. O caso de FONTE do
+//        item 5 fica VERDE nos dois casos -- ele le a palavra
+//        `AlwaysScrollableScrollPhysics` na fonte, e a palavra esta nas duas
+//        formas. E por isso que ele nao basta.
 //  6. Em qualquer uma das onze telas, troque o componente por um
 //     `RefreshIndicator` cru.
 //     -> reprova `nenhuma tela usa RefreshIndicator cru`.
@@ -171,6 +183,97 @@ void main() {
             'gesto fica inerte.',
       );
     });
+
+    testWidgets(
+      'ISCA: a fisica do gesto tem PAI -- a secao DESCANSA depois do arrasto',
+      (tester) async {
+        // ===================================================================
+        // A ISCA QUE FALTAVA PARA O `ScrollConfiguration`, e ela nao e de
+        // widget na arvore: e de ONDE A LISTA VEM PARAR.
+        //
+        // O item 5 do cabecalho deste arquivo dizia que apagar o
+        // `ScrollConfiguration` nao reprovava nada de widget. Verdade -- e a
+        // lacuna nao era a presenca da fisica, era a FORMA dela.
+        // `AlwaysScrollableScrollPhysics` sobrescreve **um** metodo,
+        // `shouldAcceptUserOffset`; `applyBoundaryConditions` e
+        // `createBallisticSimulation` ela delega ao `parent`. Imposta pela
+        // `ScrollBehavior` (`copyWith(physics:)`), o `Scrollable` a usa
+        // VERBATIM -- `applyTo` so e chamado na fisica que vem pelo widget
+        // (`scrollable.dart`, `_updatePosition`). Sem pai, a subarvore inteira
+        // ficou sem limite (`applyBoundaryConditions` -> `0.0`) e sem repouso
+        // (`createBallisticSimulation` -> `null`): o dedo empurra a lista para
+        // fora do conteudo e **nada a traz de volta**.
+        //
+        // Medido antes do conserto, na area de mensagens: o arrasto para baixo
+        // deixava a lista em `pixels` = -280 para sempre, e a rolada ate o fim
+        // deixava `pixels` = 2940 com `maxScrollExtent` = 1177 e a janela num
+        // vazio. Isto vale nas ONZE superficies, e por isso o caso mora aqui e
+        // nao na tela.
+        //
+        // **Ele mede a REDE junto**, e a ordem importa: primeiro que o gesto
+        // refez a busca (senao um `pixels == 0` ficaria verde numa tela que
+        // nunca aceitou o arrasto), depois onde a lista descansou.
+        // ===================================================================
+        final pedidos = <Uri>[];
+        await abrirOApp(
+          tester,
+          deposito: depositoLogado(),
+          rede: (http.Request req) async {
+            if (req.url.path == '/v1/store/taxonomy') {
+              return json200(<String, dynamic>{
+                'categories': const <Map<String, dynamic>>[],
+              });
+            }
+            if (req.url.path == '/v1/store/items' && req.method == 'GET') {
+              pedidos.add(req.url);
+              return json200(_paginaDaLoja(20));
+            }
+            return problema('not-found', 404);
+          },
+        );
+        await abrirAAba(tester, 'Loja');
+        expect(
+          find.byType(CartaoDaLoja),
+          findsWidgets,
+          reason: 'REPROVA NA ANCORA: a vitrine nao carregou.',
+        );
+        final antes = pedidos.length;
+
+        await arrastarParaBaixo(tester);
+
+        // ---- ANCORA DE REDE: o gesto foi ACEITO e refez a busca ----
+        expect(
+          pedidos.length,
+          greaterThan(antes),
+          reason: 'REPROVA NA ANCORA: o arrasto nao refez a busca, e o '
+              'repouso medido abaixo seria o de uma lista que nunca saiu do '
+              'lugar.',
+        );
+
+        // ---- O REPOUSO: a lista VOLTOU ----
+        final posicao = tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position;
+        expect(
+          posicao.outOfRange,
+          isFalse,
+          reason: 'REPROVA: a secao ficou parada FORA do proprio conteudo '
+              'depois do arrasto -- `pixels` = ${posicao.pixels}, '
+              '`minScrollExtent` = ${posicao.minScrollExtent}, '
+              '`maxScrollExtent` = ${posicao.maxScrollExtent}. A fisica que '
+              '`ArrastarParaAtualizar` impoe perdeu o `parent`: sem ele nao '
+              'ha limite nem simulacao balistica, e a lista nao volta ao '
+              'topo depois de puxada. Vale nas ONZE superficies do gesto.',
+        );
+        expect(
+          posicao.pixels,
+          greaterThanOrEqualTo(posicao.minScrollExtent),
+          reason: 'REPROVA: a lista descansou ACIMA do proprio topo. Quem '
+              'puxa para atualizar fica com uma faixa vazia no alto da tela '
+              'que nao fecha mais.',
+        );
+      },
+    );
 
     testWidgets('a lista de UM item tambem aceita o arrasto', (tester) async {
       // A lista curta e o estado em que o gesto mais importa -- a de um item,

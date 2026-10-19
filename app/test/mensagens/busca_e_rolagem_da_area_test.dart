@@ -81,6 +81,22 @@ GoRoute rotaDoPerfilDeTeste_() => GoRoute(
       const Scaffold(body: Center(child: Text(marcaDoPerfilDeTeste))),
 );
 
+/// A posicao de rolagem DA LISTA, para medir onde ela veio parar.
+///
+/// `matchRoot` porque o `Scrollable` do `ListView` e ele mesmo na raiz da
+/// subarvore; e descendente do `ListView` e nunca `Scrollable.first` pela
+/// mesma razao de [rolarAteOFim] -- o campo de busca tem um `Scrollable`
+/// proprio, e ele vem antes na arvore.
+ScrollPosition posicaoDaLista(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+        matchRoot: true,
+      ),
+    )
+    .position;
+
 void main() {
   group('(3) rolagem infinita, de DEZ em DEZ', () {
     testWidgets(
@@ -235,6 +251,118 @@ void main() {
               'existe nesta tela.',
         );
         expect(textoDaTela(tester), contains('Achador 4  ·  Pet 4'));
+      },
+    );
+
+    testWidgets(
+      'ISCA: a rolada ate o fim DESCANSA no conteudo, e a pagina pedida FICA na tela',
+      (tester) async {
+        // =================================================================
+        // A ISCA DA FISICA DO GESTO, e ela mede REDE E REPOUSO JUNTOS.
+        //
+        // `ArrastarParaAtualizar` impoe `AlwaysScrollableScrollPhysics` pela
+        // `ScrollBehavior` desta subarvore. Essa classe sobrescreve **um**
+        // metodo, `shouldAcceptUserOffset`, e delega todo o resto ao `parent`
+        // -- entao, sem pai, `applyBoundaryConditions` cai no
+        // `ScrollPhysics` base e devolve `0.0` (nenhum limite) e
+        // `createBallisticSimulation` devolve `null` (nenhum repouso). A
+        // lista passa a rolar para fora do proprio conteudo e **fica la**.
+        //
+        // Medido nesta base, antes do conserto: depois de UMA rolada ate o
+        // fim, `pixels` = 2940 com `maxScrollExtent` = 1177, `outOfRange`
+        // verdadeiro, e **zero** `LinhaDaConversa` montada -- a janela parada
+        // num vazio depois do fim da lista. Com o pai composto: `pixels` =
+        // 1177 = `maxScrollExtent`, dentro do intervalo, sete linhas na tela.
+        //
+        // **As assercoes de REDE vem primeiro e sao a ancora.** Sem elas, um
+        // `findsWidgets` aqui ficaria verde numa tela que nunca pediu a
+        // pagina seguinte -- a primeira pagina sozinha tambem desenha linhas.
+        // Com elas, o caso afirma a coisa certa: as tres paginas FORAM
+        // pedidas, na ordem, por cursor, e o que chegou **esta na tela** em
+        // vez de ter sido rolado para fora de alcance.
+        // =================================================================
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            'GET /v1/conversations': (req) {
+              final cursor = req.url.queryParameters['cursor'];
+              if (cursor == null) {
+                return json200(
+                  paginaDeConversas(
+                    conversas(10),
+                    proximoCursor: 'cursor-da-pagina-2',
+                    total: 23,
+                  ),
+                );
+              }
+              if (cursor == 'cursor-da-pagina-2') {
+                return json200(
+                  paginaDeConversas(
+                    conversas(10, de: 11),
+                    proximoCursor: 'cursor-da-pagina-3',
+                    total: 23,
+                  ),
+                );
+              }
+              return json200(paginaDeConversas(conversas(3, de: 21), total: 23));
+            },
+          },
+        );
+        await abrirAMensagens(tester, servidor: servidor);
+        await rolarAteOFim(tester);
+
+        // ---- A REDE: a ancora, e ela e exata ----
+        final chamadas = servidor.chamadasA('GET /v1/conversations');
+        expect(
+          chamadas.map((c) => c.url.queryParameters['cursor']).toList(),
+          <String?>[null, 'cursor-da-pagina-2', 'cursor-da-pagina-3'],
+          reason: 'REPROVA NA ANCORA: a sequencia de cursores nao e a das '
+              'tres paginas na ordem. Sem ela o repouso medido abaixo nao '
+              'diria nada -- a tela poderia estar inteira com a primeira '
+              'pagina.',
+        );
+        for (final chamada in chamadas) {
+          expect(
+            chamada.url.queryParameters['limit'],
+            '10',
+            reason: 'REPROVA NA ANCORA: o incremento nao e de dez.',
+          );
+          for (final proibido in <String>['offset', 'page', 'skip']) {
+            expect(
+              chamada.url.queryParameters.containsKey(proibido),
+              isFalse,
+              reason: 'REPROVA NA ANCORA: a lista mandou `$proibido`. A '
+                  'paginacao e por cursor.',
+            );
+          }
+        }
+
+        // ---- O REPOUSO: o que o conserto conserta ----
+        final posicao = posicaoDaLista(tester);
+        expect(
+          posicao.outOfRange,
+          isFalse,
+          reason: 'REPROVA: a lista veio parar FORA do proprio conteudo e '
+              'ficou la -- `pixels` = ${posicao.pixels}, '
+              '`maxScrollExtent` = ${posicao.maxScrollExtent}. '
+              '`AlwaysScrollableScrollPhysics` sem `parent` nao tem limite '
+              '(`applyBoundaryConditions` devolve 0.0) nem repouso '
+              '(`createBallisticSimulation` devolve null): o dedo empurra a '
+              'lista para fora do fim e nada a traz de volta. Nas onze '
+              'superficies do gesto, nao so nesta.',
+        );
+        expect(
+          posicao.pixels,
+          lessThanOrEqualTo(posicao.maxScrollExtent),
+          reason: 'REPROVA: a janela parou depois do fim da lista.',
+        );
+        expect(
+          find.byType(LinhaDaConversa),
+          findsWidgets,
+          reason: 'REPROVA: as tres paginas foram pedidas (ancora acima) e a '
+              'tela esta VAZIA de conversas. A pessoa rolou, as chamadas '
+              'sairam, as respostas chegaram -- e ela esta olhando um vazio '
+              'depois do fim da lista, sem erro nenhum para ver.',
+        );
       },
     );
 

@@ -39,16 +39,40 @@ import 'package:flutter/material.dart';
 ///    ha excesso para notificar e o indicador nao dispara -- justamente na
 ///    lista de um item, na vazia e na que acabou de falhar.
 ///
-///    **O QUE NAO FOI PROVADO, e esta escrito porque nao foi:** nao consegui
-///    produzir um caso de widget que REPROVE com este `ScrollConfiguration`
-///    desligado. Medido duas vezes com a vitrine de UM item -- na plataforma
-///    padrao de `flutter test` (macOS, `BouncingScrollPhysics`) e com
-///    `TargetPlatform.android` forcado --, o arrasto refez a busca **nos dois
-///    casos, com e sem esta linha**. Entao a linha fica pela documentacao do
-///    componente do Material e nao por regressao medida, e o unico portao
-///    sobre ela e o de FONTE (`o componente impoe a fisica e o rotulo
-///    acessivel`, em `test/widgets/arrastar_para_atualizar_test.dart`). Quem
-///    tiver aparelho Android na mao e o unico que pode fechar essa lacuna.
+///    **ELA PRECISA DE UM `parent`, e a falta dele foi um defeito de
+///    verdade.** `AlwaysScrollableScrollPhysics` sobrescreve **um** metodo,
+///    `shouldAcceptUserOffset`; `applyBoundaryConditions` e
+///    `createBallisticSimulation` ela DELEGA ao `parent`. Sem pai, as duas
+///    caem no `ScrollPhysics` base e devolvem `0.0` (nenhum limite de
+///    rolagem) e `null` (nenhuma simulacao balistica) -- a subarvore inteira
+///    fica sem limite e sem repouso, e o dedo empurra a lista para fora do
+///    proprio conteudo sem nada a trazer de volta.
+///
+///    E ela NAO ganha pai sozinha. `ListView(physics: ...)` ganharia:
+///    `Scrollable._updatePosition` chama `applyTo` na fisica que vem **pelo
+///    widget**. A que vem pela `ScrollBehavior` (`copyWith(physics:)`) o
+///    `Scrollable` usa VERBATIM. Dai a composicao explicita acima.
+///
+///    **Medido no lote de 19/10, na area de mensagens, com a forma sem pai:**
+///    uma rolada ate o fim parava a janela em `pixels` = 2940 com
+///    `maxScrollExtent` = 1177 -- num vazio depois do fim da lista, com ZERO
+///    linha montada, as tres paginas pedidas e nenhum erro na tela. O arrasto
+///    para baixo deixava a lista em `pixels` = -320 para sempre, com uma
+///    faixa vazia no alto que nao fechava mais. Quatro casos de
+///    `test/mensagens/` reprovavam por isso.
+///
+///    **O QUE CONTINUA NAO PROVADO:** nenhum caso de widget reprova com este
+///    `ScrollConfiguration` AUSENTE. A lacuna e so da ausencia, e nao da
+///    forma: a forma errada agora reprova por `ISCA: a fisica do gesto tem
+///    PAI` e pelas iscas de `test/mensagens/`. A ausencia segue coberta so
+///    pelo portao de FONTE (`o componente impoe a fisica e o rotulo
+///    acessivel`) -- e esse portao fica verde nas DUAS formas, porque le a
+///    palavra e nao o comportamento.
+///
+///    **CORRECAO DE UMA AFIRMACAO ANTERIOR:** o cabecalho dizia que a
+///    plataforma padrao de `flutter test` e macOS com `BouncingScrollPhysics`.
+///    Medido: `flutter_test` forca `TargetPlatform.android`, e a fisica
+///    herdada sai `ClampingScrollPhysics -> RangeMaintainingScrollPhysics`.
 ///
 ///    O que **nao** muda com isso: a fisica mora aqui, e nao nos onze
 ///    `ListView`. Onze `physics:` escritos a mao seriam onze chances de
@@ -125,11 +149,16 @@ class ArrastarParaAtualizar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A FISICA HERDADA E O PAI, e nao um detalhe de estilo: ver o item 4 do
+    // cabecalho. `AlwaysScrollableScrollPhysics` sozinha nao TEM limite nem
+    // repouso -- ela so responde `shouldAcceptUserOffset`, e delega todo o
+    // resto ao pai.
+    final ScrollBehavior heranca = ScrollConfiguration.of(context);
     return ScrollConfiguration(
-      // Ver o item 4 do cabecalho: sem isto o gesto nao existe na lista que
-      // nao enche a tela.
-      behavior: ScrollConfiguration.of(context)
-          .copyWith(physics: const AlwaysScrollableScrollPhysics()),
+      behavior: heranca.copyWith(
+        physics: const AlwaysScrollableScrollPhysics()
+            .applyTo(heranca.getScrollPhysics(context)),
+      ),
       child: RefreshIndicator(
         // **SEM BUSCA, O GESTO NAO E ACEITO.** `Perfil` deslogado e a unica
         // raiz de secao cujo corpo nao pergunta nada ao servidor; ali a roda
