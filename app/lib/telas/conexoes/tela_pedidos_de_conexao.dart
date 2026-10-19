@@ -8,6 +8,7 @@ import '../../api/falhas.dart';
 import '../../api/modelos_conexao.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_segmentado.dart';
 
@@ -85,6 +86,9 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
   ResumoDeConexoes? _resumo;
   bool _carregando = true;
   String? _falha;
+
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   final Set<String> _emCurso = <String>{};
 
   @override
@@ -97,6 +101,7 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     setState(() {
       _carregando = true;
       _falha = null;
+      _faltaConta = false;
     });
     try {
       // As duas perguntas em paralelo: o resumo não atrasa nem derruba a lista,
@@ -121,11 +126,15 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
         _resumo = numeros;
         _carregando = false;
       });
-    } on FalhaDeChamada {
+    } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _carregando = false;
-        _falha = TelaDePedidosDeConexao.falhaAoCarregar;
+        // `next_action: sign_in` do servidor. Medido:
+        // `/v1/connections/requests` responde `401 unauthenticated`.
+        _faltaConta = faltaConta(falha);
+        _falha =
+            _faltaConta ? null : TelaDePedidosDeConexao.falhaAoCarregar;
       });
     }
   }
@@ -159,6 +168,23 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final itens = _pagina?.items ?? const <Conexao>[];
+
+    // SEM CONTA A TELA INTEIRA E O CONVITE, e o filtro de caixa **nao**
+    // aparece: dois segmentos que nao podem mudar nada sao um controle sem
+    // desfecho, a mesma regra pela qual `Minhas indicações` nao e desenhada
+    // deslogado. Nao ha `RefreshIndicator` tambem -- arrastar para atualizar
+    // repetiria o 401.
+    if (_faltaConta) {
+      return Scaffold(
+        appBar: AppBar(title: const Text(TelaDePedidosDeConexao.titulo)),
+        body: const SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(BichuEspaco.e4),
+            child: ConviteParaEntrar(secao: SecaoComConta.pedidosDeConexao),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text(TelaDePedidosDeConexao.titulo)),

@@ -59,6 +59,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_para_entrar.dart';
 
 /// Os enderecos da area de mensagens, num lugar so.
 ///
@@ -190,6 +191,9 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   bool _carregandoMais = false;
   String? _falha;
 
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
+
   /// O numero do sino, como o SERVIDOR mandou. Nunca contado aqui.
   ///
   /// Guardado mesmo sem o sino morar nesta tela: ele e da barra de topo, que e
@@ -209,6 +213,7 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     setState(() {
       _carregando = true;
       _falha = null;
+      _faltaConta = false;
     });
     try {
       final pagina = await _api.listar();
@@ -231,15 +236,23 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       // As marcas de nao lida das linhas na tela NAO mudam. "Lido" e o item
       // aberto, e a isca `abrir_a_lista_nao_marca_itens` reprova se mudarem.
       await _api.marcarListaVista();
-    } on FalhaDeChamada {
+    } on FalhaDeChamada catch (falha) {
       // A lista anterior e LIMPADA na primeira pagina, como as outras
       // listagens do app: a pessoa veria o resultado antigo como se fosse o
       // novo. O texto diz o que fazer.
+      //
+      // **O 401 NAO E UMA DESTAS FALHAS.** Esta tela nem consultava o
+      // catalogo de `MensagensDeErro`: ela escrevia a propria frase, e a
+      // frase manda `Toque em Tentar de novo` -- um conselho impossivel de
+      // seguir sem conta, porque a tentativa seguinte sai igualmente sem
+      // `Authorization`. Medido: `/v1/conversations` responde
+      // `401 unauthenticated` com `next_action: sign_in`.
       if (!mounted) return;
       setState(() {
         _conversas.clear();
         _carregando = false;
-        _falha = TextosDasMensagens.naoConseguimosCarregar;
+        _faltaConta = faltaConta(falha);
+        _falha = _faltaConta ? null : TextosDasMensagens.naoConseguimosCarregar;
       });
     } on FormatException {
       if (!mounted) return;
@@ -309,6 +322,18 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   Widget _corpo() {
     if (_carregando) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    // SEM CONTA NAO E ERRO, e vem antes de tudo: nao ha lista para mostrar,
+    // nao ha `Tentar de novo` que funcione, e o que a pessoa precisa saber e
+    // o que esta secao e.
+    if (_faltaConta) {
+      return ListView(
+        padding: const EdgeInsets.all(BichuEspaco.e4),
+        children: const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.mensagens),
+        ],
+      );
     }
 
     final falha = _falha;

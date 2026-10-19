@@ -1329,7 +1329,18 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = 'fcd3d1b1f76bbbba40380daa188cc0817969732a'; // LOTE DE 19/10/2026 (ate achado-rico-e-loja-sem-preco): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: f2c3b9209ae248af53da714481c47236dfb26233, 6a089b729b6c275ee46105fda9738069d886ec72. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo fcd3d1b1f7] LOTE DE 19/10/2026 (ate achado-rico-e-loja-sem-preco): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: f2c3b9209ae248af53da714481c47236dfb26233, 6a089b729b6c275ee46105fda9738069d886ec72. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// [lado do ramo, valor de ramo e6dcbd496e] ESTADO DE DESLOGADO (19/10/2026, pedido do cliente: *"tem que ter uma pagina de deslogado, nao da para mostrar so uma mensagem de erro para atualizar"*): nove telas de `app/lib/telas` passam a desenhar `ConviteParaEntrar` no 401 em vez de faixa de erro com `Atualizar` -- `perto/lista_do_diretorio.dart`, `mensagens/area_de_mensagens.dart`, `notificacoes/caixa_de_notificacoes.dart`, `perfil/meus_pets.dart`, `perfil/meus_achados.dart`, `perfil/vitrine_de_fotos.dart`, `conexoes/tela_pedidos_de_conexao.dart`, `perto/pagina_do_local.dart` e `mensagens/tela_da_conversa.dart`. Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- com as CHAVES, porque em zsh `$T:app/...` aplica o modificador `:a` e devolve caminho absurdo em silencio), e nao copiado de ramo nem de relato. Valor velho: `145640db`, que e a arvore de `origin/development`. **QUEM MESCLAR RECALCULA sobre a arvore MESCLADA**: valor de ramo isolado nao sobrevive a uniao, e seis ramos desta rodada mexeram neste campo. // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = '5d91124f9101c6b972982385a340418daa4fdca6'; // LOTE DE 19/10/2026 (ate estado-deslogado-nas-secoes): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: fcd3d1b1f76bbbba40380daa188cc0817969732a, e6dcbd496e15b81b3ef34181ce62c59da45e07ed. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

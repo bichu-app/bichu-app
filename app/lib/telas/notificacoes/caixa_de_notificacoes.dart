@@ -91,6 +91,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -166,6 +167,9 @@ enum _Fase { carregando, lista, falha }
 
 class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   _Fase _fase = _Fase.carregando;
+
+  /// A falha da lista foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   List<AvisoDaCaixa> _itens = const <AvisoDaCaixa>[];
   int _total = 0;
   int _pagina = 1;
@@ -215,6 +219,7 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     setState(() {
       _fase = _Fase.carregando;
       _falhaDaLista = null;
+      _faltaConta = false;
       _falhaDeMais = null;
       _falhaDaAcao = null;
     });
@@ -234,6 +239,8 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
       if (!mounted) return;
       setState(() {
         _fase = _Fase.falha;
+        // `next_action: sign_in` do servidor, e nao um `switch` em 401.
+        _faltaConta = faltaConta(falha);
         _falhaDaLista = MensagensDeErro.de(falha).texto;
       });
     } on FormatException {
@@ -359,6 +366,13 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
       case _Fase.carregando:
         return const Center(child: CircularProgressIndicator());
       case _Fase.falha:
+        // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
+        if (_faltaConta) {
+          return const Padding(
+            padding: EdgeInsets.all(BichuEspaco.e4),
+            child: ConviteParaEntrar(secao: SecaoComConta.notificacoes),
+          );
+        }
         return Padding(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           child: FaixaDeAviso(

@@ -13,6 +13,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/grupo_de_opcoes.dart';
@@ -289,6 +290,8 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   PaginaDeAvaliacoes? _paginaDeAvaliacoes;
   OrdemDasAvaliacoes _ordem = OrdemDasAvaliacoes.recentes;
   bool _carregandoAvaliacoes = false;
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   String? _falhaDasAvaliacoes;
   bool _carregandoMais = false;
   String? _falhaDeMais;
@@ -374,6 +377,9 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         return;
       }
       setState(() {
+        // `next_action: sign_in` do servidor. Medido:
+        // `/v1/directory/entries/{slug}` responde `401 unauthenticated`.
+        _faltaConta = faltaConta(falha);
         _textoDaFalha =
             textoDoTetoDoDiretorio(falha) ?? MensagensDeErro.de(falha).texto;
         _detalhe = null;
@@ -382,6 +388,7 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
+        _faltaConta = faltaConta(falha);
         _textoDaFalha = MensagensDeErro.de(falha).texto;
         _detalhe = null;
         _fase = _Fase.falha;
@@ -768,6 +775,12 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
 
     if (_fase == _Fase.falha || detalhe == null) {
+      // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
+      if (_faltaConta) {
+        return const <Widget>[
+          _Margem(child: ConviteParaEntrar(secao: SecaoComConta.paginaDoLocal)),
+        ];
+      }
       return <Widget>[
         _Margem(
           child: FaixaDeAviso(

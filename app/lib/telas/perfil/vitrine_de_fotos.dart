@@ -7,6 +7,7 @@ import '../../dispositivo/camera_e_galeria.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/imagem_da_rede.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
@@ -93,6 +94,9 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   String? _falha;
   bool _carregando = true;
 
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
+
   @override
   void initState() {
     super.initState();
@@ -103,6 +107,7 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     setState(() {
       _carregando = true;
       _falha = null;
+      _faltaConta = false;
     });
     try {
       final vitrine = await widget.api.minhaVitrine();
@@ -118,6 +123,12 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
         // carregar" sao coisas diferentes, e a segunda tem botao de tentar de
         // novo. Mostrar o vazio no lugar do erro faria a pessoa achar que as
         // fotos dela sumiram.
+        // **O 401 DEIXAVA ESTA TELA SEM FRASE NENHUMA.** O catalogo devolve
+        // `texto: ''` para `unauthenticated` desde 18/10, e `_erro` desenhava
+        // esse vazio seguido de um `Tentar de novo` -- um botao solto embaixo
+        // de nada. Medido: `/v1/me/showcase` responde `401 unauthenticated`
+        // com `next_action: sign_in`.
+        _faltaConta = faltaConta(falha);
         _falha = MensagensDeErro.de(falha).texto;
         _carregando = false;
       });
@@ -154,6 +165,9 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             const SizedBox(height: BichuEspaco.e4),
             if (_carregando)
               const Center(child: Padding(padding: EdgeInsets.all(BichuEspaco.e4), child: CircularProgressIndicator()))
+            // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
+            else if (_faltaConta)
+              const ConviteParaEntrar(secao: SecaoComConta.minhasFotos)
             else if (_falha != null)
               _erro(_falha!, cores, textos)
             else
