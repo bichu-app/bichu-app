@@ -262,11 +262,31 @@ function conferirInvariante(codigoDeSaida, reprovados) {
  *
  * `# Subtest: <nome>` e a linha que o distingue: num arquivo exercitado o nome
  * e o do CASO; num arquivo vazio o nome e o CAMINHO que se passou ao runner.
+ *
+ * SO O QUE PASSOU, e a restricao foi MEDIDA e nao suposta.
+ * ---------------------------------------------------------------------------
+ * O runner tambem reporta um teste com o nome do caminho quando o arquivo
+ * produziu casos E falhou no nivel do ARQUIVO -- processo que nao encerra
+ * limpo, excecao fora de caso. Medido em 19/10 na primeira execucao com a
+ * esteira enxergando de novo:
+ *
+ *   not ok 39 - dist/_tests/tests/integration/troca-de-email.test.js
+ *
+ * Aquele arquivo tinha 11 casos e todos reprovaram. Casar pelo nome e mais
+ * nada acusava-o de "nenhum caso", que e falso, e mandava procurar arquivo
+ * vazio onde o defeito era outro -- portao que mente sobre o motivo gasta o
+ * tempo de quem o atende e perde a confianca que o faz ser lido.
+ *
+ * `ok` e nao `not ok` e o que separa os dois: um arquivo reportado pelo
+ * proprio caminho e APROVADO nao exercitou nada e nada mais o acusa -- e e
+ * exatamente a forma silenciosa que esta regra existe para pegar. Reportado
+ * pelo caminho e REPROVADO, ele ja esta contado em `# fail`, e a mensagem
+ * certa para ele e a de reprovacao.
  */
 function arquivosSemCaso(tap, caminhos) {
-  const nomes = new Set();
-  for (const casado of tap.matchAll(/^# Subtest: (.*)$/gm)) nomes.add(casado[1]);
-  return caminhos.filter((c) => nomes.has(c));
+  const aprovadosPeloCaminho = new Set();
+  for (const casado of tap.matchAll(/^ok \d+ - (.*)$/gm)) aprovadosPeloCaminho.add(casado[1]);
+  return caminhos.filter((c) => aprovadosPeloCaminho.has(c));
 }
 
 // ===========================================================================
@@ -297,6 +317,8 @@ function autoteste() {
 
   const CAMINHO = `${COMPILADO}/vazio.test.js`;
   const TAP_DO_ARQUIVO_VAZIO = `TAP version 13\n# Subtest: ${CAMINHO}\nok 1 - ${CAMINHO}\n1..1\n# tests 1\n# pass 1\n# fail 0\n`;
+  /** O caso medido: arquivo com 11 casos, todos reprovados, reportado pelo caminho. */
+  const TAP_DO_ARQUIVO_REPROVADO = `TAP version 13\n# Subtest: ${CAMINHO}\nnot ok 39 - ${CAMINHO}\n1..39\n# tests 39\n# pass 0\n# fail 39\n`;
   const TAP_DO_ARQUIVO_CHEIO =
     'TAP version 13\n# Subtest: grava o apelido como texto\nok 1 - grava o apelido como texto\n1..1\n# tests 1\n# pass 1\n# fail 0\n';
 
@@ -313,7 +335,7 @@ function autoteste() {
       placar(TAP_VAZIO).passaram === 0, true],
     ['ISCA: ZERO casos executados fica ABAIXO do piso de 44 arquivos',
       (placar(TAP_VAZIO).total ?? 0) < 44, true],
-    ['ISCA: arquivo reportado com o nome do proprio caminho (zero caso) e acusado',
+    ['ISCA: arquivo APROVADO com o nome do proprio caminho (zero caso) e acusado',
       arquivosSemCaso(TAP_DO_ARQUIVO_VAZIO, [CAMINHO]).length > 0, true],
     ['ISCA: placar ausente REPROVA -- relatorio sem `# tests`',
       placar('TAP version 13\n').total === undefined, true],
@@ -325,6 +347,11 @@ function autoteste() {
       contarReprovados(placar(TAP_PULADO)).semClassificacao > 0, false],
     ['o outro lado: arquivo com caso de verdade nao e acusado de vazio',
       arquivosSemCaso(TAP_DO_ARQUIVO_CHEIO, [CAMINHO]).length > 0, false],
+    // Medido em 19/10: `troca-de-email.test.js` tinha 11 casos, todos reprovados,
+    // e o runner ainda o reportou pelo caminho -- REPROVADO. Acusa-lo de "nenhum
+    // caso" e falso, e manda procurar o defeito no lugar errado.
+    ['o outro lado: arquivo REPROVADO pelo caminho nao e acusado de vazio (ja esta em `fail`)',
+      arquivosSemCaso(TAP_DO_ARQUIVO_REPROVADO, [CAMINHO]).length > 0, false],
   ];
 
   let falhas = 0;
