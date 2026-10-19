@@ -9,6 +9,7 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
@@ -78,7 +79,14 @@ class MeusAchados extends StatefulWidget {
 
   /// Uma linha, e só uma, em cada estado em que a lista não tem o que mostrar.
   static const String vazio = 'Você ainda não registrou nenhum achado.';
-  static const String semConta = 'Entre na sua conta para ver os achados que você registrou.';
+  /// **O TEXTO DE `semConta` SAIU, E A PAGINA ENTROU** (19/10/2026).
+  ///
+  /// Era *'Entre na sua conta para ver os achados que você registrou.'* numa
+  /// `_UmaLinha` -- uma frase sem saida nenhuma, nem `Entrar` nem
+  /// `Criar conta`. Quem chegava aqui sem conta lia o que nao podia fazer e
+  /// nao tinha como fazer. O estado de deslogado agora e
+  /// `ConviteParaEntrar(secao: SecaoComConta.meusAchados)`, que diz o que a
+  /// secao e e carrega as duas portas.
   static const String falha = 'Não foi possível carregar os seus achados agora.';
 
   static const String rotuloDeCarregarMais = 'Carregar mais';
@@ -153,14 +161,18 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
         _fase = _Fase.lista;
         _carregandoMais = false;
       });
-    } on FalhaDeChamada {
-      _falhou(geracao, maisUma: maisUma);
+    } on FalhaDeChamada catch (falha) {
+      _falhou(geracao, maisUma: maisUma, semConta: faltaConta(falha));
     } on FormatException {
       _falhou(geracao, maisUma: maisUma);
     }
   }
 
-  void _falhou(int geracao, {required bool maisUma}) {
+  void _falhou(
+    int geracao, {
+    required bool maisUma,
+    bool semConta = false,
+  }) {
     if (!mounted || geracao != _geracao) return;
     setState(() {
       if (maisUma) {
@@ -169,7 +181,12 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
         return;
       }
       _itens = const <AchadoRegistrado>[];
-      _fase = _Fase.falha;
+      // **A SESSAO PODE CAIR DEPOIS DA GUARDA.** `_carregar` confere
+      // `sessao.logado` antes de chamar, mas o refresh pode ser recusado
+      // dentro da chamada: o 401 chega aqui, e nao na guarda. Sem este ramo,
+      // quem foi deslogada no meio do uso veria faixa de erro com
+      // `Tentar de novo`.
+      _fase = semConta ? _Fase.semConta : _Fase.falha;
     });
   }
 
@@ -199,7 +216,9 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
   List<Widget> _corpo() {
     switch (_fase) {
       case _Fase.semConta:
-        return <Widget>[_UmaLinha(texto: MeusAchados.semConta)];
+        return const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.meusAchados),
+        ];
       case _Fase.carregando:
         return <Widget>[
           Semantics(

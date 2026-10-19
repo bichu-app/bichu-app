@@ -246,9 +246,34 @@ export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio
     );
   }
 
+  // A CIDADE COMPARA POR `texto_para_busca`, E ISSO E UMA CORRECAO DE 19/10.
+  //
+  // Era `lower(city) = lower($1)`, que baixa a caixa e **nao tira o acento**.
+  // Medido na homologacao com conta valida, antes da correcao:
+  //
+  //   GET /v1/directory/entries                  -> itens com "city":"São Paulo"
+  //   GET /v1/directory/entries?city=Sao%20Paulo -> {"items":[],"total":0}
+  //
+  // Quem digita `Sao Paulo` sem til nao acha nada, e a tela mostra o estado
+  // vazio -- "a secao ainda nao tem gente na sua regiao" --, que e a resposta
+  // errada dita com confianca.
+  //
+  // A normalizacao e a MESMA da listagem publica de perdidos
+  // (`texto_para_busca(lost_cases.last_seen_city) = texto_para_busca($1)`), e
+  // nao uma segunda: a funcao e do banco (migracao `20260928000006`), e
+  // IMMUTABLE, e por isso indexavel. Duas regras de comparacao de cidade no
+  // mesmo produto divergem em silencio -- o perdido acharia e o diretorio
+  // nao, na mesma cidade digitada do mesmo jeito.
+  //
+  // **A NORMALIZACAO E DA COMPARACAO, E NUNCA DA SAIDA.** A coluna `city`
+  // continua sendo selecionada crua na projecao, e a resposta continua
+  // devolvendo `"São Paulo"` com til: normalizar a saida devolveria
+  // `sao paulo` minusculo e sem acento para a tela mostrar.
   const cidade = recorte.city?.trim();
   if (cidade !== undefined && cidade !== '') {
-    consulta = consulta.where(sql<boolean>`lower(city) = lower(${cidade})`);
+    consulta = consulta.where(
+      sql<boolean>`texto_para_busca(professionals.city) = texto_para_busca(${cidade})`,
+    );
   }
   const uf = recorte.state?.trim();
   if (uf !== undefined && uf !== '') {

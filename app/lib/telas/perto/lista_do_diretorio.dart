@@ -9,6 +9,7 @@ import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
@@ -116,6 +117,13 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   PaginaDoDiretorio? _pagina;
   String? _textoDaFalha;
 
+  /// A falha foi **falta de conta**, e nao defeito.
+  ///
+  /// Guardado em vez de recalculado no `build` porque a resposta mora na
+  /// `FalhaDaApi` que chegou, e ela nao sobrevive ao `setState`. Ver
+  /// [faltaConta].
+  bool _faltaConta = false;
+
   /// As entradas de **todas** as paginas ja pedidas, na ordem em que chegaram.
   ///
   /// `_pagina.itens` tem so a ultima pagina, e ler dela para desenhar a lista
@@ -180,6 +188,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
       _recorte = recorte;
       _fase = _Fase.carregando;
       _textoDaFalha = null;
+      _faltaConta = false;
       _falhaDeMais = null;
       _carregandoMais = false;
       _itens.clear();
@@ -198,6 +207,12 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
+        // O SERVIDOR DIZ SE E FALTA DE CONTA, por `next_action: sign_in`.
+        // Antes de 19/10 este 401 caia no catalogo geral, que devolve
+        // `texto: ''` desde a remocao de 18/10 -- e a tela desenhava uma
+        // faixa de ERRO sem frase nenhuma com um botao `Atualizar` ao lado,
+        // que e exatamente o que o cliente relatou do iPhone.
+        _faltaConta = faltaConta(falha);
         // O 429 desta rota e por CONTA, e o texto generico nao diz isso.
         _textoDaFalha =
             textoDoTetoDoDiretorio(falha) ?? MensagensDeErro.de(falha).texto;
@@ -457,6 +472,13 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     // defensivo e nao decorativo: uma lista que se diz carregada sem pagina
     // seria a tela afirmando ter recebido algo que ela nao tem.
     if (_fase == _Fase.falha || pagina == null) {
+      // SEM CONTA NAO E ERRO, e nao tem `Atualizar`: recarregar sairia
+      // igualmente sem conta e voltaria o mesmo 401.
+      if (_faltaConta) {
+        return const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.diretorio),
+        ];
+      }
       return <Widget>[
         FaixaDeAviso(
           texto: _textoDaFalha ?? MensagensDeErro.servidorFora,
