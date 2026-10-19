@@ -116,6 +116,25 @@ export const MODULES = [
   // predicado que os outros modulos realmente precisam, `bloqueio_entre`, nao
   // passa nem por `ports/`: e funcao SQL, chamada na clausula `WHERE`.
   'safety',
+  // FATIA G da frente de comunidade (19/10/2026). O PERFIL DE OUTRA PESSOA e
+  // modulo proprio, e a razao e de fronteira: ele e uma LEITURA que junta
+  // `handles` e `users` (identity), a contagem de `pets` (pets), o estado e a
+  // contagem de `user_connections` (connections) e a vitrine de
+  // `user_showcase_images` (showcase). Dentro de qualquer um dos quatro, os
+  // outros tres teriam de ser alcancados por `domain/` alheio -- que e
+  // exatamente o que esta fronteira existe para impedir. Em `identity` seria
+  // pior: `identity` e autenticacao, sessao e senha, e um recorte que depende
+  // de "estes dois estao conectados?" viraria um segundo dominio sem
+  // fronteira.
+  //
+  // **Nenhuma tabela propria, e nenhuma escrita.** Mesmo arranjo de
+  // `moderation` e de `addresses`: a persistencia sao duas consultas de
+  // leitura, com a autorizacao na clausula `WHERE` (ADR-0021), e o modulo nao
+  // tem metodo que grave. Ele conversa com `connections` SO por
+  // `connections/ports/conexao.ts` -- a porta que oferece contagem e estado do
+  // par, e onde a LISTA de conexoes nao existe -- e com `media` so por
+  // `media/ports/imagem-de-catalogo.ts`, pela forma da chave de objeto.
+  'people',
 ];
 
 /**

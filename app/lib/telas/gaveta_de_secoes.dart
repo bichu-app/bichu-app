@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import 'conexoes/tela_pedidos_de_conexao.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -418,6 +419,29 @@ abstract final class RegistroDeSubDestinos {
         rotulo: 'Convidar vizinhos',
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.planejada,
+      ),
+      // **LINHA NOVA (19/10/2026), e nao mudanca de estado -- a diferenca esta
+      // dita aqui de proposito.** O procedimento desta casa e subir o estado do
+      // sub-destino que a UX 27.5 ja nomeia; **nao ha linha para este**, porque
+      // 27.5.5 fechou em 21/09 e a conexao entre pessoas e decisao de
+      // 18/10/2026. Entao a linha nasce aqui, e nasce `existe`: a tela
+      // (`TelaDePedidosDeConexao`) e a rota (`/conexoes/pedidos`) foram
+      // entregues em 18/10 e ficaram SEM PORTA -- `Rotas.pedidosDeConexao` era
+      // citada so em `rotas.dart`, e nenhum item de navegacao levava a ela. E
+      // por isso que o cliente nao viu nada.
+      //
+      // **Em `Perfil` e nao em `Rede`**, e a razao e a mesma de `Meus achados`:
+      // a caixa e das MINHAS decisoes -- `listMyConnectionRequests` exige conta
+      // e a autorizacao mora no `WHERE` --, e o "meu" mora em `Perfil`. `Rede` e
+      // a secao dos ENCONTROS da comunidade, que e outra coisa.
+      //
+      // **`destino` e nao `conteudoDaSecao`**: a tela tem `Scaffold`, barra de
+      // saida e endereco proprio. Ela nao e um bloco da aba.
+      SubDestino(
+        rotulo: TelaDePedidosDeConexao.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pedidosDeConexao,
       ),
       SubDestino(
         // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou

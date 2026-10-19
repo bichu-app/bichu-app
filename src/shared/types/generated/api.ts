@@ -3401,6 +3401,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O perfil de outra pessoa, pelo apelido
+         * @description **O que uma pessoa ve do perfil de outra**, e a lista e a decisao do
+         *     cliente de 19/10/2026, literal: *"ele pode ver nome, quantidade de
+         *     pets, conexoes, mas nao as fotos publicadas e nem a timeline do
+         *     usuario"*. Esta operacao e a emenda 2 do ADR-0010.
+         *
+         *     | Campo | Quem NAO e conexao | Conexao aceita |
+         *     |---|---|---|
+         *     | `display_name` | ve | ve |
+         *     | `pets_count` | ve | ve |
+         *     | `connections_count` | ve | ve |
+         *     | `showcase` | **ausente** | ve |
+         *     | nome, miniatura, slug ou link de pet | nunca | **nunca** |
+         *     | cidade, bairro, telefone, e-mail, nascimento | nunca | nunca |
+         *     | timeline, publicacao, curtida, contador | nao existe no produto | nao existe no produto |
+         *
+         *     **`pets_count` e contagem e nao agrupamento navegavel.** O item 7 do
+         *     ADR-0010 proibia "outros pets do mesmo tutor, e qualquer coisa que
+         *     permita agrupa-los"; a emenda 2 abre a CONTAGEM e so ela, nesta
+         *     operacao, que exige conta. Nenhum atributo de pet sai aqui, nem para
+         *     quem e conexao.
+         *
+         *     **`connections_count` e o numero, nunca a lista.** Nao existe
+         *     `GET /connections` e nao existe operacao que devolva pessoas
+         *     conectadas, nem ao proprio dono (plano 4-B). Contagem nao diz QUEM, e
+         *     e essa diferenca que a torna mostravel onde a lista nao e.
+         *
+         *     **A vitrine sai SO para conexao aceita**, e a autorizacao mora na
+         *     clausula `WHERE` da consulta das fotos (ADR-0021) -- a consulta que
+         *     devolveria a vitrine de quem nao e conexao nao existe. O que sai de
+         *     cada foto e MENOS do que o dono ve: sem `status`, sem
+         *     `rejection_reason` e sem `upload_id`, que sao estado de moderacao e de
+         *     edicao da PROPRIA vitrine.
+         *
+         *     **404 e nunca 403**, e os cinco caminhos sao o mesmo 404: apelido
+         *     inexistente, apelido reservado, apelido de PET, conta desabilitada de
+         *     qualquer um dos dois lados e par bloqueado em qualquer direcao. Nao ha
+         *     `if` de borda que escolha entre os dois codigos, e nao ha ramo que
+         *     produza 403 (ADR-0021). O proprio apelido tambem responde 200: o perfil
+         *     de si mesmo nao e um caso especial desta leitura, e `connection_state`
+         *     vem `none`.
+         *
+         *     **Esta operacao nao cria caminho de descoberta.** Ela recebe um apelido
+         *     que quem chama ja tem; nao ha busca, nao ha listagem, nao ha rota de
+         *     "este apelido existe?" (plano 4-C.5) e o teto por conta esta aqui
+         *     justamente para que varrer apelidos custe.
+         */
+        get: operations["getPersonProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -9057,6 +9121,146 @@ export interface components {
          */
         NetworkEventNotes: string;
         /**
+         * @description O perfil de OUTRA pessoa, no recorte que quem chama pode ver (emenda 2
+         *     do ADR-0010, decisao do cliente de 19/10/2026).
+         *
+         *     **A lista de propriedades e fechada, e a ausencia de cada coisa tem
+         *     dono.** Nao ha `city`, `neighbourhood`, `email`, `phone`,
+         *     `birth_date`, `last_name`, `location`, `timeline`, `posts`,
+         *     `publications`, `followers`, `pets` nem `photo`. Nenhuma delas e
+         *     omissao a preencher depois: cidade e bairro o cliente **nao**
+         *     mencionou, telefone e e-mail sao os itens 1 e 3 do ADR-0010, e
+         *     timeline nao existe no produto -- a migracao `20261018000030` registra
+         *     que "uma timeline de quem voce segue E a lista de presenca com hora...
+         *     Encerrado, nao se reabre".
+         */
+        PersonProfile: {
+            /**
+             * @description O apelido, que e o identificador publico da pessoa. **Nao e
+             *     anulavel aqui**, ao contrario de `ConnectionPerson.handle`: quem
+             *     nao tem apelido nao tem endereco, e por isso nao tem esta pagina.
+             */
+            handle: string;
+            /**
+             * @description `users.public_ref`: o endereco opaco da pessoa, o MESMO que
+             *     `blockUser` e `reportUserProfile` ja recebem. **Nao e UUID**
+             *     (ADR-0010 item 6), e sorteado por linha e nunca derivado de nome.
+             *
+             *     Ele sai aqui porque esta tela e o unico hospedeiro de denunciar e
+             *     de bloquear: as tres operacoes de seguranca sao enderecadas por
+             *     `userRef`, e sem este campo a tela teria o apelido e nenhuma forma
+             *     de chamar as tres.
+             */
+            public_ref: string;
+            /**
+             * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
+             *     (ADR-0010 item 3) -- a coluna guarda o que a pessoa digitou no
+             *     cadastro, e o item 3 vale para a superficie publica.
+             *
+             *     **Anulavel, como `ConnectionPerson.display_name`:** `display_name`
+             *     e anulavel em `users`, e 404 por falta de nome seria sumir com uma
+             *     conta que existe. A chave vem SEMPRE na resposta; com nulo a tela
+             *     cai para `@handle`, que e a mesma regra de `nomeParaLer`.
+             */
+            display_name: string | null;
+            /**
+             * @description **Quantos pets, e nada alem do numero.** E a emenda 2 do ADR-0010:
+             *     o item 7 proibia agrupar os pets de um tutor, e a decisao do
+             *     cliente de 19/10/2026 abre a CONTAGEM, aqui e so aqui.
+             *
+             *     Conta pet nao apagado (`pets.deleted_at IS NULL`). Nenhum atributo
+             *     de pet acompanha o numero, nem para quem e conexao: nome,
+             *     miniatura, slug e link continuam proibidos, e o portao
+             *     `perfil-de-terceiro-nao-expoe-pet-nem-timeline.test.ts` reprova
+             *     quando um deles aparece.
+             */
+            pets_count: number;
+            /**
+             * @description Quantas conexoes aceitas a pessoa tem. **O numero, nunca a
+             *     lista** (plano 4-B: *"Lista de conexoes | nunca | nunca"*):
+             *     contagem nao diz QUEM, e e essa diferenca que a torna mostravel
+             *     onde a lista nao e. E o "sinal de confianca" do plano.
+             */
+            connections_count: number;
+            /**
+             * @description A relacao entre quem chama e esta pessoa, **derivada no servidor** e
+             *     nunca recebida de quem chama.
+             *
+             *     `none` cobre junto "nunca houve nada", "o pedido expirou" e "a
+             *     recusa ainda esta em descanso", e a fusao e deliberada pela mesma
+             *     razao do 204 de `endConnection`: um valor proprio para recusado
+             *     seria o *"ela recusou voce"* que o desenho nao da.
+             *
+             *     Os tres valores nao-`none` sao os de `ConnectionAppState`, com os
+             *     mesmos nomes. A lista esta escrita em linha, e nao por `$ref`,
+             *     porque `none` nao existe la: acrescenta-lo mudaria a caixa de
+             *     pedidos, onde "nenhuma relacao" nao e um estado possivel.
+             * @enum {string}
+             */
+            connection_state: "none" | "pending_sent" | "pending_received" | "connected";
+            /**
+             * @description O `ref` da **aresta**, quando ha uma viva -- e nulo quando
+             *     `connection_state` e `none`. **E da aresta e nunca da pessoa**: e
+             *     ele que `acceptConnection` e `endConnection` recebem, e e por ele
+             *     que esta tela aceita, cancela ou desfaz sem precisar de uma segunda
+             *     leitura.
+             */
+            connection_ref?: string | null;
+            /**
+             * @description As fotos da vitrine, em ordem de posicao -- a primeira e a capa.
+             *
+             *     **Presente SO quando `connection_state` e `connected`**, e ausente
+             *     (nunca `[]`) nos outros tres estados: lista vazia diria "ela nao
+             *     tem foto", que e uma afirmacao sobre a vitrine de alguem que quem
+             *     chama nao pode ver. Vitrine vazia de uma conexao **tambem** chega
+             *     como `[]`, e a tela distingue os dois pelo estado e nao pelo
+             *     tamanho da lista.
+             */
+            showcase?: components["schemas"]["PersonShowcasePhoto"][];
+        };
+        /**
+         * @description Uma foto da vitrine de OUTRA pessoa, e ela e **menor** que
+         *     `ShowcasePhoto` de proposito.
+         *
+         *     Ficam de fora `status`, `rejection_reason`, `position` e `upload_id`:
+         *     os dois primeiros sao estado de moderacao da vitrine do dono -- motivo
+         *     de recusa de uma foto e assunto entre o dono e quem modera --, e os
+         *     dois ultimos sao de edicao, que so o dono faz. Foto que nao esta
+         *     `ready` simplesmente **nao entra nesta lista**, entao nao ha estado a
+         *     desenhar: a ordem e a da resposta.
+         *
+         *     **Nao ha legenda, curtida, contador nem pessoa marcada**, pela mesma
+         *     razao de `ShowcasePhoto`, e aqui com mais peso: e agora que existe
+         *     terceiro lendo.
+         */
+        PersonShowcasePhoto: {
+            /**
+             * Format: uri
+             * @description A derivada de **320 x 320 px (1:1)**, para a grade. **E ela que a
+             *     grade pede, e nunca `open_url`**: a celula tem 104 dp (312 px reais
+             *     a 3x), a de 1024 px e 1,6x mais dado do que a celula pinta, e a
+             *     grade desenha ate NOVE de uma vez.
+             *
+             *     **Nao e anulavel aqui**, ao contrario de `ShowcasePhoto.grid_url`:
+             *     a foto em `processing` nao entra nesta lista, porque antes de o
+             *     trabalhador reescrever a derivada ela carrega o EXIF do celular --
+             *     e servi-la a um terceiro entregaria a coordenada de onde ela foi
+             *     tirada (ADR-0010 item 4).
+             */
+            grid_url: string;
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, para a foto aberta. Nao anulavel, pelo mesmo motivo.
+             */
+            open_url: string;
+            /**
+             * @description O rotulo que o leitor de tela anuncia, **e nao legenda**: ele nunca
+             *     e desenhado como texto. Opcional, e nulo faz o leitor de tela cair
+             *     no rotulo da grade.
+             */
+            alt_text: string | null;
+        };
+        /**
          * @description Uma foto da vitrine do DONO. `grid_url` e `open_url` sao compostas na
          *     leitura a partir das chaves da imagem: o banco nao guarda URL
          *     (`docs/07-devops.md` 3.6).
@@ -11688,6 +11892,19 @@ export interface components {
          *     saida publica.
          */
         DirectoryEntrySlug: components["schemas"]["Slug"];
+        /**
+         * @description O APELIDO da pessoa (`users.handle`, tabela `handles`), que e o
+         *     identificador publico dela por decisao do cliente de 18/10/2026:
+         *     *"slug nao tem relacao com informacoes pessoais, e um id que o usuario
+         *     escolhe"*. **Nao e UUID** (ADR-0010 item 6) e nao e
+         *     `users.public_ref`.
+         *
+         *     A faixa e o padrao sao os MESMOS em quatro lugares, e esta casa ja
+         *     pagou por divergencia de faixa entre contrato e coluna: o `CHECK` de
+         *     `handles.handle` (migracao `20261018000021`), este parametro,
+         *     `PersonProfile.handle` e `app/lib/formato/apelido.dart`.
+         */
+        PersonHandleParam: string;
         /**
          * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
          *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
@@ -15579,6 +15796,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getPersonProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O APELIDO da pessoa (`users.handle`, tabela `handles`), que e o
+                 *     identificador publico dela por decisao do cliente de 18/10/2026:
+                 *     *"slug nao tem relacao com informacoes pessoais, e um id que o usuario
+                 *     escolhe"*. **Nao e UUID** (ADR-0010 item 6) e nao e
+                 *     `users.public_ref`.
+                 *
+                 *     A faixa e o padrao sao os MESMOS em quatro lugares, e esta casa ja
+                 *     pagou por divergencia de faixa entre contrato e coluna: o `CHECK` de
+                 *     `handles.handle` (migracao `20261018000021`), este parametro,
+                 *     `PersonProfile.handle` e `app/lib/formato/apelido.dart`.
+                 */
+                handle: components["parameters"]["PersonHandleParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O perfil, no recorte que quem chama pode ver. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonProfile"];
+                };
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];

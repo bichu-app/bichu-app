@@ -56,6 +56,7 @@ import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-sto
 import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as conexoes from '../../modules/connections/adapters/http/connection-routes.js';
+import * as pessoas from '../../modules/people/adapters/http/person-profile-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
@@ -125,6 +126,13 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // ele reprova contando `defineRoute` no disco -- foi exatamente assim que a
   // ausencia dela apareceu, na primeira execucao da suite desta fatia.
   conexoes,
+  // FATIA G (19/10). O perfil de OUTRA pessoa, pelo apelido. Modulo novo entra
+  // AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha
+  // um deles reprova contando `defineRoute` no disco (175 contra 176) e o
+  // outro reprova dizendo que `getPersonProfile` e operacao do contrato sem
+  // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
+  // suite desta fatia.
+  pessoas,
   // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
   // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
   // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
