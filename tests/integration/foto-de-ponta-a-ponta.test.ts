@@ -150,7 +150,7 @@ async function jpegDeVerdade(): Promise<Buffer> {
 async function criarTutorComPet(): Promise<{ tutor: UserId; pet: PetId }> {
   const tutor = randomUUID() as UserId;
   const pet = randomUUID() as PetId;
-  await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
+  await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     tutor,
     `bichus245-${tutor}@${DOMINIO_DE_TESTE}`,
   ]);

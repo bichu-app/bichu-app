@@ -147,6 +147,26 @@ void describe('a massa do diretorio', () => {
     }
   });
 
+  void it('todo endereco publico de titular cabe na forma que a coluna impoe', () => {
+    // `users_public_ref_forma` e `^[A-Za-z0-9_-]{22}$`, e `users_public_ref_unico`
+    // e indice unico GLOBAL. A massa escreve o valor LITERAL (ela e
+    // deterministica por contrato), entao os dois invariantes do banco passam a
+    // depender do que esta escrito a mao em `massa-do-diretorio.ts` -- e e aqui
+    // que isso para de depender de atencao de quem revisa. Sem este caso, um
+    // literal de 21 simbolos ou um par repetido so apareceria no `make seed`.
+    const forma = /^[A-Za-z0-9_-]{22}$/;
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      assert.match(entrada.titularPublicRef, forma, entrada.slug);
+    }
+    const refs = MASSA_DO_DIRETORIO.map((uma) => uma.titularPublicRef);
+    assert.equal(
+      new Set(refs).size,
+      refs.length,
+      'dois titulares com o mesmo `public_ref`: `users_public_ref_unico` recusa o segundo ' +
+        'INSERT, e a massa para no meio. O endereco de uma conta nao se reemite a outra.',
+    );
+  });
+
   void it('toda UF tem exatamente duas letras', () => {
     for (const entrada of MASSA_DO_DIRETORIO) {
       if (entrada.state === null) continue;
@@ -243,10 +263,18 @@ void describe('a massa do diretorio', () => {
     // Horario, rua, foto, site, e-mail, redes, servicos, preco e avaliacao NAO
     // tem coluna em `professionals`. Este caso vigia a forma do objeto para que
     // a tela nao seja desenhada em cima de dado que a rota nunca vai devolver.
+    //
+    // `titularId`, `titularEmail` e `titularPublicRef` sao a excecao ja
+    // existente, e sao de `users` e nao de `professionals`: a massa cria UMA
+    // CONTA por entrada, como no mundo real. `titularPublicRef` entrou em
+    // 19/10/2026 porque `users.public_ref` e `NOT NULL` sem valor padrao desde
+    // a `20261018000031` e a massa nao preenchia -- `make seed` reprovava com
+    // 23502, medido pela suite de integracao. Ele NAO promete campo de tela
+    // nenhum: `public_ref` nao sai em resposta de profissional.
     const permitidos = new Set([
-      'id', 'titularId', 'titularEmail', 'slug', 'kind', 'displayName', 'about',
-      'city', 'state', 'neighborhood', 'ponto', 'phoneE164', 'crmvNumber',
-      'crmvUf', 'cnpj', 'status', 'verificacoes',
+      'id', 'titularId', 'titularEmail', 'titularPublicRef', 'slug', 'kind',
+      'displayName', 'about', 'city', 'state', 'neighborhood', 'ponto',
+      'phoneE164', 'crmvNumber', 'crmvUf', 'cnpj', 'status', 'verificacoes',
     ]);
     for (const entrada of MASSA_DO_DIRETORIO) {
       for (const campo of Object.keys(entrada)) {

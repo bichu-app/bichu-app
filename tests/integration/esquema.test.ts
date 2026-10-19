@@ -520,7 +520,44 @@ void describe('ADR-0011 emenda 1 — o diretorio de profissionais, conferido no 
     assert.equal(coluna.tipo, 'uuid');
   });
 
-  void it('as duas tabelas novas so referenciam users.id, e mais nada', () => {
+  // -----------------------------------------------------------------------
+  // O QUE O ADR-0002 DIZ, E O QUE ESTE CASO AFIRMAVA SEM O ADR-0002 DIZER
+  // -----------------------------------------------------------------------
+  // Ate 18/10 este caso exigia que TODA chave estrangeira saindo de
+  // `professionals` e `entity_verifications` chegasse em `users.id`. Isso
+  // passava porque as duas tabelas, naquele dia, so apontavam para `users` --
+  // era invariante ACIDENTAL, nao a decisao.
+  //
+  // O ADR-0002 decide duas coisas, e nenhuma delas e "toda chave aponta para
+  // users": (1) `users.id` e UUIDv7 e e **a unica chave pela qual o resto do
+  // sistema identifica uma PESSOA**; (2) e-mail, telefone, login, `sub` de
+  // provedor, id de provedor gerenciado e qualquer valor impresso em QR
+  // **nunca sao chave estrangeira**. Referencia a outra tabela por chave
+  // primaria propria nunca esteve proibida -- `local_credentials` ->
+  // `user_identities.id` e o caso que este mesmo arquivo EXIGE, logo acima.
+  //
+  // Em 18/10 a `20261018000008` deu a `professionals` duas imagens
+  // (`logo_image_id` e `photo_image_id`, as duas `-> catalog_images.id`,
+  // `ON DELETE SET NULL`, as duas anulaveis), por pedido do cliente do dia, e
+  // de proposito pela esteira UNICA de imagem (ADR-0007, ADR-0027 A.3) em vez
+  // de uma segunda tabela de foto. A medicao confirma o desenho: as mesmas
+  // duas colunas sao `SET NULL` como `users.photo_image_id`, e `catalog_images`
+  // nao referencia profissional nenhum de volta.
+  //
+  // Entao o caso passa a afirmar as DUAS regras que o ADR-0002 realmente tem,
+  // e o alcance novo vira REGISTRO: destino fora de `users` precisa estar
+  // declarado aqui com a decisao que o criou. Chave nova para uma terceira
+  // tabela continua reprovando -- que e o alarme que funcionou em 18/10.
+  const DESTINOS_FORA_DE_USERS_DECLARADOS: Readonly<Record<string, string>> = {
+    'professionals.logo_image_id -> catalog_images.id':
+      'a logo do profissional, `20261018000008` (18/10/2026), pedido do cliente, ' +
+      'na esteira unica de imagem (ADR-0007 / ADR-0027 A.3). Anulavel e SET NULL.',
+    'professionals.photo_image_id -> catalog_images.id':
+      'a foto (fachada) do profissional, MESMA migracao e MESMO pedido. Dois ' +
+      'propositos e duas geometrias de derivada, por isso dois campos.',
+  };
+
+  void it('nenhuma chave das tabelas novas identifica PESSOA por outra coisa que users.id', () => {
     const das_novas = chavesEstrangeiras.filter((fk) =>
       ['professionals', 'entity_verifications'].includes(fk.tabela),
     );
@@ -528,13 +565,42 @@ void describe('ADR-0011 emenda 1 — o diretorio de profissionais, conferido no 
       das_novas.length > 0,
       'nenhuma chave estrangeira nas tabelas novas: nao ha o que conferir, e isso e reprovacao',
     );
-    const fora = das_novas.filter(
-      (fk) => fk.tabela_alvo !== 'users' || fk.coluna_alvo !== 'id',
+    const paraUsersForaDoId = das_novas.filter(
+      (fk) => fk.tabela_alvo === 'users' && fk.coluna_alvo !== 'id',
     );
     assert.deepEqual(
-      fora.map((fk) => `${fk.tabela}.${fk.coluna} -> ${fk.tabela_alvo}.${fk.coluna_alvo}`),
+      paraUsersForaDoId.map((fk) => `${fk.tabela}.${fk.coluna} -> users.${fk.coluna_alvo}`),
       [],
-      'ADR-0002: users.id e a unica chave que o resto do sistema referencia',
+      'ADR-0002: users.id e a unica chave pela qual o resto do sistema identifica a pessoa. ' +
+        'E-mail, apelido, endereco publico e qualquer valor impresso NAO sao chave estrangeira.',
+    );
+    // A metade que prova que a de cima nao passa por lista vazia: ao menos uma
+    // das duas tabelas APONTA para `users`, e aponta para `id`.
+    assert.ok(
+      das_novas.some((fk) => fk.tabela_alvo === 'users' && fk.coluna_alvo === 'id'),
+      'nenhuma das duas tabelas aponta para users.id: o filtro acima nao teve o que filtrar',
+    );
+  });
+
+  void it('destino fora de users nas tabelas novas esta DECLARADO, com a decisao', () => {
+    const fora = chavesEstrangeiras
+      .filter((fk) => ['professionals', 'entity_verifications'].includes(fk.tabela))
+      .filter((fk) => fk.tabela_alvo !== 'users')
+      .map((fk) => `${fk.tabela}.${fk.coluna} -> ${fk.tabela_alvo}.${fk.coluna_alvo}`)
+      .sort();
+    const declarados = Object.keys(DESTINOS_FORA_DE_USERS_DECLARADOS).sort();
+    assert.deepEqual(
+      fora.filter((d) => !declarados.includes(d)),
+      [],
+      'chave estrangeira das tabelas novas para fora de `users` sem entrada em ' +
+        'DESTINOS_FORA_DE_USERS_DECLARADOS. Escreva a decisao e a migracao que a criou: ' +
+        'alcance novo sem ninguem olhar e o que este caso existe para pegar.',
+    );
+    assert.deepEqual(
+      declarados.filter((d) => !fora.includes(d)),
+      [],
+      'destino declarado que o banco nao tem mais: ou a chave saiu, ou mudou de alvo. ' +
+        'Nos dois casos alguem precisa olhar, e nao e para isto ficar verde.',
     );
   });
 

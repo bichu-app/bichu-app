@@ -285,7 +285,7 @@ async function criarFotoEmProcessamento(): Promise<{ foto: string; pet: PetId }>
   const foto = randomUUID();
   const chave = `pets/${pet.replace(/-/g, '')}/original/foto.jpg`;
 
-  await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
+  await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     tutor,
     `orfao-${tutor}@${DOMINIO_DE_TESTE}`,
   ]);

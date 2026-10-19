@@ -75,7 +75,7 @@ function hashDe(valor: string): Buffer {
 
 async function criarConta(): Promise<UserId> {
   const id = randomUUID() as UserId;
-  await cliente.query('INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, now())', [
+  await cliente.query(`INSERT INTO users (id, email, email_verified_at, public_ref) VALUES ($1, $2, now(), translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     id,
     `transf-${id}@${DOMINIO_DE_TESTE}`,
   ]);
