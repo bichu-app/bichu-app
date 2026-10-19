@@ -28,6 +28,7 @@
  * - **Fatia E** (bloquear e denunciar) chama `desfazerPorBloqueio` — ver
  *   `ConexaoSobBloqueio`.
  */
+import type { EstadoNoApp } from '../domain/conexao.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 export interface LeitorDeConexao {
@@ -52,6 +53,38 @@ export interface LeitorDeConexao {
    * não pode.
    */
   contarConexoes(pessoa: UserId): Promise<number>;
+
+  /**
+   * **A aresta VIVA entre os dois, projetada do ponto de vista de quem olha** —
+   * ou `undefined` quando não há nenhuma.
+   *
+   * Existe para a fatia G (o perfil de outra pessoa), que precisa de três
+   * estados e não de um booleano: quem não é conexão, quem tem pedido pendente
+   * (nos dois sentidos) e quem é conexão aceita desenham telas diferentes, e o
+   * `ref` é o que deixa a tela aceitar, cancelar ou desfazer sem uma segunda
+   * leitura.
+   *
+   * **Nenhum `UserId` sai**, como nos dois métodos acima: o que sai é o estado
+   * e o `ref` da ARESTA. E não há como pedir "as arestas de alguém" — o
+   * argumento é um par, e a resposta é no máximo uma.
+   *
+   * `undefined` funde, de propósito, "nunca houve nada", "o pedido expirou" e
+   * "a recusa ainda está em descanso". É a mesma fusão do 204 de `encerrar`:
+   * um valor próprio para recusado seria o *"ela recusou você"* que o desenho
+   * não dá. Quem chama projeta os três como `none`.
+   */
+  arestaVivaEntre(
+    quemOlha: UserId,
+    outro: UserId,
+    agora: Instant,
+  ): Promise<ArestaVivaDoPar | undefined>;
+}
+
+/** O que [LeitorDeConexao.arestaVivaEntre] devolve: estado e `ref` da ARESTA. */
+export interface ArestaVivaDoPar {
+  readonly estado: EstadoNoApp;
+  /** O `ref` da aresta. **Da aresta, nunca de uma pessoa.** */
+  readonly ref: string;
 }
 
 /**

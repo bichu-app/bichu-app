@@ -1202,7 +1202,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 50 linhas, 15 destinos e 5 atalhos vivos', () {
+    test('o inventario de 27.5 tem 51 linhas, 16 destinos e 6 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -1237,11 +1237,16 @@ void main() {
       );
       // 48 -> 50 em 19/10: as duas linhas da secao de mensagens
       // (`Lista de conversas` e `Conversa`), as duas `planejada`.
+      // 50 -> 51 em 19/10, na fatia G: `Pedidos de conexao` em `Perfil`. **E
+      // linha NOVA e nao mudanca de estado**, e a diferenca importa aqui: a UX
+      // 27.5.5 fechou em 21/09 e a conexao entre pessoas e decisao de
+      // 18/10/2026, entao nao havia linha para subir. Ela nasce `existe`
+      // porque a tela e a rota existem desde 18/10 e estavam SEM PORTA.
       expect(
         todos.length,
-        50,
+        51,
         reason:
-            'REPROVA: o inventario de 27.5 saiu de 50 linhas e foi para '
+            'REPROVA: o inventario de 27.5 saiu de 51 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -1250,11 +1255,13 @@ void main() {
       final destinos = todos
           .where((d) => d.forma == FormaDoSubDestino.destino)
           .toList(growable: false);
+      // 15 -> 16 em 19/10: `Pedidos de conexao`, que e `destino` porque a tela
+      // tem `Scaffold`, barra de saida e endereco proprio.
       expect(
         destinos.length,
-        15,
+        16,
         reason:
-            'REPROVA: os destinos de MENU sairam de 15 e foram para '
+            'REPROVA: os destinos de MENU sairam de 16 e foram para '
             '${destinos.length}. A maioria das 48 linhas nunca foi item de '
             'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
             'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
@@ -1275,11 +1282,15 @@ void main() {
       // subiu de 8 para 10 no mesmo movimento. A queda aqui so e legitima
       // porque aquela subida aconteceu, e e isso que o caso de soma no fim
       // deste grupo garante.
+      // CINCO -> SEIS em 19/10: `Pedidos de conexao` entrou `existe` COM rota,
+      // e e a subida que a mensagem abaixo chama de caminho normal -- a tela do
+      // outro lado existe e esta registrada no roteador, o que o caso `toda
+      // rota de item vivo esta REGISTRADA no roteador` confere.
       expect(
         vivos.length,
-        5,
+        6,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 5 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',

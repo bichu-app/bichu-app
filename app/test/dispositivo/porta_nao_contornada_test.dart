@@ -1175,7 +1175,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 ///
 ///
-const String _arvoreDasTelas = '145640db9fb6764eccb543b350c43caef8e2f2b3'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+const String _arvoreDasTelas = 'c1484355dc615af2fd6a73200134ef60596b7711'; // FATIA G (19/10/2026), o perfil de OUTRA pessoa: pasta nova `pessoa/` com `tela_perfil_de_pessoa.dart`, mais uma linha de `SubDestino` em `gaveta_de_secoes.dart` (a porta da caixa de pedidos de conexao, que existia sem porta desde 18/10). Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao chutado e nao copiado de relato. ANTERIOR: 145640db9fb6764eccb543b350c43caef8e2f2b3 (UNIAO DAS QUATORZE, 18/10/2026). **QUEM MESCLAR PRECISA RECALCULAR SOBRE A ARVORE MESCLADA**: valor de ramo isolado NAO sobrevive a uniao, e tres frentes desta rodada tocam `app/lib/telas` (gaveta, casca e esta). // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

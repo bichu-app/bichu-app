@@ -1,11 +1,17 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emenda 1
+**Status:** aceito, com emendas 1 e 2
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
 da `Rede` sai em resposta **autenticada** do app. Escopo fechado; os itens 4 e
 5 continuam valendo para tudo o mais. Ver o fim do documento.
+
+**Emenda 2, 19/10/2026 (decisão do cliente):** o **item 7** passa a ter uma
+exceção de escopo fechado — a **contagem** de pets de uma pessoa sai no perfil
+dela em resposta **autenticada** (`getPersonProfile`). Nome, miniatura, slug e
+link de pet continuam proibidos, e o item 7 continua inteiro em superfície
+alcançável sem conta. Ver o fim do documento.
 
 ## Contexto
 
@@ -164,3 +170,89 @@ contrato público trata autenticação opcional como pública.
 
 A trilha de auditoria continua sem coordenada bruta: a mudança do ponto grava
 `{"point_changed": true}`, nunca o valor.
+
+---
+
+# Emenda 2 — 19/10/2026: o perfil de outra pessoa, e a contagem de pets
+
+**Decisão do cliente, 19/10/2026.** A pergunta foi o que alguém que **não é
+conexão** pode ver no perfil de outra pessoa. A resposta, literal:
+
+> "ele pode ver nome, quantidade de pets, conexões, mas não as fotos publicadas
+> e nem a timeline do usuário"
+
+## O que muda no item 7, e só isto
+
+O item 7 proíbe *"outros pets do mesmo tutor, e qualquer coisa que permita
+agrupá-los"*, e **a contagem agrupa**: dizer "3 pets" afirma que aquelas três
+fichas têm o mesmo tutor, mesmo sem nomear nenhuma. A decisão acima emenda esse
+item, e a emenda é de escopo fechado:
+
+- **sai** o número de pets da pessoa (`pets_count`), **só** na operação
+  `getPersonProfile`, que exige conta (`bearerAuth` **sem** alternativa vazia);
+- **não sai** nome, apelido, miniatura, foto, espécie, raça, link nem qualquer
+  outro atributo de pet — nem para quem já é conexão. O que o cliente liberou
+  foi a quantidade, e a quantidade é o que está liberado;
+- **o item 7 continua inteiro** em `/t/<codigo>`, `/@<slug>`, `/cartaz/<token>`,
+  na listagem pública de perdidos e em qualquer JSON que as sirva. Nada aqui
+  abre superfície alcançável sem conta.
+
+O item 6 **não** é emendado: o perfil é endereçado pelo **apelido**
+(`users.handle`, tabela `handles`), e o único outro identificador que sai é
+`users.public_ref` — opaco, sorteado, 22 símbolos, que denunciar e bloquear já
+usam. Nenhum UUID.
+
+## As conexões: a CONTAGEM, e esta é uma interpretação a confirmar
+
+O cliente escreveu "conexões" numa lista de coisas que se vê. **Foi lido como a
+contagem, e não como a lista de quem são**, e a leitura está declarada aqui
+porque ela não é óbvia:
+
+- a lista de conexões **não aparece a ninguém, nem ao dono** (plano 4-B:
+  *"Lista de conexões | nunca | nunca"*), não existe no contrato, não existe
+  `GET /connections`, e o portão `sem-lista-de-conexoes.test.ts` reprova
+  operação nova que devolva pessoas conectadas;
+- contagem não diz **quem**, e é exatamente essa diferença que a torna mostrável
+  onde a lista não é. Ela é o "sinal de confiança" do plano 4-B;
+- a lista, mostrada a um estranho, entregaria a rede social de alguém a quem não
+  tem relação com ela — e isso ele não pediu.
+
+**Pendência de confirmação com o cliente**, nestes termos: *"conexões" no perfil
+de outra pessoa é o número (`12 conexões`), e não a lista de quem são. Confirma?*
+
+## O que NÃO sai, e cada ausência tem dono
+
+| Não sai | Por quê |
+|---|---|
+| fotos da vitrine, para quem **não** é conexão | literal do cliente ("não as fotos publicadas"), e o portão `vitrine-nao-sai-para-terceiro.test.ts` continua reprovando |
+| timeline, publicação, curtida, contador | ele recusou a timeline nesta frase, e ela **não existe** no produto: a migração `20261018000030` registra *"uma timeline de quem você segue É a lista de presença com hora... Encerrado, não se reabre"* |
+| cidade, bairro, qualquer recorte geográfico | **ele não mencionou nenhum dos dois**, e o item 4 e o teto de "bairro e cidade" desta seção não são permissão para expor onde a pessoa mora a quem não tem relação com ela |
+| telefone, e-mail, data de nascimento, sobrenome | itens 1 e 3 desta seção, e `users.birth_date` não sai em resposta nenhuma |
+| nome, miniatura, slug ou link de pet | o item 7, que esta emenda abre **só** para a contagem |
+
+## A vitrine para quem JÁ É conexão aceita
+
+Ela **sai**, e só nesse estado. A frase do cliente nega as fotos a quem não é
+conexão, e negá-las também a quem é esvaziaria a distinção que ele acabou de
+fazer. O que a sustenta tecnicamente é onde a autorização mora (ADR-0021): o
+predicado de conexão aceita está na cláusula `WHERE` da própria consulta das
+fotos, e não num `if` de camada acima — a consulta que devolveria a vitrine de
+quem não é conexão não existe.
+
+O que sai de cada foto é **menos** do que o dono vê: `grid_url`, `open_url` e
+`alt_text`. Ficam de fora `status`, `rejection_reason` e `upload_id`, que são
+estado de moderação e de edição da **própria** vitrine — motivo de recusa de uma
+foto é assunto entre o dono e quem modera.
+
+## O que esta emenda NÃO decide, e portanto continua proibido
+
+- **pets nomeados para quem é conexão.** O plano 4-B previa isso na coluna de
+  conectado; o cliente, em 19/10, falou de quantidade. Enquanto ele não decidir,
+  vale o item 7;
+- **bairro para quem é conexão**, pelo mesmo motivo;
+- **como se alcança o perfil de alguém.** Não existe busca de pessoas, não
+  existe rota de disponibilidade de apelido (plano 4-C.5) e a descoberta por
+  link está morta (plano 4-B.1). Esta emenda diz **o que** o perfil mostra; ela
+  não cria caminho de descoberta, e a operação responde o mesmo **404** de
+  inexistente para apelido que não é de pessoa, conta desabilitada e par
+  bloqueado (ADR-0021, nunca 403).
