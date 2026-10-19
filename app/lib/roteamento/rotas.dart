@@ -28,6 +28,10 @@ import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
 import '../telas/conexoes/tela_pedidos_de_conexao.dart';
+import '../telas/seguranca/tela_de_bloqueados.dart';
+import '../api/pessoas_api.dart';
+import '../api/seguranca_api.dart';
+import '../telas/pessoa/tela_perfil_de_pessoa.dart';
 import '../telas/perfil/vitrine_de_fotos.dart';
 import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
@@ -199,6 +203,44 @@ abstract final class Rotas {
   /// `Pedidos de conexao` (18/10/2026): as duas caixas, recebidos e enviados.
   static const String pedidosDeConexao = '/conexoes/pedidos';
 
+  /// **O PERFIL DE OUTRA PESSOA** (19/10/2026, fatia G).
+  ///
+  /// **ESTE E O NOME ESTAVEL que as outras frentes ligam**, e ele existe
+  /// justamente para que nenhuma delas monte a cadeia na mao: quem precisa
+  /// abrir o perfil de alguem chama [perfilDe], nunca `'/pessoa/$apelido'`
+  /// escrito a dedo. A frente de mensagens precisa de um ponto unico para o
+  /// toque na foto do interlocutor; e este.
+  ///
+  /// O endereco e o **apelido**, que e o identificador publico da pessoa por
+  /// decisao do cliente de 18/10/2026 (*"slug nao tem relacao com informacoes
+  /// pessoais, e um id que o usuario escolhe"*). **Nunca um UUID** (ADR-0010
+  /// item 6) e nunca `users.public_ref` -- aquele e o endereco de denunciar e
+  /// bloquear, e ele viaja no CORPO das tres rotas de seguranca, nao na URL
+  /// desta tela.
+  ///
+  /// **Sem o `@`**: o `@` e simbolo de leitura e nao faz parte do
+  /// identificador. `/pessoa/marina-vet`, e nao `/pessoa/@marina-vet`.
+  ///
+  /// Ela EMPURRA (cobre a casca) em vez de virar ramo, como `Meus dados` e a
+  /// area de mensagens: a barra de baixo continua existindo atras e voltar
+  /// devolve a pessoa onde ela estava -- que e o que a frente de mensagens
+  /// precisa quando o toque na foto sai de dentro de uma conversa.
+  static const String perfilDePessoa = '/pessoa/:$parametroDoApelido';
+
+  /// O nome do parametro de caminho de [perfilDePessoa].
+  static const String parametroDoApelido = 'apelido';
+
+  /// O endereco do perfil de `apelido`. **Use esta funcao**, e nao a cadeia.
+  ///
+  /// Ela recebe o apelido com ou sem `@` e devolve o endereco sem ele: a tela
+  /// de mensagens tem o apelido do jeito que o contrato o manda (sem `@`), e um
+  /// texto de interface pode te-lo com. Uma funcao so para os dois casos evita
+  /// a terceira forma de montar isto.
+  static String perfilDe(String apelido) {
+    final limpo = apelido.startsWith('@') ? apelido.substring(1) : apelido;
+    return '/pessoa/$limpo';
+  }
+
   /// `Meus dados` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
   ///
   /// Endereco proprio porque `VitrineDeFotosDoUsuario` e TELA (tem `Scaffold`
@@ -230,6 +272,18 @@ abstract final class Rotas {
   /// casaria `/achados` como id vazio, e `achados` sob `perfil` diz o que a
   /// lista e -- a MINHA, e nao a da vizinhanca.
   static const String meusAchados = '/perfil/achados';
+
+  /// `Perfil` > `Pessoas bloqueadas` (19/10/2026, decisao do cliente).
+  ///
+  /// **ESTE E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO.** O bloqueio e simetrico
+  /// no servidor, e a simetria fecha o perfil da pessoa bloqueada tambem para
+  /// quem a bloqueou (`404`) -- que e onde o `Desbloquear` do `MenuDoPerfil`
+  /// mora. Sem este endereco, bloquear era irreversivel pelo aplicativo.
+  ///
+  /// `/perfil/bloqueados`, irma de `dadosPessoais` e de `meusAchados`: a lista
+  /// e das MINHAS decisoes, e o "meu" mora em `Perfil`. Ela EMPURRA e cobre a
+  /// casca, com barra de saida e volta.
+  static const String pessoasBloqueadas = '/perfil/bloqueados';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -515,7 +569,41 @@ final GlobalKey<NavigatorState> _navegadorRaiz = GlobalKey<NavigatorState>(
 /// e exatamente o defeito que o cliente encontrou no simulador. Quem abre
 /// tela de conta usa `push` ou `pushReplacement`; `go` fica para troca de aba
 /// e para o fim de um fluxo. Ver `SaidaDaTela`.
+/// **LIGA O TOQUE NA FOTO DA CONVERSA AO PERFIL DAQUELA PESSOA.**
+///
+/// A frente de mensagens deixou o ponto unico (`PortaDoPerfilDoParticipante`) e
+/// nasceu com ele devolvendo `null`, porque a tela de perfil de TERCEIRO era de
+/// outro ramo. A frente de perfil entregou a tela e [Rotas.perfilDe]. Esta
+/// funcao e a costura, e ela mora **aqui** por uma razao: `rotas.dart` e o
+/// unico arquivo que conhece as duas pontas. `area_de_mensagens.dart` nao
+/// importa `Rotas` -- se importasse, a area de mensagens deixaria de ser
+/// plugavel onde quem monta a barra quiser.
+///
+/// **NAO e a linha de uma expressao so que o plano previa.** O plano escrevia
+/// `(outro) => Rotas.perfilDe(outro.handle)`, e isso nao compila: o apelido e
+/// **anulavel** no contrato, e `Rotas.perfilDe` recebe `String`. O nulo nao e
+/// borda rara -- ele e o estado NORMAL (nao-conexao, par bloqueado, achador sem
+/// conta, conexao que nao escolheu apelido), e com ele o icone tem de ficar
+/// decorativo em vez de abrir `/pessoa/null`.
+///
+/// Funcao nomeada e nao uma atribuicao solta dentro de [criarRoteador]: e ela
+/// que a isca da fiacao chama, e um efeito escondido no meio de uma fabrica de
+/// 400 linhas nao se exercita sem montar o roteador inteiro.
+void ligarPortaDoPerfilDoParticipante() {
+  PortaDoPerfilDoParticipante.destino = (outro) {
+    final apelido = outro.handle;
+    // Vazio tratado como ausente, como no modelo: `Rotas.perfilDe('')`
+    // devolveria `/pessoa/`, que e a rota de outra coisa.
+    if (apelido == null || apelido.isEmpty) return null;
+    return Rotas.perfilDe(apelido);
+  };
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
+  // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
+  // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
+  // ha o que desfazer quando o roteador e recriado.
+  ligarPortaDoPerfilDoParticipante();
   return GoRouter(
     navigatorKey: _navegadorRaiz,
     initialLocation: Rotas.abertura,
@@ -909,6 +997,49 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.pedidosDeConexao,
         builder: (context, estado) =>
             TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
+      ),
+      // PESSOAS BLOQUEADAS (19/10/2026). A porta e construida AQUI a partir do
+      // `ApiClient` do `Escopo`, como a da vitrine e as do perfil de pessoa:
+      // acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de teste
+      // que o constroi.
+      GoRoute(
+        path: Rotas.pessoasBloqueadas,
+        builder: (context, estado) =>
+            TelaDeBloqueados(seguranca: SegurancaApi(Escopo.of(context).api)),
+      ),
+      // O PERFIL DE OUTRA PESSOA (19/10/2026, fatia G). Irma das de cima: ela
+      // EMPURRA e cobre a casca, e voltar devolve a pessoa onde ela estava.
+      //
+      // **As tres portas sao construidas AQUI, a partir do `ApiClient` do
+      // `Escopo`**, e nao recebidas por campo do `Escopo`: e a mesma fiacao de
+      // `Rotas.minhaVitrine` logo acima. Acrescentar campo obrigatorio ao
+      // `Escopo` quebraria toda tela de teste que o constroi, e o `Escopo` esta
+      // sendo mexido por outras frentes nesta mesma rodada.
+      //
+      // `conexoes` vem do `Escopo` porque ela JA mora la.
+      //
+      // **`podeAgirNaComunidade` e a MESMA porta de `podeCriarNaComunidade`**
+      // (`lib/telas/abas.dart`): sessao e e-mail verificado. Pedir conexao e
+      // acao de comunidade, e politica nova nao foi inventada aqui.
+      //
+      // **O token de convite vem do `extra`**, e nulo nao desenha a porta de
+      // pedir. Quem emitir convite (caso devolvido, encontro em comum, codigo
+      // presencial) passa `extra: <o token>` neste `push` -- e e o unico lugar
+      // que precisa mudar.
+      GoRoute(
+        path: Rotas.perfilDePessoa,
+        builder: (context, estado) {
+          final escopo = Escopo.of(context);
+          final convite = estado.extra;
+          return TelaDePerfilDePessoa(
+            apelido: estado.pathParameters[Rotas.parametroDoApelido] ?? '',
+            pessoas: PessoasApi(escopo.api),
+            conexoes: escopo.conexoes,
+            seguranca: SegurancaApi(escopo.api),
+            podeAgirNaComunidade: podeCriarNaComunidade(escopo.sessao),
+            tokenDoConvite: convite is String && convite.isNotEmpty ? convite : null,
+          );
+        },
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

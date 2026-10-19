@@ -1269,6 +1269,9 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// continua atras da porta: este ramo nao encosta em
 /// `escanear/tela_leitor_de_qr.dart`.
 ///
+/// DESTRAVADO EM 18/10 (a BUSCA, a ROLAGEM INFINITA e o TOQUE NO ICONE da area
+/// de mensagens -- os quatro pedidos do cliente para a aba `AuAu`). **UM
+/// arquivo desta pasta muda**: `mensagens/area_de_mensagens.dart`.
 ///
 /// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
 /// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
@@ -1442,7 +1445,62 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = '1959197b9604bfd136bfc160a099ed66427da947'; // LOTE DE 19/10/2026 (ate sino-na-barra-e-criar-flutuante): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 32769dcfb795143f98d911f430c0b2dae2fbdd58, 66fb4850a1e3e6e20263a8760faf960db81867d9. Valor de ramo isolado NAO sobrevive a uniao.
+/// [lado da uniao, valor de ramo 1959197b96] LOTE DE 19/10/2026 (ate sino-na-barra-e-criar-flutuante): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 32769dcfb795143f98d911f430c0b2dae2fbdd58, 66fb4850a1e3e6e20263a8760faf960db81867d9. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// O que mudou nele, e por que cada parte e pedido dele por escrito:
+///
+/// - **O campo de busca**, pelo componente compartilhado `BarraDeListagem`
+///   (*"adicione um campo de busca/filtro na secao de mensagens"*). Sem copia:
+///   `widgets/barra_de_listagem.dart` **nao foi tocado** por esta frente, e
+///   nem precisou -- nao ha filtro nem ordenacao aqui, porque
+///   `listConversations` nao declara recorte de lista fechada, e o proprio
+///   componente nao desenha gatilho sem desfecho.
+/// - **A rolagem infinita de dez em dez** (*"trazendo as 10 ultimas conversas
+///   e incrementando por 10"*): o botao `Carregar mais conversas` saiu, e
+///   entrou um `ScrollController` com gatilho de folga mais um segundo gatilho
+///   para a lista que nao enche a tela -- sem ele, `maxScrollExtent` em zero
+///   deixaria o cursor sem consumidor e a lista pararia em dez, em silencio.
+/// - **O toque no icone da conversa** (*"faca a imagem ser clicada levando o
+///   usuario para o perfil do usuario"*), num ponto unico e nomeado,
+///   `PortaDoPerfilDoParticipante`. Ele nasce devolvendo `null` porque a tela
+///   de perfil de TERCEIRO nao existe em `origin/development` -- ela e de
+///   `feat/comunidade-perfil-e-conexao`, por decisao do cliente --, e com
+///   `null` o icone continua decorativo em vez de se anunciar como um botao
+///   que nao leva a lugar nenhum.
+/// - **A FOTO NAO ENTROU**, e o cabecalho daquele arquivo tem a medida: o
+///   contrato proibe foto de perfil em `participants` por extenso e em dois
+///   pontos, o ADR-0025 item 2 proibe avatar de terceiro, e o desenho da
+///   frente de perfil recusa esta superficie por nome.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os importes novos
+/// do arquivo sao `widgets/barra_de_listagem.dart` e nada mais -- o
+/// `widgets/botao_primario.dart` SAIU junto com o botao de carregar mais. A
+/// CAMERA continua atras da porta: esta frente nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada (entre elas a que deixa o gatilho de
+/// filtro so-icone na `BarraDeListagem`), e valor de ramo isolado nao
+/// sobrevive a uniao. (antes: 145640db9f)
+/// **A MESCLA (19/10/2026) juntou os dois lados**: o `_arvoreDasTelas` de cada ramo media a
+/// propria arvore isolada, e a uniao tem as DUAS mudancas (`mensagens/area_de_mensagens.dart`
+/// desta frente e a pasta `pessoa/` mais a linha de `SubDestino` na `gaveta_de_secoes.dart` da
+/// frente de perfil), mais o acendimento da `PortaDoPerfilDoParticipante` desta tarefa. Por isso
+/// o valor abaixo nao e nem um nem outro: foi RECALCULADO sobre a arvore mesclada.
+/// [lado do ramo, valor de ramo 8b070d9dc0] A LISTA DE BLOQUEADOS E O TITULO DE `PERTO` A 200% (19/10/2026), decisao do cliente: TRES arquivos de `app/lib/telas` mudam. (1) `seguranca/tela_de_bloqueados.dart` NASCE -- a lista de quem eu bloqueei, que e o unico caminho de volta de um bloqueio: o bloqueio e SIMETRICO e fechava com 404 o perfil onde o `Desbloquear` do `MenuDoPerfil` morava, e por isso bloquear era irreversivel pelo aplicativo. (2) `gaveta_de_secoes.dart` ganha a porta dela em `Perfil` (+1 linha de importe e +28 de `SubDestino`). (3) `casca_com_abas.dart` declara a abreviacao do titulo: `maxLines: 1`, `softWrap: false`, `overflow: ellipsis` e `semanticsLabel: titulo` -- a 200% em 320 dp `Perto` pede 172,90 dp contra 160,00 de orcamento e corta, e o nome ANUNCIADO continua inteiro. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a tela nova importa so `material`, `dart:async`, a camada de api, o tema e `widgets/faixa_de_aviso.dart`, e `escanear/tela_leitor_de_qr.dart` nao foi tocado -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO da rota NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). ANTERIOR: 045d87197b2276c8e1a93dcfcd3fcd23fa7250dd (a foto na conversa entre conexoes, logo abaixo). === A FOTO NA CONVERSA ENTRE CONEXOES (19/10/2026), emenda 3 do ADR-0010: UM arquivo de `app/lib/telas` muda, `mensagens/area_de_mensagens.dart`, e a mudanca e pedido direto do cliente (*"a foto aparece SO quando as duas pessoas ja aceitaram conexao"*). `MarcaNeutraDoParticipante` passa a desenhar `ImagemDaRede` quando `participante.photoIconUrl` nao e nulo, e a inicial quando e -- e o importe novo e `widgets/imagem_da_rede.dart` e **nada mais**. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a CAMERA continua atras da porta, e `escanear/tela_leitor_de_qr.dart` nao foi tocado -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO do toque NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"`), e nao copiado de relato. ANTERIOR: 40ba5d1cb735a3c0b42c6560fbb6ed00bea6c442 (a MESCLA, logo abaixo). === MESCLA DE MENSAGENS COM PERFIL DE TERCEIRO (19/10/2026), a foto na conversa entre conexoes: valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). Nenhum dos dois valores de ramo sobrevive a uniao, porque os DOIS lados tocam `app/lib/telas`. As justificativas dos dois lados ficam INTEIRAS. === LADO MENSAGENS, 4930ba4dc4b3f15343ffcaa9d37b02040c2fe749: BUSCA, ROLAGEM E TOQUE NA AREA DE MENSAGENS (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao. === LADO PERFIL, c1484355dc615af2fd6a73200134ef60596b7711: FATIA G (19/10/2026), o perfil de OUTRA pessoa: pasta nova `pessoa/` com `tela_perfil_de_pessoa.dart`, mais uma linha de `SubDestino` em `gaveta_de_secoes.dart` (a porta da caixa de pedidos de conexao, que existia sem porta desde 18/10). Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao chutado e nao copiado de relato. ANTERIOR: 145640db9fb6764eccb543b350c43caef8e2f2b3 (UNIAO DAS QUATORZE, 18/10/2026). **QUEM MESCLAR PRECISA RECALCULAR SOBRE A ARVORE MESCLADA**: valor de ramo isolado NAO sobrevive a uniao, e tres frentes desta rodada tocam `app/lib/telas` (gaveta, casca e esta). // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = 'f11be6f92fdf8472232005651e0257cdffd72763'; // LOTE DE 19/10/2026 (ate bloqueados-e-titulo): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 1959197b9604bfd136bfc160a099ed66427da947, 8b070d9dc099578cf31f6125aca8de592fa655ff. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

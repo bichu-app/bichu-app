@@ -89,6 +89,30 @@ A resposta pública de um evento traz `checkin_count`, um inteiro. **Não existe
 campo com pessoas**, em forma nenhuma: nem nome, nem primeiro nome, nem apelido,
 nem `slug`, nem avatar, nem contagem por bairro.
 
+> **NOTA DE ESCOPO, 19/10/2026 — esta decisão NÃO foi emendada, e segue valendo
+> como está escrita.**
+>
+> Ela foi **citada** como reforço para proibir a foto do participante da
+> conversa mediada, em `api/openapi.yaml`, em
+> `app/lib/telas/mensagens/area_de_mensagens.dart` e no portão
+> `src/tools/vitrine-nao-sai-para-terceiro.test.ts`. Em 19/10/2026 o cliente
+> decidiu que a foto aparece na conversa **quando as duas pessoas já aceitaram
+> conexão** (emenda 3 do ADR-0010), e esta nota existe para que ninguém leia
+> aquela decisão como uma brecha aqui.
+>
+> **O escopo desta decisão é a superfície da `Rede`**: a resposta de um
+> **evento**, que é alcançável sem conta, e em que a pessoa que aparece não tem
+> relação nenhuma com quem está lendo. A conversa mediada é outra superfície,
+> exige conta nas duas pontas e tem um predicado de **conexão aceita** entre as
+> duas. A `Rede` continua sem avatar, sem nome e sem apelido de quem fez
+> check-in — e continua assim mesmo quando quem lê é conexão de quem foi: o
+> campo não existe, então não há regra de autorização a escrever.
+>
+> As duas variantes mais brandas recusadas abaixo (a lista para quem também fez
+> check-in, e a escolha no momento do check-in) continuam recusadas pelos mesmos
+> motivos, e a emenda 3 do ADR-0010 não as toca: ela é sobre **par**, e a
+> presença num encontro é sobre **grupo**.
+
 Foram consideradas e recusadas duas variantes mais brandas:
 
 - **Lista visível só para quem também fez check-in.** Fazer check-in é grátis e

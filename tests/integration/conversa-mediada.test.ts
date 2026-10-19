@@ -58,7 +58,7 @@ const DOMINIO_DE_TESTE = 'exemplo.invalid';
 
 const AGORA = 1_790_000_000_000 as Instant;
 const UM_DIA = 24 * 60 * 60 * 1000;
-const PAGINA = { limit: 20, depoisDe: undefined };
+const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
 let banco: DbHandle;
 let db: Db;

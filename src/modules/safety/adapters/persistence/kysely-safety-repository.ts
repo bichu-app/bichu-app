@@ -40,13 +40,15 @@
  * nova acrescenta `AND NOT <função>(<ref>, <leitor>)` ao `WHERE`. Está relatado
  * como o que falta ligar, por tela.
  */
-import { sql, type Kysely } from 'kysely';
+import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
+import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import type {
   DesfechoDaEscrita,
+  PaginaDeBloqueios,
   RefPublicoDaPessoa,
   SafetyRepository,
 } from '../../ports/safety-repository.js';
@@ -80,8 +82,126 @@ async function contaVisivelPara(
   return linha?.id;
 }
 
+/** Uma linha crua da lista de quem eu bloqueei. */
+interface LinhaDeBloqueio {
+  readonly public_ref: string;
+  readonly handle: string | null;
+  readonly display_name: string | null;
+  readonly created_at: Date;
+}
+
+/**
+ * **A LISTA DE QUEM EU BLOQUEEI, e a igualdade é a autorização.**
+ *
+ * `blocker_user_id = chamador` no `WHERE` (ADR-0021), e é **essa igualdade** que
+ * faz a leitura ser assimétrica sobre um predicado simétrico:
+ *
+ * - **`bloqueio_entre` NÃO é chamada aqui, e a ausência é o desenho inteiro.**
+ *   Aquela função é simétrica de propósito, e usá-la nesta consulta devolveria
+ *   as duas metades do par — quem eu bloqueei **e quem me bloqueou**. A segunda
+ *   metade é o oráculo *"ela te bloqueou"*, que é exatamente o que o resto desta
+ *   fatia gasta linhas para não dizer;
+ * - **`conta_habilitada(u.id)`** tira a linha de conta desabilitada, pela
+ *   decisão do cliente de 17/10 (*"não é mais encontrada em nenhuma página ou
+ *   funcionalidade"*). Aqui ela não deixa nada preso: conta desabilitada não
+ *   aparece em superfície nenhuma, então o bloqueio dela não tem efeito a
+ *   desfazer — e a linha **volta** com a conta, porque ela nunca foi apagada;
+ * - **`conta_habilitada(chamador)`**, como em toda leitura desta casa;
+ * - **`perfil_ocultado_para_quem_denunciou` NÃO entra**, e é a única divergência
+ *   deliberada em relação a `construtorDoPerfilPorApelido`. Aquela função existe
+ *   para quem denunciou parar de ver as superfícies **do alvo**; esta lista não
+ *   é superfície do alvo, é o registro dos atos de quem chama, e a linha só
+ *   existe porque quem chama a criou. Esconder o próprio ato de quem o praticou
+ *   devolveria o beco sem saída que esta leitura existe para fechar.
+ *
+ * **O `LEFT JOIN` em `handles` é `LEFT` de propósito:** o bloqueio é endereçado
+ * por `public_ref` e não pelo apelido, então é possível ter bloqueado alguém sem
+ * apelido. Um `INNER JOIN` omitiria a linha dessa pessoa — e ela ficaria
+ * bloqueada para sempre, que é o defeito que esta operação conserta.
+ *
+ * `kind = 'pessoa'` no mesmo `ON`: o apelido antigo de uma troca vira
+ * `reservado` **com `user_id` preservado**, e sem este filtro a pessoa
+ * apareceria duas vezes, uma delas com o apelido que ela já não usa.
+ *
+ * **Nenhuma migração foi necessária**: a ordem do `WHERE` é a do índice
+ * `user_blocks_um_por_par (blocker_user_id, blocked_user_id)`, que a
+ * `20261018000031` já criou.
+ *
+ * **Exportado** como os `construtorDe...` da casa: a suíte unitária não tem
+ * banco, e ler o SQL compilado é o único jeito de provar que a igualdade está no
+ * `WHERE` em vez de num `if` que um caminho novo esquece.
+ */
+export function construtorDeQuemEuBloqueei(
+  db: Kysely<Database>,
+  chamador: string,
+  page: number,
+  limit: number,
+): CompiledQuery<LinhaDeBloqueio> {
+  return db
+    .selectFrom('user_blocks as b')
+    .innerJoin('users as u', 'u.id', 'b.blocked_user_id')
+    .leftJoin('handles as h', (juncao) =>
+      juncao.onRef('h.user_id', '=', 'u.id').on('h.kind', '=', 'pessoa'),
+    )
+    .select([
+      'u.public_ref as public_ref',
+      'h.handle as handle',
+      'u.display_name as display_name',
+      'b.created_at as created_at',
+    ])
+    .where('b.blocker_user_id', '=', chamador)
+    .where(sql<boolean>`conta_habilitada(u.id)`)
+    .where(sql<boolean>`conta_habilitada(${chamador}::uuid)`)
+    // Mais recentes primeiro. O desempate por `public_ref` não é enfeite: sem
+    // ele, dois bloqueios do mesmo instante podem trocar de lugar entre duas
+    // páginas e uma pessoa some da lista sem nunca ter sido mostrada.
+    .orderBy('b.created_at', 'desc')
+    .orderBy('u.public_ref', 'asc')
+    .limit(limit)
+    .offset((page - 1) * limit)
+    .compile();
+}
+
+/**
+ * A CONTAGEM, com a MESMA cláusula `WHERE` da página.
+ *
+ * Duas cláusulas diferentes dariam um `total` que não corresponde às linhas —
+ * e a tela mostraria "3 pessoas" sobre uma lista de duas.
+ */
+export function construtorDaContagemDeQuemEuBloqueei(
+  db: Kysely<Database>,
+  chamador: string,
+): CompiledQuery<{ total: number }> {
+  return db
+    .selectFrom('user_blocks as b')
+    .innerJoin('users as u', 'u.id', 'b.blocked_user_id')
+    .select(sql<number>`count(*)::int`.as('total'))
+    .where('b.blocker_user_id', '=', chamador)
+    .where(sql<boolean>`conta_habilitada(u.id)`)
+    .where(sql<boolean>`conta_habilitada(${chamador}::uuid)`)
+    .compile();
+}
+
 export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): SafetyRepository {
   return {
+    async quemEuBloqueei(chamador: UserId, pagina): Promise<PaginaDeBloqueios> {
+      const linhas = await db.executeQuery(
+        construtorDeQuemEuBloqueei(db, chamador, pagina.page, pagina.limit),
+      );
+      const contagem = await db.executeQuery(
+        construtorDaContagemDeQuemEuBloqueei(db, chamador),
+      );
+      return {
+        items: linhas.rows.map((linha) => ({
+          publicRef: linha.public_ref,
+          handle: linha.handle,
+          displayName: linha.display_name,
+          bloqueadoEm: linha.created_at.getTime() as Instant,
+        })),
+        total: contagem.rows[0]?.total ?? 0,
+      };
+    },
+
     async bloquear(chamador, alvo, agora): Promise<DesfechoDaEscrita> {
       // O alvo é resolvido com `bloqueio_entre` no `WHERE`, o que significa que
       // quem JÁ bloqueou quem chama devolve `ausente`. Isso é certo: bloquear
