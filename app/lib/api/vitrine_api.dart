@@ -132,22 +132,31 @@ class FotoPedida {
       };
 }
 
+/// `#/components/schemas/ShowcasePhoto/properties/status` do contrato.
+///
 /// O estado de processamento de uma foto. `processing` -> `ready` | `rejected`,
 /// e **nunca volta**.
-enum EstadoDaFoto { processando, pronta, recusada }
+enum EstadoDaFoto {
+  processando('processing'),
+  pronta('ready'),
+  recusada('rejected');
+
+  const EstadoDaFoto(this.codigo);
+
+  /// O codigo de fio, e a UNICA copia dele: `_estadoDe` le desta lista. O
+  /// portao de conformidade compara estes valores com o contrato, e so
+  /// consegue porque eles moram no enum, e nao dentro do decodificador.
+  final String codigo;
+}
 
 EstadoDaFoto _estadoDe(Object? valor) {
-  switch (valor) {
-    case 'ready':
-      return EstadoDaFoto.pronta;
-    case 'rejected':
-      return EstadoDaFoto.recusada;
-    default:
-      // Qualquer outra coisa -- inclusive um estado novo que o servidor passe a
-      // mandar -- cai em `processando`. E o estado em que a tela nao promete
-      // imagem nenhuma, e portanto o unico seguro para o desconhecido.
-      return EstadoDaFoto.processando;
+  for (final estado in EstadoDaFoto.values) {
+    if (estado.codigo == valor) return estado;
   }
+  // Qualquer outra coisa -- inclusive um estado novo que o servidor passe a
+  // mandar -- cai em `processando`. E o estado em que a tela nao promete
+  // imagem nenhuma, e portanto o unico seguro para o desconhecido.
+  return EstadoDaFoto.processando;
 }
 
 /// Uma foto da vitrine, como o dono a ve.
