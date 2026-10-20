@@ -16,6 +16,7 @@ import 'casca_com_abas.dart';
 import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
+import 'perfil/meus_eventos.dart';
 import 'perfil/meus_pets.dart';
 import 'rede/secao_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
@@ -744,6 +745,35 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: 'Pessoas bloqueadas',
               aoTocar: () => context.push(Rotas.pessoasBloqueadas),
+            ),
+            // ----------------------------------------------------------------
+            // E O TERCEIRO ITEM, DA UNIAO DO LOTE (19/10/2026).
+            // ----------------------------------------------------------------
+            //
+            // `feat/barra-com-mural-e-rede-unificada` e
+            // `feat/meus-eventos-e-cancelar` acrescentaram item NESTE MESMO
+            // ponto -- "entre `Meus achados` e `Sair da conta`", que e onde
+            // este arquivo declara que item novo entra. **Os TRES
+            // sobrevivem**, e nenhum e decorativo: as duas rotas da gaveta
+            // ficariam inalcancaveis sem as duas de cima, e `Cancelar` nao
+            // tem outro caminho sem a de baixo.
+
+            // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
+            //
+            // **ESTA LINHA E O UNICO CAMINHO DO APP ATE `Cancelar`.** Nada na
+            // resposta da agenda diz de quem e o encontro -- `NetworkEventPublic`
+            // nao tem campo de autoria e nao pode ter (item 7 do ADR-0010) --,
+            // entao quem criou um encontro nao tinha como voltar a ele. O
+            // cliente escolheu este lugar, literal: *"uma tela com os eventos
+            // que voce criou, e o cancelar mora la. Nao suja o cartao da
+            // agenda, que voce acabou de mandar limpar, e e onde as pessoas
+            // procuram"*.
+            //
+            // Entre `Meus achados` e `Sair da conta`, que e onde este arquivo
+            // declara que item novo entra -- nunca depois do ultimo.
+            ItemDeMenu(
+              rotulo: MeusEventos.titulo,
+              aoTocar: () => context.push(Rotas.meusEventos),
             ),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
             // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois

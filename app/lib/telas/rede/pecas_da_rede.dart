@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../api/modelos_rede.dart';
+import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
 /// As pecas do cartao da agenda, e as duas proporcoes que a `Loja` divide com
@@ -13,6 +15,21 @@ import '../../theme/bichu_tokens.g.dart';
 /// de dia (`SÁB` / `27` / `SET`), o distintivo de situacao (`Acontecendo
 /// agora`, `Encerrado`, `Cancelado`), `rotuloDaSituacao` e os selos
 /// (`SeloDoEncontro`, `seloDeValor`, `seloPrivado`).
+///
+/// ## E o que VOLTOU na uniao do lote, no mesmo dia
+///
+/// [rotuloDaSituacao] e [DistintivoDeSituacao] estao de volta, verbatim.
+/// Eles sairam por **falta de chamador** -- esta e a frase acima, e ela nao
+/// era proibicao --, e `feat/meus-eventos-e-cancelar` trouxe um chamador
+/// noutra tela: `perfil/meus_eventos.dart`, a lista de quem CRIOU o
+/// encontro, onde saber que ele esta `Encerrado` ou `Acontecendo agora` e
+/// funcao e nao enfeite. O cartao da AGENDA nao mudou: ele continua foto e
+/// titulo, mais a palavra `Cancelado` que ele mesmo desenha.
+///
+/// O que **nao** voltou e o parametro `cancelado` de
+/// [ImagemDoEncontroOuBanner], que pintava a capa em cinza: aquele saiu por
+/// ser sinal exclusivamente por cor (SC 1.4.1), e decisao de acessibilidade
+/// nao se desfaz por conveniencia de mescla.
 ///
 /// Ficaram as tres que ainda tem chamador: [proporcaoDaCapa] e
 /// [BannerDaMarca], que [ImagemDoEncontroOuBanner] usa, e [proporcaoDaFoto],
@@ -175,6 +192,64 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// O rotulo da situacao que a data nao diz, ou nulo.
+///
+/// `upcoming` nao ganha rotulo: a data ja diz. Os outros tres ganham.
+String? rotuloDaSituacao(SituacaoDoEncontro? situacao) {
+  return switch (situacao) {
+    SituacaoDoEncontro.acontecendo => 'Acontecendo agora',
+    SituacaoDoEncontro.encerrado => 'Encerrado',
+    SituacaoDoEncontro.cancelado => 'Cancelado',
+    SituacaoDoEncontro.aVir => null,
+    null => null,
+  };
+}
+
+/// O distintivo de situacao: `Acontecendo agora`, `Encerrado`, `Cancelado`.
+///
+/// `Cancelado` e o unico invertido (`surfaceInverse` com `textOnInverse`): o
+/// par de maior contraste do sistema, sem cor de erro nem de urgencia
+/// (24.11). A diferenca nao depende de cor: a palavra esta la (SC 1.4.1).
+class DistintivoDeSituacao extends StatelessWidget {
+  const DistintivoDeSituacao({
+    required this.situacao,
+    super.key,
+    this.grande = false,
+  });
+
+  final SituacaoDoEncontro situacao;
+  final bool grande;
+
+  @override
+  Widget build(BuildContext context) {
+    final rotulo = rotuloDaSituacao(situacao);
+    if (rotulo == null) return const SizedBox.shrink();
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final invertido = situacao == SituacaoDoEncontro.cancelado;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: grande ? BichuEspaco.e4 : BichuEspaco.e3,
+        vertical: grande ? BichuEspaco.e2 : BichuEspaco.e1,
+      ),
+      decoration: BoxDecoration(
+        color: invertido ? cores.surfaceInverse : cores.surface,
+        borderRadius: BorderRadius.circular(BichuRaio.full),
+        border: invertido
+            ? null
+            : Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      child: Text(
+        rotulo,
+        style: (grande ? textos.titleMedium : textos.labelMedium)?.copyWith(
+          color: invertido ? cores.textOnInverse : cores.textPrimary,
+        ),
       ),
     );
   }

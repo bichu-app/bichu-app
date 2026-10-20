@@ -541,6 +541,72 @@ telas:
   # operacoes dela desceram para `contrato_sem_tela`, com o registro da
   # decisao. Nenhuma foi removida do contrato.
 
+  # ====================================================================
+  # App, `Perfil` > `Meus eventos` (19/10/2026)
+  # ====================================================================
+  #
+  # ESTA TELA EXISTE EM CODIGO E NAO EM PROTOTIPO, como a do diretorio de
+  # `Perto`: ela nasceu em `app/lib/telas/perfil/meus_eventos.dart` no mesmo
+  # despacho das duas operacoes novas, e nao passou por
+  # `docs/prototipos/rede-encontro.html` -- por isso `prototipo: nenhum`, e nao
+  # um arquivo que ninguem escreveu. O desenho foi autorizado sem Figma (decisao
+  # do cliente de 23/09: sem cota, o prototipo e HTML ou e codigo).
+  #
+  # POR QUE ELA EXISTE: `cancelNetworkEvent` entrou no contrato em 17/10 e NAO
+  # TINHA CAMINHO NENHUM -- nada na resposta da agenda diz de quem e o encontro,
+  # e `NetworkEventPublic` nao pode ganhar campo de autoria (item 7 do
+  # ADR-0010). O cliente escolheu o lugar em 19/10: *"uma tela com os eventos
+  # que voce criou, e o cancelar mora la"*.
+  #
+  # `cancelNetworkEvent` SAIU DE `contrato_sem_tela` por causa desta entrada, e
+  # a saida nao e redatacao: a `resolucao` dela era "tela: resolvido quando a
+  # tela existir", e a tela existe. Em `telas` o portao cobra MAIS -- cada `usa`
+  # tem de resolver contra o contrato --, e `contrato_sem_tela` so pedia uma
+  # nota. `updateNetworkEvent` FICA la: a tela de editar e de outro despacho.
+
+  - tela: "Perfil > Meus eventos"
+    prototipo: nenhum
+    estados: [lista, vazio, carregando, erro, deslogado, capa_recusada, confirmando, conflito_de_versao, saiu_da_conta]
+    operacoes:
+      - operationId: listMyNetworkEvents
+        situacao: contrato
+        usa:
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:items[].slug
+          - resp:items[].title
+          - resp:items[].starts_at
+          - resp:items[].ends_at
+          - resp:items[].time_zone
+          - resp:items[].status
+          - resp:items[].cover
+          - resp:items[].cover.status
+          - resp:items[].cover.url
+          - resp:items[].cover.rejection_reason
+          - enum:NetworkEventStatus.cancelled
+          - problem:unauthenticated
+      # A FONTE DO `ETag` DA SECAO. A tela a chama ao abrir a folha de
+      # confirmacao, e manda o valor recebido no `If-Match` do cancelamento.
+      - operationId: getMyNetworkEvent
+        situacao: contrato
+        usa:
+          - path:eventSlug
+          - resp:slug
+          - resp:status
+          - problem:not-found
+      - operationId: cancelNetworkEvent
+        situacao: contrato
+        usa:
+          - path:eventSlug
+          - header:If-Match
+          - req:note
+          - resp:status
+          - problem:precondition-failed
+          - problem:precondition-required
+          - problem:not-found
+
 # ======================================================================
 # Correspondencias codigo -> rotulo. Os rotulos ficam no cliente; o que o
 # portao cobra e que a correspondencia seja 1 para 1 e que todo codigo exista.
@@ -1131,9 +1197,16 @@ contrato_sem_tela:
   - operationId: updateNetworkEvent
     resolucao: "tela: resolvido quando a tela existir"
     nota: "quem criou administra o proprio encontro (decisao do cliente de 17/10); a tela de editar e do mesmo despacho da de criar"
-  - operationId: cancelNetworkEvent
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "cancelar o proprio encontro, com a nota que fica so na trilha; mesma tela da edicao"
+  # `cancelNetworkEvent` SAIU DAQUI EM 19/10/2026, e nao foi redatada: a
+  # `resolucao` dela era "tela: resolvido quando a tela existir", e a TELA
+  # EXISTE -- `app/lib/telas/perfil/meus_eventos.dart`, construida junto das
+  # duas operacoes de leitura do dono. O motivo dela CADUCOU pelo unico desfecho
+  # que ela mesma previa. Ela passou para `telas`, na entrada
+  # "Perfil > Meus eventos", onde o portao cobra MAIS: cada `usa` tem de
+  # resolver contra o contrato.
+  #
+  # `updateNetworkEvent`, logo acima, FICA: a tela de editar e de outro
+  # despacho, e dizer que ela existe seria falso.
   - operationId: createNetworkEventCoverUploadIntent
     resolucao: "RESOLVIDO 19/10/2026: a tela existe e chama esta operacao"
     nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet. RESOLVIDO EM 19/10/2026, por pedido do cliente ('a foto que eu estou falando para criar do evento e a da capa do evento'): `app/lib/telas/rede/criar_encontro.dart` pergunta a capa e chama esta operacao por `RedeApi.intencaoDeCapaDoEncontro`, e a capa e confirmada no MESMO `POST /v1/network/events`, em `cover_image.upload_id`. A linha FICA aqui, com a data, porque o historico de por que a tela nasceu depois do backend e o que explica a forma do contrato -- esta secao e o registro de operacao de contrato sem tela, e esta deixou de ser uma. Medido contra a homologacao: `image/heic` -> 400 (`field: content_type`, `code: enum`), `image/jpeg` -> 201 com a chave em `events/original/`, e o `POST` da criacao -> 201"

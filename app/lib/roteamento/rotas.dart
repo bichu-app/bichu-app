@@ -37,6 +37,7 @@ import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
 import '../telas/notificacoes/caixa_de_notificacoes.dart';
 import '../telas/perfil/meus_achados.dart';
+import '../telas/perfil/meus_eventos.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
@@ -361,6 +362,16 @@ abstract final class Rotas {
   /// casaria `/achados` como id vazio, e `achados` sob `perfil` diz o que a
   /// lista e -- a MINHA, e nao a da vizinhanca.
   static const String meusAchados = '/perfil/achados';
+
+  /// `Perfil` > `Meus eventos`: os encontros que a conta criou (19/10/2026).
+  ///
+  /// **Endereco proprio, irmao de [meusAchados] e de [dadosPessoais]**, e nao
+  /// bloco dentro da aba: a tela cobre a barra de baixo e volta para [perfil].
+  ///
+  /// `/perfil/eventos` e nao `/eventos`: a secao `Rede` e a agenda PUBLICA, e
+  /// `/rede` ja e a aba dela. `eventos` sob `perfil` diz de quem a lista e --
+  /// o mesmo criterio que poe `achados` sob `perfil`.
+  static const String meusEventos = '/perfil/eventos';
 
   /// `Perfil` > `Pessoas bloqueadas` (19/10/2026, decisao do cliente).
   ///
@@ -1050,6 +1061,18 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.meusAchados,
         builder: (context, estado) => const MeusAchados(),
+      ),
+      // `Perfil` > `Meus eventos` (19/10/2026). Irma das duas de cima, e o
+      // UNICO caminho do app ate `cancelNetworkEvent`: nada na agenda diz de
+      // quem e o encontro, entao sem esta rota o cancelamento do proprio
+      // encontro nao tem porta.
+      //
+      // **Sem parametro no construtor**: a tela tira a `RedeApi` do `Escopo`,
+      // como `MeusAchados` faz com a `AchadosApi`. Acrescentar campo
+      // obrigatorio ao `Escopo` quebraria toda tela de teste que o constroi.
+      GoRoute(
+        path: Rotas.meusEventos,
+        builder: (context, estado) => const MeusEventos(),
       ),
       // -- AS QUATRO ROTAS DA UNIAO DE 18/10/2026 ---------------------------
       //
