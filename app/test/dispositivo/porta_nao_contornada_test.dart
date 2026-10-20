@@ -1856,7 +1856,44 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Substitui 1413454d749f87001859c85e1e6e71d0449c2941 (e, do ramo isolado
 /// desta correcao, 5e7f753f673afdabeb3fe709ae04537b816e6051, que media a
 /// arvore de ANTES do lote e por isso nao vale).
-const String _arvoreDasTelas = '40d90082e5cf8ab6b58ec2ebb09450c2e6744a89'; // INTERMEDIARIO da ONDA 2 do terceiro lote de 20/10/2026, com a correcao do cabecalho de `podeCriarNaComunidade` somada. Substitui `2f822c38...` (valor final da onda 1) e `27399b7b...` (valor do ramo isolado da correcao, que media a arvore sem as frentes da onda 2 e por isso nao vale). Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao, COM as chaves em `rev-parse "${T}:app/lib/telas"`. Ainda entram a ficha rica do achado e o sino.
+///
+///
+/// DESTRAVADO DE NOVO EM 19/10 PELA TELA DO ACHADO (`/achados/:achadoId`), que
+/// e o destino do botao `Ver o achado` do desfecho e tinha ficado com o desenho
+/// antigo -- um paragrafo, a linha da regiao, a observacao e uma faixa. Quem
+/// volta ao app no dia seguinte para acompanhar o achado chega NELA, e nao no
+/// desfecho, que so existe no instante do envio. Quatro arquivos desta pasta
+/// mudam, e nenhum deles por causa da camera:
+///
+/// - `achado/tela_do_achado.dart`: os tres blocos do desfecho, o gesto de
+///   arrastar-para-atualizar (ela e a **decima segunda** superficie, e ficou
+///   fora do lote de 18/10 porque o recorte daquele dia foi listagem), o estado
+///   lido do SERVIDOR em vez do `Em análise` fixo, e UMA LINHA dizendo onde a
+///   foto esta -- a tela nao tem foto para desenhar e nao finge que tem;
+/// - `achado/textos_do_achado.dart`: a constante da linha da foto. Ela
+///   substitui, nesta tela, uma frase que era FALSA ali: `fotoAindaNaoSubiu`
+///   afirma que o envio nao aconteceu, e o `GET` de um achado nao devolve
+///   estado de envio de foto nenhum;
+/// - `achado/tela_achado_registrado.dart`: o `_Bloco` privado saiu para
+///   `widgets/bloco_de_informacao.dart`, porque agora sao DUAS telas com os
+///   mesmos blocos e uma copia perderia o `header: true` sem ninguem ver;
+/// - `perfil/meus_achados.dart`: `rotuloDoEstado` deixou de ser privado do
+///   cartao. Um segundo `switch` sobre o mesmo `status` na tela do achado seria
+///   a segunda traducao do mesmo campo, e as duas telas estao a dois toques uma
+///   da outra na mesma conta.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. A tela do achado
+/// nao desenha arquivo do aparelho **de proposito** -- dar-lhe uma gaveta por
+/// `achadoId` seria a foto do animal de alguem esperando, num aparelho
+/// compartilhado, a proxima pessoa a entrar.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// deste proprio portao. Este valor tambem e de RAMO ISOLADO --
+/// `claude/achado-detalhe-rico-535cde` sobre `feat/achado-rico-e-loja-sem-preco`
+/// em 1d4a9e1f -- e valor de ramo isolado NAO sobrevive a uniao.
+/// (antes: 6a089b729b)
+const String _arvoreDasTelas = '6d8a3af678847cbcde81258c1c596113132d7d68'; // INTERMEDIARIO da ONDA 2, com a ficha rica do achado somada. Ainda entra o sino.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
