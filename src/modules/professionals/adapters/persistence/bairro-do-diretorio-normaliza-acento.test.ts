@@ -71,6 +71,13 @@ const semBanco = new Kysely<Database>({
 
 const RECORTE_SEM_BAIRRO: RecorteDoDiretorio = {
   chamador: '01a15623-b345-709f-ac33-75c9bae66143' as RecorteDoDiretorio['chamador'],
+  // `undefined` porque este arquivo mede a NORMALIZACAO DE ACENTO do filtro de
+  // bairro, e nao distancia: sem aparelho nao ha ponto de referencia, a
+  // distancia sai nula e a ordem sai por nome -- que e o que `sort` abaixo ja
+  // pede. Campo acrescentado na mescla do terceiro lote de 20/10/2026, quando a
+  // correcao do ponto por aparelho (SEC-021) tornou `familia` obrigatoria e
+  // anulavel para forcar cada chamador a decidir.
+  familia: undefined,
   agora: Date.parse('2026-10-19T21:00:00.000Z') as RecorteDoDiretorio['agora'],
   sort: 'name',
   page: 1,

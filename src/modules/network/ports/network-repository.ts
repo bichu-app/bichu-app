@@ -28,6 +28,7 @@ import type {
   MudancaDoEncontroDaComunidade,
   NovoEncontroDaComunidade,
 } from '../domain/encontro-da-comunidade.js';
+import type { FamiliaDeSessao } from '../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 /**
@@ -87,6 +88,21 @@ export interface LocalDoEncontro {
 /** A agenda por distancia (`listNearbyNetworkEvents`). So encontros publicos. */
 export interface RecorteDaAgendaPorDistancia extends Omit<RecorteDaAgenda, 'sort' | 'visibility'> {
   readonly chamador: string;
+  /**
+   * **De qual APARELHO de quem chama** sai a regiao de referencia. SEC-021: a
+   * localizacao e da sessao de aparelho desde 23/09/2026, e o par
+   * `(user_id, session_family_id)` e a chave primaria da tabela -- sem a
+   * familia, a subconsulta da regiao devolve uma linha por aparelho e o
+   * Postgres levanta `more than one row returned by a subquery used as an
+   * expression`, que sobe como 500. E o mesmo defeito que `Perto` tinha,
+   * medido em homologacao em 19/10/2026.
+   *
+   * `undefined` quando o token nao carrega `sid` (anterior a emenda 1 do
+   * ADR-0002): sem aparelho nao ha regiao, entao `temRegiao` e falso, a
+   * distancia vem nula e a agenda sai por data -- o caminho que ja existia para
+   * quem nunca informou onde estava.
+   */
+  readonly familia: FamiliaDeSessao | undefined;
   readonly sort: 'distancia' | 'proximos';
   readonly maxKm?: 2 | 5 | 10 | undefined;
 }
@@ -100,7 +116,12 @@ export interface EncontroComDistancia {
 export interface PaginaPorDistancia {
   readonly itens: readonly EncontroComDistancia[];
   readonly total: number;
-  /** `false` quando a conta nao tem regiao de referencia valida. */
+  /**
+   * `false` quando ESTE APARELHO da conta nao tem regiao de referencia valida.
+   * Aparelho e nao conta (SEC-021): a regiao que o outro aparelho informou nao
+   * vale aqui, senao a agenda mediria distancia de um lugar onde este aparelho
+   * nunca esteve.
+   */
   readonly temRegiao: boolean;
 }
 

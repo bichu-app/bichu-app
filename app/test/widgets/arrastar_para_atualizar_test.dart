@@ -60,7 +60,7 @@
 //        item 5 fica VERDE nos dois casos -- ele le a palavra
 //        `AlwaysScrollableScrollPhysics` na fonte, e a palavra esta nas duas
 //        formas. E por isso que ele nao basta.
-//  6. Em qualquer uma das onze telas, troque o componente por um
+//  6. Em qualquer uma das doze telas, troque o componente por um
 //     `RefreshIndicator` cru.
 //     -> reprova `nenhuma tela usa RefreshIndicator cru`.
 
@@ -407,7 +407,7 @@ void main() {
         reason:
             'REPROVA: ${crus.join(', ')} monta `RefreshIndicator` direto. O '
             'gesto tem UM lugar -- `widgets/arrastar_para_atualizar.dart` --, '
-            'e nao e disciplina: sao onze superficies, e copiado onze vezes o '
+            'e nao e disciplina: sao doze superficies, e copiado doze vezes o '
             'gesto divergiria na primeira correcao. Uma com rotulo de leitor '
             'de tela e dez sem; uma com a fisica da lista curta e dez sem. '
             '`tela_pedidos_de_conexao.dart` era o cru que existia antes de '
@@ -415,7 +415,7 @@ void main() {
       );
     });
 
-    test('as onze superficies de conteudo de rede TEM o gesto', () {
+    test('as doze superficies de conteudo de rede TEM o gesto', () {
       // A LISTA E ESCRITA A MAO, de proposito. Derivar "toda tela que chama
       // `_carregar`" deixaria o portao concordar com qualquer recorte futuro;
       // esta lista e a DECISAO de 18/10, e mexer nela e um ato deliberado que
@@ -437,6 +437,11 @@ void main() {
         'lib/telas/perfil/meus_achados.dart',
         'lib/telas/perfil/vitrine_de_fotos.dart',
         'lib/telas/conexoes/tela_pedidos_de_conexao.dart',
+        // A DECIMA SEGUNDA, e ela nao e listagem: `/achados/:id` le UM
+        // achado do servidor. Ficou fora do lote de 18/10 porque o recorte
+        // daquele dia foi lista; o criterio e haver busca a refazer, e ela
+        // tem `_carregar`.
+        'lib/telas/achado/tela_do_achado.dart',
       ];
 
       final fontes = fontesDeLib();
@@ -471,7 +476,7 @@ void main() {
         isEmpty,
         reason:
             'REPROVA: ${semGesto.join('; ')}. O cliente pediu o gesto "no '
-            'aplicativo", e nao numa tela: estas onze sao as superficies com '
+            'aplicativo", e nao numa tela: estas doze sao as superficies com '
             'conteudo de rede que vale reler. Quem tirar uma daqui esta '
             'desfazendo a decisao de 18/10, e isso e um ato com nome no diff.',
       );

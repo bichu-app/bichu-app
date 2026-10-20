@@ -1,0 +1,20 @@
+# Trechos que a saida do portao PRECISA conter ao reprovar esta isca, um por
+# linha. Linha em branco e linha com `#` sao ignoradas. Ver o cabecalho de
+# `deve-reprovar-vazamento-em-rota-publica.esperado` para o motivo de conferir o
+# texto e nao so o codigo de saida.
+#
+# A operacao publica, e os sete parametros que ela nao podia declarar. Os
+# compostos (`center_lon`, `min_lat`) e o `max_km` estao nomeados um por um de
+# proposito: e por eles que se percebe uma troca do casamento por segmento de
+# volta para nome exato, ou da lista propria do pedido pela lista da resposta.
+iscaListaPublicaComCentro
+lat
+lon
+center_lon
+min_lat
+radius_m
+max_km
+X-Center-Point
+# O motivo tem de aparecer, e nao so o nome: um achado sem motivo nao diz a
+# quem le por que a rota nao pode ter aquilo.
+coordenada, distância ou raio no PEDIDO
