@@ -104,6 +104,17 @@ export function projecaoPublicaDoCaso(caso: CasoPublico, bases: BasesPublicas): 
     care_notes: redigido(caso.cuidados),
     can_report_sighting: !caso.doChamador,
     poster_url: links.posterUrl,
+    // `found_by_community` CHEGA AQUI PELO `allOf` do contrato, e não por
+    // escolha desta projeção: `PublicLostCase` é `allOf: [PublicLostPet, …]`, e
+    // o campo novo entrou em `PublicLostPet`. É a mesma costura que o cabeçalho
+    // de `listPublicLostPets` já registra para `distance_m`.
+    //
+    // **Falso é o valor medido, e não um padrão conveniente**: a leitura por
+    // token só resolve caso ABERTO — caso encerrado responde `410` com
+    // `lost-case-closed` —, então nenhuma resposta desta projeção pode trazer um
+    // reencontro. Declarar o campo e não emiti-lo faria o documento prometer a
+    // quatro clientes uma propriedade que nunca chega.
+    found_by_community: false,
   };
 }
 
@@ -177,5 +188,9 @@ export function projecaoPublicaDoPerdido(
         ? null
         : `${semBarraNoFim(bases.baseDeMidia)}/${perdido.chaveDaFoto}`,
     share_url: linksDoCaso(bases.baseDaWeb, perdido.shareToken).shareUrl,
+    // O SELO de reencontro pela comunidade (decisão do cliente, 20/10/2026).
+    // Vem da consulta, e não de uma dedução aqui: quem o decide é o ramo
+    // `reencontrado` do adaptador, onde a existência da conversa é predicado.
+    found_by_community: perdido.encontradoPelaComunidade,
   };
 }

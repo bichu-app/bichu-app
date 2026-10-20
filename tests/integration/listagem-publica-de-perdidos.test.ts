@@ -142,7 +142,10 @@ async function criarCaso(s: Semente): Promise<string> {
 }
 
 function recorte(ajustes: Partial<RecorteDePerdidos> = {}): RecorteDePerdidos {
-  return { pagina: 1, limite: 20, agora: AGORA, ...ajustes };
+  // `conjunto: 'aberto'` é o que a ausência de `case_state` escolhe, e é o que
+  // este arquivo sempre mediu: os casos abertos. O conjunto `reencontrado` tem
+  // arquivo próprio (`selo-de-reencontro-na-listagem-publica.test.ts`).
+  return { conjunto: 'aberto', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
 }
 
 void describe(

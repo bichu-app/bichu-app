@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1, 2 e 3
+**Status:** aceito, com emendas 1, 2, 3 e 4
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -20,6 +20,15 @@ conexão**. O apelido viaja junto, pelo mesmo predicado, porque é ele que dá
 endereço ao toque. Para quem **não** é conexão aceita — inclusive o estranho
 que escaneou a plaquinha — nada disso sai, e é ali que o motivo da regra
 anterior continua inteiro. Ver o fim do documento.
+
+**Emenda 4, 20/10/2026 (decisão do cliente):** a **listagem pública de
+perdidos** passa a poder devolver, sob pedido explícito, o caso **encerrado com
+reencontro pela comunidade**, por uma janela de **30 dias** contada do
+encerramento. É exposição nova e não reformatação: hoje encerrar o caso remove o
+animal da superfície pública no mesmo instante. A janela é o limite, e ela é
+predicado de servidor. Nenhum campo novo além do booleano `found_by_community`;
+o nível máximo de precisão geográfica continua **bairro e cidade**. Ver o fim do
+documento.
 
 ## Contexto
 
@@ -413,3 +422,140 @@ conversa for de um achado; e não aparece com quem não é conexão. Confirma?"*
   existe rota de disponibilidade de apelido e a descoberta por link está morta;
 - **nenhum identificador interno.** O item 6 continua inteiro: nem `users.id`,
   nem `users.public_ref`, nem UUID de espécie nenhuma em `participants`.
+
+
+# Emenda 4 — 20/10/2026: o pet reencontrado, por 30 dias, na listagem pública
+
+**Status:** aceita
+**Decisão do cliente**, nas palavras dele: *"o pet ganha um selo/filtro na
+pagina de pets como encontrado por 30 dias e depois ele expira e sai"*, e, sobre
+quem conta como comunidade: *"se o usuário remover que o cachorro estiver
+perdido, depois de um usuário ter escaneado a tag do usuário ou ter entrado em
+contato"*.
+
+## O que esta emenda abre, e por que ela é emenda e não reformatação
+
+**Medido em 20/10/2026**, contra Postgres de verdade e com o mesmo artefato que
+a homologação roda: encerrar o caso remove o animal da listagem pública **no
+mesmo instante**.
+
+    antes:  GET /v1/public/lost-pets           -> total 1   ["Medidor"]
+    POST /v1/lost-cases/{caseId}/close {"outcome":"reunited"} -> 200
+    depois: GET /v1/public/lost-pets           -> total 0   []
+
+A consulta carrega `lost_cases.status = 'open'` desde que existe. Então foto,
+nome de exibição, bairro, cidade e data do último avistamento **desapareciam** da
+superfície alcançável sem conta no segundo em que o tutor dizia que o animal
+voltou. Esta emenda mantém esses mesmos campos visíveis por mais 30 dias, mais um
+booleano. **Isso é dado novo em superfície pública**, e é por isso que precisa
+estar escrito aqui com data e com dono, e não só no contrato.
+
+## O que exatamente passa a sair, e sob qual pedido
+
+| | |
+|---|---|
+| **Onde** | `GET /v1/public/lost-pets` (`listPublicLostPets`), e **somente** com `case_state=reunited` no pedido |
+| **O que** | os MESMOS campos de `PublicLostPet` que o caso aberto já devolvia, mais `found_by_community: true` |
+| **Por quanto tempo** | 30 dias contados de `lost_cases.closed_at`. No 31º dia o caso sai, e sai também deste conjunto |
+| **Para quem** | qualquer um, inclusive sem conta — é a mesma superfície da lista de perdidos |
+| **Quem decide o prazo** | o **servidor**, por predicado na consulta, com o relógio da aplicação |
+
+**Nenhum campo de precisão geográfica muda.** `area_label` continua sendo bairro
+e cidade, montado pela mesma `rotuloDaArea` da lista de abertos. O item 4 (nada
+de coordenada) e o item 5 (nada de mapa com pino) ficam inteiros.
+
+## O booleano, e por que não uma data
+
+`found_by_community` é `boolean`. A alternativa natural era `reunited_at`, e ela
+foi recusada: a data diria **quando** o animal voltou, e isso é um fato novo
+sobre o pet e sobre o lugar numa superfície sem conta — junto de `area_label` e
+de `lost_since` ela fecha uma linha do tempo que ninguém pediu. O selo precisa
+dizer apenas que voltou. A janela de 30 dias é aplicada pelo servidor e não
+precisa ser contável pelo cliente.
+
+Ele sai na resposta, e não é inferido do pedido, por um motivo de implementação
+que também é de privacidade: o cartão do pet é componente compartilhado, e cartão
+que descobre o estado do animal relendo a URL que o trouxe é cartão que mente na
+próxima tela que o reaproveitar.
+
+## O item 6 continua inteiro, e o 7 e o 8 também
+
+- **item 6 (nenhum UUID):** a chave deste conjunto continua sendo o
+  `share_token` opaco. Não entra `case_id`, não entra `pet_id`, e o
+  `portao-contrato-publico.ts` continua cobrando isso por nome;
+- **item 7 (não agrupar os pets de um tutor):** nada nesta emenda liga dois
+  itens da lista à mesma conta. Dois reencontros do mesmo tutor na mesma página
+  são indistinguíveis de dois reencontros de tutores diferentes, exatamente como
+  já acontece com dois casos abertos;
+- **item 8 (sem histórico de casos anteriores do pet):** a janela devolve **o**
+  caso encerrado que satisfaz os predicados, e não uma lista. Um pet com três
+  casos encerrados não produz três itens: o índice único parcial
+  `lost_cases_um_aberto_por_pet` só vale para abertos, mas o conjunto é recortado
+  pela janela de 30 dias e pelo sinal de comunidade, e nada aqui expõe a
+  sequência. O que esta emenda **não** autoriza é uma lista de reencontros por
+  pet, por tutor ou por bairro.
+
+## O sinal de comunidade é a CONVERSA, e isso foi medido
+
+O cliente nomeou dois sinais: plaquinha escaneada e contato. O predicado é
+**existir conversa ligada ao caso** (`conversations.case_id`), e ele cobre os
+dois, porque a conversa nasce de exatamente dois caminhos — os dois únicos
+chamadores de `ConversationService.abrirPorAviso`, em `src/bin/api.ts`:
+
+1. `scan_notice` — a plaquinha foi lida e o achador registrou o aviso ao tutor;
+2. `found_notice` — o achado avulso foi **confirmado** pelo tutor.
+
+E o `INSERT` da conversa exige `pets.owner_user_id IS DISTINCT FROM` quem avisa.
+**Tutor que lê a própria plaquinha não produz selo**, e isso é privacidade e não
+só correção: o selo é uma afirmação pública sobre o animal, e uma afirmação
+pública que o próprio dono pode fabricar sozinho vale como prova de nada.
+
+**`tag_scans` foi recusada como sinal.** Ela grava a leitura da página, sem
+conta, sem identidade e sem mensagem: conta o próprio tutor, o robô que
+pré-visualiza o link e quem abriu por curiosidade. A tabela já separa as duas
+coisas, em `resulted_in_found_report`.
+
+**`resolution.reunion_channel` não participa.** O enum existe em
+`LostCaseClosure` (`tag_scan`, `bichu_alert`, `poster_or_link`, `on_my_own`,
+`other`) e **nenhuma tela o preenche** — medido em 20/10/2026, nulo em todo o
+dado. Decidir uma exposição pública por um campo vazio seria decidir por
+acidente. O cliente escolheu não perguntar na folha de encerramento, e esta
+emenda não reabre isso.
+
+## A janela é predicado, e não estado gravado
+
+`closed_at >= agora - 30 dias`, com `agora` vindo do relógio da **aplicação** e
+nunca do `now()` do banco (dois relógios na mesma decisão é o defeito que faz
+carga falhar sozinha em múltiplo comum, e aqui ele decidiria se um animal aparece
+numa página pública).
+
+A alternativa era uma coluna de expiração virada por varredura, e ela foi
+recusada por privacidade antes de performance: varredura precisa de agendador, e
+agendador falha calado. No dia em que a varredura não roda, o selo **continua na
+rua** — e um prazo de retenção que depende de um job é um prazo que não existe.
+Predicado não tem dia em que não roda.
+
+## O que esta emenda NÃO decide, e portanto continua proibido
+
+- **a lista de casos abertos não muda.** Sem `case_state`, ou com
+  `case_state=open`, a resposta é a de sempre — o SQL compilado é idêntico,
+  caractere por caractere, e há isca comparando os dois textos. Reencontrado
+  **não** ocupa vaga da página 1 dos abertos: a lista pela qual a vizinhança acha
+  o animal que sumiu não foi tocada;
+- **encerramento `not_found` e `false_alarm` nunca aparecem**, em nenhuma
+  janela. `not_found` é a busca que não acabou bem e `false_alarm` é o caso que
+  nunca existiu; publicar qualquer um dos dois seria contar uma história que o
+  tutor não autorizou;
+- **nenhuma outra superfície pública ganha o reencontro.** A leitura por token
+  (`/p/{shareToken}`) continua respondendo `410 lost-case-closed` para caso
+  encerrado, e `found_by_community` sai `false` nela de propósito — o campo chega
+  lá pelo `allOf` do contrato, não por decisão de produto;
+- **nada de contagem, agregado ou vitrine de reencontros.** "Quantos animais
+  voltaram neste bairro" é número novo sobre pessoas e lugares, e não está
+  decidido;
+- **nada de indexação.** A rota continua respondendo `X-Robots-Tag: noindex,
+  nofollow` e `Referrer-Policy: no-referrer`, e o selo não muda isso: o animal
+  que voltou não pode ficar numa página de busca por mais 30 dias;
+- **o tutor continua decidindo.** `share_to_public_list` é predicado dos dois
+  conjuntos. Quem nunca deixou o caso aparecer na lista não ganha selo nenhum, e
+  isso não precisou de código novo — o predicado já estava lá.

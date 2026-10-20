@@ -654,6 +654,34 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     return ControleDeFiltro(
       campos: <CampoDeTextoDoFiltro>[_campoDaCidade],
       grupos: <GrupoDeFiltro>[
+        // O CONJUNTO, e ele é o PRIMEIRO grupo da folha (cliente, 20/10/2026:
+        // *"o pet ganha um selo/filtro na pagina de pets como encontrado por 30
+        // dias e depois ele expira e sai"*).
+        //
+        // Primeiro porque ele não recorta a mesma lista que os outros quatro:
+        // ele troca a lista. Lido depois de `Espécie` e `Porte`, pareceria um
+        // filtro a mais sobre os perdidos.
+        //
+        // **Nasce SEM pastilha marcada**, pelo mesmo motivo de `period`: nulo é
+        // a página como ela abre — os casos abertos, sem `case_state` na
+        // consulta. Marcar `Perdidos` por padrão poria o parâmetro na query e o
+        // devolveria em `applied_filters`, e a linha do recorte diria que há um
+        // filtro aplicado numa página que ninguém filtrou.
+        GrupoDeFiltro(
+          chave: 'case_state',
+          titulo: 'Estado',
+          selecionado: base.estado?.codigo,
+          opcoes: <OpcaoDeRecorte>[
+            for (final e in EstadoDoCasoNaLista.values)
+              OpcaoDeRecorte(codigo: e.codigo, rotulo: e.rotulo),
+          ],
+          // A nota diz as DUAS condições, e nenhuma delas é promessa: os 30
+          // dias e a ajuda de alguém. Sem ela, `Encontrados` pareceria "todos
+          // os que já voltaram", e a lista vazia de quem escolheu a pastilha
+          // viraria um defeito aparente.
+          nota: 'Encontrados mostra quem voltou com a ajuda de alguém da '
+              'comunidade, nos últimos 30 dias.',
+        ),
         // O bairro só entra quando há UM para oferecer, e o único que este app
         // conhece é o da própria região cadastrada. Uma lista de bairros da
         // cidade não existe em lugar nenhum deste produto, e inventá-la a
@@ -733,6 +761,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // fazer com a ausência é o servidor, pelo `default: 30d` que o
         // contrato declara na rota — o app parou de escolher por ele.
         janela: JanelaDePerdidos.de(escolha.filtros['period']),
+        // **Limpar a pastilha deixa o estado NULO**, e `case_state` sai da
+        // consulta -- a página volta aos casos abertos sem dizer o nome deles.
+        // Mesma mecânica da janela logo acima, e pelo mesmo motivo.
+        estado: EstadoDoCasoNaLista.de(escolha.filtros['case_state']),
         pagina: 1,
       ),
     );
@@ -772,7 +804,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         base.bairro != null ||
         base.especie != null ||
         base.porte != null ||
-        base.janela != null;
+        base.janela != null ||
+        // O CONJUNTO CONTA como recorte, inclusive `Perdidos` dito em voz alta:
+        // quem escolheu `Encontrados` e não achou nada precisa ler que foi o
+        // recorte, e não que a comunidade nunca encontrou nenhum animal.
+        base.estado != null;
   }
 
   @override

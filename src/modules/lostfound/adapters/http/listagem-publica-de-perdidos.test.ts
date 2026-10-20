@@ -83,6 +83,9 @@ function perdidoHostil(parcial: Partial<PerdidoPublico> = {}): PerdidoPublico {
     racaRotulo: `Poodle, fala com ${EMAIL_DO_TUTOR}`,
     corRotulo: 'Caramelo',
     vistoPorUltimoEm: new Date('2026-10-17T18:30:00.000Z'),
+    // O selo entrou em 20/10/2026. `false` aqui porque este dublê é o item do
+    // conjunto de casos ABERTOS, que é o que a rota devolve sem `case_state`.
+    encontradoPelaComunidade: false,
     cidade: 'São Paulo',
     bairro: 'Vila Mariana',
     chaveDaFoto: 'pets/abc/thumb/f00d.webp',

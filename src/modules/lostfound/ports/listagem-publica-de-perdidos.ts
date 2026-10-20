@@ -43,6 +43,38 @@ import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 export type JanelaDePerdidos = '24h' | '7d' | '30d';
 
 /**
+ * QUAL CONJUNTO a pagina devolve (`case_state` do contrato), e a distincao nao e
+ * um filtro a mais.
+ *
+ * `aberto` e o conjunto que esta operacao sempre devolveu, e e o que a ausencia
+ * do parametro significa -- por isso ele **nao** e um campo opcional como
+ * [RecorteDePerdidos.cidade]: ausencia de cidade e "nao recorte por isto",
+ * ausencia de `case_state` e "o recorte historico".
+ *
+ * `reencontrado` e o conjunto da decisao do cliente de 20/10/2026 -- *"o pet
+ * ganha um selo/filtro na pagina de pets como encontrado por 30 dias e depois
+ * ele expira e sai"* -- e ele carrega DOIS predicados a mais que ninguem pode
+ * pedir separado: a janela de 30 dias sobre `closed_at` e a existencia de
+ * conversa ligada ao caso.
+ *
+ * **Os dois conjuntos nao se misturam**, e isso e decisao de produto e nao de
+ * implementacao: a lista de casos ABERTOS e como a vizinhanca acha o animal que
+ * sumiu, e um reencontrado ocupando uma das vinte vagas da pagina 1 e uma vaga
+ * que o animal perdido perdeu.
+ */
+export type ConjuntoDePerdidos = 'aberto' | 'reencontrado';
+
+/**
+ * A JANELA DO SELO, em dias. Decisao do cliente de 20/10/2026, nas palavras
+ * dele: *"por 30 dias e depois ele expira e sai"*.
+ *
+ * Numero aqui e nao no adaptador porque a isca de borda o importa: ela precisa
+ * montar um caso de 29 dias e um de 31, e dois lugares com o numero dariam uma
+ * isca que mede a copia dela mesma.
+ */
+export const DIAS_DO_SELO_DE_REENCONTRO = 30;
+
+/**
  * O recorte pedido.
  *
  * **`cidade` DEIXOU DE SER OBRIGATÓRIA EM 19/10/2026**, por decisão do cliente:
@@ -68,6 +100,13 @@ export type JanelaDePerdidos = '24h' | '7d' | '30d';
  * aparecer em lista.
  */
 export interface RecorteDePerdidos {
+  /**
+   * Qual conjunto. **Sem `?`, de propósito**: quem monta o recorte tem de
+   * decidir, e `undefined` aqui faria a consulta escolher sozinha num `??`
+   * espalhado por três arquivos. Quem traduz a ausência do parâmetro em
+   * `aberto` é o serviço, num lugar só.
+   */
+  readonly conjunto: ConjuntoDePerdidos;
   /**
    * A cidade pedida, ou **indefinida quando ninguém pediu nenhuma**.
    *
@@ -136,6 +175,22 @@ export interface PerdidoPublico {
    * `Loja` já cometeu.
    */
   readonly chaveDaFoto: string | null;
+  /**
+   * `found_by_community` do contrato: o SELO.
+   *
+   * Verdadeiro só no conjunto `reencontrado`, onde a existência da conversa é
+   * **predicado do `WHERE`** — então todo item daquele conjunto o tem, e o
+   * valor não é um eco do pedido: ele é implicado pelo predicado, e é a isca do
+   * SQL compilado que mantém o predicado no lugar.
+   *
+   * Falso no conjunto `aberto`, e ali ele **não é medido**: selo de reencontro
+   * num caso aberto não tem significado, e avaliar o `EXISTS` por linha na
+   * lista que a vizinhança abre seria custo novo na consulta que menos pode
+   * ganhar custo (`conversations` não tem índice por `case_id` até a migração
+   * `20261020000004`, e mesmo com ele a avaliação por linha seria paga por
+   * nada).
+   */
+  readonly encontradoPelaComunidade: boolean;
 }
 
 export interface PaginaDePerdidos {

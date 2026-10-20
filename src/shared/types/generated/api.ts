@@ -7735,6 +7735,24 @@ export interface components {
             photo_url?: string | null;
             /** Format: uri */
             share_url?: string;
+            /**
+             * @description **O SELO de reencontro pela comunidade** (decisao do cliente,
+             *     20/10/2026). Verdadeiro so para item devolvido com
+             *     `case_state=reunited`; falso em todo item do conjunto de casos
+             *     abertos, que e o que a pagina responde quando ninguem pede nada.
+             *
+             *     O campo sai na resposta e nao e inferido do pedido de proposito: o
+             *     cartao do pet e componente compartilhado, e cartao que descobre o
+             *     estado do animal relendo a URL que o trouxe e cartao que mente na
+             *     proxima tela que o reaproveitar.
+             *
+             *     **Booleano, e nao data.** `reunited_at` diria QUANDO o animal voltou,
+             *     e isso e um fato novo sobre o pet e sobre o lugar numa superficie
+             *     alcancavel sem conta. O selo precisa dizer apenas que voltou; a
+             *     janela de 30 dias e aplicada pelo servidor e nao precisa ser contavel
+             *     pelo cliente. Ver a Emenda 4 do ADR-0010.
+             */
+            found_by_community?: boolean;
         };
         /**
          * @description O cartaz. Mesma regra de privacidade da projecao publica (SEC-002): sem
@@ -16569,6 +16587,57 @@ export interface operations {
     listPublicLostPets: {
         parameters: {
             query?: {
+                /**
+                 * @description **QUAL DOS DOIS CONJUNTOS a pagina devolve.** Entrou em 20/10/2026
+                 *     pela decisao do cliente: *"o pet ganha um selo/filtro na pagina de
+                 *     pets como encontrado por 30 dias e depois ele expira e sai"*.
+                 *
+                 *     - **ausente** -- os casos **abertos**, exatamente como esta operacao
+                 *       sempre respondeu. Byte por byte: mesmos predicados, mesma ordem,
+                 *       mesmo `total`.
+                 *     - `open` -- o mesmo conjunto, dito em voz alta. Ele aparece em
+                 *       `applied_filters` quando enviado, e a ausencia **nao** aparece.
+                 *     - `reunited` -- os casos encerrados com **reencontro pela
+                 *       comunidade**, e **somente** os que satisfazem as duas condicoes
+                 *       abaixo. Todo item deste conjunto vem com
+                 *       `found_by_community: true`.
+                 *
+                 *     **A ausencia NAO e "sem recorte", e esta e a diferenca em relacao a
+                 *     `city` e a `period` logo abaixo.** Aquelas duas sao filtros que
+                 *     recortam um conjunto; esta escolhe QUAL conjunto. A lista publica de
+                 *     perdidos sempre foi a dos casos abertos -- e continua sendo quando
+                 *     ninguem pede nada --, entao a ausencia carrega o recorte historico e
+                 *     nao a abertura dele. Por isso tambem **nao ha `default`**: o
+                 *     `useDefaults: true` do Ajv escreveria o valor na consulta de quem nao
+                 *     mandou nada, e `applied_filters` passaria a citar um filtro que
+                 *     ninguem aplicou -- o defeito que `period` pagou em 18/10/2026.
+                 *
+                 *     ## As duas condicoes de `reunited`, e nenhuma delas e opcional
+                 *
+                 *     1. **A JANELA DE 30 DIAS**, contada de `closed_at` pelo relogio da
+                 *        APLICACAO e nunca pelo `now()` do banco (dois relogios na mesma
+                 *        decisao e o defeito que faz carga falhar sozinha em multiplo
+                 *        comum). No 31o dia o caso sai, e sai tambem deste conjunto -- nao
+                 *        ha estado gravado nem varredura: o prazo e predicado.
+                 *     2. **O SINAL DA COMUNIDADE**, que e existir **conversa** ligada ao
+                 *        caso. A conversa nasce de UM destes dois caminhos, e os dois sao
+                 *        os que o cliente nomeou -- *"depois de um usuario ter escaneado a
+                 *        tag do usuario ou ter entrado em contato"*: a plaquinha lida que
+                 *        virou aviso ao tutor (`scan_notice`) e o achado avulso que o tutor
+                 *        CONFIRMOU (`found_notice`). Em nenhum dos dois o outro lado pode
+                 *        ser o proprio tutor -- a abertura da conversa exige
+                 *        `owner_user_id IS DISTINCT FROM` quem avisa --, entao tutor que le
+                 *        a propria plaquinha nao produz selo.
+                 *
+                 *     **`resolution.reunion_channel` NAO participa da decisao.** O enum
+                 *     existe em `LostCaseClosure` e **nenhuma tela o preenche**: medido em
+                 *     20/10/2026, esta nulo em todo o dado. Decidir por ele seria decidir
+                 *     por um campo vazio.
+                 *
+                 *     Encerramento `not_found` e `false_alarm` **nunca** entram aqui, em
+                 *     nenhuma janela.
+                 */
+                case_state?: "open" | "reunited";
                 /**
                  * @description **SEM `required`, e a ausencia dele e a decisao do cliente de
                  *     19/10/2026**: *"o campo cidade do filtro da pagina pet nao deve ser

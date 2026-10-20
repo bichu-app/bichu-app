@@ -48,6 +48,8 @@ const AGORA = new Date('2026-10-18T12:00:00.000Z');
  * ninguém escolheu nada.
  */
 const RECORTE_MINIMO: RecorteDePerdidos = {
+  // `aberto` é o conjunto que a ausência de `case_state` escolhe (20/10/2026).
+  conjunto: 'aberto',
   cidade: 'São Paulo',
   pagina: 1,
   limite: 20,
@@ -62,6 +64,7 @@ const RECORTE_COM_JANELA: RecorteDePerdidos = { ...RECORTE_MINIMO, janela: '30d'
  * qualquer cidade.
  */
 const RECORTE_SEM_CIDADE: RecorteDePerdidos = {
+  conjunto: 'aberto',
   pagina: 1,
   limite: 20,
   agora: AGORA,

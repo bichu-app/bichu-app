@@ -45,6 +45,7 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import type { ListagemPublicaDePerdidosService } from '../../application/listagem-publica-de-perdidos.js';
 import type { EspecieDoCaso, PorteDoCaso } from '../../ports/leitura-publica-do-caso.js';
 import type { JanelaDePerdidos } from '../../ports/listagem-publica-de-perdidos.js';
+import type { EstadoDoCasoPedido } from '../../application/listagem-publica-de-perdidos.js';
 
 export const rotaDaListagemDePerdidos = defineRoute({
   operationId: 'listPublicLostPets',
@@ -69,6 +70,7 @@ export interface DependenciasDaListagemDePerdidos {
  * declara. Reconferir aqui seria uma segunda definição dos limites.
  */
 interface QueryDePerdidos {
+  readonly case_state?: EstadoDoCasoPedido | undefined;
   readonly city?: string | undefined;
   readonly neighborhood?: string | undefined;
   readonly species?: EspecieDoCaso | undefined;
@@ -113,6 +115,10 @@ export function registrarRotaDaListagemDePerdidos(
       // isca é o `aparado`, e é lá que está a nota de desligamento. O `?? ''`
       // saiu por não ter mais razão de existir, não por ser o mecanismo.
       const corpo = await deps.listagem.pagina({
+        // `case_state` chega conferido contra o `enum` do contrato por
+        // `vigiarParametrosDasRotas`: valor fora de `[open, reunited]` e 400
+        // antes desta linha, e nao um conjunto escolhido em silencio.
+        caseState: query.case_state,
         city: query.city,
         neighborhood: query.neighborhood,
         species: query.species,

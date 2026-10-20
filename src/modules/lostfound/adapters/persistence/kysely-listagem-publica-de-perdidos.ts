@@ -141,12 +141,13 @@
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { StatusDoPet } from '../../../../shared/db/schema.js';
-import type {
-  JanelaDePerdidos,
-  ListagemPublicaDePerdidos,
-  PaginaDePerdidos,
-  PerdidoPublico,
-  RecorteDePerdidos,
+import {
+  DIAS_DO_SELO_DE_REENCONTRO,
+  type JanelaDePerdidos,
+  type ListagemPublicaDePerdidos,
+  type PaginaDePerdidos,
+  type PerdidoPublico,
+  type RecorteDePerdidos,
 } from '../../ports/listagem-publica-de-perdidos.js';
 
 /** Pet nesses estados não tem mais caso público, mesmo com o caso aberto. */
@@ -169,6 +170,25 @@ export function inicioDaJanela(agora: Date, janela: JanelaDePerdidos): Date {
 }
 
 /**
+ * O INÍCIO DA JANELA DO SELO: `agora - 30 dias`, e o selo vale para o caso cujo
+ * `closed_at` é **maior ou igual** a este instante.
+ *
+ * Mesmo relógio de [inicioDaJanela] e pelo mesmo motivo, que o cabeçalho desta
+ * seção já escreve: o instante vem da aplicação e nunca do `now()` do banco.
+ * Dois relógios na mesma decisão é o defeito que faz carga falhar sozinha em
+ * múltiplo comum — e aqui ele seria pior que na janela de `period`, porque este
+ * predicado decide se um pet aparece ou não numa superfície pública.
+ *
+ * **Predicado, e não estado gravado.** A alternativa era uma coluna
+ * `selo_expira_em` virada por varredura, e ela custa um agendador que falha
+ * calado: no dia em que a varredura não roda, o selo continua na rua. O
+ * predicado não tem dia em que não roda.
+ */
+export function inicioDaJanelaDoSelo(agora: Date): Date {
+  return new Date(agora.getTime() - DIAS_DO_SELO_DE_REENCONTRO * 24 * 60 * 60 * 1000);
+}
+
+/**
  * A consulta base: os quatro predicados de publicação e as junções.
  *
  * Exportada porque o teste do SQL compilado a lê, e porque a contagem do
@@ -180,7 +200,7 @@ export function construtorDaListagemPublicaDePerdidos(
   db: DbExecutor,
   recorte: RecorteDePerdidos,
 ) {
-  let consulta = db
+  const comAsJuncoes = db
     .selectFrom('lost_cases')
     .innerJoin('pets', 'pets.id', 'lost_cases.pet_id')
     .leftJoin('ref_breeds', 'ref_breeds.code', 'pets.breed_code')
@@ -193,9 +213,61 @@ export function construtorDaListagemPublicaDePerdidos(
         .on('pet_photos.is_primary', '=', true)
         .on('pet_photos.status', '=', 'ready')
         .on('pet_photos.deleted_at', 'is', null),
-    )
-    // 1. O caso está aberto.
-    .where('lost_cases.status', '=', 'open')
+    );
+
+  // 1. O ESTADO DO CASO, e ele é um RAMO e não um filtro (decisão do cliente de
+  //    20/10/2026: *"o pet ganha um selo/filtro na pagina de pets como
+  //    encontrado por 30 dias e depois ele expira e sai"*).
+  //
+  // **O ramo `aberto` ocupa a posição EXATA do predicado que estava escrito
+  // aqui**, e isso não é capricho de diagramação: com ele nesta posição, o SQL
+  // compilado do conjunto de casos abertos é IDÊNTICO, caractere por caractere,
+  // ao de antes desta mudança — mesmos predicados, mesma ordem, mesmos
+  // parâmetros. A lista que a vizinhança abre para achar o animal que sumiu é a
+  // consulta mais cara de mexer deste produto, e a forma de não mexer nela é
+  // essa. `selo-de-reencontro-na-listagem.test.ts` compara os dois textos.
+  //
+  // O ramo `reencontrado` acrescenta TRÊS predicados, e os três são obrigatórios
+  // juntos — um sem o outro é um selo errado numa superfície pública:
+  //
+  //   a) `status = 'closed_reunited'`. Encerramento `not_found` e `false_alarm`
+  //      não entram em janela nenhuma: `not_found` é a busca que não acabou bem,
+  //      e `false_alarm` é o caso que nunca existiu.
+  //   b) `closed_at >= agora - 30 dias`, do relógio da APLICAÇÃO.
+  //   c) EXISTE conversa ligada ao caso. É o sinal da comunidade, e ele cobre os
+  //      DOIS caminhos que o cliente nomeou — *"depois de um usuario ter
+  //      escaneado a tag do usuario ou ter entrado em contato"*: a conversa de
+  //      `scan_notice` nasce da plaquinha lida que virou aviso ao tutor, e a de
+  //      `found_notice` nasce do achado avulso que o tutor CONFIRMOU. São os
+  //      dois únicos chamadores de `abrirPorAviso` (`src/bin/api.ts`), e o
+  //      `INSERT` dos dois exige `pets.owner_user_id IS DISTINCT FROM` quem
+  //      avisa — então tutor que lê a própria plaquinha **não** produz selo.
+  //
+  // `tag_scans` NÃO é o sinal, e a diferença decide se o selo mente: aquela
+  // tabela grava a leitura da página, sem conta, sem identidade e sem mensagem.
+  // Ela conta o próprio tutor, o robô que pré-visualiza o link e quem abriu por
+  // curiosidade. A própria tabela já separa as duas coisas, na coluna
+  // `resulted_in_found_report`.
+  //
+  // `resolution.reunion_channel` também não participa: o enum existe em
+  // `LostCaseClosure` e NENHUMA tela o preenche — medido em 20/10/2026, nulo em
+  // todo o dado. Decidir por ele seria decidir por um campo vazio.
+  const comOEstado =
+    recorte.conjunto === 'aberto'
+      ? comAsJuncoes.where('lost_cases.status', '=', 'open')
+      : comAsJuncoes
+          .where('lost_cases.status', '=', 'closed_reunited')
+          .where('lost_cases.closed_at', '>=', inicioDaJanelaDoSelo(recorte.agora))
+          .where((eb) =>
+            eb.exists(
+              eb
+                .selectFrom('conversations')
+                .whereRef('conversations.case_id', '=', 'lost_cases.id')
+                .select('conversations.id'),
+            ),
+          );
+
+  let consulta = comOEstado
     // 2. O tutor deixou o caso aparecer na LISTA. O link dele continua valendo
     //    de qualquer forma: quem decide isso é a leitura por token, que de
     //    propósito não tem este predicado.
@@ -312,6 +384,17 @@ export function criarListagemPublicaDePerdidos(db: Db): ListagemPublicaDePerdido
             cidade: linha.last_seen_city,
             bairro: linha.last_seen_neighborhood,
             chaveDaFoto: linha.thumb_key,
+            // O SELO. Ele não é lido de coluna nenhuma e não é eco do pedido: no
+            // ramo `reencontrado` a existência da conversa é predicado do
+            // `WHERE` logo acima, então todo item deste conjunto a tem, e no ramo
+            // `aberto` o selo não tem significado. Avaliar o `EXISTS` por linha
+            // também no ramo aberto seria custo novo na consulta que a
+            // vizinhança abre, pago por um valor que já se sabe.
+            //
+            // O que sustenta a frase "todo item deste conjunto a tem" é a isca
+            // de SQL compilado: `selo-de-reencontro-na-listagem.test.ts` cobra o
+            // `EXISTS` e os outros dois predicados do ramo, por nome.
+            encontradoPelaComunidade: recorte.conjunto === 'reencontrado',
           }),
         ),
       };
