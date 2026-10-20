@@ -690,10 +690,28 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     );
   }
 
+  /// A SAIDA DA FAIXA DE ERRO: o rotulo que o servidor manda tem de levar a
+  /// algum lugar.
+  ///
+  /// `FaixaDeAviso` desenha o rotulo da acao mesmo com `aoTocarNaAcao` nulo, e
+  /// um rotulo de acao SEM destino e o defeito que a BICHUS-62 nomeou. Por isso
+  /// cada `proximaAcao` que `MensagensDeErro` sabe devolver nesta rota precisa
+  /// do seu ramo aqui.
+  ///
+  /// **`verificarEmail` chega pelo `409 contact-channel-unverified`** -- a
+  /// recusa do servidor para quem nao confirmou o e-mail. E uma REDE DE
+  /// SEGURANCA, nao o caminho comum: a porta da indicacao ja esconde a acao de
+  /// criar de quem nao esta validado (`podeCriarNaComunidade`). O que sobra e
+  /// quem tinha a tela em pe quando o estado do e-mail mudou noutro aparelho --
+  /// e esse ainda ve a faixa, e a faixa ainda tem de sair.
   VoidCallback? _saidaDoErro(BuildContext context, MensagemDeErro mensagem) {
     if (mensagem.acao == null) return null;
     final rota = mensagem.rotaDaAcao;
     if (rota != null) return () => context.go(rota);
+    if (mensagem.proximaAcao == ProximaAcao.verificarEmail) {
+      final email = Escopo.of(context).sessao.usuario?.email ?? '';
+      return () => context.push(Rotas.verifiqueSeuEmail, extra: email);
+    }
     if (mensagem.proximaAcao == ProximaAcao.entrar) {
       return () => context.push(Rotas.entrar);
     }
