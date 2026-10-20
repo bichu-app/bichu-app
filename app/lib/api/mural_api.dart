@@ -206,22 +206,47 @@ abstract class EscritaDoMural implements IntencaoDeFotoDaPublicacao {
   Future<void> apagar(String ref);
 }
 
-/// O estado de processamento da foto. `processing` -> `ready` | `rejected`, e
-/// **nunca volta**.
-enum EstadoDaFotoDaPublicacao { processando, pronta, recusada }
+/// `#/components/schemas/MyPublicationImage/properties/status` do contrato.
+///
+/// O estado de processamento da imagem de uma publicacao:
+/// `processing` -> `ready` | `rejected`, e **nunca volta**.
+///
+/// **O PONTEIRO NAO E DECORACAO, e a falta dele foi um defeito meu medido.**
+/// `verificar-conformidade-do-app` exige que todo enum de `app/lib/api/` ou
+/// aponte para a lista fechada que ele espelha, ou diga `/// Local:` com o
+/// motivo -- *"sem isso o portao nao sabe se deveria conferi-lo, e o silencio
+/// vira aprovacao"*. Este nasceu sem ponteiro e levou o portao de **1
+/// divergencia pre-existente para 2**; o agente da mescla do lote 3 consertou,
+/// e esta forma e a que a sessao irma escolheu, para as duas nao colidirem.
+///
+/// Com o ponteiro, o portao RESOLVE a ancora contra a spec e confere os tres
+/// valores -- isto e, ele passa a medir, em vez de so aprovar.
+/// **ENUM COM O VALOR DE FIO, e nao um `switch` ao lado.** O portao resolve a
+/// ancora e le os tres valores DAQUI; com o `switch` separado ele acusava
+/// `enum-sem-valores-lidos` -- *"comparar conjunto vazio com o contrato aprova
+/// qualquer coisa"*. E a forma de `PendenciaDeCadastro`, em `modelos.dart`.
+///
+/// O ganho nao e so de portao: o valor de fio passa a ter **um dono**. Antes ele
+/// vivia no `switch`, e o enum nao sabia o proprio nome no contrato.
+enum EstadoDaFotoDaPublicacao {
+  processando('processing'),
+  pronta('ready'),
+  recusada('rejected');
+
+  const EstadoDaFotoDaPublicacao(this.valor);
+
+  /// O valor que o contrato declara em `MyPublicationImage.status`.
+  final String valor;
+}
 
 EstadoDaFotoDaPublicacao _estadoDe(Object? valor) {
-  switch (valor) {
-    case 'ready':
-      return EstadoDaFotoDaPublicacao.pronta;
-    case 'rejected':
-      return EstadoDaFotoDaPublicacao.recusada;
-    default:
-      // Qualquer outra coisa — inclusive um estado novo que o servidor passe a
-      // mandar — cai em `processando`. E o estado em que a tela nao promete
-      // imagem nenhuma, e portanto o unico seguro para o desconhecido.
-      return EstadoDaFotoDaPublicacao.processando;
+  for (final e in EstadoDaFotoDaPublicacao.values) {
+    if (e.valor == valor) return e;
   }
+  // Qualquer outra coisa, inclusive um estado novo que o servidor passe a
+  // mandar, cai em `processando`. E o estado em que a tela nao promete imagem
+  // nenhuma, e portanto o unico seguro para o desconhecido.
+  return EstadoDaFotoDaPublicacao.processando;
 }
 
 /// A imagem de uma publicacao na LINHA DO TEMPO. **Sem estado**: imagem que nao
