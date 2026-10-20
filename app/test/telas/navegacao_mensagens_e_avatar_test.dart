@@ -34,6 +34,7 @@ import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/telas/pet/tela_detalhe_do_pet.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
+import 'package:bichu/widgets/saida_da_tela.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,6 +83,48 @@ Future<http.Response> _semPet(http.Request req) async {
     return http.Response('', 204);
   }
   return http.Response('', 404);
+}
+
+/// O servidor que RESPONDE a contagem do sino, com doze avisos esperando.
+///
+/// Doze, e nao tres: e acima do teto de um digito, e por isso ele exercita as
+/// DUAS pontas da regra de apresentacao de uma vez -- o distintivo pintado
+/// encurta para `9+`, e o nome acessivel continua dizendo doze.
+Future<http.Response> _comDozeAvisos(http.Request req) async {
+  if (req.url.path == '/v1/me/notifications/count' && req.method == 'GET') {
+    return json200(<String, dynamic>{'unread_total': 12});
+  }
+  return _semPet(req);
+}
+
+/// Como [_comDozeAvisos], mais a CAIXA inteira: a lista e a marcacao de vista.
+///
+/// Existe para a isca de abrir a caixa. Sem a marcacao respondendo `204` o
+/// contador nao zera -- de proposito --, e sem a lista a tela abre em falha e a
+/// isca mediria outra coisa.
+Future<http.Response> _comCaixaQueAbre(http.Request req) async {
+  if (req.url.path == '/v1/me/notifications' && req.method == 'GET') {
+    return json200(<String, dynamic>{
+      'items': <dynamic>[
+        <String, dynamic>{
+          'ref': 'aviso-1',
+          'kind': 'broadcast',
+          'subject': 'Recado do Bichu',
+          'occurred_at': '2026-10-19T12:00:00Z',
+          'read': false,
+          'grouped_count': 1,
+        },
+      ],
+      'page': 1,
+      'limit': 30,
+      'total': 1,
+      'unread_total': 12,
+    });
+  }
+  if (req.url.path == '/v1/me/notifications/seen' && req.method == 'POST') {
+    return http.Response('', 204);
+  }
+  return _comDozeAvisos(req);
 }
 
 void main() {
@@ -591,14 +634,28 @@ void main() {
       );
     });
 
-    testWidgets('SEM FONTE, o sino nao pinta numero nenhum', (tester) async {
-      // **A isca do numero inventado.** MEDIDO em 19/10: a rota existe
-      // (`GET /v1/me/notifications/count`) e `NotificacoesApi.contar()` a
-      // embrulha, mas **nenhuma linha de `lib/` a chama** -- nao ha objeto de
-      // contagem no app para a barra ler. Enquanto nao houver, o sino fica
-      // SEM numero: contador que mostra zero quando ha coisa e pior que
-      // contador ausente, e somar no aparelho divergiria entre dois aparelhos
-      // da mesma pessoa.
+    testWidgets('A FONTE FALHOU: o sino nao pinta numero nenhum, e nao pinta '
+        'ZERO', (tester) async {
+      // **ESTE CASO FOI RETARGETADO em 19/10, e o que ele mede mudou.**
+      //
+      // Ele nasceu como "SEM FONTE": a rota e `NotificacoesApi.contar()`
+      // existiam e nenhuma linha de `lib/` as chamava, entao o sino nao tinha
+      // de onde ler numero. A fonte desceu -- `ContadorDeAvisos`, no `Escopo`
+      // --, e a ausencia que ele media deixou de existir.
+      //
+      // **O que ele mede agora e a FALHA, que e o estado mais comum em
+      // aparelho de verdade:** `_semPet` responde `404` a
+      // `/v1/me/notifications/count`, entao o contador perguntou e nao obteve
+      // numero. Nesse estado o sino fica SEM distintivo. O jeito de quebrar
+      // isto e um `catch` que devolva zero -- e zero esconderia, de quem tem
+      // trinta avisos, que eles existem, por ter aberto o app num elevador.
+      //
+      // **Nao foi apagado de proposito:** a regra "numero nao se inventa no
+      // aparelho" e a mesma de antes e continua precisando de isca. O que
+      // mudou foi a razao de nao haver numero, e a prova positiva de que o
+      // caminho ESTA ligado e o caso de doze avisos, logo abaixo: sem ele,
+      // este voltaria a passar por vacuidade no dia em que o contador fosse
+      // desligado.
       await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
 
       expect(
@@ -607,9 +664,120 @@ void main() {
           matching: find.byType(Text),
         ),
         findsNothing,
-        reason: 'REPROVA: o sino pinta um numero sem fonte que o produza. '
-            'Quando a contagem descer, o numero entra por `naoLidas` na linha '
-            'de `TelaDeAba.actions`; ate la, nao se inventa.',
+        reason: 'REPROVA: o sino pintou numero com a contagem respondendo '
+            '404. Falha de rede nao vira numero -- nem o anterior, que aqui '
+            'nao existe, nem zero.',
+      );
+    });
+
+    testWidgets('COM DOZE AVISOS: o pintado e `9+` e o ANUNCIADO e doze',
+        (tester) async {
+      // **A prova POSITIVA de que a fonte esta ligada**, e o par necessario do
+      // caso acima: sem ela, "o sino nao pinta numero" ficaria verde com o
+      // contador arrancado do app.
+      //
+      // Ela percorre o caminho inteiro -- arranque atras da sessao,
+      // `ContadorDeAvisos.atualizar`, `NotificacoesApi.contar`, `ApiClient`,
+      // `unread_total`, `Escopo`, `ListenableBuilder` da barra e `naoLidas` do
+      // sino. Um duble de contador deixaria tudo isso sem cobertura.
+      //
+      // E mede as DUAS pontas da apresentacao de uma vez, que e por que o
+      // numero e doze: **o circulo nao cresce, entao o pintado encurta; o
+      // anuncio nunca.** Dizer `9+ novas` a quem usa leitor de tela seria a
+      // apresentacao vazando para a informacao.
+      final handle = tester.ensureSemantics();
+      await abrirOApp(
+        tester,
+        rede: _comDozeAvisos,
+        deposito: depositoLogado(),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(SinoDeNotificacoes),
+          matching: find.text('9+'),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o sino nao pintou `9+` com doze avisos no servidor. '
+            'Ou a fonte nao chegou ao sino -- e ai o distintivo nao existe, e '
+            'a barra voltou a ser o desenho sem numero de antes de 19/10 --, '
+            'ou o numero nao encurtou e `12` esta estourando o circulo.',
+      );
+
+      // O ANUNCIADO, na arvore de semantica e nao no fonte: o rotulo vazio ja
+      // passou vacuamente neste repositorio.
+      final nos = todosOsNos(tester).where(
+        (n) =>
+            n.label == 'Notificações, 12 novas' ||
+            n.tooltip == 'Notificações, 12 novas',
+      );
+      expect(
+        nos,
+        isNotEmpty,
+        reason: 'REPROVA: nao ha no de semantica dizendo '
+            '"Notificações, 12 novas". Quem nao ve o circulo depende desta '
+            'frase para saber que ha algo novo -- e ela carrega o numero '
+            'INTEIRO, porque `9+` e desenho e nao informacao.',
+      );
+
+      // E o `9+` pintado **nao** entra no anuncio: dois numeros diferentes
+      // para o mesmo estado, no mesmo controle, e pior que um so.
+      expect(
+        todosOsNos(tester).where((n) => n.label.contains('9+')),
+        isEmpty,
+        reason: 'REPROVA: o `9+` do desenho vazou para a arvore de semantica. '
+            'O leitor de tela anunciaria "9+" ao lado de "12 novas".',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('ISCA: abrir a caixa DERRUBA o numero do sino',
+        (tester) async {
+      // **A isca da ligacao entre a caixa e a barra, e ela cobre um
+      // VAZAMENTO DE FIO que nenhum outro caso veria.**
+      //
+      // `markNotificationsListSeen` zera o contador NO SERVIDOR quando a
+      // caixa abre. Se o app nao souber disso, o sino continua com `9+` sobre
+      // uma caixa que a pessoa acabou de ler -- e so o conserta quando o app
+      // for reaberto. O caminho dessa noticia e
+      // `caixa_de_notificacoes.dart` -> `Escopo.contadorDeAvisos`, e ele
+      // passa por `dependOnInheritedWidgetOfExactType`, que devolve NULO em
+      // vez de estourar: a suite da propria caixa monta a tela SEM `Escopo`.
+      // Entao o dia em que essa leitura parar de achar o objeto, nada falha
+      // -- exceto este caso.
+      await abrirOApp(
+        tester,
+        rede: _comCaixaQueAbre,
+        deposito: depositoLogado(),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(SinoDeNotificacoes),
+          matching: find.text('9+'),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: este caso nao comeca com numero no sino, entao a '
+            'queda medida abaixo nao prova nada.',
+      );
+
+      await tester.tap(find.byIcon(Icons.notifications_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(CaixaDeNotificacoes), findsOneWidget);
+
+      // Volta para a secao: e a barra dela que desenha o sino.
+      await tester.tap(find.byType(SaidaDaTela));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(SinoDeNotificacoes),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o sino continua com numero depois de a caixa ter '
+            'sido aberta e o servidor ter confirmado `seen`. O servidor esta '
+            'em zero e a barra afirma o contrario -- e continuaria afirmando '
+            'ate o app ser reaberto.',
       );
     });
   });

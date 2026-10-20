@@ -82,6 +82,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_notificacao.dart';
 import '../../api/notificacoes_api.dart';
 import '../../escopo.dart';
+import '../../sessao/contador_de_avisos.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
@@ -177,11 +178,34 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   NotificacoesApi get _api =>
       widget.notificacoes ?? NotificacoesApi(Escopo.of(context).api);
 
+  /// O contador do sino, **ou nulo quando esta tela esta montada fora do app**.
+  ///
+  /// `Escopo.of` estoura de proposito quando nao acha o escopo, e aqui isso
+  /// derrubaria a propria suite desta tela: `abrirACaixa`, em
+  /// `test/notificacoes/caixa_de_notificacoes_test.dart`, monta a caixa num
+  /// `MaterialApp.router` nu -- com um roteador de verdade e **sem `Escopo`**
+  /// --, porque o assunto daqueles casos e a lista e nao a barra de outra tela.
+  ///
+  /// Nulo nao e caminho de producao: o sino que este contador alimenta e
+  /// desenhado pela casca, e nao ha casca sem `Escopo`. Para a ausencia nao
+  /// virar defeito silencioso, a isca `abrir a caixa DERRUBA o numero do sino`
+  /// (em `test/telas/navegacao_mensagens_e_avatar_test.dart`) percorre o app
+  /// inteiro: ela reprova no dia em que esta leitura parar de achar o objeto.
+  ContadorDeAvisos? _contador;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_iniciou) return;
     _iniciou = true;
+    // **O contador e capturado AQUI, e nao lido la embaixo.** `_marcarListaVista`
+    // o usa depois de um `await`, e tocar em `context` numa continuacao
+    // assincrona e o formato de defeito que aparece como erro de framework em
+    // vez de erro desta tela. Aqui a leitura esta no lugar que o Flutter
+    // reserva para dependencia de `InheritedWidget`.
+    _contador = context
+        .dependOnInheritedWidgetOfExactType<Escopo>()
+        ?.contadorDeAvisos;
     _carregar();
     // **UMA VEZ por abertura, e fora de `_carregar`.** Ela zera o contador e
     // nao marca item nenhum; se morasse dentro de `_carregar`, cada
@@ -193,6 +217,23 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   Future<void> _marcarListaVista() async {
     try {
       await _api.marcarListaVista();
+      // **O SINO ZERA AQUI, e so depois do `204`.**
+      //
+      // Esta operacao zera o contador no servidor e nao marca item nenhum.
+      // Quando ela responde, a contagem do servidor E zero -- entao publicar
+      // zero no contador e repetir o que o servidor acabou de dizer, e nao
+      // adivinhar um numero no aparelho.
+      //
+      // **Depois do `await`, nunca antes**, e e a mesma licao que
+      // `area_de_mensagens.dart` escreve sobre o contador dela: zerar antes
+      // esconderia o aviso de quem abriu a caixa num elevador sem sinal -- o
+      // servidor continuaria com o numero, o sino diria que nao ha nada, e a
+      // mentira duraria ate o app ser reaberto.
+      //
+      // Se a chamada falhar, o `catch` abaixo nao zera: o numero fica onde
+      // estava e a proxima atualizacao o traz de volta do servidor.
+      if (!mounted) return;
+      _contador?.zerarPorqueAListaFoiVista();
     } on FalhaDeChamada {
       // **Engolida de proposito, e e a unica chamada desta tela que e.** Nada
       // na tela depende dela: o que ela faz e derrubar o numero do sino, que e

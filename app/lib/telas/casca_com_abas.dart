@@ -955,6 +955,13 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
         raizDeSecao &&
         (ControleDaGaveta.maybeOf(context)?.temSubDestinos ?? false);
 
+    // O CONTADOR DO SINO, lido do escopo e OUVIDO logo abaixo.
+    //
+    // Lido aqui, e nao dentro de `SinoDeNotificacoes`, porque e esta tela que
+    // monta a barra: o sino recebe um numero e nao vai buscar nenhum (ver a
+    // linha dele no `actions`).
+    final contadorDeAvisos = Escopo.of(context).contadorDeAvisos;
+
     // O corpo fica FORA do `ValueListenableBuilder`, pelo `child`: sem isto
     // trocar o distintivo de filtros reconstruiria a lista inteira.
     final corpo = SafeArea(
@@ -1014,142 +1021,167 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
 
     return SlotDaBarraDeListagem(
       acao: _acaoDaListagem,
-      child: ValueListenableBuilder<AcaoDeListagem?>(
-        valueListenable: _acaoDaListagem,
-        child: corpo,
-        builder: (context, acao, corpo) => Scaffold(
-          appBar: AppBar(
-            // A MARCA no lugar do texto quando `tituloEmMarca`
-            // (BICHUS-195/196). O `rotulo` continua indo para o leitor de
-            // tela: vetor sem nome e vetor mudo.
-            title: tituloEmMarca
-                ? MarcaLockup(
-                    largura: MarcaLockup.pisoDeLargura,
-                    rotulo: titulo,
-                  )
-                : Text(titulo),
-            // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
-            toolbarHeight: BichuAlvoDeToque.critico,
-            // **OS 16 dp QUE A FOTO CUSTOU, DEVOLVIDOS AO TITULO.**
-            //
-            // A foto entrou no lado direito em 19/10 e levou 48 dp. Medido em
-            // 320 dp a 200% de escala, com o arranjo cheio (hamburguer 64 +
-            // criar/`Filtros` 64 + foto 48): sobravam **128,00 dp** de titulo
-            // e `Pets` e `Loja` pedem **138,32 dp** -- faltavam 10,32 dp, e o
-            // titulo saia com reticencia. `Rede` e `Perto` saiam cortados
-            // tambem.
-            //
-            // `titleSpacing: 0` devolve exatamente os 16 dp do vao padrao
-            // entre o `leading` e o titulo, e o orcamento vai a **144,00 dp**
-            // -- 5,68 dp de folga sobre o pior titulo. O vao nao era
-            // necessario: o hamburguer e um alvo de 64 dp com o glifo de 24
-            // centrado, entao ha 20 dp de ar dentro do proprio alvo e o texto
-            // nao encosta nele.
-            //
-            // **E O `titleSpacing: 0` FICA, e com o arranjo de 19/10 ele e
-            // mais necessario, nao menos.**
-            //
-            // Com `criar` fora da barra e o sino dentro dela, o lado direito
-            // e sino 48 + foto 48 = 96 e o titulo comeca em 64 (depois do
-            // hamburguer). Orcamento MEDIDO em 320 dp a 200%, logado:
-            // **160,00 dp**.
-            //
-            //   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (21,68 de folga)
-            //   `Perto`:                172,90 dp -> **AINDA NAO CABE**
-            //
-            // **O deficit do `Perto` caiu de 28,90 para 12,90 dp e nao chegou
-            // a zero**, e isso esta no relatorio como pergunta fechada para o
-            // cliente. Tirar o `criar` devolveu 64 dp e o sino levou 48:
-            // saldo de +16,00. Nao ha de onde tirar os 12,90 que faltam sem
-            // mexer em algo que nao e meu -- o hamburguer tem piso de 64 dp
-            // (11.23.1), o sino e a foto estao no piso de 48 (SC 2.5.8),
-            // `titleSpacing` ja esta em zero e a margem interna da foto custa
-            // 0,00 dp. Sobra tirar outro controle da barra ou encurtar o
-            // rotulo, e as duas coisas sao decisao dele.
-            //
-            // O caso de orcamento de `gaveta_com_submenus_test.dart` prende
-            // os 160,00 e o deficit: ele reprova se um controle voltar para a
-            // barra e reprova se `Perto` passar a pedir mais.
-            titleSpacing: 0,
-            // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
-            leading: comGaveta ? const BotaoDaGaveta() : null,
-            leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
-            // O LADO DIREITO: o SINO e, depois dele, a foto. **Dois
-            // controles, e so dois.**
-            //
-            // A FOTO DA PESSOA FECHA O LADO DIREITO, em toda tela de secao.
-            //
-            // Ela e a ULTIMA, e a ordem tem razao: ela e o controle mais
-            // estavel da barra -- esta em todas as telas, sempre no mesmo
-            // lugar --, e os dois que variam por tela (`criar` da secao,
-            // `Filtros` da lista) ficam antes dela. Controle que muda de tela
-            // para tela nao deve empurrar o que nao muda.
-            //
-            // `actions` **nunca e mais nulo**: o avatar esta sempre presente,
-            // e era o `null` que fazia o portao da gaveta afirmar que `Perfil`
-            // e `Pets` nao tinham acao nenhuma a direita.
-            actions: <Widget>[
-              // **O `criar` SAIU DAQUI em 19/10, e o SINO ENTROU no lugar
-              // dele.** Decisao dele, com a conta na mesa: eu lhe mostrei que
-              // com quatro controles o titulo nao cabia e perguntei o que
-              // sairia. Palavras dele: *"O botao criar sai da barra"*. A porta
-              // de criar e agora o `floatingActionButton` deste mesmo
-              // `Scaffold`, logo abaixo.
+      // O CONTADOR E OUVIDO AQUI, e nao dentro do sino, e o motivo e o mesmo
+      // que mantem a busca fora dele: `SinoDeNotificacoes` recebe um numero
+      // pronto. Ouvir dentro do sino colocaria uma assinatura por secao
+      // montada no mesmo objeto.
+      //
+      // **O corpo nao reconstroi quando o numero muda.** `corpo` e montado uma
+      // vez em `build` e entra no `child:` do `ValueListenableBuilder` logo
+      // abaixo; este construtor so refaz a barra. Sem esse cuidado, um aviso
+      // que chegasse reconstruiria a lista inteira da secao -- que e
+      // exatamente o que o `child:` do distintivo de filtros ja evitava.
+      child: ListenableBuilder(
+        listenable: contadorDeAvisos,
+        builder: (context, _) => ValueListenableBuilder<AcaoDeListagem?>(
+          valueListenable: _acaoDaListagem,
+          child: corpo,
+          builder: (context, acao, corpo) => Scaffold(
+            appBar: AppBar(
+              // A MARCA no lugar do texto quando `tituloEmMarca`
+              // (BICHUS-195/196). O `rotulo` continua indo para o leitor de
+              // tela: vetor sem nome e vetor mudo.
+              title: tituloEmMarca
+                  ? MarcaLockup(
+                      largura: MarcaLockup.pisoDeLargura,
+                      rotulo: titulo,
+                    )
+                  : Text(titulo),
+              // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
+              toolbarHeight: BichuAlvoDeToque.critico,
+              // **OS 16 dp QUE A FOTO CUSTOU, DEVOLVIDOS AO TITULO.**
               //
-              // **O `Filtros` tambem nao esta aqui** (19/10: *"qualquer
-              // coisa, pense em outro lugar para colocar o filtro da
-              // pagina"*): ele voltou para o topo do CORPO, e quem o desenha
-              // e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem` continua
-              // publicando no slot -- publicando NULO --, porque e essa
-              // publicacao que limpa a barra quando a lista sai da tela.
+              // A foto entrou no lado direito em 19/10 e levou 48 dp. Medido em
+              // 320 dp a 200% de escala, com o arranjo cheio (hamburguer 64 +
+              // criar/`Filtros` 64 + foto 48): sobravam **128,00 dp** de titulo
+              // e `Pets` e `Loja` pedem **138,32 dp** -- faltavam 10,32 dp, e o
+              // titulo saia com reticencia. `Rede` e `Perto` saiam cortados
+              // tambem.
               //
-              // **O SINO E INCONDICIONAL na barra, e CONDICIONAL na tela.**
-              // Ele e montado em toda tela de secao; quem decide se aparece e
-              // ele proprio, pela sessao (`SizedBox.shrink` sem conta). A
-              // diferenca importa para o portao: `actions` tem sempre dois
-              // itens, e o que varia e o que o segundo pinta.
+              // `titleSpacing: 0` devolve exatamente os 16 dp do vao padrao
+              // entre o `leading` e o titulo, e o orcamento vai a **144,00 dp**
+              // -- 5,68 dp de folga sobre o pior titulo. O vao nao era
+              // necessario: o hamburguer e um alvo de 64 dp com o glifo de 24
+              // centrado, entao ha 20 dp de ar dentro do proprio alvo e o texto
+              // nao encosta nele.
               //
-              // **`naoLidas` vai NULO, e nao zero.** O numero existe no
-              // servidor (`GET /v1/me/notifications/count`, ja embrulhado em
-              // `NotificacoesApi.contar()`), mas **nada em `lib/` chama essa
-              // operacao**: nao ha objeto de contagem no app para esta linha
-              // ler. Nulo e "ninguem contou ainda" e nao pinta distintivo;
-              // zero seria a afirmacao de que nao ha aviso nenhum, e o app
-              // nao tem como saber disso. Ver `SinoDeNotificacoes.naoLidas`.
-              const SinoDeNotificacoes(),
-              AvatarDaConta(
-                inicial: _inicialDaSessao(context),
-                // `go`, e nao `push`: a tela da conta continua sendo RAMO da
-                // casca -- ela so perdeu o slot da barra. Trocar de ramo e o
-                // que mantem a barra de baixo visivel dentro dela (o arranjo
-                // do Instagram, que o cliente deu como referencia) e o que
-                // mantem `Entrar` e `Criar conta` devolvendo a ABA de onde a
-                // pessoa veio.
+              // **E O `titleSpacing: 0` FICA, e com o arranjo de 19/10 ele e
+              // mais necessario, nao menos.**
+              //
+              // Com `criar` fora da barra e o sino dentro dela, o lado direito
+              // e sino 48 + foto 48 = 96 e o titulo comeca em 64 (depois do
+              // hamburguer). Orcamento MEDIDO em 320 dp a 200%, logado:
+              // **160,00 dp**.
+              //
+              //   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (21,68 de folga)
+              //   `Perto`:                172,90 dp -> **AINDA NAO CABE**
+              //
+              // **O deficit do `Perto` caiu de 28,90 para 12,90 dp e nao chegou
+              // a zero**, e isso esta no relatorio como pergunta fechada para o
+              // cliente. Tirar o `criar` devolveu 64 dp e o sino levou 48:
+              // saldo de +16,00. Nao ha de onde tirar os 12,90 que faltam sem
+              // mexer em algo que nao e meu -- o hamburguer tem piso de 64 dp
+              // (11.23.1), o sino e a foto estao no piso de 48 (SC 2.5.8),
+              // `titleSpacing` ja esta em zero e a margem interna da foto custa
+              // 0,00 dp. Sobra tirar outro controle da barra ou encurtar o
+              // rotulo, e as duas coisas sao decisao dele.
+              //
+              // O caso de orcamento de `gaveta_com_submenus_test.dart` prende
+              // os 160,00 e o deficit: ele reprova se um controle voltar para a
+              // barra e reprova se `Perto` passar a pedir mais.
+              titleSpacing: 0,
+              // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
+              leading: comGaveta ? const BotaoDaGaveta() : null,
+              leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
+              // O LADO DIREITO: o SINO e, depois dele, a foto. **Dois
+              // controles, e so dois.**
+              //
+              // A FOTO DA PESSOA FECHA O LADO DIREITO, em toda tela de secao.
+              //
+              // Ela e a ULTIMA, e a ordem tem razao: ela e o controle mais
+              // estavel da barra -- esta em todas as telas, sempre no mesmo
+              // lugar --, e os dois que variam por tela (`criar` da secao,
+              // `Filtros` da lista) ficam antes dela. Controle que muda de tela
+              // para tela nao deve empurrar o que nao muda.
+              //
+              // `actions` **nunca e mais nulo**: o avatar esta sempre presente,
+              // e era o `null` que fazia o portao da gaveta afirmar que
+              // `Perfil` e `Pets` nao tinham acao nenhuma a direita.
+              actions: <Widget>[
+                // **O `criar` SAIU DAQUI em 19/10, e o SINO ENTROU no lugar
+                // dele.** Decisao dele, com a conta na mesa: eu lhe mostrei que
+                // com quatro controles o titulo nao cabia e perguntei o que
+                // sairia. Palavras dele: *"O botao criar sai da barra"*. A
+                // porta de criar e agora o `floatingActionButton` deste mesmo
+                // `Scaffold`, logo abaixo.
                 //
-                // Medido: com `push` numa rota irma, voltar de `Entrar` caia
-                // numa tela que cobre a casca e a barra de baixo nao existia
-                // na arvore -- 107 casos da suite reprovaram por isso.
-                aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
-              ),
-            ],
+                // **O `Filtros` tambem nao esta aqui** (19/10: *"qualquer
+                // coisa, pense em outro lugar para colocar o filtro da
+                // pagina"*): ele voltou para o topo do CORPO, e quem o desenha
+                // e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem` continua
+                // publicando no slot -- publicando NULO --, porque e essa
+                // publicacao que limpa a barra quando a lista sai da tela.
+                //
+                // **O SINO E INCONDICIONAL na barra, e CONDICIONAL na tela.**
+                // Ele e montado em toda tela de secao; quem decide se aparece e
+                // ele proprio, pela sessao (`SizedBox.shrink` sem conta). A
+                // diferenca importa para o portao: `actions` tem sempre dois
+                // itens, e o que varia e o que o segundo pinta.
+                //
+                // **`naoLidas` VEM DO CONTADOR DO ESCOPO** (19/10/2026). Ate
+                // hoje ia nulo por falta de fonte: a rota
+                // (`GET /v1/me/notifications/count`) e a camada
+                // (`NotificacoesApi.contar()`) existiam e **nenhuma linha de
+                // `lib/` as chamava**. Agora chamam -- `ContadorDeAvisos`, um
+                // no app inteiro, com a politica de atualizacao escrita nele.
+                //
+                // **O numero NAO e buscado aqui, e nao pode ser.** Os ramos
+                // visitados da casca ficam montados (`IndexedStack`), entao uma
+                // busca nesta linha sairia uma vez por secao visitada: cinco
+                // pedidos para desenhar um numero, com cinco respostas chegando
+                // fora de ordem para o mesmo circulo. Esta linha so LE.
+                //
+                // **Nulo continua chegando aqui, e continua significando a
+                // mesma coisa**: antes da primeira resposta, e depois de uma
+                // busca que falhou sem valor anterior, o contador publica nulo
+                // -- e o sino nao pinta distintivo. Zero chega apenas quando o
+                // SERVIDOR disse zero (ou confirmou `seen`), nunca por falha de
+                // rede. Ver `ContadorDeAvisos` e `SinoDeNotificacoes.naoLidas`.
+                SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas),
+                AvatarDaConta(
+                  inicial: _inicialDaSessao(context),
+                  // `go`, e nao `push`: a tela da conta continua sendo RAMO da
+                  // casca -- ela so perdeu o slot da barra. Trocar de ramo e o
+                  // que mantem a barra de baixo visivel dentro dela (o arranjo
+                  // do Instagram, que o cliente deu como referencia) e o que
+                  // mantem `Entrar` e `Criar conta` devolvendo a ABA de onde a
+                  // pessoa veio.
+                  //
+                  // Medido: com `push` numa rota irma, voltar de `Entrar` caia
+                  // numa tela que cobre a casca e a barra de baixo nao existia
+                  // na arvore -- 107 casos da suite reprovaram por isso.
+                  aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
+                ),
+              ],
+            ),
+            body: corpo,
+            // A PORTA DE CRIAR DA SECAO, no corpo e flutuante (19/10: *"O botao
+            // criar sai da barra"*).
+            //
+            // **`endFloat`, que e o default, e e ele que resolve as duas
+            // colisoes.** No canto inferior DIREITO a acao nao briga com o
+            // puxar-para-atualizar que outra frente esta acrescentando --
+            // aquele gesto comeca no topo da lista e desenha o indicador no
+            // alto -- e nao fica sobre a primeira coluna de texto de nenhum
+            // cartao. `centerDocked` levaria a acao para cima da barra de baixo
+            // e `startFloat` a poria sobre o comeco da linha dos cartoes.
+            //
+            // `null` nas secoes que nao criam nada (`Pets`, `Loja`, `Perfil`) e
+            // em toda tela empilhada: `Scaffold` com `floatingActionButton:
+            // null` nao reserva espaco nenhum, e o respiro do pe da lista
+            // tambem desaparece junto.
+            floatingActionButton: widget.acaoDeCriar,
           ),
-          body: corpo,
-          // A PORTA DE CRIAR DA SECAO, no corpo e flutuante (19/10: *"O botao
-          // criar sai da barra"*).
-          //
-          // **`endFloat`, que e o default, e e ele que resolve as duas
-          // colisoes.** No canto inferior DIREITO a acao nao briga com o
-          // puxar-para-atualizar que outra frente esta acrescentando -- aquele
-          // gesto comeca no topo da lista e desenha o indicador centrado no
-          // alto -- e nao fica sobre a primeira coluna de texto de nenhum
-          // cartao. `centerDocked` levaria a acao para cima da barra de baixo
-          // e `startFloat` a poria sobre o comeco da linha dos cartoes.
-          //
-          // `null` nas secoes que nao criam nada (`Pets`, `Loja`, `Perfil`) e
-          // em toda tela empilhada: `Scaffold` com `floatingActionButton:
-          // null` nao reserva espaco nenhum, e o respiro do pe da lista
-          // tambem desaparece junto.
-          floatingActionButton: widget.acaoDeCriar,
         ),
       ),
     );
@@ -1178,41 +1210,42 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
 /// leitor de QR e a excecao conhecida, e por outro motivo: ler uma plaquinha
 /// nao exige conta.
 ///
-/// ## O contador vem de FORA, e hoje nao vem -- MEDIDO em 19/10
+/// ## O contador vem de FORA, e desde 19/10 ele vem
 ///
-/// **A rota existe e a camada de API existe; o que nao existe e quem chama.**
-/// Medido nesta arvore: `GET /v1/me/notifications/count` esta no contrato,
-/// `NotificacoesApi.contar()` o embrulha e devolve
-/// `ContagemDeAvisos.naoLidos` (de `unread_total`). E **nenhuma linha de
-/// `lib/` chama `contar()`** -- a busca por `NotificacoesApi` em `lib/` acha
-/// so a propria classe e a caixa, que usa `listar`, `marcarListaVista`,
-/// `marcarTodasComoLidas` e `marcarComoLido`.
+/// **Este widget nao busca numero nenhum, e isso e a regra e nao um estado
+/// transitorio.** Quem busca e `ContadorDeAvisos`, um objeto no `Escopo`, e
+/// quem o LE e `TelaDeAba` -- que passa o resultado por [naoLidas].
 ///
-/// Ou seja: nao ha **objeto de contagem** no app de onde esta barra possa ler
-/// um numero. Entao o espaco existe e o numero **nao e inventado**. Contador
-/// que mostra zero quando ha coisa e pior que contador ausente, e somar no
-/// aparelho seria adivinhar -- e divergiria entre dois aparelhos da mesma
-/// pessoa, que e o que `notificacoes_api.dart` proibe por escrito.
+/// O motivo de a busca nao morar aqui e o arranjo da casca: os ramos
+/// visitados ficam MONTADOS (`IndexedStack`), entao um sino que chamasse
+/// `NotificacoesApi.contar()` por conta propria dispararia uma chamada por
+/// secao visitada -- cinco pedidos para desenhar um numero, com cinco
+/// respostas chegando fora de ordem para o mesmo circulo. E um objeto so e o
+/// que permite a CAIXA de avisos derrubar o numero quando abre: com uma
+/// contagem por sino, ela nao teria a quem falar.
 ///
-/// **O QUE FALTA LIGAR, e nao e uma linha:** falta um objeto de contagem
-/// unico no app (no `Escopo`, como as outras camadas), que chame
-/// [NotificacoesApi.contar] e notifique. Ele precisa de politica de
-/// atualizacao -- quando buscar, e o que acontece depois de
-/// `markNotificationsListSeen` derrubar o numero no servidor -- e politica de
-/// atualizacao e decisao de produto, nao de quem monta a barra. Com ele de
-/// pe, esta barra muda em UMA linha: `const SinoDeNotificacoes()` passa a
-/// `SinoDeNotificacoes(naoLidas: <o numero>)`.
+/// **A politica de atualizacao esta escrita em `ContadorDeAvisos`**, e nao
+/// aqui: os quatro momentos em que o numero e buscado, o que acontece depois
+/// de `markNotificationsListSeen`, e por que falha de rede mantem o valor
+/// anterior em vez de virar zero. Esta barra so le.
+///
+/// **Nulo continua existindo, e continua significando "ninguem contou
+/// ainda"**: e o que chega antes da primeira resposta, depois de uma busca que
+/// falhou sem valor anterior, e depois do logout. Zero chega so quando o
+/// servidor disse zero. Nenhum dos dois e inventado no aparelho -- somar
+/// `read` aqui divergiria entre dois aparelhos da mesma pessoa, que e o que
+/// `notificacoes_api.dart` proibe por escrito.
 ///
 /// **O numero vai INTEIRO para quem usa leitor de tela.** `9+` e apresentacao:
 /// o distintivo pintado encurta porque nao cabe, o nome acessivel nunca.
 class SinoDeNotificacoes extends StatelessWidget {
   const SinoDeNotificacoes({super.key, this.naoLidas});
 
-  /// Quantas nao lidas, ou nulo enquanto a fonte nao existe.
+  /// Quantas nao lidas, ou nulo enquanto ninguem contou.
   ///
-  /// **Nulo nao e zero.** Nulo e "ninguem contou ainda" e nao pinta
-  /// distintivo nenhum; zero seria a afirmacao de que nao ha nada, e o app nao
-  /// tem como saber disso hoje.
+  /// **Nulo nao e zero.** Nulo e "o app ainda nao sabe" e nao pinta distintivo
+  /// nenhum; zero e "o servidor disse que nao ha nada". Vem de
+  /// `ContadorDeAvisos.naoLidas`, pelo `Escopo` -- ver a doc desta classe.
   final int? naoLidas;
 
   static const String rotuloBase = 'Notificações';

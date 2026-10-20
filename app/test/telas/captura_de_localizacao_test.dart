@@ -47,6 +47,7 @@ import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/conexoes_api.dart';
 import 'package:bichu/api/me_api.dart';
+import 'package:bichu/api/notificacoes_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
@@ -64,6 +65,7 @@ import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
+import 'package:bichu/sessao/contador_de_avisos.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
@@ -185,6 +187,12 @@ Future<_Caixa> _montar(
       cofreDoQr: CofreDaImagemDoQr(),
       avisoDeCadastro:
           AvisoDeCadastro(deposito: DepositoDoAvisoEmMemoria()),
+      // O contador do sino entra porque o `Escopo` o exige, e nao porque este
+      // caso o exercite: a tela medida aqui nao tem barra de topo e nao ha
+      // sino nenhum na arvore. Ele nunca e atualizado -- `atualizar()` so e
+      // chamado pelo arranque, pelo pos-login e pela retomada, e nenhum dos
+      // tres passa por aqui --, entao `naoLidas` fica nulo do comeco ao fim.
+      contadorDeAvisos: ContadorDeAvisos(notificacoes: NotificacoesApi(api)),
       child: MaterialApp(
         theme: BichuTheme.claro,
         home: Scaffold(

@@ -56,6 +56,8 @@ import 'package:http/http.dart' as http;
 import '../api/pets_api_listar_test.dart' show petDoContrato;
 import '../telas/a_foto_sobe_de_verdade_test.dart'
     show grupoDaIscaDaFotoPendente;
+import '../notificacoes/contador_de_avisos_test.dart'
+    show grupoDaIscaDoLogout;
 import '../telas/ajuda_de_tela.dart';
 
 /// O nome do grupo desta isca, escrito uma vez so.
@@ -131,6 +133,27 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
   '_avisoDeCadastro': (
     arquivo: 'test/sessao/registro_do_aviso_de_cadastro_test.dart',
     grupo: 'ISCA — o registro SOME no logout',
+  ),
+  // ACRESCENTADA EM 19/10/2026, quando o sino da barra de topo ganhou numero.
+  //
+  // A sexta entrada, e a terceira em MEMORIA -- junto com o cache de pets e o
+  // cofre do QR. O que ela apaga e um inteiro, e e o menor dado desta lista;
+  // o dano de esquece-la nao e o tamanho dele, e o que ele faz na tela.
+  //
+  // `ContadorDeAvisos` vive no `Escopo`, logo enquanto o PROCESSO viver. Sem
+  // esta entrada, o tutor seguinte neste aparelho -- o celular da recepcao do
+  // pet shop, o do casal, o usado que acabou de ser vendido -- entra na conta
+  // dele e encontra `9+` pintado no sino. Ele toca para ler os avisos, e os
+  // avisos sao de outra pessoa (a caixa dele, essa sim, vem do servidor e vem
+  // certa). O numero afirma, sobre a conta DELE, uma coisa que o app soube
+  // sobre outra conta.
+  //
+  // A isca dela mede o OBJETO e nao o sino pintado, e ha razao escrita no
+  // caso: deslogado o sino e `SizedBox.shrink`, entao medir a tela passaria
+  // por vacuidade com o numero intacto esperando o proximo login.
+  '_contadorDeAvisos': (
+    arquivo: 'test/notificacoes/contador_de_avisos_test.dart',
+    grupo: grupoDaIscaDoLogout,
   ),
 };
 

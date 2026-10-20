@@ -15,6 +15,7 @@ import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
 import 'api/me_api.dart';
+import 'api/notificacoes_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
@@ -26,6 +27,7 @@ import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'sessao/cidade_escolhida.dart';
+import 'sessao/contador_de_avisos.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
@@ -266,6 +268,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
   late final OuvinteDeAvisos _avisosRecebidos;
+  late final ContadorDeAvisos _contadorDeAvisos;
 
   @override
   void initState() {
@@ -351,6 +354,21 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       agora: widget.agora ?? DateTime.now,
     );
     _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
+    // O CONTADOR DO SINO, LIGADO (19/10/2026).
+    //
+    // `GET /v1/me/notifications/count` e `NotificacoesApi.contar()` existiam
+    // desde que a caixa de avisos nasceu, e **nenhuma linha de `lib/` as
+    // chamava**: o sino da barra de topo era montado com `naoLidas` nulo por
+    // falta de objeto de contagem no app. Este e o objeto.
+    //
+    // UM no app inteiro, pelo motivo escrito em `Escopo.contadorDeAvisos`: os
+    // ramos da casca ficam montados, e um sino que buscasse sozinho pediria o
+    // numero uma vez por secao visitada. A politica de atualizacao -- os
+    // quatro momentos, e o que acontece depois de `seen` -- esta por extenso
+    // em `ContadorDeAvisos`.
+    _contadorDeAvisos = ContadorDeAvisos(
+      notificacoes: NotificacoesApi(_api),
+    );
     // O OUVINTE DE PUSH, LIGADO.
     //
     // Ele nao existia: `firebase_messaging` estava no `pubspec`, o aparelho era
@@ -462,6 +480,12 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // esta certo. A isca esta em
         // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
         _avisoDeCadastro.limpar,
+        // O NUMERO DO SINO SAI NO LOGOUT, e ele e da CONTA pelo mesmo
+        // argumento da linha acima: sem esta entrada, o tutor seguinte neste
+        // aparelho abriria o app com o `3` da pessoa anterior pintado no sino
+        // -- e tocaria nele esperando ver avisos que nao sao dele. Volta a
+        // NULO e nao a zero: ver `ContadorDeAvisos.limpar`.
+        () async => _contadorDeAvisos.limpar(),
       ],
       // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
       // paga o preco da correcao do servidor.
@@ -486,7 +510,21 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       // mantem `OportunidadesDeAviso` fora dela. Zerar no logout tambem seria
       // redundante, porque `esquecerEReconciliar` zera no login seguinte, que
       // e o unico momento em que ha sessao para registrar o aparelho.
-      aoEntrar: <AoEntrar>[_vigiaDeAviso.esquecerEReconciliar],
+      aoEntrar: <AoEntrar>[
+        _vigiaDeAviso.esquecerEReconciliar,
+        // O SEGUNDO dos quatro momentos do contador (ver `ContadorDeAvisos`).
+        //
+        // Mora aqui, e nao no `onPressed` de `tela_entrar.dart`, pela razao
+        // que `AoEntrar` escreve: sao quatro caminhos de login hoje e nada
+        // garante que o quinto lembre. Sem ele, quem acabou de entrar fica com
+        // o sino vazio ate fechar e reabrir o app -- e `iniciar()` **nao**
+        // passa por esta lista, entao o arranque e coberto separadamente em
+        // `_arrancar`.
+        //
+        // Nao derruba o login: `_reporOQueOLoginRepoe` isola cada passo, e
+        // `atualizar()` nao estoura por conta propria.
+        _contadorDeAvisos.atualizar,
+      ],
     );
     _roteador = criarRoteador(_sessao);
     _arrancar();
@@ -516,6 +554,27 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     await _avisosRecebidos.ligar();
     await _retomarAsFotos();
     await _drenarAFila();
+    await _contarOsAvisos();
+  }
+
+  /// O PRIMEIRO dos quatro momentos do contador do sino: o app abriu.
+  ///
+  /// **Atras da sessao, pela mesma armadilha que `_drenarAFila` documenta
+  /// acima.** `GET /v1/me/notifications/count` e `bearerAuth`; sem token ela
+  /// responde 401, e uma busca sem esta guarda seria um 401 garantido no
+  /// arranque de todo mundo que abre o app deslogado -- para desenhar um numero
+  /// num sino que, deslogado, nem e pintado.
+  ///
+  /// **E o ULTIMO da fila de arranque, de proposito.** Os tres acima salvam
+  /// trabalho que a pessoa JA fez e que esta preso no aparelho -- a foto que
+  /// nao subiu, o caso de perdido enfileirado. Este desenha um distintivo. Se
+  /// a rede so der para uma coisa, que seja a primeira.
+  ///
+  /// A falha inteira fica dentro de `atualizar()`, que mantem o valor anterior
+  /// (ou o nulo) e nunca publica zero.
+  Future<void> _contarOsAvisos() async {
+    if (await _sessao.tokenValido() == null) return;
+    await _contadorDeAvisos.atualizar();
   }
 
   /// A fila offline sai do disco. **O primeiro dos DOIS momentos**; o outro e a
@@ -579,12 +638,28 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(_drenarAFila());
+    // O TERCEIRO momento do contador, e **o que faz o sino valer a pena**.
+    //
+    // O caso para o qual ele existe e o aviso que chegou com o app no bolso: a
+    // pessoa toca no push e o app RETOMA -- nao arranca, porque o processo esta
+    // vivo. Sem esta linha ela veria o numero do arranque, de horas atras, e um
+    // sino que mostra o numero velho justamente quando ha novidade e pior que
+    // um sino sem numero.
+    //
+    // **Nao e polling**, e a distincao e o custo: isto e um evento que o app ja
+    // observava (a fila offline drena na mesma transicao, e `VigiaDeAviso`
+    // reconcilia a permissao nela), e nao um temporizador -- este repositorio
+    // nao tem nenhum. Um intervalo minimo entre duas retomadas e pergunta
+    // aberta com o cliente (`.jarvis/DECISOES-PARA-19-10.md`), e hoje nao ha
+    // nenhum: cada retomada custa um `GET` pequeno.
+    unawaited(_contarOsAvisos());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _vigiaDeAviso.dispose();
+    _contadorDeAvisos.dispose();
     _avisosRecebidos.dispose();
     _sessao.dispose();
     _envioDeFoto.fechar();
@@ -623,6 +698,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       cidadeEscolhida: _cidadeEscolhida,
       cofreDoQr: _cofreDoQr,
       avisoDeCadastro: _avisoDeCadastro,
+      contadorDeAvisos: _contadorDeAvisos,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,
