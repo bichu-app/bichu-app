@@ -1,14 +1,21 @@
 import 'api_client.dart';
+import 'modelos_seguranca.dart';
 
-/// As cinco operacoes de bloquear e denunciar (`tags: [safety]` do contrato).
+/// As SEIS operacoes de bloquear e denunciar (`tags: [safety]` do contrato).
 ///
 /// ## O que este arquivo NAO tem, e a ausencia e o desenho
 ///
-/// **Nenhuma leitura.** Nao existe "minhas denuncias", nao existe estado de
-/// denuncia e nao existe consulta -- nem no contrato, nem aqui. O servidor
-/// responde `202` e nada mais, e **nenhum prazo e prometido, porque nao existe
-/// prazo**. Uma leitura da propria denuncia seria exatamente o lugar por onde
-/// um prazo prometido entraria na tela.
+/// **Nenhuma leitura DE DENUNCIA.** Nao existe "minhas denuncias", nao existe
+/// estado de denuncia e nao existe consulta -- nem no contrato, nem aqui. O
+/// servidor responde `202` e nada mais, e **nenhum prazo e prometido, porque
+/// nao existe prazo**. Uma leitura da propria denuncia seria exatamente o lugar
+/// por onde um prazo prometido entraria na tela.
+///
+/// **Ha, desde 19/10/2026, UMA leitura: [bloqueados].** Ela e de BLOQUEIO e nao
+/// de denuncia, e a diferenca e a razao de ela existir: bloquear e ato de quem
+/// chama, imediato e sem administrador, e a lista e o registro dos proprios
+/// atos. Sem ela, bloquear era irreversivel pelo aplicativo -- o bloqueio e
+/// simetrico, e fechava justamente o perfil onde o `Desbloquear` morava.
 ///
 /// **Nenhuma funcao de aviso.** O denunciado nao e avisado -- avisar e
 /// retaliacao --, e nao ha nada neste arquivo que o avise.
@@ -23,6 +30,21 @@ class SegurancaApi {
   const SegurancaApi(this._api);
 
   final ApiClient _api;
+
+  /// `GET /v1/me/blocks` -- **a lista de quem EU bloqueei**.
+  ///
+  /// Nunca de quem me bloqueou: aquela metade do par simetrico nao existe em
+  /// superficie nenhuma do contrato, e descobrir que foi bloqueado e o que gera
+  /// retaliacao.
+  ///
+  /// Sem busca e sem filtro: a ordem e fixa, mais recentes primeiro.
+  Future<PaginaDeBloqueados> bloqueados({int pagina = 1, int limite = 20}) async {
+    final json = await _api.get(
+      '/me/blocks',
+      query: <String, String>{'page': '$pagina', 'limit': '$limite'},
+    );
+    return PaginaDeBloqueados.doJson(json);
+  }
 
   /// `POST /v1/users/{userRef}/blocks`.
   ///

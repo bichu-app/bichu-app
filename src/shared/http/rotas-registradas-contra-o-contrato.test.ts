@@ -56,6 +56,7 @@ import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-sto
 import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as conexoes from '../../modules/connections/adapters/http/connection-routes.js';
+import * as pessoas from '../../modules/people/adapters/http/person-profile-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
@@ -70,6 +71,9 @@ import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
+// 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
+// sonda e deliberadamente separado dela.
+import * as vereditoDeVersao from '../../modules/app-release/adapters/http/version-status-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -125,6 +129,13 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // ele reprova contando `defineRoute` no disco -- foi exatamente assim que a
   // ausencia dela apareceu, na primeira execucao da suite desta fatia.
   conexoes,
+  // FATIA G (19/10). O perfil de OUTRA pessoa, pelo apelido. Modulo novo entra
+  // AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha
+  // um deles reprova contando `defineRoute` no disco (175 contra 176) e o
+  // outro reprova dizendo que `getPersonProfile` e operacao do contrato sem
+  // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
+  // suite desta fatia.
+  pessoas,
   // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
   // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
   // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
@@ -144,6 +155,11 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
   caixaDeNotificacoes,
   comunicadosAdministrativos,
+  // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
+  // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele
+  // reprova contando `defineRoute` no disco -- foi exatamente assim que a
+  // ausencia dela apareceu, na primeira execucao da suite desta historia.
+  vereditoDeVersao,
 ];
 
 /**
@@ -187,7 +203,9 @@ const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
  * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
  * duas delas servidas pela borda (a lista acima), sobrando 11. Cinco delas
  * ganharam rota depois (as tres do caso de perdido e as duas da conversa do lado
- * com conta), e a divida esta em SEIS.
+ * com conta), e a divida esta em SEIS. Com `reopenLostCase`, que o contrato
+ * prometia como reversao por 7 dias e nunca ganhou rota, a divida esta em
+ * CINCO.
  *
  * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
  * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
@@ -206,7 +224,12 @@ const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   // DECIDIR sobre um candidato que nao tinha como ver, e so o achador tinha
   // bloqueio e denuncia). Quem implementa uma linha daqui tira a linha no mesmo
   // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
-  'reopenLostCase',
+  // `reopenLostCase` SAIU desta lista: ela ganhou rota
+  // (`rotaDeReabertura`, em `lost-case-routes.ts`) no commit que fechou o
+  // desfazer do encerramento. O contrato prometia, em `closeLostCase`, que
+  // "encerrar e reversivel por 7 dias" e nomeava a operacao -- e ela respondia
+  // 404. Quem implementa uma linha daqui tira a linha no mesmo commit, e e
+  // esta lista exata nos dois sentidos que cobra o contrario.
   'snoozeLostCaseReminder',
   // `listPublicLostPets` SAIU desta lista: ela ganhou rota
   // (`listagem-publica-de-perdidos-routes.ts`) no commit que encheu a aba

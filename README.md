@@ -312,8 +312,27 @@ Existe um ambiente de homologação de pé, e ele **não** é `bichu.app`:
 Build para instalar no aparelho Android apontando para lá:
 
 ```sh
-flutter build apk --debug --dart-define=API_BASE_URL=https://hml.bichu.app
-adb install -r build/app/outputs/flutter-apk/app-debug.apk
+sh infra/verificacao/verificar-apk.sh
+adb install -r app/build/app/outputs/flutter-apk/app-release.apk
+```
+
+**O comando de build mora dentro do script, e não aqui.** Até 19/10/2026 este
+README trazia o comando copiado, com `--dart-define=API_BASE_URL` e nada mais —
+e duas cópias do comando, uma no script e uma no README, divergem; a que diverge
+é a que ninguém percebe. Esta cópia já havia divergido duas vezes: faltava
+`TERMS_VERSION` (o APK instalado não criava conta, 22/09/2026) e faltava
+`APP_VERSION` (o bloqueio por versão mínima saía desligado em silêncio).
+
+O script passa as sete `--dart-define`, tira a versão de `app/pubspec.yaml` —
+a mesma fonte do `versionName` — e, **depois** de compilar, mede o valor delas
+dentro do `libapp.so` do pacote. Um build sem a versão dentro reprova com
+código 1, em vez de sair 0 com o mecanismo desligado.
+
+Para apontar para outro endereço, sobrescreva pelo ambiente, que é o que o
+script documenta:
+
+```sh
+API_BASE_URL=https://hml.bichu.app sh infra/verificacao/verificar-apk.sh
 ```
 
 **Sem `/v1` no valor**: o `ApiClient` acrescenta a versão em cada chamada, e

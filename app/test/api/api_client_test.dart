@@ -120,6 +120,45 @@ void main() {
       expect(chaves.last, 'chave-da-primeira-tentativa');
     });
 
+    // ISCA DE `If-Match`. O que ela mede e o CABECALHO QUE SAI, lido da
+    // requisicao que o transporte entrega ao `MockClient` -- e nao a
+    // existencia do parametro `ifMatch`. A diferenca e a que importa: um
+    // metodo pode aceitar o valor, nao repassa-lo a `_enviar`, e um teste que
+    // so conferisse a assinatura ficaria verde com o cabecalho ausente. Treze
+    // operacoes do contrato exigem `If-Match`; sem ele a resposta e 428.
+    test('If-Match sai no cabecalho nos quatro verbos de escrita, e so '
+        'quando quem chama manda um', () async {
+      final vistos = <String, String?>{};
+      final api = clienteQueResponde((req) {
+        vistos['${req.method} ${req.url.path}'] = req.headers['If-Match'];
+        return http.Response('{}', 200, headers: _json);
+      });
+
+      await api.patch('/network/events/festa', corpo: <String, dynamic>{});
+      await api.patch(
+        '/network/events/feira',
+        corpo: <String, dynamic>{},
+        ifMatch: '"7"',
+      );
+      await api.post(
+        '/network/events/feira/cancellation',
+        corpo: <String, dynamic>{'note': 'chuva'},
+        ifMatch: '"9"',
+      );
+      await api.put('/directory/x/review', ifMatch: '"11"');
+      await api.delete('/admin/network/events/y', ifMatch: '"13"');
+
+      // Sem pedir: o cabecalho NAO entra. `If-Match` em operacao que nao o
+      // declara e precondicao inventada pelo app.
+      expect(vistos['PATCH /v1/network/events/festa'], isNull);
+
+      // Pedindo: o cabecalho SAI, com o valor exato e em todos os verbos.
+      expect(vistos['PATCH /v1/network/events/feira'], '"7"');
+      expect(vistos['POST /v1/network/events/feira/cancellation'], '"9"');
+      expect(vistos['PUT /v1/directory/x/review'], '"11"');
+      expect(vistos['DELETE /v1/admin/network/events/y'], '"13"');
+    });
+
     test('a chave gerada e unica por chamada', () {
       final a = ApiClient.novaChaveDeIdempotencia();
       final b = ApiClient.novaChaveDeIdempotencia();

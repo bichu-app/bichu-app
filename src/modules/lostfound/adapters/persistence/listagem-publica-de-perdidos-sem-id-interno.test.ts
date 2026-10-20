@@ -39,16 +39,36 @@ const semBanco = new Kysely<Database>({
 
 const AGORA = new Date('2026-10-18T12:00:00.000Z');
 
+/**
+ * O recorte MÍNIMO: só a cidade, que é o único obrigatório do contrato.
+ *
+ * **Sem `janela`, e essa é a forma que a página de pets abre** desde o pedido
+ * do cliente de 18/10/2026. O recorte com janela virou um caso à parte
+ * (`RECORTE_COM_JANELA`), para o mínimo ser o que a rota de fato recebe quando
+ * ninguém escolheu nada.
+ */
 const RECORTE_MINIMO: RecorteDePerdidos = {
   cidade: 'São Paulo',
-  janela: '30d',
+  pagina: 1,
+  limite: 20,
+  agora: AGORA,
+};
+
+const RECORTE_COM_JANELA: RecorteDePerdidos = { ...RECORTE_MINIMO, janela: '30d' };
+
+/**
+ * O recorte em que a tela de fato ABRE desde 19/10/2026: **sem cidade e sem
+ * janela**. É o `const RecorteDePerdidos()` do app, e os 20 mais recentes de
+ * qualquer cidade.
+ */
+const RECORTE_SEM_CIDADE: RecorteDePerdidos = {
   pagina: 1,
   limite: 20,
   agora: AGORA,
 };
 
 const RECORTE_CHEIO: RecorteDePerdidos = {
-  ...RECORTE_MINIMO,
+  ...RECORTE_COM_JANELA,
   bairro: 'Vila Mariana',
   especie: 'dog',
   porte: 'P',
@@ -230,6 +250,126 @@ void describe('os quatro predicados de publicação estão no `WHERE`', () => {
   });
 });
 
+void describe('a ausência de `period` é janela ABERTA, e não 30 dias', () => {
+  /**
+   * ISCA: a prova de ponta desta camada. Reponha `janela: '30d'` em
+   * `RECORTE_MINIMO` (ou volte o `.where('lost_cases.last_seen_at', ...)` para
+   * fora do `if` no adaptador) e este caso reprova pelo nome.
+   *
+   * Por que ler o SQL e não o resultado: o predicado que não existe não
+   * aparece em contagem nenhuma. A única forma de afirmar "a consulta não
+   * recorta por data" é olhar a cláusula que ela compila.
+   */
+  void it('ISCA: recorte sem janela não compila predicado de `last_seen_at`', () => {
+    const onde = clausulaWhere(sqlDaPagina(RECORTE_MINIMO));
+    assert.doesNotMatch(
+      onde,
+      /"lost_cases"\."last_seen_at"/,
+      `janela aberta não pode recortar por data. WHERE compilado: ${onde}`,
+    );
+  });
+
+  void it('CONTRAPESO: com janela, o predicado de `last_seen_at` está lá', () => {
+    // Sem este caso, tirar a janela de TODA consulta passaria pela isca acima.
+    assert.match(
+      clausulaWhere(sqlDaPagina(RECORTE_COM_JANELA)),
+      /"lost_cases"\."last_seen_at" >= \$/,
+    );
+  });
+
+  /**
+   * ISCA (a) no nível do SQL: o pedido do cliente de 19/10/2026 (*"o campo
+   * cidade do filtro da página pet não deve ser obrigatório"*).
+   *
+   * **Este caso era o oposto até hoje**, e vale registrar o que ele afirmava:
+   * *"a cidade continua recortando mesmo sem janela: não é listagem
+   * nacional"*, com o comentário *"o ADR-0010 não quer um inventário nacional
+   * de animais perdidos"*. **Essa frase não está no ADR-0010.** Foi conferida
+   * antes de sair: o que o ADR-0010 exige são os itens 4 e 5 e a linha *"o
+   * nível máximo de precisão geográfica em superfície pública é bairro e
+   * cidade"* — tudo sobre a PRECISÃO do que sai, e a projeção pública não
+   * mudou uma propriedade. Nenhum item daquela lista fala do ESCOPO da
+   * listagem, e a obrigatoriedade era leitura do código, não do documento.
+   *
+   * O que a ausência de cidade amplia de verdade é ENUMERAÇÃO, e a contenção
+   * não mudou: os três tetos por `ip` do contrato, a paginação de 20 e o
+   * predicado `share_to_public_list`.
+   *
+   * DESLIGANDO: tire o `if (recorte.cidade !== undefined)` do adaptador e
+   * este caso reprova pelo nome.
+   */
+  void it('ISCA: recorte sem cidade não compila predicado de `last_seen_city`', () => {
+    const onde = clausulaWhere(sqlDaPagina(RECORTE_SEM_CIDADE));
+    assert.doesNotMatch(
+      onde,
+      /last_seen_city/,
+      `geografia aberta não pode recortar por cidade. WHERE compilado: ${onde}`,
+    );
+  });
+
+  void it('CONTRAPESO: com cidade, o predicado normalizado está lá', () => {
+    // Sem este caso, tirar a cidade de TODA consulta passaria pela isca acima —
+    // e a folha de filtro passaria a mentir para quem digitou uma cidade.
+    assert.match(
+      clausulaWhere(sqlDaPagina(RECORTE_MINIMO)),
+      /texto_para_busca\(lost_cases\.last_seen_city\) = texto_para_busca\(\$/,
+    );
+  });
+
+  /**
+   * A ORDEM NÃO SE PROVA NESTE ARQUIVO, E ISSO FOI MEDIDO.
+   *
+   * `sqlDaPagina` compila `construtorDaListagemPublicaDePerdidos`, que é a
+   * consulta BASE — predicados e junções. O `ORDER BY last_seen_at DESC,
+   * share_token ASC`, o `LIMIT` e o `OFFSET` moram em
+   * `criarListagemPublicaDePerdidos`, depois do construtor, e **não aparecem no
+   * SQL que este ajudante compila**: uma isca escrita aqui para
+   * `/order by .* last_seen_at desc/` reprovou de imediato em 19/10/2026.
+   *
+   * Escrever o `ORDER BY` à mão dentro de `sqlDaPagina` faria o caso passar
+   * medindo a cópia do próprio teste. A prova de que "os 20 últimos pets" são
+   * os mais recentes **pela data** mora em
+   * `tests/integration/listagem-publica-de-perdidos.test.ts`, contra Postgres,
+   * no caso 'ISCA: os 20 do recorte padrão sao os mais RECENTES, pela data'.
+   */
+  /**
+   * ISCA do ADR-0006 na camada que toca o banco: **nada nesta consulta
+   * converte coordenada em nome de cidade, nem o contrário.**
+   *
+   * Ancorada no SQL que o construtor COMPILA, e não num comentário: a consulta
+   * não pode mencionar a coluna de coordenada nem função geoespacial nenhuma.
+   * Se alguém acrescentar `ST_Distance`, `ST_DWithin`, um `ST_Y`/`ST_X` para
+   * derivar rótulo, ou simplesmente ler `last_seen_point`, este caso reprova.
+   *
+   * O ADR-0006 proíbe as duas direções com todas as letras: *"não há serviço
+   * de geocodificação contratado"* (coordenada não vira rótulo), e *"CEP e
+   * bairro são rótulo de exibição e filtro de listagem, não fonte de
+   * coordenada"* (rótulo não vira coordenada).
+   *
+   * DESLIGANDO: acrescente `last_seen_point` à lista de seleção do adaptador,
+   * ou um `ST_Distance` à ordenação, e este caso reprova pelo nome.
+   */
+  void it('ISCA: a consulta não toca coordenada nem função geoespacial', () => {
+    for (const [rotulo, recorte] of [
+      ['sem cidade', RECORTE_SEM_CIDADE],
+      ['com cidade', RECORTE_MINIMO],
+      ['cheio', RECORTE_CHEIO],
+    ] as const) {
+      const sql = sqlDaPagina(recorte);
+      // **A EXPRESSÃO É SENSÍVEL À CAIXA E ANCORADA EM `\b`, e isso foi um
+      // defeito medido.** A primeira versão usava `/ST_[A-Za-z]/i`, e ela
+      // reprovava sempre: `lost_cases` contém `st_c`. Achado falso é como
+      // portão perde a confiança de quem o lê, e aqui ele reprovaria o arquivo
+      // inteiro por um nome de tabela.
+      assert.doesNotMatch(
+        sql,
+        /last_seen_point|reference_point|geohash|::geometry|\bgeography\b|\bST_(Distance|DWithin|MakePoint|SetSRID|AsText|X|Y|Point)\b/,
+        `o recorte "${rotulo}" trouxe geoespacial para a listagem pública. SQL: ${sql}`,
+      );
+    }
+  });
+});
+
 void describe('a janela sai do relógio injetado, e não do `now()` do banco', () => {
   void it('`24h`, `7d` e `30d` recuam as horas que o contrato declara', () => {
     assert.equal(
@@ -241,6 +381,9 @@ void describe('a janela sai do relógio injetado, e não do `now()` do banco', (
   });
 
   void it('o SQL não chama `now()`: dois relógios na mesma decisão é falha falsa', () => {
-    assert.doesNotMatch(sqlDaPagina(RECORTE_MINIMO), /now\(\)/i);
+    // `RECORTE_COM_JANELA` e não `RECORTE_MINIMO`: o mínimo não tem janela, e
+    // uma consulta sem predicado de data nenhum passaria por este caso sem
+    // provar nada sobre de onde a data vem.
+    assert.doesNotMatch(sqlDaPagina(RECORTE_COM_JANELA), /now\(\)/i);
   });
 });

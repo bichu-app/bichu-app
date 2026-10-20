@@ -5,7 +5,7 @@ import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_tokens.g.dart';
-import '../widgets/acao_de_criar_na_barra.dart';
+import '../widgets/acoes_de_criar_flutuantes.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
@@ -13,12 +13,12 @@ import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
+import 'perfil/meus_eventos.dart';
 import 'perfil/meus_pets.dart';
-import 'perto/corpo_do_perto.dart';
-import 'perto/lista_do_diretorio.dart';
-import 'rede/agenda_da_rede.dart';
+import 'rede/secao_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
 
 /// Quem pode ver uma acao de CRIAR da comunidade.
@@ -113,9 +113,97 @@ class AbaPets extends StatelessWidget {
           // **O custo esta no relatorio:** o leitor saiu de 1 toque (icone
           // nesta barra) para 2 (foto -> `Escanear uma tag`).
           //
-          // `Pets` fica sem acao de secao na barra, e o slot volta a ser nulo
-          // -- nao entra outro icone no lugar.
+          // `Pets` ficou sem acao de secao NA BARRA, e o slot da barra
+          // continua nulo -- nao entrou outro icone no lugar dela.
+          //
+          // **MAS A SECAO GANHOU A ACAO FLUTUANTE em 19/10/2026**, e o pedido
+          // e dele: *"so faltou na pagina de pets o botao para adicionar um
+          // novo pet perdido ou escanear a tag, gostei desse padrao"* --
+          // *"esse padrao"* e a acao flutuante que ele acabou de ver em `Rede`
+          // e no antigo `Perto`. Ver `acaoDeCriar`, abaixo.
           reforco: destino.reforcoDaPagina,
+          // **AS TRES ACOES DE `Pets`: UMA direta e DUAS atras dela.**
+          //
+          // ## A decisao do cliente, em duas rodadas do mesmo dia
+          //
+          // Primeiro ele pediu a acao flutuante aqui: *"so faltou na pagina de
+          // pets o botao para adicionar um novo pet perdido ou escanear a tag,
+          // gostei desse padrao"*. Sao TRES as acoes que precisavam de casa --
+          // os itens de `destino` VIVOS que a gaveta perdeu quando ela foi
+          // ocultada no mesmo dia, `Escanear uma tag`, `Registrar achado
+          // avulso` e `Cadastrar pet`.
+          //
+          // Elas nasceram as tres dentro de uma folha, atras de um alvo de
+          // `add`. **Entao eu perguntei qual delas era "adicionar um novo pet
+          // perdido", e a resposta foi: *"botao para escanear o pet"*.**
+          //
+          // Por isso `Escanear uma tag` saiu da folha: ela e o alvo de 56 dp
+          // no canto, de **UM TOQUE**, e as outras duas ficaram atras do alvo
+          // secundario ao lado. A conta de por que o secundario fica AO LADO e
+          // nao acima -- e por que nao e pressao longa nem botao no corpo --
+          // esta inteira em `AcoesDeCriarFlutuantes`, com os numeros.
+          //
+          // **O GLIFO E `qr_code_scanner`, e a distincao e a mesma do item da
+          // gaveta que ele substitui:** `qr_code_scanner` e LER uma plaquinha;
+          // `qr_code_2` e EXIBIR a propria. Esta porta le, e e por isso que o
+          // glifo nao e o outro.
+          //
+          // **O ROTULO DIZ O VERBO, e nao "adicionar":** `Escanear uma tag` e
+          // o que o toque faz, e e o mesmo texto do item de gaveta -- quem
+          // usava a gaveta acha a acao pelo nome, e nao descobre que ela mudou
+          // de lugar lendo uma palavra nova.
+          //
+          // **AS TRES NASCEM SEM CONTA, e isso e diferente da `Rede`.** A
+          // regua de `podeCriarNaComunidade` (sessao E e-mail confirmado)
+          // governa escrever sobre TERCEIRO, e nenhuma das tres e isso:
+          //
+          //   - `Escanear uma tag` e a excecao conhecida e DELIBERADA: a
+          //     autenticacao da rota do leitor e opcional, e quem acha um
+          //     animal na rua pode nao ter conta. Esconder o leitor de quem
+          //     mais precisa dele seria o pior defeito possivel nesta secao --
+          //     e agora ela e a acao PRINCIPAL, o que torna isso mais
+          //     importante e nao menos.
+          //   - `Registrar achado avulso` tem o mesmo dono: o achador. Ela ja
+          //     era alcancavel sem conta pela gaveta de `Pets`.
+          //   - `Cadastrar pet` leva a um assistente que pede conta na PROPRIA
+          //     tela, com a saida que a resolve -- tela que recusa dizendo e
+          //     melhor que porta que nao aparece.
+          //
+          // Por isso `acaoDeCriar` aqui NAO e condicional a sessao.
+          //
+          // **E `Marcar como perdido` NAO esta aqui, e a ausencia e medida:**
+          // ela precisa saber QUAL pet, e vive no cartao de cada um, em
+          // `Rotas.detalheDoPet`. Ela nunca foi item de gaveta e nao ficou sem
+          // casa.
+          acaoDeCriar: AcoesDeCriarFlutuantes(
+            principal: OpcaoDeCriar(
+              icone: Icons.qr_code_scanner,
+              rotulo: 'Escanear uma tag',
+              aoTocar: () => context.push(Rotas.escanear),
+            ),
+            // O alvo secundario diz o que o toque FAZ -- abrir mais acoes --
+            // e nao nomeia uma das duas: nomear uma mentiria sobre a outra.
+            rotuloDasOutras: 'Mais ações',
+            tituloDaFolha: 'O que você quer fazer?',
+            outras: <OpcaoDeCriar>[
+              // A ORDEM E A DO USO MAIS URGENTE PRIMEIRO. Quem acabou de achar
+              // um cachorro na rua tem pressa; quem vai cadastrar o proprio
+              // pet, nao.
+              //
+              // O MESMO glifo e o MESMO rotulo dos itens de gaveta que elas
+              // substituem, pelo mesmo motivo do principal.
+              OpcaoDeCriar(
+                icone: Icons.campaign_outlined,
+                rotulo: 'Registrar achado avulso',
+                aoTocar: () => context.push(Rotas.registrarAchado),
+              ),
+              OpcaoDeCriar(
+                icone: Icons.note_add_outlined,
+                rotulo: 'Cadastrar pet',
+                aoTocar: () => context.push(Rotas.cadastrarPet),
+              ),
+            ],
+          ),
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
             // de largura total logo abaixo do cabecalho, acima de tudo.
@@ -216,214 +304,132 @@ class AbaPets extends StatelessWidget {
   }
 }
 
-/// Secao 2 — `Rede`. Eventos da comunidade.
+/// Secao 2 — `Rede`. **Eventos e quem atende bem.**
 ///
-/// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Rede esta em
-/// construcao" era o certo enquanto nao havia tabela nem rota;
-/// `GET /network/events` existe, e a agenda e [AgendaDaRede]. O estado vazio
-/// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
-/// quando o servidor responde que nao ha evento -- que e afirmacao medida, e
-/// nao afirmacao sobre dado que a tela nao carrega. E ele virou **dois**, como
-/// na `Loja`: "a Rede ainda nao tem evento" e "nada com esse recorte" dizem
-/// coisas opostas.
+/// ## A SECAO REUNIDA (decisao do cliente, 19/10/2026)
 ///
-/// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
-/// de listagem -- busca, filtro e ordenacao -- moram no corpo, no topo da
-/// lista (ver `BarraDeListagem`), como em `Perto` e na `Loja`. Esta e a
-/// TERCEIRA tela a usar o componente, e ela nao mudou uma linha dele.
+/// `Perto` deixou de ser secao e o conteudo dela virou a aba `Comunidade`
+/// desta. A secao tem **duas abas**: `Eventos` (a agenda, que era esta secao)
+/// e `Comunidade` (profissionais, estabelecimentos e ONGs, que era `Perto`).
 ///
-/// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0025.**
-/// Nao ha lista de presenca, em lugar nenhum, nao ha mapa e nao ha
-/// ordenacao por distancia. Cada uma dessas ausencias fecha a inferencia que o
+/// **O nome da secao e `Rede`, e a escolha e de MEDIDA.** `Comunidade` pede
+/// 113,25 dp num slot de barra de 64,00 e reprova em 320, 375 e 412 dp -- a
+/// mesma parede que recusou `Mensagens` (103,67 dp). `Rede` pede 45,08 e cabe
+/// nos tres. Como ABA, `Comunidade` nao disputa slot de 64 dp.
+///
+/// ## ESTA CLASSE E UMA LINHA, e isso e deliberado
+///
+/// Quem monta a secao e [SecaoDaRede], em `rede/secao_da_rede.dart`, e nao
+/// esta classe. A razao e a acao flutuante: ela **troca com a aba** -- `Criar
+/// evento` em `Eventos`, `Indicar` em `Comunidade` --, e
+/// `TelaDeAba.acaoDeCriar` e um parametro e nao um slot publicavel. Quem monta
+/// a casca tem de saber qual aba esta na frente, entao o estado da aba e a
+/// casca moram juntos, e este arquivo nao engorda com eles.
+///
+/// A conta completa das cinco abas antigas em duas mais filtro, da `TabBar`
+/// rolavel e das duas acoes flutuantes que passaram a ser uma esta toda em
+/// [SecaoDaRede].
+///
+/// ## O que esta secao NAO mostra, e continua nao mostrando
+///
+/// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0025.** Nao
+/// ha lista de presenca, em lugar nenhum, nao ha mapa e nao ha ordenacao por
+/// distancia entre pessoas. Cada uma dessas ausencias fecha a inferencia que o
 /// item 7 do ADR-0010 proibe -- que dois pets sao do mesmo tutor --, e o custo
 /// delas esta escrito no ADR: um encontro de cachorros em que nao se sabe quem
 /// vai e mais pobre do que o cliente descreveu, e essa pobreza e deliberada.
 ///
-/// **Check-in e galeria de fotos sairam desta versao** (BICHUS-251, decisao
-/// do cliente de 23/09/2026) e voltam depois pela branch
+/// **Check-in e galeria de fotos sairam desta versao** (BICHUS-251, decisao do
+/// cliente de 23/09/2026) e voltam depois pela branch
 /// `guarda/rede-checkin-galeria`.
 ///
-/// **Criar evento e enviar foto continuam fora**, e isso e verificavel e
-/// nao prometido: nao ha operacao no contrato, nao ha metodo em `RedeApi` e nao
-/// ha widget na tela. A criacao pela comunidade depende do pacote de moderacao,
-/// que nao existe em lugar nenhum deste repositorio.
+/// **Sem mapa**, por decisao de 17/09: o Maps cobra por carregamento de mapa e
+/// o componente criaria precedente contra o ADR-0010. E perfil de profissional
+/// **nao e criado pela comunidade**, por decisao de 21/09 -- a comunidade
+/// convida e avalia (emenda 1 do ADR-0011).
 class AbaRede extends StatelessWidget {
   const AbaRede({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final destino = CascaComAbas.porRota(Rotas.rede);
-    final sessao = Escopo.of(context).sessao;
-
-    // `AnimatedBuilder` porque a visibilidade da porta de criar passou a
-    // depender da SESSAO: sem ele, quem entra ou confirma o e-mail com a
-    // `Rede` aberta continuaria sem o icone ate trocar de aba.
-    return AnimatedBuilder(
-      animation: sessao,
-      builder: (context, _) => TelaDeAba(
-        raizDeSecao: true,
-        titulo: destino.rotulo,
-        // A PORTA DE CRIAR EVENTO, na barra de topo (pedido do cliente em
-        // 18/10/2026). Ela saiu do corpo da agenda, onde era um
-        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
-        // folga, 64 dp devolvidos ao corpo.
-        //
-        // **"Criar evento", e nao "Marcar um encontro".** O vocabulario do app
-        // trocou "encontro" por "evento" em 18/10 e os rotulos novos dizem
-        // `Criar evento`. **A pendencia que este ramo deixou escrita esta
-        // FECHADA na mescla do lote de 18/10:** o literal saiu daqui e o
-        // rotulo vem de `AgendaDaRede.rotuloDeMarcar`, que o ramo do
-        // vocabulario passou a valer `Criar evento`. Era uma string aqui mais
-        // uma constante definida e sem uso la; agora e uma coisa so, e quem
-        // mudar a redacao muda num lugar.
-        //
-        // **O GLIFO: `Icons.more_time` -- o relogio com o sinal de mais.** Ele
-        // nao foi escolhido por gosto, e sim por eliminacao dentro da familia
-        // fechada do 10.1 (Material Symbols, a embutida no Flutter 3.47.4):
-        //
-        //   - calendario COM O SINAL DE MAIS, que seria o obvio, **nao existe**
-        //     nesta familia nesta versao (`calendar_add_on` nao esta la);
-        //   - `edit_calendar` (calendario com lapis) **ja esta em uso dentro da
-        //     propria `Rede`**, em `encontro_da_rede.dart`, significando
-        //     "adicionar ao meu calendario" -- dois sentidos no mesmo glifo na
-        //     mesma secao e a colisao que o cliente leu no aparelho em 22/09;
-        //   - `event_available` (calendario com visto) leria "vou participar",
-        //     que e outra acao que esta secao tem;
-        //   - `event` sozinho e o glifo decorativo de "quando" em quatro telas,
-        //     e diz "um evento", nunca "criar um".
-        //
-        // Sobra o sinal de mais sobre o objeto que a acao de fato produz: uma
-        // data e hora marcadas. Nenhum vetor novo, nada baixado, nada gerado.
-        //
-        // **So aparece com sessao E e-mail confirmado** (ver
-        // `podeCriarNaComunidade`). Deslogado, a barra da `Rede` fica com o
-        // titulo e o `Filtros` -- nao fica vazia --, e o caminho para entrar e
-        // a aba `Perfil`, que oferece `Entrar` e `Criar conta` e continua na
-        // barra de baixo em todo estado.
-        acaoDeCriar: podeCriarNaComunidade(sessao)
-            ? AcaoDeCriarNaBarra(
-                icone: Icons.more_time,
-                rotulo: AgendaDaRede.rotuloDeMarcar,
-                aoTocar: () => context.push(Rotas.criarEncontroDaRede),
-              )
-            : null,
-      // **O reforco desce para a agenda, e nao sai da tela.**
-      //
-      // `TelaDeAba` o desenha como PRIMEIRA linha do corpo, acima dos filhos,
-      // e o cliente pediu em 17/10/2026 que o campo de busca fique acima dele
-      // e das abas. A casca nao tem como por o campo acima do proprio reforco:
-      // o campo pertence ao estado de `AgendaDaRede`. Entao o texto vai para
-      // quem sabe a ordem -- ele continua no corpo, em `body-lg` e
-      // `text-secondary`, exatamente como aqui, so com a busca acima.
-        reforco: null,
-        filhos: <Widget>[AgendaDaRede(reforcoDaSecao: destino.reforcoDaPagina)],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SecaoDaRede();
 }
 
-/// Secao 3 — `Perto`. Profissionais e estabelecimentos indicados.
+/// **`AbaPerto` NAO EXISTE MAIS, e a ausencia e o contrato (19/10/2026).**
 ///
-/// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Perto esta em
-/// construcao" era o certo enquanto nao havia rota; `GET /directory/entries`
-/// existe, e a listagem e `ListaDoDiretorio`. O estado vazio nao sumiu, mudou
-/// de dono: quem o mostra agora e a propria lista, e so quando o servidor
-/// responde que nao ha entrada -- que e afirmacao medida, e nao afirmacao
-/// sobre dado que a tela nao carrega.
+/// A secao `Perto` foi absorvida pela `Rede`: o corpo dela -- a lista do
+/// diretorio -- e a aba `Comunidade`, e a porta de `Indicar` e a acao
+/// flutuante daquela aba. Nada foi apagado de conteudo; o que saiu foi a
+/// SECAO.
 ///
-/// **A porta das ONGs continua** (criterio 6): ela leva a `Pets` pre-filtrado
-/// em adocao e nao duplica listagem nenhuma. Ela fica **abaixo** da lista
-/// porque o conteudo da secao passou a existir, e porta para outra secao acima
-/// do conteudo proprio inverteria a ordem de leitura.
+/// **Apagar a classe e deliberado.** Deixa-la, mesmo sem rota, seria uma tela
+/// de secao sem lugar na barra -- e no dia em que alguem registrasse `/perto`
+/// de novo ela voltaria a abrir, com o titulo de uma secao que o produto nao
+/// tem. O portao e o grupo `nao ha rota orfa para a secao que saiu` de
+/// `test/telas/gaveta_oculta_e_barra_nova_test.dart`, que mede as duas coisas:
+/// que `Perto` nao esta no registro de secoes, e que `/perto` nao resolve.
 ///
-/// **A barra de topo passou a ter DUAS acoes na direita**, e nao mais uma: a
-/// porta de INDICAR subiu para a barra em 18/10/2026 (pedido do cliente) e
-/// fica a esquerda do `Filtros`. Busca, filtro e ordenacao **nao mudaram de
-/// lugar nesta rodada**: a busca continua no corpo, em largura total, e o
-/// acesso a folha de filtro e ordem continua no slot que ganhou em 17/10.
+/// **O que mudou de casa, para quem procurar:** `lista_do_diretorio.dart`,
+/// `minhas_indicacoes.dart`, `pagina_do_local.dart` e `sugerir_profissional.dart`
+/// **continuam em `lib/telas/perto/`** e nenhuma delas mudou de conteudo. A
+/// pasta nao foi renomeada de proposito: ha tres frentes editando arquivos
+/// dela nesta mesma rodada, e mover a pasta trocaria uma mudanca de
+/// composicao por um conflito textual em cada arquivo. O nome da pasta nao
+/// aparece em tela nenhuma.
 ///
-/// **Sem mapa**, por decisao de 17/09: o Maps cobra por carregamento de mapa e
-/// o componente criaria precedente contra o ADR-0010. E perfil de profissional
-/// **nao e criado pela comunidade**, por decisao de 21/09.
-class AbaPerto extends StatelessWidget {
-  const AbaPerto({super.key});
+/// `corpo_do_perto.dart` -- a casca das duas abas de `Perto` -- **foi
+/// apagado**: as abas dele nao existem mais (uma virou `Comunidade`, a outra
+/// virou porta), e deixar a casca seria uma segunda definicao de onde as abas
+/// moram.
+
+/// Secao 3 — `Mural`. **O LUGAR da linha do tempo.**
+///
+/// ## O que esta frente construiu, e o que ela NAO construiu
+///
+/// Decisao do cliente de 19/10/2026: a secao de publicacoes do usuario.
+/// **Esta frente construiu o LUGAR** -- o slot na barra (`Mural` pede 50,90 dp
+/// num slot de 64,00, medido), o ramo do `IndexedStack`, a rota
+/// `Rotas.mural` e esta tela em estado inicial honesto.
+///
+/// **Publicar, a linha do tempo, curtir, comentar e seguir sao de OUTRA
+/// FRENTE**, que roda em paralelo e cria `user_publications`, o contrato e as
+/// operacoes. O nome da rota foi combinado com ela e e estavel: `/mural`.
+///
+/// ## NAO HA ACAO FLUTUANTE, e a ausencia e a parte cuidada
+///
+/// O desenho previa `Publicar` com `Icons.post_add` no canto. Ela **nao foi
+/// desenhada**, e nao por esquecimento: medido nesta arvore, nao existe
+/// operacao de publicar -- a tabela `user_publications` nao existe e nao ha
+/// rota de linha do tempo nem de publicacao no contrato. Um botao de
+/// `Publicar` abriria o que? O criterio 2 da BICHUS-62 proibe renderizar acao
+/// sem destino, **nem habilitada nem desabilitada**.
+///
+/// Quem trouxer a operacao traz a acao com ela, no `acaoDeCriar` desta classe
+/// -- uma linha, no mesmo lugar em que `Rede` tem a sua.
+///
+/// ## `casca`, e nao `existe` nem `planejada`
+///
+/// O estado declarado no registro de secoes e `EstadoDaSecao.casca` -- "tela
+/// sem conteudo mas com saida real". `existe` obrigaria a secao a ter
+/// conteudo, e ela nao tem; `planejada` a esconderia do build de ENTREGA
+/// (`visiveisEm`), e o cliente pediu o LUGAR dela na barra.
+class AbaMural extends StatelessWidget {
+  const AbaMural({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final destino = CascaComAbas.porRota(Rotas.perto);
-    final sessao = Escopo.of(context).sessao;
-
-    // Mesma razao de `AbaRede`: a visibilidade da porta de indicar depende da
-    // sessao, e sem escutar o controlador ela so apareceria na troca de aba.
-    return AnimatedBuilder(
-      animation: sessao,
-      builder: (context, _) => TelaDeAba(
-        raizDeSecao: true,
-        titulo: destino.rotulo,
-        // A PORTA DE INDICAR, na barra de topo (pedido do cliente em
-        // 18/10/2026). Ela saiu do corpo da lista do diretorio, onde era um
-        // `BotaoSecundario` de largura total: 48 dp de altura mais 16 dp de
-        // folga, 64 dp devolvidos ao corpo.
-        //
-        // **O GLIFO E O DE PESSOAS JUNTAS, e ele foi escolhido por ele**: "o
-        // icone de recomendar um profissional, pode ser igual do instagram, as
-        // 3 pessoas juntos, para adicionar uma nova recomendacao".
-        // `Icons.group_add` e esse desenho na familia fechada do 10.1 --
-        // nenhum vetor novo, nada baixado, nada gerado.
-        //
-        // **O SINAL DE ADICIONAR NAO E ENFEITE, e e ele que resolve a
-        // ambiguidade.** Pessoas juntas SEM o sinal leria "ver a lista de
-        // profissionais" -- que e justamente o que esta tela ja mostra, e um
-        // icone que repete o conteudo da tela nao oferece acao nenhuma.
-        // `group_add` ja traz o sinal embutido no proprio glifo, entao a
-        // leitura "adicionar" vem sem compor dois glifos (o 10.1 e o UX 27.3.1
-        // proibem composicao).
-        //
-        // **Ha uma vizinhanca para vigiar, e ela esta escrita aqui para nao
-        // ser descoberta no aparelho:** a aba `Rede` usa `groups` na barra de
-        // BAIXO, e as duas saem do mesmo campo de "pessoas juntas". Elas vivem
-        // em barras diferentes e em secoes diferentes, e o cliente pediu este
-        // glifo com estas palavras. Se ele ler as duas como a mesma coisa no
-        // aparelho, quem muda e esta linha, nao a aba.
-        //
-        // **So aparece com sessao E e-mail confirmado.** O defeito que ele
-        // relatou era exatamente este: *"o botao indicar quem atende bem, nem
-        // deveria aparecer para o usuario se ele nao estiver logado"* -- a
-        // porta convidava, e a tela de destino e que dizia "Entre para
-        // indicar". Deslogado a barra fica com o hamburguer, o titulo e o
-        // `Filtros`, e o caminho para entrar e a aba `Perfil`.
-        acaoDeCriar: podeCriarNaComunidade(sessao)
-            ? AcaoDeCriarNaBarra(
-                icone: Icons.group_add,
-                // A MESMA palavra da tela, e de uma fonte so: "Indicar", nunca
-                // "Cadastrar". A emenda 1 do ADR-0011 diz que a comunidade
-                // convida e avalia, nunca cria, e `Cadastrar` prometeria
-                // publicacao -- nada e publicado por esta porta.
-                rotulo: ListaDoDiretorio.rotuloDeIndicar,
-                aoTocar: () => context.push(Rotas.sugerirProfissional),
-              )
-            : null,
-        reforco: destino.reforcoDaPagina,
-        // **AS DUAS ABAS DA SECAO** (cliente, 18/10/2026): `Profissionais` e
-        // `Minhas indicacoes`. Quem as desenha e `CorpoDoPerto`, com a
-        // mecanica de `agenda_da_rede.dart` reusada -- e nao esta classe: a
-        // casca entrega o corpo da secao, e as abas sao conteudo dele.
-        //
-        // **A porta de adocao entra como rodape da aba da LISTA**, e nao como
-        // filho da secao: pendurada fora das abas, ela apareceria embaixo de
-        // `Minhas indicacoes` tambem, oferecendo adocao a quem foi ver o
-        // estado de uma indicacao.
-        filhos: const <Widget>[
-          // A SEGUNDA PORTA DE `Adoções` SAIU (18/10/2026, decisao do ramo da
-          // navegacao): nao existe rota de adocao no contrato e a porta abria uma
-          // tela em construcao. A rota e a tela ficam; so o controle sai.
-          //
-          // `CorpoDoPerto` (as DUAS abas da secao, mais novo que aquele ramo)
-          // FICA, agora sem rodape -- e por isso `rodapeDaListagem` virou
-          // opcional. Juntar os dois lados e isto: a estrutura nova, sem a porta.
-          CorpoDoPerto(),
-        ],
-      ),
+    final destino = CascaComAbas.porRota(Rotas.mural);
+    return TelaDeAba(
+      raizDeSecao: true,
+      titulo: destino.rotulo,
+      // **A LINHA DE REFORCO NAO E DESENHADA**, como nas outras quatro: o
+      // cliente removeu as cinco frases de apoio do corpo, nominalmente, em
+      // 18/10/2026. Uma secao nova nao repoe o que ele acabou de mandar
+      // tirar. O texto continua no REGISTRO, porque ele e a outra metade do
+      // nome acessivel da aba.
+      reforco: null,
+      // **SEM ACAO FLUTUANTE.** Ver a prosa desta classe: nao existe operacao
+      // de publicar nesta arvore.
+      filhos: const <Widget>[CorpoDoMural()],
     );
   }
 }
@@ -688,6 +694,86 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: MeusAchados.titulo,
               aoTocar: () => context.push(Rotas.meusAchados),
+            ),
+            // ================================================================
+            // OS DOIS ITENS QUE A GAVETA OCULTA DEIXARIA INALCANCAVEIS
+            // (19/10/2026) -- e este e um ACHADO, nao um acrescimo.
+            // ================================================================
+            //
+            // O cliente mandou ocultar a gaveta (*"vamos ocultar o menu por
+            // enquanto, pois nao esta sendo utilizado para nada"*) e disse que
+            // os itens de conta seriam alcancados pela FOTO, que leva a esta
+            // tela. **Medido antes de ocultar: dois dos sete itens vivos NAO
+            // estavam aqui.**
+            //
+            // `Pedidos de conexao` (`Rotas.pedidosDeConexao`) e `Pessoas
+            // bloqueadas` (`Rotas.pessoasBloqueadas`) tinham a GAVETA COMO
+            // UNICA PORTA em `lib/`: as duas rotas apareciam so em
+            // `gaveta_de_secoes.dart`, em `rotas.dart` e dentro das proprias
+            // telas -- nenhuma outra tela do app as monta. Ocultar o menu por
+            // cima delas teria deixado duas telas construidas inalcancaveis,
+            // **em silencio**, e nenhum caso da suite acusaria isso: a rota
+            // existe, a tela monta, e o que desapareceria e o unico caminho
+            // humano ate ela.
+            //
+            // **E `Pessoas bloqueadas` e o pior dos dois caso se perdesse.**
+            // O bloqueio e simetrico no servidor: quem bloqueia alguem passa a
+            // receber `404` no perfil dessa pessoa, e o `Desbloquear` morava
+            // dentro do menu daquele perfil -- que nunca mais abre. Esta lista
+            // E o unico lugar de onde o desbloqueio sai. Sem porta para ela,
+            // **bloquear voltaria a ser irreversivel pelo aplicativo**, que e
+            // exatamente o defeito que a tela foi construida para fechar, em
+            // 19/10, por decisao dele.
+            //
+            // **AQUI e o lugar certo e nao um lugar qualquer:** "entre `Meus
+            // dados` e `Sair da conta`" e onde este arquivo ja declara, por
+            // escrito, que item novo deste menu entra. E a foto da barra de
+            // topo e a porta que o cliente nomeou para os itens de conta.
+            //
+            // O rotulo e o glifo de cada um sao os MESMOS que a linha da
+            // gaveta declarava (`RegistroDeSubDestinos`, secao `Perfil`), e
+            // isso e de proposito: quem usava a gaveta acha a acao pelo texto,
+            // e nao descobre que ela mudou de lugar lendo um nome novo.
+            //
+            // A isca e o grupo `os sete itens vivos continuam alcancaveis` de
+            // `test/telas/gaveta_oculta_e_barra_nova_test.dart`, com UM CASO
+            // POR ITEM e o caminho nomeado em cada um.
+            ItemDeMenu(
+              rotulo: 'Pedidos de conexão',
+              aoTocar: () => context.push(Rotas.pedidosDeConexao),
+            ),
+            ItemDeMenu(
+              rotulo: 'Pessoas bloqueadas',
+              aoTocar: () => context.push(Rotas.pessoasBloqueadas),
+            ),
+            // ----------------------------------------------------------------
+            // E O TERCEIRO ITEM, DA UNIAO DO LOTE (19/10/2026).
+            // ----------------------------------------------------------------
+            //
+            // `feat/barra-com-mural-e-rede-unificada` e
+            // `feat/meus-eventos-e-cancelar` acrescentaram item NESTE MESMO
+            // ponto -- "entre `Meus achados` e `Sair da conta`", que e onde
+            // este arquivo declara que item novo entra. **Os TRES
+            // sobrevivem**, e nenhum e decorativo: as duas rotas da gaveta
+            // ficariam inalcancaveis sem as duas de cima, e `Cancelar` nao
+            // tem outro caminho sem a de baixo.
+
+            // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
+            //
+            // **ESTA LINHA E O UNICO CAMINHO DO APP ATE `Cancelar`.** Nada na
+            // resposta da agenda diz de quem e o encontro -- `NetworkEventPublic`
+            // nao tem campo de autoria e nao pode ter (item 7 do ADR-0010) --,
+            // entao quem criou um encontro nao tinha como voltar a ele. O
+            // cliente escolheu este lugar, literal: *"uma tela com os eventos
+            // que voce criou, e o cancelar mora la. Nao suja o cartao da
+            // agenda, que voce acabou de mandar limpar, e e onde as pessoas
+            // procuram"*.
+            //
+            // Entre `Meus achados` e `Sair da conta`, que e onde este arquivo
+            // declara que item novo entra -- nunca depois do ultimo.
+            ItemDeMenu(
+              rotulo: MeusEventos.titulo,
+              aoTocar: () => context.push(Rotas.meusEventos),
             ),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
             // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois

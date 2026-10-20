@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import 'conexoes/tela_pedidos_de_conexao.dart';
+import 'seguranca/tela_de_bloqueados.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -64,7 +66,32 @@ class SubDestino {
     required this.forma,
     required this.estado,
     this.rota,
-  });
+    this.icone,
+  }) : assert(
+         // **TODO ITEM QUE A GAVETA PINTA TEM GLIFO.** A condicao e a mesma
+         // de `viraItem`, palavra por palavra, e nao uma parecida: um item
+         // que nasce vivo sem icone sairia como uma linha de texto no meio de
+         // linhas com glifo, que e o desalinho que o pedido de 18/10/2026
+         // veio fechar.
+         //
+         // **E so sobre o que a gaveta pinta.** Os dez `destino` em
+         // `planejada` nao recebem glifo aqui: escolher o desenho de uma tela
+         // que ninguem desenhou e decidir no codigo o que passa pelo Figma
+         // primeiro, e o glifo chega junto com a tela, no dia em que a linha
+         // sobe para `existe`. A assercao cobra no mesmo instante em que o
+         // item passa a ser renderizado.
+         !(forma == FormaDoSubDestino.destino &&
+                 estado == EstadoDoSubDestino.existe &&
+                 rota != null) ||
+             icone != null,
+         'Sub-destino VIVO sem icone. Item de gaveta sem glifo volta a ser a '
+         'linha de texto que o cliente mandou enfeitar em 18/10/2026: '
+         '"nos subitens dos menus voce deve colocar icones tambem". Escolha '
+         'o glifo na familia embutida (Material Symbols, design system 10.1) '
+         'e confira que nenhum outro item da MESMA secao ja o usa -- a '
+         'colisao de dois sentidos num glifo so e a que o cliente leu no '
+         'aparelho em 22/09.',
+       );
 
   /// O nome curto, como a UX 27.5 o escreve.
   final String rotulo;
@@ -75,6 +102,20 @@ class SubDestino {
   /// O endereco, quando existe. Nulo e a afirmacao de que ainda nao ha para
   /// onde ir, e o portao a cobra.
   final String? rota;
+
+  /// O GLIFO do item, da familia embutida do Flutter (Material Symbols, a
+  /// familia fechada do design system 10.1).
+  ///
+  /// **Nulo so em linha que a gaveta nao pinta** -- a assercao do construtor
+  /// nao deixa um item vivo passar sem ele. Nenhum vetor novo, nada baixado,
+  /// nada gerado e nenhuma dependencia: a mesma regra que
+  /// `AcaoDeCriarFlutuante` ja segue.
+  ///
+  /// **Um glifo por sentido, dentro da secao.** Dois itens da mesma secao com
+  /// o mesmo desenho e a colisao que o cliente leu no aparelho em 22/09
+  /// (`edit_calendar` significando duas coisas na `Rede`), e e ela que o
+  /// portao da gaveta cobra item por item.
+  final IconData? icone;
 
   /// Se ele vira item da gaveta.
   ///
@@ -167,6 +208,14 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.escanear,
+        // **`qr_code_scanner`, e NAO `qr_code_2`.** Os dois existem na
+        // familia e dizem coisas opostas: `qr_code_2` e o codigo EXIBIDO --
+        // e o que a tela do pet pinta na plaquinha, e e o que a linha
+        // `A tag do meu pet` deste mesmo inventario significa --, enquanto
+        // `qr_code_scanner` traz a moldura de leitura em volta. Ler e mostrar
+        // sao viagens opostas, e `qr_code_2` ja esta tomado com o outro
+        // sentido no app: usa-lo aqui seria a colisao de 22/09 outra vez.
+        icone: Icons.qr_code_scanner,
       ),
       SubDestino(
         rotulo: 'Registrar achado avulso',
@@ -177,6 +226,27 @@ abstract final class RegistroDeSubDestinos {
         // sustenta.
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.registrarAchado,
+        // **O MEGAFONE: dar o aviso de que achei um bicho.** O que esta acao
+        // produz e um AVISO para a vizinhanca, e nao um registro meu.
+        //
+        // Escolhido por eliminacao dentro da familia fechada do 10.1, como o
+        // `more_time` da `Rede` foi:
+        //
+        //   - `add_location_alt` (alfinete com mais) seria o obvio e esta
+        //     PROIBIDO pela vizinhanca: o alfinete e a forma da secao `Perto`
+        //     desde a BICHUS-233 (`place`/`place_outlined` na barra de
+        //     baixo), e um item de gaveta com a forma de outra secao leria
+        //     como "ir para `Perto`" -- justamente o que a regra 4 do portao
+        //     da gaveta proibe;
+        //   - `pets` esta reservado a secao `Pets` na barra de baixo, pelo
+        //     mesmo motivo;
+        //   - `where_to_vote` ja significa "entregue" em
+        //     `acompanhamento_do_pedido.dart`;
+        //   - `add` sozinho nao diz O QUE se acrescenta.
+        //
+        // Sobra o objeto que a acao de fato produz: o aviso. Nenhum outro
+        // item desta secao usa megafone.
+        icone: Icons.campaign_outlined,
       ),
       SubDestino(
         rotulo: 'Possíveis correspondências',
@@ -243,17 +313,28 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.planejada,
       ),
-    ],
-    // -- 27.5.3 `Perto` ---------------------------------------------------
-    Rotas.perto: <SubDestino>[
+      // -- O QUE ERA 27.5.3 `Perto`, ABSORVIDO AQUI (19/10/2026) ------------
+      //
+      // A secao `Perto` deixou de existir: o conteudo dela virou a aba
+      // `Comunidade` desta secao. **As oito linhas do inventario dela nao
+      // foram apagadas, elas mudaram de chave** -- a 27.5 e um INVENTARIO, e
+      // apagar linha de inventario porque a secao mudou de nome faz o
+      // documento mentir sobre o que o produto tem.
+      //
+      // **A contagem total de linhas nao muda por esta mudanca** (52), e a de
+      // `destino` tambem nao (17). O que muda e a distribuicao: `Rede` passou
+      // de 6 para 14 linhas, e `Perto` saiu do mapa.
+      //
+      // Nenhuma das oito e `destino` VIVO, entao nenhuma delas precisou de
+      // glifo -- a assercao do construtor cobra glifo so em item que a gaveta
+      // PINTA. `Pets de ONGs para adoção` e `destino`, mas `planejada`.
       SubDestino(
         rotulo: 'Profissionais e estabelecimentos',
         forma: FormaDoSubDestino.conteudoDaSecao,
-        // A UX 27.5.3 escreve `planejada`, e o documento fechou em 21/09. A
-        // secao `Perto` foi construida depois disso: `PaginaDoDiretorio` lista
+        // A UX 27.5.3 escreve `planejada`, e o documento fechou em 21/09. O
+        // conteudo foi construido depois disso: `ListaDoDiretorio` lista
         // profissional e estabelecimento com nivel de verificacao, e a lista e
-        // o CORPO da secao. Vale o que o repositorio sustenta, como ja valeu
-        // para `Registrar achado avulso`.
+        // o CORPO da aba `Comunidade`. Vale o que o repositorio sustenta.
         //
         // Continua sendo `conteudoDaSecao`, e a forma e que decide: a propria
         // aba ja mostra o diretorio, entao ele nao vira item de gaveta nem
@@ -277,12 +358,11 @@ abstract final class RegistroDeSubDestinos {
         // construcao. Item de gaveta que abre uma tela em construcao e acao
         // que promete, e o cliente mandou fechar esse defeito.
         //
-        // `planejada` e o que o registro tem para dizer isto: por `viraItem`
-        // o item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO
-        // no inventario de 27.5. A rota sai desta linha porque o portao exige
-        // rota nula em item `planejada` -- rota preenchida e como ele volta a
-        // aparecer no dia em que alguem mexer na condicao --, e ela continua
-        // registrada no roteador para link profundo.
+        // `planejada` e o que o registro tem para dizer isto: por `viraItem` o
+        // item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO no
+        // inventario de 27.5. A rota sai desta linha porque o portao exige
+        // rota nula em item `planejada`, e ela continua registrada no roteador
+        // para link profundo.
         estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
@@ -291,16 +371,21 @@ abstract final class RegistroDeSubDestinos {
         estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
-        rotulo: 'Filtros',
-        // **Nao e folha inferior, e nao e mais `planejada`.** A 27.5.3
-        // herdou de 25.6 a folha inferior para filtro; a tela que foi
-        // construida poe o controle de filtro NO CORPO, logo acima da lista,
-        // junto da ordenacao, que e o padrao de listagem deste app. Onde o
-        // documento e o codigo divergem, vale o codigo.
+        rotulo: 'Filtros do diretório',
+        // **Nao e folha inferior, e nao e mais `planejada`.** A 27.5.3 herdou
+        // de 25.6 a folha inferior para filtro; a tela que foi construida poe
+        // o gatilho de filtro NO CORPO, na linha da busca -- e a DIREITA dela
+        // desde a reversao de 19/10. Onde o documento e o codigo divergem,
+        // vale o codigo.
         //
-        // `acaoNaTela` e a forma certa e ela mantem o item FORA da gaveta
-        // pelo mesmo motivo de antes: filtro nao tem endereco. A regra nao
-        // afrouxou; o que mudou foi onde o controle mora.
+        // `acaoNaTela` e a forma certa e ela mantem o item FORA da gaveta pelo
+        // mesmo motivo de antes: filtro nao tem endereco.
+        //
+        // **O ROTULO GANHOU `do diretório` em 19/10**, e nao e enfeite: com a
+        // absorcao, esta secao passou a ter DUAS linhas chamadas `Filtros` --
+        // a dos eventos, que ja era daqui, e esta, que vinha do `Perto`. Duas
+        // linhas de mesmo nome no inventario de uma secao so e um inventario
+        // que nao distingue o que inventaria.
         forma: FormaDoSubDestino.acaoNaTela,
         estado: EstadoDoSubDestino.existe,
       ),
@@ -317,6 +402,32 @@ abstract final class RegistroDeSubDestinos {
       SubDestino(
         rotulo: 'Reivindicar este perfil',
         forma: FormaDoSubDestino.acaoNaTela,
+        estado: EstadoDoSubDestino.planejada,
+      ),
+    ],
+    // -- A SECAO `Mural` (19/10/2026) -------------------------------------
+    //
+    // **UMA LINHA SO, e a contencao e deliberada.** O inventario de 27.5
+    // descreve o que o produto TEM ou o que o mapa de UX DECLARA, e o `Mural`
+    // nao esta em nenhum dos dois: ele e decisao de 19/10, posterior ao
+    // documento, e o conteudo dele e de outra frente.
+    //
+    // Escrever aqui as linhas que eu IMAGINO que o Mural vai ter -- publicar,
+    // a publicacao aberta, curtir, comentar, denunciar -- seria decidir no
+    // codigo o desenho de telas que outra pessoa esta desenhando, e o
+    // inventario passaria a ter cinco linhas que ninguem prometeu.
+    //
+    // A unica linha e a honesta: a secao tem um CORPO, ele e a linha do tempo,
+    // e ele e `planejada`. Quem construir o conteudo acrescenta as linhas
+    // dele com as telas.
+    //
+    // **Ela NAO e `destino` e portanto nao pede glifo** (a assercao do
+    // construtor cobra glifo so em item que a gaveta PINTA): `conteudoDaSecao`
+    // e a propria aba, que ja esta na barra com `dynamic_feed`.
+    Rotas.mural: <SubDestino>[
+      SubDestino(
+        rotulo: 'Publicações das conexões',
+        forma: FormaDoSubDestino.conteudoDaSecao,
         estado: EstadoDoSubDestino.planejada,
       ),
     ],
@@ -400,6 +511,21 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.cadastrarPet,
+        // **A FICHA NOVA, e nao a patinha.** O que o assistente produz e o
+        // cadastro do animal -- nome, sinais, foto, tag --, e `note_add` e o
+        // objeto com o sinal de mais embutido no proprio glifo, sem compor
+        // dois desenhos (o 10.1 e a UX 27.3.1 proibem composicao, e foi o que
+        // tirou `group_add` do lugar de "pessoas + mais" em `Perto`).
+        //
+        // **`pets` esta reservado**, e a razao esta escrita em
+        // `casca_com_abas.dart`: a patinha e a forma da secao `Pets` na barra
+        // de baixo. Item de gaveta com a forma de uma secao convida para a
+        // secao, e a regra 4 do portao diz que nenhum item da gaveta navega
+        // para secao -- este abre o assistente de cadastro.
+        //
+        // `notes_outlined` (sem o mais) ja e o bloco de "descricao" em tres
+        // telas; o sinal de mais e o que separa os dois sentidos.
+        icone: Icons.note_add_outlined,
       ),
       SubDestino(
         rotulo: 'A tag do meu pet',
@@ -413,11 +539,107 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.escanear,
+        // O MESMO GLIFO DA OUTRA PORTA, de proposito: as duas linhas de
+        // `Escanear uma tag` (27.5.1 e 27.5.5) sao a MESMA viagem, e o
+        // recorte da gaveta e por ROTA. Glifos diferentes para a mesma rota
+        // seriam duas leituras para um destino so.
+        icone: Icons.qr_code_scanner,
       ),
       SubDestino(
         rotulo: 'Convidar vizinhos',
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.planejada,
+      ),
+      // **LINHA NOVA (19/10/2026), e nao mudanca de estado -- a diferenca esta
+      // dita aqui de proposito.** O procedimento desta casa e subir o estado do
+      // sub-destino que a UX 27.5 ja nomeia; **nao ha linha para este**, porque
+      // 27.5.5 fechou em 21/09 e a conexao entre pessoas e decisao de
+      // 18/10/2026. Entao a linha nasce aqui, e nasce `existe`: a tela
+      // (`TelaDePedidosDeConexao`) e a rota (`/conexoes/pedidos`) foram
+      // entregues em 18/10 e ficaram SEM PORTA -- `Rotas.pedidosDeConexao` era
+      // citada so em `rotas.dart`, e nenhum item de navegacao levava a ela. E
+      // por isso que o cliente nao viu nada.
+      //
+      // **Em `Perfil` e nao em `Rede`**, e a razao e a mesma de `Meus achados`:
+      // a caixa e das MINHAS decisoes -- `listMyConnectionRequests` exige conta
+      // e a autorizacao mora no `WHERE` --, e o "meu" mora em `Perfil`. `Rede` e
+      // a secao dos ENCONTROS da comunidade, que e outra coisa.
+      //
+      // **`destino` e nao `conteudoDaSecao`**: a tela tem `Scaffold`, barra de
+      // saida e endereco proprio. Ela nao e um bloco da aba.
+      SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `person_add_alt_outlined` (0xf276): uma PESSOA sendo acrescentada, que
+        // e exatamente o que um pedido de conexao e. Nao colide nesta secao.
+        rotulo: TelaDePedidosDeConexao.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pedidosDeConexao,
+        icone: Icons.person_add_alt_outlined,
+      ),
+      // **SEGUNDA LINHA NOVA (19/10/2026), pela mesma razao da de cima**: a UX
+      // 27.5.5 fechou em 21/09 e nao tem linha para esta -- bloquear alguem e
+      // decisao de 18/10 e a lista e decisao de 19/10. Ela nasce `existe`: a
+      // tela (`TelaDeBloqueados`) e a rota (`/perfil/bloqueados`) entram no
+      // mesmo commit desta linha.
+      //
+      // **ESTA PORTA E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO, e e por isso
+      // que ela nao e conveniencia.** O bloqueio e SIMETRICO no servidor, e a
+      // simetria fecha o perfil da pessoa bloqueada tambem para quem a
+      // bloqueou (`404`) -- que e exatamente onde o `Desbloquear` do
+      // `MenuDoPerfil` mora. Sem esta linha, bloquear era irreversivel pelo
+      // aplicativo. Decisao do cliente, 19/10/2026: a lista mora aqui, e o
+      // desbloqueio acontece nela.
+      //
+      // **Em `Perfil` e nao em `Rede`**, pela mesma razao de `Meus achados` e
+      // da caixa de pedidos: a lista e das MINHAS decisoes -- `listMyBlocks`
+      // exige conta e a autorizacao mora no `WHERE` --, e o "meu" mora em
+      // `Perfil`.
+      //
+      // **Depois de `Pedidos de conexao` e antes de `Meus dados`**: as duas
+      // linhas de cima sao sobre OUTRAS PESSOAS e ficam juntas; `Meus dados`
+      // abre o grupo do que e sobre a propria conta.
+      SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `block_outlined` (0xeed1): o glifo universal de bloqueio. Nao colide
+        // nesta secao, e nao divide sentido com nenhum outro item dela.
+        rotulo: TelaDeBloqueados.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pessoasBloqueadas,
+        icone: Icons.block_outlined,
       ),
       SubDestino(
         // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou
@@ -430,6 +652,17 @@ abstract final class RegistroDeSubDestinos {
         // `Perto`.
         rotulo: 'Meus dados',
         forma: FormaDoSubDestino.destino,
+        // **PESSOA COM A ENGRENAGEM: os proprios dados, e a acao de
+        // mexer neles.** `TelaDadosPessoais` edita nome, telefone e foto.
+        //
+        // Os dois vizinhos obvios estao tomados com outro sentido, e e por
+        // isso que nao e nenhum deles: `account_circle` e a forma da SECAO
+        // `Perfil` (a entrada de conta da barra, `casca_com_abas.dart`) e
+        // `person_outline` e a marca neutra dentro do avatar da barra de
+        // topo. `badge` tambem nao: `Cracha de identidade` e uma linha deste
+        // mesmo inventario de 27.5.5, e dar o cracha para `Meus dados`
+        // deixaria o cracha sem glifo proprio no dia em que ele existir.
+        icone: Icons.manage_accounts_outlined,
         // Saiu de `planejada` porque a tela existe: `TelaDadosPessoais`, com
         // endereco registrado no roteador de verdade. E a subida que o portao
         // de contagem chama de "caminho normal, e so quando a tela do outro
@@ -533,18 +766,39 @@ abstract final class RegistroDeSubDestinos {
   /// casca, e [ItemDaGaveta] navega com `push`, que e o certo para os
   /// atalhos vivos (todos rotas irmas). Empurrar a rota de um ramo coloca uma
   /// copia da tela por cima da propria casca em vez de trocar de ramo.
+  ///
+  /// **`Meus dados` SAIU DESTE GRUPO em 18/10/2026, por pedido do cliente:**
+  /// *"o menu `Meus dados` dentro da pagina Pets e Perto nao faz sentido
+  /// nenhum com o contexto dessa secao"*. Ele estava aqui -- e era daqui, e
+  /// nao do inventario de `Pets` nem do de `Perto`, que ele aparecia nas duas
+  /// gavetas.
+  ///
+  /// **A regra que ele corrigiu:** global e o destino que vale em QUALQUER
+  /// secao, e os dados da conta nao valem em qualquer secao -- eles sao da
+  /// conta, que e uma secao com endereco proprio. `Escanear uma tag` e global
+  /// de verdade: ler a plaquinha de um bicho na rua faz sentido estando em
+  /// `Pets`, em `Perto`, na `Loja` ou no `Perfil`, e nao exige conta.
+  ///
+  /// **Nada ficou orfao, e isto foi conferido antes de a linha sair.** A rota
+  /// `/perfil/dados` continua com DUAS portas, as duas no `Perfil`, que e
+  /// onde ela pertence: a linha `Meus dados` do submenu de 27.5.5 (a gaveta
+  /// do `Perfil`, que esta montada em todo estado de sessao) e o `ItemDeMenu`
+  /// do corpo da propria tela da conta (`abas.dart`, no ramo logado). A tela
+  /// da conta se alcanca pela foto da barra de topo, de qualquer secao.
+  ///
+  /// **A gaveta de nenhuma secao ficou vazia por isso**, que era a objecao
+  /// que criou este grupo: `Rede`, `Perto`, `Loja` e a secao de mensagens
+  /// continuam abrindo com `Escanear uma tag`, e `Pets` e `Perfil` abrem com
+  /// o submenu proprio.
   static const List<SubDestino> globais = <SubDestino>[
-    SubDestino(
-      rotulo: 'Meus dados',
-      forma: FormaDoSubDestino.destino,
-      estado: EstadoDoSubDestino.existe,
-      rota: Rotas.dadosPessoais,
-    ),
     SubDestino(
       rotulo: 'Escanear uma tag',
       forma: FormaDoSubDestino.destino,
       estado: EstadoDoSubDestino.existe,
       rota: Rotas.escanear,
+      // O mesmo glifo das duas portas de 27.5.6, pelo mesmo motivo: e a mesma
+      // rota, e o recorte da gaveta e por rota.
+      icone: Icons.qr_code_scanner,
     ),
   ];
 
@@ -673,7 +927,14 @@ class GavetaDeSecoes extends StatelessWidget {
             // cabecalho escrito: o grupo global nao ganha titulo, porque
             // titulo de grupo em menu de quatro linhas e a "pagina" que o
             // cliente reprovou.
-            if (itens.isNotEmpty)
+            // **E SO QUANDO HA A SEGUNDA METADE.** `itens.isNotEmpty`
+            // sozinho pintava um filete no RODAPE da gaveta do `Perfil`, que
+            // ja oferecia as duas rotas globais no submenu proprio e portanto
+            // ficava com `globais` vazia -- uma divisa entre o grupo e o
+            // nada. Com a saida de `Meus dados` dos globais (18/10/2026) a
+            // gaveta de `Pets` caiu no mesmo caso, e e por isso que a guarda
+            // esta aqui: ela e consequencia da mudanca, nao limpeza avulsa.
+            if (itens.isNotEmpty && globais.isNotEmpty)
               Divider(
                 height: BichuEspaco.e6,
                 thickness: BichuBorda.hairline,
@@ -719,6 +980,19 @@ class ItemDaGaveta extends StatelessWidget {
       // O piso de alvo de toque do 6.5. `ListTile` nasce com 56 e o piso
       // critico de navegacao e 64.
       minTileHeight: BichuAlvoDeToque.critico,
+      // O GLIFO DO ITEM (18/10/2026, pedido do cliente: *"nos subitens dos
+      // menus voce deve colocar icones tambem, para deixar o aplicativo mais
+      // bonito"*).
+      //
+      // `item.icone!` sem desvio: a assercao de `SubDestino` ja garante que
+      // todo item vivo tem glifo, e um `if` calado aqui deixaria a linha sem
+      // icone passar sem ninguem saber -- que e o defeito que o pedido veio
+      // fechar.
+      //
+      // `textPrimary` e nao `textSecondary`: o glifo e a identidade do item,
+      // do mesmo peso que o rotulo, enquanto a seta a direita e so a
+      // affordance -- e e ela que fica apagada.
+      leading: Icon(item.icone!, color: cores.textPrimary),
       // **`title` e mais nada.** Nao ha `subtitle` aqui, e a ausencia e a
       // decisao: as seis linhas de apoio ("Leia o QR da coleira de um pet.")
       // eram metade do texto da gaveta e nenhuma delas dizia algo que o

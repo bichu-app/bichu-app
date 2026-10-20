@@ -53,6 +53,20 @@ class ConversasApi {
   /// O limite que o app pede. O contrato tem o teto; este e o pedido.
   static const int limitePadrao = 20;
 
+  /// O limite da LISTA de conversas: **dez**.
+  ///
+  /// **Numero do cliente, e nao escolha de engenharia** (18/10/2026, literal):
+  /// *"faca o carregamento das conversas como rolagem infinita, trazendo as 10
+  /// ultimas conversas e incrementando por 10"*. O contrato aceita de 1 a 50
+  /// (`Limit`), entao dez nao e mudanca de contrato -- e um pedido dentro da
+  /// faixa que ja existia.
+  ///
+  /// **Separado de [limitePadrao], que continua valendo para as MENSAGENS de
+  /// uma conversa.** Um numero so para os dois faria a proxima pessoa que
+  /// mexesse na rolagem da lista mudar, sem querer, quantas mensagens a tela da
+  /// conversa carrega por vez.
+  static const int limiteDaLista = 10;
+
   /// `GET /v1/conversations` (`listConversations`) -- as minhas conversas.
   ///
   /// **Cursor, e nunca deslocamento.** O contrato declara `cursor` e `limit`, e
@@ -62,15 +76,33 @@ class ConversasApi {
   /// `cursor` nulo pede a **primeira** pagina. Nao mandar a chave e diferente
   /// de mandar vazia: o servidor valida o cursor, e `cursor=` reprovaria com
   /// 400 na abertura da tela.
+  ///
+  /// **A ordem e a da ULTIMA MENSAGEM**, e nao a da abertura da conversa
+  /// (decisao do cliente, 18/10/2026). Ela e decidida no servidor
+  /// (`coalesce(last_message_at, opened_at)`), e a tela **nao reordena**: com
+  /// rolagem infinita, ordenar no aplicativo ordenaria so o que ja chegou, e a
+  /// pagina seguinte entraria com itens mais novos no fim da lista.
+  ///
+  /// [termo] e o `q` do contrato: recorta por nome do pet e por nome de
+  /// exibicao do outro lado, **dentro das conversas de quem chamou**. Nao e
+  /// busca de pessoas, e um termo que nao casa nada responde 200 com lista
+  /// vazia -- nunca 404.
   Future<PaginaDeConversas> listar({
     String? cursor,
-    int limite = limitePadrao,
+    int limite = limiteDaLista,
+    String? termo,
   }) async {
+    final buscado = termo?.trim();
     final json = await _api.get(
       '/conversations',
       query: <String, String>{
         'limit': '$limite',
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        // `q` SO VAI QUANDO HA TERMO, pela mesma razao do `cursor`: o contrato
+        // declara `minLength: 2` em `ConversationSearch`, e `q=` reprovaria com
+        // 400 na abertura da tela. Nao mandar a chave e diferente de mandar
+        // vazia, e aqui a diferenca e um erro na cara da pessoa.
+        if (buscado != null && buscado.isNotEmpty) 'q': buscado,
       },
     );
     return _ler(() => PaginaDeConversas.doJson(json));

@@ -55,11 +55,18 @@ import '../../widgets/moldura.dart';
 /// lá nem se alguém quisesse. A chave é o `share_token`, e o destino é a página
 /// do caso.
 ///
-/// **Hoje [aoTocar] pode ser nulo, e nulo desenha um cartão que não promete
-/// toque** (a mesma regra do critério 2 da BICHUS-62 que `CartaoDePet` segue):
-/// a tela do caso público por token não existe no app — `getPublicLostCase` é
-/// consumida pelo SITE, em `/p/{shareToken}`. Renderizar uma seta para lugar
-/// nenhum seria pior que informar.
+/// **[aoTocar] PASSOU A TER DESTINO em 18/10/2026**, quando o cliente pediu que
+/// o pet perdido tivesse página interna. O destino é `Rotas.casoPublicoDe`, que
+/// é o mesmo endereço do `share_url` — `TelaDoCasoPublico`, sobre
+/// `getPublicLostCase`. O parágrafo que estava aqui dizia que aquela tela "não
+/// existe no app, `getPublicLostCase` é consumida pelo SITE": era verdade, e
+/// deixou de ser.
+///
+/// **Nulo continua sendo um desenho válido, e não um defeito**: nulo desenha um
+/// cartão que não promete toque (a mesma regra do critério 2 da BICHUS-62 que
+/// `CartaoDePet` segue), e é o que vale em qualquer lugar que mostre o cartão
+/// sem ter para onde levar. Renderizar uma seta para lugar nenhum continua
+/// sendo pior que informar.
 class CartaoDoPerdido extends StatelessWidget {
   const CartaoDoPerdido({
     required this.perdido,

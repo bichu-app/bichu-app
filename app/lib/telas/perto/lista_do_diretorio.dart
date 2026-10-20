@@ -8,9 +8,11 @@ import '../../api/modelos_diretorio.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/icone_do_inscrito.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
@@ -111,7 +113,17 @@ class ListaDoDiretorio extends StatefulWidget {
 /// e "lista vazia por falha".
 enum _Fase { carregando, lista, falha }
 
-class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
+class _ListaDoDiretorioState extends State<ListaDoDiretorio>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
   RecorteDoDiretorio _recorte = const RecorteDoDiretorio();
   PaginaDoDiretorio? _pagina;
@@ -302,10 +314,20 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
         // superior ... e nao fique esse botao grande na pagina ocupando muito
         // espaco".
         //
-        // Isto REVERTE o que estava escrito nesta linha em 17/10 -- "no CORPO
-        // e nao na `AppBar`" --, e a reversao e decisao dele. Quem desenha e
-        // `AcaoDeCriarNaBarra`; quem a entrega a casca e `AbaPerto`, em
-        // `abas.dart`.
+        // Isto REVERTEU o que estava escrito nesta linha em 17/10 -- "no
+        // CORPO e nao na `AppBar`" --, e a reversao e decisao dele.
+        //
+        // **E em 19/10 ela SAIU DA BARRA e virou acao FLUTUANTE**, para o
+        // sino de notificacao entrar no lugar: *"O botao criar sai da
+        // barra"*. **Ela nao voltou para esta linha**: o que ele recusou em
+        // 18/10 foi o botao de LARGURA TOTAL que ocupava 64 dp de linha aqui,
+        // e a acao flutuante nao ocupa linha nenhuma do fluxo.
+        //
+        // Quem desenha e `AcaoDeCriarFlutuante`; quem a entrega a casca e
+        // `SecaoDaRede`, em `rede/secao_da_rede.dart`. **Era `AbaPerto`, em
+        // `abas.dart`, ate 19/10**: a secao `Perto` deixou de existir e esta
+        // lista virou o corpo da aba `Comunidade` da `Rede`, onde a acao
+        // flutuante TROCA com a aba.
         //
         // **E ela deixou de aparecer para quem nao pode usa-la**, que era o
         // segundo defeito que ele relatou no mesmo dia: a porta convidava
@@ -553,7 +575,26 @@ class CartaoDoDiretorio extends StatelessWidget {
 
   final EntradaDoDiretorio entrada;
 
+  /// O rotulo **VISIVEL**: so `Ligar`, e nunca o nome do local.
+  ///
+  /// Pedido do cliente em 18/10/2026: *"os botoes de ligar para devem ser
+  /// apenas 'Ligar' com o icone, nao devem trazer repetidamente o nome da
+  /// clinica"*. Ele esta certo por construcao e nao por gosto: o nome do local
+  /// esta a tres linhas de distancia, no titulo do mesmo cartao, e repeti-lo
+  /// dentro do botao gastava a largura inteira do cartao para dizer o que o
+  /// olho acabou de ler.
   static const String rotuloDeLigar = 'Ligar';
+
+  /// O nome **ACESSIVEL**: `Ligar para a Clinica Santa Barbara`.
+  ///
+  /// **O rotulo visivel encurtou; este NAO.** Numa lista de dez entradas, dez
+  /// controles chamados so `Ligar` sao dez paradas indistinguiveis para quem
+  /// navega por leitor de tela e chegou no botao sem ver o cartao inteiro
+  /// (WCAG 2.1 SC 4.1.2). O `Semantics` do botao publica esta string, e
+  /// `SC 2.5.3` continua satisfeito porque o rotulo visivel (`Ligar`) e
+  /// prefixo do nome acessivel -- quem usa comando de voz diz "Ligar" e
+  /// acerta.
+  static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
   /// A media e a quantidade na mesma linha: `4,3 · 128 avaliações`.
   ///
@@ -630,29 +671,50 @@ class CartaoDoDiretorio extends StatelessWidget {
                   // e decorativa AQUI por causa de onde esta -- e por isso a
                   // decisao e do cartao, e nao de `ImagemDaRede`.
                   //
-                  // **Sem logo nao ha quadrado vazio**: `logoUrl` e nulo em
-                  // tres casos normais (sem logo, ainda processando, recusada
-                  // nos bytes) e o cartao desenha o nome na largura inteira,
-                  // exatamente como antes de a logo existir.
-                  if (logo != null)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
+                  // **Sem logo o quadrado NAO fica vazio, e tambem nao
+                  // desaparece: ele recebe o glifo do TIPO.** Ate 18/10/2026
+                  // este bloco tinha um `else` que desenhava o nome na largura
+                  // inteira, e a prosa aqui dizia que era o certo. O cliente
+                  // pediu o contrario no mesmo dia: *"tem que colocar o icone
+                  // de clinica, estabelecimento, profissional, caso a
+                  // foto/logo da empresa nao tenha sido cadastrada"*.
+                  //
+                  // **A troca nao e cosmetica, e nao e um retangulo cinza.**
+                  // `logoUrl` e nulo em tres casos normais (sem logo, ainda
+                  // processando, recusada nos bytes) e os tres sao a MAIORIA
+                  // das entradas hoje; o glifo diz o que a entrada e, o que
+                  // nenhum espaco em branco dizia, e `glifoDoInscrito` nunca
+                  // devolve nulo -- nem para um valor de `enum` que esta versao
+                  // do app nao conheca.
+                  //
+                  // O `simboloDeFalha` da imagem continua `storefront`, e de
+                  // proposito: ele e o estado "a logo existe e NAO carregou",
+                  // que nao e o mesmo estado que "nao ha logo". Dois estados
+                  // diferentes, dois simbolos diferentes.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      if (logo != null)
                         ImagemDaRede(
                           url: logo,
                           descricao: null,
                           largura: BichuMoldura.larguraFotoSm,
                           raio: BichuRaio.sm,
                           simboloDeFalha: Icons.storefront_outlined,
+                        )
+                      else
+                        IconeDoInscrito(
+                          atividade: entrada.atividade,
+                          tipoDeEntidade: entrada.tipoDeEntidade,
+                          largura: BichuMoldura.larguraFotoSm,
+                          raio: BichuRaio.sm,
                         ),
-                        const SizedBox(width: BichuEspaco.e3),
-                        Expanded(
-                          child: Text(entrada.nome, style: textos.titleMedium),
-                        ),
-                      ],
-                    )
-                  else
-                    Text(entrada.nome, style: textos.titleMedium),
+                      const SizedBox(width: BichuEspaco.e3),
+                      Expanded(
+                        child: Text(entrada.nome, style: textos.titleMedium),
+                      ),
+                    ],
+                  ),
                   if (atividade != null) ...<Widget>[
                     const SizedBox(height: BichuEspaco.e1),
                     Text(
@@ -716,13 +778,29 @@ class CartaoDoDiretorio extends StatelessWidget {
             const SizedBox(height: BichuEspaco.e3),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => _ligar(telefone),
-                icon: const Icon(Icons.call_outlined),
-                // O nome acessivel leva PARA QUEM e a ligacao: numa lista de
-                // dez entradas, dez controles chamados so `Ligar` sao dez
-                // paradas indistinguiveis no leitor de tela.
-                label: Text('$rotuloDeLigar para ${entrada.nome}'),
+              // O ROTULO VISIVEL ENCURTOU, O NOME ACESSIVEL NAO.
+              //
+              // Ver `rotuloDeLigar` e `ligarPara`: a tela mostra `Ligar` com o
+              // icone de telefone, e o leitor de tela continua dizendo para
+              // QUEM a ligacao vai.
+              //
+              // **`onTap` redeclarado nao e redundancia.**
+              // `excludeSemantics: true` apaga a arvore do filho INTEIRA e
+              // leva junto a acao que o `TextButton` publicava: o que sobraria
+              // e um no com `button: true` e ZERO acoes, e o leitor de tela
+              // anunciaria um botao que nao responde. E o defeito 2 de
+              // `test/a11y/acao_de_controle_test.dart`, que o `BotaoPrimario`
+              // ja pagou uma vez.
+              child: Semantics(
+                button: true,
+                label: ligarPara(entrada.nome),
+                excludeSemantics: true,
+                onTap: () => _ligar(telefone),
+                child: TextButton.icon(
+                  onPressed: () => _ligar(telefone),
+                  icon: const Icon(Icons.call_outlined),
+                  label: const Text(rotuloDeLigar),
+                ),
               ),
             ),
           ],

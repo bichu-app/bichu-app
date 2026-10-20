@@ -72,6 +72,8 @@ class DadosPessoais {
     this.uf,
     this.fotoUrl,
     this.fotoProcessando = false,
+    this.fotoRecusada = false,
+    this.motivoDaRecusaDaFoto,
   });
 
   /// O mesmo corpo lido como [Usuario], para repor na sessao.
@@ -122,6 +124,25 @@ class DadosPessoais {
   /// nulo: aqui havera foto, e dentro de instantes.
   final bool fotoProcessando;
 
+  /// `Me.photo.status == 'rejected'`: o worker leu os bytes e NAO aceitou a
+  /// imagem.
+  ///
+  /// **Separado de [fotoUrl] ser nulo e de [fotoProcessando]** porque os
+  /// quatro estados de `Me.photo` levam a telas diferentes, e junta-los e o que
+  /// fazia a recusa parecer "conta sem foto": sem foto nao tem o que
+  /// consertar, recusada tem, e o que consertar esta em
+  /// [motivoDaRecusaDaFoto].
+  final bool fotoRecusada;
+
+  /// `Me.photo.rejection_reason`: o motivo, **em portugues e pronto do
+  /// servidor**.
+  ///
+  /// Medido contra a homologacao em 19/10/2026 com um JPEG quebrado de 336
+  /// bytes: *"Nao conseguimos ler essa imagem. Ela pode ter chegado
+  /// incompleta."*. A tela desenha ESTE texto e nao um generico -- um
+  /// "nao deu" nao diz a ninguem que o arquivo chegou truncado.
+  final String? motivoDaRecusaDaFoto;
+
   factory DadosPessoais.doJson(Map<String, dynamic> json) {
     final regiao = json['reference_area'] as Map<String, dynamic>?;
     // `photo` e `oneOf: [MyPhoto, null]`, e `as Map?` cru sobre outro tipo
@@ -140,11 +161,13 @@ class DadosPessoais {
       uf: regiao?['state'] as String?,
       fotoUrl: urlDeImagem(dadosDaFoto?['url']),
       fotoProcessando: dadosDaFoto?['status'] == 'processing',
+      fotoRecusada: dadosDaFoto?['status'] == 'rejected',
+      motivoDaRecusaDaFoto: dadosDaFoto?['rejection_reason'] as String?,
     );
   }
 }
 
-class MeApi implements IntencaoEGravacaoDaFotoDoUsuario {
+class MeApi implements IntencaoDeFotoDoUsuario {
   const MeApi(this._api);
 
   final ApiClient _api;
@@ -180,6 +203,23 @@ class MeApi implements IntencaoEGravacaoDaFotoDoUsuario {
     String? bairro,
     String? cidade,
     String? uf,
+
+    /// O `upload_id` de uma foto cujos BYTES JA SUBIRAM, ou `null` para nao
+    /// mexer na foto.
+    ///
+    /// **E aqui que a foto e confirmada desde 19/10/2026**, e nao em
+    /// [gravarFotoDoUsuario]: o cliente pediu que escolher a foto ja a
+    /// enviasse e que o `Salvar` do formulario a guardasse. Confirmar no mesmo
+    /// PATCH do nome tem uma consequencia que importa e que nao e estetica: o
+    /// servidor recusa o cadastro sem nome, e enquanto a foto vinha num PATCH
+    /// PROPRIO a recusa do nome e a gravacao da foto eram **dois atos em
+    /// transacoes diferentes**. Um corpo so e uma decisao so.
+    ///
+    /// **Nunca `null` para REMOVER.** `MeUpdate.photo_upload_id` aceita nulo
+    /// como "tire a foto", e e por isso que o campo sai do corpo quando este
+    /// parametro e nulo (`?fotoUpload`) em vez de ir como `null`: um `null`
+    /// explicito apagaria a foto de quem so corrigiu o telefone.
+    String? fotoUpload,
   }) async {
     final regiao = <String, dynamic>{
       'postal_code': ?cep,
@@ -193,6 +233,7 @@ class MeApi implements IntencaoEGravacaoDaFotoDoUsuario {
         'display_name': ?nome,
         'handle': ?apelido,
         'phone_e164': ?telefone,
+        'photo_upload_id': ?fotoUpload,
         if (regiao.isNotEmpty) 'reference_area': regiao,
       },
     );
@@ -221,30 +262,6 @@ class MeApi implements IntencaoEGravacaoDaFotoDoUsuario {
         'content_type': tipoDeConteudo,
         'byte_size': tamanhoEmBytes,
       },
-    );
-  }
-
-  /// `PATCH /v1/me` com **so** `photo_upload_id` (`MeUpdate`).
-  ///
-  /// E esta chamada que amarra a foto a conta: os bytes no armazenamento sem
-  /// ela ficam orfaos, e a intencao que ninguem confirma vence em dez minutos
-  /// e o varredor a recolhe.
-  ///
-  /// **Devolve o corpo CRU de `/me`, e nao [DadosPessoais]**, porque quem a
-  /// chama e o mecanismo de envio (`FotoDoUsuario`), que vive em
-  /// `api/envio_de_foto.dart` e nao conhece este modelo. Quem precisa do
-  /// modelo chama `DadosPessoais.doJson` -- e com isso a tela nao faz uma
-  /// segunda leitura de `/me` so para descobrir a URL da derivada.
-  ///
-  /// **So grava, nunca tira.** `MeUpdate.photo_upload_id` aceita `null` para
-  /// REMOVER a foto, e esse caminho nao esta aqui: o cliente pediu o cadastro
-  /// da foto, e um metodo de remover sem tela que o chame seria superficie sem
-  /// pedido.
-  @override
-  Future<Map<String, dynamic>> gravarFotoDoUsuario(String uploadId) {
-    return _api.patch(
-      '/me',
-      corpo: <String, dynamic>{'photo_upload_id': uploadId},
     );
   }
 }

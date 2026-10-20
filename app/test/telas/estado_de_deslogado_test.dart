@@ -227,7 +227,7 @@ void main() {
         tester,
         rede: redeDasDuasSecoes((_) => semConta()),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -304,7 +304,7 @@ void main() {
         tester,
         rede: redeDasDuasSecoes((_) => servidorFora()),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -349,7 +349,7 @@ void main() {
           ),
         ),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -389,7 +389,7 @@ void main() {
         tester,
         rede: redeDasDuasSecoes((_) => semConta()),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -421,7 +421,7 @@ void main() {
         deposito: depositoLogado(),
         rede: redeDasDuasSecoes((_) => servidorFora()),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -451,7 +451,7 @@ void main() {
               : json200(paginaDoDiretorioVazia()),
         ),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -495,7 +495,7 @@ void main() {
         ),
         rede: redeDasDuasSecoes((_) => servidorFora()),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -623,7 +623,7 @@ void main() {
           return vezes == 1 ? semConta() : corpoForaDoContrato();
         }),
       );
-      await abrirAAba(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       exigirEstadoDeSessao(
         tester,
@@ -637,8 +637,15 @@ void main() {
             'segunda metade deste caso nao prova que ele SAIU.',
       );
 
-      await abrirAAba(tester, 'Rede');
-      await abrirAAba(tester, 'Perto');
+      // **SAIR DA SECAO E VOLTAR, e agora sair quer dizer OUTRA SECAO.**
+      //
+      // O caso trocava de `Perto` para `Rede` e voltava, e as duas eram
+      // secoes. Em 19/10 `Perto` virou a ABA `Comunidade` da `Rede`: ir para
+      // `Rede` deixou de sair de lugar nenhum, e a recarga por `TickerMode`
+      // nao acontecia -- o caso ficava sem a segunda carga que ele existe
+      // para medir. `Loja` e a secao vizinha que nao chama esta rota.
+      await abrirAAba(tester, 'Loja');
+      await abrirAComunidade(tester);
 
       expect(
         vezes,

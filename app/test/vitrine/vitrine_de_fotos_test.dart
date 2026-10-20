@@ -14,12 +14,14 @@
 //
 // Nada aqui roda em aparelho: sao casos de widget, em `flutter_tester`.
 
+import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/vitrine_api.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/perfil/vitrine_de_fotos.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 
 const String urlDaGrade = 'https://img.bichu.app/people/thumb/aaaa.jpeg';
 const String urlAberta = 'https://img.bichu.app/people/card/bbbb.jpeg';
@@ -49,11 +51,53 @@ class _LeituraDeMentira implements LeituraDaVitrine {
   Future<Vitrine> minhaVitrine() async => Vitrine.doJson(corpo);
 }
 
+/// A ESCRITA, de mentira. Estes casos sao de LEITURA: nenhum deles toca o
+/// controle de adicionar, e por isso os dois metodos daqui **estouram** em vez
+/// de devolver vazio -- um caso de leitura que chegasse a escrever precisa
+/// reprovar alto, e nao passar por acidente.
+///
+/// Ela entrou em 19/10/2026, quando a tela deixou de ser so de leitura.
+class EscritaQueNinguemChama implements EscritaDaVitrine {
+  const EscritaQueNinguemChama();
+
+  @override
+  Future<Map<String, dynamic>> intencaoDeFotoDaVitrine({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) async {
+    throw StateError('nenhum caso de leitura pede autorizacao de envio');
+  }
+
+  @override
+  Future<Vitrine> substituir(List<FotoPedida> fotos) async {
+    throw StateError('nenhum caso de leitura grava a vitrine');
+  }
+}
+
+/// Um envio que **nunca alcanca a rede**: `MockClient` que reprova alto.
+///
+/// `EnvioDeFoto` sem cliente injetado constroi um `http.Client` de verdade, e
+/// um cliente de verdade numa bancada de widget aponta para a rede -- que e o
+/// que faz teste piscar.
+EnvioDeFoto envioQueNaoSai() => EnvioDeFoto(
+      camera: const CameraNaoEmbarcada(),
+      cliente: MockClient(
+        (_) async => throw StateError('nenhum caso de leitura sobe bytes'),
+      ),
+    );
+
 Future<void> montar(WidgetTester tester, Map<String, dynamic> corpo) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: BichuTheme.claro,
-      home: VitrineDeFotosDoUsuario(api: _LeituraDeMentira(corpo)),
+      home: VitrineDeFotosDoUsuario(
+        api: _LeituraDeMentira(corpo),
+        escrita: const EscritaQueNinguemChama(),
+        // `CameraNaoEmbarcada` responde `indisponivel` nos quatro metodos, e e
+        // o duble certo aqui: estes casos nao falam de escolha de foto.
+        camera: const CameraNaoEmbarcada(),
+        envio: envioQueNaoSai(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -211,6 +255,9 @@ void main() {
           theme: BichuTheme.claro,
           home: VitrineDeFotosDoUsuario(
             api: _LeituraDeMentira(vitrineCom(1)),
+            escrita: const EscritaQueNinguemChama(),
+            camera: const CameraNaoEmbarcada(),
+            envio: envioQueNaoSai(),
             aoAbrirMeusPets: () => abriu = true,
           ),
         ),

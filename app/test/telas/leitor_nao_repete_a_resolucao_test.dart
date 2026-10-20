@@ -100,11 +100,11 @@ void main() {
       camera: CameraDeTeste(EstadoDaPermissao.concedida),
       leitorDeQr: leitor,
     );
-    // **A porta de escanear virou ICONE NA BARRA em 18/10/2026** (pedido
-    // literal do cliente). Em `Pets` ela e `AcaoDeCriarNaBarra` com
-    // `Icons.qr_code_2` (`lib/telas/abas.dart`, linhas 119-122); o botao de
-    // largura total com esse texto so sobrou no `Perfil` DESLOGADO, e o
-    // `widgetWithText(OutlinedButton, ...)` achava zero.
+    // **A porta de escanear MUDOU DE LUGAR DUAS VEZES, e nenhuma delas e
+    // aqui**: icone na barra de `Pets` em 18/10, tela da conta em 19/10
+    // (*"leve o icone de qr-code de escanear para a pagina do perfil"*). Por
+    // isso ela mora num ajudante so, `irAoLeitorDeQr`, que sabe onde ela esta
+    // hoje -- as duas mudancas custaram zero edicoes neste arquivo.
     await irAoLeitorDeQr(tester);
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();

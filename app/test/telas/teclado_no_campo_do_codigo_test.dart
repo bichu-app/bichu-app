@@ -68,17 +68,18 @@ void main() {
       camera: CameraDeTeste(EstadoDaPermissao.concedida),
       leitorDeQr: LeitorDeQrDeTeste(),
     );
-    // **A porta de escanear virou ICONE NA BARRA em 18/10/2026** (pedido
-    // literal do cliente: "os itens de criacao, como evento e indicacao, ate o
-    // escanear poderia ser icones na barra superior ... e nao fique esse botao
-    // grande na pagina"). Em `Pets` ela e `AcaoDeCriarNaBarra` com
-    // `Icons.qr_code_2` (`lib/telas/abas.dart`, linhas 119-122); o botao de
-    // largura total com esse texto so sobrou no `Perfil` DESLOGADO. O
-    // `widgetWithText(OutlinedButton, ...)` achava zero e o `tap` estourava.
+    // **A porta de escanear MUDOU DE LUGAR DUAS VEZES, e nenhuma delas e
+    // aqui.** Em 18/10/2026 ela virou icone na barra de `Pets` (pedido
+    // literal do cliente: "os itens de criacao, como evento e indicacao, ate
+    // o escanear poderia ser icones na barra superior ... e nao fique esse
+    // botao grande na pagina"), e em 19/10 ele a mandou para a tela da conta
+    // (*"leve o icone de qr-code de escanear para a pagina do perfil que tem
+    // relacao com as acoes do usuario"*). O botao de largura total com esse
+    // texto nao esta em `Pets` em nenhuma das duas.
     //
-    // Dentro da `AppBar` de proposito: `Icons.qr_code_2` tambem aparece na
-    // pagina do pet, e um `find.byIcon` solto ficaria verde com a barra vazia
-    // -- o mesmo cuidado que `criar_e_icone_na_barra_test.dart` escreve.
+    // **Por isso a porta mora num ajudante so**: `irAoLeitorDeQr` sabe onde
+    // ela esta hoje, e as duas mudancas de lugar custaram zero edicoes neste
+    // arquivo.
     await irAoLeitorDeQr(tester);
     await tester.tap(find.text(TextosDoCadastro.digitarOCodigo).last);
     await tester.pumpAndSettle();

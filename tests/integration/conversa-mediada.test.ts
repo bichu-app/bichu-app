@@ -58,7 +58,7 @@ const DOMINIO_DE_TESTE = 'exemplo.invalid';
 
 const AGORA = 1_790_000_000_000 as Instant;
 const UM_DIA = 24 * 60 * 60 * 1000;
-const PAGINA = { limit: 20, depoisDe: undefined };
+const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
 let banco: DbHandle;
 let db: Db;
@@ -71,7 +71,7 @@ const avisosCriados: FoundReportId[] = [];
 
 async function criarConta(nome: string | null = null): Promise<UserId> {
   const id = randomUUID() as UserId;
-  await cliente.query('INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)', [
+  await cliente.query(`INSERT INTO users (id, email, display_name, public_ref) VALUES ($1, $2, $3, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     id,
     `bichus43-${id}@${DOMINIO_DE_TESTE}`,
     nome,

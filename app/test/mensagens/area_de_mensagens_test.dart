@@ -33,6 +33,7 @@ import 'package:bichu/api/modelos_conversa.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/mensagens/area_de_mensagens.dart';
 import 'package:bichu/telas/mensagens/tela_da_conversa.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,8 +57,25 @@ const String idDaMensagem = '0192f3a1-7b2c-7def-8a01-00000000aaaa';
 // FIXTURES, campo por campo do contrato
 // ---------------------------------------------------------------------------
 
-Map<String, dynamic> participante(String papel, String nome) =>
-    <String, dynamic>{'role': papel, 'display_name': nome};
+/// Um item de `Conversation.participants`, com os QUATRO campos do contrato.
+///
+/// `handle` e `photo_icon_url` entraram em 19/10/2026 (emenda 3 do ADR-0010), e
+/// **o padrao dos dois e nulo**, que e o estado normal: o servidor so os manda
+/// quando o outro lado e conexao aceita de quem chama. Quem quer o estado de
+/// conexao pede os dois por nome -- foto sem apelido e apelido sem foto sao
+/// estados REAIS do contrato, e precisam ser pedidos em vez de acontecer por
+/// descuido.
+Map<String, dynamic> participante(
+  String papel,
+  String nome, {
+  String? apelido,
+  String? foto,
+}) => <String, dynamic>{
+      'role': papel,
+      'display_name': nome,
+      'handle': apelido,
+      'photo_icon_url': foto,
+    };
 
 Map<String, dynamic> mensagem({
   String id = idDaMensagem,
@@ -90,6 +108,14 @@ Map<String, dynamic> conversa({
   bool naoLida = false,
   String? previa,
   String? ultimaEm,
+  // A EMENDA 3 DO ADR-0010 (19/10/2026), no ACHADOR -- que e o outro lado
+  // visto pelo tutor, e e ele que a linha da lista desenha.
+  //
+  // **Nulos por padrao**, e esse e o corpo que o servidor manda na conversa de
+  // achado com um estranho: o estado normal do produto. Quem quer medir a
+  // conexao aceita pede os dois por nome.
+  String? apelidoDoAchador,
+  String? fotoDoAchador,
 }) => <String, dynamic>{
   'id': id,
   'case_id': null,
@@ -97,7 +123,12 @@ Map<String, dynamic> conversa({
   'status': estado,
   'participants': <Map<String, dynamic>>[
     participante('tutor', nomeDoTutor),
-    participante('finder', nomeDoAchador),
+    participante(
+      'finder',
+      nomeDoAchador,
+      apelido: apelidoDoAchador,
+      foto: fotoDoAchador,
+    ),
   ],
   // A LISTA manda `messages: []`, como o servidor faz. O detalhe manda cheio.
   'messages': mensagens ?? <Map<String, dynamic>>[],
@@ -111,9 +142,13 @@ Map<String, dynamic> paginaDeConversas(
   List<Map<String, dynamic>> itens, {
   String? proximoCursor,
   int naoLidas = 0,
+  int? total,
 }) => <String, dynamic>{
   'items': itens,
   'unread_count': naoLidas,
+  // `total` do contrato: quantas o RECORTE tem no servidor. Sem `total`
+  // explicito, o tamanho da lista -- que e o caso da pagina unica.
+  'total': total ?? itens.length,
   'next_cursor': proximoCursor,
 };
 
@@ -199,6 +234,7 @@ Future<void> abrirAMensagens(
   required ServidorDeConversas servidor,
   String rotaInicial = RotasDeMensagens.area,
   ValueChanged<int>? aoContar,
+  List<RouteBase> rotasExtra = const <RouteBase>[],
 }) async {
   final api = apiDe(servidor);
   final roteador = GoRouter(
@@ -223,12 +259,38 @@ Future<void> abrirAMensagens(
           conversas: api,
         ),
       ),
+      // ROTAS QUE A ARVORE AINDA NAO TEM, para a isca que mede um destino.
+      //
+      // Existe por `PortaDoPerfilDoParticipante`: a tela de perfil de terceiro
+      // nao esta nesta arvore (ela e de `feat/comunidade-perfil-e-conexao`), e
+      // a isca do toque no icone precisa de ALGUM destino para provar que o
+      // toque navega. Declarada pela isca e nao aqui: a bancada nao deve ter
+      // opiniao sobre o endereco de uma tela que nao existe.
+      ...rotasExtra,
     ],
   );
   addTearDown(roteador.dispose);
   await tester.pumpWidget(
     MaterialApp.router(theme: BichuTheme.claro, routerConfig: roteador),
   );
+  await tester.pumpAndSettle();
+}
+
+/// ROLA ATE O FIM da lista, que e o que pede a pagina seguinte.
+///
+/// **No `ListView`, e nunca em `Scrollable.first`.** Medido: o campo de busca
+/// tem um `Scrollable` proprio dentro dele (o `EditableText`), ele vem ANTES
+/// da lista na arvore, e o gesto ia para ele -- a lista nao rolava, a pagina
+/// seguinte nao era pedida, e a isca reprovava como se a tela estivesse errada.
+///
+/// **`fling` e nao `drag`**: a rolagem infinita dispara num `ScrollController`
+/// que escuta a POSICAO, e o `fling` leva a lista ao fim de uma vez. O
+/// `pumpAndSettle` espera a chamada que o gatilho disparou.
+///
+/// Num lugar so porque quatro iscas precisam do mesmo gesto: duas copias
+/// divergiriam no dia em que a folga do gatilho mudasse.
+Future<void> rolarAteOFim(WidgetTester tester) async {
+  await tester.fling(find.byType(ListView), const Offset(0, -3000), 4000);
   await tester.pumpAndSettle();
 }
 
@@ -801,11 +863,16 @@ void main() {
         );
         expect(find.byType(ElevatedButton), findsNothing);
         expect(find.byType(OutlinedButton), findsNothing);
+        // E A BARRA DE LISTAGEM NAO NASCE no vazio SEM recorte: buscar o nada
+        // e um controle sem desfecho, e a decisao e do componente
+        // (`BarraDeListagem.desenha`). O caso em que ela FICA -- a pessoa
+        // buscou e nao sobrou nada -- esta em `busca_da_area_test.dart`.
+        expect(find.byType(BarraDeListagem), findsNothing);
       },
     );
 
     testWidgets(
-      'nada de busca, filtro nem ordenacao: nao ha o que recortar',
+      'TEM busca, e nao tem filtro nem ordenacao: so a busca existe na rota',
       (tester) async {
         final servidor = ServidorDeConversas(
           <String, http.Response Function(http.Request)>{
@@ -815,8 +882,17 @@ void main() {
         );
         await abrirAMensagens(tester, servidor: servidor);
 
-        expect(find.byType(TextField), findsNothing);
-        expect(find.byIcon(Icons.search), findsNothing);
+        // O CAMPO EXISTE (decisao do cliente, 18/10). Isto REVERTE o caso
+        // anterior deste arquivo, que afirmava o contrario.
+        expect(find.byType(TextField), findsOneWidget);
+        // E ele e o do COMPONENTE COMPARTILHADO, e nao um `TextField` solto:
+        // o padrao de listagem manda reaproveitar, e uma copia divergiria.
+        expect(find.byType(BarraDeListagem), findsOneWidget);
+        expect(find.byType(CampoDeBuscaDaListagem), findsOneWidget);
+        // FILTRO E ORDENACAO NAO: `listConversations` nao declara recorte de
+        // lista fechada e a ordem e uma so, e a `BarraDeListagem` nao desenha
+        // gatilho sem desfecho.
+        expect(find.byType(GatilhoDeRecorteNoCorpo), findsNothing);
         expect(find.byIcon(Icons.filter_list), findsNothing);
         expect(find.byIcon(Icons.swap_vert), findsNothing);
       },
@@ -853,10 +929,13 @@ void main() {
         // 400 na abertura da tela.
         final primeira = servidor.chamadasA('GET /v1/conversations').first;
         expect(primeira.url.queryParameters.containsKey('cursor'), isFalse);
-        expect(primeira.url.queryParameters['limit'], '20');
+        // DEZ, e o numero e do cliente (18/10): *"trazendo as 10 ultimas
+        // conversas e incrementando por 10"*.
+        expect(primeira.url.queryParameters['limit'], '10');
 
-        await tester.tap(find.text('Carregar mais conversas'));
-        await tester.pumpAndSettle();
+        // O BOTAO SAIU: a segunda pagina vem da ROLAGEM.
+        expect(find.text('Carregar mais conversas'), findsNothing);
+        await rolarAteOFim(tester);
 
         final segunda = servidor.chamadasA('GET /v1/conversations').last;
         expect(segunda.url.queryParameters['cursor'], 'cursor-da-pagina-2');

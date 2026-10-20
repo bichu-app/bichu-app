@@ -21,10 +21,37 @@
  * - o contrato afirma em **dois lugares** que `Conversation.participants` nunca
  *   traz telefone, e-mail nem foto de perfil.
  *
- * Mostrar a vitrine a terceiro contraria decisão registrada e seria decisão do
- * cliente. Enquanto não houver essa decisão, a superfície que a mostraria **não
- * existe** — e é mais barato não existir do que existir com uma regra de
- * autorização que alguém esquece de repetir na segunda rota.
+ * Mostrar a vitrine a terceiro contrariava decisão registrada e era decisão do
+ * cliente. **Ela chegou em 19/10/2026**, e é de escopo fechado — literal:
+ * *"ele pode ver nome, quantidade de pets, conexões, mas não as fotos
+ * publicadas e nem a timeline do usuário"*. É a emenda 2 do ADR-0010.
+ *
+ * ## O QUE A DECISÃO DE 19/10 MUDOU AQUI, E O QUE ELA NÃO MUDOU
+ *
+ * **A recusa para quem NÃO é conexão continua inteira, e os casos que a medem
+ * não foram afrouxados.** O que passou a existir é UMA superfície a mais, e ela
+ * é nomeada: `getPersonProfile`, que só entrega foto quando
+ * `connection_state` é `connected`.
+ *
+ * O desenho foi escolhido para que a regra de autorização **não precise ser
+ * repetida** — que era a objeção original:
+ *
+ * - a vitrine de terceiro tem **schema próprio** (`PersonShowcasePhoto`), menor
+ *   que `ShowcasePhoto`, então `MyShowcase` e `ShowcasePhoto` continuam com UM
+ *   hospedeiro cada e os casos de contagem continuam valendo literalmente;
+ * - o predicado de **conexão aceita mora na cláusula `WHERE`** da consulta das
+ *   fotos (`people/adapters/persistence/kysely-perfil-de-pessoa.ts`), e não num
+ *   `if` de camada acima: chamar aquela consulta por engano devolve lista vazia.
+ *   Quem mede isso é
+ *   `people/adapters/persistence/autorizacao-na-clausula-where.test.ts`;
+ * - o que a foto de terceiro carrega é **menos** do que o dono vê: sem `status`,
+ *   sem `rejection_reason`, sem `position` e sem `upload_id`.
+ *
+ * **O que este arquivo NÃO consegue medir** é o recorte em tempo de execução: o
+ * contrato declara `showcase` como campo opcional, e "opcional" não distingue
+ * "ausente porque não é conexão" de "ausente por esquecimento". As duas pontas
+ * disso são medidas em `people/application/perfil-de-pessoa.test.ts` — a isca
+ * (a) e o contrapeso dela.
  *
  * O CONTRAPESO (último caso) prova que a vitrine sai para o DONO. Sem ele,
  * todos os casos acima passariam num mundo em que a vitrine não existe em
@@ -42,8 +69,66 @@ const spec = parseYaml(texto) as {
   components: { schemas: Record<string, unknown> };
 };
 
-/** Os esquemas da vitrine que carregam FOTO. `*Input` são de escrita. */
-const ESQUEMAS_DE_LEITURA = ['MyShowcase', 'ShowcasePhoto'] as const;
+/**
+ * Os esquemas da vitrine que carregam FOTO. `*Input` são de escrita.
+ *
+ * `PersonShowcasePhoto` entrou em 19/10/2026: ele é a vitrine vista por uma
+ * CONEXÃO, e deixá-lo fora desta lista faria toda varredura abaixo ficar cega
+ * para a superfície nova — que é a forma exata do defeito recorrente desta
+ * casa. Com ele dentro, uma operação **sem conta** que o carregasse reprova
+ * pelo mesmo caso que já reprovava `MyShowcase`.
+ */
+const ESQUEMAS_DE_LEITURA = ['MyShowcase', 'ShowcasePhoto', 'PersonShowcasePhoto'] as const;
+
+/**
+ * As operações que podem carregar vitrine, **por nome**. Lista FECHADA.
+ *
+ * Enumerar o PERMITIDO e não o proibido: operação nova cai no caso padrão, que
+ * é reprovar. Enumerar o proibido erra aceitando, que já foi o defeito de dois
+ * portões deste repositório.
+ */
+const OPERACOES_COM_VITRINE = [
+  'get /me/showcase',
+  'get /people/{handle}',
+  'put /me/showcase',
+  // **`post /me/showcase/photo-intents` NÃO está aqui, e descobrir por quê
+  // valeu o caso.** A primeira versão desta varredura procurava
+  // `'#/components/schemas/' + nome` por SUBSTRING, e
+  // `#/components/schemas/ShowcasePhotoIntentInput` **contém**
+  // `#/components/schemas/ShowcasePhoto`: a intenção de envio aparecia como se
+  // carregasse a vitrine, e `getPersonProfile` — que carrega de verdade, por
+  // `$ref` indireto — não aparecia. Os dois erros juntos deixariam a lista
+  // "certa" por acidente. A varredura agora casa NOME EXATO (`Set.has`) e
+  // segue `$ref` em profundidade.
+] as const;
+
+/**
+ * Os schemas alcançáveis a partir de um bloco, seguindo `$ref` **em
+ * profundidade**.
+ *
+ * Sem isto a varredura fica cega para `$ref` indireto, e foi exatamente o que
+ * aconteceu na primeira versão do caso abaixo: `getPersonProfile` referencia
+ * `PersonProfile`, que referencia `PersonShowcasePhoto` — procurar o segundo no
+ * JSON da operação não acha nada, e a operação que CARREGA a vitrine passava
+ * como se não carregasse. Mesma técnica de
+ * `conexao-nao-expoe-lista-nem-identificador.test.ts`.
+ */
+function schemasAlcancados(bloco: unknown): Set<string> {
+  const vistos = new Set<string>();
+  const fila: unknown[] = [bloco];
+  while (fila.length > 0) {
+    const atual = fila.pop();
+    for (const achado of JSON.stringify(atual ?? null).matchAll(
+      /#\/components\/schemas\/(\w+)/g,
+    )) {
+      const nome = achado[1] as string;
+      if (vistos.has(nome)) continue;
+      vistos.add(nome);
+      fila.push(spec.components.schemas[nome]);
+    }
+  }
+  return vistos;
+}
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
@@ -111,8 +196,95 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
     assert.deepEqual(
       fora,
       [],
-      'a vitrine de OUTRA pessoa não tem rota, e a ausência é a defesa: regra de autorização alguém esquece de repetir',
+      'a vitrine não ganhou caminho próprio fora de `/me/`: a de uma CONEXÃO sai DENTRO de `getPersonProfile`, e um `/users/{id}/showcase` seria a segunda rota em que alguém esquece de repetir a autorização',
     );
+  });
+
+  void it('ISCA (a) -- a vitrine sai em TRES operacoes nomeadas, e nenhuma quarta', () => {
+    // A varredura é sobre os três esquemas de leitura E sobre as duas derivadas
+    // por NOME DE CAMPO: um schema novo chamado de outra coisa, com `grid_url`
+    // dentro, cai aqui mesmo sem estar na lista de esquemas.
+    const comVitrine = operacoes()
+      .filter(({ op }) => {
+        const alcancados = schemasAlcancados(op);
+        if (ESQUEMAS_DE_LEITURA.some((e) => alcancados.has(e))) return true;
+        // E por NOME DE CAMPO, na operação e em tudo que ela alcança: um schema
+        // novo, chamado de outra coisa e fora da lista de esquemas, cai aqui
+        // mesmo assim se tiver uma das duas derivadas dentro.
+        const corpo = [
+          JSON.stringify(op),
+          ...[...alcancados].map((nome) => JSON.stringify(spec.components.schemas[nome] ?? null)),
+        ].join('');
+        return corpo.includes('grid_url') || corpo.includes('open_url');
+      })
+      .map(({ caminho, metodo }) => `${metodo} ${caminho}`)
+      .sort();
+    assert.deepEqual(
+      comVitrine,
+      [...OPERACOES_COM_VITRINE],
+      'uma quarta operação com vitrine é uma superfície a mais, e a de 19/10/2026 já é a única que o cliente decidiu',
+    );
+  });
+
+  void it('ISCA (a) -- `PersonShowcasePhoto` tem UM hospedeiro, e ele e `PersonProfile`', () => {
+    const referencias = texto.match(/#\/components\/schemas\/PersonShowcasePhoto\b/g) ?? [];
+    assert.equal(
+      referencias.length,
+      1,
+      'duas referências significam um segundo caminho até a foto de outra pessoa',
+    );
+    const perfil = JSON.stringify(spec.components.schemas['PersonProfile']);
+    assert.match(perfil, /#\/components\/schemas\/PersonShowcasePhoto/);
+  });
+
+  void it('ISCA (a) -- `showcase` NAO e obrigatorio em `PersonProfile`: omitir e o estado de nao-conexao', () => {
+    // É esta linha do contrato que deixa a borda OMITIR a chave em vez de
+    // mandar `[]`. Com `showcase` em `required`, "não é conexão" teria de ser
+    // representado por lista vazia — que afirma "ela não tem foto", sobre uma
+    // vitrine que quem chama não pode ver.
+    const perfil = spec.components.schemas['PersonProfile'] as {
+      required?: readonly string[];
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(perfil.properties?.['showcase'], 'o campo existe: é ele que a conexão aceita recebe');
+    assert.ok(
+      !(perfil.required ?? []).includes('showcase'),
+      '`showcase` obrigatório obrigaria a borda a mandar `[]` para quem não é conexão',
+    );
+    // E a condição está ESCRITA, com o nome do estado que a libera.
+    assert.match(
+      String((perfil.properties?.['showcase'] as { description?: string }).description),
+      /connected/,
+      'a descrição tem de nomear o estado que libera a vitrine',
+    );
+  });
+
+  void it('ISCA (a) -- a foto de terceiro e MENOR que a do dono: sem moderacao e sem edicao', () => {
+    const propriedades = Object.keys(
+      (spec.components.schemas['PersonShowcasePhoto'] as { properties?: Record<string, unknown> })
+        .properties ?? {},
+    );
+    assert.deepEqual(
+      propriedades.sort(),
+      ['alt_text', 'grid_url', 'open_url'],
+      'um campo a mais na foto de OUTRA pessoa precisa de decisão, e este caso é onde ela aparece',
+    );
+    for (const proibido of ['status', 'rejection_reason', 'position', 'upload_id', 'caption', 'likes']) {
+      assert.ok(
+        !propriedades.includes(proibido),
+        `\`${proibido}\` é estado da vitrine do DONO: motivo de recusa é assunto entre ele e quem modera`,
+      );
+    }
+  });
+
+  void it('ISCA (a) -- `PersonProfile` NAO alcanca `MyShowcase` nem `ShowcasePhoto`', () => {
+    // Se alguém "simplificasse" reusando o schema do dono, `status` e
+    // `rejection_reason` voltariam junto — e os dois casos de contagem acima
+    // reprovariam. Este caso diz isso na própria fronteira, para a mensagem de
+    // reprovação apontar o lugar certo.
+    const perfil = JSON.stringify(spec.components.schemas['PersonProfile']);
+    assert.ok(!perfil.includes('#/components/schemas/MyShowcase'));
+    assert.ok(!perfil.includes('#/components/schemas/ShowcasePhoto'));
   });
 
   void it('ISCA -- a vitrine não entrou em `Conversation`, `NetworkEvent` nem avaliação', () => {

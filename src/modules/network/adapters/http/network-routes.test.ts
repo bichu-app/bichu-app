@@ -44,15 +44,19 @@ import type { EncontroDaRede } from '../../domain/encontro-da-rede.js';
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
+  CapaDoMeuEncontro,
   EncontroDoAutor,
   EstadoDaContaParaCriar,
   LocalDoEncontro,
+  MeuEncontro,
   NetworkRepository,
   PaginaDaAgenda,
+  PaginaDosMeusEncontros,
   PaginaDosMeusPedidos,
   PaginaPorDistancia,
   PedidoDaConta,
   RecorteDaAgenda,
+  RecorteDosMeusEncontros,
   TransacaoDaComunidade,
 } from '../../ports/network-repository.js';
 import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDoLocal } from './network-routes.js';
@@ -64,6 +68,11 @@ import type {
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
 import { carregarContrato } from '../../../../shared/http/contract.js';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
+
+/** O contrato de VERDADE: a isca da autoria o le, e nao um objeto inline. */
+const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
@@ -115,6 +124,11 @@ interface Cenario {
   readonly estadoDaConta?: EstadoDaContaParaCriar;
   /** `undefined` e "nao e seu OU nao existe" -- o mesmo caso, de proposito. */
   readonly meuEncontro?: EncontroDoAutor | undefined;
+  /**
+   * A capa como a leitura do DONO a entrega. `undefined` no cenario e
+   * "encontro sem capa nenhuma", que e diferente de `processing`.
+   */
+  readonly capaDoDono?: CapaDoMeuEncontro | undefined;
   readonly versaoMudou?: boolean;
   readonly capaNaoServe?: boolean;
   /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
@@ -131,13 +145,37 @@ const locaisPedidos: string[] = [];
 const gravados: NovoEncontroDaComunidade[] = [];
 const mudancas: MudancaDoEncontroDaComunidade[] = [];
 const cancelamentos: string[] = [];
+/** A versao que o `UPDATE` do cancelamento comparou: o `If-Match` que chegou. */
+const versoesDoCancelamento: number[] = [];
 const capasPedidas: string[] = [];
 const capasDefinidas: (string | null)[] = [];
 const encontrosPedidos: string[] = [];
+const recortesDosMeus: RecorteDosMeusEncontros[] = [];
+const meusEncontrosPedidos: { slug: string; chamador: string }[] = [];
 const trilhaDeTeste: AuditEvent[] = [];
 
 /** Um `upload_id` com forma de UUID, que e o que o contrato exige. */
 const ENVIO = '018f3a2b-0000-7000-8000-0000000000c1';
+
+/** A capa que entrou: o caminho comum da lista do dono. */
+const CAPA_PRONTA: CapaDoMeuEncontro = {
+  estado: 'ready',
+  url: 'https://midia.exemplo.invalid/capa-1024.jpg',
+  motivoDaRecusa: null,
+};
+
+/**
+ * A capa RECUSADA, com o motivo que o servidor devolve.
+ *
+ * O texto e um dos exemplos REAIS medidos em 19/10/2026, e nao uma frase
+ * inventada: e ele que a tela mostra, e e por isso que a isca o procura
+ * literalmente.
+ */
+const CAPA_RECUSADA: CapaDoMeuEncontro = {
+  estado: 'rejected',
+  url: null,
+  motivoDaRecusa: 'A imagem precisa ter pelo menos 600 x 600 pixels.',
+};
 
 /** O encontro da propria conta, ainda no futuro. */
 const MEU_ENCONTRO: EncontroDoAutor = {
@@ -159,13 +197,62 @@ const idsDeTeste = {
 } as unknown as IdGenerator;
 
 function repositorio(cenario: Cenario): NetworkRepository {
+  // O ESTADO QUE A TRANSACAO MUDA E AS LEITURAS VEEM DEPOIS.
+  //
+  // Sem ele, o dobre respondia `published` depois de `cancelarEncontro` ter
+  // rodado, e um caso que afirmasse "o encontro virou cancelled" estaria
+  // medindo a constante do arquivo e nao o desfecho da chamada -- vacuidade,
+  // que e o defeito recorrente deste repositorio. Com ele, a leitura DEPOIS do
+  // cancelamento devolve `cancelled` e a versao avanca, como o `UPDATE` de
+  // verdade faz.
+  let cancelado = false;
+  const encontroAtual = (): EncontroDaRede | undefined => {
+    const base = 'encontro' in cenario ? cenario.encontro : ENCONTRO;
+    if (base === undefined) return undefined;
+    return cancelado ? { ...base, publicacao: 'cancelled' } : base;
+  };
+  /** O dono, pela MESMA regra de `encontroDoAutor`: `undefined` e o 404. */
+  const dono = (): EncontroDoAutor | undefined =>
+    'meuEncontro' in cenario ? cenario.meuEncontro : MEU_ENCONTRO;
+  /**
+   * A capa do dono. O default e `ready`: o caminho comum e a capa que entrou.
+   * `capaDoDono: undefined` no cenario e "encontro SEM capa", que e o terceiro
+   * estado e nao um sinonimo de `processing`.
+   */
+  const capaDoCenario = (): CapaDoMeuEncontro | null =>
+    'capaDoDono' in cenario ? (cenario.capaDoDono ?? null) : CAPA_PRONTA;
+
   return {
     listarAgenda: (recorte): Promise<PaginaDaAgenda> => {
       recortesVistos.push(recorte);
       return Promise.resolve({ itens: [ENCONTRO], total: 1 });
     },
-    buscarEncontro: (): Promise<EncontroDaRede | undefined> =>
-      Promise.resolve('encontro' in cenario ? cenario.encontro : ENCONTRO),
+    buscarEncontro: (): Promise<EncontroDaRede | undefined> => Promise.resolve(encontroAtual()),
+    listarMeusEncontros: (recorte): Promise<PaginaDosMeusEncontros> => {
+      // O RECORTE E GUARDADO, e e sobre ele que o caso da autoria afirma: a
+      // conta que chega aqui tem de ser a do token, e nao algo que a consulta
+      // da requisicao tenha dito.
+      recortesDosMeus.push(recorte);
+      const encontro = encontroAtual();
+      const itens =
+        dono() === undefined || encontro === undefined
+          ? []
+          : [{ encontro, capa: capaDoCenario() }];
+      return Promise.resolve({ itens, total: itens.length });
+    },
+    buscarMeuEncontro: (slug, chamador): Promise<MeuEncontro | undefined> => {
+      meusEncontrosPedidos.push({ slug, chamador });
+      const meu = dono();
+      const encontro = encontroAtual();
+      if (meu === undefined || encontro === undefined) return Promise.resolve(undefined);
+      // A versao avanca depois do cancelamento, como o `UPDATE` faz: e isso que
+      // torna o 412 de versao velha mensuravel sem dobre nenhum a mais.
+      return Promise.resolve({
+        encontro,
+        capa: capaDoCenario(),
+        versao: cancelado ? meu.versao + 1 : meu.versao,
+      });
+    },
     buscarLocalDoEncontro: (slug): Promise<LocalDoEncontro | undefined> => {
       locaisPedidos.push(slug);
       return Promise.resolve('local' in cenario ? cenario.local : { ponto: PONTO, endereco: 'Praça Benedito Calixto, s/n - Pinheiros' });
@@ -197,7 +284,11 @@ function repositorio(cenario: Cenario): NetworkRepository {
     estadoParaCriarEncontro: (): Promise<EstadoDaContaParaCriar> =>
       Promise.resolve(cenario.estadoDaConta ?? { temCanalVerificado: true, encontrosAtivos: 0 }),
     emTransacao: <T>(trabalho: (tx: TransacaoDaComunidade) => Promise<T>): Promise<T> =>
-      trabalho(transacaoDeTeste(cenario)),
+      trabalho(
+        transacaoDeTeste(cenario, () => {
+          cancelado = true;
+        }),
+      ),
   };
 }
 
@@ -209,7 +300,7 @@ function repositorio(cenario: Cenario): NetworkRepository {
  * Kysely: a borda nao tem como saber a diferenca entre "nao existe" e "nao e
  * seu", e e disso que o 404 do ADR-0021 depende.
  */
-function transacaoDeTeste(cenario: Cenario): TransacaoDaComunidade {
+function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): TransacaoDaComunidade {
   return {
     encontroDoAutor: (slug) => {
       encontrosPedidos.push(slug);
@@ -225,7 +316,12 @@ function transacaoDeTeste(cenario: Cenario): TransacaoDaComunidade {
     },
     cancelarEncontro: (_id, versaoLida, nota) => {
       cancelamentos.push(nota);
-      return Promise.resolve(cenario.versaoMudou === true ? null : versaoLida + 1);
+      // `null` e "a versao mudou": o `UPDATE` nao casou, e NADA foi gravado --
+      // por isso `aoCancelar` nao e chamado neste ramo.
+      if (cenario.versaoMudou === true) return Promise.resolve(null);
+      versoesDoCancelamento.push(versaoLida);
+      aoCancelar();
+      return Promise.resolve(versaoLida + 1);
     },
     substituirPortes: () => Promise.resolve(),
     substituirEstrutura: () => Promise.resolve(),
@@ -578,9 +674,12 @@ const ROTAS_COM_CONTA: readonly { metodo: 'GET' | 'POST' | 'DELETE'; url: string
   { metodo: 'GET', url: `/network/events/${SLUG}/join-request` },
   { metodo: 'DELETE', url: `/network/events/${SLUG}/join-request` },
   { metodo: 'GET', url: '/network/join-requests' },
+  // As duas de 19/10: a lista do dono e a leitura que entrega o `ETag`.
+  { metodo: 'GET', url: '/network/my-events' },
+  { metodo: 'GET', url: `/network/my-events/${SLUG}` },
 ];
 
-void describe('as sete operacoes com conta: 401 sem token, e nada do encontro no corpo', () => {
+void describe('as nove operacoes com conta: 401 sem token, e nada do encontro no corpo', () => {
   for (const rota of ROTAS_COM_CONTA) {
     void it(`ISCA -- ${rota.metodo} ${rota.url} sem token responde 401`, async () => {
       const resposta = await pedir(servidor(), { metodo: rota.metodo, url: rota.url, como: null });
@@ -1029,5 +1128,311 @@ void describe('o autor administra o proprio encontro: cancelar', () => {
     trilhaDeTeste.length = 0;
     await cancelar();
     assert.equal(trilhaDeTeste.at(-1)?.action, 'network_event.cancelled');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "Meus eventos": a lista do dono, o `ETag` e o caminho ate o cancelamento
+// (19/10/2026, decisao do cliente)
+// ---------------------------------------------------------------------------
+//
+// ## AS ISCAS DESTA SECAO, e o que cada uma reprova quando desligada
+//
+// | o que se desliga em producao | reprova |
+// |---|---|
+// | `chamadorAutenticado` trocado por constante na lista | `a conta que chega ao repositorio e a DO TOKEN` |
+// | `comoEtag` fora do `reply.header` de `getMyNetworkEvent` | `a leitura do dono emite o ETag da versao` |
+// | `buscarMeuEncontro` devolvendo o encontro de qualquer conta | `encontro de OUTRA pessoa: 404` |
+// | o 404 da leitura do dono virando 403 | o mesmo caso |
+// | `projetarMeuEncontro` trocado por `projetarEncontro` | `a projecao do dono tem SETE propriedades` |
+// | `versaoExigida` do cancelamento deixando de comparar | `com ETag velho, 412` |
+//
+// **O que esta secao NAO prova, dito por escrito**: que o encontro de outra
+// pessoa nao entra na CONSULTA. Aqui o dobre decide quem e o dono, e afirmar
+// isso sobre o dobre seria medir a constante do arquivo. A prova disso e
+// `tests/integration/meus-encontros-da-rede.test.ts`, contra Postgres, com duas
+// contas e quatro linhas.
+
+const URL_DOS_MEUS = '/network/my-events';
+const URL_DO_MEU = `/network/my-events/${SLUG}`;
+
+/** As sete propriedades de `MyNetworkEvent`, e nenhuma outra. */
+const PROPRIEDADES_DO_MEU = ['cover', 'ends_at', 'slug', 'starts_at', 'status', 'time_zone', 'title'];
+
+void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
+  void it('ISCA: a conta que chega ao repositorio e a DO TOKEN, e nao da consulta', async () => {
+    // O defeito que este caso pega: um `chamador` que viesse da requisicao (ou
+    // uma constante) faria a lista de uma pessoa aparecer para outra. A
+    // operacao NAO tem parametro de autoria -- o caso de baixo prova isso
+    // contra o contrato --, entao a unica origem possivel e o token.
+    recortesDosMeus.length = 0;
+    const outra = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
+    assert.equal((await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA })).status, 200);
+    assert.equal((await pedir(servidor(), { url: URL_DOS_MEUS, como: outra })).status, 200);
+    assert.deepEqual(
+      recortesDosMeus.map((r) => r.chamador),
+      [QUEM_CHAMA, outra],
+    );
+  });
+
+  void it('ISCA: o contrato da lista NAO tem parametro de autoria nenhum', () => {
+    // A metade de contrato da isca de cima. Um `author`, `mine` ou `user_id`
+    // aqui seria uma porta para pedir a lista de outra pessoa, e o `WHERE` do
+    // repositorio deixaria de ser o unico lugar que decide autoria.
+    const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, { operationId?: string; parameters?: { name: string }[] }>>;
+    };
+    const operacao = spec.paths['/network/my-events']?.['get'];
+    assert.equal(operacao?.operationId, 'listMyNetworkEvents');
+    assert.deepEqual((operacao?.parameters ?? []).map((p) => p.name).sort(), ['limit', 'page']);
+  });
+
+  void it('ISCA: a projecao do dono tem SETE propriedades, e nenhuma do corpo publico', async () => {
+    // Trocar `projetarMeuEncontro` por `projetarEncontro` faz este caso
+    // reprovar nomeando as propriedades extras. A lista do dono e menor que a
+    // vitrine de proposito (decisao de 19/10: o cartao e foto + titulo), e o
+    // que entra alem disso esta justificado no esquema.
+    const resposta = await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA });
+    assert.equal(resposta.status, 200, resposta.bruto);
+    const itens = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.equal(itens.length, 1);
+    assert.deepEqual(Object.keys(itens[0] ?? {}).sort(), PROPRIEDADES_DO_MEU);
+    // Nada de lugar, resumo, preco nem UUID: a varredura e no JSON cru.
+    // `Benedito` NAO entra nesta lista: ele esta no TITULO do encontro de
+    // teste ("Encontro de domingo na Benedito Calixto"), que e uma das sete
+    // propriedades legitimas. Procurar por ele reprovaria o caso certo.
+    for (const proibido of ['place_name', 'summary', 'admission', 'Pinheiros', 'visibility']) {
+      assert.equal(resposta.bruto.includes(proibido), false, `${proibido} na lista do dono`);
+    }
+  });
+
+  void it('a pagina traz `total`, `page` e `limit`, e nada de filtro aplicado', async () => {
+    const resposta = await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA });
+    assert.equal(resposta.corpo['total'], 1);
+    assert.equal(resposta.corpo['page'], 1);
+    assert.equal(resposta.corpo['limit'], 20);
+    assert.equal('applied_filters' in resposta.corpo, false);
+    assert.equal('effective_sort' in resposta.corpo, false);
+  });
+
+  void it('conta que nunca criou encontro recebe lista VAZIA, e nao erro', async () => {
+    const resposta = await pedir(servidor({ meuEncontro: undefined }), {
+      url: URL_DOS_MEUS,
+      como: QUEM_CHAMA,
+    });
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.deepEqual(resposta.corpo['items'], []);
+    assert.equal(resposta.corpo['total'], 0);
+  });
+
+  void it('a lista nao e cacheada: `private, no-store`', async () => {
+    const resposta = await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA });
+    assert.equal(resposta.cache, 'private, no-store');
+  });
+});
+
+void describe('a leitura do dono: a FONTE do `ETag` da Rede', () => {
+  void it('ISCA: a leitura do dono emite o `ETag` da versao, e as publicas NAO emitem', async () => {
+    // ESTE E O DEFEITO QUE A ENTREGA FECHA. Medido em homologacao em
+    // 19/10/2026: nenhuma leitura da Rede devolvia `ETag`, e por isso a
+    // primeira escrita versionada era impossivel -- `cancelNetworkEvent` exige
+    // `If-Match` e nao havia de onde tirar o valor.
+    //
+    // As duas metades estao no mesmo caso de proposito: afirmar so que a nova
+    // emite deixaria passar um `ETag` posto por engano na agenda, que e o
+    // cabecalho que NAO serve (uma versao de pagina apresentada como versao de
+    // um item da 412 em toda tentativa).
+    const app = servidor();
+    const minha = await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA });
+    assert.equal(minha.status, 200, minha.bruto);
+    assert.equal(minha.etag, '"1"');
+
+    assert.equal((await pedir(app, { url: '/network/events' })).etag, undefined);
+    assert.equal((await pedir(app, { url: `/network/events/${SLUG}` })).etag, undefined);
+  });
+
+  void it('o `ETag` acompanha a versao: versao 7 sai como `"7"`', async () => {
+    const resposta = await pedir(
+      servidor({ meuEncontro: { ...MEU_ENCONTRO, versao: 7 } }),
+      { url: URL_DO_MEU, como: QUEM_CHAMA },
+    );
+    assert.equal(resposta.etag, '"7"');
+  });
+
+  void it('ISCA: encontro de OUTRA pessoa: 404 com o MESMO corpo do inexistente, nunca 403', async () => {
+    const alheio = await pedir(servidor({ meuEncontro: undefined }), {
+      url: URL_DO_MEU,
+      como: QUEM_CHAMA,
+    });
+    const inexistente = await pedir(servidor({ meuEncontro: undefined }), {
+      url: '/network/my-events/nunca-existiu',
+      como: QUEM_CHAMA,
+    });
+    assert.equal(alheio.status, 404);
+    assert.equal(inexistente.status, 404);
+    assert.equal(alheio.corpo['type'], inexistente.corpo['type']);
+    assert.equal(alheio.corpo['title'], inexistente.corpo['title']);
+    // E sem `ETag`: um cabecalho de versao num 404 contaria que a linha existe.
+    assert.equal(alheio.etag, undefined);
+  });
+
+  void it('o `slug` do caminho e a conta do token chegam ao repositorio, e so eles', async () => {
+    meusEncontrosPedidos.length = 0;
+    await pedir(servidor(), { url: URL_DO_MEU, como: QUEM_CHAMA });
+    assert.deepEqual(meusEncontrosPedidos, [{ slug: SLUG, chamador: QUEM_CHAMA }]);
+  });
+
+  void it('a projecao e a MESMA da lista: esta leitura existe pela versao, nao por conteudo', async () => {
+    const resposta = await pedir(servidor(), { url: URL_DO_MEU, como: QUEM_CHAMA });
+    assert.deepEqual(Object.keys(resposta.corpo).sort(), PROPRIEDADES_DO_MEU);
+  });
+});
+
+void describe('o caminho inteiro: ler a versao, cancelar com ela, e o encontro vira `cancelled`', () => {
+  void it('ISCA: com o `ETag` da leitura, o cancelamento passa e o encontro vira `cancelled`', async () => {
+    // O CAMINHO COMPLETO, num servidor so: a tela le a versao, manda o valor
+    // em `If-Match` e, depois do 200, o encontro aparece cancelado. Desligar o
+    // `reply.header('ETag', ...)` da leitura faz o primeiro `assert` reprovar;
+    // desligar a comparacao de versao do `UPDATE` faz o caso do 412 reprovar.
+    versoesDoCancelamento.length = 0;
+    const app = servidor();
+
+    const leitura = await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA });
+    assert.equal(leitura.etag, '"1"');
+    assert.equal(leitura.corpo['status'], 'upcoming');
+
+    const cancelamento = await pedir(app, {
+      metodo: 'POST',
+      url: `/network/events/${SLUG}/cancellation`,
+      corpo: { note: 'Choveu demais e o parque fechou.' },
+      como: QUEM_CHAMA,
+      ifMatch: leitura.etag,
+    });
+    assert.equal(cancelamento.status, 200, cancelamento.bruto);
+    // A versao que o `UPDATE` comparou e a que a LEITURA entregou: e isto que
+    // prova que o valor atravessou o caminho inteiro, e nao que alguem mandou
+    // um `"1"` escrito a mao.
+    assert.deepEqual(versoesDoCancelamento, [1]);
+    assert.equal(cancelamento.corpo['status'], 'cancelled');
+
+    // E a leitura seguinte ja ve o estado novo e a versao nova.
+    const depois = await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA });
+    assert.equal(depois.corpo['status'], 'cancelled');
+    assert.equal(depois.etag, '"2"');
+  });
+
+  void it('ISCA: com `ETag` VELHO, 412 e nada vira `cancelled`', async () => {
+    // O 412 e colisao entre pessoas: alguem salvou depois desta leitura. O que
+    // este caso exige a mais do que o status e que **nada foi gravado**: sem a
+    // segunda afirmacao, uma implementacao que cancelasse e depois respondesse
+    // 412 passaria.
+    const app = servidor({ versaoMudou: true });
+    versoesDoCancelamento.length = 0;
+    const resposta = await pedir(app, {
+      metodo: 'POST',
+      url: `/network/events/${SLUG}/cancellation`,
+      corpo: { note: 'Choveu demais e o parque fechou.' },
+      como: QUEM_CHAMA,
+      ifMatch: '"1"',
+    });
+    assert.equal(resposta.status, 412);
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/precondition-failed`);
+    assert.deepEqual(versoesDoCancelamento, []);
+    assert.equal((await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA })).corpo['status'], 'upcoming');
+  });
+
+  void it('o 428 e o 412 tem tipos DIFERENTES: a tela os distingue', async () => {
+    // Sem isto os dois cairiam na faixa generica do app, que e a frase que
+    // esconde justamente o que resolve.
+    const semVersao = await pedir(servidor(), {
+      metodo: 'POST',
+      url: `/network/events/${SLUG}/cancellation`,
+      corpo: { note: 'Choveu demais e o parque fechou.' },
+      como: QUEM_CHAMA,
+    });
+    assert.equal(semVersao.status, 428);
+    assert.equal(semVersao.corpo['type'], `${BASE_DE_PROBLEMA}/precondition-required`);
+  });
+});
+
+void describe('a capa do dono: o unico lugar que conta que a foto foi recusada', () => {
+  // POR QUE ESTA SECAO EXISTE: outra frente mediu, em 19/10/2026, que a capa
+  // sobe no mesmo `POST` de criar o encontro e que o processador pode RECUSA-LA
+  // depois do `201`. `NetworkEventPublic` nao tem `rejection_reason`, a pagina
+  // de detalhe do encontro foi apagada por decisao do cliente e o cartao da
+  // agenda e foto + titulo -- entao nao havia superficie nenhuma que contasse a
+  // recusa a quem enviou a imagem. A lista do dono e o lugar.
+
+  void it('ISCA: capa RECUSADA sai com o motivo DO SERVIDOR, literal', async () => {
+    // Um texto generico aqui ("a foto nao foi aceita") passaria num caso que
+    // afirmasse so `status: rejected`. Este caso exige a FRASE, porque e ela
+    // que diz a pessoa o que consertar.
+    const resposta = await pedir(servidor({ capaDoDono: CAPA_RECUSADA }), {
+      url: URL_DOS_MEUS,
+      como: QUEM_CHAMA,
+    });
+    assert.equal(resposta.status, 200, resposta.bruto);
+    const capa = (resposta.corpo['items'] as Record<string, unknown>[])[0]?.['cover'] as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(capa?.['status'], 'rejected');
+    assert.equal(capa?.['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 600 pixels.');
+    // E sem url: servir o endereco de uma derivada que nao existe e promessa
+    // que a tela descobre quebrada.
+    assert.equal(capa?.['url'], null);
+  });
+
+  void it('ISCA: capa PRONTA nao tem motivo nenhum, e a url e a derivada publica', async () => {
+    const resposta = await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA });
+    const capa = (resposta.corpo['items'] as Record<string, unknown>[])[0]?.['cover'] as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(capa?.['status'], 'ready');
+    assert.equal(capa?.['rejection_reason'], null);
+    assert.equal(capa?.['url'], 'https://midia.exemplo.invalid/capa-1024.jpg');
+  });
+
+  void it('`processing` tem url nula e motivo nulo: "ainda nao" nao e "nunca"', async () => {
+    const resposta = await pedir(
+      servidor({ capaDoDono: { estado: 'processing', url: null, motivoDaRecusa: null } }),
+      { url: URL_DOS_MEUS, como: QUEM_CHAMA },
+    );
+    const capa = (resposta.corpo['items'] as Record<string, unknown>[])[0]?.['cover'] as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(capa?.['status'], 'processing');
+    assert.equal(capa?.['url'], null);
+    assert.equal(capa?.['rejection_reason'], null);
+  });
+
+  void it('encontro SEM capa sai com `cover` nulo, e nao com `processing`', async () => {
+    const resposta = await pedir(servidor({ capaDoDono: undefined }), {
+      url: URL_DOS_MEUS,
+      como: QUEM_CHAMA,
+    });
+    assert.equal((resposta.corpo['items'] as Record<string, unknown>[])[0]?.['cover'], null);
+  });
+
+  void it('ISCA: o estado da capa NAO sai na agenda publica nem no detalhe publico', async () => {
+    // A outra metade da decisao: estado de processamento de imagem e assunto
+    // entre quem enviou e o servidor. Se ele vazasse para a agenda, qualquer
+    // visitante leria o motivo da recusa da foto de outra pessoa.
+    const app = servidor({ capaDoDono: CAPA_RECUSADA });
+    for (const url of ['/network/events', `/network/events/${SLUG}`]) {
+      const resposta = await pedir(app, { url });
+      assert.equal(resposta.status, 200, resposta.bruto);
+      for (const proibido of ['rejection_reason', 'processing', 'rejected', '600 x 600']) {
+        assert.equal(resposta.bruto.includes(proibido), false, `${proibido} em ${url}`);
+      }
+    }
+  });
+
+  void it('a leitura de UM encontro meu carrega a mesma capa da lista', async () => {
+    const resposta = await pedir(servidor({ capaDoDono: CAPA_RECUSADA }), {
+      url: URL_DO_MEU,
+      como: QUEM_CHAMA,
+    });
+    const capa = resposta.corpo['cover'] as Record<string, unknown>;
+    assert.equal(capa['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 600 pixels.');
   });
 });

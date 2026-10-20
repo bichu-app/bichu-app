@@ -136,6 +136,68 @@ export interface PaginaDosMeusPedidos {
 }
 
 /**
+ * A capa do encontro **como o dono a ve**: a imagem e o que aconteceu com ela.
+ *
+ * ESTA ESTRUTURA NAO EXISTE NA LEITURA PUBLICA, e a assimetria e o ponto.
+ * `colunasDoEncontro` so carrega imagem `ready` com chave publica -- a agenda
+ * nao tem como mostrar o que nao esta pronto, e nem deve. A consequencia,
+ * medida por outra frente em 19/10/2026: a capa podia ser RECUSADA depois do
+ * `201` de criar e ninguem contava a quem enviou. Estado de processamento de
+ * imagem e assunto entre quem enviou e o servidor, entao ele sai so aqui.
+ */
+export interface CapaDoMeuEncontro {
+  readonly estado: 'processing' | 'ready' | 'rejected';
+  /** A derivada publica, a MESMA que a agenda serve. Nula fora de `ready`. */
+  readonly url: string | null;
+  /**
+   * O motivo da recusa, em texto pronto para a tela, quando `estado` e
+   * `rejected`. O banco garante que a recusada tem motivo
+   * (`catalog_images_recusada_tem_motivo`), e por isso a tela nunca precisa de
+   * frase generica de reserva.
+   */
+  readonly motivoDaRecusa: string | null;
+}
+
+/** Um item da lista do dono: o encontro e o estado da capa dele. */
+export interface ItemDosMeusEncontros {
+  readonly encontro: EncontroDaRede;
+  /** Nula quando o encontro NAO TEM capa -- diferente de `processing`. */
+  readonly capa: CapaDoMeuEncontro | null;
+}
+
+/**
+ * O encontro da propria conta, com a versao dele.
+ *
+ * A versao vem junto porque e ela que `getMyNetworkEvent` publica no `ETag`, e
+ * `cancelNetworkEvent` a exige em `If-Match`. **Ela NAO sai no corpo**: a
+ * projecao do dono (`MyNetworkEvent`) nao tem campo de versao, e a borda poe o
+ * valor no cabecalho. Dois lugares para a mesma versao divergiriam.
+ */
+export interface MeuEncontro extends ItemDosMeusEncontros {
+  readonly versao: number;
+}
+
+/**
+ * O recorte de `listMyNetworkEvents`: so a conta e a pagina.
+ *
+ * **Nao ha busca, filtro nem ordem escolhivel**, e a ausencia e decisao: o teto
+ * e de tres encontros ativos por conta, entao a lista e curta por construcao. A
+ * ordem e fixa no repositorio -- o que ainda nao terminou primeiro --, e `agora`
+ * existe exatamente para ela, e para o rotulo `status` concordar com a ordem.
+ */
+export interface RecorteDosMeusEncontros {
+  readonly chamador: string;
+  readonly agora: Instant;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface PaginaDosMeusEncontros {
+  readonly itens: readonly ItemDosMeusEncontros[];
+  readonly total: number;
+}
+
+/**
  * O estado da conta para criar encontro, numa consulta so.
  *
  * **A autorizacao e a verificacao moram na clausula `WHERE`** (ADR-0021): o
@@ -230,6 +292,31 @@ export interface NetworkRepository {
   lerMeuPedido(slug: string, chamador: string): Promise<PedidoDaConta | undefined>;
   desistirDoPedido(slug: string, chamador: string, agora: Instant): Promise<DesfechoDaDesistencia>;
   listarMeusPedidos(recorte: RecorteDosMeusPedidos): Promise<PaginaDosMeusPedidos>;
+
+  /**
+   * Os encontros da comunidade DESTA conta (`listMyNetworkEvents`, 19/10/2026).
+   *
+   * A autoria mora na clausula `WHERE`, pela funcao `network_events_da_conta`
+   * da migracao `20261019000010`: nao ha parametro de autoria e nao ha como
+   * pedir a lista de outra pessoa. Encontro do painel nao entra nem quando a
+   * conta e a mesma. Lista vazia e estado NORMAL, e nao erro: quem nunca criou
+   * encontro recebe zero itens.
+   */
+  listarMeusEncontros(recorte: RecorteDosMeusEncontros): Promise<PaginaDosMeusEncontros>;
+
+  /**
+   * Um encontro da propria conta, com a VERSAO (`getMyNetworkEvent`).
+   *
+   * **Esta e a fonte do `ETag` da secao `Rede`**, e a razao de ela existir:
+   * medido em homologacao em 19/10/2026, nenhuma outra leitura da secao emite
+   * o cabecalho, e sem ele a primeira escrita versionada era impossivel.
+   *
+   * `undefined` para inexistente, de outra conta, do painel e removido -- os
+   * quatro sao o mesmo 404 (ADR-0021). A regra de autoria e a MESMA de
+   * `encontroDoAutor`, pela mesma funcao de banco
+   * (`network_events_do_autor`): nao ha uma segunda definicao de "e meu".
+   */
+  buscarMeuEncontro(slug: string, chamador: string): Promise<MeuEncontro | undefined>;
 
   /** Canal verificado e teto de encontros ativos, numa consulta so. */
   estadoParaCriarEncontro(chamador: string, agora: Instant): Promise<EstadoDaContaParaCriar>;

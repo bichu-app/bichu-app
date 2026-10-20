@@ -20,7 +20,7 @@
  * `domain/conversa-mediada.ts` a partir de `closed_at`, de `blocked_at` e do
  * estado do caso ligado, que sai do `LEFT JOIN` abaixo.
  */
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
 import { JANELA_DE_AGRUPAMENTO_EM_MS } from '../../../tags/ports/tag-repository.js';
@@ -36,6 +36,7 @@ import type {
   NovaDenuncia,
   NovaMensagem,
   Pagina,
+  PaginaDaLista,
   PaginaDoAchador,
   EspecieDoSistema,
 } from '../../ports/conversation-repository.js';
@@ -64,6 +65,8 @@ interface LinhaDaConversa {
   nao_lida: boolean;
   corpo_da_ultima: string | null;
   ultima_mensagem_em: Date | null;
+  apelido_do_outro: string | null;
+  chave_da_foto_do_outro: string | null;
 }
 
 interface LinhaDaMensagem {
@@ -101,6 +104,12 @@ function comoConversa(linha: LinhaDaConversa): ConversaDoChamador {
     naoLida: linha.nao_lida,
     corpoDaUltima: linha.corpo_da_ultima,
     ultimaMensagemEm: linha.ultima_mensagem_em,
+    // O APELIDO E A CHAVE DA FOTO DO OUTRO LADO (emenda 3 do ADR-0010,
+    // 19/10/2026). Os dois saem JA RECORTADOS pelas subconsultas -- o predicado
+    // de conexao aceita mora no `WHERE` delas --, e nao ha nada a decidir aqui:
+    // nulo e o valor verdadeiro de todo estado que nao seja conexao aceita.
+    apelidoDoOutro: linha.apelido_do_outro,
+    chaveDaFotoDoOutro: linha.chave_da_foto_do_outro,
   };
 }
 
@@ -114,6 +123,138 @@ function comoMensagem(linha: LinhaDaMensagem): MensagemGravada {
     createdAt: linha.created_at,
   };
 }
+
+/**
+ * A ULTIMA MENSAGEM da conversa, como subconsulta correlacionada.
+ *
+ * Num lugar só porque ela aparece em TRÊS: as duas projeções (`corpo_da_ultima`
+ * e `ultima_mensagem_em`) e a CHAVE DE ORDEM da lista. Escrita três vezes, a
+ * ordem divergiria da prévia no primeiro `ORDER BY` que alguém ajustasse — e o
+ * sintoma seria uma lista ordenada por uma mensagem que não é a mostrada.
+ */
+const ULTIMA_MENSAGEM = (coluna: 'body' | 'created_at') => sql`(
+        SELECT msg.${sql.raw(coluna)} FROM conversation_messages msg
+        WHERE msg.conversation_id = conversations.id
+        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
+      )`;
+
+/**
+ * A CHAVE DE ORDEM E DE CURSOR da lista: `coalesce(última mensagem, abertura)`.
+ *
+ * **Decisão do cliente de 18/10/2026**, literal: *"ordene por última
+ * mensagem"*. Até aqui a lista ordenava por `conversations.opened_at`, que é
+ * quando a conversa NASCEU — e a conversa que o tutor abre o aplicativo para
+ * achar é a que acabou de receber recado, não a que nasceu por último.
+ *
+ * **O `coalesce` não é defensivo, é a regra.** Conversa sem mensagem visível
+ * existe (ela nasce do aviso da plaquinha e a primeira mensagem pode não ter
+ * sido gravada ainda), e `NULL` em `ORDER BY ... DESC` iria para o TOPO no
+ * Postgres (`NULLS FIRST` é o default do `DESC`) — a lista abriria com as
+ * conversas sem nada escrito. A abertura é o único instante que elas têm.
+ *
+ * **O cursor carrega esta mesma expressão**, e é por isso que ela é uma
+ * constante e não dois textos parecidos: um cursor sobre `opened_at` com a
+ * ordem sobre outra chave pula e repete linhas, e o sintoma aparece só na
+ * segunda página — depois de a pessoa rolar.
+ *
+ * Custo medido e dito em voz alta: a chave é uma subconsulta, então o índice de
+ * `(opened_at, id)` não a atende. Materializá-la em coluna
+ * (`conversations.last_message_at`) é uma MIGRAÇÃO, e o número do carimbo é
+ * distribuído por quem coordena — não foi pedido aqui, e a lista é por
+ * chamador, o que a mantém pequena.
+ */
+const CHAVE_DA_ORDEM = sql`coalesce(${ULTIMA_MENSAGEM('created_at')}, conversations.opened_at)`;
+
+/**
+ * O recorte de `q`: nome do pet, ou nome de exibição do outro lado.
+ *
+ * **É um `AND` sobre o `WHERE` do chamador, e nunca o substitui.** A
+ * autorização mora naquele predicado (ADR-0021); este só estreita o que já era
+ * dele, e por isso não existe arranjo em que o termo alargue a leitura.
+ *
+ * `ilike` com `%termo%` e não `to_tsquery`: o alvo é um nome curto de pet ou de
+ * pessoa, e busca textual com radical em cima de nome próprio casa pior que
+ * substring. `%` e `_` do termo são escapados — sem isso um `_` digitado
+ * casaria qualquer caractere, e a pessoa leria o resultado como defeito.
+ *
+ * O nome do achador sai do MESMO `coalesce` da projeção, e não de uma das duas
+ * colunas: buscar por `found_reports.finder_display_name` apenas deixaria de
+ * achar quem tem conta e não preencheu o formulário do aviso — isto é, o
+ * achado avulso inteiro.
+ */
+function comoLike(termo: string): string {
+  return `%${termo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/**
+ * **A CONTA DO OUTRO LADO**, derivada da mesma comparação que `papel_do_chamador`.
+ *
+ * `NULL` quando o achador não tem conta, que é o caminho principal da plaquinha
+ * — e `NULL` é o valor certo: as subconsultas abaixo não acham linha nenhuma
+ * com ele, e devolvem nulo em vez de um ramo alternativo.
+ *
+ * Escrita uma vez porque entra em DUAS subconsultas (o apelido e a foto), e
+ * porque errar o lado aqui seria mostrar uma pessoa como se fosse outra.
+ */
+const CONTA_DO_OUTRO_LADO = (chamador: UserId) => sql`(CASE
+        WHEN conversations.tutor_user_id = ${chamador}
+        THEN conversations.finder_user_id
+        ELSE conversations.tutor_user_id
+      END)`;
+
+/**
+ * **O PREDICADO DA EMENDA 3 (19/10/2026): existe conexão ACEITA entre quem
+ * chama e `outro`?**
+ *
+ * `outro` é uma expressão e não um valor, e é de propósito: quem usa este
+ * fragmento já amarrou a conta do outro lado numa coluna da própria subconsulta
+ * (`h.user_id`, `outro.id`), e passar essa coluna em vez de repetir o `CASE`
+ * deixa o `CASE` uma vez no SQL em vez de três. A amarração continua sendo
+ * `CONTA_DO_OUTRO_LADO`, no `WHERE` da subconsulta que a usa.
+ *
+ * É esta expressão que o cliente decidiu, e ela mora **na cláusula `WHERE` das
+ * subconsultas** que produzem o apelido e a foto — não num `if` do serviço.
+ * ADR-0021: a consulta que traria a foto de quem não é conexão aceita **não
+ * existe**, e por isso chamar esta leitura de um caminho novo devolve `NULL` em
+ * vez de foto. É esta metade que sobrevive a alguém mexer no caso de uso, e é
+ * ela que `conexao-aceita-na-clausula-where.test.ts` lê no SQL compilado.
+ *
+ * Quatro predicados, e nenhum é dispensável:
+ *
+ * 1. **`state = 'accepted'`** — pendente não é aceite. *"a foto aparece SÓ
+ *    quando as duas pessoas JÁ aceitaram conexão"*: pedido enviado, pedido
+ *    recebido e recusa são os três estados em que ela **não** aparece;
+ * 2. **os DOIS sentidos do par** — a conexão é simétrica, e quem pediu não
+ *    decide quem vê. Sem o segundo `OR`, a foto apareceria para um lado do par
+ *    e não para o outro, o que ninguém consegue explicar depois;
+ * 3. **`conta_habilitada` nas duas pontas** — decisão do cliente de 17/10:
+ *    conta desabilitada *"não é mais encontrada em nenhuma página ou
+ *    funcionalidade"*. É também o que faz o lado despersonalizado perder a foto
+ *    junto com o nome, **sem um segundo `if`** no domínio;
+ * 4. **`NOT bloqueio_entre`, simétrico** — e ele não é redundante. Bloquear
+ *    desfaz a conexão na mesma transação (`ConexaoSobBloqueio`), mas são duas
+ *    escritas, e este predicado cobre a corrida entre elas. **A conversa
+ *    mediada é o canal que ATRAVESSA o bloqueio** — ela continua legível para o
+ *    par bloqueado, de propósito, e por isso é justamente aqui que a foto não
+ *    pode depender só do `EXISTS`.
+ *
+ * **Não há leitura nova de conexão em TypeScript.** `LeitorDeConexao` não é
+ * chamado daqui nem do serviço, e isso é decisão e não esquecimento: a lista
+ * carrega dez conversas por página, e perguntar a aresta por conversa seriam
+ * dez idas ao banco por rolada — além de mover o recorte para a memória, que é
+ * o que o ADR-0021 proíbe. O predicado tem a **mesma forma** do que
+ * `construtorDaVitrineDeConexao` (`people/adapters/persistence/`) usa, e os dois
+ * são lidos por iscas de SQL próprias.
+ */
+const CONEXAO_ACEITA_ENTRE = (chamador: UserId, outro: RawBuilder<unknown>) =>
+  sql<boolean>`EXISTS (
+        SELECT 1 FROM user_connections uc
+         WHERE uc.state = 'accepted'
+           AND ((uc.requester_user_id = ${chamador}::uuid AND uc.addressee_user_id = ${outro})
+             OR (uc.requester_user_id = ${outro} AND uc.addressee_user_id = ${chamador}::uuid))
+           AND conta_habilitada(uc.requester_user_id)
+           AND conta_habilitada(uc.addressee_user_id))
+      AND NOT bloqueio_entre(${chamador}::uuid, ${outro})`;
 
 /**
  * A leitura comum às duas rotas de conversa, com o chamador no `WHERE`.
@@ -236,16 +377,66 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
       // achador EM CLARO. Uma previa tirada de lá publicaria na lista o
       // telefone que a conversa existe para nao deixar passar. O corte em 140
       // e do dominio (`previaDaMensagem`), nao daqui.
+      sql<string | null>`${ULTIMA_MENSAGEM('body')}`.as('corpo_da_ultima'),
+      // A MESMA subconsulta que a CHAVE_DA_ORDEM usa, e nao uma copia: ver o
+      // doc de `ULTIMA_MENSAGEM`. Aqui ela sai NULA quando nao ha mensagem --
+      // `last_message_at` e anulavel no contrato, e o `coalesce` da ordem e da
+      // ordem, nao da projecao.
+      sql<Date | null>`${ULTIMA_MENSAGEM('created_at')}`.as('ultima_mensagem_em'),
+      // -------------------------------------------------------------------
+      // O APELIDO E A FOTO DO OUTRO LADO (emenda 3 do ADR-0010, 19/10/2026)
+      //
+      // Decisao do cliente: *"a foto aparece SO quando as duas pessoas ja
+      // aceitaram conexao"*. As duas subconsultas carregam o predicado
+      // `CONEXAO_ACEITA_ENTRE` no proprio `WHERE` (ADR-0021), e nao
+      // num `if` do servico: sem conexao aceita elas nao acham linha, e o campo
+      // sai NULO. Nao existe, neste arquivo, consulta que traga a foto de quem
+      // nao e conexao aceita.
+      //
+      // SUBCONSULTA CORRELACIONADA e nao `LEFT JOIN`, e a diferenca e de
+      // vazamento e nao de desempenho: com juncao, `users` e `catalog_images` do
+      // OUTRO lado entrariam no escopo do `SELECT`, e a proxima pessoa que mexer
+      // aqui tem `outro.email` e `foto.rejection_reason` a um caractere de
+      // distancia. Com a subconsulta, so o valor projetado existe. E o mesmo
+      // motivo pelo qual `pets_count` e subconsulta em
+      // `kysely-perfil-de-pessoa.ts`.
+      //
+      // `h.kind = 'pessoa'` nao e decoracao: o espaco de nomes de `handles` e
+      // COMPARTILHADO com pets (`20261018000021`), e sem ele o apelido de um pet
+      // do outro lado poderia sair como se fosse o da pessoa -- e o toque abriria
+      // um perfil que responde 404.
       sql<string | null>`(
-        SELECT msg.body FROM conversation_messages msg
-        WHERE msg.conversation_id = conversations.id
-        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
-      )`.as('corpo_da_ultima'),
-      sql<Date | null>`(
-        SELECT msg.created_at FROM conversation_messages msg
-        WHERE msg.conversation_id = conversations.id
-        ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
-      )`.as('ultima_mensagem_em'),
+        SELECT h.handle FROM handles h
+         WHERE h.user_id = ${CONTA_DO_OUTRO_LADO(chamador)}
+           AND h.kind = 'pessoa'
+           AND ${CONEXAO_ACEITA_ENTRE(chamador, sql`h.user_id`)}
+      )`.as('apelido_do_outro'),
+      // A CHAVE DA DERIVADA, e nunca a URL: a URL e montada na borda com o
+      // dominio de midia do ambiente (§11.1 proibicao 9).
+      //
+      // `thumb_key` e nao `public_key`: `public_key` e a `card` de 512 px, e o
+      // icone da conversa pinta 40 dp -- 120 px reais a 3x. A de 176 cobre sem
+      // ampliar; a de 512 seria 4,3x mais dado do que a celula pinta, dez vezes
+      // por pagina. Ver `DERIVADAS_DA_FOTO_DE_USUARIO`.
+      //
+      // `purpose = 'user_photo'` no `WHERE`: a capa de um encontro e a logo de
+      // um profissional passam pela MESMA esteira e pela mesma tabela, e sem
+      // este predicado uma delas poderia sair como foto de pessoa.
+      //
+      // `status = 'ready'` e `thumb_key IS NOT NULL`: foto em `processing`
+      // carrega o EXIF do celular ate o trabalhador reescrever a derivada, e
+      // servi-la entregaria a coordenada de onde ela foi tirada (ADR-0010 item
+      // 4). Foto `rejected` fica fora por outra razao -- `rejection_reason` e
+      // assunto entre o dono e quem modera, e nao sai daqui nem como estado.
+      sql<string | null>`(
+        SELECT foto.thumb_key FROM users outro
+         INNER JOIN catalog_images foto ON foto.id = outro.photo_image_id
+         WHERE outro.id = ${CONTA_DO_OUTRO_LADO(chamador)}
+           AND foto.purpose = 'user_photo'
+           AND foto.status = 'ready'
+           AND foto.thumb_key IS NOT NULL
+           AND ${CONEXAO_ACEITA_ENTRE(chamador, sql`outro.id`)}
+      )`.as('chave_da_foto_do_outro'),
     ])
     .where((eb) =>
       eb.or([
@@ -272,20 +463,62 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
     .where('conversations.moderation_removed_at', 'is', null);
 }
 
-/** `GET /v1/conversations`. A mesma leitura, paginada por `opened_at`. */
-export function construtorDaListaDoChamador(db: Db, chamador: UserId, pagina: Pagina) {
-  const base = construtorDaLeituraDoChamador(db, chamador)
-    .orderBy('conversations.opened_at', 'desc')
+/**
+ * `GET /v1/conversations`. A mesma leitura, ordenada pela ÚLTIMA MENSAGEM.
+ *
+ * A chave é `CHAVE_DA_ORDEM` — `coalesce(última mensagem, abertura)` — e não
+ * `conversations.opened_at`, por decisão do cliente de 18/10/2026. Ver o doc
+ * daquela constante, que é onde a razão mora.
+ *
+ * `q` entra como `AND` sobre o predicado do chamador, nunca no lugar dele.
+ */
+export function construtorDaListaDoChamador(db: Db, chamador: UserId, pagina: PaginaDaLista) {
+  let base = construtorDaLeituraDoChamador(db, chamador)
+    .orderBy(CHAVE_DA_ORDEM, 'desc')
     .orderBy('conversations.id', 'desc')
     .limit(pagina.limit);
+  const termo = pagina.termo;
+  if (termo !== undefined && termo !== '') base = base.where(recorteDoTermo(termo));
   const depois = pagina.depoisDe;
   if (depois === undefined) return base;
   // Tupla e não `AND` de duas comparações: `(a, b) < (x, y)` é a comparação
-  // lexicográfica que o Postgres resolve com o índice, e a versão escrita à mão
+  // lexicográfica que o Postgres resolve de uma vez, e a versão escrita à mão
   // com `OR` erra no empate de milissegundo, que é justamente quando ela importa.
+  //
+  // **A tupla carrega a CHAVE DA ORDEM**, e não `opened_at`: cursor sobre uma
+  // chave e ordem sobre outra pula e repete linhas, e o sintoma só aparece na
+  // segunda página — depois de a pessoa rolar.
   return base.where(
-    sql<boolean>`(conversations.opened_at, conversations.id) < (${depois.criadaEm}, ${depois.id})`,
+    sql<boolean>`(${CHAVE_DA_ORDEM}, conversations.id) < (${depois.criadaEm}, ${depois.id})`,
   );
+}
+
+/**
+ * `ConversationPage.total`: quantas conversas o recorte tem, sem `limit`.
+ *
+ * **Passa pelo MESMO construtor da lista**, e por isso pelo mesmo `WHERE` do
+ * chamador: uma contagem escrita à parte seria um segundo lugar onde a
+ * autorização mora, e o segundo lugar é o que esquece.
+ */
+export function construtorDaContagemDoChamador(
+  db: Db,
+  chamador: UserId,
+  termo: string | undefined,
+) {
+  const base = construtorDaLeituraDoChamador(db, chamador);
+  const comTermo =
+    termo === undefined || termo === '' ? base : base.where(recorteDoTermo(termo));
+  return comTermo.clearSelect().clearOrderBy().select(sql<number | string>`count(*)`.as('n'));
+}
+
+/** O predicado de `q`, num lugar só: a lista e a contagem leem o mesmo. */
+function recorteDoTermo(termo: string) {
+  const alvo = comoLike(termo);
+  return sql<boolean>`(
+    "pets"."name" ILIKE ${alvo}
+    OR "tutor"."display_name" ILIKE ${alvo}
+    OR coalesce("found_reports"."finder_display_name", "achador"."display_name") ILIKE ${alvo}
+  )`;
 }
 
 /** `GET /v1/conversations/{id}`. O id é filtro A MAIS, nunca no lugar do dono. */
@@ -665,6 +898,15 @@ export function criarConversationRepository(db: Db): ConversationRepository {
     async listarDoChamador(chamador, pagina): Promise<readonly ConversaDoChamador[]> {
       const linhas = await construtorDaListaDoChamador(db, chamador, pagina).execute();
       return (linhas as unknown as LinhaDaConversa[]).map(comoConversa);
+    },
+
+    async contarDoChamador(chamador, termo): Promise<number> {
+      const linha = await construtorDaContagemDoChamador(
+        db,
+        chamador,
+        termo,
+      ).executeTakeFirstOrThrow();
+      return Number(linha.n);
     },
 
     async buscarDoChamador(conversa, chamador): Promise<ConversaDoChamador | undefined> {

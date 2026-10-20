@@ -62,6 +62,28 @@ export interface EntradaSemeada {
   /** O titular. Uma conta por entrada, como no mundo real. */
   readonly titularId: string;
   readonly titularEmail: string;
+  /**
+   * O ENDERECO PUBLICO do titular (`users.public_ref`), LITERAL como todo o
+   * resto desta massa.
+   *
+   * `users.public_ref` e `NOT NULL` e SEM valor padrao desde a `20261018000031`
+   * (ADR-0024): quem cria a conta preenche. A massa de QA e um caminho de
+   * criacao de conta como qualquer outro, e ela NAO preenchia -- `make seed`
+   * reprovava com 23502 em `public_ref`. Medido em 19/10/2026 pela suite de
+   * integracao, no caso "a MASSA DE QA grava e a secao aparece ocupada".
+   *
+   * LITERAL e nao sorteado porque a massa e deterministica por contrato:
+   * semear duas vezes tem de deixar o MESMO estado, e o caso "semear duas
+   * vezes deixa o mesmo estado" mede isso. Em producao o valor e sorteado por
+   * linha, em `kysely-identity-repository.ts`.
+   *
+   * 22 simbolos de base64url (`^[A-Za-z0-9_-]{22}$`), e NUNCA derivado do
+   * nome, do e-mail nem do telefone do titular (BICHUS-174): endereco que
+   * carregasse o dono permitiria cruzar as pegadas de uma pessoa entre
+   * superficies. O sufixo repete so o par do `titularId` para a massa continuar
+   * legivel a quem depura, e `titularId` e UUID interno, nao e dado da pessoa.
+   */
+  readonly titularPublicRef: string;
   readonly slug: string;
   readonly kind: TipoDeProfissional;
   readonly displayName: string;
@@ -90,6 +112,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d1',
     titularId: '0199c3a0-0000-7000-8000-0000000000a1',
     titularEmail: `clinica.santa-barbara@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a1',
     slug: 'clinica-santa-barbara',
     kind: 'clinic',
     // NOME LONGO DE PROPOSITO: 61 caracteres, quebra em duas linhas no cartao.
@@ -123,6 +146,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d2',
     titularId: '0199c3a0-0000-7000-8000-0000000000a2',
     titularEmail: `vet.lu@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a2',
     slug: 'vet-lu',
     kind: 'vet',
     // NOME CURTISSIMO, ao lado do longo: seis caracteres.
@@ -149,6 +173,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d3',
     titularId: '0199c3a0-0000-7000-8000-0000000000a3',
     titularEmail: `banho.do.bairro@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a3',
     slug: 'banho-do-bairro',
     kind: 'groomer',
     displayName: 'Banho do Bairro',
@@ -175,6 +200,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d4',
     titularId: '0199c3a0-0000-7000-8000-0000000000a4',
     titularEmail: `passeios.do.rodrigo@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a4',
     slug: 'passeios-do-rodrigo',
     kind: 'walker',
     displayName: 'Passeios do Rodrigo',
@@ -197,6 +223,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d5',
     titularId: '0199c3a0-0000-7000-8000-0000000000a5',
     titularEmail: `casa.do.miau@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a5',
     slug: 'casa-do-miau-hospedagem',
     kind: 'sitter',
     displayName: 'Casa do Miau Hospedagem Felina',
@@ -222,6 +249,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d6',
     titularId: '0199c3a0-0000-7000-8000-0000000000a6',
     titularEmail: `adestra.junto@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a6',
     slug: 'adestra-junto',
     kind: 'trainer',
     displayName: 'Adestra Junto',
@@ -254,6 +282,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d7',
     titularId: '0199c3a0-0000-7000-8000-0000000000a7',
     titularEmail: `pet.center.tatuape@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a7',
     slug: 'pet-center-tatuape',
     kind: 'clinic',
     displayName: 'Pet Center Tatuapé',
@@ -281,6 +310,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d8',
     titularId: '0199c3a0-0000-7000-8000-0000000000a8',
     titularEmail: `tosa.da.ana@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a8',
     slug: 'tosa-da-ana-santo-andre',
     kind: 'groomer',
     displayName: 'Tosa da Ana',
@@ -301,6 +331,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d9',
     titularId: '0199c3a0-0000-7000-8000-0000000000a9',
     titularEmail: `sos.silvestres@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000a9',
     slug: 'sos-silvestres',
     kind: 'vet',
     displayName: 'SOS Silvestres',
@@ -329,6 +360,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000da',
     titularId: '0199c3a0-0000-7000-8000-0000000000aa',
     titularEmail: `hotel.quatro.patas@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000aa',
     slug: 'hotel-quatro-patas',
     kind: 'sitter',
     displayName: 'Hotel Quatro Patas',
@@ -357,6 +389,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000db',
     titularId: '0199c3a0-0000-7000-8000-0000000000ab',
     titularEmail: `rascunho.nao.publicado@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000ab',
     slug: 'clinica-em-cadastro',
     kind: 'clinic',
     displayName: 'Clínica Em Cadastro (RASCUNHO — não pode aparecer)',
@@ -376,6 +409,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000dc',
     titularId: '0199c3a0-0000-7000-8000-0000000000ac',
     titularEmail: `saiu.da.vitrine@${DOMINIO}`,
+    titularPublicRef: 'QAmassaDiretorio0000ac',
     slug: 'banho-fechado-para-reforma',
     kind: 'groomer',
     displayName: 'Banho Fechado Para Reforma (OCULTO — não pode aparecer)',

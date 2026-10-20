@@ -54,6 +54,7 @@ interface LinhaDoCaso {
   share_to_public_list: boolean;
   opened_at: Date;
   closed_at: Date | null;
+  reopen_deadline: Date | null;
   closure_outcome: DesfechoDoCaso | null;
   closure_channel: CanalDoReencontro | null;
   closure_note: string | null;
@@ -75,6 +76,7 @@ function comoCaso(l: LinhaDoCaso): CasoGravado {
     shareToPublicList: l.share_to_public_list,
     openedAt: l.opened_at,
     closedAt: l.closed_at,
+    reopenDeadline: l.reopen_deadline,
     closureOutcome: l.closure_outcome,
     closureChannel: l.closure_channel,
     closureNote: l.closure_note,
@@ -93,7 +95,7 @@ const COLUNAS = sql<LinhaDoCaso>`
   (last_seen_point IS NOT NULL) AS tem_ponto,
   last_seen_city, last_seen_neighborhood, description,
   share_token, share_to_public_list, opened_at,
-  closed_at, closure_outcome, closure_channel, closure_note
+  closed_at, reopen_deadline, closure_outcome, closure_channel, closure_note
 `;
 
 export function criarLostCaseRepository(db: Db): LostCaseRepository {
@@ -327,6 +329,64 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
          WHERE id = ${entrada.caso}
            AND owner_user_id = ${entrada.dono}
            AND status = 'open'
+        RETURNING ${COLUNAS}
+      `.execute(db);
+      const linha = r.rows[0];
+      return linha === undefined ? null : comoCaso(linha);
+    },
+
+    /**
+     * Reabre o caso encerrado por engano. UMA escrita, QUATRO predicados.
+     *
+     * - `owner_user_id = :dono` -- a autorizacao mora no `WHERE`, como em todo
+     *   este arquivo (ADR-0021).
+     * - `status <> 'open'` -- so caso encerrado reabre. Reabrir um caso aberto
+     *   nao e erro de ninguem: e o reenvio da fila offline, e quem o traduz
+     *   para 200 e o servico.
+     * - `reopen_deadline > :agora` -- a JANELA, e ela vem da COLUNA e nao de
+     *   uma conta refeita aqui. `encerrar` gravou `agora + 7 dias`; refazer a
+     *   conta nesta consulta daria duas fontes para o mesmo prazo, e a segunda
+     *   seria a que ninguem revisita quando o numero mudar. `reopen_deadline`
+     *   nulo (caso encerrado antes de a coluna passar a ser gravada) nao
+     *   satisfaz a comparacao, e isso e o certo: prazo que ninguem gravou nao
+     *   e prazo em aberto.
+     * - `NOT EXISTS (... outro caso aberto do mesmo pet)` -- o indice unico
+     *   parcial `lost_cases_um_aberto_por_pet` imporia isso de todo jeito, mas
+     *   como VIOLACAO, que chegaria a borda como 500. Como predicado ele chega
+     *   como zero linhas, e o servico o distingue dos outros tres relendo o
+     *   caso. A subconsulta carrega `id <> :caso` porque o proprio caso
+     *   ainda nao esta aberto neste instante -- ele e justamente o que esta
+     *   sendo reaberto.
+     *
+     * **As tres colunas do encerramento voltam a `NULL`, e nao e escolha de
+     * estilo**: o `CHECK lost_cases_encerrado_tem_desfecho` exige
+     * `closure_outcome IS NULL AND closed_at IS NULL` para `status = 'open'`,
+     * nos dois sentidos. Deixar o desfecho gravado num caso aberto nao e um
+     * resto inofensivo -- o banco recusa a linha. `closure_channel` e
+     * `closure_note` saem pelo mesmo motivo de produto: eles descrevem um
+     * encerramento que a pessoa acabou de dizer que nao aconteceu, e o
+     * `CHECK lost_cases_canal_so_com_reencontro` amarra o canal ao desfecho.
+     * `reopen_deadline` tambem zera: ele e o prazo DAQUELE encerramento.
+     */
+    async reabrir(entrada): Promise<CasoGravado | null> {
+      const r = await sql<LinhaDoCaso>`
+        UPDATE lost_cases
+           SET status = 'open',
+               closed_at = NULL,
+               closure_outcome = NULL,
+               closure_channel = NULL,
+               closure_note = NULL,
+               reopen_deadline = NULL
+         WHERE id = ${entrada.caso}
+           AND owner_user_id = ${entrada.dono}
+           AND status <> 'open'
+           AND reopen_deadline > ${new Date(Number(entrada.agora))}
+           AND NOT EXISTS (
+                 SELECT 1 FROM lost_cases outro
+                  WHERE outro.pet_id = lost_cases.pet_id
+                    AND outro.id <> lost_cases.id
+                    AND outro.status = 'open'
+               )
         RETURNING ${COLUNAS}
       `.execute(db);
       const linha = r.rows[0];

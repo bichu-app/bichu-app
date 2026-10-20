@@ -692,32 +692,108 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('o padrao de listagem desta tela', () {
-    testWidgets(
-      'ISCA: nao ha puxar-para-atualizar e nao ha busca, filtro nem ordenacao',
-      (tester) async {
-        final servidor = ServidorDaCaixa(
-          rotasDe(
-            paginaDaCaixa(<Map<String, dynamic>>[
-              aviso(assunto: 'Tobias'),
-            ], naoLidos: 1),
-          ),
-        );
-        await abrirACaixa(tester, servidor: servidor);
+    testWidgets('ISCA: o arrasto para baixo REFAZ a busca', (tester) async {
+      // =====================================================================
+      // **ESTE CASO ERA O CONTRARIO ATE 18/10/2026, e a virada e do
+      // cliente.** Ele dizia, com estas palavras: *"REPROVA: este app nao
+      // tem puxar-para-atualizar em lugar nenhum, e nao e nesta tela que
+      // ele nasce"*. A frase era verdadeira quando foi escrita.
+      //
+      // O cliente mandou o gesto para o app inteiro: *"Crie uma acao no
+      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina
+      // para baixo"*. Quem ler este arquivo e achar que a regra antiga foi
+      // quebrada por descuido esta lendo o commit errado.
+      //
+      // **A assercao e na BUSCA e nao no indicador.**
+      // `find.byType(RefreshIndicator)` ficaria verde com `onRefresh`
+      // vazio, com a fisica errada e com a busca nula -- a roda giraria e
+      // nada seria perguntado ao servidor. Contar chamadas a
+      // `GET $caminhoDaLista` e a unica afirmacao que nao sobrevive a isso.
+      //
+      // DESLIGAR: em `lib/telas/notificacoes/caixa_de_notificacoes.dart`,
+      // troque `ArrastarParaAtualizar(aoAtualizar: _carregar, child:
+      // _corpo())` por `_corpo()`. Esperado: este caso reprova dizendo
+      // quantas chamadas houve antes e depois do gesto.
+      // =====================================================================
+      final servidor = ServidorDaCaixa(
+        rotasDe(
+          paginaDaCaixa(<Map<String, dynamic>>[
+            aviso(assunto: 'Tobias'),
+          ], naoLidos: 1),
+        ),
+      );
+      await abrirACaixa(tester, servidor: servidor);
 
-        expect(
-          find.byType(RefreshIndicator),
-          findsNothing,
-          reason: 'REPROVA: este app nao tem puxar-para-atualizar em lugar '
-              'nenhum, e nao e nesta tela que ele nasce.',
-        );
-        expect(
-          find.byType(TextField),
-          findsNothing,
-          reason: 'REPROVA: a caixa nao tem busca. A ordem e uma so, '
-              'decrescente, e vem pronta do servidor.',
-        );
-      },
-    );
+      // ANCORA: a caixa carregou. Sem ela, "duas chamadas" poderia ser
+      // "duas falhas" em vez de "uma carga e uma recarga".
+      expect(
+        find.textContaining('Tobias'),
+        findsWidgets,
+        reason:
+            'REPROVA NA ANCORA: a caixa nao desenhou o aviso, e o caso '
+            'mediria o arrasto sobre uma tela vazia.',
+      );
+      final antes = servidor.chamadasA('GET $caminhoDaLista').length;
+      expect(
+        antes,
+        1,
+        reason:
+            'REPROVA NA ANCORA: abrir a caixa pediu a lista $antes '
+            'vezes, e nao uma.',
+      );
+
+      // `fling` e nao `drag`: o `RefreshIndicator` so dispara quando o
+      // excesso de rolagem passa do limite dele E o gesto termina.
+      await tester.fling(
+        find.byType(Scrollable).first,
+        const Offset(0, 320),
+        1200,
+      );
+      await tester.pumpAndSettle();
+
+      final depois = servidor.chamadasA('GET $caminhoDaLista').length;
+      expect(
+        depois,
+        greaterThan(antes),
+        reason:
+            'REPROVA: o arrasto para baixo NAO refez a busca. Chamadas '
+            'a `GET $caminhoDaLista`: $antes antes do gesto e $depois '
+            'depois. Esta tela tem `Scaffold` e `ListView` proprios e '
+            'embrulha o proprio corpo com `ArrastarParaAtualizar` -- o '
+            'outro caminho do componente, o das cinco raizes de secao, '
+            'passa pelo slot da casca e e medido em '
+            '`test/widgets/arrastar_para_atualizar_test.dart`. Consertar '
+            'um nunca conserta o outro.',
+      );
+    });
+
+    testWidgets('e continua sem busca, filtro e ordenacao', (tester) async {
+      final servidor = ServidorDaCaixa(
+        rotasDe(
+          paginaDaCaixa(<Map<String, dynamic>>[
+            aviso(assunto: 'Tobias'),
+          ], naoLidos: 1),
+        ),
+      );
+      await abrirACaixa(tester, servidor: servidor);
+
+      // ANCORA: a tela carregou, e o `findsNothing` abaixo nao e vacuo.
+      expect(
+        find.textContaining('Tobias'),
+        findsWidgets,
+        reason: 'REPROVA NA ANCORA: a caixa nao carregou.',
+      );
+      expect(
+        find.byType(TextField),
+        findsNothing,
+        reason:
+            'REPROVA: a caixa nao tem busca. A ordem e uma so, '
+            'decrescente, e vem pronta do servidor. **O gesto de atualizar '
+            'entrou em 18/10 e nao abriu a porta para o resto do padrao de '
+            'listagem**: controle que recorta uma caixa de 90 dias '
+            'continua sendo controle sem funcao.',
+      );
+    });
 
     testWidgets(
       'CONTRAPESO: a pagina seguinte vem de `Carregar mais`, e o pedido leva a '

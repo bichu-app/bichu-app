@@ -584,8 +584,9 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     const pet = randomUUID();
     const intencao = randomUUID();
     fotoDePet = { tutor, pet, intencao };
-    await sql`insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
-              values (${tutor}::uuid, ${`bo-loja-tutor-${sufixo()}@exemplo.invalid`}, 'Tutor', now(), now(), now())`.execute(banco.db);
+    await sql`insert into users (id, email, display_name, email_verified_at, created_at, updated_at, public_ref)
+              values (${tutor}::uuid, ${`bo-loja-tutor-${sufixo()}@exemplo.invalid`}, 'Tutor', now(), now(), now(),
+                      translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`.execute(banco.db);
     await sql`insert into pets (id, owner_user_id, name, species_code, size_code)
               values (${pet}::uuid, ${tutor}::uuid, 'Rex', 'dog', 'M')`.execute(banco.db);
     await sql`insert into upload_intents (id, user_id, pet_id, kind, object_key, declared_type, max_bytes, expires_at)

@@ -94,6 +94,12 @@ abstract final class MensagensDeErro {
 
   static const String tentarDeNovo = 'Tentar de novo';
 
+  /// A saida dos dois desfechos de `If-Match` (412 e 428). **Nao e
+  /// [tentarDeNovo]**, e a diferenca nao e de palavra: tentar de novo com a
+  /// MESMA versao que acabou de ser recusada falha igual, para sempre. O que
+  /// resolve e reler.
+  static const String recarregar = 'Recarregar';
+
   static const String esqueciMinhaSenha = 'Esqueci minha senha';
 
   /// A saida comum as quatro telas de falha do codigo da tag (UX 12.4).
@@ -270,6 +276,41 @@ abstract final class MensagensDeErro {
           texto: 'Esta conversa está encerrada e não aceita mensagem nova. '
               'Você continua lendo o que foi escrito.',
           acao: 'Voltar para as mensagens',
+        ),
+      // `lost-case-closed` (410). **A pagina publica do caso NAO passa por
+      // aqui**, pela mesma razao da conversa encerrada: la o 410 e ESTADO e nao
+      // erro, e a tela diz o estado com a saida que o contrato nomeia em
+      // `next_action` (`register_stray_found_report`). Ver
+      // `telas/perdido/tela_do_caso_publico.dart`.
+      //
+      // O texto existe porque este catalogo e exaustivo e o compilador cobra, e
+      // ele diz o que o contrato permite dizer: o link nao leva mais a caso
+      // aberto, sem contar qual dos cinco motivos foi.
+      ProblemTipo.casoEncerrado => const MensagemDeErro(
+          texto: 'Este link não leva mais a um caso aberto.',
+          acao: 'Registrar um achado',
+        ),
+      // Os DOIS desfechos de `If-Match` (ADR-0027), e eles existem aqui para
+      // NAO cair na faixa generica. Sem estas duas entradas o 412 e o 428
+      // chegavam como `desconhecido` e a tela dizia "algo deu errado" -- a
+      // frase que esconde justamente o que resolve.
+      //
+      // `precondition-failed` (412) e COLISAO ENTRE PESSOAS: outra pessoa
+      // salvou depois de esta ter lido. O texto diz isso em linguagem de
+      // gente, sem `ETag`, sem `If-Match` e sem numero de versao, porque
+      // nenhuma dessas palavras e da pessoa que marcou um passeio no parque.
+      ProblemTipo.precondicaoFalhou => const MensagemDeErro(
+          texto: 'Alguém mexeu neste evento enquanto você olhava. Recarregue '
+              'para ver como ele está agora.',
+          acao: recarregar,
+        ),
+      // `precondition-required` (428) e defeito de QUEM CHAMOU: o app deixou
+      // de mandar a versao que leu. O texto nao culpa quem tocou no botao nem
+      // explica precondicao: diz o movimento que resolve.
+      ProblemTipo.precondicaoNecessaria => const MensagemDeErro(
+          texto: 'Não conseguimos confirmar a versão deste evento. Recarregue '
+              'e tente de novo.',
+          acao: recarregar,
         ),
       ProblemTipo.reautenticacaoNecessaria => const MensagemDeErro(
           texto: 'Confirme sua senha. Esta ação não pode ser desfeita, então '

@@ -11,7 +11,6 @@
 
 
 import 'package:bichu/api/modelos.dart';
-import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -258,21 +257,10 @@ Future<void> abrirRede(
   await tester.pumpAndSettle();
 }
 
-/// Abre o primeiro cartao cujo titulo e [titulo].
-Future<void> abrirCartao(WidgetTester tester, String titulo) async {
-  // O cartao e mais alto que a tela de teste: toca-se no TITULO dele, que
-  // esta dentro do mesmo `InkWell`.
-  final alvo = find.descendant(
-    of: find.byWidgetPredicate(
-      (w) => w is CartaoDoEncontro && w.encontro.titulo == titulo,
-    ),
-    matching: find.text(titulo),
-  );
-  await tester.ensureVisible(alvo);
-  await tester.pumpAndSettle();
-  await tester.tap(alvo);
-  await tester.pumpAndSettle();
-}
+// **`abrirCartao` SAIU** (19/10/2026). Ela tocava no titulo do cartao para
+// abrir a pagina de detalhe do evento, que nao existe mais: o cartao deixou de
+// ser tocavel por decisao do cliente. Nenhuma ajuda de teste finge abrir o que
+// nao abre -- isso daria um `tap` em nada e um `pumpAndSettle` verde.
 
 /// Todo o texto visivel da tela, numa string so, para as iscas procurarem o
 /// que NAO pode estar la.
@@ -312,3 +300,39 @@ String rotulosSemanticos(WidgetTester tester) {
   return texto;
 }
 
+/// Aplica recortes na folha de filtro da agenda, pelo gatilho do corpo.
+///
+/// **Ela existe porque as TRES ABAS da agenda viraram FILTRO em 19/10/2026**
+/// (decisao do cliente): `Próximos` e `Encerrados` sao opcoes do grupo
+/// `Quando`, e `Meus pedidos` virou `Meu envolvimento -> Só onde eu pedi`. Os
+/// casos que trocavam de aba com um toque passam a abrir a folha, marcar e
+/// aplicar -- tres passos, num lugar so, porque doze copias deles divergiriam
+/// na proxima mudanca da folha.
+///
+/// A conta de por que as tres cabem no filtro e `Minhas indicações` nao cabe
+/// esta em `rede/secao_da_rede.dart`.
+Future<void> aplicarNaFolha(
+  WidgetTester tester,
+  List<String> opcoes,
+) async {
+  await tester.tap(find.byIcon(Icons.tune));
+  await tester.pumpAndSettle();
+  for (final opcao in opcoes) {
+    await tester.tap(find.text(opcao));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(find.text('Aplicar'));
+  await tester.pumpAndSettle();
+}
+
+/// Os textos que a folha de filtro ABERTA pinta agora.
+List<String> textosDaFolha(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Text),
+      ),
+    )
+    .map((t) => t.data ?? '')
+    .where((t) => t.isNotEmpty)
+    .toList(growable: false);

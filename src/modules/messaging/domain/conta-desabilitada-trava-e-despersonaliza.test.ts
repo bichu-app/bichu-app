@@ -77,7 +77,17 @@ const NOMES: NomesDaConversa = {
   nomeDoAchador: 'Ana Paula Ribeiro',
   tutorDesabilitado: false,
   achadorDesabilitado: false,
+  // A EMENDA 3 DO ADR-0010 (19/10/2026) acrescentou três campos de entrada.
+  // Esta bancada e a de quem **não é conexão aceita**, que é o estado normal da
+  // conversa de achado: os dois recortados chegam nulos, como a consulta os
+  // entrega. O caso de conexão aceita vive em `conversa-mediada.test.ts`.
+  papelDoChamador: 'tutor',
+  apelidoDoOutro: null,
+  chaveDaFotoDoOutro: null,
 };
+
+/** A lista FECHADA de campos de um participante. Um quinto reprova. */
+const CHAVES_DO_PARTICIPANTE = ['displayName', 'handle', 'photoKey', 'role'];
 
 const PASSOU_A_TRAVA =
   'a conversa aceita mensagem nova com um participante desabilitado. O cliente pediu ' +
@@ -164,6 +174,9 @@ void describe('o participante desabilitado perde o nome, e fica o rótulo neutro
       nomeDoAchador: null,
       tutorDesabilitado: false,
       achadorDesabilitado: false,
+      papelDoChamador: 'tutor',
+      apelidoDoOutro: null,
+      chaveDaFotoDoOutro: null,
     });
     const desabilitados = participantesVisiveis({
       ...NOMES,
@@ -173,12 +186,44 @@ void describe('o participante desabilitado perde o nome, e fica o rótulo neutro
     assert.deepEqual(desabilitados, semNome);
   });
 
-  void it('o participante continua com DOIS campos: despersonalizar não acrescentou nada', () => {
+  void it('o participante tem a LISTA FECHADA de campos: despersonalizar não acrescentou nada', () => {
     // O item 7 do ADR-0010 proíbe qualquer coisa que permita agrupar os pets de
     // um mesmo tutor. Um campo novo tipo `desabilitado: true` por participante
     // seria um sinal estável por pessoa, que é exatamente o que ele fecha.
+    //
+    // **Eram dois campos e são quatro desde 19/10/2026** (emenda 3 do
+    // ADR-0010). A lista continua FECHADA, e trocar este literal continua
+    // custando uma decisão: um quinto campo reprova aqui.
     for (const p of participantesVisiveis({ ...NOMES, tutorDesabilitado: true })) {
-      assert.deepEqual(Object.keys(p).sort(), ['displayName', 'role']);
+      assert.deepEqual(Object.keys(p).sort(), CHAVES_DO_PARTICIPANTE);
     }
+  });
+
+  void it('ISCA: o lado DESABILITADO não traz foto nem apelido, mesmo sendo conexão aceita', () => {
+    // A medida: `conta_habilitada` das duas pontas está DENTRO do predicado de
+    // conexão aceita, na consulta -- então quando o outro lado desabilita a
+    // conta, `apelidoDoOutro` e `chaveDaFotoDoOutro` chegam NULOS aqui. Esta
+    // isca prova que o domínio não inventa foto para o lado que saiu, e prova
+    // o CONTRAPESO junto: com os dois campos preenchidos (conta habilitada), o
+    // mesmo lado traz os dois.
+    const saiu = participantesVisiveis({
+      ...NOMES,
+      achadorDesabilitado: true,
+      apelidoDoOutro: null,
+      chaveDaFotoDoOutro: null,
+    });
+    const achadorQueSaiu = saiu.find((p) => p.role === 'finder');
+    assert.equal(achadorQueSaiu?.displayName, 'Quem achou', 'o lado que saiu perde o nome');
+    assert.equal(achadorQueSaiu?.handle, null, 'o lado que saiu não traz apelido');
+    assert.equal(achadorQueSaiu?.photoKey, null, 'o lado que saiu não traz foto');
+
+    const ativo = participantesVisiveis({
+      ...NOMES,
+      apelidoDoOutro: 'ana-paula',
+      chaveDaFotoDoOutro: 'thumb/ana.jpg',
+    });
+    const achadorAtivo = ativo.find((p) => p.role === 'finder');
+    assert.equal(achadorAtivo?.handle, 'ana-paula', 'sem este contrapeso a isca passaria vazia');
+    assert.equal(achadorAtivo?.photoKey, 'thumb/ana.jpg');
   });
 });

@@ -30,20 +30,72 @@
  */
 import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 
-/** A janela de `period`, como o contrato a declara. */
+/**
+ * A janela de `period`, como o contrato a declara.
+ *
+ * **Nao ha membro para "janela aberta", e a ausencia e a decisao.** Janela
+ * aberta e a AUSENCIA de janela (`undefined` em [RecorteDePerdidos.janela]), e
+ * nao um valor a mais: um `'all'` aqui seria um segundo jeito de dizer o que a
+ * ausencia ja diz, e `HORAS_DA_JANELA` -- o `Record<JanelaDePerdidos, number>`
+ * do adaptador -- nao tem numero de horas para ele. Um membro sem hora num
+ * mapa de horas e a dobra onde o proximo leitor erra.
+ */
 export type JanelaDePerdidos = '24h' | '7d' | '30d';
 
 /**
- * O recorte pedido. `cidade` é obrigatória no contrato, e a obrigatoriedade é
- * de privacidade e não de desempenho: sem ela a operação seria um inventário
- * nacional de animais perdidos, que é a listagem que o ADR-0010 não quer.
+ * O recorte pedido.
+ *
+ * **`cidade` DEIXOU DE SER OBRIGATÓRIA EM 19/10/2026**, por decisão do cliente:
+ * *"o campo cidade do filtro da página pet não deve ser obrigatório, mas
+ * devemos filtrar pelos 20 últimos pets cadastrados"*.
+ *
+ * O texto que estava aqui dizia que a obrigatoriedade era "de privacidade e não
+ * de desempenho: sem ela a operação seria um inventário nacional de animais
+ * perdidos, que é a listagem que o ADR-0010 não quer". **Essa frase não estava
+ * no ADR-0010 e não está**, e isso foi medido antes de ela sair: o que o
+ * ADR-0010 exige é PRECISÃO máxima de bairro e cidade no que SAI (itens 4 e 5 e
+ * a linha "o nível máximo de precisão geográfica em superfície pública é bairro
+ * e cidade"), e a projeção pública continua inteira — `area_label` é o mesmo
+ * rótulo, não há coordenada, não há UUID. Nenhum item da lista do ADR-0010 fala
+ * do ESCOPO da listagem, e a leitura que virava obrigatoriedade era deste
+ * arquivo, não do documento.
+ *
+ * O que a ausência de cidade de fato amplia é **enumeração**, e isso fica dito
+ * em voz alta em vez de escondido: a lista nacional é varrível por quem pagina.
+ * A contenção não é nova e não foi afrouxada — são os três tetos por `ip` que o
+ * contrato declara (120/h, 600/24 h e 30/h para `q`), a paginação de 20 e o
+ * predicado `share_to_public_list`, que é o tutor dizendo que o caso DELE pode
+ * aparecer em lista.
  */
 export interface RecorteDePerdidos {
-  readonly cidade: string;
+  /**
+   * A cidade pedida, ou **indefinida quando ninguém pediu nenhuma**.
+   *
+   * Indefinida é geografia ABERTA: o adaptador não põe predicado de cidade
+   * nenhum. É a mesma mecânica de [janela], e a simetria é deliberada — os dois
+   * campos opcionais desta porta significam "não recorte por isto", e nenhum
+   * dos dois tem valor-sentinela de "qualquer", porque sentinela voltaria em
+   * `applied_filters` como filtro que ninguém aplicou.
+   */
+  readonly cidade?: string | undefined;
   readonly bairro?: string | undefined;
   readonly especie?: EspecieDoCaso | undefined;
   readonly porte?: PorteDoCaso | undefined;
-  readonly janela: JanelaDePerdidos;
+  /**
+   * A janela PEDIDA, ou **indefinida quando ninguem pediu nenhuma**.
+   *
+   * Indefinida e **janela aberta**: o adaptador nao poe predicado de data
+   * nenhum. Decisao do cliente de 18/10/2026 (*"a pagina de pets nao deve
+   * trazer nenhum item do filtro por padrao, como esta atualmente por ultimos
+   * 30 dias"*), e ela vale desde o contrato: `period` perdeu o `default: 30d`
+   * em `api/openapi.yaml` no mesmo commit que este campo virou opcional.
+   *
+   * Nao ha padrao a repor nesta camada. Repor um aqui seria o servidor
+   * escolhendo o recorte que a pessoa nao escolheu -- o mesmo defeito que o
+   * `default` do contrato cometia um nivel acima, agora escondido em
+   * TypeScript em vez de YAML.
+   */
+  readonly janela?: JanelaDePerdidos | undefined;
   /** Busca parcial por **nome do pet**, e nunca por código de tag. */
   readonly termo?: string | undefined;
   readonly pagina: number;

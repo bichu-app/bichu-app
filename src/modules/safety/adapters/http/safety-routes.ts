@@ -1,5 +1,5 @@
 /**
- * As cinco rotas de bloquear e denunciar.
+ * As SEIS rotas de bloquear e denunciar.
  *
  * ## `404` E NUNCA `403`, E AQUI ISSO É O PRODUTO E NÃO SÓ O ADR-0021
  *
@@ -48,12 +48,50 @@ import { problemas } from '../../../../shared/http/errors.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { AlvoDaDenuncia } from '../../domain/motivos-da-denuncia.js';
 import { O_QUE_O_DENUNCIANTE_RECEBE } from '../../domain/o-denunciado-nao-e-avisado.js';
+import { comoIso } from '../../../../shared/time/clock.js';
+import type { PessoaQueEuBloqueei } from '../../ports/safety-repository.js';
 import type { AutorDoAto, SegurancaDaComunidade } from '../../application/seguranca-da-comunidade.js';
 
 export interface DependenciasDasRotasDeSeguranca {
   readonly seguranca: SegurancaDaComunidade;
   readonly autenticador: { autenticar(token: string): Promise<{ userId: UserId }> };
 }
+
+/**
+ * **A LISTA DE QUEM EU BLOQUEEI** (19/10/2026), e é a ÚNICA leitura da fatia.
+ *
+ * ## Por que ela existe, e o defeito que ela conserta
+ *
+ * O bloqueio é **simétrico** (`bloqueio_entre`), e a simetria tinha uma
+ * consequência que ninguém havia medido: quem bloqueia alguém também passa a
+ * receber `404` no perfil dessa pessoa. E o "Desbloquear" morava dentro do menu
+ * **daquele perfil** — que nunca mais abre. Ou seja: **bloquear era
+ * irreversível pelo aplicativo**.
+ *
+ * Decisão do cliente de 19/10/2026: a lista mora na gaveta do `Perfil` e o
+ * desbloqueio acontece ali, por `unblockUser` — que já existia e **não muda**.
+ * O que não se fez, de propósito, foi mexer na simetria: é ela que protege quem
+ * bloqueia por estar sendo perseguido.
+ *
+ * ## `/me/blocks`, e não `GET /users/{userRef}/blocks`
+ *
+ * O segundo endereço seria "esta pessoa está bloqueada?", que é uma pergunta
+ * sobre um par — e a resposta dela, para quem foi bloqueado, é o oráculo. Este
+ * endereço só tem um sujeito possível: quem chama.
+ *
+ * ## O teto é o de LEITURA, e não o de 60/24h de bloquear
+ *
+ * 600 por hora por conta, como as outras leituras de página desta casa. Ler a
+ * própria lista não é superfície de varredura: ela devolve exatamente o que quem
+ * chama escreveu, e nada mais existe para enumerar por ali.
+ */
+export const rotaDeQuemEuBloqueei = defineRoute({
+  operationId: 'listMyBlocks',
+  method: 'get',
+  path: '/me/blocks',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
+});
 
 /**
  * **60 por dia**, e o teto é generoso de propósito.
@@ -190,6 +228,68 @@ const CAMPO_E_CODIGO: Record<AlvoDaDenuncia, { field: string; code: string; mess
   },
 };
 
+/** Perfil é dado de duas pessoas, e esta lista é dado de quem chama: nada em cache compartilhado. */
+const SEM_CACHE = 'private, no-store';
+
+/** O teto de página do contrato, COPIADO de lá (`MyBlockPage.limit`). */
+const LIMITE_PADRAO = 20;
+const LIMITE_MAXIMO = 20;
+
+/**
+ * `page` e `limit` da consulta, com o padrão e o teto do contrato.
+ *
+ * **O `400` de valor fora da faixa NÃO nasce aqui, e foi medido:**
+ * `vigiarParametrosDasRotas` confere `minimum`/`maximum` contra o contrato
+ * antes de o manipulador existir, e `?limit=0` sai
+ * `400 validation-failed` com `{"field":"limit","code":"minimum"}` — medido à
+ * mão em 19/10/2026.
+ *
+ * Então o recorte abaixo é SEGUNDA linha, e não a primeira: ele existe para que
+ * um valor que chegue sem passar pelo validador (rota registrada sem a
+ * conferência, que é outro defeito) não vire `LIMIT NaN` nem uma página de
+ * tamanho arbitrário. Ele nunca inventa `400` — o contrato declara `default`, e
+ * cair no padrão é o comportamento declarado.
+ */
+function paginaPedida(request: FastifyRequest): { page: number; limit: number } {
+  const consulta = (request.query ?? {}) as Record<string, unknown>;
+  const inteiro = (valor: unknown): number | undefined => {
+    const n = Number(valor);
+    return Number.isInteger(n) && n >= 1 ? n : undefined;
+  };
+  const limite = inteiro(consulta['limit']) ?? LIMITE_PADRAO;
+  return {
+    page: inteiro(consulta['page']) ?? 1,
+    limit: limite > LIMITE_MAXIMO ? LIMITE_MAXIMO : limite,
+  };
+}
+
+/**
+ * Uma linha como `BlockedPerson` a declara: **QUATRO chaves, e nenhuma quinta**.
+ *
+ * **Exportada para a isca**, como os `comoResposta` da casa: nenhum portão deste
+ * repositório confere o CORPO da resposta, e chamar a projeção é o único jeito
+ * de medir em suíte o conjunto de chaves que atravessa a borda.
+ *
+ * O que NÃO está aqui, e cada ausência tem dono:
+ *
+ * - **foto** — a emenda 3 do ADR-0010 abriu a foto de perfil em uma superfície,
+ *   a conversa mediada, e **só entre conexões aceitas**. Bloqueado é o oposto
+ *   de conexão aceita;
+ * - **`pets_count` e `connections_count`** — são sinal de confiança de um
+ *   PERFIL, e a pergunta desta linha é "qual das pessoas que eu bloqueei é
+ *   esta". Contagem não identifica ninguém;
+ * - **`connection_state`** — desbloquear não devolve a conexão, e um estado aqui
+ *   convidaria a uma religação que a operação não faz.
+ */
+export function comoRespostaDoBloqueio(pessoa: PessoaQueEuBloqueei): Record<string, unknown> {
+  return {
+    public_ref: pessoa.publicRef,
+    handle: pessoa.handle,
+    display_name: pessoa.displayName,
+    blocked_at: comoIso(pessoa.bloqueadoEm),
+  };
+}
+
 export function registrarRotasDeSeguranca(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeSeguranca,
@@ -197,6 +297,29 @@ export function registrarRotasDeSeguranca(
   const porConta = {
     resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) },
   };
+
+  // A LISTA DE QUEM EU BLOQUEEI. **Não há parâmetro de pessoa e não há `404`**:
+  // o único sujeito possível desta rota é quem chama, e lista vazia é `200` com
+  // `items: []` — "não bloqueei ninguém" é uma resposta, não um erro.
+  registrarRota(
+    app,
+    rotaDeQuemEuBloqueei,
+    porConta,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autor = await autorDoAto(request, deps);
+      const pagina = paginaPedida(request);
+      const lista = await deps.seguranca.quemEuBloqueei(autor, pagina);
+      return reply
+        .status(200)
+        .header('Cache-Control', SEM_CACHE)
+        .send({
+          items: lista.items.map(comoRespostaDoBloqueio),
+          total: lista.total,
+          page: pagina.page,
+          limit: pagina.limit,
+        });
+    },
+  );
 
   registrarRota(app, rotaDeBloquear, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
     const autor = await autorDoAto(request, deps);

@@ -20,9 +20,34 @@ class BotaoPrimario extends StatelessWidget {
     super.key,
     this.carregando = false,
     this.critico = false,
+    this.icone,
+    this.nomeAcessivel,
   });
 
   final String rotulo;
+
+  /// Um glifo a ESQUERDA do rotulo, ou nulo para botao so de texto.
+  ///
+  /// Nulo e o padrao e continua sendo o caso comum: a acao primaria de uma tela
+  /// e a unica, e icone em botao unico de largura total nao distingue nada.
+  /// Ele existe para o caso em que o rotulo encurtou e o glifo passou a
+  /// carregar parte do sentido -- `Ligar` com o telefone, na pagina do local.
+  final IconData? icone;
+
+  /// O nome que o LEITOR DE TELA diz, quando ele precisa ser mais longo que o
+  /// rotulo visivel. Nulo usa [rotulo], que e o caso de quase toda tela.
+  ///
+  /// **Existe por um pedido de produto que encurtou um rotulo visivel.** O
+  /// botao da pagina do local mostra `Ligar` (cliente, 18/10/2026: o nome da
+  /// clinica nao deve se repetir dentro do botao) e precisa continuar
+  /// anunciando `Ligar para a Clinica Santa Barbara` -- um controle chamado so
+  /// `Ligar` e indistinguivel para quem chegou nele sem ver a tela
+  /// (WCAG 2.1 SC 4.1.2).
+  ///
+  /// **Nao use para dizer OUTRA coisa.** O SC 2.5.3 exige que o rotulo visivel
+  /// esteja contido no nome acessivel, para que comando de voz funcione: o
+  /// valor certo aqui comeca por [rotulo] e acrescenta contexto depois dele.
+  final String? nomeAcessivel;
 
   /// Nulo desabilita. **Nao desabilite por estado de rede**: o detector de
   /// offline erra, e deixar a pessoa sem caminho e pior que deixa-la tentar.
@@ -44,13 +69,18 @@ class BotaoPrimario extends StatelessWidget {
     // divergiram em silencio.
     final VoidCallback? acao = carregando ? null : aoTocar;
 
+    // O nome anunciado. `nomeAcessivel` nulo mantem o comportamento de sempre
+    // (o rotulo visivel e tambem o nome), e o sufixo de carregando continua
+    // sendo acrescentado ao nome que de fato sai -- e nao so ao rotulo curto.
+    final String nome = nomeAcessivel ?? rotulo;
+
     return Semantics(
       button: true,
       // `enabled` segue [acao], e nao [aoTocar]: enquanto seguia `aoTocar`, o
       // botao carregando se anunciava HABILITADO sem ter acao nenhuma, e o
       // leitor de tela oferecia um controle que nao responde.
       enabled: acao != null,
-      label: carregando ? '$rotulo, em andamento' : rotulo,
+      label: carregando ? '$nome, em andamento' : nome,
       excludeSemantics: true,
       // A LINHA QUE FALTAVA.
       //
@@ -86,6 +116,9 @@ class BotaoPrimario extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: BichuEspaco.e3),
+            ] else if (icone != null) ...<Widget>[
+              Icon(icone, size: BichuEspaco.e5),
+              const SizedBox(width: BichuEspaco.e2),
             ],
             Flexible(
               child: Text(

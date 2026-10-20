@@ -260,9 +260,31 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['processing', 'ready', 'rejected'],
   },
+  // AS DUAS LISTAS DE `purpose` SAO A MESMA LISTA, E ISSO E MEDIDO E NAO LIDO.
+  // `catalog_upload_intents.purpose` (o proposito declarado no envio) e
+  // `catalog_images.purpose` (o gravado na confirmacao) precisam aceitar o MESMO
+  // conjunto: a escrita que confirma exige o mesmo valor que a intencao trouxe
+  // (T9), e um proposito que um lado aceitasse e o outro nao viraria envio que
+  // some entre as duas tabelas. Conferido no banco em 19/10: as duas definicoes
+  // sao caractere a caractere iguais, nos mesmos seis valores e na mesma ordem.
+  // Quem mudar um lado muda o outro, e as duas migracoes de 18/10 fizeram isso.
   'public.catalog_images.catalog_images_proposito': {
     coluna: 'purpose',
-    valores: ['store_item', 'network_event'],
+    valores: [
+      'store_item',
+      'network_event',
+      // Os TRES de 18/10/2026, `20261018000008`, por dois pedidos do cliente do
+      // dia: logo e foto do profissional recomendado, e a foto do proprio
+      // usuario. Entraram na esteira que JA existia, de proposito: uma segunda
+      // tabela de imagem daria duas versoes de derivada, de higiene de EXIF, de
+      // teto de bytes e de varredura de vencidos.
+      'directory_logo',
+      'directory_photo',
+      'user_photo',
+      // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
+      // nove, visivel so ao dono.
+      'user_showcase',
+    ],
   },
   'public.pet_tags.pet_tags_revocation_reason_check': {
     coluna: 'revocation_reason',
@@ -541,10 +563,27 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'sanitize_status',
     valores: ['pendente', 'pronta', 'recusada', 'ausente'],
   },
-  // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio do painel.
+  // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio. **Nao e mais so
+  // "do painel"**: a `20261001000005` (ADR-0025 emenda 3) deu a esta tabela um
+  // segundo autor, `user_id`, e `user_photo`/`user_showcase` chegam por ele. O
+  // conjunto e o MESMO de `catalog_images_proposito` -- ver a nota la.
   'public.catalog_upload_intents.catalog_upload_intents_proposito': {
     coluna: 'purpose',
-    valores: ['store_item', 'network_event'],
+    valores: [
+      'store_item',
+      'network_event',
+      // Os TRES de 18/10/2026, `20261018000008`, por dois pedidos do cliente do
+      // dia: logo e foto do profissional recomendado, e a foto do proprio
+      // usuario. Entraram na esteira que JA existia, de proposito: uma segunda
+      // tabela de imagem daria duas versoes de derivada, de higiene de EXIF, de
+      // teto de bytes e de varredura de vencidos.
+      'directory_logo',
+      'directory_photo',
+      'user_photo',
+      // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
+      // nove, visivel so ao dono.
+      'user_showcase',
+    ],
   },
   'public.user_devices.user_devices_permissao': {
     coluna: 'push_permission',
@@ -598,6 +637,126 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // `src/modules/identity/ports/identity-repository.ts` e o tipo da coluna em
     // `src/shared/db/schema.ts`. Os três precisam andar juntos.
     valores: ['email_verify', 'password_reset', 'email_change', 'session_disavow'],
+  },
+
+  // =========================================================================
+  // O LOTE DE 18/10/2026: TRINTA E DUAS RESTRICOES QUE ENTRARAM COM A SUITE DE
+  // INTEGRACAO CEGA, E QUE SO APARECERAM QUANDO A VISAO VOLTOU
+  // =========================================================================
+  // Nove listas fechadas (aqui) e vinte e tres CHECKs do outro registro
+  // chegaram entre 18/10 e 19/10 -- `Loja`/plaquinha, leitura de conversa,
+  // caixa de notificacoes, conexao simetrica, apelido e as tres filas de
+  // denuncia. Elas nao passaram por este registro porque o `tsc` da suite de
+  // integracao estourava de memoria e NENHUM caso rodava: o portao que existe
+  // para quebrar o silencio estava, ele proprio, calado. O escopo de compilacao
+  // da branch base devolveu a execucao, e e por isso que elas aparecem todas
+  // no mesmo dia -- nao foi um lote descuidado, foi o alarme religado.
+
+  // 20261018000004, a entrega da plaquinha da coleira. Os TRES estados do
+  // transporte. `requested` e o estado de quem ainda nao despachou nada; os
+  // instantes que acompanham cada um estao nos CHECKs de coerencia do outro
+  // registro.
+  'public.collar_tag_requests.collar_tag_requests_entrega_conhecida': {
+    coluna: 'delivery_state',
+    valores: ['requested', 'in_transit', 'arrived'],
+  },
+
+  // 20261018000014, a leitura da conversa por participante. Os DOIS lados da
+  // conversa mediada, e so eles: `system` NAO entra, porque o sistema nao le --
+  // ele escreve. O terceiro papel vive em
+  // `conversation_messages_sender_role_conhecido`, que tem tres.
+  'public.conversation_reads.conversation_reads_role_conhecido': {
+    coluna: 'role',
+    valores: ['tutor', 'finder'],
+  },
+
+  // 20261018000021, o espaco de nomes do `@`. As TRES especies que dividem o
+  // mesmo espaco: pessoa, pet e as reservadas. `reservado` mora aqui, e nao
+  // numa lista em `src/`, porque lista no codigo nao impede `INSERT` por psql.
+  'public.handles.handles_kind_check': {
+    coluna: 'kind',
+    valores: ['pessoa', 'pet', 'reservado'],
+  },
+
+  // 20261018000020, a caixa de notificacoes. Os DEZ tipos de item. `broadcast`
+  // e o comunicado do painel e e o unico que nao nasce de um fato do tutor.
+  // Espelha o `enum` de `NotificationItem.item_kind` no contrato.
+  'public.notification_items.notification_items_tipo_conhecido': {
+    coluna: 'item_kind',
+    valores: [
+      'tag_scanned',
+      'found_reported',
+      'match_suggested',
+      'neighborhood_alert',
+      'event_join_requested',
+      'event_join_decided',
+      'event_cancelled',
+      'suggestion_decided',
+      'tag_request_updated',
+      'broadcast',
+    ],
+  },
+
+  // 20261018000030, a conexao simetrica com aceite. Os TRES estados do convite.
+  // Nao ha `cancelled`: desistir apaga a linha, porque convite retirado nao e
+  // fato que alguem precise reler. `rest_until` so existe em `declined`, e quem
+  // impoe isso e `user_connections_descanso_so_na_recusa`, no outro registro.
+  'public.user_connections.user_connections_estado_conhecido': {
+    coluna: 'state',
+    valores: ['pending', 'accepted', 'declined'],
+  },
+
+  // Mesma migracao. As TRES origens por onde um convite pode nascer, e a lista
+  // e fechada de proposito: pedir conexao exige ter estado junto em ALGO (um
+  // caso ancorado, um encontro ancorado, ou o codigo de presenca lido na hora).
+  // Sem a lista fechada, `origin` aceitaria texto livre e a ancora deixaria de
+  // ser auditavel.
+  'public.user_connections.user_connections_origem_fechada': {
+    coluna: 'origin',
+    valores: ['anchored_case', 'anchored_event', 'presence_code'],
+  },
+
+  // ---------------------------------------------------------------------
+  // 20261018000032, as TRES filas de denuncia (perfil, foto, publicacao).
+  // Os motivos sao LISTAS DIFERENTES de proposito: o que se denuncia num
+  // perfil nao e o que se denuncia numa foto. Juntar as tres numa lista so
+  // daria a cada fila motivos que nao se aplicam a ela, e e a fila que a
+  // moderacao minima le (decisao do cliente: moderacao fica na indicacao e na
+  // avaliacao, e estender exige evidencia DESTA fila).
+  // ---------------------------------------------------------------------
+  'public.photo_reports.photo_reports_reason_conhecido': {
+    coluna: 'reason',
+    valores: [
+      'nudity_or_sexual',
+      'child_at_risk',
+      'animal_violence',
+      // `i_am_in_it` e a denuncia de quem aparece na foto, e nao a de quem se
+      // ofendeu com ela: e o unico motivo desta fila cujo denunciante e o
+      // retratado.
+      'i_am_in_it',
+      'impersonation',
+      'other',
+    ],
+  },
+  'public.profile_reports.profile_reports_reason_conhecido': {
+    coluna: 'reason',
+    valores: [
+      'impersonation',
+      'harassment',
+      'pet_ransom_scam',
+      'minor_suspected',
+      'other',
+    ],
+  },
+  'public.publication_reports.publication_reports_reason_conhecido': {
+    coluna: 'reason',
+    valores: [
+      'offensive_or_discriminatory',
+      'scam_or_animal_sale',
+      'false_lost_pet_info',
+      'spam_or_repetition',
+      'other',
+    ],
   },
 };
 
@@ -1134,6 +1293,138 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((upload_ref IS NULL) OR (upload_ref ~ '^[A-Za-z0-9_-]{22}$'::text)))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
+
+  // =========================================================================
+  // O LOTE DE 18/10/2026 (segunda metade). Ver a nota em LISTAS_FECHADAS: estas
+  // vinte e tres entraram enquanto a suite de integracao nao rodava um caso, e
+  // aparecem juntas porque o alarme voltou junto.
+  // =========================================================================
+  // ---------------------------------------------------------------------
+  // 20261018000004, a entrega da plaquinha. Quatro CHECKs de COERENCIA entre o
+  // estado do transporte e os campos que ele governa. Nenhum e lista fechada:
+  // a lista (`requested`/`in_transit`/`arrived`) esta no primeiro registro, e
+  // estes quatro dizem o que cada estado OBRIGA.
+  // ---------------------------------------------------------------------
+  // Igualdade dos dois lados (`=` entre booleanos), e nao implicacao: `arrived`
+  // exige o instante E o instante exige `arrived`. Com implicacao so num
+  // sentido, uma linha `in_transit` com `delivered_at` preenchido passaria.
+  'public.collar_tag_requests.collar_tag_requests_chegada_tem_instante':
+    "CHECK (((delivery_state = 'arrived'::text) = (delivered_at IS NOT NULL)))",
+  'public.collar_tag_requests.collar_tag_requests_despacho_tem_instante':
+    "CHECK (((delivery_state = ANY (ARRAY['in_transit'::text, 'arrived'::text])) = (shipped_at IS NOT NULL)))",
+  // O transporte so sai do estado inicial depois de o pedido ter sido
+  // ATENDIDO: nao se despacha o que ninguem produziu.
+  'public.collar_tag_requests.collar_tag_requests_entrega_exige_atendimento':
+    "CHECK (((delivery_state = 'requested'::text) OR (status = 'fulfilled'::text)))",
+  // Codigo de rastreio antes de despachar e codigo que nao rastreia nada.
+  'public.collar_tag_requests.collar_tag_requests_rastreio_so_apos_sair':
+    "CHECK (((tracking_code IS NULL) OR (delivery_state <> 'requested'::text)))",
+  // ---------------------------------------------------------------------
+  // 20261018000014. `system_kind` so existe em mensagem do sistema, e o
+  // conjunto dos tipos de mensagem do sistema. O segundo e LISTA FECHADA
+  // DISFARCADA por estar sob um `IS NULL OR`: o catalogo nao a normaliza para a
+  // forma simples, entao ela cai aqui, com a definicao inteira fixada -- que e
+  // exatamente o caso que o cabecalho deste registro descreve.
+  // ---------------------------------------------------------------------
+  'public.conversation_messages.conversation_messages_especie_so_do_sistema':
+    "CHECK (((system_kind IS NULL) OR (sender_role = 'system'::text)))",
+  'public.conversation_messages.conversation_messages_system_kind_conhecido':
+    "CHECK (((system_kind IS NULL) OR (system_kind = ANY (ARRAY['scan_notice'::text, 'found_notice'::text, 'redaction_warning'::text]))))",
+  // ---------------------------------------------------------------------
+  // A RESOLUCAO DA FILA DE MODERACAO, nas quatro filas que existem
+  // (`conversation_reports` e `professional_review_reports` da
+  // `20261018000009`; `photo_reports`, `profile_reports` e
+  // `publication_reports` da `20261018000032`). As CINCO tem a MESMA dupla --
+  // `content_removed` / `dismissed` -- e as cinco estao sob `IS NULL OR`,
+  // porque denuncia aberta ainda nao tem resolucao. Fixadas uma a uma de
+  // proposito: e isso que faz a sexta fila, no dia em que existir, ter de
+  // escrever a linha dela aqui em vez de herdar o conjunto em silencio.
+  // ---------------------------------------------------------------------
+  'public.conversation_reports.conversation_reports_resolution_conhecida':
+    "CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['content_removed'::text, 'dismissed'::text]))))",
+  // ---------------------------------------------------------------------
+  // 20261018000021. Apelido de pessoa TEM dono -- sem isto, `kind = 'pessoa'`
+  // sem `user_id` seria indistinguivel de uma reservada sem estar na lista.
+  //
+  // **ESTE CHECK CONTRADIZIA O `ON DELETE SET NULL` da propria coluna**, e a
+  // contradicao foi medida em 19/10 (23514 em `DELETE FROM users` de quem tem
+  // apelido). A `20261019000004` conserta pelo lado que preserva as DUAS
+  // decisoes escritas: um gatilho transforma o apelido orfao em `reservado`
+  // antes de o CHECK ser avaliado, entao o apelido nao volta ao pool e nao
+  // sobra linha `pessoa` sem dono. O veredito medido do par esta em
+  // `PARES_DE_NULO_CONTRA_RESTRICAO`, em
+  // `chave-estrangeira-contra-restricao.test.ts`.
+  // ---------------------------------------------------------------------
+  'public.handles.handles_pessoa_tem_dono':
+    "CHECK (((kind <> 'pessoa'::text) OR (user_id IS NOT NULL)))",
+  // ---------------------------------------------------------------------
+  // 20261018000020. O endereco publico opaco do item e do comunicado da caixa
+  // de notificacoes: 20 a 32 simbolos de base64url. A FAIXA e maior que a de 22
+  // dos outros `ref` deste banco, e a diferenca e deliberada -- estes dois
+  // nascem de origens de comprimento diferente.
+  // ---------------------------------------------------------------------
+  'public.notification_broadcasts.notification_broadcasts_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  'public.notification_items.notification_items_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // ---------------------------------------------------------------------
+  // O TEXTO LIVRE DAS TRES FILAS DE DENUNCIA (20261018000032) nao aceita `<`
+  // nem `>`. E recusa no BANCO e nao escape na saida: o detalhe da denuncia e
+  // lido no painel, e um painel que recebesse marcacao dependeria de todo
+  // caminho de leitura escapar sempre. Anulavel porque detalhe e opcional.
+  // ---------------------------------------------------------------------
+  'public.photo_reports.photo_reports_detail_sem_html':
+    "CHECK (((detail IS NULL) OR (detail !~ '[<>]'::text)))",
+  'public.photo_reports.photo_reports_resolution_conhecida':
+    "CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['content_removed'::text, 'dismissed'::text]))))",
+  'public.professional_review_reports.professional_review_reports_resolution_conhecida':
+    "CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['content_removed'::text, 'dismissed'::text]))))",
+  'public.profile_reports.profile_reports_detail_sem_html':
+    "CHECK (((detail IS NULL) OR (detail !~ '[<>]'::text)))",
+  'public.profile_reports.profile_reports_resolution_conhecida':
+    "CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['content_removed'::text, 'dismissed'::text]))))",
+  // O ALVO da denuncia de perfil e o `users.public_ref` (22 simbolos de
+  // base64url), e NAO o `users.id`: ADR-0010 item 6 proibe UUID interno em
+  // saida publica, e a denuncia atravessa a superficie publica. Copia em valor
+  // e nao chave estrangeira, de proposito (ADR-0024): a fila continua
+  // agrupando pelo mesmo alvo depois do expurgo.
+  'public.profile_reports.profile_reports_subject_ref_forma':
+    "CHECK ((subject_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  'public.publication_reports.publication_reports_detail_sem_html':
+    "CHECK (((detail IS NULL) OR (detail !~ '[<>]'::text)))",
+  // O mesmo desenho para a publicacao denunciada: endereco opaco de 22
+  // simbolos, copiado em valor.
+  'public.publication_reports.publication_reports_ref_forma':
+    "CHECK ((publication_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  'public.publication_reports.publication_reports_resolution_conhecida':
+    "CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['content_removed'::text, 'dismissed'::text]))))",
+  // ---------------------------------------------------------------------
+  // 20261018000030, a conexao simetrica. Dois CHECKs de coerencia por
+  // IGUALDADE entre booleanos, e mais o formato do `ref`.
+  // ---------------------------------------------------------------------
+  // O descanso (a janela em que nao se pede de novo) existe EXATAMENTE em
+  // `declined`, nos dois sentidos: recusa sem descanso deixaria reenviar na
+  // hora, e descanso sem recusa seria castigo sem causa.
+  'public.user_connections.user_connections_descanso_so_na_recusa':
+    "CHECK (((state = 'declined'::text) = (rest_until IS NOT NULL)))",
+  // O endereco publico do convite, no mesmo molde de 22 simbolos.
+  'public.user_connections.user_connections_ref_opaca':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  // `pending` e exatamente "sem instante de resposta", nos dois sentidos: a
+  // alternativa seria um convite respondido que continua aparecendo como
+  // pendente, ou um pendente com data de resposta.
+  'public.user_connections.user_connections_resposta_coerente':
+    "CHECK (((state = 'pending'::text) = (responded_at IS NULL)))",
+  // ---------------------------------------------------------------------
+  // 20261018000031. O formato do ENDERECO PUBLICO DA PESSOA: 22 simbolos de
+  // base64url, 128 bits sorteados por linha. `NOT NULL` e SEM valor padrao de
+  // proposito -- quem cria a conta preenche, e um padrao no banco apagaria o
+  // freio que faz um caminho de criacao novo nao compilar sem preencher. E o
+  // que o ADR-0024 separa: `id` uuid primaria para dentro, endereco opaco ao
+  // lado para fora (ADR-0010 item 6).
+  // ---------------------------------------------------------------------
+  'public.users.users_public_ref_forma':
+    "CHECK ((public_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
 };
 
 /**
@@ -1343,6 +1634,38 @@ void describe('o registro cobre o banco: restrição nova sem entrada reprova, n
     assert.ok(
       naoSimples.size >= Object.keys(CHECKS_QUE_NAO_SAO_LISTA_FECHADA).length,
       `só ${String(naoSimples.size)} CHECKs não-lista reconhecidos: a classificação deixou de casar`,
+    );
+  });
+});
+
+void describe('as duas pontas da esteira de imagem aceitam o MESMO purpose', () => {
+  // POR QUE UM CASO SO PARA ISTO. `catalog_upload_intents.purpose` e o
+  // proposito DECLARADO no envio; `catalog_images.purpose` e o GRAVADO na
+  // confirmacao, e a escrita que confirma exige o mesmo valor (T9). Os dois
+  // conjuntos estao declarados em LISTAS_FECHADAS, cada um na sua entrada, e
+  // nada obrigava os dois a serem iguais: quem acrescentasse um proposito a
+  // UMA das migracoes passaria pelos dois casos de conjunto exato, porque cada
+  // um olha a sua lista. O envio entao nasceria aceito e a confirmacao
+  // recusaria com 23514 -- imagem que some entre as duas tabelas.
+  //
+  // Medido em 19/10: as duas definicoes sao iguais caractere a caractere, nos
+  // mesmos seis valores. Este caso existe para que continuem.
+  void it('os dois CHECK de purpose tem a MESMA definicao, caractere a caractere', () => {
+    const intencao = simples.get('public.catalog_upload_intents.catalog_upload_intents_proposito');
+    const imagem = simples.get('public.catalog_images.catalog_images_proposito');
+    assert.ok(intencao, 'catalog_upload_intents_proposito nao existe no banco como lista fechada');
+    assert.ok(imagem, 'catalog_images_proposito nao existe no banco como lista fechada');
+    assert.deepEqual(
+      [...imagem.valores].sort(),
+      [...intencao.valores].sort(),
+      'a intencao de envio e a imagem de catalogo deixaram de aceitar o mesmo `purpose`: ' +
+        'um proposito aceito num lado e recusado no outro e envio que some entre as duas ' +
+        'tabelas, com 23514 na confirmacao.',
+    );
+    // A metade que impede este caso de passar por lista vazia nos dois lados.
+    assert.ok(
+      intencao.valores.length >= 2,
+      'menos de dois propositos: o caso nao teve o que comparar',
     );
   });
 });

@@ -59,7 +59,7 @@ import {
 const CHAMADOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const DESDE = 1_790_000_000_000 as Instant;
-const PAGINA = { limit: 20, depoisDe: undefined };
+const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
 /**
  * Kysely sem banco: ele compila a consulta e não a executa.

@@ -3,262 +3,173 @@ import 'package:flutter/material.dart';
 import '../../api/modelos_rede.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
-import 'encontro_da_rede.dart';
 import 'pecas_da_rede.dart';
 
-/// O cartao de um encontro na agenda (design system 24.12.3, 24.13.1, 24.16 e
-/// 24.17).
+/// O cartao de um encontro na agenda: **a foto e o titulo** -- mais UMA
+/// palavra, e so quando o encontro foi cancelado.
 ///
 /// ```
-/// [ imagem 16:9 (capa ou banner)                      ]
-/// [ SÁB 27 SET ]                        [ situação ]
+/// [ imagem 16:9 (capa ou banner da marca) ]
+/// Cancelado                 <- SO em `status: cancelled`
 /// Título
-/// (agenda) Sábado, 27 de setembro · Das 9h às 11h
-/// (lugar)  Praça Benedito Calixto · Pinheiros
-/// A cerca de 1 km da sua região
-/// Resumo em duas linhas no máximo
-/// [ Gratuito ] [ Privado ]
 /// ```
 ///
-/// ## O privado nao aprovado e so titulo e data
+/// ## A palavra `Cancelado`, e por que ela e a excecao
 ///
-/// [TeaserDoPrivado] nao tem lugar, capa, horario, resumo nem valor, e o
-/// cartao **nao tem de onde tira-los**: o servidor nao manda (P19). A imagem e
-/// o banner da marca, a data vem sem hora, e o unico selo e `Privado`, que e o
-/// que explica por que o resto sumiu (24.16).
+/// A entrega de 19/10/2026 deixou o cartao com a foto e o titulo, e nada
+/// mais. Medi a consequencia e levei a pergunta fechada ao cliente: um evento
+/// cancelado ficava **indistinguivel** na lista, e fica em `Próximos` ate o
+/// fim previsto de proposito (o contrato diz que `cancelled` prevalece sobre
+/// o estado temporal *"para as pessoas confirmarem o cancelamento"*).
 ///
-/// ## A distancia
+/// A resposta dele, no mesmo dia: a palavra entra. O motivo, na frase que
+/// veio com a decisao: **um cartao limpo nao vale alguem sair de casa para um
+/// evento que nao existe.**
 ///
-/// So com [distanciaEmMetros], que so vem de `listNearbyNetworkEvents` (a
-/// regiao cadastrada, nunca o GPS). **Nunca em privado** (o teaser nem aceita o
-/// parametro), **nunca em encerrado nem em cancelado**.
+/// **Uma palavra, e literalmente isso.** Sem fundo, sem pilula, sem moldura,
+/// sem glifo, e sem a data ou o lugar de volta. O que existia antes era
+/// `DistintivoDeSituacao`, uma pilula invertida sobre a imagem, e ele NAO
+/// voltou -- nem ele nem os outros tres rotulos que ele sabia desenhar
+/// (`Acontecendo agora`, `Encerrado`). So `cancelado` ganha palavra, porque
+/// so ele e uma informacao que muda o que a pessoa vai FAZER.
+///
+/// **O cinza da foto nao voltou.** Ele saiu nesta mesma rodada porque, sem
+/// palavra nenhuma, uma foto em escala de cinza era sinal exclusivamente por
+/// cor (SC 1.4.1). A palavra resolve isso e abriria a porta para o cinza
+/// voltar como REFORCO -- a decisao de nao traze-lo esta no relato da
+/// entrega, e trazer e acrescentar `ColorFiltered` em
+/// [ImagemDoEncontroOuBanner] de novo.
+///
+/// ## Por que ele encolheu, e o que saiu
+///
+/// Pedido do cliente em 19/10/2026: *"você deve mostrar apenas a foto e o
+/// titulo do evento, sem informações adicionais ou pagina de detalhes do
+/// evento"*. Saiu, nesta ordem de cima para baixo: o bloco de dia sobre a
+/// imagem (`SÁB` / `27` / `SET`), o distintivo de situacao (`Acontecendo
+/// agora`, `Encerrado`, `Cancelado`), a linha de data e horario, a linha de
+/// lugar e bairro, a linha de distancia da regiao cadastrada, o resumo de
+/// duas linhas, o selo de valor (`Gratuito`, `R$ 15 por pet`), o selo
+/// `Privado` e a pilula de `Meus pedidos`.
+///
+/// ## E ele deixou de ser um botao
+///
+/// O mesmo pedido tirou a **pagina de detalhes do evento**. Sem destino, o
+/// `InkWell` e o `Semantics(button: true)` sairiam de qualquer forma pelo
+/// criterio 2 da BICHUS-62: controle sem desfecho nao fica nem habilitado nem
+/// desabilitado -- ele nao existe. O cartao e conteudo, e o titulo e o unico
+/// no que o leitor de tela para.
+///
+/// **Por isso nao ha mais `nomeAcessivel`.** Enquanto o cartao era um botao,
+/// ele precisava de um nome que dissesse o encontro inteiro numa parada de
+/// foco, com a situacao na frente (`Cancelado: ...`). Conteudo nao tem nome
+/// acessivel: tem o texto que esta escrito nele, e o que esta escrito e o
+/// titulo.
+///
+/// ## O publico e o privado desenham IGUAL
+///
+/// O `switch` de [EncontroDaRede] desapareceu com as linhas que o usavam:
+/// [TeaserDoPrivado] nao tem capa (entra o banner da marca) e o publico pode
+/// nao ter (entra o mesmo banner). Nenhum dos dois tem mais nada a mostrar.
 class CartaoDoEncontro extends StatelessWidget {
-  const CartaoDoEncontro({
-    required this.encontro,
-    super.key,
-    this.distanciaEmMetros,
-    this.estadoDoPedido,
-    this.anoCorrente,
-  });
+  const CartaoDoEncontro({required this.encontro, super.key});
 
   final EncontroDaRede encontro;
 
-  /// Da regiao cadastrada. Ignorada em privado, encerrado e cancelado.
-  final int? distanciaEmMetros;
+  /// A UNICA palavra de situacao que o cartao desenha.
+  ///
+  /// `Acontecendo agora` e `Encerrado` **nao tem equivalente aqui**, e a
+  /// ausencia e a decisao: a data que o cartao nao mostra mais tambem nao
+  /// dizia essas duas, e nenhuma das duas muda o que a pessoa faz. Cancelado
+  /// muda.
+  static const String rotuloDeCancelado = 'Cancelado';
 
-  /// So em `Meus pedidos`: a pilula `Pedido enviado` / `Pedido aprovado`.
-  final EstadoDoPedido? estadoDoPedido;
-
-  /// Para testes; nulo usa o ano do relogio (so formato, nunca situacao).
-  final int? anoCorrente;
-
-  /// A distancia que o cartao de fato mostra, ou nula.
-  static int? distanciaVisivel(EncontroDaRede encontro, int? metros) {
-    if (metros == null) return null;
-    if (encontro is! EncontroPublico) return null;
-    final s = encontro.situacao;
-    if (s == SituacaoDoEncontro.encerrado ||
-        s == SituacaoDoEncontro.cancelado) {
-      return null;
-    }
-    return metros;
-  }
-
-  /// O nome acessivel: a situacao primeiro, quando houver (`Cancelado:`),
-  /// para a lista falada nao anunciar como convite um encontro que nao vai
-  /// acontecer (UX 28.6).
-  String nomeAcessivel(int ano) {
-    final partes = <String>[];
-    final situacao = rotuloDaSituacao(encontro.situacao);
-    final titulo = situacao == null ? encontro.titulo : '$situacao: ${encontro.titulo}';
-    partes.add(titulo);
-    final e = encontro;
-    switch (e) {
-      case EncontroPublico():
-        partes.add('${e.dia.dataLonga(anoCorrente: ano)}, ${e.horario.faixa}');
-        partes.add(e.lugar.lugarEBairro);
-        final d = distanciaVisivel(e, distanciaEmMetros);
-        if (d != null) partes.add(DistanciaDaRegiao.falado(d));
-        partes.add(e.resumo);
-        partes.add(e.entrada.rotuloDoSelo);
-      case TeaserDoPrivado():
-        partes.add(e.dia.dataLonga(anoCorrente: ano));
-        partes.add('Privado');
-    }
-    final pedido = estadoDoPedido;
-    final rotuloDoPedido = pedido?.rotulo;
-    if (rotuloDoPedido != null) partes.add(rotuloDoPedido);
-    return partes.join('. ');
-  }
+  /// O nome que o leitor de tela diz: o titulo, com `Cancelado: ` na frente
+  /// quando for o caso.
+  ///
+  /// **A situacao vem PRIMEIRO**, e isso e a regra de UX 28.6 que o cartao
+  /// antigo ja seguia: a lista falada nao pode anunciar como convite um
+  /// encontro que nao vai acontecer. Quem navega por foco ouve o impedimento
+  /// antes do nome, e nao depois de ter decidido ir.
+  ///
+  /// **Por que esta string e MONTADA, e nao deixada para o `MergeSemantics`.**
+  /// Medido nesta entrega, e o resultado foi um defeito: com
+  /// `MergeSemantics` em volta da coluna `Cancelado` + titulo, a arvore
+  /// publicava `label=Cancelado` e **o titulo desaparecia** -- o leitor de
+  /// tela anunciaria "Cancelado" e a pessoa nao saberia de QUAL evento. Era
+  /// pior que antes da palavra existir. O no e montado a mao por isso, e o
+  /// caso `ISCA -- cancelado tem a palavra, e o leitor de tela diz as DUAS
+  /// coisas` cobra as duas metades do rotulo.
+  String get nomeAcessivel => encontro.situacao == SituacaoDoEncontro.cancelado
+      ? '$rotuloDeCancelado: ${encontro.titulo}'
+      : encontro.titulo;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final escuro = Theme.of(context).brightness == Brightness.dark;
-    final ano = anoCorrente ?? DateTime.now().year;
     final e = encontro;
     final cancelado = e.situacao == SituacaoDoEncontro.cancelado;
-    final situacao = e.situacao;
-    final distancia = distanciaVisivel(e, distanciaEmMetros);
 
-    final corpo = <Widget>[
-      Text(e.titulo, style: textos.titleMedium),
-      const SizedBox(height: BichuEspaco.e1),
-      _LinhaComIcone(
-        icone: Icons.event_outlined,
-        texto: switch (e) {
-          EncontroPublico() =>
-            '${e.dia.dataLonga(anoCorrente: ano)} · ${e.horario.faixa}',
-          TeaserDoPrivado() => e.dia.dataLonga(anoCorrente: ano),
-        },
-      ),
-      if (e is EncontroPublico) ...<Widget>[
-        const SizedBox(height: BichuEspaco.e1),
-        _LinhaComIcone(icone: Icons.place_outlined, texto: e.lugar.lugarEBairro),
-        if (distancia != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e1),
-          Text(
-            DistanciaDaRegiao.texto(distancia),
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-        ],
-        const SizedBox(height: BichuEspaco.e1),
-        Text(
-          e.resumo,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+    return Material(
+      color: cores.surface,
+      borderRadius: BorderRadius.circular(BichuRaio.lg),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(BichuRaio.lg),
+          border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+          boxShadow: escuro ? null : BichuSombra.sm,
         ),
-      ],
-      const SizedBox(height: BichuEspaco.e2),
-      Wrap(
-        spacing: BichuEspaco.e2,
-        runSpacing: BichuEspaco.e2,
-        children: <Widget>[
-          if (e is EncontroPublico) seloDeValor(e.entrada),
-          if (e is TeaserDoPrivado) seloPrivado,
-          if (estadoDoPedido?.rotulo case final String rotulo)
-            _PilulaDoPedido(rotulo: rotulo),
-        ],
-      ),
-    ];
-
-    return Semantics(
-      button: true,
-      label: nomeAcessivel(ano),
-      onTap: () => _abrir(context),
-      excludeSemantics: true,
-      child: Material(
-        color: cores.surface,
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => _abrir(context),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(BichuRaio.lg),
-              border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-              boxShadow: escuro ? null : BichuSombra.sm,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            ImagemDoEncontroOuBanner(
+              // O teaser nao tem capa: o banner entra no lugar.
+              url: e is EncontroPublico ? e.urlDaCapa : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Stack(
+            // **UMA PARADA DE FOCO, com o rotulo montado por [nomeAcessivel].**
+            //
+            // `Semantics` com `excludeSemantics` e nao `MergeSemantics`: a
+            // prosa de [nomeAcessivel] explica a medicao que decidiu isso --
+            // o merge comia o titulo e deixava so a palavra.
+            //
+            // `excludeSemantics` aqui **nao apaga acao nenhuma**: o cartao
+            // deixou de ser tocavel em 19/10/2026, e nao ha `onTap`,
+            // `TextButton` nem `InkWell` embaixo para ele engolir. Foi
+            // exatamente esse o defeito que o `BotaoPrimario` pagou uma vez
+            // (`test/a11y/acao_de_controle_test.dart`), e e por isso que a
+            // ausencia esta escrita aqui em vez de ficar implicita.
+            //
+            // A ordem vale pelos dois canais: `Cancelado` esta ACIMA do
+            // titulo na tela, e na frente dele no rotulo falado.
+            Semantics(
+              label: nomeAcessivel,
+              excludeSemantics: true,
+              child: Padding(
+                padding: const EdgeInsets.all(BichuEspaco.e4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    ImagemDoEncontroOuBanner(
-                      // O teaser nao tem capa: o banner entra no lugar.
-                      url: e is EncontroPublico ? e.urlDaCapa : null,
-                      cancelado: cancelado,
-                    ),
-                    Positioned(
-                      left: BichuEspaco.e3,
-                      top: BichuEspaco.e3,
-                      child: BlocoDoDia(dia: e.dia),
-                    ),
-                    if (situacao != null && rotuloDaSituacao(situacao) != null)
-                      Positioned(
-                        right: BichuEspaco.e3,
-                        top: BichuEspaco.e3,
-                        child: DistintivoDeSituacao(situacao: situacao),
+                    if (cancelado) ...<Widget>[
+                      // Neutro de proposito: a PALAVRA e a informacao, e
+                      // nenhuma cor diz nada (design system 24.13.1). Sem
+                      // `errorContainer`, sem vermelho e sem urgencia -- o
+                      // evento nao deu erro, ele foi cancelado.
+                      Text(
+                        rotuloDeCancelado,
+                        style: textos.labelMedium
+                            ?.copyWith(color: cores.textPrimary),
                       ),
+                      const SizedBox(height: BichuEspaco.e1),
+                    ],
+                    Text(e.titulo, style: textos.titleMedium),
                   ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(BichuEspaco.e4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: corpo,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
-      ),
-    );
-  }
-
-  void _abrir(BuildContext context) {
-    TelaDoEncontro.abrir(
-      context,
-      encontro.slug,
-      distanciaEmMetros: distanciaVisivel(encontro, distanciaEmMetros),
-    );
-  }
-}
-
-class _LinhaComIcone extends StatelessWidget {
-  const _LinhaComIcone({required this.icone, required this.texto});
-
-  final IconData icone;
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Icon(icone, size: BichuEspaco.e5, color: cores.textSecondary),
-        const SizedBox(width: BichuEspaco.e2),
-        Expanded(
-          child: Text(
-            texto,
-            style: textos.bodySmall?.copyWith(color: cores.textPrimary),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A pilula de `Meus pedidos`: `Pedido enviado` ou `Pedido aprovado`.
-///
-/// **Nao existe pilula de recusa**: o servidor manda `requested` para o
-/// recusado, e esta pilula diz `Pedido enviado` nos dois casos (UX 28.7.3).
-class _PilulaDoPedido extends StatelessWidget {
-  const _PilulaDoPedido({required this.rotulo});
-
-  final String rotulo;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: BichuEspaco.e3,
-        vertical: BichuEspaco.e1,
-      ),
-      decoration: BoxDecoration(
-        color: cores.primaryContainer,
-        borderRadius: BorderRadius.circular(BichuRaio.full),
-      ),
-      child: Text(
-        rotulo,
-        style: textos.labelMedium?.copyWith(color: cores.onPrimaryContainer),
       ),
     );
   }

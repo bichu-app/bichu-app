@@ -217,7 +217,8 @@ void main() {
     });
 
     // -------------------------------------------------------------------
-    // `Perto`: os controles de listagem, no app montado
+    // A ABA `Comunidade` da `Rede` (o que era `Perto`): os controles de
+    // listagem, no app montado
     // -------------------------------------------------------------------
     //
     // Os tres controles novos -- o campo de busca, o icone de filtro e o de
@@ -226,10 +227,15 @@ void main() {
     // true)`, que e a forma EXATA dos quatro `btn=true tap=false` que este
     // app ja teve. So a tela montada enxerga isso.
 
-    testWidgets('Perto, com a lista carregada', (tester) async {
+    testWidgets('Comunidade, com a lista carregada', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
 
       // 5 destinos da barra + `Filtrar` + `Ordenar` + `Ligar para ...`.
       //
@@ -245,10 +251,15 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('Perto, a folha de filtros aberta', (tester) async {
+    testWidgets('Comunidade, a folha de filtros aberta', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
       // **`Filtrar e ordenar, Mais perto`**, e nao `Filtrar`. Desde 17/10 ha
       // UM controle de recorte na barra, e o nome acessivel dele e composto
       // pelo verbo mais o estado (`barra_de_listagem.dart`, linhas 313-331):
@@ -264,10 +275,15 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('Perto, a folha de ordenacao aberta', (tester) async {
+    testWidgets('Comunidade, a folha de ordenacao aberta', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
       // **A ordem passou a morar DENTRO da folha de filtros em 17/10**, e o
       // controle proprio de ordenacao deixou de existir: nao ha mais um
       // `Ordenar, Mais perto` na barra para tocar, e o `byTooltip` dele achava

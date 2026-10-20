@@ -30,19 +30,127 @@
 /// Ver aquele arquivo para a tabela inteira.
 ///
 /// ---------------------------------------------------------------------------
-/// ## O padrao de listagem, e a excecao que o cliente abriu
+/// ## O PADRAO DE LISTAGEM VALE AQUI (decisao do cliente, 18/10/2026)
 ///
-/// Sem busca, sem filtro e sem ordenacao: nao ha o que recortar numa lista de
-/// conversas, e um campo de busca aqui seria controle sem funcao. **Sem texto
-/// de apoio** -- o cliente mandou removê-los em 18/10 --, e por isso a lista
-/// vazia e **uma linha** e nada mais.
+/// Nas palavras dele: *"adicione um campo de busca/filtro na secao de
+/// mensagens, para o usuario conseguir filtrar quando tiver muitos usuarios"*.
 ///
-/// ## NENHUM AVATAR DE FOTO
+/// **Isto REVERTE o que este arquivo dizia** -- "sem busca, sem filtro e sem
+/// ordenacao: nao ha o que recortar numa lista de conversas" --, e a reversao e
+/// dele. Quem abrir este arquivo em tres meses e achar que a regra foi
+/// quebrada por descuido esta lendo o commit errado: este paragrafo e o
+/// registro.
 ///
-/// Ver `api/modelos_conversa.dart`: o contrato declara em dois lugares que
-/// `participants` **nunca** traz foto de perfil. A marca e a inicial do nome,
-/// igual para os dois lados, e o lado despersonalizado (`Tutor` / `Quem
-/// achou`) ganha a marca em cinza desligado -- forma, nao dado novo.
+/// O desenho que sai disto:
+///
+/// - **O campo de busca e o da [BarraDeListagem]**, o componente compartilhado
+///   por toda pagina com registros, e nao um `TextField` desenhado aqui. Ele
+///   fica no topo do CORPO, nunca na barra de topo.
+/// - **A busca e do SERVIDOR** (`AlcanceDaBusca.servidor`): `q` entrou no
+///   contrato em `listConversations`, e recorta por nome do pet e por nome de
+///   exibicao do outro lado, dentro das conversas de quem chamou. Recortar na
+///   memoria seria pior do que nada aqui -- com rolagem infinita de dez em dez,
+///   a busca olharia so as dez primeiras, que e exatamente o caso que o pedido
+///   ("quando tiver muitos usuarios") existe para resolver.
+/// - **NAO HA FILTRO E NAO HA ORDENACAO**, e a ausencia e do componente e nao
+///   um esquecimento: `listConversations` nao declara nenhum recorte de lista
+///   fechada, e a ordem e uma so. A propria `BarraDeListagem` nao desenha o
+///   gatilho nesses dois casos ("o filtro sem opcao", "a ordenacao com uma
+///   opcao so"), porque seria um toque que termina em nada. O dia em que o
+///   contrato ganhar um recorte, passar `filtro:` aqui e uma linha.
+/// - **Sem texto de apoio** -- o cliente mandou removê-los em 18/10 --, e por
+///   isso a lista vazia e **uma linha** e nada mais.
+///
+/// ## A ORDEM E A DA ULTIMA MENSAGEM, E ELA VEM DO SERVIDOR
+///
+/// Pedido do cliente no mesmo dia: *"ordene por ultima mensagem"*. A chave e
+/// `coalesce(last_message_at, opened_at)` e mora no `ORDER BY` da consulta
+/// (`kysely-conversation-repository.ts`, `CHAVE_DA_ORDEM`).
+///
+/// **Esta tela nao reordena nada.** Com rolagem infinita, ordenar aqui
+/// ordenaria so o que ja chegou: a pagina seguinte entraria com itens mais
+/// novos embaixo dos mais antigos, e a lista se embaralharia a cada rolada.
+///
+/// ## ROLAGEM INFINITA, DE DEZ EM DEZ
+///
+/// Numero do cliente (*"trazendo as 10 ultimas conversas e incrementando por
+/// 10"*), e nao escolha de engenharia: ver `ConversasApi.limiteDaLista`. O
+/// botao `Carregar mais conversas` **saiu**; o que ficou no rodape e o giro de
+/// carregamento, e a faixa de erro com `Tentar de novo` para o caso em que a
+/// pagina seguinte nao chega -- rolagem que falha em silencio e uma lista que
+/// simplesmente para de crescer.
+///
+/// ## A FOTO ENTROU EM 19/10/2026, E SO ENTRE CONEXOES ACEITAS
+///
+/// **ESTE PARAGRAFO SUBSTITUI A RECUSA QUE ESTAVA AQUI**, e a recusa continua
+/// escrita abaixo porque o motivo dela continua valendo. Quem abrir este
+/// arquivo e achar que a regra foi quebrada por descuido esta lendo o commit
+/// errado: este paragrafo e o registro.
+///
+/// O cliente pediu em 18/10: *"na conversa, traga a foto do usuario como icone
+/// das conversas, e a imagem clicada levando ao perfil"*. Esta frente recusou a
+/// foto, com as tres medidas abaixo, e **estava certa**. O conflito foi levado
+/// ao cliente com as tres citacoes na mesa, e a decisao dele, de 19/10/2026:
+///
+/// > "a foto aparece SO quando as duas pessoas ja aceitaram conexao"
+///
+/// Em conversa de achado com um estranho, e em qualquer conversa com quem nao e
+/// conexao aceita, **nao aparece** -- fica a inicial que ja estava aqui. E
+/// emenda deliberada e nao revogacao: o motivo das tres medidas abaixo e o
+/// golpe do falso achador, e ele mora exatamente no estado em que a foto
+/// continua nao entrando. Esta e a **emenda 3 do ADR-0010**.
+///
+/// Os cinco estados sem foto, medidos no CORPO da resposta (ver
+/// `tests/integration/foto-na-conversa-entre-conexoes.test.ts`): nao-conexao,
+/// pedido pendente ou recusado, achador sem conta, par bloqueado e conta
+/// desabilitada do outro lado.
+///
+/// **O que o servidor faz, e que esta tela nao repete:** o recorte esta na
+/// clausula `WHERE` da consulta (ADR-0021). `photo_icon_url` chega nulo ou
+/// chega de uma conexao aceita, e esta tela nao tem como saber a diferenca --
+/// nem precisa.
+///
+/// ## AS TRES MEDIDAS DA RECUSA ORIGINAL, que a emenda estreitou e nao apagou:
+///
+/// 1. **O contrato proibe, por extenso e em dois pontos.**
+///    `Conversation/properties/participants` e
+///    `FinderConversation/properties/participants` declaram `display_name`
+///    como *"Primeiro nome ou apelido. **Nunca** sobrenome completo, telefone,
+///    e-mail nem foto de perfil"*. `participants[]` tem **dois** campos, e nao
+///    existe um terceiro para uma URL de imagem cair.
+/// 2. **A decisao registrada proibe avatar de terceiro** (ADR-0025, decisao 2:
+///    *"nao existe campo com pessoas, em forma nenhuma: nem nome, nem primeiro
+///    nome, nem apelido, nem `slug`, nem avatar, nem contagem por bairro"*), e
+///    e por isso que `Me.photo.url` e a UNICA resposta do contrato que traz
+///    foto de pessoa -- e quem a ve e o dono (ver `api/me_api.dart`).
+/// 3. **O desenho da frente de perfil recusa esta superficie por nome.** O
+///    plano de `feat/comunidade-perfil-e-conexao` lista as tres telas em que o
+///    avatar pode aparecer (o proprio perfil, o perfil de outra pessoa, a
+///    lista de conexoes e de pedidos) e diz, da conversa mediada: *"o avatar
+///    **nao** entra na conversa mediada, e eu recomendo que **nao entre
+///    nunca**"*, por tres razoes -- o achador pode nao ter conta (canal
+///    assimetrico), a conversa vive sob a sombra do golpe do falso achador
+///    (rosto e insumo de engenharia social), e e o canal que **atravessa o
+///    bloqueio**.
+///
+/// **O que a emenda de 19/10 mudou nas tres:** nada do motivo, e so o alcance.
+/// (1) o contrato continua dizendo que o participante nao traz foto de perfil,
+/// e agora tem a excecao escrita ao lado, nomeada, com os dois campos novos;
+/// (2) o ADR-0025 decisao 2 **nao foi tocado** -- o escopo dele e a superficie
+/// da `Rede`, e a `Rede` continua sem avatar; (3) a recomendacao da frente de
+/// perfil (*"nao entre nunca"*) foi levada ao cliente e ele decidiu o
+/// contrario, com o risco na mesa -- e a decisao dele vale, estreitada ao
+/// estado em que o risco nao existe.
+///
+/// **O icone agora desenha a foto quando ela vem, e a inicial quando nao vem.**
+/// O lado despersonalizado (`Tutor` / `Quem achou`) continua com a marca em
+/// cinza desligado, e continua sem foto -- o servidor nao a manda.
+///
+/// **O TOQUE** continua num ponto unico e nomeado,
+/// [PortaDoPerfilDoParticipante], e ele esta LIGADO desde 19/10: o destino e
+/// `Rotas.perfilDe(apelido)`, e a fiacao mora em `roteamento/rotas.dart`
+/// (`ligarPortaDoPerfilDoParticipante`). Com apelido nulo o destino e nulo e o
+/// icone volta a ser decorativo.
 library;
 
 import 'package:flutter/material.dart';
@@ -56,9 +164,11 @@ import '../../escopo.dart';
 import '../../formato/quando.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
-import '../../widgets/faixa_de_aviso.dart';
-import '../../widgets/botao_primario.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
+import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/convite_para_entrar.dart';
+import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
 
 /// Os enderecos da area de mensagens, num lugar so.
 ///
@@ -85,6 +195,77 @@ abstract final class RotasDeMensagens {
   /// vira uma rota que nao existe.
   static String conversaDe(String conversaId) =>
       '/mensagens/${Uri.encodeComponent(conversaId)}';
+}
+
+/// **O PONTO UNICO DO TOQUE NO ICONE DA CONVERSA.** Ligar aqui, e so aqui.
+///
+/// ---------------------------------------------------------------------------
+/// ## Por que ele existe em vez de uma rota escrita na linha da lista
+///
+/// O cliente pediu em 18/10/2026: *"faca a imagem ser clicada levando o
+/// usuario para o perfil do usuario, assim como na barra principal superior"*.
+///
+/// **MEDIDO em `origin/development`, e o destino NAO EXISTE:**
+///
+/// - `roteamento/rotas.dart` nao tem rota de perfil de TERCEIRO. As 46 rotas
+///   declaradas incluem `/perfil`, `/perfil/dados`, `/perfil/achados` e
+///   `/perfil/minhas-fotos` -- todas da PROPRIA conta -- e nenhuma que receba
+///   outra pessoa por parametro.
+/// - A comparacao do cliente com a barra de topo **nao serve de atalho**:
+///   `AvatarDaConta`, em `telas/casca_com_abas.dart`, tem o nome acessivel
+///   `Sua conta` e faz `GoRouter.of(context).go(Rotas.perfil)`. Aquela foto
+///   leva a pessoa para a conta DELA. Reusar a mesma rota aqui abriria a
+///   propria conta ao tocar no icone de outra pessoa -- a mesma rota, e o
+///   destino errado.
+/// - A tela de perfil de terceiro e da branch `feat/comunidade-perfil-e-conexao`,
+///   por decisao do cliente. Medido: naquela branch ha **dois arquivos** de
+///   diferenca contra a base (`design/prototipos/conexao-e-vitrine/PLANO.md` e
+///   `index.html`) -- o desenho existe, a tela nao. Construir uma aqui
+///   duplicaria aquele trabalho e colidiria na mescla.
+///
+/// ## O que este tipo faz, e o que ele NAO faz
+///
+/// Ele e a **unica** decisao de destino do icone. [destino] devolve o endereco
+/// do perfil daquele participante, ou `null` quando nao ha endereco.
+///
+/// **`null` NAO desenha um controle.** `MarcaNeutraDoParticipante` fica
+/// decorativa, exatamente como hoje: um icone que se anuncia como botao e nao
+/// leva a lugar nenhum e o toque sem desfecho que o criterio 2 da BICHUS-62
+/// proibe, e um aviso de "em breve" e o mesmo beco com uma frase em cima.
+///
+/// ## COMO LIGAR, NA MESCLA, numa linha
+///
+/// ```dart
+/// PortaDoPerfilDoParticipante.destino =
+///     (outro) => Rotas.perfilDe(outro.handle);
+/// ```
+///
+/// Em `main.dart` ou no `Escopo`, uma vez. Nada mais neste arquivo muda: a
+/// fiacao do toque, o rotulo acessivel e o alvo de 48 dp ja estao de pe, e as
+/// iscas de `test/mensagens/foto_da_conversa_test.dart` provam os dois estados.
+///
+/// **Campo e nao metodo**, de proposito: funcao estatica nao se troca, e sem
+/// troca nao existe isca que prove que o toque navega. O preco e um estado
+/// global, e ele e aceitavel porque e UM, e porque e exatamente o que a mescla
+/// precisa alcancar.
+abstract final class PortaDoPerfilDoParticipante {
+  /// O endereco do perfil de [outro], ou `null` quando ele nao existe.
+  ///
+  /// **LIGADA EM 19/10/2026**, na mescla com a frente de perfil: o destino e
+  /// `Rotas.perfilDe(outro.handle)`, e quem liga e
+  /// `ligarPortaDoPerfilDoParticipante`, em `roteamento/rotas.dart`. Este
+  /// arquivo continua sem conhecer `Rotas`, que e o ponto do tipo.
+  ///
+  /// **Continua nascendo `null`**, e isso nao e sobra: o `null` de fabrica e o
+  /// que faz toda bancada de teste de widget desenhar o icone decorativo sem
+  /// montar o roteador, e e o que a isca religa e desliga para provar o toque.
+  static String? Function(ParticipanteDaConversa outro) destino = _semDestino;
+
+  /// O default, nomeado para a isca poder voltar a ele num `addTearDown`.
+  static String? _semDestino(ParticipanteDaConversa outro) => null;
+
+  /// Volta ao estado de fabrica. **Para a isca**, e nao para a tela.
+  static void soltar() => destino = _semDestino;
 }
 
 /// Os textos da area, num lugar so.
@@ -114,7 +295,21 @@ abstract final class TextosDasMensagens {
 
   static const String carregarAnteriores = 'Carregar mensagens anteriores';
 
-  static const String carregarMais = 'Carregar mais conversas';
+  /// O nome do campo de busca. Vai na dica DENTRO do campo e no nome
+  /// acessivel: ver `ControleDeBusca.rotulo`, que e onde essa regra mora.
+  static const String buscarConversa = 'Buscar conversa';
+
+  /// Como chamar o que esta listado, para a linha de resumo da barra.
+  static const SubstantivoDaListagem substantivo = SubstantivoDaListagem(
+    singular: 'conversa',
+    plural: 'conversas',
+  );
+
+  /// A busca nao achou nada. **Nao e a lista vazia** [listaVazia]: a pessoa TEM
+  /// mensagens, e o que nao casou foi o termo. Dizer "voce ainda nao tem
+  /// mensagens" aqui seria afirmar o contrario do que e verdade.
+  static const String nadaParaEsteTermo =
+      'Nenhuma conversa com esse termo.';
 
   static const String campoDeMensagem = 'Escreva uma mensagem';
 
@@ -143,6 +338,14 @@ abstract final class TextosDasMensagens {
   }
 
   static String rotuloDaMarcaNeutra(String quem) => 'Marca de $quem';
+
+  /// O nome acessivel do icone QUANDO ELE E UM CONTROLE.
+  ///
+  /// **Diz o que o toque ABRE, e nao o que o icone mostra** -- a mesma regra de
+  /// `AvatarDaConta.rotuloAcessivel` (*"a imagem nao e a informacao, o destino
+  /// e"*). Com o destino ausente este rotulo nao e usado: o icone volta a ser
+  /// decorativo e ganha [rotuloDaMarcaNeutra].
+  static String rotuloDaPortaDoPerfil(String quem) => 'Abrir o perfil de $quem';
 }
 
 /// A raiz da area de mensagens: a lista de conversas.
@@ -183,6 +386,15 @@ class AreaDeMensagens extends StatefulWidget {
 class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   final List<Conversa> _conversas = <Conversa>[];
 
+  /// O que a pessoa DIGITA. Intencao, e nao recorte: ver [_termoAplicado].
+  final TextEditingController _buscaControlador = TextEditingController();
+
+  /// O controlador da rolagem, e **a origem da pagina seguinte**.
+  ///
+  /// Proprio e nao herdado: a rolagem infinita precisa escutar ESTA lista, e um
+  /// `PrimaryScrollController` que a casca trocasse levaria o gatilho com ele.
+  final ScrollController _rolagem = ScrollController();
+
   ConversasApi get _api =>
       widget.conversas ?? ConversasApi(Escopo.of(context).api);
   String? _cursor;
@@ -192,6 +404,32 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
 
   /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
   bool _faltaConta = false;
+
+  /// O termo que **produziu** a lista que esta na tela, ou nulo.
+  ///
+  /// E ele que vai para a `BarraDeListagem`, e nunca o texto do controlador: o
+  /// texto digitado e intencao, e intencao nao recorta lista. A razao inteira
+  /// esta em `BarraDeListagem`, secao "O recorte ativo e o APLICADO".
+  String? _termoAplicado;
+
+  /// `ConversationPage.total`: quantas conversas o recorte tem **no servidor**.
+  ///
+  /// Nunca `_conversas.length`: com dez por pagina, a linha de resumo diria
+  /// `10` a quem tem 57, e a pessoa leria que a busca nao achou o resto.
+  int _total = 0;
+
+  /// A pagina seguinte comeca a ser buscada a esta distancia do fim, em dp.
+  ///
+  /// Ela existe para a lista crescer **antes** de a pessoa encostar no fim: com
+  /// o gatilho no fim exato, cada dez linhas rendem um giro parado no rodape.
+  ///
+  /// **400 dp sao pouco mais de quatro linhas**, medido: sete linhas de
+  /// conversa cabem na janela de 600 x 800 dp da bancada de teste, o que poe a
+  /// linha perto de 90 dp. Com dez por pagina, a folga fica abaixo de meia
+  /// pagina -- grande o bastante para a pagina seguinte chegar antes de a
+  /// pessoa alcancar o fim, e pequena o bastante para a chamada nao sair por
+  /// uma rolada de um dedo no alto da lista.
+  static const double _folgaDoGatilho = 400;
 
   /// O numero do sino, como o SERVIDOR mandou. Nunca contado aqui.
   ///
@@ -205,7 +443,48 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   @override
   void initState() {
     super.initState();
+    _rolagem.addListener(_aoRolar);
     WidgetsBinding.instance.addPostFrameCallback((_) => _carregar());
+  }
+
+  @override
+  void dispose() {
+    _rolagem
+      ..removeListener(_aoRolar)
+      ..dispose();
+    _buscaControlador.dispose();
+    super.dispose();
+  }
+
+  /// ROLOU: a pagina seguinte, quando falta menos de [_folgaDoGatilho] para o
+  /// fim.
+  void _aoRolar() {
+    if (!_rolagem.hasClients) return;
+    final posicao = _rolagem.position;
+    if (posicao.pixels < posicao.maxScrollExtent - _folgaDoGatilho) return;
+    _carregarMais();
+  }
+
+  /// A LISTA QUE NAO ROLA tambem precisa crescer.
+  ///
+  /// **Este metodo existe por um defeito que a rolagem infinita tem de
+  /// nascenca**, e ele nao e teorico: dez conversas podem nao encher a tela de
+  /// um aparelho alto, e `maxScrollExtent` fica em zero. Sem isto, `_aoRolar`
+  /// nunca dispara -- porque nao ha rolagem para disparar --, o `cursor` fica
+  /// guardado para sempre e a lista para em dez com mais quarenta no servidor.
+  /// A pessoa nao recebe erro nenhum: ela so nao tem o resto.
+  void _completarATela() {
+    if (!mounted || _cursor == null) return;
+    if (!_rolagem.hasClients) return;
+    if (_rolagem.position.maxScrollExtent > 0) return;
+    _carregarMais();
+  }
+
+  /// Depois do quadro, porque a extensao da rolagem so existe depois do
+  /// `layout`: chamar [_completarATela] dentro do `setState` leria o
+  /// `maxScrollExtent` do quadro ANTERIOR.
+  void _aposOQuadro() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _completarATela());
   }
 
   Future<void> _carregar() async {
@@ -215,7 +494,7 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       _faltaConta = false;
     });
     try {
-      final pagina = await _api.listar();
+      final pagina = await _api.listar(termo: _termoAplicado);
       if (!mounted) return;
       setState(() {
         _conversas
@@ -223,8 +502,10 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
           ..addAll(pagina.items);
         _cursor = pagina.nextCursor;
         _naoLidas = pagina.unreadCount;
+        _total = pagina.total;
         _carregando = false;
       });
+      _aposOQuadro();
       widget.aoContarNaoLidas?.call(_naoLidas);
       // A AREA FOI VISTA: zera o CONTADOR, e **nao** marca item nenhum.
       //
@@ -249,6 +530,7 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       if (!mounted) return;
       setState(() {
         _conversas.clear();
+        _total = 0;
         _carregando = false;
         _faltaConta = faltaConta(falha);
         _falha = _faltaConta ? null : TextosDasMensagens.naoConseguimosCarregar;
@@ -257,10 +539,28 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       if (!mounted) return;
       setState(() {
         _conversas.clear();
+        _total = 0;
         _carregando = false;
         _falha = TextosDasMensagens.naoConseguimosCarregar;
       });
     }
+  }
+
+  /// A BUSCA foi aplicada: volta para a PRIMEIRA pagina do recorte novo.
+  ///
+  /// **O cursor e zerado junto**, e nao e detalhe: ele e um endereco DENTRO da
+  /// ordem do recorte anterior. Reaproveita-lo faria a pagina seguinte do termo
+  /// novo continuar de um lugar da lista velha.
+  ///
+  /// `null` em [termo] significa *"volte para a lista inteira"*, e nunca "nao
+  /// mexer" -- e o contrato de `ControleDeBusca.aoAplicar`.
+  void _aplicarBusca(String? termo) {
+    if (termo == _termoAplicado) return;
+    setState(() {
+      _termoAplicado = termo;
+      _cursor = null;
+    });
+    _carregar();
   }
 
   /// A pagina seguinte, **por cursor**.
@@ -268,22 +568,31 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   /// No erro aqui a lista **fica**: o recorte nao mudou, e as conversas na tela
   /// continuam sendo a resposta certa. Apagar tudo porque a segunda pagina nao
   /// chegou seria punir quem rolou mais (`RodapeDaPaginacao`, 11.20).
+  ///
+  /// **Chamada pela ROLAGEM** (e por [_completarATela]), e nao mais por um
+  /// botao. As tres guardas da primeira linha sao o que impede a rolagem
+  /// infinita de virar uma rajada: sem `_carregandoMais`, cada quadro de uma
+  /// rolada rapida dispararia uma chamada, e dez chamadas voltariam com a mesma
+  /// pagina para somar dez vezes na lista. Sem `_carregando`, a rolada que
+  /// acontece durante uma busca nova pediria a pagina 2 do recorte antigo.
   Future<void> _carregarMais() async {
     final cursor = _cursor;
-    if (cursor == null || _carregandoMais) return;
+    if (cursor == null || _carregandoMais || _carregando) return;
     setState(() {
       _carregandoMais = true;
       _falha = null;
     });
     try {
-      final pagina = await _api.listar(cursor: cursor);
+      final pagina = await _api.listar(cursor: cursor, termo: _termoAplicado);
       if (!mounted) return;
       setState(() {
         _conversas.addAll(pagina.items);
         _cursor = pagina.nextCursor;
         _naoLidas = pagina.unreadCount;
+        _total = pagina.total;
         _carregandoMais = false;
       });
+      _aposOQuadro();
       widget.aoContarNaoLidas?.call(_naoLidas);
     } on FalhaDeChamada {
       if (!mounted) return;
@@ -304,7 +613,38 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text(TextosDasMensagens.titulo)),
-      body: SafeArea(child: _corpo()),
+      // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
+      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
+      // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
+      // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
+      // `Tentar de novo` da faixa.
+      body: SafeArea(
+        child: ArrastarParaAtualizar(
+          aoAtualizar: _carregar,
+          child: _corpo(),
+        ),
+      ),
+    );
+  }
+
+  /// O campo de busca, para a [BarraDeListagem].
+  ///
+  /// `AlcanceDaBusca.servidor` porque `q` existe no contrato: declarar
+  /// `paginaCarregada` aqui faria o componente escrever na tela que a busca
+  /// olha so o que esta carregado -- verdade para um aplicativo que filtrasse
+  /// na memoria, e mentira para este.
+  ///
+  /// `minimoDeCaracteres: 2` e o `minLength` de `ConversationSearch`, e aqui
+  /// ele vira estado da lupa: abaixo do piso ela nao habilita, em vez de a
+  /// chamada sair e voltar 400 para a tela traduzir.
+  ControleDeBusca _controleDeBusca() {
+    return ControleDeBusca(
+      controlador: _buscaControlador,
+      alcance: AlcanceDaBusca.servidor,
+      rotulo: TextosDasMensagens.buscarConversa,
+      termoAplicado: _termoAplicado,
+      minimoDeCaracteres: 2,
+      aoAplicar: _aplicarBusca,
     );
   }
 
@@ -339,29 +679,95 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       );
     }
 
+    final busca = _controleDeBusca();
+    // **A BARRA SO APARECE QUANDO ELA TEM O QUE DESENHAR**, e a decisao e do
+    // componente: `desenha` responde falso com zero itens e nenhum recorte
+    // aplicado -- buscar o nada e um controle sem desfecho --, e verdadeiro
+    // quando a pessoa buscou e nao sobrou nada, que e justamente quando tirar
+    // o campo a prenderia no vazio que ela mesma produziu.
+    //
+    // **Nao ha `filtro:` nem `ordenacao:`**, e a ausencia esta medida no
+    // cabecalho deste arquivo: `listConversations` nao declara recorte de lista
+    // fechada, e a ordem e uma so.
+    final comBarra = BarraDeListagem.desenha(total: _total, busca: busca);
+
+    // A BARRA FICA FORA DA ROLAGEM, e isso e decisao.
+    //
+    // Ela e o topo do CORPO (o padrao de listagem), e nao a primeira linha da
+    // lista: dentro do `ListView` ela sairia da arvore na primeira rolada, e
+    // com rolagem infinita a pessoa que rolou vinte linhas teria de rolar as
+    // vinte de volta para alcancar a busca que acabou de usar. E tambem o
+    // arranjo que `agenda_da_rede.dart` ja usa -- `Column` com o campo fixo
+    // acima do conteudo --, e duas listagens com arranjos diferentes seriam
+    // duas respostas para a mesma pergunta.
+    final barra = comBarra
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(
+              BichuEspaco.e4,
+              BichuEspaco.e2,
+              BichuEspaco.e4,
+              0,
+            ),
+            child: BarraDeListagem(
+              total: _total,
+              busca: busca,
+              substantivo: TextosDasMensagens.substantivo,
+            ),
+          )
+        : const SizedBox.shrink();
+
     if (_conversas.isEmpty) {
-      // A LISTA VAZIA E UMA LINHA. Sem titulo, sem ilustracao e sem texto de
-      // apoio: o cliente mandou remover os textos de apoio em 18/10.
-      return Padding(
-        padding: const EdgeInsets.all(BichuEspaco.e4),
-        child: Text(
-          TextosDasMensagens.listaVazia,
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
+      // DOIS VAZIOS DIFERENTES, e a frase diz qual dos dois e. Com termo
+      // aplicado a pessoa TEM mensagens: dizer "voce ainda nao tem mensagens"
+      // seria afirmar o contrario do que e verdade, e esconderia que o caminho
+      // de volta e limpar a busca -- que e o campo que fica logo acima.
+      final vazio = _termoAplicado == null
+          ? TextosDasMensagens.listaVazia
+          : TextosDasMensagens.nadaParaEsteTermo;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          barra,
+          Padding(
+            padding: const EdgeInsets.all(BichuEspaco.e4),
+            child: Text(vazio, style: Theme.of(context).textTheme.bodyLarge),
+          ),
+        ],
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
-      itemCount: _conversas.length + 1,
-      separatorBuilder: (context, i) => const Divider(height: 1),
-      itemBuilder: (context, i) {
-        if (i == _conversas.length) return _rodape();
-        return LinhaDaConversa(conversa: _conversas[i]);
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        barra,
+        Expanded(
+          child: ListView.separated(
+            controller: _rolagem,
+            padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
+            itemCount: _conversas.length + 1,
+            separatorBuilder: (context, i) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              if (i == _conversas.length) return _rodape();
+              return LinhaDaConversa(conversa: _conversas[i]);
+            },
+          ),
+        ),
+      ],
     );
   }
 
+  /// O RODAPE DA ROLAGEM INFINITA. Sem botao.
+  ///
+  /// Tres estados, e cada um e uma afirmacao diferente:
+  ///
+  /// - **falha**: a faixa com `Tentar de novo`, apontando para a PAGINA
+  ///   SEGUINTE e nao para a primeira. Rolagem infinita que falha em silencio e
+  ///   uma lista que simplesmente para de crescer: a pessoa rola, nada vem, e
+  ///   nao ha nada na tela dizendo por que nem oferecendo outra tentativa.
+  /// - **ha mais**: o giro. Ele e o que diz "vem mais", e aparece tanto durante
+  ///   a chamada quanto no instante entre o gatilho e ela.
+  /// - **fim**: um respiro, e nada escrito. "Fim da lista" seria texto de apoio,
+  ///   e o cliente mandou remove-los em 18/10.
   Widget _rodape() {
     final falha = _falha;
     if (falha != null) {
@@ -375,13 +781,9 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       );
     }
     if (_cursor == null) return const SizedBox(height: BichuEspaco.e4);
-    return Padding(
-      padding: const EdgeInsets.all(BichuEspaco.e4),
-      child: BotaoSecundario(
-        rotulo: TextosDasMensagens.carregarMais,
-        aoTocar: _carregarMais,
-        carregando: _carregandoMais,
-      ),
+    return const Padding(
+      padding: EdgeInsets.all(BichuEspaco.e4),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -437,6 +839,12 @@ class LinhaDaConversa extends StatelessWidget {
     // resposta antiga (versao de servidor sem o campo) sem pintar linha vazia.
     final trecho = conversa.lastMessagePreview ?? TrechoDaUltimaMensagem.de(conversa);
     final quando = conversa.lastMessageAt;
+    // O DESTINO DO TOQUE NO ICONE, lido UMA vez e num lugar so: o rotulo
+    // acessivel da linha e o do icone dependem do mesmo fato, e duas leituras
+    // poderiam discordar entre si no mesmo quadro.
+    final porta = outro == null
+        ? null
+        : PortaDoPerfilDoParticipante.destino(outro);
 
     return Semantics(
       button: true,
@@ -451,9 +859,16 @@ class LinhaDaConversa extends StatelessWidget {
             ? null
             : QuandoNaLista.de(quando, agora: DateTime.now()),
       ),
-      // `excludeSemantics` para a linha ser UM controle para o leitor de tela,
-      // com o rotulo acima -- e nao quatro nos soltos sem papel.
-      excludeSemantics: true,
+      // `excludeSemantics` COLAPSA A LINHA num no so -- mas **nao** quando o
+      // icone e um controle de verdade.
+      //
+      // Com dois destinos na mesma linha (a conversa e o perfil), colapsar
+      // esconderia o segundo: quem usa leitor de tela ouviria "Conversa com
+      // Marina sobre Tobias" e nao teria como alcancar o perfil, que e o toque
+      // que o cliente acabou de pedir. Sem destino, o icone e decorativo e a
+      // linha volta a ser um no so -- que e o desenho certo para quatro
+      // pedacos de texto sem papel proprio.
+      excludeSemantics: porta == null,
       child: InkWell(
         onTap: () =>
             context.push(RotasDeMensagens.conversaDe(conversa.id)),
@@ -465,10 +880,16 @@ class LinhaDaConversa extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              // O ICONE DA CONVERSA, e a porta do perfil quando ela existe.
+              //
+              // `outro` inteiro e nao so a inicial: quem decide o destino e
+              // `PortaDoPerfilDoParticipante`, e ela precisa do participante --
+              // nao da letra que a tela desenhou dele.
               MarcaNeutraDoParticipante(
                 inicial: marca,
                 quem: quem,
                 desligada: emLeitura,
+                participante: outro,
               ),
               const SizedBox(width: BichuEspaco.e3),
               Expanded(
@@ -564,18 +985,71 @@ class LinhaDaConversa extends StatelessWidget {
   }
 }
 
-/// A MARCA NEUTRA do participante. **Nunca uma foto.**
+/// O ICONE DA CONVERSA: a FOTO quando ela vem, e a marca neutra quando nao.
 ///
-/// O contrato declara em dois lugares que `participants` nao traz foto de
-/// perfil, e por isso nao existe caminho neste widget por onde uma imagem
-/// chegue: ele recebe uma **letra**.
+/// **A foto entrou em 19/10/2026** (emenda 3 do ADR-0010, decisao do cliente:
+/// *"a foto aparece SO quando as duas pessoas ja aceitaram conexao"*). O
+/// cabecalho deste arquivo tem a medida inteira, inclusive os cinco estados em
+/// que ela NAO aparece.
 ///
-/// [desligada] pinta a marca em cinza desligado. E a leitura do pedido do
+/// **ESTA TELA NAO DECIDE NADA SOBRE QUEM PODE VER.** Ela desenha o que veio:
+/// `participante.photoIconUrl` nulo e a marca neutra, nao-nulo e a foto. O
+/// recorte mora na clausula `WHERE` da consulta do servidor (ADR-0021), e um
+/// `if` de conexao aqui seria o segundo lugar onde a regra mora -- e o segundo
+/// e o que fica desatualizado.
+///
+/// ## A DERIVADA, e por que ela e a `thumb` de 176 px
+///
+/// A marca desenhada tem [tamanho] dp, **40 por padrao**. A 3x isso sao **120
+/// px reais**, e essa e a unica medida que decide a derivada:
+///
+/// | derivada | px | contra 120 px pintados |
+/// |---|---|---|
+/// | `thumb` de `user_photo` | 176 | 1,47x -- cobre sem ampliar |
+/// | `card` de `user_photo` | 512 | **4,27x** dado demais |
+/// | `thumb` da vitrine | 320 | 2,67x dado demais |
+///
+/// A vitrine usa 320 porque a celula DELA tem 104 dp (312 px a 3x); aqui a
+/// celula tem 40 dp, e 320 seria desperdicio multiplicado por dez linhas de
+/// pagina. O servidor serve `thumb_key`, e esta tela nao escolhe: ela recebe a
+/// URL pronta.
+///
+/// **Quem pinta e [ImagemDaRede], nunca `Image.network` cru.** Aquele
+/// componente passa `cacheWidth` pela largura PINTADA, que e o numero que
+/// decide o custo em memoria: o `ui.Image` custa `largura x altura x 4` bytes
+/// da imagem DECODIFICADA, e nao os bytes do JPEG. A medicao que criou o
+/// componente foi **88 MiB numa pagina sem `cacheWidth` contra 2,15 MiB com
+/// ele**. Com 40 dp a 3x, cada foto desta lista custa 120 x 120 x 4 = **57,6
+/// KiB** decodificados; dez linhas somam 576 KiB. Com a `card` de 512 e sem
+/// `cacheWidth` seriam 512 x 512 x 4 = 1 MiB por linha, 10 MiB na pagina --
+/// que e o defeito dos 9,8 MB da `Loja` outra vez.
+///
+/// [desligada] pinta a MARCA em cinza desligado. E a leitura do pedido do
 /// cliente (*"a foto deve trazer um avatar padrao cinza, como se tivesse
-/// desabilitado"*) num schema que nao tem foto: o lado desabilitado aparece
-/// **despersonalizado**, o que o servidor ja faz devolvendo `Tutor` / `Quem
-/// achou`, e a forma acompanha. A tela **nao sabe** se e conta desabilitada ou
-/// conversa encerrada, e nao deve saber.
+/// desabilitado"*): o lado desabilitado aparece **despersonalizado**, o que o
+/// servidor ja faz devolvendo `Tutor` / `Quem achou` **e** `photo_icon_url`
+/// nulo -- `conta_habilitada` das duas pontas esta dentro do predicado de
+/// conexao da consulta. Entao conta desabilitada cai na marca em cinza por
+/// construcao, sem esta tela saber que a conta esta desabilitada.
+///
+/// **[desligada] NAO apaga uma foto que veio**, e isso e decisao: `desligada` e
+/// `!status.aceitaMensagem`, isto e, conversa encerrada OU bloqueada. Par
+/// bloqueado ja chega sem foto (o servidor recorta); o que sobra e a conversa
+/// ENCERRADA entre duas conexoes -- caso resolvido, pet devolvido --, e pintar
+/// o rosto de uma conexao ativa em cinza afirmaria algo sobre a conta dela que
+/// nao e verdade. O que terminou foi a conversa, nao a pessoa.
+///
+/// ---------------------------------------------------------------------------
+/// ## O TOQUE, quando ha destino
+///
+/// Com [participante] e com [PortaDoPerfilDoParticipante.destino] devolvendo um
+/// endereco, o icone vira um **controle**: alvo de [alvoDeToque] dp, nome
+/// acessivel que diz o que ele ABRE, e `context.push` para o perfil.
+///
+/// **Sem destino ele continua decorativo**, e isso e decisao e nao fallback: um
+/// circulo que se anuncia como botao e nao leva a lugar nenhum e o toque sem
+/// desfecho que o criterio 2 da BICHUS-62 proibe. Ver o doc de
+/// [PortaDoPerfilDoParticipante], que e onde a medida mora.
 class MarcaNeutraDoParticipante extends StatelessWidget {
   const MarcaNeutraDoParticipante({
     required this.inicial,
@@ -583,6 +1057,7 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
     super.key,
     this.desligada = false,
     this.tamanho = 40,
+    this.participante,
   });
 
   final String inicial;
@@ -594,26 +1069,96 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
 
   final double tamanho;
 
+  /// O outro lado, quando a linha o conhece.
+  ///
+  /// Nulo nas duas vistas em que nao ha outro lado para abrir: a conversa so
+  /// com o sistema, e a resposta de um servidor que nao mandou participante
+  /// nenhum. Sem ele nao ha toque -- nao ha para onde ir.
+  final ParticipanteDaConversa? participante;
+
+  /// O alvo de toque do icone, em dp.
+  ///
+  /// **48 e nao 64**, pelo mesmo motivo de `AvatarDaConta` e do gatilho de
+  /// filtro da `BarraDeListagem`: o piso de 64 dp do paragrafo 6.5 vale para
+  /// superficie critica (o achador, a marcacao de perdido), e o icone de uma
+  /// linha de lista nao e uma delas. A marca desenhada continua com [tamanho],
+  /// e e o alvo que cresce -- 48 dp esta acima do piso do M3 e do SC 2.5.8.
+  static const double alvoDeToque = 48;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    return Semantics(
-      label: TextosDasMensagens.rotuloDaMarcaNeutra(quem),
-      child: ExcludeSemantics(
-        child: Container(
-          width: tamanho,
-          height: tamanho,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: desligada ? cores.disabledSurface : cores.primaryContainer,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            inicial.isEmpty ? '·' : inicial,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: desligada ? cores.onDisabled : cores.primary,
+    final quemEle = participante;
+    // A FOTO, QUANDO ELA VEM (emenda 3 do ADR-0010, 19/10/2026).
+    //
+    // Nulo e o estado normal: conversa de achado com um estranho, pedido
+    // pendente, achador sem conta, par bloqueado e conta desabilitada do outro
+    // lado -- os cinco chegam nulos do servidor, e a tela nao os distingue.
+    final foto = quemEle?.photoIconUrl;
+    final marca = foto == null
+        ? Container(
+            width: tamanho,
+            height: tamanho,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: desligada ? cores.disabledSurface : cores.primaryContainer,
+              shape: BoxShape.circle,
             ),
-          ),
+            child: Text(
+              inicial.isEmpty ? '·' : inicial,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: desligada ? cores.onDisabled : cores.primary,
+              ),
+            ),
+          )
+        : ImagemDaRede(
+            url: foto,
+            // DECORATIVA, e de proposito: o rotulo acessivel do icone esta no
+            // `Semantics` de fora (`rotuloDaPortaDoPerfil` quando ha destino,
+            // `rotuloDaMarcaNeutra` quando nao ha). Rotular a imagem tambem
+            // faria o leitor de tela anunciar a mesma pessoa duas vezes na
+            // mesma parada de foco -- e o nome dela ja esta na linha.
+            descricao: null,
+            // 40 dp, e `ImagemDaRede` multiplica pelo fator de pixel do
+            // aparelho: 120 px a 3x. E este numero que vira `cacheWidth`.
+            largura: tamanho,
+            proporcao: 1,
+            // Circulo, como a marca que ela substitui: metade do lado.
+            raio: tamanho / 2,
+            // O retrato de uma pessoa falhando pede outro desenho que uma
+            // fachada falhando. A derivada pode nao existir ainda, o leitor de
+            // midia pode estar fora, a rede do celular pode cair no meio -- e o
+            // lugar do icone continua la.
+            simboloDeFalha: Icons.person_outline,
+          );
+
+    final destino = quemEle == null
+        ? null
+        : PortaDoPerfilDoParticipante.destino(quemEle);
+    if (destino == null) {
+      return Semantics(
+        label: TextosDasMensagens.rotuloDaMarcaNeutra(quem),
+        child: ExcludeSemantics(child: marca),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: TextosDasMensagens.rotuloDaPortaDoPerfil(quem),
+      // `excludeSemantics` aqui pelo mesmo motivo da linha: a letra nao diz
+      // nada que o rotulo acima nao diga, e anunciada ao lado dele e ruido.
+      excludeSemantics: true,
+      child: InkWell(
+        // `push` e nao `go`: o perfil e uma tela que COBRE a area de mensagens,
+        // e voltar dele tem de devolver a lista onde a pessoa estava -- com o
+        // termo buscado e as paginas que ela ja rolou. `go` trocaria de ramo e
+        // a lista voltaria do zero.
+        onTap: () => context.push(destino),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: alvoDeToque,
+          height: alvoDeToque,
+          child: Center(child: marca),
         ),
       ),
     );

@@ -23,6 +23,7 @@
 // desses passos reprova um caso daqui.
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -63,48 +64,83 @@ void main() {
       );
     });
 
-    testWidgets('a secao `Perto` nao tem o rodape de adocoes', (tester) async {
-      await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Pets de ONGs para adoção'),
-        findsNothing,
-        reason: 'REPROVA: o rodape de `Adoções` voltou a lista do `Perto`. Ele '
-            'levava a mesma tela em construcao que a porta de `Pets`.',
-      );
-    });
-
-    testWidgets('a gaveta de nenhuma secao oferece `Adoções`',
-        (tester) async {
-      await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-
-      for (final secao in <String>['Pets', 'Rede', 'Perto', 'Loja']) {
-        await tester.tap(find.widgetWithText(NavigationDestination, secao));
+    testWidgets(
+      'a aba `Comunidade` da `Rede` nao tem o rodape de adocoes',
+      (tester) async {
+        // **A SECAO `Perto` DEIXOU DE EXISTIR em 19/10**: o diretorio virou a
+        // aba `Comunidade` da `Rede`, e e no pe dela que este rodape
+        // apareceria se voltasse. O caso segue o CONTEUDO e nao o nome da
+        // secao.
+        await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip(TextosDaGaveta.abrirAGaveta));
+        await tester.tap(
+          find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+        );
         await tester.pumpAndSettle();
 
-        for (final rotulo in <String>['Adoções', 'Pets de ONGs para adoção']) {
-          expect(
-            find.descendant(
-              of: find.byType(Drawer),
-              matching: find.text(rotulo),
-            ),
-            findsNothing,
-            reason: 'REPROVA: a gaveta de "$secao" oferece "$rotulo". O item '
-                'voltou para `existe` no inventario, e com ele volta o toque '
-                'que abre uma tela em construcao.',
-          );
+        expect(
+          find.text('Pets de ONGs para adoção'),
+          findsNothing,
+          reason: 'REPROVA: o rodape de `Adoções` voltou a lista do '
+              'diretorio, hoje a aba `Comunidade`. Ele levava a mesma tela em '
+              'construcao que a porta de `Pets`.',
+        );
+      },
+    );
+
+    testWidgets(
+      'NENHUMA secao da barra pinta as duas palavras, em lugar nenhum da tela',
+      (tester) async {
+        // **O CASO DA GAVETA MORREU COM A GAVETA (19/10/2026).** Ele varria as
+        // quatro gavetas procurando os dois rotulos; o cliente mandou ocultar
+        // o menu (*"vamos ocultar o menu por enquanto, pois nao esta sendo
+        // utilizado para nada"*) e nao ha mais gaveta para abrir.
+        //
+        // **Ele nao foi apagado, ele mudou de superficie**, e por isso ficou
+        // MAIS FORTE: ele varre a TELA INTEIRA de cada secao, e nao so a
+        // gaveta dela. Antes, uma porta de `Adoções` posta no CORPO de `Loja`
+        // passaria por ele; agora nao.
+        //
+        // **O desligamento continua sendo o mesmo:** reponha a porta em
+        // qualquer secao de `abas.dart`.
+        await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+
+        // As QUATRO que sao ramo. `AuAu` fica fora: o slot dele EMPURRA a
+        // rota de mensagens, a tela cobre a casca e depois dele nao ha barra
+        // de baixo na arvore para tocar na proxima secao.
+        for (final secao in <String>['Pets', 'Rede', 'Mural', 'Loja']) {
+          await tester.tap(find.widgetWithText(NavigationDestination, secao));
+          await tester.pumpAndSettle();
+
+          for (final rotulo in <String>[
+            'Adoções',
+            'Pets de ONGs para adoção',
+          ]) {
+            expect(
+              find.text(rotulo),
+              findsNothing,
+              reason: 'REPROVA: a secao "$secao" pinta "$rotulo". Com a '
+                  'porta de volta, volta o toque que abre uma tela em '
+                  'construcao -- e nao existe rota de adocao no contrato.',
+            );
+          }
         }
 
-        await tester.tapAt(const Offset(700, 300));
+        // **E A ABA `Comunidade` TAMBEM**, que e onde o rodape morava: a
+        // varredura acima para na aba da frente de cada secao, e `Eventos` e
+        // a da frente na `Rede`.
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
         await tester.pumpAndSettle();
-      }
-    });
+        await tester.tap(
+          find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Pets de ONGs para adoção'), findsNothing);
+        expect(find.text('Adoções'), findsNothing);
+      },
+    );
   });
-
   group('o inventario diz `planejada`, e a rota continua viva', () {
     test('as duas linhas de adocoes sao `planejada` e sem rota', () {
       // Pelos rotulos EXATOS, e nao por `contains('ado')`: aquele recorte
@@ -122,7 +158,8 @@ void main() {
         hasLength(2),
         reason: 'REPROVA: o inventario tem ${linhas.length} linha(s) de '
             'adocao, e sao DUAS -- `Adoções` em `Pets` e `Pets de ONGs para '
-            'adoção` em `Perto`. Elas nao foram apagadas: elas viraram '
+            'adoção` na `Rede`, que absorveu o inventario do `Perto`. Elas nao '
+            'foram apagadas: elas viraram '
             '`planejada`, que e como o registro nomeia o que ainda nao '
             'existe.',
       );

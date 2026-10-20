@@ -9,6 +9,7 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -203,10 +204,18 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
         bottom: false,
         child: AnimatedBuilder(
           animation: sessao,
-          builder: (context, _) => ListView(
-            padding: const EdgeInsets.all(BichuEspaco.e4),
-            addSemanticIndexes: false,
-            children: _corpo(),
+          // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
+          // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
+          // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
+          // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
+          // `Tentar de novo` da faixa.
+          builder: (context, _) => ArrastarParaAtualizar(
+            aoAtualizar: _carregar,
+            child: ListView(
+              padding: const EdgeInsets.all(BichuEspaco.e4),
+              addSemanticIndexes: false,
+              children: _corpo(),
+            ),
           ),
         ),
       ),

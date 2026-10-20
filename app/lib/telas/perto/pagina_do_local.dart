@@ -17,7 +17,9 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/grupo_de_opcoes.dart';
+import '../../widgets/icone_do_inscrito.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 import 'lista_do_diretorio.dart';
@@ -113,15 +115,24 @@ class PaginaDoLocal extends StatefulWidget {
       'Ele pode ter sido retirado. Veja quem está atendendo na sua região '
       'agora.';
 
-  static const String rotuloDeVoltarParaPerto = 'Ver o Perto';
+  /// **O TEXTO MUDOU EM 19/10/2026 com a secao.** Era `Ver o Perto`, e
+  /// `Perto` deixou de existir: o diretorio virou a aba `Comunidade` da
+  /// `Rede`. Um botao que oferece uma secao que o app nao tem e um caminho
+  /// que promete e nao entrega. O NOME da constante fica, para nao espalhar
+  /// a renomeacao por quem a le.
+  static const String rotuloDeVoltarParaPerto = 'Ver a Rede';
 
   /// Sem conta nao ha leitura, e a frase diz por que **sem culpar a pessoa**.
   static const String tituloDoVisitante = 'Entre para ver este local';
 
+  /// **A frase nao promete mais o telefone.** Ela dizia *"mostra o telefone
+  /// comercial e a distância até você"*, e a primeira metade deixou de ser
+  /// verdade em 19/10/2026: o numero saiu da tela por pedido do cliente. O
+  /// que sobrou e o que a pagina de fato da a quem entra.
   static const String explicacaoDoVisitante =
-      'A página de um profissional mostra o telefone comercial e a distância '
-      'até você, e o Bichu só mostra isso para quem tem conta. Depois de '
-      'entrar, você lê as avaliações e pode escrever a sua.';
+      'A página de um profissional mostra a distância até você, e o Bichu só '
+      'mostra isso para quem tem conta. Depois de entrar, você lê as '
+      'avaliações e pode escrever a sua.';
 
   static const String rotuloDeEntrar = 'Entrar ou criar conta';
 
@@ -131,6 +142,13 @@ class PaginaDoLocal extends StatefulWidget {
   static const String explicacaoSemAvaliacoes =
       'Seja a primeira pessoa a contar como foi o atendimento aqui.';
 
+  /// O rotulo **VISIVEL** do botao de contato: so `Ligar`.
+  ///
+  /// Pedido do cliente em 18/10/2026: *"os botoes de ligar para devem ser
+  /// apenas 'Ligar' com o icone, nao devem trazer repetidamente o nome da
+  /// clinica"*. Nesta pagina o nome e o TITULO, a poucos dp acima do botao:
+  /// repeti-lo dentro dele era a terceira vez que a mesma tela dizia a mesma
+  /// palavra.
   static const String rotuloDeLigar = 'Ligar';
 
   static const String rotuloDaNota = 'Sua nota';
@@ -207,11 +225,16 @@ class PaginaDoLocal extends StatefulWidget {
       ? 'Esta é a única avaliação deste local.'
       : 'Você viu todas as $total avaliações deste local.';
 
-  /// `Ligar para a Clínica Pata Firme`, e nao `Ligar`.
+  /// `Ligar para a Clínica Pata Firme` — o nome **ACESSIVEL**, e nao o visivel.
   ///
-  /// O nome acessivel leva PARA QUEM e a ligacao: `Ligar` sozinho e um
-  /// controle indistinguivel para quem navega por leitor de tela e chegou nele
-  /// sem ver a tela inteira.
+  /// **O rotulo visivel encurtou em 18/10/2026; este NAO.** O nome acessivel
+  /// leva PARA QUEM e a ligacao: `Ligar` sozinho e um controle indistinguivel
+  /// para quem navega por leitor de tela e chegou nele sem ver a tela inteira
+  /// (WCAG 2.1 SC 4.1.2). Ele chega ao botao por `nomeAcessivel`, e nao por
+  /// `rotulo`.
+  ///
+  /// O SC 2.5.3 continua satisfeito: [rotuloDeLigar] e PREFIXO desta string,
+  /// entao quem usa comando de voz diz "Ligar" e acerta o controle.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
   /// O rotulo da faixa do local, para quem nao ve a imagem.
@@ -515,7 +538,9 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     if (context.canPop()) {
       context.pop();
     } else {
-      context.go(Rotas.perto);
+      // `Rotas.rede` e nao `Rotas.perto`: a secao `Perto` deixou de
+      // existir em 19/10 e esta pagina virou filha do ramo da `Rede`.
+      context.go(Rotas.rede);
     }
   }
 
@@ -751,7 +776,7 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
               width: double.infinity,
               height: BichuAlvoDeToque.min,
               child: OutlinedButton(
-                onPressed: () => context.go(Rotas.perto),
+                onPressed: () => context.go(Rotas.rede),
                 child: const Text(PaginaDoLocal.rotuloDeVoltarParaPerto),
               ),
             ),
@@ -794,6 +819,14 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       // **Local sem foto nao tem faixa vazia**: `fotoUrl` e nulo em tres casos
       // normais (sem foto, ainda processando, recusada nos bytes) e a pagina
       // abre no nome, exatamente como antes de a foto existir.
+      //
+      // **Sem foto a pagina continua abrindo no nome, e NAO numa faixa 16:9
+      // vazia.** Quem desenha o tipo nesse caso e o quadrado do
+      // [_Cabecalho] -- ver a prosa dele. Um retangulo cinza de borda a borda
+      // e da altura de uma faixa empurraria `Informações` e a media para
+      // baixo da dobra em toda entrada sem foto, que e a maioria delas; foi
+      // medido aqui, com `Atende cão e gato.` saindo da arvore do `ListView`
+      // ao tentar.
       if (detalhe.fotoUrl case final String foto) ...<Widget>[
         _FaixaDoLocal(url: foto, nome: detalhe.nome),
         const SizedBox(height: BichuEspaco.e4),
@@ -1031,6 +1064,26 @@ class _FaixaDoLocal extends StatelessWidget {
 }
 
 /// Nome, atividade, lugar, distancia, **o que foi verificado** e `Ligar`.
+///
+/// ## O quadrado do TIPO, ao lado do nome
+///
+/// Pedido do cliente em 18/10/2026: *"tem que colocar o icone de clinica,
+/// estabelecimento, profissional, caso a foto/logo da empresa nao tenha sido
+/// cadastrada"*. Ele entra AQUI, e nao no lugar da faixa, por duas razoes:
+///
+/// 1. **medida**: um `IconeDoInscrito` em 16:9 de borda a borda no topo
+///    empurrava `Informações` e a media para fora da arvore do `ListView` numa
+///    pagina sem foto -- o caso `local SEM foto nao tem faixa vazia` deixou de
+///    achar `Atende cão e gato.` na primeira tentativa desta entrega. A pagina
+///    sem foto tem de abrir no nome, e esse era o motivo original de nao haver
+///    faixa vazia;
+/// 2. **o mesmo desenho da lista**: no cartao do `Perto` o glifo fica num
+///    quadrado de `larguraFotoSm` ao lado do nome, e e o mesmo quadrado aqui.
+///    Duas geometrias para o mesmo conceito divergem na primeira edicao.
+///
+/// **So quando nao ha faixa.** Com `photo_url`, a foto do lugar ja esta
+/// desenhada acima e o tipo esta escrito em palavras na linha da atividade:
+/// um terceiro lugar dizendo a mesma coisa seria ruido.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.detalhe, required this.aoLigar});
 
@@ -1058,10 +1111,31 @@ class _Cabecalho extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Semantics(
-                header: true,
-                child: Text(detalhe.nome, style: textos.headlineSmall),
-              ),
+              if (detalhe.fotoUrl == null)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    IconeDoInscrito(
+                      atividade: detalhe.atividade,
+                      tipoDeEntidade: detalhe.tipoDeEntidade,
+                      largura: BichuMoldura.larguraFotoSm,
+                      raio: BichuRaio.sm,
+                    ),
+                    const SizedBox(width: BichuEspaco.e3),
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child:
+                            Text(detalhe.nome, style: textos.headlineSmall),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Semantics(
+                  header: true,
+                  child: Text(detalhe.nome, style: textos.headlineSmall),
+                ),
               if (atividade != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
                 Text(
@@ -1104,7 +1178,11 @@ class _Cabecalho extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: BotaoPrimario(
-              rotulo: PaginaDoLocal.ligarPara(detalhe.nome),
+              // VISIVEL `Ligar`, com o telefone; ANUNCIADO `Ligar para <nome>`.
+              // Ver `rotuloDeLigar` e `ligarPara`.
+              rotulo: PaginaDoLocal.rotuloDeLigar,
+              nomeAcessivel: PaginaDoLocal.ligarPara(detalhe.nome),
+              icone: Icons.call_outlined,
               aoTocar: () => aoLigar(telefone),
             ),
           ),
@@ -1114,7 +1192,21 @@ class _Cabecalho extends StatelessWidget {
   }
 }
 
-/// `Informações`: o `about`, o lugar e o telefone comercial por extenso.
+/// `Informações`: o `about` e o lugar. **O telefone NAO.**
+///
+/// ## O numero saiu daqui, e era o unico lugar que o pintava
+///
+/// Ate 19/10/2026 esta secao desenhava `Telefone comercial: +5511987654321`
+/// -- o `phone_e164` do contrato, por extenso, em texto. O cliente pediu
+/// *"sem aparecer o telefone quando for profissionais/clinicas"*, e esta
+/// linha era o pedido inteiro: medido, nao havia outro lugar do app que
+/// escrevesse o numero na tela.
+///
+/// **O botao `Ligar` do cabecalho FICA.** Ele nao mostra numero nenhum: o
+/// rotulo visivel e `Ligar` e o nome acessivel e `Ligar para <nome>`. O
+/// numero so aparece depois, no discador do sistema, que e tela do aparelho
+/// e nao desta pagina -- e e o discador que mostra o numero e espera a
+/// confirmacao, que e a razao de o app nunca discar sozinho.
 ///
 /// **E so isso que existe.** O protótipo marca onde caberiam site, e-mail,
 /// WhatsApp, redes, horario, foto e endereco, e diz na mesma linha que nada
@@ -1131,7 +1223,6 @@ class _Informacoes extends StatelessWidget {
   Widget build(BuildContext context) {
     final sobre = detalhe.sobre;
     final lugar = detalhe.linhaDeLugar;
-    final telefone = detalhe.telefoneE164;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1146,13 +1237,6 @@ class _Informacoes extends StatelessWidget {
         if (lugar != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e4),
           _LinhaComIcone(icone: Icons.place_outlined, texto: lugar),
-        ],
-        if (telefone != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e2),
-          _LinhaComIcone(
-            icone: Icons.call_outlined,
-            texto: 'Telefone comercial: $telefone',
-          ),
         ],
       ],
     );

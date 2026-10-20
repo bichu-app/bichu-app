@@ -122,3 +122,107 @@ const String denunciaRecebida = 'Denúncia enviada. Você não vai mais ver este
 /// duplicar, mas um menu que continuasse oferecendo "Denunciar" faria a pessoa
 /// achar que a primeira nao foi.
 const String denunciaJaEnviada = 'Denúncia enviada';
+
+// ---------------------------------------------------------------------------
+// A LISTA DE QUEM EU BLOQUEEI (19/10/2026)
+// ---------------------------------------------------------------------------
+//
+// Decisão do cliente: *uma lista de quem você bloqueou, na gaveta do Perfil, e
+// o desbloqueio acontece ali*. Ela existe porque o bloqueio é **simétrico**, e
+// a simetria fechava o perfil da pessoa bloqueada para quem a bloqueou — onde o
+// botão "Desbloquear" morava. Bloquear era irreversível pelo aplicativo.
+
+/// `#/components/schemas/BlockedPerson` do contrato.
+///
+/// **QUATRO campos, e o recorte foi decidido.** Esta lista mostra pessoas com
+/// quem quem lê **não tem vínculo nenhum** — ela bloqueou justamente para não
+/// ter —, então o que cada linha carrega é o mínimo que identifica alguém
+/// **para a própria pessoa que o bloqueou**:
+///
+/// - [publicRef] é o endereço que o desbloqueio recebe. Sem ele a linha não tem
+///   botão;
+/// - [displayName] é o que a própria pessoa reconhece;
+/// - [handle] é o identificador ESTÁVEL: o nome de exibição muda, e dois
+///   homônimos bloqueados ficariam indistinguíveis na hora de escolher qual
+///   desbloquear;
+/// - [bloqueadoEm] é o ato de QUEM LÊ, e não dado da outra pessoa.
+///
+/// **NÃO HÁ FOTO**, e é a ausência que mais importa: a emenda 3 do ADR-0010
+/// (19/10/2026) liberou a foto de perfil em UMA superfície — o participante da
+/// conversa mediada — e **só entre conexões aceitas**. Bloqueado é o oposto de
+/// conexão aceita. Também não há contagem de pets nem de conexões: aquilo é
+/// sinal de confiança de um PERFIL, e a pergunta desta tela é "qual das pessoas
+/// que eu bloqueei é esta".
+///
+/// **E não há nada sobre quem bloqueou QUEM LÊ** — nem campo, nem contagem, nem
+/// booleano. O bloqueio é simétrico no servidor e a leitura é assimétrica de
+/// propósito: a outra metade do par seria o oráculo *"ela te bloqueou"*.
+class PessoaBloqueada {
+  const PessoaBloqueada({
+    required this.publicRef,
+    required this.handle,
+    required this.displayName,
+    required this.bloqueadoEm,
+  });
+
+  factory PessoaBloqueada.doJson(Map<String, dynamic> json) {
+    return PessoaBloqueada(
+      publicRef: json['public_ref'] as String,
+      handle: json['handle'] as String?,
+      displayName: json['display_name'] as String?,
+      bloqueadoEm: DateTime.parse(json['blocked_at'] as String),
+    );
+  }
+
+  /// `users.public_ref`: 22 símbolos, opaco. **Não é UUID** e não é o apelido.
+  final String publicRef;
+
+  /// Anulável no contrato: o bloqueio é endereçado por [publicRef], e é
+  /// possível ter bloqueado alguém sem apelido.
+  final String? handle;
+
+  final String? displayName;
+
+  final DateTime bloqueadoEm;
+
+  /// O que a linha escreve, na ordem em que a pessoa reconhece.
+  ///
+  /// Nome de exibição primeiro; sem ele, `@apelido`; sem os dois, [semNome], que
+  /// é **texto de tela e não de servidor**. A linha existe de qualquer forma —
+  /// esconder a de quem não tem nome a deixaria bloqueada para sempre.
+  String get nomeParaLer {
+    final nome = displayName?.trim();
+    if (nome != null && nome.isNotEmpty) return nome;
+    final apelido = handle?.trim();
+    if (apelido != null && apelido.isNotEmpty) return '@$apelido';
+    return semNome;
+  }
+
+  static const String semNome = 'Pessoa sem nome';
+}
+
+/// `#/components/schemas/MyBlockPage` do contrato.
+class PaginaDeBloqueados {
+  const PaginaDeBloqueados({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.limit,
+  });
+
+  factory PaginaDeBloqueados.doJson(Map<String, dynamic> json) {
+    final crus = (json['items'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>();
+    return PaginaDeBloqueados(
+      items: crus.map(PessoaBloqueada.doJson).toList(growable: false),
+      total: json['total'] as int? ?? 0,
+      page: json['page'] as int? ?? 1,
+      limit: json['limit'] as int? ?? 20,
+    );
+  }
+
+  final List<PessoaBloqueada> items;
+  final int total;
+  final int page;
+  final int limit;
+}

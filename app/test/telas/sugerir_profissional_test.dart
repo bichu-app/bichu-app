@@ -23,10 +23,12 @@
 import 'dart:convert';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/seletor_de_lista.dart';
+import 'package:bichu/widgets/acao_de_criar_flutuante.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -81,7 +83,14 @@ Future<void> abrirPerto(
     rede: rede,
     deposito: logado ? depositoLogado() : null,
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+  // `Perto` deixou de existir, e o diretorio virou a aba `Comunidade` da
+  // `Rede`.
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -176,20 +185,23 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
 }
 
 /// Abre o formulário pela PORTA REAL da seção, que desde 18/10/2026 é o ícone
-/// de pessoas da barra de topo e não mais o botão de largura total do corpo.
+/// de pessoas da AÇÃO FLUTUANTE do corpo -- em 18/10 ele era o ícone da barra
+/// de topo, e em 19/10 saiu dela por decisão do cliente (*"O botao criar sai
+/// da barra"*) para o sino de notificação entrar no lugar.
 ///
 /// Numa função, e não copiada em cada caso, pelo motivo que este arquivo
 /// acabou de viver: a mudança de forma da porta tirou o chão de doze casos de
 /// uma vez. Com a porta num lugar só, a próxima custa uma edição.
 ///
-/// **O glifo é procurado DENTRO da `AppBar`**, e não solto na árvore: um
-/// `find.byIcon` largo acharia um `group_add` de outra tela e ficaria verde
-/// com a barra vazia.
+/// **O glifo é procurado DENTRO de `AcaoDeCriarFlutuante`**, e não solto na
+/// árvore: um `find.byIcon` largo acharia um `group_add` de outra tela e
+/// ficaria verde com a porta ausente -- **ou acharia um ícone de volta NA
+/// BARRA**, que é exatamente o que o cliente mandou tirar.
 Future<void> abrirAPorta(WidgetTester tester) async {
   await tocar(
     tester,
     find.descendant(
-      of: find.byType(AppBar),
+      of: find.byType(AcaoDeCriarFlutuante),
       matching: find.byIcon(Icons.group_add),
     ),
   );
@@ -208,6 +220,14 @@ void main() {
   //      ele: *"o ícone de recomendar um profissional, pode ser igual do
   //      instagram, as 3 pessoas juntos"*. Isto REVERTE a regra de 17/10 que
   //      este arquivo cobrava ("a porta NÃO está na AppBar").
+  //
+  //      **E EM 19/10 ELA SAIU DA BARRA, por decisão dele:** *"O botao criar
+  //      sai da barra"*. Com o sino de notificação na barra o título não
+  //      cabia, eu perguntei o que sairia, e foi isto. A porta virou ação
+  //      FLUTUANTE no corpo -- o que ele recusou em 18/10 era o botão de
+  //      LARGURA TOTAL, que comia 64 dp de linha; a ação flutuante não ocupa
+  //      linha nenhuma do fluxo. Este arquivo volta a cobrar "a porta NÃO
+  //      está na AppBar", agora com a ação medida onde ela passou a morar.
   //   2. *"o botão indicar quem atende bem, nem deveria aparecer para o
   //      usuário se ele não estiver logado"*, depois estendido: *"essas ações
   //      só devem ser realizadas por usuários cadastrados e validados, caso ao
@@ -219,15 +239,30 @@ void main() {
   // que mudou é quem é convidado a chegar lá.
   // -------------------------------------------------------------------------
   group('a porta de indicar', () {
-    testWidgets('está na BARRA DE TOPO do Perto e abre o formulário',
-        (tester) async {
+    testWidgets('é FLUTUANTE no corpo do Perto, não está na barra, e abre o '
+        'formulário', (tester) async {
       await abrirPerto(
         tester,
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
 
+      // **A metade que mudou em 19/10, dita por ausência.** Sem ela, pôr a
+      // ação flutuante SEM tirar o ícone da barra deixaria este caso verde e
+      // a pessoa com duas cópias da mesma porta.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.group_add),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o ícone de indicar continua na barra de topo do '
+            'Perto. Ele saiu dali em 19/10 -- *"O botao criar sai da barra"* '
+            '--, e era justamente o título desta seção que a conta de largura '
+            'não fechava.',
+      );
+
       final porta = find.descendant(
-        of: find.byType(AppBar),
+        of: find.byType(AcaoDeCriarFlutuante),
         matching: find.byIcon(Icons.group_add),
       );
       expect(
@@ -258,9 +293,10 @@ void main() {
           ),
           findsNothing,
           reason: 'REPROVA: a porta voltou a ser botão de largura total no '
-              'corpo. Com o ícone na barra ela seria a segunda cópia da mesma '
+              'corpo. Com a ação flutuante ela seria a segunda cópia da mesma '
               'ação, e os 64 dp de altura que o cliente pediu de volta não '
-              'voltaram.',
+              'voltaram -- a ação flutuante não ocupa linha nenhuma do '
+              'fluxo, e o botão de largura total ocupava.',
         );
       },
     );
@@ -278,14 +314,19 @@ void main() {
         rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
       );
 
-      final icone = tester.widget<IconButton>(
+      // **`FloatingActionButton`, e nao `IconButton`.** A porta deixou de ser
+      // controle de canto de barra em 19/10 e passou a ser acao flutuante; o
+      // `tooltip` continua sendo de onde o nome acessivel sai, e e ele que
+      // este caso le. A mudanca de forma nao podia mudar o que o leitor de
+      // tela anuncia, e esta linha e o que garante isso.
+      final icone = tester.widget<FloatingActionButton>(
         find
             .ancestor(
               of: find.descendant(
-                of: find.byType(AppBar),
+                of: find.byType(AcaoDeCriarFlutuante),
                 matching: find.byIcon(Icons.group_add),
               ),
-              matching: find.byType(IconButton),
+              matching: find.byType(FloatingActionButton),
             )
             .first,
       );
@@ -318,7 +359,7 @@ void main() {
       );
       expect(
         find.descendant(
-          of: find.byType(AppBar),
+          of: find.byType(AcaoDeCriarFlutuante),
           matching: find.byIcon(Icons.group_add),
         ),
         findsNothing,

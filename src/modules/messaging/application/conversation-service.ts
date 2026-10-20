@@ -35,6 +35,7 @@ import type {
   MensagemGravada,
   MotivoDaDenuncia,
   Pagina,
+  PaginaDaLista,
 } from '../ports/conversation-repository.js';
 import {
   aceitaMensagem,
@@ -97,6 +98,16 @@ export interface PaginaDeConversas {
    * página faria o sino mostrar 20 para quem tem 57.
    */
   readonly naoLidas: number;
+  /**
+   * `ConversationPage.total`: quantas conversas o RECORTE tem no servidor.
+   *
+   * **Nem `items.length` nem [naoLidas]**, e os três são números diferentes: o
+   * primeiro é o tamanho da página, o segundo é o sino da conta inteira, e este
+   * é quantas conversas satisfazem o `q` desta chamada. A linha de resumo da
+   * listagem lê este — alimentá-la com o tamanho da página diria `10` a quem
+   * tem 57.
+   */
+  readonly total: number;
 }
 
 /** O que o aviso entrega ao abrir a conversa. */
@@ -209,17 +220,19 @@ export class ConversationService {
    * contrato exige o campo presente, e `[]` é o valor verdadeiro para esta
    * vista — não "esta conversa está vazia", e sim "esta vista não as carrega".
    */
-  async listar(chamador: Chamador, pagina: Pagina): Promise<PaginaDeConversas> {
-    // As duas em paralelo: o contador é da CONTA inteira e não depende da
-    // página, então serializá-las só somaria latência na tela que o tutor abre
-    // com o telefone tocando.
-    const [conversas, naoLidas] = await Promise.all([
+  async listar(chamador: Chamador, pagina: PaginaDaLista): Promise<PaginaDeConversas> {
+    // As TRÊS em paralelo: o contador do sino é da CONTA inteira e não depende
+    // da página, e o total é do recorte e não da página — serializá-las só
+    // somaria latência na tela que o tutor abre com o telefone tocando.
+    const [conversas, naoLidas, total] = await Promise.all([
       this.deps.repositorio.listarDoChamador(chamador.userId, pagina),
       this.deps.repositorio.contarParaOSino(chamador.userId),
+      this.deps.repositorio.contarDoChamador(chamador.userId, pagina.termo),
     ]);
     return {
       items: conversas.map((c) => this.comoVisivel(c, [], null)),
       nextCursor: proximoDaLista(conversas, pagina.limit),
+      total,
       // **ESTA LINHA NÃO CHAMA `marcarListaVista`.** Ler a lista é um GET e
       // declara `x-effects: []`; zerar o contador é uma escrita e tem rota
       // própria. Pendurá-la aqui faria um `Atualizar`, ou um pré-carregamento,
@@ -519,6 +532,18 @@ export class ConversationService {
         nomeDoAchador: conversa.nomeDoAchador,
         tutorDesabilitado: conversa.tutorDesabilitado,
         achadorDesabilitado: conversa.achadorDesabilitado,
+        // O LADO DE QUEM CHAMA sai da CONSULTA (`papel_do_chamador`), e nunca
+        // de uma comparacao aqui: o id do chamador nao volta para a aplicacao,
+        // e um `if` daqui poderia discordar do `WHERE`.
+        papelDoChamador: conversa.papelDoChamador,
+        // JA RECORTADOS (emenda 3 do ADR-0010, 19/10/2026). O predicado de
+        // conexao aceita mora no `WHERE` das subconsultas que produzem estes
+        // dois campos (ADR-0021). **Nao ha `if` de conexao neste servico**, e a
+        // ausencia e a regra: um segundo lugar decidindo a mesma coisa esconde
+        // o que o primeiro deixou passar, e um `LeitorDeConexao` chamado por
+        // conversa seriam dez idas ao banco por pagina da lista.
+        apelidoDoOutro: conversa.apelidoDoOutro,
+        chaveDaFotoDoOutro: conversa.chaveDaFotoDoOutro,
       }),
       messages: mensagens,
       nextCursor,
@@ -564,7 +589,14 @@ function sinaisDe(conversa: ConversaDoChamador): SinaisDeEstado {
   };
 }
 
-/** O cursor da lista sai de `opened_at`, que é por onde ela ordena. */
+/**
+ * O cursor da lista sai da CHAVE DA ORDEM, que é por onde ela ordena.
+ *
+ * `ultimaMensagemEm ?? abertaEm` é o `coalesce` do `ORDER BY`, repetido aqui
+ * porque é aqui que a última linha entregue vira o endereço da próxima. **Os dois têm de ser a mesma expressão**: cursor
+ * sobre `abertaEm` com a lista ordenada pela última mensagem pula e repete
+ * linhas, e o sintoma aparece só na SEGUNDA página.
+ */
 function proximoDaLista(
   conversas: readonly ConversaDoChamador[],
   limite: number,
@@ -572,7 +604,10 @@ function proximoDaLista(
   if (conversas.length < limite) return null;
   const ultima = conversas[conversas.length - 1];
   if (ultima === undefined) return null;
-  return codificarCursor({ criadaEm: ultima.abertaEm, id: ultima.id });
+  return codificarCursor({
+    criadaEm: ultima.ultimaMensagemEm ?? ultima.abertaEm,
+    id: ultima.id,
+  });
 }
 
 /** Só há próxima página quando a atual encheu. Página curta é o fim da lista. */
