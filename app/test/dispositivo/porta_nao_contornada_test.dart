@@ -1589,7 +1589,62 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// copiado de ramo nem de relato.
 /// [valor de ramo 0bda41ae9a, SUPERADO pela uniao] SEGUNDO LOTE DE 19/10/2026, VALOR FINAL: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os SETE valores de ramo listados acima, cujas justificativas ficam INTEIRAS.
 /// [lado do ramo feat/meus-eventos-e-cancelar, valor de ramo c87d9e1afc, SUPERADO pela uniao] `Perfil` > `Meus eventos` (19/10/2026): UM arquivo NOVO em `app/lib/telas` -- `perfil/meus_eventos.dart` -- mais UMA linha em `abas.dart` (o `ItemDeMenu` entre `Meus achados` e `Sair da conta`, onde o proprio arquivo declara que item novo entra) e o importe dela. A tela e o UNICO caminho do app ate `cancelNetworkEvent`: nada na resposta da agenda diz de quem e o encontro. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a tela nova importa so `material`, a camada de api, o `Escopo`, o tema, quatro pecas de `widgets/` (`arrastar_para_atualizar`, `convite_para_entrar`, `faixa_de_aviso`, `folha_destrutiva`, `saida_da_tela`) e `rede/pecas_da_rede.dart` -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO da rota NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absurdo em SILENCIO). **QUEM MESCLAR PRECISA RECALCULAR SOBRE A ARVORE MESCLADA**: valor de ramo isolado NAO sobrevive a uniao, e SEIS frentes mexem em `app/lib/telas` nesta rodada. ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (o LOTE DE 19/10/2026, logo abaixo). === LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
-const String _arvoreDasTelas = 'PENDENTE-RECALCULAR-NO-FIM-DO-LOTE';
+///
+/// **VALOR FINAL DO SEGUNDO LOTE DE 19/10/2026, com as OITO frentes.**
+///
+/// **OITO valores de ramo disputaram este campo, e NENHUM sobreviveu** -- mais
+/// um valor intermediario desta propria mescla, que tambem nao sobreviveu
+/// quando a oitava frente entrou. O hash e de ARVORE e cobre `app/lib/telas`
+/// inteira; cada frente mediu a SUA arvore isolada. Os valores superados, com
+/// a justificativa INTEIRA preservada acima, de proposito:
+///
+///   c46ae91fdb  `origin/development` (o PRIMEIRO lote de 19/10)
+///   6622873a56  `feat/versao-minima-do-app`
+///   0a06fa5404  `feat/app-manda-a-propria-versao` (a mescla do anterior)
+///   7e739f5a3b  `feat/pets-por-distancia`
+///   db34d3b735  `feat/capa-do-evento-e-vitrine`
+///   bea2650f34  `feat/evento-simples-e-sem-telefone` (a ponta `58d0df28`)
+///   30fdc84cd6  `feat/barra-com-mural-e-rede-unificada`
+///   c87d9e1afc  `feat/meus-eventos-e-cancelar`
+///   0bda41ae9a  valor INTERMEDIARIO desta mescla, com SETE frentes, antes de
+///               a oitava entrar -- registrado para ninguem o confundir com o
+///               valor final nem com um valor de ramo
+///
+/// `fix/cancelar-o-proprio-evento` nao entra na lista: ela nao tocou
+/// `app/lib/telas`, e fica CONTIDA em `feat/meus-eventos-e-cancelar`.
+///
+/// **O QUE A OITAVA FRENTE SOMOU A PASTA**, e por que o valor mudou de novo:
+/// `perfil/meus_eventos.dart` NASCE (a lista de quem criou o encontro, e o
+/// unico caminho do app ate `Cancelar`); `abas.dart` ganha o item
+/// `Meus eventos`; e `rede/pecas_da_rede.dart` RECUPERA `rotuloDaSituacao` e
+/// `DistintivoDeSituacao`.
+///
+/// **DUAS COLISOES ENTRE FRENTES FORAM RESOLVIDAS NESTA PASTA, e nenhuma deu
+/// conflito textual na segunda -- ela apareceu como ERRO DE COMPILACAO.**
+///
+/// 1. `abas.dart`, conflito textual: `feat/barra-...` e
+///    `feat/meus-eventos-e-cancelar` acrescentaram item no MESMO ponto do menu
+///    da conta. Os TRES sobrevivem (`Pedidos de conexão`, `Pessoas
+///    bloqueadas`, `Meus eventos`), com `Sair da conta` ainda por ultimo.
+///    Apagar qualquer um deixaria tela construida sem porta.
+///
+/// 2. `rede/pecas_da_rede.dart`, SEM conflito textual: `meus_eventos.dart`
+///    chamava `rotuloDaSituacao`, `DistintivoDeSituacao` e o parametro
+///    `cancelado` da capa, que `feat/evento-simples-e-sem-telefone` havia
+///    apagado. O git dobrou os dois lados em silencio e `flutter analyze`
+///    acusou com QUATRO erros. Os dois primeiros voltaram verbatim da base,
+///    porque o motivo escrito da remocao deles era **falta de chamador** e a
+///    oitava frente traz um chamador noutra tela. O terceiro NAO voltou: ele
+///    saiu por ser sinal exclusivamente por cor (SC 1.4.1), e decisao de
+///    acessibilidade nao se desfaz por conveniencia de mescla.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore
+/// MESCLADA (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
+/// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
+/// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
+/// copiado de ramo nem de relato.
+const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
