@@ -758,6 +758,32 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'other',
     ],
   },
+
+  // ---------------------------------------------------------------------
+  // 20261019000007, a politica de versao minima do aplicativo. A plataforma e
+  // a CHAVE PRIMARIA da tabela, e e lista fechada de verdade: a migracao a
+  // escreve como `platform IN ('android', 'ios')` e o catalogo a normaliza
+  // para `= ANY (ARRAY[...])`, entao ela cai aqui e o conjunto INTEIRO precisa
+  // estar declarado.
+  //
+  // Os dois valores, e so eles. `ios` esta na lista com o aplicativo iOS
+  // DORMENTE (a conta Apple nao andou; decisao do cliente de 23/09): a linha
+  // existe com o mecanismo desligado, e tirar `ios` da restricao agora
+  // obrigaria outra migracao no dia em que a conta sair. Nao ha `web`: o site
+  // nao e aplicativo instalado e nao tem versao a bloquear.
+  //
+  // Os outros CHECKs desta tabela nao sao lista fechada (expressao regular e
+  // comprimento) e estao em CHECKS_QUE_NAO_SAO_LISTA_FECHADA -- menos
+  // `app_version_policy_updated_by_check`, que e so `length(updated_by) <=
+  // 120`, nao menciona literal de texto nenhum, a classificacao do cabecalho
+  // nao o colhe, e declara-lo em qualquer um dos dois registros faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar. Mesma regra que
+  // as restricoes de faixa da `Rede`, anotada no outro registro.
+  // ---------------------------------------------------------------------
+  'public.app_version_policy.app_version_policy_platform_check': {
+    coluna: 'platform',
+    valores: ['android', 'ios'],
+  },
 };
 
 /**
@@ -1425,6 +1451,45 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ---------------------------------------------------------------------
   'public.users.users_public_ref_forma':
     "CHECK ((public_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  // ---------------------------------------------------------------------
+  // 20261019000007, a politica de versao minima do aplicativo -- o
+  // interruptor capaz de trancar a base inteira fora do produto. Os tres
+  // abaixo mencionam literal de texto e NAO sao lista fechada: dois sao
+  // expressao regular de formato e o terceiro e formato mais comprimento.
+  //
+  // A lista fechada da tabela (`platform`) esta em LISTAS_FECHADAS. O quinto
+  // CHECK, `app_version_policy_updated_by_check`, e `length(updated_by) <=
+  // 120`: sem literal de texto, a classificacao nao o colhe, e declara-lo
+  // aqui faria o caso "restricao declarada que o banco nao tem mais"
+  // reprovar -- a mesma regra das restricoes de faixa da `Rede`, anotada no
+  // topo deste registro.
+  //
+  // Estes CHECKs sao o que torna a tabela preferivel a `.env` para este
+  // valor: quem escreve `'1.10'` as pressas e recusado NO `UPDATE`, com a
+  // politica anterior intacta e a API de pe, em vez de descobrir o erro de
+  // digitacao no boot seguinte ou nunca.
+  // ---------------------------------------------------------------------
+  //
+  // O MESMO formato que `AppVersion` do contrato cobra na requisicao, e ele
+  // esta no banco porque e aqui que a mao humana escreve. `'1.10'`,
+  // `'v1.10.0'`, `'1.10.0-rc1'` e `' 1.10.0'` sao recusados. Nulo passa (a
+  // ausencia e que libera: nula = ninguem bloqueado).
+  'public.app_version_policy.app_version_policy_minimum_version_check':
+    "CHECK ((minimum_version ~ '^(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})$'::text))",
+  // Identico ao de cima, caractere a caractere, e nas DUAS colunas de
+  // proposito: os dois estados sao coisas diferentes (um fecha o produto, o
+  // outro e um bilhete dispensavel) mas o FORMATO do numero e o mesmo, e
+  // divergir aqui aceitaria na faixa branda um numero que a faixa dura
+  // recusa.
+  'public.app_version_policy.app_version_policy_recommended_version_check':
+    "CHECK ((recommended_version ~ '^(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})$'::text))",
+  // O destino do botao da tela de bloqueio: `https://` e nenhum espaco, mais
+  // o teto de 300. As DUAS metades estao na mesma restricao e por isso a
+  // definicao vem com `AND` -- um endereco digitado as pressas com `http://`
+  // ou com espaco no fim abriria o navegador em lugar nenhum, e quem esta
+  // bloqueado ficaria sem saida.
+  'public.app_version_policy.app_version_policy_store_url_check':
+    "CHECK (((store_url ~ '^https://[^[:space:]]+$'::text) AND (length(store_url) <= 300)))",
 };
 
 /**
