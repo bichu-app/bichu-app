@@ -499,13 +499,23 @@ telas:
   # App, secao Rede (docs/prototipos/rede-encontro.html)
   # ====================================================================
 
-  - tela: "Agenda: abas Proximos, Meus pedidos, Encerrados"
+  # SO EVENTO ABERTO, E A AGENDA PERDEU UMA ABA (cliente, 19/10/2026):
+  # "vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos
+  # a necessidade de ter eventos privados tambem".
+  #
+  # A aba `Meus pedidos` saiu, e com ela `listMyNetworkEventJoinRequests` (que
+  # desceu para `contrato_sem_tela`) e o filtro `query:visibility` -- a agenda
+  # agora FIXA `visibility=public` em toda chamada, e o parametro deixou de
+  # ser escolha de quem usa. Ele continua declarado e continua sendo enviado:
+  # por isso `query:visibility` FICA nesta lista, com a nota.
+  - tela: "Agenda: abas Proximos e Encerrados"
     prototipo: rede-encontro.html
     estados: [normal, carregando, erro, vazio, vazio_com_busca, vazio_com_filtro]
     operacoes:
       - operationId: listNetworkEvents
         situacao: pendente
         onde: "feat/secao-rede (BICHUS-251), emenda em ADR-0027 12.10 e 12.14"
+        nota: "19/10/2026: `visibility` deixou de ser filtro de quem usa e passou a ser FIXO em `public` (`RecorteDaRede.queryDaAgenda`); a resposta ainda e filtrada de novo em `PaginaDaRede.doJson`, porque pedir nao e garantir"
         usa:
           - query:q
           - query:when
@@ -524,56 +534,12 @@ telas:
           - query:max_km
           - query:sort
           - resp:items[].distance_m
-      - operationId: listMyNetworkEventJoinRequests
-        situacao: pendente
-        onde: "ADR-0027 12.14"
-        usa:
-          - query:q
-          - query:state
-          - query:sort
 
-  - tela: "Pagina do encontro"
-    prototipo: rede-encontro.html
-    estados: [carregado, carregando, erro, semponto, encerrado, cancelado, priv-nenhum, priv-enviado, priv-aprovado]
-    operacoes:
-      - operationId: getNetworkEvent
-        situacao: pendente
-        onde: "feat/secao-rede (BICHUS-251), ADR-0027 12.10"
-        usa:
-          - resp:title
-          - resp:local_date
-          - resp:visibility
-          - resp:status
-      - operationId: getNetworkEventLocation
-        situacao: pendente
-        onde: "ADR-0027 12.5"
-        usa:
-          - resp:point
-      - operationId: getNetworkEventPrivateDetails
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:place
-          - resp:summary
-          - resp:images
-          - resp:admission
-          - resp:accepted_sizes
-          - resp:dog_age
-          - resp:vaccination_required
-          - resp:fenced_off_leash_area
-          - resp:amenities
-          - resp:bring_items
-          - resp:notes
-      - operationId: requestToJoinNetworkEvent
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:state
-      - operationId: getMyNetworkEventJoinRequest
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:state
+  # A TELA "Pagina do encontro" SAIU DESTA MATRIZ em 19/10/2026, porque a tela
+  # saiu do app: "você deve mostrar apenas a foto e o titulo do evento, sem
+  # informações adicionais ou pagina de detalhes do evento". As cinco
+  # operacoes dela desceram para `contrato_sem_tela`, com o registro da
+  # decisao. Nenhuma foi removida do contrato.
 
 # ======================================================================
 # Correspondencias codigo -> rotulo. Os rotulos ficam no cliente; o que o
@@ -1106,11 +1072,55 @@ contrato_sem_tela:
   - operationId: closeAllAdminSessions
     resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"
+  # ====================================================================
+  # AS SETE OPERACOES DA REDE APOSENTADAS EM 19/10/2026
+  # ====================================================================
+  #
+  # DUAS decisoes do cliente, no mesmo dia, e a frase de cada uma esta
+  # repetida na `nota` de cada operacao de proposito -- quem abre uma linha
+  # sozinha precisa ler o motivo sem subir ate aqui.
+  #
+  #   (1) "a pagina perto e rede tem que ser unificado e você deve mostrar
+  #       apenas a foto e o titulo do evento, sem informações adicionais ou
+  #       pagina de detalhes do evento e sem aparecer o telefone quando for
+  #       profissionais/clinicas"
+  #   (2) "vamos deixar apenas os eventos abertos por enquanto, no futuro
+  #       analisamos a necessidade de ter eventos privados tambem"
+  #
+  # AS SETE FICAM NO CONTRATO, E AS ROTAS DO SERVIDOR FICAM DE PE. Elas nao
+  # estao em `OPERACOES_AINDA_SEM_ROTA` (`src/shared/http/rotas-registradas-contra-o-contrato.test.ts`)
+  # porque aquela lista e de operacao SEM ROTA, e estas sete tem rota: o que
+  # falta a elas e CONSUMIDOR no app. `contrato_sem_tela` e o lugar que o
+  # projeto ja tem para isso, e o portao `src/tools/portao-rastreabilidade.ts`
+  # confere que cada `operationId` daqui existe no contrato.
+  #
+  # POR QUE FICAM, e nao saem: ele disse "no futuro analisamos", e nao
+  # "nunca". Aposentada com data e com a frase dele e diferente de esquecida.
+  #
+  # O QUE FOI REMOVIDO foi o caminho de tela, e nada no contrato: a pagina de
+  # detalhe do evento, a aba `Meus pedidos`, os filtros `Público ou privado` e
+  # `Situação do pedido`, e `RecorteDaRede.queryDePedidos`.
+  - operationId: getNetworkEvent
+    resolucao: "tela: resolvido quando a pagina do evento voltar a existir"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Era a leitura da pagina de detalhe do evento, removida por decisao do cliente: 'você deve mostrar apenas a foto e o titulo do evento, sem informações adicionais ou pagina de detalhes do evento'. A agenda usa `listNetworkEvents`, que traz titulo e `cover_image_url`, e o cartao nao precisa de mais nada. A rota do servidor continua de pe"
+  - operationId: getNetworkEventLocation
+    resolucao: "tela: resolvido quando a pagina do evento voltar a existir"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Era o ponto do mapa estatico da pagina de detalhe (ADR-0027 12.5), e `rede/local_do_encontro.dart` foi apagado com ela. Nenhuma outra tela pede coordenada de evento"
+  - operationId: getNetworkEventPrivateDetails
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Decisao do cliente: 'vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem'. Era o conteudo oculto que o pedido aprovado liberava, na pagina de detalhe"
+  - operationId: requestToJoinNetworkEvent
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era `Pedir para participar`, na pagina de detalhe do evento privado; a guarda de acao que mandava o pedido depois do login (`pedido_de_participacao_como_intencao.dart`) foi apagada junto"
+  - operationId: getMyNetworkEventJoinRequest
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era a leitura que decidia o estado da caixa do privado (nenhum, enviado, aprovado) na pagina de detalhe"
   - operationId: withdrawNetworkEventJoinRequest
-    situacao: pendente
-    onde: "ADR-0027 12.11 (BICHUS-251)"
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era `Desistir do pedido` (ADR-0027 12.11), e esta linha existia aqui desde BICHUS-251 com `situacao: pendente` e a nota 'o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX' -- o gesto chegou em 19/10 e saiu no MESMO dia, com a pagina que o hospedava. `situacao: pendente` saiu daqui porque a operacao existe no contrato desta branch"
+  - operationId: listMyNetworkEventJoinRequests
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem'. Era a aba `Meus pedidos` da agenda da Rede, com os filtros `q`, `state` e `sort`. A aba existia porque havia pedido de participacao; o pedido nascia na pagina de detalhe, a pagina saiu em 19/10 e a aba ficou sem origem. Esta decisao e o veredito sobre isso: nao volta por ora. Nenhum caminho do app le esta operacao -- `RecorteDaRede.queryDePedidos` e `RedeApi.meusPedidos` nao tem chamador (o metodo fica, aposentado com registro no cabecalho de `app/lib/api/rede_api.dart`)"
   # ADR-0025 emenda 3 (17/10/2026): o backend do encontro criado pela
   # comunidade. Ele PUBLICA DIRETO -- nao ha fila de moderacao, e por isso nao
   # ha operacao de painel aqui. As telas do app sao do despacho seguinte, e por

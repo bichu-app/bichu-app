@@ -12,8 +12,36 @@ import 'modelos_rede.dart';
 /// Declarar os metodos sem o cabecalho produziria 428 em toda chamada, que e
 /// pior que a ausencia -- ver o relato da entrega.
 ///
-/// O resto do que o app escreve e o pedido de participacao da propria conta, e
-/// a desistencia dele.
+/// ## AS SETE OPERACOES APOSENTADAS (19/10/2026)
+///
+/// Decisao do cliente, palavra por palavra: *"vamos deixar apenas os eventos
+/// abertos por enquanto, no futuro analisamos a necessidade de ter eventos
+/// privados tambem"*. Sete metodos desta classe **ficam declarados e nao tem
+/// chamador nenhum no app**:
+///
+/// - [detalhar] (`getNetworkEvent`), [localizacao]
+///   (`getNetworkEventLocation`) e [detalhesDoPrivado]
+///   (`getNetworkEventPrivateDetails`): eram da pagina de detalhe do evento,
+///   que saiu no mesmo dia, por outro pedido dele (*"sem informações
+///   adicionais ou pagina de detalhes do evento"*);
+/// - [pedir] (`requestToJoinNetworkEvent`), [meuPedido]
+///   (`getMyNetworkEventJoinRequest`) e [desistir]
+///   (`withdrawNetworkEventJoinRequest`): o pedido de participacao nascia
+///   naquela pagina;
+/// - [meusPedidos] (`listMyNetworkEventJoinRequests`): era a aba `Meus
+///   pedidos` da agenda, que saiu com esta decisao.
+///
+/// **Ficam, e isto e deliberado.** Ele disse *"no futuro analisamos"*, e nao
+/// "nunca": apagar os sete faria a proxima pessoa reescrever a leitura de
+/// `NetworkEventJoinRequest` do zero, sem a prosa que explica por que a recusa
+/// nao existe aqui. Quem as reabrir le o registro em
+/// `api/rastreabilidade-backoffice-rede.yaml`, secao `contrato_sem_tela`, que
+/// e onde o projeto ja declara operacao de contrato sem tela.
+///
+/// **O que NAO fica e caminho de tela ate elas.** Nenhum widget, nenhuma rota
+/// e nenhum recorte da agenda chama qualquer uma das sete; `RecorteDaRede`
+/// perdeu `visibilidade`, `estadoDoPedido` e `queryDePedidos` no mesmo
+/// commit, e `queryDaAgenda` passou a fixar `visibility=public`.
 ///
 /// ## Quem leva token
 ///

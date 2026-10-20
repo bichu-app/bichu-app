@@ -60,28 +60,110 @@ RedeDeTeste redeComAgenda({
 
 void main() {
   group('abas', () {
-    testWidgets('sem conta: Próximos e Encerrados, e Meus pedidos não existe',
+    // **ERAM TRES ABAS, SAO DUAS** (cliente, 19/10/2026: *"vamos deixar
+    // apenas os eventos abertos por enquanto, no futuro analisamos a
+    // necessidade de ter eventos privados tambem"*).
+    //
+    // O caso `com conta: as três abas` SAIU, e o de sem conta trocou de
+    // sentido: `Meus pedidos` nao faltava mais por falta de sessao -- ela nao
+    // existe. Os dois casos abaixo medem pela CONTAGEM de `Tab`, e nao por um
+    // `findsNothing` sobre o rotulo: `findsNothing` sozinho passaria com a
+    // `TabBar` fora da arvore, e foi assim que o repositorio colecionou dez
+    // portoes cegos numa rodada.
+    for (final logado in <bool>[false, true]) {
+      testWidgets(
+          'ISCA -- duas abas, Próximos e Encerrados, '
+          '${logado ? "com" : "sem"} conta', (tester) async {
+        // ISCA: em `agenda_da_rede.dart`, devolva a linha
+        //     if (logado) AbaDaRede.pedidos,
+        // a `_abasVisiveis` e o valor `pedidos('Meus pedidos')` ao `enum`.
+        // O caso com conta reprova na contagem (2 contra 3) E no rotulo.
+        final rede = redeComAgenda();
+        await abrirRede(tester, rede: rede, logado: logado);
+
+        // (1) A `TabBar` ESTA na arvore, com DUAS abas. Esta e a assercao que
+        // nao envelhece: uma aba nova, qualquer que seja o nome dela,
+        // reprova aqui sem o caso precisar conhece-la.
+        expect(
+          find.byType(Tab),
+          findsNWidgets(2),
+          reason: 'REPROVA: a agenda nao tem exatamente duas abas. Eram tres '
+              'ate 19/10/2026; `Meus pedidos` saiu com o evento privado.',
+        );
+        expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
+        expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
+        expect(
+          find.widgetWithText(Tab, 'Meus pedidos'),
+          findsNothing,
+          reason: 'REPROVA: a aba `Meus pedidos` voltou. Ela ficou sem origem '
+              'quando a pagina de detalhe do evento saiu, e o cliente deu o '
+              'veredito em 19/10/2026: so eventos abertos por enquanto.',
+        );
+
+        final lista = rede.chamadasA('GET /v1/network/events');
+        expect(lista, isNotEmpty);
+        expect(lista.last.url.queryParameters['when'], 'upcoming');
+        if (!logado) {
+          // Sem conta, nenhuma pergunta com token sai.
+          expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
+          expect(lista.last.headers['Authorization'], isNull);
+        }
+      });
+    }
+
+    testWidgets(
+        'ISCA -- nenhuma chamada do app vai a /network/join-requests',
         (tester) async {
-      final rede = redeComAgenda();
-      await abrirRede(tester, rede: rede, logado: false);
+      // ISCA: em `agenda_da_rede.dart`, devolva o ramo
+      //     case AbaDaRede.pedidos:
+      //       final p = await rede.meusPedidos(recorte.queryDePedidos);
+      // (com o valor do `enum` e `RecorteDaRede.queryDePedidos`). Este caso
+      // reprova no registro da rede assim que a aba for tocada -- e mesmo sem
+      // toque, a aba voltar ja reprova o caso acima.
+      //
+      // **A rede de teste responde 404 em rota nao declarada**, e
+      // `listMyNetworkEventJoinRequests` NAO esta declarada abaixo de
+      // proposito: se alguem a chamar, a agenda cai na faixa de falha e as
+      // duas assercoes finais acusam.
+      final rede = RedeDeTeste(<String, http.Response Function(http.Request)>{
+        'GET /v1/network/events': (req) => json200(
+              pagina(<Map<String, dynamic>>[encontroPublico()]),
+            ),
+        'GET /v1/network/events/nearby': (req) =>
+            json200(paginaPorPerto(<Map<String, dynamic>>[])),
+      });
+      await abrirRede(tester, rede: rede);
 
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      // **PASSA POR TODA ABA QUE EXISTIR, e nao pelas duas que eu espero.**
+      // Esta e a diferenca que faz o caso valer: lido pelos rotulos que a
+      // `TabBar` de fato publica, uma aba NOVA (ou a `Meus pedidos` de volta)
+      // e visitada aqui sem o caso precisar ser editado -- e, se ela ler os
+      // pedidos, a chamada proibida aparece no registro da rede.
+      final rotulos = <String>[
+        for (final e in find.byType(Tab).evaluate())
+          ((e.widget as Tab).text ?? ''),
+      ];
+      expect(rotulos, isNotEmpty, reason: 'a `TabBar` nao esta na arvore');
+      for (final rotulo in rotulos) {
+        await tester.tap(find.widgetWithText(Tab, rotulo));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.widgetWithText(Tab, 'Próximos'));
+      await tester.pumpAndSettle();
 
-      final lista = rede.chamadasA('GET /v1/network/events');
-      expect(lista, isNotEmpty);
-      expect(lista.last.url.queryParameters['when'], 'upcoming');
-      // Sem conta, nenhuma pergunta com token sai.
-      expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
-      expect(lista.last.headers['Authorization'], isNull);
-    });
-
-    testWidgets('com conta: as três abas', (tester) async {
-      await abrirRede(tester, rede: redeComAgenda());
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
+      expect(
+        rede.chamadasA('GET /v1/network/join-requests'),
+        isEmpty,
+        reason: 'REPROVA: o app voltou a ler `listMyNetworkEventJoinRequests`. '
+            'A operacao continua no contrato, aposentada com data em '
+            '`api/rastreabilidade-backoffice-rede.yaml`, e sem ninguem para '
+            'alimenta-la: nenhuma tela cria pedido de participacao.',
+      );
+      // E a agenda nao caiu: se a chamada proibida tivesse saido e levado 404,
+      // estas duas falhariam -- e e isso que torna o `isEmpty` acima nao
+      // vacuo.
+      expect(find.byType(CartaoDoEncontro), findsOneWidget);
+      expect(find.text(AgendaDaRede.textoDaFalha), findsNothing);
     });
 
     testWidgets('Encerrados pede when=past e não tem botão de ordenar',
@@ -214,15 +296,26 @@ void main() {
       );
     });
 
-    testWidgets('ISCA -- teaser privado: o banner da marca e o título',
-        (tester) async {
-      // ISCA: em `cartao_do_encontro.dart`, troque
-      //     url: e is EncontroPublico ? e.urlDaCapa : null,
-      // por `url: 'https://midia.bichu.app/x.jpg'`. O teaser passa a baixar
-      // uma imagem que o contrato nao manda e este caso reprova no `Image`.
+    testWidgets(
+        'ISCA -- público sem capa desenha o banner da marca, pintado e não '
+        'baixado', (tester) async {
+      // ISCA: em `pecas_da_rede.dart`, troque o
+      //     if (endereco == null) return const AspectRatio(... BannerDaMarca())
+      // por `Image.network(endereco ?? '')`. `Image.network('')` LANCA, e
+      // este caso reprova na arvore.
+      //
+      // **Este caso media o TEASER PRIVADO ate 19/10/2026**, porque o teaser
+      // era o unico encontro sem capa possivel. Ele trocou de massa, e nao de
+      // mecanismo: o privado deixou de chegar a tela (ver o grupo
+      // `so evento aberto`), e publico sem imagem e estado normal e frequente
+      // -- `cover_image_url` e nulo enquanto a derivada nao existe.
       await abrirRede(
         tester,
-        rede: redeComAgenda(proximos: <Map<String, dynamic>>[teaserPrivado()]),
+        rede: redeComAgenda(
+          proximos: <Map<String, dynamic>>[
+            encontroPublico(title: 'Clube dos border collies'),
+          ],
+        ),
         logado: false,
       );
 
@@ -356,6 +449,99 @@ void main() {
     });
   });
 
+  // =====================================================================
+  // SO EVENTO ABERTO (cliente, 19/10/2026)
+  // =====================================================================
+  //
+  // *"vamos deixar apenas os eventos abertos por enquanto, no futuro
+  // analisamos a necessidade de ter eventos privados tambem"*.
+  //
+  // DUAS metades, e cada uma tem o seu caso: a agenda PEDE `visibility=public`
+  // e, se um privado chegar apesar do pedido, ela o DESCARTA. A segunda nao
+  // depende do servidor obedecer, e e por isso que ela existe -- um servidor
+  // que ignore o parametro, ou uma versao do app contra um servidor mais
+  // velho, nao podem pintar um evento privado na lista.
+  group('só evento aberto', () {
+    testWidgets('ISCA -- a agenda pede visibility=public em toda chamada',
+        (tester) async {
+      // ISCA: em `modelos_rede.dart`, em `RecorteDaRede.queryDaAgenda`,
+      // apague a linha
+      //     'visibility': VisibilidadeDoEncontro.publico.codigo,
+      // Este caso reprova nas DUAS abas.
+      final rede = redeComAgenda(
+        encerrados: <Map<String, dynamic>>[encontroPublico(status: 'ended')],
+      );
+      await abrirRede(tester, rede: rede, logado: false);
+
+      final emProximos = rede.chamadasA('GET /v1/network/events');
+      expect(emProximos, isNotEmpty, reason: 'nada foi pedido: o caso mediria o nada');
+      expect(
+        emProximos.last.url.queryParameters['visibility'],
+        'public',
+        reason: 'REPROVA: a aba `Próximos` nao pede so eventos abertos.',
+      );
+
+      await tester.tap(find.widgetWithText(Tab, 'Encerrados'));
+      await tester.pumpAndSettle();
+      final emEncerrados = rede.chamadasA('GET /v1/network/events').last;
+      expect(emEncerrados.url.queryParameters['when'], 'past');
+      expect(
+        emEncerrados.url.queryParameters['visibility'],
+        'public',
+        reason: 'REPROVA: a aba `Encerrados` nao pede so eventos abertos. Fixar '
+            'o parametro em UM lugar (`queryDaAgenda`) existe exatamente para '
+            'nenhuma das abas esquecer.',
+      );
+    });
+
+    testWidgets(
+        'ISCA -- um privado que chegue APESAR do pedido é descartado, e a '
+        'lista continua de pé', (tester) async {
+      // ISCA: em `modelos_rede.dart`, em `PaginaDaRede.doJson`, troque
+      //     if (bruto is Map<String, dynamic> && bruto['visibility'] == 'public')
+      // por `if (bruto is Map<String, dynamic>)`. Este caso reprova na
+      // contagem de cartoes (2 contra 1) e no titulo do privado.
+      //
+      // A resposta abaixo DESOBEDECE o pedido de proposito: ela devolve um
+      // teaser privado junto do publico. E o unico jeito de medir a segunda
+      // metade -- com um servidor obediente, o descarte nunca roda e um
+      // `findsNothing` sobre o titulo do privado passaria sem nada acontecer.
+      await abrirRede(
+        tester,
+        logado: false,
+        rede: redeComAgenda(
+          proximos: <Map<String, dynamic>>[
+            encontroPublico(title: 'Passeio aberto'),
+            teaserPrivado(title: 'Clube fechado'),
+          ],
+        ),
+      );
+
+      // (1) O ABERTO ESTA NA TELA. Sem esta linha, (2) e (3) passariam com a
+      // agenda em estado de falha ou em branco.
+      expect(find.text('Passeio aberto'), findsOneWidget);
+
+      // (2) UM CARTAO SO. A contagem e o que reprova por qualquer privado que
+      // escape, sem o caso precisar conhecer o titulo dele.
+      expect(
+        find.byType(CartaoDoEncontro),
+        findsOneWidget,
+        reason: 'REPROVA: o evento privado da resposta virou cartao. A agenda '
+            'pede `visibility=public`, mas pedir nao e garantir: '
+            '`PaginaDaRede.doJson` tem de descartar o que nao e aberto.',
+      );
+
+      // (3) E O TITULO DELE NAO ESTA EM LUGAR NENHUM, nem no texto nem na
+      // arvore falada.
+      expect(find.text('Clube fechado'), findsNothing);
+      expect(textoDaTela(tester), isNot(contains('Clube fechado')));
+
+      // (4) E A AGENDA NAO CAIU. Descartar, e nao lancar: um privado na
+      // resposta nao pode derrubar a lista inteira na faixa de falha.
+      expect(find.text(AgendaDaRede.textoDaFalha), findsNothing);
+    });
+  });
+
   group('distância pela região cadastrada', () {
     // **DOIS CASOS SAIRAM DESTE GRUPO** com a linha de distancia do cartao:
     // `ISCA -- a distância nunca aparece em privado` (que media
@@ -454,7 +640,6 @@ void main() {
         'Valor',
         'Gratuito',
         'Pago',
-        'Público ou privado',
         'Cidade',
         'Porte do cão',
         'Pequeno',
@@ -463,6 +648,27 @@ void main() {
         'Até 2 km',
       ]) {
         expect(find.text(t), findsWidgets, reason: 'falta "$t" na folha');
+      }
+
+      // **E OS DOIS GRUPOS QUE SAIRAM NAO VOLTARAM** (19/10/2026).
+      // `Público ou privado` nao tem desfecho com so eventos abertos, e
+      // `Situação do pedido` era da aba que saiu. Ancorado na folha ABERTA
+      // -- as assercoes positivas acima provam que ela esta na arvore, e por
+      // isso estes `findsNothing` nao sao vacuos.
+      for (final sumido in <String>[
+        'Público ou privado',
+        'Privado',
+        'Situação do pedido',
+        'Enviado',
+        'Aprovado',
+      ]) {
+        expect(
+          find.text(sumido),
+          findsNothing,
+          reason: 'REPROVA: o grupo de filtro "$sumido" voltou a folha. '
+              'Controle cujas opcoes dao a mesma lista e pior que controle '
+              'nenhum (criterio 2 da BICHUS-62).',
+        );
       }
     });
 
@@ -510,122 +716,28 @@ void main() {
     });
   });
 
-  group('Meus pedidos', () {
-    testWidgets(
-        'ISCA -- lista os pedidos com a pílula do app, e "recusado" não existe',
-        (tester) async {
-      // ISCA: em `modelos_rede.dart`, acrescente a `EstadoDoPedido`
-      //     recusado('declined', 'Pedido não aprovado'),
-      // e responda `declined` abaixo. O portao de conformidade reprova o
-      // valor que o contrato nao tem, e este caso reprova pelo texto.
-      final rede = redeComAgenda(
-        pedidos: paginaDePedidos(<Map<String, dynamic>>[
-          <String, dynamic>{
-            'event': teaserPrivado(),
-            'state': 'requested',
-            'requested_at': '2026-09-28T12:00:00Z',
-          },
-          <String, dynamic>{
-            'event': teaserPrivado(slug: 'p9w3z1', title: 'Caminhada das seis'),
-            'state': 'approved',
-            'requested_at': '2026-09-27T12:00:00Z',
-          },
-          // Fora do contrato: um servidor que vazasse a recusa. O app nao
-          // tem para onde leva-la.
-          <String, dynamic>{
-            'event': teaserPrivado(slug: 'r4v8t2', title: 'Treino de faro'),
-            'state': 'declined',
-            'requested_at': '2026-09-26T12:00:00Z',
-          },
-        ]),
-      );
-      await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
-
-      expect(rede.chamadasA('GET /v1/network/join-requests'), hasLength(1));
-      expect(
-        rede
-            .chamadasA('GET /v1/network/join-requests')
-            .single
-            .url
-            .queryParameters['sort'],
-        'proximos',
-      );
-      // **A PILULA SAIU DO CARTAO** (cliente, 19/10/2026: "sem informações
-      // adicionais"). Ate aqui este caso media `Pedido enviado` duas vezes e
-      // `Pedido aprovado` uma. Agora ele mede o contrario -- e mede ANCORADO
-      // nos tres cartoes, porque um `findsNothing` sozinho passaria com a aba
-      // vazia, que e exatamente o que o estado de `Meus pedidos` virou.
-      expect(find.byType(CartaoDoEncontro), findsNWidgets(3));
-      for (final pilula in <String>['Pedido enviado', 'Pedido aprovado']) {
-        expect(
-          find.text(pilula),
-          findsNothing,
-          reason: 'REPROVA: a pilula do pedido voltou ao cartao.',
-        );
-      }
-
-      final tela = textoDaTela(tester).toLowerCase();
-      for (final proibido in <String>['recusad', 'não aprovado', 'negad']) {
-        expect(tela, isNot(contains(proibido)));
-      }
-
-      await tester.tap(find.byIcon(Icons.tune));
-      await tester.pumpAndSettle();
-      expect(find.text('Situação do pedido'), findsOneWidget);
-      expect(find.text('Enviado'), findsOneWidget);
-      expect(find.text('Aprovado'), findsOneWidget);
-      expect(find.text('Recusado'), findsNothing);
-      // `listMyNetworkEventJoinRequests` nao aceita `admission` nem `size`.
-      expect(find.text('Valor'), findsNothing);
-      expect(find.text('Porte do cão'), findsNothing);
-    });
-
-    testWidgets('busca e Situação do pedido vão a join-requests', (tester) async {
-      final rede = redeComAgenda(
-        pedidos: paginaDePedidos(<Map<String, dynamic>>[
-          <String, dynamic>{
-            'event': teaserPrivado(),
-            'state': 'requested',
-            'requested_at': '2026-09-28T12:00:00Z',
-          },
-        ]),
-      );
-      await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField).first, 'border');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Buscar'));
-      await tester.pumpAndSettle();
-      var q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
-      expect(q['q'], 'border');
-
-      await tester.tap(find.byIcon(Icons.tune));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Aprovado'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Aplicar'));
-      await tester.pumpAndSettle();
-      q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
-      expect(q['state'], 'approved');
-      expect(q['q'], 'border');
-      expect(q['sort'], 'proximos');
-      for (final proibido in <String>['admission', 'size', 'max_km', 'city']) {
-        expect(q.containsKey(proibido), isFalse);
-      }
-    });
-
-    testWidgets('vazio de Meus pedidos', (tester) async {
-      await abrirRede(tester, rede: redeComAgenda());
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
-      expect(find.text('Nenhum pedido ainda'), findsOneWidget);
-      expect(find.text('Seus pedidos aparecem aqui.'), findsOneWidget);
-    });
-  });
+  // =====================================================================
+  // O GRUPO `Meus pedidos` SAIU INTEIRO (cliente, 19/10/2026)
+  // =====================================================================
+  //
+  // Os tres casos eram `ISCA -- lista os pedidos com a pílula do app, e
+  // "recusado" não existe`, `busca e Situação do pedido vão a join-requests`
+  // e `vazio de Meus pedidos`. Os tres mediam a aba, e a aba saiu: *"vamos
+  // deixar apenas os eventos abertos por enquanto, no futuro analisamos a
+  // necessidade de ter eventos privados tambem"*.
+  //
+  // **O QUE O PRIMEIRO PROTEGIA NAO FOI PERDIDO.** Ele existia para provar
+  // que o app nunca mostra recusa -- o servidor manda `requested` para o
+  // recusado (ADR-0027 12.11), e um `EstadoDoPedido.recusado` inventado
+  // vazaria a decisao da equipe. Isso agora e impossivel por construcao:
+  // `EstadoDoPedido` nao tem valor de recusa, nenhuma tela o desenha e o
+  // portao de conformidade do app (`make verificar-conformidade-do-app`)
+  // confere o `enum` valor por valor contra `NetworkEventJoinRequestState` do
+  // contrato. Um valor a mais no `enum` reprova LA, sem depender desta tela.
+  //
+  // O que substitui os tres aqui e
+  // `ISCA -- nenhuma chamada do app vai a /network/join-requests`, no grupo
+  // `abas`: ele mede a ausencia do caminho, que e o que a decisao pediu.
 
   group('estados da lista', () {
     testWidgets('vazio sem recorte: a barra não aparece', (tester) async {
@@ -917,15 +1029,13 @@ void main() {
       expect((await escolher(tester, rede, 'São Paulo'))['city'], 'São Paulo');
     });
 
-    testWidgets('Privado manda visibility=private e não pergunta distâncias',
-        (tester) async {
-      final rede = redeComAgenda();
-      await abrirRede(tester, rede: rede);
-      final perto = rede.chamadasA('GET /v1/network/events/nearby').length;
-      final q = await escolher(tester, rede, 'Privado');
-      expect(q['visibility'], 'private');
-      expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(perto));
-    });
+    // **O CASO `Privado manda visibility=private e não pergunta distâncias`
+    // SAIU** (19/10/2026): o grupo de filtro que o alimentava saiu, e o
+    // parametro deixou de ser escolha. O que ele garantia -- que escolher
+    // privado nao gastava a pergunta de distancias -- virou dispensavel: a
+    // agenda nunca pede privado. O caso que mede o novo comportamento e
+    // `ISCA -- a agenda pede visibility=public em toda chamada`, no grupo
+    // `so evento aberto`.
 
     testWidgets('Até 5 km vai a listNearbyNetworkEvents, sem visibility',
         (tester) async {
@@ -944,19 +1054,37 @@ void main() {
 
   group('sessão', () {
     testWidgets(
-        'sair da conta com a agenda aberta: Meus pedidos some e a agenda '
-        'volta sem token e sem distâncias', (tester) async {
+        'sair da conta com a agenda aberta: a agenda volta sem token e sem '
+        'distâncias, e as DUAS abas ficam', (tester) async {
+      // **ESTE CASO MUDOU DE ALVO EM 19/10/2026.** Ele media `Meus pedidos`
+      // sumindo ao sair da conta -- a terceira aba dependia da sessao. A aba
+      // saiu do app, e o que sobrou de verdade para medir e o que sempre foi
+      // o mais importante aqui: a agenda RECARREGA sem token e para de
+      // perguntar distancias.
+      //
+      // A assercao das duas abas entrou no lugar da que saiu, e ela nao e
+      // decorativa: a `TabBar` e refeita quando o numero de abas muda, e era
+      // a sessao que mudava esse numero. Se alguem devolver a dependencia, o
+      // controlador volta a ser recriado no logout e este caso acusa.
       final rede = redeComAgenda();
       rede.respostas['POST /v1/auth/logout'] = (_) => http.Response('', 204);
       await abrirRede(tester, rede: rede);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsOneWidget);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
-
+      expect(find.byType(Tab), findsNWidgets(2));
+      // **Fica em `Próximos` de proposito.** O caso antigo tocava em `Meus
+      // pedidos` antes de sair, porque era a aba que desaparecia; tocar em
+      // `Encerrados` agora mudaria o `when` da recarga para `past` e a
+      // assercao abaixo (`upcoming`) mediria outra coisa. A aba que importa
+      // aqui e a que fica aberta.
       final contexto = tester.element(find.byType(TabBar));
       await Escopo.of(contexto).sessao.sair();
       await tester.pumpAndSettle();
 
+      expect(
+        find.byType(Tab),
+        findsNWidgets(2),
+        reason: 'REPROVA: o numero de abas mudou com a sessao. Desde '
+            '19/10/2026 sao duas, com conta e sem.',
+      );
       expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
       final ultima = rede.chamadasA('GET /v1/network/events').last;
       expect(ultima.url.queryParameters['when'], 'upcoming');
@@ -970,18 +1098,34 @@ void main() {
   });
 
   group('resposta fora do contrato', () {
-    testWidgets('um teaser com local_date de outro tipo vira a faixa de falha',
+    testWidgets(
+        'ISCA -- um público com starts_at de outro tipo vira a faixa de falha',
         (tester) async {
+      // ISCA: em `modelos_rede.dart`, em `EncontroPublico.doJson`, troque a
+      // leitura de `starts_at` por algo que aceite qualquer tipo. A
+      // `FormatException` deixa de subir e este caso reprova pelo texto.
+      //
+      // **ESTE CASO MEDIA UM TEASER PRIVADO ate 19/10/2026**, e trocou de
+      // massa porque o privado nao e mais PARSEADO: `PaginaDaRede.doJson` o
+      // descarta antes, pela chave `visibility` -- e o descarte deixaria este
+      // caso verde por vazio, que e o pior desfecho possivel para ele. Agora
+      // ele mede o mesmo mecanismo num encontro que a agenda de fato le.
       await abrirRede(
         tester,
         logado: false,
         rede: redeComAgenda(
           proximos: <Map<String, dynamic>>[
-            <String, dynamic>{...teaserPrivado(), 'local_date': 20261004},
+            <String, dynamic>{...encontroPublico(), 'starts_at': 20261004},
           ],
         ),
       );
-      expect(find.text('Não conseguimos carregar os eventos agora.'), findsOneWidget);
+      expect(
+        find.text('Não conseguimos carregar os eventos agora.'),
+        findsOneWidget,
+        reason: 'REPROVA: resposta fora do contrato nao virou faixa de falha. '
+            'Campo de tipo errado tem de parar a tela, e nao virar lista '
+            'vazia com cara de "a Rede nao tem eventos".',
+      );
     });
   });
 }

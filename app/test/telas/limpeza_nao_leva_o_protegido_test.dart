@@ -302,8 +302,10 @@ void main() {
       final vazios = <String, String>{
         'MeusPets.explicacaoDoVazio': MeusPets.explicacaoDoVazio,
         'AgendaDaRede.explicacaoDoVazio': AgendaDaRede.explicacaoDoVazio,
-        'AgendaDaRede.explicacaoDoVazioDePedidos':
-            AgendaDaRede.explicacaoDoVazioDePedidos,
+        // `AgendaDaRede.explicacaoDoVazioDePedidos` saiu desta tabela em
+        // 19/10/2026: a aba `Meus pedidos` saiu do app com o evento privado,
+        // e a constante saiu com ela. Frase que ninguem desenha nao precisa
+        // de piso de qualidade -- precisa deixar de existir.
         'AgendaDaRede.explicacaoDoVazioDeEncerrados':
             AgendaDaRede.explicacaoDoVazioDeEncerrados,
         'AgendaDaRede.explicacaoDoVazioFiltrado':

@@ -308,10 +308,11 @@ void main() {
     });
 
     test('listNearbyNetworkEvents nao recebe visibility nem coordenada', () {
-      const r = RecorteDaRede(
-        visibilidade: VisibilidadeDoEncontro.publico,
-        distanciaMaxima: DistanciaMaxima.ate5km,
-      );
+      // `visibilidade` saiu de `RecorteDaRede` em 19/10/2026 (o filtro
+      // `Público ou privado` saiu do app). O caso FICA e continua medindo o
+      // que importava: `queryPorPerto` nao manda `visibility` -- e agora nao
+      // tem de onde o mandar, que e uma garantia mais forte.
+      const r = RecorteDaRede(distanciaMaxima: DistanciaMaxima.ate5km);
       final q = r.queryPorPerto(ordemPorPerto: OrdemPorPerto.distancia);
       expect(q.containsKey('visibility'), isFalse);
       expect(q['max_km'], '5');
@@ -321,21 +322,21 @@ void main() {
       }
     });
 
-    test('listMyNetworkEventJoinRequests nao recebe admission nem size', () {
-      const r = RecorteDaRede(
-        termo: 'border',
-        entrada: TipoDeEntrada.pago,
-        porte: Porte.grande,
-        estadoDoPedido: EstadoDoPedido.aprovado,
-      );
-      expect(r.queryDePedidos, <String, String>{
-        'q': 'border',
-        'state': 'approved',
-        'sort': 'proximos',
-        'page': '1',
-        'limit': '20',
-      });
-    });
+    // **O CASO `listMyNetworkEventJoinRequests nao recebe admission nem size`
+    // SAIU** (19/10/2026). Ele media `RecorteDaRede.queryDePedidos`, que era
+    // a consulta da aba `Meus pedidos`. A aba saiu do app por decisao do
+    // cliente -- *"vamos deixar apenas os eventos abertos por enquanto, no
+    // futuro analisamos a necessidade de ter eventos privados tambem"* -- e o
+    // montador da consulta saiu com ela.
+    //
+    // **Nao foi enfraquecido: o que ele protegia virou impossivel.** Ele
+    // existia para garantir que `admission` e `size` nao fossem para uma
+    // operacao que nao os aceita; agora nao ha consulta nenhuma sendo montada
+    // para aquela operacao. A operacao continua no contrato, aposentada com
+    // data e com a frase dele em `api/rastreabilidade-backoffice-rede.yaml`.
+    //
+    // O caso que entrou no lugar vive em `agenda_da_rede_test.dart`:
+    // `ISCA -- nenhuma chamada do app vai a /network/join-requests`.
   });
 
   // ---------------------------------------------------------------------

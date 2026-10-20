@@ -24,18 +24,29 @@ import 'cartao_do_encontro.dart';
 /// | Aba | Operacao | Ordem |
 /// |---|---|---|
 /// | `Próximos` | `listNetworkEvents` com `when=upcoming` (ou `today`, `weekend`, `next_30_days`); com `Mais perto` ou `Distância`, `listNearbyNetworkEvents` | `Data mais próxima`; `Mais perto` com regiao |
-/// | `Meus pedidos` | `listMyNetworkEventJoinRequests`, so com conta | `Data mais próxima`, unica |
 /// | `Encerrados` | `listNetworkEvents` com `when=past` | `Mais recente primeiro`, unica |
 ///
-/// Trocar de aba limpa filtros e ordem, porque cada aba tem os seus. Sem
-/// conta, `Meus pedidos` **nao aparece** (nao fica desabilitada): controle sem
-/// desfecho.
+/// Trocar de aba limpa filtros e ordem, porque cada aba tem os seus. As duas
+/// abas aparecem com conta e sem.
+///
+/// ## SO EVENTO ABERTO (cliente, 19/10/2026)
+///
+/// *"vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos
+/// a necessidade de ter eventos privados tambem"*. Tres coisas sairam com essa
+/// frase: a aba `Meus pedidos` (e com ela a unica leitura de
+/// `listMyNetworkEventJoinRequests` do app), o filtro `Situação do pedido` e o
+/// filtro `Público ou privado`.
+///
+/// A agenda pede `visibility=public` em toda chamada, e
+/// `PaginaDaRede.doJson` DESCARTA o que nao for publico -- as duas metades,
+/// porque a primeira depende do servidor obedecer e a segunda nao.
 ///
 /// ## Busca, filtro e ordem: o componente que ja existe
 ///
 /// [BarraDeListagem], sem copia. Filtros de lista fechada, os do contrato e
-/// so eles (`when`, `admission`, `visibility`, `city`, `size`, `max_km`,
-/// `state`), cada um so na aba cuja operacao o aceita.
+/// so eles (`when`, `admission`, `city`, `size`, `max_km`), cada um so na aba
+/// cuja operacao o aceita. `visibility` e `state` sairam em 19/10/2026 com o
+/// evento privado.
 ///
 /// ## A distancia e da regiao cadastrada, e nunca do GPS
 ///
@@ -71,9 +82,9 @@ class AgendaDaRede extends StatefulWidget {
   static const String tituloDoVazio = 'A Rede ainda não tem eventos';
   static const String explicacaoDoVazio =
       'Aparecem aqui assim que forem criados.';
-  static const String tituloDoVazioDePedidos = 'Nenhum pedido ainda';
-  static const String explicacaoDoVazioDePedidos =
-      'Seus pedidos aparecem aqui.';
+  // `tituloDoVazioDePedidos` e `explicacaoDoVazioDePedidos` sairam em
+  // 19/10/2026 com a aba `Meus pedidos`: eram `Nenhum pedido ainda` e `Seus
+  // pedidos aparecem aqui.`, e nao ha mais aba para mostra-las.
   static const String tituloDoVazioDeEncerrados = 'Nenhum evento encerrado';
   static const String explicacaoDoVazioDeEncerrados =
       'Os eventos que já aconteceram ficam aqui.';
@@ -116,9 +127,19 @@ class AgendaDaRede extends StatefulWidget {
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
 }
 
+/// As abas da agenda. **Duas, e nao tres.**
+///
+/// `pedidos` (`Meus pedidos`) saiu em 19/10/2026, por decisao do cliente:
+/// *"vamos deixar apenas os eventos abertos por enquanto, no futuro
+/// analisamos a necessidade de ter eventos privados tambem"*. A aba existia
+/// porque havia pedido de participacao, o pedido nascia na pagina de detalhe
+/// do evento, e aquela pagina saiu no mesmo dia -- a aba ficou sem origem, e
+/// agora tem veredito.
+///
+/// Com ela sairam o filtro `Situação do pedido` e a unica leitura de
+/// `listMyNetworkEventJoinRequests` do app.
 enum AbaDaRede {
   proximos('Próximos'),
-  pedidos('Meus pedidos'),
   encerrados('Encerrados');
 
   const AbaDaRede(this.rotulo);
@@ -126,11 +147,16 @@ enum AbaDaRede {
 }
 
 /// Um cartao da lista: o encontro e o que so a lista sabe dele.
+///
+/// `pedido` (o `EstadoDoPedido` que virava a pilula do cartao) saiu em
+/// 19/10/2026 com a aba `Meus pedidos`. `distancia` FICA: o cartao nao a
+/// desenha mais, mas e a resposta de `listNearbyNetworkEvents` que revela se
+/// ha regiao cadastrada, e e isso que decide se `Mais perto` e `Distância`
+/// aparecem na barra.
 class _ItemDaAgenda {
-  const _ItemDaAgenda(this.encontro, {this.distancia, this.pedido});
+  const _ItemDaAgenda(this.encontro, {this.distancia});
   final EncontroDaRede encontro;
   final int? distancia;
-  final EstadoDoPedido? pedido;
 }
 
 enum _Fase { carregando, lista, falha }
@@ -210,14 +236,20 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     });
   }
 
-  List<AbaDaRede> _abasVisiveis(bool logado) => <AbaDaRede>[
+  /// **As duas abas, com conta ou sem.** Era `logado` que decidia se a
+  /// terceira (`Meus pedidos`) aparecia; ela saiu em 19/10/2026 e a lista
+  /// deixou de depender da sessao. O parametro continua na assinatura porque
+  /// quem chama le a sessao de um `AnimatedBuilder` e o `_` documenta que a
+  /// resposta e a mesma nos dois casos.
+  List<AbaDaRede> _abasVisiveis(bool _) => <AbaDaRede>[
         AbaDaRede.proximos,
-        if (logado) AbaDaRede.pedidos,
         AbaDaRede.encerrados,
       ];
 
-  /// O `TabController` acompanha quantas abas existem (duas sem conta, tres
-  /// com), e e refeito quando isso muda.
+  /// O `TabController` acompanha quantas abas existem e e refeito quando isso
+  /// muda. **Hoje sao sempre duas**; o controlador continua derivando o
+  /// tamanho da lista, e nao de uma constante, porque foi a terceira aba
+  /// aparecendo e sumindo com a sessao que deu origem a este metodo.
   TabController _controladorDasAbas(List<AbaDaRede> abas) {
     final atual = _abas;
     final indice = abas.indexOf(_aba).clamp(0, abas.length - 1);
@@ -246,7 +278,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       _limparMedidas();
     }
     _logadoDaUltimaCarga = logado;
-    if (!logado && _aba == AbaDaRede.pedidos) _aba = AbaDaRede.proximos;
 
     final int geracao;
     if (maisUma) {
@@ -262,11 +293,15 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     }
     final recorte = _recorte.copiar(pagina: maisUma ? _pagina + 1 : 1);
     final rede = RedeApi(escopo.api);
+    // O ultimo termo era `recorte.visibilidade != VisibilidadeDoEncontro.privado`:
+    // `listNearbyNetworkEvents` nao devolve privado, e medir distancia com o
+    // filtro em privado gastava uma pergunta que nao casaria com nada. O
+    // filtro saiu em 19/10/2026 e a agenda so pede publicos, entao o termo
+    // ficou sempre verdadeiro e saiu com ele.
     final medir = logado &&
         _temRegiao &&
         _aba == AbaDaRede.proximos &&
-        !recorte.pedeDistancia &&
-        recorte.visibilidade != VisibilidadeDoEncontro.privado;
+        !recorte.pedeDistancia;
 
     try {
       late final List<_ItemDaAgenda> itens;
@@ -274,19 +309,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       late final int pagina;
       late final String efetiva;
 
+      // **NAO HA MAIS RAMO DE `Meus pedidos`.** Era o unico lugar do app que
+      // chamava `listMyNetworkEventJoinRequests`, e ele saiu com a aba em
+      // 19/10/2026.
       switch (_aba) {
-        case AbaDaRede.pedidos:
-          final p = await rede.meusPedidos(recorte.queryDePedidos);
-          itens = <_ItemDaAgenda>[
-            for (final m in p.itens)
-              _ItemDaAgenda(
-                m.encontro,
-                // Estado desconhecido vira `Pedido enviado`, nunca recusa.
-                pedido: m.estado ?? EstadoDoPedido.enviado,
-              ),
-          ];
-          (total, pagina) = (p.total, p.pagina);
-          efetiva = OrdemDaRede.proximos.codigo;
         case AbaDaRede.encerrados:
           final p = await rede.listar(
             recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.passados),
@@ -545,15 +571,11 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             if (_fase != _Fase.carregando)
               BarraDeListagem(
                 total: _total,
-                substantivo: _aba == AbaDaRede.pedidos
-                    ? const SubstantivoDaListagem(
-                        singular: 'pedido',
-                        plural: 'pedidos',
-                      )
-                    : const SubstantivoDaListagem(
-                        singular: 'evento',
-                        plural: 'eventos',
-                      ),
+                // Um substantivo so: era `pedido`/`pedidos` na aba que saiu.
+                substantivo: const SubstantivoDaListagem(
+                  singular: 'evento',
+                  plural: 'eventos',
+                ),
                 // O campo ja foi desenhado acima; a barra recebe o controle
                 // para saber do TERMO APLICADO, e nao para desenhar de novo.
                 buscaAcima: true,
@@ -602,12 +624,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     Object? termo = const _Nada(),
     Object? quando = const _Nada(),
     Object? entrada = const _Nada(),
-    Object? visibilidade = const _Nada(),
     Object? cidade = const _Nada(),
     Object? porte = const _Nada(),
     Object? distanciaMaxima = const _Nada(),
     Object? ordem = const _Nada(),
-    Object? estadoDoPedido = const _Nada(),
   }) {
     final r = _recorte;
     T? v<T>(Object? novo, T? atual) => novo is _Nada ? atual : novo as T?;
@@ -615,12 +635,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       termo: v<String>(termo, r.termo),
       quando: v<QuandoDaRede>(quando, r.quando),
       entrada: v<TipoDeEntrada>(entrada, r.entrada),
-      visibilidade: v<VisibilidadeDoEncontro>(visibilidade, r.visibilidade),
       cidade: v<String>(cidade, r.cidade),
       porte: v<Porte>(porte, r.porte),
       distanciaMaxima: v<DistanciaMaxima>(distanciaMaxima, r.distanciaMaxima),
       ordem: v<String>(ordem, r.ordem),
-      estadoDoPedido: v<EstadoDoPedido>(estadoDoPedido, r.estadoDoPedido),
     );
   }
 
@@ -628,24 +646,16 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     final r = _recorte;
     final grupos = <GrupoDeFiltro>[];
 
-    if (_aba == AbaDaRede.pedidos) {
-      // `listMyNetworkEventJoinRequests` nao aceita `admission`, `size` nem
-      // distancia: filtrar por valor oculto entregaria o valor.
-      grupos.add(
-        GrupoDeFiltro(
-          chave: 'state',
-          titulo: 'Situação do pedido',
-          selecionado: r.estadoDoPedido?.codigo,
-          opcoes: <OpcaoDeRecorte>[
-            for (final e in EstadoDoPedido.doFiltro)
-              OpcaoDeRecorte(
-                codigo: e.codigo,
-                rotulo: e == EstadoDoPedido.enviado ? 'Enviado' : 'Aprovado',
-              ),
-          ],
-        ),
-      );
-    } else {
+    // **DOIS GRUPOS SAIRAM EM 19/10/2026.**
+    //
+    // `Situação do pedido` (`state`) existia so na aba `Meus pedidos`, e a
+    // aba saiu. `Público ou privado` (`visibility`) nao tem mais desfecho:
+    // *"vamos deixar apenas os eventos abertos por enquanto"*, e um controle
+    // cujas duas opcoes dao a mesma lista e pior que controle nenhum
+    // (criterio 2 da BICHUS-62). A agenda pede `visibility=public` em toda
+    // chamada; quem decide isso e `RecorteDaRede.queryDaAgenda`, e nao a
+    // folha de filtros.
+    {
       if (_aba == AbaDaRede.proximos) {
         grupos.add(
           GrupoDeFiltro(
@@ -670,21 +680,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
           ],
         ),
       );
-      // Com a lista vindo de `listNearbyNetworkEvents` (so publicos), o grupo
-      // de visibilidade nao tem desfecho, e nao aparece.
-      if (!r.pedeDistancia) {
-        grupos.add(
-          GrupoDeFiltro(
-            chave: 'visibility',
-            titulo: 'Público ou privado',
-            selecionado: r.visibilidade?.codigo,
-            opcoes: <OpcaoDeRecorte>[
-              for (final v in VisibilidadeDoEncontro.values)
-                OpcaoDeRecorte(codigo: v.codigo, rotulo: v.rotulo),
-            ],
-          ),
-        );
-      }
       final cidades = SplayTreeSet<String>.from(_cidadesConhecidas);
       if (r.cidade != null) cidades.add(r.cidade!);
       grupos.add(
@@ -740,20 +735,15 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     final filtros = escolha.filtros;
     Object? v(String chave, Object? Function(String?) de) =>
         filtros.containsKey(chave) ? de(filtros[chave]) : const _Nada();
-    final maxKm = filtros['max_km'];
     final ordem = escolha.ordem;
-    // `Distância` como ordem e a lista so de publicos, pela mesma razao do
-    // filtro `max_km`: `listNearbyNetworkEvents` nao devolve privado.
-    final porDistancia = ordem == OrdemPorPerto.distancia.codigo;
+    // `state` e `visibility` nao chegam mais nesta folha: os dois grupos
+    // sairam em 19/10/2026 (ver `_controleDeFiltro`). `max_km` e
+    // `Distância` continuam, e continuam sendo so de publicos -- o que
+    // mudou e que agora TODA a agenda e.
     _trocarRecorte(
       _recorteCom(
-        estadoDoPedido: v('state', EstadoDoPedido.porCodigo),
         quando: v('when', QuandoDaRede.porCodigo),
         entrada: v('admission', TipoDeEntrada.porCodigo),
-        // Lista so de publicos: o filtro de visibilidade sai junto.
-        visibilidade: maxKm != null || porDistancia
-            ? null
-            : v('visibility', VisibilidadeDoEncontro.porCodigo),
         cidade: v('city', (c) => c),
         porte: v('size', Porte.de),
         distanciaMaxima: v('max_km', DistanciaMaxima.porCodigo),
@@ -780,13 +770,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             ),
           );
         }
-      case AbaDaRede.pedidos:
-        opcoes.add(
-          OpcaoDeRecorte(
-            codigo: OrdemDaRede.proximos.codigo,
-            rotulo: OrdemDaRede.proximos.rotulo,
-          ),
-        );
       case AbaDaRede.encerrados:
         opcoes.add(
           OpcaoDeRecorte(
@@ -887,10 +870,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         AbaDaRede.proximos => const EstadoVazio(
             titulo: AgendaDaRede.tituloDoVazio,
             explicacao: AgendaDaRede.explicacaoDoVazio,
-          ),
-        AbaDaRede.pedidos => const EstadoVazio(
-            titulo: AgendaDaRede.tituloDoVazioDePedidos,
-            explicacao: AgendaDaRede.explicacaoDoVazioDePedidos,
           ),
         AbaDaRede.encerrados => const EstadoVazio(
             titulo: AgendaDaRede.tituloDoVazioDeEncerrados,
