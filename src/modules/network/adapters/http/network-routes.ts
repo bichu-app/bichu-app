@@ -52,6 +52,10 @@ import type {
   CorpoDoEncontroDaComunidade,
   PatchDoEncontroDaComunidade,
 } from '../../domain/encontro-da-comunidade.js';
+import {
+  comoFamiliaDeSessao,
+  type FamiliaDeSessao,
+} from '../../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 /** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
@@ -188,7 +192,23 @@ export function ordemPadraoDe(quando: RecorteNoTempo): OrdemDaAgenda {
 }
 
 export interface Autenticador {
-  autenticar(token: string): Promise<{ userId: UserId }>;
+  /**
+   * `sid` e a familia de refresh que emitiu o token -- a SESSAO DE APARELHO do
+   * ADR-0002, emenda 1, secao 2. Ele chega aqui porque desde a SEC-021 a
+   * regiao de referencia e do aparelho, e e dela que a agenda por distancia
+   * mede.
+   *
+   * **Opcional porque e opcional no token**: o que nasceu antes da emenda 1 nao
+   * o carrega. A ausencia nao recusa a rota -- a agenda sai por data e sem
+   * distancia, como para quem nunca informou onde estava.
+   */
+  autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
+}
+
+/** Quem chama e de qual aparelho. `familia` indefinida: token sem `sid`. */
+interface ChamadorDaRede {
+  readonly userId: UserId;
+  readonly familia: FamiliaDeSessao | undefined;
 }
 
 export interface DependenciasDasRotasDaRede {
@@ -272,17 +292,35 @@ function tokenDaRequisicao(request: FastifyRequest): string | undefined {
 }
 
 /** MEMOIZADO: o teto por `account` e o manipulador precisam do mesmo dono. */
-function chamadorAutenticado(
+function identidadeDoChamador(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
-): Promise<UserId> {
+): Promise<ChamadorDaRede> {
   return memoDaRequisicao(request, 'rede:chamador', async () => {
     const token = tokenDaRequisicao(request);
     if (token === undefined) throw problemas.naoAutenticado();
     // O 401 de token vencido ou forjado e do servico de identidade. Nao ha
     // `catch`: engolir o erro transformaria falha de banco em 401.
-    return (await deps.autenticador.autenticar(token)).userId;
+    const { userId, sid } = await deps.autenticador.autenticar(token);
+    return {
+      userId,
+      // Vazio e ausente sao o mesmo caso: nenhum dos dois nomeia um aparelho.
+      familia: typeof sid === 'string' && sid !== '' ? comoFamiliaDeSessao(sid) : undefined,
+    };
   });
+}
+
+/**
+ * So o dono, para as rotas que nao medem distancia.
+ *
+ * Projeta `identidadeDoChamador` e nao le a credencial de novo: e o mesmo memo
+ * e a mesma chave, entao continua havendo uma autenticacao por requisicao.
+ */
+async function chamadorAutenticado(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDaRede,
+): Promise<UserId> {
+  return (await identidadeDoChamador(request, deps)).userId;
 }
 
 /** `account` para o teto. Sem credencial valida nao ha balde de conta. */
@@ -483,7 +521,7 @@ export function registrarRotasDaRede(
     rotaDaAgendaPorDistancia,
     porConta,
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const chamador = await chamadorAutenticado(request, deps);
+      const chamador = await identidadeDoChamador(request, deps);
       const query = (request.query ?? {}) as QueryDaAgenda;
       const page = query.page ?? PAGINA_INICIAL;
       const limit = query.limit ?? TAMANHO_PADRAO;
@@ -494,7 +532,9 @@ export function registrarRotasDaRede(
 
       const pagina = await deps.rede.listarPorDistancia({
         ...filtros,
-        chamador,
+        chamador: chamador.userId,
+        // SEC-021: de qual aparelho sai a regiao que mede a distancia.
+        familia: chamador.familia,
         when,
         sort: pedida,
         maxKm: query.max_km,

@@ -276,6 +276,9 @@ void describe('a fila de indicações do Perto, contra Postgres', () => {
     // A PROVA: a listagem que o aplicativo lê.
     const pagina = await perto.listarPublicados({
       chamador: quem,
+      // SEC-021: sem aparelho nao ha ponto, e este caso ordena por nome -- o
+      // que ele mede e a entrada aprovada aparecendo, nao distancia.
+      familia: undefined,
       agora: relogio.now(),
       sort: 'name',
       page: 1,

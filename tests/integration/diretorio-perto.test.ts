@@ -78,6 +78,15 @@ import { randomUUID } from 'node:crypto';
  * distância, que é o que ele foi escrito para medir.
  */
 const APARELHO_UNICO = '018f3a2b-0000-7000-8000-00000000dd01';
+
+/**
+ * O SEGUNDO aparelho da mesma conta.
+ *
+ * Existe para os casos de `session_family_id` abaixo, e nao para o resto do
+ * arquivo: com duas linhas validas a subconsulta do ponto deixa de ser escalar
+ * se ela nao filtrar pela familia, e o Postgres responde 500 em vez de medir.
+ */
+const OUTRO_APARELHO = '018f3a2b-0000-7000-8000-00000000dd02';
 import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
@@ -87,6 +96,7 @@ import { criarDirectoryRepository } from '../../src/modules/professionals/adapte
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { projetarEntrada } from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
 import type { DirectoryRepository } from '../../src/modules/professionals/ports/directory-repository.js';
+import { comoFamiliaDeSessao } from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
 
 /** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
@@ -201,6 +211,7 @@ async function darLocalizacao(
   dono: UserId,
   ponto: { lat: number; lon: number },
   validaAte: number,
+  aparelho: string = APARELHO_UNICO,
 ): Promise<void> {
   await cliente.query(
     // SEC-021: a localização é do aparelho desde 23/09. Estes casos falam de uma
@@ -220,7 +231,7 @@ async function darLocalizacao(
       ponto.lat,
       new Date(validaAte - 30 * DIA),
       new Date(validaAte),
-      APARELHO_UNICO,
+      aparelho,
     ],
   );
 }
@@ -249,6 +260,11 @@ async function todasAsPaginas(chamador: UserId): Promise<{ slug: string; nivel: 
 function recorte(chamador: UserId, ajustes: Record<string, unknown> = {}) {
   return {
     chamador,
+    // SEC-021: o aparelho de quem chama. `darLocalizacao` grava nesta MESMA
+    // familia, entao os casos deste arquivo continuam medindo a distancia que
+    // foram escritos para medir -- e o caso de dois aparelhos, abaixo, e o unico
+    // que troca este valor de proposito.
+    familia: comoFamiliaDeSessao(APARELHO_UNICO),
     agora: AGORA,
     sort: 'distance' as const,
     page: 1,
@@ -438,6 +454,120 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
 
     assert.equal(pagina.distanciaDisponivel, false);
     assert.deepEqual(pagina.itens.map((uma) => uma.displayName), ['Alfa', 'Zeta']);
+  });
+
+  /**
+   * SEC-021, os tres casos de DOIS APARELHOS. Nenhum dos 3358 casos da suite
+   * tinha duas linhas em `user_reference_locations` para a mesma conta, e foi
+   * exatamente por isso que o 500 abaixo chegou a homologacao.
+   */
+  void it('DOIS APARELHOS na conta: a lista responde, e nao 500', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    // O aparelho de quem chama, na Paulista.
+    await darLocalizacao(titular, PAULISTA, Number(AGORA) + 10 * DIA);
+    // O OUTRO aparelho da mesma conta, no Tatuape. Outra familia de sessao,
+    // validade no futuro: as duas linhas sao validas ao mesmo tempo, que e o
+    // estado normal de quem entrou na conta no celular e no tablet.
+    await darLocalizacao(titular, TATUAPE, Number(AGORA) + 10 * DIA, OUTRO_APARELHO);
+    await criarEntrada({ titular, slug: `dois-${randomUUID().slice(0, 8)}`, bairro, ponto: SE });
+
+    // ISCA: sem `session_family_id` na subconsulta do ponto, esta linha nao
+    // devolve lista nenhuma -- ela LANCA. O Postgres levanta `more than one row
+    // returned by a subquery used as an expression`, que a borda traduz em 500
+    // e `problems/internal`, e a aba `Comunidade` inteira cai. Medido em
+    // homologacao (hml.bichu.app, 458cd005) em 19/10/2026.
+    const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro }));
+
+    assert.equal(pagina.total, 1);
+    assert.equal(
+      pagina.distanciaDisponivel,
+      true,
+      'o aparelho de quem chama TEM localizacao valida: a distancia vale.',
+    );
+    const medida = projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA).distance_m;
+    assert.ok(medida !== null);
+    // Da Paulista a Se sao cerca de 2,7 km; do Tatuape a Se, uns 7 km. A faixa
+    // separa as duas de proposito: ela prova que o ponto medido foi o DESTE
+    // aparelho, e nao o do outro nem a media de nada.
+    assert.ok(
+      medida > 2_000 && medida < 4_000,
+      `mediu do aparelho errado: ${medida} m. Da Paulista (este aparelho) a Se ` +
+        'sao ~2,7 km; do Tatuape (o outro aparelho) a Se, ~7 km.',
+    );
+  });
+
+  void it('o aparelho SEM localizacao nao herda a do outro aparelho da conta', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    // So o OUTRO aparelho informou onde esta.
+    await darLocalizacao(titular, PAULISTA, Number(AGORA) + 10 * DIA, OUTRO_APARELHO);
+    await criarEntrada({ titular, slug: `herd-${randomUUID().slice(0, 8)}`, bairro, ponto: SE });
+
+    // Quem chama e o aparelho recem-logado, que nunca informou nada: para ele,
+    // `GET /v1/me/location` devolve `null` (e `construtorDaLeitura` filtra por
+    // esta mesma coluna justamente para isso).
+    const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro }));
+
+    assert.equal(
+      pagina.distanciaDisponivel,
+      false,
+      'ISCA: sem a familia, a presenca enxerga a linha do OUTRO aparelho e a ' +
+        'resposta promete uma ordem por distancia que este aparelho nao mediu.',
+    );
+    assert.equal(
+      projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA).distance_m,
+      null,
+      'ISCA: sem a familia, a lista publica em metros o lugar que o `GET` da ' +
+        'propria localizacao se recusa a contar -- medido em homologacao: conta ' +
+        'recem-logada, `/v1/me/location` nulo, e `distance_m` preenchido.',
+    );
+  });
+
+  void it('token SEM `sid`: sem aparelho nao ha ponto, e a lista continua saindo', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    await darLocalizacao(titular, PAULISTA, Number(AGORA) + 10 * DIA);
+    await criarEntrada({ titular, slug: `sid0-${randomUUID().slice(0, 8)}`, nome: 'Zeta', bairro, ponto: SE });
+    await criarEntrada({ titular, slug: `sid1-${randomUUID().slice(0, 8)}`, nome: 'Alfa', bairro, ponto: TATUAPE });
+
+    // O token anterior a emenda 1 do ADR-0002 nao carrega `sid`. A borda nao o
+    // recusa aqui: recusar apagaria a aba por um campo que a renovacao repoe.
+    const pagina = await repo.listarPublicados(
+      recorte(titular, { neighborhood: bairro, familia: undefined }),
+    );
+
+    assert.equal(pagina.total, 2, 'a lista sai inteira: a ausencia de aparelho nao filtra nada.');
+    assert.equal(pagina.distanciaDisponivel, false);
+    assert.deepEqual(
+      pagina.itens.map((uma) => uma.displayName),
+      ['Alfa', 'Zeta'],
+      'sem ponto, a ordem cai para nome -- e nao para "a que o banco devolver".',
+    );
+  });
+
+  void it('o DETALHE do local tambem responde com dois aparelhos na conta', async () => {
+    const titular = await criarConta();
+    const slug = `det-${randomUUID().slice(0, 8)}`;
+    await darLocalizacao(titular, PAULISTA, Number(AGORA) + 10 * DIA);
+    await darLocalizacao(titular, TATUAPE, Number(AGORA) + 10 * DIA, OUTRO_APARELHO);
+    await criarEntrada({ titular, slug, ponto: SE });
+
+    // `lerLocalPublicado` usa a MESMA subconsulta, entao tinha o MESMO 500 --
+    // e a tela do detalhe e o toque seguinte ao da lista.
+    const local = await repo.lerLocalPublicado(
+      slug,
+      titular,
+      comoFamiliaDeSessao(APARELHO_UNICO),
+      AGORA,
+    );
+
+    assert.ok(local !== undefined);
+    assert.ok(local.entrada.distanciaEmMetros !== null);
+    assert.ok(
+      local.entrada.distanciaEmMetros > 2_000 && local.entrada.distanciaEmMetros < 4_000,
+      `o detalhe mediu do aparelho errado: ${local.entrada.distanciaEmMetros} m.`,
+    );
   });
 
   void it('o piso de verificacao traz o nivel mais forte junto', async () => {
