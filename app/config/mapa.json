@@ -1,0 +1,4 @@
+{
+  "MAP_TILES_URL": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "MAP_USER_AGENT": "Bichu/1.0 (app Android; +https://bichu.app)"
+}

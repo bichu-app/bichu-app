@@ -353,18 +353,10 @@ REGRAS_HOSTNAME = [
 # e publicar na loja exatamente como pede trocar a constante. O que se compraria
 # de verdade era uma entrada obrigatoria a mais no build e um caminho novo de
 # falha calada -- o campo de CEP parando de se preencher porque alguem esqueceu
-# o arquivo de configuracao.
-#
-# O CONTRAEXEMPLO QUE ESTE PARAGRAFO CITAVA NAO EXISTE MAIS, e a historia dele
-# vale como aviso. Era o `MAP_TILES_URL` do mapa, em `app/config/mapa.json`,
-# "por um motivo que NAO vale aqui: servidor de tiles se auto-hospeda e se
-# troca, e o bloco do mapa cai num estado visivel quando a chave falta". O
-# argumento segue de pe; o exemplo, nao. O leitor citado
-# (`app/lib/telas/rede/local_do_encontro.dart`) saiu em 19/10/2026 com a pagina
-# de detalhe do evento (`be057793`, pedido do cliente), e o arquivo de
-# configuracao ficou sem ninguem para ler -- fazendo `verificar-apk.sh` cobrar,
-# dentro do binario, o valor de um define que o Dart nao compila. Em 20/10/2026
-# as duas chaves sairam.
+# o arquivo de configuracao. (O `MAP_TILES_URL` do mapa esta em
+# `app/config/mapa.json` por um motivo que NAO vale aqui: servidor de tiles se
+# auto-hospeda e se troca, e o bloco do mapa cai num estado visivel quando a
+# chave falta. Ver `app/lib/telas/rede/local_do_encontro.dart`.)
 #
 # A lista e de HOST EXATO, com o servico nomeado, e vale SO para
 # MOTIVO_URL_ABSOLUTA: dominio de provedor, `localhost`, loopback, bind e IP
