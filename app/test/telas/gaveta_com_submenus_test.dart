@@ -427,7 +427,15 @@ void main() {
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
       await irParaASecao(tester, 'Pets');
 
-      await tester.tap(find.byType(AcoesDeCriarFlutuantes));
+      // **PELO ALVO SECUNDARIO, e nao pelo flutuante inteiro.** Desde
+      // 19/10/2026 `Pets` tem DOIS alvos na mesma linha: o principal e
+      // `Escanear uma tag` (um toque, decisao do cliente: *"botao para
+      // escanear o pet"*) e o secundario abre a folha com as outras duas.
+      // `find.byType(AcoesDeCriarFlutuantes)` acharia a `Row` inteira e o
+      // toque cairia no meio dela.
+      await tester.tap(
+        find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Registrar achado avulso'));
       await tester.pumpAndSettle();
@@ -559,6 +567,79 @@ void main() {
         greaterThanOrEqualTo(BichuAlvoDeToque.min),
         reason: 'REPROVA: o alvo da foto mede ${alvo.height} dp de altura, '
             'abaixo do piso de ${BichuAlvoDeToque.min} dp do SC 2.5.8.',
+      );
+    });
+
+    testWidgets('SAIDA e FOTO nunca aparecem na mesma barra', (
+      tester,
+    ) async {
+      // **O SUJEITO MUDOU DE DONO EM 19/10/2026, e a propriedade e a mesma.**
+      //
+      // O caso provava que `Saida + titulo + hamburguer` nao existe. O cliente
+      // mandou ocultar o menu e por a FOTO no slot do hamburguer, entao a
+      // composicao proibida passou a ser `Saida + titulo + foto` -- mesmo
+      // slot, mesmo risco, mesmo mecanismo: `raizDeSecao` e a unica condicao
+      // que monta o `leading`, e raiz de secao nao tem saida.
+      //
+      // **E o risco e MAIOR com a foto do que era com o hamburguer**, e vale
+      // dizer por que: perder a gaveta numa tela empilhada custava um atalho;
+      // perder a SAIDA custa a tela -- ela vira um beco, e a pessoa so sai
+      // pelo gesto do sistema.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+      await irParaASecao(tester, 'Pets');
+
+      // Na raiz: foto, sem saida.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(AvatarDaConta),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: a raiz de secao nao tem a foto no `leading`.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byTooltip('Voltar'),
+        ),
+        findsNothing,
+        reason: 'REPROVA: a raiz de secao ganhou saida ALEM da foto.',
+      );
+
+      // Numa tela empilhada que usa a MESMA `TelaDeAba`: saida, sem foto.
+      //
+      // **O VEICULO E `Registrar achado avulso`**, alcancada pelo alvo
+      // SECUNDARIO da acao flutuante de `Pets` (19/10) -- era item de gaveta,
+      // e desde que ele pediu *"botao para escanear o pet"* o alvo principal
+      // e o leitor e as outras duas ficaram atras do secundario. O caso
+      // precisa de um destino que abra tela empilhada sobre a casca usando a
+      // mesma `TelaDeAba`, e ela continua sendo exatamente isso.
+      await tester.tap(find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Registrar achado avulso'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byTooltip('Voltar'),
+        ),
+        findsOneWidget,
+        reason:
+            'REPROVA: a tela empilhada perdeu a saida. Ela usa a mesma '
+            '`TelaDeAba` das raizes, e por a foto no `leading` sem a condicao '
+            'de raiz apagaria a seta automatica do `AppBar`.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(AvatarDaConta),
+        ),
+        findsNothing,
+        reason:
+            'REPROVA: a tela empilhada ganhou a foto por cima da saida. A '
+            'composicao `Saida + titulo + foto` apaga a unica saida da tela, '
+            'e ela nao pode existir.',
       );
     });
   });

@@ -1050,29 +1050,34 @@ void main() {
       );
     });
 
-    // **O DESTINO DE CADA UMA, pelo TIPO DA TELA.** Medir "saiu da casca" era
-    // mais fraco e mais frágil: `Cadastrar pet` abre um assistente que
-    // continua tendo barra em alguns passos, e um caso que só olhasse a
+    // ======================================================================
+    // A FORMA MUDOU EM 19/10/2026, e a decisão é dele
+    // ======================================================================
+    //
+    // As três nasceram dentro de UMA folha, atrás de um alvo de `add`. Eu
+    // perguntei qual delas era *"adicionar um novo pet perdido"* e ele
+    // respondeu: ***"botão para escanear o pet"***.
+    //
+    // Então `Escanear uma tag` é a ação de **UM TOQUE** -- alvo de 56 dp no
+    // canto, sem folha no caminho -- e as outras duas ficaram atrás do alvo
+    // SECUNDÁRIO ao lado. São três casos e não um: a suíte diz QUAL ação
+    // quebrou, e o caminho de cada uma é diferente.
+    //
+    // **O DESTINO DE CADA UMA é medido pelo TIPO DA TELA.** Medir "saiu da
+    // casca" era mais fraco e mais frágil: `Cadastrar pet` abre um assistente
+    // que continua tendo barra em alguns passos, e um caso que só olhasse a
     // ausência da barra reprovaria por um motivo que não é o da isca.
-    for (final (rotulo, tela) in <(String, Type)>[
-      ('Escanear uma tag', TelaLeitorDeQr),
-      ('Registrar achado avulso', TelaRegistrarAchado),
-      ('Cadastrar pet', TelaCadastrarIdentificacao),
-    ]) {
-      testWidgets(
-          '`$rotulo` é alcançável pela ação flutuante de `Pets`',
-          (tester) async {
-        // **UMA TELA ALTA, e a razão é medida.** Na bancada padrão
-        // (800 x 600 px) a folha com título e três opções chega ao pé da
-        // janela, e a ÚLTIMA opção fica debaixo da borda: `tap()` acusa
-        // *"derived an Offset that would not hit test"*. O caso passaria a
-        // reprovar por geometria da bancada e não pela isca.
+    testWidgets(
+      '`Escanear uma tag` é a ação de UM TOQUE, sem folha no caminho',
+      (tester) async {
+        // **A ISCA DO PEDIDO DELE, e ela mede os DOIS lados:** que o toque
+        // abre o leitor, e que ele abre o leitor **direto** -- sem a folha
+        // aparecer no meio. Um caso que só medisse o destino ficaria verde com
+        // a ação de volta dentro da folha, que é exatamente o que ele mandou
+        // desfazer.
         //
-        // **O defeito que isso revelou era REAL e foi consertado na
-        // produção**, não na bancada: a folha não rolava e o `Column`
-        // transbordava 39 px, CLIPANDO a terceira opção. Ver
-        // `AcoesDeCriarFlutuantes`. A tela alta fica porque a isca é sobre
-        // alcance e não sobre a altura da janela de teste.
+        // DESLIGAMENTO: em `abas.dart`, mova `Escanear uma tag` de `principal`
+        // para dentro de `outras`. Este caso reprova no primeiro passo.
         tester.view.physicalSize = const Size(1125, 3000);
         tester.view.devicePixelRatio = 3;
         addTearDown(tester.view.reset);
@@ -1085,44 +1090,240 @@ void main() {
         await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
         await tester.pumpAndSettle();
 
-        final alvo = find.byType(AcoesDeCriarFlutuantes);
+        final principal = find.byKey(AcoesDeCriarFlutuantes.chaveDoPrincipal);
         expect(
-          alvo,
+          principal,
           findsOneWidget,
-          reason: 'REPROVA: a seção `Pets` não tem a ação flutuante. O cliente '
-              'pediu em 19/10: "só faltou na pagina de pets o botão para '
-              'adicionar um novo pet perdido ou escanear a tag, gostei desse '
-              'padrão". Sem ela, os três itens que a gaveta perdeu ficam sem '
-              'caminho nenhum.',
+          reason: 'REPROVA: a seção `Pets` não tem o alvo flutuante '
+              'principal. O cliente pediu o leitor de plaquinha a UM TOQUE: '
+              '"botão para escanear o pet".',
         );
-        await tester.tap(alvo);
+
+        // **O GLIFO É `qr_code_scanner` e não `qr_code_2`**, e a distinção é a
+        // mesma do item de gaveta que esta porta substitui: um LÊ uma
+        // plaquinha, o outro EXIBE a própria. Esta porta lê.
+        expect(
+          find.descendant(
+            of: principal,
+            matching: find.byIcon(Icons.qr_code_scanner),
+          ),
+          findsOneWidget,
+          reason: 'REPROVA: o alvo principal de `Pets` não desenha '
+              '`qr_code_scanner`. `qr_code_2` é EXIBIR a plaquinha do próprio '
+              'pet, e esta porta LÊ a de um bicho na rua.',
+        );
+
+        // **O NOME ACESSÍVEL DIZ O VERBO, e não "adicionar".** O `tooltip` é
+        // de onde o Flutter publica o nome da árvore de semântica; sem ele o
+        // leitor de tela anuncia só "botão".
+        expect(
+          tester.widget<FloatingActionButton>(principal).tooltip,
+          'Escanear uma tag',
+          reason: 'REPROVA: o nome acessível do alvo principal não é o verbo '
+              'do que o toque faz. `Adicionar` diria o que o app faz com o '
+              'resultado, e quem usa leitor de tela ouviria uma palavra que '
+              'não descreve nada do que vem depois do toque.',
+        );
+
+        await tester.tap(principal);
+        await tester.pumpAndSettle();
+
+        // **NENHUMA FOLHA NO CAMINHO.** Esta linha é a metade que o pedido
+        // dele criou: com a ação de volta dentro da folha, o destino ainda
+        // abriria -- depois de um toque a mais.
+        expect(
+          find.byKey(AcoesDeCriarFlutuantes.chaveDaFolha),
+          findsNothing,
+          reason: 'REPROVA: tocar no alvo principal abriu a FOLHA. O cliente '
+              'pediu um toque: "botão para escanear o pet".',
+        );
+        expect(
+          find.byType(TelaLeitorDeQr),
+          findsOneWidget,
+          reason: 'REPROVA: o alvo principal de `Pets` não abriu o leitor de '
+              'QR. Ele pinta o glifo do leitor e não leva a lugar nenhum: a '
+              'função continua perdida, agora com um ícone em cima dela.',
+        );
+      },
+    );
+
+    for (final (rotulo, tela) in <(String, Type)>[
+      ('Registrar achado avulso', TelaRegistrarAchado),
+      ('Cadastrar pet', TelaCadastrarIdentificacao),
+    ]) {
+      testWidgets(
+          '`$rotulo` é alcançável pelo alvo SECUNDÁRIO de `Pets`',
+          (tester) async {
+        // **O CAMINHO É VISÍVEL, e é por isso que ele serve.** O briefing
+        // proibiu pressão longa como único caminho -- ela não é descobrível e
+        // `onLongPress` não entra na árvore de semântica com nome, então quem
+        // usa TalkBack ou VoiceOver não teria como saber que estas duas
+        // existem. O alvo secundário é um `FloatingActionButton` de 56 dp com
+        // `tooltip`: visível, tocável e anunciado.
+        //
+        // DESLIGAMENTO: em `abas.dart`, apague a `OpcaoDeCriar` desta ação de
+        // `outras`. **UM** caso deste grupo reprova, e ele nomeia a ação.
+        tester.view.physicalSize = const Size(1125, 3000);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+        await tester.pumpAndSettle();
+
+        final secundario = find.byKey(
+          AcoesDeCriarFlutuantes.chaveDoSecundario,
+        );
+        expect(
+          secundario,
+          findsOneWidget,
+          reason: 'REPROVA: a seção `Pets` não tem o alvo secundário. Sem ele '
+              '"$rotulo" -- que era item VIVO da gaveta oculta -- não tem '
+              'caminho nenhum, e nenhum outro caso da suíte acusaria isso: a '
+              'rota existe e a tela monta.',
+        );
+        // O nome acessível dele diz o que o toque faz, e não nomeia uma das
+        // duas: nomear uma mentiria sobre a outra.
+        expect(
+          tester.widget<FloatingActionButton>(secundario).tooltip,
+          'Mais ações',
+          reason: 'REPROVA: o alvo secundário perdeu o nome acessível, ou ele '
+              'passou a nomear uma das ações. Sem `tooltip` o leitor de tela '
+              'anuncia só "botão".',
+        );
+
+        await tester.tap(secundario);
         await tester.pumpAndSettle();
 
         expect(
           find.text(rotulo),
           findsOneWidget,
-          reason: 'REPROVA: a folha da ação flutuante de `Pets` não oferece '
-              '"$rotulo". Ele era item VIVO da gaveta, e com o menu oculto '
-              'esta folha é a casa dele -- sem ela, a função desaparece em '
-              'silêncio.',
+          reason: 'REPROVA: a folha do alvo secundário não oferece "$rotulo". '
+              'Ele era item VIVO da gaveta, e com o menu oculto esta folha é a '
+              'casa dele -- sem ela, a função desaparece em silêncio.',
         );
 
-        // **O TOQUE LEVA À TELA CERTA, e é isso que separa esta isca de um
-        // `findsOneWidget` sobre um texto.** Uma opção que pinta o nome e não
-        // navega é ação sem destino -- o critério 2 da BICHUS-62 -- e
-        // continuaria sendo função perdida, agora com um rótulo em cima.
         await tester.tap(find.text(rotulo));
         await tester.pumpAndSettle();
         expect(
           find.byType(tela),
           findsOneWidget,
-          reason: 'REPROVA: tocar em "$rotulo" não abriu $tela. A opção '
-              'pinta o nome do item que a gaveta perdeu e não leva a lugar '
-              'nenhum: a função continua perdida, agora com um rótulo em '
-              'cima dela.',
+          reason: 'REPROVA: tocar em "$rotulo" não abriu $tela. A opção pinta '
+              'o nome do item que a gaveta perdeu e não leva a lugar nenhum: a '
+              'função continua perdida, agora com um rótulo em cima.',
         );
       });
     }
+
+    testWidgets(
+      'os DOIS alvos dividem a MESMA linha, e a invasão do pé continua 72,00 dp',
+      (tester) async {
+        // ====================================================================
+        // O CRITÉRIO 3 DO BRIEFING, medido
+        // ====================================================================
+        //
+        // O alvo flutuante invade os últimos 72,00 dp da lista (56 de desenho
+        // + 16 de assentamento do `Scaffold`), pagos com respiro rolável no
+        // `padding`. Um alvo secundário come mais -- **e quanto depende de
+        // onde ele fica.**
+        //
+        // EMPILHADOS em coluna: `56 + 16 + 56 = 128` dp de altura, e a invasão
+        // iria a **144,00 dp**. Em 320 x 568 dp (barra de topo 64 + barra de
+        // baixo 72, corpo de ~432) isso é um TERÇO da altura visível da lista
+        // reservado para não ser coberto.
+        //
+        // NA MESMA LINHA a altura é a do alvo mais alto: 56 dp. **A invasão
+        // continua 72,00** e o respiro que já existe continua pagando-a
+        // inteira. O que o segundo alvo custa é LARGURA do canto inferior
+        // direito, e largura não cobre item -- o respiro vertical é que decide
+        // isso.
+        //
+        // DESLIGAMENTO: em `AcoesDeCriarFlutuantes`, troque a `Row` por uma
+        // `Column`. A invasão vai a 144,00 e este caso reprova com os dois
+        // números na mensagem.
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+        await tester.pumpAndSettle();
+
+        final principal = tester.getRect(
+          find.byKey(AcoesDeCriarFlutuantes.chaveDoPrincipal),
+        );
+        final secundario = tester.getRect(
+          find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario),
+        );
+
+        // (1) MESMA LINHA: os centros verticais coincidem.
+        expect(
+          secundario.center.dy,
+          closeTo(principal.center.dy, 0.01),
+          reason: 'REPROVA: os dois alvos não estão na mesma linha (centros em '
+              '${secundario.center.dy} e ${principal.center.dy}). Empilhados, '
+              'a invasão do pé da lista dobra para 144,00 dp.',
+        );
+        // (2) O SECUNDÁRIO À ESQUERDA: o principal fica no canto, ao alcance
+        // do polegar. É daí que vem a hierarquia, porque os dois têm 56 dp.
+        expect(
+          secundario.right,
+          lessThanOrEqualTo(principal.left),
+          reason: 'REPROVA: o alvo secundário não está à ESQUERDA do '
+              'principal. O principal fica no canto de propósito: é a ação de '
+              'um toque, e é ela que o polegar alcança primeiro.',
+        );
+        // (3) OS DOIS CUMPREM O PISO DE 48 dp do SC 2.5.8.
+        //
+        // `FloatingActionButton.small` (40 x 40) seria o padrão do Material
+        // para o secundário e FURA o piso. Os dois ficaram em 56.
+        for (final (nome, r) in <(String, Rect)>[
+          ('principal', principal),
+          ('secundário', secundario),
+        ]) {
+          expect(
+            r.shortestSide,
+            greaterThanOrEqualTo(BichuAlvoDeToque.min),
+            reason: 'REPROVA: o alvo $nome mede ${r.shortestSide} dp no menor '
+                'lado, abaixo do piso de ${BichuAlvoDeToque.min} dp do '
+                'SC 2.5.8. `FloatingActionButton.small` tem 40 e não serve.',
+          );
+        }
+
+        // (4) A INVASÃO, e o RESPIRO que a paga.
+        final lista = find
+            .descendant(
+              of: find.byType(Scaffold),
+              matching: find.byType(ListView),
+            )
+            .first;
+        final corpo = tester.getRect(lista);
+        final respiro =
+            (tester.widget<ListView>(lista).padding as EdgeInsets).bottom;
+        final invasao = corpo.bottom - principal.top;
+        expect(
+          invasao,
+          closeTo(72.0, 0.01),
+          reason: 'REPROVA: os alvos flutuantes invadem '
+              '${invasao.toStringAsFixed(2)} dp do pé do corpo, e o medido é '
+              '72,00 (56 de desenho + 16 de assentamento). Se eles foram '
+              'empilhados, a invasão virou 144,00 e o respiro abaixo tem de '
+              'dobrar com ela.',
+        );
+        expect(
+          respiro,
+          greaterThanOrEqualTo(invasao),
+          reason: 'REPROVA: o pé da lista reserva '
+              '${respiro.toStringAsFixed(2)} dp e os alvos cobrem '
+              '${invasao.toStringAsFixed(2)} dp. O último cartão de pet '
+              'perdido termina embaixo deles, em toda rolagem.',
+        );
+      },
+    );
 
     for (final (rotulo, tela) in <(String, Type)>[
       ('Meus dados', TelaDadosPessoais),

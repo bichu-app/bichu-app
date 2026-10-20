@@ -121,35 +121,36 @@ class AbaPets extends StatelessWidget {
           // *"esse padrao"* e a acao flutuante que ele acabou de ver em `Rede`
           // e no antigo `Perto`. Ver `acaoDeCriar`, abaixo.
           reforco: destino.reforcoDaPagina,
-          // **AS TRES ACOES DE `Pets`, num alvo flutuante so.**
+          // **AS TRES ACOES DE `Pets`: UMA direta e DUAS atras dela.**
           //
-          // Ele nomeou DUAS (*"adicionar um novo pet perdido ou escanear a
-          // tag"*) e sao **tres** as que precisam desta porta. A terceira nao
-          // foi acrescentada por zelo: as tres sao exatamente os itens de
-          // `destino` VIVOS que a gaveta perdeu quando ela foi ocultada no
-          // MESMO dia -- `Escanear uma tag`, `Registrar achado avulso` e
-          // `Cadastrar pet`. A tabela de para onde cada um dos sete itens
-          // vivos foi esta em `TelaDeAba`, no `leading` da barra de topo.
+          // ## A decisao do cliente, em duas rodadas do mesmo dia
           //
-          // **UMA RESSALVA DE LEITURA, e ela esta aqui para nao ser
-          // descoberta no aparelho:** *"adicionar um novo pet perdido"* pode
-          // ter sido `Marcar como perdido` (`Rotas.escolherPetPerdido`) e nao
-          // `Registrar achado avulso`. As duas tratam de bicho na rua e as
-          // palavras dele cabem nas duas. Nao inventei a resposta: as tres
-          // desta folha sao as que a gaveta tinha e que ficariam sem casa, que
-          // e o criterio objetivo. `Marcar como perdido` **nao ficou sem
-          // casa** -- ela continua no cartao de cada pet, em
-          // `Rotas.detalheDoPet`, que e o unico lugar onde ela pode existir
-          // (ela precisa de QUAL pet). Se ele quis aquela, quem muda e esta
-          // linha.
+          // Primeiro ele pediu a acao flutuante aqui: *"so faltou na pagina de
+          // pets o botao para adicionar um novo pet perdido ou escanear a tag,
+          // gostei desse padrao"*. Sao TRES as acoes que precisavam de casa --
+          // os itens de `destino` VIVOS que a gaveta perdeu quando ela foi
+          // ocultada no mesmo dia, `Escanear uma tag`, `Registrar achado
+          // avulso` e `Cadastrar pet`.
           //
-          // **TRES ALVOS SOLTOS NAO CABEM**, e o numero esta medido em
-          // `AcoesDeCriarFlutuantes`: tres `FloatingActionButton` em coluna
-          // medem 200 dp de altura contra os 72,00 dp que a folga do pe da
-          // lista paga. Um alvo e uma folha com as tres opcoes nomeadas e o
-          // que cabe -- e e melhor, porque `qr_code_scanner`, `campaign` e
-          // `note_add` nao se distinguem por forma para quem abre o app pela
-          // primeira vez.
+          // Elas nasceram as tres dentro de uma folha, atras de um alvo de
+          // `add`. **Entao eu perguntei qual delas era "adicionar um novo pet
+          // perdido", e a resposta foi: *"botao para escanear o pet"*.**
+          //
+          // Por isso `Escanear uma tag` saiu da folha: ela e o alvo de 56 dp
+          // no canto, de **UM TOQUE**, e as outras duas ficaram atras do alvo
+          // secundario ao lado. A conta de por que o secundario fica AO LADO e
+          // nao acima -- e por que nao e pressao longa nem botao no corpo --
+          // esta inteira em `AcoesDeCriarFlutuantes`, com os numeros.
+          //
+          // **O GLIFO E `qr_code_scanner`, e a distincao e a mesma do item da
+          // gaveta que ele substitui:** `qr_code_scanner` e LER uma plaquinha;
+          // `qr_code_2` e EXIBIR a propria. Esta porta le, e e por isso que o
+          // glifo nao e o outro.
+          //
+          // **O ROTULO DIZ O VERBO, e nao "adicionar":** `Escanear uma tag` e
+          // o que o toque faz, e e o mesmo texto do item de gaveta -- quem
+          // usava a gaveta acha a acao pelo nome, e nao descobre que ela mudou
+          // de lugar lendo uma palavra nova.
           //
           // **AS TRES NASCEM SEM CONTA, e isso e diferente da `Rede`.** A
           // regua de `podeCriarNaComunidade` (sessao E e-mail confirmado)
@@ -158,33 +159,38 @@ class AbaPets extends StatelessWidget {
           //   - `Escanear uma tag` e a excecao conhecida e DELIBERADA: a
           //     autenticacao da rota do leitor e opcional, e quem acha um
           //     animal na rua pode nao ter conta. Esconder o leitor de quem
-          //     mais precisa dele seria o pior defeito possivel nesta secao.
+          //     mais precisa dele seria o pior defeito possivel nesta secao --
+          //     e agora ela e a acao PRINCIPAL, o que torna isso mais
+          //     importante e nao menos.
           //   - `Registrar achado avulso` tem o mesmo dono: o achador. Ela ja
-          //     era alcancavel sem conta pela gaveta de `Pets`, e esta porta
-          //     nao aperta a regua de nada.
-          //   - `Cadastrar pet` leva a um assistente que pede conta na
-          //     PROPRIA tela, com a saida que a resolve -- tela que recusa
-          //     dizendo e melhor que porta que nao aparece.
+          //     era alcancavel sem conta pela gaveta de `Pets`.
+          //   - `Cadastrar pet` leva a um assistente que pede conta na PROPRIA
+          //     tela, com a saida que a resolve -- tela que recusa dizendo e
+          //     melhor que porta que nao aparece.
           //
           // Por isso `acaoDeCriar` aqui NAO e condicional a sessao.
+          //
+          // **E `Marcar como perdido` NAO esta aqui, e a ausencia e medida:**
+          // ela precisa saber QUAL pet, e vive no cartao de cada um, em
+          // `Rotas.detalheDoPet`. Ela nunca foi item de gaveta e nao ficou sem
+          // casa.
           acaoDeCriar: AcoesDeCriarFlutuantes(
-            // O VERBO e nao o objeto: o alvo abre a escolha entre tres, e um
-            // nome que prometesse uma delas mentiria sobre as outras duas.
-            rotulo: 'Criar',
+            principal: OpcaoDeCriar(
+              icone: Icons.qr_code_scanner,
+              rotulo: 'Escanear uma tag',
+              aoTocar: () => context.push(Rotas.escanear),
+            ),
+            // O alvo secundario diz o que o toque FAZ -- abrir mais acoes --
+            // e nao nomeia uma das duas: nomear uma mentiria sobre a outra.
+            rotuloDasOutras: 'Mais ações',
             tituloDaFolha: 'O que você quer fazer?',
-            opcoes: <OpcaoDeCriar>[
-              // A ORDEM E A DO USO MAIS URGENTE PRIMEIRO, e nao a da gaveta.
-              // Quem acabou de achar um cachorro na rua tem pressa; quem vai
-              // cadastrar o proprio pet, nao.
-              OpcaoDeCriar(
-                // O MESMO glifo e o MESMO rotulo do item de gaveta que ela
-                // substitui, e isso e de proposito: quem usava a gaveta acha a
-                // acao pelo texto e pelo desenho, e nao descobre que ela
-                // mudou de lugar lendo um nome novo.
-                icone: Icons.qr_code_scanner,
-                rotulo: 'Escanear uma tag',
-                aoTocar: () => context.push(Rotas.escanear),
-              ),
+            outras: <OpcaoDeCriar>[
+              // A ORDEM E A DO USO MAIS URGENTE PRIMEIRO. Quem acabou de achar
+              // um cachorro na rua tem pressa; quem vai cadastrar o proprio
+              // pet, nao.
+              //
+              // O MESMO glifo e o MESMO rotulo dos itens de gaveta que elas
+              // substituem, pelo mesmo motivo do principal.
               OpcaoDeCriar(
                 icone: Icons.campaign_outlined,
                 rotulo: 'Registrar achado avulso',

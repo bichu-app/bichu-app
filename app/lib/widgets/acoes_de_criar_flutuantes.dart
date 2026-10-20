@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
-/// Uma das opcoes que [AcoesDeCriarFlutuantes] oferece.
+/// Uma acao que [AcoesDeCriarFlutuantes] oferece: a principal, ou uma das
+/// secundarias da folha.
 class OpcaoDeCriar {
   const OpcaoDeCriar({
     required this.icone,
@@ -12,8 +13,8 @@ class OpcaoDeCriar {
   }) : assert(
          rotulo != '',
          'OpcaoDeCriar sem rotulo e uma linha muda: o rotulo e o texto '
-         'PINTADO na folha e tambem o nome acessivel. Sem ele o leitor de '
-         'tela anuncia so "botao".',
+         'PINTADO na folha (ou o `tooltip` do alvo principal) e tambem o nome '
+         'acessivel. Sem ele o leitor de tela anuncia so "botao".',
        );
 
   /// O glifo, da familia fechada do design system 10.1 (Material Symbols),
@@ -21,12 +22,17 @@ class OpcaoDeCriar {
   /// nada baixado, nada gerado.
   final IconData icone;
 
-  /// O que vai ser feito, por extenso e em portugues.
+  /// O que o toque FAZ, por extenso e em portugues.
   ///
-  /// **Ele e PINTADO aqui, e nao so anunciado**, e e essa a diferenca entre
-  /// esta folha e tres icones soltos: na folha cada opcao tem o nome ao lado
-  /// do glifo, e ninguem precisa adivinhar o que um desenho de 24 dp quer
-  /// dizer.
+  /// **Ele diz o VERBO da pessoa, e nunca "adicionar".** `Escanear uma tag`
+  /// diz o que acontece; `Adicionar` diria o que o app faz com o resultado, e
+  /// quem usa leitor de tela ouviria uma palavra que nao descreve nada do que
+  /// vem depois do toque.
+  ///
+  /// Na folha ele e **PINTADO** ao lado do glifo -- e e essa a diferenca entre
+  /// a folha e dois icones soltos: ninguem precisa adivinhar o que um desenho
+  /// de 24 dp quer dizer. No alvo principal ele vai para o `tooltip`, que e de
+  /// onde o Flutter publica o nome da arvore de semantica.
   final String rotulo;
 
   /// **Nunca nulo.** Quem explica bloqueio de conta ou de e-mail e a tela de
@@ -35,127 +41,175 @@ class OpcaoDeCriar {
   final VoidCallback aoTocar;
 }
 
-/// A porta de criar de uma secao que tem **MAIS DE UMA** acao: um unico alvo
-/// flutuante que abre a folha com as opcoes.
+/// A porta de criar de uma secao que tem uma acao PRINCIPAL e outras atras
+/// dela: dois alvos flutuantes na MESMA LINHA, o principal direto e o
+/// secundario abrindo a folha.
 ///
-/// ## Por que ela existe: a secao `Pets` ganhou TRES acoes
+/// ## O que o cliente decidiu, e em duas rodadas (19/10/2026)
 ///
-/// Decisao do cliente, 19/10/2026, literal: *"so faltou na pagina de pets o
-/// botao para adicionar um novo pet perdido ou escanear a tag, gostei desse
-/// padrao"* -- *"esse padrao"* e a acao flutuante que ele acabou de ver em
-/// `Rede` e no antigo `Perto`.
+/// Primeiro ele pediu a acao flutuante em `Pets`: *"so faltou na pagina de
+/// pets o botao para adicionar um novo pet perdido ou escanear a tag, gostei
+/// desse padrao"*. Eram TRES as acoes que precisavam de casa -- os itens de
+/// `destino` vivos que a gaveta perdeu quando ela foi ocultada no mesmo dia --
+/// e elas nasceram as tres dentro de uma folha, atras de um alvo de `add`.
 ///
-/// Sao **tres** as acoes que precisam desta porta, e nao duas: as duas que ele
-/// nomeou mais `Cadastrar pet`. As tres sao exatamente os itens de `destino`
-/// VIVOS que a gaveta perdeu quando ela foi ocultada no mesmo dia -- a tabela
-/// de para onde cada um dos sete foi esta em `TelaDeAba`, no `leading`.
+/// **Entao eu perguntei qual delas era "adicionar um novo pet perdido", e ele
+/// respondeu: *"botao para escanear o pet"*.** E o leitor de plaquinha, e ele
+/// quer um TOQUE.
 ///
-/// ## TRES ALVOS SOLTOS NAO CABEM, e o numero esta medido
+/// Por isso a forma mudou: a acao principal perdeu a folha do caminho e virou
+/// o alvo de 56 dp direto, e as outras duas passaram a ser alcancadas por um
+/// alvo SECUNDARIO ao lado dele.
 ///
-/// O `floatingActionButton` do `Scaffold` e um slot UNICO. Tres
-/// `FloatingActionButton` empilhados em coluna no canto medem
-/// **56 + 16 + 56 + 16 + 56 = 200 dp** de altura, contra os **72,00 dp** que a
-/// folga do pe da lista paga (`_folgaDaAcaoFlutuante` em
-/// `casca_com_abas.dart`, que e `e12 + e2`). Eles cobririam **128 dp a mais**
-/// do que o corpo reserva: em `Pets`, cujo conteudo e uma lista de cartoes de
-/// pet, isso e mais de um cartao inteiro escondido atras dos botoes, em toda
-/// rolagem.
+/// ## POR QUE DOIS ALVOS NA MESMA LINHA, e nao as outras tres formas
 ///
-/// Aumentar a folga para 200 dp foi medido e recusado: em 320 x 568 dp, com a
-/// barra de baixo e a de topo, sobram ~440 dp de corpo -- a reserva passaria a
-/// ser 45% da altura visivel da lista.
+/// O briefing deu tres caminhos (alvo secundario, pressao longa, as duas no
+/// corpo) e tres critorios, e a escolha e o unico arranjo que satisfaz os tres.
 ///
-/// ## A FOLHA, e por que ela em vez de uma coluna que expande
+/// **PRESSAO LONGA foi recusada, e nao e por gosto.** Ela nao e descobrivel --
+/// nada na tela diz que o alvo tem um segundo gesto -- e **nao e anunciada por
+/// leitor de tela**: `onLongPress` nao entra na arvore de semantica com nome,
+/// entao quem usa TalkBack ou VoiceOver nao tem como saber que as duas acoes
+/// existem. Como UNICO caminho ela deixaria as duas inalcancaveis para essas
+/// pessoas, que e o critorio 1 quebrado do jeito mais silencioso possivel. E
+/// com um caminho visivel equivalente ao lado, ela deixa de ser necessaria.
 ///
-/// O alvo e **um**: 56 x 56, o mesmo de `AcaoDeCriarFlutuante`, no mesmo canto
-/// e com a mesma folga de 72,00 dp paga pelo `padding` rolavel. O toque abre
-/// uma folha inferior com as tres opcoes, cada uma com **glifo e rotulo
-/// escrito**.
+/// **AS DUAS NO CORPO foram recusadas por uma decisao que ja existe.** Em
+/// 18/10 o cliente removeu exatamente isso: *"nao fique esse botao grande na
+/// pagina ocupando muito espaco"*, e era um `BotaoSecundario` de largura total
+/// que empurrava a lista 64 dp para baixo. Duas portas no corpo de `Pets`
+/// empurrariam a listagem de perdidos -- que e o conteudo da secao -- em mais
+/// do que aquele botao empurrava.
 ///
-/// A coluna de mini-alvos que expande (o "speed dial") foi recusada por tres
-/// razoes medidas nesta arvore:
+/// **O ALVO SECUNDARIO AO LADO, e nao ACIMA, e e aqui que a conta fecha.**
+/// Empilhados em coluna, dois alvos medem `56 + 16 + 56 = 128` dp de altura, e
+/// a invasao do pe da lista iria de 72,00 para **144,00 dp** -- o respiro
+/// rolavel do `padding` teria de dobrar, e em 320 x 568 dp (barra de topo 64 +
+/// barra de baixo 72, corpo de ~432) isso e **um terco da altura visivel da
+/// lista** reservado para nao ser coberto.
 ///
-/// 1. **Ela nao resolve a altura, so a esconde**: aberta, ela ocupa os mesmos
-///    200 dp sobre a lista, e agora sobre o conteudo que a pessoa estava
-///    lendo.
-/// 2. **Mini-alvo tem 40 dp**, abaixo do piso de 48 do SC 2.5.8. Mantendo 56
-///    para respeitar o piso, a coluna fica do tamanho de cima.
-/// 3. **O rotulo nao cabe ao lado do mini-alvo** sem um balao proprio por
-///    opcao, e sem rotulo as tres acoes viram tres desenhos: `qr_code_scanner`,
-///    `campaign` e `note_add` nao se distinguem por forma para quem abre o app
-///    pela primeira vez -- e duas delas tratam de bicho perdido, que e
-///    justamente onde errar o toque custa mais.
+/// Na MESMA LINHA a altura nao muda: ela e a do alvo mais alto, 56 dp. **A
+/// invasao continua exatamente 72,00 dp** (56 de desenho + 16 de assentamento
+/// do `Scaffold`), o respiro de `_folgaDaAcaoFlutuante` que ja existe continua
+/// pagando-a inteira, e nenhum item da lista termina embaixo de alvo nenhum.
+/// O que o segundo alvo custa e LARGURA do canto inferior direito --
+/// `16 + 56 + 16 + 56 = 144` dp de um corpo de 288 em 320 dp --, e largura
+/// nao cobre item: o respiro vertical e que decide isso.
 ///
-/// A folha ainda ganha de graca o que a coluna nao tem: ela e modal, entao a
-/// cortina **bloqueia a semantica do fundo** e o leitor de tela nao oferece a
-/// lista de pets enquanto as opcoes estao abertas.
+/// Medido no portao `a acao flutuante nao cobre o fim do corpo` e no grupo
+/// `(g)` de `gaveta_oculta_e_barra_nova_test.dart`.
 ///
-/// ## O `heroTag` CONTINUA DESLIGADO, e continua sendo conserto de defeito
-/// MEDIDO
+/// ## OS DOIS ALVOS TEM 56 dp, e o piso NAO foi afrouxado
+///
+/// O Material ofereceria `FloatingActionButton.small` (40 x 40) para o
+/// secundario, e **40 fura o piso de 48 dp do SC 2.5.8** -- o mesmo piso que
+/// [AvatarDaConta] cumpre com os 48 dela e que o 11.23.1 trata como minimo de
+/// controle. Com os dois em 56 o piso sobra nos dois, e a hierarquia vem de
+/// onde ela pode vir sem custar alvo: o principal fica no canto, ao alcance do
+/// polegar, e o secundario a esquerda dele; os glifos dizem o resto.
+///
+/// ## O `heroTag` CONTINUA DESLIGADO nos dois
 ///
 /// Os ramos visitados da casca ficam **MONTADOS** (`IndexedStack` deixa o
 /// inativo em `Offstage`, que nao pinta mas continua na arvore de elementos).
-/// Com acao flutuante em `Pets` **e** em `Rede`, os dois
-/// `FloatingActionButton` coexistem, e com o `heroTag` padrao -- que e o mesmo
-/// para todos -- o `Hero` reclama de duas etiquetas iguais na mesma subarvore.
-/// `find.byType` nao veria o irmao: os finders pulam o que esta `Offstage` por
-/// padrao, e o `Hero` nao pula.
+/// Com acao flutuante em `Pets` **e** em `Rede`, ha agora TRES
+/// `FloatingActionButton` coexistindo, e com o `heroTag` padrao -- que e o
+/// mesmo para todos -- o `Hero` reclama de etiquetas iguais na mesma
+/// subarvore. `find.byType` nao veria os irmaos: os finders pulam o que esta
+/// `Offstage` por padrao, e o `Hero` nao pula.
 ///
-/// Uma etiqueta UNICA por secao resolveria a colisao e nao serviria para nada:
+/// Uma etiqueta unica por alvo resolveria a colisao e nao serviria para nada:
 /// o `Hero` so anima quando a tela de DESTINO tem um `FloatingActionButton`
 /// para receber o voo, e nenhuma das tres telas de destino tem um.
 class AcoesDeCriarFlutuantes extends StatelessWidget {
   const AcoesDeCriarFlutuantes({
-    required this.rotulo,
+    required this.principal,
+    required this.rotuloDasOutras,
     required this.tituloDaFolha,
-    required this.opcoes,
+    required this.outras,
     super.key,
   }) : assert(
-         rotulo != '',
-         'AcoesDeCriarFlutuantes sem rotulo e um icone mudo: o nome acessivel '
-         'sai do tooltip, e sem ele o leitor de tela anuncia so "botao".',
+         rotuloDasOutras != '',
+         'O alvo secundario sem rotulo e um icone mudo: o nome acessivel sai '
+         'do tooltip, e sem ele o leitor de tela anuncia so "botao".',
        ),
        assert(
-         opcoes.length > 1,
-         'AcoesDeCriarFlutuantes com uma opcao so e uma folha que existe para '
-         'oferecer uma coisa: um toque a mais entre a pessoa e a acao, sem '
-         'escolha nenhuma no meio. Com UMA acao use AcaoDeCriarFlutuante, que '
-         'leva direto ao destino.',
+         outras.length > 1,
+         'AcoesDeCriarFlutuantes com UMA acao secundaria e uma folha que '
+         'existe para oferecer uma coisa: um toque a mais entre a pessoa e a '
+         'acao, sem escolha nenhuma no meio. Com uma secundaria so, use dois '
+         'AcaoDeCriarFlutuante -- ou leve a segunda direto ao destino.',
        );
 
-  /// O nome acessivel do alvo flutuante. Vai para o `tooltip` e, por ele, para
-  /// a arvore de semantica.
+  /// A acao de UM TOQUE: o alvo de 56 dp no canto, sem folha no caminho.
   ///
-  /// **Ele diz o VERBO e nao o objeto** (`Criar`, e nao `Criar pet`): o alvo
-  /// nao leva a uma acao, ele abre a escolha entre tres. Um nome que
-  /// prometesse uma das tres mentiria sobre as outras duas.
-  final String rotulo;
+  /// Em `Pets` ela e `Escanear uma tag`, por decisao do cliente de 19/10
+  /// (*"botao para escanear o pet"*).
+  final OpcaoDeCriar principal;
+
+  /// O nome acessivel do alvo SECUNDARIO.
+  ///
+  /// **Ele diz o que o toque FAZ: abrir mais acoes.** Nao diz "adicionar" --
+  /// o toque nao adiciona nada, ele oferece uma escolha -- e nao nomeia uma
+  /// das duas, porque nomear uma mentiria sobre a outra.
+  final String rotuloDasOutras;
 
   /// O titulo da folha. **Ele e o rotulo do GRUPO para quem usa leitor de
   /// tela**, e a primeira coisa que a folha anuncia ao abrir.
   final String tituloDaFolha;
 
-  /// As opcoes, na ordem em que sao pintadas. **Duas ou mais** -- ver a
-  /// assercao do construtor.
-  final List<OpcaoDeCriar> opcoes;
+  /// As acoes secundarias, na ordem em que sao pintadas. **Duas ou mais** --
+  /// ver a assercao do construtor.
+  final List<OpcaoDeCriar> outras;
 
   /// A chave da folha, para o portao achar a folha aberta sem casar texto.
   static const Key chaveDaFolha = ValueKey<String>('criar/folha');
 
+  /// A chave do alvo PRINCIPAL, para o portao distinguir os dois sem casar
+  /// glifo nem posicao.
+  static const Key chaveDoPrincipal = ValueKey<String>('criar/principal');
+
+  /// A chave do alvo SECUNDARIO.
+  static const Key chaveDoSecundario = ValueKey<String>('criar/secundario');
+
   @override
   Widget build(BuildContext context) {
-    return FloatingActionButton(
-      // Ver a prosa da classe: conserto de um defeito MEDIDO, e nao
-      // precaucao.
-      heroTag: null,
-      tooltip: rotulo,
-      onPressed: () => _abrir(context),
-      // `add`, e o glifo e deliberado: ele diz "criar algo" sem dizer O QUE,
-      // que e o unico sentido honesto para um alvo que abre tres opcoes. Os
-      // glifos especificos (`qr_code_scanner`, `campaign_outlined`,
-      // `note_add_outlined`) ficam nas linhas da folha, cada um ao lado do
-      // proprio nome escrito.
-      child: const Icon(Icons.add),
+    // `mainAxisSize: min` para a linha ocupar so o que os dois alvos pedem: o
+    // `floatingActionButton` do `Scaffold` posiciona o que recebe, e uma linha
+    // de largura total empurraria o alvo principal para o centro da tela.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        FloatingActionButton(
+          key: chaveDoSecundario,
+          // Ver a prosa da classe: conserto de um defeito MEDIDO, e nao
+          // precaucao.
+          heroTag: null,
+          tooltip: rotuloDasOutras,
+          onPressed: () => _abrir(context),
+          // `more_horiz`, e o glifo e deliberado: ele diz "ha mais aqui" sem
+          // dizer O QUE, que e o unico sentido honesto para um alvo que abre
+          // duas opcoes. Os glifos especificos de cada uma ficam nas linhas da
+          // folha, cada um ao lado do proprio nome escrito.
+          //
+          // **`add` nao serve mais neste alvo.** Ele era o glifo dos TRES
+          // numa folha so; com a acao principal fora da folha, um `add` aqui
+          // leria como "criar algo" ao lado de um alvo que tambem cria -- dois
+          // sinais de criacao no mesmo canto, que e a colisao que o cliente
+          // leu no aparelho em 22/09.
+          child: const Icon(Icons.more_horiz),
+        ),
+        const SizedBox(width: BichuEspaco.e4),
+        FloatingActionButton(
+          key: chaveDoPrincipal,
+          heroTag: null,
+          // O `tooltip` E o nome acessivel (11.23.3), e por isso ele diz o
+          // verbo da pessoa: `Escanear uma tag`, e nao `Adicionar`.
+          tooltip: principal.rotulo,
+          onPressed: principal.aoTocar,
+          child: Icon(principal.icone),
+        ),
+      ],
     );
   }
 
@@ -171,22 +225,21 @@ class AcoesDeCriarFlutuantes extends StatelessWidget {
         // **A FOLHA ROLA, e isto e conserto de um defeito MEDIDO.**
         //
         // Sem o rolavel, o `Column` transbordou **39 px** na bancada de teste
-        // (800 x 600 px): titulo mais tres linhas de 48 dp mais os respiros
-        // nao cabem na altura que `showModalBottomSheet` concede sem
+        // (800 x 600 px): titulo mais as linhas de 48 dp mais os respiros nao
+        // cabem na altura que `showModalBottomSheet` concede sem
         // `isScrollControlled`. O transbordo nao e cosmetico -- o `Column`
-        // CLIPA o que passa, e a ultima opcao (`Cadastrar pet`) deixou de
-        // receber toque: `tap()` acusou *"derived an Offset that would not hit
-        // test on the specified widget"*.
+        // CLIPA o que passa, e a ultima opcao deixou de receber toque:
+        // `tap()` acusou *"derived an Offset that would not hit test on the
+        // specified widget"*.
         //
         // **E em aparelho ele seria pior do que em teste:** a 200% de escala
-        // de texto as tres linhas crescem, e a folha teria de caber numa tela
-        // de 568 dp de altura com a barra de status e a de gestos fora. Quem
+        // de texto as linhas crescem, e a folha teria de caber numa tela de
+        // 568 dp de altura com a barra de status e a de gestos fora. Quem
         // perde e sempre a ULTIMA opcao da lista.
         //
         // `SingleChildScrollView` e nao `isScrollControlled: true`: a folha
         // continua com a altura do conteudo quando ele cabe -- que e o caso
-        // comum, tres opcoes em escala 1x --, e passa a rolar so quando nao
-        // cabe. `isScrollControlled` a faria nascer alta sempre.
+        // comum -- e passa a rolar so quando nao cabe.
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
@@ -204,7 +257,7 @@ class AcoesDeCriarFlutuantes extends StatelessWidget {
                     style: Theme.of(contextoDaFolha).textTheme.titleMedium,
                   ),
                 ),
-                for (final opcao in opcoes)
+                for (final opcao in outras)
                   _LinhaDaOpcao(
                     opcao: opcao,
                     // **FECHA A FOLHA ANTES DE NAVEGAR, e a ordem importa.**
