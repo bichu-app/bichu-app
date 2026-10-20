@@ -14,6 +14,10 @@
 //      documento nem dado de pessoa física;
 //   3. o tipo de contato é DECLARADO e a ajuda do campo muda com ele;
 //   4. o `400` nomeado em `public_contact.value` marca o campo.
+//   5. **o e-mail nao confirmado e dito ANTES dos campos**, e nao no envio:
+//      a tela e destino de acao de criar da comunidade, e a rota dela
+//      continua alcancavel por link profundo com a porta escondida. Este era
+//      o unico impedimento que ela nao tinha e a de criar encontro tinha.
 //
 // **Nenhum `expect` compara texto renderizado com a constante que o produz.**
 //
@@ -22,6 +26,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
@@ -77,11 +82,16 @@ Future<void> abrirPerto(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
   bool logado = true,
+  /// `Me.email_verified`. Falso e o estado que o grupo
+  /// `o e-mail nao confirmado` mede, e ele nao e fraudado em lugar nenhum:
+  /// vai para o deposito e sai em `Me`, como na vida.
+  bool emailVerificado = true,
 }) async {
   await abrirOApp(
     tester,
     rede: rede,
-    deposito: logado ? depositoLogado() : null,
+    deposito:
+        logado ? depositoLogado(emailVerificado: emailVerificado) : null,
   );
   // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
   // `Perto` deixou de existir, e o diretorio virou a aba `Comunidade` da
@@ -697,6 +707,115 @@ void main() {
             'trabalho humano de revisão, e o teto por conta é o orçamento '
             'dessa fila: a pessoa precisa saber que é para esperar.',
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // O E-MAIL NÃO CONFIRMADO, que até 20/10/2026 esta tela só descobria no
+  // ENVIO.
+  //
+  // As duas ações de criar da comunidade têm a mesma régua no servidor
+  // (`409 contact-channel-unverified` com `next_action: verify_email`, medido
+  // em homologação em 19/10/2026), e a porta das duas está escondida para quem
+  // não é cadastrado E validado (`podeCriarNaComunidade`, em `telas/abas.dart`,
+  // decisão do cliente de 18/10). Mas **esconder a porta não fecha a rota**:
+  // App Link e `F5` caem no endereço, e a tela de criar encontro já dizia o
+  // motivo acima dos campos enquanto esta mandava preencher nove deles para
+  // recusar no toque do botão.
+  //
+  // Os dois estados estão medidos porque um sozinho não acusa nada: só a
+  // ausência da faixa com o e-mail confirmado prova que ela não virou faixa
+  // permanente na cara de quem não tem bloqueio nenhum.
+  // -------------------------------------------------------------------------
+  group('o e-mail não confirmado', () {
+    testWidgets('confirmado: o formulário abre SEM faixa de e-mail',
+        (tester) async {
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+      );
+      await abrirAPorta(tester);
+
+      expect(
+        find.textContaining('Confirme seu e-mail'),
+        findsNothing,
+        reason: 'REPROVA: a faixa de confirmar e-mail aparece para quem já '
+            'confirmou. Faixa de bloqueio permanente ensina a pessoa a '
+            'ignorar faixa de bloqueio.',
+      );
+
+      // **O botão é medido COM o mínimo preenchido**, e esta é a correção de
+      // uma primeira versão deste caso que media o formulário vazio e
+      // reprovava por motivo errado: vazio, o botão está desabilitado por
+      // `semNome`, como sempre esteve, e `isNotNull` ali não falava do
+      // impedimento novo.
+      await preencherOMinimo(tester);
+      final botao = tester.widget<BotaoPrimario>(
+        find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
+      );
+      expect(
+        botao.aoTocar,
+        isNotNull,
+        reason: 'REPROVA: o impedimento novo travou o botão de quem tem o '
+            'e-mail confirmado e preencheu tudo -- mas aí ninguém indica '
+            'mais nada.',
+      );
+    });
+
+    testWidgets('não confirmado: o motivo vem ANTES dos campos, uma vez, com '
+        'a saída', (tester) async {
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+        emailVerificado: false,
+      );
+      // Pelo ENDEREÇO, porque neste estado a porta não aparece — é o caminho
+      // de link profundo, e é ele que esta tela deixava sem aviso.
+      await irPara(tester, Rotas.sugerirProfissional);
+
+      expect(
+        find.byType(TelaSugerirProfissional),
+        findsOneWidget,
+        reason: 'REPROVA: o endereço do formulário não abriu a tela. A rota '
+            'tem de continuar de pé: a porta ficou oculta, e a tela não foi '
+            'removida.',
+      );
+
+      // **UMA cópia, e não duas.** A faixa diz o motivo com a saída e a barra
+      // de ação não repete: duas cópias da mesma frase fazem o leitor de tela
+      // anunciar o bloqueio duas vezes.
+      expect(
+        find.textContaining('Confirme seu e-mail antes de indicar'),
+        findsOneWidget,
+        reason: 'REPROVA: ou a tela não diz por que o formulário está travado '
+            'para quem não confirmou o e-mail, ou ela diz duas vezes.',
+      );
+
+      // **A ORDEM, que é metade do defeito.** Com o e-mail pendente e os
+      // campos vazios, o que a tela mostra é o e-mail — e não "Diga o nome do
+      // lugar.". Na ordem inversa a pessoa é mandada preencher um formulário
+      // que não vai passar.
+      expect(
+        find.textContaining('Diga o nome do lugar'),
+        findsNothing,
+        reason: 'REPROVA: o impedimento de preenchimento vem antes do de '
+            'e-mail. A pessoa preenche nove campos para ser recusada no '
+            'envio, que é exatamente o caminho que este aviso veio encurtar.',
+      );
+
+      // A saída está junto do motivo: dizer o bloqueio sem oferecer o caminho
+      // é o beco sem saída que a faixa existe para não ser.
+      expect(
+        find.text('Confirmar meu e-mail'),
+        findsOneWidget,
+        reason: 'REPROVA: o motivo saiu sem a saída que o resolve.',
+      );
+
+      // O botão continua desabilitado: o motivo não é decorativo.
+      final botao = tester.widget<BotaoPrimario>(
+        find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
+      );
+      expect(botao.aoTocar, isNull);
     });
   });
 }
