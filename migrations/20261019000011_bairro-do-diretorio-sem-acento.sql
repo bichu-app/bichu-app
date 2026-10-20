@@ -1,0 +1,112 @@
+-- O filtro de BAIRRO do diretorio de `Perto` passa a comparar SEM ACENTO, e
+-- este indice e o que impede a correcao de virar uma varredura.
+--
+-- POR QUE ESTA MIGRACAO EXISTE, EM UMA FRASE: o predicado de bairro deixou de
+-- ser `lower(neighborhood) = lower($1)` e passou a ser
+-- `texto_para_busca(neighborhood) = texto_para_busca($1)`, e nenhum indice
+-- existente atende uma FUNCAO sobre a coluna.
+--
+-- E A SEGUNDA METADE DA 20261019000006, que fez isto com a CIDADE no mesmo
+-- `construtorDaListagem`. O bairro ficou de pe naquele dia porque o pedido do
+-- cliente era so a cidade, e a regra desta casa e nao ir alem do pedido.
+--
+-- O QUE ESTAVA ERRADO, MEDIDO CONTRA UM POSTGRES 16 EM 19/10/2026 COM 20 000
+-- LINHAS PUBLICADAS E 100 EM `Jardim América`:
+--
+--   lower(neighborhood) = lower('Jardim America')  ->   0 linhas
+--   lower(neighborhood) = lower('Jardim América')  -> 100 linhas
+--
+-- Quem digitasse `Jardim America` sem acento nao achava nada, e a tela nao
+-- dizia que o filtro falhou: ela desenhava o estado vazio do recorte, que
+-- AFIRMA que nao ha profissional naquele bairro.
+--
+-- ---------------------------------------------------------------------------
+-- UMA REGRA DE COMPARACAO DE BAIRRO NO PRODUTO, E NAO DUAS
+-- ---------------------------------------------------------------------------
+-- A listagem publica de perdidos ja comparava bairro por
+-- `texto_para_busca(lost_cases.last_seen_neighborhood) = texto_para_busca($1)`
+-- (`kysely-listagem-publica-de-perdidos.ts`). Com o diretorio em `lower()`, o
+-- mesmo texto digitado do mesmo jeito achava o pet perdido no bairro e nao
+-- achava o veterinario dele -- duas regras que concordam so enquanto ninguem
+-- digita sem acento.
+--
+-- `texto_para_busca` e a funcao da migracao `20260928000006`: `IMMUTABLE`,
+-- `STRICT`, `PARALLEL SAFE`, definida como
+-- `lower(unaccent('unaccent'::regdictionary, texto))`. A forma de dois
+-- argumentos de `unaccent` e o que a torna `IMMUTABLE`, e **e por ser
+-- IMMUTABLE que ela pode entrar num indice de expressao**. O preco esta na
+-- prosa daquela migracao: trocar o conteudo do dicionario `unaccent` exige
+-- `REINDEX`, e o dicionario deste produto e o que vem da imagem.
+--
+-- ---------------------------------------------------------------------------
+-- O INDICE NAO E ENFEITE: SEM ELE A CORRECAO FICA MAIS LENTA QUE O DEFEITO
+-- ---------------------------------------------------------------------------
+-- Medido no mesmo banco descartavel, com a consulta que o Kysely de fato
+-- compila (`status = $1 AND conta_habilitada(...) AND <predicado>`):
+--
+--   predicado velho, `lower(neighborhood)`     Seq Scan  custo  5838,00   4,106 ms
+--   predicado novo, SEM este indice            Seq Scan  custo 10788,00  36,648 ms
+--   predicado novo, COM este indice            Bitmap    custo   302,66   0,252 ms
+--
+-- A linha do meio e o motivo de esta migracao andar junto com a correcao, e
+-- nao depois dela: `texto_para_busca` e UMA CHAMADA DE FUNCAO POR LINHA, e a
+-- varredura que custava 4 ms passa a custar 36 ms -- nove vezes o defeito que
+-- se foi corrigir. Corrigir o acento sem o indice troca uma resposta errada e
+-- rapida por uma resposta certa e nove vezes mais lenta.
+--
+-- As duas grafias passam a devolver as mesmas 100 linhas pelo indice
+-- (0,252 ms sem acento, 0,169 ms com), e `DISTINCT neighborhood` continua
+-- devolvendo `Jardim América`: a normalizacao e da COMPARACAO e nunca da
+-- saida. O indice ocupou 168 kB para essas 20 000 linhas.
+--
+-- ---------------------------------------------------------------------------
+-- B-TREE, E NAO GIN TRIGRAMA
+-- ---------------------------------------------------------------------------
+-- Mesma razao da 20261019000006: `q` e GIN trigrama porque casa por
+-- `LIKE '%termo%'`, e um padrao sem prefixo nao da a um B-tree por onde
+-- comecar. **Bairro e IGUALDADE**, e igualdade e o que um B-tree faz melhor.
+--
+-- ---------------------------------------------------------------------------
+-- O INDICE NAO E PARCIAL, E A AUSENCIA E A MESMA DECISAO DE 20261019000006
+-- ---------------------------------------------------------------------------
+-- O reflexo seria `WHERE status = 'published'`. Ele NAO esta aqui: o Kysely
+-- escreve `"status" = $1`, com PARAMETRO, e para usar indice parcial o
+-- planejador precisa PROVAR que o predicado da consulta implica o do indice --
+-- `status = $1` nao implica `status = 'published'` num plano generico. O
+-- indice funcionaria nas primeiras execucoes e pararia de ser usado a partir
+-- da sexta, quando o Postgres passa ao plano generico. Custo de nao ser
+-- parcial: cobre tambem rascunho, oculto e removido, que sao poucas linhas, e
+-- o filtro de `status` continua no `WHERE`.
+--
+-- ---------------------------------------------------------------------------
+-- O QUE ESTA MIGRACAO NAO TOCA, E UMA CORRECAO DE REGISTRO
+-- ---------------------------------------------------------------------------
+-- `professionals_publicados_por_lugar_texto`, em `(state, city, neighborhood)`
+-- cru (migracao `20260921000002`), FICA.
+--
+-- A prosa da 20261019000006 escreveu que ela "continua atendendo `state` e
+-- `neighborhood`, que seguem comparando por `upper()`/`lower()`". **Medido
+-- agora, isso nao era verdade nem antes desta migracao**: os planos acima
+-- mostram que `lower(neighborhood) = lower($1)` tambem saia por Seq Scan --
+-- nenhum B-tree sobre a coluna CRUA responde uma funcao sobre ela, e
+-- `upper(state) = upper($1)` esta na mesma situacao. Aquele indice nao perdeu
+-- um cliente hoje; ele nunca atendeu estes predicados.
+--
+-- Ela fica de pe de proposito: derrubar um indice que outras leituras podem
+-- usar -- o backoffice consulta `professionals` por lugar sem passar por
+-- `construtorDaListagem` -- seria resolver um pedido de bairro mexendo no que
+-- ninguem mediu. O filtro de `state`, que continua em `upper()` e continua em
+-- Seq Scan, fica como esta: nao e o pedido, e corrigi-lo pede a mesma medicao
+-- que esta migracao fez para o bairro.
+
+-- Up Migration
+
+CREATE INDEX professionals_bairro_normalizado
+  ON professionals (texto_para_busca(neighborhood));
+
+COMMENT ON INDEX professionals_bairro_normalizado IS
+  'Atende `neighborhood` de GET /v1/directory/entries. A expressao indexada e identica a do predicado; mudar uma sem a outra deixa o filtro correto e LENTO -- medido: 36,6 ms de Seq Scan contra 0,25 ms por este indice. Igualdade, por isso B-tree e nao GIN.';
+
+-- Down Migration
+
+DROP INDEX professionals_bairro_normalizado;
