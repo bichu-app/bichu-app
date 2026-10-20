@@ -11890,7 +11890,7 @@ export interface components {
             slug: string;
             label: string;
             active: boolean;
-            /** @description Itens ligados a tag */
+            /** @description Itens ligados a tag, em qualquer estado. */
             item_count: number;
             /** Format: date-time */
             created_at: string;
@@ -20473,7 +20473,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Bloqueada. Resposta vazia */
+            /** @description Bloqueada. Resposta vazia, e a mesma de quem ja estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -20511,7 +20511,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Desbloqueada. Resposta vazia */
+            /** @description Desbloqueada. Resposta vazia, e a mesma de quem nao estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;
