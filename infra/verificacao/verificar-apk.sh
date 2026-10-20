@@ -97,40 +97,37 @@ ENVIRONMENT="${ENVIRONMENT:-hml}"
 TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"
 TERMS_URL="${TERMS_URL:-https://bichu.app/termos}"
 PRIVACY_URL="${PRIVACY_URL:-https://bichu.app/privacidade}"
-# O MAPA SAIU, E COM ELE O `--dart-define-from-file`.
+# O MAPA VOLTOU, E O `--dart-define-from-file` VOLTA COM ELE.
 #
-# Ate 19/10/2026 o comando passava `--dart-define-from-file=config/mapa.json`,
-# com `MAP_TILES_URL` e `MAP_USER_AGENT` lidos por
-# `app/lib/telas/rede/local_do_encontro.dart`. Naquele dia o cliente pediu o
-# cartao de evento reduzido a foto e titulo e SEM pagina de detalhe, e o commit
-# `be057793` tirou a tela -- "o mapa estatico da `/location`", nas palavras da
-# propria mensagem. Era o unico leitor das duas chaves.
+# A medicao do PR #43 estava CERTA na base dele e envelheceu: `be057793`
+# (19/10/2026) tirou `app/lib/telas/rede/local_do_encontro.dart`, o unico leitor
+# de `MAP_TILES_URL` e `MAP_USER_AGENT`, e define que o Dart nao LE nao e
+# compilado para dentro do binario -- a conferencia de valor reprovava por
+# construcao, e o portao estava certo contra uma arvore errada.
 #
-# `app/config/mapa.json` ficou, e o comando continuou passando o arquivo. O
-# resultado, MEDIDO em 20/10/2026: `verificar-apk.sh` saindo 1 com o APK
-# APROVADO (80.815.105 bytes, manifesto, dex e `libapp.so` no lugar) e o
-# literal do comando aprovado tambem. Reprovava so a conferencia do VALOR de
-# `MAP_TILES_URL` dentro de `lib/arm64-v8a/libapp.so` -- e ela nao tinha como
-# passar: define que o Dart nao LE nao e compilado para dentro do binario, e
-# `app/lib/config/app_config.dart` le `API_BASE_URL`, `ENVIRONMENT`,
-# `TERMS_VERSION`, `TERMS_URL`, `PRIVACY_URL` e `APP_VERSION`, e nenhuma das
-# duas do mapa. Nao era um build mal feito: era impossivel por construcao.
+# **A tela VOLTOU antes de o PR entrar**, em `65dfcb99` (a frente que devolveu a
+# pagina do evento, por correcao de pedido do cliente). Medido em `070bfee6` e
+# reconferido na arvore desta onda, com `git grep` em `app/lib` e `app/test`:
+# esse segue sendo o UNICO leitor, e ele esta la.
 #
-# Entao o portao esta CERTO e a arvore estava errada: `app/config/mapa.json`
-# era a configuracao de uma tela que nao existe mais. As chaves saem, e o
-# `--dart-define-from-file` sai com elas (`MAPA` acima deriva do comando, e nao
-# ha como um sobreviver sem o outro).
+#   local_do_encontro.dart:56  String.fromEnvironment('MAP_TILES_URL')
+#   local_do_encontro.dart:57  String.fromEnvironment('MAP_USER_AGENT')
+#   local_do_encontro.dart:83  StateError('MAP_TILES_URL ausente no build')
 #
-# QUANDO O MAPA VOLTAR: ponha a tela que LE as chaves, recrie o arquivo e
-# ponha o `--dart-define-from-file=config/<arquivo>.json` de volta no comando.
-# A conferencia do valor volta a cobrar sozinha -- e a cobrar certo, porque
-# dessa vez havera quem leia.
+# Sem as duas chaves no build, essa tela estoura naquele `StateError` ou desenha
+# mapa sem tiles -- e a remocao do `--dart-define-from-file` tirava exatamente o
+# portao que acusaria isso. Seria um APK com tela quebrada e SEM alarme, e este
+# commit e o que sai para o cliente.
 #
-# O QUE NAO FICOU DESPROTEGIDO: a CAUSA da cicatriz de 19/10 (defines num
-# amontoado de variavel de shell) e pega pelo portao de literalidade abaixo,
-# no texto do comando, e pela conferencia de "bandeira que virou valor" dentro
-# do binario, que roda sobre as seis `--chave`. Nenhuma das duas depende do
-# `--dart-define-from-file`.
+# O DESENHO DO #43 FICA INTEIRO, e e ele que faz este conserto caber em duas
+# linhas: `MAPA` (no alto) deriva do PROPRIO comando por `sed`, entao repor o
+# `--dart-define-from-file` repoe o braco `--mapa` do conferidor SOZINHO -- uma
+# copia do fato, nao duas. E a receita que o proprio #43 deixou escrita para o
+# dia em que o mapa voltasse; ele so nao sabia que o dia tinha sido anteontem.
+#
+# NUNCA por variavel de shell: os seis defines e o from-file sao LITERAIS aqui, e
+# o portao de literalidade abaixo cobra isso. Ja perdemos o mapa em silencio com
+# `flutter build apk "$DEFINES"`, com o build saindo 0.
 
 # ---------------------------------------------------------------------------
 # A VERSAO DO APP SAI DE `app/pubspec.yaml`, E DE MAIS NENHUM LUGAR.
@@ -650,7 +647,8 @@ rm -f "$APK"
     --dart-define=ENVIRONMENT="$ENVIRONMENT" \
     --dart-define=TERMS_VERSION="$TERMS_VERSION" \
     --dart-define=TERMS_URL="$TERMS_URL" \
-    --dart-define=PRIVACY_URL="$PRIVACY_URL"
+    --dart-define=PRIVACY_URL="$PRIVACY_URL" \
+    --dart-define-from-file=config/mapa.json
   # FIM DO COMANDO DE BUILD
 ) || {
   echo "REPROVA: \`flutter build apk --release\` falhou. Leia o erro acima: se ele fala de compileSdk, de AAR metadata ou de versao de AGP, alguma dependencia subiu o piso da cadeia de ferramentas e o projeto ficou para tras" >&2
