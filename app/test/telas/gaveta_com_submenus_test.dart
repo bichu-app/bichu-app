@@ -853,7 +853,8 @@ void main() {
   group('3. os cinco titulos cabem com o hamburguer instalado', () {
     for (final destino in secoesDaBarra) {
       testWidgets(
-        'o titulo "${destino.rotulo}" cabe em 320 dp a 200% de escala',
+        'o titulo "${destino.rotulo}" em 320 dp a 200%: cabe, ou abrevia com '
+        'reticencia sem abreviar o nome acessivel',
         (tester) async {
           tester.view.physicalSize = const Size(960, 2000);
           tester.view.devicePixelRatio = 3;
@@ -883,6 +884,12 @@ void main() {
           // no arranque do app a faria medir o arranjo mais vazio sem que
           // nenhum caso reprovasse. Medido depois de tirar: `Rede` continua
           // com tres controles na barra e `Perto` continua cortada.
+          //
+          // A ARVORE DE SEMANTICA E PARTE DA MEDIDA desde 19/10: este caso
+          // passou a cobrar que o nome ANUNCIADO nao seja abreviado junto com
+          // o pintado, e sem `ensureSemantics` a arvore nasce vazia e a
+          // conferencia do rotulo aprovaria qualquer coisa.
+          final semantica = tester.ensureSemantics();
           await abrirOApp(
             tester,
             rede: _semServidor,
@@ -907,7 +914,15 @@ void main() {
                 'REPROVA: a barra de topo de "${destino.rotulo}" nao pinta '
                 'o titulo. Sem ele nao ha o que medir.',
           );
-          final paragrafo = tester.renderObject<RenderParagraph>(titulo);
+          // **O `RichText` POR DENTRO, e nao o no que `find.text` acha.**
+          // Desde 19/10 o titulo declara `semanticsLabel`, e com ele o `Text`
+          // embrulha o `RichText` num `Semantics` -- `renderObject` sobre o
+          // `find.text` passou a devolver `RenderSemanticsAnnotations` e a
+          // estourar em cast. Descer ao `RichText` e o que mantem a medida
+          // sobre o objeto que realmente faz o leiaute do texto.
+          final paragrafo = tester.renderObject<RenderParagraph>(
+            find.descendant(of: titulo, matching: find.byType(RichText)),
+          );
 
           // O orcamento sai do LEIAUTE, e nao de uma conta: o titulo comeca
           // onde o `AppBar` o poe, ja descontados o gatilho de 64 dp e o
@@ -1026,15 +1041,143 @@ void main() {
                 'para a barra de topo; mais, que um saiu dela. Os dois mudam '
                 'quais titulos cabem.',
           );
+
+          // ------------------------------------------------------------------
+          // NOTA DA UNIAO DE 19/10/2026 (mescla das duas frentes)
+          // ------------------------------------------------------------------
+          //
+          // As duas frentes mediram ARRANJOS DIFERENTES da barra, e as duas
+          // justificativas ficam abaixo INTEIRAS porque cada uma explica uma
+          // parte do que este caso cobra. O que a UNIAO mede e isto:
+          //
+          // `criar` saiu da barra e virou acao FLUTUANTE (frente
+          // `sino-na-barra-e-criar-flutuante`, ver `_folgaDaAcaoFlutuante` em
+          // `casca_com_abas.dart`) E o sino entrou na barra. Com isso a
+          // reserva do lado direito passou a ser **a mesma nas quatro
+          // secoes** -- sino 48 + foto 48 --, e o orcamento do titulo e
+          // 160,00 dp nas quatro.
+          //
+          // **A TABELA DA FRENTE `bloqueados` ABAIXO E ANTERIOR AO SINO** e
+          // esta mantida como registro: os 208,00 dp que ela da a `Pets` e a
+          // `Loja` valiam quando `criar` ainda morava em `actions` e o sino
+          // nao existia. Nenhuma asercao dela depende daquele numero -- o que
+          // ela cobra (reticencia declarada, uma linha so, nome acessivel
+          // inteiro) e ORTOGONAL ao orcamento e continua valendo palavra por
+          // palavra. Quem travou o orcamento em numero e a asercao da outra
+          // frente, logo acima.
+          // ------------------------------------------------------------------
+          // ===================================================================
+          // OS NUMEROS MEDIDOS, 19/10/2026, e o que este caso cobra
+          // ===================================================================
+          //
+          // Medido no app de verdade, LOGADO, em 320 dp a 200%, com a `Inter`
+          // real e o arranjo que cada secao tem hoje:
+          //
+          //   | secao   | reserva de acao | orcamento | pede (inteiro) | corta |
+          //   |---------|-----------------|-----------|----------------|-------|
+          //   | `Pets`  | foto 48         | 208,00 dp | 138,32 dp      | nao   |
+          //   | `Perto` | criar + foto    | 160,00 dp | 172,90 dp      | SIM   |
+          //   | `Rede`  | criar + foto    | 160,00 dp | 138,32 dp      | nao   |
+          //   | `Loja`  | foto 48         | 208,00 dp | 138,32 dp      | nao   |
+          //
+          // `Perto` e a UNICA que nao cabe: e o unico rotulo de CINCO letras
+          // entre as quatro, e faltam **12,90 dp** (172,90 - 160,00).
+          //
+          // **O HAMBURGUER FICA, E ISSO E DECISAO E NAO OMISSAO.** O cliente
+          // pediu em 17/10 *"padronize todas as telas, tornando o menu
+          // esquerdo fixo"*; tira-lo renderia 64 dp e contrariaria aquilo em
+          // TODAS as telas para resolver uma largura em UMA. O rotulo tambem
+          // nao encurta: `Perto` ja e o nome curto que ele escolheu, e nao ha o
+          // que abreviar no texto (`casca_com_abas.dart`).
+          //
+          // Entao `Perto` ABREVIA a 200% -- e este caso cobra que a abreviacao
+          // seja **deliberada**, nos quatro pontos abaixo. O que ele NAO faz
+          // mais e aceitar o corte com um teto solto de 180 dp: aquele numero
+          // nao vinha de medida nenhuma e deixava `Perto` crescer 7 dp sem
+          // ninguem ver.
+          final tituloDaBarra = tester.widget<Text>(titulo);
+
+          // (1) A RETICENCIA E DECLARADA, e vale para as quatro secoes.
+          //
+          // `ellipsis` e hoje o padrao do `AppBar`, e e por isso mesmo que o
+          // titulo o declara: padrao de componente muda de versao, e o dia em
+          // que mudasse `Perto` passaria a ser cortado EM SECO -- sem os tres
+          // pontos, quem le nao tem sinal nenhum de que falta texto.
+          expect(
+            tituloDaBarra.overflow,
+            TextOverflow.ellipsis,
+            reason:
+                'REPROVA: o titulo "${destino.rotulo}" nao declara '
+                '`overflow: ellipsis`. A 200% o titulo de `Perto` corta '
+                '(172,90 dp pedidos contra 160,00 de orcamento), e corte sem '
+                'reticencia e texto que desaparece sem aviso.',
+          );
+
+          // (2) O TITULO NAO QUEBRA O ARRANJO NEM EMPURRA CONTROLE.
+          //
+          // Uma linha so, sem dobra: a barra tem 64 dp de altura, e um titulo
+          // de duas linhas empurraria o leiaute em vez de abreviar.
+          expect(tituloDaBarra.maxLines, 1, reason: 'REPROVA: o titulo pode dobrar de linha.');
+          expect(
+            tituloDaBarra.softWrap,
+            isFalse,
+            reason: 'REPROVA: o titulo pode quebrar em palavra e crescer em altura.',
+          );
+          expect(
+            paragrafo.size.width,
+            lessThanOrEqualTo(disponivel),
+            reason:
+                'REPROVA: "${destino.rotulo}" PINTA '
+                '${paragrafo.size.width.toStringAsFixed(2)} dp sobre um '
+                'orcamento de ${disponivel.toStringAsFixed(2)} dp em 320 dp a '
+                '200%, com o hamburguer na esquerda, a foto da conta a direita '
+                'e ${reservaDeAcao > AvatarDaConta.alvo ? 'uma' : 'nenhuma'} '
+                'acao a mais reservada. Titulo que transborda o orcamento '
+                'empurra controle -- e a abreviacao existe exatamente para que '
+                'isso nao aconteca.',
+          );
+
+          // (3) O NOME ACESSIVEL CONTINUA INTEIRO.
+          //
+          // **Abreviar o pintado nao pode abreviar o anunciado.** Quem usa
+          // leitor de tela ouve `Perto`, e nao `Pert...`: a reticencia e um
+          // efeito de PINTURA, e o rotulo de semantica e declarado a partir do
+          // rotulo inteiro (`semanticsLabel: titulo`).
+          //
+          // A conferencia e sobre a ARVORE DE SEMANTICA, e nao sobre a
+          // propriedade do widget: a propriedade e declaracao, a arvore e o que
+          // o leitor de tela recebe. A propriedade entra como segunda ancora.
+          expect(
+            tester.getSemantics(titulo).label,
+            destino.rotulo,
+            reason:
+                'REPROVA: o leitor de tela ouve '
+                '"${tester.getSemantics(titulo).label}" onde o rotulo e '
+                '"${destino.rotulo}". A 200% o titulo de `Perto` abrevia na '
+                'tela; abreviar tambem o nome ANUNCIADO tiraria de quem usa '
+                'leitor de tela a unica forma que ele tem de saber em que '
+                'secao esta.',
+          );
+          expect(
+            tituloDaBarra.semanticsLabel,
+            destino.rotulo,
+            reason:
+                'REPROVA: o titulo deixou de declarar `semanticsLabel` com o '
+                'rotulo inteiro. Sem a declaracao, o nome anunciado passa a ser '
+                'o que estiver pintado, e quem abreviar o pintado amanha '
+                'abrevia o anunciado junto, em silencio.',
+          );
+
+          // (4) QUEM CORTA E QUEM NAO CORTA, e os dois lados sao cobrados.
           expect(
             paragrafo.didExceedMaxLines,
             deficitDeCincoLetras ? isTrue : isFalse,
             reason: deficitDeCincoLetras
                 ? 'REPROVA: "${destino.rotulo}" NAO foi cortado a 200%, e o '
                       'deficit medido de 12,90 dp dizia que seria. Se a barra '
-                      'ganhou espaco -- outro controle saiu, ou o rotulo '
-                      'mudou --, apague esta excecao e volte a cobrar o '
-                      'titulo inteiro nas quatro secoes.'
+                      'ganhou espaco -- um controle saiu, ou o rotulo mudou '
+                      '--, apague esta excecao e volte a cobrar o titulo '
+                      'inteiro nas quatro secoes.'
                 : 'REPROVA: o titulo "${destino.rotulo}" foi CORTADO com '
                       'reticencia na barra de topo. O cliente encarregou o '
                       'titulo de carregar o significado que o rotulo de '
@@ -1043,48 +1186,114 @@ void main() {
                       'nenhum.',
           );
 
-          // -----------------------------------------------------------------
-          // O ORCAMENTO COM A RESERVA DE FILTRO: `Perto` JA NAO CABE NELE.
+          // (5) O NUMERO MEDIDO FICA TRAVADO, e agora e o pedido INTEIRO.
           //
-          // `disponivel` desconta 64 dp para o gatilho de `Filtros` que a UX
-          // 27.5.3 promete a esta secao e que ela **ainda nao publica** (sem
-          // dados carregados nao ha acao de listagem). Por isso o leiaute de
-          // hoje nao corta nada: o espaco reservado esta livre na pratica.
-          //
-          // Medido a 200% em 320 dp, com a foto na barra:
-          //
-          //   orcamento com hamburguer + reserva de filtro + foto: 144,00 dp
-          //   `Pets` 138,32 · `Loja` 138,32 · `Rede` 138,32  -> cabem
-          //   `Perto` 172,90                                 -> NAO cabe
-          //
-          // Ou seja: **no dia em que `Perto` publicar o gatilho de `Filtros`,
-          // o titulo dela passa a ser cortado a 200%** -- faltam 28,90 dp.
-          // Fechar isso exige tirar UM dos controles que o cliente pos na
-          // barra: o `Filtros` (17/10), a porta de criar (18/10) ou a foto
-          // (19/10). **Decisao dele, nao de quem implementa**, e esta no
-          // relatorio como pergunta fechada.
-          //
-          // O caso trava os dois lados: as tres que cabem continuam cabendo,
-          // e `Perto` reprova se pedir mais que os 172,90 dp medidos.
+          // `paragrafo.size.width` de um titulo cortado e a largura do CORTE
+          // (144,00 dp em `Perto`) e nao o que o texto pede -- medir o corte
+          // nao acusa um rotulo que cresceu. `getMaxIntrinsicWidth` devolve o
+          // pedido sem o corte, e e ele que esta travado nos numeros medidos.
           expect(
-            paragrafo.size.width,
-            deficitDeCincoLetras
-                ? lessThanOrEqualTo(180.0)
-                : lessThanOrEqualTo(disponivel),
-            reason: deficitDeCincoLetras
-                ? 'REPROVA: "${destino.rotulo}" passou a pedir '
-                      '${paragrafo.size.width.toStringAsFixed(2)} dp a 200%, '
-                      'acima dos 172,90 dp medidos em 19/10. Ela ja nao cabe '
-                      'no orcamento com a reserva de `Filtros` (144,00 dp), e '
-                      'o deficit aumentou.'
-                : 'REPROVA: "${destino.rotulo}" pede '
-                      '${paragrafo.size.width.toStringAsFixed(2)} dp e sobram '
-                      '${disponivel.toStringAsFixed(2)} dp em 320 dp a 200%, '
-                      'com o hamburguer na esquerda, a foto da conta a direita '
-                      'e ${reservaDeAcao > AvatarDaConta.alvo ? 'uma' : 'nenhuma'} '
-                      'acao de listagem reservada. Titulo que nao cabe se '
-                      'resolve trocando a palavra em projeto, nunca com '
-                      'reticencia (UX 27.4.2).',
+            paragrafo.getMaxIntrinsicWidth(double.infinity),
+            closeTo(deficitDeCincoLetras ? 172.90 : 138.32, 0.5),
+            reason:
+                'REPROVA: "${destino.rotulo}" pede '
+                '${paragrafo.getMaxIntrinsicWidth(double.infinity).toStringAsFixed(2)} dp '
+                'inteiros a 200%, e o medido em 19/10/2026 era '
+                '${deficitDeCincoLetras ? '172,90' : '138,32'} dp. Rotulo que '
+                'cresce muda a conta: com orcamento de '
+                '${disponivel.toStringAsFixed(2)} dp, cada dp a mais e mais '
+                'texto que a reticencia come.',
+          );
+
+          // `dispose` AQUI e nao em `addTearDown`: a verificacao de fim de caso
+          // do `flutter_test` roda ANTES dos `tearDown`, e um `addTearDown`
+          // reprova com "A SemanticsHandle was active at the end of the test".
+          // Medido em 19/10/2026. E a mesma forma dos outros casos de
+          // semantica deste arquivo.
+          semantica.dispose();
+        },
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // ISCA (e): NENHUM CONTROLE SAIU DA BARRA PARA O TITULO CABER
+    // -----------------------------------------------------------------------
+    //
+    // A saida barata para o deficit de 12,90 dp de `Perto` e tirar um controle
+    // da barra: sem a porta de criar, o orcamento vai de 160,00 para 224,00 dp
+    // e o titulo passa a caber. **Nenhum deles sai**, e os tres sao pedido
+    // direto do cliente -- o hamburguer em 17/10 (*"padronize todas as telas,
+    // tornando o menu esquerdo fixo"*), a porta de criar em 18/10 e a foto em
+    // 19/10. Abreviar o titulo foi a escolha PARA NAO tirar nenhum.
+    //
+    // Este caso compara a barra a 200% com a MESMA barra em tamanho normal: se
+    // alguem "consertar" o titulo esvaziando a barra na escala grande, o
+    // conjunto de controles deixa de bater e isto reprova.
+    for (final destino in secoesDaBarra) {
+      testWidgets(
+        'ISCA (e): a barra de "${destino.rotulo}" tem OS MESMOS controles a '
+        '100% e a 200%',
+        (tester) async {
+          Future<List<String>> controles(double escala) async {
+            tester.view.physicalSize = const Size(960, 2000);
+            tester.view.devicePixelRatio = 3;
+            await abrirOApp(
+              tester,
+              rede: _semServidor,
+              deposito: depositoLogado(),
+              escala: escala,
+            );
+            await tester.tap(
+              find.widgetWithText(NavigationDestination, destino.rotulo),
+            );
+            await tester.pumpAndSettle();
+            final barra = tester.widget<AppBar>(find.byType(AppBar));
+            return <String>[
+              'leading:${barra.leading.runtimeType}',
+              ...(barra.actions ?? const <Widget>[]).map(
+                (acao) => 'acao:${acao.runtimeType}',
+              ),
+            ];
+          }
+
+          addTearDown(tester.view.reset);
+          final normal = await controles(1);
+          final grande = await controles(2);
+
+          // CONTRAPESO: sem ele, o caso passaria com duas listas vazias -- que
+          // e o que aconteceria se `abrirOApp` deixasse de abrir a secao.
+          expect(
+            normal,
+            contains('acao:AvatarDaConta'),
+            reason:
+                'REPROVA: a barra de "${destino.rotulo}" nao tem a foto da '
+                'conta nem em tamanho normal. A comparacao abaixo estaria '
+                'medindo duas telas vazias e aprovaria qualquer coisa.',
+          );
+          // MEDIDO em 19/10/2026: as QUATRO secoes da barra desenham o
+          // hamburguer. (A conferencia nao e derivada do registro de
+          // sub-destinos de proposito: derivar faria o caso concordar com o
+          // codigo em vez de brigar com ele.)
+          expect(
+            normal.first,
+            'leading:BotaoDaGaveta',
+            reason:
+                'REPROVA: o slot da esquerda de "${destino.rotulo}" deixou de '
+                'ter o hamburguer. O cliente fixou o menu esquerdo em 17/10 '
+                '(*"padronize todas as telas, tornando o menu esquerdo '
+                'fixo"*), e e justamente para nao tira-lo que o titulo de '
+                '`Perto` abrevia a 200%.',
+          );
+          expect(
+            grande,
+            normal,
+            reason:
+                'REPROVA: a barra de "${destino.rotulo}" tem controles '
+                'DIFERENTES a 200%: $grande contra $normal em tamanho normal. '
+                'A 200% o titulo de `Perto` nao cabe (172,90 dp pedidos contra '
+                '160,00 de orcamento) e a saida barata e esvaziar a barra -- '
+                'mas os tres controles sao pedido do cliente, e a decisao foi '
+                'abreviar o titulo justamente para nao tirar nenhum.',
           );
         },
       );
@@ -1314,7 +1523,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 50 linhas, 15 destinos e 5 atalhos vivos', () {
+    test('o inventario de 27.5 tem 52 linhas, 17 destinos e 6 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -1349,11 +1558,19 @@ void main() {
       );
       // 48 -> 50 em 19/10: as duas linhas da secao de mensagens
       // (`Lista de conversas` e `Conversa`), as duas `planejada`.
+      // 50 -> 51 em 19/10, na fatia G: `Pedidos de conexao` em `Perfil`. **E
+      // linha NOVA e nao mudanca de estado**, e a diferenca importa aqui: a UX
+      // 27.5.5 fechou em 21/09 e a conexao entre pessoas e decisao de
+      // 18/10/2026, entao nao havia linha para subir. Ela nasce `existe`
+      // porque a tela e a rota existem desde 18/10 e estavam SEM PORTA.
+      // 51 -> 52 em 19/10: `Pessoas bloqueadas` em `Perfil`, pela mesma razao
+      // -- linha NOVA, sem linha na UX, e decisao do cliente de 19/10/2026.
+      // Ela nasce `existe` porque a tela e a rota entram no MESMO commit.
       expect(
         todos.length,
-        50,
+        52,
         reason:
-            'REPROVA: o inventario de 27.5 saiu de 50 linhas e foi para '
+            'REPROVA: o inventario de 27.5 saiu de 52 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -1362,11 +1579,14 @@ void main() {
       final destinos = todos
           .where((d) => d.forma == FormaDoSubDestino.destino)
           .toList(growable: false);
+      // 15 -> 16 em 19/10: `Pedidos de conexao`, que e `destino` porque a tela
+      // tem `Scaffold`, barra de saida e endereco proprio.
+      // 16 -> 17 em 19/10: `Pessoas bloqueadas`, `destino` pelo mesmo motivo.
       expect(
         destinos.length,
-        15,
+        17,
         reason:
-            'REPROVA: os destinos de MENU sairam de 15 e foram para '
+            'REPROVA: os destinos de MENU sairam de 17 e foram para '
             '${destinos.length}. A maioria das 48 linhas nunca foi item de '
             'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
             'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
@@ -1387,11 +1607,18 @@ void main() {
       // subiu de 8 para 10 no mesmo movimento. A queda aqui so e legitima
       // porque aquela subida aconteceu, e e isso que o caso de soma no fim
       // deste grupo garante.
+      // CINCO -> SEIS em 19/10: `Pedidos de conexao` entrou `existe` COM rota,
+      // e e a subida que a mensagem abaixo chama de caminho normal -- a tela do
+      // outro lado existe e esta registrada no roteador, o que o caso `toda
+      // rota de item vivo esta REGISTRADA no roteador` confere.
+      // SEIS -> SETE em 19/10: `Pessoas bloqueadas` entrou `existe` COM rota,
+      // pela mesma razao -- `TelaDeBloqueados` e `/perfil/bloqueados` entram no
+      // mesmo commit da linha, e o caso de registro no roteador confere.
       expect(
         vivos.length,
-        5,
+        7,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 5 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -2578,7 +2805,20 @@ void main() {
           // 19/10 e **nao chegou a zero**. A margem da foto continua custando
           // 0,00 dp. Fechar os 12,90 que faltam exige tirar outro controle da
           // barra ou encurtar o rotulo, e as duas coisas sao decisao dele.
-          final paragrafo = tester.renderObject<RenderParagraph>(titulo);
+          // ACHADO DA MESCLA DE 19/10/2026: desce ao `RichText`, como o
+          // grupo 3 deste mesmo arquivo ja fazia.
+          //
+          // A frente `bloqueados-e-titulo` passou a declarar
+          // `semanticsLabel` no titulo da barra (para o nome ANUNCIADO nao
+          // abreviar junto com o pintado). Com `semanticsLabel`, o `Text`
+          // embrulha o paragrafo e `find.text` passa a devolver
+          // `RenderSemanticsAnnotations` -- o cast para `RenderParagraph`
+          // estoura com `_TypeError`. Este caso e da frente da MARGEM DA
+          // FOTO, que nao tinha o rotulo de semantica na base dela, e por
+          // isso nenhum dos dois ramos reprovava sozinho.
+          final paragrafo = tester.renderObject<RenderParagraph>(
+            find.descendant(of: titulo, matching: find.byType(RichText)),
+          );
           expect(
             paragrafo.didExceedMaxLines,
             destino.rotulo == 'Perto' ? isTrue : isFalse,

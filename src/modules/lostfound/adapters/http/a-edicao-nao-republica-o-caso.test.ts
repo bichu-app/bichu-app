@@ -108,6 +108,7 @@ const CASO_FORA_DA_LISTA: CasoGravado = {
   shareToPublicList: false,
   openedAt: new Date(AGORA - 86_400_000),
   closedAt: null,
+  reopenDeadline: null,
   closureOutcome: null,
   closureChannel: null,
   closureNote: null,
@@ -141,6 +142,7 @@ function espiaoDoRepositorio(): Espiao {
       abrir: naoUsado,
       buscarDoTutor: () => Promise.resolve(CASO_FORA_DA_LISTA),
       encerrar: () => Promise.resolve(null),
+      reabrir: naoUsado,
       atualizarOndeEQuando: (entrada: AtualizacaoDoCaso): Promise<CasoGravado | null> => {
         visto = entrada;
         // O dublê devolve o caso com a decisão que a entrada carrega, do mesmo

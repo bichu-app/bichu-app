@@ -1,0 +1,139 @@
+-- O INDICE DA LISTAGEM PUBLICA DE PERDIDOS (`listPublicLostPets`), por cidade e
+-- por `last_seen_at`.
+--
+-- POR QUE AGORA: em 18/10/2026 o cliente pediu que *"a pagina de pets nao deve
+-- trazer nenhum item do filtro por padrao, como esta atualmente por ultimos 30
+-- dias"*. `period` perdeu o `default: 30d` em `api/openapi.yaml` e a ausencia
+-- passou a significar JANELA ABERTA (commit `05565fcf`). Sem o predicado de
+-- data, a consulta passou a ler os casos abertos da CIDADE INTEIRA em vez dos
+-- dos ultimos 30 dias.
+--
+-- ===========================================================================
+-- `lost_cases_publicos_por_cidade` NAO SERVE ESTA CONSULTA, E NUNCA SERVIU.
+-- LEIA ISTO ANTES DE ACHAR QUE UM DOS DOIS E REDUNDANTE.
+-- ===========================================================================
+-- O indice antigo, da `20260918000003`, e:
+--
+--   (last_seen_city, opened_at DESC) WHERE status = 'open' AND share_to_public_list
+--
+-- E ELE FOI CRIADO PARA ESTA ROTA. O comentario em cima dele, na propria
+-- `20260918000003`, diz com todas as letras: *"A lista publica filtra por
+-- cidade"*. Ele nunca serviu a lista que o justificou, e isso nao se descobriu
+-- antes porque o plano nunca foi olhado -- a operacao so ganhou codigo depois
+-- (ela era a ultima linha de `OPERACOES_AINDA_SEM_ROTA`), e ninguem voltou ao
+-- indice que a esperava.
+--
+-- Ele nao e alcancado pela listagem publica por DOIS motivos independentes, e
+-- cada um deles bastaria:
+--
+-- 1. **O predicado de cidade e uma FUNCAO SOBRE A COLUNA.** A consulta compara
+--    `texto_para_busca(lost_cases.last_seen_city) = texto_para_busca($1)`, e
+--    nao `last_seen_city = $1`. A comparacao normalizada existe porque "vila
+--    mariana" e "Vila Mariana" sao o mesmo lugar e um `=` cru responderia vazio
+--    para quem digitou com acento diferente do que o tutor gravou. Nenhum btree
+--    sobre a coluna CRUA alcanca um predicado sobre a funcao: o planejador nao
+--    sabe que `texto_para_busca` preserva a ordem, e nem preserva.
+-- 2. **A ordenacao do indice e `opened_at`, e a rota recorta e ordena por
+--    `last_seen_at`.** Sao campos diferentes de proposito: `last_seen_at` e
+--    quando o animal foi VISTO, que e o que a tela mostra e o que a janela
+--    conta; `opened_at` e quando o caso foi aberto. O contrato chamava a janela
+--    de "desde a abertura do caso" e o codigo sempre usou `last_seen_at`,
+--    porque `opened_at` faria "ultimas 24 h" esconder o caso aberto hoje de um
+--    animal visto anteontem.
+--
+-- ESTA MIGRACAO NAO DERRUBA O ANTIGO, e a razao e que eu nao medi o suficiente
+-- para derrubar -- nao que os dois se complementem. O que foi medido, por grep
+-- em `src/` em 19/10/2026: **nenhuma consulta do codigo filtra
+-- `lost_cases.last_seen_city` num `WHERE`** (as duas ocorrencias sao de SAIDA,
+-- em `kysely-listagem-publica-de-perdidos.ts` e
+-- `kysely-leitura-publica-do-caso.ts`), e **nenhuma ordena `lost_cases` por
+-- `opened_at`** (a unica ordenacao por `opened_at` no repositorio e de
+-- `conversations`, outra tabela). Pela leitura do codigo, o indice antigo tem
+-- ZERO leitores.
+--
+-- Mesmo assim ele fica, e deliberadamente: "nao achei leitor com grep" nao e o
+-- mesmo que "nao ha leitor". O que nao foi medido e consulta escrita fora de
+-- `src/` -- painel, analise, roteiro de operacao -- e derrubar indice e
+-- barato de desfazer mas caro de descobrir que fez falta, porque o sintoma e
+-- uma consulta mais lenta e nao um erro. Derruba-lo e uma decisao propria, com
+-- a medicao propria, e ela nao cabia nesta frente.
+--
+-- Quem vier depois: os dois NAO sao duplicata um do outro -- as colunas e a
+-- ordenacao sao diferentes, e o de cima explica por que. Se for aposentar o
+-- antigo, aposente por MEDICAO de quem o le, e nao por ele parecer igual a
+-- este.
+--
+-- ===========================================================================
+-- O QUE FOI MEDIDO, E COMO
+-- ===========================================================================
+-- Pilha efemera de integracao (`infra/integracao/compose.integracao.yaml`),
+-- Postgres 16 com o mesmo digest de dev e producao, 6 000 casos abertos
+-- publicos em 10 cidades (600 em `Sao Paulo`) espalhados por 720 dias,
+-- `ANALYZE` feito antes de cada medicao. `EXPLAIN (ANALYZE, BUFFERS)` da MESMA
+-- consulta que `kysely-listagem-publica-de-perdidos.ts` compila, com a janela
+-- ABERTA (o caso novo, que e o que esta migracao existe para atender):
+--
+--   contagem   Seq Scan          15 113 buffers   58,8 ms
+--   contagem   Bitmap Index Scan  4 320 buffers    8,7 ms   <- com este indice
+--
+--   pagina 1   Seq Scan                           57,5 ms
+--   pagina 1   Bitmap Index Scan                  16,2 ms   <- com este indice
+--
+-- Para comparacao, a MESMA consulta com a janela de 30 dias, que e o que a rota
+-- fazia antes do pedido do cliente: contagem em 923 buffers e 15,9 ms, pagina 1
+-- em 839 buffers e 10,3 ms -- as duas tambem por `Seq Scan`, porque o indice
+-- antigo nunca participou. Isto e o que a medicao desmente: tirar o `default`
+-- nao degradou um plano bom, tornou visivel quantas linhas o plano ruim ja
+-- percorria.
+--
+-- O QUE EXPLICA OS 3,5x DE BUFFERS nao e a varredura em si -- ela le as mesmas
+-- paginas de tabela de qualquer jeito. E `conta_habilitada(owner_user_id)`,
+-- uma funcao por linha que consulta `users`: com a janela, o Postgres a avalia
+-- depois do corte de data e ela roda 26 vezes; sem a janela, ela roda para as
+-- 600 da cidade. O indice a devolve ao regime de poucas linhas.
+--
+-- ===========================================================================
+-- POR QUE AS COLUNAS SAO ESTAS TRES, E NESTA ORDEM
+-- ===========================================================================
+-- `(texto_para_busca(last_seen_city), last_seen_at DESC, share_token)`:
+--
+-- - `texto_para_busca(last_seen_city)` primeiro porque e o unico predicado de
+--   IGUALDADE do recorte obrigatorio (`city` e `required` no contrato, e a
+--   obrigatoriedade e de privacidade: sem ela a operacao seria um inventario
+--   nacional de animais perdidos, que e a listagem que o ADR-0010 nao quer).
+-- - `last_seen_at DESC` depois, porque e a janela E a ordem: a rota devolve o
+--   mais recente primeiro.
+-- - `share_token` por ultimo porque e o desempate estavel da ordenacao. Sem
+--   ele, `OFFSET` devolve ordem arbitraria entre casos com o mesmo
+--   `last_seen_at`, e a pagina 2 repete ou pula caso.
+--
+-- `texto_para_busca` e IMMUTABLE (`provolatile = 'i'`), e e por isso que ela
+-- PODE ser indexada. `conta_habilitada` e STABLE (`provolatile = 's'`) e por
+-- isso NAO pode entrar no `WHERE` deste indice -- predicado de indice exige
+-- imutabilidade, e tentar reprova na criacao.
+--
+-- O `WHERE` parcial e o MESMO do indice antigo (`status = 'open' AND
+-- share_to_public_list`) de proposito: sao os dois predicados de publicacao que
+-- nao dependem de outra tabela, e os dois valem para toda consulta publica
+-- desta rota. Os outros dois predicados (`conta_habilitada` e o estado do pet)
+-- ficam fora porque um e STABLE e o outro vive em `pets`.
+--
+-- SEM `CONCURRENTLY`, como nenhuma migracao deste repositorio: `node-pg-migrate`
+-- roda cada migracao em transacao, e `CREATE INDEX CONCURRENTLY` nao executa
+-- dentro de uma. Em `lost_cases` isso e aceitavel hoje -- a tabela e pequena e
+-- o bloqueio de escrita dura o que a criacao durar.
+
+-- Up Migration
+
+CREATE INDEX lost_cases_publicos_por_cidade_e_visto
+  ON lost_cases (texto_para_busca(last_seen_city), last_seen_at DESC, share_token)
+  WHERE status = 'open' AND share_to_public_list;
+
+COMMENT ON INDEX lost_cases_publicos_por_cidade_e_visto IS
+  'listPublicLostPets: cidade normalizada, mais recente primeiro, share_token como desempate. NAO e redundante com lost_cases_publicos_por_cidade: aquele indexa a coluna CRUA e ordena por opened_at.';
+
+-- Down Migration
+
+-- Descer devolve a listagem publica ao `Seq Scan` medido acima. Nada de dado se
+-- perde: indice nao guarda verdade nenhuma que a tabela nao tenha.
+DROP INDEX IF EXISTS lost_cases_publicos_por_cidade_e_visto;

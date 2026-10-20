@@ -91,8 +91,14 @@ const PET_VISIVEL = '0192f3a1-7c2b-7e3d-9a10-2160000000b1';
 const PET_JA_EXCLUIDO = '0192f3a1-7c2b-7e3d-9a10-2160000000b2';
 const PET_DE_QUEM_FICA = '0192f3a1-7c2b-7e3d-9a10-2160000000b3';
 
-const SLUG_VISIVEL = 'rex-isca-desabilitada';
-const SLUG_DE_QUEM_FICA = 'mel-isca-desabilitada';
+// 20 CARACTERES NO MAXIMO, e nao e capricho: a `20261018000021` poe o slug do
+// pet no MESMO espaco de nomes do `@` (tabela `handles`), e o gatilho dela
+// aborta com P0001 fora da faixa de 5 a 20. `rex-isca-desabilitada` tem 21 e
+// vinha derrubando dez casos deste arquivo no `insert` da massa, antes de
+// qualquer asserção. `pets.slug` ainda aceita 3 a 30; a faixa estreita e a do
+// espaco compartilhado, e e ela que manda.
+const SLUG_VISIVEL = 'rex-isca-fora';
+const SLUG_DE_QUEM_FICA = 'mel-isca-fica';
 
 let cliente: Client;
 let banco: DbHandle;
@@ -211,16 +217,16 @@ async function montarERodar(corpo: () => Promise<void>): Promise<void> {
   let doCaso: Error | undefined;
   try {
     await cliente.query(
-      `insert into users (id, email, deleted_at, status) values
-         ($1, 'que-sai@isca.test',  null, 'active'),
-         ($2, 'que-fica@isca.test', null, 'active')`,
+      `insert into users (id, email, deleted_at, status, public_ref) values
+         ($1, 'que-sai@isca.test',  null, 'active', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')),
+         ($2, 'que-fica@isca.test', null, 'active', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
       [QUE_SAI, QUE_FICA],
     );
     await cliente.query(
       `insert into pets (id, owner_user_id, name, species_code, size_code, slug,
                          public_profile_enabled, deleted_at) values
          ($1, $2, 'Rex', 'dog', 'M', $3, true, null),
-         ($4, $2, 'Bob', 'dog', 'M', 'bob-isca-desabilitada', true, $5),
+         ($4, $2, 'Bob', 'dog', 'M', 'bob-isca-ja-fora', true, $5),
          ($6, $7, 'Mel', 'dog', 'M', $8, true, null)`,
       [
         PET_VISIVEL,

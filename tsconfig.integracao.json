@@ -1,0 +1,49 @@
+// O PROJETO QUE A SUITE DE INTEGRACAO COMPILA, E POR QUE ELE NAO E O `tsconfig.json`
+// =============================================================================
+// `infra/integracao/executar-suite.mjs` compilava com o `tsconfig.json` da
+// raiz, que inclui `src/**/*.ts` INTEIRO -- e `src/` carrega 235 arquivos
+// `*.test.ts` da suite UNITARIA. A de integracao nunca os roda: ela roda
+// `dist/_tests/tests/integration/**`. Eram 235 arquivos compilados em toda
+// execucao para serem ignorados em seguida.
+//
+// Isso deixou de ser desperdicio e passou a ser PARADA. Medido nesta maquina,
+// Node 22.23.2, `tsc` do lockfile, bisseccao de `--max-old-space-size` com o
+// comando real (`--outDir`, com emissao e source map):
+//
+//   tsconfig.json          (1188 arquivos)  384 MB: estoura   448: estoura   512: estoura   640: PASSA
+//   tsconfig.integracao    ( 949 arquivos)  384 MB: estoura   448: estoura   512: PASSA     640: PASSA
+//
+// E o teto de monte velho que o V8 escolhe sozinho dentro do `mem_limit: 1g`
+// do servico `testes` e ~520 MB -- lido do proprio estouro:
+//
+//   Mark-Compact 503.8 (520.8) -> 499.9 (520.6) MB ... allocation failure
+//   FATAL ERROR: Ineffective mark-compacts near heap limit
+//
+// 640 > 520: o compilador morria ANTES do primeiro caso, e a suite de
+// integracao nao rodava. Nao era teste passando errado, era teste nao rodando.
+//
+// POR QUE ESCOPO, E NAO TETO. A regra do cliente e que, ate existirem clientes
+// reais, falta de memoria se resolve baixando o que se alcanca e nao subindo a
+// maquina. `mem_limit: 1g` fica onde esta. O que muda aqui e o alcance: 1188
+// arquivos para 949, e 18,0 s para 7,5 s de compilacao.
+//
+// POR QUE NAO ESTREITAR O `tsconfig.json`. Ele e o projeto da suite UNITARIA
+// (`npm test` compila com ele e roda `dist/_tests/src/**/*.test.js`). Tirar
+// `src/**/*.test.ts` de la apagaria a unitaria inteira -- 235 arquivos deixando
+// de ser compilados, e o `fontesSemCompilado` de `infra/suite/executar-unitaria.mjs`
+// reprovando. Dois consumidores, duas listas de inclusao.
+//
+// O `exclude` NAO alcanca o que o grafo de importacao traz: `tsc` compila todo
+// arquivo importado, estando ele incluido ou nao. Entao nenhum modulo de
+// producao sai da conta por estar aqui -- o que sai e so o arquivo de teste
+// unitario que ninguem importa. Os 44 arquivos de `tests/integration/` continuam
+// compilando, conferido depois do corte, e o portao de
+// `executar-suite.mjs` reprova pelo nome se algum deixar de compilar.
+//
+// A mesma forma do `tsconfig.build.json`, que ja estreita assim para o
+// artefato de producao.
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

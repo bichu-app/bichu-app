@@ -137,8 +137,18 @@ export interface HandlesTable {
    * nos 180 dias (plano 4-C.7).
    */
   user_id: string | null;
-  /** Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui. */
-  claimed_at: ColumnType<Date, number | Date | string | undefined, number | Date | string>;
+  /**
+   * Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui.
+   *
+   * **A ESCRITA ACEITA `Date` E NADA MAIS**, e o estreitamento é a correção de
+   * um defeito medido em 18/10/2026: o tipo aceitava `number`, `atualizarPerfil`
+   * passava o `Instant` (milissegundos desde a época) e o Postgres recusava com
+   * `22008 date/time field value out of range` -- `PATCH /v1/me` com `handle`
+   * devolvia 500 em toda troca e toda escolha de apelido. `number` não servia
+   * para nada aqui: ninguém grava epoch nesta coluna de propósito, e o único
+   * efeito de aceitá-lo era deixar o erro compilar.
+   */
+  claimed_at: ColumnType<Date, Date | undefined, Date>;
 }
 
 export interface UserIdentitiesTable {
@@ -2071,9 +2081,19 @@ export type OrigemDoPedidoDeConexao = 'anchored_case' | 'anchored_event' | 'pres
  * **Nao entra na fila do painel**, de proposito: bloquear nao tem
  * administrador, nao tem revisao e tem efeito imediato na leitura.
  *
- * Nenhuma resposta projeta nenhuma das duas colunas de pessoa, nem como
- * contagem nem como existencia -- e e por isso que o bloqueado continua sem
- * saber. O predicado de leitura e `bloqueio_entre(uuid, uuid)`, SIMETRICO.
+ * O predicado de leitura e `bloqueio_entre(uuid, uuid)`, SIMETRICO.
+ *
+ * **DESDE 19/10/2026 HA UMA SAIDA, e ela e ASSIMETRICA de proposito**
+ * (`listMyBlocks`): a lista de quem EU bloqueei, lida por
+ * `blocker_user_id = quem chama` na clausula `WHERE`. `blocker_user_id`
+ * continua sem sair em resposta nenhuma -- ele e sempre quem chama --, e
+ * `blocked_user_id` sai so resolvido no apelido, no nome e no `public_ref`
+ * daquela pessoa, **e so para quem a bloqueou**.
+ *
+ * **O bloqueado continua sem saber**, e a razao e a assimetria: nao ha leitura,
+ * nem contagem, nem existencia, de quem bloqueou quem chama. `bloqueio_entre` e
+ * simetrica e NAO e chamada naquela consulta, justamente para que a segunda
+ * metade do par nao apareca.
  */
 export interface UserBlocksTable {
   id: string;

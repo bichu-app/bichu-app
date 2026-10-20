@@ -114,8 +114,9 @@ async function novaContaDoPainel(): Promise<AdminAccountId> {
 async function novaConta(): Promise<UserId> {
   const id = randomUUID() as UserId;
   await sql`
-    insert into users (id, email, display_name, created_at, updated_at)
-    values (${id}::uuid, ${`fila-${sufixo()}@${DOMINIO}`}, 'Quem Indicou', now(), now())
+    insert into users (id, email, display_name, created_at, updated_at, public_ref)
+    values (${id}::uuid, ${`fila-${sufixo()}@${DOMINIO}`}, 'Quem Indicou', now(), now(),
+            translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))
   `.execute(banco.db);
   contas.push(id);
   return id;

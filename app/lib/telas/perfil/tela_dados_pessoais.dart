@@ -231,6 +231,28 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final foto = _fotoEscolhida;
     if (foto == null || _enviandoAFoto) return;
 
+    // O NOME ANTES DA FOTO, e a conferencia e local de proposito.
+    //
+    // O terceiro passo do envio e `PATCH /v1/me` com `photo_upload_id`, e o
+    // servidor recusa esse PATCH quando a conta nao tem nome (decisao do
+    // cliente de 18/10/2026). Essa recusa chega aqui como
+    // `DesfechoDoEnvio.recusada`, que vira "tente outra foto" -- e nenhuma
+    // outra foto resolve. Medido em 18/10/2026: a conta sem nome recebia
+    // `400 {"field":"display_name","code":"required"}` depois de os bytes
+    // subirem.
+    //
+    // Conferir aqui poupa o envio inteiro e, acima disso, DIZ O QUE PREENCHER:
+    // a mensagem cai no campo do nome, como a do `Salvar`.
+    if (_nome.text.trim().isEmpty) {
+      setState(() {
+        _erros[_CamposDosDados.nome] = _TextosDosDados.nomePrecisaDeTexto;
+        _confirmacao = null;
+        _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoPrecisaDoNome);
+      });
+      anunciar(context, _TextosDosDados.fotoPrecisaDoNome);
+      return;
+    }
+
     setState(() {
       _enviandoAFoto = true;
       _faixa = null;
@@ -1332,6 +1354,17 @@ abstract final class _TextosDosDados {
       'Sem conexão para enviar a foto. Tente de novo quando o sinal voltar.';
 
   static const String fotoRecusada = 'O envio foi recusado. Tente outra foto.';
+
+  /// A FOTO TAMBEM E CADASTRO, e a conta sem nome nao atualiza cadastro.
+  ///
+  /// Cliente, 18/10/2026: *"nao permitir atualizar o cadastro, se nao tiver
+  /// algum nome cadastrado"*. O terceiro passo do envio e `PATCH /v1/me` com
+  /// `photo_upload_id`, entao a trava do servidor vale para ele -- e sem esta
+  /// frase a pessoa recebia `fotoRecusada` ("tente outra foto") para um
+  /// problema que nenhuma outra foto resolve. O que falta e o NOME, e a
+  /// mensagem diz isso e o campo fica marcado.
+  static const String fotoPrecisaDoNome =
+      'Preencha o nome e salve antes de enviar a foto.';
 
   static const String email = 'E-mail';
   static const String emailConfirmado = 'E-mail confirmado';

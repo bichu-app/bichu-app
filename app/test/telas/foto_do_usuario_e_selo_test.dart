@@ -60,18 +60,23 @@ const String uploadId = 'up-foto-do-usuario-1';
 /// `photo` e `oneOf: [MyPhoto, null]`: ausente, nulo e objeto sao os tres
 /// estados que a tela trata, e [statusDaFoto] com [urlDaFoto] nula e o
 /// `processing` do contrato.
+/// [semNome] e o estado de 2 das 7 contas de homologacao (medido em
+/// 18/10/2026): `display_name` nulo. `Me.display_name` e `nullable: true` no
+/// contrato, e e nesse estado que o envio da foto morria com "o envio foi
+/// recusado" -- ver o grupo `o envio da propria foto sem nome na conta`.
 Map<String, dynamic> me({
   bool validado = true,
   String? urlDaFoto,
   String? statusDaFoto,
   bool semCampoDeFoto = false,
   bool comCampoDeOriginal = false,
+  bool semNome = false,
 }) {
   return <String, dynamic>{
     'id': 'u-1',
     'email': 'marina@exemplo.com.br',
     'email_verified': validado,
-    'display_name': 'Marina',
+    'display_name': semNome ? null : 'Marina',
     'phone_e164': null,
     'phone_verified': false,
     'pending_profile_fields': <String>[],
@@ -685,6 +690,123 @@ void main() {
         reason: 'REPROVA: ha `Salvar a foto` sem arquivo escolhido. Nao ha o '
             'que enviar, e um botao desabilitado aqui seria um controle '
             'pedindo um toque que nao faz nada.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('o envio da propria foto sem nome na conta', () {
+    // -----------------------------------------------------------------------
+    // O DEFEITO, MEDIDO E NAO SUPOSTO.
+    //
+    // Relato do cliente em 18/10/2026, contra homologacao: *"no perfil do
+    // usuario, para subir a foto esta dando erro"*. Medido contra a pilha
+    // efemera de integracao, no commit `f8c74714` -- o MESMO que
+    // `https://hml.bichu.app/v1/health` reportava --, com uma conta de
+    // `display_name` nulo, que e o estado de 2 das 7 contas de homologacao:
+    //
+    //     PATCH /v1/me  {"photo_upload_id":"01a151f1-5e6a-70da-935c-3d6998208ec1"}
+    //     400 {"errors":[{"field":"display_name","code":"required",
+    //          "message":"Diga como voce quer ser chamado para continuar."}]}
+    //
+    // O terceiro passo do envio e esse PATCH, e a decisao do cliente do mesmo
+    // dia -- *"nao permitir atualizar o cadastro, se nao tiver algum nome
+    // cadastrado"* -- vale para ele: a foto e cadastro. Do lado de ca o 400
+    // chegava como `DesfechoDoEnvio.recusada`, que vira **"O envio foi
+    // recusado. Tente outra foto."** -- e nenhuma outra foto resolve. A
+    // pessoa trocava de arquivo a esmo sem nunca descobrir que faltava o
+    // NOME.
+    //
+    // O conserto nao afrouxa a trava: ele conta o que falta, antes de gastar
+    // a leitura do arquivo e dois pedidos de rede.
+    testWidgets(
+        'ISCA — conta SEM nome: nada sobe e a tela diz que falta o NOME, '
+        'nao "tente outra foto"', (tester) async {
+      final camera = CameraDeTeste(
+        EstadoDaPermissao.concedida,
+        foto: fotoEscolhidaDeTeste,
+      );
+      final capturado = Capturado();
+      await abrirOsDados(
+        tester,
+        rede: servidor(meInicial: me(semNome: true), capturado: capturado),
+        camera: camera,
+      );
+
+      await tester.tap(find.text('Escolher da galeria'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Salvar a foto'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Preencha o nome'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela nao disse o que preencher. Era este o '
+            'defeito: a recusa do servidor chegava como '
+            '`DesfechoDoEnvio.recusada` e virava "tente outra foto", para um '
+            'problema que nenhuma outra foto resolve.',
+      );
+      expect(
+        find.textContaining('O envio foi recusado'),
+        findsNothing,
+        reason: 'REPROVA: a tela mandou tentar outra foto. O arquivo nao e o '
+            'problema.',
+      );
+      // O CAMPO FICA MARCADO, como no `Salvar`: a faixa diz o que aconteceu e
+      // o campo diz ONDE mexer.
+      expect(
+        find.textContaining('Digite o nome que você quer usar'),
+        findsOneWidget,
+        reason: 'REPROVA: a mensagem do campo do nome nao apareceu. Uma faixa '
+            'sozinha faz a pessoa procurar qual campo o servidor recusou.',
+      );
+
+      // E NADA SAIU DO APARELHO: nem a leitura do arquivo, nem a intencao,
+      // nem os bytes. Sem estes tres, o caso passaria com o envio inteiro
+      // acontecendo e a faixa aparecendo depois.
+      expect(
+        camera.vezesQueLeuOsBytes,
+        0,
+        reason: 'REPROVA: os bytes foram lidos para um envio que a tela ja '
+            'sabia que o servidor ia recusar.',
+      );
+      expect(capturado.doCaminho('/media/my-photo-intents'), isEmpty);
+      expect(capturado.aoArmazenamento(), isEmpty);
+      expect(capturado.doCaminho('/v1/me').where((p) => p.method == 'PATCH'),
+          isEmpty);
+    });
+
+    // CONTRAPESO, e ele e obrigatorio: sem este caso, "consertar" o anterior
+    // parando TODO envio deixaria a suite verde com a foto quebrada para
+    // todo mundo.
+    testWidgets('a conta COM nome continua subindo a foto normalmente',
+        (tester) async {
+      final camera = CameraDeTeste(
+        EstadoDaPermissao.concedida,
+        foto: fotoEscolhidaDeTeste,
+      );
+      final capturado = Capturado();
+      await abrirOsDados(
+        tester,
+        rede: servidor(meInicial: me(), capturado: capturado),
+        camera: camera,
+      );
+
+      await tester.tap(find.text('Escolher da galeria'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Salvar a foto'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Preencha o nome'),
+        findsNothing,
+        reason: 'REPROVA: a tela cobrou o nome de quem tem nome.',
+      );
+      expect(
+        capturado.doCaminho('/media/my-photo-intents'),
+        isNotEmpty,
+        reason: 'REPROVA: o envio nao saiu para uma conta com nome. A '
+            'conferencia local passou a barrar o caminho normal.',
       );
     });
   });

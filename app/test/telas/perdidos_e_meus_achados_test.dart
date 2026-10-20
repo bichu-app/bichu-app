@@ -11,6 +11,8 @@
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
+import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -419,7 +421,6 @@ void main() {
       );
       expect(pedidos, hasLength(1));
       expect(pedidos.single.url.queryParameters['city'], 'São Paulo');
-      expect(pedidos.single.url.queryParameters['period'], '30d');
       expect(pedidos.single.url.queryParameters['limit'], '20');
       expect(
         pedidos.single.headers.containsKey('Authorization'),
@@ -427,6 +428,74 @@ void main() {
         reason: 'REPROVA: a listagem publica mandou credencial. A rota declara '
             '`security: []`, e token vencido passaria a derrubar a tela de '
             'quem mais precisa dela.',
+      );
+    });
+
+    testWidgets(
+        'ISCA: a pagina de pets abre SEM FILTRO NENHUM, e sem `period`',
+        (tester) async {
+      // PEDIDO DO CLIENTE, 18/10/2026: *"a pagina de pets nao deve trazer
+      // nenhum item do filtro por padrao, como esta atualmente por ultimos 30
+      // dias"*.
+      //
+      // DESLIGANDO: em `lib/api/modelos_perdido.dart`, volte
+      // `this.janela = JanelaDePerdidos.trintaDias` no construtor de
+      // `RecorteDePerdidos` (ou faca `JanelaDePerdidos.de` devolver
+      // `trintaDias` no lugar de nulo). As DUAS medidas deste caso reprovam:
+      // `period=30d` reaparece na consulta e o gatilho volta a se chamar
+      // "Filtrar, 1 filtro ativo" na primeira abertura.
+      //
+      // **Ele mede a CONSULTA e o NOME do controle, e nao um texto de apoio.**
+      // O que o cliente ve e um filtro que ninguem escolheu ja valendo; as
+      // duas medidas sao as duas caras disso -- o recorte que foi pedido ao
+      // servidor e o estado que a tela anuncia.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+
+      expect(pedidos, hasLength(1));
+      expect(
+        pedidos.single.url.queryParameters.containsKey('period'),
+        isFalse,
+        reason: 'REPROVA: a pagina de pets mandou `period='
+            '${pedidos.single.url.queryParameters['period']}` sem ninguem '
+            'ter escolhido janela. Quem decide o que fazer com a ausencia e o '
+            'servidor, pelo `default` da rota -- o app parou de escolher '
+            'por ele.',
+      );
+
+      // O gatilho de recorte se chama pelo VERBO e so: sem "1 filtro ativo",
+      // porque nao ha filtro ativo. Esta e a forma de medir o distintivo sem
+      // depender de um literal que pode mudar de palavra: o nome com estado
+      // tem a palavra "ativo" dentro, e o sem estado nao tem.
+      final gatilho = find.byType(GatilhoDeRecorteNoCorpo);
+      expect(
+        gatilho,
+        findsOneWidget,
+        reason: 'REPROVA: a pagina de pets abriu sem o gatilho de filtro. Sem '
+            'ele as medidas abaixo seriam sobre um controle que nao existe.',
+      );
+      // O `Tooltip` e DESCENDENTE do gatilho (ele o constroi), e nao
+      // ancestral: `GatilhoDeRecorteNoCorpo` e quem envolve o botao.
+      final nome = tester
+          .widget<Tooltip>(
+            find.descendant(of: gatilho, matching: find.byType(Tooltip)),
+          )
+          .message;
+      expect(
+        nome,
+        'Filtrar',
+        reason: 'REPROVA: o gatilho de filtro da pagina de pets abriu se '
+            'chamando "$nome". Com filtro nenhum aplicado o nome e o verbo e '
+            'so -- qualquer estado no nome quer dizer que algo foi filtrado '
+            'sem ninguem pedir.',
       );
     });
 
@@ -770,14 +839,53 @@ void main() {
           find.byType(CartaoDoPerdido).evaluate().single.widget as CartaoDoPerdido;
       expect(cartao.perdido.shareToken, tokenDeMel);
       expect(umUuid.hasMatch(cartao.perdido.shareToken), isFalse);
-      // E o cartao NAO promete toque: `/pets/:petId` e endereçada por UUID
-      // interno, e a tela do caso publico por token e do SITE, nao do app.
+      // **O CARTAO PASSOU A PROMETER TOQUE** (cliente, 18/10/2026: *"quando o
+      // pet esta perdido, deve ter uma pagina interna do pet"*). O que estava
+      // aqui era `expect(cartao.aoTocar, isNull)` com o motivo escrito ao lado:
+      // *"se for outro, confira que ele existe antes de prometer"*. O destino
+      // agora existe -- `TelaDoCasoPublico`, sobre `getPublicLostCase` --, e o
+      // que este caso continua cobrando e a OUTRA metade da mesma frase: que o
+      // endereco **nao carrega UUID interno**.
+      //
+      // DESLIGANDO: troque o destino de `lista_de_perdidos.dart` por
+      // `Rotas.detalheDoPetDe(...)` com qualquer id. Este caso reprova.
       expect(
         cartao.aoTocar,
-        isNull,
-        reason: 'REPROVA: o cartao publico ganhou toque. Se o destino for '
-            '`/pets/:petId`, ele carrega UUID interno; se for outro, confira '
-            'que ele existe antes de prometer.',
+        isNotNull,
+        reason: 'REPROVA: o cartao da listagem de perdidos voltou a nao levar '
+            'a lugar nenhum. O cliente pediu a pagina interna do pet perdido, '
+            'e sem toque no cartao ela nao tem porta.',
+      );
+      await tocar(tester, find.byType(CartaoDoPerdido));
+
+      final pagina = find.byType(TelaDoCasoPublico);
+      expect(
+        pagina,
+        findsOneWidget,
+        reason: 'REPROVA: o toque no cartao nao abriu a pagina publica do '
+            'caso. Sem ela os `expect` abaixo nao medem nada.',
+      );
+      final token = tester.widget<TelaDoCasoPublico>(pagina).shareToken;
+      expect(
+        token,
+        tokenDeMel,
+        reason: 'REPROVA: a pagina nao foi enderecada pelo `share_token` do '
+            'cartao.',
+      );
+      expect(
+        umUuid.hasMatch(token),
+        isFalse,
+        reason: 'REPROVA: o endereco da pagina publica carrega UUID interno '
+            '(ADR-0010, item 6). `PublicLostPet` nao traz `pet_id` nem '
+            '`case_id` de proposito -- o contrato diz que ela "nunca deve '
+            'possuir" --, e a chave deste caminho e o token opaco.',
+      );
+      final enderecos = textosNaTela(tester).where(umUuid.hasMatch).toList();
+      expect(
+        enderecos,
+        isEmpty,
+        reason: 'REPROVA: UUID interno na pagina publica do caso. '
+            'Achados: $enderecos',
       );
     });
   });

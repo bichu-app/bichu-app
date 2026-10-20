@@ -8,8 +8,10 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../avisos/aviso_de_cadastro_incompleto.dart';
 import '../../widgets/item_de_menu.dart';
@@ -122,8 +124,21 @@ class MeusPets extends StatefulWidget {
 /// branco", e nenhum deles e "lista vazia por falha".
 enum _Fase { carregando, lista, falhaComCache, falhaSemCache }
 
-class _MeusPetsState extends State<MeusPets> {
+class _MeusPetsState extends State<MeusPets>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
+
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   List<Pet> _pets = const <Pet>[];
   String? _textoDaFalha;
 
@@ -219,6 +234,7 @@ class _MeusPetsState extends State<MeusPets> {
       _fase = _Fase.carregando;
       _pets = salvo ?? const <Pet>[];
       _textoDaFalha = null;
+      _faltaConta = false;
     });
 
     try {
@@ -232,9 +248,21 @@ class _MeusPetsState extends State<MeusPets> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       final cache = widget.cache.pets(idDoDono);
+      final semConta = faltaConta(falha);
       setState(() {
         _textoDaFalha = MensagensDeErro.de(falha).texto;
-        if (cache != null && cache.isNotEmpty) {
+        _faltaConta = semConta;
+        if (semConta) {
+          // **O CACHE NAO SOBREVIVE A UM 401, e isto nao e zelo.** `idDoDono`
+          // e lido ANTES do `await`, quando a sessao ainda estava de pe, e o
+          // cache responde por aquele id -- entao sem esta guarda a tela
+          // desenharia os pets da sessao que acabou de cair sob uma faixa
+          // informativa, parecendo logada. Pior no caminho do refresh
+          // recusado: `_renovar` apaga o deposito mas NAO roda as limpezas de
+          // `sair()`, entao o cache em memoria continua cheio.
+          _pets = const <Pet>[];
+          _fase = _Fase.falhaSemCache;
+        } else if (cache != null && cache.isNotEmpty) {
           _pets = cache;
           _fase = _Fase.falhaComCache;
         } else {
@@ -353,6 +381,11 @@ class _MeusPetsState extends State<MeusPets> {
           ),
           const SizedBox(height: BichuEspaco.e4),
           ..._cartoes(),
+        ],
+      // SEM CONTA NAO E ERRO, e vem antes dos dois ramos de falha: nao ha
+      // `Atualizar` que resolva um 401. Ver `widgets/convite_para_entrar.dart`.
+      _Fase.falhaSemCache when _faltaConta => const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.meusPets),
         ],
       _Fase.falhaSemCache => <Widget>[
           FaixaDeAviso(

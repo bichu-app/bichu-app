@@ -37,7 +37,11 @@ import {
   type AlvoDaDenuncia,
 } from '../domain/motivos-da-denuncia.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
-import type { DesfechoDaEscrita, SafetyRepository } from '../ports/safety-repository.js';
+import type {
+  DesfechoDaEscrita,
+  PaginaDeBloqueios,
+  SafetyRepository,
+} from '../ports/safety-repository.js';
 
 export interface DependenciasDaSeguranca {
   readonly repositorio: SafetyRepository;
@@ -60,6 +64,29 @@ export type DesfechoDaDenuncia =
 
 export class SegurancaDaComunidade {
   constructor(private readonly deps: DependenciasDaSeguranca) {}
+
+  /**
+   * **QUEM EU BLOQUEEI** (19/10/2026). Leitura, e por isso ela é a única
+   * operação desta classe que **não grava na trilha**.
+   *
+   * A trilha do app registra ATOS (`user_block.created`, `user_block.removed`,
+   * `content_report.created`), e ler a própria lista não é ato: gravar uma linha
+   * por abertura de tela encheria a trilha de navegação e esconderia os três
+   * eventos que importam. É a mesma razão por que bloqueio que não encontrou
+   * alvo também não é gravado.
+   *
+   * **Nenhuma regra de autorização mora aqui.** Ela é a igualdade
+   * `blocker_user_id = chamador` no `WHERE` da consulta (ADR-0021): este método
+   * não tem `if` nenhum, e não existe caminho por ele que leia a lista de outra
+   * pessoa — o `userId` que ele passa adiante é o de quem chama, e é o único que
+   * ele tem.
+   */
+  quemEuBloqueei(
+    autor: AutorDoAto,
+    pagina: { readonly page: number; readonly limit: number },
+  ): Promise<PaginaDeBloqueios> {
+    return this.deps.repositorio.quemEuBloqueei(autor.userId, pagina);
+  }
 
   async bloquear(autor: AutorDoAto, alvo: string): Promise<DesfechoDaEscrita> {
     const desfecho = await this.deps.repositorio.bloquear(

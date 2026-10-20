@@ -1,6 +1,8 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/modelos.dart';
@@ -8,6 +10,7 @@ import '../../api/modelos_perdido.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -153,7 +156,17 @@ class ListaDePerdidos extends StatefulWidget {
 
 enum _Fase { carregando, lista, falha, semCidade }
 
-class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
+class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
 
   List<PerdidoPublico> _itens = const <PerdidoPublico>[];
@@ -454,7 +467,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         GrupoDeFiltro(
           chave: 'period',
           titulo: 'Perdido desde',
-          selecionado: base.janela.codigo,
+          // **Nasce SEM pastilha marcada** (cliente, 18/10/2026): nulo e
+          // "qualquer janela", e e o estado em que a pagina de pets abre.
+          selecionado: base.janela?.codigo,
           opcoes: <OpcaoDeRecorte>[
             for (final j in JanelaDePerdidos.values)
               OpcaoDeRecorte(codigo: j.codigo, rotulo: j.rotulo),
@@ -486,8 +501,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         bairro: escolha.filtros['neighborhood'],
         especie: Especie.de(escolha.filtros['species']),
         porte: Porte.de(escolha.filtros['size']),
-        // `period` tem padrão no contrato: limpar a pastilha volta para `30d`,
-        // e não para "sem janela" — não existe listagem sem janela.
+        // **Limpar a pastilha deixa a janela NULA**, e `period` sai da
+        // consulta. Era o contrário até 18/10/2026: a tela repunha `30d`, e a
+        // lista voltava recortada sem ninguém ter pedido. Quem decide o que
+        // fazer com a ausência é o servidor, pelo `default: 30d` que o
+        // contrato declara na rota — o app parou de escolher por ele.
         janela: JanelaDePerdidos.de(escolha.filtros['period']),
         pagina: 1,
       ),
@@ -501,7 +519,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         base.bairro != null ||
         base.especie != null ||
         base.porte != null ||
-        base.janela != JanelaDePerdidos.trintaDias;
+        base.janela != null;
   }
 
   @override
@@ -534,8 +552,18 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            // **O GATILHO DE FILTRO VEM NA FRENTE DA BUSCA, na mesma
+            // linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
+            // sozinho aqui e o gatilho com rotulo logo abaixo, desenhado pela
+            // barra; agora a linha e uma so e sobe inteira, e a barra deixa de
+            // desenhar o gatilho por causa de `buscaAcima`.
             if (comControles) ...<Widget>[
-              CampoDeBuscaDaListagem(busca: busca),
+              LinhaDeBuscaDaListagem(
+                total: _total,
+                busca: busca,
+                filtro: filtro,
+                aoAplicar: _aplicarAFolha,
+              ),
               const SizedBox(height: BichuEspaco.e4),
             ],
             if (_fase == _Fase.lista)
@@ -616,7 +644,23 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos> {
         return <Widget>[
           for (var i = 0; i < _itens.length; i++) ...<Widget>[
             if (i > 0) const SizedBox(height: BichuEspaco.e4),
-            CartaoDoPerdido(perdido: _itens[i], agora: _agora),
+            // O TOQUE PASSOU A TER DESTINO (cliente, 18/10/2026: *"quando o
+            // pet esta perdido, deve ter uma pagina interna do pet"*).
+            //
+            // O cabecalho de `CartaoDoPerdido` dizia que `aoTocar` era nulo
+            // porque "a tela do caso publico por token nao existe no app", e
+            // era verdade: `getPublicLostCase` era consumida so pelo SITE.
+            // Agora existe (`TelaDoCasoPublico`), e o destino e o endereco do
+            // proprio `share_url` -- **nunca `/pets/:petId`**, que e enderecada
+            // por UUID interno (ADR-0010, item 6), e cujo id esta
+            // deliberadamente ausente desta projecao.
+            CartaoDoPerdido(
+              perdido: _itens[i],
+              agora: _agora,
+              aoTocar: () => context.push(
+                Rotas.casoPublicoDe(_itens[i].shareToken),
+              ),
+            ),
           ],
           const SizedBox(height: espacoAcimaDoRodape),
           RodapeDaPaginacao(

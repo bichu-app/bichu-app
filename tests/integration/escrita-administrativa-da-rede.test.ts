@@ -150,9 +150,10 @@ async function novaContaDoPainel(nome: string): Promise<AdminAccountId> {
 async function novaConta(ajuste: { displayName?: string | null; verificada?: boolean } = {}): Promise<string> {
   const id = randomUUID();
   await sql`
-    insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
+    insert into users (id, email, display_name, email_verified_at, created_at, updated_at, public_ref)
     values (${id}::uuid, ${`rede-adm-${sufixo()}@exemplo.invalid`}, ${ajuste.displayName ?? null},
-            ${ajuste.verificada === false ? null : new Date()}, '2025-03-14T10:00:00Z', now())
+            ${ajuste.verificada === false ? null : new Date()}, '2025-03-14T10:00:00Z', now(),
+            translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))
   `.execute(banco.db);
   contas.push(id);
   return id;

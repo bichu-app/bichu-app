@@ -191,7 +191,7 @@ async function contaNovaComTokenDeEmail(rotulo: string): Promise<string> {
   const email = `link-${rotulo}-${randomUUID().slice(0, 8)}@${DOMINIO_DE_TESTE}`;
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
-    corpo: { email, password: SENHA },
+    corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
   });
   assert.equal(
     cadastro.status,
@@ -221,7 +221,7 @@ async function contaNovaComTokenDeRedefinicao(rotulo: string): Promise<string> {
   const email = `reset-${rotulo}-${randomUUID().slice(0, 8)}@${DOMINIO_DE_TESTE}`;
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
-    corpo: { email, password: SENHA },
+    corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
   });
   assert.equal(
     cadastro.status,

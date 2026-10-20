@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import 'conexoes/tela_pedidos_de_conexao.dart';
+import 'seguranca/tela_de_bloqueados.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -506,6 +508,97 @@ abstract final class RegistroDeSubDestinos {
         rotulo: 'Convidar vizinhos',
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.planejada,
+      ),
+      // **LINHA NOVA (19/10/2026), e nao mudanca de estado -- a diferenca esta
+      // dita aqui de proposito.** O procedimento desta casa e subir o estado do
+      // sub-destino que a UX 27.5 ja nomeia; **nao ha linha para este**, porque
+      // 27.5.5 fechou em 21/09 e a conexao entre pessoas e decisao de
+      // 18/10/2026. Entao a linha nasce aqui, e nasce `existe`: a tela
+      // (`TelaDePedidosDeConexao`) e a rota (`/conexoes/pedidos`) foram
+      // entregues em 18/10 e ficaram SEM PORTA -- `Rotas.pedidosDeConexao` era
+      // citada so em `rotas.dart`, e nenhum item de navegacao levava a ela. E
+      // por isso que o cliente nao viu nada.
+      //
+      // **Em `Perfil` e nao em `Rede`**, e a razao e a mesma de `Meus achados`:
+      // a caixa e das MINHAS decisoes -- `listMyConnectionRequests` exige conta
+      // e a autorizacao mora no `WHERE` --, e o "meu" mora em `Perfil`. `Rede` e
+      // a secao dos ENCONTROS da comunidade, que e outra coisa.
+      //
+      // **`destino` e nao `conteudoDaSecao`**: a tela tem `Scaffold`, barra de
+      // saida e endereco proprio. Ela nao e um bloco da aba.
+      SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `person_add_alt_outlined` (0xf276): uma PESSOA sendo acrescentada, que
+        // e exatamente o que um pedido de conexao e. Nao colide nesta secao.
+        rotulo: TelaDePedidosDeConexao.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pedidosDeConexao,
+        icone: Icons.person_add_alt_outlined,
+      ),
+      // **SEGUNDA LINHA NOVA (19/10/2026), pela mesma razao da de cima**: a UX
+      // 27.5.5 fechou em 21/09 e nao tem linha para esta -- bloquear alguem e
+      // decisao de 18/10 e a lista e decisao de 19/10. Ela nasce `existe`: a
+      // tela (`TelaDeBloqueados`) e a rota (`/perfil/bloqueados`) entram no
+      // mesmo commit desta linha.
+      //
+      // **ESTA PORTA E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO, e e por isso
+      // que ela nao e conveniencia.** O bloqueio e SIMETRICO no servidor, e a
+      // simetria fecha o perfil da pessoa bloqueada tambem para quem a
+      // bloqueou (`404`) -- que e exatamente onde o `Desbloquear` do
+      // `MenuDoPerfil` mora. Sem esta linha, bloquear era irreversivel pelo
+      // aplicativo. Decisao do cliente, 19/10/2026: a lista mora aqui, e o
+      // desbloqueio acontece nela.
+      //
+      // **Em `Perfil` e nao em `Rede`**, pela mesma razao de `Meus achados` e
+      // da caixa de pedidos: a lista e das MINHAS decisoes -- `listMyBlocks`
+      // exige conta e a autorizacao mora no `WHERE` --, e o "meu" mora em
+      // `Perfil`.
+      //
+      // **Depois de `Pedidos de conexao` e antes de `Meus dados`**: as duas
+      // linhas de cima sao sobre OUTRAS PESSOAS e ficam juntas; `Meus dados`
+      // abre o grupo do que e sobre a propria conta.
+      SubDestino(
+        // ACHADO DA MESCLA DE 19/10/2026, e nao escolha de estilo.
+        //
+        // A frente `gaveta-icones-e-alinhamento` poe uma ASSERCAO no
+        // construtor de `SubDestino`: todo item VIVO (`destino` + `existe` +
+        // `rota` nao nula) tem de ter glifo. A frente `bloqueados-e-titulo`
+        // acrescentou esta linha VIVA sem `icone`, porque na base dela a
+        // assercao ainda nao existia. As duas tocam partes diferentes deste
+        // arquivo, entao o git MESCLOU SEM CONFLITO e o resultado quebrava
+        // `const_eval_throws_exception` em `flutter analyze` -- defeito que
+        // so aparece medindo a UNIAO, e nao em nenhum dos dois ramos.
+        //
+        // O glifo foi escolhido pelo procedimento que a propria assercao
+        // manda: familia embutida (Material Symbols) e nenhum outro item
+        // DESTA secao (`Rotas.perfil`) com o mesmo `codePoint` -- os tres que
+        // ja moram aqui sao `note_add_outlined` (0xf22e), `qr_code_scanner`
+        // (0xe4f7) e `manage_accounts_outlined` (0xf1ac).
+        //
+        // `block_outlined` (0xeed1): o glifo universal de bloqueio. Nao colide
+        // nesta secao, e nao divide sentido com nenhum outro item dela.
+        rotulo: TelaDeBloqueados.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.pessoasBloqueadas,
+        icone: Icons.block_outlined,
       ),
       SubDestino(
         // A UX 27.5.5 chama esta linha de `Editar o perfil`, e o rotulo mudou

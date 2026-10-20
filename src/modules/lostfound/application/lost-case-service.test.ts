@@ -127,6 +127,8 @@ interface Registro {
     agora: Instant;
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
+  /** O que o servico pediu ao repositorio ao REABRIR, dono incluido. */
+  readonly reabriu: { caso: CaseId; dono: UserId; agora: Instant }[];
   /** BICHUS-66: os pets cuja transferencia viva o servico mandou cancelar. */
   readonly transferenciasCanceladas: PetId[];
   /** O que o serviço pediu ao repositório ao decidir, dono incluído. */
@@ -156,6 +158,7 @@ function casoAberto(): CasoGravado {
     shareToPublicList: true,
     openedAt: comoData(ONTEM),
     closedAt: null,
+    reopenDeadline: null,
     closureOutcome: null,
     closureChannel: null,
     closureNote: null,
@@ -170,6 +173,7 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     abriu: [],
     encerrou: [],
     buscou: [],
+    reabriu: [],
     decidiu: [],
     conversasAbertas: [],
     conferiuAbertura: [],
@@ -262,10 +266,58 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
         closureOutcome: entrada.desfecho,
         closureChannel: entrada.canal ?? null,
         closureNote: entrada.nota ?? null,
+        // 7 DIAS, o mesmo numero que o SQL grava e o mesmo que o contrato
+        // promete ("Encerrar e reversivel por 7 dias"). Sem esta linha o dado
+        // de bancada nasceria sem prazo e NADA reabriria -- a isca da janela
+        // ficaria verde por vazio, medindo o dublê e nao o servico.
+        reopenDeadline: comoData((Number(entrada.agora) + 7 * 24 * 3600 * 1000) as Instant),
       };
       indice.delete(guardado.gravado.petId);
       guardado = { dono: guardado.dono, gravado: encerrado };
       return Promise.resolve(encerrado);
+    },
+
+    /**
+     * A reabertura, com os MESMOS quatro predicados que o `WHERE` do `UPDATE`
+     * carrega — e não um `if` a mais nem um a menos.
+     *
+     * Dublê DERIVADO do SQL de `kysely-lost-case-repository.ts`, e é isso que
+     * torna os casos de cima mediveis: se este dublê recusasse por um critério
+     * que o SQL não tem (ou aceitasse por um que ele tem), os casos mediriam o
+     * dublê. Os quatro, na ordem do `WHERE`:
+     *
+     * 1. `id` — caso que não é este sai como `null`;
+     * 2. `owner_user_id = :dono` — a autorização, e é ela que faz 404 e não 403;
+     * 3. `status <> 'open'` — caso aberto não reabre (o serviço traduz para 200);
+     * 4. `reopen_deadline > :agora` — a janela, lida da COLUNA. Prazo nulo não
+     *    satisfaz a comparação, igual ao SQL;
+     * 5. `NOT EXISTS (outro caso aberto do mesmo pet)` — o índice único parcial
+     *    como predicado, que é o que `indice` representa nesta bancada.
+     */
+    reabrir: (entrada) => {
+      registro.reabriu.push({ ...entrada });
+      if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
+        return Promise.resolve(null);
+      }
+      if (guardado.dono !== entrada.dono) return Promise.resolve(null);
+      if (guardado.gravado.status === 'open') return Promise.resolve(null);
+      const prazo = guardado.gravado.reopenDeadline;
+      if (prazo === null || Number(prazo) <= Number(entrada.agora)) {
+        return Promise.resolve(null);
+      }
+      if (indice.has(guardado.gravado.petId)) return Promise.resolve(null);
+      const reaberto: CasoGravado = {
+        ...guardado.gravado,
+        status: 'open',
+        closedAt: null,
+        reopenDeadline: null,
+        closureOutcome: null,
+        closureChannel: null,
+        closureNote: null,
+      };
+      indice.add(guardado.gravado.petId);
+      guardado = { dono: guardado.dono, gravado: reaberto };
+      return Promise.resolve(reaberto);
     },
 
     /**
@@ -663,6 +715,13 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       lastSeenAt: null,
       openedAt: null,
       closedAt: null,
+      // `reopenDeadline` entra nesta lista pelo MESMO motivo das outras datas,
+      // e ele foi MEDIDO: o campo nasceu com a reabertura
+      // (`LostCase.reopen_deadline`, que o contrato declara), e a varredura
+      // reprovou nele -- os milissegundos de `2027-01-22T08:00:00.000Z` casam
+      // com `COORDENADA` (`00` + `.` + `000`). Era falso positivo da forma, e
+      // não vazamento: a data não tem geografia nenhuma.
+      reopenDeadline: null,
     };
     assert.doesNotMatch(JSON.stringify(semOQueOContratoExige), COORDENADA);
     assert.doesNotMatch(JSON.stringify(semOQueOContratoExige), TELEFONE);

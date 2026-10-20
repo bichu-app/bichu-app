@@ -353,8 +353,10 @@ export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
 
   for (const entrada of MASSA_DO_DIRETORIO) {
     await sql`
-      insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
+      insert into users (id, email, display_name, public_ref,
+                         email_verified_at, created_at, updated_at)
       values (${entrada.titularId}::uuid, ${entrada.titularEmail}, ${entrada.displayName},
+              ${entrada.titularPublicRef},
               ${MOMENTO_DA_MASSA}::timestamptz, ${MOMENTO_DA_MASSA}::timestamptz,
               ${MOMENTO_DA_MASSA}::timestamptz)
     `.execute(db);

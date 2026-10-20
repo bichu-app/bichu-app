@@ -449,6 +449,26 @@ jobs:
       - name: as iscas do executor da suite unitaria reprovam
         run: node infra/suite/executar-unitaria.mjs --autoteste
 
+      # O MESMO passo para o executor da INTEGRACAO, e ele mora AQUI e nao no
+      # job `integracao` de proposito: o autoteste nao toca banco, nao toca
+      # Docker e nao compila nada, entao exigir a pilha de pe o tornaria
+      # inalcancavel justamente quando a pilha esta quebrada -- que e quando ele
+      # mais importa. Em 19/10 a pilha estava quebrada: o `tsc` da integracao
+      # estourava o monte e a suite morria sem rodar caso nenhum.
+      #
+      # Por que ele precisava existir: o executor da integracao lia 3 dos 6
+      # rotulos do TAP, como a unitaria lia antes da BICHUS-219, e ainda deixava
+      # passar o caso que a unitaria pega por ARQUIVO. Medido com os 44 arquivos
+      # de `tests/integration/` esvaziados para `export {};`:
+      #
+      #   executor antigo: placar 44/44/fail 0 -> "APROVADA", saida 0
+      #   executor novo:   "44 arquivo(s) ... nao produziram NENHUM caso", saida 1
+      #
+      # Verde com ZERO caso executado. Este passo e o que impede o conserto de
+      # se desfazer em silencio.
+      - name: as iscas do executor da suite de integracao reprovam
+        run: node infra/integracao/executar-suite.mjs --autoteste
+
       # `--placar placar` nao muda o que a suite faz: ela so deixa uma COPIA do
       # relatorio TAP fora de `dist/`, para o passo seguinte conseguir ler
       # QUAIS casos reprovaram.

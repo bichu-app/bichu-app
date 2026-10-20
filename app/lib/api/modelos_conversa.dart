@@ -7,27 +7,39 @@
 /// lados.
 ///
 /// ---------------------------------------------------------------------------
-/// ## NAO HA FOTO DE PERFIL AQUI, E A AUSENCIA E DO CONTRATO
+/// ## A FOTO EXISTE AGORA, E EM UM ESTADO SO: CONEXAO ACEITA
 ///
-/// O contrato declara, **por extenso e em dois lugares** -- em
-/// `Conversation/properties/participants` e em
-/// `FinderConversation/properties/participants` --, que `display_name` e
-/// *"Primeiro nome ou apelido. **Nunca** sobrenome completo, telefone, e-mail
-/// nem foto de perfil"*. [ParticipanteDaConversa] tem **dois campos**, que sao
-/// os dois que o contrato lista, e nao ha um terceiro para uma URL de imagem
-/// cair.
+/// **Decisao do cliente, 19/10/2026** (emenda 3 do ADR-0010), literal:
 ///
-/// A consequencia de tela precisa estar dita aqui, porque e de onde ela vem: a
-/// conversa **nao tem avatar de foto para ninguem**. A marca ao lado do nome e
-/// neutra -- a inicial do `display_name` -- e e a mesma para os dois lados.
+/// > "a foto aparece SO quando as duas pessoas ja aceitaram conexao"
+///
+/// Antes disso o contrato proibia foto de participante por extenso e em dois
+/// pontos, e esta camada estava certa em nao ter o campo. **A regra nao foi
+/// revogada: ela ganhou uma excecao nomeada**, e o motivo dela continua
+/// protegido porque e exatamente onde a foto NAO entra:
+///
+/// - **conversa de achado com um estranho**: sem foto. O golpe do falso
+///   achador vive aqui, e rosto e insumo de engenharia social;
+/// - **pedido de conexao pendente ou recusado**: sem foto. "JA aceitaram";
+/// - **achador sem conta**: sem foto, e estruturalmente -- aquele caminho le
+///   `FinderConversation`, que **nao tem** os dois campos novos;
+/// - **par bloqueado**: sem foto. A conversa mediada e o canal que ATRAVESSA o
+///   bloqueio, e e por isso que ela e o lugar onde isso mais importa;
+/// - **conta desabilitada do outro lado**: sem foto, junto com o nome.
+///
+/// [ParticipanteDaConversa] tem **quatro campos**, que sao os quatro que o
+/// contrato lista: `role`, `display_name`, `handle` e `photo_icon_url`. Os dois
+/// ultimos sao anulaveis, e o servidor ja os entrega recortados -- a decisao
+/// mora na clausula `WHERE` da consulta (ADR-0021), e **esta camada nao decide
+/// nada**: ela le o que veio, e nulo e "sem foto".
 ///
 /// O cliente pediu, antes desta tela existir, que *"a foto deve trazer um
 /// avatar padrao cinza, como se tivesse desabilitado"* para conta
-/// desabilitada. **Como nao existe foto nenhuma neste schema**, a leitura
-/// correta do pedido e a que o servidor ja cumpre: o lado desabilitado aparece
-/// **despersonalizado**, com o rotulo neutro (`Tutor` / `Quem achou`) que
-/// `participantesVisiveis` devolve quando nao ha nome. A tela acompanha
-/// pintando a marca em cinza desligado -- o que e a forma, e nao um dado novo.
+/// desabilitada. Isso continua cumprido do mesmo jeito, e agora nos dois
+/// campos: o lado desabilitado aparece **despersonalizado**, com o rotulo
+/// neutro (`Tutor` / `Quem achou`) **e sem foto**, porque `conta_habilitada`
+/// das duas pontas esta dentro do predicado de conexao da consulta. A tela
+/// acompanha pintando a marca em cinza desligado.
 ///
 /// ---------------------------------------------------------------------------
 /// ## O que o contrato NAO manda na LISTA, e por que a tela nao inventa
@@ -141,12 +153,22 @@ enum TipoDeRedacao {
 
 /// `#/components/schemas/Conversation/properties/participants/items`.
 ///
-/// **Dois campos, e sao os dois que o contrato declara.** Ver o cabecalho
-/// deste arquivo: nao ha foto, nao ha id, nao ha telefone, e nao pode passar a
-/// haver -- o item 7 do ADR-0010 proibe qualquer coisa que permita agrupar os
-/// pets de um mesmo tutor, e um identificador estavel aqui faria isso.
+/// **Quatro campos desde 19/10/2026, e sao os quatro que o contrato declara.**
+/// Eram dois; a emenda 3 do ADR-0010 acrescentou [handle] e [photoIconUrl], e
+/// os dois so chegam preenchidos quando o outro lado e **conexao aceita** de
+/// quem chama. Ver o cabecalho deste arquivo.
+///
+/// O que continua nao existindo: id, telefone, e-mail, `public_ref` e qualquer
+/// UUID. O item 7 do ADR-0010 proibe o que permita agrupar os pets de um mesmo
+/// tutor, e para o estranho que escaneou a plaquinha os dois campos novos vem
+/// nulos -- que e justamente o caminho que aquele item protege.
 class ParticipanteDaConversa {
-  const ParticipanteDaConversa({required this.role, required this.displayName});
+  const ParticipanteDaConversa({
+    required this.role,
+    required this.displayName,
+    this.handle,
+    this.photoIconUrl,
+  });
 
   final PapelNaConversa role;
 
@@ -170,6 +192,30 @@ class ParticipanteDaConversa {
     return limpo.substring(0, 1).toUpperCase();
   }
 
+  /// `#/components/schemas/Conversation/properties/participants/items/properties/handle`
+  ///
+  /// O apelido desta pessoa, **so quando ela e conexao aceita de quem chama**.
+  ///
+  /// Nulo em cinco estados, e esta camada nao distingue nenhum deles (a fusao e
+  /// do servidor, ADR-0021): nao e conexao aceita, par bloqueado, o outro lado
+  /// nao tem conta, o outro lado desabilitou a conta, ou e conexao e nao
+  /// escolheu apelido. Com nulo **nao ha destino** e o icone fica decorativo --
+  /// ver `PortaDoPerfilDoParticipante`.
+  ///
+  /// Sem `@`: o contrato manda o identificador, e o `@` e simbolo de leitura.
+  final String? handle;
+
+  /// `#/components/schemas/Conversation/properties/participants/items/properties/photo_icon_url`
+  ///
+  /// A URL da derivada `thumb` (176 x 176) da foto desta pessoa, pela mesma
+  /// regra de [handle], mais um sexto estado de nulo: conexao aceita sem foto
+  /// pronta.
+  ///
+  /// **A tela nao a desenha com `Image.network` cru**: quem pinta e
+  /// `ImagemDaRede`, que passa `cacheWidth` pela largura PINTADA. Ver
+  /// `MarcaNeutraDoParticipante`.
+  final String? photoIconUrl;
+
   static ParticipanteDaConversa? doJson(Object? bruto) {
     if (bruto is! Map<String, dynamic>) return null;
     final papel = PapelNaConversa.porCodigo(bruto['role']);
@@ -179,7 +225,25 @@ class ParticipanteDaConversa {
     if (papel == null) return null;
     final nome = bruto['display_name'];
     if (nome is! String) return null;
-    return ParticipanteDaConversa(role: papel, displayName: nome);
+    // OS DOIS CAMPOS DA EMENDA 3 (19/10/2026).
+    //
+    // `is String` e nao `as String?`: o contrato os declara anulaveis, e uma
+    // resposta de servidor antigo nao os traz de jeito nenhum. Os dois casos
+    // querem a mesma tela -- icone decorativo, sem foto --, e por isso nao ha
+    // ramo para distingui-los.
+    //
+    // **Vazio e tratado como ausente**, e isso nao e defensivo: `ImagemDaRede`
+    // recebe uma `url` NAO anulavel de proposito, porque `Image.network('')`
+    // LANCA. Deixar `''` passar daqui poria a excecao dentro da lista de
+    // conversas.
+    final apelido = bruto['handle'];
+    final foto = bruto['photo_icon_url'];
+    return ParticipanteDaConversa(
+      role: papel,
+      displayName: nome,
+      handle: apelido is String && apelido.isNotEmpty ? apelido : null,
+      photoIconUrl: foto is String && foto.isNotEmpty ? foto : null,
+    );
   }
 }
 
@@ -401,10 +465,23 @@ class PaginaDeConversas {
   const PaginaDeConversas({
     required this.items,
     required this.unreadCount,
+    required this.total,
     this.nextCursor,
   });
 
   final List<Conversa> items;
+
+  /// `total` do contrato: quantas conversas o RECORTE tem **no servidor**.
+  ///
+  /// **Nem `items.length` nem [unreadCount]**, e os tres sao numeros
+  /// diferentes: o primeiro e o tamanho desta pagina (dez), o segundo e o sino
+  /// da conta inteira, e este e quantas conversas satisfazem a busca desta
+  /// chamada.
+  ///
+  /// E ele que alimenta a linha de resumo da `BarraDeListagem` (`12
+  /// conversas`). Com `items.length` ali, a tela diria `10` a quem tem 57 --
+  /// e a pessoa leria que a busca nao achou o resto.
+  final int total;
 
   /// `unread_count` do contrato: o numero do **sino**, da conta inteira.
   ///
@@ -427,18 +504,26 @@ class PaginaDeConversas {
     final itens = json['items'];
     final cursor = json['next_cursor'];
     final contador = json['unread_count'];
+    final quantas = json['total'];
+    final lidos = itens is! List
+        ? const <Conversa>[]
+        : <Conversa>[
+            for (final item in itens)
+              if (Conversa.doJson(item) case final Conversa c) c,
+          ];
     return PaginaDeConversas(
       nextCursor: cursor is String ? cursor : null,
+      // `total` e `required` no contrato. Ausente ou de tipo inesperado, cai
+      // no tamanho da lista LIDA: e a unica afirmacao verdadeira que sobra --
+      // "ha pelo menos estas" --, e zero apagaria a barra de listagem inteira
+      // numa tela que tem conversas na frente da pessoa. O caso existe de
+      // verdade: o APK publicado le esta resposta e nao conhece `total`.
+      total: quantas is int && quantas >= 0 ? quantas : lidos.length,
       // `unread_count` e `required` no contrato. Ausente ou de tipo
       // inesperado, zero: um sino apagado e melhor que um sino com numero
       // inventado.
       unreadCount: contador is int && contador > 0 ? contador : 0,
-      items: itens is! List
-          ? const <Conversa>[]
-          : <Conversa>[
-              for (final item in itens)
-                if (Conversa.doJson(item) case final Conversa c) c,
-            ],
+      items: lidos,
     );
   }
 }

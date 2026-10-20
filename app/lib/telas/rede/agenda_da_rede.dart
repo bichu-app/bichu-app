@@ -1,3 +1,4 @@
+import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 import 'dart:collection';
 
@@ -135,7 +136,16 @@ class _ItemDaAgenda {
 enum _Fase { carregando, lista, falha }
 
 class _AgendaDaRedeState extends State<AgendaDaRede>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   AbaDaRede _aba = AbaDaRede.proximos;
   RecorteDaRede _recorte = const RecorteDaRede();
   _Fase _fase = _Fase.carregando;
@@ -469,8 +479,20 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // a barra nao e desenhada em alguns deles. Abas dentro da barra
             // sumiriam junto, e quem filtrou ate o vazio em `Encerrados`
             // ficaria sem como voltar para `Próximos`.
+            // **O GATILHO DE FILTRO E ORDEM VEM NA FRENTE DA BUSCA, na
+            // mesma linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
+            // sozinho aqui e o gatilho com rotulo abaixo das abas, desenhado
+            // pela barra; agora a linha e uma so e sobe inteira, acima do
+            // reforco e das abas, e a barra deixa de desenhar o gatilho por
+            // causa de `buscaAcima`.
             if (comControles) ...<Widget>[
-              CampoDeBuscaDaListagem(busca: busca),
+              LinhaDeBuscaDaListagem(
+                total: _total,
+                busca: busca,
+                filtro: filtro,
+                ordenacao: ordenacao,
+                aoAplicar: _aplicarAFolha,
+              ),
               const SizedBox(height: BichuEspaco.e4),
             ],
             // **Vazio nao desenha** (18/10/2026): a `Rede` manda

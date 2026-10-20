@@ -147,4 +147,86 @@ class CasosApi {
     final json = await _api.post('/lost-cases/$caseId/alerts');
     return DisparoDoAlerta.doJson(json);
   }
+
+  /// `POST /lost-cases/{caseId}/close` (`closeLostCase`).
+  ///
+  /// **A acao inversa de `Marcar como perdido`**, e o cliente a pediu em 18/10
+  /// com estas palavras: *"no perfil do cachorro ... nao tem uma opcao de
+  /// desmarcar como perdido ou que foi encontrado"*.
+  ///
+  /// ## `outcome` e obrigatorio, e o contrato diz por que
+  ///
+  /// *"O desfecho e o instrumento de medicao do produto: sem ele a metrica de
+  /// reencontro nao existe."* Os tres valores sao `reunited`, `not_found` e
+  /// `false_alarm`, e **quem escolhe e quem chama** -- esta funcao nao tem
+  /// padrao. Um padrao aqui faria uma tela que esqueceu de decidir gravar
+  /// "reencontrado" sobre um caso que ninguem resolveu, e a metrica do produto
+  /// e o que pagaria.
+  ///
+  /// ## Sem chave de idempotencia, e a ausencia e do contrato
+  ///
+  /// `closeLostCase` **nao declara** o parametro `Idempotency-Key`, ao
+  /// contrario de [abrirCaso]. Mandar um cabecalho que a operacao nao preve nao
+  /// e inofensivo: ele nao e lido, e passaria a impressao de uma protecao que
+  /// nao existe. O que protege o reenvio aqui e o proprio estado -- encerrar um
+  /// caso ja encerrado nao e caso aberto de novo.
+  ///
+  /// ## `reunion_channel` nao e preenchido por esta funcao
+  ///
+  /// Ele e opcional no contrato e e o que torna a metrica de reencontro
+  /// **atribuivel a um canal** -- e o app nao sabe o canal. Quem toca em
+  /// `Encontrei meu pet` na pagina do pet pode ter achado pela tag, pelo
+  /// alerta, pelo cartaz ou sozinho, e inventar um valor aqui colocaria
+  /// atribuicao falsa numa metrica de produto. Entra como parametro para o dia
+  /// em que uma tela PERGUNTAR, e nao antes.
+  Future<CasoDePerdido> encerrarCaso({
+    required String caseId,
+    required DesfechoDoCaso desfecho,
+    CanalDoReencontro? canal,
+    String? observacao,
+  }) async {
+    final json = await _api.post(
+      '/lost-cases/$caseId/close',
+      corpo: <String, dynamic>{
+        'outcome': desfecho.valor,
+        if (canal != null) 'reunion_channel': canal.valor,
+        if (observacao != null && observacao.trim().isNotEmpty)
+          'note': observacao.trim(),
+      },
+    );
+    return CasoDePerdido.doJson(json);
+  }
+
+  /// `POST /lost-cases/{caseId}/reopen` (`reopenLostCase`).
+  ///
+  /// **O DESFAZER de [encerrarCaso].** O contrato promete a reversao desde o
+  /// comeco -- *"Encerrar e reversivel por 7 dias"*, na descricao de
+  /// `closeLostCase` -- e nomeia esta operacao, com um `410` cuja descricao e
+  /// *"Passou dos 7 dias"*. Ela **nao tinha rota no servidor** ate agora: era
+  /// uma linha de `OPERACOES_AINDA_SEM_ROTA`, e este caminho respondia 404.
+  /// Quem tocasse em `Encontrei meu pet` por engano nao tinha desfazer nenhum.
+  ///
+  /// ## Sem corpo, e a ausencia e do contrato
+  ///
+  /// `reopenLostCase` nao declara `requestBody`. Mandar um corpo que a operacao
+  /// nao preve nao e inofensivo: ele nao e lido, e passaria a impressao de que
+  /// esta chamada escolhe alguma coisa. Ela nao escolhe -- reabrir e reabrir.
+  ///
+  /// ## Sem chave de idempotencia, e sem precisar de uma
+  ///
+  /// O contrato nao a declara, e o estado protege o reenvio: reabrir um caso
+  /// que **ja esta aberto** devolve `200` com o caso aberto, e nao erro. E a
+  /// resposta certa para a fila offline, que reenvia em rajada quando o sinal
+  /// volta.
+  ///
+  /// ## Os erros que a tela precisa distinguir
+  ///
+  /// `410` com `type` `lost-case-closed` (`ProblemTipo.casoEncerrado`) e a
+  /// janela vencida; `404` e caso que nao existe ou nao e da conta (ADR-0021,
+  /// nunca 403); `409` `pet-already-lost` e o pet que ja tem outro caso aberto.
+  /// Quem decide por `type`, e nunca pelo texto, e `MensagensDeErro`.
+  Future<CasoDePerdido> reabrirCaso(String caseId) async {
+    final json = await _api.post('/lost-cases/$caseId/reopen');
+    return CasoDePerdido.doJson(json);
+  }
 }

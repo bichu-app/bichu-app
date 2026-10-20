@@ -188,6 +188,55 @@ class DisparoDoAlerta {
   }
 }
 
+/// `#/components/schemas/LostCaseClosure/properties/outcome` do contrato.
+///
+/// **Nao ha valor `desconhecido` aqui, ao contrario de `StatusDoPet`.** A
+/// diferenca e a direcao: aquele enum LE o que o servidor manda, e precisa
+/// sobreviver a um valor que este build nao conhece; este ESCREVE no corpo de
+/// um pedido, e um valor que o contrato nao declara seria 400. Enum de entrada e
+/// enum de saida nao se parecem.
+enum DesfechoDoCaso {
+  /// O animal voltou. **E o unico que conta no numerador da metrica de
+  /// reencontro**, que o contrato chama de instrumento de medicao do produto.
+  reencontrado('reunited'),
+
+  /// A procura terminou sem o animal. Conta no denominador.
+  naoEncontrado('not_found'),
+
+  /// O caso foi aberto por engano, e o animal nunca esteve perdido.
+  ///
+  /// **Sai do numerador E do denominador** da metrica, e e por isso que ele
+  /// existe: sem ele o tutor responde "voltou" e um caso que nunca foi perdido
+  /// entra na conta de reencontro.
+  ///
+  /// O contrato o oferece **somente** quando o caso tem menos de 6 horas e
+  /// nenhum aviso ou candidato. Nenhuma tela deste app tem esses tres numeros
+  /// em maos hoje -- eles sairiam de `GET /lost-cases/{caseId}` --, e por isso
+  /// nenhuma o envia.
+  abertoPorEngano('false_alarm');
+
+  const DesfechoDoCaso(this.valor);
+
+  final String valor;
+}
+
+/// `#/components/schemas/LostCaseClosure/properties/reunion_channel`.
+///
+/// **So faz sentido com [DesfechoDoCaso.reencontrado]**, e e o que torna a
+/// metrica de reencontro atribuivel a um canal. Nenhuma tela deste app o manda
+/// hoje: ver a prosa de `CasosApi.encerrarCaso`.
+enum CanalDoReencontro {
+  pelaTag('tag_scan'),
+  peloAlerta('bichu_alert'),
+  peloCartazOuLink('poster_or_link'),
+  porContaPropria('on_my_own'),
+  outro('other');
+
+  const CanalDoReencontro(this.valor);
+
+  final String valor;
+}
+
 /// `LostCase`: o caso aberto.
 class CasoDePerdido {
   const CasoDePerdido({
@@ -202,6 +251,7 @@ class CasoDePerdido {
     this.descricao,
     this.urlDeCompartilhar,
     this.urlDoCartaz,
+    this.prazoDeReabertura,
   });
 
   final String id;
@@ -221,6 +271,33 @@ class CasoDePerdido {
   final DisparoDoAlerta alerta;
   final String? urlDeCompartilhar;
   final String? urlDoCartaz;
+
+  /// `reopen_deadline`: ate quando este encerramento da para desfazer.
+  ///
+  /// **Nulo e o estado normal de um caso ABERTO**, e nulo tambem e o que chega
+  /// de um servidor que nao manda o campo. A tela trata os dois igual -- sem
+  /// prazo, sem oferta de reabrir -- e isso e deliberado: `?? ` com um valor
+  /// de verdade aqui seria a terceira repeticao do defeito que esta casa ja
+  /// pagou, em que o servidor devolvia `owner_notified: true`, a tela afirmava
+  /// isso em texto fixo E o desserializador tinha `?? true`. Tres lugares
+  /// mentindo juntos, e nenhum deles media nada.
+  ///
+  /// **O app NAO recalcula a janela.** Os 7 dias sao numero de produto: o
+  /// contrato os escreve em `closeLostCase` ("Encerrar e reversivel por 7
+  /// dias"), o servidor os grava em `reopen_deadline`, e refazer a conta sobre
+  /// `closed_at` aqui poria uma segunda fonte no bolso de quem nao atualiza o
+  /// aplicativo. Quem decide se da para reabrir e esta data.
+  final DateTime? prazoDeReabertura;
+
+  /// Se a janela de reabertura esta aberta **neste instante**.
+  ///
+  /// `agora` entra como argumento, e nao sai de `DateTime.now()` aqui dentro:
+  /// a tela precisa poder medir isto com um relogio de bancada, e um relogio
+  /// escondido num getter e um teste que so passa no dia certo.
+  bool janelaDeReaberturaAberta(DateTime agora) {
+    final prazo = prazoDeReabertura;
+    return prazo != null && prazo.isAfter(agora);
+  }
 
   factory CasoDePerdido.doJson(Map<String, dynamic> json) {
     final vistoEm = json['last_seen_at'] as String?;
@@ -242,6 +319,11 @@ class CasoDePerdido {
       ),
       urlDeCompartilhar: json['share_url'] as String?,
       urlDoCartaz: json['poster_url'] as String?,
+      // SEM `??` de valor: campo ausente e prazo ausente, e prazo ausente nao
+      // oferece reabrir. Ver a prosa de [prazoDeReabertura].
+      prazoDeReabertura: DateTime.tryParse(
+        json['reopen_deadline'] as String? ?? '',
+      ),
     );
   }
 }

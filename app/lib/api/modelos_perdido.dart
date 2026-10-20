@@ -28,7 +28,23 @@ library;
 
 import 'modelos_pet.dart';
 
-/// A janela de `period`, como o contrato a declara.
+/// A janela de `period`, como o contrato a declara:
+/// `#/paths/~1public~1lost-pets/get/parameters/4/schema`.
+///
+/// O ponteiro traz o INDICE do parametro porque `period` e declarado em linha
+/// na operacao, e nao em `#/components/parameters` -- RFC 6901 nao tem outra
+/// forma de enderecar um item de lista. Reordenar os parametros de
+/// `listPublicLostPets` no contrato quebra este ponteiro, e
+/// `verificar-conformidade-do-app.mjs` reprova com `ponteiro-nao-resolve`
+/// nomeando-o, que e o jeito certo de descobrir.
+///
+/// **A lista fechada tem TRES valores, e nao ha um quarto para "janela
+/// aberta".** Janela aberta e a AUSENCIA de `period` na consulta, e nao um
+/// valor a mais -- `RecorteDePerdidos.janela` nula nao manda o parametro, e o
+/// servidor perdeu o `default: 30d` que repunha 30 dias por conta propria
+/// (`api/openapi.yaml`, 19/10/2026). Um `all` aqui voltaria em
+/// `applied_filters` e a tela abriria dizendo "1 filtro ativo" sem ninguem ter
+/// escolhido nada, que e o defeito que o cliente reclamou em 18/10.
 enum JanelaDePerdidos {
   umDia('24h', '24 horas'),
   seteDias('7d', '7 dias'),
@@ -39,11 +55,19 @@ enum JanelaDePerdidos {
   final String codigo;
   final String rotulo;
 
-  static JanelaDePerdidos de(String? codigo) {
+  /// A janela de um codigo, ou **nulo** quando nao ha codigo.
+  ///
+  /// **Nulo, e nao `trintaDias`** (cliente, 18/10/2026): *"a pagina de pets
+  /// nao deve trazer nenhum item do filtro por padrao, como esta atualmente
+  /// por ultimos 30 dias"*. Antes, limpar a pastilha de `Perdido desde`
+  /// voltava para `30d`, e a lista nascia recortada sem ninguem ter pedido.
+  /// Agora "nenhuma escolha" e um valor que o recorte sabe guardar, e ele nao
+  /// manda `period` nenhum.
+  static JanelaDePerdidos? de(String? codigo) {
     for (final j in JanelaDePerdidos.values) {
       if (j.codigo == codigo) return j;
     }
-    return JanelaDePerdidos.trintaDias;
+    return null;
   }
 }
 
@@ -172,7 +196,7 @@ class RecorteDePerdidos {
     this.bairro,
     this.especie,
     this.porte,
-    this.janela = JanelaDePerdidos.trintaDias,
+    this.janela,
     this.termo,
     this.pagina = 1,
   });
@@ -181,7 +205,14 @@ class RecorteDePerdidos {
   final String? bairro;
   final Especie? especie;
   final Porte? porte;
-  final JanelaDePerdidos janela;
+  /// A janela PEDIDA, ou nulo quando ninguem pediu nenhuma.
+  ///
+  /// **Nasce nula** (cliente, 18/10/2026): a pagina de pets abre sem filtro
+  /// nenhum aplicado. Nula, `period` fica FORA da consulta -- e e o servidor
+  /// que decide o que fazer com a ausencia, pelo `default: 30d` que o contrato
+  /// declara na rota. Mandar `30d` daqui era o app escolhendo um recorte que a
+  /// pessoa nao escolheu.
+  final JanelaDePerdidos? janela;
 
   /// Busca parcial por **nome do pet**. Nunca por código de tag: quando o
   /// texto digitado tem a forma de um código, o caminho é `GET /v1/tags/{code}`,
@@ -207,7 +238,7 @@ class RecorteDePerdidos {
     if (bairro != null && bairro!.trim().isNotEmpty) 'neighborhood': bairro!.trim(),
     if (especie != null) 'species': especie!.valor,
     if (porte != null) 'size': porte!.valor,
-    'period': janela.codigo,
+    'period': ?janela?.codigo,
     'q': ?termoLimpo,
     'page': '$pagina',
     'limit': '$limite',
@@ -218,7 +249,11 @@ class RecorteDePerdidos {
     Object? bairro = _naoMexer,
     Object? especie = _naoMexer,
     Object? porte = _naoMexer,
-    JanelaDePerdidos? janela,
+    // **Sentinela, e nao `JanelaDePerdidos?`**: com a janela podendo ser nula
+    // de verdade, `janela ?? this.janela` nao consegue LIMPA-LA -- passar nulo
+    // seria indistinguivel de nao passar nada, e tirar a pastilha de `Perdido
+    // desde` deixaria a janela anterior valendo.
+    Object? janela = _naoMexer,
     Object? termo = _naoMexer,
     int? pagina,
   }) {
@@ -228,11 +263,68 @@ class RecorteDePerdidos {
       bairro: v<String>(bairro, this.bairro),
       especie: v<Especie>(especie, this.especie),
       porte: v<Porte>(porte, this.porte),
-      janela: janela ?? this.janela,
+      janela: v<JanelaDePerdidos>(janela, this.janela),
       termo: v<String>(termo, this.termo),
       pagina: pagina ?? this.pagina,
     );
   }
 
   static const Object _naoMexer = Object();
+}
+
+/// `#/components/schemas/PublicLostCase`: a visão pública de UM caso, pelo
+/// `share_token`.
+///
+/// `allOf` sobre `PublicLostPet` no contrato, e por isso [perdido] está aqui
+/// inteiro em vez de ter os campos repetidos: o cartão da listagem e esta
+/// página desenham a **mesma** projeção, e duas cópias dos sete campos
+/// divergiriam na primeira manutenção.
+///
+/// ## `podeAvisarQueViu` é do SERVIDOR, e a tela não o deduz
+///
+/// `can_report_sighting` é falso **só para o próprio tutor** — e verdadeiro
+/// para qualquer outra conta **e para quem chama sem conta**. O contrato diz
+/// por escrito por quê: *"a conta é pedida no toque, não na leitura. Esconder o
+/// botão de quem não entrou esconderia justamente de quem chegou pelo cartaz."*
+///
+/// Deduzir isto no app seria impossível sem o `user_id` do tutor, que esta
+/// projeção não tem e nunca deve ter (ADR-0010, item 6).
+class CasoPerdidoPublico {
+  const CasoPerdidoPublico({
+    required this.perdido,
+    required this.podeAvisarQueViu,
+    this.descricao,
+    this.notasDeCuidado,
+    this.urlDoCartaz,
+  });
+
+  /// Os campos de `PublicLostPet`, que é o que o cartão da listagem já lê.
+  final PerdidoPublico perdido;
+
+  /// `can_report_sighting`. Ver o cabeçalho da classe.
+  ///
+  /// **Lido sem `??` para `false`**: o contrato o declara `boolean` sem
+  /// `nullable`, e um padrão falso aqui esconderia a ação de quem tem direito a
+  /// ela no dia em que o campo chegasse ausente por defeito de servidor — que é
+  /// o pior desfecho possível, porque quem perde a ação é o achador. O padrão é
+  /// `true`, e quem é o tutor recebe `false` explícito.
+  final bool podeAvisarQueViu;
+
+  /// `description`: o texto do tutor.
+  final String? descricao;
+
+  /// `care_notes`: o mesmo cartão de manejo da página do achador por QR.
+  final String? notasDeCuidado;
+
+  final String? urlDoCartaz;
+
+  factory CasoPerdidoPublico.doJson(Map<String, dynamic> json) {
+    return CasoPerdidoPublico(
+      perdido: PerdidoPublico.doJson(json),
+      podeAvisarQueViu: json['can_report_sighting'] as bool? ?? true,
+      descricao: json['description'] as String?,
+      notasDeCuidado: json['care_notes'] as String?,
+      urlDoCartaz: json['poster_url'] as String?,
+    );
+  }
 }

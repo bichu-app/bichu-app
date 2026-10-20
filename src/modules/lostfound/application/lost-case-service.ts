@@ -571,6 +571,102 @@ export class LostCaseService {
   }
 
   /**
+   * `POST /v1/lost-cases/{caseId}/reopen` — o DESFAZER do encerramento.
+   *
+   * A operação estava no contrato desde o começo e **não tinha rota**: era uma
+   * linha de `OPERACOES_AINDA_SEM_ROTA`, e o documento já prometia a quatro
+   * clientes que *"encerrar e reversivel por 7 dias"*. Quem tocasse em
+   * `Encontrei meu pet` por engano — um toque, sem confirmação, numa tela que
+   * se abre em pânico — não tinha desfazer nenhum.
+   *
+   * ## Os quatro desfechos, e por que são quatro e não dois
+   *
+   * A escrita é UMA, com os quatro predicados no `WHERE` (ver `reabrir` no
+   * adaptador). Zero linhas cobre quatro situações, e empilhá-las num 404 só
+   * seria a tela dizendo "não encontramos esse caso" a quem está olhando para
+   * ele. A releitura que as separa **só acontece quando a escrita não pegou**:
+   * o caminho de sucesso continua sendo uma consulta.
+   *
+   * | Releitura | Resposta | Por quê |
+   * |---|---|---|
+   * | `null` | **404** | ADR-0021. Caso inexistente e caso alheio são a mesma resposta, e aqui um 403 confirmaria que aquele pet esteve perdido |
+   * | `status === 'open'` | **200** | O reenvio da fila offline. Mesma decisão escrita em `decidirCandidato`: a segunda chamada chega depois de a primeira ter dado certo, e 404 diria "não deu" sobre o que deu |
+   * | encerrado, prazo vencido ou ausente | **410** | O que o contrato declara: *"Passou dos 7 dias"* |
+   * | encerrado, prazo em aberto | **409** | Sobrou um predicado: o pet já tem OUTRO caso aberto (`pet-already-lost`) |
+   *
+   * **O 409 é o único que o contrato não declara**, e ele não é hipotético:
+   * encerrar, marcar como perdido de novo e tentar reabrir o primeiro são dois
+   * toques. Sem ele a violação do índice único parcial chegaria à borda como
+   * 500 — um defeito do servidor no lugar de uma recusa explicada.
+   *
+   * ## A trilha, e por que ela não é opcional aqui
+   *
+   * Reabrir DESFAZ um desfecho que a métrica de reencontro já contabilizou.
+   * `lost_case.reopened` é a única ação que responde "este `reunited` foi
+   * desfeito, por quem e quando", e o metadado carrega o desfecho desfeito e o
+   * prazo que valia — lidos do caso ANTES da escrita, porque depois dela as
+   * três colunas estão em `NULL`. Diagnóstico deste projeto mora em
+   * `audit.events`: o `node-pg-migrate` descarta `RAISE NOTICE` e `WARNING`, e
+   * nada que saia por ali chega a ninguém.
+   *
+   * **Não dispara alerta**, e a ausência é deliberada: o contrato declara
+   * `x-effects: [notifies]` nesta operação, mas o reenvio do aviso à vizinhança
+   * é `POST /alerts`, com teto de um por dia e máquina própria. Reabrir por
+   * engano acordaria os vizinhos de novo sem ninguém ter pedido, e o caminho de
+   * pedir já existe e é explícito.
+   */
+  async reabrir(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoComAlerta> {
+    // O caso ANTES da escrita: as três colunas do encerramento vão para `NULL`
+    // nela, e o metadado da trilha precisa do desfecho que foi desfeito. A
+    // leitura carrega `owner_user_id` no `WHERE` como todo o resto do módulo.
+    const antes = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
+
+    const reaberto = await this.deps.repositorio.reabrir({
+      caso,
+      dono: chamador.userId,
+      agora: this.deps.clock.now(),
+    });
+
+    if (reaberto === null) {
+      // A releitura separa as quatro situações. `depois` e não `antes`: entre
+      // as duas chamadas o estado pode ter mudado — é o mesmo caso que a fila
+      // offline produz —, e diagnosticar sobre a leitura velha diria 410 sobre
+      // um caso que outra requisição acabou de reabrir.
+      const depois = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
+      if (depois === null) throw problemas.naoEncontrado();
+      if (depois.status === 'open') {
+        return { caso: depois, alerta: await this.deps.disparos.ultimoDoCaso(depois.id) };
+      }
+      const prazo = depois.reopenDeadline;
+      if (prazo === null || Number(prazo) <= Number(this.deps.clock.now())) {
+        throw problemas.janelaDeReaberturaVencida();
+      }
+      // Sobrou o quarto predicado. O pet já tem outro caso aberto, e a saída da
+      // pessoa é aquele caso — não é "tente de novo".
+      throw problemas.petJaEstaPerdido();
+    }
+
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      actorIp: chamador.ip,
+      correlationId: chamador.correlationId,
+      action: 'lost_case.reopened',
+      resourceKind: 'lost_case',
+      resourceId: reaberto.id,
+      // SEM coordenada, como no resto do módulo (docs/04-seguranca.md 9). O que
+      // uma investigação precisa é o desfecho que deixou de valer e o prazo que
+      // autorizava desfazê-lo.
+      metadata: {
+        undone_outcome: antes?.closureOutcome ?? null,
+        reopen_deadline: antes?.reopenDeadline?.toISOString() ?? null,
+      },
+    });
+
+    return { caso: reaberto, alerta: await this.deps.disparos.ultimoDoCaso(reaberto.id) };
+  }
+
+  /**
    * `POST /v1/lost-cases/{caseId}/candidates/{candidateId}/decision`.
    *
    * O fecho da BICHUS-86: o cruzamento sugere, e é aqui que uma pessoa afirma.

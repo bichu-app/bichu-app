@@ -20,6 +20,7 @@ import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/rodape_da_paginacao.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -45,10 +46,16 @@ Map<String, dynamic> entradaDoContrato({
   String level = 'document_verified',
   List<String> evidence = const <String>['cnpj', 'crmv'],
   int? distanceM,
+  // `entity_kind` do contrato (`EntityKind`). **Ausente por padrao, de
+  // proposito**: o campo e novo (migracao `20261018000012`) e um servidor que
+  // nao subiu nao o manda. O padrao da massa e o caso que o APK publicado ja
+  // le hoje; quem precisa do eixo o passa.
+  Object? entityKind,
 }) {
   return <String, dynamic>{
     'slug': slug,
     'kind': kind,
+    'entity_kind': ?entityKind,
     'display_name': displayName,
     'city': city,
     'state': state,
@@ -648,7 +655,19 @@ void main() {
 
       expect(find.text('Sem telefone'), findsOneWidget);
       expect(find.byIcon(Icons.call_outlined), findsNothing);
-      expect(find.textContaining('Ligar para'), findsNothing);
+      // **`Ligar`, e nao `Ligar para`.** Ate 18/10/2026 esta linha procurava
+      // `textContaining('Ligar para')`, e ela PAROU DE MEDIR no dia em que o
+      // rotulo visivel encurtou para `Ligar`: um botao indevido passaria a
+      // existir sem que a busca o achasse. Verde por vazio e exatamente a
+      // familia de defeito que este arquivo guarda.
+      expect(
+        find.text('Ligar'),
+        findsNothing,
+        reason: 'REPROVA: ha botao de ligar num cartao sem `phone_e164`. '
+            'Cartao sem telefone nao ganha botao desabilitado: ganha nenhum '
+            'botao.',
+      );
+      expect(find.textContaining('Ligar'), findsNothing);
     });
 
     testWidgets('com `phone_e164`, o botao existe e nomeia PARA QUEM',
@@ -674,9 +693,69 @@ void main() {
 
       // Um botao, e nao dois: a segunda entrada nao tem telefone.
       expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+
+      // (1) O ROTULO VISIVEL E SO `Ligar`. Pedido do cliente em 18/10/2026:
+      // o nome da clinica nao deve se repetir dentro do botao.
+      expect(
+        find.text('Ligar'),
+        findsOneWidget,
+        reason: 'REPROVA: o rotulo visivel do botao nao e `Ligar`. O cliente '
+            'pediu `Ligar` com o icone, e o nome do local esta tres linhas '
+            'acima, no titulo do mesmo cartao.',
+      );
+
+      // (2) E O NOME NAO VOLTA DENTRO DO BOTAO. Medido DENTRO do
+      // `TextButton`, e nao na tela: o nome esta no titulo do cartao de
+      // proposito, e um `findsNothing` na tela inteira reprovaria a tela
+      // certa.
+      expect(
+        find.descendant(
+          of: find.byType(TextButton),
+          matching: find.textContaining('Santa Bárbara'),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o nome do local voltou ao texto VISIVEL do botao.',
+      );
+
+      // (3) E O LEITOR DE TELA CONTINUA DIZENDO PARA QUEM. Esta e a asserção
+      // que carrega o caso: o rotulo visivel encurtou, o nome acessivel NAO.
       // Numa lista de dez entradas, dez controles chamados so `Ligar` sao dez
-      // paradas indistinguiveis no leitor de tela.
-      expect(find.text('Ligar para Clínica Santa Bárbara'), findsOneWidget);
+      // paradas indistinguiveis (WCAG 2.1 SC 4.1.2).
+      final nodo = tester.getSemantics(find.byIcon(Icons.call_outlined));
+
+      // O GUARDA CONTRA O VERDE POR VAZIO, e ele tem historia: este
+      // repositorio ja teve um rotulo de semantica VAZIO fazendo um
+      // `isNot(contains(...))` passar vacuamente -- a afirmacao era verdadeira
+      // e nao media nada. Aqui a asserção e de IGUALDADE com a string escrita
+      // a mao, com acento, e rotulo vazio reprova nela; este `isNotEmpty`
+      // existe para a mensagem dizer QUAL dos dois defeitos ocorreu.
+      expect(
+        nodo.label,
+        isNotEmpty,
+        reason: 'REPROVA: o no do botao de ligar tem rotulo VAZIO. Um rotulo '
+            'vazio nao e "sem repeticao do nome": e um controle sem nome, e '
+            'ele faz asserção de ausencia passar sem medir nada.',
+      );
+      expect(
+        nodo.label,
+        'Ligar para Clínica Santa Bárbara',
+        reason: 'REPROVA: o nome acessivel do botao e "${nodo.label}". O '
+            'rotulo VISIVEL encurtou para `Ligar` (cliente, 18/10/2026) e o '
+            'nome ACESSIVEL tem de continuar dizendo para quem a ligacao vai. '
+            'Quem publica essa string e o `Semantics` de `CartaoDoDiretorio`, '
+            'por `ligarPara`.',
+      );
+
+      // (4) E A ACAO CHEGOU AO NO. `excludeSemantics: true` apaga a arvore do
+      // filho e leva junto a acao que o `TextButton` publicava; sem o `onTap`
+      // redeclarado, o leitor de tela anuncia um botao que nao responde. E o
+      // defeito 2 de `test/a11y/acao_de_controle_test.dart`.
+      expect(
+        nodo.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: 'REPROVA: o no anunciado como botao de ligar nao tem acao de '
+            'toque. Ver `test/a11y/acao_de_controle_test.dart`.',
+      );
     });
   });
 

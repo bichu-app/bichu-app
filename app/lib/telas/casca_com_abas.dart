@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
+import '../widgets/arrastar_para_atualizar.dart';
 import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
@@ -903,6 +904,23 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   final ValueNotifier<AcaoDeListagem?> _acaoDaListagem =
       ValueNotifier<AcaoDeListagem?>(null);
 
+  /// A BUSCA QUE O ARRASTO REFAZ, publicada pelo corpo da secao.
+  ///
+  /// Pedido do cliente, 18/10/2026: *"Crie uma acao no aplicativo de atualizar
+  /// a pagina conforme o usuario puxa a pagina para baixo"*.
+  ///
+  /// **Mora na casca porque a ROLAGEM e da casca.** O `ListView` das cinco
+  /// secoes e montado aqui embaixo, e `RefreshIndicator` precisa de rolavel
+  /// descendente: posto dentro de `ListaDePerdidos` ou de `VitrineDaLoja` ele
+  /// nao veria rolagem nenhuma e o gesto nao dispararia. Quem conhece a busca
+  /// e o corpo, e ele a publica por [SlotDeAtualizacao] -- o mesmo arranjo de
+  /// [_acaoDaListagem], e pela mesma razao.
+  ///
+  /// **Nulo nao aceita o gesto**, e nao e detalhe: `Perfil` deslogado nao tem
+  /// rota a chamar, e uma roda que gira sem buscar nada e pior que gesto
+  /// nenhum.
+  final RecargaDaSecao _recargaDaSecao = RecargaDaSecao();
+
   /// O RESPIRO EXTRA NO PE DA LISTA quando ha acao flutuante.
   ///
   /// **Medido, e nao arredondado por gosto.** O `FloatingActionButton` padrao
@@ -926,6 +944,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   @override
   void dispose() {
     _acaoDaListagem.dispose();
+    _recargaDaSecao.dispose();
     super.dispose();
   }
 
@@ -987,7 +1006,19 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
       // NAO REMOVA. `test/telas/casca_de_cinco_secoes_test.dart` reprova por
       // dois caminhos independentes: a varredura do fonte deste arquivo, e a
       // arvore de semantica com a acao primaria colapsada.
-      child: ListView(
+      // **O ARRASTAR-PARA-ATUALIZAR EMBRULHA ESTE `ListView`**, e nao o
+      // `Scaffold`: o `RefreshIndicator` precisa do rolavel como descendente.
+      // Ele fica DENTRO do `SafeArea` para a roda nao nascer debaixo da barra
+      // de status.
+      //
+      // **E PERMANENTE, e nao condicional** -- `.doSlot` le a busca no momento
+      // do arrasto. Desenha-lo so quando ha busca publicada remontava a secao
+      // inteira a cada publicacao, e com ela uma carga de rede nova: 22 casos
+      // da suite reprovaram assim. A medicao esta no construtor, em
+      // `widgets/arrastar_para_atualizar.dart`.
+      child: ArrastarParaAtualizar.doSlot(
+        recarga: _recargaDaSecao,
+        child: ListView(
         addSemanticIndexes: false,
         // A MARGEM DA PAGINA, mais o respiro do que flutua por cima dela.
         // Ver `_folgaDaAcaoFlutuante`: sem isto o ultimo item da lista nasce
@@ -1016,20 +1047,23 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ],
           ...filhos,
         ],
+        ),
       ),
     );
 
-    return SlotDaBarraDeListagem(
+    return SlotDeAtualizacao(
+      recarga: _recargaDaSecao,
+      child: SlotDaBarraDeListagem(
       acao: _acaoDaListagem,
       // O CONTADOR E OUVIDO AQUI, e nao dentro do sino, e o motivo e o mesmo
       // que mantem a busca fora dele: `SinoDeNotificacoes` recebe um numero
       // pronto. Ouvir dentro do sino colocaria uma assinatura por secao
       // montada no mesmo objeto.
       //
-      // **O corpo nao reconstroi quando o numero muda.** `corpo` e montado uma
-      // vez em `build` e entra no `child:` do `ValueListenableBuilder` logo
-      // abaixo; este construtor so refaz a barra. Sem esse cuidado, um aviso
-      // que chegasse reconstruiria a lista inteira da secao -- que e
+      // **O corpo nao reconstroi quando o numero muda.** `corpo` e montado
+      // uma vez em `build` e entra no `child:` do `ValueListenableBuilder`
+      // logo abaixo; este construtor so refaz a barra. Sem esse cuidado, um
+      // aviso que chegasse reconstruiria a lista inteira da secao -- que e
       // exatamente o que o `child:` do distintivo de filtros ja evitava.
       child: ListenableBuilder(
         listenable: contadorDeAvisos,
@@ -1046,7 +1080,53 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
                       largura: MarcaLockup.pisoDeLargura,
                       rotulo: titulo,
                     )
-                  : Text(titulo),
+                  // **A ABREVIACAO E DELIBERADA E MEDIDA, e nao acidente de
+                  // leiaute** (19/10/2026).
+                  //
+                  // A 200% de escala de texto, em 320 dp, com o arranjo que as
+                  // secoes de comunidade tem (hamburguer 64 + porta de criar +
+                  // foto 48), `Perto` **nao cabe**. Medido, logado, com a
+                  // `Inter`
+                  // de verdade:
+                  //
+                  //   orcamento pela reserva do portao: 160,00 dp
+                  //   `Pets`, `Rede` e `Loja`:          138,32 dp -> cabem
+                  //   `Perto`:                          172,90 dp -> NAO cabe
+                  //
+                  // **O hamburguer FICA.** O cliente pediu em 17/10 *"padronize
+                  // todas as telas, tornando o menu esquerdo fixo"*, e tira-lo
+                  // para ganhar 64 dp contrariaria aquilo em TODAS as telas
+                  // para resolver uma largura em UMA. O rotulo tambem nao
+                  // encurta: ja
+                  // e so `Perto`, o nome curto que ele escolheu, e nao ha o que
+                  // abreviar no texto.
+                  //
+                  // Entao a 200% o titulo corta -- e as tres linhas abaixo
+                  // sao o
+                  // que faz esse corte ser uma DECISAO:
+                  //
+                  // - `maxLines: 1` e `softWrap: false` garantem que o titulo
+                  //   **nunca quebre o arranjo nem empurre controle**: sem
+                  //   eles,
+                  //   um titulo mais longo ganharia uma segunda linha dentro de
+                  //   uma barra de 64 dp de altura;
+                  // - `overflow: ellipsis` e a reticencia EXPLICITA. Ela e o
+                  //   padrao do `AppBar` hoje, e por isso mesmo esta escrita
+                  //   aqui: padrao de componente muda de versao, e o dia em que
+                  //   mudasse o titulo passaria a ser cortado em seco sem
+                  //   ninguem ver;
+                  // - `semanticsLabel: titulo` e o que separa o PINTADO do
+                  //   ANUNCIADO. **Abreviar o pintado nao pode abreviar o
+                  //   anunciado**: quem usa leitor de tela continua ouvindo
+                  //   `Perto` inteiro, e nao `Pert...`. O portao de orcamento
+                  //   cobra as duas coisas.
+                  : Text(
+                      titulo,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      semanticsLabel: titulo,
+                    ),
               // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
               toolbarHeight: BichuAlvoDeToque.critico,
               // **OS 16 dp QUE A FOTO CUSTOU, DEVOLVIDOS AO TITULO.**
@@ -1183,6 +1263,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             floatingActionButton: widget.acaoDeCriar,
           ),
         ),
+      ),
       ),
     );
   }

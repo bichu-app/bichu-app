@@ -119,6 +119,23 @@ export class ConversaDoAchadorService {
         nomeDoAchador: conversa.nomeDoAchador,
         tutorDesabilitado: conversa.tutorDesabilitado,
         achadorDesabilitado: conversa.achadorDesabilitado,
+        // O ACHADOR SEM CONTA. `papelDoChamador: 'finder'` e um fato do
+        // caminho, e nao uma escolha: esta rota e resolvida por TOKEN, e o
+        // token e sempre do lado de quem achou.
+        papelDoChamador: 'finder',
+        // **OS DOIS NULOS SAO ESTRUTURAIS, e nao um default.** A emenda 3 do
+        // ADR-0010 abre a foto so entre CONEXOES ACEITAS, e quem nao tem conta
+        // nao tem conexao com ninguem -- nao ha aresta a medir e nao ha
+        // chamador de quem medi-la. Nao existe, nesta ponta, consulta que
+        // devolva apelido ou foto: `ConversaDoAchador` nao tem esses campos, e
+        // por isso o nulo aqui nao e uma decisao que alguem possa reverter sem
+        // acrescentar coluna, consulta e campo de porta.
+        //
+        // E e por isso que `FinderConversation` tem schema PROPRIO no contrato:
+        // uma descricao dizendo "a foto nao vale para o achador" nao e
+        // contrato, e o cliente gerado nasceria com o campo.
+        apelidoDoOutro: null,
+        chaveDaFotoDoOutro: null,
       }),
       messages: mensagens.map(paraOAchador),
       // Página cheia pode ter continuação; página curta é o fim. A posição é a
