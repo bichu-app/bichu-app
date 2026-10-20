@@ -14,22 +14,12 @@ na homologação como se fosse problema de rede.
 
 ```bash
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
+flutter run --dart-define=API_BASE_URL=http://localhost:3000 --dart-define-from-file=config/mapa.json
 ```
 
-**Não há mais `--dart-define-from-file`.** Havia `config/mapa.json`, com o
-endereço dos tiles do mapa da Rede e o `User-Agent` que a política do
-OpenStreetMap pede. Em 19/10/2026 o cliente pediu o evento sem página de
-detalhe (`be057793`), e a página levou com ela o mapa estático — o único lugar
-do app que lia `MAP_TILES_URL` e `MAP_USER_AGENT`. O arquivo ficou órfão e
-`verificar-apk.sh` passou a cobrar, dentro do binário, o valor de uma chave que
-ninguém lê: define que o Dart não lê não é compilado, então aquela conferência
-não tinha como passar. As chaves saíram em 20/10/2026, junto com a bandeira.
-
-Quando o mapa voltar: entre primeiro a tela que **lê** as chaves, depois
-recrie o arquivo e devolva `--dart-define-from-file=config/<arquivo>.json` ao
-comando de build. A conferência de valor volta a cobrar sozinha —
-`verificar-apk.sh` deriva o arquivo do texto do próprio comando.
+`config/mapa.json` traz o endereço dos tiles do mapa da Rede e o `User-Agent`
+que a política do OpenStreetMap pede. Sem ele o app sobe, e o mapa do encontro
+mostra "Não conseguimos carregar o mapa agora."
 
 Para alcançar a API a partir de um **aparelho físico** na mesma Wi-Fi, use o IP
 da máquina, e não `localhost`. Troque `SEU_IP` pelo endereço da sua máquina
@@ -46,7 +36,8 @@ flutter build apk --debug \
   --build-name=1.0.0 \
   --dart-define=APP_VERSION=1.0.0 \
   --dart-define=API_BASE_URL=http://SEU_IP:3000 \
-  --dart-define=TERMS_VERSION=2026-09-17
+  --dart-define=TERMS_VERSION=2026-09-17 \
+  --dart-define-from-file=config/mapa.json
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
@@ -149,9 +140,7 @@ dia em que se quer provar o mecanismo.
 shell.** Em 19/10/2026, gerando APK e iOS, os seis defines foram passados por
 uma variável e o `--dart-define-from-file=config/mapa.json` se perdeu em
 silêncio: build terminou em 0, `hml.bichu.app` presente, parâmetro do mapa
-ausente. Com os parâmetros literais, apareceu. (Aquele `from-file` não existe
-mais — ver acima —, mas a regra vale igual para os defines que restaram: o que
-denuncia o amontoado é a bandeira virando valor dentro do binário.) O portão de literalidade de
+ausente. Com os parâmetros literais, apareceu. O portão de literalidade de
 `infra/verificacao/verificar-apk.sh` reprova essa forma antes de compilar, e a
 conferência de valor reprova a consequência depois.
 

@@ -57,29 +57,8 @@ set -eu
 
 APK="app/build/app/outputs/flutter-apk/app-release.apk"
 PUBSPEC="app/pubspec.yaml"
+MAPA="app/config/mapa.json"
 CONFERIDOR_DE_VERSAO="infra/verificacao/verificar_versao_no_apk.py"
-
-# ---------------------------------------------------------------------------
-# O ARQUIVO DE `--dart-define-from-file` SAI DO PROPRIO COMANDO DE BUILD.
-#
-# Ate 20/10/2026 ele era um literal aqui (`MAPA="app/config/mapa.json"`), ao
-# lado de um comando que passava `--dart-define-from-file=config/mapa.json`.
-# Duas copias do mesmo fato, e e o proprio cabecalho deste arquivo que diz o
-# que acontece com duas copias: "terminam divergindo, e a que diverge e a que
-# ninguem percebe". Hoje ha UMA copia, e a conferencia do valor segue o
-# comando -- se o `--dart-define-from-file` voltar, ela volta com ele, e sem
-# ninguem precisar lembrar de mexer aqui.
-#
-# O caminho no comando e relativo a `app/` (o comando roda depois de `cd app`)
-# e o conferidor roda da raiz, entao o prefixo e reposto.
-MAPA=$(
-  sed -n '/^[[:space:]]*# INICIO DO COMANDO DE BUILD/,/^[[:space:]]*# FIM DO COMANDO DE BUILD/p' "$0" \
-    | sed -n 's|^[[:space:]]*--dart-define-from-file=\([^[:space:]\\]*\).*$|\1|p' \
-    | head -1
-)
-if [ -n "$MAPA" ]; then
-  MAPA="app/$MAPA"
-fi
 
 # O piso de tamanho existe para acusar arquivo truncado ou marcador vazio. Um
 # APK de release do Flutter tem dezenas de megabytes (56 MB em 22/09/2026); 1 MB
@@ -97,37 +76,8 @@ ENVIRONMENT="${ENVIRONMENT:-hml}"
 TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"
 TERMS_URL="${TERMS_URL:-https://bichu.app/termos}"
 PRIVACY_URL="${PRIVACY_URL:-https://bichu.app/privacidade}"
-# O MAPA VOLTOU, E O `--dart-define-from-file` VOLTA COM ELE.
-#
-# A medicao do PR #43 estava CERTA na base dele e envelheceu: `be057793`
-# (19/10/2026) tirou `app/lib/telas/rede/local_do_encontro.dart`, o unico leitor
-# de `MAP_TILES_URL` e `MAP_USER_AGENT`, e define que o Dart nao LE nao e
-# compilado para dentro do binario -- a conferencia de valor reprovava por
-# construcao, e o portao estava certo contra uma arvore errada.
-#
-# **A tela VOLTOU antes de o PR entrar**, em `65dfcb99` (a frente que devolveu a
-# pagina do evento, por correcao de pedido do cliente). Medido em `070bfee6` e
-# reconferido na arvore desta onda, com `git grep` em `app/lib` e `app/test`:
-# esse segue sendo o UNICO leitor, e ele esta la.
-#
-#   local_do_encontro.dart:56  String.fromEnvironment('MAP_TILES_URL')
-#   local_do_encontro.dart:57  String.fromEnvironment('MAP_USER_AGENT')
-#   local_do_encontro.dart:83  StateError('MAP_TILES_URL ausente no build')
-#
-# Sem as duas chaves no build, essa tela estoura naquele `StateError` ou desenha
-# mapa sem tiles -- e a remocao do `--dart-define-from-file` tirava exatamente o
-# portao que acusaria isso. Seria um APK com tela quebrada e SEM alarme, e este
-# commit e o que sai para o cliente.
-#
-# O DESENHO DO #43 FICA INTEIRO, e e ele que faz este conserto caber em duas
-# linhas: `MAPA` (no alto) deriva do PROPRIO comando por `sed`, entao repor o
-# `--dart-define-from-file` repoe o braco `--mapa` do conferidor SOZINHO -- uma
-# copia do fato, nao duas. E a receita que o proprio #43 deixou escrita para o
-# dia em que o mapa voltasse; ele so nao sabia que o dia tinha sido anteontem.
-#
-# NUNCA por variavel de shell: os seis defines e o from-file sao LITERAIS aqui, e
-# o portao de literalidade abaixo cobra isso. Ja perdemos o mapa em silencio com
-# `flutter build apk "$DEFINES"`, com o build saindo 0.
+# O endereco dos tiles do mapa e o User-Agent que a politica do OpenStreetMap
+# pede moram em app/config/mapa.json, fora do codigo (portao de portabilidade).
 
 # ---------------------------------------------------------------------------
 # A VERSAO DO APP SAI DE `app/pubspec.yaml`, E DE MAIS NENHUM LUGAR.
@@ -248,19 +198,13 @@ conferir_versao_no_binario() {
   # bandeira que virou valor e a marca do amontoado por variavel de shell
   # (`flutter build apk "$DEFINES"`), que foi medido em 19/10/2026 PASSANDO
   # pelas conferencias de valor, porque a versao e o controle estavam la como
-  # pedacos do amontoado. As chaves do arquivo de `--dart-define-from-file`, se
-  # o comando passar um, o proprio conferidor acrescenta lendo o arquivo.
-  #
-  # `--mapa` so vai quando o comando de build passa `--dart-define-from-file`
-  # (ver `MAPA`, no alto). Sem o argumento o conferidor NAO fica calado: ele
-  # imprime no laudo que aquele braco nao rodou e por que. Portao que deixa de
-  # medir uma coisa tem de dizer que deixou.
-  set -- --apk "$alvo" --versao "$BUILD_NAME" --controle "$controle"
-  if [ -n "$MAPA" ]; then
-    set -- "$@" --mapa "$MAPA"
-  fi
+  # pedacos do amontoado. As chaves de `config/mapa.json` o proprio conferidor
+  # acrescenta, lendo o arquivo.
   python3 "$CONFERIDOR_DE_VERSAO" \
-    "$@" \
+    --apk "$alvo" \
+    --versao "$BUILD_NAME" \
+    --controle "$controle" \
+    --mapa "$MAPA" \
     --chave APP_VERSION \
     --chave API_BASE_URL \
     --chave ENVIRONMENT \
@@ -278,12 +222,9 @@ conferir_versao_no_binario() {
 # `exit 0`, `hml.bichu.app` presente, parametro do mapa AUSENTE. Refeito com os
 # parametros LITERAIS, apareceu.
 #
-# A conferencia de valor acima PEGA a consequencia (a bandeira `--dart-define=`
-# virando VALOR dentro do binario, que e o que o amontoado produz). Ela tambem
-# cobrava os valores do arquivo de `--dart-define-from-file`, e esse braco so
-# roda quando o comando passa a bandeira -- hoje nao passa, desde que o mapa
-# saiu. Este portao pega a CAUSA, no texto do comando, antes de gastar um build
-# inteiro, e NAO depende do from-file para isso: nas linhas do comando de build,
+# A conferencia de valor acima PEGA a consequencia (ela cobra os valores de
+# `config/mapa.json` dentro do binario). Este portao pega a CAUSA, no texto do
+# comando, antes de gastar um build inteiro: nas linhas do comando de build,
 # todo argumento tem de comecar com `--`. Uma variavel solta (`$DEFINES`) nao
 # comeca com `--`, entao nao da para escrever o comando daquele jeito e passar
 # por aqui.
@@ -356,12 +297,9 @@ conferir_literalidade() {
   # TODAS as linhas do bloco, e nao so as que terminam em `\`.
   #
   # A primeira versao disto pegava apenas as continuacoes de linha, e deixava o
-  # ULTIMO argumento do comando fora da conferencia -- e na epoca o ultimo era
-  # o `--dart-define-from-file`, justamente o que se perdeu na cicatriz. Portao
-  # que nao olha a linha onde o defeito aconteceu e o proprio defeito que ele
-  # diz pegar. (O `--dart-define-from-file` saiu em 20/10/2026, com o mapa; a
-  # conferencia continua lendo TODAS as linhas, porque o ultimo argumento vai
-  # sempre ser o de alguem.)
+  # ULTIMO argumento do comando -- hoje `--dart-define-from-file`, justamente o
+  # que se perdeu na cicatriz -- fora da conferencia. Portao que nao olha a
+  # linha onde o defeito aconteceu e o proprio defeito que ele diz pegar.
   #
   # Tira comentario, linha vazia, a barra de continuacao, o espaco das pontas e
   # a linha do proprio `flutter build apk`.
@@ -414,7 +352,7 @@ conferir_literalidade() {
     return 1
   fi
   if [ "$vistos" -lt 2 ]; then
-    echo "REPROVA: so achei $vistos argumento(s) no comando de build de $arquivo. O comando passa sete (eram oito ate o \`--dart-define-from-file\` sair com o mapa, em 20/10/2026); este portao parou de enxergar e nao pode aprovar" >&2
+    echo "REPROVA: so achei $vistos argumento(s) no comando de build de $arquivo. O comando passa oito; este portao parou de enxergar e nao pode aprovar" >&2
     return 1
   fi
   if [ "$achou_versao" -ne 1 ]; then
@@ -549,15 +487,15 @@ autoteste() {
   # A CICATRIZ, escrita como ela foi escrita no dia: os defines numa variavel.
   # O `$DEFINES` vai em aspas SIMPLES, entao e texto, e nao expansao.
   montar_isca_de_comando "$tmp/por-variavel.sh" \
-    '--dart-define=APP_VERSION="$BUILD_NAME"' \
-    '$DEFINES' >/dev/null
+    '$DEFINES' \
+    '--dart-define-from-file=config/mapa.json' >/dev/null
   esperar_reprova_literal "defines passados por VARIAVEL DE SHELL" "$tmp/por-variavel.sh"
 
   # A variavel na MESMA linha de uma bandeira: a linha comeca com `--` e
   # passaria por uma conferencia de linha em vez de palavra.
   montar_isca_de_comando "$tmp/variavel-na-mesma-linha.sh" \
     '--dart-define=APP_VERSION="$BUILD_NAME" $DEFINES' \
-    '--dart-define=API_BASE_URL="$API_BASE_URL"' >/dev/null
+    '--dart-define-from-file=config/mapa.json' >/dev/null
   esperar_reprova_literal "variavel solta na MESMA linha de uma bandeira" "$tmp/variavel-na-mesma-linha.sh"
 
   # A variavel na ULTIMA linha, que e a que nao tem barra de continuacao: a
@@ -574,7 +512,7 @@ autoteste() {
   montar_isca_de_comando "$tmp/sem-app-version.sh" \
     '--build-name="$BUILD_NAME"' \
     '--dart-define=API_BASE_URL="$API_BASE_URL"' \
-    '--dart-define=ENVIRONMENT="$ENVIRONMENT"' >/dev/null
+    '--dart-define-from-file=config/mapa.json' >/dev/null
   esperar_reprova_literal "comando SEM --dart-define=APP_VERSION (o defeito de 19/10/2026)" "$tmp/sem-app-version.sh"
 
   printf '(\n  cd app && flutter build apk --release --dart-define=APP_VERSION=1.0.0\n)\n' \
