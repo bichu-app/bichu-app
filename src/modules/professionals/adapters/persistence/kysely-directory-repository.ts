@@ -300,7 +300,7 @@ export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio
   // veterinario dele.
   //
   // O indice e `professionals_bairro_normalizado` (migracao
-  // 20261019000007), B-tree sobre `texto_para_busca(neighborhood)`. A
+  // 20261019000011), B-tree sobre `texto_para_busca(neighborhood)`. A
   // expressao aqui e a do indice, caractere a caractere; divergir deixa o
   // filtro CORRETO e LENTO, sem erro nenhum.
   // `professionals_publicados_por_lugar_texto`, em `(state, city,
