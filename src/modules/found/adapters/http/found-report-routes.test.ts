@@ -724,8 +724,17 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
     // status é 400. Isso NÃO é divergência com o contrato: medido em
     // `api/openapi.yaml`, `createFoundReportPhotoUploadIntent` declara 400, o
     // caso afirma 400, e os dois concordam — o mesmo vale para
-    // `createPetPhotoUploadIntent` e para as outras três operações de upload
+    // `createPetPhotoUploadIntent` e para as outras CINCO operações de upload
     // intent, que declaram 400 e 415.
+    //
+    // **São SETE no total, e a contagem foi medida na mescla do terceiro lote
+    // de 20/10/2026, não copiada.** O comentário dizia "outras três" (cinco no
+    // total) e isso envelheceu duas vezes no mesmo dia: entrou
+    // `createNetworkEventCoverUploadIntent` (a capa do encontro) e entrou
+    // `createPublicationPhotoUploadIntent` (a foto da publicação do Mural), e
+    // esta última entrou na ONDA 1 DESTE MESMO LOTE. A afirmação substantiva
+    // continua verdadeira e foi reconferida uma a uma contra
+    // `api/openapi.yaml`: as sete declaram 400 e 415.
     //
     // **O que mudou é que o 415 deixou de ser alcançável nesta operação.** Os
     // dois caminhos que o produziam — tipo fora da lista e tamanho acima do
