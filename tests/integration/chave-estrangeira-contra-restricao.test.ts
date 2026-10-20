@@ -1355,53 +1355,68 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
   },
 
   // =========================================================================
-  // A FOTO DA PUBLICACAO DO MURAL: `contradiz`, E FOI MEDIDO (20/10/2026).
+  // A FOTO DA PUBLICACAO DO MURAL: NASCEU `contradiz`, FOI CONSERTADA, E O
+  // `compativel` ABAIXO E REMEDIDO -- NAO AJUSTADO.
   // =========================================================================
-  // Par novo, trazido pela `20261020000002`. **O veredito e `contradiz`, e nao
-  // leitura de intencao: foi medido em banco de pe, do zero, nesta ordem.**
+  // Par trazido pela `20261020000002`. Durante a mescla do terceiro lote de
+  // 20/10/2026 ele foi medido e declarado `contradiz`, e o caso central deste
+  // arquivo reprovou -- que e o portao fazendo o trabalho dele.
   //
-  // As duas decisoes da migracao se contradizem no banco:
+  // As duas decisoes da `20261020000002` nao cabiam juntas no banco:
   //   - a chave: `image_id ... REFERENCES catalog_images ON DELETE SET NULL`,
   //     escrita como *"imagem apagada deixa o TEXTO de pe"*;
   //   - o CHECK: `user_publications_texto_alternativo_pede_imagem`,
   //     `CHECK (image_id IS NOT NULL OR alt_text IS NULL)`, escrito como
   //     *"texto alternativo sem imagem nao descreve nada"*.
   //
-  // Publicacao com foto E rotulo e o estado legitimo que a migracao desenhou.
-  // Apagar a imagem dispara o SET NULL, o `alt_text` continua preenchido, e o
-  // CHECK recusa a linha: o DELETE da imagem FALHA.
+  // Publicacao com foto E rotulo era estado legitimo; apagar a imagem punha o
+  // nulo, o rotulo continuava la, e o CHECK recusava. A imagem ficava
+  // INAPAGAVEL, e **quem escrevia descricao de acessibilidade era justamente
+  // quem criava a linha presa**.
   //
-  // **CONSEQUENCIA, e e por isso que isto nao e detalhe:** a varredura de
-  // vencidos e qualquer remocao de `catalog_images` reprovam com 23514 para
-  // toda publicacao que tenha rotulo de leitor de tela. A imagem fica
-  // INAPAGAVEL enquanto a publicacao viver -- e a exclusao LOGICA da
-  // publicacao (um UPDATE de `deleted_at`) nao a solta, porque a linha
-  // continua la com `image_id` e `alt_text`.
+  // **O CONSERTO VEIO DA FRENTE DONA, e nao de quem mesclou** -- a
+  // `20261020000007`, gatilho `user_publications_texto_sai_com_a_imagem`,
+  // `BEFORE UPDATE` com `WHEN` por transicao `OLD` -> `NEW`. `BEFORE` e o que
+  // resolve: a acao referencial e um `UPDATE` e o `CHECK` e avaliado DEPOIS dos
+  // gatilhos de linha `BEFORE`. Mesma forma e mesmo motivo de
+  // `handles_orfao_vira_reservado` (`20261019000004`), que e o precedente desta
+  // casa para exatamente este impasse.
   //
-  // O expurgo de CONTA conclui, e nao e sorte: `user_publications` sai antes
-  // pela cascata de `author_user_id`, entao a linha do nulo deixa de existir.
-  // O caminho que estoura e o da imagem, nao o da conta.
+  // **Nada foi afrouxado para o par caber**, e isso esta medido na `medicao`
+  // abaixo: o CHECK continua proibindo `alt_text` orfao, e a FK continua
+  // `SET NULL` (trocar por `CASCADE` apagaria a publicacao inteira e levaria o
+  // texto que a pessoa escreveu -- o oposto da razao escrita na linha).
   //
-  // **QUEM VAI CONSERTAR DECIDE O COMO, e a decisao nao e de quem mesclou:**
-  // as duas intencoes escritas acima so se conciliam se o rotulo sair junto
-  // com a imagem (gatilho que anula `alt_text`), e isso e objeto de banco
-  // novo, com carimbo novo, na frente do Mural.
+  // **O `WHEN` fecha DOIS caminhos**, e o segundo nao estava previsto quando o
+  // par foi declarado: a exclusao LOGICA e um `UPDATE`, nao dispara `ON DELETE`
+  // de nada, e sem aquele ramo a imagem de uma publicacao apagada ficaria presa
+  // para sempre.
   'public.user_publications.user_publications_image_id_fkey + user_publications_texto_alternativo_pede_imagem':
     {
       coluna: 'image_id',
-      veredito: 'contradiz',
+      veredito: 'compativel',
       medicao:
-        'Medido em 20/10/2026, banco postgis/postgis:16-3.4 subido do zero com as 82 ' +
-        'migracoes, em BEGIN/ROLLBACK: INSERT de users + catalog_images ' +
-        "(purpose 'user_publication', status 'ready', public_key preenchida) + " +
-        'user_publications com image_id E alt_text -- os tres entram. Em seguida ' +
-        'DELETE FROM catalog_images da linha referenciada: ERROR 23514, ' +
-        '`new row for relation "user_publications" violates check constraint ' +
-        '"user_publications_texto_alternativo_pede_imagem"`, com ' +
-        'CONTEXT `UPDATE ONLY "public"."user_publications" SET "image_id" = NULL`. ' +
-        'Nao houve RAISE NOTICE no caminho: o veredito vem do erro do proprio ' +
-        'Postgres e do catalogo, e nao de mensagem de migracao.',
-    },
+        'CONSERTADO pela 20261020000007 (gatilho `user_publications_texto_sai_com_a_imagem`, ' +
+        '`BEFORE UPDATE` com `WHEN` por transicao OLD -> NEW), e REMEDIDO em 20/10/2026 ' +
+        'depois da mescla dele, em banco postgis/postgis:16-3.4 subido do zero com as 84 ' +
+        'migracoes, BEGIN/ROLLBACK, lendo o catalogo e o erro do Postgres e nunca NOTICE.\n' +
+        '  ANTES (so a 20261020000002): DELETE FROM catalog_images reprovava com 23514 em ' +
+        '`user_publications_texto_alternativo_pede_imagem`, CONTEXT ' +
+        '`UPDATE ONLY "public"."user_publications" SET "image_id" = NULL`.\n' +
+        '  DEPOIS, caminho 1 (apagar a imagem): o DELETE CONCLUI; a linha fica image_id NULL, ' +
+        'alt_text NULL, `body` INTACTO e a publicacao VIVA -- que e a razao escrita na linha ' +
+        '("imagem apagada deixa o TEXTO de pe").\n' +
+        '  DEPOIS, caminho 2 (exclusao LOGICA, o segundo ramo do WHEN): o UPDATE de ' +
+        'deleted_at anula image_id E alt_text, e a imagem passa a ser APAGAVEL (0 linhas em ' +
+        'catalog_images depois do DELETE). Sem esse ramo ela ficaria presa para sempre, ' +
+        'porque exclusao logica e UPDATE e nao dispara ON DELETE de nada.\n' +
+        '  E O GATILHO NAO E LARGO DEMAIS, medido tambem, porque o risco oposto seria apagar ' +
+        'rotulo de acessibilidade em edicao comum: editar so o `body` preserva o alt_text; ' +
+        'trocar de UMA imagem para OUTRA preserva; reescrever o alt_text com a imagem de pe ' +
+        'vale; e um segundo UPDATE numa linha JA apagada nao dispara de novo.\n' +
+        '  O CHECK continua `((image_id IS NOT NULL) OR (alt_text IS NULL))` e a FK continua ' +
+        "`confdeltype = 'n'` (SET NULL) -- nenhum dos dois foi afrouxado para o par caber.",
+},
 };
 
 // ===========================================================================
