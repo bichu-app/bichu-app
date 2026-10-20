@@ -37,8 +37,12 @@
  * (perfil, timeline, vitrine). O mecanismo está pronto e é das funções
  * `perfil_ocultado_para_quem_denunciou`, `foto_ocultada_para_quem_denunciou` e
  * `publicacao_ocultada_para_quem_denunciou` (`20261018000032`): cada leitura
- * nova acrescenta `AND NOT <função>(<ref>, <leitor>)` ao `WHERE`. Está relatado
- * como o que falta ligar, por tela.
+ * nova acrescenta `AND NOT <função>(<ref>, <leitor>)` ao `WHERE`.
+ *
+ * **A da PUBLICAÇÃO está ligada desde 20/10/2026**, em
+ * `publications/adapters/persistence/kysely-publicacoes.ts`: a linha do tempo
+ * carrega `NOT publicacao_ocultada_para_quem_denunciou(p.public_ref, <leitor>)`
+ * no `WHERE`. As do perfil e da foto continuam onde estavam.
  */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
@@ -179,6 +183,76 @@ export function construtorDaContagemDeQuemEuBloqueei(
     .where('b.blocker_user_id', '=', chamador)
     .where(sql<boolean>`conta_habilitada(u.id)`)
     .where(sql<boolean>`conta_habilitada(${chamador}::uuid)`)
+    .compile();
+}
+
+/**
+ * A PUBLICAÇÃO denunciada, resolvida pelo endereço público, **com o MESMO
+ * recorte da linha do tempo**.
+ *
+ * ## Por que o recorte, e por que ele é o mesmo
+ *
+ * Sem o predicado de conexão aceita, qualquer conta poderia perguntar *"este
+ * endereço de 22 símbolos existe?"* pelo desfecho da denúncia — `202` quando
+ * existe, `404` quando não. Isso é um oráculo de existência, e o endereço de uma
+ * publicação que quem chama não pode ver não deve nem confirmar existência
+ * (ADR-0021).
+ *
+ * Ser **o mesmo** recorte da leitura não é zelo: se este fosse mais frouxo, a
+ * denúncia seria a leitura que a linha do tempo recusa; se fosse mais apertado,
+ * haveria publicação visível e não denunciável, e o ponto de acesso da denúncia
+ * é o próprio cartão.
+ *
+ * **Construtor exportado** pela mesma razão dos dois vizinhos: a prova de que o
+ * predicado está no `WHERE` se faz compilando e lendo o SQL, e não chamando o
+ * repositório com um banco. Medido em
+ * `denuncia-de-publicacao-confere-o-alvo.test.ts`.
+ *
+ * `body` sai porque a denúncia **congela o texto denunciado**: sem a cópia,
+ * editar depois faria o administrador julgar um texto que ninguém denunciou.
+ * `author_user_id` sai porque a fila mostra de quem é a publicação — e ele
+ * **não** vai para resposta nenhuma.
+ */
+export function construtorDoAlvoDaPublicacao(
+  db: Kysely<Database>,
+  refDaPublicacao: string,
+  chamador: UserId,
+): CompiledQuery<{ readonly id: string; readonly autor: string; readonly corpo: string }> {
+  return db
+    .selectFrom('user_publications as p')
+    .select(['p.id as id', 'p.author_user_id as autor', 'p.body as corpo'])
+    .where('p.public_ref', '=', refDaPublicacao)
+    .where('p.deleted_at', 'is', null)
+    // **O MESMO recorte da linha do tempo, com as DUAS pernas.**
+    //
+    // A perna do proprio autor (`p.author_user_id = chamador`) nao e descuido e
+    // nao afrouxa nada: ela e o que torna o desfecho `eu_mesmo` ALCANCAVEL.
+    // Sem ela, a propria publicacao caia no mesmo `ausente` de inexistente --
+    // ninguem tem aresta de conexao consigo -- e a rota respondia `404` a quem
+    // tentasse denunciar o proprio texto.
+    //
+    // E `404` ali seria o desenho errado: `CAMPO_E_CODIGO.publication` existe
+    // em `safety-routes.ts` desde 18/10 com a mensagem *"Esta publicacao e
+    // sua. Para tira-la do ar, apague-a."* -- isto e, o produto JA decidiu que
+    // este caso e `400 own_publication`, com a saida que o resolve, e nao um
+    // `404` que esconde a publicacao de quem a escreveu. E o mesmo que
+    // `denunciarFoto` e `denunciarPerfil` fazem.
+    //
+    // **MEDIDO A MAO**: antes desta perna, `POST /v1/publications/{propria}/reports`
+    // respondia `404`; com ela, `400` com `code: own_publication`.
+    .where(
+      sql<boolean>`(
+        p.author_user_id = ${chamador}::uuid
+        OR EXISTS (
+          SELECT 1 FROM user_connections uc
+           WHERE uc.state = 'accepted'
+             AND ((uc.requester_user_id = p.author_user_id AND uc.addressee_user_id = ${chamador}::uuid)
+               OR (uc.requester_user_id = ${chamador}::uuid AND uc.addressee_user_id = p.author_user_id))
+             AND conta_habilitada(uc.requester_user_id)
+             AND conta_habilitada(uc.addressee_user_id))
+      )`,
+    )
+    .where(sql<boolean>`NOT bloqueio_entre(p.author_user_id, ${chamador}::uuid)`)
     .compile();
 }
 
@@ -341,25 +415,58 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
     },
 
     async denunciarPublicacao(chamador, refDaPublicacao, denuncia, agora): Promise<DesfechoDaEscrita> {
-      // **NÃO HÁ CONFERÊNCIA DE ALVO, e a ausência está declarada.**
-      // `user_publications` é de outra fatia e não existe nesta base: medido na
-      // lista de tabelas de `shared/db/schema.ts`. Conferir contra uma tabela
-      // inexistente não compila, e criar a tabela aqui seria construir a fatia
-      // de outro agente.
+      // **O ALVO PASSOU A SER CONFERIDO EM 20/10/2026.**
       //
-      // O que isso custa, dito por extenso: hoje esta rota aceita um endereço
-      // de publicação que não existe, e grava a denúncia dele. Os tetos valem,
-      // a ocultação imediata funciona e a fila recebe a linha; o que falta é o
-      // `404` de publicação inexistente. É uma linha quando a tabela pousar, e
-      // ela está escrita no fim da `20261018000032`.
+      // Até aqui esta escrita não conferia nada, e a ausência estava declarada
+      // em voz alta: `user_publications` não existia nesta base, conferir contra
+      // tabela inexistente não compila, e o custo estava dito por extenso --
+      // *"hoje esta rota aceita um endereço de publicação que não existe, e
+      // grava a denúncia dele"*. A tabela existe (`20261020000002`), e a
+      // conferência que faltava é esta consulta.
+      //
+      // **O RECORTE É O MESMO DA LINHA DO TEMPO, e isso não é zelo: é o que
+      // impede a denúncia de ser um oráculo.** Sem o predicado de conexão
+      // aceita, qualquer conta poderia perguntar "este endereço de 22 símbolos
+      // existe?" pelo desfecho da denúncia -- e o endereço de uma publicação
+      // que quem chama não pode ver não deve nem confirmar existência
+      // (ADR-0021).
+      //
+      // Os quatro predicados, e cada um tem a mesma razão que tem na linha do
+      // tempo: `deleted_at IS NULL` (publicação apagada não tem alvo), conexão
+      // aceita nos dois sentidos com `conta_habilitada` das duas pontas,
+      // `NOT bloqueio_entre`, e a própria publicação de quem chama **fora** --
+      // esta última pelo motivo da foto e do perfil: o caminho para o próprio
+      // conteúdo é apagá-lo, que é imediato, e denunciar a si mesmo não tem
+      // desfecho.
+      //
+      // `author_user_id` sai da consulta porque a fila mostra de quem é a
+      // publicação, e `body` porque a denúncia **congela o texto denunciado**:
+      // sem a cópia, editar depois faria o administrador julgar um texto que
+      // ninguém denunciou. (Hoje a publicação não tem operação de edição; a
+      // cópia existe para que isso continue verdade quando ela tiver.)
+      const { rows } = await db.executeQuery(
+        construtorDoAlvoDaPublicacao(db, refDaPublicacao, chamador),
+      );
+      const alvo = rows[0];
+
+      if (alvo === undefined) return 'ausente';
+      // A PRÓPRIA publicação não se denuncia, e este desfecho é ALCANÇÁVEL: a
+      // consulta acima tem a perna do próprio autor justamente para que ele
+      // chegue aqui. O caminho para o próprio conteúdo é apagá-lo
+      // (`deleteMyPublication`), que é imediato, e a borda responde `400` com
+      // `code: own_publication` e essa saída escrita na mensagem -- em vez de um
+      // `404` que esconderia de alguém a publicação que ela mesma escreveu.
+      if (alvo.autor === chamador) return 'eu_mesmo';
+
       const quando = comoData(agora);
 
       await sql`
         INSERT INTO publication_reports
-          (id, publication_ref, reporter_user_id, reason, detail,
-           created_at, last_reported_at)
+          (id, publication_id, publication_ref, publication_body, author_user_id,
+           reporter_user_id, reason, detail, created_at, last_reported_at)
         VALUES
-          (${ids.uuidv7()}::uuid, ${refDaPublicacao}, ${chamador}::uuid,
+          (${ids.uuidv7()}::uuid, ${alvo.id}::uuid, ${refDaPublicacao}, ${alvo.corpo},
+           ${alvo.autor}::uuid, ${chamador}::uuid,
            ${denuncia.motivo}, ${denuncia.relato},
            ${quando}::timestamptz, ${quando}::timestamptz)
         ON CONFLICT (publication_ref, reporter_user_id) WHERE resolved_at IS NULL DO UPDATE SET

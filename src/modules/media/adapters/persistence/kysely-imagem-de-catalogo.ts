@@ -173,6 +173,50 @@ export async function registrarIntencaoDaVitrineDoUsuario(
     .execute();
 }
 
+/**
+ * A intencao da FOTO DE UMA PUBLICACAO DO MURAL (20/10/2026). Autor em `users`.
+ *
+ * **Funcao propria, com `purpose` FECHADO no literal `'user_publication'`**, e
+ * nao um parametro aberto nem reuso da irma da vitrine. A razao esta no
+ * cabecalho de `registrarIntencaoDaVitrineDoUsuario`, logo acima, e ela foi
+ * paga: em 18/10/2026 `api.ts` ligou a vitrine ao registrador da capa do
+ * encontro, as duas assinaturas eram identicas, **a troca compilou**, e nenhuma
+ * foto de vitrine podia ser salva -- `201` na intencao e `404` na confirmacao,
+ * porque a confirmacao procura o envio pelo proposito.
+ *
+ * Com o literal no tipo, ligar esta funcao no lugar de qualquer uma das outras
+ * quatro (ou qualquer uma delas no lugar desta) **nao compila**. E a quinta vez
+ * que este arquivo repete a forma, e a repeticao e o mecanismo.
+ */
+export async function registrarIntencaoDaFotoDaPublicacao(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+    readonly purpose: 'user_publication';
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      // Do parametro, e nao um literal escrito aqui: o MESMO valor que o caso
+      // de uso usou para assinar e o que vai para a linha.
+      purpose: nova.purpose,
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

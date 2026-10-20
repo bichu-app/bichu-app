@@ -522,50 +522,65 @@ void main() {
     });
 
     testWidgets(
-        'ISCA -- o cartão NÃO abre nada: nenhum InkWell e nenhuma rota de '
-        'detalhe de evento', (tester) async {
-      // ISCA (duas metades, e as duas reprovam aqui):
-      //   1. em `cartao_do_encontro.dart`, embrulhe o `Container` num
-      //      `InkWell(onTap: () {})`. A primeira metade reprova.
-      //   2. em `rotas.dart`, devolva `encontros/:slug` ao ramo da `Rede`.
-      //      A segunda metade reprova no `GoRouter`.
+        'ISCA -- o cartão ABRE, e a rota de detalhe de evento existe',
+        (tester) async {
+      // **ESTE CASO ERA O INVERSO ATE 20/10/2026**, e a inversao e correcao de
+      // pedido e nao mudanca de ideia minha. Ele se chamava `ISCA -- o cartao
+      // NAO abre nada` e cobrava que nao houvesse `InkWell`, que o no nao
+      // fosse botao e que `/rede/encontros/<slug>` nao casasse com rota
+      // nenhuma. O cliente corrigiu o pedido: *"eu nao pedi pra voce remover,
+      // eu pedi para remover o clique para o usuario nnao conseguir acessar a
+      // pagina de detalhes e pedi pra voce resumir a listagem com foto, titulo
+      // do evento"*.
+      //
+      // O que ele pediu em 19/10 era **o clique de quem esta deslogado**, e
+      // isso continua valendo: ver
+      // `test/telas/aviso_de_login_ao_ver_detalhe_test.dart`, que mede a folha
+      // no toque sem conta. **Aqui o caso e logado**, e o que ele guarda e que
+      // o caminho existe -- um cartao que volte a ser inerte deixaria a pagina
+      // inalcancavel pela unica porta que ela tem.
+      //
+      // ISCA (tres metades, e as tres reprovam aqui):
+      //   1. em `cartao_do_encontro.dart`, troque o `InkWell` pelo
+      //      `Container` cru. A primeira metade reprova;
+      //   2. no mesmo arquivo, apague `button: true` do `Semantics`. A
+      //      segunda reprova;
+      //   3. em `rotas.dart`, tire `encontros/:slug` do ramo da `Rede`. A
+      //      terceira reprova no `GoRouter`.
       await abrirRede(
         tester,
         rede: redeComAgenda(
           proximos: <Map<String, dynamic>>[encontroPublico()],
         ),
-        logado: false,
       );
       expect(find.byType(CartaoDoEncontro), findsOneWidget);
 
-      // (1) NENHUM CONTROLE DENTRO DO CARTAO. Medido DENTRO do cartao, e nao
-      // na tela: a `AppBar` e a barra de abas tem controles proprios, e
-      // contar a tela inteira mediria o app em volta.
-      for (final tipo in <Finder>[
-        find.byType(InkWell),
-        find.byType(GestureDetector),
-      ]) {
-        expect(
-          find.descendant(of: find.byType(CartaoDoEncontro), matching: tipo),
-          findsNothing,
-          reason: 'REPROVA: o cartao do evento voltou a ser tocavel. Nao ha '
-              'pagina de detalhe para ele abrir desde 19/10/2026.',
-        );
-      }
+      // (1) O CONTROLE ESTA DENTRO DO CARTAO, e e dele. Medido DENTRO do
+      // cartao e nao na tela: a `AppBar` e a barra de abas tem controles
+      // proprios, e contar a tela inteira mediria o app em volta.
+      expect(
+        find.descendant(
+          of: find.byType(CartaoDoEncontro),
+          matching: find.byType(InkWell),
+        ),
+        findsWidgets,
+        reason: 'REPROVA: o cartao do evento voltou a ser inerte. A pagina do '
+            'encontro existe de novo desde 20/10/2026, e este cartao e a '
+            'unica porta dela.',
+      );
 
-      // (2) E O NO QUE FALA O EVENTO NAO E BOTAO.
+      // (2) E O NO QUE FALA O EVENTO E BOTAO.
       //
       // Medido pelo ROTULO e nao pela subarvore do widget: `getSemantics`
       // sobe ate o no mais proximo, que e o da lista inteira, e contar botoes
       // ali mediria a barra de abas junto -- foi assim que a primeira versao
       // deste caso achou dois botoes que nao eram do cartao.
       //
-      // Ate 19/10/2026 o cartao publicava um no com `button: true` e
-      // `label: nomeAcessivel` -- uma string que COMECA pelo titulo. Entao
-      // procurar o titulo no rotulo acha o no certo nas duas versoes, e so na
-      // antiga ele e botao. **As duas assercoes importam**: a primeira prova
-      // que ha no com o titulo (sem ela a segunda passaria com a arvore
-      // vazia), e a segunda prova que ele e conteudo.
+      // O cartao publica UM no com `label: nomeAcessivel` -- uma string que
+      // COMECA pelo titulo --, entao procurar o titulo no rotulo acha o no
+      // certo. **As duas assercoes importam**: a primeira prova que ha no com
+      // o titulo (sem ela a segunda passaria com a arvore vazia), e a segunda
+      // prova que ele anuncia a acao a quem usa leitor de tela.
       final semantica = tester.ensureSemantics();
       final comOTitulo = <SemanticsNode>[];
       void colher(SemanticsNode n) {
@@ -585,29 +600,27 @@ void main() {
         reason: 'a arvore semantica nao tem no nenhum com o titulo do evento: '
             'a assercao seguinte passaria por vazio',
       );
-      for (final n in comOTitulo) {
-        expect(
-          n.flagsCollection.isButton,
-          isFalse,
-          reason: 'REPROVA: o no que anuncia o evento ainda e um botao. Nao '
-              'ha pagina de detalhe para ele abrir desde 19/10/2026.',
-        );
-      }
+      expect(
+        comOTitulo.any((n) => n.flagsCollection.isButton),
+        isTrue,
+        reason: 'REPROVA: nenhum no que anuncia o evento e botao. Quem navega '
+            'por audicao nao descobre que ha para onde ir -- e o toque existe.',
+      );
       semantica.dispose();
 
-      // (3) E A ROTA NAO EXISTE. Esta e a metade que o `InkWell` nao cobre:
-      // um link direto, um `push` de outra tela ou um `deep link` chegariam
-      // na tela de detalhe sem passar pelo cartao.
+      // (3) E A ROTA EXISTE. Esta e a metade que o `InkWell` nao cobre: um
+      // link compartilhado chega na pagina sem passar pelo cartao, e foi a
+      // rota apagada em 19/10 que tornou o link morto.
       final contexto = tester.element(find.byType(AgendaDaRede));
       final roteador = GoRouter.of(contexto);
       expect(
         roteador.configuration.findMatch(
           Uri.parse('/rede/encontros/$slugPublico'),
         ).routes,
-        isEmpty,
-        reason: 'REPROVA: `/rede/encontros/<slug>` voltou a casar com uma '
-            'rota. A tela de detalhe do evento saiu em 19/10/2026 e a rota '
-            'saiu com ela -- rota orfa leva a pagina de erro, e nao a nada.',
+        isNotEmpty,
+        reason: 'REPROVA: `/rede/encontros/<slug>` nao casa com rota nenhuma. '
+            'O link do evento que a pessoa compartilha no WhatsApp morre, e '
+            'ninguem descobre isso pelo app.',
       );
     });
   });

@@ -36,14 +36,22 @@ const List<String> arquivosDaHistoria = <String>[
   // hex ou um 12 solto entrariam sem ninguem notar. O banner usa
   // `BichuCores.claro` e nao hex.
   //
-  // **DOIS CAMINHOS SAIRAM DESTA LISTA em 19/10/2026**, e os arquivos sairam
-  // do repositorio: `rede/encontro_da_rede.dart` (a pagina de detalhe do
-  // evento, que o cliente removeu) e `rede/local_do_encontro.dart` (o mapa
-  // estatico, que so aquela pagina desenhava). O portao LE os arquivos da
-  // lista: caminho que nao existe o faria reprovar por leitura, e nao por
-  // token -- e e por isso que a lista encolheu junto, no mesmo commit.
+  // **OS DOIS CAMINHOS VOLTARAM em 20/10/2026**, com os arquivos. Eles sairam
+  // em 19/10 porque os arquivos sairam do repositorio --
+  // `rede/encontro_da_rede.dart` (a pagina do evento) e
+  // `rede/local_do_encontro.dart` (o mapa estatico, que so aquela pagina
+  // desenhava) --, e o cliente corrigiu o pedido no dia seguinte: *"eu nao
+  // pedi pra voce remover, eu pedi para remover o clique"*.
+  //
+  // O portao LE os arquivos da lista, entao a lista TEM de acompanhar o
+  // repositorio nos dois sentidos: caminho que nao existe o faz reprovar por
+  // leitura e nao por token; caminho que existe e nao esta aqui deixa um mapa
+  // estatico com hex solto passar calado -- e `local_do_encontro.dart` e o
+  // unico lugar do app que desenha um, com tinta de marcador e moldura.
   'lib/telas/rede/agenda_da_rede.dart',
   'lib/telas/rede/cartao_do_encontro.dart',
+  'lib/telas/rede/encontro_da_rede.dart',
+  'lib/telas/rede/local_do_encontro.dart',
   'lib/telas/rede/pecas_da_rede.dart',
   // O `Perfil` so com menus e a tela de dados pessoais (18/10/2026): o item de
   // menu e um controle novo com borda, icone e dois niveis de texto, e o
