@@ -53,6 +53,17 @@ class _SaidaDeMentira extends SaidaDoApp {
   @override
   Future<bool> adicionarAoCalendario(EventoDeCalendario evento) async =>
       throw StateError('a vitrine da Loja nao escreve no calendario');
+
+  @override
+  Future<bool> compartilharTexto({
+    required String texto,
+    required String assunto,
+  }) async {
+    // Este arquivo nao fala de compartilhamento. Devolver `false` e o lado
+    // escondido, e o dia em que alguem o chamar daqui o teste nao vai afirmar
+    // que a folha abriu.
+    return false;
+  }
 }
 
 /// Um item com TRES fotos, para o cartao virar `PageView` de verdade.

@@ -154,6 +154,7 @@ class BotaoSecundario extends StatelessWidget {
     required this.aoTocar,
     super.key,
     this.carregando = false,
+    this.nomeAcessivel,
   });
 
   final String rotulo;
@@ -161,35 +162,76 @@ class BotaoSecundario extends StatelessWidget {
 
   final bool carregando;
 
+  /// O nome que o LEITOR DE TELA diz, quando ele precisa ser mais longo que o
+  /// rotulo visivel. **Nulo e o padrao e nao embrulha nada**: ver `_comNome`.
+  ///
+  /// Existe pelo mesmo motivo do campo de mesmo nome em [BotaoPrimario] -- um
+  /// rotulo visivel curto que, lido fora de contexto, nao diz sobre o que ele
+  /// age. O primeiro caso e `Compartilhar` na ficha do pet: numa lista de
+  /// acoes, "Compartilhar" sozinho nao diz o que, e o nome completo e
+  /// "Compartilhar o desaparecimento de Nina".
+  final String? nomeAcessivel;
+
+  /// Embrulha em [Semantics] **somente quando ha nome proprio a anunciar**.
+  ///
+  /// Nulo devolve o filho intacto, e isso e deliberado: `excludeSemantics` apaga
+  /// a arvore do filho inteira, e com ela a acao de toque que o `OutlinedButton`
+  /// publica. Todo `BotaoSecundario` que existe hoje sai com `tap=true` sem
+  /// embrulho nenhum, e `test/a11y/acao_de_controle_test.dart` cobra isso em
+  /// todo no anunciado como botao. Embrulhar sempre trocaria o comportamento de
+  /// dezenas de chamadas por um campo que uma delas usa.
+  ///
+  /// Quando ha nome, `onTap` e REDECLARADO -- o preco de `excludeSemantics`,
+  /// e a mesma linha que faltava em [BotaoPrimario] e deixava a acao primaria
+  /// do produto inalcancavel pelo leitor de tela.
+  Widget _comNome(Widget filho, VoidCallback? acao) {
+    final nome = nomeAcessivel;
+    if (nome == null) return filho;
+    return Semantics(
+      button: true,
+      enabled: acao != null,
+      label: carregando ? '$nome, em andamento' : nome,
+      excludeSemantics: true,
+      onTap: acao,
+      child: filho,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!carregando) {
-      return OutlinedButton(onPressed: aoTocar, child: Text(rotulo));
+      return _comNome(
+        OutlinedButton(onPressed: aoTocar, child: Text(rotulo)),
+        aoTocar,
+      );
     }
 
     final cores = BichuColors.of(context).cores;
 
-    return OutlinedButton(
-      onPressed: null,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: cores.textSecondary,
-              // Quem usa leitor de tela ouve o botao DESABILITADO e nao
-              // saberia por que. O indicador diz.
-              semanticsLabel: 'Carregando',
+    return _comNome(
+      OutlinedButton(
+        onPressed: null,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: cores.textSecondary,
+                // Quem usa leitor de tela ouve o botao DESABILITADO e nao
+                // saberia por que. O indicador diz.
+                semanticsLabel: 'Carregando',
+              ),
             ),
-          ),
-          const SizedBox(width: BichuEspaco.e3),
-          Flexible(child: Text(rotulo, textAlign: TextAlign.center)),
-        ],
+            const SizedBox(width: BichuEspaco.e3),
+            Flexible(child: Text(rotulo, textAlign: TextAlign.center)),
+          ],
+        ),
       ),
+      null,
     );
   }
 }

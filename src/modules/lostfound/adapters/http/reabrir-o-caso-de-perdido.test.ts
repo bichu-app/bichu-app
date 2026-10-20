@@ -54,6 +54,7 @@ import type { AlcanceDoAlerta } from '../../ports/alcance-do-alerta.js';
 import type { RegistroDeDisparos } from '../../ports/registro-de-disparos.js';
 import type { CasoGravado, LostCaseRepository } from '../../ports/lost-case-repository.js';
 import { registrarRotasDeCasos, rotaDeReabertura } from './lost-case-routes.js';
+import { paginaNenhumaPublicada } from '../../ports/disponibilidade-da-pagina.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const BASE_DA_WEB = 'https://bichu.test' as AbsoluteUrl;
@@ -231,6 +232,9 @@ function bancada(
     contrato: carregarContrato('api/openapi.yaml'),
     clock,
     baseDaWeb: BASE_DA_WEB,
+    // Interruptor das paginas publicas DESLIGADO: e o estado de producao em
+    // 20/10/2026, e nenhum caso deste arquivo fala de `share_url`.
+    paginas: paginaNenhumaPublicada,
   });
 
   return { app, trilhado: () => eventos };

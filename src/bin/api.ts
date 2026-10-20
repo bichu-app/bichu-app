@@ -81,6 +81,7 @@ import { registrarRotasDaVitrineDeFotos } from '../modules/showcase/adapters/htt
 import { VitrineDeFotos } from '../modules/showcase/application/vitrine-de-fotos-service.js';
 import { criarVitrineRepository } from '../modules/showcase/adapters/persistence/kysely-vitrine.js';
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
+import { criarDisponibilidadeDaPagina } from '../modules/lostfound/adapters/persistence/kysely-disponibilidade-da-pagina.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
 import { registrarRotasDaLeituraPublicaDoCaso } from '../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
@@ -900,6 +901,15 @@ export async function main(): Promise<void> {
     // time web (ADR-0017 item 1), e o papel colado no poste se arranca e se
     // reimprime. Só a plaquinha da coleira é irreversível.
     baseDaWeb: config.webBaseUrl,
+    // O interruptor das páginas públicas (`site_page_availability`,
+    // `20261020000005`). `baseDaWeb` diz onde a página moraria; esta porta diz
+    // se ela existe — e em 20/10/2026 ela NÃO existe, medido de fora nos dois
+    // ambientes. Enquanto a linha disser `false`, `share_url` não sai e o
+    // aplicativo não desenha a ação de compartilhar.
+    //
+    // Nasce do banco e não de `config`: acender é um `UPDATE` com a API de pé,
+    // e `loadAppConfig()` lê o ambiente uma vez na subida.
+    paginas: criarDisponibilidadeDaPagina(db),
   };
 
   // BICHUS-35. O achado avulso mora em `found` e nao em `lostfound` porque ele e

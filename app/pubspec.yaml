@@ -69,6 +69,38 @@ dependencies:
   # juridico. O navegador do sistema e tambem onde a pessoa consegue guardar,
   # imprimir e compartilhar o que aceitou.
   url_launcher: ^6.3.2
+  # A FOLHA DE COMPARTILHAMENTO DO SISTEMA (cliente, 20/10/2026): *"quando o
+  # usuario clicar em compartilhar, tem que aparecer aquela barra no celular
+  # para o usuario selecionar onde ele quer compartilhar, e um dos lugares vai
+  # ser o whatsapp se o usuario tiver instalado"*.
+  #
+  # `^12` E NAO `^13`, e o motivo e medido: `share_plus >= 13` depende de
+  # `win32 ^6`, e `flutter_secure_storage ^9.2.4` exige `win32 ^5`. As duas nao
+  # coexistem, e a resolucao reprova com essas palavras. `win32` so vale para
+  # Windows, que este produto nao publica -- mas a resolucao de versao nao faz
+  # essa distincao, e forcar `^13` custaria trocar o cofre de credenciais.
+  #
+  # CUSTO MEDIDO, e nao estimado: `app-arm64-v8a-release.apk` passou de
+  # 30.777.264 para 30.777.908 bytes, **+644 bytes (+0,0021%)**, com a chamada
+  # de fato referenciada no binario. Descompactado sao +6.461 bytes:
+  # `classes.dex` +5.076, `AndroidManifest.xml` +824 e `res/RT.xml` (novo, o
+  # `flutter_share_file_paths` do FileProvider) +396.
+  #
+  # NENHUMA PERMISSAO NOVA: comparei a lista de permissoes dos manifestos
+  # mesclados antes e depois, e ela e identica. O plugin acrescenta so um
+  # `FileProvider` nao exportado (`app.bichu.flutter.share_provider`) e um
+  # receiver nao exportado, os dois pelo manifesto dele.
+  #
+  # iOS entra sem configuracao: minimo 12.0 contra os 15.0 deste Runner, nenhuma
+  # chave de uso no `Info.plist` (compartilhar texto nao pede permissao) e o
+  # `PrivacyInfo.xcprivacy` ja vem no pacote.
+  #
+  # **Ele e pacote de APARELHO.** Entra na MESMA rodada na lista de
+  # `_importesProibidos` de `app/test/dispositivo/porta_nao_contornada_test.dart`
+  # -- o cabecalho daquele portao manda acrescentar "no mesmo dia em que entra no
+  # `pubspec.yaml`", e nao quando a primeira tela errar. Quem fala com ele e
+  # `lib/dispositivo/saida_do_app.dart`, a porta que ja abre mapa e navegador.
+  share_plus: ^12.0.2
   # Unica forma de achar o diretorio do app sem escrever codigo por plataforma.
   # Entra pela fila offline da BICHUS-31, que precisa sobreviver ao app ser
   # encerrado pelo sistema -- e memoria nao sobrevive a isso.

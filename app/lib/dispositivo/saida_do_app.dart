@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Um encontro para o calendario do aparelho.
@@ -28,7 +29,7 @@ class EventoDeCalendario {
 
 /// A porta de saida da `Rede`: o que leva a pessoa para outro app.
 ///
-/// **Quatro saidas, e nenhuma pede permissao.**
+/// **Cinco saidas, e nenhuma pede permissao.**
 ///
 /// - [abrirNoAppDeMapas]: a intencao `geo:` (Android) com o ponto e o nome do
 ///   lugar como rotulo, sem rota (UX 28.3, decisao 1); sem app que responda, o
@@ -46,6 +47,14 @@ class EventoDeCalendario {
 ///   `CalendarContract.Events`). Nao le nem escreve o calendario, e por isso
 ///   nao exige `READ_CALENDAR`/`WRITE_CALENDAR`: quem salva e a pessoa, no app
 ///   dela (design system 24.12.1, item 4).
+/// - [compartilharTexto]: a FOLHA DE COMPARTILHAMENTO do sistema, com um texto
+///   e um assunto. O cliente pediu em 20/10/2026 *"aquela barra no celular para
+///   o usuario selecionar onde ele quer compartilhar"*, e e o sistema que
+///   decide o que ela lista -- WhatsApp se estiver instalado, e tambem
+///   Telegram, mensagem, e-mail e copiar. **O app nao escolhe destino e nao
+///   pergunta o que esta instalado**: perguntar exigiria `QUERY_ALL_PACKAGES`
+///   no Android 11+, que e permissao sensivel na revisao da loja, para decidir
+///   algo que a folha ja decide melhor.
 ///
 /// Mora em `lib/dispositivo/` porque abre canal de plataforma, que o portao de
 /// `porta_nao_contornada_test.dart` proibe em tela.
@@ -76,6 +85,21 @@ abstract class SaidaDoApp {
   Future<bool> abrirLink(Uri link);
 
   Future<bool> adicionarAoCalendario(EventoDeCalendario evento);
+
+  /// Abre a folha de compartilhamento do sistema com [texto].
+  ///
+  /// [assunto] vira `EXTRA_SUBJECT` no Android e o assunto da mensagem quando o
+  /// destino escolhido e um aplicativo de e-mail. Nos destinos que nao tem
+  /// assunto -- WhatsApp, Telegram, copiar -- ele e ignorado pelo sistema, e nao
+  /// aparece duplicado no corpo.
+  ///
+  /// **Devolve se a folha ABRIU, e nao o que a pessoa fez nela.** As duas coisas
+  /// sao diferentes e so a primeira e nossa: cancelar a folha e um desfecho
+  /// legitimo, e uma tela que reclamasse de cancelamento estaria reclamando de
+  /// a pessoa ter mudado de ideia. `ShareResult.status` distingue os dois, e
+  /// **nao e lido de proposito** -- quem chama nao tem o que fazer com a
+  /// diferenca.
+  Future<bool> compartilharTexto({required String texto, required String assunto});
 }
 
 /// A implementacao que fala com o aparelho.
@@ -163,6 +187,34 @@ class SaidaDoAparelho extends SaidaDoApp {
     } on PlatformException {
       return false;
     } on MissingPluginException {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> compartilharTexto({
+    required String texto,
+    required String assunto,
+  }) async {
+    try {
+      // `SharePlus.instance.share(ShareParams(...))` e a interface de 12.x; os
+      // estaticos `Share.share` estao la por compatibilidade.
+      //
+      // `text` e nao `uri`: os dois sao mutuamente exclusivos no pacote, e `uri`
+      // manda **so** o endereco -- o nome do pet, o bairro e a frase ficariam
+      // de fora, e e justamente o texto que faz alguem olhar. O link vai dentro
+      // do texto, que e como ele chega num grupo de bairro.
+      await SharePlus.instance.share(
+        ShareParams(text: texto, subject: assunto, title: assunto),
+      );
+      return true;
+    } on PlatformException {
+      // Sem atividade que responda a `ACTION_SEND`, ou a folha recusando abrir.
+      // A tela diz que nao conseguiu, em vez de ficar calada.
+      return false;
+    } on MissingPluginException {
+      // O plugin nao registrado neste binario (o caso do iOS dormente, e o de
+      // um `flutter test` que suba o aparelho de mentira). Mesmo desfecho.
       return false;
     }
   }
