@@ -143,7 +143,7 @@ export const rotaDeComentar = defineRoute({
 });
 
 export const rotaDeApagarComentario = defineRoute({
-  operationId: 'deleteMyComment',
+  operationId: 'deleteComment',
   method: 'delete',
   path: '/publications/:publicationRef/comments/:commentRef',
   effects: ['irreversible_write'],
@@ -450,13 +450,16 @@ export function registrarRotasDoMural(
     rotaDeApagarComentario,
     { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const autorDoComentario = await donoAutenticado(request, deps);
+      const chamador = await donoAutenticado(request, deps);
       const { publicationRef, commentRef } = request.params as {
         publicationRef: string;
         commentRef: string;
       };
+      // **Quem chama, e nao "o autor do comentario".** Os dois caminhos de
+      // autorizacao -- autor do comentario, dono da publicacao -- sao
+      // resolvidos na clausula `WHERE` do `UPDATE`, e nao aqui.
       const total = await deps.mural.apagarComentario(
-        autorDoComentario,
+        chamador,
         publicationRef,
         commentRef,
       );

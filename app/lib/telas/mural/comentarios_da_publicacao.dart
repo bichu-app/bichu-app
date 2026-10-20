@@ -35,10 +35,14 @@ import '../casca_com_abas.dart';
 ///
 /// ## O QUE FALTA, E ESTA DITO AQUI PORQUE E AQUI QUE O DANO MORA
 ///
-/// **A DENUNCIA DE COMENTARIO NAO EXISTE.** Medido: os cinco motivos de
+/// **A DENUNCIA DE COMENTARIO NAO EXISTE, E FICAR SEM ELA FOI DECISAO DO
+/// CLIENTE EM 20/10/2026.** Medido: os cinco motivos de
 /// `PublicationReportInput` servem a um comentario sem mudanca nenhuma — o que
 /// falta nao e motivo, e ALVO (`comment_reports`, a sexta perna da fila do
-/// painel, o valor `comment` em `ModerationOrigin` e uma operacao em `safety`).
+/// painel, o valor `comment` em `ModerationOrigin` e uma operacao em `safety`,
+/// que iria de seis para sete). O custo foi levado a ele e ele escolheu deixar
+/// para depois: **nao e esquecimento**, e a data esta aqui para quem ler depois
+/// saber que alguem olhou e decidiu.
 ///
 /// Por isso **nao ha `Denunciar` no `⋮` de um comentario alheio**: um controle
 /// que abrisse uma folha de motivos e terminasse num `404` seria pior do que a
@@ -52,6 +56,7 @@ class ComentariosDaPublicacao extends StatefulWidget {
   const ComentariosDaPublicacao({
     required this.ref,
     required this.interacao,
+    required this.minhaPublicacao,
     super.key,
   });
 
@@ -59,6 +64,18 @@ class ComentariosDaPublicacao extends StatefulWidget {
   final String ref;
 
   final InteracaoDoMural interacao;
+
+  /// Se quem chama e o DONO da publicacao.
+  ///
+  /// **Vem do `mine` da linha do tempo, que vem do SERVIDOR** -- nao de uma
+  /// comparacao de apelido nesta camada. E ele que decide se o `Apagar` nasce
+  /// num comentario de TERCEIRO (decisao do cliente de 20/10/2026): o dono
+  /// limpa a propria casa.
+  ///
+  /// **A trava de verdade e do servidor**, nao desta linha: os dois caminhos de
+  /// autorizacao estao na clausula `WHERE` do `UPDATE` (ADR-0021), e um
+  /// `Apagar` desenhado por engano levaria `404`. Isto decide quem VE a porta.
+  final bool minhaPublicacao;
 
   /// O teto do contrato, COPIADO de la — o MESMO da publicacao, que e o de
   /// `publication_reports.publication_body` e o de `pets.care_notes`.
@@ -238,6 +255,10 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
                             for (final comentario in itens) ...<Widget>[
                               _Comentario(
                                 comentario: comentario,
+                                // O `Apagar` nasce em DOIS casos: o comentario
+                                // e meu, OU a publicacao e minha.
+                                podeApagar: comentario.meu ||
+                                    widget.minhaPublicacao,
                                 aoApagar: () => _apagar(comentario),
                               ),
                               const SizedBox(height: BichuEspaco.e4),
@@ -304,14 +325,33 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
 
 /// Um comentario na lista.
 ///
-/// **O `⋮` so nasce no PROPRIO comentario**, e so com `Apagar`. Nao ha
-/// `Denunciar`: a denuncia de comentario nao existe no contrato, e um controle
-/// que abrisse uma folha de motivos para terminar num `404` seria pior do que a
-/// ausencia — ver o cabecalho de [ComentariosDaPublicacao].
+/// ## O `⋮` nasce em DOIS casos, e so com `Apagar`
+///
+/// 1. o comentario e **meu** -- tirar do ar o que eu escrevi;
+/// 2. a **publicacao** e minha -- decisao do cliente de 20/10/2026: o dono
+///    limpa a propria casa.
+///
+/// **O segundo nao e moderacao**: nao passa por fila, nao tem administrador e
+/// nao tem revisao. E a mesma natureza de bloquear alguem, que o produto trata
+/// como ferramenta pessoal.
+///
+/// **Nao ha `Denunciar`**: a denuncia de comentario nao existe no contrato, e
+/// ficar sem ela foi decisao do cliente no mesmo dia. Um controle que abrisse
+/// uma folha de motivos para terminar num `404` seria pior do que a ausencia —
+/// ver o cabecalho de [ComentariosDaPublicacao].
 class _Comentario extends StatelessWidget {
-  const _Comentario({required this.comentario, required this.aoApagar});
+  const _Comentario({
+    required this.comentario,
+    required this.podeApagar,
+    required this.aoApagar,
+  });
 
   final ComentarioDaPublicacao comentario;
+
+  /// Se o `Apagar` nasce. **Decidido por quem monta**, com `comentario.meu` ou
+  /// `minhaPublicacao` -- os dois vindos do servidor.
+  final bool podeApagar;
+
   final VoidCallback aoApagar;
 
   /// 32 dp, menor que os 40 do cartao: o comentario e uma linha dentro de uma
@@ -375,7 +415,7 @@ class _Comentario extends StatelessWidget {
             ],
           ),
         ),
-        if (comentario.meu)
+        if (podeApagar)
           PopupMenuButton<String>(
             tooltip: 'Opções do comentário',
             itemBuilder: (_) => const <PopupMenuEntry<String>>[

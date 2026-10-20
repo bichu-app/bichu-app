@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1, 2, 3 e 5
+**Status:** aceito, com emendas 1, 2, 3 e 5 (a 4 chega pela mescla — ver abaixo)
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -29,14 +29,13 @@ só mostra publicação de conexão aceita. Nada mais muda: a foto continua fora
 denúncia, fora de toda projeção pública, e o Mural **não** ganha lista de
 pessoas. Ver o fim do documento.
 
-**Não existe emenda 4 neste documento, e o salto é deliberado.** Medido em
-20/10/2026: `# Emenda 4` não aparece em ADR-0010 em **nenhuma** ref deste
-repositório — nem em `origin/development`, nem em ramo de sessão. O número 4
-foi reservado por quem distribui, e inventar uma emenda 4 para fechar o buraco
-seria escrever decisão que ninguém tomou. É o mesmo critério que
-`infra/verificacao/verificar-numero-de-adr.mjs` já aplica aos ADR: ele aprova
-com buraco e anota *"buraco é esperado quando um número foi reservado numa
-branch que ainda não mesclou"*.
+**A emenda 4 é de outra frente e chega pela mescla.** Ela vive em
+`fix/desmarcar-perdido-e-encontrado` (o selo de "encontrado" na listagem
+pública) e não está nesta árvore; **quem juntar as duas atualiza a linha de
+status para `1, 2, 3, 4 e 5`.** A nota existe porque três sessões escrevem
+neste documento no mesmo dia, e a linha de status é o único lugar em que elas
+colidem textualmente — o que é o resultado desejado: a colisão obriga alguém a
+olhar, em vez de uma das duas sobrescrever a outra em silêncio.
 
 ## Contexto
 

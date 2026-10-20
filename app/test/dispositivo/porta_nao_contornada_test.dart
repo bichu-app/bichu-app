@@ -1658,7 +1658,10 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///     `Publicar`;
 ///   - `mural/comentarios_da_publicacao.dart` (NOVO) -- os comentarios, por
 ///     decisao dele de 19/10 (*"curtir e comentar"*), com o carimbo de migracao
-///     `20261020000006`;
+///     `20261020000006`; mais o `Apagar` que o DONO DA PUBLICACAO ve em
+///     comentario de terceiro, por decisao dele de 20/10 -- e que **nao e
+///     moderacao**: nao passa por fila, nao tem administrador e nao tem
+///     revisao;
 ///   - `mural/tela_do_mural.dart` -- o estado inicial honesto virou a linha do
 ///     tempo, porque agora existe `GET /timeline` para desenhar; mais a foto do
 ///     autor (Emenda 5 do ADR-0010, *"tras a foto, algo bem parecido com o
@@ -1683,7 +1686,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
 /// -- COM as chaves, porque em zsh sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo EM SILENCIO.
-const String _arvoreDasTelas = '4d8ad8a36dd84ac3e2c5a4d437cfcda8ca59a52e'; // MURAL, 20/10/2026 (BICHUS-278): a caixa de publicar, a linha do tempo, a acao flutuante, a foto do autor (Emenda 5 do ADR-0010) e os comentarios. Ver o bloco acima. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA.
+const String _arvoreDasTelas = 'bc0506b4956701e29c632733a4b5465a65d14869'; // MURAL, 20/10/2026 (BICHUS-278): a caixa de publicar, a linha do tempo, a acao flutuante, a foto do autor (Emenda 5 do ADR-0010), os comentarios e o `Apagar` do dono da publicacao. Ver o bloco acima. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

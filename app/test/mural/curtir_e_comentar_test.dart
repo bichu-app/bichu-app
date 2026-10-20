@@ -219,6 +219,9 @@ Future<List<http.Request>> montarOsComentarios(
   List<Map<String, dynamic>> comentarios = const <Map<String, dynamic>>[],
   int totalDeComentarios = 0,
   http.Response Function()? respostaDoComentar,
+  // Padrao `false`: a montagem comum e a de quem VISITA a publicacao de outra
+  // pessoa, e e nela que o `Apagar` NAO deve nascer em comentario alheio.
+  bool minhaPublicacao = false,
 }) async {
   tester.view.physicalSize = const Size(420, 2000);
   tester.view.devicePixelRatio = 1;
@@ -240,6 +243,7 @@ Future<List<http.Request>> montarOsComentarios(
       home: ComentariosDaPublicacao(
         ref: refDaPublicacao,
         interacao: MuralApi(api),
+        minhaPublicacao: minhaPublicacao,
       ),
     ),
   );
@@ -498,11 +502,20 @@ void main() {
   });
 
   testWidgets(
-      'ISCA — o `⋮` SO nasce no PROPRIO comentario, e so com `Apagar`',
+      'ISCA — VISITANDO publicacao alheia, o `⋮` so nasce no PROPRIO comentario',
       (tester) async {
-    // Um comentario alheio nao tem menu nenhum: a denuncia de comentario NAO
-    // EXISTE no contrato, e um `Denunciar` que abrisse uma folha de motivos para
-    // terminar num 404 seria pior do que a ausencia.
+    // **O nome diz a MONTAGEM, e isso passou a importar em 20/10/2026:**
+    // `minhaPublicacao` e `false` aqui, isto e, quem olha esta VISITANDO a
+    // publicacao de outra pessoa. Nessa montagem o menu nasce so no proprio
+    // comentario -- e o caso irmao (`CAMINHO 2`) mede a outra, em que o DONO ve
+    // `Apagar` no comentario de terceiro.
+    //
+    // Um nome que dissesse "so nasce no proprio" sem dizer de onde se olha
+    // afirmaria mais do que o caso mede, e envelheceria errado.
+    //
+    // Um comentario alheio nao tem `Denunciar` em montagem nenhuma: a denuncia
+    // de comentario NAO EXISTE no contrato, e um controle que abrisse uma folha
+    // de motivos para terminar num 404 seria pior do que a ausencia.
     await montarOsComentarios(
       tester,
       comentarios: <Map<String, dynamic>>[
@@ -578,6 +591,115 @@ void main() {
     expect(find.text(ComentariosDaPublicacao.tituloVazio), findsOneWidget);
     // UM `BotaoPrimario` na tela: o `Comentar` do pe.
     expect(find.byType(BotaoPrimario), findsOneWidget);
+  });
+
+  // =========================================================================
+  // O DONO DA PUBLICACAO APAGA COMENTARIO DE TERCEIRO (cliente, 20/10/2026)
+  // =========================================================================
+
+  testWidgets(
+      'ISCA — CAMINHO 1: o AUTOR do comentario ve `Apagar` no proprio',
+      (tester) async {
+    await montarOsComentarios(
+      tester,
+      comentarios: <Map<String, dynamic>>[
+        comentario(ref: 'MeuAaAaAaAaAaAaAaAaAa', texto: 'meu', nome: 'Eu', meu: true),
+      ],
+      totalDeComentarios: 1,
+    );
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Apagar'), findsOneWidget);
+  });
+
+  testWidgets(
+      'ISCA — CAMINHO 2: o DONO DA PUBLICACAO ve `Apagar` em comentario de '
+      'TERCEIRO', (tester) async {
+    // Decisao do cliente de 20/10/2026: o dono limpa a propria casa.
+    //
+    // **Isto NAO e moderacao**, e a distincao nao e semantica: nao passa por
+    // fila, nao tem administrador e nao tem revisao. A moderacao de comentario
+    // pelo painel continua nao existindo, e ficar sem ela foi decisao dele no
+    // mesmo dia.
+    //
+    // ISCA: em `_Comentario`, trocar `podeApagar` por `comentario.meu`. O caso
+    // reprova pelo nome -- e e o estado em que esta frente estava antes da
+    // decisao dele.
+    await montarOsComentarios(
+      tester,
+      minhaPublicacao: true,
+      comentarios: <Map<String, dynamic>>[
+        comentario(texto: 'da Joana', nome: 'Joana'),
+      ],
+      totalDeComentarios: 1,
+    );
+    expect(
+      find.byType(PopupMenuButton<String>),
+      findsOneWidget,
+      reason:
+          'o dono da publicacao nao ve `Apagar` no comentario de terceiro: a '
+          'decisao do cliente de 20/10/2026 deixou de valer na tela',
+    );
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Apagar'), findsOneWidget);
+    // E continua SEM `Denunciar`: a denuncia de comentario nao existe.
+    expect(find.text('Denunciar'), findsNothing);
+  });
+
+  testWidgets(
+      'ISCA — RECUSA: o TERCEIRO nao ve `Apagar` em nada', (tester) async {
+    // Nem no comentario alheio, nem em lugar nenhum: ele nao e autor do
+    // comentario nem dono da publicacao. **A trava de verdade e do servidor** --
+    // os dois caminhos estao no `WHERE` --, e esta e a metade que decide quem VE
+    // a porta.
+    //
+    // ISCA: trocar `podeApagar` por `true`. O caso reprova pelo nome, e esse e
+    // o defeito que desenharia um controle cujo unico desfecho e `404`.
+    await montarOsComentarios(
+      tester,
+      comentarios: <Map<String, dynamic>>[
+        comentario(texto: 'da Joana', nome: 'Joana'),
+        comentario(ref: 'OutroAaAaAaAaAaAaAaAa', texto: 'do Pedro', nome: 'Pedro'),
+      ],
+      totalDeComentarios: 2,
+    );
+    expect(
+      find.byType(PopupMenuButton<String>),
+      findsNothing,
+      reason:
+          'apareceu `Apagar` para quem nao e autor do comentario nem dono da '
+          'publicacao: o toque levaria a um 404, e a tela teria mentido',
+    );
+    // E os comentarios continuam inteiros: a ausencia do menu nao esconde texto.
+    expect(find.text('da Joana'), findsOneWidget);
+    expect(find.text('do Pedro'), findsOneWidget);
+  });
+
+  testWidgets(
+      'ISCA — o DONO apagando comentario de terceiro tira da lista e BAIXA o '
+      'contador', (tester) async {
+    // A contagem vem do SERVIDOR (lida das linhas), e nao de um decremento
+    // local: a resposta do `DELETE` devolve `comment_count`.
+    final capturado = await montarOsComentarios(
+      tester,
+      minhaPublicacao: true,
+      comentarios: <Map<String, dynamic>>[
+        comentario(ref: 'DaJoanaAaAaAaAaAaAaAa', texto: 'da Joana', nome: 'Joana'),
+      ],
+      totalDeComentarios: 1,
+    );
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apagar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      caminhosEVerbos(capturado),
+      contains('DELETE /v1/publications/$refDaPublicacao/comments/DaJoanaAaAaAaAaAaAaAa'),
+    );
+    expect(find.text('da Joana'), findsNothing);
   });
 
   // =========================================================================

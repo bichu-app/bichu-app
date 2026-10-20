@@ -687,30 +687,99 @@ void describe('CURTIR E COMENTAR -- o recorte e UM, e a contagem sai das LINHAS'
     );
   });
 
-  void it('ISCA -- apagar comentario resolve pelo AUTOR DO COMENTARIO, e nao pelo da publicacao', () => {
-    // **O dono da publicacao NAO apaga comentario de terceiro.** Isso seria
-    // moderacao-por-dono, ninguem a decidiu, e a decisao de 18/10 poe a
-    // moderacao no administrador e no backoffice. E pergunta aberta no
-    // relatorio desta fatia.
+  void it('ISCA -- apagar comentario tem os DOIS caminhos na clausula, e nenhum acima dela', () => {
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 20/10/2026.** Ele dizia que SO o autor
+    // do comentario apagava, e que o dono da publicacao nao -- e aquilo era o
+    // certo enquanto ninguem havia decidido. A pergunta foi levada ao cliente e
+    // ele decidiu que o dono apaga.
+    //
+    // **O que substituiu nao e "qualquer um apaga": sao DOIS caminhos
+    // nomeados**, os dois no `WHERE`, e um `OR` entre eles. Quem nao esta em
+    // nenhum dos dois nao atinge linha.
     const { sql, parameters } = TODAS.apagarComentario();
     assert.match(sql, /update "?publication_comments"?/i);
-    assert.match(sql, /"?author_user_id"? = \$\d+/);
-    assert.match(sql, /"?publication_id"? = \$\d+/);
     assert.match(sql, /"?public_ref"? = \$\d+/);
+    assert.match(sql, /"?publication_id"? = \$\d+/);
     assert.match(sql, /"?deleted_at"? is null/i);
-    assert.ok(parameters.includes(QUEM_OLHA), 'o autor do comentario nao chegou como parametro');
+    // CAMINHO 1: o autor do comentario.
+    assert.match(
+      sql,
+      /publication_comments\.author_user_id = \$\d+::uuid/,
+      'o caminho do AUTOR DO COMENTARIO saiu do WHERE: ele deixaria de apagar o proprio',
+    );
+    // CAMINHO 2: o dono da publicacao, por `EXISTS` sobre `user_publications`.
+    assert.match(
+      sql,
+      /or exists \(\s*select 1 from user_publications p\s+where p\.id = publication_comments\.publication_id\s+and p\.author_user_id = \$\d+::uuid\)/i,
+      'o caminho do DONO DA PUBLICACAO saiu do WHERE: a decisao do cliente de 20/10 deixaria de valer',
+    );
+    assert.ok(parameters.includes(QUEM_OLHA), 'quem chama nao chegou como parametro');
     assert.ok(!/^delete/i.test(sql.trim()), 'apagar comentario passou a ser DELETE fisico');
   });
 
-  void it('ISCA -- a MUTACAO reprova: o autor removido do apagar-comentario', () => {
+  void it('ISCA -- a MUTACAO reprova: o caminho do AUTOR removido', () => {
     const conferirAutor = (texto: string): void => {
-      assert.match(texto, /"?author_user_id"? = \$\d+/);
+      assert.match(texto, /publication_comments\.author_user_id = \$\d+::uuid/);
     };
     conferirAutor(sqlDo('apagarComentario'));
     aMutacaoTemDeReprovar(
       conferirAutor,
-      sqlDo('apagarComentario').replace(/"author_user_id" = \$\d+/, 'true'),
-      'a conferencia nao enxerga o autor removido: qualquer um apagaria o comentario de qualquer um',
+      sqlDo('apagarComentario').replace(
+        /publication_comments\.author_user_id = \$\d+::uuid/,
+        'false',
+      ),
+      'a conferencia nao enxerga o caminho do autor removido: quem escreveu deixaria de apagar',
+    );
+  });
+
+  void it('ISCA -- a MUTACAO reprova: o caminho do DONO removido', () => {
+    const conferirDono = (texto: string): void => {
+      assert.match(texto, /or exists \(\s*select 1 from user_publications p/i);
+    };
+    conferirDono(sqlDo('apagarComentario'));
+    aMutacaoTemDeReprovar(
+      conferirDono,
+      sqlDo('apagarComentario').replace(/or exists \([\s\S]*?::uuid\)/i, ''),
+      'a conferencia nao enxerga o caminho do dono removido',
+    );
+  });
+
+  void it('ISCA -- a MUTACAO reprova: o `OR` virou `OR true` (qualquer um apaga)', () => {
+    // **A forma mais perigosa do defeito**, porque ela NAO quebra nada na tela:
+    // o dono continua apagando, o autor continua apagando, e um terceiro que e
+    // conexao aceita passa a apagar tambem -- em silencio. Uma conferencia que
+    // so procurasse os dois caminhos ficaria verde.
+    const conferirSemAbertura = (texto: string): void => {
+      assert.ok(
+        !/\bor true\b/i.test(texto),
+        'ha um `OR true` no predicado de apagar comentario: qualquer um que VE a ' +
+          'publicacao passaria a apagar comentario de qualquer um',
+      );
+      assert.ok(
+        !/\bor 1 ?= ?1\b/i.test(texto),
+        'ha um `OR 1=1` no predicado de apagar comentario',
+      );
+    };
+    conferirSemAbertura(sqlDo('apagarComentario'));
+    aMutacaoTemDeReprovar(
+      conferirSemAbertura,
+      sqlDo('apagarComentario').replace('and "deleted_at" is null', 'or true and "deleted_at" is null'),
+      'a conferencia nao enxerga uma abertura do predicado',
+    );
+  });
+
+  void it('ISCA -- o `publication_id` CONTINUA na clausula: ref de outra publicacao nao e atingido', () => {
+    // Sem ele, o dono desta publicacao atingiria um comentario de OUTRA, so
+    // adivinhando o `ref` -- e o `ref` do comentario sai na resposta de
+    // `listPublicationComments` a quem e conexao.
+    const conferirPublicacao = (texto: string): void => {
+      assert.match(texto, /"?publication_id"? = \$\d+/);
+    };
+    conferirPublicacao(sqlDo('apagarComentario'));
+    aMutacaoTemDeReprovar(
+      conferirPublicacao,
+      sqlDo('apagarComentario').replace(/"publication_id" = \$\d+/, 'true'),
+      'a conferencia nao enxerga a publicacao removida da clausula',
     );
   });
 

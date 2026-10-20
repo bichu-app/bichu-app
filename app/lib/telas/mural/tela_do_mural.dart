@@ -542,6 +542,9 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
         builder: (_) => ComentariosDaPublicacao(
           ref: widget.publicacao.ref,
           interacao: widget.interacao,
+          // `mine` da linha do tempo: e ele que decide se o `Apagar` nasce num
+          // comentario de TERCEIRO (decisao do cliente de 20/10/2026).
+          minhaPublicacao: widget.publicacao.minha,
         ),
       ),
     );

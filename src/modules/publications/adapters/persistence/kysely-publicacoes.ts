@@ -482,10 +482,39 @@ export function construtorDosComentarios(
   return consulta.compile();
 }
 
-/** O `UPDATE` que apaga um comentario, **com o AUTOR DELE na clausula**. */
+/**
+ * O `UPDATE` que apaga um comentario, com **DOIS caminhos de autorizacao na
+ * clausula** -- e nenhum deles acima dela (ADR-0021).
+ *
+ * ## Quem apaga, e as duas razoes sao diferentes
+ *
+ * 1. **o AUTOR DO COMENTARIO** apaga o proprio -- tirar do ar o que eu escrevi;
+ * 2. **o DONO DA PUBLICACAO** apaga comentario de terceiro na publicacao DELE
+ *    (decisao do cliente de 20/10/2026).
+ *
+ * **O segundo caminho NAO e moderacao, e a distincao nao e semantica:** nao
+ * passa por fila, nao tem administrador, nao tem revisao, nao tem motivo
+ * obrigatorio e nao gera registro para ninguem olhar depois. E dono limpando a
+ * propria casa, com efeito imediato -- a mesma natureza de `user_blocks`, que a
+ * `20261018000031` descreve como *"ferramenta PESSOAL, nao moderacao"* e que por
+ * isso **nao entra** em `fila_de_moderacao`. A moderacao de comentario pelo
+ * painel continua nao existindo, e ficar sem ela foi decisao do cliente no mesmo
+ * dia -- ver o cabecalho da migracao `20261020000006`.
+ *
+ * ## Por que o `OR` e aqui e nao num `if`
+ *
+ * Os dois caminhos sao UM predicado, e quem nao esta em nenhum dos dois **nao
+ * atinge linha**: terceiro que e conexao aceita chega ate este `UPDATE` (ele VE
+ * a publicacao) e sai com zero linhas afetadas, que a borda transforma em
+ * `404` -- nunca `403`. Com um `if` na camada acima, o caminho novo que
+ * esquecesse a leitura abriria o furo sem nada acusar.
+ *
+ * `publication_id` continua na clausula: ele vem de `alvoVisivel`, e sem ele um
+ * `ref` de comentario de OUTRA publicacao seria atingido pelo dono desta.
+ */
 export function construtorDoApagarComentario(
   db: Kysely<Database>,
-  autorDoComentario: UserId,
+  chamador: UserId,
   publicacaoId: string,
   ref: string,
   agora: Instant,
@@ -495,11 +524,15 @@ export function construtorDoApagarComentario(
     .set({ deleted_at: comoData(agora) })
     .where('public_ref', '=', ref)
     .where('publication_id', '=', publicacaoId)
-    // **O AUTOR DO COMENTARIO, e nao o da publicacao.** O dono da publicacao
-    // NAO apaga comentario de terceiro: isso seria moderacao-por-dono, ninguem a
-    // decidiu, e a decisao de 18/10 poe a moderacao no administrador e no
-    // backoffice. E pergunta aberta no relatorio desta fatia.
-    .where('author_user_id', '=', autorDoComentario)
+    .where(
+      sql<boolean>`(
+        publication_comments.author_user_id = ${chamador}::uuid
+        OR EXISTS (
+          SELECT 1 FROM user_publications p
+           WHERE p.id = publication_comments.publication_id
+             AND p.author_user_id = ${chamador}::uuid)
+      )`,
+    )
     .where('deleted_at', 'is', null)
     .compile();
 }
@@ -933,13 +966,13 @@ export function criarPublicacoesRepository(
       });
     },
 
-    async apagarComentario(autorDoComentario, ref, refDoComentario, agora) {
+    async apagarComentario(chamador, ref, refDoComentario, agora) {
       if (!FORMA_DE_REF.test(ref) || !FORMA_DE_REF.test(refDoComentario)) return undefined;
       return db.transaction().execute(async (trx) => {
-        const alvo = await alvoVisivel(trx, ref, autorDoComentario);
+        const alvo = await alvoVisivel(trx, ref, chamador);
         if (alvo === undefined) return undefined;
         const resultado = await trx.executeQuery(
-          construtorDoApagarComentario(trx as unknown as Kysely<Database>, autorDoComentario, alvo, refDoComentario, agora),
+          construtorDoApagarComentario(trx as unknown as Kysely<Database>, chamador, alvo, refDoComentario, agora),
         );
         if ((resultado.numAffectedRows ?? 0n) === 0n) return null;
         return contarComentarios(trx, alvo);

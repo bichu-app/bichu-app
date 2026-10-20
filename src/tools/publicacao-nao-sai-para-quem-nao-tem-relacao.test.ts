@@ -581,7 +581,11 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
       'commentOnPublication',
       'createPublication',
       'createPublicationPhotoUploadIntent',
-      'deleteMyComment',
+      // Era `deleteMyComment` ate 20/10/2026. O nome mudou com a decisao do
+      // cliente de que o DONO DA PUBLICACAO tambem apaga: com o segundo caminho,
+      // "my" passou a ser falso na metade dos usos -- e `operationId` e o nome
+      // que o cliente gerado carrega. oasdiff: nao quebrante.
+      'deleteComment',
       'deleteMyPublication',
       'getMyTimeline',
       'likePublication',

@@ -231,16 +231,22 @@ export interface PublicacoesRepository {
   ): Promise<{ readonly comentario: ComentarioVisivel; readonly total: number } | undefined>;
 
   /**
-   * Apaga um comentario, **e so o AUTOR DELE apaga**. O dono da publicacao nao
-   * apaga comentario de terceiro -- ver `construtorDoApagarComentario`.
+   * Apaga um comentario. **DOIS caminhos de autorizacao, os dois na clausula
+   * `WHERE`** (ADR-0021): o AUTOR do comentario apaga o proprio, e o DONO da
+   * publicacao apaga comentario de terceiro na publicacao dele (decisao do
+   * cliente de 20/10/2026).
+   *
+   * **O segundo nao e moderacao**: nao passa por fila, nao tem administrador e
+   * nao tem revisao -- e dono limpando a propria casa, com efeito imediato, da
+   * mesma natureza de `user_blocks`. Ver `construtorDoApagarComentario`.
    *
    * `undefined` quando a publicacao nao e visivel; `null` quando ela e visivel
-   * mas o comentario nao foi atingido (de outra pessoa, inexistente, ou ja
-   * apagado) -- os dois viram `404`, e a distincao existe para a borda nao
-   * precisar de uma segunda consulta.
+   * mas o comentario nao foi atingido (de terceiro numa publicacao que nao e de
+   * quem chama, inexistente, ou ja apagado) -- os dois viram `404`, e a
+   * distincao existe para a borda nao precisar de uma segunda consulta.
    */
   apagarComentario(
-    autorDoComentario: UserId,
+    chamador: UserId,
     ref: string,
     refDoComentario: string,
     agora: Instant,

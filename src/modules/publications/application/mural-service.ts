@@ -281,19 +281,20 @@ export class Mural {
   }
 
   /**
-   * Apaga um comentario. **So o autor DELE apaga** -- ver
-   * `construtorDoApagarComentario`.
+   * Apaga um comentario. **Dois caminhos**: o autor do comentario, e o dono da
+   * publicacao (decisao do cliente de 20/10/2026) -- os dois resolvidos na
+   * clausula `WHERE`, ver `construtorDoApagarComentario`.
    *
    * `undefined` (publicacao invisivel) e `null` (comentario nao atingido) sao o
    * MESMO `404`: distinguir revelaria que o comentario existe.
    */
   async apagarComentario(
-    autorDoComentario: UserId,
+    chamador: UserId,
     ref: string,
     refDoComentario: string,
   ): Promise<number> {
     const total = await this.deps.publicacoes.apagarComentario(
-      autorDoComentario,
+      chamador,
       ref,
       refDoComentario,
       this.deps.clock.now(),

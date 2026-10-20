@@ -27,7 +27,12 @@
 --
 -- ## O QUE ESTE ARQUIVO NAO RESOLVE, e esta dito em voz alta
 --
--- **A DENUNCIA DE COMENTARIO NAO EXISTE, e ela precisa de uma fatia propria.**
+-- **A DENUNCIA DE COMENTARIO NAO EXISTE, E FICAR SEM ELA FOI DECISAO DO
+-- CLIENTE EM 20/10/2026.**
+--
+-- Isto nao e esquecimento e nao e divida descoberta depois: a medicao abaixo foi
+-- levada a ele com o custo na mesa, e ele escolheu deixar para depois. A data
+-- esta aqui para quem ler em seis meses saber que alguem olhou e decidiu.
 --
 -- Medido: os CINCO motivos de `publication_reports` servem a um comentario sem
 -- mudanca nenhuma -- `offensive_or_discriminatory`, `scam_or_animal_sale`,
@@ -47,7 +52,11 @@
 --   - o rotulo do alvo novo na tela do painel.
 --
 -- **O que existe enquanto ela nao chega, e nao e nada:** quem comenta apaga o
--- proprio comentario, e **bloquear o autor some com os comentarios dele** --
+-- proprio comentario, **o dono da publicacao apaga comentario de terceiro na
+-- publicacao DELE** (decisao do cliente de 20/10/2026 -- e isso e dono
+-- limpando a propria casa, NAO moderacao: nao passa por fila, nao tem
+-- administrador e nao tem revisao), e **bloquear o autor some com os
+-- comentarios dele** --
 -- `bloqueio_entre` esta no `WHERE` da leitura de comentario, como esta no da
 -- publicacao. O que NAO existe e o administrador agir sobre um comentario.
 -- **Isto e risco conhecido e nao surpresa**, e a decisao do cliente de 18/10 e

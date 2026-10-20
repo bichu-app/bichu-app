@@ -6433,7 +6433,11 @@ export interface paths {
          *     backoffice"* (cliente, 18/10/2026).
          *
          *     **E AQUI ESTA O QUE FALTA, DITO EM VOZ ALTA: A DENUNCIA DE COMENTARIO
-         *     NAO EXISTE.**
+         *     NAO EXISTE, E FICAR SEM ELA FOI DECISAO DO CLIENTE EM 20/10/2026.**
+         *
+         *     A medicao abaixo foi levada a ele com o custo na mesa, e ele escolheu
+         *     deixar para depois. **Nao e esquecimento**, e a data esta aqui para quem
+         *     ler depois saber que alguem olhou e decidiu.
          *
          *     Medido: os CINCO motivos de `PublicationReportInput` servem a um
          *     comentario sem mudanca nenhuma -- um comentario pode ser ofensivo, pode
@@ -6495,16 +6499,37 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Apaga um comentario meu
-         * @description **SO O AUTOR DO COMENTARIO apaga**, e o predicado esta na clausula
-         *     `WHERE` do `UPDATE` (ADR-0021): comentario de outra pessoa, endereco
-         *     inexistente e comentario ja apagado sao o MESMO `404`.
+         * Apaga um comentario
+         * @description **DOIS caminhos de autorizacao, e os dois estao na clausula `WHERE` do
+         *     `UPDATE`** (ADR-0021):
          *
-         *     **O AUTOR DA PUBLICACAO NAO APAGA COMENTARIO DE TERCEIRO**, e a ausencia
-         *     e deliberada: isso seria moderacao-por-dono, ninguem a decidiu, e a
-         *     decisao de 18/10 poe a moderacao no administrador e no backoffice.
-         *     Inventa-la aqui seria responder uma pergunta de produto que nao foi
-         *     feita. **Esta e uma pergunta aberta no relatorio desta fatia.**
+         *     1. o **AUTOR DO COMENTARIO** apaga o proprio -- tirar do ar o que eu
+         *        escrevi;
+         *     2. o **DONO DA PUBLICACAO** apaga comentario de terceiro na publicacao
+         *        DELE -- decisao do cliente de **20/10/2026**.
+         *
+         *     **O nome mudou de `deleteMyComment` para `deleteComment` no mesmo
+         *     commit**, e a troca nao e cosmetica: com o segundo caminho, "my" passou a
+         *     ser falso na metade dos usos, e `operationId` e o nome que o cliente
+         *     gerado carrega.
+         *
+         *     **O SEGUNDO CAMINHO NAO E MODERACAO, e a distincao nao e semantica:** ele
+         *     nao passa por fila, nao tem administrador, nao tem revisao, nao tem
+         *     motivo obrigatorio e nao gera registro para ninguem olhar depois. E dono
+         *     limpando a propria casa, com efeito imediato -- a mesma natureza de
+         *     `blockUser`, que o produto trata como *"ferramenta PESSOAL, nao
+         *     moderacao"* e que por isso nao entra na fila do painel.
+         *
+         *     **A moderacao de comentario pelo painel continua NAO EXISTINDO**, e
+         *     ficar sem ela foi decisao do cliente no mesmo dia -- ver
+         *     `commentOnPublication`. As duas coisas nao se confundem: esta rota nao e
+         *     um substituto dela.
+         *
+         *     **Quem nao esta em nenhum dos dois caminhos nao atinge linha.** Terceiro
+         *     que e conexao aceita chega ate o `UPDATE` (ele VE a publicacao) e sai com
+         *     zero linhas afetadas: comentario de terceiro em publicacao alheia,
+         *     endereco inexistente e comentario ja apagado sao o MESMO `404` --
+         *     **nunca `403`**.
          *
          *     Exclusao LOGICA, pelo molde da publicacao: a linha fica e para de ser
          *     lida. Hoje nenhuma denuncia aponta para ela (a denuncia de comentario nao
@@ -6515,7 +6540,7 @@ export interface paths {
          *     **`200` e nao `204`**: a resposta devolve a contagem que passou a valer,
          *     pelo mesmo motivo de `unlikePublication`.
          */
-        delete: operations["deleteMyComment"];
+        delete: operations["deleteComment"];
         options?: never;
         head?: never;
         patch?: never;
@@ -20407,7 +20432,7 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
-    deleteMyComment: {
+    deleteComment: {
         parameters: {
             query?: never;
             header?: never;

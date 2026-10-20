@@ -2246,9 +2246,10 @@ export interface PublicationLikesTable {
  *   de midia em superficie de terceiro, e nao foi pedido;
  * - **nenhum `parent_comment_id`**: fio de resposta e outro objeto, com outra
  *   leitura e outra paginacao;
- * - **nenhuma denuncia aponta para esta tabela, e isso e o que FALTA.** Os cinco
- *   motivos de `PublicationReportsTable` servem a um comentario sem mudanca; o
- *   que falta e o ALVO. A fatia que fecha isso e `comment_reports` + a sexta
+ * - **nenhuma denuncia aponta para esta tabela, e ficar sem ela foi DECISAO DO
+ *   CLIENTE EM 20/10/2026.** Os cinco motivos de `PublicationReportsTable`
+ *   servem a um comentario sem mudanca; o que falta e o ALVO, e o custo foi
+ *   levado a ele -- nao e esquecimento. A fatia que fecha isso e `comment_reports` + a sexta
  *   perna de `fila_de_moderacao` + `comment` em `ModerationOrigin` + uma
  *   operacao em `safety`. Enquanto ela nao chega: quem comenta apaga o proprio
  *   comentario, e **bloquear o autor some com os comentarios dele**.
