@@ -5,6 +5,8 @@ import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../api/mural_api.dart';
+import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/acoes_de_criar_flutuantes.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
@@ -394,17 +396,23 @@ class AbaRede extends StatelessWidget {
 /// FRENTE**, que roda em paralelo e cria `user_publications`, o contrato e as
 /// operacoes. O nome da rota foi combinado com ela e e estavel: `/mural`.
 ///
-/// ## NAO HA ACAO FLUTUANTE, e a ausencia e a parte cuidada
+/// ## A ACAO FLUTUANTE `Publicar` EXISTE DESDE 20/10/2026
 ///
-/// O desenho previa `Publicar` com `Icons.post_add` no canto. Ela **nao foi
-/// desenhada**, e nao por esquecimento: medido nesta arvore, nao existe
-/// operacao de publicar -- a tabela `user_publications` nao existe e nao ha
-/// rota de linha do tempo nem de publicacao no contrato. Um botao de
-/// `Publicar` abriria o que? O criterio 2 da BICHUS-62 proibe renderizar acao
-/// sem destino, **nem habilitada nem desabilitada**.
+/// A frente de 19/10 **nao** a desenhou, e estava certa: medido naquela arvore,
+/// nao existia operacao de publicar -- `user_publications` nao existia e nao
+/// havia rota de linha do tempo nem de publicacao no contrato. O criterio 2 da
+/// BICHUS-62 proibe renderizar acao sem destino, nem habilitada nem
+/// desabilitada, e um `Publicar` ali abriria o que?
 ///
-/// Quem trouxer a operacao traz a acao com ela, no `acaoDeCriar` desta classe
-/// -- uma linha, no mesmo lugar em que `Rede` tem a sua.
+/// **Agora ela tem destino** (`Rotas.publicarNoMural`, que leva a
+/// `POST /me/publications`), e por isso ela nasce -- no mesmo `acaoDeCriar` em
+/// que `Rede` tem a sua, com `Icons.post_add`, como o desenho previa.
+///
+/// **A REGUA E `podeCriarNaComunidade`** (sessao E e-mail confirmado), a mesma
+/// de `Marcar` e `Indicar`, e pelo mesmo motivo: publicar e escrever no feed de
+/// terceiros, e o servidor recusaria sem canal de contato verificado. Sem
+/// sessao a porta **nao nasce** -- nao nasce desabilitada, porque controle sem
+/// desfecho nao se desenha.
 ///
 /// ## `casca`, e nao `existe` nem `planejada`
 ///
@@ -412,12 +420,38 @@ class AbaRede extends StatelessWidget {
 /// sem conteudo mas com saida real". `existe` obrigaria a secao a ter
 /// conteudo, e ela nao tem; `planejada` a esconderia do build de ENTREGA
 /// (`visiveisEm`), e o cliente pediu o LUGAR dela na barra.
-class AbaMural extends StatelessWidget {
+class AbaMural extends StatefulWidget {
   const AbaMural({super.key});
+
+  @override
+  State<AbaMural> createState() => _AbaMuralState();
+}
+
+class _AbaMuralState extends State<AbaMural> {
+  /// Quantas vezes a pessoa publicou nesta sessao da tela.
+  ///
+  /// Ele vira a `Key` de [CorpoDoMural], e e assim que a linha do tempo recarrega
+  /// depois de publicar: a tela de publicar e IRMA da casca (ela empurra e
+  /// cobre), entao voltar dela nao remonta este ramo -- o `IndexedStack` manteve
+  /// tudo montado. Sem isto a pessoa publicaria, voltaria, e nao veria o que
+  /// acabou de escrever: o defeito que a propria decisao do cliente sobre o
+  /// Mural existe para nao ter.
+  ///
+  /// Uma `Key` nova, e nao um metodo chamado por `GlobalKey`: a `GlobalKey`
+  /// atravessaria a fronteira da tela e deixaria duas donas do mesmo estado.
+  int _publicacoes = 0;
+
+  Future<void> _abrirPublicar() async {
+    final publicou = await context.push<bool>(Rotas.publicarNoMural);
+    if (!mounted) return;
+    if (publicou == true) setState(() => _publicacoes += 1);
+  }
 
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.mural);
+    final escopo = Escopo.of(context);
+    final sessao = escopo.sessao;
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
@@ -427,9 +461,28 @@ class AbaMural extends StatelessWidget {
       // tirar. O texto continua no REGISTRO, porque ele e a outra metade do
       // nome acessivel da aba.
       reforco: null,
-      // **SEM ACAO FLUTUANTE.** Ver a prosa desta classe: nao existe operacao
-      // de publicar nesta arvore.
-      filhos: const <Widget>[CorpoDoMural()],
+      // A PORTA DE PUBLICAR. Ver a prosa desta classe: ela so nasce com sessao
+      // E e-mail confirmado, e nunca desabilitada.
+      acaoDeCriar: podeCriarNaComunidade(sessao)
+          ? AcaoDeCriarFlutuante(
+              icone: Icons.post_add,
+              rotulo: 'Publicar',
+              aoTocar: _abrirPublicar,
+            )
+          : null,
+      filhos: <Widget>[
+        () {
+          // UMA porta, DUAS interfaces estreitas: a tela que desenha nao
+          // alcanca `apagar`, e o cartao que curte nao alcanca `publicar`. E a
+          // mesma fiacao de `Rotas.minhaVitrine`.
+          final porta = MuralApi(escopo.api);
+          return CorpoDoMural(
+            key: ValueKey<int>(_publicacoes),
+            leitura: porta,
+            interacao: porta,
+          );
+        }(),
+      ],
     );
   }
 }

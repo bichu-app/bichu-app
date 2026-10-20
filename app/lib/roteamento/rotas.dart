@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../api/mural_api.dart';
 import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../intencao/caso_de_perdido_como_intencao.dart';
@@ -32,6 +33,7 @@ import '../telas/seguranca/tela_de_bloqueados.dart';
 import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
 import '../telas/pessoa/tela_perfil_de_pessoa.dart';
+import '../telas/mural/publicar_no_mural.dart';
 import '../telas/perfil/vitrine_de_fotos.dart';
 import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
@@ -145,6 +147,18 @@ abstract final class Rotas {
   /// `/pets`. As rotas filhas dela (a publicacao aberta, por exemplo) nascem
   /// SOB este caminho, como `encontros/:slug` nasceu sob `/rede`.
   static const String mural = '/mural';
+
+  /// **Publicar no Mural: IRMA da casca, e nao sob o ramo** (20/10/2026).
+  ///
+  /// Mesma razao de [criarEncontroDaRede] e do assistente de cadastro de pet:
+  /// escrever uma publicacao e TAREFA, e a barra de abas abaixo dela ofereceria
+  /// quatro saidas para o meio do preenchimento -- com uma foto ja enviada e
+  /// nenhum lugar para dizer que ela vai se perder.
+  ///
+  /// **Declarada ANTES do ramo da casca**, como `/rede/encontros/novo` em
+  /// relacao a `/rede`: o `go_router` casa na ordem de registro, e o `/mural`
+  /// do ramo engoliria o segmento se a ordem se invertesse.
+  static const String publicarNoMural = '/mural/publicar';
 
   /// **Indicar um profissional: irma da casca**, pela mesma razao de
   /// [criarEncontroDaRede].
@@ -904,6 +918,26 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `encontros/:slug`, que engolia `encontros/novo` e abria um detalhe
       // inexistente; a rota de detalhe saiu em 19/10/2026 e a ordem ficou,
       // porque ela e de graca e o ramo `/rede` continua acima.
+      GoRoute(
+        path: Rotas.publicarNoMural,
+        builder: (context, estado) {
+          final escopo = Escopo.of(context);
+          // A porta e construida AQUI a partir do `ApiClient` do `Escopo`, como
+          // a da vitrine, a dos bloqueados e as do perfil de pessoa.
+          // Acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de
+          // teste que o constroi, e o `Escopo` esta sendo mexido por outras
+          // frentes nesta mesma rodada.
+          //
+          // **A camera e o envio saem do `Escopo`**: o envio carrega um cliente
+          // HTTP proprio, sem o token da sessao, e um construido aqui seria o
+          // segundo.
+          return PublicarNoMural(
+            escrita: MuralApi(escopo.api),
+            camera: escopo.camera,
+            envio: escopo.envioDeFoto,
+          );
+        },
+      ),
       GoRoute(
         path: Rotas.criarEncontroDaRede,
         builder: (context, estado) => const TelaCriarEncontro(),

@@ -597,7 +597,15 @@ export type PropositoDaImagemDeCatalogo =
   // A VITRINE de fotos do usuario -- ver `migrations/20261018000040`. Separado
   // de `user_photo`: aquele e a foto UNICA do perfil, este sao as ate nove da
   // vitrine, com geometria e tabela de ordem proprias.
-  | 'user_showcase';
+  | 'user_showcase'
+  // A FOTO DE UMA PUBLICACAO DO MURAL (20/10/2026) -- ver
+  // `migrations/20261020000002`. Separado de `user_showcase` pelo mesmo
+  // critério que separou aquele de `user_photo`: a vitrine e uma grade de ate
+  // nove no perfil, com ordem e capa, e esta e UMA foto presa a UM texto, sem
+  // ordem. Um proposito so para os dois obrigaria a derivada a adivinhar qual
+  // tela vai desenhar a imagem -- e a desta tem UMA derivada (`card` 1024) e a
+  // da vitrine tem duas.
+  | 'user_publication';
 
 export interface UploadIntentsTable {
   id: string;
@@ -2127,6 +2135,174 @@ export interface UserBlocksTable {
 }
 
 /**
+ * `user_publications` -- A PUBLICACAO DO MURAL (`20261020000002`).
+ *
+ * **ELA DEIXOU DE SER UM COMENTARIO.** Tres lugares desta base diziam que ela
+ * nao existia, e um deles era o comentario de `publication_id` logo abaixo
+ * neste arquivo. Agora existe, e a chave estrangeira que esperava entrou com
+ * ela -- linha orfa em `publication_reports` nao e mais possivel.
+ *
+ * ## Identidade interna separada da publica (ADR-0024, ADR-0010 item 6)
+ *
+ * `id` e a chave primaria e **nunca sai em resposta**; `public_ref` e o
+ * endereco, 22 simbolos de base64url -- a forma que
+ * `publication_reports.publication_ref` ja cobrava antes de esta tabela
+ * existir, e divergir dela faria a denuncia nao achar o alvo.
+ *
+ * ## `author_user_id` ESTA declarada, e a diferenca importa
+ *
+ * `src/` PRECISA dela na clausula `WHERE`: toda leitura e toda escrita desta
+ * tabela e resolvida por igualdade com quem chama ou por conexao aceita com
+ * quem chama (ADR-0021). O que NAO acontece e ela ser PROJETADA -- nenhuma
+ * leitura a seleciona para a resposta, e o que sai do autor e `handle` e
+ * `display_name`, resolvidos por juncao. Mesma forma de
+ * `UserConnectionsTable.requester_user_id`.
+ *
+ * ## O QUE NAO EXISTE AQUI, e cada ausencia e uma regra
+ *
+ * - **nenhuma coluna de pet.** Ligar a publicacao a ficha de um pet agruparia
+ *   os pets de um tutor, que o item 7 do ADR-0010 proibe e que a Emenda 2 abriu
+ *   **so** para a contagem. Foto de pet e permitida (cliente, 19/10); marcar o
+ *   pet, nao -- e a diferenca e nao haver onde guardar a marca;
+ * - **nenhuma coluna de lugar** (ADR-0006: nao ha geocodificacao);
+ * - **nenhuma coluna de visibilidade.** Ela e UMA -- conexao aceita --, por
+ *   decisao do cliente (*"o que nao pode e ser publico, sem ter nenhum
+ *   relacionamento"*), e uma coluna com um valor possivel e um `if` esperando
+ *   nascer;
+ * - **nenhuma coluna de curtida nem de contador.** Curtir e comentar sao
+ *   decisao do cliente para a primeira versao e **nao foram construidos**: a
+ *   prioridade 4 desta frente pede o proprio carimbo de migracao.
+ */
+export interface UserPublicationsTable {
+  /** Identidade interna. Nunca projetada em resposta (ADR-0010 item 6). */
+  id: string;
+  /**
+   * Quem publicou. Entra no `WHERE` de toda leitura e de toda escrita; **nunca
+   * e projetada**. `ON DELETE CASCADE`: a publicacao morre com o expurgo da
+   * conta, e a denuncia sobrevive porque guarda `publication_ref` e
+   * `publication_body` em COPIA.
+   */
+  author_user_id: string;
+  /** O endereco publico: 128 bits em base64url, 22 simbolos. E ele que sai. */
+  public_ref: string;
+  /**
+   * O texto, **LIVRE**, 1 a 280. Nao ha filtro de palavra aqui nem em `src/`
+   * (cliente: *"deixe o texto livre na timeline"*). 280 e o teto que
+   * `publication_reports.publication_body` ja cobra.
+   */
+  body: string;
+  /**
+   * A foto, opcional e UNICA (`UNIQUE`). `purpose = 'user_publication'`,
+   * conferido pelo caso de uso -- `CHECK` nao alcanca outra tabela.
+   * `ON DELETE SET NULL`: imagem apagada deixa o TEXTO de pe.
+   */
+  image_id: string | null;
+  /**
+   * Rotulo do leitor de tela, **opcional**, 2 a 150, e so com `image_id`. A
+   * faixa e a de `network_event_images.alt_text`, onde ele e obrigatorio; aqui
+   * e opcional porque `body` e `NOT NULL` e o leitor sempre tem o que anunciar.
+   */
+  alt_text: string | null;
+  created_at: Generated<Date>;
+  /**
+   * EXCLUSAO LOGICA, e a denuncia e o motivo: a chave estrangeira de
+   * `publication_reports.publication_id` e `SET NULL`, e um apagamento fisico
+   * deixaria a denuncia aberta sem alvo no meio da fila do painel. Toda leitura
+   * carrega `deleted_at IS NULL` no `WHERE`.
+   */
+  deleted_at: Date | null;
+}
+
+/**
+ * `publication_likes` -- A CURTIDA (`20261020000006`).
+ *
+ * Decisao do cliente de 19/10/2026: *"curtir e comentar"* na primeira versao.
+ *
+ * ## A unicidade e a CHAVE PRIMARIA, e e ela que faz "curtir duas vezes nao
+ * conta duas"
+ *
+ * `PRIMARY KEY (publication_id, user_id)`. Nao e `CHECK`, nao e conferencia em
+ * `src/` e nao e `UPDATE ... count + 1`: sob concorrencia, duas requisicoes
+ * simultaneas da mesma pessoa produzem uma linha e um conflito -- absorvido por
+ * `ON CONFLICT DO NOTHING` na escrita, que e o que torna curtir **idempotente**
+ * sem laco de retentativa. Conferir antes de inserir teria a janela entre a
+ * leitura e a escrita, que e exatamente a janela do toque duplo na tela.
+ *
+ * ## NENHUM `id` proprio, e a ausencia e a defesa
+ *
+ * A curtida nao tem endereco publico e nao sai em resposta individual -- o que
+ * sai dela e a CONTAGEM e o booleano `liked_by_me`. Um `id` aqui seria
+ * identificador sem leitor e, pior, o comeco de uma lista de quem curtiu, que o
+ * item 7 da Emenda 5 do ADR-0010 registra como nao autorizada: *"a decisao de
+ * 19/10 sobre curtir e CONTAGEM, e contagem nao diz quem"*.
+ *
+ * ## Nenhum predicado de visibilidade mora aqui
+ *
+ * Esta tabela e a ARESTA. O recorte -- autor ou conexao aceita, menos bloqueio,
+ * menos ocultacao por denuncia -- e da LEITURA, resolvido na clausula `WHERE`
+ * (ADR-0021). Repeti-lo aqui seria a segunda copia dele.
+ */
+export interface PublicationLikesTable {
+  publication_id: string;
+  /** Quem curtiu. Entra no `WHERE`; **nunca e projetada**. `CASCADE` no expurgo. */
+  user_id: string;
+  created_at: Generated<Date>;
+}
+
+/**
+ * `publication_comments` -- O COMENTARIO (`20261020000006`).
+ *
+ * Molde de `UserPublicationsTable`, coluna por coluna, e a repeticao e o
+ * mecanismo.
+ *
+ * **280 nao e escolha deste tipo**: e o teto do corpo da publicacao, que e o de
+ * `publication_reports.publication_body` e o de `pets.care_notes`. Um quarto
+ * numero para a mesma coisa e o que ninguem consegue explicar depois.
+ *
+ * **TEXTO LIVRE, sem filtro de palavra** -- a decisao do cliente de 18/10 vale
+ * aqui inteira.
+ *
+ * ## O QUE NAO EXISTE, e cada ausencia tem dono
+ *
+ * - **nenhuma coluna de imagem**: comentario com foto seria uma segunda esteira
+ *   de midia em superficie de terceiro, e nao foi pedido;
+ * - **nenhum `parent_comment_id`**: fio de resposta e outro objeto, com outra
+ *   leitura e outra paginacao;
+ * - **nenhuma denuncia aponta para esta tabela, e ficar sem ela foi DECISAO DO
+ *   CLIENTE EM 20/10/2026.** Os cinco motivos de `PublicationReportsTable`
+ *   servem a um comentario sem mudanca; o que falta e o ALVO, e o custo foi
+ *   levado a ele -- nao e esquecimento. A fatia que fecha isso e `comment_reports` + a sexta
+ *   perna de `fila_de_moderacao` + `comment` em `ModerationOrigin` + uma
+ *   operacao em `safety`. Enquanto ela nao chega: quem comenta apaga o proprio
+ *   comentario, e **bloquear o autor some com os comentarios dele**.
+ */
+export interface PublicationCommentsTable {
+  /** Identidade interna. Nunca projetada (ADR-0010 item 6). */
+  id: string;
+  /**
+   * A publicacao. `ON DELETE CASCADE`: o expurgo da conta apaga a publicacao de
+   * verdade e leva os comentarios. A exclusao LOGICA da publicacao **nao**
+   * dispara o cascade (ela e um `UPDATE`): os comentarios ficam e param de ser
+   * lidos, porque a leitura exige a publicacao viva.
+   */
+  publication_id: string;
+  /** Quem comentou. Entra no `WHERE`; **nunca e projetada**. */
+  author_user_id: string;
+  /** O endereco publico: 22 simbolos, a MESMA forma de `user_publications`. */
+  public_ref: string;
+  /** O texto, **LIVRE**, 1 a 280. Sem filtro de palavra. */
+  body: string;
+  created_at: Generated<Date>;
+  /**
+   * EXCLUSAO LOGICA, pelo molde da publicacao. Fica logica mesmo sem denuncia
+   * apontando para ela hoje, por duas razoes: a simetria, e o dia em que
+   * `comment_reports` existir -- naquele dia a chave estrangeira dela encontra a
+   * linha de pe, sem migracao de dado.
+   */
+  deleted_at: Date | null;
+}
+
+/**
  * As TRES tabelas de denuncia desta fatia usam a MESMA
  * `DecisaoDaModeracao` declarada acima (a da fila de `20261018000009`):
  * mesma forma e mesmos dois valores -- um estado de espera
@@ -2185,9 +2361,11 @@ export interface PhotoReportsTable extends DenunciaDaComunidade {
 /** Denuncia de PUBLICACAO: cinco motivos, e a terceira lista e so deste produto. */
 export interface PublicationReportsTable extends DenunciaDaComunidade {
   /**
-   * SEM chave estrangeira: `user_publications` e de outra fatia e nao existe
-   * nesta base. O `ALTER` de uma linha que a liga esta no fim da
-   * `20261018000032`.
+   * A publicacao denunciada. **A CHAVE ESTRANGEIRA ENTROU EM 20/10/2026**
+   * (`20261020000002`), pela linha que a `20261018000032` deixou escrita e
+   * comentada: `user_publications` passou a existir. **Linha orfa nao e mais
+   * possivel.** `ON DELETE SET NULL`, e nao `CASCADE`: a denuncia e o unico
+   * registro desta frente que sobrevive ao expurgo.
    */
   publication_id: string | null;
   publication_ref: string;
@@ -2290,6 +2468,9 @@ export interface Database {
   store_item_tags: StoreItemTagsTable;
   store_item_images: StoreItemImagesTable;
   user_showcase_images: UserShowcaseImagesTable;
+  user_publications: UserPublicationsTable;
+  publication_likes: PublicationLikesTable;
+  publication_comments: PublicationCommentsTable;
   network_events: NetworkEventsTable;
   network_event_bring_items: NetworkEventBringItemsTable;
   network_event_sizes: NetworkEventSizesTable;

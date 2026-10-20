@@ -48,3 +48,26 @@ export function comoData(instante: Instant): Date {
 export function comoIso(instante: Instant): string {
   return new Date(instante).toISOString();
 }
+
+/**
+ * O caminho de VOLTA: um texto ISO-8601 vira `Instant`, ou `undefined` quando
+ * não é data.
+ *
+ * Mora aqui pela MESMA razão de `comoData`, e a terceira direção da mesma
+ * regra. `new Date(texto)` não lê relógio nenhum — é conversão de um valor que
+ * chegou de fora —, mas o lint o proíbe em `domain/` e `application/` com
+ * razão, porque distinguir `new Date(x)` de `new Date()` por inspeção é
+ * exatamente o tipo de exceção que para de valer no dia em que `x` fica opcional.
+ *
+ * Quem precisa disto é o cursor da linha do tempo
+ * (`publications/domain/publicacao.ts`): o cursor viaja como texto e volta, e
+ * sem um caminho declarado aquele arquivo inventaria uma supressão de lint.
+ *
+ * **`undefined` e não exceção**, e não `NaN`: cursor ilegível é `400` com campo,
+ * decidido pela borda, e um `Instant` que vale `NaN` atravessaria a borda e
+ * chegaria ao `WHERE` da consulta.
+ */
+export function comoInstante(iso: string): Instant | undefined {
+  const milissegundos = new Date(iso).getTime();
+  return Number.isNaN(milissegundos) ? undefined : (milissegundos as Instant);
+}

@@ -170,6 +170,36 @@ export const MODULES = [
   // marcador de "ja vi" por area. Ela e deste modulo e de mais ninguem --
   // `lostfound`, `network` e `professionals` nunca a leem.
   'sections',
+  // 20/10/2026, pedido do cliente: *"na secao do mural, nao tem a caixa de
+  // texto para o usuario escrever uma mensagem, subir uma foto e publicar o
+  // conteudo"*. O MURAL e modulo proprio, e a razao e de fronteira e de
+  // privacidade.
+  //
+  // DE FRONTEIRA: `network` e de ENCONTROS (um lugar, uma data, um publico) e
+  // `showcase` e de uma GALERIA ORDENADA de ate nove fotos do perfil, com capa
+  // e reordenacao. A publicacao e outra coisa: UM texto livre com no maximo UMA
+  // foto, sem ordem, cujo recorte de leitura e "quem e conexao aceita de quem
+  // chama". Dentro de qualquer um dos dois ela viraria um segundo dominio sem
+  // fronteira -- o mesmo argumento que `transfers` registra.
+  //
+  // DE PRIVACIDADE, e e a que decide: a leitura deste modulo e a UNICA deste
+  // produto que mostra conteudo de uma pessoa a outra a partir de
+  // `user_connections`. Manter a fronteira e o que garante que ninguem a
+  // alcance a nao ser por `ports/` -- onde a linha do tempo devolve
+  // PUBLICACOES e nao pessoas, e onde nao existe metodo que liste as conexoes
+  // de alguem.
+  //
+  // **Nenhuma leitura nova de conexao em TypeScript**, e isso tambem e
+  // fronteira: `LeitorDeConexao` NAO e chamado daqui. O predicado de conexao
+  // aceita e SQL, na clausula `WHERE` da consulta (ADR-0021), pela mesma razao
+  // que a Emenda 3 do ADR-0010 registra para a foto na conversa -- uma pagina
+  // carrega vinte publicacoes, e perguntar a aresta por publicacao seriam vinte
+  // idas ao banco por rolada, alem de mover o recorte para a memoria.
+  //
+  // Ele conversa com `media` SO por `media/ports/imagem-de-catalogo.ts`: a
+  // esteira de imagem e uma so (ADR-0007), e a foto da publicacao e o SETIMO
+  // proposito dela.
+  'publications',
 ];
 
 /**
