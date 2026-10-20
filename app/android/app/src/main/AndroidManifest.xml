@@ -1,5 +1,49 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- REDE. A permissao de que o produto INTEIRO depende, e a unica aqui que
+         nao tem dialogo nem pergunta: ela e concedida na instalacao.
+
+         ELA NAO ESTAVA NESTE ARQUIVO ATE 19/10/2026, e o jeito como ela
+         funcionava mesmo assim e a razao deste comentario ser longo.
+
+         O conjunto declarado aqui era so `CAMERA` e `ACCESS_COARSE_LOCATION`.
+         No APK de release a `INTERNET` aparecia — medida no manifesto merged
+         (`app/build/app/intermediates/merged_manifest/release/`) — porque ela
+         chegava pelo MERGE do manifesto do `firebase_messaging`, que a declara
+         no manifesto do proprio plugin junto com `WAKE_LOCK`,
+         `ACCESS_NETWORK_STATE` e `POST_NOTIFICATIONS`.
+
+         Os dois lugares onde ela ESTAVA escrita — `src/debug/` e
+         `src/profile/` — sao os manifestos que o `flutter create` gera por
+         padrao, e nenhum dos dois vale para release.
+
+         Ou seja: a capacidade de rede do produto estava pendurada num plugin de
+         PUSH. O app chama a nossa API em `API_BASE_URL` em cada tela. Tirar o
+         `firebase_messaging`, troca-lo, ou ele mudar o manifesto dele numa
+         versao nova, e o APK de release sai sem `INTERNET`.
+
+         E O SINTOMA NAO E ERRO DE BUILD: `flutter build apk` sai 0, o APK
+         instala, o app abre, e toda chamada de rede falha em producao. Pior,
+         nem parece defeito de permissao: a `ApiClient` captura
+         `SocketException` e mostra "sem conexao", a mesma tela de quem esta no
+         metro.
+
+         `ACCESS_NETWORK_STATE`: NAO DECLARADA, e isso e decisao, nao descuido
+         de simetria. Ela tambem vem do `firebase_messaging`, mas nenhuma linha
+         do Bichu consulta o `ConnectivityManager`: nao ha `connectivity_plus`
+         no `pubspec.yaml`, e a deteccao de "sem conexao" do produto le o socket
+         (`SocketException`/`ClientException`/`HandshakeException`), que
+         funciona sem a permissao. Quem a usa e o reenvio do proprio plugin: se
+         ele sair, ela deve sair com ele. Declara-la aqui seria pedir permissao
+         que o produto nao usa, que e o excesso que o resto deste arquivo evita.
+
+         Cobrada por `app/test/dispositivo/permissoes_de_loja_test.dart`, no
+         caso `INTERNET esta declarada no manifesto main, nao herdada de
+         plugin`. Aquele caso mede ESTE arquivo e nao o merged, de proposito: o
+         merged fica verde hoje: o que se cobra e que a permissao nao DEPENDA do
+         merge. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- CAMERA (BICHUS-161). A justificativa de uso vive no texto da ficha da
          Play Console e no `NSCameraUsageDescription` do iOS; aqui fica a
          declaracao tecnica e a razao de ela existir.
