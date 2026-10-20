@@ -148,10 +148,27 @@ class TelaSugerirProfissional extends StatefulWidget {
   /// veio a indicacao de um estabelecimento de verdade. Copiar a frase de la
   /// prometeria uma publicacao que esta tela acabou de passar tres paragrafos
   /// dizendo que nao acontece.
+  /// **UMA COPIA SO DO TEXTO, e isto e o colapso da mescla de 20/10/2026.**
+  ///
+  /// O #40 (esta tela avisa ANTES do formulario) e o #49 (a frase do `409`
+  /// nomeia a rota que recusou) nasceram em sessoes que nao se enxergavam, e os
+  /// dois escreveram a MESMA frase em lugares diferentes -- o #49 copiou a
+  /// redacao do #40 em vez de reescrever, e os dois deixaram a duplicacao de
+  /// proposito para nao criar conflito entre os PRs. Medido na arvore mesclada
+  /// antes de colapsar: os dois literais eram iguais caractere a caractere.
+  ///
+  /// Nao houve decisao de microcopy aqui, so de estrutura. O texto mora em
+  /// [MensagensDeErro.canalNaoVerificadoParaIndicar], que e o vocabulario do
+  /// `409 contact-channel-unverified` desta rota, e esta tela o REUSA: o aviso
+  /// previo e a recusa do servidor dizem a mesma coisa porque sao a mesma
+  /// coisa, uma antes e outra depois da chamada. Duas copias terminariam
+  /// divergindo numa revisao de texto que mexesse numa e nao na outra, e a que
+  /// divergisse seria a que ninguem percebe.
+  ///
+  /// O NOME daqui fica, e nao e cerimonia: ha teste que o referencia, e manter
+  /// o apelido da tela deixa o colapso sem efeito em quem chama.
   static const String semEmailConfirmado =
-      'Confirme seu e-mail antes de indicar. A indicação fala de um '
-      'estabelecimento de verdade, e quem confere precisa saber de quem ela '
-      'veio.';
+      MensagensDeErro.canalNaoVerificadoParaIndicar;
 
   static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
 
