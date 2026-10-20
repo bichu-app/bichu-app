@@ -1,0 +1,1223 @@
+// A BARRA NOVA, A `Rede` REUNIDA E A GAVETA OCULTA — as decisoes do cliente de
+// 19/10/2026, com portão para cada uma.
+//
+// Este arquivo guarda SETE iscas. Nenhuma delas é uma afirmação sobre o
+// código-fonte: todas medem a árvore montada, a geometria renderizada ou o
+// registro que a produção lê. A vacuidade é o defeito recorrente deste
+// repositório -- `findsNothing` sobre texto que a tela já não dizia, rótulo de
+// semântica vazio, portão de fonte que lia a PALAVRA
+// `AlwaysScrollableScrollPhysics` em vez do comportamento --, e cada grupo
+// abaixo diz, por escrito, COMO desligá-lo para ver reprovar.
+//
+// ---------------------------------------------------------------------------
+// AS DECISÕES
+// ---------------------------------------------------------------------------
+//
+// 1. A barra de baixo é `Pets · Rede · Mural · Loja · AuAu`, nesta ordem.
+// 2. `Perto` deixa de ser seção. A seção reunida é `Rede`, com as abas
+//    `Eventos` e `Comunidade` -- esta última é o que era `Perto`.
+// 3. `Próximos`, `Encerrados` e `Meus pedidos` viram FILTRO, não abas.
+//    `Minhas indicações` vira porta própria.
+// 4. `Mural` é a seção de publicações. Esta frente criou só o LUGAR dela.
+// 5. Busca primeiro, gatilho de filtro à DIREITA (reverte 18/10).
+// 6. A gaveta é OCULTADA, a foto da pessoa vai para o slot do hamburguer e o
+//    sino fica sozinho à direita.
+// 7. `Pets` ganha ação flutuante com as três ações que a gaveta perdeu.
+//
+// O portão da decisão 6 que mede a AUSÊNCIA da gaveta vive em
+// `casca_de_cinco_secoes_test.dart` (a isca invertida pela terceira vez, junto
+// das outras três inversões dela). Aqui está a metade que importa mais: que
+// ocultar o menu **não perdeu função**.
+
+import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/achado/tela_registrar_achado.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
+import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
+import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
+import 'package:bichu/telas/pet/tela_cadastrar_identificacao.dart';
+import 'package:bichu/telas/seguranca/tela_de_bloqueados.dart';
+import 'package:bichu/telas/gaveta_de_secoes.dart';
+import 'package:bichu/telas/mural/tela_do_mural.dart';
+import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/perto/minhas_indicacoes.dart';
+import 'package:bichu/telas/rede/agenda_da_rede.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
+import 'package:bichu/theme/bichu_tokens.g.dart';
+import 'package:bichu/widgets/acoes_de_criar_flutuantes.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
+import 'package:bichu/widgets/item_de_menu.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+
+import 'package:bichu/api/modelos.dart';
+
+import '../rede/fixtures_da_rede.dart' as rede_fix;
+import 'ajuda_de_tela.dart';
+import 'casca_de_cinco_secoes_test.dart' show carregarInter;
+import 'loja_com_dados_test.dart' as loja_fix;
+import 'minhas_indicacoes_test.dart' as indicacoes_fix;
+import 'perdidos_e_meus_achados_test.dart' as perdidos_fix;
+import 'perto_com_dados_test.dart' as perto_fix;
+
+/// Uma rede que responde às CINCO listagens de uma vez, cada uma com um item.
+///
+/// **Ela existe porque a isca da inversão precisa das cinco TELAS**, e não de
+/// um `LinhaDeBuscaDaListagem` montado solto: a decisão é de que a inversão
+/// aconteça num lugar só, e isso só é provado abrindo as cinco telas de
+/// verdade e medindo a geometria de cada uma. Um caso que montasse o
+/// componente provaria que o componente inverteu -- não que as telas o usam.
+///
+/// **Os corpos vêm dos fixtures já versionados de cada tela**, por importação
+/// com prefixo, e não de JSON escrito aqui: um corpo inventado neste arquivo
+/// divergiria do contrato na primeira mudança dele, e a isca passaria a medir
+/// uma tela em estado de falha -- que não desenha barra de listagem nenhuma.
+Future<http.Response> redeDasCincoListagens(http.Request req) async {
+  final caminho = req.url.path;
+  if (req.method != 'GET') return problema('not-found', 404);
+  switch (caminho) {
+    case '/v1/directory/entries':
+      return json200(
+        perto_fix.paginaDoContrato(
+          <Map<String, dynamic>>[perto_fix.entradaDoContrato()],
+          distanciaDisponivel: false,
+        ),
+      );
+    case '/v1/directory/suggestions':
+      return json200(
+        indicacoes_fix.paginaDoContrato(
+          <Map<String, dynamic>>[indicacoes_fix.indicacaoDoContrato()],
+        ),
+      );
+    case '/v1/store/items':
+      return json200(
+        loja_fix.paginaDoContrato(
+          <Map<String, dynamic>>[loja_fix.itemDoContrato()],
+        ),
+      );
+    case '/v1/store/taxonomy':
+      return json200(loja_fix.taxonomiaDoContrato());
+    case '/v1/public/lost-pets':
+      return json200(
+        perdidos_fix.paginaDePerdidos(
+          <Map<String, dynamic>>[
+            perdidos_fix.perdidoDoContrato(vistoEm: '2026-10-18T12:00:00Z'),
+          ],
+        ),
+      );
+    case '/v1/network/events':
+      return json200(
+        rede_fix.pagina(
+          <Map<String, dynamic>>[rede_fix.encontroPublico()],
+        ),
+      );
+    case '/v1/network/events/nearby':
+      return json200(
+        rede_fix.paginaPorPerto(<Map<String, dynamic>>[
+          rede_fix.porPerto(rede_fix.encontroPublico(), 1200),
+        ]),
+      );
+    case '/v1/network/join-requests':
+      return json200(
+        rede_fix.paginaDePedidos(const <Map<String, dynamic>>[]),
+      );
+    case '/v1/pets':
+      return json200(<String, dynamic>{'items': <dynamic>[]});
+  }
+  return problema('not-found', 404);
+}
+
+/// Os rótulos das abas que a tela da frente pinta, na ordem desenhada.
+List<String> abasNaTela(WidgetTester tester) => tester
+    .widgetList<Tab>(find.byType(Tab))
+    .map((t) => t.text ?? '')
+    .toList(growable: false);
+
+/// Os títulos dos grupos da folha de filtro ABERTA.
+///
+/// Lidos da árvore montada, e não da lista que a tela constrói: um caso que
+/// lesse `_controleDeFiltro()` provaria que a função devolve o grupo, e não
+/// que a pessoa o vê.
+List<String> gruposDaFolha(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Text),
+      ),
+    )
+    .map((t) => t.data ?? '')
+    .where((t) => t.isNotEmpty)
+    .toList(growable: false);
+
+/// Abre a folha de filtro da tela da frente pelo gatilho do corpo.
+Future<void> abrirAFolha(WidgetTester tester) async {
+  final gatilho = find.byType(GatilhoDeRecorteNoCorpo);
+  expect(
+    gatilho,
+    findsOneWidget,
+    reason: 'REPROVA: não há gatilho de filtro no corpo da tela. Sem ele a '
+        'folha não abre por caminho nenhum, e os recortes que absorveram as '
+        'abas ficariam inalcançáveis.',
+  );
+  await tester.tap(gatilho);
+  await tester.pumpAndSettle();
+}
+
+
+/// Abre `Minhas indicações` pela porta no pé da aba `Comunidade`.
+Future<void> abrirAsMinhasIndicacoes(WidgetTester t) async {
+        await t.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await t.pumpAndSettle();
+        await t.tap(find.widgetWithText(Tab, 'Comunidade'));
+        await t.pumpAndSettle();
+        // Pelo `ItemDeMenu` e nao pelo texto: `find.text` acha tambem o
+        // titulo da barra de topo depois de navegar.
+        final porta = find.widgetWithText(
+          ItemDeMenu,
+          SecaoDaRede.rotuloDasMinhasIndicacoes,
+        );
+        // **`ensureVisible` e nao `scrollUntilVisible`, e a troca conserta um
+        // defeito MEDIDO.** `scrollUntilVisible` sem `scrollable:` resolve o
+        // rolavel por `find.byType(Scrollable)` e exige que haja **um**; a
+        // `TabBar` da `Rede` virou ROLAVEL em 19/10 (`isScrollable: true`,
+        // para `Comunidade` nao cortar a 200%), e com ela ha DOIS rolaveis na
+        // tela -- o erro foi `Bad state: Too many elements`, que nao diz nada
+        // sobre a causa. `ensureVisible` acha o rolavel ANCESTRAL do alvo, que
+        // e sempre o certo.
+        await t.ensureVisible(porta);
+        await t.pumpAndSettle();
+        await t.tap(porta);
+        await t.pumpAndSettle();
+      }
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // **A `Inter` DE VERDADE, e sem ela TODA MEDIDA DESTE ARQUIVO E OUTRA.**
+  //
+  // O ambiente de teste do Flutter usa uma fonte sintetica de largura
+  // UNIFORME: cada caractere mede o mesmo, nenhuma quebra nunca acontece, e
+  // uma isca de largura aprova qualquer rotulo. **Medido aqui, numa bancada
+  // descartavel sem esta linha:** `Eventos` deu exatos 126,00 dp e
+  // `Comunidade` exatos 180,00 -- 18,00 dp por caractere nos dois, que e a
+  // assinatura da fonte sintetica. Com a `Inter` os numeros nao sao multiplos
+  // da contagem de letras.
+  //
+  // A UX perdeu uma passada inteira exatamente assim (UX 27.1), e e a razao
+  // pela qual `carregarInter` REPROVA em vez de seguir calada quando nao acha
+  // o arquivo da fonte.
+  setUpAll(carregarInter);
+
+  // =========================================================================
+  // ISCA (a) — A BARRA TEM OS CINCO, NESTA ORDEM
+  // =========================================================================
+  group('(a) a barra de baixo é `Pets · Rede · Mural · Loja · AuAu`', () {
+    // DESLIGAMENTO: troque a ordem de duas entradas de `CascaComAbas.destinos`
+    // em `casca_com_abas.dart`, ou apague a entrada do `Mural`. O primeiro
+    // caso reprova no primeiro passo; o segundo, nos dois.
+    testWidgets('os cinco rótulos PINTADOS, na ordem desenhada',
+        (tester) async {
+      await abrirOApp(tester, rede: redeDasCincoListagens);
+
+      // **A ORDEM SAI DA GEOMETRIA, e não da lista de `destinations`.** Ler a
+      // lista provaria que a lista está na ordem; o que a pessoa toca é o que
+      // está mais à esquerda na tela, e uma `Row` em `rtl` inverteria o
+      // desenho sem mexer na lista.
+      final slots = <(double, String)>[];
+      for (final e in find.byType(NavigationDestination).evaluate()) {
+        final d = e.widget as NavigationDestination;
+        slots.add((tester.getRect(find.byWidget(d)).left, d.label));
+      }
+      slots.sort((a, b) => a.$1.compareTo(b.$1));
+
+      expect(
+        slots.map((s) => s.$2).toList(),
+        <String>['Pets', 'Rede', 'Mural', 'Loja', 'AuAu'],
+        reason: 'REPROVA: a barra de baixo não desenha os cinco destinos na '
+            'ordem que o cliente pediu em 19/10/2026. A ordem foi lida da '
+            'POSIÇÃO de cada slot na tela, da esquerda para a direita.',
+      );
+    });
+
+    testWidgets('e tocar em cada um abre a seção dele, e não a do vizinho',
+        (tester) async {
+      // **ESTE CASO É O QUE PEGA A DIVERGÊNCIA ENTRE O REGISTRO E OS RAMOS.**
+      // A casca traduz a posição tocada na barra para o índice do ramo pelo
+      // registro; trocar só uma das duas listas faz tocar em `Mural` abrir a
+      // `Rede`, CALADO -- a barra acende o slot certo e o corpo é o errado.
+      //
+      // O caso anterior, sozinho, fica verde nesse defeito.
+      await abrirOApp(tester, rede: redeDasCincoListagens);
+
+      const corpoEsperado = <String, Type>{
+        'Rede': SecaoDaRede,
+        'Mural': CorpoDoMural,
+      };
+      for (final (rotulo, tipo) in corpoEsperado.entries.map(
+        (e) => (e.key, e.value),
+      )) {
+        await tester.tap(
+          find.widgetWithText(NavigationDestination, rotulo),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(tipo),
+          findsOneWidget,
+          reason: 'REPROVA: tocar em `$rotulo` não montou $tipo. A ordem dos '
+              'ramos de `rotas.dart` e a ordem de `CascaComAbas.destinos` '
+              'divergiram, e o toque abre a seção do vizinho em silêncio.',
+        );
+        // E o título da barra de topo é a MESMA palavra do rótulo (UX 25.7.2).
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(rotulo),
+          ),
+          findsOneWidget,
+          reason: 'REPROVA: a barra de topo de `$rotulo` não diz `$rotulo`. A '
+              'mesma palavra nos dois lugares é o que faz a casca servir para '
+              'conferir nomenclatura.',
+        );
+      }
+    });
+  });
+
+  // =========================================================================
+  // ISCA (b) — `Perto` NÃO EXISTE MAIS, E NÃO HÁ ROTA ÓRFÃ
+  // =========================================================================
+  group('(b) não há rota órfã para a seção que saiu', () {
+    // DESLIGAMENTO: devolva `static const String perto = '/perto';` a
+    // `Rotas`, registre o ramo de novo em `rotas.dart` e reponha a entrada no
+    // registro de seções. Cada passo reprova um caso daqui.
+    test('`Perto` não está no registro de seções', () {
+      final destinos = CascaComAbas.destinos;
+      // A guarda contra o verde por vazio: um registro vazio satisfaz
+      // "`Perto` não está nele" sem nunca ter olhado para uma seção.
+      expect(
+        destinos,
+        hasLength(6),
+        reason: 'REPROVA: o registro tem ${destinos.length} entrada(s) e não '
+            '6 (as cinco da barra mais a conta). Com outro número, as '
+            'afirmações abaixo medem outra barra.',
+      );
+      expect(
+        destinos.where((d) => d.rotulo == 'Perto' || d.rota == '/perto'),
+        isEmpty,
+        reason: 'REPROVA: `Perto` voltou ao registro de seções.',
+      );
+    });
+
+    test('nenhuma rota de seção nem de ramo começa por `/perto`', () {
+      // **SOBRE O REGISTRO E SOBRE OS RAMOS, que são listas diferentes.** A
+      // entrada do registro pode existir sem ser ramo (é o caso de `AuAu`), e
+      // o ramo é o que o `IndexedStack` monta.
+      final comPrefixo = <String>[
+        for (final d in CascaComAbas.destinos)
+          if (d.rota.startsWith('/perto')) '${d.rotulo} -> ${d.rota}',
+        for (final d in CascaComAbas.ramosDoRegistro)
+          if (d.rota.startsWith('/perto')) 'ramo ${d.rotulo} -> ${d.rota}',
+      ];
+      expect(
+        comPrefixo,
+        isEmpty,
+        reason: 'REPROVA: $comPrefixo. A seção `Perto` deixou de existir, e um '
+            'endereço que começa por `/perto` é uma rota órfã: o roteador a '
+            'conhece, nenhum destino da barra a alcança, e ela abriria uma '
+            'seção que o produto não tem mais.',
+      );
+    });
+
+    test('as duas rotas que viviam SOB `/perto` mudaram de prefixo, e vivem',
+        () {
+      // **A AUSÊNCIA SOZINHA NÃO É A ENTREGA.** Apagar `/perto` e deixar as
+      // duas telas sem endereço passaria no caso acima e teria quebrado o
+      // produto: a ficha de um local e o formulário de indicar continuam
+      // existindo. Este caso cobra que elas tenham endereço NOVO.
+      expect(
+        Rotas.sugerirProfissional,
+        '/rede/indicacoes/nova',
+        reason: 'REPROVA: a rota de indicar um profissional não mudou de '
+            'prefixo. Em `/perto/...` ela mantém vivo o primeiro segmento de '
+            'uma seção que não existe.',
+      );
+      expect(
+        Rotas.minhasIndicacoes,
+        '/rede/indicacoes',
+        reason: 'REPROVA: `Minhas indicações` não tem o endereço esperado. '
+            'Ela virou porta própria e precisa de rota -- como aba, ela não '
+            'tinha nenhuma.',
+      );
+      expect(
+        Rotas.localDoPertoDe('clinica-exemplo'),
+        '/rede/locais/clinica-exemplo',
+        reason: 'REPROVA: o montador do endereço da ficha de um local ainda '
+            'escreve `/perto/...`. Ele monta o caminho ABSOLUTO, e um prefixo '
+            'velho aqui dá uma rota que não existe -- em silêncio, e só no '
+            'toque do cartão.',
+      );
+    });
+
+    testWidgets('e `/perto` não resolve: ele cai no desvio de rota desconhecida',
+        (tester) async {
+      // **A PROVA DE COMPORTAMENTO, e é ela que fecha o grupo.** As três
+      // afirmações acima são sobre constantes; esta abre o endereço de
+      // verdade no roteador do app e cobra que ele não monte uma seção.
+      await abrirOApp(tester, rede: redeDasCincoListagens);
+      // O roteador sai de um elemento da arvore montada, como os outros
+      // casos deste repositorio fazem (`casca_de_cinco_secoes_test.dart`).
+      GoRouter.of(tester.element(find.byType(CascaComAbas))).go('/perto');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Perto'),
+        ),
+        findsNothing,
+        reason: 'REPROVA: `/perto` abriu uma tela com o título `Perto`. A '
+            'seção não existe, e um endereço que ainda a monta é a rota órfã '
+            'que este grupo existe para impedir.',
+      );
+      expect(
+        find.byType(ListaDoDiretorio),
+        findsNothing,
+        reason: 'REPROVA: `/perto` abriu a lista do diretório. Ela mora na '
+            'aba `Comunidade` da `Rede`, e um segundo endereço para ela é a '
+            'segunda definição de onde ela mora.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // ISCA (c) — AS DUAS ABAS DA `Rede`, E A ROLÁVEL QUE NÃO CORTA
+  // =========================================================================
+  group('(c) as duas abas da `Rede`, e a rolável que não corta', () {
+    // DESLIGAMENTO: em `rede/secao_da_rede.dart`, troque
+    // `isScrollable: true` por `false`. O caso da escala de 200% reprova com
+    // `Comunidade` cortando por 77,24 dp.
+    testWidgets('`Eventos` e `Comunidade`, nesta ordem, com e sem conta',
+        (tester) async {
+      // **COM E SEM CONTA, e isso é diferente das abas antigas.** `Meus
+      // pedidos` e `Minhas indicações` sumiam sem sessão porque eram listas do
+      // que a pessoa fez. Estas duas não são: `Eventos` é a agenda pública e
+      // `Comunidade` é o diretório, que desenha o próprio convite sem sessão.
+      for (final logado in <bool>[true, false]) {
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: logado ? depositoLogado() : null,
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await tester.pumpAndSettle();
+
+        expect(
+          abasNaTela(tester),
+          <String>['Eventos', 'Comunidade'],
+          reason: 'REPROVA: com logado=$logado as abas da `Rede` não são '
+              '`Eventos` e `Comunidade`, nesta ordem. `Eventos` é a primeira '
+              'porque é o conteúdo histórico da seção e é onde o arranque do '
+              'app abre.',
+        );
+      }
+    });
+
+    testWidgets('a `TabBar` é ROLÁVEL, e nenhuma das duas abas corta a 200%',
+        (tester) async {
+      // ======================================================================
+      // A MEDIÇÃO QUE DECIDIU O DESENHO
+      // ======================================================================
+      //
+      // Medido na bancada do projeto, com a `Inter` real, em 320 dp, numa
+      // `TabBar` NÃO rolável de dois itens (slot de 144,00 dp cada):
+      //
+      //   `Eventos`     69,81 dp
+      //   `Comunidade` 110,62 dp
+      //
+      // As duas cabem lado a lado **até 130%** de escala. A **200%**,
+      // `Comunidade` pede 221,24 dp e corta por **77,24 dp**.
+      //
+      // `isScrollable: true` é o que resolve sem abreviar: cada aba recebe a
+      // largura do próprio texto. O contexto que torna isto uma MELHORA e não
+      // uma troca: as TRÊS abas de ontem já cortavam DUAS em 320 dp a 100%.
+      //
+      // **O CASO MEDE O COMPORTAMENTO, e não a palavra `isScrollable`.** Um
+      // portão que lesse o fonte procurando a palavra é exatamente o defeito
+      // que este repositório já teve (o portão que lia
+      // `AlwaysScrollableScrollPhysics` e ficou verde num defeito real em onze
+      // telas). Aqui ele mede duas coisas da árvore renderizada: que a largura
+      // de cada aba é a do PRÓPRIO texto (e não a tela dividida em dois), e
+      // que nenhum dos dois parágrafos transborda a constrição que recebeu.
+      tester.view.physicalSize = const Size(960, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+        escala: 2,
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+
+      final barra = tester.getRect(find.byType(TabBar));
+      final larguras = <String, double>{};
+      final transbordos = <String>[];
+      for (final rotulo in <String>['Eventos', 'Comunidade']) {
+        final alvo = find.descendant(
+          of: find.byType(TabBar),
+          matching: find.text(rotulo),
+        );
+        expect(
+          alvo,
+          findsOneWidget,
+          reason: 'REPROVA: a aba `$rotulo` não está pintada.',
+        );
+        final paragrafo = tester.renderObject<RenderParagraph>(alvo);
+        final pedida = paragrafo.getMaxIntrinsicWidth(double.infinity);
+        final recebida = paragrafo.constraints.maxWidth;
+        larguras[rotulo] = pedida;
+        if (pedida > recebida + 0.01) {
+          transbordos.add(
+            '  `$rotulo` pede ${pedida.toStringAsFixed(2)} dp e recebeu '
+            '${recebida.toStringAsFixed(2)} dp',
+          );
+        }
+      }
+
+      expect(
+        transbordos,
+        isEmpty,
+        reason: 'REPROVA: a 200% de escala, em 320 dp, uma das abas da `Rede` '
+            'NÃO CABE no espaço que o layout lhe deu:\n'
+            '${transbordos.join('\n')}\n'
+            'Com `isScrollable: false` as duas dividem a tela em dois slots '
+            'de 144,00 dp e `Comunidade` corta por 77,24 dp. A `TabBar` '
+            'rolável dá a cada aba a largura do próprio texto.',
+      );
+
+      // **OS DOIS NÚMEROS, TRAVADOS, e eles batem com a bancada do
+      // protótipo casa por casa.** Medidos aqui, em 320 dp a 200%, com a
+      // `Inter` real:
+      //
+      //   `Eventos`    139,62 dp   (69,81 a 100%)
+      //   `Comunidade` 221,24 dp  (110,62 a 100%)
+      //
+      // Numa `TabBar` NÃO rolável de dois itens o slot é 144,00 dp (o corpo de
+      // 288 dividido por dois), e `Comunidade` cortaria por **77,24 dp**. É
+      // esse número que `isScrollable: true` resolve.
+      //
+      // Rótulo que cresce muda a conta, e o caso diz em quanto.
+      expect(
+        larguras['Eventos'],
+        closeTo(139.62, 0.5),
+        reason: 'REPROVA: `Eventos` pede ${larguras["Eventos"]} dp a 200% e a '
+            'bancada mediu 139,62. Ou o tema mudou de tipografia, ou o rótulo '
+            'mudou de palavra.',
+      );
+      expect(
+        larguras['Comunidade'],
+        closeTo(221.24, 0.5),
+        reason: 'REPROVA: `Comunidade` pede ${larguras["Comunidade"]} dp a '
+            '200% e a bancada mediu 221,24. Num slot não rolável de 144,00 ela '
+            'cortaria por 77,24 dp, e é esse corte que a `TabBar` rolável '
+            'evita sem abreviar o nome que o cliente escolheu.',
+      );
+
+      // E a prova de que ela é ROLÁVEL: a soma das duas abas transborda a
+      // largura da tela. Numa `TabBar` não rolável isso é impossível por
+      // construção -- as abas dividem a largura disponível.
+      expect(
+        larguras.values.reduce((a, b) => a + b),
+        greaterThan(barra.width),
+        reason: 'REPROVA: as duas abas somadas (${larguras.values.join(" + ")} '
+            'dp) cabem na largura da barra (${barra.width} dp). A 200% de '
+            'escala em 320 dp elas NÃO cabem, e se cabem é porque a bancada '
+            'não está medindo a escala que diz medir -- ou porque a `TabBar` '
+            'voltou a dividir a tela e os rótulos foram abreviados.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // ISCA (d) — O FILTRO ABSORVEU AS TRÊS ABAS DA AGENDA
+  // =========================================================================
+  group('(d) o filtro absorveu `Próximos`, `Encerrados` e `Meus pedidos`', () {
+    // DESLIGAMENTO: em `rede/agenda_da_rede.dart`, tire `Próximos` e
+    // `Encerrados` das opções do grupo `when`, ou tire o grupo
+    // `Meu envolvimento` inteiro. Cada passo reprova um caso daqui.
+    testWidgets('as três NÃO são mais abas, em lugar nenhum da seção',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+
+      // **A medida é a lista de abas PINTADAS, e não `findsNothing` sobre três
+      // textos.** `findsNothing` sobre texto que a tela já não diz é o portão
+      // cego que esta rodada achou dez vezes: ele passaria igual se a `TabBar`
+      // tivesse desaparecido inteira, ou se os rótulos tivessem mudado de
+      // palavra e continuassem sendo abas.
+      expect(
+        abasNaTela(tester),
+        <String>['Eventos', 'Comunidade'],
+        reason: 'REPROVA: a seção `Rede` pinta abas que não são as duas da '
+            'decisão. As três abas da agenda (`Próximos`, `Meus pedidos`, '
+            '`Encerrados`) viraram FILTRO em 19/10/2026.',
+      );
+    });
+
+    testWidgets('`Quando` oferece `Próximos` e `Encerrados`, e mais nada vira aba',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+      await abrirAFolha(tester);
+
+      final pintados = gruposDaFolha(tester);
+      for (final esperado in <String>[
+        'Quando',
+        'Próximos',
+        'Encerrados',
+        'Meu envolvimento',
+        'Só onde eu pedi',
+      ]) {
+        expect(
+          pintados,
+          contains(esperado),
+          reason: 'REPROVA: a folha de filtro da `Rede` não oferece '
+              '"$esperado". As três abas da agenda viraram recortes DESTA '
+              'folha, e uma que não aparece aqui é função perdida -- não '
+              'função movida. Pintados: $pintados',
+        );
+      }
+    });
+
+    testWidgets(
+      'ISCA: `Só onde eu pedi` TROCA A OPERAÇÃO, e vai para a rota dos pedidos',
+      (tester) async {
+        // **A medida é a CHAMADA DE REDE, e não a pastilha marcada.** Um caso
+        // que só olhasse a folha ficaria verde com um filtro que a tela aceita
+        // e nunca manda a lugar nenhum -- que é o filtro que mente sobre o
+        // alcance, exatamente o que `barra_de_listagem.dart` existe para
+        // impedir.
+        final pedidos = <http.Request>[];
+        Future<http.Response> comEspiao(http.Request req) {
+          pedidos.add(req);
+          return redeDasCincoListagens(req);
+        }
+
+        await abrirOApp(
+          tester,
+          rede: comEspiao,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await tester.pumpAndSettle();
+
+        expect(
+          pedidos.where((r) => r.url.path == '/v1/network/join-requests'),
+          isEmpty,
+          reason: 'REPROVA: a agenda pediu a lista de PEDIDOS sem ninguém ter '
+              'escolhido `Só onde eu pedi`. O recorte nasce desligado.',
+        );
+
+        await abrirAFolha(tester);
+        await tester.tap(find.text('Só onde eu pedi'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(
+          pedidos.where((r) => r.url.path == '/v1/network/join-requests'),
+          isNotEmpty,
+          reason: 'REPROVA: aplicar `Só onde eu pedi` não pediu '
+              '`GET /v1/network/join-requests`. O recorte troca a OPERAÇÃO, e '
+              'não um parâmetro da lista: "só os eventos em que eu pedi para '
+              'ir" é `listMyNetworkEventJoinRequests`, com outra resposta.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: `Encerrados` manda `when=past` para a rota da agenda',
+      (tester) async {
+        final pedidos = <http.Request>[];
+        Future<http.Response> comEspiao(http.Request req) {
+          pedidos.add(req);
+          return redeDasCincoListagens(req);
+        }
+
+        await abrirOApp(
+          tester,
+          rede: comEspiao,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await tester.pumpAndSettle();
+
+        final primeira = pedidos
+            .where((r) => r.url.path == '/v1/network/events')
+            .last;
+        expect(
+          primeira.url.queryParameters['when'],
+          'upcoming',
+          reason: 'REPROVA: a agenda não abre em `upcoming`. `Próximos` é o '
+              'padrão, e é por isso que o recorte guarda `null` -- para o '
+              'distintivo da barra não nascer com 1 numa lista que ninguém '
+              'recortou.',
+        );
+
+        await abrirAFolha(tester);
+        await tester.tap(find.text('Encerrados'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(
+          pedidos
+              .where((r) => r.url.path == '/v1/network/events')
+              .last
+              .url
+              .queryParameters['when'],
+          'past',
+          reason: 'REPROVA: escolher `Encerrados` no filtro não mandou '
+              '`when=past`. O recorte de tempo já morava em '
+              '`RecorteDaRede.quando`; o que mudou em 19/10 foi QUEM escolhe '
+              'o valor -- era a aba, e agora é este grupo.',
+        );
+      },
+    );
+
+    test('`AbaDaRede` não existe mais como tipo', () {
+      // **A PROVA ESTRUTURAL, e ela é de COMPILAÇÃO e não de texto.** O enum
+      // das três abas saiu; se alguém o repuser, este arquivo deixa de
+      // compilar na linha abaixo -- e um `grep` no fonte seria o portão de
+      // palavra que este repositório já teve verde sobre um defeito real.
+      //
+      // O que resta no lugar dele é um `bool` de estado privado e o grupo da
+      // folha, e os dois estão medidos nos casos acima.
+      expect(
+        AgendaDaRede.rotuloDeMarcar,
+        'Criar evento',
+        reason: 'REPROVA: o rótulo da porta de criar mudou. Ele é a ÚNICA '
+            'fonte do texto, e esta linha existe para este arquivo depender '
+            'de `AgendaDaRede` -- se o enum das três abas voltar, ele volta '
+            'junto deste import e o compilador acusa.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // ISCA (e) — A BUSCA VEM ANTES DO GATILHO, NAS CINCO TELAS
+  // =========================================================================
+  group('(e) a busca vem ANTES do gatilho de filtro, nas telas que têm busca', () {
+    // ======================================================================
+    // A REVERSÃO, e ela é deliberada
+    // ======================================================================
+    //
+    // Em 18/10 o cliente pediu o gatilho *"na frente do campo de busca e não
+    // embaixo"*. Em 19/10 ele INVERTEU: a busca primeiro, o gatilho à direita.
+    // Não é defeito e não é volta ao arranjo de 17/10 -- o gatilho continua só
+    // ícone, continua na mesma linha e continua com 48 dp. Mudou o LADO.
+    //
+    // ======================================================================
+    // SÃO QUATRO TELAS COM BUSCA, E NÃO CINCO -- e o número foi medido
+    // ======================================================================
+    //
+    // O briefing listou cinco. `perto/minhas_indicacoes.dart` **não tem campo
+    // de busca** e nunca teve: `listMyDirectorySuggestions` não tem parâmetro
+    // `q` no contrato, e aquela tela passa só `filtro` para a barra. Sem
+    // busca não há par, e não há ordem a inverter. O caso logo acima guarda
+    // essa ausência pelos dois lados.
+    //
+    // As quatro que têm busca e passam por este laço são
+    // `perto/lista_do_diretorio.dart`, `loja/vitrine_da_loja.dart`,
+    // `perdido/lista_de_perdidos.dart` e `rede/agenda_da_rede.dart` -- as duas
+    // últimas desenhando a linha fora da barra, por `buscaAcima`.
+    //
+    // DESLIGAMENTO: em `widgets/barra_de_listagem.dart`, dentro de
+    // `LinhaDeBuscaDaListagem.build`, mova `GatilhoDeRecorteNoCorpo` de volta
+    // para ANTES do `Expanded`. **Os quatro casos deste laço reprovam de uma
+    // vez**, e é isso que prova que a inversão mora num lugar só.
+    //
+    // **AS LARGURAS SÃO AS MESMAS DE ANTES DA INVERSÃO**, de propósito: o
+    // campo divide a linha com um alvo de 48 dp e 8 dp de respiro, e trocar de
+    // lado não muda quanto sobra. Um caso que medisse só a ordem não acusaria
+    // uma inversão que tivesse estreitado o campo pelo caminho.
+    // Lista de pares, e nao mapa: `double` nao serve de chave de mapa
+    // constante em Dart (ele sobrescreve `==`). A primeira medida e a do
+    // APARELHO, a segunda a que a busca tem de receber -- o corpo e a largura
+    // menos 32 dp de margem, e a busca e o corpo menos 48 do gatilho e 8 de
+    // respiro.
+    const larguraDaBusca = <(double, double)>[
+      (320, 232), // corpo 288
+      (360, 272), // corpo 328
+      (375, 287), // corpo 343
+      (390, 302), // corpo 358
+      (412, 324), // corpo 380
+    ];
+
+    /// As cinco telas, e como chegar a cada uma.
+    final telas = <String, Future<void> Function(WidgetTester)>{
+      'perto/lista_do_diretorio.dart': (t) async {
+        await t.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await t.pumpAndSettle();
+        await t.tap(find.widgetWithText(Tab, 'Comunidade'));
+        await t.pumpAndSettle();
+      },
+      'loja/vitrine_da_loja.dart': (t) async {
+        await t.tap(find.widgetWithText(NavigationDestination, 'Loja'));
+        await t.pumpAndSettle();
+      },
+      'perdido/lista_de_perdidos.dart': (t) async {
+        await t.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+        await t.pumpAndSettle();
+      },
+      'rede/agenda_da_rede.dart': (t) async {
+        await t.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await t.pumpAndSettle();
+      },
+    };
+
+    testWidgets(
+      'em `perto/minhas_indicacoes.dart` NÃO há busca, e por isso não há '
+      'ordem a inverter',
+      (tester) async {
+        // ======================================================================
+        // ACHADO DESTA RODADA, e ele corrige o briefing
+        // ======================================================================
+        //
+        // O briefing listou `perto/minhas_indicacoes.dart` entre as CINCO
+        // telas que usam o padrão de listagem com busca. **A árvore diz
+        // outra coisa, e isto foi medido:** aquela tela passa `filtro` e
+        // `aoAplicar` para `BarraDeListagem` e **não passa `busca`** -- ela
+        // nunca teve campo de busca.
+        //
+        // **E a ausência é correta, não um esquecimento:**
+        // `listMyDirectorySuggestions` não tem parâmetro `q` no contrato. Um
+        // campo de busca ali seria exatamente o campo que mente sobre o
+        // alcance, que é o que `barra_de_listagem.dart` existe para impedir.
+        //
+        // Com `busca: null`, `LinhaDeBuscaDaListagem` nem é construída: a
+        // barra desenha o gatilho sozinho, alinhado à esquerda do corpo. **Não
+        // há par para inverter**, e um caso que exigisse a ordem ali
+        // reprovaria pedindo um campo que não pode existir.
+        //
+        // Este caso guarda as duas metades: que o gatilho existe (a tela tem
+        // recorte) e que a busca não existe (não há ordem a medir). Se alguém
+        // acrescentar busca àquela tela, ela passa a ter ordem -- e este caso
+        // reprova, pedindo que ela entre no laço das outras quatro.
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: depositoLogado(),
+        );
+        await abrirAsMinhasIndicacoes(tester);
+
+        expect(
+          find.byType(MinhasIndicacoes),
+          findsOneWidget,
+          reason: 'REPROVA: a porta não abriu `Minhas indicações`.',
+        );
+        expect(
+          find.byType(GatilhoDeRecorteNoCorpo),
+          findsOneWidget,
+          reason: 'REPROVA: `Minhas indicações` não desenha o gatilho de '
+              'filtro no corpo. Ela tem recorte (`Situação da indicação`), e '
+              'sem gatilho ele fica inalcançável.',
+        );
+        expect(
+          find.byType(CampoDeBuscaDaListagem),
+          findsNothing,
+          reason: 'REPROVA: `Minhas indicações` passou a desenhar campo de '
+              'busca. `listMyDirectorySuggestions` não tem parâmetro `q` no '
+              'contrato, e campo de busca que não vai a lugar nenhum é o '
+              'campo que mente sobre o alcance. Se a operação ganhar `q`, '
+              'mova esta tela para o laço das outras quatro -- ela passa a ter '
+              'uma ordem a medir.',
+        );
+      },
+    );
+
+    for (final entrada in telas.entries) {
+      testWidgets(
+        'em `${entrada.key}` a busca vem primeiro, nas CINCO larguras',
+        (tester) async {
+          final medidas = <String>[];
+          for (final (aparelho, esperada) in larguraDaBusca) {
+            tester.view.physicalSize = Size(aparelho * 3, 2400);
+            tester.view.devicePixelRatio = 3;
+            addTearDown(tester.view.reset);
+
+            // **O APP E DESMONTADO ENTRE AS LARGURAS, e isto nao e zelo.**
+            //
+            // `pumpWidget` com o MESMO tipo de widget reaproveita o `State` --
+            // e com ele o roteador e a pilha de navegacao. Medido aqui: a
+            // segunda largura da tela de `Minhas indicações` encontrava DOIS
+            // `ItemDeMenu` com o mesmo rotulo (o da aba `Comunidade` e o da
+            // rota que a iteracao anterior deixou empilhada), e
+            // `scrollUntilVisible` estourava com "Too many elements". O mesmo
+            // reaproveitamento de `State` ja enganou um portao deste
+            // repositorio, que chamava `abrirOApp` duas vezes achando que
+            // media o estado deslogado.
+            //
+            // Montar um tipo DIFERENTE antes força a arvore a ser descartada.
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pumpAndSettle();
+
+            // **A REGIAO CADASTRADA ENTRA, e ela nao e enfeite:** a listagem
+            // de perdidos nao desenha controle nenhum sem CIDADE em uso
+            // (`_Fase.semCidade`), e a regiao do tutor e uma das fontes dela.
+            // Sem isto, a tela de perdidos entra no caso como "nao desenha
+            // campo de busca" -- e a isca reprovaria por falta de dado, e nao
+            // por ordem errada.
+            await abrirOApp(
+              tester,
+              rede: redeDasCincoListagens,
+              deposito: depositoLogado(
+                regiaoDeReferencia: const RegiaoDeReferencia(
+                  bairro: 'Pinheiros',
+                  cidade: 'São Paulo',
+                  uf: 'SP',
+                ),
+              ),
+            );
+            await entrada.value(tester);
+
+            final campo = find.byType(CampoDeBuscaDaListagem);
+            final gatilho = find.byType(GatilhoDeRecorteNoCorpo);
+            expect(
+              campo,
+              findsOneWidget,
+              reason: 'REPROVA: `${entrada.key}` não desenha campo de busca em '
+                  '$aparelho dp. Sem ele não há ordem para medir, e um caso '
+                  'que só olhasse a geometria passaria por não achar nada.',
+            );
+            expect(
+              gatilho,
+              findsOneWidget,
+              reason: 'REPROVA: `${entrada.key}` não desenha o gatilho de '
+                  'filtro em $aparelho dp.',
+            );
+
+            final r1 = tester.getRect(campo);
+            final r2 = tester.getRect(gatilho);
+            if (r1.right > r2.left + 0.01) {
+              medidas.add(
+                '  $aparelho dp: a busca termina em ${r1.right} e o gatilho '
+                'começa em ${r2.left} -- o gatilho NÃO está à direita',
+              );
+            }
+            if (r2.center.dy < r1.top || r2.center.dy > r1.bottom) {
+              medidas.add(
+                '  $aparelho dp: o gatilho não divide a LINHA com a busca '
+                '(centro em ${r2.center.dy}, campo de ${r1.top} a ${r1.bottom})',
+              );
+            }
+            if ((r1.width - esperada).abs() > 0.5) {
+              medidas.add(
+                '  $aparelho dp: a busca recebeu ${r1.width.toStringAsFixed(2)}'
+                ' dp e o esperado é ${esperada.toStringAsFixed(2)}',
+              );
+            }
+            if ((r2.width - BichuAlvoDeToque.min).abs() > 0.5) {
+              medidas.add(
+                '  $aparelho dp: o gatilho tem ${r2.width} dp e não os 48 do '
+                'SC 2.5.8',
+              );
+            }
+          }
+          expect(
+            medidas,
+            isEmpty,
+            reason: 'REPROVA em `${entrada.key}`:\n${medidas.join('\n')}\n'
+                'O cliente inverteu a ordem em 19/10/2026: a busca primeiro, '
+                'o gatilho à DIREITA. A inversão mora numa única `Row`, em '
+                '`LinhaDeBuscaDaListagem` -- se esta tela divergir das outras '
+                'quatro, ela tem cópia da ordem e a cópia é o defeito.',
+          );
+        },
+      );
+    }
+  });
+
+  // =========================================================================
+  // ISCA (f) — A GAVETA ESTÁ OCULTA (a medida principal vive na casca)
+  // =========================================================================
+  group('(f) nenhuma rota leva à gaveta', () {
+    // A AUSÊNCIA do `drawer:`, do `BotaoDaGaveta` e do glifo de hamburguer nas
+    // quatro seções de ramo é medida em `casca_de_cinco_secoes_test.dart`, na
+    // isca `a casca NÃO tem gaveta, e nenhuma tela desenha o hamburguer` --
+    // ela vive lá porque é a MESMA isca que foi virada quatro vezes, e as
+    // quatro inversões precisam ficar juntas para ninguém achar que a de hoje
+    // é descuido.
+    //
+    // Aqui fica o que falta: que não há ENDEREÇO para ela.
+    //
+    // DESLIGAMENTO: devolva o `drawer:` ao `Scaffold` da casca em
+    // `casca_com_abas.dart`. O caso de lá reprova; este continua verde, porque
+    // a gaveta nunca teve rota -- e é por isso que os dois existem.
+    test('a gaveta nunca teve endereço, e continua sem ter', () {
+      // **ESTE CASO É O CONTRAPESO HONESTO, e ele diz o que NÃO mede.**
+      //
+      // A gaveta não é uma rota: ela era o `drawer:` de um `Scaffold`, e
+      // `Scaffold` sem `drawer` não tem como abrir uma. Então não há endereço
+      // a apagar, e afirmar "nenhuma rota leva à gaveta" seria verdade
+      // trivial -- a classe de verde-por-vazio que esta rodada achou dez
+      // vezes.
+      //
+      // O que ele mede de verdade é o que SOBROU no registro: o inventário de
+      // 27.5 continua inteiro, e é dele que a reinstalação vai sair.
+      final inventario = RegistroDeSubDestinos.todos;
+      expect(
+        inventario,
+        hasLength(53),
+        reason: 'REPROVA: o inventário de 27.5 tem ${inventario.length} '
+            'linha(s). Ele tinha 52 e foi a 53 em 19/10: as oito linhas de '
+            '`Perto` mudaram de chave para `Rede` (a contagem não muda com '
+            'isso) e o `Mural` entrou com UMA linha. A gaveta foi OCULTADA e '
+            'não apagada -- a palavra do cliente é "por enquanto" --, e '
+            'apagar o inventário é o que tornaria a reinstalação uma '
+            'reescrita.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // ISCA (g) — OS SETE ITENS VIVOS CONTINUAM ALCANÇÁVEIS
+  // =========================================================================
+  group('(g) os sete itens vivos continuam alcançáveis', () {
+    // ======================================================================
+    // A ISCA QUE IMPORTA MAIS, e por quê
+    // ======================================================================
+    //
+    // Ocultar a gaveta esconde FUNÇÃO QUE EXISTE. Ela tinha sete itens vivos
+    // (`forma: destino`, `estado: existe`, `rota != null`), e sem casa nova
+    // cada um deles deixaria de ser alcançável **em silêncio**: a rota existe,
+    // a tela monta, e o que desapareceria é o único caminho humano até ela.
+    // Nenhum caso da suíte acusaria isso.
+    //
+    // **DOIS DELES TINHAM A GAVETA COMO ÚNICA PORTA**, e isso foi medido antes
+    // de ocultar o menu: `Pedidos de conexão` e `Pessoas bloqueadas` só
+    // apareciam em `gaveta_de_secoes.dart`, em `rotas.dart` e dentro das
+    // próprias telas. Eles entraram no menu da conta de `AbaPerfil`.
+    //
+    // `Pessoas bloqueadas` é o pior dos dois caso se perdesse: o bloqueio é
+    // simétrico no servidor, quem bloqueia passa a receber 404 no perfil da
+    // pessoa, e o `Desbloquear` morava dentro do menu daquele perfil -- que
+    // nunca mais abre. Aquela lista É o único lugar de onde o desbloqueio sai.
+    // Sem porta, **bloquear voltaria a ser irreversível pelo aplicativo**.
+    //
+    // DESLIGAMENTO: apague qualquer um dos sete controles -- a opção da folha
+    // de `Pets` ou o `ItemDeMenu` de `Perfil`. UM caso deste grupo reprova, e
+    // ele nomeia o item.
+    test('são SETE, e a lista é lida do registro e não escrita à mão', () {
+      // A guarda contra o verde por vazio: os sete casos abaixo citam rótulos
+      // à mão, e um registro que mudasse de tamanho os deixaria medindo um
+      // subconjunto sem ninguém notar.
+      final vivos = RegistroDeSubDestinos.todos
+          .where((d) => d.viraItem)
+          .map((d) => d.rotulo)
+          .toList();
+      expect(
+        vivos,
+        hasLength(7),
+        reason: 'REPROVA: o registro tem ${vivos.length} item(ns) vivo(s) e '
+            'não 7: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
+            'Item novo sem caso aqui é função que pode desaparecer no próximo '
+            'diff grande, porque a gaveta já não a mostra.',
+      );
+      // E são SEIS destinos distintos: `Escanear uma tag` aparece em duas
+      // seções do inventário, legitimamente (a porta primária em `Pets` e a de
+      // conta em `Perfil`), e o destino das duas é o mesmo.
+      expect(
+        vivos.toSet(),
+        hasLength(6),
+        reason: 'REPROVA: os sete itens vivos apontam para '
+            '${vivos.toSet().length} destinos distintos, e são 6 -- '
+            '`Escanear uma tag` tem duas linhas de propósito.',
+      );
+    });
+
+    // **O DESTINO DE CADA UMA, pelo TIPO DA TELA.** Medir "saiu da casca" era
+    // mais fraco e mais frágil: `Cadastrar pet` abre um assistente que
+    // continua tendo barra em alguns passos, e um caso que só olhasse a
+    // ausência da barra reprovaria por um motivo que não é o da isca.
+    for (final (rotulo, tela) in <(String, Type)>[
+      ('Escanear uma tag', TelaLeitorDeQr),
+      ('Registrar achado avulso', TelaRegistrarAchado),
+      ('Cadastrar pet', TelaCadastrarIdentificacao),
+    ]) {
+      testWidgets(
+          '`$rotulo` é alcançável pela ação flutuante de `Pets`',
+          (tester) async {
+        // **UMA TELA ALTA, e a razão é medida.** Na bancada padrão
+        // (800 x 600 px) a folha com título e três opções chega ao pé da
+        // janela, e a ÚLTIMA opção fica debaixo da borda: `tap()` acusa
+        // *"derived an Offset that would not hit test"*. O caso passaria a
+        // reprovar por geometria da bancada e não pela isca.
+        //
+        // **O defeito que isso revelou era REAL e foi consertado na
+        // produção**, não na bancada: a folha não rolava e o `Column`
+        // transbordava 39 px, CLIPANDO a terceira opção. Ver
+        // `AcoesDeCriarFlutuantes`. A tela alta fica porque a isca é sobre
+        // alcance e não sobre a altura da janela de teste.
+        tester.view.physicalSize = const Size(1125, 3000);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+        await tester.pumpAndSettle();
+
+        final alvo = find.byType(AcoesDeCriarFlutuantes);
+        expect(
+          alvo,
+          findsOneWidget,
+          reason: 'REPROVA: a seção `Pets` não tem a ação flutuante. O cliente '
+              'pediu em 19/10: "só faltou na pagina de pets o botão para '
+              'adicionar um novo pet perdido ou escanear a tag, gostei desse '
+              'padrão". Sem ela, os três itens que a gaveta perdeu ficam sem '
+              'caminho nenhum.',
+        );
+        await tester.tap(alvo);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(rotulo),
+          findsOneWidget,
+          reason: 'REPROVA: a folha da ação flutuante de `Pets` não oferece '
+              '"$rotulo". Ele era item VIVO da gaveta, e com o menu oculto '
+              'esta folha é a casa dele -- sem ela, a função desaparece em '
+              'silêncio.',
+        );
+
+        // **O TOQUE LEVA À TELA CERTA, e é isso que separa esta isca de um
+        // `findsOneWidget` sobre um texto.** Uma opção que pinta o nome e não
+        // navega é ação sem destino -- o critério 2 da BICHUS-62 -- e
+        // continuaria sendo função perdida, agora com um rótulo em cima.
+        await tester.tap(find.text(rotulo));
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(tela),
+          findsOneWidget,
+          reason: 'REPROVA: tocar em "$rotulo" não abriu $tela. A opção '
+              'pinta o nome do item que a gaveta perdeu e não leva a lugar '
+              'nenhum: a função continua perdida, agora com um rótulo em '
+              'cima dela.',
+        );
+      });
+    }
+
+    for (final (rotulo, tela) in <(String, Type)>[
+      ('Meus dados', TelaDadosPessoais),
+      ('Pedidos de conexão', TelaDePedidosDeConexao),
+      ('Pessoas bloqueadas', TelaDeBloqueados),
+    ]) {
+      testWidgets(
+        '`$rotulo` é alcançável pela FOTO da barra de topo',
+        (tester) async {
+          // Tela alta pela mesma razão do grupo acima: o menu da conta tem
+          // seis itens mais o bloco de `Meus pets`, e na bancada padrão o
+          // último item fica debaixo da barra de baixo -- o toque não chega
+          // nele e o caso reprovaria por geometria da janela, não pela isca.
+          tester.view.physicalSize = const Size(1125, 3000);
+          tester.view.devicePixelRatio = 3;
+          addTearDown(tester.view.reset);
+
+          // **O CAMINHO É A FOTO, e o caso passa por ela.** O cliente nomeou
+          // esse caminho: a foto substituiu o hamburguer e leva à tela da
+          // conta. Um caso que montasse a rota direto provaria que a tela
+          // existe -- e a tela já existia; o que estava em risco era a PORTA.
+          await abrirOApp(
+            tester,
+            rede: redeDasCincoListagens,
+            deposito: depositoLogado(),
+          );
+          await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+          await tester.pumpAndSettle();
+
+          final foto = find.byType(AvatarDaConta);
+          expect(
+            foto,
+            findsOneWidget,
+            reason: 'REPROVA: não há foto na barra de topo. Ela é a porta que '
+                'o cliente nomeou para os itens de conta quando mandou '
+                'ocultar o menu.',
+          );
+          await tester.tap(foto);
+          await tester.pumpAndSettle();
+
+          final item = find.text(rotulo);
+          await tester.scrollUntilVisible(item, 200);
+          expect(
+            item,
+            findsOneWidget,
+            reason: 'REPROVA: a tela da conta não oferece "$rotulo". Ele era '
+                'item VIVO da gaveta, e com o menu oculto este menu é a casa '
+                'dele. **Dois dos sete tinham a gaveta como ÚNICA porta** -- '
+                '`Pedidos de conexão` e `Pessoas bloqueadas` --, e ocultar o '
+                'menu por cima deles deixaria duas telas construídas '
+                'inalcançáveis, em silêncio.',
+          );
+
+          await tester.tap(item);
+          await tester.pumpAndSettle();
+          // **O DESTINO É MEDIDO PELO TIPO DA TELA MONTADA**, e não pela URI
+          // do roteador: a URI de um `push` dentro de um
+          // `StatefulShellRoute` não é o endereço da tela empilhada, e um
+          // caso que a lesse reprovaria (ou passaria) por um motivo que não é
+          // o da isca. O que importa aqui é que a tela ABRE.
+          expect(
+            find.byType(tela),
+            findsOneWidget,
+            reason: 'REPROVA: tocar em "$rotulo" não abriu $tela. Item que '
+                'pinta o nome e não navega é ação sem destino, e continuaria '
+                'sendo função perdida com um rótulo em cima.',
+          );
+        },
+      );
+    }
+
+    testWidgets('`Sair da conta` é alcançável pela FOTO da barra de topo',
+        (tester) async {
+      tester.view.physicalSize = const Size(1125, 3000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      // Ele **não** é item vivo da gaveta (`forma: acaoNaTela`), e por isso
+      // nunca esteve nela -- mas o cliente o listou junto dos outros quando
+      // mandou ocultar o menu, e vale medir que ele continua onde sempre
+      // esteve: o ÚLTIMO item do menu da conta, por pedido literal dele
+      // (*"o sair da conta deve ser sempre a última opção do menu"*).
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AvatarDaConta));
+      await tester.pumpAndSettle();
+
+      final item = find.text('Sair da conta');
+      await tester.scrollUntilVisible(item, 200);
+      expect(item, findsOneWidget);
+    });
+  });
+}

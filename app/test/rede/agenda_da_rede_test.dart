@@ -4,6 +4,7 @@
 // o texto renderizado com a constante que o produz.
 
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -55,15 +56,37 @@ RedeDeTeste redeComAgenda({
 }
 
 void main() {
-  group('abas', () {
-    testWidgets('sem conta: Próximos e Encerrados, e Meus pedidos não existe',
+  // **AS TRES ABAS DESTE GRUPO VIRARAM FILTRO em 19/10/2026**, por decisao do
+  // cliente: `Próximos` e `Encerrados` sao opcoes do grupo `Quando`, e
+  // `Meus pedidos` virou `Meu envolvimento -> Só onde eu pedi`. Os casos nao
+  // foram apagados nem afrouxados -- cada um continua medindo a MESMA
+  // propriedade (qual rota e chamada, com que `when`, com que `state`); o que
+  // mudou e o controle pelo qual a pessoa chega la. Ver `aplicarNaFolha` em
+  // `fixtures_da_rede.dart`.
+  //
+  // As duas abas que a secao tem agora sao `Eventos` e `Comunidade`, e elas
+  // sao da SECAO e nao desta lista: quem as mede e
+  // `telas/gaveta_oculta_e_barra_nova_test.dart`.
+  group('os recortes que eram abas', () {
+    testWidgets(
+        'sem conta: `Quando` existe e `Só onde eu pedi` NAO e oferecido',
         (tester) async {
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede, logado: false);
 
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final folha = textosDaFolha(tester);
+      expect(folha, contains('Quando'));
+      expect(folha, contains('Próximos'));
+      expect(folha, contains('Encerrados'));
+      // Sem conta nao existe "onde eu pedi": a rota responderia 401, e uma
+      // opcao cujo desfecho e uma recusa e controle sem desfecho. Ela nao
+      // nasce desabilitada -- nao nasce.
+      expect(folha, isNot(contains('Meu envolvimento')));
+      expect(folha, isNot(contains('Só onde eu pedi')));
+      await tester.tap(find.text('Aplicar').first);
+      await tester.pumpAndSettle();
 
       final lista = rede.chamadasA('GET /v1/network/events');
       expect(lista, isNotEmpty);
@@ -73,14 +96,33 @@ void main() {
       expect(lista.last.headers['Authorization'], isNull);
     });
 
-    testWidgets('com conta: as três abas', (tester) async {
+    testWidgets('com conta: os TRES recortes estão na folha', (tester) async {
       await abrirRede(tester, rede: redeComAgenda());
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final folha = textosDaFolha(tester);
+      for (final esperado in <String>[
+        'Quando',
+        'Próximos',
+        'Encerrados',
+        'Meu envolvimento',
+        'Só onde eu pedi',
+      ]) {
+        expect(
+          folha,
+          contains(esperado),
+          reason: 'REPROVA: a folha não oferece "$esperado". As três abas '
+              'viraram recortes DESTA folha, e uma que não aparece aqui é '
+              'função perdida -- não função movida. Pintados: $folha',
+        );
+      }
+      // E NENHUMA das três continua sendo aba.
+      expect(find.widgetWithText(Tab, 'Próximos'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Encerrados'), findsNothing);
     });
 
-    testWidgets('Encerrados pede when=past e não tem botão de ordenar',
+    testWidgets('`Encerrados` pede when=past e não tem botão de ordenar',
         (tester) async {
       final rede = redeComAgenda(
         encerrados: <Map<String, dynamic>>[
@@ -88,8 +130,7 @@ void main() {
         ],
       );
       await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Encerrados'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Encerrados']);
 
       expect(
         rede.chamadasA('GET /v1/network/events').last.url.queryParameters['when'],
@@ -375,8 +416,7 @@ void main() {
         ]),
       );
       await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Só onde eu pedi']);
 
       expect(rede.chamadasA('GET /v1/network/join-requests'), hasLength(1));
       expect(
@@ -417,8 +457,7 @@ void main() {
         ]),
       );
       await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Só onde eu pedi']);
 
       await tester.enterText(find.byType(TextField).first, 'border');
       await tester.pumpAndSettle();
@@ -444,8 +483,7 @@ void main() {
 
     testWidgets('vazio de Meus pedidos', (tester) async {
       await abrirRede(tester, rede: redeComAgenda());
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Só onde eu pedi']);
       expect(find.text('Nenhum pedido ainda'), findsOneWidget);
       expect(find.text('Seus pedidos aparecem aqui.'), findsOneWidget);
     });
@@ -665,25 +703,52 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a busca espera o toque e o campo fica ACIMA das abas',
+    testWidgets(
+        'a busca e a PRIMEIRA LINHA DO CORPO da lista, e as abas da SECAO '
+        'ficam acima dela',
         (tester) async {
       // Pedido do cliente de 17/10: *"coloque o campo de busca acima do texto
       // e das abas proximos e encerrados"*.
       //
       // **O TEXTO DO MEIO SAIU EM 18/10/2026**, por pedido do mesmo cliente
       // (*"remova os textos ... 'os eventos de quem tem pet aqui perto de
-      // você.'"*). A ordem que ele pediu em 17/10 era busca, texto, abas; com
-      // o texto fora, o que resta a provar e busca acima das abas -- e e isso
-      // que este caso mede agora, sem deixar de medir a ordem.
+      // você.'"*).
+      //
+      // **E AS ABAS DAQUELE PEDIDO DEIXARAM DE EXISTIR EM 19/10.** `Próximos`
+      // e `Encerrados` viraram FILTRO; as abas que existem agora sao
+      // `Eventos` e `Comunidade`, e elas sao da SECAO e nao desta lista.
+      //
+      // **A ORDEM INVERTEU, e a inversao e a certa.** O pedido de 17/10 era
+      // sobre abas que recortavam a MESMA lista: um campo de busca embaixo
+      // delas parecia buscar dentro do recorte. As abas de agora trocam a
+      // LISTA inteira -- `Comunidade` nem e a mesma entidade --, e um campo de
+      // busca ACIMA delas prometeria buscar nas duas. A busca pertence ao
+      // conteudo da aba, e e por isso que ela fica dentro dele.
+      //
+      // O que este caso mede agora:
+      //   1. as abas da SECAO vem acima da busca (a ordem nova);
+      //   2. a busca e a PRIMEIRA linha do corpo da lista -- acima do resumo
+      //      e dos cartoes --, que e a metade do pedido de 17/10 que continua
+      //      valendo e e o que um caso que so olhasse as abas deixaria cair.
       await abrirRede(tester, rede: redeComAgenda(), logado: false);
 
       final campo = tester.getTopLeft(find.byType(TextField).first);
       final abas = tester.getTopLeft(find.byType(TabBar));
+      final resumo = tester.getTopLeft(find.byType(BarraDeListagem));
 
       expect(
+        abas.dy,
+        lessThan(campo.dy),
+        reason: 'REPROVA: as abas da SECAO (`Eventos` e `Comunidade`) nao '
+            'estao acima do campo de busca. Elas trocam a LISTA inteira, e um '
+            'campo de busca acima delas prometeria buscar nas duas.',
+      );
+      expect(
         campo.dy,
-        lessThan(abas.dy),
-        reason: 'REPROVA: o campo de busca nao esta acima das abas.',
+        lessThan(resumo.dy),
+        reason: 'REPROVA: o campo de busca nao e a primeira linha do corpo da '
+            'lista. O cliente pediu em 17/10 que ele ficasse no alto, e ele '
+            'continua la -- no alto do conteudo da ABA, que e onde ele age.',
       );
       expect(
         find.text('Os eventos de quem tem pet aqui perto de você.'),
@@ -693,10 +758,20 @@ void main() {
       );
     });
 
-    testWidgets('as abas FICAM quando a barra nao e desenhada', (tester) async {
+    testWidgets(
+        'as abas DA SECAO ficam quando a barra desta lista nao e desenhada',
+        (tester) async {
       // A armadilha de ter subido a busca: se as abas tivessem ido para
       // dentro da `BarraDeListagem`, elas sumiriam no estado em que a barra
-      // nao nasce -- e quem estivesse em `Encerrados` ficaria preso.
+      // nao nasce -- e quem estivesse na outra aba ficaria preso.
+      //
+      // **AS ABAS MEDIDAS MUDARAM DE DONO em 19/10/2026, e a propriedade
+      // continua a mesma.** As tres desta lista viraram filtro; as duas que
+      // existem agora sao da SECAO (`Eventos` e `Comunidade`), desenhadas por
+      // `SecaoDaRede` ACIMA desta tela. O risco e identico e o caso continua
+      // valendo: se alguem as mover para dentro da barra de listagem, elas
+      // sumem num estado em que a lista nao desenha barra -- e quem estivesse
+      // em `Comunidade` ficaria sem como voltar para `Eventos`.
       final rede = RedeDeTeste(<String, http.Response Function(http.Request)>{
         'GET /v1/network/events': (_) =>
             json200(pagina(const <Map<String, dynamic>>[])),
@@ -704,8 +779,8 @@ void main() {
       await abrirRede(tester, rede: rede, logado: false);
 
       expect(find.byType(TextField), findsNothing);
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Eventos'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Comunidade'), findsOneWidget);
     });
   });
 
@@ -768,20 +843,26 @@ void main() {
 
   group('sessão', () {
     testWidgets(
-        'sair da conta com a agenda aberta: Meus pedidos some e a agenda '
+        'sair da conta com a agenda aberta: `Só onde eu pedi` cai e a agenda '
         'volta sem token e sem distâncias', (tester) async {
       final rede = redeComAgenda();
       rede.respostas['POST /v1/auth/logout'] = (_) => http.Response('', 204);
       await abrirRede(tester, rede: rede);
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsOneWidget);
-      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Só onde eu pedi']);
+      // O recorte esta ligado: a lista veio da rota de PEDIDOS.
+      expect(rede.chamadasA('GET /v1/network/join-requests'), isNotEmpty);
 
       final contexto = tester.element(find.byType(TabBar));
       await Escopo.of(contexto).sessao.sair();
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      // **O RECORTE CAI COM A SESSAO**, como a aba sumia: a folha nao oferece
+      // mais `Só onde eu pedi`, e a lista voltou a agenda publica.
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      expect(textosDaFolha(tester), isNot(contains('Só onde eu pedi')));
+      await tester.tap(find.text('Aplicar').first);
+      await tester.pumpAndSettle();
       final ultima = rede.chamadasA('GET /v1/network/events').last;
       expect(ultima.url.queryParameters['when'], 'upcoming');
       expect(ultima.headers['Authorization'], isNull);

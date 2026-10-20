@@ -23,6 +23,7 @@
 import 'dart:convert';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
@@ -82,7 +83,14 @@ Future<void> abrirPerto(
     rede: rede,
     deposito: logado ? depositoLogado() : null,
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+  // `Perto` deixou de existir, e o diretorio virou a aba `Comunidade` da
+  // `Rede`.
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+  );
   await tester.pumpAndSettle();
 }
 

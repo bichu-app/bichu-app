@@ -795,17 +795,26 @@ void main() {
     });
 
     testWidgets(
-        'ISCA -- o gatilho vem NA FRENTE da busca, e na MESMA linha',
+        'ISCA -- a BUSCA vem primeiro e o gatilho fica a DIREITA, na MESMA '
+        'linha',
         (tester) async {
+      // **A ORDEM INVERTEU EM 19/10/2026, e a reversao e do cliente.**
+      //
+      // Em 18/10 ele pediu o gatilho *"na frente do campo de busca e nao
+      // embaixo"*, e este caso cobrava exatamente isso. Em 19/10 ele mudou de
+      // ideia: a busca vem primeiro e o gatilho fica a direita. **Nao e
+      // defeito e nao e volta ao arranjo de 17/10** -- o gatilho continua so
+      // icone, continua na mesma linha e continua com 48 dp. Mudou o LADO.
+      //
       // ISCA: em `LinhaDeBuscaDaListagem.build`, mova
-      // `GatilhoDeRecorteNoCorpo` para DEPOIS do `Expanded`, ou troque a `Row`
-      // por uma `Column`. Este caso reprova nas duas: na primeira o gatilho
-      // deixa de estar a esquerda; na segunda ele deixa de dividir a linha.
+      // `GatilhoDeRecorteNoCorpo` de volta para ANTES do `Expanded`, ou troque
+      // a `Row` por uma `Column`. Este caso reprova nas duas: na primeira o
+      // gatilho volta a esquerda; na segunda ele deixa de dividir a linha.
       //
       // **Ele mede GEOMETRIA, e nao a ordem da lista de `children`.** A ordem
-      // da lista nao e o que o cliente pediu -- ele pediu o controle NA
-      // FRENTE do campo e na mesma linha --, e um caso que lesse a lista
-      // ficaria verde com uma `Row` em `textDirection: rtl`.
+      // da lista nao e o que o cliente pediu -- ele pediu o controle DEPOIS do
+      // campo e na mesma linha --, e um caso que lesse a lista ficaria verde
+      // com uma `Row` em `textDirection: rtl`.
       final controlador = TextEditingController();
       addTearDown(controlador.dispose);
       await montarNoCorpoDaAba(
@@ -825,11 +834,12 @@ void main() {
       final campo = tester.getRect(find.byType(CampoDeBuscaDaListagem));
 
       expect(
-        gatilho.right,
-        lessThanOrEqualTo(campo.left),
-        reason: 'REPROVA: o gatilho de filtro nao esta NA FRENTE do campo de '
-            'busca. Ele termina em ${gatilho.right} e o campo comeca em '
-            '${campo.left}.',
+        campo.right,
+        lessThanOrEqualTo(gatilho.left),
+        reason: 'REPROVA: o gatilho de filtro nao esta a DIREITA do campo de '
+            'busca. O campo termina em ${campo.right} e o gatilho comeca em '
+            '${gatilho.left}. Em 19/10/2026 o cliente inverteu a ordem que ele '
+            'mesmo pediu em 18/10: a busca vem primeiro.',
       );
       expect(
         gatilho.center.dy,
@@ -839,8 +849,9 @@ void main() {
         ),
         reason: 'REPROVA: o gatilho nao divide a LINHA com a busca. O centro '
             'dele esta em ${gatilho.center.dy} e o campo ocupa de '
-            '${campo.top} a ${campo.bottom}. O cliente pediu "na frente do '
-            'campo de busca e nao embaixo".',
+            '${campo.top} a ${campo.bottom}. O cliente pediu o gatilho na '
+            'mesma linha da busca, e "nao embaixo" continua valendo -- o que '
+            'inverteu em 19/10 foi so o lado.',
       );
     });
 

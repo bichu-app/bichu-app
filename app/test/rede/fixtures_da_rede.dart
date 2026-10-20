@@ -312,3 +312,39 @@ String rotulosSemanticos(WidgetTester tester) {
   return texto;
 }
 
+/// Aplica recortes na folha de filtro da agenda, pelo gatilho do corpo.
+///
+/// **Ela existe porque as TRES ABAS da agenda viraram FILTRO em 19/10/2026**
+/// (decisao do cliente): `Próximos` e `Encerrados` sao opcoes do grupo
+/// `Quando`, e `Meus pedidos` virou `Meu envolvimento -> Só onde eu pedi`. Os
+/// casos que trocavam de aba com um toque passam a abrir a folha, marcar e
+/// aplicar -- tres passos, num lugar so, porque doze copias deles divergiriam
+/// na proxima mudanca da folha.
+///
+/// A conta de por que as tres cabem no filtro e `Minhas indicações` nao cabe
+/// esta em `rede/secao_da_rede.dart`.
+Future<void> aplicarNaFolha(
+  WidgetTester tester,
+  List<String> opcoes,
+) async {
+  await tester.tap(find.byIcon(Icons.tune));
+  await tester.pumpAndSettle();
+  for (final opcao in opcoes) {
+    await tester.tap(find.text(opcao));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(find.text('Aplicar'));
+  await tester.pumpAndSettle();
+}
+
+/// Os textos que a folha de filtro ABERTA pinta agora.
+List<String> textosDaFolha(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Text),
+      ),
+    )
+    .map((t) => t.data ?? '')
+    .where((t) => t.isNotEmpty)
+    .toList(growable: false);

@@ -116,14 +116,34 @@ class AgendaDaRede extends StatefulWidget {
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
 }
 
-enum AbaDaRede {
-  proximos('Próximos'),
-  pedidos('Meus pedidos'),
-  encerrados('Encerrados');
-
-  const AbaDaRede(this.rotulo);
-  final String rotulo;
-}
+/// **`AbaDaRede` NAO EXISTE MAIS: as TRES abas viraram FILTRO (19/10/2026).**
+///
+/// Decisao do cliente. As tres couberam no filtro **porque a entidade nao
+/// muda**: a lista continua sendo de eventos, e o que cada recorte faz e
+/// escolher QUAIS eventos.
+///
+/// | Aba de ontem | Virou |
+/// |---|---|
+/// | `Próximos` | grupo `Quando` -> `Próximos` (o padrao, e por isso o recorte guarda `null`) |
+/// | `Encerrados` | grupo `Quando` -> `Encerrados` |
+/// | `Meus pedidos` | grupo `Meu envolvimento` -> `Só onde eu pedi` |
+///
+/// **O estado que sobrou nesta tela e UM `bool`**, e nao um enum de tres: o
+/// recorte de tempo ja morava em `RecorteDaRede.quando` -- era so a aba que
+/// escolhia o valor por ela --, e o unico recorte que o modelo nao sabia
+/// expressar e "so os eventos em que eu pedi para ir", porque ele nao e um
+/// parametro da lista e sim **outra operacao**
+/// (`listMyNetworkEventJoinRequests`). Ver `_soOndePedi`.
+///
+/// **As duas abas que a secao tem agora sao outras**: `Eventos` e
+/// `Comunidade`, e elas moram em `AbaDaSecaoRede` (`rede/secao_da_rede.dart`).
+/// Esta tela e o corpo da primeira, e **nao desenha `TabBar` nenhuma** -- quem
+/// desenha e a secao, acima dela, porque as abas tem de ficar na tela em todo
+/// estado (carregando, vazio, falha) e esta tela desaparece em alguns deles.
+///
+/// **`Minhas indicações` NAO virou filtro, e a assimetria e medida**: ver
+/// `Rotas.minhasIndicacoes`. A entidade muda -- uma indicacao em analise nao e
+/// um local da lista --, e filtrar devolveria zero no unico caso que importa.
 
 /// Um cartao da lista: o encontro e o que so a lista sabe dele.
 class _ItemDaAgenda {
@@ -136,7 +156,7 @@ class _ItemDaAgenda {
 enum _Fase { carregando, lista, falha }
 
 class _AgendaDaRedeState extends State<AgendaDaRede>
-    with TickerProviderStateMixin, PublicaAAtualizacao {
+    with PublicaAAtualizacao {
   /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
   ///
   /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
@@ -146,7 +166,30 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   @override
   Future<void> aoArrastarParaAtualizar() => _carregar();
 
-  AbaDaRede _aba = AbaDaRede.proximos;
+  /// **O UNICO recorte que `RecorteDaRede` nao sabe expressar.**
+  ///
+  /// Ele nao e um parametro da lista de eventos: "so onde eu pedi" e uma
+  /// OPERACAO diferente (`listMyNetworkEventJoinRequests`), com outra resposta
+  /// e outros parametros aceitos. Por isso ele e estado desta tela e nao campo
+  /// do recorte -- po-lo no modelo faria `queryDaAgenda` ter de ignora-lo, e
+  /// recorte que o modelo carrega e a rota ignora e a classe de defeito que
+  /// `barra_de_listagem.dart` existe para impedir.
+  ///
+  /// Ele entra na folha como o grupo `Meu envolvimento`, e e por isso que o
+  /// distintivo da barra o conta: `ControleDeFiltro.ativos` conta grupo com
+  /// `selecionado != null`, e o grupo declara o valor quando ele e verdadeiro.
+  bool _soOndePedi = false;
+
+  /// O codigo da unica opcao do grupo `Meu envolvimento`.
+  ///
+  /// **Ele NAO vai para o servidor**, e e por isso que ele e local: a rota de
+  /// pedidos nao tem parametro de envolvimento -- ela E a lista dos meus
+  /// pedidos. O codigo existe para o componente de filtro poder dizer
+  /// "selecionado" e para `_aplicarAFolha` poder ler a escolha de volta, e
+  /// `requested` e a palavra que o contrato usa para o pedido
+  /// (`NetworkEventJoinRequest`).
+  static const String _codigoDeSoOndePedi = 'requested';
+
   RecorteDaRede _recorte = const RecorteDaRede();
   _Fase _fase = _Fase.carregando;
 
@@ -174,7 +217,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
   final TextEditingController _buscaControlador = TextEditingController();
-  TabController? _abas;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
@@ -185,7 +227,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   @override
   void dispose() {
     _buscaControlador.dispose();
-    _abas?.dispose();
     super.dispose();
   }
 
@@ -210,26 +251,29 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     });
   }
 
-  List<AbaDaRede> _abasVisiveis(bool logado) => <AbaDaRede>[
-        AbaDaRede.proximos,
-        if (logado) AbaDaRede.pedidos,
-        AbaDaRede.encerrados,
-      ];
+  /// O recorte de tempo EFETIVO.
+  ///
+  /// **Nulo no recorte significa `upcoming`**, e isso nao e invencao desta
+  /// mudanca: `RecorteDaRede.quando` ja era nulavel com esse sentido, e
+  /// `queryDaAgenda` ja fazia `(quando ?? quandoDaAba)`. O que mudou e QUEM
+  /// escolhe o valor -- era a aba, e agora e o grupo `Quando` da folha.
+  ///
+  /// Manter `null` como padrao em vez de gravar `aVir` tem uma consequencia
+  /// desejada: `Próximos` nao conta como filtro ativo, e o distintivo da barra
+  /// nao nasce com `1` numa lista que ninguem recortou.
+  QuandoDaRede get _quandoEfetivo => _recorte.quando ?? QuandoDaRede.aVir;
 
-  /// O `TabController` acompanha quantas abas existem (duas sem conta, tres
-  /// com), e e refeito quando isso muda.
-  TabController _controladorDasAbas(List<AbaDaRede> abas) {
-    final atual = _abas;
-    final indice = abas.indexOf(_aba).clamp(0, abas.length - 1);
-    if (atual != null && atual.length == abas.length) {
-      if (atual.index != indice) atual.index = indice;
-      return atual;
-    }
-    atual?.dispose();
-    final novo = TabController(length: abas.length, vsync: this, initialIndex: indice);
-    _abas = novo;
-    return novo;
-  }
+  /// A lista esta nos eventos que ja passaram (o que era a aba `Encerrados`).
+  bool get _encerrados => _quandoEfetivo == QuandoDaRede.passados;
+
+  /// A lista esta na agenda do que vem (o que era a aba `Próximos`).
+  ///
+  /// **Os tres sub-recortes de tempo (`Hoje`, `Este fim de semana`,
+  /// `Próximos 30 dias`) continuam DENTRO deste caso**, e nao viraram um quarto
+  /// estado: eles sao janelas do futuro, e e por isso que a distancia e a ordem
+  /// por proximidade continuam valendo neles -- como valiam dentro da aba
+  /// `Próximos`, que tinha os mesmos tres sub-recortes.
+  bool get _naAgendaDoQueVem => !_soOndePedi && !_encerrados;
 
   /// Ha regiao cadastrada no perfil (`Me.reference_area`). Sem ela nao ha
   /// distancia, e a pergunta de distancias nao sai (UX 28.3, decisao 3).
@@ -246,7 +290,9 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       _limparMedidas();
     }
     _logadoDaUltimaCarga = logado;
-    if (!logado && _aba == AbaDaRede.pedidos) _aba = AbaDaRede.proximos;
+    // Saiu da conta com `Só onde eu pedi` ligado: o recorte cai, e a lista
+    // volta a agenda publica em vez de pedir uma rota que responderia `401`.
+    if (!logado && _soOndePedi) _soOndePedi = false;
 
     final int geracao;
     if (maisUma) {
@@ -264,7 +310,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     final rede = RedeApi(escopo.api);
     final medir = logado &&
         _temRegiao &&
-        _aba == AbaDaRede.proximos &&
+        _naAgendaDoQueVem &&
         !recorte.pedeDistancia &&
         recorte.visibilidade != VisibilidadeDoEncontro.privado;
 
@@ -274,67 +320,80 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       late final int pagina;
       late final String efetiva;
 
-      switch (_aba) {
-        case AbaDaRede.pedidos:
-          final p = await rede.meusPedidos(recorte.queryDePedidos);
+      // **O RECORTE ESCOLHE A OPERACAO, e era a aba que escolhia.** Os tres
+      // ramos sao os mesmos de antes, palavra por palavra; o que mudou foi a
+      // condicao de cada um -- `_soOndePedi` e `_encerrados` no lugar de
+      // `AbaDaRede.pedidos` e `AbaDaRede.encerrados`.
+      //
+      // **`Só onde eu pedi` vem PRIMEIRO, e a ordem importa**: ele e uma
+      // operacao diferente e nao aceita `when`, entao um recorte de tempo
+      // junto com ele nao tem efeito -- e por isso o grupo `Quando` nao e
+      // oferecido quando ele esta ligado (ver `_controleDeFiltro`).
+      if (_soOndePedi) {
+        final p = await rede.meusPedidos(recorte.queryDePedidos);
+        itens = <_ItemDaAgenda>[
+          for (final m in p.itens)
+            _ItemDaAgenda(
+              m.encontro,
+              // Estado desconhecido vira `Pedido enviado`, nunca recusa.
+              pedido: m.estado ?? EstadoDoPedido.enviado,
+            ),
+        ];
+        (total, pagina) = (p.total, p.pagina);
+        efetiva = OrdemDaRede.proximos.codigo;
+      } else if (_encerrados) {
+        // `quandoDaAba` continua sendo o PADRAO de quem nao escolheu, e aqui
+        // ele e redundante de proposito: `_encerrados` so e verdadeiro quando
+        // `_recorte.quando` JA e `passados`, e `queryDaAgenda` faz
+        // `(quando ?? quandoDaAba)`. Repetir o valor deixa a chamada legivel
+        // sozinha e nao muda o resultado.
+        final p = await rede.listar(
+          recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.passados),
+        );
+        _cidadesConhecidas.addAll(p.cidades);
+        itens = <_ItemDaAgenda>[for (final e in p.itens) _ItemDaAgenda(e)];
+        (total, pagina) = (p.total, p.pagina);
+        efetiva = p.ordemEfetiva.codigo;
+      } else {
+        if (logado && _temRegiao && recorte.pedeDistancia) {
+          final p = await rede.listarPorPerto(
+            recorte.queryPorPerto(
+              ordemPorPerto: recorte.ordem == OrdemPorPerto.distancia.codigo
+                  ? OrdemPorPerto.distancia
+                  : OrdemPorPerto.proximos,
+            ),
+          );
+          for (final i in p.itens) {
+            _cidadesConhecidas.add(i.encontro.lugar.cidade);
+          }
           itens = <_ItemDaAgenda>[
-            for (final m in p.itens)
+            for (final i in p.itens)
+              _ItemDaAgenda(i.encontro, distancia: i.distanciaEmMetros),
+          ];
+          (total, pagina) = (p.total, p.pagina);
+          efetiva = p.ordemEfetiva.codigo;
+        } else {
+          final p = await rede.listar(
+            recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.aVir),
+          );
+          _cidadesConhecidas.addAll(p.cidades);
+          if (medir) {
+            await _garantirMedidas(rede, recorte, <String>[
+              for (final e in p.itens)
+                if (e is EncontroPublico) e.slug,
+            ]);
+          }
+          itens = <_ItemDaAgenda>[
+            for (final e in p.itens)
               _ItemDaAgenda(
-                m.encontro,
-                // Estado desconhecido vira `Pedido enviado`, nunca recusa.
-                pedido: m.estado ?? EstadoDoPedido.enviado,
+                e,
+                // So publico recebe medida; o teaser nao tem onde por.
+                distancia: medir && e is EncontroPublico ? _medidas[e.slug] : null,
               ),
           ];
           (total, pagina) = (p.total, p.pagina);
-          efetiva = OrdemDaRede.proximos.codigo;
-        case AbaDaRede.encerrados:
-          final p = await rede.listar(
-            recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.passados),
-          );
-          _cidadesConhecidas.addAll(p.cidades);
-          itens = <_ItemDaAgenda>[for (final e in p.itens) _ItemDaAgenda(e)];
-          (total, pagina) = (p.total, p.pagina);
           efetiva = p.ordemEfetiva.codigo;
-        case AbaDaRede.proximos:
-          if (logado && _temRegiao && recorte.pedeDistancia) {
-            final p = await rede.listarPorPerto(
-              recorte.queryPorPerto(
-                ordemPorPerto: recorte.ordem == OrdemPorPerto.distancia.codigo
-                    ? OrdemPorPerto.distancia
-                    : OrdemPorPerto.proximos,
-              ),
-            );
-            for (final i in p.itens) {
-              _cidadesConhecidas.add(i.encontro.lugar.cidade);
-            }
-            itens = <_ItemDaAgenda>[
-              for (final i in p.itens)
-                _ItemDaAgenda(i.encontro, distancia: i.distanciaEmMetros),
-            ];
-            (total, pagina) = (p.total, p.pagina);
-            efetiva = p.ordemEfetiva.codigo;
-          } else {
-            final p = await rede.listar(
-              recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.aVir),
-            );
-            _cidadesConhecidas.addAll(p.cidades);
-            if (medir) {
-              await _garantirMedidas(rede, recorte, <String>[
-                for (final e in p.itens)
-                  if (e is EncontroPublico) e.slug,
-              ]);
-            }
-            itens = <_ItemDaAgenda>[
-              for (final e in p.itens)
-                _ItemDaAgenda(
-                  e,
-                  // So publico recebe medida; o teaser nao tem onde por.
-                  distancia: medir && e is EncontroPublico ? _medidas[e.slug] : null,
-                ),
-            ];
-            (total, pagina) = (p.total, p.pagina);
-            efetiva = p.ordemEfetiva.codigo;
-          }
+        }
       }
 
       if (!mounted || geracao != _geracao) return;
@@ -421,18 +480,22 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     _carregar();
   }
 
-  void _trocarAba(AbaDaRede aba) {
-    if (aba == _aba) return;
-    setState(() {
-      _aba = aba;
-      // Filtros e ordem sao de cada aba; a busca vale para as tres.
-      _recorte = RecorteDaRede(termo: _recorte.termo);
-    });
-    _carregar();
-  }
-
+  /// **`_trocarAba` SAIU com as abas (19/10/2026).**
+  ///
+  /// Ele zerava filtro e ordem ao trocar de aba, mantendo so a busca
+  /// (*"filtros e ordem sao de cada aba; a busca vale para as tres"*). Com as
+  /// tres abas virando recortes da MESMA folha, nao ha mais o que zerar: a
+  /// folha aplica tudo num `Aplicar` e e ela que decide o que fica.
+  ///
+  /// **O que o zeramento resolvia continua resolvido, e por construcao em vez
+  /// de por limpeza:** um recorte que a operacao escolhida nao aceita nao e
+  /// OFERECIDO -- `_controleDeFiltro` nao desenha o grupo --, e
+  /// `_aplicarAFolha` so mexe nas chaves que os grupos daquela composicao
+  /// declararam (`_Nada` e "nao mexer"). Entao `max_km` nao pode sobrar ligado
+  /// numa lista de pedidos, porque o grupo de distancia nao existe la para
+  /// liga-lo.
   bool get _podeMedir =>
-      Escopo.of(context).sessao.logado && _temRegiao && _aba == AbaDaRede.proximos;
+      Escopo.of(context).sessao.logado && _temRegiao && _naAgendaDoQueVem;
 
   bool get _temMais => _itens.length < _total;
 
@@ -444,12 +507,14 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       builder: (context, _) {
         final logado = sessao.logado;
         if (_logadoDaUltimaCarga != null && _logadoDaUltimaCarga != logado) {
-          // Entrou ou saiu com a agenda aberta: recarrega na aba certa.
+          // Entrou ou saiu com a agenda aberta: recarrega com o recorte certo.
           _agendarCarga();
         }
-        final abas = _abasVisiveis(logado);
-        if (!abas.contains(_aba)) _aba = AbaDaRede.proximos;
-        final controlador = _controladorDasAbas(abas);
+        // Saiu da conta com `Só onde eu pedi` ligado: o recorte cai aqui
+        // tambem, e nao so em `_carregar`. Sem esta linha a folha continuaria
+        // mostrando o grupo `Meu envolvimento` com a opcao marcada no quadro
+        // entre sair da conta e a carga nova chegar.
+        if (!logado && _soOndePedi) _soOndePedi = false;
 
         final busca = _controleDeBusca();
         final filtro = _controleDeFiltro();
@@ -533,19 +598,24 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // O que saiu daqui foi um `BotaoSecundario` de largura total com
             // 48 dp de altura, dentro de um `Padding` de 16 dp embaixo: 64 dp
             // de altura devolvidos ao corpo da agenda.
-            TabBar(
-              controller: controlador,
-              onTap: (i) => _trocarAba(abas[i]),
-              tabs: <Widget>[
-                for (final a in abas)
-                  Tab(height: BichuAlvoDeToque.min, text: a.rotulo),
-              ],
-            ),
-            const SizedBox(height: BichuEspaco.e4),
+            // **A `TabBar` DAS TRES ABAS SAIU DAQUI (19/10/2026).** Elas
+            // viraram recortes da folha de filtro -- a conta esta no lugar em
+            // que `AbaDaRede` estava, no alto deste arquivo.
+            //
+            // **E NAO FOI SUBSTITUIDA POR OUTRA AQUI:** as duas abas que a
+            // secao tem agora (`Eventos` e `Comunidade`) sao da SECAO e nao
+            // desta lista, e quem as desenha e `SecaoDaRede`, ACIMA desta
+            // tela. A razao e a mesma que mantinha as tres fora da
+            // `BarraDeListagem`: esta tela desaparece em alguns estados
+            // (carregando, falha) e as abas tem de ficar -- quem filtrou ate o
+            // vazio precisa de como voltar.
             if (_fase != _Fase.carregando)
               BarraDeListagem(
                 total: _total,
-                substantivo: _aba == AbaDaRede.pedidos
+                // O substantivo acompanha a OPERACAO e nao a aba: com
+                // `Só onde eu pedi` a lista e de pedidos, e o resumo da barra
+                // tem de dizer `3 pedidos` e nao `3 eventos`.
+                substantivo: _soOndePedi
                     ? const SubstantivoDaListagem(
                         singular: 'pedido',
                         plural: 'pedidos',
@@ -628,9 +698,50 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     final r = _recorte;
     final grupos = <GrupoDeFiltro>[];
 
-    if (_aba == AbaDaRede.pedidos) {
-      // `listMyNetworkEventJoinRequests` nao aceita `admission`, `size` nem
-      // distancia: filtrar por valor oculto entregaria o valor.
+    // **O GRUPO QUE ABSORVEU A ABA `Meus pedidos` (19/10/2026).**
+    //
+    // Ele vem PRIMEIRO de proposito: ele e o unico grupo que troca a OPERACAO
+    // -- e, com ela, quais outros grupos existem. Quem abre a folha le a
+    // escolha que governa as outras antes de ver as outras.
+    //
+    // **SO COM SESSAO, e ele nao nasce desabilitado.** Sem conta nao existe
+    // "onde eu pedi": a rota responderia `401`, e uma opcao que convidasse a
+    // entrar seria um controle cujo desfecho e uma recusa. Mesma regra que a
+    // aba antiga ja seguia (`_abasVisiveis` escondia `Meus pedidos` sem
+    // sessao), e e a regra dos tres casos em que um controle nao nasce, de
+    // `barra_de_listagem.dart`.
+    //
+    // **A REGUA E SESSAO e nao `podeCriarNaComunidade`**, e a diferenca e
+    // medida: pedir para ir e escrever e exige canal verificado; VER os
+    // pedidos que eu ja fiz e ler, e quem pediu e depois trocou de e-mail
+    // continua tendo pedidos na fila.
+    //
+    // **UMA opcao num grupo nao e um grupo vazio**, e aqui ela e uma escolha
+    // de verdade: marcar recorta, desmarcar devolve a agenda inteira. A
+    // alternativa -- duas opcoes, `Todos` e `Só onde eu pedi` -- seria a
+    // ausencia de recorte vestida de recorte, e o componente ja expressa
+    // "nenhum" por `selecionado: null`.
+    if (Escopo.of(context).sessao.logado) {
+      grupos.add(
+        GrupoDeFiltro(
+          chave: 'involvement',
+          titulo: 'Meu envolvimento',
+          selecionado: _soOndePedi ? _codigoDeSoOndePedi : null,
+          opcoes: const <OpcaoDeRecorte>[
+            OpcaoDeRecorte(
+              codigo: _codigoDeSoOndePedi,
+              rotulo: 'Só onde eu pedi',
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_soOndePedi) {
+      // `listMyNetworkEventJoinRequests` nao aceita `when`, `admission`,
+      // `size`, `visibility` nem distancia: filtrar por valor oculto
+      // entregaria o valor, e oferecer grupo que a rota ignora e o filtro que
+      // mente sobre o alcance.
       grupos.add(
         GrupoDeFiltro(
           chave: 'state',
@@ -646,19 +757,57 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         ),
       );
     } else {
-      if (_aba == AbaDaRede.proximos) {
-        grupos.add(
-          GrupoDeFiltro(
-            chave: 'when',
-            titulo: 'Quando',
-            selecionado: r.quando?.codigo,
-            opcoes: <OpcaoDeRecorte>[
-              for (final q in QuandoDaRede.subRecortes)
-                OpcaoDeRecorte(codigo: q.codigo, rotulo: q.rotulo),
-            ],
-          ),
-        );
-      }
+      // **O GRUPO QUE ABSORVEU AS ABAS `Próximos` E `Encerrados`
+      // (19/10/2026).**
+      //
+      // Ele ja existia, com os TRES sub-recortes do futuro (`Hoje`, `Este fim
+      // de semana`, `Próximos 30 dias`) e so dentro da aba `Próximos`. Agora
+      // ele carrega as duas abas tambem, e passou a ser oferecido sempre que a
+      // lista e de eventos.
+      //
+      // **A ORDEM DAS OPCOES E DELIBERADA**: `Próximos` e `Encerrados`
+      // primeiro, porque sao as duas metades do tempo e uma delas e sempre a
+      // verdade da lista; os tres sub-recortes depois, porque recortam DENTRO
+      // de `Próximos`.
+      //
+      // **`Próximos` e mostrado como SELECIONADO quando ninguem escolheu**
+      // (`?? QuandoDaRede.aVir`), e isso nao e o mesmo que estar no recorte: o
+      // recorte guarda `null`, e por isso o distintivo da barra nao nasce com
+      // `1`. A folha mostra a verdade da lista -- ela E a agenda do que vem --
+      // sem afirmar que alguem filtrou. `_aplicarAFolha` fecha o circulo
+      // devolvendo `null` quando a escolha e `upcoming`.
+      //
+      // **Escolher um sub-recorte NAO desliga `Próximos`**, porque os tres sao
+      // janelas do futuro e o servidor os trata como `when` unico: o grupo e
+      // de escolha unica, e marcar `Hoje` substitui `Próximos` por uma janela
+      // mais estreita DO MESMO lado do tempo.
+      grupos.add(
+        GrupoDeFiltro(
+          chave: 'when',
+          titulo: 'Quando',
+          selecionado: _quandoEfetivo.codigo,
+          // **`Próximos` E A VERDADE DA LISTA E NAO UM RECORTE**, e esta linha
+          // e o que separa as duas coisas. Sem ela o distintivo da barra
+          // nascia com `1` numa agenda que ninguem filtrou, e -- pior -- o
+          // estado vazio trocava de frase: a `Rede` sem evento nenhum dizia
+          // *"Nenhum evento com esses filtros"* e oferecia `Limpar filtro`,
+          // um botao que nao tinha o que limpar. **Medido**, e e o defeito que
+          // `GrupoDeFiltro.codigoPadrao` existe para fechar.
+          codigoPadrao: QuandoDaRede.aVir.codigo,
+          opcoes: <OpcaoDeRecorte>[
+            OpcaoDeRecorte(
+              codigo: QuandoDaRede.aVir.codigo,
+              rotulo: QuandoDaRede.aVir.rotulo,
+            ),
+            OpcaoDeRecorte(
+              codigo: QuandoDaRede.passados.codigo,
+              rotulo: QuandoDaRede.passados.rotulo,
+            ),
+            for (final q in QuandoDaRede.subRecortes)
+              OpcaoDeRecorte(codigo: q.codigo, rotulo: q.rotulo),
+          ],
+        ),
+      );
       grupos.add(
         GrupoDeFiltro(
           chave: 'admission',
@@ -708,6 +857,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
           ],
         ),
       );
+      // A distancia continua so na agenda do que vem, e `_podeMedir` ja diz
+      // isso: ela chama `_naAgendaDoQueVem`, que e falso em `Encerrados`.
+      // Medir a distancia de um evento que ja passou e oferecer um recorte
+      // sobre uma decisao que ninguem mais pode tomar.
       if (_podeMedir) {
         grupos.add(
           GrupoDeFiltro(
@@ -745,10 +898,32 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     // `Distância` como ordem e a lista so de publicos, pela mesma razao do
     // filtro `max_km`: `listNearbyNetworkEvents` nao devolve privado.
     final porDistancia = ordem == OrdemPorPerto.distancia.codigo;
+    // **O RECORTE QUE TROCA A OPERACAO, aplicado ANTES do resto.**
+    //
+    // `_soOndePedi` nao mora no recorte (ver o campo), entao ele e aplicado
+    // aqui e o `_trocarRecorte` abaixo dispara a carga uma vez so -- e nao
+    // duas, que e o que aconteceria com um `setState` proprio.
+    //
+    // `containsKey` e nao `!= null`: o grupo nao e oferecido sem sessao nem
+    // dentro da propria lista de pedidos para alguns casos, e chave ausente e
+    // "nao mexer". Sem esta distincao, abrir a folha com o grupo escondido
+    // desligaria o recorte sozinho.
+    if (filtros.containsKey('involvement')) {
+      _soOndePedi = filtros['involvement'] == _codigoDeSoOndePedi;
+    }
     _trocarRecorte(
       _recorteCom(
         estadoDoPedido: v('state', EstadoDoPedido.porCodigo),
-        quando: v('when', QuandoDaRede.porCodigo),
+        // **`Próximos` VOLTA A SER `null` no recorte**, e e isto que mantem o
+        // distintivo da barra em zero para a lista que ninguem recortou. A
+        // folha mostra `Próximos` marcado porque e a verdade da lista; o
+        // recorte guarda "nao escolhi".
+        quando: v(
+          'when',
+          (c) => c == QuandoDaRede.aVir.codigo
+              ? null
+              : QuandoDaRede.porCodigo(c),
+        ),
         entrada: v('admission', TipoDeEntrada.porCodigo),
         // Lista so de publicos: o filtro de visibilidade sai junto.
         visibilidade: maxKm != null || porDistancia
@@ -764,39 +939,41 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   ControleDeOrdenacao _controleDeOrdenacao() {
     final opcoes = <OpcaoDeRecorte>[];
-    switch (_aba) {
-      case AbaDaRede.proximos:
+    // **AS MESMAS TRES COMPOSICOES DE ANTES**, agora escolhidas pelo recorte e
+    // nao pela aba: `Só onde eu pedi` e `Encerrados` so aceitam uma ordem
+    // cada, e a agenda do que vem aceita duas quando ha de onde medir.
+    if (_soOndePedi) {
+      opcoes.add(
+        OpcaoDeRecorte(
+          codigo: OrdemDaRede.proximos.codigo,
+          rotulo: OrdemDaRede.proximos.rotulo,
+        ),
+      );
+    } else if (_encerrados) {
+      opcoes.add(
+        OpcaoDeRecorte(
+          codigo: OrdemDaRede.recentes.codigo,
+          rotulo: OrdemDaRede.recentes.rotulo,
+        ),
+      );
+    } else {
+      opcoes.add(
+        OpcaoDeRecorte(
+          codigo: OrdemDaRede.proximos.codigo,
+          rotulo: OrdemDaRede.proximos.rotulo,
+        ),
+      );
+      if (_podeMedir) {
         opcoes.add(
           OpcaoDeRecorte(
-            codigo: OrdemDaRede.proximos.codigo,
-            rotulo: OrdemDaRede.proximos.rotulo,
+            codigo: OrdemPorPerto.distancia.codigo,
+            rotulo: OrdemPorPerto.distancia.rotulo,
           ),
         );
-        if (_podeMedir) {
-          opcoes.add(
-            OpcaoDeRecorte(
-              codigo: OrdemPorPerto.distancia.codigo,
-              rotulo: OrdemPorPerto.distancia.rotulo,
-            ),
-          );
-        }
-      case AbaDaRede.pedidos:
-        opcoes.add(
-          OpcaoDeRecorte(
-            codigo: OrdemDaRede.proximos.codigo,
-            rotulo: OrdemDaRede.proximos.rotulo,
-          ),
-        );
-      case AbaDaRede.encerrados:
-        opcoes.add(
-          OpcaoDeRecorte(
-            codigo: OrdemDaRede.recentes.codigo,
-            rotulo: OrdemDaRede.recentes.rotulo,
-          ),
-        );
+      }
     }
-    // A barra mostra a ordem REAL. Se o servidor devolveu uma que a aba nao
-    // oferece, ela entra na lista em vez de a barra mentir.
+    // A barra mostra a ordem REAL. Se o servidor devolveu uma que o recorte
+    // atual nao oferece, ela entra na lista em vez de a barra mentir.
     if (!opcoes.any((o) => o.codigo == _ordemEfetiva)) {
       final rotulo = OrdemDaRede.porCodigo(_ordemEfetiva)?.rotulo ??
           OrdemPorPerto.porCodigo(_ordemEfetiva)?.rotulo ??
@@ -879,44 +1056,86 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   Widget _vazio() {
     final r = _recorte;
-    final filtros = r.quantidadeDeFiltros;
+    // **A CONTAGEM SAI DOS GRUPOS DESENHADOS, e nao de
+    // `RecorteDaRede.quantidadeDeFiltros`.** Isto conserta um portao cego que
+    // a absorcao das abas teria aberto: `_soOndePedi` **nao mora no recorte**,
+    // entao `quantidadeDeFiltros` devolveria `0` com `Só onde eu pedi`
+    // ligado -- e a tela diria "a Rede ainda nao tem evento" sobre uma lista
+    // de PEDIDOS vazia, que e uma afirmacao diferente e falsa.
+    //
+    // `ControleDeFiltro.ativos` conta grupo com `selecionado != null`, e e a
+    // MESMA conta que o distintivo da barra usa. Uma verdade so.
+    final filtros = _controleDeFiltro().ativos;
     if (!r.temBusca && filtros == 0) {
-      return switch (_aba) {
-        AbaDaRede.proximos => const EstadoVazio(
-            titulo: AgendaDaRede.tituloDoVazio,
-            explicacao: AgendaDaRede.explicacaoDoVazio,
-          ),
-        AbaDaRede.pedidos => const EstadoVazio(
-            titulo: AgendaDaRede.tituloDoVazioDePedidos,
-            explicacao: AgendaDaRede.explicacaoDoVazioDePedidos,
-          ),
-        AbaDaRede.encerrados => const EstadoVazio(
-            titulo: AgendaDaRede.tituloDoVazioDeEncerrados,
-            explicacao: AgendaDaRede.explicacaoDoVazioDeEncerrados,
-          ),
-      };
+      // Sem busca e sem recorte nenhum a lista e a agenda do que vem, e so
+      // ela: `Só onde eu pedi` e `Encerrados` sao filtros e contam acima.
+      return const EstadoVazio(
+        titulo: AgendaDaRede.tituloDoVazio,
+        explicacao: AgendaDaRede.explicacaoDoVazio,
+      );
     }
+
     final filtroTexto = filtros == 1 ? 'filtro' : 'filtros';
     final rotulo = r.temBusca && filtros > 0
         ? 'Limpar busca e $filtroTexto'
         : r.temBusca
             ? 'Limpar busca'
             : 'Limpar $filtroTexto';
+    final limpar = OutlinedButton(
+      onPressed: () {
+        if (r.temBusca) _buscaControlador.clear();
+        // `_soOndePedi` nao mora no recorte, entao limpar o recorte nao o
+        // limpa: sem esta linha, `Limpar filtro` deixaria a lista de pedidos
+        // vazia exatamente como estava, e o botao viraria um toque sem
+        // desfecho.
+        _soOndePedi = false;
+        _trocarRecorte(RecorteDaRede(ordem: r.ordem));
+      },
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+      ),
+      child: Text(rotulo),
+    );
+
+    // **OS DOIS VAZIOS QUE ERAM DE ABA CONTINUAM, e agora sao de FILTRO.**
+    //
+    // `Nenhum pedido ainda` e `Nenhum evento encerrado` existiam porque
+    // `Meus pedidos` e `Encerrados` eram abas, e cada uma tinha o proprio
+    // vazio sem recorte. Com as duas virando filtro, a frase generica
+    // (`Nenhum evento com esses filtros`) passaria a cobrir os dois casos --
+    // e ela diria menos: *"nenhum pedido ainda"* conta a historia de quem
+    // nunca pediu para ir a nada, e *"nenhum evento com esses filtros"*
+    // sugere que mexer no filtro resolve.
+    //
+    // A condicao e **filtro UNICO**: com mais de um recorte ligado a frase
+    // especifica mentiria por omissao (pode nao haver pedido *naquela cidade*,
+    // e nao pedido nenhum).
+    //
+    // **E agora eles TEM a acao de limpar**, que como abas nao tinham: sendo
+    // filtro, ha o que desfazer.
+    if (!r.temBusca && filtros == 1) {
+      if (_soOndePedi) {
+        return EstadoVazio(
+          titulo: AgendaDaRede.tituloDoVazioDePedidos,
+          explicacao: AgendaDaRede.explicacaoDoVazioDePedidos,
+          acao: limpar,
+        );
+      }
+      if (_encerrados) {
+        return EstadoVazio(
+          titulo: AgendaDaRede.tituloDoVazioDeEncerrados,
+          explicacao: AgendaDaRede.explicacaoDoVazioDeEncerrados,
+          acao: limpar,
+        );
+      }
+    }
+
     return EstadoVazio(
       titulo: r.temBusca
           ? AgendaDaRede.tituloDoVazioComBusca(r.termoLimpo!)
           : AgendaDaRede.tituloDoVazioFiltrado,
       explicacao: AgendaDaRede.explicacaoDoVazioFiltrado,
-      acao: OutlinedButton(
-        onPressed: () {
-          if (r.temBusca) _buscaControlador.clear();
-          _trocarRecorte(RecorteDaRede(ordem: r.ordem));
-        },
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
-        ),
-        child: Text(rotulo),
-      ),
+      acao: limpar,
     );
   }
 }
