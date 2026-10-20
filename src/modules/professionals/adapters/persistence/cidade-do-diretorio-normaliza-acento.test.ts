@@ -61,6 +61,10 @@ const semBanco = new Kysely<Database>({
 const RECORTE_SEM_CIDADE: RecorteDoDiretorio = {
   chamador: '01a15623-b345-709f-ac33-75c9bae66143' as RecorteDoDiretorio['chamador'],
   agora: Date.parse('2026-10-19T21:00:00.000Z') as RecorteDoDiretorio['agora'],
+  // SEC-021: este arquivo compila o SQL do FILTRO de cidade, que nao toca o
+  // ponto de referencia. Sem aparelho o ponto e `null::geography`, e e o
+  // recorte mais simples que ainda exercita o que ele mede.
+  familia: undefined,
   sort: 'name',
   page: 1,
   limit: 20,

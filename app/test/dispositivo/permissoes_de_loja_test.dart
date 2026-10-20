@@ -91,6 +91,74 @@ void main() {
       );
     });
 
+    // A ISCA DESTE CASO, medida em 19/10/2026: `INTERNET` NAO ESTAVA no
+    // manifesto `main`. O conjunto declarado aqui era so `CAMERA` e
+    // `ACCESS_COARSE_LOCATION`.
+    //
+    // No APK de release a permissao aparecia, e e por isso que ninguem viu: ela
+    // chegava pelo MERGE do manifesto do `firebase_messaging`, que a declara no
+    // manifesto dele (junto com `WAKE_LOCK`, `ACCESS_NETWORK_STATE` e
+    // `POST_NOTIFICATIONS`). Os dois manifestos onde ela estava escrita --
+    // `src/debug/` e `src/profile/` -- sao os que o Flutter cria por padrao e
+    // NAO valem para release.
+    //
+    // Ou seja: a capacidade de rede do produto inteiro estava pendurada num
+    // plugin de push. O app chama a nossa API em `API_BASE_URL` em cada tela;
+    // tirar o `firebase_messaging`, troca-lo, ou ele mudar de manifesto numa
+    // versao nova, e o APK de release sai SEM INTERNET.
+    //
+    // E O SINTOMA NAO E ERRO DE BUILD: `flutter build apk` sai 0, o APK
+    // instala, o app abre, e TODA chamada de rede falha em producao. Dentro do
+    // app isso nem parece defeito de permissao -- a `ApiClient` captura
+    // `SocketException` e mostra "sem conexao", a mesma tela de quem esta no
+    // metro. Nenhum teste de widget muda de cor.
+    //
+    // ESTE CASO MEDE O MANIFESTO `main`, NAO O MERGED, e isso e o ponto: medir
+    // o merged daria verde hoje, porque hoje a permissao chega la. O que este
+    // portao cobra e que ela nao DEPENDA do merge.
+    test('INTERNET esta declarada no manifesto main, nao herdada de plugin',
+        () {
+      expect(
+        manifesto,
+        matches(
+          RegExp(
+            r'<uses-permission\s+android:name="android\.permission\.INTERNET"',
+          ),
+        ),
+        reason: 'REPROVA: `android.permission.INTERNET` nao esta declarada em '
+            '`app/android/app/src/main/AndroidManifest.xml`.\n'
+            'Ela pode estar chegando ao APK de release pelo merge do manifesto '
+            'do `firebase_messaging` -- foi assim que este defeito nasceu. '
+            'Nesse estado, a capacidade de rede do produto inteiro depende de '
+            'um plugin de PUSH continuar presente e continuar declarando-a.\n'
+            'Nao conta estar em `src/debug/` nem em `src/profile/`: esses dois '
+            'manifestos sao os que o Flutter cria por padrao e nao valem para '
+            'release.\n'
+            'O app chama a API em `API_BASE_URL` em cada tela. Sem esta linha o '
+            'build sai 0, o APK instala, o app abre e toda chamada de rede '
+            'falha em producao mostrando "sem conexao".',
+      );
+    });
+
+    // ACCESS_NETWORK_STATE **NAO** ENTRA AQUI, e a decisao e por argumento, nao
+    // por simetria com a `INTERNET` acima.
+    //
+    // Ela tambem vem do `firebase_messaging`, mas a diferenca e quem a usa:
+    // nenhuma linha do Bichu consulta o `ConnectivityManager`. Nao ha
+    // `connectivity_plus` no `pubspec.yaml`, e a deteccao de "sem conexao" do
+    // produto nao pergunta o estado da rede ao sistema -- a `ApiClient` captura
+    // `SocketException`, `ClientException` e `HandshakeException` do socket, e
+    // isso funciona sem a permissao.
+    //
+    // Quem usa `ACCESS_NETWORK_STATE` e a logica de reenvio do PROPRIO plugin.
+    // Se o `firebase_messaging` sair, ela deve sair com ele, porque nao sobra
+    // ninguem para ler o estado da rede. Declara-la no `main` seria pedir
+    // permissao que o produto nao usa -- exatamente o excesso que o caso
+    // `nenhuma permissao de biblioteca de fotos` abaixo cobra.
+    //
+    // Se um dia o produto for consultar o estado da rede (banner "voce esta
+    // offline", repique automatico da fila ao voltar a conexao), ela passa a
+    // ser do produto e ganha declaracao e caso proprios, nesse commit.
     test('a camera NAO e exigida como recurso de hardware', () {
       final m = RegExp(
         r'<uses-feature[^>]*android:name="android\.hardware\.camera"[^>]*'

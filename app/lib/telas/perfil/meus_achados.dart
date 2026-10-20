@@ -92,6 +92,25 @@ class MeusAchados extends StatefulWidget {
 
   static const String rotuloDeCarregarMais = 'Carregar mais';
 
+  /// O estado do aviso, em palavra. **Nunca em cor sozinha** (SC 1.4.1), e o
+  /// desconhecido vira a palavra neutra: versão antiga do app continua no
+  /// bolso de alguém quando o servidor ganhar um estado novo, e um `switch` que
+  /// não o conhece não pode derrubar a tela.
+  static String rotuloDoEstado(StatusDoAchado status) => switch (status) {
+        StatusDoAchado.aberto => 'Em análise',
+        StatusDoAchado.comCorrespondencia => 'Possível tutor encontrado',
+        StatusDoAchado.encerrado => 'Encerrado',
+        StatusDoAchado.desconhecido => 'Registrado',
+      };
+
+  // **PUBLICO, e nao privado no cartao.** Ele morava em `_CartaoDoMeuAchado`,
+  // onde so esta lista o alcancava. `achado/tela_do_achado.dart` passou a
+  // mostrar o estado do MESMO `status`, e um segundo `switch` la seria a
+  // segunda traducao do mesmo campo: `Meus achados` diria `Possível tutor
+  // encontrado` e a tela do achado diria outra coisa sobre o mesmo registro, na
+  // mesma conta, a dois toques de distancia. E o mesmo arranjo de
+  // `MinhasIndicacoes.rotuloDoEstado`, que ja e publico por esta razao.
+
   static String fimDaLista(int quantos) => quantos == 1
       ? 'Você registrou 1 achado.'
       : 'Você registrou $quantos achados.';
@@ -297,17 +316,6 @@ class _CartaoDoMeuAchado extends StatelessWidget {
 
   final AchadoRegistrado achado;
 
-  /// O estado do aviso, em palavra. **Nunca em cor sozinha** (SC 1.4.1), e o
-  /// desconhecido vira a palavra neutra: versão antiga do app continua no
-  /// bolso de alguém quando o servidor ganhar um estado novo, e um `switch` que
-  /// não o conhece não pode derrubar a tela.
-  static String rotuloDoEstado(StatusDoAchado status) => switch (status) {
-        StatusDoAchado.aberto => 'Em análise',
-        StatusDoAchado.comCorrespondencia => 'Possível tutor encontrado',
-        StatusDoAchado.encerrado => 'Encerrado',
-        StatusDoAchado.desconhecido => 'Registrado',
-      };
-
   /// O título. O achado avulso não tem nome de pet — ele é de um animal que
   /// ninguém identificou ainda —, e por isso o título é **o que a pessoa
   /// informou**: espécie e porte. `FoundReport.species` e `size` são opcionais
@@ -332,7 +340,7 @@ class _CartaoDoMeuAchado extends StatelessWidget {
 
   static String rotuloAcessivelDe(AchadoRegistrado achado) {
     return <String>[
-      rotuloDoEstado(achado.status),
+      MeusAchados.rotuloDoEstado(achado.status),
       tituloDe(achado),
       achado.rotuloDaArea ?? 'Região não informada',
       quandoDe(achado) ?? '',
@@ -373,7 +381,7 @@ class _CartaoDoMeuAchado extends StatelessWidget {
                   borderRadius: BorderRadius.circular(BichuRaio.full),
                 ),
                 child: Text(
-                  rotuloDoEstado(achado.status),
+                  MeusAchados.rotuloDoEstado(achado.status),
                   style: textos.labelSmall?.copyWith(
                     color: cores.onPrimaryContainer,
                   ),

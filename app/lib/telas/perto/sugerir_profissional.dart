@@ -690,10 +690,30 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     );
   }
 
+  /// A SAIDA DA FAIXA DE ERRO: o rotulo que o servidor manda tem de levar a
+  /// algum lugar.
+  ///
+  /// `FaixaDeAviso` so monta o `TextButton` com rotulo E callback
+  /// (`widgets/faixa_de_aviso.dart`, linha 97). Devolver `null` aqui para uma
+  /// `proximaAcao` que `MensagensDeErro` sabe produzir nao deixa um rotulo de
+  /// acao sem destino -- o defeito que a BICHUS-62 nomeou --, deixa a faixa
+  /// SEM SAIDA NENHUMA: a pessoa le o motivo e nao tem onde tocar. Por isso
+  /// cada `proximaAcao` que chega nesta rota precisa do seu ramo aqui.
+  ///
+  /// **`verificarEmail` chega pelo `409 contact-channel-unverified`** -- a
+  /// recusa do servidor para quem nao confirmou o e-mail. E uma REDE DE
+  /// SEGURANCA, nao o caminho comum: a porta da indicacao ja esconde a acao de
+  /// criar de quem nao esta validado (`podeCriarNaComunidade`). O que sobra e
+  /// quem tinha a tela em pe quando o estado do e-mail mudou noutro aparelho --
+  /// e esse ainda ve a faixa, e a faixa ainda tem de sair.
   VoidCallback? _saidaDoErro(BuildContext context, MensagemDeErro mensagem) {
     if (mensagem.acao == null) return null;
     final rota = mensagem.rotaDaAcao;
     if (rota != null) return () => context.go(rota);
+    if (mensagem.proximaAcao == ProximaAcao.verificarEmail) {
+      final email = Escopo.of(context).sessao.usuario?.email ?? '';
+      return () => context.push(Rotas.verifiqueSeuEmail, extra: email);
+    }
     if (mensagem.proximaAcao == ProximaAcao.entrar) {
       return () => context.push(Rotas.entrar);
     }

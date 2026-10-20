@@ -48,7 +48,8 @@
 //     `<String>['O tutor foi avisado. Ele recebeu o aviso no celular agora.']`.
 //     -> reprova `a tela NAO afirma que o tutor foi avisado` -- e passa a
 //        ancora, que e o ponto: a reprovacao e pela mentira, nao pelo vazio.
-//  3. No mesmo arquivo, apague o `_Bloco` de `tituloDoQueFazerAgora`.
+//  3. No mesmo arquivo, apague o `BlocoDeInformacao` de
+//     `tituloDoQueFazerAgora`.
 //     -> reprova `a tela diz o que fazer em seguida`.
 //  4. Em `textos_do_achado.dart`, troque `achadoEmTexto` por um retorno fixo
 //     `'Achado em 01/01/2026'`.

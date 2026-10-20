@@ -230,6 +230,24 @@ class ContagemDeAvisos {
 
   final int naoLidos;
 
-  static ContagemDeAvisos doJson(Map<String, dynamic> json) =>
-      ContagemDeAvisos(naoLidos: json['unread_total'] as int);
+  /// **`FormatException`, e nao `TypeError`, quando o corpo nao bate** -- e a
+  /// diferenca e o que separa "nao consegui ler" de um app que cai.
+  ///
+  /// O `as int` cru que estava aqui estourava `_TypeError` num corpo `200` sem
+  /// `unread_total`, e `_TypeError` nao e `Exception`: quem chama trata
+  /// `FalhaDeChamada` e `FormatException` -- como [PaginaDaCaixa.doJson] ja
+  /// ensinava neste mesmo arquivo --, entao o erro escapava do `catch` e subia
+  /// pelo `await`. Medido: o arranque de 55 casos da suite reprovou assim,
+  /// quando o contador do sino passou a chamar esta rota no arranque e os
+  /// servidores de mentira responderam `200` sem o campo.
+  ///
+  /// Em producao o preco e o mesmo e pior: um deploy que mudasse este campo
+  /// derrubaria o ARRANQUE do app -- por causa do numero de um distintivo.
+  static ContagemDeAvisos doJson(Map<String, dynamic> json) {
+    final naoLidos = json['unread_total'];
+    if (naoLidos is! int) {
+      throw const FormatException('contagem de avisos sem `unread_total`');
+    }
+    return ContagemDeAvisos(naoLidos: naoLidos);
+  }
 }
