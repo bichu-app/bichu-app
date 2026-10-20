@@ -23,7 +23,7 @@
 import { createServer } from 'node:http';
 
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
-import { comoObjectKey } from '../modules/media/domain/chave-de-objeto.js';
+import { CATEGORIAS_PUBLICAS, comoObjectKey } from '../modules/media/domain/chave-de-objeto.js';
 import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { optionalEnv } from '../shared/config/env.js';
@@ -46,8 +46,33 @@ const PORTA = Number(optionalEnv('LEITOR_DE_MIDIA_PORTA') ?? '8080');
  * `banner` entrou com a capa de borda a borda do detalhe do encontro
  * (1280 px): a mesma imagem é desenhada em três tamanhos, e uma derivada só
  * servia mal aos três.
+ *
+ * ## A CATEGORIA VEM DE `CATEGORIAS_PUBLICAS`, E NÃO DE UMA LISTA ESCRITA AQUI
+ *
+ * Até 20/10/2026 esta linha trazia `(?:pets|products|events)` digitado à mão, e
+ * era a QUARTA cópia da lista de categorias — `CATEGORIAS_PUBLICAS`,
+ * `comoObjectKey` e `CATEGORIA_DO_PROPOSITO` já a tinham. `directory/` e
+ * `people/` entraram em 18/10/2026 nas outras três e **não entraram nesta**.
+ *
+ * O defeito foi medido contra homologação em 20/10/2026, e ele não estava na
+ * escrita: a foto do perfil subia, o `PUT` no armazenamento dava `204`,
+ * `PATCH /v1/me` devolvia `200`, `catalog_images.status` virava `ready`, o
+ * objeto existia em `gs://bichu-hml-media-public/people/card/...` e
+ * `GET /v1/me` devolvia a URL dela — e
+ * `GET https://img-hml.bichu.app/people/card/{nome}.jpeg` respondia **404
+ * `nao encontrado`**, porque `chaveDeDerivadaPublica` recusava a chave ANTES de
+ * olhar o balde. Na tela isso é indistinguível de "a foto não salvou", que foi
+ * exatamente como o cliente relatou. Valia para a foto do perfil, para a
+ * vitrine e para a foto do Mural (as três são `people/`) e para a logo e a foto
+ * do diretório (`directory/`).
+ *
+ * Derivar a forma da constante é o conserto, e não acrescentar duas palavras à
+ * alternação: a sexta categoria entra em `CATEGORIAS_PUBLICAS` e passa a ser
+ * servida sem ninguém lembrar deste arquivo. Era a conferência que faltava.
  */
-const FORMA_DE_DERIVADA = /^(?:(?:pets|products|events)\/)?(?:thumb|card|banner)\/[A-Za-z0-9_-]+\.(?:webp|jpg|jpeg)$/;
+const FORMA_DE_DERIVADA = new RegExp(
+  `^(?:(?:${CATEGORIAS_PUBLICAS.join('|')})/)?(?:thumb|card|banner)/[A-Za-z0-9_-]+\\.(?:webp|jpg|jpeg)$`,
+);
 const TIPO_POR_EXTENSAO: Readonly<Record<string, string>> = {
   webp: 'image/webp',
   jpg: 'image/jpeg',

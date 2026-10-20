@@ -18,6 +18,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { CATEGORIAS_PUBLICAS } from '../modules/media/domain/chave-de-objeto.js';
 import { chaveDeDerivadaPublica } from './leitor-de-midia.js';
 
 void describe('chaveDeDerivadaPublica', () => {
@@ -41,6 +42,62 @@ void describe('chaveDeDerivadaPublica', () => {
 
     void it('a barra da frente é aparada, porque a borda entrega o caminho com ela', () => {
       assert.equal(chaveDeDerivadaPublica('/pets/card/abc123.webp'), 'pets/card/abc123.webp');
+    });
+  });
+
+  /**
+   * A ISCA DO DEFEITO DE 20/10/2026, e ela reprova de verdade com o mecanismo
+   * desligado: com a alternação `(?:pets|products|events)` digitada à mão de
+   * volta no lugar da derivação de `CATEGORIAS_PUBLICAS`, os casos `people` e
+   * `directory` deste bloco falham, e o `TODA categoria` falha junto.
+   *
+   * Não é asserção genérica: o laço percorre `CATEGORIAS_PUBLICAS`, que é a
+   * MESMA constante que `comoObjectKey` usa para aceitar a chave. É isso que
+   * faz a sétima categoria não poder entrar no domínio e ficar 404 no leitor —
+   * o modo de falha que custou a foto do perfil, a vitrine, o Mural e o
+   * diretório ao mesmo tempo.
+   */
+  void describe('serve TODA categoria pública, e a lista não é escrita aqui', () => {
+    for (const categoria of CATEGORIAS_PUBLICAS) {
+      for (const variante of ['thumb', 'card', 'banner'] as const) {
+        const caminho = `${categoria}/${variante}/abc-123_XYZ.jpeg`;
+        void it(caminho, () => {
+          assert.equal(chaveDeDerivadaPublica(caminho), caminho);
+        });
+      }
+    }
+
+    // As DUAS que estavam 404 em homologação, nomeadas uma por uma: um laço
+    // sobre a constante passaria a valer sozinho se alguém tirasse `people` de
+    // `CATEGORIAS_PUBLICAS`, e esses dois casos é que não deixam.
+    void it('people/card — a foto do perfil, 404 em homologação até 20/10/2026', () => {
+      assert.equal(
+        chaveDeDerivadaPublica('people/card/nf-lly4AhMupaRWhfbYZnA.jpeg'),
+        'people/card/nf-lly4AhMupaRWhfbYZnA.jpeg',
+      );
+    });
+
+    void it('people/thumb — a vitrine e o ícone da conversa, pela mesma chave', () => {
+      assert.equal(chaveDeDerivadaPublica('people/thumb/abc123.jpeg'), 'people/thumb/abc123.jpeg');
+    });
+
+    void it('directory/card — a logo e a foto do profissional do Perto', () => {
+      assert.equal(chaveDeDerivadaPublica('directory/card/abc123.jpeg'), 'directory/card/abc123.jpeg');
+    });
+
+    // O CONTROLE POSITIVO DA ISCA: `pets/card` servia antes do conserto e
+    // continua servindo. Sem ele, uma isca que passasse por acidente (por
+    // exemplo um `FORMA_DE_DERIVADA` que aceitasse qualquer primeiro segmento)
+    // não se distinguiria de uma que mede o que diz medir.
+    void it('pets/card continua servindo — o controle positivo da isca', () => {
+      assert.equal(chaveDeDerivadaPublica('pets/card/abc123.jpeg'), 'pets/card/abc123.jpeg');
+    });
+
+    // E a recusa continua recusando: derivar a forma da constante não pode ter
+    // afrouxado o primeiro segmento. `found-reports` é categoria de verdade no
+    // armazenamento e **não** é pública (a foto do achado nunca é).
+    void it('found-reports NÃO entra, mesmo com a forma derivada da constante', () => {
+      assert.equal(chaveDeDerivadaPublica('found-reports/card/abc123.jpeg'), null);
     });
   });
 
