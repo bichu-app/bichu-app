@@ -110,6 +110,11 @@ ApiClient clienteDasDuasFontes(List<String> pedidos, {required int naoLidas}) {
 const String grupoDaIscaDoDescarteDoContador =
     'ISCA — o contador de nao lido e DESCARTADO com o app';
 
+/// O nome do grupo da isca do descarte do contador do SINO, escrito uma vez
+/// so. Ver [grupoDaIscaDoDescarteDoContador].
+const String grupoDaIscaDoDescarteDoSino =
+    'ISCA — o contador de avisos do sino e DESCARTADO com o app';
+
 /// O que o `dispose()` de `_BichuAppState` desfaz, e onde esta a prova.
 ///
 /// **A chave e o campo, exatamente como ele aparece em `lib/app.dart`.**
@@ -126,6 +131,18 @@ const Map<String, ProvaDoDescarte> descartesRegistrados =
   '_contadores': (
     arquivo: 'test/sessao/descartes_no_dispose_test.dart',
     grupo: grupoDaIscaDoDescarteDoContador,
+    semIsca: null,
+  ),
+  // ACRESCENTADA QUANDO A FRENTE DO SINO (PR #33) ENTROU NA `development`.
+  //
+  // Ela chegou com o descarte CERTO desde o primeiro dia -- `app.dart` ja a
+  // tinha no `dispose()`, e a classe ja tinha a guarda `_descartado` lida em
+  // `_publicar`. O que ela nao tinha era prova: nenhum caso ficava vermelho se
+  // a linha sumisse. Entao este portao nao a registrou como divida; ele cobrou
+  // dela a mesma isca que cobra do contador de nao lido, no mesmo formato.
+  '_contadorDeAvisos': (
+    arquivo: 'test/sessao/descartes_no_dispose_test.dart',
+    grupo: grupoDaIscaDoDescarteDoSino,
     semIsca: null,
   ),
   '_vigiaDeAviso': (
@@ -431,6 +448,59 @@ void main() {
             'engolido pelo `catch` de `_apagarTudoDestaConta`, que o '
             'registra como "uma limpeza de logout falhou" --, e e por isso '
             'que a guarda tem de estar aqui e nao la.',
+      );
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // A ISCA DO SINO. Mesmo formato, outro objeto: `ContadorDeAvisos` chegou da
+  // frente do PR #33 com o descarte certo e SEM prova de que ele esta la.
+  //
+  // Nao confundir os dois contadores: este e o do SINO da barra de topo
+  // (`GET /v1/me/notifications/count`), e `ContadoresDeNaoLido` e o das
+  // CONVERSAS. Os nomes sao parecidos e a arquitetura e a mesma -- e foi
+  // justamente essa semelhanca que deixou um deles sem descarte.
+  //
+  // DESLIGAR PARA VER REPROVAR: em `lib/app.dart`, tire
+  // `_contadorDeAvisos.dispose()` do `dispose()`.
+  // ------------------------------------------------------------------------
+  group(grupoDaIscaDoDescarteDoSino, () {
+    testWidgets('MEDICAO: com o app na arvore, o contador do sino esta VIVO',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        rede: (req) async => json200(<String, dynamic>{}),
+        deposito: depositoLogado(),
+      );
+      final sino = escopoDoApp(tester).contadorDeAvisos;
+      expect(
+        () => sino.addListener(() {}),
+        returnsNormally,
+        reason: 'O contador do sino ja estava descartado com o app na '
+            'arvore. Sem isto, o caso de baixo nao tem o que ver morrer.',
+      );
+    });
+
+    testWidgets('quando o app sai da arvore, o contador do sino esta '
+        'DESCARTADO', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: (req) async => json200(<String, dynamic>{}),
+        deposito: depositoLogado(),
+      );
+      final sino = escopoDoApp(tester).contadorDeAvisos;
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(
+        () => sino.addListener(() {}),
+        throwsFlutterError,
+        reason: 'REPROVA: o contador do sino sobreviveu ao app. A guarda '
+            '`_descartado` de `ContadorDeAvisos` depende de alguem chamar o '
+            '`dispose()` dela -- sem a linha no `app.dart`, a guarda nunca '
+            'liga e o notificador segura os ouvintes enquanto o processo '
+            'viver.',
       );
     });
   });
