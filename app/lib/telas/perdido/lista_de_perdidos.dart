@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/falhas.dart';
 import '../../api/modelos.dart';
 import '../../api/modelos_perdido.dart';
+import '../../api/contadores_api.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
@@ -557,6 +558,24 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         _fase = _Fase.lista;
         _carregandoMais = false;
       });
+      // A AREA FOI VISTA -- zera o selo da aba `Pets` (BICHUS-278).
+      //
+      // **Aqui, e nao no toque na aba:** o momento honesto e quando a lista
+      // CHEGOU na tela, e e a mesma escolha que `area_de_mensagens.dart` fez
+      // com `aoVerAArea`. Marcar no toque zeraria o numero de quem abriu a aba
+      // e levou um erro de rede -- a pessoa nao viu nada e o selo teria sumido.
+      //
+      // **`!maisUma`:** a pagina 2 nao e uma visita nova, e marcar nela
+      // gastaria um pedido por rolagem.
+      //
+      // **`unawaited`, e a falha e engolida dentro de `marcarSecaoVista`:** a
+      // lista acabou de carregar, e uma faixa de erro em cima dela por causa de
+      // um contador seria um erro sobre operacao que ninguem pediu.
+      if (!maisUma) {
+        unawaited(
+          Escopo.of(context).contadores.marcarSecaoVista(SecaoComContador.pets),
+        );
+      }
     } on FalhaDeChamada {
       _falhou(geracao, maisUma: maisUma);
     } on FormatException {

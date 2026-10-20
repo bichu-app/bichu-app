@@ -338,38 +338,71 @@ class _MeusPetsState extends State<MeusPets>
     );
   }
 
+  /// O corpo do bloco, por fase.
+  ///
+  /// ## A PORTA DE `Cadastrar pet` EXISTE EM TODA FASE COM SESSAO (20/10/2026)
+  ///
+  /// **Isto virou obrigacao hoje, e o motivo veio de outra tela.** O cliente
+  /// mandou tirar o alvo secundario da acao flutuante de `Pets` (*"na pagina
+  /// pet, remova o icone dos ..., so deixe o de escanear a tag"*), e com a
+  /// folha dele saiu uma das duas portas de `Rotas.cadastrarPet`. A outra e o
+  /// `Cadastrar meu pet` daqui -- **e ela so existia em DUAS das seis fases
+  /// deste bloco**, medido:
+  ///
+  ///   | fase                            | tinha a porta? |
+  ///   |---------------------------------|----------------|
+  ///   | `carregando` sem cache          | NAO            |
+  ///   | `carregando` com cache          | NAO            |
+  ///   | `lista` vazia                   | sim            |
+  ///   | `lista` com pets                | sim            |
+  ///   | `falhaComCache`                 | NAO            |
+  ///   | `falhaSemCache`                 | NAO            |
+  ///
+  /// Quatro fases sem porta nenhuma: quem abrisse a tela da conta com o
+  /// servidor fora -- ou so enquanto a lista carrega -- **nao tinha como
+  /// cadastrar um pet em lugar nenhum do app**. Antes de hoje a folha de
+  /// `Pets` cobria o buraco; agora nada cobre.
+  ///
+  /// Entao a acao desceu para as quatro fases que nao a tinham. **Ela nao
+  /// desceu numa quinta**, e a ausencia e a unica correta: `falhaSemCache`
+  /// quando `_faltaConta` mostra [ConviteParaEntrar], e cadastrar pet exige
+  /// conta -- oferecer a porta ali seria mandar a pessoa a um assistente que
+  /// vai recusa-la, por cima do convite que resolve o problema dela.
+  ///
+  /// **E a porta continua sendo UMA**, construida por [_acaoDeCadastrar]: o
+  /// `ItemDeMenu` que o briefing sugeriu poria um SEGUNDO controle para a
+  /// mesma rota na mesma tela, a um cabecalho de distancia do botao -- `Meus
+  /// pets > Cadastrar meu pet` e `Meus pets > Cadastrar pet` lado a lado.
   List<Widget> _corpo(BichuCores cores) {
     return switch (_fase) {
       // Esqueleto do paragrafo 11.3: moldura e barras em `surface-sunken`. Um
       // indicador circular no lugar disto nao diria que o que vem e uma lista.
-      _Fase.carregando when _pets.isEmpty => const <Widget>[
-          _EsqueletoDeCartao(),
-          SizedBox(height: BichuEspaco.e3),
-          _EsqueletoDeCartao(),
+      //
+      // **A porta de cadastrar entra aqui tambem**, e nao e enfeite: a fase
+      // dura o tempo da chamada, e com o servidor lento ela e a tela que a
+      // pessoa ve. Ver a prosa deste metodo.
+      _Fase.carregando when _pets.isEmpty => <Widget>[
+          const _EsqueletoDeCartao(),
+          const SizedBox(height: BichuEspaco.e3),
+          const _EsqueletoDeCartao(),
+          const SizedBox(height: BichuEspaco.e6),
+          _acaoDeCadastrar(),
         ],
-      _Fase.carregando => _cartoes(),
+      _Fase.carregando => <Widget>[
+          ..._cartoes(),
+          const SizedBox(height: BichuEspaco.e6),
+          _acaoDeCadastrar(),
+        ],
       _Fase.lista when _pets.isEmpty => <Widget>[
           EstadoVazio(
             titulo: MeusPets.tituloDoVazio,
             explicacao: MeusPets.explicacaoDoVazio,
-            // Acao **unica** em destaque (criterio 6 da BICHUS-62, que nao
-            // muda): no vazio ela e a acao da caixa, e nao ha um segundo botao
-            // competindo com ela. Por isso a acao permanente abaixo dos
-            // cartoes **nao** e acrescentada neste ramo.
             acao: _acaoDeCadastrar(),
           ),
         ],
       _Fase.lista => <Widget>[
           ..._cartoes(),
           const SizedBox(height: BichuEspaco.e6),
-          // A ACAO PERMANENTE (BICHUS-232).
-          //
-          // **Ela existia so no estado vazio, e esse era o defeito.** Com um
-          // pet na lista o ramo era `_cartoes()` e a acao sumia; o unico ponto
-          // de entrada sempre visivel era o botao da secao `Pets`, que saiu em
-          // 22/09 por misturar contextos. As duas metades sao uma coisa so:
-          // sem esta linha, o app nao teria caminho nenhum para cadastrar o
-          // segundo pet.
           _acaoDeCadastrar(),
         ],
       _Fase.falhaComCache => <Widget>[
@@ -381,9 +414,11 @@ class _MeusPetsState extends State<MeusPets>
           ),
           const SizedBox(height: BichuEspaco.e4),
           ..._cartoes(),
+          const SizedBox(height: BichuEspaco.e6),
+          _acaoDeCadastrar(),
         ],
-      // SEM CONTA NAO E ERRO, e vem antes dos dois ramos de falha: nao ha
-      // `Atualizar` que resolva um 401. Ver `widgets/convite_para_entrar.dart`.
+      // **SEM a porta, e e a unica fase em que a ausencia e certa:** nao ha
+      // sessao, e cadastrar pet exige uma. Ver a prosa deste metodo.
       _Fase.falhaSemCache when _faltaConta => const <Widget>[
           ConviteParaEntrar(secao: SecaoComConta.meusPets),
         ],
@@ -393,6 +428,8 @@ class _MeusPetsState extends State<MeusPets>
             rotuloDaAcao: MeusPets.rotuloDeAtualizar,
             aoTocarNaAcao: _carregar,
           ),
+          const SizedBox(height: BichuEspaco.e6),
+          _acaoDeCadastrar(),
         ],
     };
   }

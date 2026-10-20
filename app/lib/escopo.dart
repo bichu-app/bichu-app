@@ -26,6 +26,8 @@ import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'telas/perfil/meus_pets.dart';
+import 'sessao/contadores_de_nao_lido.dart';
+import 'sessao/contador_de_avisos.dart';
 import 'sessao/controlador_de_sessao.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
@@ -64,6 +66,8 @@ class Escopo extends InheritedWidget {
     required this.cidadeEscolhida,
     required this.cofreDoQr,
     required this.avisoDeCadastro,
+    required this.contadores,
+    required this.contadorDeAvisos,
     required super.child,
     super.key,
   });
@@ -251,6 +255,34 @@ class Escopo extends InheritedWidget {
   /// em [AvisoDeCadastro]: o que ele guarda e da CONTA.
   final AvisoDeCadastro avisoDeCadastro;
 
+  /// O CONTADOR DE NAO LIDO que a barra de baixo pinta (20/10/2026).
+  ///
+  /// Fica no escopo, e nao dentro da casca, por tres razoes que sao a mesma:
+  /// o numero e da CONTA e nao da tela; quem o atualiza na abertura e na
+  /// retomada e o `app.dart`, que e outro lugar; e quem o derruba e a area de
+  /// mensagens, que e um ramo diferente da aba que o pinta. Duas instancias
+  /// perderiam uma da outra, e a aba continuaria acesa depois de a pessoa ler.
+  ///
+  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`: o que ele guarda e
+  /// da conta, e nao do aparelho.
+  final ContadoresDeNaoLido contadores;
+  /// O NUMERO DO SINO da barra de topo (19/10/2026).
+  ///
+  /// Fica no escopo, e nao dentro do sino, e o motivo e o arranjo da casca: os
+  /// ramos visitados ficam MONTADOS (`IndexedStack`), entao um sino que
+  /// buscasse por conta propria dispararia uma chamada por secao visitada --
+  /// cinco pedidos para desenhar um numero, com cinco respostas chegando fora
+  /// de ordem para o mesmo circulo.
+  ///
+  /// Um objeto so e tambem o que deixa a CAIXA de avisos derrubar o numero ao
+  /// abrir: com uma contagem por sino, ela nao teria a quem falar.
+  ///
+  /// A limpeza dele esta em `limpezasAoSair` e a busca em `aoEntrar`, as duas
+  /// no `app.dart`, pelo motivo de [avisoDeCadastro]: o que ele guarda e da
+  /// CONTA. A politica de atualizacao inteira esta escrita em
+  /// [ContadorDeAvisos].
+  final ContadorDeAvisos contadorDeAvisos;
+
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
     if (escopo == null) {
@@ -288,5 +320,7 @@ class Escopo extends InheritedWidget {
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
       cidadeEscolhida != anterior.cidadeEscolhida ||
       cofreDoQr != anterior.cofreDoQr ||
-      avisoDeCadastro != anterior.avisoDeCadastro;
+      avisoDeCadastro != anterior.avisoDeCadastro ||
+      contadores != anterior.contadores ||
+      contadorDeAvisos != anterior.contadorDeAvisos;
 }

@@ -13,6 +13,7 @@ import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -96,7 +97,18 @@ class TelaDetalheDoPet extends StatefulWidget {
 
 /// Os desfechos de uma abertura. **`foraDaConta` e um deles**, e nao um erro
 /// generico: ele tem texto proprio e saida propria.
-enum _Fase { carregando, carregado, foraDaConta, falha }
+/// **`semConta` entrou em 20/10/2026, e e DIFERENTE de `foraDaConta`.**
+///
+/// `foraDaConta` e o 404 de "este pet nao e desta conta" (ADR-0021): quem esta
+/// dentro, com conta, pedindo um pet que nao e dela. `semConta` e o 401 de
+/// quem **nao tem sessao nenhuma** e chegou por link.
+///
+/// Os dois caiam no MESMO lugar errado, e nao no mesmo: o 401 nao e 404, entao
+/// `_ehForaDaConta` devolvia falso e o 401 ia para `falha` -- com
+/// `_textoDaFalha = ''`, porque o catalogo devolve texto vazio para
+/// `unauthenticated` desde 18/10. A tela desenhava o icone de ERRO, nenhuma
+/// frase e um `Atualizar`. Atualizar nao resolve um 401.
+enum _Fase { carregando, carregado, foraDaConta, semConta, falha }
 
 class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   _Fase _fase = _Fase.carregando;
@@ -199,7 +211,13 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
-        if (_ehForaDaConta(falha)) {
+        if (faltaConta(falha)) {
+          // **ANTES de `_ehForaDaConta`**, e a ordem importa: sem conta o
+          // servidor responde 401 e nao 404, e trocar a ordem daria o texto
+          // de "este pet nao e seu" a quem nao tem conta nenhuma -- uma
+          // afirmacao sobre a conta de alguem que nao tem uma.
+          _fase = _Fase.semConta;
+        } else if (_ehForaDaConta(falha)) {
           // **404 e a resposta de "nao e seu" tambem** (ADR-0021). A tela nao
           // tenta descobrir qual dos dois foi, e nao deve: a autorizacao mora
           // na clausula `WHERE` do servidor justamente para que as duas
@@ -711,6 +729,11 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     return switch (_fase) {
       _Fase.carregando => const Center(child: CircularProgressIndicator()),
       _Fase.foraDaConta => _ForaDaConta(),
+      // SEM CONTA NAO E ERRO, e nao tem `Atualizar`.
+      _Fase.semConta => const Padding(
+          padding: EdgeInsets.all(BichuEspaco.e4),
+          child: ConviteParaEntrar(secao: SecaoComConta.paginaDoPet),
+        ),
       // `_textoDaFalha` nunca e nulo nesta fase: quem a liga sempre o
       // preenche por `MensagensDeErro.de`, que devolve texto para toda falha.
       _Fase.falha => _Falha(

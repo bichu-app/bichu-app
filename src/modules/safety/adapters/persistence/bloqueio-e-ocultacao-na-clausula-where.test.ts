@@ -112,13 +112,32 @@ void describe('(a) o bloqueio está na cláusula WHERE, e é SIMÉTRICO', () => 
       /NOT bloqueio_entre\(users\.id, \$\{chamador\}::uuid\)/,
       'a resolução do alvo deixou de negar `bloqueio_entre` com quem chama no WHERE',
     );
-    // E ela entra em TODA resolução de alvo, não só numa: `conta_habilitada`
-    // está na mesma consulta, e a consulta é uma só (`contaVisivelPara`) —
-    // justamente para que não haja um segundo caminho sem o predicado.
-    assert.equal(
-      (fonte.match(/\.where\(sql<boolean>`NOT bloqueio_entre/g) ?? []).length,
-      1,
-      'há mais de uma resolução de alvo: duas são dois lugares onde o predicado pode faltar',
+    // **E ELA ENTRA EM TODA RESOLUÇÃO DE ALVO.**
+    //
+    // Até 20/10/2026 esta conferência exigia **uma** resolução, e a razão
+    // escrita era "duas são dois lugares onde o predicado pode faltar". Em
+    // 20/10 nasceu a segunda, e ela é legítima: `construtorDoAlvoDaPublicacao`
+    // resolve uma PUBLICAÇÃO, que não é uma pessoa e não pode ser achada por
+    // `contaVisivelPara` — a denúncia de publicação passou a conferir o alvo
+    // quando `user_publications` pousou.
+    //
+    // **O invariante correto nunca foi "existe uma": é "toda uma carrega o
+    // predicado".** Exigir uma só era a forma barata de garantir isso enquanto
+    // havia uma só, e ela reprovou a segunda resolução certa — o que é o
+    // comportamento desejado de um portão: avisar. A troca é esta, e ela é mais
+    // forte, não mais fraca: as duas são enumeradas POR NOME e as duas têm de
+    // negar o bloqueio, e uma terceira reprova aqui.
+    const resolucoes = [...fonte.matchAll(/NOT bloqueio_entre\(([^,]+), \$\{chamador\}::uuid\)/g)]
+      .map((achado) => achado[1])
+      .sort();
+    assert.deepEqual(
+      resolucoes,
+      ['p.author_user_id', 'users.id'],
+      'as resoluções de alvo deste arquivo mudaram. Cada uma é um lugar onde o ' +
+        'predicado do bloqueio pode faltar: `users.id` é a da PESSOA ' +
+        '(`contaVisivelPara`, perfil e foto) e `p.author_user_id` é a da ' +
+        'PUBLICAÇÃO (`construtorDoAlvoDaPublicacao`). Uma resolução nova entra ' +
+        'nesta lista com o predicado, ou não entra.',
     );
     assert.match(fonte, /conta_habilitada\(users\.id\)/, 'conta desabilitada deixou de ser filtrada');
   });

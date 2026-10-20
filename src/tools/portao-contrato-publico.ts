@@ -3,7 +3,17 @@
  *
  * Lê `api/openapi.yaml` e percorre **toda** operação cujo chamador não tem
  * conta: `security: []`, `tagCode` ou `finderToken`. Reprova quando a resposta
- * declarada traz coordenada, telefone, e-mail, endereço ou UUID interno.
+ * declarada traz coordenada, telefone, e-mail, endereço ou UUID interno, e
+ * quando o PEDIDO declara parâmetro de coordenada, distância ou raio.
+ *
+ * Os dois lados estão aqui porque o vazamento não precisa aparecer na resposta
+ * para existir. Uma rota pública que aceita um centro escolhido por quem chama
+ * é um oráculo de posição: variando o centro e lendo a ORDEM da página dá para
+ * trilaterar o ponto de cada caso sem um único número de coordenada sair no
+ * corpo. O ADR-0006 proíbe nominalmente para a listagem pública de perdidos
+ * ("filtra por cidade e bairro digitados, jamais por latitude e longitude") e o
+ * ADR-0010 itens 4 e 5 proíbem coordenada e distância em superfície alcançável
+ * sem conta.
  *
  * Três decisões que fazem este portão valer alguma coisa:
  *
@@ -23,7 +33,7 @@ import { parse as parseYaml } from 'yaml';
 import { readFileSync } from 'node:fs';
 import { carregarContrato, type OperacaoDoContrato } from '../shared/http/contract.js';
 
-export const VERSAO_DO_PORTAO = '1.2.0';
+export const VERSAO_DO_PORTAO = '1.3.0';
 
 /**
  * Nomes proibidos em resposta a quem não tem conta. Comparação por nome exato:
@@ -236,6 +246,180 @@ export function inspecionarCamposPublicos(
 }
 
 /**
+ * Tokens proibidos em NOME DE PARÂMETRO de operação alcançável sem conta.
+ *
+ * ## Por que esta lista é PRÓPRIA, e não a `CAMPOS_PROIBIDOS` da resposta
+ *
+ * A pergunta foi medida antes de ser respondida, nas 53 nomes de parâmetro que
+ * o contrato declara hoje. Três coisas saíram da medição, e a primeira decide:
+ *
+ * 1. **`max_km` não está em `CAMPOS_PROIBIDOS`, e é um parâmetro deste
+ *    contrato.** Ele é o nome que esta casa já usa para raio
+ *    (`listNearbyNetworkEvents`, `bearerAuth`). A lista da resposta tem
+ *    `radius_m` e não tem `max_km`, por um motivo correto: `max_km` nunca
+ *    aparece numa resposta, só num pedido. Reusar a lista da resposta deixaria
+ *    passar, numa rota pública, exatamente o nome que o projeto escolheu para
+ *    dizer "raio" — o buraco fechado com a mão esquerda e reaberto com a
+ *    direita.
+ * 2. **A lista da resposta é mais larga do que esta regra autoriza.** Ela traz
+ *    `phone`, `email`, `address`, `cep`, `street`, `zip`, `street_number`,
+ *    `house_number`, `map_url`. Proibir `email` no PEDIDO de rota pública pode
+ *    muito bem ser certo, mas por outro defeito (enumeração de conta), com
+ *    outra evidência e em outra história. O que o ADR-0006 e o ADR-0010 itens 4
+ *    e 5 proíbem é coordenada, distância e raio. Arrastar o resto para dentro
+ *    desta mudança seria alargar a regra sem ADR atrás.
+ * 3. **A lista da resposta muda por motivo de resposta.** O comentário dela diz
+ *    isso de `reference_point`: entrou porque era o nome de uma COLUNA nova. No
+ *    dia em que o mascaramento chegar e `phone` sair de lá, o lado do pedido
+ *    perderia cobertura que nunca derivou dali. Acoplar faz uma mudança cair no
+ *    raio da outra sem ninguém raciocinar sobre isso.
+ *
+ * O argumento contrário — uma lista só não divergir — é real, e perde: as duas
+ * listas respondem a perguntas diferentes, e a divergência já é necessária
+ * (`radius_m` de um lado, `max_km` do outro). O que não pode acontecer é
+ * qualquer das duas ENCOLHER calada, e disso cuidam as iscas, uma por lista.
+ *
+ * O teste de `listagem-publica-de-perdidos.test.ts` já tinha feito esta mesma
+ * escolha, por escrito e com a mesma razão ("a lista de lá é sobre o que SAI e
+ * pode mudar por outra razão"). Divergir dela agora é que seria a incoerência.
+ *
+ * ## Por que o casamento é por SEGMENTO, e não por nome exato
+ *
+ * Na resposta o nome exato basta, e o arquivo explica por quê: substring
+ * transformaria o portão numa fonte de achado falso. No pedido, não basta —
+ * nome de parâmetro é naturalmente composto, e `max_km` está aí para provar.
+ * `center_lat`, `lat_min` e `sw_lat` são a mesma coordenada com um prefixo, e
+ * nome exato não alcança nenhum deles.
+ *
+ * Então o nome é quebrado em `_`, `-` e `.`, e cada segmento é comparado com os
+ * tokens abaixo. Medido: nos 53 nomes de parâmetro do contrato de hoje isso
+ * casa com TRÊS — `lat`, `lon` e `max_km` — e os três estão em operação com
+ * `bearerAuth`. Zero achado falso. `page`, `limit`, `period`, `q`, `city`,
+ * `neighborhood`, `size`, `sort`, `species`, `cursor`, `price_status` e
+ * `verification_level` passam, e passam medidos, não por esperança.
+ *
+ * Fora da lista de propósito: `long`, `around`, `within` e `bounds`. São
+ * palavras inglesas que nomeiam outra coisa com naturalidade (`long_name`), e
+ * um achado falso custa ao portão a confiança de quem o lê — que é o que o
+ * resto deste arquivo passa o tempo tentando não gastar. As formas compostas
+ * que importam já caem pelo token geográfico ao lado (`lat`, `lon`, `km`).
+ */
+const TOKENS_PROIBIDOS_NO_PEDIDO: ReadonlySet<string> = new Set([
+  // Coordenada, por todos os nomes que ela usa.
+  'lat',
+  'latitude',
+  'lon',
+  'lng',
+  'longitude',
+  'coord',
+  'coords',
+  'coordinate',
+  'coordinates',
+  'geo',
+  'geohash',
+  'geom',
+  'geometry',
+  'point',
+  'centroid',
+  // O CENTRO escolhido por quem chama. É o coração do defeito: um `?center=`
+  // empacotando os dois números num texto só não tem segmento `lat` nem `lon`,
+  // e passaria por tudo acima.
+  'center',
+  'centre',
+  'bbox',
+  // Distância e raio. O ADR-0010 registra o motivo e ele não é zelo: distância
+  // implica centro, e três distâncias a partir de centros conhecidos trilateram
+  // o centro desconhecido.
+  'radius',
+  'distance',
+  'dist',
+  'km',
+  'proximity',
+  'near',
+  'nearby',
+]);
+
+/**
+ * Por que o PEDIDO não dispensa `OPERACOES_QUE_ABREM_SESSAO`.
+ *
+ * A dispensa da resposta tem uma razão estreita e boa: o corpo que o login
+ * devolve é a conta de quem acabou de provar a credencial na mesma requisição.
+ * Nada disso vale para o lado do pedido — `login` não tem negócio nenhum
+ * aceitando um `lat` de query string. A dispensa é da resposta, e fica lá.
+ *
+ * E por que o CORPO da requisição não é percorrido, que é uma fronteira e não
+ * um esquecimento: um `lat` no corpo de `createFoundReportFromTag` é quem achou
+ * o pet dizendo onde o achou — entrada legítima, e o ADR-0010 fala do que a
+ * superfície pública EXIBE. O que faz o parâmetro ser diferente é que ele é um
+ * SELETOR: vive na URL, é registrado em log, cai em cache e é compartilhado, e
+ * é onde o OpenAPI declara filtro e ordenação. Coordenada que entra por direito
+ * entra pelo corpo; esta varredura não toca no corpo.
+ */
+
+/** O que a varredura de parâmetros conseguiu olhar, além do que ela achou. */
+export interface ResultadoDoPedido {
+  readonly achados: readonly Achado[];
+  readonly operacoesConferidas: number;
+  /** Zero significa que não havia parâmetro para conferir, e NÃO que passou. */
+  readonly parametrosConferidos: number;
+}
+
+function segmentosDoNome(nome: string): string[] {
+  return nome
+    .toLowerCase()
+    .split(/[_\-.]/)
+    .filter((parte) => parte.length > 0);
+}
+
+export function inspecionarParametrosPublicos(
+  operacoes: readonly OperacaoDoContrato[],
+): ResultadoDoPedido {
+  const achados: Achado[] = [];
+  let parametrosConferidos = 0;
+
+  for (const operacao of operacoes) {
+    for (const parametro of operacao.parameters) {
+      const nome = parametro['name'];
+      if (typeof nome !== 'string') continue;
+      parametrosConferidos += 1;
+      const onde = typeof parametro['in'] === 'string' ? parametro['in'] : '?';
+      const casou = segmentosDoNome(nome).filter((segmento) =>
+        TOKENS_PROIBIDOS_NO_PEDIDO.has(segmento),
+      );
+      if (casou.length === 0) continue;
+      achados.push({
+        operationId: operacao.operationId,
+        onde: `parâmetro (${onde})`,
+        campo: nome,
+        motivo:
+          `coordenada, distância ou raio no PEDIDO de operação alcançável sem conta ` +
+          `(segmento: ${casou.join(', ')}) — ADR-0006 e ADR-0010 itens 4 e 5. ` +
+          'Um centro escolhido por quem chama transforma a rota pública num oráculo ' +
+          'de posição, mesmo que nenhuma coordenada apareça na resposta',
+      });
+    }
+  }
+
+  if (parametrosConferidos === 0) {
+    // "Não achar alvo é reprovação", a regra deste arquivo. Se NENHUMA operação
+    // sem conta declarar um parâmetro, esta varredura não percorreu nada e um
+    // verde dela não diz nada. Vai como achado, e não como saída antecipada, de
+    // propósito: as outras iscas precisam continuar vendo os achados de campo
+    // que o `.esperado` delas cobra.
+    achados.push({
+      operationId: `(${operacoes.length} operação(ões) sem conta)`,
+      onde: 'parâmetros',
+      campo: 'nenhum parâmetro para percorrer',
+      motivo:
+        'a varredura do pedido não teve alvo nenhum. Filtro que não filtra termina ' +
+        'verde e ninguém desconfia',
+    });
+  }
+
+  return { achados, operacoesConferidas: operacoes.length, parametrosConferidos };
+}
+
+/**
  * Cabeçalhos exigidos nas páginas HTML públicas (critério 5).
  *
  * Desde o ADR-0017 o contrato não tem mais nenhuma resposta `text/html`: as 12
@@ -339,6 +523,30 @@ paths:
                   distance_m: { type: integer }
                   radius_m: { type: integer }
                   map_url: { type: string }
+  /isca-pedido:
+    get:
+      operationId: iscaDeCoordenadaNoPedido
+      security: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: period, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: neighborhood, in: query, schema: { type: string } }
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: center_lon, in: query, schema: { type: number } }
+        - { name: max_km, in: query, schema: { type: integer } }
+        - { name: X-Near-Me, in: header, schema: { type: string } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  city: { type: string }
   /isca-html:
     get:
       operationId: iscaDePaginaNua
@@ -442,6 +650,69 @@ function autoTeste(): string[] {
         'a conferência de cabeçalho parou de cobrar o que o critério 5 manda cobrar',
     );
   }
+
+  // ---------------------------------------------------------------------
+  // A ISCA DO PEDIDO.
+  //
+  // Mesma construção da isca de granularidade, e pelo mesmo motivo: metade dela
+  // PRECISA passar. `page`, `limit`, `period`, `q`, `city` e `neighborhood` são
+  // os filtros que o ADR-0006 manda a listagem pública usar — se o portão
+  // reprovasse qualquer um deles ele não distinguiria nada e seria retirado na
+  // primeira sexta-feira. A outra metade cobre as três formas que nome exato
+  // não alcança: `lat` (nome cru), `center_lon` (composto, com o prefixo que o
+  // oráculo usaria) e `max_km` (o nome que ESTA casa já usa para raio, e que a
+  // lista da resposta não tem). `X-Near-Me` está aí porque cabeçalho é pedido
+  // também: um oráculo não fica menos oráculo por entrar pelo cabeçalho.
+  // ---------------------------------------------------------------------
+  const pedido: OperacaoDoContrato = {
+    operationId: 'iscaDeCoordenadaNoPedido',
+    method: 'get',
+    path: '/isca-pedido',
+    security: [],
+    securitySchemes: [],
+    effects: [],
+    hasRateLimit: false,
+    raw: paths['/isca-pedido']?.['get'] ?? {},
+    parameters: (() => {
+      const brutos = paths['/isca-pedido']?.['get']?.['parameters'];
+      return Array.isArray(brutos) ? (brutos as Record<string, unknown>[]) : [];
+    })(),
+  };
+  const doPedido = inspecionarParametrosPublicos([pedido]);
+  if (doPedido.parametrosConferidos !== 10) {
+    falhas.push(
+      `a isca do pedido tinha 10 parâmetros e o portão conferiu ${doPedido.parametrosConferidos}: ` +
+        'a varredura do pedido parou de enxergar `parameters`',
+    );
+  }
+  for (const proibido of ['lat', 'center_lon', 'max_km', 'X-Near-Me']) {
+    if (!doPedido.achados.some((a) => a.campo === proibido)) {
+      falhas.push(
+        `a isca do pedido passou em \`${proibido}\`: a rota pública voltou a poder ` +
+          'aceitar um centro escolhido por quem chama, e com ele a ordem da página ' +
+          'trilatera o ponto de cada caso sem nenhuma coordenada sair na resposta',
+      );
+    }
+  }
+  for (const permitido of ['page', 'limit', 'period', 'q', 'city', 'neighborhood']) {
+    if (doPedido.achados.some((a) => a.campo === permitido)) {
+      falhas.push(
+        `o portão reprovou o parâmetro \`${permitido}\`, que é filtro PERMITIDO pelo ` +
+          'ADR-0006: portão que reprova tudo não distingue nada e é retirado na ' +
+          'primeira sexta-feira',
+      );
+    }
+  }
+  // E a outra metade da regra: sem alvo, reprova. Uma operação sem parâmetro
+  // nenhum não pode terminar verde por omissão.
+  const semAlvo = inspecionarParametrosPublicos([paginaNua]);
+  if (!semAlvo.achados.some((a) => a.campo === 'nenhum parâmetro para percorrer')) {
+    falhas.push(
+      'a varredura do pedido aprovou um conjunto sem parâmetro nenhum: ' +
+        '"não achar alvo é reprovação" deixou de valer para o lado do pedido',
+    );
+  }
+
   return falhas;
 }
 
@@ -518,13 +789,27 @@ export function executar(caminhoDaSpec: string): number {
     console.info(`cabeçalhos: ${cabecalhos.paginasConferidas} página(s) HTML pública(s) conferida(s).`);
   }
 
+  // O lado do PEDIDO. Ele percorre as `semConta` inteiras, sem a dispensa de
+  // `OPERACOES_QUE_ABREM_SESSAO`: a dispensa é da resposta, pelo motivo escrito
+  // junto dela, e não há razão nenhuma para `login` aceitar um `lat` de query.
+  const pedido = inspecionarParametrosPublicos(semConta);
+  console.info(
+    `pedido: ${pedido.parametrosConferidos} parâmetro(s) conferido(s) em ` +
+      `${pedido.operacoesConferidas} operação(ões) sem conta.`,
+  );
+  console.info(`tokens proibidos no pedido: ${[...TOKENS_PROIBIDOS_NO_PEDIDO].join(', ')}`);
+
   const achados = [
     ...inspecionarCamposPublicos(contrato.spec, semConta),
+    ...pedido.achados,
     ...cabecalhos.achados,
   ];
 
   if (achados.length === 0) {
-    console.info('APROVADO — nenhuma resposta sem conta declara campo privado.');
+    console.info(
+      'APROVADO — nenhuma resposta sem conta declara campo privado, e nenhum pedido ' +
+        'sem conta declara parâmetro de coordenada, distância ou raio.',
+    );
     return 0;
   }
 

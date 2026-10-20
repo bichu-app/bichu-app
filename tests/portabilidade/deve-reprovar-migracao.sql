@@ -1,47 +1,33 @@
--- ISCA. Este arquivo EXISTE PARA SER MEDIDO pelo portao de portabilidade, e
--- nao para rodar: ele NAO mora em `migrations/`, entao o migrador nunca o ve e
--- a tabela abaixo nunca existe. O autoteste o le por caminho proprio e o mede
--- COM UM `rel` DE MIGRACAO, de proposito -- a regra de URL absoluta so vale
--- para `migrations/*.sql`, e ate 20/10/2026 ela nao tinha testemunha nenhuma.
--- Nao corrija este arquivo. Ver docs/07-devops.md 3.6 e 3.9.
+-- ISCA. Este arquivo EXISTE PARA SER REPROVADO pela regra de migracao do portao
+-- de portabilidade. Nao corrija este arquivo. Nao o use como exemplo.
+-- Ver docs/07-devops.md 3.9.
 --
--- Tres marcas, no FIM da linha, depois de `--`. Escritas aqui SEM os
--- dois-pontos de proposito: com eles, esta propria explicacao entraria como
--- anotacao de um motivo que nunca existiu, que e o mesmo tropeco que
--- `motivo_anotado` documenta.
+-- O banco guarda codigo e chave, nunca URL. URL persistida transforma a troca
+-- de dominio em migracao de dados sobre plastico ja impresso, e esse e o ponto
+-- irreversivel que esta regra protege.
 --
---   `isca` + motivo .................. a linha medida TEM de reprovar com ele
---   `dispensa-de-comentario` + motivo  o texto CRU reprova e a linha MEDIDA
---                                      nao: comentario nao e codigo
---   `dispensa-de-forma` + motivo ..... nao reprova nem crua, porque o
---                                      `https://` dela e a FORMA de uma URL e
---                                      nao um endereco -- nao ha host
+-- A regra ganhou isca porque foi ESTREITADA em 20/10/2026: antes ela era
+-- `"http://" in linha`, acusava comentario e literal de regex, e por isso nao
+-- precisava de prova nenhuma -- acusava tudo. Agora exige HOST depois do
+-- esquema, e regra estreitada sem isca e regra que ninguem viu reprovar.
 --
--- As duas dispensas sao as duas metades do que travou a esteira inteira em
--- 20/10/2026, e nenhuma delas vale sozinha: a de forma so prova algo em par
--- com as linhas de `isca` daqui, que provam que a regra continua enxergando.
+-- Uma linha por forma que a regra existe para ver, cada uma declarando a regra
+-- que acorda com `isca:` seguido do motivo. O autoteste cobra o par nos dois
+-- sentidos, como nas iscas `.ts`, e mede na linha SEM COMENTARIO: se o defeito
+-- destas linhas virasse prosa, a regra continuaria "provada" sem que a
+-- varredura a exercitasse mais.
+--
+-- Este arquivo nao e uma migracao: mora fora de `migrations/`, nao tem carimbo
+-- e nunca e aplicado. O autoteste o le por caminho proprio e cobra dele a regra
+-- de migracao de proposito.
 
-CREATE TABLE isca_de_portabilidade (
-  -- O CASO QUE O PORTAO EXISTE PARA PEGAR: endereco NOSSO gravado no banco.
-  -- Trocar de dominio deixa de ser uma variavel e passa a ser migracao de
-  -- dados sobre plastico ja impresso.
-  capa_padrao text NOT NULL DEFAULT 'https://img.bichu.app/padrao/capa.jpeg', -- isca: URL absoluta em migracao
+-- URL persistida como dado, que e o caso que a regra nasceu para pegar.
+INSERT INTO app_config (chave, valor)
+  VALUES ('cdn_de_fotos', 'https://img.bichu.app'); -- isca: URL absoluta em migracao
 
-  -- E DENTRO DE UM `CHECK` TAMBEM, quando ha host escrito. A dispensa de forma
-  -- abaixo nao e "`CHECK` esta liberado": e "esquema sem host nao e endereco".
-  -- Aqui o dominio esta escrito, e isso e amarracao de verdade.
-  loja_amarrada text CHECK (loja_amarrada ~ '^https://bichu\.app/'), -- isca: URL absoluta em migracao
-
-  -- O CASO QUE O PORTAO ACUSAVA SEM MOTIVO, medido em
-  -- `migrations/20261019000007_versao-minima-do-app.sql:161`. O literal
-  -- `https://` aqui e a REGRA DE VALIDACAO: ele existe para o banco RECUSAR um
-  -- endereco mal digitado. Nao ha host, nao ha dominio, e nao ha nada para
-  -- empurrar para configuracao -- e o portao mandava empurrar.
-  loja_url text CHECK (loja_url ~ '^https://[^[:space:]]+$' AND length(loja_url) <= 300), -- dispensa-de-forma: URL absoluta em migracao
-
-  -- E PROSA, e prosa nao grava nada em coluna nenhuma. O endereco esta aqui
-  -- para ser LIDO por quem mantem a migracao, que foi o caso dos dois achados
-  -- de `20261019000007_versao-minima-do-app.sql:156` e `:157`. Medido contra a
-  -- homologacao: a derivada saiu em `https://img-hml.bichu.app/events/card/x.jpeg` -- dispensa-de-comentario: URL absoluta em migracao
-  criado_em timestamptz NOT NULL DEFAULT now()
-);
+-- Host dentro de literal de regex, com o ponto escapado. Ancorar o esquema num
+-- host amarra o ESQUEMA a ele, e a forma escapada e a que escaparia de uma
+-- regra escrita as pressas.
+ALTER TABLE pet
+  ADD CONSTRAINT pet_foto_na_cdn
+  CHECK (foto_url ~ '^https://img\.bichu\.app/'); -- isca: URL absoluta em migracao

@@ -44,10 +44,3 @@ export const armazenamentoErradoR2 =
 // de regiao": sao DUAS regras com o mesmo nome. Por isso a conferencia e por
 // linha, e nao por motivo solto -- so assim apagar uma das duas reprova.
 export const regiaoErradaNaFormaLonga = { region: "southamerica-east1" }; // isca: literal de regiao
-
-// A dispensa de comentario vale para a familia de PROVEDOR tambem, e nao so
-// para hostname: a varredura tira comentario antes de medir, ponto. Sem uma
-// linha aqui, a familia inteira ficaria sem testemunha desse lado, e e a
-// familia em que a prosa mais aparece -- explicar por escrito o provedor que
-// NAO usamos e metade do argumento do ADR-0012.
-// Nao usamos nada em `https://s3.us-east-1.amazonaws.com`, e dizer isso nao e amarracao. // dispensa-de-comentario: dominio de provedor (AWS)

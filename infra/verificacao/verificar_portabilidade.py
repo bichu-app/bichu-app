@@ -6,26 +6,28 @@ docs/07-devops.md secoes 3.6 e 3.9.
 Tres familias de achado:
   - provedor: dominio de nuvem, regiao, nome de bucket, SDK em camada errada
   - hostname: literal de host, IP privado
-  - migracao: esquema SEGUIDO DE HOST num `migrations/*.sql`
+  - migracao: URL absoluta persistida ou embutida em `migrations/*.sql`
 
-Todas medem o codigo SEM COMENTARIO: comentario nao e compilado, nao vai ao
-navegador e nao decide host em tempo de execucao. Ver o bloco "COMENTARIO NAO E
-CODIGO", que conta por que isso mudou em 20/10/2026 e o que custou.
+Amarracao se mede no CODIGO. `hostname` e `migracao` leem a linha com o
+comentario apagado, porque comentario nao amarra nada: ele EXPLICA. `provedor`
+le o arquivo inteiro de proposito -- ela confina uma dependencia, e nao empurra
+um endereco para configuracao. O porque de cada uma esta na nota acima de
+`Dialeto`.
 
-E um autoteste que e a parte que importa: as duas iscas em
-`tests/portabilidade/` PRECISAM ser reprovadas -- e nao por qualquer regra, mas
-por CADA UMA das regras da familia que a isca cobre, em par com a linha de isca
-que prova aquela regra. Cada linha de isca declara, num comentario `// isca:
-<motivo>`, qual regra ela existe para acordar; o autoteste confere os dois
-sentidos desse par e falha nomeando o motivo da regra que parou de enxergar,
-porque um portao que ninguem viu reprovar vale pela confianca do dia em que foi
-escrito.
+E um autoteste que e a parte que importa, em tres camadas:
+  - as iscas POSITIVAS em `tests/portabilidade/deve-reprovar-*` PRECISAM ser
+    reprovadas -- e nao por qualquer regra, mas por CADA UMA das regras da
+    familia que a isca cobre, em par com a linha que prova aquela regra. Cada
+    linha declara, num comentario `isca:` seguido do motivo, qual regra ela
+    existe para acordar, e o autoteste confere os dois sentidos desse par;
+  - as iscas NEGATIVAS em `tests/portabilidade/nao-deve-reprovar-*` PRECISAM
+    passar, com o host escrito nelas: elas provam que prosa nao acusa sem
+    deixar o portao se calar de graca;
+  - `CASOS_DO_APAGADOR` confere, dialeto por dialeto, que o apagador de
+    comentario nao come CODIGO -- a falha silenciosa desta peca.
 
-A DISPENSA tem testemunha pelo mesmo motivo, e e novidade de 20/10/2026: as
-iscas trazem linhas anotadas dizendo o que NAO deve mais reprovar, e o
-autoteste cobra os dois lados de cada uma -- que a linha contenha de verdade o
-defeito (senao a testemunha e vazia) e que ela deixe de acusar depois de medida
-(senao a dispensa nao vale nada). Ver MARCA_DE_DISPENSA.
+Um portao que ninguem viu reprovar vale pela confianca do dia em que foi
+escrito; um portao que ninguem viu APROVAR vive vermelho e e contornado.
 
 Uso: python3 verificar_portabilidade.py [raiz]
 Saida: 0 aprovado, 1 reprovado. So biblioteca padrao.
@@ -36,6 +38,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 # O portao varre CODIGO. Configuracao (compose, Makefile, .env.example, infra,
 # workflows) e contrato (api/openapi.yaml) tem URL por natureza e ficam de fora:
@@ -73,152 +76,207 @@ ISENTOS = (
 
 EXTENSOES = {".ts", ".tsx", ".js", ".mjs", ".dart", ".sql", ".yaml", ".yml", ".json", ".html"}
 
-# ---------------------------------------------------------------------------
-# COMENTARIO NAO E CODIGO.
+# Comentario nao amarra nada: ele EXPLICA.
 #
-# Em 20/10/2026 este portao reprovava a `development` e, com ela, os 8 PRs
-# abertos: `portoes rapidos` e o PRIMEIRO job da esteira, e quando ele reprova
-# todo o resto fica `skipped` -- a esteira parava de avaliar mudanca nenhuma,
-# em PR nenhum. Eram 5 achados, e QUATRO deles eram PROSA: comentario de
-# documentacao dizendo o que foi MEDIDO contra a homologacao (`// ... a
-# derivada da grade sai em `https://img-hml.bichu.app/people/thumb/...``) e
-# comentario de migracao explicando o que um `CHECK` valida. O quinto era o
-# proprio `CHECK`, cujo literal `https://` e a REGRA DE VALIDACAO e nao tem
-# host nenhum -- tratado em REGRAS_DE_MIGRACAO, abaixo.
+# O portao existe para impedir que host, regiao ou bucket entrem no CODIGO, e
+# tinha passado a acusar a PROSA que explica a forma de uma URL derivada. Medido
+# em 20/10/2026 na development: 7 achados, nenhum deles amarracao -- tres
+# comentarios de documentacao em Dart (`//` e `///`), um bloco `/** */` em
+# TypeScript que registra contra qual ambiente uma rota foi medida, dois
+# comentarios `--` numa migracao e um literal de regex. Com isso TODO PR nascia
+# vermelho: `portoes rapidos` reprovava, o agregador reprovava, e os outros dez
+# jobs ficavam `skipping`. Portao que esta sempre vermelho nao e lido -- e
+# contornado, e ai ele nao protege mais nada.
 #
-# Nenhum dos quatro amarra coisa alguma. Comentario nao e compilado, nao vai ao
-# navegador e nao decide host em tempo de execucao -- que e PALAVRA POR PALAVRA
-# o argumento com que SUFIXOS_DE_TESTE ja tira o teste da varredura ("o que nao
-# roda nao amarra o que roda a host nenhum"). O portao estava medindo TEXTO
-# CRU e confundindo a explicacao do defeito com o defeito. Ha precedente
-# MEDIDO neste repositorio: `app/test/dispositivo/permissoes_de_loja_test.dart`
-# tira os comentarios ANTES de medir, porque o manifesto explica em prosa as
-# permissoes que ele NAO pede, e o texto cru acusava a propria explicacao.
+# Entao a familia `hostname` e a regra de migracao passam a ler so o CODIGO. A
+# familia `provedor` continua lendo o arquivo inteiro, comentario incluido, e de
+# PROPOSITO: ela nao manda empurrar o endereco para uma variavel, ela CONFINA
+# uma dependencia no adaptador, e o endereco do FCM escrito num comentario de
+# `domain/` e exatamente o rastro que a regra do FCM existe para ver -- esta
+# dito com estas palavras no comentario dela, em REGRAS_PROVEDOR.
 #
-# O QUE NAO MUDOU: host literal em CODIGO continua reprovando. A isca de
-# codigo em `tests/portabilidade/deve-reprovar-hostname.ts` esta la para
-# provar, e o autoteste a cobra.
-#
-# O PRECO: a dispensa de comentario passa a ser a segunda coisa neste portao
-# que faz um achado DEIXAR de sair (a primeira e HOSTS_DE_TERCEIRO), e vale a
-# mesma regra que esta escrita la -- o que aprova em silencio precisa de
-# testemunha. As iscas ganharam linhas de dispensa anotadas, e o autoteste
-# cobra os DOIS lados de cada uma: o texto CRU da linha tem de reprovar (senao
-# a testemunha e vazia e sobreviveria a uma dispensa quebrada) e a linha
-# MEDIDA nao pode reprovar (senao a dispensa nao vale nada). Ver
-# MARCA_DE_DISPENSA e autoteste().
-# ---------------------------------------------------------------------------
+# Apagar comentario exige um varredor que conheca STRING, porque o `//` de
+# `https://` vive dentro de uma e um corte ingenuo decapitaria justamente as
+# URLs que o portao precisa ver. O portao ficaria cego sem ninguem notar, que e
+# o contrario do defeito consertado aqui e muito pior que ele. As iscas
+# negativas em `tests/portabilidade/` cobram os dois lados: host em comentario
+# nao acusa, e o MESMO host na linha crua acusa.
 
-# Por extensao: marcas de comentario de linha, o par de bloco (ou None) e os
-# delimitadores de texto literal. `.json` e `.html` tem entrada propria em vez
-# de ficar fora da tabela: ficar fora significa "nao sei ler este formato", e
-# para JSON a resposta certa e "nao ha comentario para tirar".
-SINTAXE_DE_COMENTARIO: dict[str, tuple[tuple[str, ...], tuple[str, str] | None, str]] = {
-    ".ts": (("//",), ("/*", "*/"), "\"'`"),
-    ".tsx": (("//",), ("/*", "*/"), "\"'`"),
-    ".js": (("//",), ("/*", "*/"), "\"'`"),
-    ".mjs": (("//",), ("/*", "*/"), "\"'`"),
-    ".dart": (("//",), ("/*", "*/"), "\"'`"),
-    # Em SQL `"` delimita IDENTIFICADOR, e nao texto -- mas para achar onde o
-    # comentario comeca os dois se comportam igual, e tratar so `'` evita
-    # decidir se `"a"` abriu ou fechou alguma coisa.
-    ".sql": (("--",), ("/*", "*/"), "'"),
-    ".yaml": (("#",), None, "\"'"),
-    ".yml": (("#",), None, "\"'"),
-    ".html": ((), ("<!--", "-->"), ""),
-    ".json": ((), None, "\"'"),
+
+class Dialeto(NamedTuple):
+    """Como uma linguagem escreve comentario e string."""
+
+    linha: tuple[str, ...] = ()
+    bloco: tuple[tuple[str, str], ...] = ()
+    aspas: tuple[str, ...] = ()
+    escape_barra: bool = False
+    aspas_dobradas: bool = False  # aspa repetida fecha e reabre, como no SQL
+    triplas: bool = False  # aspa tripla do Dart
+    multilinha: tuple[str, ...] = ()  # delimitador que atravessa quebra de linha
+    linha_exige_espaco: bool = False  # `#` do YAML so comenta depois de espaco
+
+
+# String multilinha so onde a linguagem de fato tem uma: literal de template do
+# JS e aspa tripla do Dart. No SQL ela NAO esta declarada de proposito -- uma
+# aspa sem par (um apostrofo dentro de corpo `$$`) engoliria o resto do ARQUIVO
+# e cegaria o portao dali para baixo. Limitar o estrago a uma linha e o lado
+# seguro do erro.
+_JS = Dialeto(
+    linha=("//",),
+    bloco=(("/*", "*/"),),
+    aspas=('"', "'", "`"),
+    escape_barra=True,
+    multilinha=("`",),
+)
+_DART = Dialeto(
+    linha=("//",),
+    bloco=(("/*", "*/"),),
+    aspas=('"', "'"),
+    escape_barra=True,
+    triplas=True,
+)
+_SQL = Dialeto(linha=("--",), bloco=(("/*", "*/"),), aspas=("'", '"'), aspas_dobradas=True)
+_YAML = Dialeto(linha=("#",), aspas=('"', "'"), escape_barra=True, linha_exige_espaco=True)
+_HTML = Dialeto(bloco=(("<!--", "-->"),))
+_JSON = Dialeto(aspas=('"',), escape_barra=True)  # JSON nao tem comentario
+
+DIALETOS = {
+    ".ts": _JS,
+    ".tsx": _JS,
+    ".js": _JS,
+    ".mjs": _JS,
+    ".dart": _DART,
+    ".sql": _SQL,
+    ".yaml": _YAML,
+    ".yml": _YAML,
+    ".html": _HTML,
+    ".json": _JSON,
 }
 
 
-def _abre_comentario(linha: str, i: int, marca: str) -> bool:
-    """A marca em `i` abre comentario de verdade?
+def _fim_da_string(texto: str, i: int, delim: str, d: Dialeto) -> int:
+    """Indice do primeiro caractere DEPOIS da string que abre em `i`."""
+    n = len(texto)
+    j = i + len(delim)
+    aceita_quebra = len(delim) == 3 or delim in d.multilinha
+    while j < n:
+        if d.escape_barra and texto[j] == "\\":
+            j += 2
+            continue
+        if texto.startswith(delim, j):
+            if d.aspas_dobradas and texto.startswith(delim, j + len(delim)):
+                j += 2 * len(delim)
+                continue
+            return j + len(delim)
+        if texto[j] == "\n" and not aceita_quebra:
+            return j  # string sem fechar: nao engole o resto do arquivo
+        j += 1
+    return n
 
-    Duas recusas, e cada uma paga um caso concreto:
 
-      - `//` PRECEDIDO DE `:` nunca abre comentario, porque e o `//` de um
-        ESQUEMA de URL. E cinto e suspensorio sobre o rastreio de texto
-        literal de `sem_comentario`: mesmo que o rastreio erre o estado em
-        algum arquivo, o `//` de `https://` nao vira comentario e o achado nao
-        desaparece calado. Sem isto, `https://img.bichu.app` viraria
-        `https:` e o portao aprovaria a amarracao que ele existe para pegar.
-      - `#` em YAML so abre comentario no comeco da linha ou depois de espaco,
-        que e a regra da propria linguagem (`a#b` e o texto `a#b`).
+def linhas_de_codigo(texto: str, sufixo: str) -> list[str]:
+    """As mesmas linhas do arquivo, com o CONTEUDO dos comentarios apagado.
+
+    Mesma contagem de linhas que `texto.splitlines()`, e de proposito: o portao
+    reporta numero de linha, e um apagador que encurtasse o arquivo apontaria
+    para a linha errada. Comentario vira espaco; a quebra de linha fica.
+
+    String e reconhecida ANTES de comentario, porque `//` mora dentro de
+    `https://`. Sem isso o apagador cortaria a URL no meio e o portao pararia de
+    ver amarracao de verdade -- em silencio, do lado que aprova.
     """
-    if not linha.startswith(marca, i):
-        return False
-    if marca == "//" and i > 0 and linha[i - 1] == ":":
-        return False
-    if marca == "#" and i > 0 and not linha[i - 1].isspace():
-        return False
-    return True
-
-
-def sem_comentario(linhas: list[str], sufixo: str) -> list[str]:
-    """As mesmas linhas, na mesma ordem e na mesma quantidade, sem comentario.
-
-    MANTEM A NUMERACAO de proposito: o achado continua apontando a linha certa
-    do arquivo, e quem abrir o arquivo ve o que o portao viu.
-
-    Anda caractere a caractere porque tirar comentario com `split("//")` e o
-    jeito classico de criar um falso NEGATIVO exatamente aqui: `//` e parte de
-    `https://`, e cortar na primeira ocorrencia apagaria o host.
-
-    O estado de texto literal ATRAVESSA a linha, e nao reinicia a cada uma.
-    Template literal de TypeScript ocupa varias linhas, e uma linha dentro dele
-    pode comecar com `https://x.bichu.app` SEM nenhum `:` antes do `//` --
-    reiniciando o estado, esse host sairia da varredura.
-
-    SE O RASTREIO SE PERDER, o efeito e PARAR de tirar comentario, isto e,
-    voltar a acusar. Erra para o lado que aparece em vermelho, e nao para o
-    lado que aprova em silencio: um literal que ficou aberto para sempre deixa
-    o resto do arquivo inteiro sendo medido cru.
-    """
-    sintaxe = SINTAXE_DE_COMENTARIO.get(sufixo)
-    if sintaxe is None:
-        return list(linhas)
-    marcas, bloco, delimitadores = sintaxe
-    abre, fecha = bloco if bloco is not None else ("", "")
-    saida: list[str] = []
-    em_bloco = False
-    aberto = ""  # o delimitador de texto literal em curso, ou "" fora dele
-    for linha in linhas:
-        pedacos: list[str] = []
-        i, n = 0, len(linha)
-        while i < n:
-            if em_bloco:
-                fim = linha.find(fecha, i)
-                if fim < 0:
-                    break
-                em_bloco = False
-                i = fim + len(fecha)
-                continue
-            c = linha[i]
-            if aberto:
-                pedacos.append(c)
-                if c == "\\" and i + 1 < n:
-                    pedacos.append(linha[i + 1])
-                    i += 2
-                    continue
-                if c == aberto:
-                    aberto = ""
+    d = DIALETOS.get(sufixo)
+    if d is None:
+        return texto.splitlines()
+    chars = list(texto)
+    n = len(texto)
+    i = 0
+    while i < n:
+        delim = None
+        if d.triplas:
+            delim = next((a * 3 for a in d.aspas if texto.startswith(a * 3, i)), None)
+        if delim is None:
+            delim = next((a for a in d.aspas if texto.startswith(a, i)), None)
+        if delim is not None:
+            i = _fim_da_string(texto, i, delim, d)
+            continue
+        marcador = next((m for m in d.linha if texto.startswith(m, i)), None)
+        if marcador is not None and not (
+            d.linha_exige_espaco and i > 0 and texto[i - 1] not in " \t\n"
+        ):
+            while i < n and texto[i] != "\n":
+                chars[i] = " "
                 i += 1
-                continue
-            if c in delimitadores:
-                aberto = c
-                pedacos.append(c)
-                i += 1
-                continue
-            if abre and linha.startswith(abre, i):
-                em_bloco = True
-                i += len(abre)
-                continue
-            if any(_abre_comentario(linha, i, marca) for marca in marcas):
-                break
-            pedacos.append(c)
-            i += 1
-        saida.append("".join(pedacos))
-    return saida
+            continue
+        abre = next((b for b in d.bloco if texto.startswith(b[0], i)), None)
+        if abre is not None:
+            fim = texto.find(abre[1], i + len(abre[0]))
+            fim = n if fim < 0 else fim + len(abre[1])
+            for j in range(i, fim):
+                if texto[j] != "\n":
+                    chars[j] = " "
+            i = fim
+            continue
+        i += 1
+    return "".join(chars).splitlines()
 
+
+# O apagador de comentario e a peca nova deste portao, e ele falha nos DOIS
+# sentidos. Deixar comentario de pe devolve o falso positivo de 20/10/2026: faz
+# barulho, e quem le descobre. Comer CODIGO e o outro, e e o grave: o portao
+# para de ver amarracao de verdade e nada fica vermelho. As iscas em arquivo
+# cobram o primeiro sentido; esta tabela cobra o segundo, por dialeto, porque o
+# `//` de `https://` mora dentro de uma string e e exatamente ali que um
+# apagador ingenuo corta.
+#
+# Cada caso e (sufixo, texto, o que tem de SOBRAR, o que tem de DESAPARECER). O
+# que sobra esta sempre dentro de uma string; o que desaparece, sempre dentro de
+# um comentario.
+_SOBREVIVE = "https://hml.bichu.app"
+_DESAPARECE = "nao-conta.bichu.app"
+CASOS_DO_APAGADOR = (
+    (".ts", 'const a = "https://hml.bichu.app"; // https://nao-conta.bichu.app'),
+    (".ts", "const a = `https://hml.bichu.app/${k}`; /* https://nao-conta.bichu.app */"),
+    (".dart", "const a = 'https://hml.bichu.app'; /// https://nao-conta.bichu.app"),
+    (".dart", "const a = '''https://hml.bichu.app'''; // https://nao-conta.bichu.app"),
+    (".sql", "INSERT INTO t VALUES ('https://hml.bichu.app'); -- https://nao-conta.bichu.app"),
+    # Aspa repetida dentro de string de SQL: se ela fechasse a string, o resto da
+    # linha viraria codigo e o `--` seguinte apagaria o que nao e comentario.
+    (".sql", "INSERT INTO t VALUES ('do''c https://hml.bichu.app'); -- https://nao-conta.bichu.app"),
+    (".yaml", 'url: "https://hml.bichu.app" # https://nao-conta.bichu.app'),
+    # `#` sem espaco antes e fragmento de URL, nao comentario.
+    (".yaml", "url: https://hml.bichu.app#frag # https://nao-conta.bichu.app"),
+    (".html", '<a href="https://hml.bichu.app">x</a> <!-- https://nao-conta.bichu.app -->'),
+)
+
+
+def autoteste_do_apagador() -> list[str]:
+    """O apagador de comentario, nos dois sentidos, dialeto por dialeto."""
+    falhas: list[str] = []
+    for sufixo, texto in CASOS_DO_APAGADOR:
+        codigo = "\n".join(linhas_de_codigo(texto, sufixo))
+        if _SOBREVIVE not in codigo:
+            falhas.append(
+                f"apagador de comentario ({sufixo}): COMEU CODIGO -- "
+                f"`{_SOBREVIVE}` estava dentro de uma string e desapareceu de "
+                f"`{texto}`. Este e o defeito silencioso: o portao para de ver "
+                "amarracao de verdade e nada fica vermelho"
+            )
+        if _DESAPARECE in codigo:
+            falhas.append(
+                f"apagador de comentario ({sufixo}): DEIXOU COMENTARIO DE PE -- "
+                f"`{_DESAPARECE}` estava dentro de um comentario e sobrou de "
+                f"`{texto}`. O portao volta a acusar prosa, e todo PR volta a "
+                "nascer vermelho"
+            )
+    muitas = "a\n// b\nc\n"
+    if len(linhas_de_codigo(muitas, ".ts")) != len(muitas.splitlines()):
+        falhas.append(
+            "apagador de comentario: mudou a CONTAGEM de linhas. O portao reporta "
+            "numero de linha, e desalinhado ele acusa a linha errada -- o achado "
+            "passa a apontar para um lugar onde nao ha nada"
+        )
+    return falhas
 
 REGRAS_PROVEDOR = [
     (re.compile(r"\b[\w.-]*\.amazonaws\.com\b"), "dominio de provedor (AWS)"),
@@ -266,42 +324,6 @@ REGRAS_HOSTNAME = [
      MOTIVO_URL_ABSOLUTA),
 ]
 
-# ---------------------------------------------------------------------------
-# A REGRA DA MIGRACAO PEDE HOST, E NAO ESQUEMA.
-#
-# Ela protege o ponto irreversivel: o banco guarda codigo e chave, nunca URL,
-# porque persistir URL transforma a troca de dominio em migracao de dados sobre
-# plastico ja impresso.
-#
-# Ate 20/10/2026 ela media `"http://" in linha or "https://" in linha` -- texto
-# cru, sem host. Consequencia MEDIDA no mesmo dia, em
-# `migrations/20261019000007_versao-minima-do-app.sql:161`:
-#
-#     CHECK (store_url ~ '^https://[^[:space:]]+$' AND length(store_url) <= 300)
-#
-# Aquele `https://` NAO E UM ENDERECO. E a FORMA de uma URL, escrita como
-# regra de validacao: ele existe justamente para o banco RECUSAR um endereco
-# mal digitado. Nao tem host, nao tem dominio, nao ha nada para empurrar para
-# configuracao -- e o portao mandava empurrar. Portao que cobra o conserto de
-# quem ja esta certo e ruido, e ruido e o caminho para um portao desligado.
-#
-# Entao a regra passa a pedir ESQUEMA SEGUIDO DE HOST. Isso nao afrouxa nada,
-# e os dois lados estao medidos na isca:
-#   - `DEFAULT 'https://img.bichu.app/padrao/capa.jpeg'` continua reprovando;
-#   - `CHECK (loja_url ~ '^https://bichu\.app/')` TAMBEM reprova, porque ali o
-#     dominio esta escrito e isso e amarracao de verdade, dentro de um `CHECK`;
-#   - `CHECK (loja_url ~ '^https://[^[:space:]]+$')` nao reprova, porque depois
-#     de `//` vem `[`, que nao comeca host nenhum.
-#
-# Em lista, e nao solta no meio de `medir()`, por um motivo so: o autoteste
-# pergunta "que regras produzem o motivo X?", e uma regra escrita a mao no meio
-# da funcao nao tem como ser respondida -- ficaria sem testemunha.
-MOTIVO_URL_EM_MIGRACAO = "URL absoluta em migracao"
-
-REGRAS_DE_MIGRACAO = [
-    (re.compile(r"https?://[A-Za-z0-9]"), MOTIVO_URL_EM_MIGRACAO),
-]
-
 # Servico de TERCEIRO que o produto CONSULTA, e que nao e infraestrutura nossa.
 #
 # Este portao existe contra amarracao na NOSSA nuvem e no NOSSO dominio: o
@@ -336,12 +358,13 @@ REGRAS_DE_MIGRACAO = [
 # O CONTRAEXEMPLO QUE ESTE PARAGRAFO CITAVA NAO EXISTE MAIS, e a historia dele
 # vale como aviso. Era o `MAP_TILES_URL` do mapa, em `app/config/mapa.json`,
 # "por um motivo que NAO vale aqui: servidor de tiles se auto-hospeda e se
-# troca". O argumento segue de pe; o exemplo, nao. O leitor citado
+# troca, e o bloco do mapa cai num estado visivel quando a chave falta". O
+# argumento segue de pe; o exemplo, nao. O leitor citado
 # (`app/lib/telas/rede/local_do_encontro.dart`) saiu em 19/10/2026 com a pagina
 # de detalhe do evento (`be057793`, pedido do cliente), e o arquivo de
-# configuracao ficou sem ninguem para ler. Em 20/10/2026 as duas chaves sairam,
-# porque configuracao de tela que nao existe nao e portabilidade: e um portao
-# cobrando, dentro do binario, o valor de um define que o Dart nao compila.
+# configuracao ficou sem ninguem para ler -- fazendo `verificar-apk.sh` cobrar,
+# dentro do binario, o valor de um define que o Dart nao compila. Em 20/10/2026
+# as duas chaves sairam.
 #
 # A lista e de HOST EXATO, com o servico nomeado, e vale SO para
 # MOTIVO_URL_ABSOLUTA: dominio de provedor, `localhost`, loopback, bind e IP
@@ -395,76 +418,90 @@ def host_de_terceiro(linha: str, inicio: int) -> bool:
 # O motivo e copiado literalmente do `motivo` da regra; se ele contivesse um
 # literal que as proprias regras casam, a linha passaria a se auto-satisfazer
 # pelo comentario -- nenhum motivo de hoje contem um, e nao deve passar a conter.
+# URL absoluta em migracao e o caso que protege o ponto irreversivel: o banco
+# guarda codigo e chave, nunca URL. Persistir URL transforma a troca de dominio
+# em migracao de dados sobre plastico ja impresso. A regra vive numa familia
+# propria porque so vale para `migrations/*.sql` -- e porque, como toda regra
+# deste portao, ela precisa de isca.
+#
+# Ela era `"http://" in linha or "https://" in linha` sobre qualquer `.sql` de
+# `migrations/`, sem excecao nenhuma, e por isso acusava duas coisas que nao
+# amarram nada:
+#   - o comentario `--` que EXPLICA o que a coluna aceita -- resolvido por
+#     `linhas_de_codigo`, que apaga comentario antes de medir;
+#   - o ESQUEMA dentro de um literal de regex, como
+#     `CHECK (store_url ~ '^https://[^[:space:]]+$')`, que e justamente a
+#     validacao que impede GUARDAR URL malformada. O portao estava acusando a
+#     propria defesa, e nao ha host nenhum ali.
+#
+# Agora a regra exige HOST depois do esquema, que e o que "URL absoluta"
+# significa. Isso nao a afrouxa para o caso que importa: `'https://img.bichu.app'`
+# persistido continua reprovando, e o host escrito DENTRO de um regex
+# (`~ '^https://img\.bichu\.app/'`) tambem, porque ancorar o esquema num host
+# amarra o esquema aquele host do mesmo jeito -- a barra invertida do regex
+# entra no padrao de proposito, senao a forma escapada escaparia da regra. Ver
+# as duas iscas: `deve-reprovar-migracao.sql` e
+# `nao-deve-reprovar-comentario.sql`.
+REGRAS_MIGRACAO = [
+    (
+        re.compile(
+            r"https?://(?:localhost|\d{1,3}(?:\.\d{1,3}){3}|[a-z0-9][a-z0-9._\\-]*\.[a-z]{2,})",
+            re.I,
+        ),
+        "URL absoluta em migracao",
+    ),
+]
+
+# `--` alem de `//` porque a isca da regra de migracao e um `.sql`.
 MARCA_DE_ISCA = re.compile(r"(?://|--)\s*isca:\s*(.+?)\s*$")
 
-# A anotacao da DISPENSA, e o que cada tipo promete:
-#
-#   `dispensa-de-comentario` + motivo: a linha e PROSA. O texto CRU dela tem de
-#       reprovar com aquele motivo e a linha MEDIDA nao pode. Os dois lados
-#       importam: sem o primeiro a testemunha e vazia (uma linha que nunca
-#       conteve o defeito passaria mesmo com a dispensa quebrada), e sem o
-#       segundo a dispensa nao existe.
-#   `dispensa-de-forma` + motivo: a linha e CODIGO e nao reprova nem crua,
-#       porque o `https://` dela e a FORMA de uma URL e nao um endereco -- o
-#       `CHECK` do Postgres. Esta nao tem como cobrar o lado "cru reprova", e
-#       por isso ela nao vale sozinha: ela so prova algo em par com uma linha
-#       de `isca` do MESMO motivo no MESMO arquivo, que o autoteste cobra.
-#
-# A marca aceita `//` e `--` porque as iscas sao duas linguagens: a regra de
-# URL em migracao so vale para `migrations/*.sql` e a isca dela e SQL.
-#
-# Por que esta explicacao escreve `dispensa-de-comentario` SEM os dois-pontos:
-# com eles, este proprio comentario entraria como anotacao de um motivo que
-# nunca existiu. E o mesmo tropeco que `motivo_anotado` documenta, e ele custa
-# uma falha de autoteste que parece defeito do portao.
-MARCA_DE_DISPENSA = re.compile(r"(?://|--)\s*dispensa-de-(comentario|forma):\s*(.+?)\s*$")
+# As marcas das iscas NEGATIVAS, que declaram o que NAO pode reprovar. Elas
+# vivem em linha inteira de comentario -- e esse e o ponto delas --, entao nao
+# passam por `motivo_anotado`, que exige codigo. Sao duas porque sao duas
+# afirmacoes diferentes:
+#   - `nao-isca`: o defeito esta na linha, e o que o salva e ser comentario. O
+#     autoteste cobra que a linha CRUA case a regra e a linha de codigo nao.
+#   - `nao-isca-sem-host`: nao ha host ali, em comentario nenhum -- e o caso do
+#     literal de regex. O autoteste cobra que a regra nao case de jeito nenhum.
+MARCA_DE_NAO_ISCA = re.compile(r"(?://|--)\s*nao-isca:\s*(.+?)\s*$")
+MARCA_DE_NAO_ISCA_SEM_HOST = re.compile(r"(?://|--)\s*nao-isca-sem-host:\s*(.+?)\s*$")
 
 REGRA_SDK = re.compile(r"""^\s*import\s+.*from\s+['"](@aws-sdk/|@google-cloud/|@azure/)""", re.M)
 CAMADAS_PURAS = ("/domain/", "/application/", "/ports/")
 
 
-def motivo_anotado(linha: str) -> str | None:
+def motivo_anotado(linha: str, codigo: str) -> str | None:
     """O motivo que ESTA linha declara acordar, ou None se ela nao declara um.
 
-    A anotacao so vale depois de codigo. Linha que comeca com `//` (ou com
-    `--`, desde que a isca da migracao e SQL) e prosa, e prosa nao anota nada
-    -- o cabecalho de cada isca explica a convencao e para isso precisa CITAR a
-    forma dela, e sem esta condicao a propria explicacao entrava como anotacao
-    de um motivo que nunca existiu.
+    A anotacao so vale depois de CODIGO. Linha inteira de comentario e prosa, e
+    prosa nao anota nada -- o cabecalho de cada isca explica a convencao e para
+    isso precisa CITAR a forma dela, e sem esta condicao a propria explicacao
+    entrava como anotacao de um motivo que nunca existiu.
 
-    A anotacao de DISPENSA e o contrario: ela vive numa linha que E prosa, e
-    por isso tem leitor proprio (`dispensa_anotada`) sem esta recusa.
+    A condicao era "a linha comeca com `//`"; agora e "a linha nao tem codigo",
+    que diz a mesma coisa com a mesma severidade, vale para o `--` do SQL e nao
+    se engana com bloco `/* */` nem com `///` indentado.
     """
-    despido = linha.lstrip()
-    if despido.startswith("//") or despido.startswith("--"):
+    if not codigo.strip():
         return None
     marca = MARCA_DE_ISCA.search(linha)
     return marca.group(1) if marca is not None else None
 
 
-def dispensa_anotada(linha: str) -> tuple[str, str] | None:
-    """`(tipo, motivo)` da dispensa que ESTA linha declara, ou None.
+def motivo_negado(linha: str) -> tuple[str, bool] | None:
+    """O motivo que esta linha declara NAO poder reprovar, e se ha host nela.
 
-    Sem a recusa de `motivo_anotado`: a linha de `dispensa-de-comentario` E um
-    comentario inteiro -- e exatamente por isso que ela existe.
+    Retorna `(motivo, tem_host)`: `tem_host` e True para `nao-isca` (o defeito
+    esta escrito na linha e o que o salva e ser comentario) e False para
+    `nao-isca-sem-host` (nao ha host ali de forma nenhuma).
     """
-    marca = MARCA_DE_DISPENSA.search(linha)
-    return (marca.group(1), marca.group(2)) if marca is not None else None
-
-
-def regras_com_motivo(motivo: str) -> list[re.Pattern[str]]:
-    """Os padroes que produzem `motivo`, em qualquer das tres familias.
-
-    Existe para o autoteste poder perguntar "este motivo ainda e producivel?"
-    sem recopiar regex nenhum: regra recopiada no teste e a regra testando a si
-    mesma, e e por isso que REGRAS_DE_MIGRACAO e uma lista.
-    """
-    return [
-        regex
-        for familia in (REGRAS_PROVEDOR, REGRAS_HOSTNAME, REGRAS_DE_MIGRACAO)
-        for regex, m in familia
-        if m == motivo
-    ]
+    marca = MARCA_DE_NAO_ISCA.search(linha)
+    if marca is not None:
+        return marca.group(1), True
+    marca = MARCA_DE_NAO_ISCA_SEM_HOST.search(linha)
+    if marca is not None:
+        return marca.group(1), False
+    return None
 
 
 # Lockfile e gerado pelo gerenciador de pacotes e carrega, por natureza, a URL
@@ -537,69 +574,61 @@ def isento(rel: str) -> bool:
     return False
 
 
-def medir(caminho: Path, rel: str) -> list[tuple[int, str, str]]:
-    """Os achados como dado: `(linha, motivo, texto original da linha)`.
+def achados_de_regras(
+    rel: str, medidas: list[str], cruas: list[str], regras: list[tuple[re.Pattern[str], str]]
+) -> list[str]:
+    """Casa `regras` contra `medidas`, mas MOSTRA a linha crua no achado.
 
-    Linha `0` e achado do ARQUIVO, e nao de uma linha dele.
-
-    Devolve dado, e nao a frase do relatorio, porque o autoteste precisa
-    perguntar "esta linha produziu ESTE motivo?" -- e com a frase pronta ele
-    teria de reparsear o proprio relatorio para saber, o que torna a cobranca
-    refem do formato da mensagem.
-
-    TODAS as tres familias medem o codigo SEM COMENTARIO (ver sem_comentario, e
-    o bloco "COMENTARIO NAO E CODIGO" que explica por que), e o achado cita a
-    linha ORIGINAL, que e a que a pessoa vai abrir no editor.
+    A linha medida pode ter o comentario apagado (ver `linhas_de_codigo`); quem
+    le o achado quer ver o arquivo como ele esta escrito.
     """
-    try:
-        texto = caminho.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        return [(0, f"nao foi possivel ler: {e}", "")]
-
-    achados: list[tuple[int, str, str]] = []
-    linhas = texto.splitlines()
-    medidas = sem_comentario(linhas, caminho.suffix)
-
-    familias = [REGRAS_PROVEDOR, REGRAS_HOSTNAME]
-    # A regra da migracao protege o ponto irreversivel: o banco guarda codigo e
-    # chave, nunca URL. Persistir URL transforma a troca de dominio em migracao
-    # de dados sobre plastico ja impresso.
-    if rel.startswith("migrations/") and caminho.suffix == ".sql":
-        familias.append(REGRAS_DE_MIGRACAO)
-
-    for regras in familias:
-        for regex, motivo in regras:
-            for n, linha in enumerate(medidas, 1):
-                casadas = list(regex.finditer(linha))
-                if not casadas:
-                    continue
-                # So a regra generica aceita terceiro declarado, e so quando
-                # TODAS as URLs da linha sao de terceiro: uma linha que mistura
-                # o ViaCEP com um host nosso continua acusando, porque o que
-                # importa e o host que sobrou, nao o que foi explicado.
-                if motivo == MOTIVO_URL_ABSOLUTA and all(
-                    host_de_terceiro(linha, m.start()) for m in casadas
-                ):
-                    continue
-                achados.append((n, motivo, linhas[n - 1]))
-
-    # Tambem sem comentario, e pelo mesmo motivo: `// import ... from
-    # "@aws-sdk/client-s3"` numa camada pura e uma linha comentada, nao um
-    # import. Ela nao entra no grafo de modulos e nao traz SDK nenhum.
-    if any(c in f"/{rel}" for c in CAMADAS_PURAS) and REGRA_SDK.search("\n".join(medidas)):
-        achados.append(
-            (0, "SDK de provedor importado em camada pura (domain/application/ports)", "")
-        )
-
+    achados: list[str] = []
+    for regex, motivo in regras:
+        for n, linha in enumerate(medidas, 1):
+            casadas = list(regex.finditer(linha))
+            if not casadas:
+                continue
+            # So a regra generica aceita terceiro declarado, e so quando TODAS
+            # as URLs da linha sao de terceiro: uma linha que mistura o ViaCEP
+            # com um host nosso continua acusando, porque o que importa e o
+            # host que sobrou, nao o que foi explicado.
+            if motivo == MOTIVO_URL_ABSOLUTA and all(
+                host_de_terceiro(linha, m.start()) for m in casadas
+            ):
+                continue
+            achados.append(f"{rel}:{n}: {motivo} -> {cruas[n - 1].strip()[:90]}")
     return achados
 
 
-def achados_em(caminho: Path, rel: str) -> list[str]:
-    """As linhas do relatorio. O formato nao mudou: so a origem do dado mudou."""
-    return [
-        f"{rel}: {motivo}" if n == 0 else f"{rel}:{n}: {motivo} -> {linha.strip()[:90]}"
-        for n, motivo, linha in medir(caminho, rel)
-    ]
+def achados_em(caminho: Path, rel: str, como_migracao: bool | None = None) -> list[str]:
+    try:
+        texto = caminho.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return [f"{rel}: nao foi possivel ler: {e}"]
+
+    achados: list[str] = []
+    linhas = texto.splitlines()
+    codigo = linhas_de_codigo(texto, caminho.suffix)
+
+    # `provedor` le o arquivo INTEIRO, comentario incluido; `hostname` e a regra
+    # de migracao leem so o codigo. A diferenca nao e descuido: sao duas
+    # perguntas diferentes, e o porque de cada uma esta na nota acima de
+    # `Dialeto`.
+    achados.extend(achados_de_regras(rel, linhas, linhas, REGRAS_PROVEDOR))
+    achados.extend(achados_de_regras(rel, codigo, linhas, REGRAS_HOSTNAME))
+
+    # `como_migracao` existe para o autoteste poder cobrar a regra de migracao
+    # de uma isca que nao mora em `migrations/`. Na varredura quem decide e o
+    # caminho, como sempre.
+    if como_migracao is None:
+        como_migracao = rel.startswith("migrations/") and caminho.suffix == ".sql"
+    if como_migracao:
+        achados.extend(achados_de_regras(rel, codigo, linhas, REGRAS_MIGRACAO))
+
+    if any(c in f"/{rel}" for c in CAMADAS_PURAS) and REGRA_SDK.search(texto):
+        achados.append(f"{rel}: SDK de provedor importado em camada pura (domain/application/ports)")
+
+    return achados
 
 
 def varrer(raiz: Path, apenas: str | None = None) -> list[str]:
@@ -618,122 +647,6 @@ def varrer(raiz: Path, apenas: str | None = None) -> list[str]:
             continue  # as iscas sao avaliadas no autoteste, nao na varredura
         achados.extend(achados_em(caminho, rel))
     return achados
-
-
-# A isca da regra de migracao. Mora em `tests/portabilidade/` como as outras, e
-# NAO em `migrations/`: la o migrador a aplicaria. O autoteste a mede com um
-# `rel` de migracao, de proposito, porque a regra so vale para
-# `migrations/*.sql` -- e ate 20/10/2026 ela nao tinha testemunha nenhuma.
-ISCA_DE_MIGRACAO = "tests/portabilidade/deve-reprovar-migracao.sql"
-REL_MEDIDO_DA_ISCA_DE_MIGRACAO = "migrations/__isca-de-portabilidade__.sql"
-
-
-def _falhas_da_dispensa(
-    rel: str, dispensas: list[tuple[int, str, str, str, str]], familia: str
-) -> list[str]:
-    """Cobra cada linha de dispensa. Ver a direcao C em autoteste()."""
-    falhas: list[str] = []
-    for n, tipo, motivo, crua, medida in dispensas:
-        regras = regras_com_motivo(motivo)
-        if not regras:
-            falhas.append(
-                f'{rel}:{n}: a dispensa espera o motivo "{motivo}", que NAO '
-                f"EXISTE MAIS em regra nenhuma ({familia} e as outras duas "
-                "familias). Dispensa de um achado que ninguem mais produz nao "
-                "dispensa nada, e passa a esconder que a regra foi apagada"
-            )
-            continue
-        if tipo == "comentario":
-            if not any(regex.search(crua) for regex in regras):
-                falhas.append(
-                    f'{rel}:{n}: a linha de dispensa NAO CONTEM o defeito de '
-                    f'"{motivo}" nem no texto cru. Ela e uma TESTEMUNHA VAZIA: '
-                    "passaria no lado de baixo mesmo com a dispensa de "
-                    f"comentario quebrada -> {crua.strip()[:90]}"
-                )
-            if any(regex.search(medida) for regex in regras):
-                falhas.append(
-                    f'{rel}:{n}: a dispensa de comentario PAROU DE VALER: a '
-                    f'linha medida ainda reprova por "{motivo}". O portao voltou '
-                    "a cobrar prosa, que foi o que travou a esteira inteira em "
-                    f"20/10/2026 -> {medida.strip()[:90]}"
-                )
-        elif any(regex.search(medida) for regex in regras):
-            falhas.append(
-                f'{rel}:{n}: a dispensa de forma PAROU DE VALER: a linha medida '
-                f'reprova por "{motivo}". `https://` sem host e a FORMA de uma '
-                "URL, nao um endereco, e cobrar conserto de quem ja esta certo e "
-                f"o caminho para um portao desligado -> {medida.strip()[:90]}"
-            )
-    return falhas
-
-
-def autoteste_da_migracao(raiz: Path) -> list[str]:
-    """A isca de `migrations/*.sql`, medida pelo caminho de verdade (`medir`).
-
-    Usa `medir` e nao regex recopiado aqui, porque regra recopiada no teste e a
-    regra testando a si mesma. Cobra tres coisas:
-      - cada linha de `isca` reprova com o motivo dela (a regra ainda enxerga);
-      - nenhuma linha de dispensa reprova (a dispensa vale);
-      - a de `dispensa-de-comentario` reprovaria CRUA (a testemunha nao e vazia).
-    """
-    falhas: list[str] = []
-    caminho = raiz / ISCA_DE_MIGRACAO
-    if not caminho.is_file():
-        return [
-            f"{ISCA_DE_MIGRACAO}: isca ausente. A regra "
-            f'"{MOTIVO_URL_EM_MIGRACAO}" e as duas dispensas dela ficam sem '
-            "testemunha, e o portao passa a valer pela confianca do dia em que "
-            "foi escrito"
-        ]
-    try:
-        linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError as e:
-        return [f"{ISCA_DE_MIGRACAO}: nao foi possivel ler a isca: {e}"]
-
-    medidas = sem_comentario(linhas, caminho.suffix)
-    motivos_por_linha: dict[int, set[str]] = {}
-    for n, motivo, _ in medir(caminho, REL_MEDIDO_DA_ISCA_DE_MIGRACAO):
-        motivos_por_linha.setdefault(n, set()).add(motivo)
-
-    anotadas = 0
-    dispensas: list[tuple[int, str, str, str, str]] = []
-    for n, (crua, medida) in enumerate(zip(linhas, medidas), 1):
-        esperado = motivo_anotado(crua)
-        if esperado is not None:
-            anotadas += 1
-            if esperado not in motivos_por_linha.get(n, set()):
-                falhas.append(
-                    f'{ISCA_DE_MIGRACAO}:{n}: a isca espera "{esperado}" e a '
-                    f"varredura nao deu esse achado nesta linha (deu "
-                    f"{sorted(motivos_por_linha.get(n, set())) or 'nada'}). A "
-                    "regra foi apagada, renomeada ou apertada demais para o "
-                    f"proprio caso dela -> {crua.strip()[:90]}"
-                )
-        marca = dispensa_anotada(crua)
-        if marca is not None:
-            dispensas.append((n, marca[0], marca[1], crua, medida))
-            if marca[1] in motivos_por_linha.get(n, set()):
-                falhas.append(
-                    f'{ISCA_DE_MIGRACAO}:{n}: a linha de dispensa REPROVOU por '
-                    f'"{marca[1]}" na varredura de verdade. A dispensa de '
-                    f"{marca[0]} nao esta valendo -> {crua.strip()[:90]}"
-                )
-
-    if not anotadas:
-        falhas.append(
-            f"{ISCA_DE_MIGRACAO}: nenhuma linha anotada com `isca`. Sem ela as "
-            "dispensas abaixo nao provam nada: um portao que nao acusa NADA "
-            "passa nelas todas"
-        )
-    if not dispensas:
-        falhas.append(
-            f"{ISCA_DE_MIGRACAO}: nenhuma linha de dispensa. As duas que "
-            "travaram a esteira em 20/10/2026 -- prosa em comentario `--` e "
-            "`https://` sem host num `CHECK` -- voltam a nao ter testemunha"
-        )
-    falhas.extend(_falhas_da_dispensa(ISCA_DE_MIGRACAO, dispensas, "REGRAS_DE_MIGRACAO"))
-    return falhas
 
 
 def autoteste(raiz: Path) -> list[str]:
@@ -759,13 +672,23 @@ def autoteste(raiz: Path) -> list[str]:
     A falha cita o motivo, e na direcao A tambem o padrao: dois motivos podem
     ser iguais (as duas regras de `literal de regiao`) e o motivo sozinho nao
     diria qual das duas cegou.
+
+    As iscas de `hostname` e de migracao sao medidas na linha SEM COMENTARIO,
+    pela mesma razao que a varredura: se o defeito da isca migrasse para um
+    comentario, a regra continuaria "provada" por prosa e a varredura nao a
+    exercitaria mais. Medir no codigo e o que faz a isca positiva dizer "host em
+    CODIGO reprova" -- a outra metade, "host em comentario nao reprova", e
+    cobrada pelas iscas NEGATIVAS, logo abaixo.
     """
-    falhas: list[str] = []
+    falhas: list[str] = autoteste_do_apagador()
+    # O quarto campo diz se a isca e medida na linha sem comentario. `provedor`
+    # e False de proposito: aquela familia varre o arquivo inteiro.
     iscas = (
-        ("tests/portabilidade/deve-reprovar-provedor.ts", REGRAS_PROVEDOR, "REGRAS_PROVEDOR"),
-        ("tests/portabilidade/deve-reprovar-hostname.ts", REGRAS_HOSTNAME, "REGRAS_HOSTNAME"),
+        ("tests/portabilidade/deve-reprovar-provedor.ts", REGRAS_PROVEDOR, "REGRAS_PROVEDOR", False),
+        ("tests/portabilidade/deve-reprovar-hostname.ts", REGRAS_HOSTNAME, "REGRAS_HOSTNAME", True),
+        ("tests/portabilidade/deve-reprovar-migracao.sql", REGRAS_MIGRACAO, "REGRAS_MIGRACAO", True),
     )
-    for rel, regras, familia in iscas:
+    for rel, regras, familia, so_codigo in iscas:
         caminho = raiz / rel
         if not caminho.is_file():
             falhas.append(
@@ -774,34 +697,26 @@ def autoteste(raiz: Path) -> list[str]:
             )
             continue
         try:
-            linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
+            texto = caminho.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
             falhas.append(f"{rel}: nao foi possivel ler a isca: {e}")
             continue
+        linhas = texto.splitlines()
+        codigo = linhas_de_codigo(texto, caminho.suffix)
+        medidas = codigo if so_codigo else linhas
 
-        # A isca e lida DUAS VEZES: crua, de onde sai a anotacao (ela mora num
-        # comentario), e MEDIDA, que e o texto contra o qual a regra e cobrada.
-        #
-        # Cobrar a regra contra o texto CRU seria o autoteste deixando de
-        # testemunhar a varredura no dia em que elas discordassem -- e e
-        # exatamente nisso que elas agora podem discordar.
-        medidas = sem_comentario(linhas, caminho.suffix)
-
-        anotadas: list[tuple[int, str, str]] = []  # (numero, motivo esperado, linha MEDIDA)
-        dispensas: list[tuple[int, str, str, str, str]] = []  # (n, tipo, motivo, crua, medida)
-        for n, (crua, medida) in enumerate(zip(linhas, medidas), 1):
-            esperado = motivo_anotado(crua)
+        anotadas: list[tuple[int, str, str]] = []  # (numero, motivo esperado, linha medida)
+        for n, (linha, cod) in enumerate(zip(linhas, codigo), 1):
+            esperado = motivo_anotado(linha, cod)
             if esperado is not None:
-                anotadas.append((n, esperado, medida))
-            marca = dispensa_anotada(crua)
-            if marca is not None:
-                dispensas.append((n, marca[0], marca[1], crua, medida))
+                anotadas.append((n, esperado, medidas[n - 1]))
 
         if not anotadas:
             falhas.append(
-                f"{rel}: nenhuma linha anotada com `// isca: <motivo>`. Sem as "
-                "anotacoes o autoteste nao tem testemunha independente da lista "
-                f"de regras, e uma regra apagada de {familia} passaria em branco"
+                f"{rel}: nenhuma linha anotada com `isca: <motivo>` depois de "
+                "codigo. Sem as anotacoes o autoteste nao tem testemunha "
+                "independente da lista de regras, e uma regra apagada de "
+                f"{familia} passaria em branco"
             )
 
         # Direcao A: regra -> isca.
@@ -810,8 +725,9 @@ def autoteste(raiz: Path) -> list[str]:
                 falhas.append(
                     f'{rel}: NENHUMA LINHA ANOTADA DISPARA a regra "{motivo}" '
                     f"de {familia} (padrao: {regex.pattern}). Ou a linha de isca "
-                    "que a provava saiu do arquivo, ou perdeu a anotacao, ou a "
-                    "regra ficou estreita demais para o proprio caso dela"
+                    "que a provava saiu do arquivo, ou perdeu a anotacao, ou o "
+                    "defeito virou comentario, ou a regra ficou estreita demais "
+                    "para o proprio caso dela"
                 )
 
         # Direcao B: isca -> regra. A que pega a regra apagada.
@@ -831,17 +747,93 @@ def autoteste(raiz: Path) -> list[str]:
                     f"a linha deixou de conter o defeito -> {linha.strip()[:90]}"
                 )
 
-        # Direcao C: a DISPENSA DE COMENTARIO, nos dois lados.
-        #
-        # Esta e a testemunha da unica coisa que a mudanca de 20/10/2026 fez um
-        # achado DEIXAR de sair. Os dois lados sao obrigatorios, e cada um pega
-        # um defeito diferente:
-        #   - o texto CRU tem de reprovar. Sem isto a testemunha e VAZIA: uma
-        #     linha de prosa sem host nenhum passaria no segundo lado para
-        #     sempre, inclusive no dia em que a dispensa parasse de funcionar.
-        #   - a linha MEDIDA nao pode reprovar. Sem isto a dispensa nao vale
-        #     nada, e o portao volta a cobrar prosa.
-        falhas.extend(_falhas_da_dispensa(rel, dispensas, familia))
+    # As iscas NEGATIVAS. O defeito que elas existem para impedir e o inverso do
+    # habitual -- nao "o portao parou de ver", e "o portao passou a ver onde nao
+    # ha nada --, e ele custou o mesmo: medido em 20/10/2026, a familia hostname
+    # e a regra de migracao acusavam prosa em sete linhas da development, e com
+    # isso TODO PR nascia vermelho. Portao sempre vermelho nao e lido.
+    #
+    # Cada linha marcada declara a regra que NAO pode disparar ali, e em qual
+    # dos dois sentidos (ver `motivo_negado`). A conferencia tem quatro partes, e
+    # nenhuma sozinha basta:
+    #   1. o motivo declarado tem de EXISTIR na familia -- senao a declaracao
+    #      envelheceu sozinha e nao cobra mais nada;
+    #   2. a linha marcada `nao-isca` tem de casar a regra na linha CRUA. Sem
+    #      isso um arquivo vazio, ou com o host apagado, passaria: a isca
+    #      provaria o silencio do portao com silencio proprio. E e esta parte que
+    #      diz, do mesmo texto, "em codigo isto acusa";
+    #   3. nenhuma linha marcada pode casar a regra na linha de CODIGO -- o que
+    #      pega a regra voltando a acusar comentario;
+    #   4. o arquivo inteiro nao pode dar achado nenhum, pela varredura de
+    #      verdade. Pega o afrouxamento que entrasse por outra regra da familia.
+    negativas = (
+        ("tests/portabilidade/nao-deve-reprovar-comentario.ts", REGRAS_HOSTNAME, "REGRAS_HOSTNAME", False),
+        ("tests/portabilidade/nao-deve-reprovar-comentario.dart", REGRAS_HOSTNAME, "REGRAS_HOSTNAME", False),
+        ("tests/portabilidade/nao-deve-reprovar-comentario.sql", REGRAS_MIGRACAO, "REGRAS_MIGRACAO", True),
+    )
+    for rel, regras, familia, como_migracao in negativas:
+        caminho = raiz / rel
+        if not caminho.is_file():
+            falhas.append(
+                f"{rel}: isca negativa ausente. Sem ela nada prova que host em "
+                "comentario deixou de acusar, e o falso positivo volta calado -- "
+                "com todo PR nascendo vermelho outra vez"
+            )
+            continue
+        try:
+            texto = caminho.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            falhas.append(f"{rel}: nao foi possivel ler a isca negativa: {e}")
+            continue
+        linhas = texto.splitlines()
+        codigo = linhas_de_codigo(texto, caminho.suffix)
+        motivos = {motivo for _, motivo in regras}
+
+        marcadas: list[tuple[int, str, bool]] = []  # (numero, motivo negado, tem host)
+        for n, linha in enumerate(linhas, 1):
+            negado = motivo_negado(linha)
+            if negado is not None:
+                marcadas.append((n, negado[0], negado[1]))
+
+        if not any(tem_host for _, _, tem_host in marcadas):
+            falhas.append(
+                f"{rel}: nenhuma linha marcada com `nao-isca: <motivo>`. Uma isca "
+                "negativa sem linha com defeito nao prova nada: ela aprovaria o "
+                f"portao por estar vazia, e a regra de {familia} ficaria sem a "
+                "metade que diz onde ela NAO pode disparar"
+            )
+
+        for n, negado, tem_host in marcadas:
+            if negado not in motivos:
+                falhas.append(
+                    f'{rel}:{n}: a isca negativa cita o motivo "{negado}", que '
+                    f"NAO EXISTE em {familia}. A declaracao envelheceu sozinha e "
+                    "nao cobra mais nada"
+                )
+                continue
+            casa = [regex for regex, motivo in regras if motivo == negado]
+            if tem_host and not any(regex.search(linhas[n - 1]) for regex in casa):
+                falhas.append(
+                    f'{rel}:{n}: a linha CRUA nao contem o defeito que a regra '
+                    f'"{negado}" pega. Esta isca negativa existe para provar que o '
+                    "host esta escrito ali e so nao acusa por ser comentario; sem o "
+                    f"host ela nao prova nada -> {linhas[n - 1].strip()[:90]}"
+                )
+            if any(regex.search(codigo[n - 1]) for regex in casa):
+                falhas.append(
+                    f'{rel}:{n}: a regra "{negado}" de {familia} VOLTOU A ACUSAR '
+                    "uma linha que existe para NAO ser acusada. O portao esta "
+                    f"cobrando prosa outra vez -> {linhas[n - 1].strip()[:90]}"
+                )
+
+        acusados = achados_em(caminho, rel, como_migracao=como_migracao)
+        if acusados:
+            falhas.append(
+                f"{rel}: o portao deu {len(acusados)} achado(s) numa isca que "
+                "existe para NAO ser acusada -- host em comentario, ou esquema "
+                "dentro de literal de regex, voltou a reprovar: "
+                + "; ".join(acusados[:3])
+            )
 
     # HOSTS_DE_TERCEIRO e a unica coisa neste portao que faz um achado DEIXAR de
     # sair, entao ela e conferida aqui junto com as iscas, e pelo mesmo motivo:
@@ -886,8 +878,6 @@ def autoteste(raiz: Path) -> list[str]:
                 "nenhum. Host errado, com erro de digitacao ou ja sem uso -- e, do "
                 "jeito que esta, uma permissao que ninguem conferiu porque nunca agiu"
             )
-
-    falhas.extend(autoteste_da_migracao(raiz))
 
     return falhas
 

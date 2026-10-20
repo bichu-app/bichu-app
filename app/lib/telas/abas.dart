@@ -5,7 +5,8 @@ import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_tokens.g.dart';
-import '../widgets/acoes_de_criar_flutuantes.dart';
+import '../api/mural_api.dart';
+import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
@@ -30,11 +31,17 @@ import 'loja/vitrine_da_loja.dart';
 /// desenha nada -- nem botao, nem icone.
 ///
 /// **Isto SUBSTITUI o comportamento anterior**, em que a porta aparecia sempre
-/// e a tela de destino explicava a recusa com a saida que a resolve. Os dois
-/// impedimentos (`semConta` e `semEmailConfirmado`) **continuam em
-/// `criar_encontro.dart` e `sugerir_profissional.dart` e nao foram tocados**:
-/// as rotas seguem alcancaveis por link profundo, e tela que recusa calada e
-/// pior do que tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+/// e a tela de destino explicava a recusa com a saida que a resolve. As rotas
+/// seguem alcancaveis por link profundo, e tela que recusa calada e pior do que
+/// tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+///
+/// **Os impedimentos das telas de destino nao sao os mesmos nas duas, e isso
+/// nao e simetria que esta descricao pode afirmar.** `criar_encontro.dart` tem
+/// `semConta` **e** `semEmailConfirmado`; `sugerir_profissional.dart` tem
+/// `semConta` e os impedimentos de preenchimento, e **nao** tem
+/// `semEmailConfirmado`. Quem chega na sugestao por link profundo sem o e-mail
+/// confirmado preenche o formulario e so descobre no envio, pelo 409 do
+/// servidor -- que diz o que fazer, mas depois do trabalho.
 ///
 /// **O caminho para validar nao depende desta porta, e isso foi conferido.** O
 /// `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com `Reenviar` em
@@ -42,11 +49,33 @@ import 'loja/vitrine_da_loja.dart';
 /// topo de `Pets` (posicao 1) e item destacado no topo de `Perfil` (posicao
 /// 2). Esconder a acao de criar nao fecha caminho nenhum de confirmacao.
 ///
-/// **E ela NAO e a trava.** A trava de verdade e do servidor, e aqui vai o
-/// achado: `rotaDaCriacaoDeEncontro` e a rota da sugestao do diretorio exigem
-/// **conta** (teto por `account`, token obrigatorio) e **nao** exigem
-/// `email_verified` em lugar nenhum de `src/`. A metade "validado" desta regra
-/// existe **so no app**. Esta linha esconde a porta; ela nao recusa o pedido.
+/// **A trava E do servidor, e esta linha e so a porta.** As duas rotas da
+/// comunidade recusam conta nao validada com `409
+/// contact-channel-unverified` e `next_action: verify_email`:
+/// `createNetworkEvent` por `bloqueiosParaCriarEncontro`
+/// (`network/domain/encontro-da-comunidade.ts`) e `suggestDirectoryEntry` por
+/// `temCanalVerificado` (`professionals/application/sugestao-do-diretorio.ts`).
+/// Os dois `409` estao declarados no contrato, que escreve a mesma frase: "a
+/// trava e do SERVIDOR; o botao escondido nao recusa quem chama a rota direto".
+/// Medido em hml em 19/10/2026 no commit `458cd005`, com conta descartavel de
+/// `email_verified: false`: **409 nas duas**.
+///
+/// **O que o servidor cobra e CANAL DE CONTATO verificado, e nao
+/// `email_verified`** -- e e por isso que procurar `email_verified` em `src/`
+/// nao acha a trava. O predicado e
+/// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, escrito
+/// com a mesma redacao nos dois lugares (`kysely-network-repository.ts` e
+/// `kysely-canal-verificado-do-chamador.ts`): a metade do e-mail mora numa
+/// coluna com sufixo `_at`, e nenhuma das duas metades aparece com aquele nome.
+///
+/// **Na pratica a regua do servidor bate com a daqui**, porque o telefone nunca
+/// satisfaz o predicado: nao existe operacao de verificacao de telefone no
+/// contrato, e a unica escrita de `phone_verified_at` em `src/` e para ZERAR a
+/// coluna quando o telefone muda. Entao `usuario.emailVerificado` aqui concorda
+/// com o servidor hoje -- **por ausencia de uma rota, e nao por acordo de
+/// definicao**. No dia em que verificar telefone existir, uma conta com
+/// telefone verificado e e-mail nao verificado passa no servidor e nao ve a
+/// porta, e e esta linha que precisa mudar.
 bool podeCriarNaComunidade(ControladorDeSessao sessao) {
   final usuario = sessao.usuario;
   return sessao.logado && usuario != null && usuario.emailVerificado;
@@ -175,34 +204,74 @@ class AbaPets extends StatelessWidget {
           // ela precisa saber QUAL pet, e vive no cartao de cada um, em
           // `Rotas.detalheDoPet`. Ela nunca foi item de gaveta e nao ficou sem
           // casa.
-          acaoDeCriar: AcoesDeCriarFlutuantes(
-            principal: OpcaoDeCriar(
-              icone: Icons.qr_code_scanner,
-              rotulo: 'Escanear uma tag',
-              aoTocar: () => context.push(Rotas.escanear),
-            ),
-            // O alvo secundario diz o que o toque FAZ -- abrir mais acoes --
-            // e nao nomeia uma das duas: nomear uma mentiria sobre a outra.
-            rotuloDasOutras: 'Mais ações',
-            tituloDaFolha: 'O que você quer fazer?',
-            outras: <OpcaoDeCriar>[
-              // A ORDEM E A DO USO MAIS URGENTE PRIMEIRO. Quem acabou de achar
-              // um cachorro na rua tem pressa; quem vai cadastrar o proprio
-              // pet, nao.
-              //
-              // O MESMO glifo e o MESMO rotulo dos itens de gaveta que elas
-              // substituem, pelo mesmo motivo do principal.
-              OpcaoDeCriar(
-                icone: Icons.campaign_outlined,
-                rotulo: 'Registrar achado avulso',
-                aoTocar: () => context.push(Rotas.registrarAchado),
-              ),
-              OpcaoDeCriar(
-                icone: Icons.note_add_outlined,
-                rotulo: 'Cadastrar pet',
-                aoTocar: () => context.push(Rotas.cadastrarPet),
-              ),
-            ],
+          // **O ALVO SECUNDARIO SAIU EM 20/10/2026, e quem decidiu foi ele.**
+          //
+          // Literal: *"na pagina pet, remova o icone dos ..., so deixe o de
+          // escanear a tag"*. O glifo dos tres pontos era
+          // `AcoesDeCriarFlutuantes.chaveDoSecundario`, e com ele saiu a folha
+          // que ele abria -- `Registrar achado avulso` e `Cadastrar pet`.
+          //
+          // **AS DUAS ACOES NAO FICARAM SEM CASA, e elas sao o item 4 do mesmo
+          // dia** (*"como o menu do perfil esta crescendo, vamos separar os
+          // links por topicos/categorias"*):
+          //
+          //   | acao                      | casa de hoje                      |
+          //   |---------------------------|-----------------------------------|
+          //   | `Registrar achado avulso` | `Perfil` > grupo `Bichos na rua`  |
+          //   | `Cadastrar pet`           | `Perfil` > grupo `Meus pets`      |
+          //
+          // `Registrar achado avulso` virou `ItemDeMenu` na tela da conta,
+          // porque ela nao tinha NENHUMA outra porta em `lib/` -- medido por
+          // busca de `Rotas.registrarAchado`, que aparecia so aqui, em
+          // `rotas.dart` e na propria tela.
+          //
+          // **`Cadastrar pet` JA TINHA porta no `Perfil`, e nao ganhou uma
+          // segunda:** o `BotaoPrimario` `Cadastrar meu pet`, dentro do bloco
+          // `Meus pets`, empurra a MESMA `Rotas.cadastrarPet`. Por um
+          // `ItemDeMenu` novo, a tela teria dois controles para a mesma rota a
+          // um cabecalho de distancia. O que ela TINHA era um buraco: aquele
+          // botao so existia em duas das seis fases do bloco, e nas outras
+          // quatro a porta desaparecia. O conserto esta em `meus_pets.dart`,
+          // nas fases -- ver a prosa de `_acaoDeCadastrar`.
+          //
+          // **O RESPIRO DO PE DA LISTA CONTINUA 72,00 dp, e isto foi
+          // conferido**: a invasao e a do alvo mais alto da linha (56 dp de
+          // desenho) mais os 16 dp de assentamento do `Scaffold`, e tirar o
+          // segundo alvo da `Row` tira LARGURA do canto, nao altura. O
+          // `_folgaDaAcaoFlutuante` de `TelaDeAba` continua pagando a conta
+          // inteira.
+          //
+          // ## A decisao do cliente que criou esta porta, em duas rodadas
+          //
+          // Primeiro ele pediu a acao flutuante aqui: *"so faltou na pagina de
+          // pets o botao para adicionar um novo pet perdido ou escanear a tag,
+          // gostei desse padrao"*. **Entao eu perguntei qual delas era
+          // "adicionar um novo pet perdido", e a resposta foi: *"botao para
+          // escanear o pet"*.** Ela e a acao de **UM TOQUE** desde entao, e
+          // com o alvo secundario fora ela e a UNICA -- que e literalmente o
+          // que ele acabou de pedir.
+          //
+          // **O GLIFO E `qr_code_scanner`, e a distincao e a mesma do item da
+          // gaveta que ele substitui:** `qr_code_scanner` e LER uma plaquinha;
+          // `qr_code_2` e EXIBIR a propria. Esta porta le.
+          //
+          // **O ROTULO DIZ O VERBO, e nao "adicionar":** `Escanear uma tag` e
+          // o que o toque faz, e e o mesmo texto do item de gaveta -- quem
+          // usava a gaveta acha a acao pelo nome.
+          //
+          // **ELA NASCE SEM CONTA, e e a excecao conhecida e DELIBERADA:** a
+          // autenticacao da rota do leitor e opcional, e quem acha um animal
+          // na rua pode nao ter conta. Esconder o leitor de quem mais precisa
+          // dele seria o pior defeito possivel nesta secao. Por isso
+          // `acaoDeCriar` aqui NAO e condicional a sessao.
+          //
+          // **E `Marcar como perdido` NAO esta aqui, e a ausencia e medida:**
+          // ela precisa saber QUAL pet, e vive no cartao de cada um, em
+          // `Rotas.detalheDoPet`.
+          acaoDeCriar: AcaoDeCriarFlutuante(
+            icone: Icons.qr_code_scanner,
+            rotulo: 'Escanear uma tag',
+            aoTocar: () => context.push(Rotas.escanear),
           ),
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
@@ -394,17 +463,23 @@ class AbaRede extends StatelessWidget {
 /// FRENTE**, que roda em paralelo e cria `user_publications`, o contrato e as
 /// operacoes. O nome da rota foi combinado com ela e e estavel: `/mural`.
 ///
-/// ## NAO HA ACAO FLUTUANTE, e a ausencia e a parte cuidada
+/// ## A ACAO FLUTUANTE `Publicar` EXISTE DESDE 20/10/2026
 ///
-/// O desenho previa `Publicar` com `Icons.post_add` no canto. Ela **nao foi
-/// desenhada**, e nao por esquecimento: medido nesta arvore, nao existe
-/// operacao de publicar -- a tabela `user_publications` nao existe e nao ha
-/// rota de linha do tempo nem de publicacao no contrato. Um botao de
-/// `Publicar` abriria o que? O criterio 2 da BICHUS-62 proibe renderizar acao
-/// sem destino, **nem habilitada nem desabilitada**.
+/// A frente de 19/10 **nao** a desenhou, e estava certa: medido naquela arvore,
+/// nao existia operacao de publicar -- `user_publications` nao existia e nao
+/// havia rota de linha do tempo nem de publicacao no contrato. O criterio 2 da
+/// BICHUS-62 proibe renderizar acao sem destino, nem habilitada nem
+/// desabilitada, e um `Publicar` ali abriria o que?
 ///
-/// Quem trouxer a operacao traz a acao com ela, no `acaoDeCriar` desta classe
-/// -- uma linha, no mesmo lugar em que `Rede` tem a sua.
+/// **Agora ela tem destino** (`Rotas.publicarNoMural`, que leva a
+/// `POST /me/publications`), e por isso ela nasce -- no mesmo `acaoDeCriar` em
+/// que `Rede` tem a sua, com `Icons.post_add`, como o desenho previa.
+///
+/// **A REGUA E `podeCriarNaComunidade`** (sessao E e-mail confirmado), a mesma
+/// de `Marcar` e `Indicar`, e pelo mesmo motivo: publicar e escrever no feed de
+/// terceiros, e o servidor recusaria sem canal de contato verificado. Sem
+/// sessao a porta **nao nasce** -- nao nasce desabilitada, porque controle sem
+/// desfecho nao se desenha.
 ///
 /// ## `casca`, e nao `existe` nem `planejada`
 ///
@@ -412,12 +487,38 @@ class AbaRede extends StatelessWidget {
 /// sem conteudo mas com saida real". `existe` obrigaria a secao a ter
 /// conteudo, e ela nao tem; `planejada` a esconderia do build de ENTREGA
 /// (`visiveisEm`), e o cliente pediu o LUGAR dela na barra.
-class AbaMural extends StatelessWidget {
+class AbaMural extends StatefulWidget {
   const AbaMural({super.key});
+
+  @override
+  State<AbaMural> createState() => _AbaMuralState();
+}
+
+class _AbaMuralState extends State<AbaMural> {
+  /// Quantas vezes a pessoa publicou nesta sessao da tela.
+  ///
+  /// Ele vira a `Key` de [CorpoDoMural], e e assim que a linha do tempo recarrega
+  /// depois de publicar: a tela de publicar e IRMA da casca (ela empurra e
+  /// cobre), entao voltar dela nao remonta este ramo -- o `IndexedStack` manteve
+  /// tudo montado. Sem isto a pessoa publicaria, voltaria, e nao veria o que
+  /// acabou de escrever: o defeito que a propria decisao do cliente sobre o
+  /// Mural existe para nao ter.
+  ///
+  /// Uma `Key` nova, e nao um metodo chamado por `GlobalKey`: a `GlobalKey`
+  /// atravessaria a fronteira da tela e deixaria duas donas do mesmo estado.
+  int _publicacoes = 0;
+
+  Future<void> _abrirPublicar() async {
+    final publicou = await context.push<bool>(Rotas.publicarNoMural);
+    if (!mounted) return;
+    if (publicou == true) setState(() => _publicacoes += 1);
+  }
 
   @override
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.mural);
+    final escopo = Escopo.of(context);
+    final sessao = escopo.sessao;
     return TelaDeAba(
       raizDeSecao: true,
       titulo: destino.rotulo,
@@ -427,9 +528,28 @@ class AbaMural extends StatelessWidget {
       // tirar. O texto continua no REGISTRO, porque ele e a outra metade do
       // nome acessivel da aba.
       reforco: null,
-      // **SEM ACAO FLUTUANTE.** Ver a prosa desta classe: nao existe operacao
-      // de publicar nesta arvore.
-      filhos: const <Widget>[CorpoDoMural()],
+      // A PORTA DE PUBLICAR. Ver a prosa desta classe: ela so nasce com sessao
+      // E e-mail confirmado, e nunca desabilitada.
+      acaoDeCriar: podeCriarNaComunidade(sessao)
+          ? AcaoDeCriarFlutuante(
+              icone: Icons.post_add,
+              rotulo: 'Publicar',
+              aoTocar: _abrirPublicar,
+            )
+          : null,
+      filhos: <Widget>[
+        () {
+          // UMA porta, DUAS interfaces estreitas: a tela que desenha nao
+          // alcanca `apagar`, e o cartao que curte nao alcanca `publicar`. E a
+          // mesma fiacao de `Rotas.minhaVitrine`.
+          final porta = MuralApi(escopo.api);
+          return CorpoDoMural(
+            key: ValueKey<int>(_publicacoes),
+            leitura: porta,
+            interacao: porta,
+          );
+        }(),
+      ],
     );
   }
 }
@@ -636,50 +756,203 @@ class AbaPerfil extends StatelessWidget {
             // `Pets`, este e o unico caminho do app para cadastrar o proximo
             // pet.
             // -----------------------------------------------------------------
+            // =================================================================
+            // O MENU POR TOPICOS (20/10/2026, pedido do cliente)
+            // =================================================================
+            //
+            // Literal: *"como o menu do perfil esta crescendo, vamos separar os
+            // links por topicos/categorias"*.
+            //
+            // **A PERGUNTA QUE O AGRUPAMENTO RESPONDE E "o que eu vim fazer
+            // aqui", e nao "o que o programa tem".** Era uma pilha de seis
+            // linhas iguais entre o bloco de pets e o `Sair da conta`, e com o
+            // item novo do mesmo dia seriam sete -- `Meus dados`, `Escanear uma
+            // tag`, `Meus achados`, `Pedidos de conexao`, `Pessoas bloqueadas`,
+            // `Meus eventos` e `Registrar achado avulso`. Agrupar por objeto
+            // ("telas de pessoa", "telas de lista") daria tres grupos que
+            // descrevem o CODIGO; os quatro abaixo descrevem intencoes.
+            //
+            //   | grupo           | a intencao, em uma frase                 |
+            //   |-----------------|------------------------------------------|
+            //   | `Meus pets`     | cuidar dos MEUS bichos                   |
+            //   | `Conta`         | mexer em mim: meus dados e quem eu nao   |
+            //   |                 | quero ver                                |
+            //   | `Bichos na rua` | o bicho que NAO e meu                    |
+            //   | `Comunidade`    | a minha gente e os encontros             |
+            //
+            // **A ORDEM DOS GRUPOS E POR URGENCIA, e nao alfabetica nem por
+            // tamanho.** Depois do que e meu (`Meus pets`) e de quem eu sou
+            // (`Conta`), vem o bicho que precisa de ajuda AGORA -- ler a
+            // plaquinha de um cachorro na rua e a coisa mais urgente que este
+            // produto faz -- e so depois as pessoas e os encontros, que
+            // esperam.
+            //
+            // **E a ordem tambem e CONTRATO com dois portoes.** `Conta` tem
+            // de vir antes de `Meus dados`, `Meus dados` antes de `Escanear
+            // uma tag` (`ordemDecididaDoPerfil`, em
+            // `perfil_ordem_dos_itens_test.dart`) e `Meus eventos` depois de
+            // `Meus achados` (`meus_eventos_e_cancelar_test.dart`). Os tres
+            // sao decisoes do cliente de dias anteriores, e o agrupamento foi
+            // desenhado para caber nelas em vez de reescreve-las.
+            //
+            // **`Meus pets` ja era grupo**, e e ele que `MeusPets` desenha
+            // acima com o proprio `TituloDeGrupoDeMenu`: os cartoes e
+            // `Cadastrar meu pet`. Ele nao mudou de nome nem de conteudo, e
+            // continua sendo a casa declarada de `Cadastrar pet`.
+            //
+            // **NENHUM GRUPO TEM UM ITEM SO**, e isso foi conferido antes de
+            // escolher os nomes: grupo de um item e um cabecalho que nao
+            // agrupa nada -- custa uma linha de leitura e nao responde
+            // pergunta nenhuma. Sao 2, 2 e 3 itens, mais o bloco de pets.
+            // **O orfao que quase houve era `Meus dados`**: com `Pessoas
+            // bloqueadas` em `Comunidade`, `Conta` ficaria sozinho. Ele nao
+            // ficou, e a razao esta no grupo.
+            //
+            // **`Sair da conta` fica FORA de grupo e por ultimo** (pedido
+            // literal dele, de 18/10: *"o sair da conta deve ser sempre a
+            // ultima opcao do menu"*). Por-lo dentro de `Conta` o enterraria no
+            // meio da pagina.
+            //
+            // **O CABECALHO E CABECALHO PARA QUEM NAO VE, e nao texto
+            // pequeno:** `TituloDeGrupoDeMenu` embrulha o texto em
+            // `Semantics(header: true)` e **nao tem `onTap` nenhum** -- quem
+            // navega por cabecalho no VoiceOver e no TalkBack pula de grupo em
+            // grupo, e um cabecalho tocavel seria um controle que nao faz nada.
+            // O portao e `test/telas/barra_fixa_em_toda_tela_test.dart`, grupo
+            // `(e)`, com contraprova.
+            //
+            // ## Historia dos itens, que o agrupamento nao apaga
+            //
+            // O menu nasceu em 18/10 do pedido *"Essa pagina inicial atual,
+            // deveria ter apenas os menus para realizar as acoes e nao todos os
+            // botoes nessa pagina"*: tres botoes de contorno de largura total e
+            // um `ListTile` MUDO com o e-mail viraram itens. Nenhuma acao foi
+            // apagada entao, e nenhuma e apagada agora -- os sete itens trocam
+            // de GRUPO e nao de rotulo nem de destino, porque quem achava a
+            // acao pelo texto continua achando.
+
+            // -----------------------------------------------------------------
+            // GRUPO `Conta`: mexer em mim
+            // -----------------------------------------------------------------
+            //
+            // **Os dois itens respondem a mesma intencao, e nao e obvio ate
+            // dizer:** `Meus dados` e quem eu sou para o app, e `Pessoas
+            // bloqueadas` e quem eu **recusei** -- as duas coisas que so a
+            // propria pessoa mexe, e nenhuma delas e sobre comunidade. Bloqueio
+            // nao e um ato de comunidade: e uma configuracao da conta, e **e o
+            // UNICO lugar de onde o desbloqueio sai** (ver a prosa do item).
             const TituloDeGrupoDeMenu('Conta'),
             // **SO O TITULO** (18/10/2026, literal do cliente: *"na pagina do
             // perfil, não traga o e-mail no menu, deixe apenas o titulo meus
             // dados"*).
             //
             // O item tinha linha de apoio com o e-mail e a situacao de
-            // confirmacao ("marina@exemplo.com.br · E-mail confirmado"), e
-            // ela era HERANCA: antes desta pagina ser menu, o e-mail era um
-            // `ListTile` MUDO no topo, sem toque, e a linha nasceu para o
-            // conteudo daquele `ListTile` nao se perder quando ele virou porta.
-            // O cliente nomeou a linha agora, e ela sai -- com ela sai tambem
-            // a funcao `_apoioDosDados`, para a linha nao ter de onde voltar.
+            // confirmacao, e ela era HERANCA do `ListTile` mudo que o item
+            // substituiu. O cliente nomeou a linha e ela saiu, com a funcao
+            // `_apoioDosDados` junto, para a linha nao ter de onde voltar.
             //
             // **A FAIXA DE CADASTRO INCOMPLETO NAO E ESTA LINHA E NAO SAIU.**
             // `AvisoDeCadastroIncompleto`, com o `Reenviar`, continua no TOPO
-            // desta mesma pagina (POSICAO 2 da BICHUS-75, logo acima). Ela e
-            // outra coisa: a linha de apoio era ESTADO ESCRITO -- dizia que o
-            // e-mail estava ou nao confirmado e paravam ali --, e a faixa e
-            // CAMINHO, com a acao de reenviar. Com as acoes de criar escondidas
-            // de quem nao validou, ela e o que sobra para a pessoa descobrir o
-            // que fazer, e remove-la seria beco.
+            // desta mesma pagina (POSICAO 2 da BICHUS-75). Ela e outra coisa: a
+            // linha de apoio era ESTADO ESCRITO, e a faixa e CAMINHO.
             //
             // O rotulo `Meus dados` NAO mudou: ele esta em tres portoes e na
-            // tela `/perfil/dados` que este toque abre.
+            // tela `/perfil/dados` que este toque abre. **E ele e a porta de
+            // `Minhas fotos`**, que nao e item deste menu e nunca foi -- medido
+            // nesta arvore: `Rotas.minhaVitrine` sai de `tela_dados_pessoais`
+            // e de mais nenhuma tela.
             ItemDeMenu(
               rotulo: 'Meus dados',
               aoTocar: () => context.push(Rotas.dadosPessoais),
             ),
+            // `Pessoas bloqueadas` -- e ela tinha a GAVETA COMO UNICA PORTA
+            // ate 19/10 (medido: `Rotas.pessoasBloqueadas` aparecia so em
+            // `gaveta_de_secoes.dart`, em `rotas.dart` e dentro da propria
+            // tela).
+            //
+            // **E ela e a mais critica deste menu caso se perdesse.** O
+            // bloqueio e simetrico no servidor: quem bloqueia alguem passa a
+            // receber `404` no perfil dessa pessoa, e o `Desbloquear` morava
+            // dentro do menu daquele perfil -- que nunca mais abre. Esta lista
+            // E o unico lugar de onde o desbloqueio sai. Sem porta para ela,
+            // **bloquear voltaria a ser irreversivel pelo aplicativo**.
+            //
+            // **POR QUE EM `Conta` E NAO EM `Comunidade`:** ninguem vem aqui
+            // "ver os bloqueados"; vem DESFAZER um bloqueio. Isso e ajuste da
+            // propria conta, do mesmo tipo de `Meus dados`.
+            ItemDeMenu(
+              rotulo: 'Pessoas bloqueadas',
+              aoTocar: () => context.push(Rotas.pessoasBloqueadas),
+            ),
+            const SizedBox(height: BichuEspaco.e6),
+            // -----------------------------------------------------------------
+            // GRUPO `Bichos na rua`: o bicho que NAO e meu
+            // -----------------------------------------------------------------
+            //
+            // **As tres acoes sao a MESMA historia, na ordem em que ela
+            // acontece:** achei um bicho, li a plaquinha dele, registrei o
+            // achado, e depois volto para ver os que registrei. Elas estavam
+            // espalhadas entre `Conta` e a acao flutuante de `Pets`, e nenhuma
+            // das tres e sobre a minha conta nem sobre o meu pet.
+            //
+            // **O nome nao e `Achados`**, que seria o nome do OBJETO e deixaria
+            // `Escanear uma tag` de fora do sentido: ler a plaquinha de um
+            // cachorro na rua ainda nao e um achado registrado.
+            const TituloDeGrupoDeMenu('Bichos na rua'),
             // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
             // cliente pediu. Um leitor so; o destino da leitura sai das regras
             // dos tres cenarios de QR e **nunca** da aba de origem.
             //
-            // Virou item de menu e **continua sendo a mesma porta**: mesmo
-            // rotulo, mesma rota, mesmo `push` -- o leitor cobre a casca e
-            // precisa ter volta. A porta PRIMARIA, em `Pets`, nao mudou de
-            // forma: la ela e a acao da secao de aterrissagem, e quem achou um
-            // cachorro na rua nao vai procurar menu.
-            //
-            // E o "resto dos itens no meio" do pedido: entre `Meus dados` e
-            // `Sair da conta`. Item novo neste menu entra AQUI, nunca depois
-            // do ultimo.
+            // **Mesmo rotulo, mesma rota, mesmo `push`** -- so o grupo mudou. A
+            // porta PRIMARIA, em `Pets`, e a acao flutuante, e desde 20/10 ela
+            // e a UNICA acao flutuante daquela secao (*"na pagina pet, remova o
+            // icone dos ..., so deixe o de escanear a tag"*).
             ItemDeMenu(
               rotulo: 'Escanear uma tag',
               aoTocar: () => context.push(Rotas.escanear),
+            ),
+            // ================================================================
+            // `Registrar achado avulso`: A ACAO QUE PERDEU A CASA EM 20/10
+            // ================================================================
+            //
+            // Ela morava atras do alvo secundario da acao flutuante de `Pets`,
+            // e o cliente mandou o alvo sair no mesmo dia em que pediu os
+            // topicos: *"na pagina pet, remova o icone dos ..., so deixe o de
+            // escanear a tag"*.
+            //
+            // **MEDIDO ANTES DE MOVER: ela nao tinha NENHUMA outra porta.**
+            // `Rotas.registrarAchado` aparecia em `lib/` so em tres lugares --
+            // a folha do alvo secundario em `abas.dart`, a declaracao em
+            // `rotas.dart` e a propria tela. Tirar o alvo sem esta linha
+            // deixaria uma tela construida inalcancavel **em silencio**: a rota
+            // existe, a tela monta, e o que desapareceria e o unico caminho
+            // humano ate ela. Foi o mesmo achado de `Pedidos de conexao` e
+            // `Pessoas bloqueadas` em 19/10.
+            //
+            // **O ROTULO E O MESMO que a folha pintava**, e e de proposito:
+            // quem usava a folha acha a acao pelo texto, e nao descobre que ela
+            // mudou de lugar lendo um nome novo.
+            //
+            // **E ELA NAO EXIGE CONTA**, como nao exigia na folha: o dono da
+            // acao e o ACHADOR, e quem acha um animal na rua pode nao ter
+            // conta. A tela de destino pede o que precisar, com a saida que
+            // resolve -- tela que recusa dizendo e melhor que porta que nao
+            // aparece. **Este menu so existe logado**, e a porta sem conta
+            // continua sendo a de `Pets`... que saiu com o alvo secundario.
+            //
+            // **ESTA E A PERDA REAL DO ITEM 3, E O CLIENTE JA RESPONDEU SOBRE
+            // ELA -- NAO REABRA.** Eu a medi e a levei a ele como pergunta
+            // fechada; resposta literal, de 20/10/2026: *"O fluxo ja existe
+            // dentro do botao escanear, digitar codigo manualmente e sinalizar
+            // o pet perdido ou no perfil do usuario, podemos deixar como
+            // esta"*. Ou seja: quem acha um bicho na rua SEM conta entra pelo
+            // leitor de plaquinha -- que e a acao flutuante de `Pets`, nao
+            // exige conta, e aceita codigo digitado a mao --, e dali sinaliza.
+            // A perda e conhecida e aceita; devolver uma porta sem conta aqui
+            // seria desfazer uma decisao dele.
+            ItemDeMenu(
+              rotulo: 'Registrar achado avulso',
+              aoTocar: () => context.push(Rotas.registrarAchado),
             ),
             // `Meus achados`: a lista dos avisos de achado desta conta.
             //
@@ -688,97 +961,46 @@ class AbaPerfil extends StatelessWidget {
             // SEM CONTA (`listPublicLostPets` declara `security: []`), e
             // `listMyFoundReports` exige conta com a autorizacao no `WHERE` do
             // servidor. O "meu" mora em `Perfil`, como `Meus pets`.
-            //
-            // Entre `Escanear uma tag` e `Sair da conta`, que e onde item novo
-            // entra neste menu.
             ItemDeMenu(
               rotulo: MeusAchados.titulo,
               aoTocar: () => context.push(Rotas.meusAchados),
             ),
-            // ================================================================
-            // OS DOIS ITENS QUE A GAVETA OCULTA DEIXARIA INALCANCAVEIS
-            // (19/10/2026) -- e este e um ACHADO, nao um acrescimo.
-            // ================================================================
+            const SizedBox(height: BichuEspaco.e6),
+            // -----------------------------------------------------------------
+            // GRUPO `Comunidade`: a minha gente e os encontros
+            // -----------------------------------------------------------------
             //
-            // O cliente mandou ocultar a gaveta (*"vamos ocultar o menu por
-            // enquanto, pois nao esta sendo utilizado para nada"*) e disse que
-            // os itens de conta seriam alcancados pela FOTO, que leva a esta
-            // tela. **Medido antes de ocultar: dois dos sete itens vivos NAO
-            // estavam aqui.**
-            //
-            // `Pedidos de conexao` (`Rotas.pedidosDeConexao`) e `Pessoas
-            // bloqueadas` (`Rotas.pessoasBloqueadas`) tinham a GAVETA COMO
-            // UNICA PORTA em `lib/`: as duas rotas apareciam so em
-            // `gaveta_de_secoes.dart`, em `rotas.dart` e dentro das proprias
-            // telas -- nenhuma outra tela do app as monta. Ocultar o menu por
-            // cima delas teria deixado duas telas construidas inalcancaveis,
-            // **em silencio**, e nenhum caso da suite acusaria isso: a rota
-            // existe, a tela monta, e o que desapareceria e o unico caminho
-            // humano ate ela.
-            //
-            // **E `Pessoas bloqueadas` e o pior dos dois caso se perdesse.**
-            // O bloqueio e simetrico no servidor: quem bloqueia alguem passa a
-            // receber `404` no perfil dessa pessoa, e o `Desbloquear` morava
-            // dentro do menu daquele perfil -- que nunca mais abre. Esta lista
-            // E o unico lugar de onde o desbloqueio sai. Sem porta para ela,
-            // **bloquear voltaria a ser irreversivel pelo aplicativo**, que e
-            // exatamente o defeito que a tela foi construida para fechar, em
-            // 19/10, por decisao dele.
-            //
-            // **AQUI e o lugar certo e nao um lugar qualquer:** "entre `Meus
-            // dados` e `Sair da conta`" e onde este arquivo ja declara, por
-            // escrito, que item novo deste menu entra. E a foto da barra de
-            // topo e a porta que o cliente nomeou para os itens de conta.
-            //
-            // O rotulo e o glifo de cada um sao os MESMOS que a linha da
-            // gaveta declarava (`RegistroDeSubDestinos`, secao `Perfil`), e
-            // isso e de proposito: quem usava a gaveta acha a acao pelo texto,
-            // e nao descobre que ela mudou de lugar lendo um nome novo.
-            //
-            // A isca e o grupo `os sete itens vivos continuam alcancaveis` de
-            // `test/telas/gaveta_oculta_e_barra_nova_test.dart`, com UM CASO
-            // POR ITEM e o caminho nomeado em cada um.
+            // **O nome e o da secao `Rede`?** Nao: `Rede` e a secao da barra,
+            // que e o que ACONTECE -- os eventos e quem atende bem. Este grupo
+            // e o que e MEU dentro daquilo: os pedidos que me chegaram e os
+            // encontros em que entrei. Nomear o grupo `Rede` faria o menu
+            // parecer um atalho para a secao, e ele nao e.
+            const TituloDeGrupoDeMenu('Comunidade'),
+            // `Pedidos de conexao` -- o outro dos dois que tinham a gaveta
+            // como UNICA porta em `lib/` ate 19/10, pela mesma medicao.
             ItemDeMenu(
               rotulo: 'Pedidos de conexão',
               aoTocar: () => context.push(Rotas.pedidosDeConexao),
             ),
-            ItemDeMenu(
-              rotulo: 'Pessoas bloqueadas',
-              aoTocar: () => context.push(Rotas.pessoasBloqueadas),
-            ),
-            // ----------------------------------------------------------------
-            // E O TERCEIRO ITEM, DA UNIAO DO LOTE (19/10/2026).
-            // ----------------------------------------------------------------
-            //
-            // `feat/barra-com-mural-e-rede-unificada` e
-            // `feat/meus-eventos-e-cancelar` acrescentaram item NESTE MESMO
-            // ponto -- "entre `Meus achados` e `Sair da conta`", que e onde
-            // este arquivo declara que item novo entra. **Os TRES
-            // sobrevivem**, e nenhum e decorativo: as duas rotas da gaveta
-            // ficariam inalcancaveis sem as duas de cima, e `Cancelar` nao
-            // tem outro caminho sem a de baixo.
-
             // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
             //
             // **ESTA LINHA E O UNICO CAMINHO DO APP ATE `Cancelar`.** Nada na
-            // resposta da agenda diz de quem e o encontro -- `NetworkEventPublic`
-            // nao tem campo de autoria e nao pode ter (item 7 do ADR-0010) --,
-            // entao quem criou um encontro nao tinha como voltar a ele. O
-            // cliente escolheu este lugar, literal: *"uma tela com os eventos
-            // que voce criou, e o cancelar mora la. Nao suja o cartao da
-            // agenda, que voce acabou de mandar limpar, e e onde as pessoas
-            // procuram"*.
-            //
-            // Entre `Meus achados` e `Sair da conta`, que e onde este arquivo
-            // declara que item novo entra -- nunca depois do ultimo.
+            // resposta da agenda diz de quem e o encontro --
+            // `NetworkEventPublic` nao tem campo de autoria e nao pode ter
+            // (item 7 do ADR-0010) --, entao quem criou um encontro nao tinha
+            // como voltar a ele. O cliente escolheu este lugar, literal: *"uma
+            // tela com os eventos que voce criou, e o cancelar mora la. Nao
+            // suja o cartao da agenda, que voce acabou de mandar limpar, e e
+            // onde as pessoas procuram"*.
             ItemDeMenu(
               rotulo: MeusEventos.titulo,
               aoTocar: () => context.push(Rotas.meusEventos),
             ),
+            const SizedBox(height: BichuEspaco.e6),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
-            // deve ser sempre a ultima opcao do menu"). Nenhuma linha depois
-            // desta: era `Meus pets` que vinha depois dela, e era isso que
-            // fazia a pagina parecer quebrada no meio.
+            // deve ser sempre a ultima opcao do menu"), e **fora de grupo**:
+            // encerrar a sessao nao e um item de `Conta` entre outros, e por-lo
+            // dentro daquele grupo o enterraria no meio da pagina.
             _ItemDeSair(sessao: sessao),
           ],
         );

@@ -172,15 +172,56 @@ void describe('busca de CEP do servidor', () => {
     // O cliente falso HONRA o `signal`, de proposito: e so assim que a isca
     // mede o prazo em vez de medir o cliente falso. Remover o
     // `AbortSignal.timeout` das duas chamadas faz `sinal` chegar `undefined`
-    // e a isca reprova em `assert.ok(sinal)` -- e nao pendura, que seria o
-    // modo de falha inaceitavel num teste de prazo.
+    // -- e a isca tem de reprovar, sem pendurar, que seria o modo de falha
+    // inaceitavel num teste de prazo.
+    //
+    // ## O `assert.ok(sinal)` sozinho NAO reprova, e isso foi medido
+    //
+    // Ele lanca DENTRO do cliente falso, ou seja dentro da tentativa, e o
+    // `try/catch` de `tentar` existe justamente para engolir tudo o que vem de
+    // lá -- AssertionError inclusive. Com as duas chamadas sem prazo, o
+    // desfecho continua `indisponivel` e `chamadas` continua 2: medido em
+    // 18/10/2026, a isca **passava** 10/10 com o `AbortSignal.timeout`
+    // arrancado do adaptador, nos dois Node. A linha da tabela do cabecalho
+    // era, portanto, falsa. Quem reprova de verdade e o
+    // `assert.equal(abortos, 2)` no fim, que roda FORA do alcance daquele
+    // `catch`.
+    //
+    // ## A GUARDA, e por que ela nao e zelo
+    //
+    // O timer de `AbortSignal.timeout` **nao segura o laco de eventos** (ele e
+    // `unref`ed, por desenho do Node). Este cliente falso devolve uma promessa
+    // que SO se resolve quando o `abort` dispara, entao sem mais nada pendente
+    // no laco a sequencia e: o laco drena, o timer de 5 ms nunca chega a
+    // disparar, a promessa fica pendente para sempre e o runner **cancela** o
+    // caso com `Promise resolution is still pending but the event loop has
+    // already resolved`. Nao e teoria: medido em 18/10/2026, 10 execucoes em 10
+    // canceladas no Node 22.23.2 (`node --test`, que roda o arquivo em processo
+    // filho, que e o que a esteira faz) e 0 em 10 no Node 26.8.2 -- o runner do
+    // 26 mantem handle proprio e disfarca o defeito. A esteira usa 22, e foi la
+    // que ele apareceu (run 39130666267).
+    //
+    // A guarda e um `setTimeout` comum, que **e** `ref`ed: ela segura o laco
+    // enquanto o prazo corre, e e limpa no `abort`. No caminho feliz ela custa
+    // zero, porque o `abort` chega em 5 ms e a limpa. No caminho em que o prazo
+    // NAO estoura, ela recusa em vez de pendurar -- e, porque `tentar` engole
+    // toda excecao, o desfecho sozinho nao distinguiria os dois casos: e o
+    // `assert.equal(abortos, 2)` no fim que prova que o `indisponivel` veio do
+    // prazo e nao da guarda.
+    const GUARDA_MS = 2_000;
     let chamadas = 0;
+    let abortos = 0;
     const fetch = ((_url: string, init?: { signal?: AbortSignal }) => {
       chamadas += 1;
       const sinal = init?.signal;
       assert.ok(sinal, 'cada chamada de saida tem de carregar o prazo');
       return new Promise<Response>((_resolver, recusar) => {
+        const guarda = setTimeout(() => {
+          recusar(new Error(`o prazo nao estourou em ${String(GUARDA_MS)} ms`));
+        }, GUARDA_MS);
         sinal.addEventListener('abort', () => {
+          clearTimeout(guarda);
+          abortos += 1;
           recusar(new DOMException('The operation was aborted', 'TimeoutError'));
         });
       });
@@ -189,5 +230,6 @@ void describe('busca de CEP do servidor', () => {
     const r = await criarBuscaDeCep({ buscarNaRede: fetch, prazoMs: 5 }).buscar('05435000');
     assert.equal(r.desfecho, 'indisponivel');
     assert.equal(chamadas, 2, 'o prazo vale POR SERVICO: os dois sao tentados');
+    assert.equal(abortos, 2, 'o `indisponivel` veio do prazo estourando, e nao da guarda do laco');
   });
 });

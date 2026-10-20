@@ -51,6 +51,12 @@ import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http
 // duas moram em `notifications` pelo mesmo argumento que trouxe o aparelho para
 // ca: o modulo e o do aviso, e nao o da identidade.
 import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import { registrarRotasDosContadoresDeSecao } from '../modules/sections/adapters/http/section-counter-routes.js';
+import { criarContadoresDeSecaoService } from '../modules/sections/application/contadores-de-secao-service.js';
+import { criarMarcadoresDeSecao } from '../modules/sections/adapters/persistence/kysely-marcadores-de-secao.js';
+import { criarContagemDePerdidosNovos } from '../modules/lostfound/adapters/persistence/kysely-contagem-de-perdidos-novos.js';
+import { criarContagemDeEventosNovos } from '../modules/network/adapters/persistence/kysely-contagem-de-eventos-novos.js';
+import { criarContagemDeEntradasNovas } from '../modules/professionals/adapters/persistence/kysely-contagem-de-entradas-novas.js';
 import { registrarRotasDeComunicado } from '../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import { criarCaixaDeNotificacoes } from '../modules/notifications/adapters/persistence/kysely-caixa-de-notificacoes.js';
 import { criarRepositorioDeComunicados } from '../modules/notifications/adapters/persistence/kysely-comunicados.js';
@@ -78,6 +84,9 @@ import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
 // A VITRINE DE FOTOS DO USUARIO (cliente, 18/10/2026), visivel so ao dono.
 import { registrarRotasDaVitrineDeFotos } from '../modules/showcase/adapters/http/showcase-routes.js';
+import { registrarRotasDoMural } from '../modules/publications/adapters/http/publicacao-routes.js';
+import { Mural } from '../modules/publications/application/mural-service.js';
+import { criarPublicacoesRepository } from '../modules/publications/adapters/persistence/kysely-publicacoes.js';
 import { VitrineDeFotos } from '../modules/showcase/application/vitrine-de-fotos-service.js';
 import { criarVitrineRepository } from '../modules/showcase/adapters/persistence/kysely-vitrine.js';
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
@@ -183,6 +192,7 @@ import {
   registrarIntencaoDeCapaDaComunidade,
   registrarIntencaoDaVitrineDoUsuario,
   registrarIntencaoDeFotoDoUsuario,
+  registrarIntencaoDaFotoDaPublicacao,
 } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { FotoDoProprioUsuario } from '../modules/media/application/foto-do-proprio-usuario.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
@@ -729,6 +739,29 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // OS CONTADORES DAS ABAS `Pets` E `Rede` (BICHUS-278, cliente 20/10/2026).
+  // Mesmo molde da caixa: o modulo recebe um `autenticar` e nao o servico de
+  // identidade. Cada contagem REUSA o construtor da propria listagem, e e
+  // isso que impede o selo de contar um recorte diferente do que a aba abre --
+  // a conta esta no cabecalho de cada um dos tres adaptadores de contagem.
+  const dependenciasDasRotasDosContadores = {
+    contadores: criarContadoresDeSecaoService({
+      // O MARCADOR e deste modulo; as TRES CONTAGENS sao de quem tem a tabela.
+      // A fronteira de modulo reprova quem alcanca `adapters` alheio, e o
+      // desenho que saiu dessa reprovacao e melhor: cada contagem mora ao lado
+      // da listagem com que ela tem de concordar.
+      marcadores: criarMarcadoresDeSecao(db),
+      perdidos: criarContagemDePerdidosNovos(db),
+      eventos: criarContagemDeEventosNovos(db),
+      diretorio: criarContagemDeEntradasNovas(db),
+      clock: systemClock,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
   // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
   // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
@@ -762,6 +795,50 @@ export async function main(): Promise<void> {
       // 'user_showcase'`.
       registrarIntencao: registrarIntencaoDaVitrineDoUsuario,
       db,
+      clock: systemClock,
+    }),
+    autenticador: dependenciasDasRotasDePet.autenticador,
+    contrato,
+    baseDeMidia: config.mediaPublicBaseUrl,
+  };
+
+  // O MURAL (20/10/2026). A publicacao do usuario e a linha do tempo.
+  //
+  // Reusa a MESMA ESTEIRA DE IMAGEM das outras cinco fotos: o mesmo preparador
+  // de envio, com `purpose = user_publication`, o prefixo `people/` e o autor em
+  // `users`. Nenhuma segunda esteira -- intencao, confirmacao, derivadas,
+  // higiene de EXIF e varredura de vencidos continuam tendo uma versao so
+  // (ADR-0007).
+  //
+  // **`registrarIntencaoDaFotoDaPublicacao`, E NAO a da vitrine nem a da capa
+  // do encontro.** As quatro funcoes tem a MESMA FORMA e assinaturas que
+  // divergem apenas no literal de `purpose` -- e e por isso que elas o
+  // declaram no tipo. Em 18/10/2026 esta linha apontava para a funcao errada na
+  // vitrine, a troca COMPILOU, e nenhuma foto de vitrine podia ser salva:
+  // `201` na intencao e `404` na confirmacao, porque a confirmacao procura o
+  // envio pelo proposito. Hoje a troca nao compila.
+  //
+  // **NENHUMA PORTA ENTRA DESLIGADA AQUI.** A linha do tempo depende de
+  // `user_publications`, `user_connections`, `users`, `handles`,
+  // `catalog_images` e das funcoes `conta_habilitada`, `bloqueio_entre` e
+  // `publicacao_ocultada_para_quem_denunciou` -- e todas estao nesta arvore.
+  // Ela funciona de ponta a ponta no dia em que sobe.
+  //
+  // **O bloqueio e a conexao NAO entram por porta**, e e de proposito: os dois
+  // predicados sao SQL na clausula `WHERE` da consulta (ADR-0021), que e a
+  // forma que a Emenda 3 do ADR-0010 registra para a foto na conversa e pela
+  // mesma razao -- uma pagina carrega vinte publicacoes, e perguntar a aresta
+  // por publicacao seriam vinte idas ao banco por rolada.
+  const dependenciasDasRotasDoMural = {
+    mural: new Mural({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      publicacoes: criarPublicacoesRepository(db, ids),
+      registrarIntencao: registrarIntencaoDaFotoDaPublicacao,
+      db,
+      ids,
       clock: systemClock,
     }),
     autenticador: dependenciasDasRotasDePet.autenticador,
@@ -1021,7 +1098,14 @@ export async function main(): Promise<void> {
     registrarRotasDoDiretorio(escopo, {
       diretorio: criarDirectoryRepository(db, ids),
       autenticador: {
-        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+        // SEC-021: o `sid` atravessa esta fiacao, como ja atravessa a da
+        // localizacao de referencia. Ele e a sessao de aparelho, e e dela que
+        // sai o ponto que mede a distancia -- sem ele a subconsulta devolveria
+        // uma linha por aparelho da conta, e o Postgres responderia 500.
+        autenticar: async (token: string) => {
+          const { conta, sid } = await auth.autenticar(token);
+          return { userId: conta.id, sid };
+        },
       },
       clock: systemClock,
       // 18/10/2026: o cliente liberou a logo e a foto do profissional no
@@ -1095,7 +1179,14 @@ export async function main(): Promise<void> {
     registrarRotasDaRede(escopo, {
       rede: redeDaComunidade,
       autenticador: {
-        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+        // SEC-021: o `sid` atravessa esta fiacao, como ja atravessa a da
+        // localizacao de referencia. Ele e a sessao de aparelho, e e dela que
+        // sai o ponto que mede a distancia -- sem ele a subconsulta devolveria
+        // uma linha por aparelho da conta, e o Postgres responderia 500.
+        autenticar: async (token: string) => {
+          const { conta, sid } = await auth.autenticar(token);
+          return { userId: conta.id, sid };
+        },
       },
       clock: systemClock,
       escritas: new EncontroDaComunidade({
@@ -1180,8 +1271,16 @@ export async function main(): Promise<void> {
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
+    registrarRotasDosContadoresDeSecao(escopo, dependenciasDasRotasDosContadores);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
+    // O MURAL (20/10/2026): `GET /timeline`, `GET|POST /me/publications`,
+    // `DELETE /me/publications/{ref}` e a intencao de envio da foto. As cinco
+    // exigem conta sem alternativa vazia, e **nao existe leitura de publicacao
+    // de quem nao e conexao aceita** -- nao ha `GET /publications/{ref}`, e a
+    // ausencia e a defesa: uma segunda leitura por endereco teria de repetir o
+    // recorte inteiro num segundo lugar.
+    registrarRotasDoMural(escopo, dependenciasDasRotasDoMural);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     // BICHUS-76. A pagina do caso e o cartaz, pelo `share_token`. O token e a
     // credencial; a conta, quando vem, so decide `can_report_sighting`. As
