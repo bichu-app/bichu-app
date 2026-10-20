@@ -31,11 +31,17 @@ import 'loja/vitrine_da_loja.dart';
 /// desenha nada -- nem botao, nem icone.
 ///
 /// **Isto SUBSTITUI o comportamento anterior**, em que a porta aparecia sempre
-/// e a tela de destino explicava a recusa com a saida que a resolve. Os dois
-/// impedimentos (`semConta` e `semEmailConfirmado`) **continuam em
-/// `criar_encontro.dart` e `sugerir_profissional.dart` e nao foram tocados**:
-/// as rotas seguem alcancaveis por link profundo, e tela que recusa calada e
-/// pior do que tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+/// e a tela de destino explicava a recusa com a saida que a resolve. As rotas
+/// seguem alcancaveis por link profundo, e tela que recusa calada e pior do que
+/// tela que recusa dizendo. O que mudou foi quem ve a PORTA.
+///
+/// **Os impedimentos das telas de destino nao sao os mesmos nas duas, e isso
+/// nao e simetria que esta descricao pode afirmar.** `criar_encontro.dart` tem
+/// `semConta` **e** `semEmailConfirmado`; `sugerir_profissional.dart` tem
+/// `semConta` e os impedimentos de preenchimento, e **nao** tem
+/// `semEmailConfirmado`. Quem chega na sugestao por link profundo sem o e-mail
+/// confirmado preenche o formulario e so descobre no envio, pelo 409 do
+/// servidor -- que diz o que fazer, mas depois do trabalho.
 ///
 /// **O caminho para validar nao depende desta porta, e isso foi conferido.** O
 /// `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com `Reenviar` em
@@ -43,11 +49,33 @@ import 'loja/vitrine_da_loja.dart';
 /// topo de `Pets` (posicao 1) e item destacado no topo de `Perfil` (posicao
 /// 2). Esconder a acao de criar nao fecha caminho nenhum de confirmacao.
 ///
-/// **E ela NAO e a trava.** A trava de verdade e do servidor, e aqui vai o
-/// achado: `rotaDaCriacaoDeEncontro` e a rota da sugestao do diretorio exigem
-/// **conta** (teto por `account`, token obrigatorio) e **nao** exigem
-/// `email_verified` em lugar nenhum de `src/`. A metade "validado" desta regra
-/// existe **so no app**. Esta linha esconde a porta; ela nao recusa o pedido.
+/// **A trava E do servidor, e esta linha e so a porta.** As duas rotas da
+/// comunidade recusam conta nao validada com `409
+/// contact-channel-unverified` e `next_action: verify_email`:
+/// `createNetworkEvent` por `bloqueiosParaCriarEncontro`
+/// (`network/domain/encontro-da-comunidade.ts`) e `suggestDirectoryEntry` por
+/// `temCanalVerificado` (`professionals/application/sugestao-do-diretorio.ts`).
+/// Os dois `409` estao declarados no contrato, que escreve a mesma frase: "a
+/// trava e do SERVIDOR; o botao escondido nao recusa quem chama a rota direto".
+/// Medido em hml em 19/10/2026 no commit `458cd005`, com conta descartavel de
+/// `email_verified: false`: **409 nas duas**.
+///
+/// **O que o servidor cobra e CANAL DE CONTATO verificado, e nao
+/// `email_verified`** -- e e por isso que procurar `email_verified` em `src/`
+/// nao acha a trava. O predicado e
+/// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, escrito
+/// com a mesma redacao nos dois lugares (`kysely-network-repository.ts` e
+/// `kysely-canal-verificado-do-chamador.ts`): a metade do e-mail mora numa
+/// coluna com sufixo `_at`, e nenhuma das duas metades aparece com aquele nome.
+///
+/// **Na pratica a regua do servidor bate com a daqui**, porque o telefone nunca
+/// satisfaz o predicado: nao existe operacao de verificacao de telefone no
+/// contrato, e a unica escrita de `phone_verified_at` em `src/` e para ZERAR a
+/// coluna quando o telefone muda. Entao `usuario.emailVerificado` aqui concorda
+/// com o servidor hoje -- **por ausencia de uma rota, e nao por acordo de
+/// definicao**. No dia em que verificar telefone existir, uma conta com
+/// telefone verificado e e-mail nao verificado passa no servidor e nao ve a
+/// porta, e e esta linha que precisa mudar.
 bool podeCriarNaComunidade(ControladorDeSessao sessao) {
   final usuario = sessao.usuario;
   return sessao.logado && usuario != null && usuario.emailVerificado;

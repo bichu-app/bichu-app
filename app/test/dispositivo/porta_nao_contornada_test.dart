@@ -1826,7 +1826,37 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// cliente e tira-la do `routes:` do ramo e declara-la irma da casca.
 /// Substitui 99cc2437faf7cfabad8e567e698c4a7ae372ecec, e antes dele
 /// 1413454d749f87001859c85e1e6e71d0449c2941.
-const String _arvoreDasTelas = '2f822c3823e97a304c6fee96c88977c8ae45f2b5'; // TERCEIRO LOTE DE 20/10/2026, VALOR FINAL com as CINCO frentes mescladas (contador do `AuAu`, contadores de `Pets` e `Rede`, Mural, aviso de login com a volta da ficha do evento, barra fixa). Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com o procedimento VALIDADO antes de ser usado, reproduzindo o valor da base `1413454d...`. Substitui os CINCO valores de RAMO (`4e13c694...`, `8f3222ea...`, `d979a337...`, `7f016247...`, `bc0506b4...`) e os dois intermediarios desta mescla, cujas justificativas ficam INTEIRAS acima.
+///
+/// **CORRECAO DO COMENTARIO DE `podeCriarNaComunidade` (20/10/2026).**
+/// Justificativa do ramo, preservada INTEIRA (ela vinha na linha da
+/// constante, e nao em doc):
+///
+/// CORRECAO DE COMENTARIO EM `telas/abas.dart` (20/10/2026), MESCLADA SOBRE O
+/// SEGUNDO LOTE: SO o cabecalho de `podeCriarNaComunidade` muda, e nenhuma
+/// linha executavel -- o corpo da funcao e todo o resto da pasta vem do lote,
+/// byte a byte. O cabecalho afirmava que `createNetworkEvent` e a rota da
+/// sugestao do diretorio "nao exigem `email_verified` em lugar nenhum de
+/// `src/`" e que a metade "validado" da regra existia "so no app"; as duas
+/// rotas RECUSAM, com `409 contact-channel-unverified` e `next_action:
+/// verify_email` -- medido em hml no commit `458cd005` com conta descartavel
+/// de `email_verified: false`, e `suggestDirectoryEntry` junto com
+/// `createNetworkEvent`. O servidor cobra CANAL DE CONTATO
+/// (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a mesma
+/// redacao em `kysely-network-repository.ts` e `kysely-canal-verificado-do-
+/// chamador.ts`), e e por isso que procurar `email_verified` em `src/` nao
+/// achava a trava: a metade do e-mail mora numa coluna com sufixo `_at`. **O
+/// VALOR DO LOTE NAO SOBREVIVEU A ESTA MESCLA** porque os dois lados tocam
+/// `abas.dart` -- o lote por `Meus eventos` no menu da conta, esta correcao
+/// pelo cabecalho --, e o hash e de ARVORE. Valor RECALCULADO sobre a arvore
+/// MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com a LINHA DE BASE
+/// conferida antes: `origin/development:app/lib/telas` reproduziu
+/// 1413454d749f87001859c85e1e6e71d0449c2941, o valor que o lote travava.
+/// Substitui 1413454d749f87001859c85e1e6e71d0449c2941 (e, do ramo isolado
+/// desta correcao, 5e7f753f673afdabeb3fe709ae04537b816e6051, que media a
+/// arvore de ANTES do lote e por isso nao vale).
+const String _arvoreDasTelas = '40d90082e5cf8ab6b58ec2ebb09450c2e6744a89'; // INTERMEDIARIO da ONDA 2 do terceiro lote de 20/10/2026, com a correcao do cabecalho de `podeCriarNaComunidade` somada. Substitui `2f822c38...` (valor final da onda 1) e `27399b7b...` (valor do ramo isolado da correcao, que media a arvore sem as frentes da onda 2 e por isso nao vale). Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao, COM as chaves em `rev-parse "${T}:app/lib/telas"`. Ainda entram a ficha rica do achado e o sino.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
