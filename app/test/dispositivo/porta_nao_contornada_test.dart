@@ -1644,7 +1644,38 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
 /// copiado de ramo nem de relato.
-const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
+///
+/// **AVISO DO E-MAIL NAO CONFIRMADO NA TELA DE INDICAR (20/10/2026).** Um
+/// arquivo mudou, `perto/sugerir_profissional.dart`, e a mudanca e a simetria
+/// que faltava entre as duas acoes de criar da comunidade: a tela de criar
+/// encontro tem `_Impedimento.semEmailConfirmado` desde o primeiro dia, e a
+/// de indicar profissional nao tinha nenhum impedimento de e-mail -- quem
+/// chegava a rota por link profundo (`podeCriarNaComunidade`, em
+/// `abas.dart`, esconde a PORTA e nao fecha a ROTA) preenchia o formulario
+/// inteiro para ser recusado no envio pelo `409
+/// contact-channel-unverified`. Entrou o impedimento, ANTES dos de
+/// preenchimento, e a faixa com a saida `Confirmar meu e-mail` acima dos
+/// campos, pelo `FaixaDeAviso` que a outra tela ja usa.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo no arquivo
+/// (`widgets/faixa_de_aviso.dart`, `roteamento/rotas.dart` e
+/// `go_router` ja estavam lá), nenhum plugin, nenhum canal de plataforma,
+/// nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas
+/// deste mesmo arquivo continua respondendo por isso. `abas.dart`,
+/// `criar_encontro.dart`, `src/` e o contrato **nao foram tocados**: o
+/// servidor ja recusa e esta certo.
+///
+/// LINHA DE BASE CONFERIDA antes da edicao: a arvore limpa de
+/// `origin/development` (`fb3a0fba`) reproduziu `1413454d74` pelo
+/// procedimento abaixo, e so depois disso o valor novo foi calculado. Valor
+/// RECALCULADO pelo procedimento deste proprio portao sobre a arvore de
+/// trabalho JA MESCLADA com `origin/development` (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves), e nao copiado de ramo
+/// nem de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** --
+/// ha outras sessoes tocando `app/lib/telas` nesta rodada, e valor de ramo
+/// isolado nao sobrevive a uniao. Anterior: `1413454d74`.
+const String _arvoreDasTelas = '94c906c31db3ae56654135f9bf83dc8740ae8683'; // AVISO DE E-MAIL NA TELA DE INDICAR (20/10/2026): um arquivo, `perto/sugerir_profissional.dart`. Substitui o valor do SEGUNDO LOTE DE 19/10/2026 (1413454d74), cuja justificativa -- e as de todos os ramos antes dele -- fica INTEIRA acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
