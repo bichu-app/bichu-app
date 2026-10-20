@@ -12,7 +12,7 @@
  *    30 s o produto continuaria mandando gente para uma pagina morta por mais 30
  *    segundos depois do comando, com quem o digitou sem saber se consertou.
  * 2. **A leitura e de uma linha por chave primaria.**
- *    `site_page_availability` tem duas linhas (migracao `20261020000005`), a
+ *    `site_page_availability` tem duas linhas (migracao `20261020000010`), a
  *    tabela nunca cresce, e a pagina dela vive no `shared_buffers`. A consulta e
  *    mais barata que o aperto de mao TLS que trouxe a requisicao.
  *

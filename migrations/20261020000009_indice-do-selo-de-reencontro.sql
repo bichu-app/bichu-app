@@ -134,7 +134,7 @@
 -- roda cada migracao em transacao, e `CREATE INDEX CONCURRENTLY` nao executa
 -- dentro de uma.
 --
--- O CARIMBO `20261020000004` FOI DISTRIBUIDO, e nao escolhido aqui: o portao de
+-- O CARIMBO `20261020000009` FOI DISTRIBUIDO, e nao escolhido aqui: o portao de
 -- numero le so as refs do git e ja aprovou o mesmo numero para dois agentes no
 -- mesmo dia (migracao nao comitada em outro worktree e invisivel para ele).
 --
@@ -157,7 +157,7 @@ CREATE INDEX lost_cases_reencontrados_por_visto
   WHERE status = 'closed_reunited' AND share_to_public_list;
 
 COMMENT ON INDEX lost_cases_reencontrados_por_visto IS
-  'listPublicLostPets com case_state=reunited (cliente, 20/10/2026): o conjunto do selo de "encontrado pela comunidade". Parcial sobre closed_reunited de proposito -- os outros indices publicos de lost_cases sao WHERE status = open e nao alcancam linha encerrada, e este nao alcanca linha aberta, entao a lista de casos abertos nao muda de plano. closed_at fica como filtro residual: ver o cabecalho da migracao 20261020000004 para por que a ordem nao passa a ser por closed_at.';
+  'listPublicLostPets com case_state=reunited (cliente, 20/10/2026): o conjunto do selo de "encontrado pela comunidade". Parcial sobre closed_reunited de proposito -- os outros indices publicos de lost_cases sao WHERE status = open e nao alcancam linha encerrada, e este nao alcanca linha aberta, entao a lista de casos abertos nao muda de plano. closed_at fica como filtro residual: ver o cabecalho da migracao 20261020000009 para por que a ordem nao passa a ser por closed_at.';
 
 CREATE INDEX conversations_do_caso
   ON conversations (case_id)

@@ -4,7 +4,7 @@
  * Uma leitura e nada mais. Nao ha escrita por aqui de proposito, pela mesma
  * razao de `app-release/ports/politica-de-versao.ts`: o interruptor e trocado a
  * mao, no banco, por quem publica o site (ver o cabecalho da migracao
- * `20261020000005`). Uma rota de escrita no backoffice faria o interruptor
+ * `20261020000010`). Uma rota de escrita no backoffice faria o interruptor
  * depender de o painel estar de pe no momento em que alguem precisa apaga-lo.
  *
  * ====================================================================

@@ -141,8 +141,8 @@ COMMENT ON COLUMN site_page_availability.is_published IS
 -- seria sinal de que esta migracao rodou duas vezes -- coisa que precisa
 -- estourar, nao coisa que se engole.
 INSERT INTO site_page_availability (page, updated_by)
-VALUES ('lost_case', 'migracao 20261020000005'),
-       ('poster', 'migracao 20261020000005');
+VALUES ('lost_case', 'migracao 20261020000010'),
+       ('poster', 'migracao 20261020000010');
 
 -- Down Migration
 

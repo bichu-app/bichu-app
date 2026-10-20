@@ -1059,7 +1059,7 @@ class _Conteudo extends StatelessWidget {
   /// pet nao existe. O cliente decidiu construir o app antes do site, e a
   /// condicao foi que a acao nascesse DESLIGADA e acendesse sem APK novo.
   ///
-  /// Quem acende e `site_page_availability` (migracao `20261020000005`): um
+  /// Quem acende e `site_page_availability` (migracao `20261020000010`): um
   /// `UPDATE ... SET is_published = true`, com a API de pe, e `share_url` passa
   /// a sair. Enquanto ele disser `false`, o campo **nao vem**, e sem campo nao
   /// ha acao.

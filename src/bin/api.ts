@@ -979,7 +979,7 @@ export async function main(): Promise<void> {
     // reimprime. Só a plaquinha da coleira é irreversível.
     baseDaWeb: config.webBaseUrl,
     // O interruptor das páginas públicas (`site_page_availability`,
-    // `20261020000005`). `baseDaWeb` diz onde a página moraria; esta porta diz
+    // `20261020000010`). `baseDaWeb` diz onde a página moraria; esta porta diz
     // se ela existe — e em 20/10/2026 ela NÃO existe, medido de fora nos dois
     // ambientes. Enquanto a linha disser `false`, `share_url` não sai e o
     // aplicativo não desenha a ação de compartilhar.

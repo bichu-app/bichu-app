@@ -25,7 +25,7 @@
 //    `og:title: Pagina nao encontrada · Bichu`.
 //
 //    Por isso existe a isca (f): o interruptor do servidor
-//    (`site_page_availability`, migracao `20261020000005`) omite `share_url`
+//    (`site_page_availability`, migracao `20261020000010`) omite `share_url`
 //    enquanto a pagina nao for publicada, e **sem o campo nao ha acao**.
 //
 // 2. **`GET /v1/public/lost-cases/{shareToken}` responde 200 sem conta**, e

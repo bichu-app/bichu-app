@@ -839,7 +839,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   // ------------------------------------------------------------------
   // As DUAS paginas publicas do site cuja existencia o app consulta antes de
-  // oferecer o compartilhamento. Entrou com a migracao `20261020000005`, da
+  // oferecer o compartilhamento. Entrou com a migracao `20261020000010`, da
   // frente `feat/compartilhar-o-caso`, e a tabela e irma de
   // `app_version_policy`: linha escrita a mao no `psql`, sem conta a que se
   // vincular.

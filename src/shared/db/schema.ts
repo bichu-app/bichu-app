@@ -2406,7 +2406,7 @@ export interface AppVersionPolicyTable {
 }
 
 /**
- * Quais paginas publicas do site existem de verdade (`20261020000005`).
+ * Quais paginas publicas do site existem de verdade (`20261020000010`).
  *
  * Irma de [AppVersionPolicyTable] na forma e **oposta no sentido da ausencia**:
  * la toda ausencia LIBERA, aqui toda ausencia ESCONDE. O motivo esta no
