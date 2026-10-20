@@ -506,10 +506,24 @@ verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta be
 # alvo das iscas existia fora dos dois agregadores, entao o fechamento rodava o
 # conferidor do APK SEM as iscas que impedem ele de aprovar lixo -- um portao
 # cego, do mesmo tipo que `verificar-app` ja evita com as iscas dos tokens.
-apk: verificar-apk-autoteste ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
+#
+# DESDE 19/10/2026 ESTES DOIS ALVOS COBRAM MAIS, e nao precisaram mudar de
+# linha de comando para isso: as tres conferencias moram dentro do script, num
+# lugar so, que e o mesmo motivo pelo qual as `--dart-define` moram la. O que
+# entrou foi (1) a VERSAO DO APP no comando de build, tirada do `version:` de
+# `app/pubspec.yaml` -- a mesma fonte do `versionName` -- e alimentando
+# `--build-name` E `--dart-define=APP_VERSION` da MESMA variavel; (2) a
+# conferencia do VALOR das defines DENTRO do `libapp.so` do pacote
+# (`infra/verificacao/verificar_versao_no_apk.py`); e (3) o portao de
+# literalidade do comando, que reprova define passado por variavel de shell.
+#
+# O que isso fecha: ate 19/10 `make apk` saia 0 com o APK sem `APP_VERSION`
+# dentro -- MEDIDO, a versao aparecia zero vezes nos tres `libapp.so` -- e o
+# bloqueio por versao minima inteiro ficava inerte em silencio.
+apk: verificar-apk-autoteste ## compila o APK de release de hml, confere o pacote e o VALOR das dart-define dentro dele
 	sh infra/verificacao/verificar-apk.sh
 
-verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (nao compila nada)
+verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor das defines, literalidade do comando) precisam reprovar (nao compila nada)
 	sh infra/verificacao/verificar-apk.sh --autoteste
 
 # ---------------------------------------------------------------------------

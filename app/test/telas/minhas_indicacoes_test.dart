@@ -25,7 +25,9 @@
 
 import 'dart:convert';
 
-import 'package:bichu/telas/perto/corpo_do_perto.dart';
+import 'package:bichu/telas/perto/tela_de_minhas_indicacoes.dart';
+import 'package:bichu/widgets/item_de_menu.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/minhas_indicacoes.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
@@ -132,45 +134,86 @@ Future<http.Response> Function(http.Request) redeDasIndicacoes(
   };
 }
 
-/// Abre `Minhas indicações` **pelo caminho que a pessoa tem**: a segunda aba
-/// da seção `Perto`.
+/// Abre `Minhas indicações` **pelo caminho que a pessoa tem**: a porta no pé
+/// da aba `Comunidade` da seção `Rede`.
 ///
-/// Não monta a tela solta e não navega por rota -- ela não tem rota. A porta de
-/// entrada é parte da entrega: uma lista que só o roteador alcança é uma lista
-/// que o cliente não acha, que é exatamente o defeito que esta rodada mediu.
+/// ## O CAMINHO MUDOU EM 19/10/2026, e o motivo é medido
+///
+/// Era a segunda ABA da seção `Perto`. `Perto` deixou de ser seção -- o
+/// conteúdo dela virou a aba `Comunidade` da `Rede` --, e as cinco abas
+/// antigas tiveram de caber em duas mais filtro. Três couberam no filtro
+/// porque a entidade não muda; esta **não cabe**: uma indicação em análise
+/// ainda não é um local do diretório, e filtrar a lista de locais por "as que
+/// eu indiquei" devolveria **zero** justamente no caso que interessa.
+///
+/// Então ela virou **porta**, e agora ela TEM rota (`Rotas.minhasIndicacoes`).
+///
+/// **Este helper continua navegando pela porta e não pela rota**, e isso é
+/// deliberado: a porta de entrada é parte da entrega, e uma lista que só o
+/// roteador alcança é uma lista que o cliente não acha -- o defeito que esta
+/// rodada mediu em `Pedidos de conexão` e `Pessoas bloqueadas`.
 Future<void> abrirMinhasIndicacoes(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
 }) async {
   await abrirOApp(tester, rede: rede, deposito: depositoLogado());
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
   await tester.pumpAndSettle();
 
-  final aba = find.widgetWithText(Tab, AbaDoPerto.indicacoes.rotulo);
+  final abaDaComunidade =
+      find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo);
   expect(
-    aba,
+    abaDaComunidade,
     findsOneWidget,
-    reason: 'REPROVA: não há aba `Minhas indicações` na seção `Perto`. O '
-        'cliente pediu aba, e sem ela a lista não tem porta de entrada '
-        'nenhuma -- ela não tem rota.',
+    reason: 'REPROVA: não há aba `Comunidade` na seção `Rede`. É ela que '
+        'absorveu a seção `Perto`, e é no pé dela que mora a porta de '
+        '`Minhas indicações`.',
   );
-  await tester.tap(aba);
+  await tester.tap(abaDaComunidade);
+  await tester.pumpAndSettle();
+  // **A agenda SAI de cena, e isto não é detalhe de estilo:** as duas listas
+  // publicam o ícone de filtrar no mesmo slot da casca, e com as duas montadas
+  // o ícone da barra abriria o filtro da aba de trás.
+  expect(
+    find.byType(ListaDoDiretorio),
+    findsOneWidget,
+    reason: 'REPROVA: tocar na aba `Comunidade` não montou a lista do '
+        'diretório.',
+  );
+
+  final porta = find.widgetWithText(
+    ItemDeMenu,
+    SecaoDaRede.rotuloDasMinhasIndicacoes,
+  );
+  // `ensureVisible` e nao `scrollUntilVisible`: com a `TabBar` rolavel da
+  // `Rede` ha DOIS rolaveis na tela, e `scrollUntilVisible` sem `scrollable:`
+  // exige um so (`Bad state: Too many elements`). `ensureVisible` acha o
+  // rolavel ancestral do alvo.
+  await tester.ensureVisible(porta);
+  await tester.pumpAndSettle();
+  expect(
+    porta,
+    findsOneWidget,
+    reason: 'REPROVA: não há porta `Minhas indicações` no pé da aba '
+        '`Comunidade`. Com a aba virando porta, ela é o ÚNICO caminho humano '
+        'até a lista -- a rota existe, mas rota não é porta.',
+  );
+  await tester.tap(porta);
   await tester.pumpAndSettle();
   expect(
     find.byType(MinhasIndicacoes),
     findsOneWidget,
-    reason: 'REPROVA: tocar na aba `Minhas indicações` não montou o corpo '
+    reason: 'REPROVA: tocar na porta `Minhas indicações` não montou o corpo '
         'dela.',
   );
-  // **A lista do diretório SAI de cena, e isto não é detalhe de estilo:** as
-  // duas publicam o ícone de filtrar no mesmo slot da casca, e com as duas
-  // montadas o ícone da barra abriria o filtro da aba de trás.
+  // A tela é EMPILHADA e tem saída: sem `Voltar` ela seria um beco, e é por
+  // isso que ela não é ramo da casca.
   expect(
-    find.byType(ListaDoDiretorio),
-    findsNothing,
-    reason: 'REPROVA: as duas abas estão montadas ao mesmo tempo (um '
-        '`TabBarView`?). As duas publicam no `SlotDaBarraDeListagem` da '
-        'casca, e a de trás ganharia a barra de cima.',
+    find.byType(BackButton),
+    findsOneWidget,
+    reason: 'REPROVA: a tela de `Minhas indicações` não tem `Voltar`. Ela é '
+        'empilhada de propósito -- como ramo, o slot da esquerda seria a foto '
+        'da conta e a saída desapareceria.',
   );
 }
 
@@ -185,13 +228,10 @@ List<String> motivosNaTela() {
 }
 
 void main() {
-  group('a aba na seção `Perto`', () {
-    testWidgets('`Profissionais` é a PRIMEIRA, e `Minhas indicações` a segunda',
-        (tester) async {
-      // A seção existe para achar quem atende bem: a lista do diretório é o
-      // conteúdo dela. Pôr a lista pessoal na frente trocaria o conteúdo pelo
-      // histórico de quem já contribuiu -- e quem nunca indicou, que é a
-      // maioria, abriria `Perto` numa tela vazia.
+  group('a porta no pé da aba `Comunidade`', () {
+    testWidgets('a `Rede` tem DUAS abas, `Eventos` primeiro', (tester) async {
+      // `Eventos` é a primeira e a principal: é o conteúdo histórico da seção
+      // e é onde o arranque do app abre. `Comunidade` é o que era `Perto`.
       await abrirOApp(
         tester,
         rede: redeDasIndicacoes(
@@ -199,7 +239,7 @@ void main() {
         ),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
       await tester.pumpAndSettle();
 
       final rotulos = find
@@ -210,58 +250,66 @@ void main() {
       expect(
         rotulos,
         <String>[
-          AbaDoPerto.profissionais.rotulo,
-          AbaDoPerto.indicacoes.rotulo,
+          AbaDaSecaoRede.eventos.rotulo,
+          AbaDaSecaoRede.comunidade.rotulo,
         ],
-        reason: 'REPROVA: a ordem das abas do `Perto` mudou. A listagem é a '
-            'aba principal e vem primeiro; `Minhas indicações` é secundária '
-            'e não pode roubar a entrada da seção.',
+        reason: 'REPROVA: as abas da `Rede` não são `Eventos` e `Comunidade`, '
+            'nesta ordem. As TRÊS abas antigas da agenda (`Próximos`, `Meus '
+            'pedidos`, `Encerrados`) viraram FILTRO, e as duas que sobraram '
+            'são as duas seções que foram reunidas.',
       );
-
-      // E a aba da frente, ao abrir, é a listagem -- não basta estar primeiro
-      // na barra se o corpo inicial for o outro.
-      expect(find.byType(ListaDoDiretorio), findsOneWidget);
-      expect(find.byType(MinhasIndicacoes), findsNothing);
     });
 
-    testWidgets('ISCA: SEM CONTA a aba não aparece, e não fica desabilitada',
-        (tester) async {
-      // Mesma regra de `Meus pedidos` na `Rede`, e aqui ela é mais literal:
-      // sem conta não existe "minhas indicações" -- a rota responderia 401, e
-      // uma aba cujo desfecho é uma recusa é controle sem desfecho.
-      //
-      // PARA DESLIGAR E VER REPROVAR: em `corpo_do_perto.dart`, troque
-      // `if (logado) AbaDoPerto.indicacoes` por `AbaDoPerto.indicacoes` em
-      // `_abasVisiveis`.
-      await abrirOApp(
-        tester,
-        rede: redeDasIndicacoes(
-          paginaDoContrato(const <Map<String, dynamic>>[]),
-        ),
-        // SEM `deposito`: ninguém logado.
-      );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'ISCA: SEM CONTA a porta não aparece, e não fica desabilitada',
+      (tester) async {
+        // Sem conta não existe "minhas indicações": a rota responderia 401, e
+        // uma porta cujo desfecho é uma recusa é controle sem desfecho.
+        //
+        // PARA DESLIGAR E VER REPROVAR: em `rede/secao_da_rede.dart`, no
+        // `_corpoDaAba` da aba `comunidade`, troque `if (logado)` por
+        // `if (true)`.
+        await abrirOApp(
+          tester,
+          rede: redeDasIndicacoes(
+            paginaDoContrato(const <Map<String, dynamic>>[]),
+          ),
+          // SEM `deposito`: ninguém logado.
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo));
+        await tester.pumpAndSettle();
 
-      expect(
-        find.widgetWithText(Tab, AbaDoPerto.indicacoes.rotulo),
-        findsNothing,
-        reason: 'REPROVA: a aba `Minhas indicações` aparece para quem não tem '
-            'conta. Não há o que listar, e a rota responderia 401.',
-      );
-      // **UMA ABA SÓ NÃO É ABA**: deslogado não há `TabBar` nenhuma, e não uma
-      // barra de um item -- que faria parecer que falta algo inalcançável.
-      expect(find.byType(TabBar), findsNothing);
-      // E a listagem continua lá: esconder a aba não esconde a seção.
-      expect(find.byType(ListaDoDiretorio), findsOneWidget);
-    });
+        expect(
+          find.widgetWithText(
+            ItemDeMenu,
+            SecaoDaRede.rotuloDasMinhasIndicacoes,
+          ),
+          findsNothing,
+          reason: 'REPROVA: a porta `Minhas indicações` aparece para quem não '
+              'tem conta. Não há o que listar, e a rota responderia 401.',
+        );
+        // **AS DUAS ABAS CONTINUAM**, e isso é diferente das abas antigas:
+        // `Eventos` e `Comunidade` não são listas "minhas", então nenhuma
+        // aparece e desaparece com a sessão. Esconder a porta não esconde a
+        // seção.
+        expect(find.byType(TabBar), findsOneWidget);
+        expect(find.byType(ListaDoDiretorio), findsOneWidget);
+      },
+    );
 
-    testWidgets('a aba NÃO mostra contagem de pendentes', (tester) async {
+    testWidgets('a porta NÃO mostra contagem de pendentes', (tester) async {
       // A ausência é decisão: o número só existiria honesto vindo do servidor
       // e passando pelo predicado de conta desabilitada, e ele responderia
       // "quanto trabalho está esperando" -- a pergunta do PAINEL, não da
       // pessoa. `MyDirectorySuggestionPage` não traz `pending_total` por isso.
-      await abrirMinhasIndicacoes(
+      //
+      // **O caso mede a PORTA e não a aba**, e o texto medido é o mesmo: com a
+      // aba virando porta, um número no rótulo seria o mesmo defeito no mesmo
+      // lugar da tela.
+      await abrirOApp(
         tester,
         rede: redeDasIndicacoes(
           paginaDoContrato(<Map<String, dynamic>>[
@@ -269,21 +317,68 @@ void main() {
             indicacaoDoContrato(reference: 'bPendenteDaContaUm0001'),
           ], total: 2),
         ),
+        deposito: depositoLogado(),
       );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo));
+      await tester.pumpAndSettle();
 
-      final rotuloDaAba = find
-          .byType(Tab)
+      final porta = find.widgetWithText(
+        ItemDeMenu,
+        SecaoDaRede.rotuloDasMinhasIndicacoes,
+      );
+      // `ensureVisible` e nao `scrollUntilVisible`: com a `TabBar` rolavel da
+      // `Rede` ha DOIS rolaveis na tela, e `scrollUntilVisible` sem
+      // `scrollable:` exige um so (`Bad state: Too many elements`).
+      await tester.ensureVisible(porta);
+      await tester.pumpAndSettle();
+      final rotulos = find
+          .descendant(of: porta, matching: find.byType(Text))
           .evaluate()
-          .map((e) => (e.widget as Tab).text ?? '')
-          .firstWhere((r) => r.startsWith('Minhas indicações'));
+          .map((e) => (e.widget as Text).data ?? '')
+          .where((t) => t.isNotEmpty)
+          .toList();
       expect(
-        rotuloDaAba,
-        AbaDoPerto.indicacoes.rotulo,
-        reason: 'REPROVA: a aba ganhou número no rótulo. Contagem na aba só '
-            'existiria honesta vindo do servidor com o predicado de conta '
-            'desabilitada, e ela responde a pergunta do painel.',
+        rotulos,
+        <String>[SecaoDaRede.rotuloDasMinhasIndicacoes],
+        reason: 'REPROVA: a porta `Minhas indicações` pinta mais que o próprio '
+            'rótulo -- um número, ou uma linha de apoio. Contagem só existiria '
+            'honesta vindo do servidor com o predicado de conta desabilitada, '
+            'e ela responde a pergunta do painel. Pintado: $rotulos',
       );
     });
+
+    testWidgets(
+      'a tela tem o título da porta, e é a MESMA palavra nos três lugares',
+      (tester) async {
+        // Aba, porta e título: quem procurava a aba acha a porta e a tela pelo
+        // mesmo texto. Três literais soltos divergiriam na primeira redação.
+        expect(
+          TelaDeMinhasIndicacoes.titulo,
+          SecaoDaRede.rotuloDasMinhasIndicacoes,
+          reason: 'REPROVA: o título da tela e o rótulo da porta divergiram. '
+              'Quem usava a aba `Minhas indicações` acha a função pelo texto, '
+              'e um nome novo faria a função parecer removida em vez de '
+              'mudada de lugar.',
+        );
+
+        await abrirMinhasIndicacoes(
+          tester,
+          rede: redeDasIndicacoes(
+            paginaDoContrato(const <Map<String, dynamic>>[]),
+          ),
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(TelaDeMinhasIndicacoes.titulo),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('Minhas indicações — os três estados', () {

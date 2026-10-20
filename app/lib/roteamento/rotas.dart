@@ -37,6 +37,7 @@ import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
 import '../telas/notificacoes/caixa_de_notificacoes.dart';
 import '../telas/perfil/meus_achados.dart';
+import '../telas/perfil/meus_eventos.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
@@ -49,12 +50,11 @@ import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
-import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
 import '../telas/perto/pagina_do_local.dart';
 import '../telas/perto/sugerir_profissional.dart';
+import '../telas/perto/tela_de_minhas_indicacoes.dart';
 import '../telas/rede/criar_encontro.dart';
-import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -77,15 +77,22 @@ abstract final class Rotas {
   static const String pets = '/pets';
   static const String rede = '/rede';
 
-  /// O encontro da `Rede`, sob o ramo da secao: a barra de abas continua, e
-  /// voltar devolve a agenda. Endereco proprio porque a guarda de acao do
-  /// `Pedir para participar` volta para ca depois do login (UX 8.3).
-  static const String encontroDaRede = 'encontros/:slug';
-
-  static const String parametroDoEncontro = 'slug';
-
-  static String encontroDaRedeDe(String slug) =>
-      '/rede/encontros/${Uri.encodeComponent(slug)}';
+  // **NAO HA MAIS ENDERECO DE DETALHE DE EVENTO**, e isso e decisao do
+  // cliente de 19/10/2026: *"sem informações adicionais ou pagina de detalhes
+  // do evento"*. O que morava aqui era `encontros/:slug`, sob o ramo da
+  // secao, com `parametroDoEncontro` e `encontroDaRedeDe`.
+  //
+  // **A rota saiu junto com a tela, e nao antes dela.** Rota apontando para
+  // tela que nao existe e o pior dos dois mundos: o `go_router` casa o
+  // caminho, nao acha o `builder` e a pessoa cai numa pagina de erro no lugar
+  // de nao ter chegado ali.
+  //
+  // Com o endereco saiu tambem a guarda de acao de `Pedir para participar`,
+  // que voltava para ca depois do login -- o pedido de participacao nascia na
+  // tela de detalhe e nao nasce em lugar nenhum agora.
+  //
+  // `criarEncontroDaRede`, abaixo, FICA: criar evento continua sendo a acao
+  // flutuante da secao, e o desfecho dela virou a propria agenda.
 
   /// **Marcar um encontro da `Rede`: IRMA da casca, e nao sob o ramo.**
   ///
@@ -96,33 +103,116 @@ abstract final class Rotas {
   ///
   /// **Declarada ANTES do ramo da casca**, como `/pets/novo` em relacao a
   /// `/pets`: o `go_router` casa na ordem de registro, e o
-  /// `encontros/:slug` do ramo engoliria qualquer segmento -- o formulario
-  /// abriria o detalhe de um encontro chamado "novo".
+  /// `/rede` do ramo da casca engoliria o segmento se a ordem se invertesse.
+  /// A regra fica escrita aqui porque ela sobreviveu a saida de
+  /// `encontros/:slug`: a ordem de registro e o que a sustenta.
   static const String criarEncontroDaRede = '/rede/encontros/novo';
-  static const String perto = '/perto';
 
-  /// **Indicar um profissional para o `Perto`: irma da casca**, pela mesma
-  /// razao de [criarEncontroDaRede].
+  /// **`Rotas.perto` NAO EXISTE MAIS, e a ausencia e o contrato (19/10/2026).**
+  ///
+  /// `Perto` deixou de ser secao por decisao do cliente: o conteudo dela virou
+  /// a aba `Comunidade` da `Rede`. **Apagar a constante e deliberado e e o que
+  /// fecha o defeito de verdade** -- deixa-la apontando para `/perto` criaria
+  /// uma rota ORFA: um endereco que o roteador conhece, que nenhum destino da
+  /// barra alcanca, e que abriria uma secao que o produto nao tem mais. Link
+  /// profundo antigo para `/perto` agora cai no desvio de rota desconhecida,
+  /// que e a resposta honesta.
+  ///
+  /// O que foi das duas rotas que viviam SOB ela: [sugerirProfissional] e
+  /// [localDoPerto] mudaram de prefixo para `/rede/...` e seguem nas proprias
+  /// linhas. Nenhuma tela ficou sem endereco.
+  ///
+  /// O portao e o grupo `nao ha rota orfa para a secao que saiu` de
+  /// `test/telas/gaveta_oculta_e_barra_nova_test.dart`.
+
+  /// **A SECAO `Mural`: a linha do tempo das publicacoes (19/10/2026).**
+  ///
+  /// Decisao do cliente, literal: *"a secao de timeline, onde as
+  /// publicacoes/notificacoes dos usuarios que ele segue e sao amigos
+  /// apareca"*, *"o menu onde o usuario vai fazer os posts, compartilhar suas
+  /// fotos em eventos"*.
+  ///
+  /// **ESTE NOME DE ROTA E COMBINADO COM A FRENTE DO CONTEUDO, e e por isso
+  /// que ele e obvio e nao abreviado.** Nesta frente so o LUGAR foi
+  /// construido: o slot na barra, o ramo do `IndexedStack` e a tela em estado
+  /// inicial honesto. Publicar, a linha do tempo, curtir, comentar e seguir
+  /// sao de outra frente, que roda em paralelo e cria `user_publications`, o
+  /// contrato e as operacoes. Quem chegar com o conteudo troca o corpo de
+  /// `TelaDoMural` e **nao mexe nesta linha, nem no ramo, nem no registro de
+  /// secoes**.
+  ///
+  /// `/mural`, no singular e sem prefixo: a mesma forma de `/rede`, `/loja` e
+  /// `/pets`. As rotas filhas dela (a publicacao aberta, por exemplo) nascem
+  /// SOB este caminho, como `encontros/:slug` nasceu sob `/rede`.
+  static const String mural = '/mural';
+
+  /// **Indicar um profissional: irma da casca**, pela mesma razao de
+  /// [criarEncontroDaRede].
+  ///
+  /// **O PREFIXO MUDOU DE `/perto` PARA `/rede` em 19/10/2026**, com a secao:
+  /// era `/perto/indicacoes/nova`. Deixa-la em `/perto` manteria vivo o
+  /// primeiro segmento de uma secao que nao existe -- um endereco meio-orfao,
+  /// que nenhuma tela do app monta e que reapareceria no dia em que alguem
+  /// registrasse `/perto` de novo.
   ///
   /// **Declarada ANTES do ramo da casca** nao e necessario aqui, ao contrario
-  /// de [criarEncontroDaRede]: o caminho dela e `/perto/indicacoes/nova`, e
-  /// [localDoPerto] casa em `/perto/locais/:slug`. Os dois primeiros segmentos
+  /// de [criarEncontroDaRede]: o caminho dela e `/rede/indicacoes/nova`, e
+  /// [encontroDaRede] casa em `/rede/encontros/:slug`. Os segundos segmentos
   /// diferem, entao nao ha como um engolir o outro.
-  static const String sugerirProfissional = '/perto/indicacoes/nova';
+  static const String sugerirProfissional = '/rede/indicacoes/nova';
 
-  /// A pagina de um local do `Perto`, **sob o ramo da secao** (18/10/2026).
+  /// **`Minhas indicacoes`: PORTA PROPRIA, e nao mais aba (19/10/2026).**
+  ///
+  /// Ela era a segunda aba da secao `Perto` (`AbaDoPerto.indicacoes`). Com as
+  /// cinco abas antigas tendo de caber em duas mais filtro, `Meus pedidos`
+  /// virou filtro e **esta NAO cabe no filtro** -- e a assimetria e medida, nao
+  /// descuido:
+  ///
+  /// `Meus pedidos` vira filtro porque a ENTIDADE NAO MUDA: a lista continua
+  /// sendo de eventos, e o recorte so fica com os eventos em que eu pedi para
+  /// ir. O cartao ja sabe pintar o estado do pedido (`_ItemDaAgenda` carrega
+  /// `pedido`).
+  ///
+  /// `Minhas indicacoes` nao vira filtro porque a entidade MUDA: uma indicacao
+  /// **em analise** ainda nao e um local do diretorio -- nao tem ficha, nao
+  /// esta na lista, e quem a le e outra operacao (`listMyDirectorySuggestions`).
+  /// Filtrar a lista de locais por "as que eu indiquei" devolveria **zero**
+  /// justamente no caso que interessa: a que ainda espera revisao. Filtro que
+  /// mente sobre o alcance e o que `barra_de_listagem.dart` existe para
+  /// impedir.
+  ///
+  /// **Irma da casca, e nao sob o ramo**, ao contrario de [localDoPerto]: a
+  /// lista das minhas indicacoes e uma tela de CONTA, da mesma familia de
+  /// `Meus achados` e `Meus dados`, e todas aquelas cobrem a casca e tem
+  /// `Voltar`. Sob o ramo ela herdaria a barra de baixo e a foto da conta no
+  /// slot da esquerda, e a saida dela sumiria.
+  ///
+  /// A regua e **SESSAO**, e nao `podeCriarNaComunidade`: ler o que eu ja fiz
+  /// nao exige e-mail confirmado -- quem indicou e depois trocou de e-mail
+  /// continua tendo indicacoes na fila, e esconder a lista esconderia o
+  /// trabalho dela mesma. Quem desenha a recusa sem conta e a propria tela,
+  /// com `ConviteParaEntrar`.
+  static const String minhasIndicacoes = '/rede/indicacoes';
+
+  /// A pagina de um local da aba `Comunidade`, **sob o ramo da `Rede`**.
   ///
   /// O cliente pediu que o cartao do diretorio abrisse uma pagina, com
   /// pontuacao de 1 a 5 e recomendacao em texto visivel aos outros usuarios.
   /// Esta e a porta.
   ///
   /// **Sob o ramo, e nao irma da casca**, pela mesma escolha de
-  /// [produtoDaLoja] e [encontroDaRede] e pelo mesmo motivo: a pagina de um
-  /// local e LEITURA, nao tarefa. A barra de abas continua, e voltar devolve a
+  /// [produtoDaLoja] e pelo mesmo motivo: a pagina de um local e LEITURA, nao
+  /// tarefa. A barra de abas continua, e voltar devolve a
   /// lista com a busca e o filtro de quem estava procurando intactos -- quem
   /// esta comparando tres veterinarios quer continuar comparando, e esconder
   /// as outras quatro secoes para mostrar uma ficha tiraria o app de quem so
   /// foi ver uma nota.
+  ///
+  /// **O PREFIXO MUDOU DE `/perto` PARA `/rede` em 19/10/2026.** O caminho
+  /// relativo nao mudou (`locais/:slug`); o que mudou foi sob qual ramo ele e
+  /// registrado, e por isso [localDoPertoDe] teve de andar junto -- ela monta o
+  /// caminho ABSOLUTO, e um prefixo velho ali daria uma rota que nao existe,
+  /// em silencio, so no toque do cartao.
   static const String localDoPerto = 'locais/:slug';
 
   static const String parametroDoLocal = 'slug';
@@ -133,7 +223,7 @@ abstract final class Rotas {
   /// desta tela: montar caminho com interpolacao crua e como um slug com barra
   /// vira uma rota que nao existe. Mesma regra de [produtoDaLojaDe].
   static String localDoPertoDe(String slug) =>
-      '/perto/locais/${Uri.encodeComponent(slug)}';
+      '/rede/locais/${Uri.encodeComponent(slug)}';
   static const String loja = '/loja';
 
   /// O produto da `Loja`, sob o ramo da secao: a barra de abas continua, e
@@ -144,8 +234,8 @@ abstract final class Rotas {
   /// cadastro: o detalhe de um produto e leitura, nao tarefa. Quem esta
   /// comparando produtos quer continuar comparando, e esconder a barra de abas
   /// para mostrar uma ficha de produto tiraria as outras quatro secoes de
-  /// quem so foi ver uma foto maior. E a mesma escolha de
-  /// [encontroDaRede], pelo mesmo motivo.
+  /// quem so foi ver uma foto maior. E a mesma escolha de [localDoPerto],
+  /// pelo mesmo motivo.
   static const String produtoDaLoja = 'produtos/:slug';
 
   static const String parametroDoProduto = 'slug';
@@ -272,6 +362,16 @@ abstract final class Rotas {
   /// casaria `/achados` como id vazio, e `achados` sob `perfil` diz o que a
   /// lista e -- a MINHA, e nao a da vizinhanca.
   static const String meusAchados = '/perfil/achados';
+
+  /// `Perfil` > `Meus eventos`: os encontros que a conta criou (19/10/2026).
+  ///
+  /// **Endereco proprio, irmao de [meusAchados] e de [dadosPessoais]**, e nao
+  /// bloco dentro da aba: a tela cobre a barra de baixo e volta para [perfil].
+  ///
+  /// `/perfil/eventos` e nao `/eventos`: a secao `Rede` e a agenda PUBLICA, e
+  /// `/rede` ja e a aba dela. `eventos` sob `perfil` diz de quem a lista e --
+  /// o mesmo criterio que poe `achados` sob `perfil`.
+  static const String meusEventos = '/perfil/eventos';
 
   /// `Perfil` > `Pessoas bloqueadas` (19/10/2026, decisao do cliente).
   ///
@@ -800,8 +900,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
       // detalhe de um achado chamado "novo".
       // As duas ESCRITAS da comunidade, irmas da casca porque sao tarefa.
-      // Declaradas antes do ramo da casca: `encontros/:slug` engoliria
-      // `encontros/novo` e o formulario abriria um detalhe inexistente.
+      // Declaradas antes do ramo da casca. O motivo original era
+      // `encontros/:slug`, que engolia `encontros/novo` e abria um detalhe
+      // inexistente; a rota de detalhe saiu em 19/10/2026 e a ordem ficou,
+      // porque ela e de graca e o ramo `/rede` continua acima.
       GoRoute(
         path: Rotas.criarEncontroDaRede,
         builder: (context, estado) => const TelaCriarEncontro(),
@@ -809,6 +911,17 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.sugerirProfissional,
         builder: (context, estado) => const TelaSugerirProfissional(),
+      ),
+      // `Minhas indicacoes`: PORTA PROPRIA desde 19/10/2026, e nao mais a
+      // segunda aba da secao. A razao de ela nao caber no filtro esta inteira
+      // em [Rotas.minhasIndicacoes]: a entidade muda, e filtrar devolveria
+      // zero no unico caso que importa.
+      //
+      // IRMA da casca, como `Meus achados` e `Meus dados`: ela cobre a casca e
+      // ganha `Voltar`. A porta que a abre e o pe da aba `Comunidade`.
+      GoRoute(
+        path: Rotas.minhasIndicacoes,
+        builder: (context, estado) => const TelaDeMinhasIndicacoes(),
       ),
       GoRoute(
         path: Rotas.registrarAchado,
@@ -949,6 +1062,18 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.meusAchados,
         builder: (context, estado) => const MeusAchados(),
       ),
+      // `Perfil` > `Meus eventos` (19/10/2026). Irma das duas de cima, e o
+      // UNICO caminho do app ate `cancelNetworkEvent`: nada na agenda diz de
+      // quem e o encontro, entao sem esta rota o cancelamento do proprio
+      // encontro nao tem porta.
+      //
+      // **Sem parametro no construtor**: a tela tira a `RedeApi` do `Escopo`,
+      // como `MeusAchados` faz com a `AchadosApi`. Acrescentar campo
+      // obrigatorio ao `Escopo` quebraria toda tela de teste que o constroi.
+      GoRoute(
+        path: Rotas.meusEventos,
+        builder: (context, estado) => const MeusEventos(),
+      ),
       // -- AS QUATRO ROTAS DA UNIAO DE 18/10/2026 ---------------------------
       //
       // As quatro telas chegaram prontas, de frentes diferentes, e nenhuma
@@ -983,15 +1108,28 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // OS PEDIDOS DE CONEXAO. `ConexoesApi` sai do `Escopo`, onde esta
       // fiacao a registrou -- a tela pedia a porta por parametro justamente
       // porque o `Escopo` estava sendo mexido por outra sessao.
-      // A VITRINE DO PROPRIO TUTOR. A tela recebe a LEITURA e nao a
-      // `VitrineApi` inteira -- quem desenha nao escreve, e com a porta de
-      // escrita na mao um toque errado reordenaria ou apagaria a vitrine.
+      // A VITRINE DO PROPRIO TUTOR. A tela recebe DUAS interfaces estreitas
+      // da mesma porta -- `LeituraDaVitrine` e `EscritaDaVitrine` --, e nao a
+      // `VitrineApi` inteira: a classe tem tres operacoes, e a tela precisa de
+      // duas. A escrita entrou em 19/10/2026, quando a tela ganhou o controle
+      // de adicionar foto que ela nao tinha.
+      //
+      // **A camera e o envio saem do `Escopo`**, que e onde o app os guarda: o
+      // envio carrega um cliente HTTP proprio, sem o token da sessao, e um
+      // construido aqui seria o segundo.
       GoRoute(
         path: Rotas.minhaVitrine,
-        builder: (context, estado) => VitrineDeFotosDoUsuario(
-          api: VitrineApi(Escopo.of(context).api),
-          aoAbrirMeusPets: () => GoRouter.of(context).go(Rotas.perfil),
-        ),
+        builder: (context, estado) {
+          final escopo = Escopo.of(context);
+          final porta = VitrineApi(escopo.api);
+          return VitrineDeFotosDoUsuario(
+            api: porta,
+            escrita: porta,
+            camera: escopo.camera,
+            envio: escopo.envioDeFoto,
+            aoAbrirMeusPets: () => GoRouter.of(context).go(Rotas.perfil),
+          );
+        },
       ),
       GoRoute(
         path: Rotas.pedidosDeConexao,
@@ -1050,12 +1188,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         // `Perfil` abre `Rede`. O portao `a ordem dos ramos e a ordem do
         // registro` reprova quando isso acontece.
         //
-        // **18/10/2026: `Perto` e `Rede` trocaram de lugar** (literal do
-        // cliente: *"inverta a ordem no app do item rede e perto"*). A ordem
-        // era `Pets, Rede, Perto, Loja, Perfil` e passou a ser
-        // `Pets, Perto, Rede, Loja, Perfil`. Os ramos tiveram de andar JUNTO
-        // com o registro, e nao e detalhe: trocar so a barra faria tocar em
-        // `Perto` abrir a `Rede`, calado, porque a casca resolve o indice.
+        // **19/10/2026: `Perto` SAIU e `Mural` ENTROU.** A ordem dos ramos
+        // era `Pets, Perto, Rede, Loja, Perfil` e passou a ser
+        // **`Pets, Rede, Mural, Loja, Perfil`**. Os ramos tiveram de andar
+        // JUNTO com o registro, e nao e detalhe: trocar so a barra faria tocar
+        // em `Mural` abrir a `Rede`, calado, porque a casca resolve o indice.
+        //
+        // **O RAMO DE `Perto` NAO FOI RENOMEADO, ELE FOI ABSORVIDO.** As duas
+        // rotas que viviam sob ele mudaram de casa: `locais/:slug` desceu para
+        // SOB O RAMO DA `Rede` (a aba `Comunidade` e quem lista os locais, e
+        // voltar da ficha tem de devolver a aba com a busca e o filtro
+        // intactos) e `/perto/indicacoes/nova` virou `/rede/indicacoes/nova`,
+        // irma da casca como era.
+        //
+        // **O RAMO DO `Mural` nasce com a tela de verdade, e nao com desvio.**
+        // `TelaDoMural` existe nesta arvore e diz honestamente o que ainda nao
+        // ha: ramo com tela de mentira seria construir a secao de outra
+        // frente, e ramo sem tela estoura no primeiro toque.
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
             routes: <RouteBase>[
@@ -1068,43 +1217,50 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: Rotas.perto,
-                builder: (context, estado) => const AbaPerto(),
+                path: Rotas.rede,
+                builder: (context, estado) => const AbaRede(),
                 routes: <RouteBase>[
+                  // A FICHA DE UM LOCAL DA ABA `Comunidade`, que ANTES
+                  // morava sob o ramo de `Perto` (19/10/2026).
+                  //
+                  // Ela continua sendo LEITURA e nao tarefa, e por isso
+                  // continua SOB o ramo: a barra de baixo fica, e voltar
+                  // devolve a aba `Comunidade` com a busca e o filtro de quem
+                  // estava comparando tres veterinarios intactos.
                   GoRoute(
                     path: Rotas.localDoPerto,
                     builder: (context, estado) => PaginaDoLocal(
                       slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
                     ),
                   ),
+                  // **A rota `encontros/:slug` NAO VOLTA (uniao do lote de
+                  // 19/10/2026).** A frente `feat/barra-com-mural-e-rede-unificada`
+                  // a trazia para DENTRO deste ramo unificado, porque no ramo dela
+                  // a tela de detalhe do evento ainda existia. Ela nao existe mais:
+                  // `feat/evento-simples-e-sem-telefone` APAGOU
+                  // `telas/rede/encontro_da_rede.dart` por decisao do cliente
+                  // (*"sem informações adicionais ou pagina de detalhes do
+                  // evento"*), e com ela sairam `TelaDoEncontro` e
+                  // `RetomadaDoPedido` -- declarar a rota aqui nao compilaria.
+                  //
+                  // `encontros/novo` continua, mas IRMA da casca e nao filha:
+                  // preencher formulario e tarefa, e tarefa esconde a barra.
                 ],
               ),
             ],
           ),
+          // O RAMO DO `Mural`, na posicao 3 (19/10/2026).
+          //
+          // **Ele E ramo, e nao um slot que empurra rota.** A secao de
+          // mensagens nao e ramo porque a tela dela e de outro agente e nao
+          // existe nesta arvore; a do `Mural` existe -- `TelaDoMural` --, e
+          // ramo e o que da a ela o estado proprio do `IndexedStack`: quem rola
+          // o mural, vai ao `Perfil` e volta encontra o mural onde deixou.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: Rotas.rede,
-                builder: (context, estado) => const AbaRede(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: Rotas.encontroDaRede,
-                    builder: (context, estado) => TelaDoEncontro(
-                      slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
-                      // A distancia vem do cartao, que a leu de
-                      // `listNearbyNetworkEvents`. Por link direto ela nao vem,
-                      // e a linha some sem aviso.
-                      distanciaEmMetros: estado.extra is int
-                          ? estado.extra! as int
-                          : null,
-                      // O pedido feito depois do login nao saiu: a caixa do
-                      // privado diz por que.
-                      erroDoPedido: estado.extra is RetomadaDoPedido
-                          ? (estado.extra! as RetomadaDoPedido).erro.texto
-                          : null,
-                    ),
-                  ),
-                ],
+                path: Rotas.mural,
+                builder: (context, estado) => const AbaMural(),
               ),
             ],
           ),

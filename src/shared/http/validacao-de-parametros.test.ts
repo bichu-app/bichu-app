@@ -452,8 +452,26 @@ void describe('o contrato de verdade produz os schemas de verdade', () => {
       maximum: 20,
       default: 20,
     });
-    // `city` é o único obrigatório da operação, e o resto não pode virar obrigatório.
-    assert.deepEqual(esquemas.querystring?.['required'], ['city']);
+    // **`listPublicLostPets` NÃO TEM MAIS PARÂMETRO OBRIGATÓRIO NENHUM.**
+    //
+    // Este caso exigia `required: ['city']`, com o comentário "`city` é o único
+    // obrigatório da operação, e o resto não pode virar obrigatório". A metade
+    // que importava era a segunda, e ela continua medida aqui: o que não pode
+    // acontecer é um parâmetro desta operação virar obrigatório por descuido.
+    //
+    // `city` perdeu o `required: true` em 19/10/2026, por decisão do cliente
+    // (*"o campo cidade do filtro da página pet não deve ser obrigatório"*), e
+    // sem nenhum obrigatório o carregador de contrato não emite a chave
+    // `required` — daí `undefined`, e não `[]`.
+    //
+    // DESLIGANDO: reponha `required: true` em qualquer parâmetro de
+    // `listPublicLostPets` em `api/openapi.yaml` e este caso reprova pelo nome.
+    assert.equal(
+      esquemas.querystring?.['required'],
+      undefined,
+      'nenhum parâmetro de `listPublicLostPets` é obrigatório desde 19/10/2026: ' +
+        `o contrato declarou ${JSON.stringify(esquemas.querystring?.['required'])}`,
+    );
   });
 
   void it('o `code` carrega `tag-code-malformed`, e só ele', () => {

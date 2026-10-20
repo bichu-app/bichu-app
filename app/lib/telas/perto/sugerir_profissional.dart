@@ -679,9 +679,11 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       bottomNavigationBar: BarraDeAcaoFixa(
         acoes: <Widget>[
           BotaoPrimario(
-            rotulo: 'Voltar para o Perto',
+            // `Rede` e nao `Perto`: a secao `Perto` deixou de existir em
+            // 19/10, e o diretorio virou a aba `Comunidade` da `Rede`.
+            rotulo: 'Voltar para a Rede',
             critico: true,
-            aoTocar: () => context.go(Rotas.perto),
+            aoTocar: () => context.go(Rotas.rede),
           ),
         ],
       ),

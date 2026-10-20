@@ -102,6 +102,21 @@ class _LocalizacaoQueConta implements Localizacao {
     }
     return CapturaComPonto(p);
   }
+
+  /// A RESOLUCAO DE CIDADE NAO E ASSUNTO DESTE ARQUIVO, e por isso ela
+  /// responde ausencia em vez de um nome.
+  ///
+  /// `cidadeAproximada` entrou na porta em 19/10/2026 (emenda 1 do ADR-0006) e
+  /// obrigou todo dublê a implementa-la. Este arquivo mede o BOTAO de
+  /// localizacao de outra tela -- quantas vezes `pedir()` e chamado e qual
+  /// faixa aparece --, e nada aqui depende de cidade.
+  ///
+  /// **Devolver ausencia e deliberado, e nao atalho**: um nome de cidade aqui
+  /// seria um valor que nenhum caso deste arquivo le, e que o proximo leitor
+  /// tomaria por significativo.
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({required Duration prazo}) async =>
+      const CidadeNaoResolvida(MotivoDeNaoTerCidade.indisponivel);
 }
 
 /// `app/lib/app.dart`, achado subindo a partir do diretorio do teste.
@@ -165,9 +180,21 @@ void main() {
     test('o padrao de `BichuApp.localizacao` nao e a implementacao ausente',
         () {
       // A escolha mora numa linha so (`app.dart`), e e a linha que faltava.
+      //
+      // **O `const` SAIU DO LITERAL em 19/10/2026, e a medida nao afrouxou.**
+      // `LocalizacaoPorGeolocator` deixou de ser constante quando ganhou a
+      // memoria da ultima resolucao de cidade -- a grade de ~100 m que a
+      // emenda 1 do ADR-0006 exige para nao mandar a coordenada ao servico de
+      // plataforma a cada abertura. Objeto com estado nao e `const`, e o
+      // compilador recusou antes deste caso: a suite inteira parou de carregar
+      // com "Cannot invoke a non-'const' constructor".
+      //
+      // O que este caso mede continua sendo o MESMO: que o padrao de producao
+      // e a implementacao do APARELHO, e nao `LocalizacaoNaoEmbarcada`. O
+      // `const` nunca foi o ponto.
       final fonte = _fonteDoApp().readAsStringSync();
       expect(
-        fonte.contains('widget.localizacao ?? const LocalizacaoPorGeolocator()'),
+        fonte.contains('widget.localizacao ?? LocalizacaoPorGeolocator()'),
         isTrue,
         reason: 'REPROVA: `BichuApp` nao escolhe `LocalizacaoPorGeolocator` '
             'quando ninguem passa a porta. `main.dart` nunca passa, entao o '

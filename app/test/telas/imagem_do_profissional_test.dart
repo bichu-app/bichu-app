@@ -22,6 +22,7 @@
 // decodificacao, e que nenhuma ausencia derruba a tela.
 
 import 'package:bichu/api/modelos_diretorio.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
@@ -165,7 +166,14 @@ Future<void> _abrirOPerto(
   required Future<http.Response> Function(http.Request) rede,
 }) async {
   await abrirOApp(tester, rede: rede, deposito: depositoLogado());
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+  // `Perto` deixou de existir, e o diretorio virou a aba `Comunidade` da
+  // `Rede`.
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+  );
   await tester.pumpAndSettle();
 }
 

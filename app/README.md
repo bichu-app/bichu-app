@@ -33,11 +33,22 @@ Build para instalar no aparelho:
 
 ```bash
 flutter build apk --debug \
+  --build-name=1.0.0 \
+  --dart-define=APP_VERSION=1.0.0 \
   --dart-define=API_BASE_URL=http://SEU_IP:3000 \
   --dart-define=TERMS_VERSION=2026-09-17 \
   --dart-define-from-file=config/mapa.json
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
+
+**`--build-name` e `--dart-define=APP_VERSION` com o MESMO valor, e o valor é o
+`version:` de `pubspec.yaml`.** Os dois juntos de propósito: `--build-name`
+decide o `versionName` que o Gradle estampa, `APP_VERSION` decide o que o app
+manda em `GET /v1/app/version-status`, e se os dois divergirem o servidor passa
+a decidir sobre uma versão que não é a do aparelho. Para o APK de release **não
+monte o comando à mão**: use `sh infra/verificacao/verificar-apk.sh` da raiz do
+repositório, que tira a versão do `pubspec.yaml` uma vez, alimenta os dois com
+ela, e **mede o valor dentro do `libapp.so`** depois de compilar.
 
 **`TERMS_VERSION` está aqui de propósito, e não é enfeite.** Um APK construído
 só com `API_BASE_URL` sobe, navega e faz login, mas **não cria conta**: a tela
@@ -54,18 +65,41 @@ O endereço aparece como marcador, e não como IP de exemplo: endereço privado
 escrito no repositório é amarração de ambiente, e o portão de portabilidade
 (`infra/verificacao/verificar_portabilidade.py`) reprova.
 
-### As três configurações opcionais
+### As quatro configurações opcionais
 
-Além de `API_BASE_URL`, que é obrigatória, o build aceita três valores que o
-app usa e que **ainda não têm de onde sair**. Elas não derrubam o arranque
-quando faltam — sem API o app não faz nada e o certo é parar —, mas a primeira
-delas **fecha o cadastro** quando falta, e o motivo está abaixo.
+Além de `API_BASE_URL`, que é obrigatória, o build aceita quatro valores que o
+app usa. Elas não derrubam o arranque quando faltam — sem API o app não faz nada
+e o certo é parar —, mas a primeira delas **fecha o cadastro** quando falta, e a
+última **desliga o bloqueio por versão mínima**.
 
 | Variável | Para que serve | O que acontece sem ela |
 |---|---|---|
 | `TERMS_VERSION` | vai em `accepted_terms_version` no cadastro | **a tela de cadastro recusa criar conta**, dizendo `Não conseguimos registrar o aceite dos termos nesta versão do app.` O resto do app funciona |
 | `TERMS_URL` | destino do link "termos de uso" | a expressão fica texto comum, e não vira link que não abre nada |
 | `PRIVACY_URL` | destino do link "política de privacidade" | idem |
+| `APP_VERSION` | é o que o app manda em `GET /v1/app/version-status` | **o bloqueio por versão mínima fica inerte**: `PortaoDeVersao` não chama a rota e nunca bloqueia nada. O app funciona inteiro |
+
+**`APP_VERSION` tem de sair da mesma fonte que o `versionName`, que é o
+`version:` deste `pubspec.yaml`.** Duas origens divergem no dia em que alguém
+passar `--build-name` diferente, e o preço da divergência é específico: o
+servidor decide sobre uma versão que não é a que está no aparelho, e ou bloqueia
+quem está em dia ou libera quem não está.
+
+**Liberar na dúvida é a regra do mecanismo, e é por isso que a ausência não
+bloqueia** (`AppConfig.versaoDoApp` nula → `PortaoDeVersao._perguntar` retorna
+sem pedir nada → estado inicial `liberado`). Medido pelos casos
+`sem APP_VERSION no build a requisicao NEM SAI`,
+`sem APP_VERSION o portao nem pergunta, e o app aparece` e
+`ausente e nula, e isso NAO derruba o arranque`, em
+`test/atualizacao/portao_de_versao_test.dart`.
+
+**A direção segura é também a silenciosa, e é isso que o portão de build
+resolve.** Um APK sem `APP_VERSION` funciona, passa na homologação e não
+reclama; só não bloqueia ninguém no dia em que precisar. Interruptor de
+emergência que não está ligado em nada é pior que não ter interruptor, porque
+alguém vai contar com ele. Por isso a cobrança não está aqui, nem no arranque do
+app: está em `infra/verificacao/verificar-apk.sh`, que **mede o valor dentro do
+`libapp.so`** depois de compilar e reprova com código 1 quando ele não está lá.
 
 **Por que o cadastro para, em vez de seguir sem registrar.** O caminho do aceite
 está inteiro: a tela manda `accepted_terms_version`, o contrato a declara em
@@ -93,8 +127,22 @@ flutter run \
   --dart-define=API_BASE_URL=http://localhost:3000 \
   --dart-define=TERMS_VERSION=2026-09-17 \
   --dart-define=TERMS_URL=https://exemplo.com.br/termos \
-  --dart-define=PRIVACY_URL=https://exemplo.com.br/privacidade
+  --dart-define=PRIVACY_URL=https://exemplo.com.br/privacidade \
+  --build-name=1.0.0 --dart-define=APP_VERSION=1.0.0
 ```
+
+`APP_VERSION` está no `flutter run` para que o bloqueio por versão mínima possa
+ser **exercitado** contra uma pilha local: sem ela o app roda igual e o portão
+nunca pergunta nada, o que é cômodo no dia a dia e indistinguível de defeito no
+dia em que se quer provar o mecanismo.
+
+**Escreva os `--dart-define` LITERAIS no comando, nunca juntos numa variável de
+shell.** Em 19/10/2026, gerando APK e iOS, os seis defines foram passados por
+uma variável e o `--dart-define-from-file=config/mapa.json` se perdeu em
+silêncio: build terminou em 0, `hml.bichu.app` presente, parâmetro do mapa
+ausente. Com os parâmetros literais, apareceu. O portão de literalidade de
+`infra/verificacao/verificar-apk.sh` reprova essa forma antes de compilar, e a
+conferência de valor reprova a consequência depois.
 
 Nenhuma delas tem valor padrão, e a ausência é deliberada. A versão dos termos
 precisa ser "o identificador do arquivo versionado no repositório, não `v1`
@@ -217,6 +265,17 @@ de redução de `docs/06-design-system.md` §3.10 reprova o símbolo abaixo de
 
 O iOS compila com `flutter build ios --debug --no-codesign`. Instalar em iPhone
 depende da conta Apple Developer, que ainda não está ativa.
+
+**Esse comando não passa `--dart-define` nenhuma, e não há portão do lado iOS.**
+Dito com o nome: um IPA gerado por aqui sai sem `API_BASE_URL` — ele nem abre —
+e sem `APP_VERSION`, com o bloqueio por versão mínima desligado. A conferência
+de valor de 19/10/2026 ficou só no APK, porque é o APK que a esteira publica e
+que o cliente instala; o iOS está dormente por decisão (a conta Apple não anda),
+e um portão para um alvo que ninguém compila seria portão sem consumidor. Quando
+o iOS voltar, o caminho já está medido: `grep -a -c -F "<valor>"` em
+`build/ios/iphoneos/Runner.app/Frameworks/App.framework/App`, com a mesma string
+de controle e as mesmas chaves que
+`infra/verificacao/verificar_versao_no_apk.py` cobra.
 
 ## Verificar
 

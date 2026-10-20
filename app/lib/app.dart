@@ -21,6 +21,7 @@ import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
@@ -39,11 +40,11 @@ import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
-import 'intencao/pedido_de_participacao_como_intencao.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
+import 'telas/atualizacao/portao_de_versao.dart';
 import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
@@ -270,6 +271,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final OuvinteDeAvisos _avisosRecebidos;
   late final ContadorDeAvisos _contadorDeAvisos;
 
+  /// A consulta ao veredito de versao (19/10/2026). Fica aqui, e nao no
+  /// `Escopo`, porque **um unico widget a consome** -- o portao de versao, no
+  /// `builder` abaixo. Nenhuma tela chama esta porta, e nenhuma deve: o
+  /// veredito nao e informacao de tela, e a decisao de fechar o aplicativo
+  /// mora num lugar so.
+  late final VersaoApi _versao;
+
   @override
   void initState() {
     super.initState();
@@ -289,6 +297,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       tokenDeAcesso: () => _sessao.tokenValido(),
     );
     _auth = AuthApi(_api);
+    _versao = VersaoApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
     // A porta das conexoes, do mesmo `ApiClient` das outras (uniao 18/10/2026).
@@ -381,7 +390,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    _localizacao = widget.localizacao ?? const LocalizacaoPorGeolocator();
+    // **SEM `const`**: `LocalizacaoPorGeolocator` deixou de ser constante em
+    // 19/10/2026, quando ganhou a memoria da ultima resolucao de cidade (a
+    // grade de ~100 m que a emenda 1 do ADR-0006 exige). Objeto com estado nao
+    // e `const`, e a instancia aqui e uma por processo de qualquer forma.
+    _localizacao = widget.localizacao ?? LocalizacaoPorGeolocator();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -405,11 +418,17 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
         // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
-        // `pedir_para_participar`: depois de autenticar, o pedido e ENVIADO e
-        // a pessoa volta ao encontro com a caixa em `Pedido enviado`
-        // (design system 24.17.1, item 5).
-        AcaoDeIntencao.pedirParaParticipar:
-            pedidoDeParticipacaoExecutavel(_api),
+        // **`pedir_para_participar` NAO esta mais aqui.** O executavel dela
+        // mandava o pedido depois do login e devolvia a pessoa ao detalhe do
+        // evento; a tela de detalhe saiu em 19/10/2026 por decisao do
+        // cliente, e com ela o unico lugar do app que criava essa intencao.
+        //
+        // O valor do `enum` FICA em `intencao/intencao_pendente.dart`, de
+        // proposito: um envelope `pedir_para_participar` ja gravado no disco
+        // de alguem continua legivel, `GuardaDeAcao` nao acha executavel para
+        // ele e a pessoa cai na agenda da `Rede` em vez de num erro. Tirar o
+        // valor do `enum` faria a leitura do envelope LANCAR -- caminho que o
+        // registro de erro cobre, mas que nao ha motivo para exercitar.
       },
     );
     _sessao = ControladorDeSessao(
@@ -725,7 +744,19 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
           );
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: escala),
-            child: filho ?? const SizedBox.shrink(),
+            // O PORTAO DE VERSAO EMBRULHA TODA ROTA, e e por isso que ele
+            // esta no `builder` e nao numa rota: instalado como rota, ele
+            // seria contornavel por um deep link apontando para outra. Aqui
+            // nao ha rota a que escapar.
+            //
+            // Ele nasce LIBERADO e nao espera resposta nenhuma para pintar o
+            // app: `PortaoDeVersao` so troca de estado se o servidor disser
+            // explicitamente que esta versao nao serve.
+            child: PortaoDeVersao(
+              versaoApi: _versao,
+              versaoDoApp: widget.config.versaoDoApp,
+              child: filho ?? const SizedBox.shrink(),
+            ),
           );
         },
       ),

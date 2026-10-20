@@ -10,7 +10,6 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/barra_de_listagem.dart';
 import '../widgets/marca.dart';
-import 'gaveta_de_secoes.dart';
 
 /// O estado de uma secao no registro (UX 27.5).
 ///
@@ -34,7 +33,20 @@ enum EstadoDaSecao { existe, casca, planejada }
 /// A distincao importa mais aqui que nas outras quatro, porque o rotulo desta
 /// secao e `AuAu` -- palavra de marca, que nao diz a funcao -- e o glifo passou
 /// a ser o unico sinal visivel que diz "mensagem". Ver a entrada do registro.
-enum CampoSemantico { animal, comunidade, lugar, compra, conta, conversa }
+///
+/// **`lugar` SAIU em 19/10/2026 com a secao `Perto`.** Ele era o alfinete de
+/// `place`, e a secao que o declarava deixou de existir: o conteudo dela virou
+/// a aba `Comunidade` da `Rede`, e aba NAO declara campo semantico -- o
+/// registro e de SECAO, e o campo existe para impedir colisao entre dois
+/// GLIFOS DA BARRA. Deixar o valor no enum sem dono seria um campo que nenhum
+/// portao exercita, e quem acrescentasse uma secao o escolheria achando que
+/// ainda ha uma secao de lugar.
+///
+/// **`publicacao` ENTROU no mesmo dia, com o `Mural`.** Ele nao divide campo
+/// com `comunidade` (`groups`, que desenha CABECAS) nem com `conversa`
+/// (`chat`, que desenha UM BALAO): `dynamic_feed` desenha CARTOES EMPILHADOS,
+/// que e a forma de "a pilha do que chegou" e nao de gente nem de fala.
+enum CampoSemantico { animal, comunidade, publicacao, compra, conta, conversa }
 
 /// Qual build esta sendo montado (UX 25.7.3).
 ///
@@ -220,23 +232,38 @@ class CascaComAbas extends StatefulWidget {
   /// BICHUS-172 iteram esta lista em vez de repetir os rotulos a mao. Portao
   /// que guarda uma copia da lista fica verde no dia em que a lista muda.
   ///
-  /// ## A ordem mudou em 18/10/2026
+  /// ## A ordem mudou DE NOVO em 19/10/2026, e `Perto` saiu do registro
   ///
-  /// `Pets, Perto, Rede, Loja, Perfil`. Era `Pets, Rede, Perto, Loja, Perfil`,
-  /// e o cliente pediu literalmente: *"inverta a ordem no app do item rede e
-  /// perto"*. Medida antes de inverter: `Rede` estava na posicao 2 e `Perto`
-  /// na 3, entao inverter e por `Perto` antes -- e nao o contrario.
+  /// Hoje: **`Pets, Rede, Mural, Loja, AuAu`** na barra, mais `Perfil` fora
+  /// dela. Era `Pets, Perto, Rede, Loja, AuAu`.
+  ///
+  /// `Perto` **deixou de ser secao** por decisao do cliente, e o conteudo dela
+  /// nao foi apagado: ele virou a aba `Comunidade` da `Rede` (profissionais,
+  /// estabelecimentos e ONGs). O nome da secao reunida e `Rede`, e a escolha
+  /// e de MEDIDA e nao de gosto -- `Comunidade` pede **113,25 dp** num slot de
+  /// 64,00 e reprova em 320, 375 e 412 dp; `Rede` pede 45,08 e cabe nos tres.
+  /// A parede e a mesma que recusou `Mensagens` (103,67 dp).
+  ///
+  /// `Mural` entrou no slot 3, entre `Rede` e `Loja`.
+  ///
+  /// **A ordem ANTERIOR, de 18/10, fica registrada**: era
+  /// `Pets, Rede, Perto, Loja, Perfil` e ele pediu *"inverta a ordem no app do
+  /// item rede e perto"*, o que pos `Perto` na posicao 2. Essa inversao foi
+  /// absorvida: com `Perto` fora da barra nao ha mais par para inverter.
   ///
   /// **A ordem dos RAMOS em `roteamento/rotas.dart` andou junto.** A casca
   /// traduz a posicao tocada na barra para o indice do ramo por esta lista;
-  /// trocar so aqui faria tocar em `Perto` abrir a `Rede`, calado. Ha portao
+  /// trocar so aqui faria tocar em `Mural` abrir a `Rede`, calado. Ha portao
   /// que reprova a divergencia (`a ordem dos ramos e a ordem do registro`).
   ///
   /// **A aba de ARRANQUE nao e a primeira desta lista, e nao precisa ser.** No
   /// mesmo dia o cliente fez da `Rede` a aba padrao de quem abre o app ou
-  /// acaba de entrar (`Rotas.destinoDoArranque`), e ela ficou na posicao 3. As
-  /// duas decisoes sao independentes: a ordem e onde o dedo encontra a secao,
-  /// o arranque e onde o app comeca. Quem mudar uma nao herda a outra.
+  /// acaba de entrar (`Rotas.destinoDoArranque`), e com a reordenacao de 19/10
+  /// ela ficou na posicao 2. As duas decisoes sao independentes: a ordem e
+  /// onde o dedo encontra a secao, o arranque e onde o app comeca. Quem mudar
+  /// uma nao herda a outra. **O arranque continua apontando para `Rede`**, e
+  /// nao foi movido para o `Mural`: a secao de arranque tem de ter conteudo, e
+  /// a do `Mural` e de outra frente.
   static const List<DestinoDeNavegacao> destinos = <DestinoDeNavegacao>[
     DestinoDeNavegacao(
       rotulo: 'Pets',
@@ -281,49 +308,29 @@ class CascaComAbas extends StatefulWidget {
       campoSemantico: CampoSemantico.animal,
     ),
     DestinoDeNavegacao(
-      rotulo: 'Perto',
-      reforcoAcessivel: 'profissionais e estabelecimentos indicados',
-      reforcoDaPagina: '',
-      // O ALFINETE DE LOCALIZACAO, e nao a fachada de loja (BICHUS-233).
-      //
-      // `storefront` desenha uma fachada, e ficava a **dois slots** de
-      // `shopping_bag`, a sacola da aba `Loja`. A UX 27.3 defendia o par com
-      // o argumento de que "a sacola e compra minha; a fachada e o negocio de
-      // outra pessoa", e o argumento se sustenta no papel. No aparelho ele nao
-      // sobreviveu ao primeiro usuario, que e a unica bancada que conta: o
-      // cliente leu duas lojas lado a lado em 22/09.
-      //
-      // **`near_me` foi recusado**, e nao por ser pior: a seta e o sinal
-      // universal de "tracar rota", e o produto nao tem mapa nem rota por
-      // decisao de 17/09 (ADR-0010, o Maps cobra por carregamento). Um
-      // signifier que promete um mecanismo inexistente e o golfo da execucao
-      // aberto de proposito. `pin_drop`, `my_location` e `location_searching`
-      // caem pelo mesmo motivo, mais fraco: os tres leem como controle de mapa.
-      //
-      // Contorno em repouso e preenchido no selecionado, que e o M3 e o que os
-      // outros quatro ja fazem. As cores nao mudam: continuam vindo de
-      // `navigationBarTheme.iconTheme`. O rotulo e o nome acessivel tambem
-      // nao: o icone e decorativo e nao entra na arvore (UX 27.7), entao a
-      // troca nao tem efeito de acessibilidade.
-      icone: Icons.place_outlined,
-      iconeSelecionado: Icons.place,
-      rota: Rotas.perto,
-      // **`existe`, e nao `planejada`, desde a listagem do diretorio.**
-      //
-      // A troca nao e cosmetica e tem duas consequencias medidas. A primeira:
-      // `planejada` obriga a secao a dizer "Perto esta em construcao"
-      // (UX 25.7.3), e essa frase passou a ser falsa -- ha lista, vinda de
-      // `GET /directory/entries`. A segunda: `visiveisEm` esconde o que e
-      // `planejada` no build de ENTREGA, entao enquanto esta linha dissesse
-      // `planejada` a secao com conteudo nao apareceria na barra do build que
-      // vai para a loja.
-      estado: EstadoDaSecao.existe,
-      campoSemantico: CampoSemantico.lugar,
-    ),
-    DestinoDeNavegacao(
       rotulo: 'Rede',
-      reforcoAcessivel: 'eventos da comunidade',
+      // **A METADE DE TRAS DO NOME ACESSIVEL MUDOU em 19/10**, porque a secao
+      // mudou de tamanho: ela era so os eventos e passou a ser tambem o
+      // diretorio que morava em `Perto` (`profissionais e estabelecimentos
+      // indicados`). Deixar `eventos da comunidade` faria o leitor de tela
+      // anunciar METADE da secao -- e quem navega por audicao nao teria como
+      // descobrir que os profissionais mudaram de casa.
+      //
+      // Redacao curta de proposito (UX 27.7, regra 5): o leitor le o nome
+      // inteiro a cada passagem pela barra. As duas abas em cinco palavras.
+      reforcoAcessivel: 'eventos e quem atende bem',
       reforcoDaPagina: '',
+      // **`groups` FICA, e agora ele e mais certo e nao menos.** O glifo de
+      // CABECAS era o campo `comunidade` quando a secao era so eventos; com o
+      // diretorio dentro, a secao passou a ser literalmente a comunidade --
+      // gente que se encontra e gente que atende bem.
+      //
+      // **O alfinete de `place` SAIU com a secao `Perto`**, e nao foi
+      // reaproveitado aqui: dois glifos numa secao so e o que o registro
+      // existe para impedir, e a aba nao desenha glifo nenhum -- as duas abas
+      // da `Rede` sao TEXTO (`Eventos` e `Comunidade`), porque aba de texto
+      // nao precisa transferir significado para forma como o slot de 64 dp
+      // precisa.
       icone: Icons.groups_outlined,
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
@@ -339,6 +346,77 @@ class CascaComAbas extends StatefulWidget {
       // instalasse. E o mesmo passo que `Perto` e `Loja` ja deram.
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.comunidade,
+    ),
+    // -- A SECAO `Mural`, no slot 3 (decisao do cliente, 19/10/2026) --------
+    //
+    // **O ROTULO E `Mural`, E ELE FOI MEDIDO.** O slot de cinco destinos e de
+    // 64,00 dp na tela de 320 dp (UX 27.2.1) e o `NavigationBar` limita a
+    // escala de texto em 1,3x. Medido com a `Inter` real, na bancada que
+    // reproduz a tabela versionada de `casca_de_cinco_secoes_test.dart`:
+    //
+    //   `Pets`  39,20 dp -> cabe
+    //   `Rede`  45,08 dp -> cabe
+    //   `Mural` 50,90 dp -> cabe, com 13,10 dp de folga
+    //   `Loja`  37,15 dp -> cabe
+    //   `AuAu`  49,33 dp -> cabe
+    //
+    // Os cinco passam em 320, 375 e 412 dp. **`Comunidade` (113,25 dp)
+    // REPROVARIA** nesta barra, e e por isso que ela e ABA da `Rede` e nao
+    // nome de secao -- a mesma parede que recusou `Mensagens` (103,67 dp).
+    //
+    // **O GLIFO: `dynamic_feed` -- os cartoes empilhados.** Escolhido por
+    // ELIMINACAO dentro da familia fechada do 10.1, e cada recusa tem dono
+    // nesta arvore:
+    //
+    //   - `photo_library` e a galeria do encontro;
+    //   - `forum` e "outras avaliacoes" na pagina do local, e ainda le como
+    //     quadro de discussao, vizinho do campo `comunidade` da `Rede`;
+    //   - `notes` e `article` sao "observacoes" em tres telas;
+    //   - `chat` e o `AuAu`, no MESMO rodape -- dois baloes na mesma barra e
+    //     a colisao que o cliente leu no aparelho em 22/09;
+    //   - `campaign` e o comunicado da administracao;
+    //   - `grid_view` e controle de visualizacao, e nao lugar.
+    //
+    // Sobram os cartoes empilhados, que e a forma de "a pilha do que
+    // chegou". Nenhum vetor novo, nada baixado, nada gerado.
+    //
+    // **`casca`, e nao `existe` nem `planejada`, e o estado e a parte honesta
+    // desta entrada.** O conteudo do Mural -- publicar, a linha do tempo,
+    // curtir, comentar, seguir -- e de OUTRA FRENTE, que roda em paralelo e
+    // cria `user_publications`, o contrato e as operacoes. Medido nesta
+    // arvore: a tabela `user_publications` **nao existe** (ela aparece so em
+    // comentario, em `src/shared/db/schema.ts` e em duas linhas da migracao
+    // `20261018000032`), e nao ha operacao de linha do tempo no contrato.
+    //
+    //   - `existe` obrigaria a secao a ter conteudo, e ela nao tem;
+    //   - `planejada` a esconderia do build de ENTREGA (`visiveisEm`), e o
+    //     cliente pediu o LUGAR dela na barra -- esconde-la desfaria o
+    //     pedido;
+    //   - `casca` e exatamente "tela sem conteudo mas com saida real"
+    //     (ver [EstadoDaSecao]), que e o que esta tela e: ela diz o que vai
+    //     aparecer ali e oferece a saida de quem nao tem conta.
+    DestinoDeNavegacao(
+      rotulo: 'Mural',
+      // A metade de tras do nome acessivel. **Nunca vazia**, e aqui ela carrega
+      // o assunto inteiro: `Mural` e palavra de LUGAR e nao diz o que ha
+      // dentro, do mesmo jeito que `AuAu` nao diz "mensagem".
+      //
+      // **Ela diz `conexoes`, e nao `amigos` nem `quem voce segue`.** O
+      // produto tem UMA relacao, `user_connections`, simetrica e com aceite;
+      // "seguir" assimetrico nao existe nesta arvore e prometer a palavra
+      // seria prometer o objeto. Ele usou as duas palavras no mesmo dia
+      // (*"os usuarios que ele segue e sao amigos"*) e a pergunta esta na
+      // secao 8 do desenho, aberta.
+      reforcoAcessivel: 'publicações das suas conexões',
+      // **VAZIO**, como nas outras: o cliente removeu as frases de apoio do
+      // corpo das paginas, nominalmente, em 18/10/2026. Uma secao nova nao
+      // repoe o que ele acabou de mandar tirar.
+      reforcoDaPagina: '',
+      icone: Icons.dynamic_feed_outlined,
+      iconeSelecionado: Icons.dynamic_feed,
+      rota: Rotas.mural,
+      estado: EstadoDaSecao.casca,
+      campoSemantico: CampoSemantico.publicacao,
     ),
     DestinoDeNavegacao(
       rotulo: 'Loja',
@@ -602,79 +680,54 @@ class _CascaComAbasState extends State<CascaComAbas> {
     // a barra afirmando uma secao em que a pessoa nao esta, que e pior que
     // nenhuma acesa. Quem mostra onde ela esta e o avatar da barra de topo.
     final selecionado = ramos.indexOf(navegacao.currentIndex);
-    // A SECAO ATUAL, e o que ela tem de submenu.
-    //
-    // Sai de `navegacao.currentIndex`, que e o indice em `destinos` -- e nao
-    // de `selecionado`, que e a posicao na barra e some quando o build de
-    // entrega esconde uma secao. A gaveta mostra o submenu DESTA secao, e a
-    // barra de topo dela so desenha o gatilho quando ha submenu: e a mesma
-    // conta nos dois lugares, feita uma vez aqui.
-    // A rota da secao atual sai da lista de RAMOS, nao de `destinos`:
-    // `currentIndex` e indice de ramo, e o registro passou a ter uma entrada
-    // que nao e ramo. Sem esta troca, estar no `Perfil` (ramo 4) leria a
-    // entrada de mensagens e a gaveta mostraria o submenu da secao errada.
-    final rotaAtual = ramosDoRegistro[navegacao.currentIndex].rota;
-    // **A GAVETA EXISTE EM TODA SECAO, inclusive nas que nao tem submenu.**
-    //
-    // Pedido do cliente, literal (19/10): *"padronize todas as telas, tornando
-    // o menu esquerdo fixo para manter o padrao, por mais que nao exista um
-    // sub-menu ainda, mas irei evoluir e acrescentar alguns itens"*. Isto
-    // REVERTE a regra que `temSubDestinos` impunha: `Rede` e `Loja` nao tinham
-    // gaveta nem hamburguer porque nao tem nenhum sub-destino construido.
-    //
-    // O caso vazio nao foi resolvido com uma frase dizendo que nao ha submenu
-    // -- isso seria a "pagina com tanto texto, tanta explicacao" que ele
-    // reprovou em 23/09. Foi resolvido com CONTEUDO: a gaveta mostra os
-    // sub-destinos da secao, quando ha, mais o grupo de destinos GLOBAIS, que
-    // toda secao tem. `Rede` e `Loja` abrem com o grupo global e nada mais, e
-    // nenhuma gaveta deste app abre vazia. Ver `GavetaDeSecoes`.
-    const temSubDestinos = true;
-
     return Scaffold(
       key: _casca,
-      // A GAVETA (pedido do cliente, duas vezes).
+      // **A GAVETA FOI OCULTADA EM 19/10/2026, e quem decidiu foi ele.**
       //
-      // **Ela mora AQUI, no mesmo `Scaffold` da barra de baixo**, e nao na
-      // `TelaDeAba` de dentro. Nao e arrumacao: a cortina modal da gaveta
-      // bloqueia a semantica dos IRMAOS dela, e a barra de baixo so e irma da
-      // gaveta neste `Scaffold`. Com a gaveta montada na tela de dentro, os
-      // cinco destinos continuavam tocaveis pelo leitor de tela com a gaveta
-      // aberta -- medido, e e a armadilha classica de gaveta.
+      // Literal: *"vamos ocultar o menu por enquanto, pois nao esta sendo
+      // utilizado para nada. colocar o icone do usuario no lugar do menu"*.
       //
-      // Efeito colateral desejado: `Adoções` e as outras telas empilhadas no
-      // navegador raiz cobrem a casca e portanto nao tem gaveta nenhuma.
+      // **Isto REVERTE o pedido dele de 17/10**, que era o oposto exato
+      // (*"padronize todas as telas, tornando o menu esquerdo fixo para
+      // manter o padrao, por mais que nao exista um sub-menu ainda, mas irei
+      // evoluir e acrescentar alguns itens"*) e foi o que fez `temSubDestinos`
+      // valer `true` incondicionalmente. Reversao DELE, do dia seguinte, e
+      // nao descuido de quem apagou estas linhas.
       //
-      // **A gaveta e a da secao ATUAL, e ela nao existe quando a secao nao tem
-      // sub-destino construido** (`Rede` e `Loja`, hoje). Gaveta montada e
-      // vazia seria uma cortina que escurece a tela para nao oferecer nada.
-      drawer: GavetaDeSecoes(rotaDaSecao: rotaAtual),
-      // **O GESTO DE VOLTAR.** O padrao do Flutter e `true`, e com ele a
-      // borda esquerda passaria a abrir a gaveta. No iOS a borda esquerda ja
-      // E o voltar deste app; no Android o voltar por gesto sai de QUALQUER
-      // uma das duas bordas. Uma gaveta que abrisse por arrasto brigaria com
-      // o gesto em toda tela de secao. Ela abre so pelo botao da barra de
-      // topo.
-      drawerEnableOpenDragGesture: false,
-      body: ControleDaGaveta(
-        abrir: () => _casca.currentState?.openDrawer(),
-        temSubDestinos: temSubDestinos,
+      // **NAO HA `drawer:` NESTE `Scaffold`, e e por isso que nao ha gaveta em
+      // tela nenhuma.** `Scaffold` sem `drawer` nao tem `openDrawer`, nao
+      // responde a arrasto de borda e nao desenha hamburguer automatico: a
+      // ausencia e estrutural e nao depende de ninguem lembrar de esconder um
+      // botao. Com ela, `drawerEnableOpenDragGesture` tambem deixou de ter o
+      // que desligar.
+      //
+      // **A GAVETA FOI OCULTADA E NAO APAGADA**, e a distincao e dele (*"por
+      // enquanto"*): `GavetaDeSecoes`, `BotaoDaGaveta`, `ControleDaGaveta` e o
+      // inventario de 27.5 (`RegistroDeSubDestinos`) continuam no repositorio,
+      // intactos. Reinstalar e devolver o `drawer:` aqui e o `leading` em
+      // `TelaDeAba` -- duas linhas, e nenhum conteudo a reescrever.
+      //
+      // **OS SETE ITENS VIVOS DELA NAO FICARAM SEM CASA.** A tabela de para
+      // onde cada um foi, e o achado de que DOIS deles tinham a gaveta como
+      // unica porta, estao em `TelaDeAba`, no `leading` da barra de topo. O
+      // portao e `test/telas/gaveta_oculta_e_barra_nova_test.dart`, um caso
+      // por item.
+      body: Column(
         // O AVISO QUE CHEGOU, ACIMA DO CONTEUDO.
         //
-        // **Ele mora aqui e nao numa tela**, e a razao e a mesma da gaveta: o
-        // push chega em qualquer momento, e a pessoa pode estar em qualquer
-        // uma das cinco secoes. Um aviso preso a uma tela cobre a tela, e o
-        // problema nao e da tela.
+        // **Ele mora aqui e nao numa tela**, e a razao e a mesma que a gaveta
+        // tinha: o push chega em qualquer momento, e a pessoa pode estar em
+        // qualquer uma das cinco secoes. Um aviso preso a uma tela cobre a
+        // tela, e o problema nao e da tela.
         //
         // **Com o app ABERTO o sistema operacional nao desenha nada**, mesmo
         // com bloco `notification` na mensagem. Sem esta faixa, quem esta com
         // o app na mao e a unica pessoa que nao ve o alerta -- o oposto do
         // esperado, e o motivo de testar so com o app aberto enganar.
-        child: Column(
-          children: <Widget>[
-            const AvisoQueChegou(),
-            Expanded(child: navegacao),
-          ],
-        ),
+        children: <Widget>[
+          const AvisoQueChegou(),
+          Expanded(child: navegacao),
+        ],
       ),
       bottomNavigationBar: DecoratedBox(
         // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
@@ -957,22 +1010,22 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
     final filhos = widget.filhos;
     final tituloEmMarca = widget.tituloEmMarca;
     final raizDeSecao = widget.raizDeSecao;
-    // O gatilho so existe onde HA gaveta, e a gaveta mora na casca.
+    // **`comGaveta` SAIU em 19/10/2026 junto com o hamburguer.**
     //
-    // `raizDeSecao` sozinho nao basta: `rotas.dart` usa `AbaPerfil()` como
-    // tela de escape de cinco rotas alcancadas sem o `extra` que esperavam
+    // Ele existia para o gatilho da gaveta nao nascer onde nao havia gaveta
+    // para abrir -- `raizDeSecao` sozinho nao bastava, porque `rotas.dart` usa
+    // `AbaPerfil()` como tela de escape de quatro rotas IRMAS da casca
     // (`casoAberto`, `marcarPerdido`, `marcarPerdidoAlcance`,
-    // `escolherPetPerdido`), e essas rotas sao IRMAS da casca. Ali a raiz de
-    // secao existe sem barra de baixo e sem gaveta, e desenhar o hamburguer
-    // seria um controle sem nada para abrir -- o criterio 2 da BICHUS-62
-    // quebrado pelo caminho menos exercitado a mao. Medido: tres casos de
-    // `marcar_como_perdido_test.dart` reprovaram assim.
-    // E a segunda metade: `temSubDestinos`. Sem ela, `Rede` e `Loja`
-    // desenhariam um hamburguer que abre uma gaveta vazia -- e a casca nem
-    // monta gaveta nessas secoes, entao o toque escureceria a tela para nada.
-    final comGaveta =
-        raizDeSecao &&
-        (ControleDaGaveta.maybeOf(context)?.temSubDestinos ?? false);
+    // `escolherPetPerdido`), e ali a raiz de secao existe sem barra de baixo e
+    // sem gaveta. Com a gaveta oculta nao ha gatilho, e a conta deixou de ter
+    // objeto.
+    //
+    // **E a foto NAO precisa da mesma conta, e isso foi conferido.** O
+    // `leading` novo e um `IconButton` que faz `go(Rotas.perfil)`: a rota
+    // existe no roteador raiz e o `go` funciona das telas irmas da casca
+    // tambem -- a foto ja era desenhada nelas, por `actions`, com o mesmo
+    // toque. Ela mudou de lado e nao de condicao, e nenhum caso de
+    // `marcar_como_perdido_test.dart` depende disso.
 
     // O CONTADOR DO SINO, lido do escopo e OUVIDO logo abaixo.
     //
@@ -1170,78 +1223,149 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
               // os 160,00 e o deficit: ele reprova se um controle voltar para a
               // barra e reprova se `Perto` passar a pedir mais.
               titleSpacing: 0,
-              // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
-              leading: comGaveta ? const BotaoDaGaveta() : null,
-              leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
-              // O LADO DIREITO: o SINO e, depois dele, a foto. **Dois
-              // controles, e so dois.**
+              // **A FOTO DA PESSOA VAI NO SLOT DA ESQUERDA, no lugar do
+              // hamburguer (decisao do cliente, 19/10/2026).**
               //
-              // A FOTO DA PESSOA FECHA O LADO DIREITO, em toda tela de secao.
+              // Literal dele: *"vamos ocultar o menu por enquanto, pois nao
+              // esta sendo utilizado para nada. colocar o icone do usuario no
+              // lugar do menu, do lado esquerdo da pagina e o icone de
+              // notificacao vai ficar na barra principal do lado direito de
+              // todas as paginas"*.
               //
-              // Ela e a ULTIMA, e a ordem tem razao: ela e o controle mais
-              // estavel da barra -- esta em todas as telas, sempre no mesmo
-              // lugar --, e os dois que variam por tela (`criar` da secao,
-              // `Filtros` da lista) ficam antes dela. Controle que muda de tela
-              // para tela nao deve empurrar o que nao muda.
+              // **Isto REVERTE o pedido dele de 17/10** (*"padronize todas as
+              // telas, tornando o menu esquerdo fixo para manter o padrao, por
+              // mais que nao exista um sub-menu ainda, mas irei evoluir e
+              // acrescentar alguns itens"*), que foi o que instalou o
+              // hamburguer em TODA raiz de secao. E reversao DELE, do dia
+              // seguinte, e nao descuido de quem mexe nesta linha. A gaveta foi
+              // **OCULTADA e nao apagada**: `GavetaDeSecoes` e o inventario de
+              // 27.5 continuam no repositorio, e o que saiu foi o `drawer:` da
+              // casca e este gatilho.
               //
-              // `actions` **nunca e mais nulo**: o avatar esta sempre presente,
-              // e era o `null` que fazia o portao da gaveta afirmar que
-              // `Perfil` e `Pets` nao tinham acao nenhuma a direita.
+              // **OS SETE ITENS VIVOS DA GAVETA NAO FICARAM SEM CASA**, e isso
+              // foi MEDIDO item por item antes de ocultar o menu -- a medicao e
+              // o grupo `os sete itens vivos continuam alcancaveis` de
+              // `test/telas/gaveta_oculta_e_barra_nova_test.dart`, um caso por
+              // item, com o caminho nomeado:
+              //
+              //   | item                     | caminho de hoje                |
+              //   |--------------------------|--------------------------------|
+              //   | `Escanear uma tag`       | acao flutuante em `Pets`       |
+              //   | `Registrar achado avulso`| acao flutuante em `Pets`       |
+              //   | `Cadastrar pet`          | acao flutuante em `Pets`       |
+              //   | `Meus dados`             | foto -> `Perfil` (item)        |
+              //   | `Sair da conta`          | foto -> `Perfil` (item)        |
+              //   | `Pedidos de conexao`     | foto -> `Perfil` (item NOVO)   |
+              //   | `Pessoas bloqueadas`     | foto -> `Perfil` (item NOVO)   |
+              //
+              // **Os dois ultimos tiveram de ser CONSTRUIDOS, e o achado e
+              // este:** `Pedidos de conexao` e `Pessoas bloqueadas` tinham a
+              // gaveta como UNICA porta em `lib/` -- medido por busca das duas
+              // rotas, que aparecem so em `gaveta_de_secoes.dart`, em
+              // `rotas.dart` e nas proprias telas. Ocultar o menu por cima
+              // delas teria deixado duas telas construidas inalcancaveis, em
+              // silencio. Elas entraram no menu da conta de `AbaPerfil`.
+              //
+              // **O ORCAMENTO DO TITULO MELHOROU, e esta medido no portao.** O
+              // hamburguer tinha piso de 64 dp (11.23.1) e a foto tem 48 (o
+              // piso do SC 2.5.8, com a excecao explicada em [AvatarDaConta]);
+              // com a foto saindo de `actions` e entrando aqui, o lado direito
+              // perdeu 48 dp. Em 320 dp a 200%, logado:
+              //
+              //   antes:  hamburguer 64 | titulo | sino 48 + foto 48  -> 160,00
+              //   agora:  foto 48       | titulo | sino 48            -> 224,00
+              //
+              // **E com 224,00 a excecao de corte de cinco letras ACABOU.** Ela
+              // era de `Perto` (172,90 dp pedidos contra 160,00), e `Perto`
+              // deixou de ser secao no mesmo dia; `Mural`, que e o novo rotulo
+              // de cinco letras, pede os mesmos 172,90 e agora CABE, com 51,10
+              // dp de folga. Nenhum dos cinco titulos corta mais. Os numeros
+              // sao medidos em `gaveta_oculta_e_barra_nova_test.dart`, pela
+              // constricao que o leiaute entrega ao titulo -- e nao por esta
+              // conta.
+              //
+              // **So na RAIZ DE SECAO.** Numa tela empilhada o slot da esquerda
+              // e o `Voltar` (design system 23.4), e por a foto ali apagaria a
+              // saida -- exatamente a razao pela qual o hamburguer tambem nao
+              // ficava nelas. A composicao `Saida + titulo + foto a esquerda`
+              // **nao existe neste app**, e e esta linha que garante isso por
+              // construcao.
+              leading: raizDeSecao
+                  ? AvatarDaConta(
+                      inicial: _inicialDaSessao(context),
+                      // `go`, e nao `push`: a tela da conta continua sendo RAMO
+                      // da casca -- ela so perdeu o slot da barra de baixo.
+                      // Trocar de ramo e o que mantem a barra de baixo visivel
+                      // dentro dela (o arranjo do Instagram, que o cliente deu
+                      // como referencia) e o que mantem `Entrar` e `Criar
+                      // conta` devolvendo a ABA de onde a pessoa veio.
+                      //
+                      // Medido: com `push` numa rota irma, voltar de `Entrar`
+                      // caia numa tela que cobre a casca e a barra de baixo nao
+                      // existia na arvore -- 107 casos da suite reprovaram.
+                      aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
+                    )
+                  : null,
+              leadingWidth: raizDeSecao ? AvatarDaConta.alvo : null,
+              // **O LADO DIREITO: O SINO, E SO O SINO (19/10/2026).**
+              //
+              // A foto saiu daqui e foi para o slot da ESQUERDA, no lugar do
+              // hamburguer, por pedido dele -- a conta inteira esta em
+              // `leading`, acima. O sino fica, e no lado em que ele pediu:
+              // *"o icone de notificacao vai ficar na barra principal do lado
+              // direito de todas as paginas"*.
+              //
+              // **UM controle, e so um.** `actions` deixou de ter dois itens, e
+              // isso e o que devolveu 48,00 dp ao titulo. O portao de orcamento
+              // mede a constricao que o leiaute entrega ao titulo, e nao a
+              // quantidade de `IconButton`: foi assim que um portao cego antigo
+              // aprovou 160,00 enquanto o titulo cortava de verdade.
+              //
+              // **O `criar` NAO ESTA AQUI, e nao volta** (19/10: *"O botao
+              // criar sai da barra"*). A porta de criar e o
+              // `floatingActionButton`
+              // deste mesmo `Scaffold`, logo abaixo.
+              //
+              // **O `Filtros` tambem nao esta aqui** (19/10: *"qualquer coisa,
+              // pense em outro lugar para colocar o filtro da pagina"*): ele
+              // voltou para o topo do CORPO, e quem o desenha e
+              // `GatilhoDeRecorteNoCorpo` -- a DIREITA do campo de busca
+              // desde a reversao do mesmo dia. `BarraDeListagem` continua
+              // publicando no slot -- publicando NULO --, porque e essa
+              // publicacao que limpa a
+              // barra quando a lista sai da tela.
+              //
+              // **O SINO E INCONDICIONAL na barra, e CONDICIONAL na tela.** Ele
+              // e montado em toda tela de secao; quem decide se aparece e ele
+              // proprio, pela sessao (`SizedBox.shrink` sem conta). A diferenca
+              // importa para o portao: `actions` tem sempre UM item, e o que
+              // varia e o que ele pinta.
+              //
+              // **`naoLidas` VEM DO CONTADOR DO ESCOPO** (19/10/2026). Ate
+              // hoje ia nulo por falta de fonte: a rota
+              // (`GET /v1/me/notifications/count`) e a camada
+              // (`NotificacoesApi.contar()`) existiam e **nenhuma linha de
+              // `lib/` as chamava**. Agora chamam -- `ContadorDeAvisos`, um no
+              // app inteiro, com a politica de atualizacao escrita nele.
+              //
+              // **O numero NAO e buscado aqui, e nao pode ser.** Os ramos
+              // visitados da casca ficam montados (`IndexedStack`), entao uma
+              // busca nesta linha sairia uma vez por secao visitada: um pedido
+              // por secao para desenhar um numero, com as respostas chegando
+              // fora de ordem para o mesmo circulo. Esta linha so LE.
+              //
+              // **O `const` SAIU da lista, e nao por descuido:** `naoLidas` e
+              // um valor de execucao agora, e `const` nao sobrevive a isso. A
+              // lista continua tendo UM item, que e o que o portao mede.
+              //
+              // **Nulo continua chegando aqui, e continua significando a mesma
+              // coisa**: antes da primeira resposta, e depois de uma busca que
+              // falhou sem valor anterior, o contador publica nulo -- e o sino
+              // nao pinta distintivo. Zero chega apenas quando o SERVIDOR disse
+              // zero (ou confirmou `seen`), nunca por falha de rede. Ver
+              // `ContadorDeAvisos` e `SinoDeNotificacoes.naoLidas`.
               actions: <Widget>[
-                // **O `criar` SAIU DAQUI em 19/10, e o SINO ENTROU no lugar
-                // dele.** Decisao dele, com a conta na mesa: eu lhe mostrei que
-                // com quatro controles o titulo nao cabia e perguntei o que
-                // sairia. Palavras dele: *"O botao criar sai da barra"*. A
-                // porta de criar e agora o `floatingActionButton` deste mesmo
-                // `Scaffold`, logo abaixo.
-                //
-                // **O `Filtros` tambem nao esta aqui** (19/10: *"qualquer
-                // coisa, pense em outro lugar para colocar o filtro da
-                // pagina"*): ele voltou para o topo do CORPO, e quem o desenha
-                // e `GatilhoDeRecorteNoCorpo`. `BarraDeListagem` continua
-                // publicando no slot -- publicando NULO --, porque e essa
-                // publicacao que limpa a barra quando a lista sai da tela.
-                //
-                // **O SINO E INCONDICIONAL na barra, e CONDICIONAL na tela.**
-                // Ele e montado em toda tela de secao; quem decide se aparece e
-                // ele proprio, pela sessao (`SizedBox.shrink` sem conta). A
-                // diferenca importa para o portao: `actions` tem sempre dois
-                // itens, e o que varia e o que o segundo pinta.
-                //
-                // **`naoLidas` VEM DO CONTADOR DO ESCOPO** (19/10/2026). Ate
-                // hoje ia nulo por falta de fonte: a rota
-                // (`GET /v1/me/notifications/count`) e a camada
-                // (`NotificacoesApi.contar()`) existiam e **nenhuma linha de
-                // `lib/` as chamava**. Agora chamam -- `ContadorDeAvisos`, um
-                // no app inteiro, com a politica de atualizacao escrita nele.
-                //
-                // **O numero NAO e buscado aqui, e nao pode ser.** Os ramos
-                // visitados da casca ficam montados (`IndexedStack`), entao uma
-                // busca nesta linha sairia uma vez por secao visitada: cinco
-                // pedidos para desenhar um numero, com cinco respostas chegando
-                // fora de ordem para o mesmo circulo. Esta linha so LE.
-                //
-                // **Nulo continua chegando aqui, e continua significando a
-                // mesma coisa**: antes da primeira resposta, e depois de uma
-                // busca que falhou sem valor anterior, o contador publica nulo
-                // -- e o sino nao pinta distintivo. Zero chega apenas quando o
-                // SERVIDOR disse zero (ou confirmou `seen`), nunca por falha de
-                // rede. Ver `ContadorDeAvisos` e `SinoDeNotificacoes.naoLidas`.
                 SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas),
-                AvatarDaConta(
-                  inicial: _inicialDaSessao(context),
-                  // `go`, e nao `push`: a tela da conta continua sendo RAMO da
-                  // casca -- ela so perdeu o slot da barra. Trocar de ramo e o
-                  // que mantem a barra de baixo visivel dentro dela (o arranjo
-                  // do Instagram, que o cliente deu como referencia) e o que
-                  // mantem `Entrar` e `Criar conta` devolvendo a ABA de onde a
-                  // pessoa veio.
-                  //
-                  // Medido: com `push` numa rota irma, voltar de `Entrar` caia
-                  // numa tela que cobre a casca e a barra de baixo nao existia
-                  // na arvore -- 107 casos da suite reprovaram por isso.
-                  aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
-                ),
               ],
             ),
             body: corpo,
@@ -1300,7 +1424,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
 /// O motivo de a busca nao morar aqui e o arranjo da casca: os ramos
 /// visitados ficam MONTADOS (`IndexedStack`), entao um sino que chamasse
 /// `NotificacoesApi.contar()` por conta propria dispararia uma chamada por
-/// secao visitada -- cinco pedidos para desenhar um numero, com cinco
+/// secao visitada -- um pedido por secao para desenhar um numero, com as
 /// respostas chegando fora de ordem para o mesmo circulo. E um objeto so e o
 /// que permite a CAIXA de avisos derrubar o numero quando abre: com uma
 /// contagem por sino, ela nao teria a quem falar.
@@ -1456,14 +1580,23 @@ String? _inicialDaSessao(BuildContext context) {
 /// Mostrar a PROPRIA foto para si mesmo e o caso permitido: a imagem e visivel
 /// so ao dono, e o dono e exatamente quem esta olhando esta barra.
 ///
+/// ## Ela MUDOU DE LADO em 19/10/2026, e esta no slot do hamburguer
+///
+/// Pedido dele, no mesmo dia em que a pos na barra: *"colocar o icone do
+/// usuario no lugar do menu, do lado esquerdo da pagina"*. Ela era a ULTIMA de
+/// `actions` e passou a ser o `leading` de toda raiz de secao. O toque, o nome
+/// acessivel e o desenho nao mudaram; mudaram o lado e o lado da margem.
+///
 /// ## O alvo e 48 dp, e nao os 64 dos outros controles da barra
 ///
-/// O 11.23.1 pede 64 x 64 nos controles de canto, e aqui ha uma conta a
-/// respeitar: em `Perto` o lado direito ja carrega `criar` e `Filtros`. Com os
-/// tres a 64 dp mais o hamburguer de 64 a esquerda, sobrariam 64,0 dp de
-/// titulo em 320 dp. Com o avatar a 48 sobram 80,0 dp, e o maior titulo que
-/// chega a esse arranjo e `Perto` (39,95 dp em 1,3x). 48 dp continua acima do
-/// piso do M3 e do SC 2.5.8, e e o piso que o briefing desta mudanca fixou.
+/// O 11.23.1 pede 64 x 64 nos controles de canto, e a excecao foi fixada pelo
+/// briefing que trouxe esta foto: 48 dp, que continua acima do piso do M3 e do
+/// SC 2.5.8. **No slot do `leading` ela paga melhor do que o hamburguer
+/// pagava**, e isso esta medido no portao: o hamburguer tinha piso de 64 dp
+/// (11.23.1 o trata como controle de canto de barra), entao trocar um pelo
+/// outro devolveu 16,00 dp ao titulo -- e tirar a foto de `actions` devolveu
+/// outros 48,00. O orcamento foi de 160,00 para **224,00 dp** em 320 dp a
+/// 200%, e com ele nenhum dos cinco titulos corta mais.
 class AvatarDaConta extends StatelessWidget {
   const AvatarDaConta({required this.aoTocar, super.key, this.inicial});
 
@@ -1500,35 +1633,35 @@ class AvatarDaConta extends StatelessWidget {
       // `tooltip` vira o nome acessivel (11.23.3), como no gatilho da gaveta.
       tooltip: rotuloAcessivel,
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
-      // A MARGEM DA DIREITA, DENTRO DO PROPRIO ALVO. **Zero dp de custo para
+      // A MARGEM DA ESQUERDA, DENTRO DO PROPRIO ALVO. **Zero dp de custo para
       // o titulo**, e e por isso que ela e assimetrica em vez de um `Padding`
       // por fora.
       //
-      // Medido em 320 dp a 200%, logado, antes: o alvo de 48 dp ia de 272 a
-      // 320 -- `margemDireita` de **0,00 dp** -- e o circulo de 32 dp ficava
-      // centrado nele, a **8,00 dp** da borda da tela. Os vizinhos da mesma
-      // barra tem 20,00 dp de ar em volta do glifo (hamburguer e `criar` sao
-      // alvos de 64 com glifo de 24 centrado), e `layout.margem-celular` do
-      // design system fixa a margem lateral da tela em **16 dp**, que e a
-      // mesma do corpo (`EdgeInsets.all(e4)`). A foto era o unico controle da
-      // tela encostado na borda, e foi isso que o cliente leu como desalinho.
+      // **ELA TROCOU DE LADO EM 19/10/2026, com a foto.** Ela nasceu `right:`
+      // porque a foto fechava o lado DIREITO da barra; o cliente a mandou para
+      // o slot da esquerda, no lugar do hamburguer, e a margem foi com ela. A
+      // regra nao mudou -- o circulo fica a `layout.margem-celular` (16 dp) da
+      // borda da TELA, que e a mesma margem do corpo (`EdgeInsets.all(e4)`) --,
+      // mudou qual borda e essa. Uma `margemCelular` do lado direito aqui
+      // poria 16 dp de ar ENTRE a foto e o titulo e deixaria o circulo
+      // encostado na borda esquerda: o desalinho que o cliente leu, espelhado.
       //
-      // **O `Padding` por fora foi medido e recusado**: com
-      // `EdgeInsets.only(right: 8)` o circulo chega aos 16,00 dp, o alvo
-      // inteiro anda para 264..312 e o lado direito passa a custar 56 dp --
-      // o titulo de `Rede` e `Perto` cai de 144,00 para 136,00 dp e **`Rede`
-      // (138,32 dp a 200%) passa a sair com reticencia**. Pagar a margem com
-      // o titulo e desfazer o `titleSpacing: 0` de 19/10 pelo outro lado.
+      // **O `Padding` por fora foi medido e recusado** quando ela era do lado
+      // direito, e a recusa vale igual deste lado: `Padding` por fora engorda
+      // o `leading`, e `leadingWidth` nao o acompanha -- ou o alvo passa a
+      // custar 64 dp de orcamento de titulo, ou o circulo sai do alvo. Pagar a
+      // margem com o titulo e desfazer o `titleSpacing: 0` pelo outro lado.
       //
-      // Aqui o alvo continua 272..320 -- 48 x 48, que e o piso do M3 e do
-      // SC 2.5.8 e o que o briefing desta foto fixou (o 11.23.1 pede 64 em
-      // controle de canto, e a excecao esta explicada no cabecalho desta
-      // classe) -- e o circulo anda para 272..304: 16,00 dp de margem visual,
-      // orcamento de titulo intacto. O alvo deixa de ser
-      // concentrico com o glifo -- os 16 dp a mais ficam ENTRE o circulo e a
-      // borda da tela, onde nao ha outro controle para roubar o toque.
+      // Medido em 320 dp a 200%, logado, no arranjo de hoje: o alvo vai de
+      // 0..48 -- 48 x 48, que e o piso do M3 e do SC 2.5.8 e o que o briefing
+      // desta foto fixou (o 11.23.1 pede 64 em controle de canto, e a excecao
+      // esta explicada no cabecalho desta classe) -- e o circulo de 32 dp fica
+      // em 16..48: **16,00 dp de margem visual**, orcamento de titulo intacto.
+      // O alvo deixa de ser concentrico com o glifo, e os 16 dp a mais ficam
+      // ENTRE a borda da tela e o circulo, onde nao ha outro controle para
+      // roubar o toque.
       padding: const EdgeInsets.only(
-        right: BichuLayout.margemCelular,
+        left: BichuLayout.margemCelular,
         top: BichuEspaco.e2,
         bottom: BichuEspaco.e2,
       ),
