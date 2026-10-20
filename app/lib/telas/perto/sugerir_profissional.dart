@@ -59,6 +59,25 @@ import '../../widgets/saida_da_tela.dart';
 /// geocodificacao neste caminho. Cidade, estado e bairro sao rotulo de texto. O
 /// ponto e trabalho do painel, com mapa de toque.
 ///
+/// ## O e-mail nao confirmado: a recusa vem ANTES do formulario
+///
+/// A porta desta tela ja esta escondida para quem nao esta cadastrado E
+/// validado (`podeCriarNaComunidade`, em `telas/abas.dart`, decisao do
+/// cliente de 18/10/2026: *"caso ao contrario o botao nem aparece"*). Mas
+/// **esconder a porta nao fecha a rota**: `Rotas.sugerirProfissional` segue
+/// alcancavel por link profundo, e App Link e `F5` caem nela.
+///
+/// Quem chegava assim preenchia a tela inteira e era recusado no envio, pelo
+/// `409 contact-channel-unverified`. A tela de criar encontro nao fazia isso
+/// -- ela tem `_Impedimento.semEmailConfirmado` desde o primeiro dia --, e a
+/// assimetria era defeito e nao desenho: **as duas sao destino de acao de
+/// criar da comunidade, com a mesma regua no servidor**. Agora as duas dizem
+/// o motivo com a saida acima dos campos. Ver [TelaSugerirProfissional.semEmailConfirmado]
+/// para a regua e para por que a FRASE e diferente da de la.
+///
+/// O `409` continua tratado, como rede de seguranca para quem confirmou o
+/// e-mail noutro aparelho com esta tela em pe.
+///
 /// ## O CEP: busca o endereco E vai no corpo, para quem revisa
 ///
 /// O cliente pediu o campo em 18/10/2026 ("no formulario de indicacao do
@@ -112,6 +131,30 @@ class TelaSugerirProfissional extends StatefulWidget {
 
   static const String entreParaIndicar = 'Entre para indicar.';
 
+  /// **O bloqueio que esta tela passou a saber ANTES do formulario.**
+  ///
+  /// A regua e `usuario.emailVerificado`, que sai de `Me.email_verified` e a
+  /// sessao ja tem -- a mesma de criar encontro, e a mesma do servidor nas
+  /// duas rotas de criar da comunidade: `409 contact-channel-unverified` com
+  /// `next_action: verify_email`, medido em homologacao em 19/10/2026. O
+  /// predicado de la e `email_verified_at IS NOT NULL OR phone_verified_at IS
+  /// NOT NULL`, mas na pratica e o e-mail: nao existe operacao de verificacao
+  /// de telefone no contrato.
+  ///
+  /// **Por que a frase e OUTRA que a de criar encontro.** La o motivo e a
+  /// publicacao -- *"o evento vai aparecer para toda a comunidade com o seu
+  /// nome"* --, e aqui nada publica: a indicacao nasce pendente de revisao. O
+  /// que pesa nesta tela e o TERCEIRO, e quem confere precisa saber de quem
+  /// veio a indicacao de um estabelecimento de verdade. Copiar a frase de la
+  /// prometeria uma publicacao que esta tela acabou de passar tres paragrafos
+  /// dizendo que nao acontece.
+  static const String semEmailConfirmado =
+      'Confirme seu e-mail antes de indicar. A indicação fala de um '
+      'estabelecimento de verdade, e quem confere precisa saber de quem ela '
+      'veio.';
+
+  static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
+
   static const String recebido =
       'Indicação recebida. Ela vai para conferência: nada aparece no Perto até '
       'alguém olhar.';
@@ -143,9 +186,13 @@ class TelaSugerirProfissional extends StatefulWidget {
 
 enum _Fase { preenchendo, enviando, recebida }
 
-/// O primeiro impedimento, ou nulo.
+/// O primeiro impedimento, ou nulo. **A ordem importa**: o que a pessoa nao
+/// resolve nesta tela vem antes do que ela resolve digitando. E-mail nao
+/// confirmado vem antes dos campos de proposito -- na ordem inversa a tela
+/// mandaria preencher o formulario inteiro para o servidor recusar no envio.
 enum _Impedimento {
   semConta(TelaSugerirProfissional.entreParaIndicar),
+  semEmailConfirmado(TelaSugerirProfissional.semEmailConfirmado),
   semNome('Diga o nome do lugar ou da pessoa.'),
   semAtividade('Escolha o que eles fazem.'),
   semCidade('Diga a cidade.'),
@@ -297,9 +344,14 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   }
 
   _Impedimento? get _impedimento {
-    if (Escopo.of(context).sessao.usuario == null) {
+    final usuario = Escopo.of(context).sessao.usuario;
+    if (usuario == null) {
       return _Impedimento.semConta;
     }
+    // **Aqui, acima dos campos, e nao no envio.** Sem esta linha quem chega
+    // sem o e-mail confirmado preenche nome, atividade, cidade, UF e contato
+    // publico e so descobre no toque do botao, pelo `409` do servidor.
+    if (!usuario.emailVerificado) return _Impedimento.semEmailConfirmado;
     if (_nome.text.trim().length < 2) return _Impedimento.semNome;
     if (_atividade == null) return _Impedimento.semAtividade;
     if (_cidade.text.trim().length < 2) return _Impedimento.semCidade;
@@ -445,6 +497,23 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                     texto: TelaSugerirProfissional.entreParaIndicar,
                     rotuloDaAcao: 'Entrar',
                     aoTocarNaAcao: () => context.push(Rotas.entrar),
+                  ),
+                ],
+                // Mesmo desenho, e pelo mesmo motivo: o bloqueio que a tela
+                // sabe de antemao vem com a saida que o resolve, ACIMA dos
+                // campos -- os dois tornam o formulario inutil enquanto
+                // valem, e preencher nove campos para ser recusado no envio
+                // era o que esta faixa veio tirar.
+                if (impedimento == _Impedimento.semEmailConfirmado) ...<Widget>[
+                  const SizedBox(height: BichuEspaco.e4),
+                  FaixaDeAviso(
+                    texto: TelaSugerirProfissional.semEmailConfirmado,
+                    rotuloDaAcao:
+                        TelaSugerirProfissional.rotuloDeConfirmarEmail,
+                    aoTocarNaAcao: () => context.push(
+                      Rotas.verifiqueSeuEmail,
+                      extra: escopo.sessao.usuario?.email ?? '',
+                    ),
                   ),
                 ],
                 const SizedBox(height: BichuEspaco.e6),
@@ -630,8 +699,12 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
           ),
           bottomNavigationBar: BarraDeAcaoFixa(
             acoes: <Widget>[
-              // Nao repete o que a faixa acima ja disse com saida.
-              if (impedimento != null && impedimento != _Impedimento.semConta)
+              // Nao repete o que a faixa acima ja disse com saida: duas
+              // copias da mesma frase fazem o leitor de tela anunciar o
+              // bloqueio duas vezes.
+              if (impedimento != null &&
+                  impedimento != _Impedimento.semEmailConfirmado &&
+                  impedimento != _Impedimento.semConta)
                 _MotivoDoBloqueio(
                   texto: impedimento.texto,
                   cor: cores.textPrimary,
