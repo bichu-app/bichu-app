@@ -377,7 +377,10 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
 
     const token = tokenDoLink(bancada.mensagens[0]?.corpo ?? '');
     const gravado = bancada.repo.tokensGravados[0]?.tokenHash;
-    assert.equal(gravado, hashDeToken(token).toString('base64') as TokenHash);
+    // `deepEqual` e nao `equal`: `TokenHash` e `Buffer` desde 19/10, e `equal`
+    // compara dois `Buffer` por identidade -- passaria a reprovar sempre.
+    assert.deepEqual(gravado, hashDeToken(token) as TokenHash);
+    assert.equal(gravado?.length, 32, 'SHA-256 tem 32 bytes; 44 seria o texto base64 deles');
     assert.notEqual(gravado, token, 'o que se guarda é o resumo, nunca o valor');
   });
 

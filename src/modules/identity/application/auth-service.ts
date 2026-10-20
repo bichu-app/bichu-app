@@ -157,8 +157,23 @@ export interface Autenticado {
   readonly sid?: string | undefined;
 }
 
+/**
+ * O resumo do token, na forma em que ele é persistido: **32 bytes**.
+ *
+ * Era `.toString('base64')` aqui, e o adaptador desfazia a conversão com
+ * `Buffer.from(hash)` — utf8, porque sem segundo argumento é isso que
+ * `Buffer.from` faz com uma string. O que ia para a coluna `bytea` eram os 44
+ * bytes ASCII do texto base64. Os dois lados erravam do mesmo jeito, então o
+ * ida-e-volta pela aplicação funcionava e nenhum teste reprovava; o desvio só
+ * aparece olhando `octet_length` no banco. Ver o comentário de `TokenHash` em
+ * `src/shared/types/brands.ts`.
+ *
+ * Agora não há conversão: `hashDeToken` devolve os bytes do digest e eles
+ * atravessam até o `bytea` sem passar por texto. Este é o único lugar do módulo
+ * onde um `TokenHash` nasce.
+ */
 function comoTokenHash(valor: string): TokenHash {
-  return hashDeToken(valor).toString('base64') as TokenHash;
+  return hashDeToken(valor) as TokenHash;
 }
 
 /** Quanto vale cada token. Os números vêm das histórias, não daqui. */
