@@ -206,22 +206,39 @@ abstract class EscritaDoMural implements IntencaoDeFotoDaPublicacao {
   Future<void> apagar(String ref);
 }
 
+/// `#/components/schemas/MyPublicationImage/properties/status` do contrato.
+///
 /// O estado de processamento da foto. `processing` -> `ready` | `rejected`, e
 /// **nunca volta**.
-enum EstadoDaFotoDaPublicacao { processando, pronta, recusada }
+///
+/// **A ANCORA E O CODIGO DE FIO ENTRARAM NA MESCLA DO TERCEIRO LOTE DE
+/// 20/10/2026.** Este enum nasceu sem os dois e `verificar-conformidade-do-app`
+/// passou de UMA divergencia para DUAS -- a frente do Mural copiou a forma
+/// antiga do irmao `EstadoDaFoto` de `vitrine_api.dart`, que e justamente a
+/// que o portao ja acusava. A forma usada aqui e a MESMA que a sessao que
+/// conserta o irmao escolheu, para as duas nao divergirem: o codigo de fio mora
+/// no enum, e nao dentro do decodificador.
+enum EstadoDaFotoDaPublicacao {
+  processando('processing'),
+  pronta('ready'),
+  recusada('rejected');
+
+  const EstadoDaFotoDaPublicacao(this.codigo);
+
+  /// O codigo de fio, e a UNICA copia dele: `_estadoDe` le desta lista. O
+  /// portao de conformidade compara estes valores com o contrato, e so
+  /// consegue porque eles moram no enum, e nao dentro do decodificador.
+  final String codigo;
+}
 
 EstadoDaFotoDaPublicacao _estadoDe(Object? valor) {
-  switch (valor) {
-    case 'ready':
-      return EstadoDaFotoDaPublicacao.pronta;
-    case 'rejected':
-      return EstadoDaFotoDaPublicacao.recusada;
-    default:
-      // Qualquer outra coisa — inclusive um estado novo que o servidor passe a
-      // mandar — cai em `processando`. E o estado em que a tela nao promete
-      // imagem nenhuma, e portanto o unico seguro para o desconhecido.
-      return EstadoDaFotoDaPublicacao.processando;
+  for (final estado in EstadoDaFotoDaPublicacao.values) {
+    if (estado.codigo == valor) return estado;
   }
+  // Qualquer outra coisa — inclusive um estado novo que o servidor passe a
+  // mandar — cai em `processando`. E o estado em que a tela nao promete
+  // imagem nenhuma, e portanto o unico seguro para o desconhecido.
+  return EstadoDaFotoDaPublicacao.processando;
 }
 
 /// A imagem de uma publicacao na LINHA DO TEMPO. **Sem estado**: imagem que nao
