@@ -45,7 +45,7 @@
  * divergencia interna que fez o defeito parecer um detalhe de estilo. As tres
  * entram, porque o que se afirma e a classe da coluna e nao o caminho de uma.
  *
- * O ultimo caso mede a restricao que a `20261019000050` trouxe. Ela e o que
+ * O ultimo caso mede a restricao que a `20261020000008` trouxe. Ela e o que
  * responde pela frase que o cliente escreveu no relatorio -- "qualquer migracao
  * ou ferramenta que toque a coluna erra": o conserto no codigo vale para quem
  * passa por `comoTokenHash`, e o `CHECK` vale para qualquer escrita, inclusive

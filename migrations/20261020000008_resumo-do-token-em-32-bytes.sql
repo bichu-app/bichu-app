@@ -1,3 +1,21 @@
+-- ===========================================================================
+-- O CARIMBO MUDOU DE `20261019000050` PARA `20261020000008` EM 20/10/2026
+-- ===========================================================================
+-- Nao houve duas migracoes: e ESTA, renumerada na mescla do terceiro lote de
+-- 20/10/2026, e o numero novo foi atribuido pelo coordenador e nao escolhido
+-- por quem mesclou.
+--
+-- O motivo e o teto. O portao `verificar-carimbo-de-migracao` reprova migracao
+-- nova com carimbo ANTERIOR ao maior carimbo de `origin/development`, e a onda
+-- 1 deste lote subiu esse teto para `20261020000007`. O `20261019000050`
+-- passou a ficar abaixo dele, e a saida que o proprio portao imprime e
+-- renumerar para o teto mais um.
+--
+-- As referencias ao numero antigo dentro deste arquivo e em
+-- `tests/integration/resumo-do-token-tem-32-bytes.test.ts` foram trocadas na
+-- mesma passada, para quem ler o historico nao procurar uma migracao que nunca
+-- existiu.
+
 -- As colunas `token_hash` guardam os 32 BYTES do SHA-256, e o banco passa a
 -- cobrar isso.
 --
@@ -163,14 +181,14 @@ BEGIN
       'system',
       'token_hash_convertido_de_base64_para_bytes',
       'migration',
-      '20261019000050',
+      '20261020000008',
       jsonb_build_object(
         'verification_tokens', convertidas_verification,
         'reauth_tokens', convertidas_reauth,
         'refresh_tokens', convertidas_refresh,
         'causa', 'Buffer.from(hash) sem segundo argumento gravava os 44 bytes ASCII do texto base64 na coluna bytea',
         'medido_em', 'hml.bichu.app, commit 458cd005, 19/10/2026',
-        'migracao', '20261019000050_resumo-do-token-em-32-bytes'));
+        'migracao', '20261020000008_resumo-do-token-em-32-bytes'));
   END IF;
 END
 $$;
@@ -198,13 +216,13 @@ ALTER TABLE refresh_tokens
 -- A promessa sai do comentario de arquivo e vira `COMMENT ON COLUMN`: a mesma
 -- frase, agora onde se consulta e com o banco cobrando o que ela diz.
 COMMENT ON COLUMN verification_tokens.token_hash IS
-  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Ate 19/10/2026 esta coluna guardava os 44 bytes ASCII do base64, porque `Buffer.from(hash)` sem segundo argumento interpreta a string como utf8; a 20261019000050 converteu o que havia e trouxe `verification_tokens_token_hash_32_bytes`.';
+  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Ate 19/10/2026 esta coluna guardava os 44 bytes ASCII do base64, porque `Buffer.from(hash)` sem segundo argumento interpreta a string como utf8; a 20261020000008 converteu o que havia e trouxe `verification_tokens_token_hash_32_bytes`.';
 
 COMMENT ON COLUMN reauth_tokens.token_hash IS
-  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Mesmo caminho e mesmo conserto de `verification_tokens.token_hash` (20261019000050).';
+  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Mesmo caminho e mesmo conserto de `verification_tokens.token_hash` (20261020000008).';
 
 COMMENT ON COLUMN refresh_tokens.token_hash IS
-  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Esta coluna nunca divergiu -- o adaptador sempre usou `Buffer.from(hash, ''base64'')` aqui --, e ganhou `refresh_tokens_token_hash_32_bytes` na 20261019000050 porque e da mesma classe das duas que divergiram.';
+  'SHA-256 de 256 bits de CSPRNG (SEC-005): os 32 BYTES do resumo, nunca o texto base64 deles. Esta coluna nunca divergiu -- o adaptador sempre usou `Buffer.from(hash, ''base64'')` aqui --, e ganhou `refresh_tokens_token_hash_32_bytes` na 20261020000008 porque e da mesma classe das duas que divergiram.';
 
 -- Down Migration
 
