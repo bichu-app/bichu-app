@@ -72,6 +72,7 @@ import type {
   RecorteDosMeusPedidos,
   TransacaoDaComunidade,
 } from '../../ports/network-repository.js';
+import type { FamiliaDeSessao } from '../../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant } from '../../../../shared/types/brands.js';
 
 /** Os estados de publicacao que as leituras enxergam. Uma lista so. */
@@ -404,10 +405,43 @@ export function construtorDoLocal(db: DbExecutor, slug: string, chamador: string
     ]);
 }
 
-/** A regiao de referencia VALIDA da conta, como em `Perto`. */
-function regiaoDaConta(chamador: string, agora: Date) {
+/**
+ * A regiao de referencia VALIDA **deste aparelho** de quem chama, como em
+ * `Perto`.
+ *
+ * `session_family_id` no `WHERE` nao e zelo: desde a
+ * `20260928000008_localizacao-de-referencia-por-aparelho` a chave primaria da
+ * tabela e o par `(user_id, session_family_id)`, uma linha POR APARELHO. Sem a
+ * familia esta subconsulta escalar devolve duas linhas para quem entrou na
+ * conta em dois aparelhos, e o Postgres levanta `more than one row returned by
+ * a subquery used as an expression` -- 500 na rota inteira, porque a contagem e
+ * a pagina usam a mesma expressao. Com o par, o resultado e no maximo uma linha
+ * por construcao, e nao por um `LIMIT 1` que escolheria um dos dois lugares sem
+ * ninguem ter decidido qual.
+ *
+ * E tambem a regra da SEC-021, a mesma que `construtorDaLeitura` de `identity`
+ * aplica: um aparelho nao le o lugar que outro informou, e por isso nao mede
+ * distancia a partir dele.
+ */
+function regiaoDaConta(chamador: string, familia: FamiliaDeSessao, agora: Date) {
   return sql`(SELECT u.reference_point FROM user_reference_locations u
-               WHERE u.user_id = ${chamador}::uuid AND u.expires_at > ${agora}::timestamptz)`;
+               WHERE u.user_id = ${chamador}::uuid
+                 AND u.session_family_id = ${familia}::uuid
+                 AND u.expires_at > ${agora}::timestamptz)`;
+}
+
+/**
+ * A regiao que vale para esta chamada: a do aparelho, ou nenhuma.
+ *
+ * `null::geography` para o token sem `sid`: `ST_Distance` e `ST_DWithin`
+ * devolvem nulo e falso contra nulo, que e o mesmo comportamento de quem nunca
+ * informou onde estava. A conversao explicita existe porque `null` cru deixaria
+ * as duas funcoes ambiguas para o Postgres.
+ */
+function regiaoDoAparelho(chamador: string, familia: FamiliaDeSessao | undefined, agora: Date) {
+  return familia === undefined
+    ? sql`null::geography`
+    : regiaoDaConta(chamador, familia, agora);
 }
 
 interface LinhaDoPedido extends LinhaDoEncontro {
@@ -449,12 +483,20 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
   async listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia> {
     const agora = comoData(recorte.agora);
-    const regiao = await this.db
-      .selectFrom('user_reference_locations')
-      .select('user_id')
-      .where('user_id', '=', recorte.chamador)
-      .where('expires_at', '>', agora)
-      .executeTakeFirst();
+    // A presenca pergunta pelo MESMO par que a subconsulta mede. Perguntar so
+    // por `user_id` diria "tem regiao" por causa do outro aparelho, e a
+    // resposta prometeria uma ordem por distancia que este aparelho nao tem
+    // como produzir.
+    const regiao =
+      recorte.familia === undefined
+        ? undefined
+        : await this.db
+            .selectFrom('user_reference_locations')
+            .select('user_id')
+            .where('user_id', '=', recorte.chamador)
+            .where('session_family_id', '=', recorte.familia)
+            .where('expires_at', '>', agora)
+            .executeTakeFirst();
     const temRegiao = regiao !== undefined;
 
     // O privado NUNCA entra, aprovado ou nao: a posicao dele numa lista por
@@ -468,7 +510,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       base = base
         .where(sql<SqlBool>`e.geo IS NOT NULL`)
         .where(
-          sql<SqlBool>`ST_DWithin(e.geo, ${regiaoDaConta(recorte.chamador, agora)}, ${recorte.maxKm * 1000})`,
+          sql<SqlBool>`ST_DWithin(e.geo, ${regiaoDoAparelho(recorte.chamador, recorte.familia, agora)}, ${recorte.maxKm * 1000})`,
         );
     }
 
@@ -478,7 +520,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
     const total = Number(contagem?.total ?? 0);
 
     const distancia = temRegiao
-      ? sql<number | null>`ST_Distance(e.geo, ${regiaoDaConta(recorte.chamador, agora)})`
+      ? sql<number | null>`ST_Distance(e.geo, ${regiaoDoAparelho(recorte.chamador, recorte.familia, agora)})`
       : sql<number | null>`NULL::float8`;
 
     let ordenada = base.select([...colunasDoEncontro(), distancia.as('distancia_m')]);
