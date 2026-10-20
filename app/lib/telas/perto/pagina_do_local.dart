@@ -120,10 +120,14 @@ class PaginaDoLocal extends StatefulWidget {
   /// Sem conta nao ha leitura, e a frase diz por que **sem culpar a pessoa**.
   static const String tituloDoVisitante = 'Entre para ver este local';
 
+  /// **A frase nao promete mais o telefone.** Ela dizia *"mostra o telefone
+  /// comercial e a distância até você"*, e a primeira metade deixou de ser
+  /// verdade em 19/10/2026: o numero saiu da tela por pedido do cliente. O
+  /// que sobrou e o que a pagina de fato da a quem entra.
   static const String explicacaoDoVisitante =
-      'A página de um profissional mostra o telefone comercial e a distância '
-      'até você, e o Bichu só mostra isso para quem tem conta. Depois de '
-      'entrar, você lê as avaliações e pode escrever a sua.';
+      'A página de um profissional mostra a distância até você, e o Bichu só '
+      'mostra isso para quem tem conta. Depois de entrar, você lê as '
+      'avaliações e pode escrever a sua.';
 
   static const String rotuloDeEntrar = 'Entrar ou criar conta';
 
@@ -1181,7 +1185,21 @@ class _Cabecalho extends StatelessWidget {
   }
 }
 
-/// `Informações`: o `about`, o lugar e o telefone comercial por extenso.
+/// `Informações`: o `about` e o lugar. **O telefone NAO.**
+///
+/// ## O numero saiu daqui, e era o unico lugar que o pintava
+///
+/// Ate 19/10/2026 esta secao desenhava `Telefone comercial: +5511987654321`
+/// -- o `phone_e164` do contrato, por extenso, em texto. O cliente pediu
+/// *"sem aparecer o telefone quando for profissionais/clinicas"*, e esta
+/// linha era o pedido inteiro: medido, nao havia outro lugar do app que
+/// escrevesse o numero na tela.
+///
+/// **O botao `Ligar` do cabecalho FICA.** Ele nao mostra numero nenhum: o
+/// rotulo visivel e `Ligar` e o nome acessivel e `Ligar para <nome>`. O
+/// numero so aparece depois, no discador do sistema, que e tela do aparelho
+/// e nao desta pagina -- e e o discador que mostra o numero e espera a
+/// confirmacao, que e a razao de o app nunca discar sozinho.
 ///
 /// **E so isso que existe.** O protótipo marca onde caberiam site, e-mail,
 /// WhatsApp, redes, horario, foto e endereco, e diz na mesma linha que nada
@@ -1198,7 +1216,6 @@ class _Informacoes extends StatelessWidget {
   Widget build(BuildContext context) {
     final sobre = detalhe.sobre;
     final lugar = detalhe.linhaDeLugar;
-    final telefone = detalhe.telefoneE164;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,13 +1230,6 @@ class _Informacoes extends StatelessWidget {
         if (lugar != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e4),
           _LinhaComIcone(icone: Icons.place_outlined, texto: lugar),
-        ],
-        if (telefone != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e2),
-          _LinhaComIcone(
-            icone: Icons.call_outlined,
-            texto: 'Telefone comercial: $telefone',
-          ),
         ],
       ],
     );
