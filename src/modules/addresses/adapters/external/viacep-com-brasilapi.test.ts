@@ -180,7 +180,27 @@ void describe('busca de CEP do servidor', () => {
       const sinal = init?.signal;
       assert.ok(sinal, 'cada chamada de saida tem de carregar o prazo');
       return new Promise<Response>((_resolver, recusar) => {
+        // **O TIMER DE `AbortSignal.timeout` E UNREF, e sozinho ele NAO segura
+        // o laco de eventos.** Medido no Node 22.23.2:
+        // `AbortSignal.timeout(5)` com mais nada pendente sai do processo sem
+        // nunca disparar o `abort`.
+        //
+        // Com o `fetch` de verdade quem segura o laco e o SOCKET, que e ref, e
+        // por isso o prazo estoura em producao. Aqui nao ha socket nenhum: o
+        // unico pendente era este `Promise`, que so se resolve no `abort` que
+        // nunca vem. `node:test` entao reprova com "Promise resolution is
+        // still pending but the event loop has already resolved" -- e levava o
+        // `describe` inteiro junto, como cancelado. Medido na esteira de
+        // 20/10/2026: 1 reprovado e 1 cancelado neste arquivo.
+        //
+        // Este timer e ref e existe so para segurar o laco enquanto o prazo
+        // corre; ele e limpo no `abort` e nao resolve nada por conta propria.
+        // **Nao resolver nada e deliberado**: um timer que recusasse por conta
+        // propria faria a isca passar com o `AbortSignal` arrancado do codigo,
+        // que e exatamente o que ela existe para pegar.
+        const seguraOLaco = setTimeout(() => {}, 1_000);
         sinal.addEventListener('abort', () => {
+          clearTimeout(seguraOLaco);
           recusar(new DOMException('The operation was aborted', 'TimeoutError'));
         });
       });

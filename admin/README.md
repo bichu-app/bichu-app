@@ -51,7 +51,7 @@ npm test
 | Gerado | Fonte | Gerar | Verificar |
 |---|---|---|---|
 | `src/theme/tokens.g.css` | `design/tokens.json` | `npm run generate:tokens` | `npm run verify:tokens` |
-| `src/api/generated/api.ts` | `api/openapi.yaml` | `npm run generate:api` | `npm run verify:api` |
+| `src/api/generated/api.ts` | `api/openapi.yaml` | `npm run generate:api` | `npm run verify:types` |
 
 As verificações regeram em memória e reprovam (saída 1) quando o arquivo em
 disco diverge da fonte, quando ele falta ou quando a fonte não é encontrada.

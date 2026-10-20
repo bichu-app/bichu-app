@@ -20,7 +20,7 @@
     "generate:tokens": "node scripts/gerar-tokens-css.mjs",
     "verify:tokens": "node scripts/gerar-tokens-css.mjs --verificar",
     "generate:api": "node scripts/gerar-tipos-da-api.mjs",
-    "verify:api": "node scripts/gerar-tipos-da-api.mjs --verificar"
+    "verify:types": "node scripts/gerar-tipos-da-api.mjs --verificar"
   },
   "dependencies": {
     "openapi-fetch": "^0.17.0",

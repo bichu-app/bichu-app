@@ -7540,7 +7540,7 @@ paths:
             schema: { $ref: '#/components/schemas/AdminStorePartnerInput' }
             examples:
               parceiro:
-                value: { slug: loja-do-bairro, name: Loja do Bairro, host: lojadobairro.com.br }
+                value: { slug: loja-do-bairro, name: Loja do Bairro, site_url: 'https://lojadobairro.com.br' }
       responses:
         '201':
           description: Parceiro criado, ativo.
@@ -10263,7 +10263,7 @@ paths:
           on_exceed: deny_429
           note: "SESSENTA POR DIA por conta, e o teto e generoso de proposito: bloquear e a acao de ALIVIO desta fatia, e quem esta sendo assediado por varias contas precisa poder bloquear todas. O teto existe so contra o laco automatizado que varreria a base inteira -- nao contra a pessoa. Por CONTA e nao por IP porque a rota exige conta"
       responses:
-        '204': { description: Bloqueada. Resposta vazia, e a mesma de quem ja estava bloqueada. }
+        '204': { description: 'Bloqueada. Resposta vazia, e a mesma de quem ja estava bloqueada.' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -10292,7 +10292,7 @@ paths:
           on_exceed: deny_429
           note: "o MESMO orcamento do bloqueio: bloquear e desbloquear em laco nao pode ser o caminho que contorna o teto"
       responses:
-        '204': { description: Desbloqueada. Resposta vazia, e a mesma de quem nao estava bloqueada. }
+        '204': { description: 'Desbloqueada. Resposta vazia, e a mesma de quem nao estava bloqueada.' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -11467,6 +11467,7 @@ components:
         summary: Racao seca para caes adultos de porte medio.
         category: food
         target_url: https://lojadobairro.com.br/racao-adulto-10kg
+        missing_to_publish: []
         species: [dog]
         tags:
           - { slug: porte-medio, label: Porte medio, active: true }
