@@ -288,7 +288,7 @@ verificar-commit-de-build: ## BICHUS-210/211: o `make` exporta BUILD_COMMIT com 
 verificar-commit-de-build-autoteste: ## BICHUS-216: cada caso do portao do commit reprova pela regra dele (nao usa docker)
 	python3 infra/verificacao/verificar_commit_de_build.py --autoteste --raiz .
 
-verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as duas iscas
+verificar-portabilidade: ## portao de portabilidade: provedor, hostname, migracao e as iscas (positivas e negativas)
 	python3 infra/verificacao/verificar_portabilidade.py
 
 verificar-sorteio: ## recusa assercao de tolerancia zero sobre quantidade sorteada, iscas primeiro

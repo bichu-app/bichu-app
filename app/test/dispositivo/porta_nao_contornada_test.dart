@@ -1967,7 +1967,13 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// proprio portao -- nao escolhido entre os dois lados. As justificativas de
 /// TODOS os ramos continuam INTEIRAS acima.
 ///
-const String _arvoreDasTelas = '1cbe335548d8166753f25aa022536f517f26e3fb'; // MESCLA DA BASE NO CONSERTO DO `Usar minha localizacao`: valor recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de ramo nem de relato.
+/// **REMEDIDO NA SEGUNDA MESCLA DA BASE NO CONSERTO DO BOTAO (20/10/2026).**
+/// A base andou outra vez depois que esta frente mediu. Nenhum valor de ramo
+/// sobrevive, e o de baixo foi RECALCULADO sobre a arvore MESCLADA pelo
+/// procedimento deste proprio portao -- nao escolhido entre os dois lados.
+/// As justificativas de TODOS os ramos continuam INTEIRAS acima.
+///
+const String _arvoreDasTelas = 'd61295cb51dab6a9285aa03f5a9f231257c73edf'; // SEGUNDA MESCLA DA BASE NO CONSERTO DO `Usar minha localizacao`: valor recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de ramo nem de relato.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
