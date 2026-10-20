@@ -7,7 +7,7 @@ import 'envio_de_foto.dart';
 /// vitrine tem tres operacoes e um modelo proprio, e `me_api.dart` e a porta
 /// dos DADOS da conta (nome, telefone, endereco de referencia). Misturar os
 /// dois faria o envio de uma foto alcancar `atualizar` -- que e exatamente o
-/// que `IntencaoEGravacaoDaFotoDoUsuario` existe para impedir.
+/// que `IntencaoDeFotoDoUsuario` existe para impedir.
 ///
 /// ## Nenhuma rota de vitrine de OUTRA pessoa, e a ausencia e deliberada
 ///
@@ -85,8 +85,8 @@ abstract class IntencaoDeFotoDaVitrine {
 /// A foto da vitrine como destino de envio.
 ///
 /// **[confirmar] nao faz nada, e a ausencia e deliberada** -- como em
-/// `FotoDeAchado`, e por motivo oposto ao de `FotoDoUsuario`. A foto da vitrine
-/// passa a existir quando `PUT /me/showcase` grava a ordem nova com o
+/// `FotoDeAchado`. A foto da vitrine passa a existir quando
+/// `PUT /me/showcase` grava a ordem nova com o
 /// `upload_id` dentro; nao ha operacao de confirmacao separada no contrato, e
 /// um metodo que fingisse confirmar inventaria uma rota.
 ///
