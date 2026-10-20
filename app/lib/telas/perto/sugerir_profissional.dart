@@ -693,10 +693,12 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   /// A SAIDA DA FAIXA DE ERRO: o rotulo que o servidor manda tem de levar a
   /// algum lugar.
   ///
-  /// `FaixaDeAviso` desenha o rotulo da acao mesmo com `aoTocarNaAcao` nulo, e
-  /// um rotulo de acao SEM destino e o defeito que a BICHUS-62 nomeou. Por isso
-  /// cada `proximaAcao` que `MensagensDeErro` sabe devolver nesta rota precisa
-  /// do seu ramo aqui.
+  /// `FaixaDeAviso` so monta o `TextButton` com rotulo E callback
+  /// (`widgets/faixa_de_aviso.dart`, linha 97). Devolver `null` aqui para uma
+  /// `proximaAcao` que `MensagensDeErro` sabe produzir nao deixa um rotulo de
+  /// acao sem destino -- o defeito que a BICHUS-62 nomeou --, deixa a faixa
+  /// SEM SAIDA NENHUMA: a pessoa le o motivo e nao tem onde tocar. Por isso
+  /// cada `proximaAcao` que chega nesta rota precisa do seu ramo aqui.
   ///
   /// **`verificarEmail` chega pelo `409 contact-channel-unverified`** -- a
   /// recusa do servidor para quem nao confirmou o e-mail. E uma REDE DE
