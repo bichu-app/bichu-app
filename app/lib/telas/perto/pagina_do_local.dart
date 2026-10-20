@@ -9,6 +9,7 @@ import '../../api/modelos_diretorio.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
@@ -311,7 +312,16 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   int? _nota;
   final TextEditingController _texto = TextEditingController();
   bool _enviando = false;
-  String? _erroDoFormulario;
+
+  /// A recusa do envio da minha avaliacao, **inteira**.
+  ///
+  /// **Nao e `String`, e a diferenca nao e de tipo.** Guardar so o `.texto`
+  /// descarta `acao` e `proximaAcao`, e e por eles que a faixa sabe que saida
+  /// oferecer: no `409 contact-channel-unverified` a mensagem chega com
+  /// `Confirmar meu e-mail` e `verify_email`, e com o estado em `String` os
+  /// dois morriam aqui -- a pessoa lia que precisa confirmar o e-mail e nao
+  /// tinha onde tocar. Quem resolve o destino e [saidaDaMensagem].
+  MensagemDeErro? _erroDoFormulario;
   String? _erroDaNota;
 
   bool _cargaAgendada = false;
@@ -635,30 +645,50 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         // O nome do campo recusado vem do `Problem`, e e o que diz a quem
         // escreveu 1600 caracteres qual dos dois campos o servidor negou.
         //
-        // **`acaoEmCurso` e o que faz o `409 contact-channel-unverified` desta
-        // rota falar de avaliacao.** Sem ele esta faixa dizia a quem avaliou um
-        // veterinario que *"os tutores por perto vao receber a foto"*: o `type`
-        // e o mesmo de abrir caso de pet perdido, de proposito, e era a frase
-        // de la que chegava aqui.
+        // **AS DUAS METADES DO MESMO CONSERTO, e elas vieram de PRs
+        // diferentes que mexeram nesta mesma linha.**
+        //
+        // `acaoEmCurso` (do #49) e o que faz o `409
+        // contact-channel-unverified` desta rota falar de AVALIACAO. Sem ele
+        // esta faixa dizia a quem avaliou um veterinario que *"os tutores por
+        // perto vao receber a foto"*: o `type` e o mesmo de abrir caso de pet
+        // perdido, de proposito, e era a frase de la que chegava aqui.
+        //
+        // A ausencia de `.texto` (do #51) e o que faz a mensagem ir INTEIRA
+        // para o estado. Com `.texto`, o rotulo e o `next_action` -- a saida
+        // `Confirmar meu e-mail` -- eram jogados fora antes de a faixa
+        // existir, e a pessoa lia o motivo sem ter onde tocar.
+        //
+        // Pegar um lado so reintroduz um dos dois defeitos, e **as duas formas
+        // COMPILAM**: nenhum teste de tipo acusaria a escolha errada. Esta
+        // linha foi conferida a mao depois da uniao, nos dois `catch`.
         _erroDoFormulario = MensagensDeErro.de(
           falha,
           acaoEmCurso: AcaoEmCurso.avaliarLocal,
-        ).texto;
+        );
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _enviando = false;
+        // O irmao da linha acima, e com as duas metades pelo mesmo motivo:
+        // `acaoEmCurso` do #49, sem `.texto` do #51.
         _erroDoFormulario = MensagensDeErro.de(
           falha,
           acaoEmCurso: AcaoEmCurso.avaliarLocal,
-        ).texto;
+        );
       });
     } on FormatException catch (erro) {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        _erroDoFormulario = MensagensDeErro.servidorFora;
+        // **Sem `acao`, e de proposito**: nao ha endereco que resolva
+        // resposta fora do contrato, e `Tentar de novo` aqui ofereceria um
+        // reenvio que vai falhar igual. A faixa sai so com a frase, como
+        // saia antes.
+        _erroDoFormulario = const MensagemDeErro(
+          texto: MensagensDeErro.servidorFora,
+        );
       });
       debugPrint('Resposta da escrita da avaliacao fora do contrato: $erro');
     }
@@ -1471,7 +1501,10 @@ class _Formulario extends StatelessWidget {
   final String? erroDaNota;
   final TextEditingController texto;
   final bool enviando;
-  final String? erro;
+
+  /// A recusa do envio, **inteira**: a faixa precisa de `acao` e de
+  /// `proximaAcao` para ter saida, e nao so da frase.
+  final MensagemDeErro? erro;
   final bool editando;
   final ValueChanged<int> aoEscolherNota;
   final VoidCallback aoEnviar;
@@ -1505,7 +1538,16 @@ class _Formulario extends StatelessWidget {
           ),
           if (erro != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e4),
-            FaixaDeAviso(texto: erro!),
+            // A SAIDA SAI DA MENSAGEM, e nao desta tela: o catalogo diz o
+            // rotulo e `saidaDaMensagem` diz o destino. Rotulo de operacao
+            // (`Tentar de novo`) nao tem endereco e nao vira botao -- a faixa
+            // so o desenha com rotulo E callback, e e isso que impede saida
+            // que nao leva a lugar nenhum.
+            FaixaDeAviso(
+              texto: erro!.texto,
+              rotuloDaAcao: erro!.acao,
+              aoTocarNaAcao: saidaDaMensagem(context, erro!),
+            ),
           ],
           const SizedBox(height: BichuEspaco.e4),
           SizedBox(
