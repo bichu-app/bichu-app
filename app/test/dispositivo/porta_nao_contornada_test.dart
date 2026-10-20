@@ -1644,7 +1644,31 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
 /// copiado de ramo nem de relato.
-const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
+/// BICHUS-278 (20/10/2026) -- O CONTADOR DE NAO LIDO DA ABA `AuAu`.
+///
+/// Destravado por `1413454d...` -> `d979a337...`. Duas telas mudaram, e as
+/// duas por pedido literal do cliente (*"o icone do auau vai ficar de outra
+/// cor com o +1, +2 dependendo a quantidade de mensagens nao lida"*):
+///
+///   * `app/lib/telas/casca_com_abas.dart` -- `DistintivoDaAba` (o numero
+///     SOBRE o glifo, fora do fluxo, para nao disputar a largura do rotulo),
+///     `DestinoDeNavegacao.nomeAcessivelCom` (o numero INTEIRO para quem ouve
+///     a tela) e o `ListenableBuilder` que reconstroi SO a barra;
+///   * `app/lib/telas/mensagens/area_de_mensagens.dart` -- UM parametro novo,
+///     `aoVerAArea`, que dispara depois de `markMyConversationsSeen` voltar. A
+///     costura irma (`aoContarNaoLidas`) ja existia e nao mudou.
+///
+/// **Valor RECALCULADO pelo procedimento deste proprio portao**, sobre o commit
+/// desta frente e depois de comitar: `git rev-parse "${T}:app/lib/telas"` --
+/// COM as chaves, pelo motivo medido no paragrafo acima. Nao copiado de relato.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Duas outras frentes
+/// rodam hoje e ao menos uma delas encosta na barra (margem da foto, barra de
+/// baixo fixa, menu do perfil, alvo secundario em `Pets`) e a outra no
+/// compositor do `Mural` -- quer dizer, nos MESMOS dois diretorios. Este valor
+/// e de RAMO e nao vale depois da uniao, exatamente como os oito de 19/10 nao
+/// valeram.
+const String _arvoreDasTelas = 'd979a3376f80c43fa42bf99f0d72b455b70e8f04'; // BICHUS-278, 20/10/2026: o contador de nao lido da aba `AuAu`. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

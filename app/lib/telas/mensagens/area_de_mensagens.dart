@@ -352,7 +352,12 @@ abstract final class TextosDasMensagens {
 ///
 /// **E ESTE o widget de entrada que o agente da barra pluga.**
 class AreaDeMensagens extends StatefulWidget {
-  const AreaDeMensagens({super.key, this.conversas, this.aoContarNaoLidas});
+  const AreaDeMensagens({
+    super.key,
+    this.conversas,
+    this.aoContarNaoLidas,
+    this.aoVerAArea,
+  });
 
   /// O cliente de conversa. Nulo usa o do [Escopo], que e o caminho do app.
   ///
@@ -378,6 +383,23 @@ class AreaDeMensagens extends StatefulWidget {
   /// pessoa abrir a area chama `ConversasApi.listar()` e le `unreadCount` --
   /// e a MESMA fonte, e nunca uma contagem local.
   final ValueChanged<int>? aoContarNaoLidas;
+
+  /// **A SEGUNDA COSTURA: a area foi VISTA** (20/10/2026).
+  ///
+  /// Dispara depois de `markMyConversationsSeen` voltar, e nao antes: se a
+  /// chamada nao saiu, o servidor nao sabe que a pessoa viu, e apagar o numero
+  /// aqui faria a aba discordar da proxima contagem.
+  ///
+  /// **Por que ela nao e [aoContarNaoLidas] com zero.** Aquela publica o que o
+  /// SERVIDOR mandou, e o que ele mandou nesta carga e o numero de ANTES de a
+  /// area ser vista -- 3, e nao 0. As duas sao fatos diferentes no mesmo
+  /// instante: "a conta tinha 3" e "eu acabei de ver a area". Sem esta, a aba
+  /// `AuAu` ficaria com o 3 aceso enquanto a pessoa le, ate a proxima
+  /// retomada do app.
+  ///
+  /// **Ela nao marca conversa nenhuma como lida**, pela mesma regra da rota:
+  /// as marcas das linhas ficam, e so o CONTADOR cai.
+  final VoidCallback? aoVerAArea;
 
   @override
   State<AreaDeMensagens> createState() => _EstadoDaAreaDeMensagens();
@@ -516,6 +538,10 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       // As marcas de nao lida das linhas na tela NAO mudam. "Lido" e o item
       // aberto, e a isca `abrir_a_lista_nao_marca_itens` reprova se mudarem.
       await _api.marcarListaVista();
+      // A AREA FOI VISTA, e quem mostra o numero precisa saber. Depois do
+      // `await` de proposito: ver o doc de `aoVerAArea`.
+      if (!mounted) return;
+      widget.aoVerAArea?.call();
     } on FalhaDeChamada catch (falha) {
       // A lista anterior e LIMPADA na primeira pagina, como as outras
       // listagens do app: a pessoa veria o resultado antigo como se fosse o

@@ -26,6 +26,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/dispositivo/distintivo_do_aplicativo.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
@@ -635,6 +636,13 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// (`DepositoDaCidadeQueFalha`, o aparelho com armazenamento bloqueado),
   /// passa o seu: nenhum dos dois estados se produz passando pelo fluxo.
   DepositoDaCidade? depositoDaCidade,
+  /// O caminho do numero no ICONE DO APLICATIVO (20/10/2026).
+  ///
+  /// O padrao do app e [DistintivoInerte], que recebe o numero e nao pinta
+  /// nada -- e esse e o valor de producao hoje, nao um dublê. Quem passa o seu
+  /// e o portao que precisa VER o caminho ser exercido: sem injecao, "o
+  /// caminho existe" so poderia ser afirmado lendo o codigo.
+  DistintivoDoAplicativo? distintivoDoApp,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -687,6 +695,9 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         // a excecao cairia dentro de um `Future` -- o formato de falha que
         // nao aponta para a causa.
         localizacao: localizacao ?? const LocalizacaoNaoEmbarcada(),
+        // O padrao e NULO, e `ContadoresDeNaoLido` cai no inerte: ver o doc do
+        // parametro. Nenhum caso ganha um distintivo de icone de surpresa.
+        distintivoDoApp: distintivoDoApp,
       ),
     ),
   );
