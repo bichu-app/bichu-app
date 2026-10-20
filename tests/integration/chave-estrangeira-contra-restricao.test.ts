@@ -1157,6 +1157,74 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'ao dono, entao nada de terceiro sai por aqui; os objetos do balde saem pelo ' +
       'expurgo, que le as chaves ANTES do DELETE.',
   },
+
+  // -------------------------------------------------------------------------
+  // marcador de "ja vi" por secao (20261020000001, 20/10/2026)
+  // -------------------------------------------------------------------------
+  'public.section_list_views.section_list_views_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o marcador de "ja vi esta secao" da propria pessoa. Da propria pessoa, e de mais ' +
+      'ninguem: a tabela guarda UMA linha por (conta, secao) e nao fala de terceiro.',
+  },
+
+  // -------------------------------------------------------------------------
+  // o Mural: publicacao, curtida e comentario (20261020000002 e 20261020000006)
+  // -------------------------------------------------------------------------
+  'public.user_publications.user_publications_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as publicacoes da propria pessoa, e com elas as curtidas e os comentarios que ' +
+      'PENDEM delas por cascata -- inclusive os de TERCEIROS. A curtida e o comentario de ' +
+      'outra pessoa somem com a publicacao que comentavam, e e por aqui que apagar uma ' +
+      'conta leva embora o que um terceiro escreveu. Ver o caso "a cascata atravessa ' +
+      'pessoas". A denuncia NAO vem junto: `publication_reports_publicacao` poe nulo.',
+  },
+  'public.user_publications.user_publications_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+  'public.publication_likes.publication_likes_publication_id_fkey': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as curtidas da publicacao apagada, que sem ela nao sao nada. A linha e sobre OUTRA ' +
+      'pessoa -- quem curtiu --, e sai junto.',
+  },
+  'public.publication_likes.publication_likes_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o registro de que a propria pessoa curtiu. Da propria pessoa.',
+  },
+  'public.publication_comments.publication_comments_publication_id_fkey': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os comentarios da publicacao apagada, dos DOIS lados. A migracao escreve a razao: ' +
+      'comentario de publicacao inexistente nao tem contexto. A exclusao LOGICA da ' +
+      'publicacao (um UPDATE de `deleted_at`) NAO dispara esta cascata.',
+  },
+  'public.publication_comments.publication_comments_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os comentarios que a propria pessoa escreveu, inclusive em publicacao de OUTRA ' +
+      'pessoa. Da propria pessoa, e e o que o expurgo deve levar.',
+  },
+  'public.publication_reports.publication_reports_publicacao': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'SET NULL',
+  },
 };
 
 type VereditoDoPar = 'compativel' | 'contradiz';
@@ -1285,6 +1353,55 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
       "o DELETE conclui e a linha fica kind = 'reservado', user_id = NULL, claimed_at " +
       'preenchido -- o gatilho handles_orfao_reservado reescreve `kind` antes do CHECK.',
   },
+
+  // =========================================================================
+  // A FOTO DA PUBLICACAO DO MURAL: `contradiz`, E FOI MEDIDO (20/10/2026).
+  // =========================================================================
+  // Par novo, trazido pela `20261020000002`. **O veredito e `contradiz`, e nao
+  // leitura de intencao: foi medido em banco de pe, do zero, nesta ordem.**
+  //
+  // As duas decisoes da migracao se contradizem no banco:
+  //   - a chave: `image_id ... REFERENCES catalog_images ON DELETE SET NULL`,
+  //     escrita como *"imagem apagada deixa o TEXTO de pe"*;
+  //   - o CHECK: `user_publications_texto_alternativo_pede_imagem`,
+  //     `CHECK (image_id IS NOT NULL OR alt_text IS NULL)`, escrito como
+  //     *"texto alternativo sem imagem nao descreve nada"*.
+  //
+  // Publicacao com foto E rotulo e o estado legitimo que a migracao desenhou.
+  // Apagar a imagem dispara o SET NULL, o `alt_text` continua preenchido, e o
+  // CHECK recusa a linha: o DELETE da imagem FALHA.
+  //
+  // **CONSEQUENCIA, e e por isso que isto nao e detalhe:** a varredura de
+  // vencidos e qualquer remocao de `catalog_images` reprovam com 23514 para
+  // toda publicacao que tenha rotulo de leitor de tela. A imagem fica
+  // INAPAGAVEL enquanto a publicacao viver -- e a exclusao LOGICA da
+  // publicacao (um UPDATE de `deleted_at`) nao a solta, porque a linha
+  // continua la com `image_id` e `alt_text`.
+  //
+  // O expurgo de CONTA conclui, e nao e sorte: `user_publications` sai antes
+  // pela cascata de `author_user_id`, entao a linha do nulo deixa de existir.
+  // O caminho que estoura e o da imagem, nao o da conta.
+  //
+  // **QUEM VAI CONSERTAR DECIDE O COMO, e a decisao nao e de quem mesclou:**
+  // as duas intencoes escritas acima so se conciliam se o rotulo sair junto
+  // com a imagem (gatilho que anula `alt_text`), e isso e objeto de banco
+  // novo, com carimbo novo, na frente do Mural.
+  'public.user_publications.user_publications_image_id_fkey + user_publications_texto_alternativo_pede_imagem':
+    {
+      coluna: 'image_id',
+      veredito: 'contradiz',
+      medicao:
+        'Medido em 20/10/2026, banco postgis/postgis:16-3.4 subido do zero com as 82 ' +
+        'migracoes, em BEGIN/ROLLBACK: INSERT de users + catalog_images ' +
+        "(purpose 'user_publication', status 'ready', public_key preenchida) + " +
+        'user_publications com image_id E alt_text -- os tres entram. Em seguida ' +
+        'DELETE FROM catalog_images da linha referenciada: ERROR 23514, ' +
+        '`new row for relation "user_publications" violates check constraint ' +
+        '"user_publications_texto_alternativo_pede_imagem"`, com ' +
+        'CONTEXT `UPDATE ONLY "public"."user_publications" SET "image_id" = NULL`. ' +
+        'Nao houve RAISE NOTICE no caminho: o veredito vem do erro do proprio ' +
+        'Postgres e do catalogo, e nao de mensagem de migracao.',
+    },
 };
 
 // ===========================================================================
