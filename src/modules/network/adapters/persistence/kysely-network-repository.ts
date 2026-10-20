@@ -1102,10 +1102,24 @@ export function criarNetworkRepository(
  * O `slug` do encontro da comunidade: o derivado do titulo, depois o derivado
  * com sufixo curto, e dez tentativas no total.
  *
- * **O laco existe porque a comunidade nao manda `slug`** e dois encontros com o
- * mesmo titulo sao normais ("Encontro no Ibirapuera"). O conflito e capturado
- * pelo indice unico, e nao por um `SELECT` antes: um `SELECT` deixaria duas
- * criacoes simultaneas passarem juntas.
+ * **O laco existe porque a comunidade nao manda `slug`** e dois encontros com
+ * titulos parecidos sao normais ("Encontro no Ibirapuera"). O `slug` e cortado
+ * em 30 caracteres, entao dois titulos que so divergem DEPOIS do 30o caractere
+ * colidem tambem -- foi assim que o defeito apareceu em homologacao.
+ *
+ * **O conflito nao sobe mais como erro, e esse e o ponto.** Cada tentativa e um
+ * `INSERT ... ON CONFLICT (slug) DO NOTHING RETURNING slug`: `slug` ocupado
+ * devolve zero linhas, e o laco segue para o proximo candidato. Antes o laco
+ * capturava o `23505` do indice unico, o que nunca funcionou: a violacao aborta
+ * a transacao inteira, e a tentativa seguinte morria com `25P02` (`current
+ * transaction is aborted`), que subia como 500. **O desempate era inalcancavel
+ * -- ele nunca conseguia gravar** (medido em `hml.bichu.app` em 19/10/2026,
+ * commit `458cd005`).
+ *
+ * O alvo do `ON CONFLICT` e explicito: so a colisao de `slug` e silenciada, e
+ * conflito em qualquer outra restricao continua subindo. E o desempate segue
+ * sem `SELECT` antes -- um `SELECT` deixaria duas criacoes simultaneas passarem
+ * juntas, e quem decide e o indice unico.
  */
 async function inserirComSlugLivre(
   trx: DbTransaction,
@@ -1116,36 +1130,23 @@ async function inserirComSlugLivre(
     slugDoTitulo(novo.title),
     ...Array.from({ length: 9 }, () => slugDoTitulo(novo.title, sufixoCurto(randomBytes(3)))),
   ].filter((s): s is string => s !== undefined);
-  let ultimo: unknown;
   for (const slug of candidatos) {
-    try {
-      await inserirLinhaDoEncontro(trx, novo, slug, quando);
-      return slug;
-    } catch (erro) {
-      if (!ehSlugOcupado(erro)) throw erro;
-      ultimo = erro;
-    }
+    if (await inserirLinhaDoEncontro(trx, novo, slug, quando)) return slug;
   }
   // Dez tentativas falhadas nao e colisao: e titulo que nao da `slug` nenhum
   // (so pontuacao) ou sorte impossivel. As duas sobem como 409, que e o que o
   // contrato declara para `slug` ocupado.
-  throw ultimo instanceof Error ? ultimo : new SlugDoEncontroOcupado();
+  throw new SlugDoEncontroOcupado();
 }
 
-/** `23505` com o indice do `slug`: o Postgres o nomeia na violacao. */
-function ehSlugOcupado(erro: unknown): boolean {
-  if (typeof erro !== 'object' || erro === null) return false;
-  const e = erro as { code?: unknown; constraint?: unknown };
-  return e.code === '23505' && e.constraint === 'network_events_slug_unico';
-}
-
-function inserirLinhaDoEncontro(
+/** `false` quando o `slug` ja estava ocupado: nada e gravado, e nada levanta. */
+async function inserirLinhaDoEncontro(
   trx: DbTransaction,
   novo: NovoEncontroDaComunidade,
   slug: string,
   quando: Date,
-): Promise<unknown> {
-  return trx
+): Promise<boolean> {
+  const gravada = await trx
     .insertInto('network_events')
     .values({
       id: novo.id,
@@ -1188,5 +1189,11 @@ function inserirLinhaDoEncontro(
       updated_at: quando,
       version: 1,
     })
-    .execute();
+    // O alvo e o indice `network_events_slug_unico`, nomeado pela coluna: so
+    // a colisao de `slug` vira "zero linhas". Conflito em qualquer outra
+    // restricao (a chave primaria, por exemplo) continua levantando.
+    .onConflict((oc) => oc.column('slug').doNothing())
+    .returning('slug')
+    .executeTakeFirst();
+  return gravada !== undefined;
 }
