@@ -312,6 +312,17 @@ class _SaidaDeTeste extends SaidaDoApp {
 
   @override
   Future<bool> adicionarAoCalendario(EventoDeCalendario evento) async => true;
+
+  /// A QUINTA saida da porta, que chegou com a folha de compartilhamento em
+  /// 20/10/2026. Este arquivo nao exercita compartilhamento: devolver `false`
+  /// e o lado ESCONDIDO, entao o dia em que alguem compartilhar daqui o teste
+  /// nao vai afirmar que a folha abriu.
+  @override
+  Future<bool> compartilharTexto({
+    required String texto,
+    required String assunto,
+  }) async =>
+      false;
 }
 
 /// Uma tela de celular (400 dp) bem **alta**: a pagina do encontro inteira

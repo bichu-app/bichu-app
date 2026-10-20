@@ -78,6 +78,17 @@ class SaidaDeTeste extends SaidaDoApp {
     calendario.add(evento);
     return abre;
   }
+
+  /// A QUINTA saida da porta, que chegou com a folha de compartilhamento em
+  /// 20/10/2026. Este arquivo nao exercita compartilhamento: devolver `false`
+  /// e o lado ESCONDIDO, entao o dia em que alguem compartilhar daqui o teste
+  /// nao vai afirmar que a folha abriu.
+  @override
+  Future<bool> compartilharTexto({
+    required String texto,
+    required String assunto,
+  }) async =>
+      false;
 }
 
 /// A rede de um encontro: a agenda com ele, o detalhe, e o que o caso pedir.
