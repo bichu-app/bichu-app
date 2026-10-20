@@ -342,6 +342,19 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     motivo: 'formulario, aberto pela acao flutuante do corpo da `Rede`.',
   ),
   (
+    nome: 'publicar no mural',
+    endereco: '/mural/publicar',
+    padrao: '/mural/publicar',
+    motivo: 'formulario, aberto pela acao flutuante do corpo do `Mural`. '
+        'ACHADO DA MESCLA do terceiro lote de 20/10: a frente do Mural criou '
+        'esta rota irma da casca no mesmo dia em que esta frente criou o '
+        'portao de completude, e nenhuma das duas viu a outra. Ela e TAREFA '
+        'pela razao que `rotas.dart` ja registra -- *"escrever uma publicacao "'
+        'e TAREFA, e a barra de abas abaixo dela ofereceria quatro saidas para '
+        'o meio do preenchimento"* --, e por isso entra aqui e nao em '
+        '`telasDePrimeiroPlano`. Ela NAO usa `_comBarraFixa`.',
+  ),
+  (
     nome: 'sugerir profissional',
     endereco: '/rede/indicacoes/nova',
     padrao: '/rede/indicacoes/nova',
@@ -385,10 +398,13 @@ const Map<String, String> subRotasDeRamo = <String, String>{
   'produtos/:slug': 'a ficha de um produto, sob o ramo da `Loja`. Mesma razao.',
 };
 
-/// As 30 telas empilhadas, nos dois grupos, para os casos que percorrem todas.
+/// As 31 telas empilhadas, nos dois grupos, para os casos que percorrem todas.
 ///
-/// **Eram 29 ate a mescla do terceiro lote de 20/10/2026**, que trouxe a ficha
-/// do encontro de volta e a classificou como INTERNA.
+/// **Eram 29 ate a mescla do terceiro lote de 20/10/2026**, que classificou
+/// DUAS rotas novas, as duas como INTERNAS: a ficha do encontro, que a frente
+/// `feat/aviso-de-login-ao-tocar` devolveu, e `publicar no mural`, que a
+/// frente `feat/mural-publicar` criou. Nenhuma das duas frentes via o portao
+/// de completude, que nasceu na frente da barra no mesmo dia.
 List<TelaEmpilhada> get telasEmpilhadas => <TelaEmpilhada>[
       ...telasDePrimeiroPlano,
       ...telasInternas,
@@ -446,6 +462,33 @@ const Set<String> saidaSoPelaFoto = <String>{
   '/pets/perdido/onde-e-quando',
   '/pets/perdido/alcance',
   '/pets/perdido/caso',
+};
+
+/// As telas que saem por um controle FLUTUANTE SOBRE A MIDIA, e nao pela barra
+/// de topo nem pela foto.
+///
+/// **A terceira forma de saida desta arvore, escrita na mescla do terceiro lote
+/// de 20/10/2026.** Ate aqui a contabilidade tinha duas linhas -- saida na
+/// barra de topo, ou so pela foto --, e a ficha do encontro nao cabe em
+/// nenhuma: no estado pronto ela **nao tem `AppBar`**, porque a capa sangra ate
+/// o topo (UX 28.7.2: sem titulo visivel enquanto a capa esta na tela), e a
+/// saida e um `IconButton` de 48 dp POR CIMA da foto, com fundo `surface` e
+/// sombra propria para o contraste nao depender da imagem (design system
+/// 24.12.1 e 24.12.6).
+///
+/// **Ela e saida de verdade, e melhor que a da foto:** faz `pop` quando ha
+/// pilha e vai para `/rede` quando nao ha -- quer dizer, ela VOLTA, enquanto a
+/// foto leva para a conta. Por isso esta linha e separada de
+/// [saidaSoPelaFoto]: as duas dizem "nao tem seta na barra de topo", e so uma
+/// delas e um problema em aberto.
+///
+/// **Por que ela apareceu agora:** a ficha do encontro era SUB-ROTA do ramo da
+/// `Rede` e tinha a barra de baixo como segunda saida. A decisao do cliente de
+/// 20/10 (*"ao clicar nos detalhes do evento, remove a barra"*) tirou a barra,
+/// e o controle sobre a capa passou a ser a saida unica -- que e o que esta
+/// linha registra, para que ninguem o apague sem ver a conta mudar.
+const Set<String> saidaFlutuanteSobreMidia = <String>{
+  '/rede/encontros/e-1',
 };
 
 // ---------------------------------------------------------------------------
@@ -1484,6 +1527,26 @@ void main() {
                 .descendant(of: dentroDaBarra, matching: find.byType(BackButton))
                 .evaluate()
                 .isNotEmpty;
+        // **A SAIDA FLUTUANTE SOBRE A MIDIA, acrescentada na mescla do
+        // terceiro lote de 20/10/2026.** As tres formas acima presumem que a
+        // tela tem `AppBar`, e a ficha do encontro NAO tem no estado pronto:
+        // a capa sangra ate o topo (UX 28.7.2, sem titulo visivel enquanto a
+        // capa esta na tela) e a saida e um `IconButton` de 48 dp sobre a
+        // foto, com fundo `surface` e sombra propria (design system 24.12.1 e
+        // 24.12.6). Ela e saida de verdade -- `canPop` e `pop`, com escape
+        // para `/rede` --, e o caso a acusava de BECO so porque olhava
+        // dentro do `AppBar`.
+        //
+        // **Isto ACRESCENTA um sinal e nao afrouxa nenhum**: as tres
+        // conferencias acima continuam exatamente como estavam, e tela sem
+        // NENHUM controle de saida continua reprovando. O `tooltip` serve
+        // aqui, onde nao servia como conferencia UNICA: o alerta do
+        // comentario acima e contra depender dele para o `BackButton`
+        // automatico do Material, cujo texto nao e portugues na bancada --
+        // uma saida FEITA NESTA CASA sempre escreve `Voltar` ou `Fechar`.
+        final temSaidaFlutuante =
+            find.byTooltip('Voltar').evaluate().isNotEmpty ||
+                find.byTooltip('Fechar').evaluate().isNotEmpty;
         final temBarra = find.byType(NavigationBar).evaluate().isNotEmpty;
         final temFoto = find
             .descendant(of: dentroDaBarra, matching: find.byType(AvatarDaConta))
@@ -1491,7 +1554,7 @@ void main() {
             .isNotEmpty;
 
         expect(
-          temSaidaNoTopo || temBarra || temFoto,
+          temSaidaNoTopo || temBarra || temFoto || temSaidaFlutuante,
           isTrue,
           reason: 'REPROVA: ${tela.nome} (${tela.endereco}) e um BECO: nao tem '
               'saida no topo, nem barra de baixo, nem a foto da conta. A '
@@ -1503,7 +1566,8 @@ void main() {
         // conta muda sem ninguem decidir.
         expect(
           temSaidaNoTopo,
-          !saidaSoPelaFoto.contains(tela.endereco),
+          !saidaSoPelaFoto.contains(tela.endereco) &&
+              !saidaFlutuanteSobreMidia.contains(tela.endereco),
           reason: 'REPROVA: ${tela.endereco} '
               '${temSaidaNoTopo ? "GANHOU" : "PERDEU"} a saida da barra de '
               'topo. `saidaSoPelaFoto` diz quais telas saem SO pela foto -- e '
