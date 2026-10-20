@@ -1043,13 +1043,17 @@ void main() {
       _reservaSemErro(tester, pedidos);
     });
 
-    /// ISCA (4 de 5): TETO DE USO ESTOURADO.
+    /// ISCA (4 de 5): FALHA DO SERVICO DE PLATAFORMA.
     ///
-    /// E o `PlatformException(IO_ERROR, ...)` que o README do pacote descreve
-    /// como *"most of the times ... the rate limit has been reached"*. Entra
-    /// DENTRO da resolucao, com geocoder presente e ponto na mao -- nenhuma das
-    /// tres iscas acima passa por este ramo.
-    testWidgets('ISCA 4/5: TETO de uso estourado cai para a reserva, sem erro',
+    /// **Chamava-se `tetoDeUsoEstourado` ate 20/10/2026, e o nome mentia no
+    /// iOS.** No Android e quase sempre o `PlatformException(IO_ERROR, ...)`
+    /// que o README do pacote descreve como *"most of the times ... the rate
+    /// limit has been reached"*. No iOS e QUALQUER `NSError` do `CLGeocoder`:
+    /// o `CLGeocoderProxyApiDelegate.swift` do `geocoding_darwin` colapsa rede,
+    /// cancelamento e "nao achei" num codigo unico. Entra DENTRO da resolucao,
+    /// com geocoder presente e ponto na mao -- nenhuma das tres iscas acima
+    /// passa por este ramo.
+    testWidgets('ISCA 4/5: FALHA do servico cai para a reserva, sem erro',
         (tester) async {
       final pedidos = <http.Request>[];
       await abrirPets(
@@ -1058,7 +1062,7 @@ void main() {
         localizacao: LocalizacaoDeTeste(
           PermissaoDeLocalizacao.concedida,
           resultadoDaCidade: const CidadeNaoResolvida(
-            MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+            MotivoDeNaoTerCidade.falhaDoServico,
           ),
         ),
         rede: redeDosPerdidos(
@@ -1073,10 +1077,18 @@ void main() {
 
     /// ISCA (5 de 5): RESOLUCAO SEM RESULTADO.
     ///
-    /// A chamada DEU CERTO e devolveu nada (ou devolveu lugar sem `locality`):
-    /// mar aberto, zona rural, e o aparelho que responde mas nao sabe. E o
-    /// unico dos cinco em que nada falhou -- e e por isso que ele nao e
-    /// coberto por nenhum dos outros quatro.
+    /// A chamada DEU CERTO e devolveu lugar sem nenhum campo de cidade (ver
+    /// `cidadeDoLugar`): zona rural, distrito, mar aberto. E o unico dos cinco
+    /// em que nada falhou -- e e por isso que ele nao e coberto por nenhum dos
+    /// outros quatro.
+    ///
+    /// **Continuam sendo CINCO e nao nove**, e isso e decisao: dos nove
+    /// motivos, `resolucaoSemResposta` nasce do `.timeout` da PROPRIA TELA e
+    /// chega neste mesmo ramo (`if (!porToque) return;`) sem desviar em nada --
+    /// um sexto caso aqui mediria o mesmo `return` com outro nome. Quem o mede
+    /// de verdade e a isca do teto em
+    /// `test/telas/o_botao_de_localizacao_nos_pets_test.dart`, onde o relogio
+    /// anda. Os outros tres de permissao tem iscas 1 e 2 acima.
     testWidgets('ISCA 5/5: resolucao SEM RESULTADO cai para a reserva, sem erro',
         (tester) async {
       final pedidos = <http.Request>[];

@@ -53,6 +53,7 @@ library;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -121,6 +122,18 @@ enum OrigemDoPonto {
 /// cinco e nao um. Um `null` no lugar disto faria as cinco situacoes virarem a
 /// mesma mensagem generica, e a pessoa que esta com o servico desligado seria
 /// mandada para a tela de permissao que ela ja concedeu.
+///
+/// **O motivo nao basta, e isso foi MEDIDO em 20/10/2026 contra um relato de
+/// iPhone.** Cliente, com o build de release de `1ff67840` no aparelho dele:
+/// *"quando tento usar minha localizacao, ele ate pede a permissao para
+/// liberar, mas da o erro: Nao deu para descobrir sua cidade agora"*. Permissao
+/// CONCEDIDA, rede boa, capital de SP, localizacao exata ligada, e a falha
+/// **instantanea**. Quatro caminhos diferentes produzem exatamente essa frase
+/// nessas condicoes, e nenhum deles deixa rastro -- a frase nao distingue
+/// "a Apple errou" de "o ponto nao veio" de "veio lugar sem nome de cidade".
+/// Por isso [CapturaSemPonto.detalhe] e [CidadeNaoResolvida.detalhe] existem:
+/// o motivo diz a CLASSE da falha e o detalhe diz QUAL foi, e sem o segundo o
+/// aparelho da pessoa nao e instrumento de medicao nenhum.
 enum MotivoDeNaoTerPonto {
   /// Recusou desta vez. A tela oferece o bairro e o pedido continua possivel.
   permissaoNegada,
@@ -197,29 +210,72 @@ class CapturaComPonto extends ResultadoDaCaptura {
 /// esquecer derruba a tela -- que e exatamente o "fluxo travado" que o
 /// criterio 5 proibe.
 class CapturaSemPonto extends ResultadoDaCaptura {
-  const CapturaSemPonto(this.motivo);
+  const CapturaSemPonto(this.motivo, {this.detalhe});
   final MotivoDeNaoTerPonto motivo;
+
+  /// O QUE DE FATO VEIO DO APARELHO, quando veio algo.
+  ///
+  /// **Nulo nos motivos que o proprio Dart decidiu** (permissao, servico
+  /// desligado, indisponivel): neles nao ha erro de plataforma nenhum para
+  /// registrar, e inventar um texto ali seria ruido com cara de medicao.
+  ///
+  /// Preenchido so em [MotivoDeNaoTerPonto.semFixNoPrazo], que e o motivo
+  /// generico: ele nasce de um `catch` que apanha TRES coisas diferentes do
+  /// `geolocator`, e o detalhe e o unico lugar onde elas continuam distintas.
+  /// Medido no pacote em 20/10/2026 (`geolocator_apple-2.3.14`,
+  /// `lib/src/geolocator_apple.dart`): `getCurrentPosition` apanha a
+  /// `PlatformException` do canal e **relanca um tipo proprio**
+  /// (`_handlePlatformException`), entao o que chega aqui e
+  /// `PermissionDeniedException`, `LocationServiceDisabledException` ou
+  /// `PositionUpdateException` -- e o `timeLimit`, que e um
+  /// `.timeout()` de Dart puro, chega como `TimeoutException`. O NOME DO TIPO e
+  /// a informacao, e e por isso que o detalhe o carrega.
+  final String? detalhe;
 }
 
 /// Por que a resolucao da cidade nao devolveu nome.
 ///
-/// **Sao OITO, e cada um e um caminho que acontece de verdade.** Os cinco
+/// **Sao NOVE, e cada um e um caminho que acontece de verdade.** Os cinco
 /// primeiros sao os de [MotivoDeNaoTerPonto], repetidos aqui porque sem ponto
-/// nao ha o que resolver; os tres ultimos sao da resolucao em si, e nenhum
-/// deles e exotico:
+/// nao ha o que resolver; os quatro ultimos sao da resolucao em si.
+///
+/// ## Dois nomes mudaram em 20/10/2026, e os dois estavam ERRADOS NO IOS
 ///
 /// - [geocoderAusente] e medido pelo proprio pacote (`isPresent()`), e ele
 ///   existe porque o geocoder do Android **pode nao estar no aparelho** --
-///   AOSP sem Play Services, e paises onde o servico nao e oferecido;
-/// - [tetoDeUsoEstourado] e o `PlatformException(IO_ERROR, ...)` que o README
-///   do pacote descreve: *"most of the times it means that the rate limit has
-///   been reached"*;
-/// - [semResultado] e a lista de lugares vindo vazia, ou vindo sem `locality`
-///   -- mar aberto, zona rural, e o aparelho que responde mas nao sabe.
+///   AOSP sem Play Services, e paises onde o servico nao e oferecido. **Ele e
+///   ANDROID-ONLY, e isso foi medido no pacote**: o darwin implementa
+///   `isPresent()` como `Future<bool>.value(true)` cravado
+///   (`geocoding_darwin-1.0.3/lib/src/geocoding_darwin.dart`). Num relato de
+///   iPhone este motivo e impossivel, e quem o considerar esta perdendo tempo.
 ///
-/// **Nenhum dos oito e erro, e nenhum deles vira excecao.** Os oito caem para
+/// - [falhaDoServico] **era `tetoDeUsoEstourado`, e o nome antigo mentia.** No
+///   Android o `IO_ERROR` do README do pacote e quase sempre teto de uso
+///   mesmo: *"most of the times it means that the rate limit has been
+///   reached"*. No iOS nao: o `CLGeocoderProxyApiDelegate.swift` do
+///   `geocoding_darwin` converte **qualquer** `NSError` do `CLGeocoder` num
+///   unico `PigeonError(code: "GeocodeAddressError")`. Rede
+///   (`kCLErrorNetwork`), cancelamento (`kCLErrorGeocodeCanceled`) e
+///   **"nao achei" (`kCLErrorGeocodeFoundNoResult`)** chegam todos aqui, com o
+///   mesmo codigo. Chamar isso de "teto estourado" mandava quem estava sem
+///   rede esperar uma cota que nunca foi o problema.
+///
+/// - [semResultado] e a lista vindo COM lugares e sem nome de cidade em nenhum
+///   deles -- ver [cidadeDoLugar]. **No iOS isto nao e a lista vazia**: a
+///   Apple devolve ausencia como ERRO (acima), e lista vazia e forma do
+///   Android. Aqui ele significa uma coisa so, nas duas plataformas: o servico
+///   respondeu, descreveu o lugar, e nenhum campo de cidade veio preenchido.
+///
+/// - [resolucaoSemResposta] e a desistencia por TEMPO **da resolucao**, e ela e
+///   separada de [semFixNoPrazo] porque as duas eram o mesmo valor e nao sao a
+///   mesma coisa. [semFixNoPrazo] e o aparelho nao fixando a posicao; este e o
+///   servico de plataforma nao respondendo depois de a posicao ter chegado.
+///   Com um valor so, "o GPS nao pegou" e "a Apple nao respondeu" eram
+///   indistinguiveis no relato, e as duas tem conserto diferente.
+///
+/// **Nenhum dos nove e erro, e nenhum deles vira excecao.** Os nove caem para
 /// a reserva da tela, que e a lista nacional dos 20 mais recentes. Um `null`
-/// no lugar deste enum faria os oito virarem a mesma ausencia, e a tela nao
+/// no lugar deste enum faria os nove virarem a mesma ausencia, e a tela nao
 /// teria como registrar o que aconteceu.
 enum MotivoDeNaoTerCidade {
   permissaoNegada,
@@ -228,8 +284,28 @@ enum MotivoDeNaoTerCidade {
   semFixNoPrazo,
   indisponivel,
   geocoderAusente,
-  tetoDeUsoEstourado,
+  falhaDoServico,
   semResultado,
+  resolucaoSemResposta;
+
+  /// O codigo CURTO que a tela mostra para a pessoa ler de volta para nos.
+  ///
+  /// **Nao e o `name` do enum, e a diferenca e deliberada.** O `name` muda
+  /// quando alguem renomeia um valor -- e dois valores acabaram de ser
+  /// renomeados aqui. Um codigo escrito a mao sobrevive ao renome, e e ele que
+  /// vai no relato do cliente: o que ele le na tela tem de continuar
+  /// significando a mesma coisa daqui a tres meses.
+  String get codigo => switch (this) {
+        MotivoDeNaoTerCidade.permissaoNegada => 'perm-negada',
+        MotivoDeNaoTerCidade.permissaoNegadaPermanentemente => 'perm-bloqueada',
+        MotivoDeNaoTerCidade.servicoDesligado => 'servico-off',
+        MotivoDeNaoTerCidade.semFixNoPrazo => 'sem-fix',
+        MotivoDeNaoTerCidade.indisponivel => 'indisponivel',
+        MotivoDeNaoTerCidade.geocoderAusente => 'geocoder-ausente',
+        MotivoDeNaoTerCidade.falhaDoServico => 'falha-servico',
+        MotivoDeNaoTerCidade.semResultado => 'sem-nome',
+        MotivoDeNaoTerCidade.resolucaoSemResposta => 'sem-resposta',
+      };
 }
 
 /// O resultado de uma tentativa de resolver a cidade.
@@ -250,10 +326,86 @@ class CidadeResolvida extends ResultadoDaCidade {
   final String cidade;
 }
 
-/// Nao deu, e o motivo e so para registro: a tela trata os oito igual.
+/// Nao deu, e o motivo decide a frase: a tela trata os nove em DOIS grupos.
 class CidadeNaoResolvida extends ResultadoDaCidade {
-  const CidadeNaoResolvida(this.motivo);
+  const CidadeNaoResolvida(this.motivo, {this.detalhe});
   final MotivoDeNaoTerCidade motivo;
+
+  /// O QUE A PLATAFORMA DISSE, quando disse algo. Nulo quando nao disse.
+  ///
+  /// Existe pela mesma razao de [CapturaSemPonto.detalhe], e carrega o que
+  /// sobrou dele mais o que a chamada ao geocoder deixou: o `code` da
+  /// `PlatformException` e, quando ela traz, a `message` e os `details`.
+  ///
+  /// **MEDIDO, e o resultado da medicao e uma limitacao que precisa estar
+  /// escrita:** no iOS o `code` e SEMPRE `GeocodeAddressError` e a `message` e
+  /// sempre `Failed to geocode address.`, porque o
+  /// `CLGeocoderProxyApiDelegate.swift` poe o `NSError` de verdade em `details`
+  /// -- e `NSError` nao atravessa o codec do pigeon. Ou seja: **o detalhe
+  /// distingue a ETAPA (ponto / geocoder / lugar sem nome), e nao distingue
+  /// QUAL erro da Apple foi.** Isso e limite do pacote e nao desleixo daqui;
+  /// quem quiser o `kCLError` tem de mandar um PR para o `geocoding_darwin`.
+  /// Ainda assim e a informacao que faltava: as quatro frases iguais viravam
+  /// zero bits, e tres grupos distinguiveis valem a viagem de um build.
+  final String? detalhe;
+}
+
+/// O NOME DA CIDADE dentro de um [Placemark], ou nulo quando nao ha nenhum.
+///
+/// **Funcao pura, de proposito, e e a unica parte da resolucao que da para
+/// medir sem aparelho.** O resto de `_resolver` e canal de plataforma: em
+/// teste ele nao responde, e `cidade_da_localizacao_test.dart` registra essa
+/// lacuna por escrito desde 19/10/2026. A escolha de CAMPO nao precisava estar
+/// do lado de la da fronteira, e enquanto estava ela nunca foi medida.
+///
+/// ## Dois degraus, e cada um dos que ficaram de fora ficou por uma razao
+///
+/// 1. **`locality`** -- "The name of the city", e o campo certo. No Android o
+///    `android.location.Geocoder` o preenche; no iOS o `CLGeocoder` tambem, na
+///    maior parte dos lugares.
+///
+/// 2. **`subAdministrativeArea`** -- a reserva, e ela existe porque a Apple
+///    **nao preenche `locality` em todo lugar**. Distrito, zona rural e cidade
+///    pequena voltam com `locality` nulo e o municipio em
+///    `subAdministrativeArea`. Antes de 20/10/2026 o codigo lia um campo so e
+///    esses lugares caiam em [MotivoDeNaoTerCidade.semResultado] -- defeito
+///    real, medido no codigo, que o iOS expoe e o Android esconde.
+///
+/// ## O QUE NAO ENTRA, E ISSO E MAIS IMPORTANTE QUE O QUE ENTRA
+///
+/// - **`administrativeArea` NAO entra, e a tentacao e grande.** O proprio
+///   pacote o documenta como *"The name of the state or province"*
+///   (`geocoding_platform_interface/lib/src/types/placemark.dart`). No Brasil
+///   ele vale `SP`, que e o ESTADO. Um terceiro degrau nele poria `SP` no
+///   filtro de CIDADE: recorte errado com cara de acerto, e a pessoa veria
+///   "voce esta em SP" sem ninguem reprovar nada. Ha contrapeso de teste
+///   exigindo nulo nesse caso, e ele existe para reprovar quem acrescentar o
+///   degrau.
+///
+/// - **`subLocality` NAO entra, e e proibido.** Ele e o BAIRRO. A emenda 1 do
+///   ADR-0006 autorizou coordenada -> **cidade**, e nao coordenada -> bairro:
+///   o nivel maximo publico e bairro+cidade (ADR-0010), e DERIVAR o bairro da
+///   coordenada e mais fino que o que a pessoa escolheu entregar. O portao
+///   `app/test/dispositivo/sem_geocodificacao_test.dart` reprova
+///   `bairroDaCoordenada` pelo nome, com essa razao escrita.
+///
+/// - **`name` NAO entra.** No iOS ele e o nome do PONTO -- um ponto de
+///   interesse, um estabelecimento, as vezes o numero da rua. Nada disso e
+///   cidade, e nada disso deveria aparecer num filtro de cidade.
+///
+/// Devolve o nome **aparado**, e nulo quando o campo existe mas e so espaco:
+/// `''` e `'   '` sao a mesma ausencia, e so um deles seria pego por
+/// `isNotEmpty`. O colapso do espaco DO MEIO e de [CidadeResolvida], que e
+/// quem fala com `texto_para_busca` do banco.
+String? cidadeDoLugar(Placemark lugar) {
+  // Os dois campos sao ANULAVEIS no pacote. Um `!` em qualquer um derrubaria a
+  // tela no aparelho que responde sem cidade -- que e justamente o caso que
+  // [MotivoDeNaoTerCidade.semResultado] existe para nomear.
+  for (final campo in <String?>[lugar.locality, lugar.subAdministrativeArea]) {
+    final nome = (campo ?? '').trim();
+    if (nome.isNotEmpty) return nome;
+  }
+  return null;
 }
 
 /// O acesso a localizacao do aparelho.
@@ -403,13 +555,38 @@ class LocalizacaoPorGeolocator implements Localizacao {
           origem: OrigemDoPonto.deviceGps,
         ),
       );
-    } on Object {
+    } on Object catch (erro) {
       // O pacote lanca tipos diferentes para "estourou o prazo", "o servico
       // caiu no meio" e "o aparelho recusou", e os tres terminam na mesma
       // tela: sem ponto, com o bairro oferecido. Distinguir aqui produziria
       // tres frases para uma acao unica.
-      return const CapturaSemPonto(MotivoDeNaoTerPonto.semFixNoPrazo);
+      //
+      // **A FRASE continua uma, e o REGISTRO passou a ser tres.** Era o mesmo
+      // `on Object` sem `catch`, e com ele o relato do cliente de 20/10/2026
+      // ("da o erro ... instantaneo") nao tinha como ser lido: um
+      // `PermissionDeniedException` do lado nativo e um `TimeoutException` de
+      // 12 s produziam byte por byte a mesma tela. O tipo e barato de guardar
+      // e e a unica coisa que separa os dois.
+      return CapturaSemPonto(
+        MotivoDeNaoTerPonto.semFixNoPrazo,
+        detalhe: _detalheDoErro(erro),
+      );
     }
+  }
+
+  /// O que der para dizer sobre o erro, em pouco texto e sem dado pessoal.
+  ///
+  /// Nao e `erro.toString()`: a mensagem de algumas excecoes do `geolocator`
+  /// traz a coordenada, e isto vai para a TELA. O tipo mais o `code` do canal
+  /// sao o que diagnostica, e nenhum dos dois e dado de ninguem.
+  static String _detalheDoErro(Object erro) {
+    if (erro is PlatformException) {
+      final partes = <String>[erro.code];
+      final detalhes = erro.details;
+      if (detalhes != null) partes.add(detalhes.toString());
+      return partes.join(' ');
+    }
+    return erro.runtimeType.toString();
   }
 
   /// Os ajustes que vao para o lado nativo -- e **o unico lugar que le
@@ -489,21 +666,26 @@ class LocalizacaoPorGeolocator implements Localizacao {
   }) async {
     final captura = await pontoAproximado(prazo: prazo);
     switch (captura) {
-      case CapturaSemPonto(motivo: final motivo):
-        // Os cinco motivos do PONTO atravessam sem traducao perdida: a tela
-        // trata os oito igual, e manter o motivo preserva o registro.
-        return CidadeNaoResolvida(switch (motivo) {
-          MotivoDeNaoTerPonto.permissaoNegada =>
-            MotivoDeNaoTerCidade.permissaoNegada,
-          MotivoDeNaoTerPonto.permissaoNegadaPermanentemente =>
-            MotivoDeNaoTerCidade.permissaoNegadaPermanentemente,
-          MotivoDeNaoTerPonto.servicoDesligado =>
-            MotivoDeNaoTerCidade.servicoDesligado,
-          MotivoDeNaoTerPonto.semFixNoPrazo =>
-            MotivoDeNaoTerCidade.semFixNoPrazo,
-          MotivoDeNaoTerPonto.indisponivel =>
-            MotivoDeNaoTerCidade.indisponivel,
-        });
+      case CapturaSemPonto(motivo: final motivo, detalhe: final detalhe):
+        // Os cinco motivos do PONTO atravessam sem traducao perdida, e **o
+        // detalhe atravessa com eles**: quem le a tela precisa poder dizer que
+        // a falha foi na etapa do PONTO e nao na do nome, e sem repassar o
+        // detalhe a etapa se perdia na fronteira dos dois enums.
+        return CidadeNaoResolvida(
+          switch (motivo) {
+            MotivoDeNaoTerPonto.permissaoNegada =>
+              MotivoDeNaoTerCidade.permissaoNegada,
+            MotivoDeNaoTerPonto.permissaoNegadaPermanentemente =>
+              MotivoDeNaoTerCidade.permissaoNegadaPermanentemente,
+            MotivoDeNaoTerPonto.servicoDesligado =>
+              MotivoDeNaoTerCidade.servicoDesligado,
+            MotivoDeNaoTerPonto.semFixNoPrazo =>
+              MotivoDeNaoTerCidade.semFixNoPrazo,
+            MotivoDeNaoTerPonto.indisponivel =>
+              MotivoDeNaoTerCidade.indisponivel,
+          },
+          detalhe: detalhe,
+        );
       case CapturaComPonto(ponto: final ponto):
         final guardada = _cidadeGuardadaPara(ponto);
         if (guardada != null) return CidadeResolvida(guardada);
@@ -551,30 +733,37 @@ class LocalizacaoPorGeolocator implements Localizacao {
       // NAO pode ser chamado aqui nem em lugar nenhum deste app: ADR-0006, e
       // o portao `sem_geocodificacao_test.dart` reprova por nome.
       lugares = await plataforma.placemarkFromCoordinates(ponto.lat, ponto.lon);
-    } on Object {
+    } on Object catch (erro) {
       // O `IO_ERROR` do teto de uso chega aqui, e e o caminho NORMAL sob
       // volume -- nao o excepcional. Qualquer outra falha de plataforma cai no
       // mesmo lugar porque o desfecho da tela e o mesmo: a reserva.
-      return const CidadeNaoResolvida(
-        MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+      //
+      // **No iOS "qualquer outra" e literalmente tudo**, inclusive "nao
+      // achei": ver [MotivoDeNaoTerCidade.falhaDoServico]. O detalhe e o que
+      // separa ESTE caminho do caminho do ponto no relato de quem usa o app.
+      return CidadeNaoResolvida(
+        MotivoDeNaoTerCidade.falhaDoServico,
+        detalhe: _detalheDoErro(erro),
       );
     }
 
-    // `locality` e a cidade. Lista vazia, ou `locality` vazia em todos os
-    // lugares devolvidos, e `semResultado` -- mar aberto e zona rural
-    // respondem assim, e nao sao erro.
+    // Lista vindo vazia, ou vindo sem nenhum campo de cidade em lugar nenhum,
+    // e `semResultado` -- ver [cidadeDoLugar] para QUAIS campos contam.
     for (final lugar in lugares) {
-      // `locality` e ANULAVEL no pacote, e e ela que e a cidade. Um `!` aqui
-      // derrubaria a tela no aparelho que responde sem cidade -- que e
-      // justamente o caso `semResultado`.
-      final nome = (lugar.locality ?? '').trim();
-      if (nome.isNotEmpty) {
+      final nome = cidadeDoLugar(lugar);
+      if (nome != null) {
         _ultimoPonto = ponto;
         _ultimaCidade = nome;
         return CidadeResolvida(nome);
       }
     }
-    return const CidadeNaoResolvida(MotivoDeNaoTerCidade.semResultado);
+    return CidadeNaoResolvida(
+      MotivoDeNaoTerCidade.semResultado,
+      // O numero de lugares separa "a plataforma nao devolveu nada" de "a
+      // plataforma descreveu o lugar e nenhum campo de cidade veio". No iOS o
+      // primeiro nao acontece (ausencia vira erro), no Android acontece.
+      detalhe: '${lugares.length} lugar(es) sem nome de cidade',
+    );
   }
 
   static PermissaoDeLocalizacao _traduzir(LocationPermission permissao) {
