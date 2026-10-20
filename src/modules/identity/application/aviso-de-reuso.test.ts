@@ -17,9 +17,9 @@
  * integração, contra o receptor local. Aqui a porta é um dublê.
  */
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 
+import { hashDeToken } from '../../../shared/crypto/digest.js';
 import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/types/brands.js';
 import { dataFixa, INSTANTE_FIXO } from '../../../shared/time/relogio-de-teste.js';
 import type { Conta, NovoTokenDeVerificacao } from '../ports/identity-repository.js';
@@ -234,9 +234,15 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
     // leitura de banco numa revogação em massa disparável por qualquer um — e,
     // pior, num rastro de quem teve a conta invadida.
     assert.notEqual(token.tokenHash, TOKEN_EM_CLARO);
+    // `hashDeToken`, e nao um `createHash` reescrito aqui: o resumo era
+    // reimplementado neste arquivo com `.digest('base64')`, e era essa
+    // duplicacao que fazia o caso concordar com um adaptador que gravava os 44
+    // bytes do texto base64 numa coluna `bytea` (medido em 19/10/2026).
+    assert.deepEqual(token.tokenHash, hashDeToken(TOKEN_EM_CLARO));
     assert.equal(
-      token.tokenHash,
-      createHash('sha256').update(TOKEN_EM_CLARO, 'utf8').digest('base64'),
+      token.tokenHash.length,
+      32,
+      'SHA-256 tem 32 bytes; 44 seria o texto base64 deles',
     );
   });
 

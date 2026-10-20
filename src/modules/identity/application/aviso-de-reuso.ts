@@ -150,7 +150,7 @@ export function criarAvisoDeReusoAoTitular(
       id: deps.ids.uuidv7(),
       userId: conta.id,
       proposito: 'session_disavow',
-      tokenHash: hashDeToken(tokenBruto).toString('base64') as TokenHash,
+      tokenHash: hashDeToken(tokenBruto) as TokenHash,
       enviadoPara: conta.email,
       expiraEm: (aviso.ocorridoEm + VALIDADE_DO_DISAVOW_EM_MS) as Instant,
       // De quem APRESENTOU o refresh reusado, e não da vítima: é o único rastro

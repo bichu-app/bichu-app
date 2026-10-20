@@ -53,6 +53,24 @@ export function criarContagemDeEntradasNovas(db: Db): ContagemDeEntradasNovas {
     async contar(recorte: RecorteDeEntradasNovas): Promise<number> {
       let consulta = construtorDaListagem(db, {
         chamador: recorte.chamador,
+        // **`undefined` AQUI E A RESPOSTA CERTA, e nao um campo que faltou.**
+        //
+        // `familia` entrou em `RecorteDoDiretorio` pela correcao do ponto de
+        // referencia por APARELHO (SEC-021), e entrou **obrigatoria e anulavel**
+        // de proposito: cada chamador tem de DECIDIR de qual aparelho sai o
+        // ponto, em vez de herdar "a localizacao da conta" -- que e a pergunta
+        // sem resposta unica que derrubava a aba para quem entrou em dois.
+        //
+        // Esta chamada CONTA e nao lista: ela pede `sort: 'name'`, `limit: 1` e
+        // termina em `countAll`. Nao ha distancia a medir e nao ha ordem por
+        // proximidade a produzir, entao nao ha aparelho de onde tirar ponto.
+        // Passar um aqui faria a subconsulta escalar do ponto rodar para nada,
+        // num caminho que so quer um numero.
+        //
+        // As duas pontas foram costuradas na mescla do terceiro lote de
+        // 20/10/2026: o contador e de uma frente e o `familia` e de outra, as
+        // duas mesclaram sem conflito de TEXTO, e quem acusou foi `tsc`.
+        familia: undefined,
         agora: recorte.agora,
         sort: 'name',
         page: 1,

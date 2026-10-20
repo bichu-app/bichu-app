@@ -112,7 +112,8 @@ interface Linha {
   id: string;
   userId: UserId;
   familyId: string;
-  tokenHash: string;
+  /** `TokenHash` e `Buffer` desde 19/10: a comparacao e `.equals`, nunca `===`. */
+  tokenHash: TokenHash;
   /** BICHUS-77: `renovar()` compara este valor com a barreira da conta. */
   issuedAt: Instant;
   expiresAt: Instant;
@@ -194,7 +195,7 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   }
 
   override buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
-    const l = this.linhas.find((x) => x.tokenHash === hash);
+    const l = this.linhas.find((x) => x.tokenHash.equals(hash));
     if (l === undefined) return Promise.resolve(undefined);
     return Promise.resolve({
       id: l.id,

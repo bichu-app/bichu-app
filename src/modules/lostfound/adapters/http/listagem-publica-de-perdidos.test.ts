@@ -482,13 +482,45 @@ void describe('não-vazamento: a listagem pública não carrega id interno nem d
  * ESTE CASO ESTÁ ANCORADO NO QUE O CONTRATO DECLARA, e não num comentário:
  * ele lê `parameters` da operação pelo próprio carregador de contrato.
  */
+/**
+ * ADR-0006: a listagem pública não aceita coordenada NEM distância no pedido.
+ *
+ * ## O que este describe ainda faz, agora que o portão lê o pedido
+ *
+ * Quando ele foi escrito, `portao-contrato-publico.ts` olhava só a RESPOSTA
+ * declarada, e esta era a ÚNICA coisa no repositório medindo o lado do pedido —
+ * de uma rota só. O portão passou a percorrer o contrato também pelo pedido, e
+ * cobre esta rota de forma geral e mais forte: casamento por segmento (alcança
+ * `center_lat` e `max_km`, que nome exato não alcança), nas 38 operações
+ * alcançáveis sem conta, e operação pública nova nasce coberta.
+ *
+ * Os três casos abaixo FICAM, e cada um por um motivo próprio — a redundância
+ * é de um só deles, e é barata:
+ *
+ * 1. `a operação declara parâmetro...` NÃO é redundante. A regra do portão é
+ *    GLOBAL: ela reprova quando nenhuma das 38 operações declara parâmetro
+ *    nenhum. Esta aqui é POR OPERAÇÃO. Se `listPublicLostPets` sozinha perdesse
+ *    os `parameters`, o portão seguiria percorrendo 46 parâmetros das outras e
+ *    terminaria verde, enquanto este caso reprova.
+ * 2. `ISCA: nenhum parâmetro da rota é coordenada...` É redundante com o
+ *    portão, e mais fraca que ele. Fica porque é outro MECANISMO sobre a mesma
+ *    afirmação, por ~15 linhas: o portão roda no passo de esteira
+ *    (`verificar-contrato-publico.sh`), este caso roda na suíte do backend.
+ *    Quem apagar um não apaga o outro.
+ * 3. `ISCA: o recorte que a porta recebe...` NÃO é redundante, e é o caso que
+ *    mais importa. Ele mede o TEMPO DE EXECUÇÃO: dispara `?lat&lon&radius_m` na
+ *    rota montada e exige que o recorte entregue à porta não os carregue. O
+ *    portão lê o CONTRATO, por construção — o próprio arquivo dele diz "ele lê
+ *    o contrato, não a lista de rotas de hoje". Um parâmetro FORA do contrato,
+ *    lido à mão de `request.query`, é invisível para ele e visível só aqui.
+ *
+ * A lista abaixo é a mesma família de nomes que `portao-contrato-publico.ts`
+ * reprova. Copiada e não importada **de propósito**: a de lá é sobre o que SAI,
+ * a do pedido do portão é sobre o que ENTRA em qualquer rota pública, e esta é
+ * sobre o que entra NESTA rota. Importar qualquer uma faria uma mudança lá
+ * alterar em silêncio o que este caso mede.
+ */
 void describe('ADR-0006: a listagem pública não aceita coordenada NEM distância no pedido', () => {
-  /**
-   * A mesma família de nomes que `portao-contrato-publico.ts` reprova na
-   * resposta. Copiada e não importada **de propósito**: a lista de lá é sobre o
-   * que SAI e pode mudar por outra razão; esta é sobre o que ENTRA nesta rota.
-   * Importá-la faria uma mudança lá alterar em silêncio o que este caso mede.
-   */
   const NOMES_DE_COORDENADA = [
     'lat',
     'lon',
@@ -535,9 +567,18 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
 
   /**
    * DESLIGANDO: acrescente `- name: lat` / `in: query` aos `parameters` de
-   * `listPublicLostPets` em `api/openapi.yaml`. Este caso reprova pelo nome, e
-   * o portão de contrato público continua APROVANDO — que é exatamente a razão
-   * de este caso existir.
+   * `listPublicLostPets` em `api/openapi.yaml`. Este caso reprova pelo nome.
+   *
+   * O portão de contrato público TAMBÉM reprova, desde que passou a ler o
+   * pedido — e a frase que estava aqui dizia o contrário ("o portão continua
+   * APROVANDO"), que era verdade quando foi escrita e deixou de ser. Ela ficaria
+   * contando ao próximo leitor que o portão é cego para isto, e foi corrigida
+   * por isso: comentário errado sobre uma verificação é pior que comentário
+   * nenhum, porque convence.
+   *
+   * A razão de este caso continuar existindo passou a ser outra, e está no
+   * cabeçalho do describe: ele é outro mecanismo, na suíte do backend, sobre a
+   * mesma afirmação que o passo de esteira faz.
    */
   void it('ISCA: nenhum parâmetro da rota é coordenada, distância ou raio', () => {
     // `typeof === 'string'` e nao `String(...)`: o `name` de um parametro e

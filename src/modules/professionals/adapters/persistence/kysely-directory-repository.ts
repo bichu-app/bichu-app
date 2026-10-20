@@ -82,6 +82,7 @@ import type {
 } from '../../domain/avaliacao-do-local.js';
 import { PONTUACAO_VAZIA } from '../../domain/avaliacao-do-local.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
+import type { FamiliaDeSessao } from '../../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 interface LinhaDaEntrada {
@@ -100,20 +101,65 @@ interface LinhaDaEntrada {
 }
 
 /**
- * O ponto de referencia de quem chama, valido, como subconsulta.
+ * O ponto de referencia DESTE APARELHO de quem chama, valido, como subconsulta.
  *
- * Subconsulta e nao junção porque o resultado e no maximo uma linha (a tabela
- * tem `user_id` como chave primaria) e porque assim a ausencia produz nulo em
- * vez de descartar a pagina inteira -- que e o que um `INNER JOIN` faria com
- * quem nunca informou onde mora.
+ * Subconsulta e nao junção porque assim a ausencia produz nulo em vez de
+ * descartar a pagina inteira -- que e o que um `INNER JOIN` faria com quem
+ * nunca informou onde mora.
+ *
+ * ## A FAMILIA DE SESSAO NAO E DETALHE DE AUTORIZACAO AQUI: E O QUE MANTEM A SUBCONSULTA ESCALAR
+ *
+ * Esta funcao filtrava apenas por `user_id`, e isso era verdade quando `user_id`
+ * era a chave primaria inteira da tabela. Desde a
+ * `20260928000008_localizacao-de-referencia-por-aparelho` a chave e o PAR
+ * `(user_id, session_family_id)` -- uma linha por aparelho --, e uma
+ * subconsulta escalar que devolve duas linhas nao sai lenta nem imprecisa: o
+ * Postgres levanta `more than one row returned by a subquery used as an
+ * expression`, que sobe como 500. Como a pagina e a contagem chamam a mesma
+ * funcao, a aba inteira caia para qualquer pessoa que tivesse entrado na conta
+ * em dois aparelhos e informado onde estava. Medido em homologacao, 19/10/2026.
+ *
+ * O par e a chave primaria, entao com a familia no `WHERE` o resultado volta a
+ * ser no maximo uma linha POR CONSTRUCAO -- e nao por um `LIMIT 1` que escolhe
+ * um dos dois lugares sem ninguem ter decidido qual.
+ *
+ * ## E a MESMA regra do `GET` da propria localizacao, pela mesma razao
+ *
+ * `construtorDaLeitura` (`identity`) filtra por esta coluna de proposito: sem
+ * ela, um aparelho leria o lugar que OUTRO aparelho da mesma conta informou.
+ * Ordenar `Perto` a partir daquele lugar publicaria em metros exatamente o que
+ * aquele `GET` se recusa a contar -- e foi medido tambem: conta recem-logada,
+ * `GET /v1/me/location` devolvendo `null`, e o diretorio ainda assim medindo
+ * distancia. Se algum dia o produto decidir que a lista deve usar qualquer
+ * localizacao da conta, isso e decisao do cliente contra a SEC-021 e precisa de
+ * `order by captured_at desc limit 1` escrito aqui -- nao e o que este
+ * adaptador pode escolher sozinho.
  */
-function pontoDeReferencia(chamador: UserId, agora: Instant) {
+function pontoDeReferencia(chamador: UserId, familia: FamiliaDeSessao, agora: Instant) {
   return sql`(
     select reference_point
       from user_reference_locations
      where user_id = ${chamador}
+       and session_family_id = ${familia}
        and expires_at > ${comoData(agora)}
   )`;
+}
+
+/**
+ * O ponto de quem chama SEM aparelho conhecido: nenhum.
+ *
+ * Token anterior a emenda 1 do ADR-0002 nao carrega `sid`, e sem `sid` nao ha
+ * de onde deduzir o aparelho. `null::geography` faz `ST_Distance` devolver nulo
+ * em todas as entradas, que e o mesmo caminho de quem nunca informou onde mora
+ * -- e nulo vira `distance_available: false` na borda, nunca zero. A conversao
+ * explicita existe porque `null` cru deixaria `ST_Distance` ambiguo para o
+ * Postgres.
+ */
+const SEM_PONTO = sql`null::geography`;
+
+/** O ponto que vale para esta chamada: o do aparelho, ou nenhum. */
+function pontoDoAparelho(chamador: UserId, familia: FamiliaDeSessao | undefined, agora: Instant) {
+  return familia === undefined ? SEM_PONTO : pontoDeReferencia(chamador, familia, agora);
 }
 
 /**
@@ -472,16 +518,24 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
 
   return {
     async listarPublicados(recorte: RecorteDoDiretorio): Promise<PaginaDoDiretorio> {
-      const localizacao = await db
-        .selectFrom('user_reference_locations')
-        .select('user_id')
-        .where('user_id', '=', recorte.chamador)
-        .where('expires_at', '>', comoData(recorte.agora))
-        .executeTakeFirst();
+      // A presenca pergunta pelo MESMO par que a subconsulta mede: perguntar
+      // so por `user_id` diria "tem localizacao" por causa do outro aparelho, e
+      // a resposta prometeria uma ordem por distancia que o ponto deste
+      // aparelho nao tem como produzir.
+      const localizacao =
+        recorte.familia === undefined
+          ? undefined
+          : await db
+              .selectFrom('user_reference_locations')
+              .select('user_id')
+              .where('user_id', '=', recorte.chamador)
+              .where('session_family_id', '=', recorte.familia)
+              .where('expires_at', '>', comoData(recorte.agora))
+              .executeTakeFirst();
 
       const distanciaDisponivel = localizacao !== undefined && recorte.sort === 'distance';
 
-      const ponto = pontoDeReferencia(recorte.chamador, recorte.agora);
+      const ponto = pontoDoAparelho(recorte.chamador, recorte.familia, recorte.agora);
       let pagina = construtorDaListagem(db, recorte).select([
         'slug',
         'kind',
@@ -528,9 +582,10 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
     async lerLocalPublicado(
       slug: string,
       chamador: UserId,
+      familia: FamiliaDeSessao | undefined,
       agora: Instant,
     ): Promise<LocalDoDiretorio | undefined> {
-      const ponto = pontoDeReferencia(chamador, agora);
+      const ponto = pontoDoAparelho(chamador, familia, agora);
       // `status = 'published'` no `WHERE`: rascunho, oculto e removido caem no
       // mesmo `undefined`, que a borda traduz em 404. Distinguir confirmaria a
       // existencia do endereco a quem nao tem direito de saber (ADR-0021).
