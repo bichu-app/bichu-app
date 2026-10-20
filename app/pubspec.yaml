@@ -83,14 +83,13 @@ dependencies:
   #
   # POR QUE ESTE, e nao o `location`, que tem um TERCO das dependencias:
   #
-  # 1. **Ele nao sabe geocodificar, e isso e o requisito.** O ADR-0006 proibe
-  #    converter coordenada em endereco e endereco em coordenada. No
-  #    `geolocator` essa conversao nao existe -- ela mora no pacote SEPARADO
-  #    `geocoding`, do mesmo publicador, que este projeto nao declara. A
-  #    proibicao deixa de depender da disciplina de quem escreve a proxima
-  #    tela: o codigo para converter nao esta no binario. (Conferido por
-  #    varredura no fonte dos quatro pacotes: zero ocorrencia de `placemark`,
-  #    `geocode` ou `fromAddress`.)
+  # 1. **Ele nao sabe geocodificar**, e isso era o requisito ate 19/10/2026.
+  #    LEIA O BLOCO DO `geocoding` ABAIXO ANTES DE CONCLUIR QUALQUER COISA
+  #    DAQUI: a proibicao de coordenada->cidade caiu por decisao do cliente, e
+  #    a de endereco->coordenada CONTINUA. O `geolocator` continua nao sabendo
+  #    fazer nem uma nem outra, e continua sendo escolhido tambem por isso --
+  #    o que mudou e que a conversao autorizada passou a existir no binario,
+  #    por um pacote proprio e com portao proprio.
   #
   # 2. **Ele deixa desligar o provedor do Google.** No Android, o padrao do
   #    ecossistema e o `FusedLocationProvider`, que e um componente do Google
@@ -102,10 +101,17 @@ dependencies:
   #    tem uso aqui, e o custo dela e uma dependencia de terceiro no caminho de
   #    um dado pessoal.
   #
-  # O QUE ELE MANDA PARA FORA: nada. Nao ha cliente HTTP nem socket no codigo
-  # Dart dos quatro pacotes (conferido por varredura: as unicas URLs sao links
-  # de documentacao em comentario). A coordenada so sai do aparelho quando ESTE
-  # app a manda para a nossa API.
+  # O QUE **ESTE** PACOTE MANDA PARA FORA: nada. Nao ha cliente HTTP nem socket
+  # no codigo Dart dos quatro pacotes do `geolocator` (conferido por varredura:
+  # as unicas URLs sao links de documentacao em comentario).
+  #
+  # **A FRASE "O QUE ELE MANDA PARA FORA: nada" VALIA PARA O APP INTEIRO ATE
+  # 19/10/2026, E NAO VALE MAIS.** Ela ficou aqui, com escopo estreitado para
+  # o `geolocator`, em vez de ser apagada: quem ler so este bloco precisa ser
+  # mandado para o de baixo, porque manter a frase larga seria pior que o
+  # proprio risco que ela descrevia. O `geocoding`, declarado abaixo, MANDA a
+  # coordenada para a Apple ou para o Google a cada resolucao. Esta escrito la,
+  # com a decisao e a data.
   #
   # O PRECO: ele e federado e traz as implementacoes de web, Windows e Linux
   # junto (`geoclue`, `gsettings`, `win32`, `package_info_plus`, `uuid`) -- 14
@@ -121,6 +127,74 @@ dependencies:
   # — o `geolocator_apple` LE o plist para decidir qual autorizacao pedir. As
   # duas sao cobradas por teste; ver `permissoes_de_loja_test.dart`.
   geolocator: ^14.0.2
+
+  # ---------------------------------------------------------------------------
+  # COORDENADA -> NOME DE CIDADE, autorizado pelo cliente em 19/10/2026.
+  # ---------------------------------------------------------------------------
+  #
+  # A DECISAO, nas palavras dele: *"autorizar o gps, e trazer algum valor
+  # padrao em caso de fallback"*. Ela veio depois de ele pedir duas vezes que a
+  # pagina de pets mostrasse *"os pets cadastrados nessa cidade"* -- a cidade
+  # em que a pessoa esta -- e depois de a conta honesta ser posta na mesa dele:
+  # o caminho sem este pacote cobria 3 de 47 contas (`users.reference_city`
+  # preenchido, medido em homologacao em 19/10/2026) e nenhum visitante
+  # deslogado. A emenda do ADR-0006 tem a frase literal e a data.
+  #
+  # ===========================================================================
+  # O QUE ELE MANDA PARA FORA, E PARA QUEM. LEIA ANTES DE USAR.
+  # ===========================================================================
+  # **A COORDENADA SAI DO APARELHO, para a Apple ou para o Google, a cada
+  # resolucao.** Isto nao e suposicao e nao e leitura pessimista: e o que o
+  # README do proprio pacote declara (linhas 13-15 de
+  # `geocoding-5.0.0/README.md`), e o que o fonte confirma --
+  # `geocoding_android` chama `android.location.Geocoder`
+  # (`GeocoderProxyApi.kt`) e `geocoding_darwin` usa `CLGeocoder`.
+  #
+  # O README e literal: *"This plugin uses the free Geocoding services provided
+  # by the iOS, macOS and Android platforms. This means that there are
+  # restrictions to their use"*, *"When a `PlatformException(IO_ERROR, ...)`
+  # gets thrown, most of the times it means that the rate limit has been
+  # reached"*, e *"The availability of the Google Play Services depends on your
+  # country"*. Teto de uso e disponibilidade por pais sao propriedades de
+  # servico REMOTO. Nao ha resolucao local.
+  #
+  # A primeira versao desta decisao foi tomada sobre a premissa de que a
+  # resolucao acontecia NO APARELHO, sem nada viajar. Essa premissa estava
+  # errada, foi medida, foi corrigida com o cliente, e ele decidiu de novo com
+  # o fato na mesa. Fica registrado porque a premissa errada e mais facil de
+  # repetir que a decisao.
+  #
+  # O QUE O CLIENTE ACEITOU EM TROCA, e esta na emenda do ADR-0006:
+  #   1. um terceiro (Apple/Google) no caminho de um dado pessoal;
+  #   2. teto de uso, que faz a resolucao falhar sob volume;
+  #   3. indisponibilidade por pais e por aparelho sem Play Services.
+  #
+  # NAO EXIGE CHAVE DE API NEM CONTA DE SERVICO, e isso foi conferido antes de
+  # declarar: o README nao pede chave, nenhum dos quatro pacotes le credencial,
+  # e as duas plataformas usam o servico gratuito do proprio sistema. Se algum
+  # dia exigir, a decisao muda de natureza -- vira servico contratado, e o
+  # ADR-0006 volta a valer contra.
+  #
+  # ===========================================================================
+  # O PACOTE TRAZ OS DOIS SENTIDOS. SO UM ESTA AUTORIZADO.
+  # ===========================================================================
+  # `geocoding-5.0.0/lib/geocoding.dart` expoe os dois no mesmo arquivo:
+  #
+  #   placemarkFromCoordinates  coordenada -> lugar   AUTORIZADO
+  #   locationFromAddress       endereco   -> ponto   PROIBIDO, segue proibido
+  #
+  # O segundo e exatamente o que o cabecalho de
+  # `app/test/dispositivo/sem_geocodificacao_test.dart` nomeia: *"o CEP que
+  # 'acha' o ponto de quem negou o GPS"*. Nao da para importar meio pacote,
+  # entao a protecao mudou de forma: ela era a AUSENCIA da dependencia e passou
+  # a ser ASSERCAO sobre o uso. Aquele portao NAO foi removido -- foi
+  # ESTREITADO, e ganhou caso novo que reprova `locationFromAddress` em
+  # qualquer importe, chamada ou porta do app.
+  #
+  # A porta e `lib/dispositivo/localizacao.dart`, e ela expoe **um** metodo de
+  # conversao, num sentido so. Chamar o pacote direto de uma tela reprova no
+  # portao.
+  geocoding: ^5.0.0
 
 dev_dependencies:
   flutter_test:

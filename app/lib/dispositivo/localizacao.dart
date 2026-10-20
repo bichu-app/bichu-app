@@ -22,19 +22,36 @@
 /// um fluxo que nao termina. Por isso [Localizacao.pontoAproximado] recebe um
 /// [Duration] e desiste, com motivo.
 ///
-/// ## Esta porta nao geocodifica, e isso e estrutural
+/// ## Esta porta converte num sentido so, e o outro segue proibido
 ///
-/// ADR-0006: nao ha geocodificacao no MVP. CEP e bairro sao rotulo de exibicao
-/// e filtro de listagem, nunca fonte de coordenada; e coordenada nunca vira
-/// endereco. Esta porta **nao tem** metodo que faca nenhuma das duas coisas, e
-/// o pacote escolhido tambem nao: `geolocator` e so posicao, e a conversao
-/// para endereco mora num pacote separado (`geocoding`, do mesmo publicador)
-/// que este projeto NAO declara. A garantia nao depende de disciplina de quem
-/// escreve a proxima tela: o codigo para converter nao esta no binario.
+/// ADR-0006, emenda 1 de 19/10/2026 (decisao do cliente: *"autorizar o gps, e
+/// trazer algum valor padrao em caso de fallback"*):
 ///
-/// O portao que cobra isso e `app/test/dispositivo/sem_geocodificacao_test.dart`.
+/// - **coordenada -> nome de cidade: AUTORIZADO.** E o que
+///   [Localizacao.cidadeAproximada] faz, pelo servico de plataforma, e e o
+///   unico metodo de conversao desta porta.
+/// - **endereco -> coordenada: PROIBIDO, e continua.** CEP e bairro seguem
+///   sendo rotulo de exibicao e filtro de listagem, nunca fonte de coordenada.
+///   Esta porta **nao tem** metodo que faca isso, e nao pode passar a ter sem
+///   nova decisao.
+///
+/// A garantia mudou de FORMA, e isso precisa estar dito: ela era a ausencia do
+/// pacote no binario e passou a ser **assercao sobre o uso**. O pacote
+/// `geocoding` traz os dois sentidos no mesmo arquivo
+/// (`placemarkFromCoordinates` e `locationFromAddress`), e nao da para
+/// importar meio pacote. Quem cobra a diferenca e
+/// `app/test/dispositivo/sem_geocodificacao_test.dart`, que foi ESTREITADO e
+/// nao removido: ele permite `placemarkFromCoordinates` por nome, e reprova
+/// `locationFromAddress` em qualquer importe, chamada ou porta.
+///
+/// **E A COORDENADA SAI DO APARELHO PARA RESOLVER A CIDADE.** Apple no iOS,
+/// Google no Android, com teto de uso e indisponibilidade por pais. O
+/// `pubspec.yaml` tem o paragrafo inteiro, com o que o cliente aceitou em
+/// troca. Nao existe resolucao local: quem achar que existe vai desenhar uma
+/// tela que promete offline o que nao e.
 library;
 
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Os tres estados de permissao, mais o quarto que nao e permissao.
@@ -182,6 +199,61 @@ class CapturaSemPonto extends ResultadoDaCaptura {
   final MotivoDeNaoTerPonto motivo;
 }
 
+/// Por que a resolucao da cidade nao devolveu nome.
+///
+/// **Sao OITO, e cada um e um caminho que acontece de verdade.** Os cinco
+/// primeiros sao os de [MotivoDeNaoTerPonto], repetidos aqui porque sem ponto
+/// nao ha o que resolver; os tres ultimos sao da resolucao em si, e nenhum
+/// deles e exotico:
+///
+/// - [geocoderAusente] e medido pelo proprio pacote (`isPresent()`), e ele
+///   existe porque o geocoder do Android **pode nao estar no aparelho** --
+///   AOSP sem Play Services, e paises onde o servico nao e oferecido;
+/// - [tetoDeUsoEstourado] e o `PlatformException(IO_ERROR, ...)` que o README
+///   do pacote descreve: *"most of the times it means that the rate limit has
+///   been reached"*;
+/// - [semResultado] e a lista de lugares vindo vazia, ou vindo sem `locality`
+///   -- mar aberto, zona rural, e o aparelho que responde mas nao sabe.
+///
+/// **Nenhum dos oito e erro, e nenhum deles vira excecao.** Os oito caem para
+/// a reserva da tela, que e a lista nacional dos 20 mais recentes. Um `null`
+/// no lugar deste enum faria os oito virarem a mesma ausencia, e a tela nao
+/// teria como registrar o que aconteceu.
+enum MotivoDeNaoTerCidade {
+  permissaoNegada,
+  permissaoNegadaPermanentemente,
+  servicoDesligado,
+  semFixNoPrazo,
+  indisponivel,
+  geocoderAusente,
+  tetoDeUsoEstourado,
+  semResultado,
+}
+
+/// O resultado de uma tentativa de resolver a cidade.
+sealed class ResultadoDaCidade {
+  const ResultadoDaCidade();
+}
+
+/// Deu certo: o nome da cidade, **ja aparado e com espaco colapsado**.
+///
+/// A normalizacao de espaco nao e enfeite e foi MEDIDA em 19/10/2026 contra
+/// `texto_para_busca` do banco: ela absorve acento (`São`/`Sao`) e caixa
+/// (`SAO PAULO`/`sao paulo`), e **nao absorve espaco** -- `'São  Paulo'`
+/// normaliza para `'sao  paulo'` e nao casa com `'sao paulo'`, e
+/// `' São Paulo '` tambem nao. Como o nome vem de fora (a plataforma decide a
+/// forma), deixar o espaco passar produziria lista vazia com cara de defeito.
+class CidadeResolvida extends ResultadoDaCidade {
+  CidadeResolvida(String cidade) : cidade = cidade.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final String cidade;
+}
+
+/// Nao deu, e o motivo e so para registro: a tela trata os oito igual.
+class CidadeNaoResolvida extends ResultadoDaCidade {
+  const CidadeNaoResolvida(this.motivo);
+  final MotivoDeNaoTerCidade motivo;
+}
+
 /// O acesso a localizacao do aparelho.
 abstract class Localizacao {
   /// O estado atual, **sem** abrir dialogo.
@@ -204,6 +276,17 @@ abstract class Localizacao {
   /// Nao pede permissao: quem pede e a tela, depois da antessala, porque o
   /// pedido e um ato da pessoa e nao um efeito colateral de medir.
   Future<ResultadoDaCaptura> pontoAproximado({required Duration prazo});
+
+  /// O nome da cidade em que o aparelho esta, ou o motivo de nao ter.
+  ///
+  /// **O UNICO metodo de conversao desta porta, e num sentido so**
+  /// (coordenada -> cidade). Ver o topo do arquivo: o sentido inverso segue
+  /// proibido pelo ADR-0006 e e cobrado por portao.
+  ///
+  /// Nao pede permissao, pela mesma razao de [pontoAproximado]: sem permissao
+  /// concedida ela devolve [MotivoDeNaoTerCidade.permissaoNegada] em vez de
+  /// abrir dialogo. Quem pede e a tela, por um toque da pessoa.
+  Future<ResultadoDaCidade> cidadeAproximada({required Duration prazo});
 }
 
 /// A implementacao de verdade: `geolocator`.
@@ -235,7 +318,7 @@ abstract class Localizacao {
 /// nossa API. [forcarGerenciadorDoSistema] existe para o unico ponto em que
 /// isso poderia deixar de ser verdade -- ver o campo.
 class LocalizacaoPorGeolocator implements Localizacao {
-  const LocalizacaoPorGeolocator({this.forcarGerenciadorDoSistema = true});
+  LocalizacaoPorGeolocator({this.forcarGerenciadorDoSistema = true});
 
   /// No Android, usar o `LocationManager` do sistema em vez do provedor
   /// fundido do Google Play Services.
@@ -321,6 +404,135 @@ class LocalizacaoPorGeolocator implements Localizacao {
     }
   }
 
+  /// ## A MEMORIA DA ULTIMA RESOLUCAO, e por que ela e obrigatoria
+  ///
+  /// `_ultimoPonto` e `_ultimaCidade` existem para a resolucao NAO acontecer a
+  /// cada abertura da tela. Duas razoes, e as duas sao medidas e nao
+  /// preferencia:
+  ///
+  /// 1. **Teto de uso.** O servico de plataforma e limitado, e o README do
+  ///    pacote diz que estourar vira `IO_ERROR`. Resolver a cada abertura
+  ///    gastaria o teto de quem usa o app muito, e quem usa muito e justamente
+  ///    quem esta procurando um pet.
+  /// 2. **O ADR-0006 exige a grade de ~100 m.** Ele diz que a localizacao do
+  ///    usuario e quantizada numa grade de cerca de 100 m antes de ser
+  ///    gravada, porque *"precisao maior nao melhora em nada um raio de 5 km e
+  ///    so aumenta o dano de um vazamento"*. O mesmo raciocinio vale para
+  ///    nome de CIDADE, com folga: andar 100 m nao troca a cidade. Reresolver
+  ///    por menos que isso manda a coordenada para o terceiro de novo sem
+  ///    nenhuma chance de a resposta mudar.
+  ///
+  /// [gradeEmMetros] e a mesma ordem de grandeza da grade do ADR. Ela nao
+  /// pretende ser a quantizacao do servidor -- essa continua sendo do servidor
+  /// (ver [PontoCapturado.noContrato]); aqui ela e so o limiar de "vale
+  /// reperguntar".
+  static const double gradeEmMetros = 100;
+
+  PontoCapturado? _ultimoPonto;
+  String? _ultimaCidade;
+  Geocoding? _geocoding;
+
+  /// Quantas vezes o servico de plataforma foi de fato chamado nesta sessao.
+  ///
+  /// Existe para ser MEDIDO, e e lido por teste: "quantas resolucoes por
+  /// abertura da tela" e uma pergunta com resposta, e sem este contador ela
+  /// seria respondida por leitura de codigo.
+  int resolucoesPedidas = 0;
+
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({
+    required Duration prazo,
+  }) async {
+    final captura = await pontoAproximado(prazo: prazo);
+    switch (captura) {
+      case CapturaSemPonto(motivo: final motivo):
+        // Os cinco motivos do PONTO atravessam sem traducao perdida: a tela
+        // trata os oito igual, e manter o motivo preserva o registro.
+        return CidadeNaoResolvida(switch (motivo) {
+          MotivoDeNaoTerPonto.permissaoNegada =>
+            MotivoDeNaoTerCidade.permissaoNegada,
+          MotivoDeNaoTerPonto.permissaoNegadaPermanentemente =>
+            MotivoDeNaoTerCidade.permissaoNegadaPermanentemente,
+          MotivoDeNaoTerPonto.servicoDesligado =>
+            MotivoDeNaoTerCidade.servicoDesligado,
+          MotivoDeNaoTerPonto.semFixNoPrazo =>
+            MotivoDeNaoTerCidade.semFixNoPrazo,
+          MotivoDeNaoTerPonto.indisponivel =>
+            MotivoDeNaoTerCidade.indisponivel,
+        });
+      case CapturaComPonto(ponto: final ponto):
+        final guardada = _cidadeGuardadaPara(ponto);
+        if (guardada != null) return CidadeResolvida(guardada);
+        return _resolver(ponto);
+    }
+  }
+
+  /// A cidade da ultima resolucao, quando o aparelho nao saiu da celula.
+  String? _cidadeGuardadaPara(PontoCapturado ponto) {
+    final anterior = _ultimoPonto;
+    final cidade = _ultimaCidade;
+    if (anterior == null || cidade == null) return null;
+    final metros = Geolocator.distanceBetween(
+      anterior.lat,
+      anterior.lon,
+      ponto.lat,
+      ponto.lon,
+    );
+    return metros <= gradeEmMetros ? cidade : null;
+  }
+
+  Future<ResultadoDaCidade> _resolver(PontoCapturado ponto) async {
+    // `isPresent` PRIMEIRO, e nao dentro do `try`: ausencia de geocoder nao e
+    // falha de chamada, e misturar os dois daria a mesma frase para "este
+    // aparelho nao tem" e "o teto estourou". Medido no pacote: `isPresent()`
+    // existe exatamente porque o Android pode nao ter.
+    // Instancia guardada: `Geocoding()` monta o canal de plataforma, e montar
+    // um por resolucao seria desperdicio num caminho que ja tem teto de uso.
+    final plataforma = _geocoding ??= Geocoding();
+    try {
+      if (!await plataforma.isPresent()) {
+        return const CidadeNaoResolvida(MotivoDeNaoTerCidade.geocoderAusente);
+      }
+    } on Object {
+      // `isPresent` falhando e tratado como ausencia, e nao como teto: o
+      // aparelho que nao consegue nem responder "tenho geocoder" nao tem.
+      return const CidadeNaoResolvida(MotivoDeNaoTerCidade.geocoderAusente);
+    }
+
+    resolucoesPedidas += 1;
+    final List<Placemark> lugares;
+    try {
+      // **O SENTIDO AUTORIZADO, e o unico.** `placemarkFromCoordinates` e
+      // coordenada -> lugar. `locationFromAddress` existe no mesmo pacote e
+      // NAO pode ser chamado aqui nem em lugar nenhum deste app: ADR-0006, e
+      // o portao `sem_geocodificacao_test.dart` reprova por nome.
+      lugares = await plataforma.placemarkFromCoordinates(ponto.lat, ponto.lon);
+    } on Object {
+      // O `IO_ERROR` do teto de uso chega aqui, e e o caminho NORMAL sob
+      // volume -- nao o excepcional. Qualquer outra falha de plataforma cai no
+      // mesmo lugar porque o desfecho da tela e o mesmo: a reserva.
+      return const CidadeNaoResolvida(
+        MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+      );
+    }
+
+    // `locality` e a cidade. Lista vazia, ou `locality` vazia em todos os
+    // lugares devolvidos, e `semResultado` -- mar aberto e zona rural
+    // respondem assim, e nao sao erro.
+    for (final lugar in lugares) {
+      // `locality` e ANULAVEL no pacote, e e ela que e a cidade. Um `!` aqui
+      // derrubaria a tela no aparelho que responde sem cidade -- que e
+      // justamente o caso `semResultado`.
+      final nome = (lugar.locality ?? '').trim();
+      if (nome.isNotEmpty) {
+        _ultimoPonto = ponto;
+        _ultimaCidade = nome;
+        return CidadeResolvida(nome);
+      }
+    }
+    return const CidadeNaoResolvida(MotivoDeNaoTerCidade.semResultado);
+  }
+
   static PermissaoDeLocalizacao _traduzir(LocationPermission permissao) {
     switch (permissao) {
       case LocationPermission.always:
@@ -366,4 +578,10 @@ class LocalizacaoNaoEmbarcada implements Localizacao {
     required Duration prazo,
   }) async =>
       const CapturaSemPonto(MotivoDeNaoTerPonto.indisponivel);
+
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({
+    required Duration prazo,
+  }) async =>
+      const CidadeNaoResolvida(MotivoDeNaoTerCidade.indisponivel);
 }

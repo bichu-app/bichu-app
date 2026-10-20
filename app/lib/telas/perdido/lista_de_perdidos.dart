@@ -1,4 +1,6 @@
 import '../../widgets/arrastar_para_atualizar.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,7 +10,9 @@ import '../../api/modelos_perdido.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
+import '../../dispositivo/localizacao.dart';
 import '../../roteamento/rotas.dart';
+import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
@@ -49,7 +53,62 @@ import 'cartao_do_perdido.dart';
 /// dois.
 ///
 /// ---------------------------------------------------------------------------
-/// ## A CIDADE DEIXOU DE SER OBRIGATÓRIA, E A TELA ABRE SEM NENHUMA
+/// ## A CIDADE VEM DA LOCALIZAÇÃO, COM TRÊS RESERVAS (cliente, 19/10/2026)
+///
+/// Decisão dele, nas palavras dele: *"autorizar o gps, e trazer algum valor
+/// padrão em caso de fallback"*, depois de pedir duas vezes *"que você pegue a
+/// cidade que o usuário esta pela localização dele e monte os pets cadastrados
+/// nessa cidade"*. A emenda 1 do ADR-0006 autoriza coordenada → nome de
+/// cidade, e só esse sentido.
+///
+/// **A cadeia, nesta ordem, e nenhum elo trava a tela:**
+///
+/// 1. **a cidade resolvida pelo aparelho**, quando a permissão está concedida;
+/// 2. **`Me.reference_area.city`**, a cidade que a pessoa informou no perfil —
+///    rótulo, e por isso legítima aqui (medido: 3 de 47 contas a têm);
+/// 3. **nenhuma cidade**: os 20 mais recentes do país inteiro.
+///
+/// **NÃO HÁ CIDADE FIXA NO CÓDIGO, e a ausência é decisão.** "São Paulo" como
+/// padrão faria quem abre o app em Recife ver pets de São Paulo sem entender
+/// por quê, e isso é pior que a lista nacional — que ao menos nunca mente
+/// sobre onde a pessoa está.
+///
+/// **A TELA DIZ QUAL RECORTE ESTÁ VALENDO, nos três estados**, e é
+/// [_LinhaDoRecorte] quem diz. Cidade derivada em silêncio é pior que cidade
+/// nenhuma: quem abre o app numa viagem e vê pets da cidade errada sem
+/// explicação conclui que a lista está quebrada. A linha nomeia a cidade **e a
+/// origem dela**, e carrega a saída (`Ver todas`, e `Usar minha localização`
+/// quando ela ainda não foi usada).
+///
+/// ## O QUE A PESSOA ESCOLHE GANHA DE TUDO, INCLUSIVE DE "NADA"
+///
+/// [_pessoaMexeu] existe por um motivo que um `??` não resolve: com a
+/// precedência escrita como `digitada ?? doAparelho ?? daRegiao`, **apagar o
+/// campo não teria efeito** — nulo é indistinguível de "não mexeu", e a cidade
+/// do aparelho voltaria a valer no quadro seguinte. É o mesmo defeito que o
+/// sentinela de `RecorteDePerdidos.copiar` resolve um nível abaixo.
+///
+/// ## A RESOLUÇÃO NÃO É PEDIDA NA ABERTURA, e a tela não espera por ela
+///
+/// A lista carrega **primeiro**, com a reserva. A resolução acontece depois,
+/// sem `await` na frente da primeira pintura, e só quando a permissão **já
+/// está concedida** — abrir diálogo do sistema como efeito colateral de abrir
+/// a seção é exatamente o que a porta do aparelho proíbe
+/// (*"quem pede é a tela, depois da antessala, porque o pedido é um ato da
+/// pessoa"*). Quem ainda não concedeu lê um convite em [_LinhaDoRecorte] e
+/// toca se quiser.
+///
+/// ## OS OITO MOTIVOS DE NÃO RESOLVER CAEM TODOS PARA A RESERVA
+///
+/// Permissão negada, negada em definitivo, serviço desligado, sem fix no
+/// prazo, indisponível no build, geocoder ausente, teto de uso estourado e
+/// resolução sem resultado. **Nenhum deles vira erro na tela** e nenhum deles
+/// é raro: o geocoder do Android pode não existir no aparelho e o teto de uso
+/// é real, os dois medidos no pacote. A tela não distingue os oito — ela cai
+/// para a reserva e diz qual recorte ficou valendo.
+///
+/// ---------------------------------------------------------------------------
+/// ## A CIDADE NÃO É OBRIGATÓRIA, E A TELA ABRE MESMO SEM NENHUMA
 ///
 /// Decisão do cliente, 19/10/2026: *"o campo cidade do filtro da página pet não
 /// deve ser obrigatório, mas devemos filtrar pelos 20 últimos pets cadastrados
@@ -135,6 +194,15 @@ class ListaDePerdidos extends StatefulWidget {
   static const String vazio = 'Nenhum pet perdido agora.';
   static const String vazioFiltrado = 'Nenhum pet perdido com esse recorte.';
 
+  /// As frases de [_LinhaDoRecorte]. Elas dizem a cidade **e de onde ela
+  /// veio**: cidade derivada em silêncio é pior que cidade nenhuma.
+  static const String origemDoAparelho = 'da sua localização';
+  static const String origemDaRegiao = 'da sua região cadastrada';
+  static const String origemDaUltimaBusca = 'da sua última busca';
+  static const String semRecorteGeografico = 'Pets perdidos de todo o Brasil';
+  static const String rotuloDeVerTodas = 'Ver todas';
+  static const String rotuloDeUsarLocalizacao = 'Usar minha localização';
+
   /// O rótulo do campo de cidade, que é também o nome acessível dele.
   static const String rotuloDaCidade = 'Cidade';
   static const String exemploDaCidade = 'São Paulo';
@@ -166,6 +234,38 @@ class ListaDePerdidos extends StatefulWidget {
 /// ser obrigatória: não há mais pergunta a fazer antes de listar.
 enum _Fase { carregando, lista, falha }
 
+/// O prazo da resolucao da cidade.
+///
+/// Generoso de proposito: a tela NAO espera por ele -- a lista ja esta pintada
+/// com a reserva quando a resolucao comeca. O prazo existe para a tentativa
+/// nao ficar pendurada para sempre no aparelho que nao fixa, e nao para a
+/// pessoa esperar.
+const Duration prazoDaResolucao = Duration(seconds: 12);
+
+/// De onde veio a cidade que esta valendo. E o que a tela MOSTRA.
+enum _OrigemDaCidade {
+  /// A pessoa digitou (ou apagou) na folha de filtro.
+  escolhida,
+
+  /// Resolvida pelo aparelho, com permissao concedida.
+  aparelho,
+
+  /// `Me.reference_area.city`, a cidade que a pessoa informou no perfil.
+  regiao,
+
+  /// A ultima cidade que valeu neste aparelho (`CidadeEscolhida`).
+  ///
+  /// **Ela NAO se anuncia como "da sua localizacao", e a distincao e o ponto.**
+  /// Uma cidade guardada na semana passada pode ser de outra cidade inteira:
+  /// rotula-la como localizacao atual seria a "cidade errada derivada em
+  /// silencio" que esta tela existe para nao fazer. Ela diz o que e -- a ultima
+  /// busca -- e quem viajou le isso e corrige.
+  ultimaBusca,
+
+  /// Nenhuma: os 20 mais recentes do pais inteiro.
+  nenhuma,
+}
+
 class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     with PublicaAAtualizacao {
   /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
@@ -184,6 +284,36 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   int _pagina = 1;
 
   RecorteDePerdidos? _recorte;
+
+  /// A PESSOA mexeu no campo de cidade. Ver o cabeçalho: sem este sinal,
+  /// apagar o campo não teria efeito.
+  bool _pessoaMexeu = false;
+
+  /// A cidade que a pessoa escolheu. **Válida só quando [_pessoaMexeu]**, e
+  /// nula ali significa "ela apagou", que é um recorte e não uma ausência.
+  String? _cidadeDigitada;
+
+  /// A cidade resolvida pelo aparelho, quando deu.
+  String? _cidadeDoAparelho;
+
+  /// A última cidade que ficou valendo **neste aparelho**, lida de
+  /// [CidadeEscolhida]. **Terceira reserva**, abaixo da região.
+  ///
+  /// Ela chega **sem a tela esperar** — o depósito é canal de plataforma, e
+  /// esperá-lo antes da primeira carga travaria a seção em que o aplicativo
+  /// ABRE (foi o que travou cinco arquivos da suíte quando a leitura era
+  /// aguardada). A lista carrega com o que já tem, e esta chega depois.
+  String? _cidadeDaUltimaBusca;
+
+  /// A leitura do depósito já foi PEDIDA. Pedida, não concluída.
+  bool _pediuODeposito = false;
+
+  /// A resolução já foi PEDIDA nesta montagem. Pedida, não concluída.
+  bool _pediuAResolucao = false;
+
+  /// A permissão de localização, como a porta a vê. Nula antes da primeira
+  /// leitura — e nula não é "negada": é "ainda não sei".
+  PermissaoDeLocalizacao? _permissao;
 
   bool _carregandoMais = false;
   bool _falhaAoCarregarMais = false;
@@ -228,18 +358,143 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargaAgendada = false;
       if (!mounted) return;
+      // A CARGA PRIMEIRO, E SEM `await`. A lista aparece com a reserva; a
+      // resolucao da cidade vem depois e, quando der, recarrega. Esperar por
+      // ela antes da primeira pintura faria a secao em que o aplicativo ABRE
+      // depender de GPS, de rede da Apple ou do Google e de teto de uso.
       _carregar();
+      if (!_pediuODeposito) {
+        _pediuODeposito = true;
+        unawaited(_lerODeposito());
+      }
+      if (!_pediuAResolucao) {
+        _pediuAResolucao = true;
+        unawaited(_resolverACidade());
+      }
     });
   }
 
-  /// **NÃO HÁ MAIS PRECEDÊNCIA DE CIDADE, e a ausência é a decisão de
-  /// 19/10/2026.** Havia `_cidadeDigitada`, `_cidadeDaRegiao` e
-  /// `_cidadeDoAparelho`, nessa ordem, mais um `_lerOAparelho()` que buscava a
-  /// última cidade do aparelho sem a tela esperar. As três saíram juntas: a
-  /// cidade que vale é a que está no recorte, e o recorte nasce sem nenhuma.
+  /// A cidade que vale agora. **A escolha da pessoa ganha de tudo, inclusive
+  /// de "nenhuma"** — ver [_pessoaMexeu] no cabeçalho.
+  String? get _cidadeEmUso => _pessoaMexeu
+      ? _cidadeDigitada
+      : (_cidadeDoAparelho ?? _cidadeDaRegiao ?? _cidadeDaUltimaBusca);
+
+  /// De onde a cidade que está valendo veio. É o que [_LinhaDoRecorte] mostra.
+  _OrigemDaCidade get _origemDaCidade {
+    if (_cidadeEmUso == null) return _OrigemDaCidade.nenhuma;
+    if (_pessoaMexeu) return _OrigemDaCidade.escolhida;
+    if (_cidadeDoAparelho != null) return _OrigemDaCidade.aparelho;
+    if (_cidadeDaRegiao != null) return _OrigemDaCidade.regiao;
+    return _OrigemDaCidade.ultimaBusca;
+  }
+
+  /// A cidade da região cadastrada: a **segunda** reserva da cadeia.
+  String? get _cidadeDaRegiao {
+    final c = _regiao?.cidade?.trim();
+    return (c == null || c.isEmpty) ? null : c;
+  }
+
+  /// Onde a última cidade fica guardada **neste aparelho**.
   ///
-  /// A região do perfil continua sendo lida — mas só para o filtro de BAIRRO,
-  /// logo abaixo, que é o único recorte para o qual este app conhece uma opção.
+  /// **[CidadeEscolhida] voltou a ter dono em 19/10/2026.** Ela ficou sem
+  /// leitor de produção quando a precedência saiu, e com a cidade derivada ela
+  /// recupera a função: é ela que guarda a cidade que ficou valendo, venha do
+  /// aparelho, da região ou do dedo da pessoa, para a abertura seguinte não
+  /// depender de resolver de novo — e resolver de novo custa teto de uso.
+  ///
+  /// **Vem do `Escopo`, e não é construída aqui.** O depósito em arquivo chama
+  /// `getApplicationDocumentsDirectory()`, um canal de plataforma que trava o
+  /// `pumpAndSettle` para sempre, sem mensagem, em teste de widget.
+  CidadeEscolhida get _cidadeGuardada => Escopo.of(context).cidadeEscolhida;
+
+  /// Lê a última cidade guardada neste aparelho, **sem a tela esperar**.
+  ///
+  /// É o LEITOR de [CidadeEscolhida], e ele existe para a classe não ser
+  /// depósito só de escrita: até 19/10/2026 esta tela escrevia nela e ninguém
+  /// lia, o que é dívida com aparência de função.
+  ///
+  /// Ela só vale se nada melhor já estiver valendo quando chegar — o aparelho
+  /// pode ter resolvido primeiro, a região pode existir, e a pessoa pode ter
+  /// mexido no filtro. Nos três casos a guardada perdeu, e recarregar seria
+  /// trocar a lista debaixo de quem está lendo.
+  Future<void> _lerODeposito() async {
+    // **Nunca lança**: `CidadeEscolhida` engole falha das duas pontas e
+    // devolve nulo. É o aparelho com armazenamento bloqueado, o perfil
+    // restrito e o build sem o plugin registrado.
+    final guardada = await _cidadeGuardada.ler();
+    if (!mounted || guardada == null) return;
+    if (_pessoaMexeu ||
+        _cidadeDoAparelho != null ||
+        _cidadeDaRegiao != null) {
+      return;
+    }
+    setState(() => _cidadeDaUltimaBusca = guardada);
+    await _carregar();
+  }
+
+  /// Resolve a cidade pelo aparelho, **sem a tela esperar**.
+  ///
+  /// Chamada depois da primeira carga, por `addPostFrameCallback`. Ela nunca
+  /// lança: a porta devolve [CidadeNaoResolvida] com um dos oito motivos, e os
+  /// oito caem para a reserva. Um `try` aqui seria rede sobre rede.
+  ///
+  /// **Só resolve com a permissão JÁ concedida.** Pedir aqui abriria o diálogo
+  /// do sistema como efeito colateral de abrir a seção.
+  Future<void> _resolverACidade() async {
+    final porta = Escopo.of(context).localizacao;
+    final permissao = await porta.estado();
+    if (!mounted) return;
+    setState(() => _permissao = permissao);
+    if (permissao != PermissaoDeLocalizacao.concedida) return;
+    await _resolverEAplicar(porta);
+  }
+
+  /// O caminho do TOQUE: pede a permissão e, concedida, resolve.
+  ///
+  /// Este é o único lugar que chama `pedir()`, e ele só roda a partir de
+  /// [ListaDePerdidos.rotuloDeUsarLocalizacao] — um ato da pessoa, com o
+  /// rótulo dizendo o que vai acontecer. Negada em definitivo, abre os
+  /// ajustes, porque pedir de novo não abre diálogo nenhum.
+  Future<void> _pedirEResolver() async {
+    final porta = Escopo.of(context).localizacao;
+    final antes = await porta.estado();
+    if (!mounted) return;
+    if (antes == PermissaoDeLocalizacao.negadaPermanentemente) {
+      await porta.abrirAjustesDoSistema();
+      return;
+    }
+    final depois = await porta.pedir();
+    if (!mounted) return;
+    setState(() => _permissao = depois);
+    if (depois != PermissaoDeLocalizacao.concedida) return;
+    await _resolverEAplicar(porta);
+  }
+
+  Future<void> _resolverEAplicar(Localizacao porta) async {
+    final resultado = await porta.cidadeAproximada(prazo: prazoDaResolucao);
+    if (!mounted) return;
+    switch (resultado) {
+      case CidadeNaoResolvida():
+        // Os oito motivos terminam aqui, e aqui não faz nada: a lista já está
+        // na tela com a reserva. Pintar aviso seria transformar em erro o que
+        // o ADR chama de reserva.
+        return;
+      case CidadeResolvida(cidade: final cidade):
+        // Quem mexeu no filtro enquanto a resolução corria MANDA: trocar a
+        // lista debaixo de quem acabou de escolher é o pior desfecho possível.
+        if (_pessoaMexeu) return;
+        if (cidade == _cidadeDoAparelho) return;
+        // A resolucao GANHA da guardada e da regiao: ela e a unica que diz
+        // onde a pessoa esta AGORA.
+        if (cidade == _cidadeEmUso) {
+          setState(() => _cidadeDoAparelho = cidade);
+          return;
+        }
+        setState(() => _cidadeDoAparelho = cidade);
+        await _carregar();
+    }
+  }
   /// A região cadastrada do tutor. **Lida só pelo filtro de bairro**: a cidade
   /// dela deixou de recortar a lista em 19/10/2026.
   RegiaoDeReferencia? get _regiao =>
@@ -258,9 +513,17 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // receber erro. A cidade deixou de ser obrigatória em 19/10/2026 e a porta
     // virou o contrário do pedido — ela é o que impedia a lista de abrir.
     //
-    // O recorte nasce VAZIO (`const RecorteDePerdidos()`): sem cidade, sem
-    // janela, sem espécie, sem porte. É a página 1 dos 20 mais recentes.
-    final atual = _recorte ?? const RecorteDePerdidos();
+    // O recorte acompanha a cidade que vale AGORA: a resolução pode ter
+    // chegado depois da primeira carga, e a região pode trocar com um login.
+    final cidade = _cidadeEmUso;
+    final atual =
+        (_recorte ?? const RecorteDePerdidos()).copiar(cidade: cidade);
+    // **Guardada ANTES da chamada, e sem `await`.** Guardar depois perderia a
+    // cidade de quem fechou o aplicativo enquanto a lista carregava, e esperar
+    // a gravação atrasaria a lista por uma conveniência. Nula não apaga a
+    // guardada: quem escolheu "todas" nesta sessão não perdeu a cidade do
+    // aparelho da sessão passada.
+    if (cidade != null) unawaited(_cidadeGuardada.guardar(cidade));
 
     final int geracao;
     if (maisUma) {
@@ -362,6 +625,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   CampoDeTextoDoFiltro get _campoDaCidade => CampoDeTextoDoFiltro(
         chave: 'city',
         rotulo: ListaDePerdidos.rotuloDaCidade,
+        // O que o recorte de fato tem -- e ele carrega a cidade derivada
+        // quando ela é a que está valendo, porque é ela que o servidor
+        // aplicou. Mostrar o campo vazio com a lista recortada seria o
+        // inverso do defeito de 18/10, e igualmente mentiroso.
         valor: _recorte?.cidadeLimpa,
         textoDeValidacao: ListaDePerdidos.validacaoDaCidade,
         // Os dois números são do contrato (`minLength: 2, maxLength: 80`), e
@@ -445,6 +712,12 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // continuava valendo. Com o campo opcional, esvaziar é um recorte, e é o
     // caminho de volta para "todas as cidades".
     final base = _recorte ?? const RecorteDePerdidos();
+    // **A PARTIR DAQUI A ESCOLHA DELA MANDA, inclusive quando é "nenhuma".**
+    // Sem esta linha, apagar o campo não teria efeito: a cidade do aparelho
+    // voltaria a valer no quadro seguinte, porque nulo é indistinguível de
+    // "não mexeu" numa precedência escrita com `??`.
+    _pessoaMexeu = true;
+    _cidadeDigitada = escolha.filtros['city'];
     _trocarRecorte(
       base.copiar(
         // `escolha.filtros['city']` nulo ou vazio limpa a cidade: quem apaga o
@@ -463,6 +736,27 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         pagina: 1,
       ),
     );
+  }
+
+  /// Oferecer `Usar minha localização` só faz sentido quando ela ainda pode
+  /// dar em algo.
+  ///
+  /// **Negada em definitivo CONTINUA oferecendo**, e o toque abre os ajustes
+  /// em vez de um diálogo que não abre — é o que a porta do aparelho manda
+  /// fazer nesse estado. O que não se oferece é o caminho que já deu certo
+  /// (cidade do aparelho valendo) e o que não existe neste build
+  /// ([PermissaoDeLocalizacao.indisponivel]).
+  bool get _podeOferecerLocalizacao {
+    if (_cidadeDoAparelho != null && !_pessoaMexeu) return false;
+    return _permissao != PermissaoDeLocalizacao.indisponivel;
+  }
+
+  /// `Ver todas`: tira a cidade do recorte, venha ela de onde vier.
+  void _verTodas() {
+    _pessoaMexeu = true;
+    _cidadeDigitada = null;
+    final base = _recorte ?? const RecorteDePerdidos();
+    _trocarRecorte(base.copiar(cidade: null, pagina: 1));
   }
 
   bool get _temRecorteAtivo {
@@ -509,6 +803,22 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            // **A LINHA QUE DIZ O RECORTE, e ela aparece nos TRÊS estados.**
+            // Ela vem antes da busca e do filtro de propósito: é a resposta à
+            // pergunta "por que estes pets?", e quem não a lê primeiro conclui
+            // que a lista está errada. Só não aparece enquanto a primeira
+            // carga está no ar, porque aí ela afirmaria um recorte que ainda
+            // não voltou do servidor.
+            if (_fase != _Fase.carregando) ...<Widget>[
+              _LinhaDoRecorte(
+                cidade: _cidadeEmUso,
+                origem: _origemDaCidade,
+                podeOferecerLocalizacao: _podeOferecerLocalizacao,
+                aoVerTodas: _verTodas,
+                aoUsarLocalizacao: _pedirEResolver,
+              ),
+              const SizedBox(height: BichuEspaco.e4),
+            ],
             // **O GATILHO DE FILTRO VEM NA FRENTE DA BUSCA, na mesma
             // linha** (cliente, 18/10/2026). Era `CampoDeBuscaDaListagem`
             // sozinho aqui e o gatilho com rotulo logo abaixo, desenhado pela
@@ -610,6 +920,111 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
           ),
         ];
     }
+  }
+}
+
+/// A LINHA QUE DIZ QUAL RECORTE ESTÁ VALENDO, e de onde ele veio.
+///
+/// Ela existe por uma exigência que veio junto com a decisão de derivar a
+/// cidade: **a pessoa tem de ver que a cidade foi preenchida sozinha e poder
+/// mudar.** Cidade derivada em silêncio é pior que cidade nenhuma — quem abre
+/// o app numa viagem e vê os pets da cidade onde está, sem explicação, conclui
+/// que a lista está quebrada; e quem vê os pets da cidade de casa, estando
+/// longe, conclui o mesmo pelo motivo oposto.
+///
+/// Os quatro estados, e os quatro dizem a origem:
+///
+/// | origem | o que a linha diz | a saída que ela oferece |
+/// |---|---|---|
+/// | aparelho | `Pets perdidos em São Paulo · da sua localização` | `Ver todas` |
+/// | região | `Pets perdidos em São Paulo · da sua região cadastrada` | `Ver todas` + `Usar minha localização` |
+/// | escolhida | `Pets perdidos em Campinas` | `Ver todas` |
+/// | nenhuma | `Pets perdidos de todo o Brasil` | `Usar minha localização` |
+///
+/// **`escolhida` não diz a origem**, e a ausência é deliberada: quem digitou a
+/// cidade sabe de onde ela veio, e um rótulo "que você escolheu" seria o app
+/// explicando à pessoa o que ela acabou de fazer.
+///
+/// `Ver todas` não aparece quando não há cidade, porque já é o estado atual;
+/// `Usar minha localização` não aparece quando a cidade do aparelho já está
+/// valendo, nem quando a localização não existe neste build.
+class _LinhaDoRecorte extends StatelessWidget {
+  const _LinhaDoRecorte({
+    required this.cidade,
+    required this.origem,
+    required this.podeOferecerLocalizacao,
+    required this.aoVerTodas,
+    required this.aoUsarLocalizacao,
+  });
+
+  final String? cidade;
+  final _OrigemDaCidade origem;
+  final bool podeOferecerLocalizacao;
+  final VoidCallback aoVerTodas;
+  final VoidCallback aoUsarLocalizacao;
+
+  String get _texto {
+    final c = cidade;
+    if (c == null) return ListaDePerdidos.semRecorteGeografico;
+    return switch (origem) {
+      _OrigemDaCidade.aparelho =>
+        'Pets perdidos em $c \u00b7 ${ListaDePerdidos.origemDoAparelho}',
+      _OrigemDaCidade.regiao =>
+        'Pets perdidos em $c \u00b7 ${ListaDePerdidos.origemDaRegiao}',
+      _OrigemDaCidade.ultimaBusca =>
+        'Pets perdidos em $c \u00b7 ${ListaDePerdidos.origemDaUltimaBusca}',
+      _OrigemDaCidade.escolhida => 'Pets perdidos em $c',
+      _OrigemDaCidade.nenhuma => ListaDePerdidos.semRecorteGeografico,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: BichuEspaco.e4,
+        vertical: BichuEspaco.e3,
+      ),
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // `liveRegion`: a linha TROCA quando a resolução chega, depois da
+          // lista já estar pintada. Sem isto, quem usa leitor de tela veria a
+          // lista mudar de recorte sem nada ser anunciado.
+          Semantics(
+            liveRegion: true,
+            child: Text(_texto, style: textos.bodyMedium),
+          ),
+          if (cidade != null || podeOferecerLocalizacao) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e2),
+            Wrap(
+              spacing: BichuEspaco.e4,
+              children: <Widget>[
+                if (cidade != null)
+                  TextButton(
+                    onPressed: aoVerTodas,
+                    child: const Text(ListaDePerdidos.rotuloDeVerTodas),
+                  ),
+                if (podeOferecerLocalizacao)
+                  TextButton(
+                    onPressed: aoUsarLocalizacao,
+                    child:
+                        const Text(ListaDePerdidos.rotuloDeUsarLocalizacao),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

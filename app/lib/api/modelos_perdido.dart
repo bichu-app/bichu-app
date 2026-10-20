@@ -240,8 +240,31 @@ class RecorteDePerdidos {
   /// responderia 400.
   static const int limite = 20;
 
+  /// A cidade pronta para a consulta: **aparada e com espaço colapsado**.
+  ///
+  /// **O colapso de espaço NÃO é zelo, e foi medido** em 19/10/2026 contra
+  /// `texto_para_busca` do banco, que é a função dos dois lados da comparação
+  /// de cidade:
+  ///
+  /// | forma | normaliza para | casa com `sao paulo` |
+  /// |---|---|---|
+  /// | `São Paulo` | `sao paulo` | sim |
+  /// | `SAO PAULO` | `sao paulo` | sim |
+  /// | `Mogi das Cruzes` / `Mogi Das Cruzes` | `mogi das cruzes` | sim |
+  /// | `' São Paulo '` | `' sao paulo '` | **NÃO** |
+  /// | `São  Paulo` | `sao  paulo` | **NÃO** |
+  ///
+  /// Ela absorve **acento e caixa**, e **não absorve espaço**. Isso importa
+  /// porque a cidade deixou de ser só digitada: ela vem do serviço de
+  /// plataforma, que decide a forma do nome. Deixar o espaço passar produziria
+  /// uma lista VAZIA com cara de defeito — a pior saída possível, porque ela
+  /// não acusa nada.
+  ///
+  /// Aparar resolve a borda; colapsar resolve o meio. O servidor não faz nem
+  /// um nem outro, e corrigir lá seria mudar a semântica de `texto_para_busca`
+  /// para todas as consultas que a usam.
   String? get cidadeLimpa {
-    final c = cidade?.trim();
+    final c = cidade?.trim().replaceAll(RegExp(r'\s+'), ' ');
     return (c == null || c.isEmpty) ? null : c;
   }
 

@@ -8,6 +8,7 @@
 // que o produz** nos casos de microcopy: o esperado esta escrito por extenso,
 // com acento e pontuacao, e trocar a microcopy reprova -- que e o ponto.
 
+import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
@@ -218,6 +219,7 @@ Future<void> abrirPets(
   RegiaoDeReferencia? regiao,
   bool logado = true,
   DepositoDaCidade? depositoDaCidade,
+  Localizacao? localizacao,
 }) async {
   await abrirOApp(
     tester,
@@ -226,6 +228,11 @@ Future<void> abrirPets(
         ? depositoLogado(regiaoDeReferencia: regiao ?? regiaoDeSaoPaulo)
         : null,
     depositoDaCidade: depositoDaCidade,
+    // **`LocalizacaoNaoEmbarcada` e o padrao, e isso mantem os casos
+    // ANTERIORES medindo o que mediam**: sem aparelho, a resolucao devolve
+    // `indisponivel`, cai para a reserva, e `city` nao entra na consulta. Quem
+    // quer medir o caminho do GPS passa um dublê.
+    localizacao: localizacao,
   );
   await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
   await tester.pumpAndSettle();
@@ -396,11 +403,17 @@ void main() {
         (tester) async {
       await abrirPets(
         tester,
+        // **DESLOGADO desde 19/10/2026**, e a troca e necessaria: com conta, a
+        // cidade da regiao passou a RECORTAR (segunda reserva da cadeia), e
+        // uma lista vazia com recorte aplicado diz a outra frase -- a do
+        // recorte, nao a do vazio. Deslogado nao ha regiao e nao ha GPS, que e
+        // o estado em que a frase do vazio e a verdadeira.
+        logado: false,
         rede: redeDosPerdidos(paginaDePerdidos(const <Map<String, dynamic>>[])),
       );
       expect(find.byType(CartaoDoPerdido), findsNothing);
-      // **SEM "na sua região"** desde 19/10/2026: a lista abre sem cidade, e a
-      // frase antiga afirmava um recorte geografico que o servidor nao aplicou.
+      // **SEM "na sua região"** desde 19/10/2026: sem cidade nenhuma, a frase
+      // antiga afirmava um recorte geografico que o servidor nao aplicou.
       expect(find.text('Nenhum pet perdido agora.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -411,21 +424,29 @@ void main() {
       // ISCA (a) no app, decisao do cliente de 19/10/2026: *"o campo cidade do
       // filtro da pagina pet nao deve ser obrigatorio"*.
       //
-      // **Este caso media o contrario ate hoje**: ele exigia
-      // `queryParameters['city'] == 'São Paulo'`, vindo de
-      // `Me.reference_area.city`. A conta deste teste CONTINUA tendo regiao em
-      // Sao Paulo (`abrirPets` usa `regiaoDeSaoPaulo`), e e isso que torna o
-      // caso forte: a regiao existe e NAO recorta mais. Abrir filtrado pela
-      // regiao de quem tem conta e a reclamacao de 18/10 um nivel acima.
+      // **ESTE CASO MUDOU DUAS VEZES EM 19/10, e vale registrar as duas.**
+      // Ele exigia `city == 'São Paulo'` vindo de `Me.reference_area.city`
+      // (`city` era `required`). Com a cidade virando opcional, ele passou a
+      // exigir que NEM a regiao recortasse -- e com conta, porque a conta ter
+      // regiao e nao recortar era o ponto. Depois o cliente pediu a cidade da
+      // localizacao, e a regiao virou a SEGUNDA RESERVA da cadeia: com conta,
+      // ela recorta de novo, e de proposito.
       //
-      // DESLIGANDO: reponha a precedencia de cidade em `lista_de_perdidos.dart`
-      // (`_cidadeEmUso`/`_cidadeDaRegiao`) e este caso reprova pelo nome.
+      // Entao este caso virou o do VISITANTE DESLOGADO, que e quem nao tem
+      // nenhuma das duas fontes -- e continua sendo a medida de que a lista
+      // ABRE, sem cidade, para quem a vizinhanca precisa que a veja. Quem mede
+      // a regiao recortando e `ISCA: sem GPS, a cidade da REGIAO e a segunda
+      // reserva`, no grupo 1-C.
+      //
+      // DESLIGANDO: reponha a porta `if (cidade == null)` em `_carregar()` de
+      // `lista_de_perdidos.dart` e este caso reprova pelo nome.
       //
       // O `exigeToken: false` continua medido na mesma chamada: troque-o por
       // `true` em `lib/api/perdidos_api.dart` e o cabecalho aparece.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
+        logado: false,
         rede: redeDosPerdidos(
           paginaDePerdidos(<Map<String, dynamic>>[
             perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
@@ -437,9 +458,8 @@ void main() {
       expect(
         pedidos.single.url.queryParameters.containsKey('city'),
         isFalse,
-        reason: 'REPROVA: a lista abriu recortada por uma cidade que ninguem '
-            'escolheu. `city` nao pode ir na consulta de abertura, nem vindo '
-            'da regiao do perfil.',
+        reason: 'REPROVA: deslogado e sem GPS nao ha fonte de cidade nenhuma, '
+            'e `city` nao pode ir na consulta.',
       );
       // E os 20 ultimos: o `limit` do contrato, e a pagina 1.
       expect(pedidos.single.url.queryParameters['limit'], '20');
@@ -471,9 +491,15 @@ void main() {
       // O que o cliente ve e um filtro que ninguem escolheu ja valendo; as
       // duas medidas sao as duas caras disso -- o recorte que foi pedido ao
       // servidor e o estado que a tela anuncia.
+      //
+      // **DESLOGADO desde 19/10/2026**: com conta, a cidade da regiao passou a
+      // recortar (segunda reserva da cadeia) e o gatilho anunciaria "1 filtro
+      // ativo" com razao. O que este caso mede e `period`, e deslogado e o
+      // estado em que o recorte nasce de fato vazio.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
+        logado: false,
         rede: redeDosPerdidos(
           paginaDePerdidos(<Map<String, dynamic>>[
             perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
@@ -689,36 +715,19 @@ void main() {
       expect(find.text('Mel'), findsOneWidget);
     });
 
-    testWidgets(
-        'ISCA: a regiao do perfil NAO recorta, nem para quem tem conta',
-        (tester) async {
-      // O caso antigo exigia o contrario -- `city == 'São Paulo'` vindo de
-      // `Me.reference_area.city`, com o motivo *"o padrao de quem tem conta
-      // deixou de ser Me.reference_area.city"*. A conta deste caso continua
-      // tendo regiao em Sao Paulo, e e isso que o torna forte: a regiao esta
-      // la, legivel, e nao entra na consulta.
-      //
-      // DESLIGANDO: reponha `_cidadeDaRegiao` na cidade do recorte em
-      // `lib/telas/perdido/lista_de_perdidos.dart`.
-      final pedidos = <http.Request>[];
-      await abrirPets(
-        tester,
-        rede: redeDosPerdidos(
-          paginaDePerdidos(const <Map<String, dynamic>>[]),
-          pedidos: pedidos,
-        ),
-      );
-      expect(pedidos, isNotEmpty);
-      for (final p in pedidos) {
-        expect(
-          p.url.queryParameters.containsKey('city'),
-          isFalse,
-          reason: 'REPROVA: a regiao do perfil voltou a recortar a lista de '
-              'abertura. Abrir filtrado pelo que ninguem escolheu e a '
-              'reclamacao de 18/10 um nivel acima.',
-        );
-      }
-    });
+    // **A ISCA `a regiao do perfil NAO recorta, nem para quem tem conta` SAIU
+    // DAQUI EM 19/10/2026, e ela foi SUBSTITUIDA e nao apagada.**
+    //
+    // Ela media que `Me.reference_area.city` nao entrava na consulta de
+    // abertura, e isso valeu por algumas horas: entre a cidade virar opcional
+    // e o cliente pedir *"que voce pegue a cidade que o usuario esta pela
+    // localizacao dele"*. Com a cadeia de reserva da emenda 1 do ADR-0006, a
+    // regiao e a SEGUNDA reserva e recortar e o comportamento correto.
+    //
+    // Quem mede isso agora e `ISCA: sem GPS, a cidade da REGIAO e a segunda
+    // reserva`, no grupo 1-C. O que NAO se perdeu: que a regiao nao se impoe
+    // sobre a escolha da pessoa -- isso e a isca de APAGAR, logo abaixo, e a
+    // de `Ver todas` no grupo 1-C.
 
     testWidgets('ISCA: APAGAR a cidade no filtro volta a mostrar todas',
         (tester) async {
@@ -874,6 +883,438 @@ void main() {
         reason: 'REPROVA: ha um seletor de estado na folha, e a rota nao aceita '
             'estado. Controle cujo valor nao tem para onde ir e controle sem '
             'desfecho.',
+      );
+    });
+  });
+
+
+  // -------------------------------------------------------------------------
+  // 1-C. A CIDADE VEM DA LOCALIZACAO (cliente, 19/10/2026)
+  // -------------------------------------------------------------------------
+  //
+  // Decisao dele: *"autorizar o gps, e trazer algum valor padrao em caso de
+  // fallback"*, depois de pedir duas vezes *"que voce pegue a cidade que o
+  // usuario esta pela localizacao dele e monte os pets cadastrados nessa
+  // cidade"*. Emenda 1 do ADR-0006.
+  //
+  // **AS CINCO ISCAS DE RESERVA SAO CINCO CASOS, E NAO UM.** Elas parecem
+  // redacoes do mesmo caso e nao sao: cada uma entra por um ponto diferente da
+  // porta do aparelho, e desligar o mecanismo de uma deixa as outras quatro
+  // verdes. Permissao negada para antes de medir; servico desligado para
+  // depois da permissao e antes do ponto; geocoder ausente para depois do
+  // ponto e antes da resolucao; teto estourado para DENTRO da resolucao; e sem
+  // resultado para depois dela, com a chamada tendo dado certo e devolvido
+  // nada. Uma so cobriria o primeiro ramo e aprovaria os outros quatro.
+  group('a cidade vem da localizacao, com reserva que nao trava', () {
+    /// O caminho principal: permissao concedida, cidade resolvida, lista
+    /// recortada por ela -- e a tela DIZ de onde a cidade veio.
+    ///
+    /// DESLIGANDO: tire o `unawaited(_resolverACidade())` de `_agendarCarga()`
+    /// em `lib/telas/perdido/lista_de_perdidos.dart`. Este caso reprova pelo
+    /// nome: a segunda chamada nunca sai e `city` nunca aparece.
+    testWidgets('ISCA: com permissao, a cidade do aparelho RECORTA a lista',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: porta,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+
+      // DUAS chamadas: a primeira sem cidade (a reserva, que pinta na hora) e
+      // a segunda com a cidade resolvida. A ordem e o ponto: a lista NAO
+      // espera o GPS para aparecer.
+      expect(pedidos, hasLength(2));
+      expect(
+        pedidos.first.url.queryParameters.containsKey('city'),
+        isFalse,
+        reason: 'REPROVA: a primeira carga esperou a resolucao. A lista tem de '
+            'aparecer antes, com a reserva.',
+      );
+      expect(pedidos.last.url.queryParameters['city'], 'Sao Paulo');
+      // E a tela DIZ de onde veio.
+      // O literal INTEIRO, e nao a constante de producao: medir contra
+      // `ListaDePerdidos.origemDoAparelho` deixaria um erro de digitacao na
+      // constante passar, porque os dois lados mudariam juntos.
+      expect(
+        find.text('Pets perdidos em Sao Paulo · da sua localização'),
+        findsOneWidget,
+        reason: 'REPROVA: a cidade foi derivada em silencio, ou a linha nao '
+            'diz de onde ela veio. Cidade derivada sem explicacao e pior que '
+            'cidade nenhuma.',
+      );
+    });
+
+    /// ISCA (1 de 5): PERMISSAO NEGADA.
+    ///
+    /// DESLIGANDO: faca `_resolverACidade()` chamar `porta.pedir()` em vez de
+    /// `porta.estado()`. O dublê concede, a cidade resolve, e este caso
+    /// reprova -- que e o desenho que abre dialogo do sistema como efeito
+    /// colateral de abrir a secao.
+    testWidgets('ISCA 1/5: permissao NEGADA cai para a reserva, sem erro',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.negada);
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: porta,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      _reservaSemErro(tester, pedidos);
+      expect(
+        porta.vezesQuePediu,
+        0,
+        reason: 'REPROVA: a tela PEDIU a permissao sozinha. O pedido e um ato '
+            'da pessoa, pelo botao -- nao efeito colateral de abrir a secao.',
+      );
+    });
+
+    /// ISCA (2 de 5): GPS DESLIGADO nos ajustes, com a permissao concedida.
+    ///
+    /// Entra num ponto diferente da isca 1: a permissao PASSA, e a porta falha
+    /// depois dela. Tratar isto como recusa mandaria a pessoa para a tela de
+    /// permissao que ela ja concedeu.
+    testWidgets('ISCA 2/5: GPS DESLIGADO cai para a reserva, sem erro',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(
+          PermissaoDeLocalizacao.concedida,
+          servico: false,
+        ),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      _reservaSemErro(tester, pedidos);
+    });
+
+    /// ISCA (3 de 5): GEOCODER AUSENTE no aparelho.
+    ///
+    /// Nao e exotico: `isPresent()` existe no pacote exatamente porque o
+    /// geocoder do Android pode nao estar la -- AOSP sem Play Services, e
+    /// paises onde o servico nao e oferecido. Entra DEPOIS do ponto.
+    testWidgets('ISCA 3/5: geocoder AUSENTE cai para a reserva, sem erro',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(
+          PermissaoDeLocalizacao.concedida,
+          resultadoDaCidade: const CidadeNaoResolvida(
+            MotivoDeNaoTerCidade.geocoderAusente,
+          ),
+        ),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      _reservaSemErro(tester, pedidos);
+    });
+
+    /// ISCA (4 de 5): TETO DE USO ESTOURADO.
+    ///
+    /// E o `PlatformException(IO_ERROR, ...)` que o README do pacote descreve
+    /// como *"most of the times ... the rate limit has been reached"*. Entra
+    /// DENTRO da resolucao, com geocoder presente e ponto na mao -- nenhuma das
+    /// tres iscas acima passa por este ramo.
+    testWidgets('ISCA 4/5: TETO de uso estourado cai para a reserva, sem erro',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(
+          PermissaoDeLocalizacao.concedida,
+          resultadoDaCidade: const CidadeNaoResolvida(
+            MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+          ),
+        ),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      _reservaSemErro(tester, pedidos);
+    });
+
+    /// ISCA (5 de 5): RESOLUCAO SEM RESULTADO.
+    ///
+    /// A chamada DEU CERTO e devolveu nada (ou devolveu lugar sem `locality`):
+    /// mar aberto, zona rural, e o aparelho que responde mas nao sabe. E o
+    /// unico dos cinco em que nada falhou -- e e por isso que ele nao e
+    /// coberto por nenhum dos outros quatro.
+    testWidgets('ISCA 5/5: resolucao SEM RESULTADO cai para a reserva, sem erro',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(
+          PermissaoDeLocalizacao.concedida,
+          resultadoDaCidade: const CidadeNaoResolvida(
+            MotivoDeNaoTerCidade.semResultado,
+          ),
+        ),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      _reservaSemErro(tester, pedidos);
+    });
+
+    /// A RESERVA 2 da cadeia: sem GPS, a cidade da REGIAO recorta.
+    ///
+    /// Medido em homologacao: 3 de 47 contas tem `reference_city`. Ela cobre
+    /// pouco, e cobre -- e e rotulo, nao geocodificacao.
+    ///
+    /// DESLIGANDO: tire `_cidadeDaRegiao` de `_cidadeEmUso` e este caso
+    /// reprova pelo nome.
+    testWidgets('ISCA: sem GPS, a cidade da REGIAO e a segunda reserva',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        // Com conta, e a regiao e Sao Paulo (`regiaoDeSaoPaulo`).
+        localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos, isNotEmpty);
+      expect(pedidos.first.url.queryParameters['city'], 'São Paulo');
+      expect(
+        find.textContaining('da sua região cadastrada'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela nao disse que a cidade veio da regiao do '
+            'perfil, e quem esta viajando nao entenderia o recorte.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    /// `Ver todas` TIRA a cidade derivada, e a escolha dela manda.
+    ///
+    /// DESLIGANDO: tire o `_pessoaMexeu = true` de `_verTodas()`. A cidade do
+    /// aparelho volta a valer no quadro seguinte e este caso reprova.
+    testWidgets('ISCA: `Ver todas` tira a cidade DERIVADA e ela nao volta',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos.last.url.queryParameters['city'], 'Sao Paulo');
+
+      await tester.tap(find.text('Ver todas'));
+      await tester.pumpAndSettle();
+
+      expect(
+        pedidos.last.url.queryParameters.containsKey('city'),
+        isFalse,
+        reason: 'REPROVA: `Ver todas` nao tirou a cidade do recorte.',
+      );
+      expect(find.text('Pets perdidos de todo o Brasil'), findsOneWidget);
+    });
+
+    /// A TERCEIRA RESERVA: a ultima cidade guardada neste aparelho.
+    ///
+    /// **Este caso existe porque `CidadeEscolhida` estava sem LEITOR.** A tela
+    /// escrevia nela e ninguem lia -- deposito so de escrita, que e divida com
+    /// aparencia de funcao. Ela voltou a ter dono como terceira reserva, e com
+    /// rotulo PROPRIO: `da sua ultima busca`, e nunca `da sua localizacao`,
+    /// porque uma cidade guardada semana passada pode ser de outra cidade
+    /// inteira.
+    ///
+    /// DESLIGANDO: tire o `unawaited(_lerODeposito())` de `_agendarCarga()`,
+    /// ou `_cidadeDaUltimaBusca` de `_cidadeEmUso`, em
+    /// `lib/telas/perdido/lista_de_perdidos.dart`. Este caso reprova pelo
+    /// nome.
+    testWidgets('ISCA: a ultima cidade GUARDADA e a terceira reserva',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        // Deslogado (sem regiao) e sem GPS: a guardada e a unica fonte.
+        logado: false,
+        localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos.last.url.queryParameters['city'], 'Campinas');
+      expect(
+        find.textContaining('da sua última busca'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela nao disse que a cidade veio da ultima busca. '
+            'Rotula-la como localizacao atual seria a cidade errada derivada '
+            'em silencio.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    /// CONTRAPESO: a REGIAO ganha da guardada.
+    ///
+    /// Sem este caso, inverter a ordem dos dois elos passaria pela isca acima.
+    /// Quem tem conta com regiao abre na regiao, e nao na cidade da ultima
+    /// busca -- e a regiao e escolha declarada, a guardada e residuo.
+    testWidgets('CONTRAPESO: a REGIAO do perfil ganha da cidade guardada',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(pedidos, isNotEmpty);
+      for (final p in pedidos) {
+        expect(
+          p.url.queryParameters['city'],
+          'São Paulo',
+          reason: 'REPROVA: a cidade guardada passou por cima da regiao '
+              'cadastrada.',
+        );
+      }
+    });
+
+    /// ISCA: o armazenamento FALHANDO nao derruba a tela.
+    ///
+    /// `DepositoDaCidadeQueFalha` estoura nas duas pontas: e o aparelho com
+    /// armazenamento bloqueado, o perfil restrito e o build sem o plugin
+    /// registrado. A lista tem de aparecer igual -- e a falha acontece dentro
+    /// de um `addPostFrameCallback`, onde excecao nao tem quem a pegue.
+    ///
+    /// DESLIGANDO: apague o `try`/`on Object` de `CidadeEscolhida.ler` em
+    /// `lib/sessao/cidade_escolhida.dart`.
+    testWidgets('ISCA: o armazenamento FALHANDO nao derruba a tela',
+        (tester) async {
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        depositoDaCidade: const DepositoDaCidadeQueFalha(),
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+        ),
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'REPROVA: a leitura do aparelho derrubou a secao em que o '
+            'aplicativo ABRE.',
+      );
+      expect(perdidosNaTela(tester), hasLength(1));
+      expect(find.text('Pets perdidos de todo o Brasil'), findsOneWidget);
+    });
+
+    /// O ESPACO QUE `texto_para_busca` NAO ABSORVE, pelo caminho DIGITADO.
+    ///
+    /// `CidadeResolvida` normaliza o nome que vem da plataforma
+    /// (`test/dispositivo/cidade_da_localizacao_test.dart`), e `cidadeLimpa`
+    /// normaliza o que vem do DEDO -- os dois caminhos chegam no mesmo
+    /// parametro `city`, e o banco nao perdoa nenhum dos dois.
+    ///
+    /// MEDIDO em 19/10/2026 contra `texto_para_busca`: `'São  Paulo'`
+    /// normaliza para `'sao  paulo'` e **nao casa** com `'sao paulo'`. Sem o
+    /// colapso, quem digita com dois espacos recebe lista VAZIA -- que nao
+    /// acusa nada e parece defeito do servidor.
+    ///
+    /// DESLIGANDO: tire o `.replaceAll(RegExp(r'\s+'), ' ')` de `cidadeLimpa`
+    /// em `lib/api/modelos_perdido.dart`. Este caso reprova pelo nome.
+    testWidgets('ISCA: cidade digitada com espaco DUPLO vai limpa na consulta',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      await escolherCidade(tester, 'Sao  Paulo');
+      expect(
+        pedidos.last.url.queryParameters['city'],
+        'Sao Paulo',
+        reason: 'REPROVA: o espaco duplo chegou ao servidor. '
+            '`texto_para_busca` absorve acento e caixa, e NAO absorve espaco: '
+            'a consulta responderia vazio.',
+      );
+    });
+
+    /// UMA resolucao por abertura, e nao uma por carga.
+    ///
+    /// A pergunta e de custo real: o servico de plataforma tem teto de uso, e
+    /// a lista recarrega quando a cidade chega. Se a recarga disparasse outra
+    /// resolucao, cada abertura gastaria duas -- e um recorte trocado na folha
+    /// gastaria mais.
+    testWidgets('ISCA: a resolucao acontece UMA vez por abertura da tela',
+        (tester) async {
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: porta,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+        ),
+      );
+      expect(
+        porta.vezesQueResolveu,
+        1,
+        reason: 'REPROVA: a tela resolveu ${porta.vezesQueResolveu} vezes numa '
+            'abertura. O servico de plataforma tem teto de uso, e a recarga '
+            'que a cidade dispara NAO pode disparar outra resolucao.',
       );
     });
   });
@@ -1184,4 +1625,33 @@ void main() {
 /// reprova e alguem le a tabela do 5.4 de novo.
 abstract final class BichuMolduraDeTeste {
   static const double larguraFotoSm = 56;
+}
+
+/// O desfecho que as CINCO iscas de reserva compartilham: **a lista aparece
+/// igual, sem cidade no pedido, e sem erro na tela.**
+///
+/// Extraido porque as cinco medem o MESMO desfecho por CAMINHOS diferentes.
+/// Repetir as tres assercoes cinco vezes convidaria a divergirem; o que nao se
+/// extrai e o CAMINHO, que e o que faz de cada uma delas um caso proprio.
+void _reservaSemErro(WidgetTester tester, List<http.Request> pedidos) {
+  expect(
+    pedidos, hasLength(1),
+    reason: 'REPROVA: houve ${pedidos.length} chamada(s). Sem cidade resolvida '
+        'ha UMA: a da reserva. Uma segunda quer dizer que a tela recarregou '
+        'por causa de uma resolucao que nao deu em nada.',
+  );
+  expect(
+    pedidos.single.url.queryParameters.containsKey('city'),
+    isFalse,
+    reason: 'REPROVA: `city` entrou na consulta sem a cidade ter sido '
+        'resolvida.',
+  );
+  expect(perdidosNaTela(tester), hasLength(1));
+  expect(find.text('Pets perdidos de todo o Brasil'), findsOneWidget);
+  expect(
+    tester.takeException(),
+    isNull,
+    reason: 'REPROVA: a reserva virou erro na tela. Nenhum dos oito motivos e '
+        'excecao: os oito caem para a lista nacional.',
+  );
 }

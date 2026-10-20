@@ -363,7 +363,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    _localizacao = widget.localizacao ?? const LocalizacaoPorGeolocator();
+    // **SEM `const`**: `LocalizacaoPorGeolocator` deixou de ser constante em
+    // 19/10/2026, quando ganhou a memoria da ultima resolucao de cidade (a
+    // grade de ~100 m que a emenda 1 do ADR-0006 exige). Objeto com estado nao
+    // e `const`, e a instancia aqui e uma por processo de qualquer forma.
+    _localizacao = widget.localizacao ?? LocalizacaoPorGeolocator();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
