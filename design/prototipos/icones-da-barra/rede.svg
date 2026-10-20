@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Rede">
+<title>Rede</title>
+<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="7.5" cy="7.8" r="2.5"/>
+  <circle cx="16.5" cy="7.8" r="2.5"/>
+  <path d="M 3.4 20.9 C 3.4 16.6 7.2 14.4 12 14.4 C 16.8 14.4 20.6 16.6 20.6 20.9 Z"/>
+</g>
+</svg>
