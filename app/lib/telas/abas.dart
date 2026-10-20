@@ -35,13 +35,13 @@ import 'loja/vitrine_da_loja.dart';
 /// seguem alcancaveis por link profundo, e tela que recusa calada e pior do que
 /// tela que recusa dizendo. O que mudou foi quem ve a PORTA.
 ///
-/// **Os impedimentos das telas de destino nao sao os mesmos nas duas, e isso
-/// nao e simetria que esta descricao pode afirmar.** `criar_encontro.dart` tem
-/// `semConta` **e** `semEmailConfirmado`; `sugerir_profissional.dart` tem
-/// `semConta` e os impedimentos de preenchimento, e **nao** tem
-/// `semEmailConfirmado`. Quem chega na sugestao por link profundo sem o e-mail
-/// confirmado preenche o formulario e so descobre no envio, pelo 409 do
-/// servidor -- que diz o que fazer, mas depois do trabalho.
+/// **O impedimento de e-mail na tela de destino e CORTESIA, e nao a regra.** Ele
+/// evita que a pessoa preencha um formulario que o servidor vai recusar; quem
+/// garante a recusa e o servidor, no paragrafo abaixo. Por isso esta descricao
+/// NAO afirma quais telas o tem: isso muda por entrega, e comentario que lista
+/// o estado de outro arquivo envelhece sem ninguem notar -- foi exatamente
+/// assim que o paragrafo seguinte precisou ser corrigido. Procure o enum
+/// `_Impedimento` da tela em questao, que e onde a resposta mora.
 ///
 /// **O caminho para validar nao depende desta porta, e isso foi conferido.** O
 /// `AvisoDeCadastroIncompleto` desenha "Confirme seu e-mail" com `Reenviar` em
