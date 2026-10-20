@@ -1622,7 +1622,7 @@ void main() {
           '`SinoDeNotificacoes`. A porta de indicar e a acao FLUTUANTE desta '
           'aba desde 19/10, o acesso a folha de filtro voltou para o topo do '
           'corpo, e a foto foi para o `leading`. Cada controle que volta para '
-          'ca custa 48 ou 64 dp dos 224,00 do titulo.',
+          'ca custa 48 ou 64 dp dos 216,00 do titulo.',
     );
     expect(
       barra.leading,
@@ -1631,12 +1631,17 @@ void main() {
           'assumiu o lugar do hamburguer em 19/10, e a ausencia dela a direita '
           'nao e a entrega -- a entrega e ela do outro lado.',
     );
+    // **56 E NAO 48 DESDE 20/10/2026**: o slot e o alvo de 48 mais os 8 dp de
+    // respiro que o cliente pediu entre a foto e o titulo (*"o icone do perfil
+    // do usuario ficou muito perto do titulo da barra, de uma margem do
+    // nome"*). O ALVO continua 48 -- ver `AvatarDaConta.chaveDoAlvo`.
     expect(
       barra.leadingWidth,
-      AvatarDaConta.alvo,
+      AvatarDaConta.larguraNoLeading,
       reason: 'REPROVA: a reserva do `leading` deixou de ser '
-          '${AvatarDaConta.alvo} dp. O hamburguer tinha piso de 64 (11.23.1) e '
-          'a foto tem 48 (SC 2.5.8): sao 16,00 dp que foram para o titulo.',
+          '${AvatarDaConta.larguraNoLeading} dp. O hamburguer tinha piso de 64 '
+          '(11.23.1), a foto tem 48 (SC 2.5.8) e desde 20/10 ela carrega 8 dp '
+          'de respiro ate o titulo.',
     );
 
     expect(

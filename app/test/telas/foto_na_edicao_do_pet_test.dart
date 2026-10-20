@@ -396,11 +396,33 @@ void main() {
       // nao o isolei: a tela e `SingleChildScrollView` e nao `ListView`, entao
       // nao e a virtualizacao obvia. O que esta medido e que o recado APARECE,
       // e e isso que o caso cobra.
-      await rolarAte(
-        tester,
-        find.text(TextosDoDetalhe.fotoPresaAoCasoAberto),
-        passo: -120,
-      );
+      // =====================================================================
+      // A FOLHA FICA ABERTA NA RECUSA, E E PRECISO FECHA-LA (20/10/2026)
+      // =====================================================================
+      //
+      // `FolhaDestrutiva` **nao fecha quando `aoConfirmar` lanca** -- ela pinta
+      // o erro generico dentro de si e espera. O recado especifico do 409 e
+      // escrito pela TELA, e a tela so o escreve quando
+      // `mostrarFolhaDestrutiva` RETORNA: `_recadoDaFoto =
+      // _mensagemDaRemocao(erro)` esta depois do `await`. Enquanto a folha
+      // estiver aberta, o recado **nao existe na arvore** -- medido:
+      // `find.text(..., skipOffstage: false)` acha zero.
+      //
+      // **O CASO FECHAVA A FOLHA POR ACIDENTE, e isto e o achado.** Ele
+      // chamava `rolarAte(..., passo: -120)`, que arrasta
+      // `find.byType(Scrollable).first` para baixo; `.first` era o rolavel da
+      // PROPRIA folha, e arrastar uma `showModalBottomSheet` para baixo a
+      // DISPENSA. O caso dependia de um gesto de dispensa disfarcado de
+      // rolagem, e a prosa dele dizia textualmente *"nao afirmo aqui qual e o
+      // mecanismo, porque nao o isolei"*. Ele quebrou quando a casca fixa de
+      // 20/10 acrescentou um `Scaffold` por baixo da tela e `.first` deixou de
+      // ser o rolavel da folha: as 50 tentativas passaram a arrastar outra
+      // coisa e o caso morreu com `Bad state: No element`.
+      //
+      // Agora a folha e fechada pelo controle que a pessoa usa -- `Cancelar`,
+      // o rotulo padrao de `mostrarFolhaDestrutiva` --, e o recado e procurado
+      // depois. O mecanismo esta dito, e e o da pessoa.
+      await tocar(tester, find.widgetWithText(OutlinedButton, 'Cancelar'));
       expect(
         find.text(TextosDoDetalhe.fotoPresaAoCasoAberto),
         findsOneWidget,

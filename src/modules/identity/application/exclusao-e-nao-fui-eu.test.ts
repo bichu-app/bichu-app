@@ -27,10 +27,10 @@
  *    remédio **e** sem o aviso.
  */
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
+import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { AppError } from '../../../shared/http/errors.js';
 import type { IdGenerator } from '../../../shared/ports/id-generator.js';
 import { comoIso, type Clock } from '../../../shared/time/clock.js';
@@ -67,8 +67,15 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-function hashDe(valor: string): string {
-  return createHash('sha256').update(valor, 'utf8').digest('base64');
+/**
+ * O resumo do link, pela MESMA funcao que a producao usa.
+ *
+ * Era uma reimplementacao local (`createHash('sha256')...digest('base64')`), e
+ * foi essa duplicacao que deixou o conserto de 19/10 passar por aqui sem
+ * reprovar: o dublê errava junto com o adaptador. `hashDeToken` e uma forma so.
+ */
+function hashDe(valor: string): TokenHash {
+  return hashDeToken(valor) as TokenHash;
 }
 
 function contaViva(): Conta {
@@ -109,7 +116,8 @@ interface LinhaDeRefresh {
 }
 
 interface LinhaDeToken {
-  hash: string;
+  /** `TokenHash` e `Buffer` desde 19/10: a comparacao e `.equals`, nunca `===`. */
+  hash: TokenHash;
   proposito: PropositoDoToken;
   enviadoPara: string;
   expiraEm: Instant;
@@ -225,7 +233,7 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   ): Promise<TokenConsumido | undefined> {
     const linha = this.tokens.find(
       (t) =>
-        t.hash === (hash as string) &&
+        t.hash.equals(hash) &&
         t.proposito === proposito &&
         t.consumidoEm === null &&
         t.expiraEm > agora,
@@ -242,7 +250,7 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   ): Promise<TokenConsumido | undefined> {
     const linha = this.tokens.find(
       (t) =>
-        t.hash === (hash as string) &&
+        t.hash.equals(hash) &&
         t.proposito === proposito &&
         t.consumidoEm === null &&
         t.expiraEm > agora,

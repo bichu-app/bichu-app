@@ -333,9 +333,20 @@ void main() {
       final handle = tester.ensureSemantics();
       await _abrirOPerfil(tester);
 
+      // **ROLAR ANTES, e a razao e de 20/10/2026:** o menu da conta ganhou
+      // QUATRO cabecalhos de grupo e um item (*"como o menu do perfil esta
+      // crescendo, vamos separar os links por topicos/categorias"*), e
+      // `Sair da conta` -- que e sempre o ultimo -- desceu abaixo da dobra
+      // mesmo no gabarito de 390 x 844. `ListView` so constroi o que cabe:
+      // sem a rolagem, `find` nao enxerga a linha e o caso reprovaria por
+      // geometria da janela, nao pela isca. Rolar e o que a pessoa faz.
+      final sair = find.widgetWithText(ItemDeMenu, 'Sair da conta');
+      await tester.scrollUntilVisible(sair, 200);
+      await tester.pumpAndSettle();
+
       exigirControleVivo(tester, 'Sair da conta', acao: 'Sair da conta');
 
-      await tocar(tester, find.widgetWithText(ItemDeMenu, 'Sair da conta'));
+      await tocar(tester, sair);
       expect(
         find.text('Sair da sua conta?'),
         findsOneWidget,

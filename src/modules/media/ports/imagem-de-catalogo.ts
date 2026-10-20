@@ -61,7 +61,14 @@ export type PropositoDaImagem =
   // ate nove fotos da vitrine, com geometria propria (a grade pede 320 px) e
   // tabela de ordem propria (`user_showcase_images`). Um proposito so para os
   // dois obrigaria a derivada a adivinhar qual tela vai desenhar a imagem.
-  | 'user_showcase';
+  | 'user_showcase'
+  // A FOTO DE UMA PUBLICACAO DO MURAL (20/10/2026). O SETIMO, e separado de
+  // `user_showcase` pelo MESMO critério que separou aquele de `user_photo`: a
+  // vitrine e uma grade de ate nove no perfil, com ordem e capa, e esta e UMA
+  // foto presa a UM texto, sem ordem. A consequencia esta na geometria -- a
+  // vitrine tem DUAS derivadas (`thumb` 320 para a grade e `card` 1024 para a
+  // foto aberta) e esta tem UMA (`card` 1024), porque nao ha grade no Mural.
+  | 'user_publication';
 
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
@@ -76,6 +83,10 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   // imagem da MESMA pessoa e somem juntas no expurgo da conta. Prefixo
   // separado faria o expurgo ter duas listas para varrer.
   user_showcase: 'people',
+  // A foto da PUBLICACAO divide o mesmo `people/`, pela mesma razao e com mais
+  // peso: as TRES sao imagem da mesma pessoa, e um terceiro prefixo faria o
+  // expurgo ter tres listas para varrer.
+  user_publication: 'people',
 };
 
 /**
@@ -113,6 +124,9 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   // `TIPOS_ACEITOS`, com HEIC. Reusar e nao repetir: duas listas dos mesmos
   // quatro tipos e o defeito esperando o quinto.
   user_showcase: TIPOS_ACEITOS,
+  // A foto da PUBLICACAO sai do MESMO celular. A mesma lista, pela terceira
+  // vez, e sempre a mesma constante.
+  user_publication: TIPOS_ACEITOS,
 };
 
 /**
@@ -160,6 +174,13 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   // mesmo 600 -- numeros diferentes para a mesma geometria e o que ninguem
   // consegue explicar depois.
   user_showcase: { largura: 600, altura: 600 },
+  // 600 x 600 na PUBLICACAO, pelo MESMO raciocinio da vitrine e nao por copia:
+  // a maior (e unica) derivada desta foto e `card` 1024, `sharp` nao amplia
+  // (`withoutEnlargement`), e abaixo de 600 ela sai sem se preencher. O numero
+  // bater com o da vitrine, da capa do encontro e da foto de pet e o ponto --
+  // numeros diferentes para a mesma geometria e o que ninguem consegue
+  // explicar depois.
+  user_publication: { largura: 600, altura: 600 },
 };
 
 /**

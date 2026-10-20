@@ -27,6 +27,7 @@
 import 'dart:convert';
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/conta/tela_verifique_seu_email.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/sugerir_profissional.dart';
@@ -674,6 +675,87 @@ void main() {
         findsOneWidget,
         reason: 'REPROVA: a recusa saiu como faixa genérica e o campo ficou '
             'sem marca.',
+      );
+    });
+
+    testWidgets(
+        'o 409 de canal não verificado SAI para a confirmação de e-mail',
+        (tester) async {
+      // ONDE ESTE 409 AINDA ACONTECE. A porta da indicação já esconde a ação
+      // de criar de quem não está validado (`podeCriarNaComunidade`, em
+      // `lib/telas/abas.dart`), e a tela avisa do e-mail não confirmado antes
+      // dos campos. O que sobra para o servidor recusar é quem tinha a tela em
+      // pé quando o estado do e-mail mudou noutro aparelho -- e é por isso que
+      // a sessão deste caso tem o e-mail CONFIRMADO (`depositoLogado` abre com
+      // `emailVerificado: true`): sem isso o caso não chegaria ao envio.
+      //
+      // **A faixa sem saída é PIOR do que a BICHUS-62 descreveu.**
+      // `FaixaDeAviso` só desenha o `TextButton` com rótulo E callback
+      // (`lib/widgets/faixa_de_aviso.dart`, linha 97), então o ramo que falta
+      // não produzia um rótulo morto: produzia faixa NENHUMA saída. A pessoa
+      // lia "Confirme seu e-mail" sem nada em que tocar.
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(
+          enviados: <Map<String, dynamic>>[],
+          respostaDaIndicacao: () => problema(
+            'contact-channel-unverified',
+            409,
+            extra: <String, dynamic>{'next_action': 'verify_email'},
+          ),
+        ),
+      );
+      await abrirAPorta(tester);
+      await preencherOMinimo(tester);
+      await tocar(
+        tester,
+        find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
+      );
+
+      // Rola PARA CIMA antes de ler: a faixa de erro é o segundo filho do
+      // `ListView` e o formulário preenchido ficou rolado para baixo. O caso
+      // do `429`, abaixo, tem o porquê por extenso.
+      //
+      // **Rola até a FRASE, e não até o botão.** A frase do `409` é desenhada
+      // com ou sem o ramo da saída, então `rolarAte` chega nela nos dois
+      // casos e quem reprova é o `expect` abaixo, com o motivo escrito.
+      // Rolando até o botão, o ramo ausente estouraria dentro de
+      // `scrollUntilVisible` -- reprova igual, mas a falha sairia como
+      // `Bad state` de ajudante, sem dizer o que faltou.
+      await rolarAte(
+        tester,
+        find.textContaining('Confirme seu e-mail'),
+        passo: -120,
+      );
+
+      final saida = find.widgetWithText(TextButton, 'Confirmar meu e-mail');
+      expect(
+        saida,
+        findsOneWidget,
+        reason: 'REPROVA: o 409 de canal não verificado saiu sem saída '
+            'nenhuma. O rótulo que o servidor manda só vira botão quando a '
+            'tela sabe para onde ele leva, e a pessoa ficou lendo "Confirme '
+            'seu e-mail" sem nada em que tocar.',
+      );
+
+      await tocar(tester, saida);
+
+      final destino = find.byType(TelaVerifiqueSeuEmail);
+      expect(
+        destino,
+        findsOneWidget,
+        reason: 'REPROVA: tocar na saída da faixa não abriu a confirmação de '
+            'e-mail. É o mesmo destino que `criar_encontro.dart` já dá ao '
+            'mesmo 409, e duas telas da mesma regra que divergem no destino '
+            'fazem a pessoa aprender a tela, não o app.',
+      );
+      expect(
+        tester.widget<TelaVerifiqueSeuEmail>(destino).email,
+        'marina@exemplo.com.br',
+        reason: 'REPROVA: a confirmação abriu sem o e-mail da sessão. Sem ele '
+            'a tela não diz PARA ONDE o link foi, e a pessoa não tem como '
+            'saber em qual caixa procurar. O endereço é o que `depositoLogado` '
+            'grava na sessão deste caso.',
       );
     });
 

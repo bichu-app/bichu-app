@@ -1,91 +1,596 @@
 import 'package:flutter/material.dart';
 
+import '../../api/falhas.dart';
+import '../../api/mensagens_de_erro.dart';
+import '../../api/mural_api.dart';
+import '../../theme/bichu_colors.dart';
+import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
+import 'comentarios_da_publicacao.dart';
 import '../casca_com_abas.dart';
 
-/// O corpo da secao `Mural`: **o LUGAR da linha do tempo, e so ele.**
+/// O corpo da secao `Mural`: **a linha do tempo.**
 ///
-/// ## O que esta frente construiu, e o que ela deliberadamente NAO construiu
+/// ## O que esta frente construiu
 ///
-/// Decisao do cliente de 19/10/2026, literal: *"a secao de timeline, onde as
-/// publicacoes/notificacoes dos usuarios que ele segue e sao amigos apareca"*
-/// e *"o menu onde o usuario vai fazer os posts, compartilhar suas fotos em
-/// eventos"*.
+/// A frente de 19/10 construiu o LUGAR — o slot na barra de baixo (`Mural` pede
+/// 50,90 dp num slot de 64,00, medido), o ramo do `IndexedStack`, a rota
+/// [Rotas.mural] e um estado vazio honesto que dizia, por escrito, que publicar
+/// *"ainda nao esta no ar"*. Estava certo: nao havia onde guardar publicacao.
 ///
-/// **Esta frente construiu o LUGAR**: o slot na barra de baixo (medido,
-/// `Mural` pede 50,90 dp num slot de 64,00), o ramo do `IndexedStack`, a rota
-/// [Rotas.mural] e esta tela.
+/// **Agora ha.** `user_publications` existe (migracao `20261020000002`),
+/// `GET /timeline` e `POST /me/publications` existem, e esta tela desenha o que
+/// elas devolvem. O estado vazio deixou de prometer o futuro e passou a
+/// descrever o presente.
 ///
-/// **Publicar, a linha do tempo, curtir, comentar e seguir sao de OUTRA
-/// FRENTE**, que roda em paralelo e cria `user_publications`, o contrato e as
-/// operacoes. Nao ha uma linha disso aqui, e a ausencia e o combinado -- duas
-/// frentes construindo a mesma tela dao duas telas.
+/// ## O RECORTE NAO E DESTA TELA, e isso e a parte que importa
 ///
-/// ## NAO HA ACAO FLUTUANTE NESTA SECAO, e a ausencia e a parte cuidada
+/// Esta tela desenha **exatamente** o que `GET /timeline` devolveu, e nao tem um
+/// `if` que esconda item nenhum. Quem decide o que entra e a clausula `WHERE` da
+/// consulta do servidor (ADR-0021): publicacao de quem nao e conexao aceita de
+/// quem chama **nao chega aqui** — nao chega vazia, nao chega marcada, nao
+/// chega. Nao existe campo nesta resposta que diga "voce nao pode ver isto",
+/// porque nao existe estado assim.
 ///
-/// O desenho previa `Publicar` com `Icons.post_add` no canto, como `Rede` tem
-/// `Criar evento`. **Ela nao foi desenhada, e nao por esquecimento:** medido
-/// nesta arvore, nao existe operacao de publicar. A tabela
-/// `user_publications` **nao existe** -- ela aparece so em comentario, em
-/// `src/shared/db/schema.ts` (*"SEM chave estrangeira: `user_publications` e
-/// de outra fatia e nao existe"*) e em duas linhas da migracao
-/// `20261018000032` --, e nao ha rota de linha do tempo nem de publicacao no
-/// contrato.
+/// **E por isso que a isca do app e sobre a AUSENCIA de outra fonte**, e nao
+/// sobre um filtro: `mural_nao_tem_outra_fonte_test.dart` prova que a unica
+/// coisa que esta tela pinta vem de `LeituraDoMural.linhaDoTempo`, e que ela nao
+/// alcanca nenhuma outra leitura do app. Um filtro de tela seria o recorte
+/// migrando para o cliente — e o cliente e onde ele nao pode estar.
 ///
-/// Um botao de `Publicar` abriria o que? O criterio 2 da BICHUS-62 proibe
-/// renderizar acao sem destino, **nem habilitada nem desabilitada**, e e
-/// exatamente este caso: um alvo de 56 dp no canto de toda tela do Mural, que
-/// nao leva a lugar nenhum. Quem trouxer a operacao de publicar traz a acao
-/// com ela, no `acaoDeCriar` de `AbaMural` -- uma linha, no mesmo lugar em que
-/// `Rede` tem a sua.
+/// ## OS DOIS ESTADOS VAZIOS, e eles sao diferentes de proposito
 ///
-/// ## O ESTADO INICIAL E O MESMO COM E SEM CONTA, e isto foi decidido e nao
-/// herdado
+/// `items: []` tem duas causas, e a pessoa precisa saber qual:
 ///
-/// **Nao ha `ConviteParaEntrar` aqui**, e a ausencia e a escolha honesta. O
-/// convite diz *"Entre para ver X"*, e e verdade em todas as telas que o usam
-/// -- `Meus achados`, a area de mensagens, o diretorio: nelas a operacao
-/// existe e entrar de fato mostra X. Aqui ela **nao existe**: quem entrasse
-/// veria esta mesma caixa. Um convite seria uma porta que cobra uma conta e
-/// entrega o mesmo nada, que e pior do que nenhuma porta.
+/// - **ninguem publicou ainda** (ela tem conexao, ou publicou algo): a lista
+///   vazia e temporaria, e o texto diz isso;
+/// - **ela nao tem conexao nenhuma e nao publicou nada**: a lista vazia e
+///   estrutural, e dizer "quando alguem publicar aparece aqui" seria mentir —
+///   nao ha ninguem de quem esperar.
 ///
-/// Por isso a caixa e UMA, nos dois estados de sessao, e ela diz o que a secao
-/// vai ser e o que ainda nao esta no ar.
+/// A distincao sai de `listMyPublications`, que **nao depende de conexao**: se
+/// ela tambem vem vazia, a pessoa nao publicou nada. E por isso que esta tela
+/// faz DUAS leituras e nao uma.
 ///
-/// ## O TEXTO NAO PROMETE AVISO, e isso tambem e medido
+/// ## O TEXTO NAO PROMETE AVISO, e isso continua medido
 ///
-/// A frase e *"quando alguma publicar, aparece aqui"*, e **nunca** "a gente te
-/// avisa": o envio de push esta bloqueado em producao por falta de permissao
-/// da conta de servico, a caixa de notificacoes vive em ramo nao mesclado e a
-/// rota de contagem nem esta no contrato. O sino esta na barra; o aviso nao
-/// esta.
-class CorpoDoMural extends StatelessWidget {
-  const CorpoDoMural({super.key});
+/// Nenhuma frase desta tela diz "a gente te avisa": o envio de push esta
+/// bloqueado em producao por falta de permissao da conta de servico, e a rota de
+/// contagem da caixa de notificacoes nem esta no contrato. O sino esta na barra;
+/// o aviso nao esta.
+///
+/// ## A BARRA DE LISTAGEM NAO E DESENHADA, e isso e o padrao sendo OBEDECIDO
+///
+/// As tres regras de `barra_de_listagem.dart`, aplicadas: nao existe rota de
+/// busca de publicacao (campo que mente sobre o alcance e pior que campo
+/// ausente); uma linha do tempo tem UMA ordem (mais recente primeiro, e uma
+/// opcao nao e uma escolha); e nao ha grupo de filtro que o servidor aceite. Com
+/// os tres ausentes o componente devolveria `SizedBox.shrink()` sozinho — entao
+/// ele nao e chamado. **No dia em que o servidor oferecer um recorte, a barra
+/// aparece no lugar padrao, sem desenho novo.**
+class CorpoDoMural extends StatefulWidget {
+  const CorpoDoMural({
+    required this.leitura,
+    required this.interacao,
+    super.key,
+    this.aoDenunciar,
+    this.aoApagar,
+  });
 
-  /// O titulo da caixa do estado inicial. **Publico de proposito**: o portao
-  /// o le daqui em vez de guardar uma copia do texto, e portao que guarda
-  /// copia de texto fica verde no dia em que o texto muda.
-  static const String tituloDoEstadoInicial = 'As publicações ficam aqui';
+  /// A leitura, por interface ESTREITA: esta tela nao alcanca `publicar` nem
+  /// `apagar` por aqui. Quem publica e a tela de publicar, aberta pela acao
+  /// flutuante.
+  final LeituraDoMural leitura;
 
-  /// A explicacao do estado inicial.
+  /// Curtir, descurtir e comentar. Interface ESTREITA, pelo mesmo motivo de
+  /// [leitura]: o cartao que curte nao deve alcancar `apagar` da publicacao --
+  /// um toque errado apagaria a publicacao em vez de descurtir.
+  final InteracaoDoMural interacao;
+
+  /// Abre a denuncia de uma publicacao de OUTRA pessoa. Nulo nao desenha a
+  /// opcao — `reportPublication` existe no contrato, e quem a liga na tela e
+  /// quem montar a folha de denuncia; ate la a opcao **nao nasce**, em vez de
+  /// nascer sem destino (criterio 2 da BICHUS-62).
+  final void Function(PublicacaoDaLinha)? aoDenunciar;
+
+  /// Apaga a PROPRIA publicacao. Nulo nao desenha a opcao, pelo mesmo motivo.
+  final Future<void> Function(PublicacaoDaLinha)? aoApagar;
+
+  static const String tituloSemConexao = 'Comece pelas suas conexões';
+  static const String explicacaoSemConexao =
+      'O Mural mostra o que as suas conexões publicam. Você ainda não tem '
+      'nenhuma — e também pode publicar, que aparece aqui para elas.';
+
+  static const String tituloSemPublicacao = 'As publicações ficam aqui';
+  static const String explicacaoSemPublicacao =
+      'Quando as suas conexões publicarem, as publicações aparecem aqui.';
+
+  /// O rotulo da foto para quem usa leitor de tela **quando quem publicou nao
+  /// escreveu uma descricao**.
   ///
-  /// **A segunda frase e a parte honesta**: ela diz que publicar ainda nao
-  /// esta no ar, em vez de deixar a pessoa procurar um botao que nao existe.
-  /// Estado vazio que esconde a razao de estar vazio e o defeito que
-  /// `EstadoVazio` existe para nao repetir.
-  static const String explicacaoDoEstadoInicial =
-      'Quando as suas conexões publicarem, as publicações aparecem aqui. '
-      'Publicar ainda não está no ar.';
+  /// Generico, e **nao `ExcludeSemantics`**: quem nao ve precisa saber que ha
+  /// uma foto ali, mesmo sem saber o que ela mostra. Esconder a imagem do leitor
+  /// apagaria metade da publicacao para essa pessoa.
+  static const String fotoSemDescricao = 'Foto da publicação';
+
+  @override
+  State<CorpoDoMural> createState() => _CorpoDoMuralState();
+}
+
+class _CorpoDoMuralState extends State<CorpoDoMural> {
+  List<PublicacaoDaLinha>? _linha;
+
+  /// Se a propria pessoa tem alguma publicacao. **E ele que escolhe qual estado
+  /// vazio desenhar** — ver o cabecalho.
+  bool _tenhoPublicacao = false;
+
+  bool _carregando = true;
+  MensagemDeErro? _faixa;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaitedCarregar();
+  }
+
+  /// Sem `unawaited` de `dart:async` para nao acrescentar import por uma linha;
+  /// o nome diz o que esta acontecendo.
+  void unawaitedCarregar() {
+    _carregar();
+  }
+
+  Future<void> _carregar() async {
+    setState(() {
+      _carregando = true;
+      _faixa = null;
+    });
+    try {
+      // AS DUAS LEITURAS. A segunda nao e luxo: sem ela os dois estados vazios
+      // ficam indistinguiveis, e a tela escolheria a frase errada em metade dos
+      // casos. Ver o cabecalho.
+      final linha = await widget.leitura.linhaDoTempo();
+      final minhas = await widget.leitura.minhasPublicacoes();
+      if (!mounted) return;
+      setState(() {
+        _linha = linha.itens;
+        _tenhoPublicacao = minhas.itens.isNotEmpty;
+        _carregando = false;
+      });
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _carregando = false;
+        _faixa = MensagensDeErro.de(falha);
+      });
+    }
+  }
+
+  /// Recarrega, para quem publicou agora. Publico porque a acao flutuante vive
+  /// em `AbaMural`, fora desta arvore.
+  Future<void> recarregar() => _carregar();
 
   @override
   Widget build(BuildContext context) {
-    return const EstadoVazio(
-      titulo: tituloDoEstadoInicial,
-      explicacao: explicacaoDoEstadoInicial,
-      // **SEM ACAO**, e a ausencia esta justificada no cabecalho desta classe:
-      // nao ha operacao de publicar nesta arvore, e `EstadoVazio` com uma
-      // acao que nao leva a lugar nenhum seria o criterio 2 quebrado dentro
-      // do proprio componente que existe para nao quebra-lo.
-      acao: null,
+    final faixa = _faixa;
+    final linha = _linha;
+
+    if (faixa != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
+        child: FaixaDeAviso(texto: faixa.texto),
+      );
+    }
+
+    if (_carregando || linha == null) {
+      return const Padding(
+        padding: EdgeInsets.all(BichuEspaco.e6),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (linha.isEmpty) {
+      // OS DOIS ESTADOS VAZIOS. **Sem acao**, nos dois: a porta de publicar e a
+      // acao flutuante da secao, que esta sempre no canto — um segundo botao
+      // aqui seria a mesma porta em dois lugares, e o `EstadoVazio` com acao
+      // repetida e o criterio 2 sendo quebrado dentro do componente que existe
+      // para nao quebra-lo.
+      return EstadoVazio(
+        titulo: _tenhoPublicacao
+            ? CorpoDoMural.tituloSemPublicacao
+            : CorpoDoMural.tituloSemConexao,
+        explicacao: _tenhoPublicacao
+            ? CorpoDoMural.explicacaoSemPublicacao
+            : CorpoDoMural.explicacaoSemConexao,
+        acao: null,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        for (final publicacao in linha) ...<Widget>[
+          _CartaoDaPublicacao(
+            publicacao: publicacao,
+            interacao: widget.interacao,
+            aoDenunciar: widget.aoDenunciar,
+            aoApagar: widget.aoApagar == null
+                ? null
+                : () async {
+                    await widget.aoApagar!(publicacao);
+                    await _carregar();
+                  },
+          ),
+          const SizedBox(height: BichuEspaco.e4),
+        ],
+      ],
+    );
+  }
+}
+
+/// Um cartao da linha do tempo.
+///
+/// ## A FOTO DO AUTOR (Emenda 5 do ADR-0010, 20/10/2026)
+///
+/// Decisao do cliente: *"tras a foto, algo bem parecido com o instagram"*. Ela
+/// nasceu ausente, de proposito -- a Emenda 3 limitava a foto de pessoa a
+/// `Conversation.participants[]` *"e em mais nenhuma resposta deste contrato"*
+/// --, a frente parou e perguntou, e a emenda nomeou esta superficie.
+///
+/// Redonda, 40 dp, pela derivada `thumb` de 176 que a emenda nomeia. Quem pinta
+/// e [ImagemDaRede], nunca `Image.network` cru: ela passa `cacheWidth` pela
+/// largura PINTADA, e e esse numero que decide o custo em memoria. A 3x cada
+/// foto custa 120 x 120 x 4 = **57,6 KiB** decodificados; com a `card` de 512 e
+/// sem `cacheWidth` seriam 1 MiB por cartao.
+///
+/// **Nula e o estado normal**, em tres casos que a tela nao distingue: a pessoa
+/// nao tem foto, a foto nao esta `ready`, ou a conta esta desabilitada. Ai
+/// desenha a INICIAL do nome, como a conversa mediada ja faz.
+///
+/// **"Parecido com o Instagram" foi dito sobre a FOTO**, e o item 7 da Emenda 5
+/// registra que isso nao e autorizacao de redesenho: nao entra contagem de
+/// seguidores (nao existe seguir), nao entra carrossel, nao entra lista de quem
+/// curtiu.
+///
+/// ## O QUE ELE NAO DESENHA, e cada ausencia tem dono
+///
+/// - **nenhum pet**: nem nome, nem miniatura, nem link. Foto de pet dentro da
+///   foto da publicacao e permitida (cliente, 19/10); LIGAR a ficha dele
+///   agruparia os pets de um tutor (item 7 do ADR-0010), e nao ha campo que o
+///   permita;
+/// - **nenhuma LISTA de quem curtiu.** Curtir e comentar existem desde
+///   20/10/2026 (migracao `20261020000006`), e o que o cartao desenha e a
+///   CONTAGEM -- nunca quem. O item 7 da Emenda 5 do ADR-0010 registra que a
+///   decisao do cliente de 19/10 sobre curtir e contagem, e contagem nao diz
+///   quem; nao existe `GET /publications/{ref}/likes`, entao nao ha o que abrir;
+/// - **nenhuma contagem de seguidores.** Nao existe seguir neste produto, e
+///   "parecido com o Instagram" foi dito sobre a FOTO (item 7 da Emenda 5);
+/// - **nenhum lugar** (ADR-0006).
+class _CartaoDaPublicacao extends StatelessWidget {
+  const _CartaoDaPublicacao({
+    required this.publicacao,
+    required this.interacao,
+    required this.aoDenunciar,
+    required this.aoApagar,
+  });
+
+  final PublicacaoDaLinha publicacao;
+  final InteracaoDoMural interacao;
+  final void Function(PublicacaoDaLinha)? aoDenunciar;
+  final Future<void> Function()? aoApagar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final imagem = publicacao.imagem;
+    final urlDaImagem = imagem?.url;
+
+    return Container(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      decoration: BoxDecoration(
+        color: cores.surface,
+        borderRadius: BorderRadius.circular(BichuRaio.lg),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              _FotoDoAutor(autor: publicacao.autor),
+              const SizedBox(width: BichuEspaco.e3),
+              Expanded(
+                child: Text(
+                  publicacao.autor.nomeExibido,
+                  style: textos.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _menu(context),
+            ],
+          ),
+          const SizedBox(height: BichuEspaco.e2),
+
+          // O TEXTO, como a pessoa escreveu. Sem recorte, sem "ver mais" e sem
+          // nenhum tratamento de conteudo: ele cabe em 280 caracteres, e o
+          // cliente mandou deixa-lo livre.
+          Text(publicacao.texto, style: textos.bodyLarge),
+
+          if (urlDaImagem != null && urlDaImagem.isNotEmpty) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e4),
+            // `ImagemDaRede` e nunca `Image.network` cru: ela trata
+            // `cacheWidth` pelo que a tela PINTA e tem `errorBuilder` sempre.
+            // A derivada e a `card` de 1024 x 1024 (1:1), e o cartao a desenha
+            // na largura do corpo — por isso `proporcao: 1`, que e o que faz a
+            // altura ser reservada antes de os bytes chegarem e a rolagem nao
+            // saltar.
+            ImagemDaRede(
+              url: urlDaImagem,
+              descricao: (imagem?.textoAlternativo?.trim().isNotEmpty ?? false)
+                  ? imagem!.textoAlternativo!.trim()
+                  : CorpoDoMural.fotoSemDescricao,
+              proporcao: 1,
+            ),
+          ],
+
+          const SizedBox(height: BichuEspaco.e2),
+          _AcoesDaPublicacao(publicacao: publicacao, interacao: interacao),
+        ],
+      ),
+    );
+  }
+
+  /// O `⋮` do cartao: **`Apagar` na propria, `Denunciar` na de outra pessoa, e
+  /// nunca as duas.**
+  ///
+  /// Quem decide e `publicacao.minha`, que vem do SERVIDOR como coluna
+  /// calculada — e nao de uma comparacao de apelido nesta camada: a tela nao tem
+  /// o apelido de quem chama em toda rolagem, e comparar aqui seria a
+  /// autorizacao migrando para o cliente.
+  ///
+  /// **Denunciar a propria publicacao nao existe**, e isso e produto e nao
+  /// economia: o caminho para o proprio conteudo e apaga-lo, que e imediato, e o
+  /// servidor responde `400 own_content` a quem tentar. Oferecer as duas seria
+  /// desenhar um controle cujo unico desfecho e um erro.
+  Widget _menu(BuildContext context) {
+    final opcoes = <PopupMenuEntry<String>>[
+      if (publicacao.minha && aoApagar != null)
+        const PopupMenuItem<String>(value: 'apagar', child: Text('Apagar')),
+      if (!publicacao.minha && aoDenunciar != null)
+        const PopupMenuItem<String>(value: 'denunciar', child: Text('Denunciar')),
+    ];
+    // **Menu sem opcao nao nasce.** Um `⋮` que abre uma folha vazia e um toque
+    // que termina em nada.
+    if (opcoes.isEmpty) return const SizedBox.shrink();
+
+    return PopupMenuButton<String>(
+      // O nome acessivel do alvo. Sem ele o leitor de tela anuncia so "botao".
+      tooltip: 'Opções da publicação',
+      itemBuilder: (_) => opcoes,
+      onSelected: (escolha) {
+        if (escolha == 'apagar') {
+          aoApagar?.call();
+          return;
+        }
+        aoDenunciar?.call(publicacao);
+      },
+    );
+  }
+}
+
+/// A FOTO DO AUTOR no cartao do Mural — **Emenda 5 do ADR-0010 (20/10/2026)**.
+///
+/// ## Por que ela nao reusa `MarcaNeutraDoParticipante`
+///
+/// Aquele widget existe, faz o mesmo desenho e mora em
+/// `telas/mensagens/area_de_mensagens.dart` — mas a API dele e sobre uma
+/// CONVERSA: ele recebe `ParticipanteDaConversa?` e decide o toque por
+/// `PortaDoPerfilDoParticipante`. Reusa-lo aqui acoplaria o Mural ao modulo de
+/// mensagens e ao modelo da conversa, e generaliza-lo exigiria mexer naquela
+/// tela — mais raio de alteracao do que esta frente tem.
+///
+/// **O que NAO esta duplicado e a regra que importa.** `cacheWidth` pela
+/// largura pintada, `errorBuilder` sempre e a politica de decodificacao moram
+/// em [ImagemDaRede], e e ela que pinta nos dois lugares. O que se repete aqui
+/// sao as poucas linhas da inicial de reserva.
+///
+/// **No dia em que aparecer a terceira superficie**, este widget e o irmao dele
+/// viram um so, em `lib/widgets/` — e ai o lugar certo e aquele, nao aqui.
+class _FotoDoAutor extends StatelessWidget {
+  const _FotoDoAutor({required this.autor});
+
+  final AutorDaPublicacao autor;
+
+  /// 40 dp, o tamanho para o qual a `thumb` de 176 foi medida: 120 px reais a
+  /// 3x, 1,47x de cobertura. **Nao e numero escolhido aqui** — ele vem da
+  /// Emenda 3 e a Emenda 5 o reusa por nome.
+  static const double lado = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final url = autor.urlDoIcone;
+
+    // **A FOTO NAO E UM CONTROLE, e a ausencia de toque e deliberada.**
+    //
+    // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
+    // outro lado. Aqui o cartao inteiro ja e conteudo e o apelido pode ser
+    // nulo; um circulo que se anuncia como botao e nao leva a lugar nenhum e o
+    // toque sem desfecho que o criterio 2 da BICHUS-62 proibe. Quem trouxer o
+    // toque para o perfil traz com ele o estado de apelido nulo.
+    if (url == null || url.isEmpty) {
+      final inicial = autor.nomeExibido.trim();
+      return Container(
+        width: lado,
+        height: lado,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: cores.primaryContainer,
+          shape: BoxShape.circle,
+        ),
+        // DECORATIVA para o leitor de tela: o nome esta ao lado, na mesma
+        // linha, e rotular a inicial faria ele anunciar a pessoa duas vezes na
+        // mesma parada de foco.
+        child: ExcludeSemantics(
+          child: Text(
+            inicial.isEmpty ? '·' : inicial.characters.first.toUpperCase(),
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: cores.primary),
+          ),
+        ),
+      );
+    }
+
+    return ImagemDaRede(
+      url: url,
+      // DECORATIVA, pelo mesmo motivo da inicial acima.
+      descricao: null,
+      // E este numero que vira `cacheWidth` dentro de `ImagemDaRede`.
+      largura: lado,
+      proporcao: 1,
+      // Circulo: metade do lado.
+      raio: lado / 2,
+      // O retrato de uma pessoa falhando pede outro desenho que uma fachada
+      // falhando.
+      simboloDeFalha: Icons.person_outline,
+    );
+  }
+}
+
+/// A LINHA DE ACOES do cartao: **curtir e comentar**, decisao do cliente de
+/// 19/10/2026.
+///
+/// ## O coracao e OTIMISTA, e o servidor manda
+///
+/// O toque pinta o estado novo na hora e so depois espera a resposta -- curtir
+/// tem de parecer instantaneo. **Mas o numero que fica e o do SERVIDOR**: a
+/// resposta devolve `like_count` lido das linhas, e e ele que substitui o
+/// palpite. Se a chamada falhar, o estado volta ao que era.
+///
+/// E por isso que `curtir` e idempotente do outro lado: dois toques rapidos
+/// mandam duas requisicoes, e as duas respondem a MESMA contagem -- a unicidade
+/// e a chave primaria de `publication_likes`, no banco, nao nesta tela.
+///
+/// ## NAO HA LISTA DE QUEM CURTIU, e o numero nao e um toque
+///
+/// O contador e TEXTO, e nao botao. Nao existe `GET /publications/{ref}/likes`
+/// no contrato, entao um toque no numero nao levaria a lugar nenhum -- e o
+/// criterio 2 da BICHUS-62 proibe renderizar acao sem destino. A ausencia da
+/// rota e o item 7 da Emenda 5 do ADR-0010: a decisao de 19/10 sobre curtir e
+/// CONTAGEM, e contagem nao diz quem.
+class _AcoesDaPublicacao extends StatefulWidget {
+  const _AcoesDaPublicacao({required this.publicacao, required this.interacao});
+
+  final PublicacaoDaLinha publicacao;
+  final InteracaoDoMural interacao;
+
+  static const String curtir = 'Curtir';
+  static const String descurtir = 'Descurtir';
+  static const String comentar = 'Comentar';
+
+  @override
+  State<_AcoesDaPublicacao> createState() => _AcoesDaPublicacaoState();
+}
+
+class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
+  late bool _curti = widget.publicacao.curtiEu;
+  late int _curtidas = widget.publicacao.curtidas;
+  late int _comentarios = widget.publicacao.comentarios;
+  bool _emVoo = false;
+
+  Future<void> _alternarCurtida() async {
+    if (_emVoo) return;
+    final eraCurti = _curti;
+    final eramCurtidas = _curtidas;
+    // OTIMISTA: pinta agora. Ver o cabecalho.
+    setState(() {
+      _emVoo = true;
+      _curti = !eraCurti;
+      _curtidas = eraCurti ? eramCurtidas - 1 : eramCurtidas + 1;
+    });
+    try {
+      final reacao = eraCurti
+          ? await widget.interacao.descurtir(widget.publicacao.ref)
+          : await widget.interacao.curtir(widget.publicacao.ref);
+      if (!mounted) return;
+      // **O NUMERO DO SERVIDOR SUBSTITUI O PALPITE.** Ele foi lido das linhas,
+      // e o palpite era so para a tela nao esperar.
+      setState(() {
+        _emVoo = false;
+        _curti = reacao.curtiEu;
+        _curtidas = reacao.curtidas;
+      });
+    } on FalhaDeChamada {
+      if (!mounted) return;
+      // VOLTA ao que era: deixar o coracao pintado depois de uma falha seria a
+      // tela afirmando uma curtida que o servidor nao tem.
+      setState(() {
+        _emVoo = false;
+        _curti = eraCurti;
+        _curtidas = eramCurtidas;
+      });
+    }
+  }
+
+  Future<void> _abrirComentarios() async {
+    final total = await Navigator.of(context).push<int>(
+      MaterialPageRoute<int>(
+        builder: (_) => ComentariosDaPublicacao(
+          ref: widget.publicacao.ref,
+          interacao: widget.interacao,
+          // `mine` da linha do tempo: e ele que decide se o `Apagar` nasce num
+          // comentario de TERCEIRO (decisao do cliente de 20/10/2026).
+          minhaPublicacao: widget.publicacao.minha,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    // A folha devolve o TOTAL que passou a valer: comentar ou apagar lá muda o
+    // numero aqui, e sem isto o cartao ficaria com o numero velho até a
+    // proxima recarga da linha do tempo.
+    if (total != null) setState(() => _comentarios = total);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Row(
+      children: <Widget>[
+        IconButton(
+          onPressed: _emVoo ? null : _alternarCurtida,
+          // O nome acessivel diz o que o toque FAZ, e muda com o estado: quem
+          // usa leitor de tela ouve `Descurtir` no que ja esta curtido.
+          tooltip: _curti
+              ? _AcoesDaPublicacao.descurtir
+              : _AcoesDaPublicacao.curtir,
+          icon: Icon(
+            _curti ? Icons.favorite : Icons.favorite_border,
+            color: _curti ? cores.urgency : cores.textSecondary,
+          ),
+        ),
+        // O CONTADOR E TEXTO, e nao botao: nao existe rota de lista de quem
+        // curtiu, e um toque aqui nao levaria a lugar nenhum.
+        Text(
+          '$_curtidas',
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+        const SizedBox(width: BichuEspaco.e4),
+        IconButton(
+          onPressed: _abrirComentarios,
+          tooltip: _AcoesDaPublicacao.comentar,
+          icon: Icon(Icons.mode_comment_outlined, color: cores.textSecondary),
+        ),
+        Text(
+          '$_comentarios',
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+      ],
     );
   }
 }

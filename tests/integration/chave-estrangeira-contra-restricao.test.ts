@@ -1157,6 +1157,74 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'ao dono, entao nada de terceiro sai por aqui; os objetos do balde saem pelo ' +
       'expurgo, que le as chaves ANTES do DELETE.',
   },
+
+  // -------------------------------------------------------------------------
+  // marcador de "ja vi" por secao (20261020000001, 20/10/2026)
+  // -------------------------------------------------------------------------
+  'public.section_list_views.section_list_views_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o marcador de "ja vi esta secao" da propria pessoa. Da propria pessoa, e de mais ' +
+      'ninguem: a tabela guarda UMA linha por (conta, secao) e nao fala de terceiro.',
+  },
+
+  // -------------------------------------------------------------------------
+  // o Mural: publicacao, curtida e comentario (20261020000002 e 20261020000006)
+  // -------------------------------------------------------------------------
+  'public.user_publications.user_publications_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as publicacoes da propria pessoa, e com elas as curtidas e os comentarios que ' +
+      'PENDEM delas por cascata -- inclusive os de TERCEIROS. A curtida e o comentario de ' +
+      'outra pessoa somem com a publicacao que comentavam, e e por aqui que apagar uma ' +
+      'conta leva embora o que um terceiro escreveu. Ver o caso "a cascata atravessa ' +
+      'pessoas". A denuncia NAO vem junto: `publication_reports_publicacao` poe nulo.',
+  },
+  'public.user_publications.user_publications_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+  'public.publication_likes.publication_likes_publication_id_fkey': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as curtidas da publicacao apagada, que sem ela nao sao nada. A linha e sobre OUTRA ' +
+      'pessoa -- quem curtiu --, e sai junto.',
+  },
+  'public.publication_likes.publication_likes_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o registro de que a propria pessoa curtiu. Da propria pessoa.',
+  },
+  'public.publication_comments.publication_comments_publication_id_fkey': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os comentarios da publicacao apagada, dos DOIS lados. A migracao escreve a razao: ' +
+      'comentario de publicacao inexistente nao tem contexto. A exclusao LOGICA da ' +
+      'publicacao (um UPDATE de `deleted_at`) NAO dispara esta cascata.',
+  },
+  'public.publication_comments.publication_comments_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os comentarios que a propria pessoa escreveu, inclusive em publicacao de OUTRA ' +
+      'pessoa. Da propria pessoa, e e o que o expurgo deve levar.',
+  },
+  'public.publication_reports.publication_reports_publicacao': {
+    colunas: ['publication_id'],
+    referencia: 'public.user_publications',
+    aoApagar: 'SET NULL',
+  },
 };
 
 type VereditoDoPar = 'compativel' | 'contradiz';
@@ -1285,6 +1353,70 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
       "o DELETE conclui e a linha fica kind = 'reservado', user_id = NULL, claimed_at " +
       'preenchido -- o gatilho handles_orfao_reservado reescreve `kind` antes do CHECK.',
   },
+
+  // =========================================================================
+  // A FOTO DA PUBLICACAO DO MURAL: NASCEU `contradiz`, FOI CONSERTADA, E O
+  // `compativel` ABAIXO E REMEDIDO -- NAO AJUSTADO.
+  // =========================================================================
+  // Par trazido pela `20261020000002`. Durante a mescla do terceiro lote de
+  // 20/10/2026 ele foi medido e declarado `contradiz`, e o caso central deste
+  // arquivo reprovou -- que e o portao fazendo o trabalho dele.
+  //
+  // As duas decisoes da `20261020000002` nao cabiam juntas no banco:
+  //   - a chave: `image_id ... REFERENCES catalog_images ON DELETE SET NULL`,
+  //     escrita como *"imagem apagada deixa o TEXTO de pe"*;
+  //   - o CHECK: `user_publications_texto_alternativo_pede_imagem`,
+  //     `CHECK (image_id IS NOT NULL OR alt_text IS NULL)`, escrito como
+  //     *"texto alternativo sem imagem nao descreve nada"*.
+  //
+  // Publicacao com foto E rotulo era estado legitimo; apagar a imagem punha o
+  // nulo, o rotulo continuava la, e o CHECK recusava. A imagem ficava
+  // INAPAGAVEL, e **quem escrevia descricao de acessibilidade era justamente
+  // quem criava a linha presa**.
+  //
+  // **O CONSERTO VEIO DA FRENTE DONA, e nao de quem mesclou** -- a
+  // `20261020000007`, gatilho `user_publications_texto_sai_com_a_imagem`,
+  // `BEFORE UPDATE` com `WHEN` por transicao `OLD` -> `NEW`. `BEFORE` e o que
+  // resolve: a acao referencial e um `UPDATE` e o `CHECK` e avaliado DEPOIS dos
+  // gatilhos de linha `BEFORE`. Mesma forma e mesmo motivo de
+  // `handles_orfao_vira_reservado` (`20261019000004`), que e o precedente desta
+  // casa para exatamente este impasse.
+  //
+  // **Nada foi afrouxado para o par caber**, e isso esta medido na `medicao`
+  // abaixo: o CHECK continua proibindo `alt_text` orfao, e a FK continua
+  // `SET NULL` (trocar por `CASCADE` apagaria a publicacao inteira e levaria o
+  // texto que a pessoa escreveu -- o oposto da razao escrita na linha).
+  //
+  // **O `WHEN` fecha DOIS caminhos**, e o segundo nao estava previsto quando o
+  // par foi declarado: a exclusao LOGICA e um `UPDATE`, nao dispara `ON DELETE`
+  // de nada, e sem aquele ramo a imagem de uma publicacao apagada ficaria presa
+  // para sempre.
+  'public.user_publications.user_publications_image_id_fkey + user_publications_texto_alternativo_pede_imagem':
+    {
+      coluna: 'image_id',
+      veredito: 'compativel',
+      medicao:
+        'CONSERTADO pela 20261020000007 (gatilho `user_publications_texto_sai_com_a_imagem`, ' +
+        '`BEFORE UPDATE` com `WHEN` por transicao OLD -> NEW), e REMEDIDO em 20/10/2026 ' +
+        'depois da mescla dele, em banco postgis/postgis:16-3.4 subido do zero com as 84 ' +
+        'migracoes, BEGIN/ROLLBACK, lendo o catalogo e o erro do Postgres e nunca NOTICE.\n' +
+        '  ANTES (so a 20261020000002): DELETE FROM catalog_images reprovava com 23514 em ' +
+        '`user_publications_texto_alternativo_pede_imagem`, CONTEXT ' +
+        '`UPDATE ONLY "public"."user_publications" SET "image_id" = NULL`.\n' +
+        '  DEPOIS, caminho 1 (apagar a imagem): o DELETE CONCLUI; a linha fica image_id NULL, ' +
+        'alt_text NULL, `body` INTACTO e a publicacao VIVA -- que e a razao escrita na linha ' +
+        '("imagem apagada deixa o TEXTO de pe").\n' +
+        '  DEPOIS, caminho 2 (exclusao LOGICA, o segundo ramo do WHEN): o UPDATE de ' +
+        'deleted_at anula image_id E alt_text, e a imagem passa a ser APAGAVEL (0 linhas em ' +
+        'catalog_images depois do DELETE). Sem esse ramo ela ficaria presa para sempre, ' +
+        'porque exclusao logica e UPDATE e nao dispara ON DELETE de nada.\n' +
+        '  E O GATILHO NAO E LARGO DEMAIS, medido tambem, porque o risco oposto seria apagar ' +
+        'rotulo de acessibilidade em edicao comum: editar so o `body` preserva o alt_text; ' +
+        'trocar de UMA imagem para OUTRA preserva; reescrever o alt_text com a imagem de pe ' +
+        'vale; e um segundo UPDATE numa linha JA apagada nao dispara de novo.\n' +
+        '  O CHECK continua `((image_id IS NOT NULL) OR (alt_text IS NULL))` e a FK continua ' +
+        "`confdeltype = 'n'` (SET NULL) -- nenhum dos dois foi afrouxado para o par caber.",
+},
 };
 
 // ===========================================================================

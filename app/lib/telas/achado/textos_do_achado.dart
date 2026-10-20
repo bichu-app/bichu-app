@@ -166,6 +166,36 @@ abstract final class TextosDoAchado {
 
   static const String semFoto = 'Você registrou este achado sem foto.';
 
+  /// ONDE A FOTO ESTA, na tela do achado (`/achados/:id`), que **nao tem
+  /// foto para desenhar**.
+  ///
+  /// ## Por que uma frase nova, e nao uma das de cima
+  ///
+  /// As duas frases de foto que existem afirmam o que aquela tela **nao sabe**.
+  /// [fotoAindaNaoSubiu] diz *"a foto ainda nao foi enviada"* e [semFoto] diz
+  /// *"voce registrou este achado sem foto"*: as duas falam do estado do envio,
+  /// e o `GET` de um achado nao devolve esse estado -- `FoundReport` nao tem
+  /// campo de foto nenhum, por criterio. A tela do achado mostrava
+  /// [fotoAindaNaoSubiu] em TODA visita, sobre TODO achado, afirmando um fato
+  /// que ela nunca mediu.
+  ///
+  /// No desfecho aquelas duas continuam certas, e por isso continuam lá: ele
+  /// recebeu a `FotoLocal` do seletor e sabe, por construcao, se ha foto e que
+  /// ela ainda nao subiu.
+  ///
+  /// ## A condicional nao e hesitacao: e o limite do que a tela sabe
+  ///
+  /// *"Se voce enviou uma foto"* existe porque a tela nao tem como saber se
+  /// houve foto. Afirmar que houve seria inventar; afirmar que nao houve seria
+  /// apagar o trabalho de quem tirou a foto. A segunda metade e a linha ja
+  /// aprovada do formulario ([fotoSoNaConversa], *"Mostrada só ao tutor, na
+  /// conversa"*), que e a parte com peso de aviso de uso de dado -- e aqui ela
+  /// responde a pergunta que a ausencia do quadro levanta: nao se perdeu, esta
+  /// guardada para o tutor.
+  static const String fotoNaoApareceAqui =
+      'Se você enviou uma foto, ela não aparece aqui: a foto do achado é '
+      'mostrada só ao tutor, na conversa.';
+
   // -- O DESFECHO RICO (cliente, 18/10/2026) --------------------------------
   //
   // A queixa, palavra por palavra: *"Na pagina 'achado registrado' nao mostra

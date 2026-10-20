@@ -57,6 +57,10 @@ import {
 } from '../../domain/avaliacao-do-local.js';
 import type { NivelDeVerificacao } from '../../domain/nivel-de-verificacao.js';
 import type { DirectoryRepository, OrdemDoDiretorio } from '../../ports/directory-repository.js';
+import {
+  comoFamiliaDeSessao,
+  type FamiliaDeSessao,
+} from '../../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 
@@ -107,7 +111,25 @@ const TAMANHO_PADRAO = 20;
 const ORDEM_PADRAO: OrdemDoDiretorio = 'distance';
 
 export interface Autenticador {
-  autenticar(token: string): Promise<{ userId: UserId }>;
+  /**
+   * `sid` e a familia de refresh que emitiu o token -- a SESSAO DE APARELHO do
+   * ADR-0002, emenda 1, secao 2. Ele chega aqui porque desde a SEC-021 a
+   * localizacao de referencia e do aparelho, e e dela que sai a distancia desta
+   * secao.
+   *
+   * **Opcional porque e opcional no token**: o verificador aceita os dois
+   * formatos, e o que nasceu antes da emenda 1 nao o carrega. Ao contrario das
+   * rotas de `/v1/me/location`, que recusam esse token, aqui a ausencia nao e
+   * recusa: a lista sai por nome e sem distancia. Negar a leitura do diretorio
+   * por um campo que a renovacao repoe apagaria a aba inteira.
+   */
+  autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
+}
+
+/** Quem chama e de qual aparelho. `familia` indefinida: token sem `sid`. */
+export interface ChamadorDoDiretorio {
+  readonly userId: UserId;
+  readonly familia: FamiliaDeSessao | undefined;
 }
 
 export interface DependenciasDasRotasDoDiretorio {
@@ -140,17 +162,21 @@ interface QueryDoDiretorio {
 /**
  * MEMOIZADA: o teto por `account` e o manipulador precisam do mesmo dono.
  *
- * **Exportada, e o parametro e so o autenticador**, porque
- * `directory-suggestion-routes.ts` reusa esta funcao: o memo e por requisicao e
- * a chave e a mesma (`diretorio:chamador`), entao o teto da sugestao e o
- * manipulador dela veem a MESMA conta, e a credencial e lida uma vez so. Uma
- * segunda copia desta funcao ali daria dois donos possiveis para a mesma
- * requisicao, que e a forma de o teto contar no balde de outra pessoa.
+ * **O parametro e so o autenticador**, porque `chamadorAutenticado` logo abaixo
+ * -- que `directory-suggestion-routes.ts` reusa -- se apoia nesta: o memo e por
+ * requisicao e a chave e a mesma (`diretorio:chamador`), entao o teto da
+ * sugestao e o manipulador dela veem a MESMA conta, e a credencial e lida uma
+ * vez so. Uma segunda copia desta funcao ali daria dois donos possiveis para a
+ * mesma requisicao, que e a forma de o teto contar no balde de outra pessoa.
+ *
+ * SEC-021: devolve o APARELHO ao lado do dono, porque e do aparelho que sai o
+ * ponto de referencia desde 23/09/2026. Quem nao mede distancia continua
+ * pedindo so o dono.
  */
-export function chamadorAutenticado(
+export function identidadeDoChamador(
   request: FastifyRequest,
   deps: { readonly autenticador: Autenticador },
-): Promise<UserId> {
+): Promise<ChamadorDoDiretorio> {
   return memoDaRequisicao(request, 'diretorio:chamador', async () => {
     const cabecalho = request.headers.authorization;
     if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
@@ -158,8 +184,27 @@ export function chamadorAutenticado(
     }
     const token = cabecalho.slice('Bearer '.length).trim();
     if (token === '') throw problemas.naoAutenticado();
-    return (await deps.autenticador.autenticar(token)).userId;
+    const { userId, sid } = await deps.autenticador.autenticar(token);
+    return {
+      userId,
+      // Vazio e ausente sao o mesmo caso: nenhum dos dois nomeia um aparelho.
+      familia: typeof sid === 'string' && sid !== '' ? comoFamiliaDeSessao(sid) : undefined,
+    };
   });
+}
+
+/**
+ * So o dono, para quem nao mede distancia.
+ *
+ * Projeta `identidadeDoChamador` em vez de repetir a leitura da credencial: e o
+ * MESMO memo e a mesma chave, entao continua havendo uma unica autenticacao por
+ * requisicao -- a propriedade que o comentario acima descreve.
+ */
+export async function chamadorAutenticado(
+  request: FastifyRequest,
+  deps: { readonly autenticador: Autenticador },
+): Promise<UserId> {
+  return (await identidadeDoChamador(request, deps)).userId;
 }
 
 /** `account` para o teto. Sem credencial valida nao ha balde de conta. */
@@ -314,14 +359,16 @@ export function registrarRotasDoDiretorio(
     rotaDoDiretorio,
     { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const chamador = await chamadorAutenticado(request, deps);
+      const chamador = await identidadeDoChamador(request, deps);
       const query = (request.query ?? {}) as QueryDoDiretorio;
       const page = query.page ?? PAGINA_INICIAL;
       const limit = query.limit ?? TAMANHO_PADRAO;
       const sort = query.sort ?? ORDEM_PADRAO;
 
       const pagina = await deps.diretorio.listarPublicados({
-        chamador,
+        chamador: chamador.userId,
+        // SEC-021: de qual aparelho sai o ponto que mede a distancia.
+        familia: chamador.familia,
         agora: deps.clock.now(),
         ...(query.q === undefined ? {} : { q: query.q }),
         ...(query.city === undefined ? {} : { city: query.city }),
@@ -365,10 +412,11 @@ export function registrarRotasDoDiretorio(
     rotaDoLocal,
     { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const chamador = await chamadorAutenticado(request, deps);
+      const chamador = await identidadeDoChamador(request, deps);
       const local = await deps.diretorio.lerLocalPublicado(
         parametro(request, 'slug'),
-        chamador,
+        chamador.userId,
+        chamador.familia,
         deps.clock.now(),
       );
       // **404 E NAO 403** (ADR-0021). Rascunho, oculto, removido e inexistente
