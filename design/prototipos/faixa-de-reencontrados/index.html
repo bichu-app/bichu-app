@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faixa de reencontrados — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+:root{
+  /* Tokens de design/tokens.json, tema claro (bichu_tokens.g.dart) */
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --surface-inverse:#1C1B19;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --text-on-inverse:#FAFAF8;
+  --urgency:#9B330D; --urgency-container:#FBEEE9; --on-urgency-container:#8E2E0B;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --info:#1B5FA8; --info-container:#DCEAF8;
+  --outline:#DFDED8; --outline-control:#827F73;
+  --community-fill:#A9CFBB; --action-fill:#E7B93E; --accent-fill:#E8A7A0;
+  --disabled-surface:#F4F3F1; --on-disabled:#827F73;
+  /* espaco */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px;
+  --e10:40px; --e12:48px; --e16:64px;
+  /* raio */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px; --alvo-critico:64px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#2A2824; color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- painel de controle ---------------- */
+.painel{
+  position:sticky; top:0; z-index:50;
+  background:#1C1B19; color:#FAFAF8;
+  padding:10px var(--e5) 8px;
+  border-bottom:1px solid #3A3833;
+  max-height:46vh; overflow-y:auto;
+}
+.painel h1{font-size:15px;margin:0 0 1px;font-weight:700;letter-spacing:.01em}
+.painel .sub{font-size:11.5px;color:#B5B2A8;margin:0 0 8px}
+.linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.linha .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8E8B82;margin-right:var(--e1)}
+.chip{
+  font:inherit;font-size:12px;font-weight:600;
+  background:#312F2A;color:#E8E6DE;border:1px solid #46433C;
+  border-radius:var(--r-full);padding:6px 12px;cursor:pointer;
+}
+.chip:hover{background:#3C3933}
+.chip[aria-pressed="true"]{background:#FAFAF8;color:#1C1B19;border-color:#FAFAF8}
+.aviso{
+  font-size:11.5px;line-height:1.5;color:#C9C6BC;background:#262420;
+  border-left:3px solid var(--action-fill);padding:8px 10px;border-radius:0 6px 6px 0;
+  margin-top:var(--e2);
+}
+
+/* ---------------- palco ---------------- */
+.palco{display:flex;flex-wrap:wrap;gap:var(--e8);padding:var(--e8) var(--e5) 80px;justify-content:center;align-items:flex-start}
+.caso{display:none}
+.caso.ativo{display:block}
+.rotulo-tela{
+  color:#E8E6DE;font-size:13px;font-weight:600;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:8px;
+}
+.rotulo-tela .w{color:#8E8B82;font-weight:400;font-size:11px}
+.nota-tela{color:#A8A59B;font-size:11.5px;line-height:1.5;max-width:420px;margin:0 0 var(--e3)}
+
+/* ---------------- aparelho ---------------- */
+.aparelho{
+  width:var(--tela,375px);
+  height:720px;
+  background:var(--surface);
+  border-radius:var(--r-xl);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
+  position:relative;
+}
+
+/* ---------------- barra de topo ---------------- */
+.topo{
+  height:var(--alvo-critico);min-height:var(--alvo-critico);
+  background:var(--surface);
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--outline);
+  /* titleSpacing: 0 -- decisao de 19/10 que devolveu os 16 dp do vao padrao */
+}
+.topo .ham{width:64px;height:64px;display:grid;place-items:center;flex:0 0 64px}
+.topo .tit{
+  flex:1 1 auto;min-width:0;
+  font-size:22px;font-weight:600;line-height:28px; /* titleLg */
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topo .acao{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px;position:relative}
+.topo .foto{
+  width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--community-fill);color:var(--text-primary);
+  display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.topo .foto.vazia{background:var(--surface-sunken);color:var(--text-muted)}
+.selo{
+  position:absolute;top:8px;right:8px;min-width:8px;height:8px;
+  background:var(--primary);border-radius:var(--r-full);
+  border:2px solid var(--surface);
+}
+
+/* ---------------- corpo ---------------- */
+.corpo{flex:1 1 auto;overflow-y:auto;padding:var(--e4);position:relative}
+.corpo.sem-pad{padding:0}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+  color:var(--text-primary);
+  /* se a fonte nao carregar (sem rede) aparece o NOME do glifo, que e
+     exatamente o nome proposto -- falha que informa em vez de enganar */
+  max-width:28px;overflow:hidden;font-size:24px;
+}
+.ms.cheio{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.ms.p{font-size:20px;max-width:24px}
+.ms.g{font-size:28px;max-width:32px}
+
+/* ---------------- barra de baixo ---------------- */
+.baixo{
+  height:80px;min-height:80px;display:flex;
+  background:var(--surface);border-top:1px solid var(--outline);
+}
+.baixo a{
+  flex:1 1 0;min-width:0;text-decoration:none;color:var(--text-muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:0 2px;
+}
+.baixo a .lab{
+  font-size:12px;line-height:16px;font-weight:500;
+  width:100%;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:clip;
+}
+.baixo a[aria-current="page"]{color:var(--primary)}
+.baixo a[aria-current="page"] .ms{color:var(--primary)}
+.baixo a[aria-current="page"] .lab{font-weight:600}
+.baixo .pilula{
+  width:56px;height:28px;border-radius:var(--r-full);
+  display:grid;place-items:center;
+}
+.baixo a[aria-current="page"] .pilula{background:var(--primary-container)}
+
+/* ---------------- abas ---------------- */
+.abas{display:flex;border-bottom:1px solid var(--outline);margin-bottom:var(--e4)}
+.abas button{
+  flex:1 1 0;min-width:0;background:none;border:0;cursor:pointer;
+  font:inherit;font-size:14px;font-weight:600;color:var(--text-secondary);
+  height:var(--alvo-min);padding:0 4px;
+  border-bottom:2px solid transparent;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.abas button[aria-selected="true"]{color:var(--primary);border-bottom-color:var(--primary)}
+
+/* ---------------- barra de listagem ---------------- */
+.listagem{margin-bottom:var(--e2)}
+.listagem .linha1{display:flex;gap:var(--e2);align-items:center}
+.gatilho{
+  width:48px;height:48px;flex:0 0 48px;border-radius:var(--r-md);
+  border:1px solid var(--outline-control);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;position:relative;
+}
+.gatilho .dist{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--primary);color:var(--on-primary);
+  font-size:10px;font-weight:700;line-height:1;
+  min-width:18px;height:18px;border-radius:var(--r-full);
+  display:grid;place-items:center;padding:0 4px;border:2px solid var(--surface);
+}
+.busca{
+  flex:1 1 auto;min-width:0;height:48px;
+  border:1px solid var(--outline-control);border-radius:var(--r-md);
+  background:var(--surface);display:flex;align-items:center;
+  padding:0 var(--e2) 0 var(--e3);gap:var(--e2);
+}
+.busca input{
+  flex:1 1 auto;min-width:0;border:0;outline:0;background:none;
+  font:inherit;font-size:16px;color:var(--text-primary);
+}
+.busca input::placeholder{color:var(--text-muted)}
+.busca .lupa{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;
+  border-radius:var(--r-sm);border:0;background:none;cursor:pointer}
+.resumo{font-size:14px;line-height:20px;color:var(--text-secondary);margin:var(--e2) 0 var(--e4)}
+
+/* ============ A FAIXA DE REENCONTRADOS ============
+   Ela NAO pode parecer a lista principal nem ser a primeira coisa que o olho
+   encontra: quem abre esta tela esta procurando um animal perdido. Tres
+   decisoes de desenho sustentam isso, e as tres estao marcadas no palco.
+
+   1. ELA VEM DEPOIS DA BARRA DE LISTAGEM E DO RESUMO. O primeiro texto da
+      tela continua sendo "N pets perdidos", e o primeiro controle continua
+      sendo a busca. A faixa entra abaixo disso.
+   2. OUTRA FORMA: cartao deitado de 112 dp de altura, com foto pequena a
+      esquerda; o cartao da lista e vertical, de 96 dp, com a foto de 56 dp a
+      esquerda e quatro linhas de texto. Formas diferentes, leituras
+      diferentes.
+   3. OUTRA TINTA, e ela e o `successContainer` do sistema -- o mesmo chao
+      `sage-100` que a Rede desenha. A lista de perdidos e `surface` com
+      borda `outline`.
+*/
+.faixa{
+  background:var(--success-container);
+  border-radius:var(--r-lg);
+  padding:var(--e3) 0 var(--e3) var(--e3);
+  margin:0 0 var(--e5);
+}
+.faixa .cab{
+  display:flex;align-items:center;gap:var(--e2);
+  padding-right:var(--e3);margin-bottom:var(--e2);
+}
+.faixa .cab .tit{
+  font-size:14px;line-height:20px;font-weight:600;color:var(--text-primary);
+  flex:1 1 auto;min-width:0;
+}
+.faixa .cab .ms{color:var(--success)}
+.faixa .sub{
+  font-size:12px;line-height:16px;color:var(--text-secondary);
+  padding-right:var(--e3);margin:0 0 var(--e3);
+}
+/* A TRILHA ROLA NA HORIZONTAL. Ver a nota do palco: e a unica das tres
+   saidas que nao esconde item nem rouba altura da lista. */
+.faixa .trilha{
+  display:flex;gap:var(--e3);overflow-x:auto;
+  padding:0 var(--e3) var(--e2) 0;
+  scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;
+}
+.faixa .trilha::-webkit-scrollbar{height:4px}
+.faixa .trilha::-webkit-scrollbar-thumb{background:var(--community-fill);border-radius:var(--r-full)}
+.volta{
+  flex:0 0 232px;scroll-snap-align:start;
+  background:var(--surface);border-radius:var(--r-md);
+  border:1px solid var(--community-fill);
+  padding:var(--e3);display:flex;gap:var(--e3);align-items:flex-start;
+  text-align:left;font:inherit;cursor:pointer;
+  min-height:112px;
+}
+.volta .foto{
+  width:56px;height:56px;flex:0 0 56px;border-radius:var(--r-sm);
+  background:var(--surface-sunken);display:grid;place-items:center;overflow:hidden;
+}
+.volta .foto .ms{color:var(--text-muted)}
+/* COLUNA, e nao fluxo inline: os filhos sao `span` (o cartao e um `button`,
+   e `button` nao pode conter `div`), e sem isto o chip e o nome caem na
+   MESMA linha -- medido no navegador antes de corrigir. */
+.volta .txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:flex-start}
+.volta .selo-ok{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--success-container);color:var(--text-primary);
+  font-size:11px;line-height:14px;font-weight:600;
+  border-radius:var(--r-full);padding:3px var(--e2);margin-bottom:var(--e1);
+}
+.volta .selo-ok .ms{font-size:14px;max-width:16px;color:var(--success)}
+.volta .nome{
+  width:100%;
+  font-size:15px;line-height:20px;font-weight:600;color:var(--text-primary);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.volta .onde{
+  font-size:12px;line-height:16px;color:var(--text-secondary);
+  display:flex;align-items:center;gap:var(--e1);margin-top:2px;
+}
+.volta .onde .ms{font-size:14px;max-width:16px;color:var(--text-secondary)}
+/* O 11o item: o ultimo lugar da trilha e um alvo que abre o filtro. */
+.ver-todos{
+  flex:0 0 132px;scroll-snap-align:start;min-height:112px;
+  background:transparent;border:1px dashed var(--outline-control);
+  border-radius:var(--r-md);cursor:pointer;font:inherit;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--e2);
+  color:var(--text-secondary);padding:var(--e3);
+}
+.ver-todos .n{font-size:13px;line-height:18px;font-weight:600;color:var(--text-primary);text-align:center}
+.ver-todos .ms{color:var(--text-secondary)}
+
+/* ---------------- cartao do perdido (a lista principal) ---------------- */
+.perdido{
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  background:var(--surface);padding:var(--e4);
+  display:flex;gap:var(--e4);align-items:flex-start;margin-bottom:var(--e4);
+}
+.perdido .foto{
+  width:56px;height:62px;flex:0 0 56px;border-radius:var(--r-sm);
+  background:var(--surface-sunken);display:grid;place-items:center;
+}
+.perdido .foto .ms{color:var(--text-muted)}
+.perdido .txt{flex:1 1 auto;min-width:0}
+.perdido .selo{
+  position:static;display:inline-block;width:auto;height:auto;border:0;
+  background:var(--primary-container);color:var(--on-primary-container);
+  font-size:11px;line-height:14px;font-weight:600;
+  border-radius:var(--r-full);padding:3px var(--e2);margin-bottom:var(--e2);
+}
+.perdido .nome{font-size:16px;line-height:22px;font-weight:600}
+.perdido .atr{font-size:12px;line-height:16px;color:var(--text-secondary);margin-top:2px}
+.perdido .lin{
+  font-size:12px;line-height:16px;color:var(--text-secondary);
+  display:flex;align-items:flex-start;gap:var(--e1);margin-top:var(--e2);
+}
+.perdido .lin .ms{font-size:16px;max-width:18px;color:var(--text-secondary)}
+
+/* ---------------- folha de filtros ---------------- */
+.sombra{position:absolute;inset:0;background:rgba(28,27,25,.45)}
+.folha{
+  position:absolute;left:0;right:0;bottom:0;
+  background:var(--surface);border-radius:var(--r-xl) var(--r-xl) 0 0;
+  padding:var(--e2) var(--e4) var(--e4);max-height:82%;overflow-y:auto;
+}
+.folha .alca{width:32px;height:4px;background:var(--outline);border-radius:var(--r-full);margin:var(--e2) auto var(--e4)}
+.folha .gt{font-size:16px;line-height:22px;font-weight:600;margin:0 0 var(--e1)}
+.folha .nota{font-size:12px;line-height:16px;color:var(--text-secondary);margin:0 0 var(--e2)}
+.folha .ops{display:flex;flex-wrap:wrap;gap:var(--e2);margin-bottom:var(--e6)}
+.op{
+  font:inherit;font-size:14px;font-weight:500;
+  background:var(--surface);color:var(--text-primary);
+  border:1px solid var(--outline-control);border-radius:var(--r-full);
+  padding:0 var(--e4);height:40px;cursor:pointer;
+}
+.op[aria-pressed="true"]{background:var(--primary-container);border-color:var(--primary);color:var(--on-primary-container);font-weight:600}
+.folha .rodape{display:flex;flex-direction:column;gap:var(--e2)}
+.botao{
+  font:inherit;font-size:16px;font-weight:600;height:var(--alvo-min);
+  border-radius:var(--r-md);border:0;cursor:pointer;
+  background:var(--primary);color:var(--on-primary);
+}
+.botao.sec{background:none;border:2px solid var(--outline-control);color:var(--text-primary)}
+
+/* ---------------- vazio ---------------- */
+.vazio{text-align:center;padding:var(--e10) var(--e4)}
+.vazio .ms{font-size:40px;max-width:48px;color:var(--text-muted);margin-bottom:var(--e3)}
+.vazio p{font-size:14px;line-height:20px;color:var(--text-secondary);margin:0}
+
+</style>
+</head>
+<body>
+
+<div class="painel">
+  <h1>Faixa de reencontrados — protótipo de desenho</h1>
+  <p class="sub">Bichu · 20/10/2026 · substitui o Figma por autorização do cliente de 23/09 (a conta não tem cota) · decisão dele: faixa separada, sem disputar as 20 vagas</p>
+
+  <div class="linha">
+    <span class="rot">Largura</span>
+    <button class="chip" data-w="320" aria-pressed="false">320 dp</button>
+    <button class="chip" data-w="375" aria-pressed="true">375 dp</button>
+    <button class="chip" data-w="412" aria-pressed="false">412 dp</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Telas</span>
+    <button class="chip" data-t="a-com-faixa" aria-pressed="true">com a faixa</button>
+    <button class="chip" data-t="b-zero" aria-pressed="false">ZERO reencontrados</button>
+    <button class="chip" data-t="c-onze" aria-pressed="false">mais de 10</button>
+    <button class="chip" data-t="d-deslogado" aria-pressed="false">deslogado</button>
+    <button class="chip" data-t="e-filtro-encontrados" aria-pressed="false">filtro Encontrados</button>
+    <button class="chip" data-t="f-folha" aria-pressed="false">a folha</button>
+  </div>
+
+  <p class="aviso"><strong>O que decidiu a faixa:</strong> com a ordem de hoje (<code>last_seen_at DESC</code>) o reencontrado cai na <strong>página 13</strong> — medido, 20 de 20 abertos na página 1. A faixa é consulta separada, então ela não disputa as 20 vagas e não muda a ordem da lista pela qual a vizinhança acha o animal que sumiu.</p>
+  <p class="aviso"><strong>O selo em cada item, sem repetir a frase inteira:</strong> o chip do cartão da faixa diz <code>Encontrado</code>, e quem diz <em>pela comunidade</em> é o título da faixa — uma vez, e não seis. A frase inteira continua em CADA item no <code>aria-label</code> do cartão, porque quem usa leitor de tela não recebe o título da seção junto do item. No filtro <code>Encontrados</code>, onde não há título de seção, o chip volta a dizer a frase inteira.</p>
+  <p class="aviso"><strong>Por que ela não parece a lista:</strong> vem DEPOIS da busca e do resumo; é cartão <em>deitado</em> de 112 dp com rolagem horizontal, contra o cartão vertical da lista; e usa <code>successContainer</code> (<code>sage-100</code>) contra o <code>surface</code> com borda da lista. Três eixos — posição, forma e tinta —, e nenhum deles é só cor.</p>
+</div>
+
+<div class="palco">
+  <div class="caso ativo" id="a-com-faixa">
+    <p class="rotulo-tela">Pets — com a faixa <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">A ORDEM DA TELA: busca, resumo dos perdidos, faixa, lista. O primeiro texto continua sendo "18 pets perdidos" e o primeiro controle continua sendo a busca — a faixa não rouba a primeira coisa que o olho encontra.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        </div>
+      </div>
+      <p class="resumo">18 pets perdidos</p>
+      <section class="faixa" aria-labelledby="t-faixa">
+        <div class="cab">
+          <span class="ms">volunteer_activism</span>
+          <h2 class="tit" id="t-faixa">Voltaram para casa</h2>
+        </div>
+        <p class="sub">6 pets reencontrados com a ajuda de alguém da comunidade, nos últimos 30 dias.</p>
+        <div class="trilha" role="list" aria-label="Pets que voltaram para casa">
+        <button class="volta" aria-label="Encontrado pela comunidade. Mel, Vila Mariana, São Paulo. Voltou há 3 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Mel</span>
+            <span class="onde"><span class="ms">place</span>Vila Mariana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 3 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Thor, Pinheiros, São Paulo. Voltou há 6 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Thor</span>
+            <span class="onde"><span class="ms">place</span>Pinheiros, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 6 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Nina, Tatuapé, São Paulo. Voltou há 11 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Nina</span>
+            <span class="onde"><span class="ms">place</span>Tatuapé, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 11 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Bidu, Santana, São Paulo. Voltou há 18 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Bidu</span>
+            <span class="onde"><span class="ms">place</span>Santana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 18 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Pingo, Butantã, São Paulo. Voltou há 24 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Pingo</span>
+            <span class="onde"><span class="ms">place</span>Butantã, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 24 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Luna, Ipiranga, São Paulo. Voltou há 28 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Luna</span>
+            <span class="onde"><span class="ms">place</span>Ipiranga, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 28 dias</span>
+          </span>
+        </button>
+        </div>
+      </section>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Toddy</div>
+          <div class="atr">Cão · Spitz Alemão · Pequeno · Preto</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Gertrudes, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último hoje</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Amora</div>
+          <div class="atr">Gato · Pequeno · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Moema, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último ontem</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Zeca</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Grande · Branco</div>
+          <div class="lin"><span class="ms">place</span><span>Lapa, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 2 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Tufão</div>
+          <div class="atr">Gato · Médio · Cinza</div>
+          <div class="lin"><span class="ms">place</span><span>Pinheiros, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 4 dias</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="caso" id="b-zero">
+    <p class="rotulo-tela">Pets — ZERO reencontrados <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">A faixa SOME inteira: não fica título órfão, não fica caixa verde vazia, não fica "nenhum pet voltou ainda". A tela é idêntica à de antes desta entrega.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        </div>
+      </div>
+      <p class="resumo">18 pets perdidos</p>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Toddy</div>
+          <div class="atr">Cão · Spitz Alemão · Pequeno · Preto</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Gertrudes, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último hoje</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Amora</div>
+          <div class="atr">Gato · Pequeno · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Moema, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último ontem</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Zeca</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Grande · Branco</div>
+          <div class="lin"><span class="ms">place</span><span>Lapa, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 2 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Tufão</div>
+          <div class="atr">Gato · Médio · Cinza</div>
+          <div class="lin"><span class="ms">place</span><span>Pinheiros, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 4 dias</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="caso" id="c-onze">
+    <p class="rotulo-tela">Pets — mais de 10 reencontrados <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">A trilha mostra 10 e o 11º lugar é um alvo que abre o filtro `Encontrados` já marcado. A rolagem horizontal continua; o alvo é o fim dela, não um substituto.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        </div>
+      </div>
+      <p class="resumo">18 pets perdidos</p>
+      <section class="faixa" aria-labelledby="t-faixa">
+        <div class="cab">
+          <span class="ms">volunteer_activism</span>
+          <h2 class="tit" id="t-faixa">Voltaram para casa</h2>
+        </div>
+        <p class="sub">17 pets reencontrados com a ajuda de alguém da comunidade, nos últimos 30 dias.</p>
+        <div class="trilha" role="list" aria-label="Pets que voltaram para casa">
+        <button class="volta" aria-label="Encontrado pela comunidade. Mel, Vila Mariana, São Paulo. Voltou há 3 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Mel</span>
+            <span class="onde"><span class="ms">place</span>Vila Mariana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 3 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Thor, Pinheiros, São Paulo. Voltou há 6 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Thor</span>
+            <span class="onde"><span class="ms">place</span>Pinheiros, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 6 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Nina, Tatuapé, São Paulo. Voltou há 11 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Nina</span>
+            <span class="onde"><span class="ms">place</span>Tatuapé, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 11 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Bidu, Santana, São Paulo. Voltou há 18 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Bidu</span>
+            <span class="onde"><span class="ms">place</span>Santana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 18 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Pingo, Butantã, São Paulo. Voltou há 24 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Pingo</span>
+            <span class="onde"><span class="ms">place</span>Butantã, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 24 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Luna, Ipiranga, São Paulo. Voltou há 28 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Luna</span>
+            <span class="onde"><span class="ms">place</span>Ipiranga, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 28 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Mel, Vila Mariana, São Paulo. Voltou há 3 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Mel</span>
+            <span class="onde"><span class="ms">place</span>Vila Mariana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 3 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Thor, Pinheiros, São Paulo. Voltou há 6 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Thor</span>
+            <span class="onde"><span class="ms">place</span>Pinheiros, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 6 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Nina, Tatuapé, São Paulo. Voltou há 11 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Nina</span>
+            <span class="onde"><span class="ms">place</span>Tatuapé, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 11 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Bidu, Santana, São Paulo. Voltou há 18 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Bidu</span>
+            <span class="onde"><span class="ms">place</span>Santana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 18 dias</span>
+          </span>
+        </button>
+        <button class="ver-todos" data-abre-filtro>
+          <span class="ms">arrow_forward</span>
+          <span class="n">Ver os 7 outros</span>
+        </button>
+        </div>
+      </section>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Toddy</div>
+          <div class="atr">Cão · Spitz Alemão · Pequeno · Preto</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Gertrudes, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último hoje</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Amora</div>
+          <div class="atr">Gato · Pequeno · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Moema, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último ontem</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Zeca</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Grande · Branco</div>
+          <div class="lin"><span class="ms">place</span><span>Lapa, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 2 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Tufão</div>
+          <div class="atr">Gato · Médio · Cinza</div>
+          <div class="lin"><span class="ms">place</span><span>Pinheiros, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 4 dias</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="caso" id="d-deslogado">
+    <p class="rotulo-tela">Pets — DESLOGADO <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">A lista é pública e a faixa também. Sem conta, nada muda na faixa: ela não tem ação que exija conta, e o toque num item abre a página pública do caso, pelo `share_token`. A foto da barra de topo é a única diferença.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto vazia"><span class="ms">person</span></span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        </div>
+      </div>
+      <p class="resumo">18 pets perdidos</p>
+      <section class="faixa" aria-labelledby="t-faixa">
+        <div class="cab">
+          <span class="ms">volunteer_activism</span>
+          <h2 class="tit" id="t-faixa">Voltaram para casa</h2>
+        </div>
+        <p class="sub">4 pets reencontrados com a ajuda de alguém da comunidade, nos últimos 30 dias.</p>
+        <div class="trilha" role="list" aria-label="Pets que voltaram para casa">
+        <button class="volta" aria-label="Encontrado pela comunidade. Mel, Vila Mariana, São Paulo. Voltou há 3 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Mel</span>
+            <span class="onde"><span class="ms">place</span>Vila Mariana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 3 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Thor, Pinheiros, São Paulo. Voltou há 6 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Thor</span>
+            <span class="onde"><span class="ms">place</span>Pinheiros, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 6 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Nina, Tatuapé, São Paulo. Voltou há 11 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Nina</span>
+            <span class="onde"><span class="ms">place</span>Tatuapé, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 11 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Bidu, Santana, São Paulo. Voltou há 18 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Bidu</span>
+            <span class="onde"><span class="ms">place</span>Santana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 18 dias</span>
+          </span>
+        </button>
+        </div>
+      </section>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Toddy</div>
+          <div class="atr">Cão · Spitz Alemão · Pequeno · Preto</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Gertrudes, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último hoje</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Amora</div>
+          <div class="atr">Gato · Pequeno · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Moema, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último ontem</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Zeca</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Grande · Branco</div>
+          <div class="lin"><span class="ms">place</span><span>Lapa, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 2 dias</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="caso" id="e-filtro-encontrados">
+    <p class="rotulo-tela">Pets — filtro `Encontrados` <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">Com `Encontrados` marcado a faixa SOME e os reencontrados viram a lista principal, no cartão vertical de sempre com o selo verde. Dois lugares, uma informação: o selo é o mesmo campo `found_by_community` em cada item.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span><span class="dist">1</span></button>
+        </div>
+      </div>
+      <p class="resumo">6 pets perdidos</p>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo" style="background:var(--success-container);color:var(--text-primary)">Encontrado pela comunidade</span>
+          <div class="nome">Mel</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Médio · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Mariana, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 12 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo" style="background:var(--success-container);color:var(--text-primary)">Encontrado pela comunidade</span>
+          <div class="nome">Thor</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Médio · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Pinheiros, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 12 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo" style="background:var(--success-container);color:var(--text-primary)">Encontrado pela comunidade</span>
+          <div class="nome">Nina</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Médio · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Tatuapé, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 12 dias</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo" style="background:var(--success-container);color:var(--text-primary)">Encontrado pela comunidade</span>
+          <div class="nome">Bidu</div>
+          <div class="atr">Cão · Vira-lata (SRD) · Médio · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Santana, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último há 12 dias</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="caso" id="f-folha">
+    <p class="rotulo-tela">A folha de filtros <span class="w" data-w-eco>· 375 dp</span></p>
+    <p class="nota-tela">O grupo `Estado` é o primeiro, nasce sem pastilha marcada, e a nota diz as duas condições. Nada no componente compartilhado `barra_de_listagem.dart` muda: o grupo é dado entregue a ele.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Pets</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+      <div class="listagem">
+        <div class="linha1">
+          <div class="busca">
+            <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+            <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+          </div>
+          <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+        </div>
+      </div>
+      <p class="resumo">18 pets perdidos</p>
+      <section class="faixa" aria-labelledby="t-faixa">
+        <div class="cab">
+          <span class="ms">volunteer_activism</span>
+          <h2 class="tit" id="t-faixa">Voltaram para casa</h2>
+        </div>
+        <p class="sub">3 pets reencontrados com a ajuda de alguém da comunidade, nos últimos 30 dias.</p>
+        <div class="trilha" role="list" aria-label="Pets que voltaram para casa">
+        <button class="volta" aria-label="Encontrado pela comunidade. Mel, Vila Mariana, São Paulo. Voltou há 3 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Mel</span>
+            <span class="onde"><span class="ms">place</span>Vila Mariana, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 3 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Thor, Pinheiros, São Paulo. Voltou há 6 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Thor</span>
+            <span class="onde"><span class="ms">place</span>Pinheiros, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 6 dias</span>
+          </span>
+        </button>
+        <button class="volta" aria-label="Encontrado pela comunidade. Nina, Tatuapé, São Paulo. Voltou há 11 dias.">
+          <span class="foto"><span class="ms">pets</span></span>
+          <span class="txt">
+            <span class="selo-ok"><span class="ms">volunteer_activism</span>Encontrado</span>
+            <span class="nome">Nina</span>
+            <span class="onde"><span class="ms">place</span>Tatuapé, São Paulo</span>
+            <span class="onde"><span class="ms">event_available</span>Voltou há 11 dias</span>
+          </span>
+        </button>
+        </div>
+      </section>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Toddy</div>
+          <div class="atr">Cão · Spitz Alemão · Pequeno · Preto</div>
+          <div class="lin"><span class="ms">place</span><span>Vila Gertrudes, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último hoje</span></div>
+        </div>
+      </div>
+      <div class="perdido">
+        <span class="foto"><span class="ms">pets</span></span>
+        <div class="txt">
+          <span class="selo">Perdido</span>
+          <div class="nome">Amora</div>
+          <div class="atr">Gato · Pequeno · Caramelo</div>
+          <div class="lin"><span class="ms">place</span><span>Moema, São Paulo</span></div>
+          <div class="lin"><span class="ms">schedule</span><span>Visto por último ontem</span></div>
+        </div>
+      </div>
+      </div>
+      <div class="sombra"></div>
+      <div class="folha">
+        <div class="alca"></div>
+        <h2 class="gt" style="font-size:20px">Filtros</h2>
+        <h3 class="gt">Estado</h3>
+        <p class="nota">A lista já traz os dois. Encontrados mostra só quem voltou com a ajuda de alguém da comunidade, nos últimos 30 dias.</p>
+        <div class="ops grupo">
+          <button class="op" aria-pressed="false">Perdidos</button>
+          <button class="op" aria-pressed="false">Encontrados</button>
+        </div>
+        <h3 class="gt">Espécie</h3>
+        <div class="ops grupo">
+          <button class="op" aria-pressed="false">Cão</button>
+          <button class="op" aria-pressed="false">Gato</button>
+          <button class="op" aria-pressed="false">Outro</button>
+        </div>
+        <div class="rodape">
+          <button class="botao sec">Limpar</button>
+          <button class="botao" disabled>Aplicar</button>
+        </div>
+      </div>
+      <div class="baixo">
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms cheio">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Rede</span></a>
+        <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var casos = Array.prototype.slice.call(document.querySelectorAll('.caso'));
+  function mostrar(id){
+    casos.forEach(function(c){ c.classList.toggle('ativo', c.id === id); });
+    document.querySelectorAll('.chip[data-t]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.t === id));
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.t); });
+  });
+
+  function largura(w){
+    document.querySelectorAll('.aparelho').forEach(function(a){ a.style.setProperty('--tela', w+'px'); });
+    document.querySelectorAll('[data-w-eco]').forEach(function(s){ s.textContent = '· '+w+' dp'; });
+    document.querySelectorAll('.chip[data-w]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.w === w));
+    });
+  }
+  document.querySelectorAll('.chip[data-w]').forEach(function(b){
+    b.addEventListener('click', function(){ largura(b.dataset.w); });
+  });
+  largura('375');
+
+  /* O gatilho de filtro e o alvo do 11o item levam a folha, para dar o que clicar. */
+  document.querySelectorAll('.gatilho, [data-abre-filtro]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar('f-folha'); });
+  });
+
+  /* `Aplicar` so habilita quando ha escolha pendente. */
+  document.querySelectorAll('.folha .grupo').forEach(function(g){
+    g.querySelectorAll('.op').forEach(function(o){
+      o.addEventListener('click', function(){
+        g.querySelectorAll('.op').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+        o.setAttribute('aria-pressed','true');
+        var aplicar = document.querySelector('.folha .rodape .botao:not(.sec)');
+        if (aplicar) aplicar.disabled = false;
+      });
+    });
+  });
+
+  /* Um toque num item da faixa vai para a pagina publica do caso. No produto
+     e `Rotas.casoPublico(shareToken)`; aqui ele so pisca, porque o prototipo
+     nao tem aquela tela e prometer destino que nao existe e o defeito que o
+     criterio 2 da BICHUS-62 proibe. */
+  document.querySelectorAll('.volta').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.style.outline = '3px solid var(--primary)';
+      setTimeout(function(){ b.style.outline = ''; }, 420);
+    });
+  });
+})();
+</script>
+</body>
+</html>
