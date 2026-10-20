@@ -795,6 +795,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _contadorDeAvisos.dispose();
     _avisosRecebidos.dispose();
     _sessao.dispose();
+    _contadores.dispose();
     _envioDeFoto.fechar();
     _api.fechar();
     super.dispose();

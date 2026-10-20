@@ -153,6 +153,9 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   String? _cidadeConhecida;
   bool _pediuACidade = false;
 
+  /// Se o objeto ja foi descartado. Ver [dispose] e as tres guardas.
+  bool _descartado = false;
+
   /// Quantas mensagens nao lidas a CONTA tem, ou **nulo**.
   ///
   /// **Nulo nao e zero, e a diferenca e a regra inteira desta classe.** Nulo e
@@ -296,7 +299,57 @@ class ContadoresDeNaoLido extends ChangeNotifier {
     }).catchError((Object _) => null);
   }
 
+  /// O DESCARTE, e as tres guardas que ele liga.
+  ///
+  /// ## Por que o descarte tem de existir: ele NAO existia
+  ///
+  /// Este objeto entrou no `Escopo`, em `limpezasAoSair`, em `aoEntrar`, no
+  /// arranque e na retomada -- e **nenhum `dispose()` o chamava**, enquanto os
+  /// cinco irmaos dele estavam todos no `dispose()` de `_BichuAppState`. A
+  /// isca que cobra a linha de la esta em
+  /// `test/sessao/descartes_no_dispose_test.dart`.
+  ///
+  /// ## Por que a guarda vem JUNTO, e o que foi medido em 20/10/2026
+  ///
+  /// O app pergunta o numero no arranque e em toda retomada, e nenhuma das
+  /// duas chamadas e aguardada (`unawaited`). Uma resposta pode chegar **com o
+  /// objeto ja descartado** -- em producao no `dispose` do app, e em teste de
+  /// widget a cada `pumpWidget`, que descarta o app anterior e deixa a
+  /// resposta dele a caminho. Medido neste worktree que isso de fato acontece:
+  /// a resposta de `GET /v1/conversations` chega depois do descarte.
+  ///
+  /// `ChangeNotifier` estoura `A ContadoresDeNaoLido was used after being
+  /// disposed` em `notifyListeners` depois do descarte. **E aqui esse erro NAO
+  /// aparece em lugar nenhum**, que e o que torna a guarda necessaria e nao
+  /// decorativa. Os tres caminhos que publicam estao, hoje, cada um dentro de
+  /// um `catch` largo escrito para OUTRA coisa:
+  ///
+  /// | Caminho | Quem engole |
+  /// |---|---|
+  /// | [definir], por `_contarMensagens` | o `on Object` de `_contarMensagens`, que existe para "falha de rede nao zera" |
+  /// | [_definirSecoes], por [atualizarSecoes] e [marcarSecaoVista] | o `on Object` dos dois, pela mesma razao |
+  /// | [esquecer], por `limpezasAoSair` | o `on Object catch` de `_apagarTudoDestaConta`, que isola uma limpeza das outras |
+  ///
+  /// Medido sem a guarda: `atualizar()` sobre um objeto descartado **nao
+  /// reprova nada** e deixa o objeto PELA METADE -- `_mensagens` virou `7` e
+  /// ninguem foi notificado, porque o erro saiu entre as duas linhas. Pior:
+  /// `definir` anuncia ao icone do aplicativo ANTES de notificar, entao um
+  /// contador descartado chega a escrever no distintivo de um app que nao esta
+  /// mais na arvore. Hoje o distintivo e [DistintivoInerte] e nada acende --
+  /// mas o ponto de injecao existe exatamente para o dia em que acender.
+  ///
+  /// A guarda troca tres erros engolidos por tres saidas limpas. A isca dela
+  /// olha o EFEITO: depois do descarte, a resposta em voo nao mexe no numero e
+  /// **nao chega ao caminho do icone**.
+  @override
+  void dispose() {
+    _descartado = true;
+    super.dispose();
+  }
+
   void _definirSecoes(ContadoresDeSecao contagem) {
+    // A GUARDA DE DESCARTE. Ver [dispose].
+    if (_descartado) return;
     final anterior = _secoesContadas;
     if (anterior != null &&
         anterior.perdidosNovos == contagem.perdidosNovos &&
@@ -310,6 +363,9 @@ class ContadoresDeNaoLido extends ChangeNotifier {
 
   /// Recebe o numero que o servidor mandou. E a porta de `aoContarNaoLidas`.
   void definir(int naoLidas) {
+    // A GUARDA DE DESCARTE, e ela vem ANTES de `_anunciarAoAplicativo`: um
+    // contador descartado nao escreve no icone do aplicativo. Ver [dispose].
+    if (_descartado) return;
     final valor = naoLidas < 0 ? 0 : naoLidas;
     _anunciarAoAplicativo(valor);
     if (_mensagens == valor) return;
@@ -374,6 +430,10 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   /// Zero seria errado aqui: ele afirmaria que a conta que acabou de sair nao
   /// tinha mensagem, e a aba pintaria essa afirmacao para quem nem conta tem.
   void esquecer() {
+    // A GUARDA DE DESCARTE. Um `sair()` em curso quando o app sai da arvore
+    // chega aqui, e o erro seria engolido pelo `catch` por limpeza de
+    // `_apagarTudoDestaConta`. Ver [dispose].
+    if (_descartado) return;
     _ultimoDistintivo = null;
     // AS TRES CONTAGENS DE SECAO SAEM JUNTO, e esquecer de limpa-las seria o
     // defeito visivel: quem sai da conta continuaria vendo o selo de `Pets` e
