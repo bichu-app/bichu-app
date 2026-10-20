@@ -6033,6 +6033,33 @@ paths:
         Por isso o filtro geografico e por **cidade e bairro digitados**, e nao
         por latitude e longitude. Paginacao numerada com total, porque a tela
         precisa dizer "1 a 20 de 87" e permitir chegar ao fim da lista.
+
+        ## `city` DEIXOU DE SER OBRIGATORIA EM 19/10/2026
+
+        Decisao do cliente, nas palavras dele: *"o campo cidade do filtro da
+        pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos 20
+        ultimos pets cadastrados"*. Ausente, `city` NAO recorta geografia
+        nenhuma e `applied_filters` nao a cita -- a mesma mecanica que `period`
+        ganhou em 18/10, e pelo mesmo motivo: a tela precisa poder dizer que
+        abriu sem recorte.
+
+        **Sem `city` a pagina 1 e os 20 casos abertos mais RECENTES**, pela
+        ordem que esta operacao sempre teve (`lost_cases.last_seen_at DESC`,
+        desempatada por `share_token`). O `limit` continua com `default: 20` e
+        `maximum: 20`, entao "os 20 ultimos" e o recorte padrao sem nada de
+        novo no contrato.
+
+        **A ordem NAO passou a ser por proximidade, e a ausencia e de ADR.**
+        Ordenar esta lista por distancia exigiria uma das duas coisas que o
+        ADR-0006 proibe nominalmente para ela -- latitude e longitude no pedido
+        (*"a listagem publica de perdidos filtra por cidade e bairro digitados,
+        jamais por latitude e longitude"*) ou distancia na resposta, que o
+        ADR-0010 itens 4 e 5 vedam em superficie alcancavel sem conta e que
+        `src/tools/portao-contrato-publico.ts` reprova por nome (`distance_m`,
+        `distance_km`, `radius_m`). Medido em 19/10/2026: acrescentar
+        `distance_m` a `PublicLostPet` reprova o portao com DOIS achados, porque
+        `PublicLostCase` reusa o mesmo esquema. Enquanto nao houver emenda
+        datada desses dois ADRs, a ordem desta rota e temporal.
       security: []
       x-rate-limit:
         - dimension: [ip]
@@ -6051,7 +6078,26 @@ paths:
       parameters:
         - name: city
           in: query
-          required: true
+          description: |
+            **SEM `required`, e a ausencia dele e a decisao do cliente de
+            19/10/2026**: *"o campo cidade do filtro da pagina pet nao deve ser
+            obrigatorio"*. `city` ausente e geografia ABERTA -- o servidor nao
+            recorta por cidade nenhuma, e `applied_filters` nao cita `city`.
+
+            Mesma forma que `period` logo abaixo, e pela mesma razao: nao ha
+            valor de "qualquer cidade" a inventar, porque a ausencia ja o diz, e
+            um valor desses voltaria em `applied_filters` como filtro aplicado
+            numa pagina que ninguem filtrou.
+
+            O `minLength: 2` continua valendo para quem MANDA o parametro:
+            `city=` vazio e 400, e nao geografia aberta. Quem quer todas as
+            cidades omite o parametro.
+
+            CUSTO MEDIDO: sem cidade a consulta le os casos abertos publicos de
+            TODAS as cidades, e a funcao `conta_habilitada(owner_user_id)` corre
+            por linha. O indice que sustenta esse caminho e a migracao
+            `20261019000008`; o cabecalho de
+            `kysely-listagem-publica-de-perdidos.ts` tem os dois EXPLAIN.
           schema: { type: string, minLength: 2, maxLength: 80 }
         - name: neighborhood
           in: query

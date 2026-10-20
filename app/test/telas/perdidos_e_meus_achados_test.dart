@@ -253,41 +253,42 @@ Future<void> abrirMeusAchados(
   await tester.pumpAndSettle();
 }
 
-/// Abre a folha de filtro, digita [cidade] no campo `Cidade` e toca `Aplicar`.
+/// O rotulo do campo de cidade na folha, **como ele aparece desde 19/10/2026**.
 ///
-/// O caminho de ENTRADA depende do estado: sem lista, a barra nao nasce
-/// (`desenha` responde falso com `total: 0`) e a porta e o botao
-/// `Escolher cidade` do corpo; com lista, e o icone `Icons.tune` do slot unico
-/// de acao da barra de topo. Este atalho tenta os dois, e e isso que o torna
-/// capaz de medir os dois estados com um caso cada.
+/// `BichuField` escreve `"<rotulo> (opcional)"` quando `opcional` e verdadeiro
+/// (`lib/widgets/bichu_field.dart`), e o campo de cidade passou a ser opcional
+/// por decisao do cliente. Entao o rotulo visivel mudou de `Cidade` para
+/// `Cidade (opcional)` **sem ninguem escrever esse texto** -- ele e derivado.
+///
+/// Vale como medida: o texto na tela e a prova de que `obrigatorio` saiu de
+/// `_campoDaCidade`. Reponha `obrigatorio: true` e todo caso que usa este
+/// ajudante reprova por nao achar o rotulo.
+const String rotuloDoCampoDeCidade = 'Cidade (opcional)';
+
+/// Abre a folha de filtro, digita [cidade] no campo de cidade e toca `Aplicar`.
+///
+/// **A porta e UMA desde 19/10/2026**: o icone `Icons.tune` do slot de acao. O
+/// botao `Escolher cidade` do corpo nao existe mais -- ele era a saida da fase
+/// `semCidade`, e a fase saiu com a obrigatoriedade da cidade. A barra tambem
+/// nasce sempre agora: a lista abre com itens em vez de esperar uma cidade.
 Future<void> escolherCidade(WidgetTester tester, String cidade) async {
-  final botao = find.text('Escolher cidade');
-  if (botao.evaluate().isNotEmpty) {
-    await tester.ensureVisible(botao);
-    await tester.pumpAndSettle();
-    await tester.tap(botao);
-  } else {
-    // O GATILHO DE FILTRO MORA NO CORPO, e nao na `AppBar` (uniao de
-    // 18/10/2026). Este ajudante nasceu antes da decisao do cliente de levar
-    // busca, filtro e ordenacao para o topo do CORPO da listagem; procurar
-    // dentro da `AppBar` passou a nao achar nada. O caso prova o mesmo: que
-    // existe UM caminho ate a folha de filtro.
-    final icone = find.byIcon(Icons.tune);
-    expect(
-      icone,
-      findsOneWidget,
-      reason: 'REPROVA: nao ha caminho nenhum para a folha de filtro. Sem ele '
-          'quem quer trocar de cidade nao tem como.',
-    );
-    await tester.tap(icone);
-  }
+  final icone = find.byIcon(Icons.tune);
+  expect(
+    icone,
+    findsOneWidget,
+    reason: 'REPROVA: nao ha caminho nenhum para a folha de filtro. Sem ele '
+        'quem quer trocar de cidade nao tem como.',
+  );
+  await tester.tap(icone);
   await tester.pumpAndSettle();
 
   expect(
-    find.text('Cidade'),
+    find.text(rotuloDoCampoDeCidade),
     findsOneWidget,
-    reason: 'REPROVA: a folha nao tem campo de cidade. Deslogado ele e a UNICA '
-        'fonte de cidade, e sem ele a rota nao e chamada.',
+    reason: 'REPROVA: a folha nao tem o campo de cidade com o rotulo '
+        '"$rotuloDoCampoDeCidade". Se o rotulo voltou a ser "Cidade" sem o '
+        'sufixo, `obrigatorio: true` voltou a `_campoDaCidade` e esvaziar o '
+        'campo deixou de ser um recorte valido.',
   );
 
   // **DENTRO DA FOLHA, e nao `find.byType(TextField).first`.** Com a lista
@@ -398,17 +399,30 @@ void main() {
         rede: redeDosPerdidos(paginaDePerdidos(const <Map<String, dynamic>>[])),
       );
       expect(find.byType(CartaoDoPerdido), findsNothing);
-      expect(
-        find.text('Nenhum pet perdido na sua região agora.'),
-        findsOneWidget,
-      );
+      // **SEM "na sua região"** desde 19/10/2026: a lista abre sem cidade, e a
+      // frase antiga afirmava um recorte geografico que o servidor nao aplicou.
+      expect(find.text('Nenhum pet perdido agora.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('ISCA: `city` vai na consulta, e SEM cabecalho de autenticacao',
+    testWidgets(
+        'ISCA: a lista abre SEM `city` na consulta, e SEM cabecalho de autenticacao',
         (tester) async {
-      // DESLIGANDO: troque `exigeToken: false` por `true` em
-      // `lib/api/perdidos_api.dart`. O cabecalho aparece e este caso reprova.
+      // ISCA (a) no app, decisao do cliente de 19/10/2026: *"o campo cidade do
+      // filtro da pagina pet nao deve ser obrigatorio"*.
+      //
+      // **Este caso media o contrario ate hoje**: ele exigia
+      // `queryParameters['city'] == 'São Paulo'`, vindo de
+      // `Me.reference_area.city`. A conta deste teste CONTINUA tendo regiao em
+      // Sao Paulo (`abrirPets` usa `regiaoDeSaoPaulo`), e e isso que torna o
+      // caso forte: a regiao existe e NAO recorta mais. Abrir filtrado pela
+      // regiao de quem tem conta e a reclamacao de 18/10 um nivel acima.
+      //
+      // DESLIGANDO: reponha a precedencia de cidade em `lista_de_perdidos.dart`
+      // (`_cidadeEmUso`/`_cidadeDaRegiao`) e este caso reprova pelo nome.
+      //
+      // O `exigeToken: false` continua medido na mesma chamada: troque-o por
+      // `true` em `lib/api/perdidos_api.dart` e o cabecalho aparece.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
@@ -420,8 +434,16 @@ void main() {
         ),
       );
       expect(pedidos, hasLength(1));
-      expect(pedidos.single.url.queryParameters['city'], 'São Paulo');
+      expect(
+        pedidos.single.url.queryParameters.containsKey('city'),
+        isFalse,
+        reason: 'REPROVA: a lista abriu recortada por uma cidade que ninguem '
+            'escolheu. `city` nao pode ir na consulta de abertura, nem vindo '
+            'da regiao do perfil.',
+      );
+      // E os 20 ultimos: o `limit` do contrato, e a pagina 1.
       expect(pedidos.single.url.queryParameters['limit'], '20');
+      expect(pedidos.single.url.queryParameters['page'], '1');
       expect(
         pedidos.single.headers.containsKey('Authorization'),
         isFalse,
@@ -517,43 +539,130 @@ void main() {
       expect(urls.map((u) => u.queryParameters['page']), <String>['1', '2']);
       // E o `Carregar mais` SAI quando a lista acaba.
       expect(find.text('Carregar mais'), findsNothing);
-      expect(find.text('25 pets perdidos na região.'), findsOneWidget);
+      // **SEM "na região"**, pelo mesmo motivo do vazio: a lista abre sem
+      // cidade e o total conta o que o recorte de fato tem.
+      expect(find.text('25 pets perdidos.'), findsOneWidget);
     });
 
-    testWidgets('sem cidade cadastrada, a tela diz UMA linha e nao pergunta nada',
+    testWidgets(
+        'ISCA: sem cidade cadastrada a lista CARREGA igual, e nao pede nada',
         (tester) async {
-      // A rota e publica, mas `city` e obrigatoria e a unica fonte de cidade
-      // deste app e `Me.reference_area`. Sem ela a tela nao inventa cidade.
+      // **ESTE CASO MEDIA O OPOSTO ATE 19/10/2026.** Ele se chamava "sem cidade
+      // cadastrada, a tela diz UMA linha e nao pergunta nada" e exigia
+      // `pedidos` VAZIO, com o comentario *"a tela chamou a rota sem cidade, e
+      // o servidor responderia 400"* -- que era verdade: `city` era `required`.
+      //
+      // Agora a conta tem regiao SEM cidade (so bairro), que e o estado de
+      // quem preencheu o perfil pela metade, e **a lista tem de aparecer
+      // igual**. Era exatamente o beco: conta incompleta via uma linha e um
+      // botao em vez da lista.
+      //
+      // DESLIGANDO: reponha a porta `if (cidade == null)` em `_carregar()` de
+      // `lib/telas/perdido/lista_de_perdidos.dart` e este caso reprova pelo
+      // nome -- a rota deixa de ser chamada e os cartoes nao pintam.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
         rede: redeDosPerdidos(
-          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
           pedidos: pedidos,
         ),
         regiao: const RegiaoDeReferencia(bairro: 'Vila Mariana'),
       );
       expect(
-        find.text(
-          'Escolha uma cidade para ver os pets perdidos por perto.',
-        ),
-        findsOneWidget,
+        pedidos,
+        hasLength(1),
+        reason: 'REPROVA: a tela nao chamou a rota. Sem cidade obrigatoria nao '
+            'ha mais o que esperar antes de listar.',
       );
       expect(
-        pedidos,
-        isEmpty,
-        reason: 'REPROVA: a tela chamou a rota sem cidade, e o servidor '
-            'responderia 400.',
+        pedidos.single.url.queryParameters.containsKey('city'),
+        isFalse,
       );
+      expect(perdidosNaTela(tester), hasLength(1));
+      // E NAO ha mais a linha nem o botao que a substituiam.
+      expect(
+        find.text('Escolha uma cidade para ver os pets perdidos por perto.'),
+        findsNothing,
+      );
+      expect(find.text('Escolher cidade'), findsNothing);
     });
   });
 
   // -------------------------------------------------------------------------
-  // 1-B. A CIDADE DIGITADA (autorizada pelo cliente em 18/10/2026)
+  // 1-B. A CIDADE E UM FILTRO OPCIONAL (cliente, 19/10/2026)
   // -------------------------------------------------------------------------
-  group('a cidade e digitavel, e deslogado ela e a unica fonte', () {
-    testWidgets('ISCA: DESLOGADO, a cidade digitada chama a rota e desenha a '
-        'lista', (tester) async {
+  //
+  // ESTE GRUPO SE CHAMAVA "a cidade e digitavel, e deslogado ela e a unica
+  // fonte", e media a PRECEDENCIA de tres fontes de cidade: a digitada, a
+  // `Me.reference_area.city` e a ultima guardada no aparelho
+  // (`CidadeEscolhida`). Sete casos, e a maior parte deles afirmava que a lista
+  // NAO carrega antes de haver cidade -- *"a tela chamou a rota sem cidade, e o
+  // servidor responderia 400"*.
+  //
+  // A decisao do cliente de 19/10/2026 (*"o campo cidade do filtro da pagina
+  // pet nao deve ser obrigatorio, mas devemos filtrar pelos 20 ultimos pets
+  // cadastrados e deixar que ele altere os filtros manualmente"*) retirou a
+  // obrigatoriedade, e com ela a precedencia inteira: qualquer uma das tres
+  // fontes, aplicada na abertura, faria a pagina abrir FILTRADA por uma cidade
+  // que ninguem escolheu. O que fica medido aqui e o que sobrou, e e o que ele
+  // pediu: a cidade e um filtro como os outros, da para POR e da para TIRAR.
+  //
+  // O que saiu de teste junto, e por que nao e perda de cobertura:
+  //
+  // - os casos da cidade guardada no aparelho e da regiao ganhando dela nao
+  //   tem mais mecanismo a medir. `CidadeEscolhida` continua existindo, com
+  //   `test/sessao/cidade_escolhida_test.dart` inteiro em cima dela; o que
+  //   deixou de existir e o LEITOR dela nesta tela.
+  // - o caso do armazenamento falhando media que a leitura do aparelho nao
+  //   derrubava a tela. Sem leitura nenhuma, nao ha o que derrubar -- e o
+  //   `try`/`on Object` de `CidadeEscolhida.ler` continua coberto no arquivo
+  //   proprio dela.
+  group('a cidade e um filtro opcional, e da para por e tirar', () {
+    testWidgets('ISCA: DESLOGADO, a lista abre SEM cidade e ja desenha',
+        (tester) async {
+      // **ESTE CASO MEDIA O OPOSTO**: ele exigia `pedidos` vazio antes de
+      // digitar, com o motivo *"sem cidade a rota nao e chamada"*. Agora a
+      // primeira coisa que a secao faz, deslogada e sem nada guardado, e
+      // chamar a rota sem `city` e pintar cartao.
+      //
+      // DESLIGANDO: reponha a porta `if (cidade == null)` em `_carregar()` de
+      // `lib/telas/perdido/lista_de_perdidos.dart`.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      expect(
+        pedidos,
+        hasLength(1),
+        reason: 'REPROVA: deslogado e sem cidade, a tela nao chamou a rota. '
+            'E quem nao tem conta que a vizinhanca precisa que veja a lista.',
+      );
+      expect(pedidos.single.url.queryParameters.containsKey('city'), isFalse);
+      expect(
+        pedidos.single.headers.containsKey('Authorization'),
+        isFalse,
+        reason: 'REPROVA: a listagem publica mandou credencial numa rota que '
+            'declara `security: []`.',
+      );
+      expect(find.text('Mel'), findsOneWidget);
+    });
+
+    testWidgets('ISCA (e): digitar uma cidade RECORTA, e a pagina volta para 1',
+        (tester) async {
+      // ISCA (e) do briefing: o filtro muda o recorte. No app isso se mede na
+      // CONSULTA que sai -- `applied_filters` e medido no servidor, em
+      // `src/modules/lostfound/adapters/http/listagem-publica-de-perdidos.test.ts`.
+      //
       // DESLIGANDO: tire `campos:` de `_controleDeFiltro()` em
       // `lib/telas/perdido/lista_de_perdidos.dart`, ou o bloco
       // `for (final campo in widget.campos)` da folha em
@@ -570,103 +679,30 @@ void main() {
           pedidos: pedidos,
         ),
       );
-
-      // Antes de digitar, NADA foi pedido: sem cidade a rota nao e chamada.
-      expect(
-        pedidos,
-        isEmpty,
-        reason: 'REPROVA: a tela chamou a rota sem cidade, e o servidor '
-            'responderia 400.',
-      );
-      expect(find.byType(CartaoDoPerdido), findsNothing);
-
-      await escolherCidade(tester, 'Campinas');
-
       expect(pedidos, hasLength(1));
-      expect(pedidos.single.url.queryParameters['city'], 'Campinas');
-      expect(
-        pedidos.single.headers.containsKey('Authorization'),
-        isFalse,
-        reason: 'REPROVA: a listagem publica mandou credencial numa rota que '
-            'declara `security: []`.',
-      );
-      expect(find.text('Mel'), findsOneWidget);
-    });
-
-    testWidgets('ISCA: LOGADO, o padrao e a regiao E a pessoa pode trocar',
-        (tester) async {
-      // DESLIGANDO: troque a ordem do `??` em `_cidadeEmUso`
-      // (`lib/telas/perdido/lista_de_perdidos.dart`), para a regiao ganhar da
-      // digitada. O segundo pedido volta a `São Paulo` e este caso reprova --
-      // que e exatamente o "nao force a regiao do perfil" do pedido.
-      final pedidos = <http.Request>[];
-      await abrirPets(
-        tester,
-        rede: redeDosPerdidos(
-          paginaDePerdidos(<Map<String, dynamic>>[
-            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
-          ]),
-          pedidos: pedidos,
-        ),
-      );
-      expect(pedidos, hasLength(1));
-      expect(
-        pedidos.first.url.queryParameters['city'],
-        'São Paulo',
-        reason: 'REPROVA: o padrao de quem tem conta deixou de ser '
-            '`Me.reference_area.city`.',
-      );
 
       await escolherCidade(tester, 'Campinas');
 
       expect(pedidos, hasLength(2));
-      expect(
-        pedidos.last.url.queryParameters['city'],
-        'Campinas',
-        reason: 'REPROVA: trocar a cidade na folha nao mudou a chamada. Quem '
-            'esta em viagem, ou procurando na cidade vizinha, ficou preso na '
-            'regiao do perfil.',
-      );
-      // E a pagina volta para a 1: o recorte e outro.
+      expect(pedidos.last.url.queryParameters['city'], 'Campinas');
       expect(pedidos.last.url.queryParameters['page'], '1');
-    });
-
-    testWidgets('ISCA: DESLOGADO, a cidade GUARDADA no aparelho e usada sem '
-        'redigitar', (tester) async {
-      // DESLIGANDO: tire `_cidadeDoAparelho` de `_cidadeEmUso`, ou o
-      // `_carregar()` do fim de `_lerOAparelho`, em
-      // `lib/telas/perdido/lista_de_perdidos.dart`. Este caso reprova por
-      // nenhuma chamada ter saido.
-      final pedidos = <http.Request>[];
-      await abrirPets(
-        tester,
-        logado: false,
-        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
-        rede: redeDosPerdidos(
-          paginaDePerdidos(<Map<String, dynamic>>[
-            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
-          ]),
-          pedidos: pedidos,
-        ),
-      );
-      expect(
-        pedidos,
-        hasLength(1),
-        reason: 'REPROVA: a cidade guardada no aparelho nao foi usada, e o '
-            'visitante teria de redigitar a cada abertura.',
-      );
-      expect(pedidos.single.url.queryParameters['city'], 'Campinas');
       expect(find.text('Mel'), findsOneWidget);
     });
 
-    testWidgets('LOGADO: a regiao GANHA da cidade guardada no aparelho',
+    testWidgets(
+        'ISCA: a regiao do perfil NAO recorta, nem para quem tem conta',
         (tester) async {
-      // A precedencia e: digitada > regiao > guardada. Quem tem conta com
-      // regiao abre na regiao, e nao na cidade da ultima busca.
+      // O caso antigo exigia o contrario -- `city == 'São Paulo'` vindo de
+      // `Me.reference_area.city`, com o motivo *"o padrao de quem tem conta
+      // deixou de ser Me.reference_area.city"*. A conta deste caso continua
+      // tendo regiao em Sao Paulo, e e isso que o torna forte: a regiao esta
+      // la, legivel, e nao entra na consulta.
+      //
+      // DESLIGANDO: reponha `_cidadeDaRegiao` na cidade do recorte em
+      // `lib/telas/perdido/lista_de_perdidos.dart`.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
-        depositoDaCidade: DepositoDaCidadeEmMemoria(conteudo: 'Campinas'),
         rede: redeDosPerdidos(
           paginaDePerdidos(const <Map<String, dynamic>>[]),
           pedidos: pedidos,
@@ -675,65 +711,102 @@ void main() {
       expect(pedidos, isNotEmpty);
       for (final p in pedidos) {
         expect(
-          p.url.queryParameters['city'],
-          'São Paulo',
-          reason: 'REPROVA: a cidade guardada no aparelho passou por cima da '
-              'regiao cadastrada.',
+          p.url.queryParameters.containsKey('city'),
+          isFalse,
+          reason: 'REPROVA: a regiao do perfil voltou a recortar a lista de '
+              'abertura. Abrir filtrado pelo que ninguem escolheu e a '
+              'reclamacao de 18/10 um nivel acima.',
         );
       }
     });
 
-    testWidgets('ISCA: o armazenamento FALHANDO nao derruba a tela',
+    testWidgets('ISCA: APAGAR a cidade no filtro volta a mostrar todas',
         (tester) async {
-      // `DepositoDaCidadeQueFalha` estoura nas duas pontas: e o aparelho com
-      // armazenamento bloqueado, o perfil restrito e o build sem o plugin
-      // registrado. A tela tem de abrir normalmente, com o campo vazio.
+      // O caminho de volta, e ele e a metade do pedido que mais facilmente
+      // ficaria de fora: *"deixar que ele altere os filtros manualmente"*.
       //
-      // DESLIGANDO: apague o `try`/`on Object` de `CidadeEscolhida.ler` em
-      // `lib/sessao/cidade_escolhida.dart`. A excecao escapa pelo
-      // `addPostFrameCallback` e este caso reprova.
-      await abrirPets(
-        tester,
-        logado: false,
-        depositoDaCidade: const DepositoDaCidadeQueFalha(),
-        rede: redeDosPerdidos(paginaDePerdidos(const <Map<String, dynamic>>[])),
-      );
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: 'REPROVA: a leitura do aparelho derrubou a secao em que o '
-            'aplicativo ABRE.',
-      );
-      expect(
-        find.text('Escolha uma cidade para ver os pets perdidos por perto.'),
-        findsOneWidget,
-      );
-      // E o caminho para escolher a cidade esta la, mesmo com o aparelho
-      // mudo: a conveniencia falhou, a funcao nao.
-      await escolherCidade(tester, 'Campinas');
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('ISCA: `Aplicar` NAO habilita com a cidade abaixo do piso',
-        (tester) async {
-      // DESLIGANDO: tire o `if (!_camposServem) return false;` de `_mudou`, em
-      // `lib/widgets/barra_de_listagem.dart`. O `Aplicar` habilita, a rota e
-      // chamada sem cidade valida e volta 400 -- a pessoa leria falha de
-      // servidor onde falta um dado dela.
+      // DESLIGANDO (duas formas, as duas medidas em 19/10/2026):
+      //   1. reponha `obrigatorio: true` em `_campoDaCidade`
+      //      (`lista_de_perdidos.dart`): o `Aplicar` nao habilita com o campo
+      //      vazio e o terceiro pedido nunca sai;
+      //   2. troque o sentinela de `cidade` em `RecorteDePerdidos.copiar`
+      //      (`lib/api/modelos_perdido.dart`) por `cidade ?? this.cidade`:
+      //      passar nulo volta a ser indistinguivel de nao passar nada, e a
+      //      cidade anterior continua valendo.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
         logado: false,
         rede: redeDosPerdidos(
-          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
           pedidos: pedidos,
         ),
       );
-      await tester.tap(find.text('Escolher cidade'));
+      await escolherCidade(tester, 'Campinas');
+      expect(pedidos.last.url.queryParameters['city'], 'Campinas');
+
+      // Agora APAGA o campo e aplica de novo.
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(TextField),
+        ),
+        '',
+      );
+      await tester.pumpAndSettle();
+      final aplicar = find.widgetWithText(FilledButton, 'Aplicar');
+      expect(
+        tester.widget<FilledButton>(aplicar).onPressed,
+        isNotNull,
+        reason: 'REPROVA: o `Aplicar` nao habilita com a cidade VAZIA. Esvaziar '
+            'o campo e um recorte valido desde 19/10/2026, e e o unico caminho '
+            'de volta para "todas as cidades".',
+      );
+      await tester.tap(aplicar);
       await tester.pumpAndSettle();
 
-      // Um caractere so: abaixo do `minLength: 2` do contrato. O campo e o da
-      // FOLHA, pelo mesmo motivo de `escolherCidade`.
+      expect(pedidos, hasLength(3));
+      expect(
+        pedidos.last.url.queryParameters.containsKey('city'),
+        isFalse,
+        reason: 'REPROVA: apagar a cidade nao a tirou da consulta.',
+      );
+    });
+
+    testWidgets('CONTRAPESO: `Aplicar` NAO habilita com a cidade abaixo do piso',
+        (tester) async {
+      // Omitir e geografia aberta; mandar UM caractere e 400. Os dois nao sao
+      // a mesma coisa, e sem este caso a isca de cima (campo vazio habilita)
+      // justificaria habilitar com qualquer coisa.
+      //
+      // DESLIGANDO: tire o `if (!_camposServem) return false;` de `_mudou`, em
+      // `lib/widgets/barra_de_listagem.dart`.
+      //
+      // **A LISTA AQUI TEM ITEM, e nao e detalhe.** Com `paginaDePerdidos([])`
+      // a barra NAO NASCE -- `BarraDeListagem.desenha` e
+      // `total != 0 || _recorteAtivo`, e os dois sao falsos numa lista vazia
+      // sem recorte. Este caso media com lista vazia enquanto a porta para a
+      // folha era o botao `Escolher cidade` do corpo, que existia justamente
+      // nesse estado; sem a fase `semCidade` a porta e so o gatilho da barra.
+      final pedidos = <http.Request>[];
+      await abrirPets(
+        tester,
+        logado: false,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+      final antes = pedidos.length;
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+
       await tester.enterText(
         find.descendant(
           of: find.byType(BottomSheet),
@@ -754,36 +827,47 @@ void main() {
         reason: 'REPROVA: o `Aplicar` habilitou com a cidade abaixo do piso do '
             'contrato.',
       );
-      expect(pedidos, isEmpty);
+      expect(pedidos, hasLength(antes));
     });
 
     testWidgets('o estado (UF) NAO vai no pedido, porque a rota nao o declara',
         (tester) async {
-      // MEDIDO em 18/10/2026 contra `api/openapi.yaml`: `listPublicLostPets`
-      // declara `city`, `neighborhood`, `species`, `size`, `period`, `q`,
-      // `page` e `limit`, e **nao** `state`. `listDirectoryEntries` declara
-      // (`UF, duas letras`), entao o padrao existe no contrato -- so nao nesta
-      // operacao. Desenhar um seletor de UF seria controle sem desfecho.
+      // MEDIDO em 18/10/2026 contra `api/openapi.yaml`, e reconferido em
+      // 19/10: `listPublicLostPets` declara `city`, `neighborhood`, `species`,
+      // `size`, `period`, `q`, `page` e `limit`, e **nao** `state`.
+      // `listDirectoryEntries` declara (`UF, duas letras`), entao o padrao
+      // existe no contrato -- so nao nesta operacao. Desenhar um seletor de UF
+      // seria controle sem desfecho.
       //
-      // Este caso e o registro executavel da medicao: no dia em que o contrato
-      // ganhar `state`, ele reprova e alguem liga as duas pontas.
+      // A CONSEQUENCIA FICOU MAIOR em 19/10, e vale dita: sem `state`, quem
+      // digita `Campinas` recebe as tres Campinas do pais. Antes isso valia
+      // para quem digitava; agora a lista ABRE nacional, entao a ambiguidade de
+      // cidade so aparece para quem filtra -- e continua sem seletor de UF.
       final pedidos = <http.Request>[];
       await abrirPets(
         tester,
         logado: false,
         rede: redeDosPerdidos(
-          paginaDePerdidos(const <Map<String, dynamic>>[]),
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
           pedidos: pedidos,
         ),
       );
       await escolherCidade(tester, 'Campinas');
-      expect(pedidos, hasLength(1));
-      expect(
-        pedidos.single.url.queryParameters.containsKey('state'),
-        isFalse,
-        reason: 'REPROVA: a tela mandou `state` numa operacao que nao o '
-            'declara.',
-      );
+      // **DOIS pedidos agora, e nao um**: a lista ja carrega na abertura, e o
+      // segundo e o da cidade digitada. O `pedidos.single` que estava aqui
+      // estourava `Bad state: Too many elements` -- e `state` tem de estar
+      // fora dos DOIS, nao so do ultimo.
+      expect(pedidos, hasLength(2));
+      for (final p in pedidos) {
+        expect(
+          p.url.queryParameters.containsKey('state'),
+          isFalse,
+          reason: 'REPROVA: a tela mandou `state` numa operacao que nao o '
+              'declara.',
+        );
+      }
       expect(
         find.text('Estado'),
         findsNothing,

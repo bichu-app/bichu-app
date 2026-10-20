@@ -1,0 +1,129 @@
+-- O INDICE DA LISTAGEM PUBLICA DE PERDIDOS (`listPublicLostPets`) QUANDO NAO HA
+-- CIDADE NO PEDIDO.
+--
+-- POR QUE AGORA: em 19/10/2026 o cliente pediu que *"o campo cidade do filtro da
+-- pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos 20 ultimos pets
+-- cadastrados"*. `city` perdeu o `required: true` em `api/openapi.yaml` e a
+-- ausencia passou a significar GEOGRAFIA ABERTA: o predicado
+-- `texto_para_busca(last_seen_city) = ...` deixa de existir, e a consulta passa
+-- a ler os casos abertos publicos de TODAS as cidades.
+--
+-- ===========================================================================
+-- `lost_cases_publicos_por_cidade_e_visto` NAO SERVE O CAMINHO SEM CIDADE.
+-- ===========================================================================
+-- O indice da `20261019000003` e
+--
+--   (texto_para_busca(last_seen_city), last_seen_at DESC, share_token)
+--     WHERE status = 'open' AND share_to_public_list
+--
+-- e ele continua sendo o indice CERTO para o caminho COM cidade -- medido abaixo,
+-- e ele nao e tocado por esta migracao. O que ele nao faz e servir a ORDEM
+-- quando a cidade sai do `WHERE`: a coluna de ordenacao do indice e a SEGUNDA, e
+-- um btree so entrega ordem pela segunda coluna DENTRO de um valor fixo da
+-- primeira. Sem predicado de igualdade na primeira, `last_seen_at DESC` deixa de
+-- ser uma ordem que o indice sabe produzir, e o planejador volta para
+-- `Seq Scan` + `Sort`.
+--
+-- Este indice tira a cidade da frente e deixa so a ordem da rota.
+--
+-- ===========================================================================
+-- AS DUAS MEDICOES, E A SEGUNDA E A QUE DECIDE
+-- ===========================================================================
+-- `EXPLAIN (ANALYZE, BUFFERS)` da MESMA consulta que
+-- `kysely-listagem-publica-de-perdidos.ts` compila para o recorte SEM cidade
+-- (conferido imprimindo o SQL pelo proprio construtor, nao reescrito a mao).
+--
+-- 1. HOMOLOGACAO, 19/10/2026 -- `lost_cases` com **1 linha** (medido:
+--    `select count(*) from lost_cases` = 1, `count(last_seen_point)` = 0):
+--
+--      pagina 1, sem cidade   Seq Scan   1 linha   104 buffers   0,619 ms
+--
+--    `Seq Scan` E A ESCOLHA CERTA COM UMA LINHA, e por isso esta medicao NAO
+--    justifica indice nenhum: o indice novo nao apareceria no plano nem se ja
+--    existisse. Ela esta escrita aqui para que ninguem conclua de homologacao
+--    que o indice e inutil -- que e a leitura que o volume de la convida a
+--    fazer.
+--
+-- 2. MASSA DE VERDADE, Postgres 16 com PostGIS 3.4 (a imagem pinada do
+--    `compose.yaml`), as 76 migracoes aplicadas por `node-pg-migrate`,
+--    **20 000 casos abertos publicos em 40 cidades** (500 em `Sao Paulo`)
+--    espalhados por 720 dias, `ANALYZE` feito:
+--
+--      ANTES deste indice
+--        pagina 1,  sem cidade   Seq Scan     20 000 linhas   60 800 buffers   61,933 ms
+--        contagem,  sem cidade   Seq Scan     20 000 linhas   60 751 buffers   54,372 ms
+--
+--      DEPOIS deste indice
+--        pagina 1,  sem cidade   Index Scan       20 linhas      169 buffers    2,391 ms
+--        contagem,  sem cidade   Seq Scan     20 000 linhas   60 751 buffers   54,372 ms
+--
+--      COM cidade (inalterado, pelo indice da `20261019000003`)
+--        pagina 1,  Sao Paulo    Index Scan       20 linhas      145 buffers    0,232 ms
+--
+-- ===========================================================================
+-- O QUE ESTE INDICE **NAO** RESOLVE, DITO EM VOZ ALTA: A CONTAGEM
+-- ===========================================================================
+-- Leia as duas linhas de `contagem` acima: elas sao IDENTICAS antes e depois.
+-- O indice nao muda o plano da contagem, e nao e falha de escolha de colunas --
+-- e a forma da pergunta. `count(*)` sobre geografia aberta tem de visitar toda
+-- linha que qualifica, e `conta_habilitada(owner_user_id)` -- funcao STABLE que
+-- consulta `users`, e que por ser STABLE nao pode entrar no `WHERE` parcial de
+-- indice nenhum -- corre uma vez por linha visitada. Com cidade ela corria para
+-- as 500 da cidade; sem cidade corre para as 20 000.
+--
+-- Entao o custo medido da decisao de 19/10 e: **a pagina ficou 26x mais rapida
+-- que seria sem este indice, e o `total` continua custando uma varredura**. O
+-- `total` nao e opcional -- `PublicLostPetPage` o declara `required`, porque a
+-- tela diz "Mostrando 1 a 20 de 87".
+--
+-- O que NAO foi feito, e por que: trocar `total` por contagem aproximada, ou
+-- cache-a-la, muda o CONTRATO e a verdade que a tela afirma, e isso e decisao do
+-- cliente e nao escolha de migracao. A contencao que existe hoje sao os tres
+-- tetos por `ip` que a operacao declara (120/h, 600/24 h, e 30/h para `q`) e a
+-- paginacao de 20. Fica registrado para quem medir a rota sob carga e achar que
+-- este indice falhou: ele nao falhou, ele nao cobre a contagem.
+--
+-- ===========================================================================
+-- A ORDEM DAS COLUNAS, E O QUE FICA DE FORA DO `WHERE`
+-- ===========================================================================
+-- - `last_seen_at DESC` primeiro porque e A ORDEM da rota: o mais recente
+--   primeiro. E ela que faz o `LIMIT 20` parar depois de 20 linhas em vez de
+--   ordenar 20 000.
+-- - `share_token` depois porque e o desempate estavel. Sem ele, `OFFSET`
+--   devolve ordem arbitraria entre casos com o mesmo `last_seen_at`, e a pagina
+--   2 repete ou pula caso.
+--
+-- `conta_habilitada` fica FORA do `WHERE` parcial porque e STABLE
+-- (`provolatile = 's'`) e predicado de indice exige imutabilidade -- tentar
+-- reprova na criacao. O estado do pet fica fora porque vive em `pets`. Os dois
+-- aparecem no plano como `Filter`, aplicado sobre as linhas que o indice
+-- entrega, e com o `LIMIT` isso e um punhado de linhas e nao a tabela.
+--
+-- ESTE INDICE NAO DERRUBA NENHUM DOS DOIS QUE JA EXISTEM, e a razao e medida e
+-- nao conservadora: a `20261019000003` continua sendo usada pelo caminho COM
+-- cidade (a terceira medicao acima nomeia o indice no plano), e sobre a
+-- `20260918000003` a propria `20261019000003` ja registrou por que ela fica.
+--
+-- SEM `CONCURRENTLY`, como nenhuma migracao deste repositorio: `node-pg-migrate`
+-- roda cada migracao em transacao, e `CREATE INDEX CONCURRENTLY` nao executa
+-- dentro de uma.
+--
+-- O CARIMBO `20261019000008` FOI DISTRIBUIDO, e nao escolhido aqui: o portao de
+-- numero le so as refs do git e ja aprovou o mesmo numero para dois agentes no
+-- mesmo dia.
+
+-- Up Migration
+
+CREATE INDEX lost_cases_publicos_por_visto
+  ON lost_cases (last_seen_at DESC, share_token)
+  WHERE status = 'open' AND share_to_public_list;
+
+COMMENT ON INDEX lost_cases_publicos_por_visto IS
+  'listPublicLostPets SEM city (cliente, 19/10/2026): mais recente primeiro, share_token como desempate, sem cidade na frente. NAO e redundante com lost_cases_publicos_por_cidade_e_visto, que tem a cidade como PRIMEIRA coluna e por isso nao entrega esta ordem sem predicado de cidade. NAO cobre a contagem: ver o cabecalho da migracao 20261019000008.';
+
+-- Down Migration
+
+-- Descer devolve o caminho sem cidade ao `Seq Scan` + `Sort` medido acima
+-- (60 800 buffers, 61,9 ms em 20 000 linhas). Nada de dado se perde: indice nao
+-- guarda verdade nenhuma que a tabela nao tenha.
+DROP INDEX IF EXISTS lost_cases_publicos_por_visto;

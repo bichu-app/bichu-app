@@ -1,6 +1,4 @@
 import '../../widgets/arrastar_para_atualizar.dart';
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,11 +9,9 @@ import '../../api/modelos_pet.dart';
 import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
-import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
-import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
@@ -53,30 +49,46 @@ import 'cartao_do_perdido.dart';
 /// dois.
 ///
 /// ---------------------------------------------------------------------------
-/// ## A CIDADE É OBRIGATÓRIA NO CONTRATO, E ELA É DIGITÁVEL
+/// ## A CIDADE DEIXOU DE SER OBRIGATÓRIA, E A TELA ABRE SEM NENHUMA
 ///
-/// `city` é `required` em `listPublicLostPets`, e a obrigatoriedade é de
-/// privacidade: sem ela a operação seria um inventário nacional de animais
-/// perdidos, que é a listagem que o item 6 do ADR-0010 não quer existir.
+/// Decisão do cliente, 19/10/2026: *"o campo cidade do filtro da página pet não
+/// deve ser obrigatório, mas devemos filtrar pelos 20 últimos pets cadastrados
+/// e deixar que ele altere os filtros manualmente"*. `city` perdeu o
+/// `required: true` em `api/openapi.yaml` no mesmo trabalho que este arquivo.
 ///
-/// **São três fontes, nesta ordem de precedência:**
+/// **A tela abre SEM cidade**, e isso é o recorte e não um estado de espera: a
+/// página 1 são os 20 casos abertos mais recentes, de qualquer cidade, pela
+/// ordem que a operação sempre teve (`last_seen_at DESC`). `limit` já tinha
+/// `default: 20` e `maximum: 20` no contrato, então "os 20 últimos" não pediu
+/// nada de novo.
 ///
-/// 1. **O que a pessoa digitou na folha de filtro**, que ganha de tudo. Quem
-///    está em viagem, ou procurando na cidade vizinha onde o cachorro pode ter
-///    ido, precisa poder trocar — e a região do perfil não é forçada por cima
-///    disso (decisão do cliente, 18/10/2026).
-/// 2. **`Me.reference_area.city`**, o padrão de quem tem conta com região
-///    cadastrada. É só o padrão: ele preenche o campo e sai da frente.
-/// 3. **A última cidade escolhida neste aparelho** ([CidadeEscolhida]), para o
-///    visitante sem conta não redigitar a cada abertura. É a última da
-///    precedência de propósito: quem tem conta com região abre na região, e não
-///    na cidade da última busca. E ela chega **sem a tela esperar** — ver
-///    [_EstadoDaListaDePerdidos._lerOAparelho].
+/// ### O que SAIU, e por que sair era o ponto
 ///
-/// **Deslogado, a 1 e a 3 são as únicas**, e é isso que torna a seção útil para
-/// quem não tem conta — que é exatamente quem a vizinhança precisa que veja a
-/// lista. Sem nenhuma das três, a tela desenha **uma linha** e para: ela não
-/// inventa cidade, não pede coordenada e não afirma que não há perdidos.
+/// Havia uma fase própria, `_Fase.semCidade`, com uma linha ("Escolha uma
+/// cidade...") e um botão que abria a folha de filtro — a tela não tinha o que
+/// mostrar até alguém digitar uma cidade. **Essa fase não existe mais**, e com
+/// ela saíram as três fontes de cidade que a alimentavam: o que a pessoa
+/// digitou, `Me.reference_area.city` e a última cidade guardada no aparelho
+/// (`CidadeEscolhida`).
+///
+/// **A precedência não foi substituída por outra: ela foi removida.** Qualquer
+/// uma das três, aplicada na abertura, faria a página abrir FILTRADA por uma
+/// cidade que ninguém escolheu — que é literalmente a reclamação de 18/10
+/// (*"não deve trazer nenhum item do filtro por padrão"*), um nível acima,
+/// porque cidade recorta mais que janela. E o campo da folha mostraria um valor
+/// que o servidor não aplicou, que é o defeito que o contrato nomeia em
+/// `period`: "a tela leria um filtro aplicado numa página que ninguém filtrou".
+///
+/// `CidadeEscolhida` **continua existindo e não é mais lida por esta tela.**
+/// Ela é a última leitora de produção que a classe tinha; a classe tem teste
+/// próprio e está ligada no `Escopo` e no `app.dart`, então retirá-la é
+/// decisão à parte e não estava no pedido.
+///
+/// O campo de cidade continua na folha, agora **opcional**, e é ele que atende
+/// o *"deixar que ele altere os filtros manualmente"*: quem quer uma cidade
+/// digita; quem apaga o campo volta a ver todas. Esvaziá-lo é um recorte
+/// válido, e é por isso que `obrigatorio` não é mais passado — com ele, o
+/// `Aplicar` nascia desabilitado com o campo vazio.
 ///
 /// ## O ESTADO (UF) NÃO VAI NO PEDIDO, E A FALTA É DO CONTRATO
 ///
@@ -117,10 +129,11 @@ class ListaDePerdidos extends StatefulWidget {
   const ListaDePerdidos({super.key});
 
   /// Uma linha, e só uma, em cada estado em que a lista não tem o que mostrar.
-  static const String vazio = 'Nenhum pet perdido na sua região agora.';
+  /// **Sem "na sua região"** desde 19/10/2026: a lista abre sem cidade, então a
+  /// frase antiga ("Nenhum pet perdido na sua região agora.") afirmava um
+  /// recorte geográfico que o servidor não aplicou.
+  static const String vazio = 'Nenhum pet perdido agora.';
   static const String vazioFiltrado = 'Nenhum pet perdido com esse recorte.';
-  static const String semCidade =
-      'Escolha uma cidade para ver os pets perdidos por perto.';
 
   /// O rótulo do campo de cidade, que é também o nome acessível dele.
   static const String rotuloDaCidade = 'Cidade';
@@ -131,14 +144,6 @@ class ListaDePerdidos extends StatefulWidget {
   static const String validacaoDaCidade =
       'Escreva o nome da cidade, com dois caracteres ou mais.';
 
-  /// A porta do campo de cidade quando a lista ainda não existe.
-  ///
-  /// **Existe porque a folha de filtro mora atrás de um controle que a barra só
-  /// desenha quando há lista** (`BarraDeListagem.desenha` responde falso com
-  /// `total: 0` e nenhum recorte aplicado). Sem esta porta, quem não tem cidade
-  /// leria a linha única e não teria caminho nenhum para sair dela — que é o
-  /// beco que o critério 2 da BICHUS-62 proíbe.
-  static const String rotuloDeEscolherCidade = 'Escolher cidade';
   static const String falha = 'Não foi possível carregar os pets perdidos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
@@ -147,14 +152,19 @@ class ListaDePerdidos extends StatefulWidget {
 
   /// A frase do fim da lista. Carrega o substantivo e o plural, que é por que
   /// [RodapeDaPaginacao] não a monta sozinho.
+  /// **Sem "na região"**, pelo mesmo motivo de [vazio]: a lista abre sem
+  /// cidade, e o total conta o que o recorte de fato tem.
   static String fimDaLista(int total) =>
-      total == 1 ? 'Um pet perdido na região.' : '$total pets perdidos na região.';
+      total == 1 ? 'Um pet perdido.' : '$total pets perdidos.';
 
   @override
   State<ListaDePerdidos> createState() => _EstadoDaListaDePerdidos();
 }
 
-enum _Fase { carregando, lista, falha, semCidade }
+/// **`semCidade` SAIU em 19/10/2026.** Ela era a fase em que a tela não tinha o
+/// que mostrar porque ninguém havia digitado uma cidade, e a cidade deixou de
+/// ser obrigatória: não há mais pergunta a fazer antes de listar.
+enum _Fase { carregando, lista, falha }
 
 class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     with PublicaAAtualizacao {
@@ -179,28 +189,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   bool _falhaAoCarregarMais = false;
 
   final TextEditingController _buscaControlador = TextEditingController();
-
-  /// Onde a última cidade escolhida é guardada **neste aparelho**.
-  ///
-  /// **Vem do `Escopo`, e não é construída aqui.** O depósito em arquivo chama
-  /// `getApplicationDocumentsDirectory()`, um canal de plataforma que trava o
-  /// `pumpAndSettle` para sempre, sem mensagem, em teste de widget. Construído
-  /// aqui, ele travaria a suíte inteira na seção em que o aplicativo ABRE — e o
-  /// sintoma não aponta para a causa. Custou uma execução travada para
-  /// descobrir, e é a mesma armadilha que `DepositoDeIntencaoEmArquivo` tem.
-  CidadeEscolhida get _cidadeGuardada => Escopo.of(context).cidadeEscolhida;
-
-  /// A cidade que a PESSOA escolheu nesta sessão. Ganha de tudo.
-  String? _cidadeDigitada;
-
-  /// A cidade que estava guardada neste aparelho. **Último lugar da
-  /// precedência**: quem tem conta com região cadastrada abre na região, e não
-  /// na cidade da última busca (decisão do cliente, 18/10/2026).
-  String? _cidadeDoAparelho;
-
-  /// A leitura do aparelho já foi PEDIDA. Pedida, e não concluída: ver
-  /// [_lerOAparelho].
-  bool _pediuOAparelho = false;
 
   /// Cada carga ganha um número; resposta de carga velha é descartada. É a
   /// mesma guarda da agenda da `Rede`, e ela existe porque trocar o recorte
@@ -240,60 +228,22 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargaAgendada = false;
       if (!mounted) return;
-      if (!_pediuOAparelho) {
-        _pediuOAparelho = true;
-        unawaited(_lerOAparelho());
-      }
       _carregar();
     });
   }
 
-  /// Lê a cidade guardada no aparelho, **sem a tela esperar por ela**.
+  /// **NÃO HÁ MAIS PRECEDÊNCIA DE CIDADE, e a ausência é a decisão de
+  /// 19/10/2026.** Havia `_cidadeDigitada`, `_cidadeDaRegiao` e
+  /// `_cidadeDoAparelho`, nessa ordem, mais um `_lerOAparelho()` que buscava a
+  /// última cidade do aparelho sem a tela esperar. As três saíram juntas: a
+  /// cidade que vale é a que está no recorte, e o recorte nasce sem nenhuma.
   ///
-  /// ## O `unawaited` é a parte que importa, e não é descuido
-  ///
-  /// O depósito em arquivo chama `getApplicationDocumentsDirectory()`, que é
-  /// canal de plataforma. Canal de plataforma **pode não responder nunca**: em
-  /// teste de widget ele trava o `pumpAndSettle` para sempre, sem mensagem, e
-  /// num aparelho com armazenamento lento ou bloqueado ele demora.
-  ///
-  /// Esperá-lo antes da primeira carga faria a seção em que o aplicativo ABRE
-  /// ficar presa numa conveniência de digitação. A primeira versão disto
-  /// esperava, e travou cinco arquivos da suíte — cada um deles montando o
-  /// aplicativo por um caminho que não injeta o depósito. O sintoma era
-  /// `pumpAndSettle timed out`, que não aponta para a causa.
-  ///
-  /// Então a ordem é: a lista carrega com o que já tem (a região, ou nada), e a
-  /// cidade guardada chega **depois** — e só é usada se ainda não houver nada
-  /// melhor. Uma recarga a mais no arranque do visitante é barata; a seção
-  /// presa não é.
-  Future<void> _lerOAparelho() async {
-    // **Nunca lança**, e é `CidadeEscolhida` quem garante.
-    final guardada = await _cidadeGuardada.ler();
-    if (!mounted || guardada == null) return;
-    // Chegou tarde: a pessoa já escolheu, ou a região já é o padrão dela. Nos
-    // dois casos a guardada perdeu, e recarregar seria trocar a lista debaixo
-    // de quem está lendo.
-    if (_cidadeDigitada != null || _cidadeDaRegiao != null) return;
-    _cidadeDoAparelho = guardada;
-    await _carregar();
-  }
-
-  /// A cidade que vale agora, na precedência do cabeçalho: o que a pessoa
-  /// escolheu, depois a região do perfil, depois a guardada no aparelho.
-  String? get _cidadeEmUso =>
-      _cidadeDigitada ?? _cidadeDaRegiao ?? _cidadeDoAparelho;
-
-  /// A região cadastrada do tutor. **A única fonte de cidade deste app.**
+  /// A região do perfil continua sendo lida — mas só para o filtro de BAIRRO,
+  /// logo abaixo, que é o único recorte para o qual este app conhece uma opção.
+  /// A região cadastrada do tutor. **Lida só pelo filtro de bairro**: a cidade
+  /// dela deixou de recortar a lista em 19/10/2026.
   RegiaoDeReferencia? get _regiao =>
       Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
-
-  /// A cidade da região cadastrada. **Só o padrão**, e não uma imposição: quem
-  /// digitou outra continua nela (decisão do cliente, 18/10/2026).
-  String? get _cidadeDaRegiao {
-    final c = _regiao?.cidade?.trim();
-    return (c == null || c.isEmpty) ? null : c;
-  }
 
   String? get _meuBairro {
     final b = _regiao?.bairro?.trim();
@@ -302,24 +252,15 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   Future<void> _carregar({bool maisUma = false}) async {
     if (!mounted) return;
-    final cidade = _cidadeEmUso;
-    if (cidade == null) {
-      setState(() {
-        _fase = _Fase.semCidade;
-        _itens = const <PerdidoPublico>[];
-        _total = 0;
-      });
-      return;
-    }
-
-    // O recorte nasce com a cidade que vale (digitada, depois a da região) e a
-    // acompanha: quem troca a cidade na folha, ou muda a região no perfil, não
-    // deve continuar vendo a lista da antiga.
-    final atual = (_recorte ?? RecorteDePerdidos(cidade: cidade)).copiar(cidade: cidade);
-    // **Guardada ANTES da chamada, e sem `await`.** Guardar depois perderia a
-    // cidade de quem fechou o aplicativo enquanto a lista carregava, e esperar
-    // a gravação atrasaria a lista por uma conveniência.
-    unawaited(_cidadeGuardada.guardar(cidade));
+    // **NÃO HÁ MAIS PORTA AQUI.** Havia um `if (cidade == null)` que punha a
+    // tela em `_Fase.semCidade` e devolvia sem chamar a rota: sem cidade a
+    // operação respondia 400, então pedir era desperdiçar uma chamada para
+    // receber erro. A cidade deixou de ser obrigatória em 19/10/2026 e a porta
+    // virou o contrário do pedido — ela é o que impedia a lista de abrir.
+    //
+    // O recorte nasce VAZIO (`const RecorteDePerdidos()`): sem cidade, sem
+    // janela, sem espécie, sem porte. É a página 1 dos 20 mais recentes.
+    final atual = _recorte ?? const RecorteDePerdidos();
 
     final int geracao;
     if (maisUma) {
@@ -402,13 +343,26 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     );
   }
 
-  /// O campo de cidade da folha. **Sempre presente**, e obrigatório: é a
-  /// pergunta sem a qual a rota não responde nada.
+  /// O campo de cidade da folha. **Sempre presente, e OPCIONAL desde
+  /// 19/10/2026.**
+  ///
+  /// `obrigatorio` não é mais passado (o padrão de `CampoDeTextoDoFiltro` é
+  /// `false`), e a diferença é inteira: com ele, campo vazio desabilitava o
+  /// `Aplicar` e o `Limpar` da folha não limpava este campo. Sem ele, apagar a
+  /// cidade é um recorte válido — e é assim que quem digitou uma cidade volta a
+  /// ver todas sem fechar a folha.
+  ///
+  /// `valor` é **o que o recorte de fato tem**, e não uma sugestão: campo que
+  /// mostra cidade que o servidor não aplicou é o defeito de 18/10 com outro
+  /// nome.
+  ///
+  /// `textoDeValidacao` continua, e continua valendo: `minLength: 2` é do
+  /// contrato e vale para quem MANDA o parâmetro. Vazio é omissão e passa;
+  /// uma letra só é 400 e a folha o barra antes.
   CampoDeTextoDoFiltro get _campoDaCidade => CampoDeTextoDoFiltro(
         chave: 'city',
         rotulo: ListaDePerdidos.rotuloDaCidade,
-        valor: _cidadeEmUso,
-        obrigatorio: true,
+        valor: _recorte?.cidadeLimpa,
         textoDeValidacao: ListaDePerdidos.validacaoDaCidade,
         // Os dois números são do contrato (`minLength: 2, maxLength: 80`), e
         // não escolhas desta tela.
@@ -421,8 +375,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     final base = _recorte;
     final bairro = _meuBairro;
     if (base == null) {
-      // Sem lista ainda, a folha oferece a CIDADE e só ela: as pastilhas
-      // recortariam uma lista que não existe.
+      // Primeira pintura, antes da primeira resposta: a folha oferece a CIDADE
+      // e só ela, porque as pastilhas recortariam uma lista que ainda não
+      // chegou. Com a cidade opcional esta janela é curta — a carga não espera
+      // mais ninguém digitar nada.
       return ControleDeFiltro(
         grupos: const <GrupoDeFiltro>[],
         campos: <CampoDeTextoDoFiltro>[_campoDaCidade],
@@ -482,22 +438,19 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   /// O `Aplicar` da folha: **um** recorte, **uma** chamada à rota.
   void _aplicarAFolha(EscolhaDaFolha escolha) {
-    // A CIDADE PRIMEIRO, porque ela decide se há lista. `obrigatorio: true` na
-    // folha garante que ela não chega vazia: o `Aplicar` não habilita assim.
-    final cidade = escolha.filtros['city']?.trim();
-    if (cidade != null && cidade.isNotEmpty) {
-      _cidadeDigitada = cidade;
-    }
-    final base = _recorte;
-    if (base == null) {
-      // Primeira cidade escolhida: não há recorte anterior a copiar, e a carga
-      // monta um do zero com a cidade que acabou de valer.
-      _carregar();
-      return;
-    }
+    // A CIDADE É UM FILTRO COMO OS OUTROS DESDE 19/10/2026, e o tratamento
+    // especial dela saiu daqui inteiro. O que havia: a cidade era lida antes de
+    // tudo, guardada em `_cidadeDigitada` e **só quando não-vazia** — apagar o
+    // campo era indistinguível de não tocar nele, e a cidade anterior
+    // continuava valendo. Com o campo opcional, esvaziar é um recorte, e é o
+    // caminho de volta para "todas as cidades".
+    final base = _recorte ?? const RecorteDePerdidos();
     _trocarRecorte(
       base.copiar(
-        cidade: _cidadeEmUso,
+        // `escolha.filtros['city']` nulo ou vazio limpa a cidade: quem apaga o
+        // campo volta a ver todas. `cidadeLimpa` no modelo apara o espaço, e é
+        // ele que decide se `city` entra na query.
+        cidade: escolha.filtros['city'],
         bairro: escolha.filtros['neighborhood'],
         especie: Especie.de(escolha.filtros['species']),
         porte: Porte.de(escolha.filtros['size']),
@@ -515,7 +468,13 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   bool get _temRecorteAtivo {
     final base = _recorte;
     if (base == null) return false;
-    return base.temBusca ||
+    // **A CIDADE CONTA AGORA.** Enquanto era obrigatória ela não podia contar:
+    // ela estava sempre lá, e `_temRecorteAtivo` seria sempre verdadeiro, o que
+    // faria a lista vazia dizer "com esse recorte" mesmo para quem não filtrou
+    // nada. Opcional, ela é um recorte de verdade — quem digitou uma cidade e
+    // não achou nada precisa ler que foi o recorte, não que não há perdidos.
+    return base.cidadeLimpa != null ||
+        base.temBusca ||
         base.bairro != null ||
         base.especie != null ||
         base.porte != null ||
@@ -528,14 +487,12 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     return AnimatedBuilder(
       animation: sessao,
       builder: (context, _) {
-        // Entrar ou sair com a seção aberta troca a região, e a região é uma
-        // das fontes de cidade: sem isto quem acabou de entrar continuaria na
-        // linha única. Quem DIGITOU uma cidade não é afetado — a digitada ganha
-        // da região, e entrar não a sobrescreve.
-        final cidade = _cidadeEmUso;
-        if (cidade == null && _fase != _Fase.semCidade) _agendarCarga();
-        if (cidade != null && _fase == _Fase.semCidade) _agendarCarga();
-
+        // **O REAGENDAMENTO POR CIDADE SAIU.** Ele existia porque entrar ou
+        // sair trocava a região, a região era fonte de cidade, e a tela tinha
+        // de sair ou entrar na fase `semCidade`. Sem aquela fase e sem a
+        // região recortando, entrar não muda o recorte desta lista: o que entrar
+        // passa a oferecer é a opção de BAIRRO na folha, e a folha é montada a
+        // cada pintura. O `AnimatedBuilder` fica — é ele que repinta a folha.
         final busca = _controleDeBusca();
         final filtro = _controleDeFiltro();
         // O campo de busca aparece **exatamente** quando a barra apareceria: a
@@ -589,26 +546,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   List<Widget> _corpo() {
     switch (_fase) {
-      case _Fase.semCidade:
-        // UMA LINHA, E UMA SAÍDA. A linha diz o que falta; o botão abre a MESMA
-        // folha de filtro da lista cheia -- e não uma segunda folha, que
-        // divergiria da primeira na primeira edição.
-        //
-        // O botão existe porque a barra não nasce aqui: `desenha` responde
-        // falso com `total: 0` e nenhum recorte aplicado, e sem ele quem não
-        // tem cidade leria a linha e não teria caminho nenhum.
-        return <Widget>[
-          _UmaLinha(texto: ListaDePerdidos.semCidade),
-          const SizedBox(height: BichuEspaco.e4),
-          BotaoSecundario(
-            rotulo: ListaDePerdidos.rotuloDeEscolherCidade,
-            aoTocar: () => abrirFolhaDeFiltros(
-              context,
-              filtro: _controleDeFiltro(),
-              aoAplicar: _aplicarAFolha,
-            ),
-          ),
-        ];
       case _Fase.carregando:
         return <Widget>[
           Semantics(
