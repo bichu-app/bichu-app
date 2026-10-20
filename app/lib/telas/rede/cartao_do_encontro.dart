@@ -5,12 +5,40 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import 'pecas_da_rede.dart';
 
-/// O cartao de um encontro na agenda: **a foto e o titulo, e nada mais**.
+/// O cartao de um encontro na agenda: **a foto e o titulo** -- mais UMA
+/// palavra, e so quando o encontro foi cancelado.
 ///
 /// ```
 /// [ imagem 16:9 (capa ou banner da marca) ]
+/// Cancelado                 <- SO em `status: cancelled`
 /// Título
 /// ```
+///
+/// ## A palavra `Cancelado`, e por que ela e a excecao
+///
+/// A entrega de 19/10/2026 deixou o cartao com a foto e o titulo, e nada
+/// mais. Medi a consequencia e levei a pergunta fechada ao cliente: um evento
+/// cancelado ficava **indistinguivel** na lista, e fica em `Próximos` ate o
+/// fim previsto de proposito (o contrato diz que `cancelled` prevalece sobre
+/// o estado temporal *"para as pessoas confirmarem o cancelamento"*).
+///
+/// A resposta dele, no mesmo dia: a palavra entra. O motivo, na frase que
+/// veio com a decisao: **um cartao limpo nao vale alguem sair de casa para um
+/// evento que nao existe.**
+///
+/// **Uma palavra, e literalmente isso.** Sem fundo, sem pilula, sem moldura,
+/// sem glifo, e sem a data ou o lugar de volta. O que existia antes era
+/// `DistintivoDeSituacao`, uma pilula invertida sobre a imagem, e ele NAO
+/// voltou -- nem ele nem os outros tres rotulos que ele sabia desenhar
+/// (`Acontecendo agora`, `Encerrado`). So `cancelado` ganha palavra, porque
+/// so ele e uma informacao que muda o que a pessoa vai FAZER.
+///
+/// **O cinza da foto nao voltou.** Ele saiu nesta mesma rodada porque, sem
+/// palavra nenhuma, uma foto em escala de cinza era sinal exclusivamente por
+/// cor (SC 1.4.1). A palavra resolve isso e abriria a porta para o cinza
+/// voltar como REFORCO -- a decisao de nao traze-lo esta no relato da
+/// entrega, e trazer e acrescentar `ColorFiltered` em
+/// [ImagemDoEncontroOuBanner] de novo.
 ///
 /// ## Por que ele encolheu, e o que saiu
 ///
@@ -47,12 +75,41 @@ class CartaoDoEncontro extends StatelessWidget {
 
   final EncontroDaRede encontro;
 
+  /// A UNICA palavra de situacao que o cartao desenha.
+  ///
+  /// `Acontecendo agora` e `Encerrado` **nao tem equivalente aqui**, e a
+  /// ausencia e a decisao: a data que o cartao nao mostra mais tambem nao
+  /// dizia essas duas, e nenhuma das duas muda o que a pessoa faz. Cancelado
+  /// muda.
+  static const String rotuloDeCancelado = 'Cancelado';
+
+  /// O nome que o leitor de tela diz: o titulo, com `Cancelado: ` na frente
+  /// quando for o caso.
+  ///
+  /// **A situacao vem PRIMEIRO**, e isso e a regra de UX 28.6 que o cartao
+  /// antigo ja seguia: a lista falada nao pode anunciar como convite um
+  /// encontro que nao vai acontecer. Quem navega por foco ouve o impedimento
+  /// antes do nome, e nao depois de ter decidido ir.
+  ///
+  /// **Por que esta string e MONTADA, e nao deixada para o `MergeSemantics`.**
+  /// Medido nesta entrega, e o resultado foi um defeito: com
+  /// `MergeSemantics` em volta da coluna `Cancelado` + titulo, a arvore
+  /// publicava `label=Cancelado` e **o titulo desaparecia** -- o leitor de
+  /// tela anunciaria "Cancelado" e a pessoa nao saberia de QUAL evento. Era
+  /// pior que antes da palavra existir. O no e montado a mao por isso, e o
+  /// caso `ISCA -- cancelado tem a palavra, e o leitor de tela diz as DUAS
+  /// coisas` cobra as duas metades do rotulo.
+  String get nomeAcessivel => encontro.situacao == SituacaoDoEncontro.cancelado
+      ? '$rotuloDeCancelado: ${encontro.titulo}'
+      : encontro.titulo;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final escuro = Theme.of(context).brightness == Brightness.dark;
     final e = encontro;
+    final cancelado = e.situacao == SituacaoDoEncontro.cancelado;
 
     return Material(
       color: cores.surface,
@@ -71,9 +128,45 @@ class CartaoDoEncontro extends StatelessWidget {
               // O teaser nao tem capa: o banner entra no lugar.
               url: e is EncontroPublico ? e.urlDaCapa : null,
             ),
-            Padding(
-              padding: const EdgeInsets.all(BichuEspaco.e4),
-              child: Text(e.titulo, style: textos.titleMedium),
+            // **UMA PARADA DE FOCO, com o rotulo montado por [nomeAcessivel].**
+            //
+            // `Semantics` com `excludeSemantics` e nao `MergeSemantics`: a
+            // prosa de [nomeAcessivel] explica a medicao que decidiu isso --
+            // o merge comia o titulo e deixava so a palavra.
+            //
+            // `excludeSemantics` aqui **nao apaga acao nenhuma**: o cartao
+            // deixou de ser tocavel em 19/10/2026, e nao ha `onTap`,
+            // `TextButton` nem `InkWell` embaixo para ele engolir. Foi
+            // exatamente esse o defeito que o `BotaoPrimario` pagou uma vez
+            // (`test/a11y/acao_de_controle_test.dart`), e e por isso que a
+            // ausencia esta escrita aqui em vez de ficar implicita.
+            //
+            // A ordem vale pelos dois canais: `Cancelado` esta ACIMA do
+            // titulo na tela, e na frente dele no rotulo falado.
+            Semantics(
+              label: nomeAcessivel,
+              excludeSemantics: true,
+              child: Padding(
+                padding: const EdgeInsets.all(BichuEspaco.e4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (cancelado) ...<Widget>[
+                      // Neutro de proposito: a PALAVRA e a informacao, e
+                      // nenhuma cor diz nada (design system 24.13.1). Sem
+                      // `errorContainer`, sem vermelho e sem urgencia -- o
+                      // evento nao deu erro, ele foi cancelado.
+                      Text(
+                        rotuloDeCancelado,
+                        style: textos.labelMedium
+                            ?.copyWith(color: cores.textPrimary),
+                      ),
+                      const SizedBox(height: BichuEspaco.e1),
+                    ],
+                    Text(e.titulo, style: textos.titleMedium),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

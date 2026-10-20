@@ -333,16 +333,27 @@ void main() {
       expect(textosNoCartao(tester), 1);
     });
 
+    // **A ISCA `ISCA -- cancelado desenha IGUAL: nenhum selo, nenhum
+    // distintivo` MORREU, e nao foi afrouxada.** Ela cobrava o contrario
+    // DISTO: que cancelado desenhasse igual a qualquer outro evento. Era
+    // consequencia medida da entrega da manha, nao desenho pedido, e eu levei
+    // a pergunta fechada ao cliente. Ele respondeu no mesmo dia -- a palavra
+    // entra --, e a frase do motivo veio com a decisao: *um cartao limpo nao
+    // vale alguem sair de casa para um evento que nao existe.*
+    //
+    // Os dois casos abaixo sao o substituto, e eles cobram MAIS do que o
+    // antigo: a palavra existe em `cancelled`, NAO existe nos outros tres
+    // estados, o cartao continua com exatamente um `Text` quando nao e
+    // cancelado, e o leitor de tela diz as DUAS coisas.
     testWidgets(
-        'ISCA -- cancelado desenha IGUAL: nenhum selo, nenhum distintivo',
-        (tester) async {
-      // ISCA: em `cartao_do_encontro.dart`, embrulhe o `Text` do titulo num
-      // `Column` com `DistintivoDeSituacao` -- ou qualquer coisa que a
-      // situacao faca aparecer. Este caso reprova na contagem.
-      //
-      // **ISTO E CONSEQUENCIA MEDIDA, e nao desenho pedido:** o cliente pediu
-      // "sem informações adicionais", e o distintivo `Cancelado` era uma
-      // delas. Um evento cancelado ficou indistinguivel na lista.
+        'ISCA -- cancelado tem a palavra, e o leitor de tela diz as DUAS '
+        'coisas', (tester) async {
+      // ISCA: em `cartao_do_encontro.dart`, apague o
+      //     if (cancelado) ...<Widget>[ Text(rotuloDeCancelado), ... ]
+      // do `Column`. A assercao (2) reprova. Apague em vez disso o ramo
+      // `cancelado ? '$rotuloDeCancelado: ...'` de `nomeAcessivel`, e a (4)
+      // reprova -- as duas metades sao independentes e cada uma tem a sua.
+      final semantica = tester.ensureSemantics();
       await abrirRede(
         tester,
         rede: redeComAgenda(
@@ -353,9 +364,122 @@ void main() {
         logado: false,
       );
 
+      // (1) O CARTAO ESTA NA ARVORE, com o titulo. Sem isto, tudo abaixo
+      // mediria o nada.
       expect(find.byType(CartaoDoEncontro), findsOneWidget);
       expect(find.text('Manhã dos labradores'), findsOneWidget);
-      expect(textosNoCartao(tester), 1);
+
+      // (2) A PALAVRA ESTA ESCRITA, DENTRO do cartao -- e nao em algum lugar
+      // da tela, que incluiria a barra e as abas.
+      expect(
+        find.descendant(
+          of: find.byType(CartaoDoEncontro),
+          matching: find.text('Cancelado'),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o cartao de um evento cancelado nao diz que ele foi '
+            'cancelado. Decisao do cliente de 19/10/2026: um cartao limpo nao '
+            'vale alguem sair de casa para um evento que nao existe.',
+      );
+
+      // (3) E E UMA PALAVRA, E SO. Dois `Text` no cartao cancelado: a palavra
+      // e o titulo. Esta contagem e o que reprova por um campo que volte --
+      // data, lugar, resumo, selo -- sem o caso precisar conhecer o nome
+      // dele. Foi ela que fez a isca da entrega da manha valer algo.
+      expect(
+        textosNoCartao(tester),
+        2,
+        reason: 'REPROVA: o cartao do cancelado escreve mais do que a palavra '
+            'e o titulo. O cliente pediu UMA palavra, sem fundo, sem pilula e '
+            'sem a data ou o lugar de volta.',
+      );
+      // E nenhum dos rotulos que a pilula antiga sabia desenhar voltou.
+      for (final sumido in <String>['Acontecendo agora', 'Encerrado']) {
+        expect(find.text(sumido), findsNothing);
+      }
+
+      // (4) E O LEITOR DE TELA DIZ AS DUAS COISAS, NUMA PARADA SO.
+      //
+      // Medido antes de escrever, e o primeiro desenho estava ERRADO:
+      // `MergeSemantics` em volta da coluna publicava `label=Cancelado` e
+      // COMIA o titulo -- a pessoa ouviria "Cancelado" sem saber de qual
+      // evento. Por isso as duas assercoes abaixo, e por isso a primeira e
+      // `contains` sobre a frase inteira: ja houve neste repositorio rotulo
+      // de semantica VAZIO fazendo `isNot(contains())` passar vacuamente, e
+      // um `expect(label, isNot(contains('...')))` sozinho aprovaria o
+      // rotulo vazio e o rotulo sem titulo.
+      final falado = rotulosSemanticos(tester);
+      expect(
+        falado,
+        contains('Cancelado: Manhã dos labradores'),
+        reason: 'REPROVA: o nome acessivel do cartao nao diz o cancelamento '
+            'ANTES do nome do evento (UX 28.6). A lista falada nao pode '
+            'anunciar como convite um encontro que nao vai acontecer.',
+      );
+      // E o titulo NAO aparece sozinho num segundo no: uma parada, nao duas.
+      expect(
+        find.bySemanticsLabel('Manhã dos labradores'),
+        findsNothing,
+        reason: 'REPROVA: o cartao publica dois nos para o mesmo evento. Quem '
+            'navega por foco ouviria a palavra e o nome em paradas '
+            'separadas.',
+      );
+      semantica.dispose();
+    });
+
+    testWidgets(
+        'ISCA -- os outros TRES estados não têm palavra nenhuma, e o cartão '
+        'fica com um Text só', (tester) async {
+      // ISCA: em `cartao_do_encontro.dart`, troque
+      //     if (cancelado) ...
+      // por `if (true) ...`. Este caso reprova nos tres estados, na contagem
+      // E na palavra.
+      //
+      // **Os tres juntos, e num caso so**: `upcoming`, `happening` e `ended`
+      // sao os outros valores de `NetworkEventStatus`, e o que importa deles
+      // aqui e a MESMA coisa -- nenhum ganha palavra. Um caso por estado
+      // daria tres nomes para uma regra.
+      final semantica = tester.ensureSemantics();
+      for (final status in <String>['upcoming', 'happening', 'ended']) {
+        await abrirRede(
+          tester,
+          rede: redeComAgenda(
+            proximos: <Map<String, dynamic>>[
+              encontroPublico(status: status, title: 'Manhã dos labradores'),
+            ],
+          ),
+          logado: false,
+        );
+
+        // A ancora positiva, por estado: sem ela os `findsNothing` abaixo
+        // passariam com a tela em branco ou em falha.
+        expect(
+          find.byType(CartaoDoEncontro),
+          findsOneWidget,
+          reason: 'o cartao de `$status` nao esta na arvore',
+        );
+        expect(find.text('Manhã dos labradores'), findsOneWidget);
+
+        expect(
+          textosNoCartao(tester),
+          1,
+          reason: 'REPROVA: o cartao de `$status` escreve mais do que o '
+              'titulo. So `cancelled` ganha palavra.',
+        );
+        expect(
+          find.text('Cancelado'),
+          findsNothing,
+          reason: 'REPROVA: o cartao de `$status` diz `Cancelado`. A palavra e '
+              'exclusiva do estado cancelado -- dizer que um evento que vai '
+              'acontecer foi cancelado e pior que nao dizer nada.',
+        );
+        // E o nome falado e o titulo CRU, sem prefixo de situacao.
+        final falado = rotulosSemanticos(tester);
+        expect(falado, contains('Manhã dos labradores'));
+        expect(falado, isNot(contains('Cancelado')));
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+      semantica.dispose();
     });
 
     testWidgets(
