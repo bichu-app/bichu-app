@@ -64,7 +64,11 @@ const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const JTI = '018f3a2b-0000-7000-8000-00000000cc01';
 const AGORA = 1_800_000_000_000 as Instant;
 const BARREIRA = (AGORA - 3_600_000) as Instant;
-const HASH = 'aG5hc2gtZGEtamFuZWxh' as TokenHash;
+// O VALOR nao e afirmado por nenhum caso deste arquivo -- o que se mede e a
+// clausula compilada, nao o parametro ligado. O TAMANHO e que e a forma: 32
+// bytes, que e o que `TokenHash` passou a ser desde o conserto de 19/10 (era
+// texto base64, e o adaptador o convertia como utf8 para uma coluna `bytea`).
+const HASH = Buffer.alloc(32, 0x5a) as TokenHash;
 
 const consumo: ConsumoDeJanela = {
   tokenHash: HASH,
