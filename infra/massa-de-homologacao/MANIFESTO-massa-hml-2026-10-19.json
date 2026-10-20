@@ -1,0 +1,1052 @@
+{
+  "lote": "massa-hml-2026-10-19",
+  "criado_em": "2026-10-20T00:48:43.900Z",
+  "base_url": "http://127.0.0.1:3000",
+  "marcas": {
+    "visivel": "[teste] (prefixo em todo texto de tela)",
+    "estrutural_email": "@exemplo-de-teste.invalid",
+    "estrutural_apelido": "massatesteNN",
+    "estrutural_slug": "massateste-",
+    "audit_event_id": "78a58571-9495-4426-82c9-ca58abda8bf3"
+  },
+  "conversation_messages_por_conversa": [
+    "01a156c8-6a7a-7085-bcb6-d843b86585ec",
+    "01a156c8-6ab9-7020-b917-3ca734ed6cf8",
+    "01a156c8-6aeb-705e-914b-5990616887a3",
+    "01a156c8-6b1d-706e-94c4-fcb144739d96",
+    "01a156c8-6b51-70d3-8ce5-78f4941f1a49",
+    "01a156c8-6b83-709d-b543-1791757643b2",
+    "01a156c8-6bb2-70b0-b93b-c0b52693c3ad",
+    "01a156c8-6beb-7003-8f48-0d7eee710383",
+    "01a156c8-6c22-70c3-be25-247e9b9a7eec",
+    "01a156c8-6c50-70b1-a68d-e6a72b9c84ac",
+    "01a156c8-6c85-7020-8665-48e2a3dbfcce",
+    "01a156c8-6cb5-700e-bc7d-0614f3ac7d06",
+    "01a156c8-6cea-705d-8e92-c3edc3ebdad5",
+    "01a156c8-6d18-705c-95bc-8afcb3f07c4c",
+    "01a156c8-6d49-7048-b7f8-3a5ebc4e8afc",
+    "01a156c8-6d85-7078-a417-d6b1a880538a",
+    "01a156c8-6db6-70f8-89b9-10cd372a9a24",
+    "01a156c8-6de5-700c-bb60-35815fcdf7b4",
+    "01a156c8-6e1b-7059-a6e5-f90263ff1528",
+    "01a156c8-6e4b-70fd-860d-a29a7b5791c9",
+    "01a156c8-6e7d-7076-9a6d-ed39b3c06900",
+    "01a156c8-6eab-7005-8164-7d125427fac0",
+    "01a156c8-6edd-7080-a28e-1fab8c55cdc9",
+    "01a156c8-6f0c-704b-9ebc-5fb70656fce1",
+    "01a156c8-6f4b-70e3-bc8c-e97b6b367317",
+    "01a156c8-6f7a-7044-ad34-866e41706d6f",
+    "01a156c8-6fb3-70db-bcca-d5c33682a7ce",
+    "01a156c8-6fec-7046-8a81-5e47c02b1b5f",
+    "01a156c8-701e-7009-a9ce-b5af7318f89c",
+    "01a156c8-704f-709f-9790-116bec004255"
+  ],
+  "conversations": [
+    "01a156c8-6a7a-7085-bcb6-d843b86585ec",
+    "01a156c8-6ab9-7020-b917-3ca734ed6cf8",
+    "01a156c8-6aeb-705e-914b-5990616887a3",
+    "01a156c8-6b1d-706e-94c4-fcb144739d96",
+    "01a156c8-6b51-70d3-8ce5-78f4941f1a49",
+    "01a156c8-6b83-709d-b543-1791757643b2",
+    "01a156c8-6bb2-70b0-b93b-c0b52693c3ad",
+    "01a156c8-6beb-7003-8f48-0d7eee710383",
+    "01a156c8-6c22-70c3-be25-247e9b9a7eec",
+    "01a156c8-6c50-70b1-a68d-e6a72b9c84ac",
+    "01a156c8-6c85-7020-8665-48e2a3dbfcce",
+    "01a156c8-6cb5-700e-bc7d-0614f3ac7d06",
+    "01a156c8-6cea-705d-8e92-c3edc3ebdad5",
+    "01a156c8-6d18-705c-95bc-8afcb3f07c4c",
+    "01a156c8-6d49-7048-b7f8-3a5ebc4e8afc",
+    "01a156c8-6d85-7078-a417-d6b1a880538a",
+    "01a156c8-6db6-70f8-89b9-10cd372a9a24",
+    "01a156c8-6de5-700c-bb60-35815fcdf7b4",
+    "01a156c8-6e1b-7059-a6e5-f90263ff1528",
+    "01a156c8-6e4b-70fd-860d-a29a7b5791c9",
+    "01a156c8-6e7d-7076-9a6d-ed39b3c06900",
+    "01a156c8-6eab-7005-8164-7d125427fac0",
+    "01a156c8-6edd-7080-a28e-1fab8c55cdc9",
+    "01a156c8-6f0c-704b-9ebc-5fb70656fce1",
+    "01a156c8-6f4b-70e3-bc8c-e97b6b367317",
+    "01a156c8-6f7a-7044-ad34-866e41706d6f",
+    "01a156c8-6fb3-70db-bcca-d5c33682a7ce",
+    "01a156c8-6fec-7046-8a81-5e47c02b1b5f",
+    "01a156c8-701e-7009-a9ce-b5af7318f89c",
+    "01a156c8-704f-709f-9790-116bec004255"
+  ],
+  "found_reports": [
+    "01a156c8-6a60-70df-8043-43bcc5d0239d",
+    "01a156c8-6ab3-708f-8c9c-29e4ddf8a4f0",
+    "01a156c8-6ae5-7011-9137-663a51e6004e",
+    "01a156c8-6b16-70cd-ae05-345b46579cc9",
+    "01a156c8-6b4b-7002-9f0d-2d80a62fa756",
+    "01a156c8-6b7c-70af-b104-9568ca726643",
+    "01a156c8-6bad-7042-aa11-bff827377a02",
+    "01a156c8-6be5-709b-be62-c3620ab83356",
+    "01a156c8-6c1c-70b9-9f59-29cd3845661c",
+    "01a156c8-6c4b-701f-92b3-3a4959c55929",
+    "01a156c8-6c80-703a-bdb2-c3da2b43a8fe",
+    "01a156c8-6caf-700a-8af9-346d2c4e08a4",
+    "01a156c8-6ce4-70d8-bfaa-e8d6fe6b7e37",
+    "01a156c8-6d13-703b-9107-4d93c08b3c2f",
+    "01a156c8-6d44-7069-b257-794bcf1c7a0b",
+    "01a156c8-6d77-702d-8a7d-e681e55ab6a4",
+    "01a156c8-6db1-7003-892f-9dafb61a7a27",
+    "01a156c8-6de0-7068-ad61-5e85fa7f7846",
+    "01a156c8-6e16-7002-9130-722eb40a4936",
+    "01a156c8-6e46-704a-bf0c-e2d557f86c9f",
+    "01a156c8-6e78-7062-aa58-07aa7fa333b4",
+    "01a156c8-6ea6-7045-b6fd-c6d2ffb886f3",
+    "01a156c8-6ed8-7087-8a0a-0c539a2a4bcb",
+    "01a156c8-6f07-7045-96b0-8cc522929316",
+    "01a156c8-6f45-70b1-a856-9cb38d0a164c",
+    "01a156c8-6f74-7059-bcf3-49f8afb7e296",
+    "01a156c8-6fae-70a3-aada-221d761050e1",
+    "01a156c8-6fe7-7021-aa1a-8aa1a8f2da92",
+    "01a156c8-7018-7050-933d-b007cfa26d10",
+    "01a156c8-704a-707a-ae42-84f98851132a"
+  ],
+  "tag_scans_por_tag": [
+    "01a156c8-6a2a-7044-acb1-202e87b7c5d6",
+    "01a156c8-6a99-70b1-b528-255652e9eb8a",
+    "01a156c8-6acd-7031-88c7-77104e3eed18",
+    "01a156c8-6afe-703a-bf00-773522df4eb7",
+    "01a156c8-6b32-701f-9d3e-8fc3d1ec477a",
+    "01a156c8-6b64-7078-ab70-39eeb3fc9951",
+    "01a156c8-6b95-70d1-a18f-2d01025377f6",
+    "01a156c8-6bc9-708b-90c8-e512b0851737",
+    "01a156c8-6c01-7045-b20e-c1216e74d2a7",
+    "01a156c8-6c34-70c0-84e6-82e3238affd2",
+    "01a156c8-6c65-7027-8fbe-2acec972fdc7",
+    "01a156c8-6c98-700d-9314-1d1f8c5bba63",
+    "01a156c8-6ccd-7086-b270-43425fbb2470",
+    "01a156c8-6cfc-7053-b90b-5fbe46c415d6",
+    "01a156c8-6d2b-70ad-8ce3-faaffc84cc2c",
+    "01a156c8-6d5b-70c1-a8c8-4468865ebf7c",
+    "01a156c8-6d98-70b4-8684-7117b4d39d05",
+    "01a156c8-6dc9-7028-aa11-5487e0e27ac4",
+    "01a156c8-6df9-702c-84a1-d8760aef20fb",
+    "01a156c8-6e2e-7038-881b-af0e6f307117",
+    "01a156c8-6e5e-70e7-86e2-45768d394aff",
+    "01a156c8-6e8e-70a0-9ddf-3bb0ee4a79fb",
+    "01a156c8-6ebd-7071-9e97-b5f276ac9805",
+    "01a156c8-6ef0-703d-a801-b67ee3e6e797",
+    "01a156c8-6f20-709d-a6b1-9dca88c61204",
+    "01a156c8-6f5e-70ec-b791-32e7589298b6",
+    "01a156c8-6f96-70aa-991e-8d7c12f868f8",
+    "01a156c8-6fce-7089-bea0-08a811098c13",
+    "01a156c8-7000-709b-938e-b0369dbb898d",
+    "01a156c8-7030-7073-80d0-8f321b9a3839"
+  ],
+  "pet_tags": [
+    {
+      "id": "01a156c8-6a2a-7044-acb1-202e87b7c5d6",
+      "pet": "01a156c8-521b-70e2-9d1c-abea646c296e"
+    },
+    {
+      "id": "01a156c8-6a99-70b1-b528-255652e9eb8a",
+      "pet": "01a156c8-521b-70e2-9d1c-abea646c296e"
+    },
+    {
+      "id": "01a156c8-6acd-7031-88c7-77104e3eed18",
+      "pet": "01a156c8-521b-70e2-9d1c-abea646c296e"
+    },
+    {
+      "id": "01a156c8-6afe-703a-bf00-773522df4eb7",
+      "pet": "01a156c8-521b-70e2-9d1c-abea646c296e"
+    },
+    {
+      "id": "01a156c8-6b32-701f-9d3e-8fc3d1ec477a",
+      "pet": "01a156c8-521b-70e2-9d1c-abea646c296e"
+    },
+    {
+      "id": "01a156c8-6b64-7078-ab70-39eeb3fc9951",
+      "pet": "01a156c8-5230-703f-88c7-3992cc488339"
+    },
+    {
+      "id": "01a156c8-6b95-70d1-a18f-2d01025377f6",
+      "pet": "01a156c8-5230-703f-88c7-3992cc488339"
+    },
+    {
+      "id": "01a156c8-6bc9-708b-90c8-e512b0851737",
+      "pet": "01a156c8-5230-703f-88c7-3992cc488339"
+    },
+    {
+      "id": "01a156c8-6c01-7045-b20e-c1216e74d2a7",
+      "pet": "01a156c8-5230-703f-88c7-3992cc488339"
+    },
+    {
+      "id": "01a156c8-6c34-70c0-84e6-82e3238affd2",
+      "pet": "01a156c8-5230-703f-88c7-3992cc488339"
+    },
+    {
+      "id": "01a156c8-6c65-7027-8fbe-2acec972fdc7",
+      "pet": "01a156c8-523f-70f6-a50c-71e6245adf79"
+    },
+    {
+      "id": "01a156c8-6c98-700d-9314-1d1f8c5bba63",
+      "pet": "01a156c8-523f-70f6-a50c-71e6245adf79"
+    },
+    {
+      "id": "01a156c8-6ccd-7086-b270-43425fbb2470",
+      "pet": "01a156c8-523f-70f6-a50c-71e6245adf79"
+    },
+    {
+      "id": "01a156c8-6cfc-7053-b90b-5fbe46c415d6",
+      "pet": "01a156c8-523f-70f6-a50c-71e6245adf79"
+    },
+    {
+      "id": "01a156c8-6d2b-70ad-8ce3-faaffc84cc2c",
+      "pet": "01a156c8-523f-70f6-a50c-71e6245adf79"
+    },
+    {
+      "id": "01a156c8-6d5b-70c1-a8c8-4468865ebf7c",
+      "pet": "01a156c8-524f-70d2-939f-dc0afb81bbf3"
+    },
+    {
+      "id": "01a156c8-6d98-70b4-8684-7117b4d39d05",
+      "pet": "01a156c8-524f-70d2-939f-dc0afb81bbf3"
+    },
+    {
+      "id": "01a156c8-6dc9-7028-aa11-5487e0e27ac4",
+      "pet": "01a156c8-524f-70d2-939f-dc0afb81bbf3"
+    },
+    {
+      "id": "01a156c8-6df9-702c-84a1-d8760aef20fb",
+      "pet": "01a156c8-524f-70d2-939f-dc0afb81bbf3"
+    },
+    {
+      "id": "01a156c8-6e2e-7038-881b-af0e6f307117",
+      "pet": "01a156c8-524f-70d2-939f-dc0afb81bbf3"
+    },
+    {
+      "id": "01a156c8-6e5e-70e7-86e2-45768d394aff",
+      "pet": "01a156c8-525f-70f8-b2a4-a97de412f64f"
+    },
+    {
+      "id": "01a156c8-6e8e-70a0-9ddf-3bb0ee4a79fb",
+      "pet": "01a156c8-525f-70f8-b2a4-a97de412f64f"
+    },
+    {
+      "id": "01a156c8-6ebd-7071-9e97-b5f276ac9805",
+      "pet": "01a156c8-525f-70f8-b2a4-a97de412f64f"
+    },
+    {
+      "id": "01a156c8-6ef0-703d-a801-b67ee3e6e797",
+      "pet": "01a156c8-525f-70f8-b2a4-a97de412f64f"
+    },
+    {
+      "id": "01a156c8-6f20-709d-a6b1-9dca88c61204",
+      "pet": "01a156c8-525f-70f8-b2a4-a97de412f64f"
+    },
+    {
+      "id": "01a156c8-6f5e-70ec-b791-32e7589298b6",
+      "pet": "01a156c8-5273-7081-8594-e035d4c871cb"
+    },
+    {
+      "id": "01a156c8-6f96-70aa-991e-8d7c12f868f8",
+      "pet": "01a156c8-5273-7081-8594-e035d4c871cb"
+    },
+    {
+      "id": "01a156c8-6fce-7089-bea0-08a811098c13",
+      "pet": "01a156c8-5273-7081-8594-e035d4c871cb"
+    },
+    {
+      "id": "01a156c8-7000-709b-938e-b0369dbb898d",
+      "pet": "01a156c8-5273-7081-8594-e035d4c871cb"
+    },
+    {
+      "id": "01a156c8-7030-7073-80d0-8f321b9a3839",
+      "pet": "01a156c8-5273-7081-8594-e035d4c871cb"
+    }
+  ],
+  "pets": [
+    {
+      "indice": 1,
+      "id": "01a156c8-521b-70e2-9d1c-abea646c296e",
+      "conta": 1
+    },
+    {
+      "indice": 2,
+      "id": "01a156c8-5230-703f-88c7-3992cc488339",
+      "conta": 1
+    },
+    {
+      "indice": 3,
+      "id": "01a156c8-523f-70f6-a50c-71e6245adf79",
+      "conta": 1
+    },
+    {
+      "indice": 4,
+      "id": "01a156c8-524f-70d2-939f-dc0afb81bbf3",
+      "conta": 1
+    },
+    {
+      "indice": 5,
+      "id": "01a156c8-525f-70f8-b2a4-a97de412f64f",
+      "conta": 1
+    },
+    {
+      "indice": 6,
+      "id": "01a156c8-5273-7081-8594-e035d4c871cb",
+      "conta": 1
+    },
+    {
+      "indice": 7,
+      "id": "01a156c8-5285-70d9-9431-97a2f00ee1d5",
+      "conta": 2
+    },
+    {
+      "indice": 8,
+      "id": "01a156c8-5294-70da-98d1-0925bc16a6cf",
+      "conta": 3
+    },
+    {
+      "indice": 9,
+      "id": "01a156c8-52a4-70c6-8f0d-d8cc65dd62ef",
+      "conta": 4
+    },
+    {
+      "indice": 10,
+      "id": "01a156c8-52b6-7017-a21e-711e9b99f4bb",
+      "conta": 5
+    },
+    {
+      "indice": 11,
+      "id": "01a156c8-52c6-70cd-9d76-2600b45f5f4b",
+      "conta": 6
+    },
+    {
+      "indice": 12,
+      "id": "01a156c8-52d7-70fd-b7df-dea46cbb102c",
+      "conta": 7
+    },
+    {
+      "indice": 13,
+      "id": "01a156c8-52e8-70f9-81a6-d97cd5343e2f",
+      "conta": 8
+    },
+    {
+      "indice": 14,
+      "id": "01a156c8-52f8-7045-8475-e9f041b7b347",
+      "conta": 9
+    },
+    {
+      "indice": 15,
+      "id": "01a156c8-5308-7039-9fd0-cf188a879e8c",
+      "conta": 10
+    },
+    {
+      "indice": 16,
+      "id": "01a156c8-5318-7076-9cf2-ed5f54edcfa6",
+      "conta": 11
+    },
+    {
+      "indice": 17,
+      "id": "01a156c8-5328-708f-a317-9ba78f7a3db3",
+      "conta": 12
+    },
+    {
+      "indice": 18,
+      "id": "01a156c8-533e-708f-85ce-88b2bfad2494",
+      "conta": 13
+    },
+    {
+      "indice": 19,
+      "id": "01a156c8-534e-703c-9659-c0d821eef9a5",
+      "conta": 14
+    },
+    {
+      "indice": 20,
+      "id": "01a156c8-535d-7004-93df-339c1386b290",
+      "conta": 15
+    },
+    {
+      "indice": 21,
+      "id": "01a156c8-536d-7055-909d-9042ba3a6e7e",
+      "conta": 16
+    },
+    {
+      "indice": 22,
+      "id": "01a156c8-537f-70a7-a7d7-c8ba3dcf1e70",
+      "conta": 17
+    },
+    {
+      "indice": 23,
+      "id": "01a156c8-538f-7028-82a9-9745d41877e8",
+      "conta": 18
+    },
+    {
+      "indice": 24,
+      "id": "01a156c8-539e-7076-b143-9e78932432c5",
+      "conta": 19
+    },
+    {
+      "indice": 25,
+      "id": "01a156c8-53ad-70ab-ba9e-ced442bdf6ba",
+      "conta": 20
+    },
+    {
+      "indice": 26,
+      "id": "01a156c8-53c2-7094-a26f-004f9456ed13",
+      "conta": 21
+    },
+    {
+      "indice": 27,
+      "id": "01a156c8-53d1-700c-a027-bac6754d7220",
+      "conta": 22
+    },
+    {
+      "indice": 28,
+      "id": "01a156c8-53e0-709b-a507-cfb4c0d50549",
+      "conta": 23
+    },
+    {
+      "indice": 29,
+      "id": "01a156c8-53f1-704d-84f1-79c6734e41cb",
+      "conta": 24
+    },
+    {
+      "indice": 30,
+      "id": "01a156c8-53fe-708d-8352-ab4a3c011995",
+      "conta": 25
+    }
+  ],
+  "network_events": [
+    {
+      "indice": 1,
+      "slug": "teste-encontro-01-no-parque-vi"
+    },
+    {
+      "indice": 2,
+      "slug": "teste-encontro-02-no-parque-vi"
+    },
+    {
+      "indice": 3,
+      "slug": "teste-encontro-03-no-parque-vi"
+    },
+    {
+      "indice": 4,
+      "slug": "teste-encontro-04-no-parque-do"
+    },
+    {
+      "indice": 5,
+      "slug": "teste-encontro-05-no-parque-do"
+    },
+    {
+      "indice": 6,
+      "slug": "teste-encontro-06-no-parque-do"
+    },
+    {
+      "indice": 7,
+      "slug": "teste-encontro-07-no-praca-ben"
+    },
+    {
+      "indice": 8,
+      "slug": "teste-encontro-08-no-praca-ben"
+    },
+    {
+      "indice": 9,
+      "slug": "teste-encontro-09-no-praca-ben"
+    },
+    {
+      "indice": 10,
+      "slug": "teste-encontro-10-no-parque-da"
+    },
+    {
+      "indice": 11,
+      "slug": "teste-encontro-11-no-parque-da"
+    },
+    {
+      "indice": 12,
+      "slug": "teste-encontro-12-no-parque-da"
+    },
+    {
+      "indice": 13,
+      "slug": "teste-encontro-13-no-parque-ib"
+    },
+    {
+      "indice": 14,
+      "slug": "teste-encontro-14-no-parque-ib"
+    },
+    {
+      "indice": 15,
+      "slug": "teste-encontro-15-no-parque-ib"
+    },
+    {
+      "indice": 16,
+      "slug": "teste-encontro-16-no-parque-bo"
+    },
+    {
+      "indice": 17,
+      "slug": "teste-encontro-17-no-parque-bo"
+    },
+    {
+      "indice": 18,
+      "slug": "teste-encontro-18-no-parque-bo"
+    },
+    {
+      "indice": 19,
+      "slug": "teste-encontro-19-no-parque-ce"
+    },
+    {
+      "indice": 20,
+      "slug": "teste-encontro-20-no-parque-ce"
+    },
+    {
+      "indice": 21,
+      "slug": "teste-encontro-21-no-parque-ce"
+    },
+    {
+      "indice": 22,
+      "slug": "teste-encontro-22-no-parque-ch"
+    },
+    {
+      "indice": 23,
+      "slug": "teste-encontro-23-no-parque-ch"
+    },
+    {
+      "indice": 24,
+      "slug": "teste-encontro-24-no-parque-ch"
+    },
+    {
+      "indice": 25,
+      "slug": "teste-encontro-25-no-parque-pr"
+    },
+    {
+      "indice": 26,
+      "slug": "teste-encontro-26-no-parque-pr"
+    },
+    {
+      "indice": 27,
+      "slug": "teste-encontro-27-no-parque-pr"
+    },
+    {
+      "indice": 28,
+      "slug": "teste-encontro-28-no-parque-bu"
+    },
+    {
+      "indice": 29,
+      "slug": "teste-encontro-29-no-parque-bu"
+    },
+    {
+      "indice": 30,
+      "slug": "teste-encontro-30-no-parque-bu"
+    }
+  ],
+  "store_items": [
+    {
+      "indice": 1,
+      "id": "542dc82f-263d-4314-98d5-e4ef0e17fb65",
+      "slug": "massateste-item-01"
+    },
+    {
+      "indice": 2,
+      "id": "fd449b95-b517-4436-b53e-ac550dedaec0",
+      "slug": "massateste-item-02"
+    },
+    {
+      "indice": 3,
+      "id": "405686d1-e435-46b4-b70b-8f3399a3c899",
+      "slug": "massateste-item-03"
+    },
+    {
+      "indice": 4,
+      "id": "e413262d-97ec-4c83-bbe9-cbcda082641d",
+      "slug": "massateste-item-04"
+    },
+    {
+      "indice": 5,
+      "id": "0554ce01-7fa1-4e73-bb3b-583e9d5703d5",
+      "slug": "massateste-item-05"
+    },
+    {
+      "indice": 6,
+      "id": "d616da4e-69a9-46ca-994e-bb0d5fd57efd",
+      "slug": "massateste-item-06"
+    },
+    {
+      "indice": 7,
+      "id": "194658be-aa3d-4d01-900b-1b1d14097931",
+      "slug": "massateste-item-07"
+    },
+    {
+      "indice": 8,
+      "id": "6ee9fcaf-5b5d-4fc4-9ee3-2bb843576733",
+      "slug": "massateste-item-08"
+    },
+    {
+      "indice": 9,
+      "id": "50326d7f-0c39-401e-81ef-975bc820970a",
+      "slug": "massateste-item-09"
+    },
+    {
+      "indice": 10,
+      "id": "ea615d5c-73ce-4a4b-9de1-80ef6d8f6e44",
+      "slug": "massateste-item-10"
+    },
+    {
+      "indice": 11,
+      "id": "ded193cb-38ce-440f-bfba-c4f8cd6442d6",
+      "slug": "massateste-item-11"
+    },
+    {
+      "indice": 12,
+      "id": "0107f4d8-d5b9-4550-9e23-d275b68d3106",
+      "slug": "massateste-item-12"
+    },
+    {
+      "indice": 13,
+      "id": "53232c6a-596c-4b0a-94e5-3f89cb13948b",
+      "slug": "massateste-item-13"
+    },
+    {
+      "indice": 14,
+      "id": "264966b7-8a77-4235-9a23-abf130e9eb4d",
+      "slug": "massateste-item-14"
+    },
+    {
+      "indice": 15,
+      "id": "052cf0d1-a38a-43b0-976c-8c0b4b8058d0",
+      "slug": "massateste-item-15"
+    },
+    {
+      "indice": 16,
+      "id": "26ed2981-738c-47d5-90ca-102366cdb884",
+      "slug": "massateste-item-16"
+    },
+    {
+      "indice": 17,
+      "id": "37e03c92-dbe8-4e52-936d-d6bd63f585f1",
+      "slug": "massateste-item-17"
+    },
+    {
+      "indice": 18,
+      "id": "3c9431c1-0b63-4050-a901-3abd7b33de7a",
+      "slug": "massateste-item-18"
+    },
+    {
+      "indice": 19,
+      "id": "f16f1ec1-8c4a-4d9c-978a-5425d15e65df",
+      "slug": "massateste-item-19"
+    },
+    {
+      "indice": 20,
+      "id": "1634841f-5afa-4a07-9b1f-dfe025d55bd8",
+      "slug": "massateste-item-20"
+    },
+    {
+      "indice": 21,
+      "id": "c978a492-b95b-4fdd-ab5d-12f7b483a261",
+      "slug": "massateste-item-21"
+    },
+    {
+      "indice": 22,
+      "id": "e2d037ca-dcec-48bc-9581-997377b634e3",
+      "slug": "massateste-item-22"
+    },
+    {
+      "indice": 23,
+      "id": "d3a80acd-d9e3-4a3e-99ed-603582811425",
+      "slug": "massateste-item-23"
+    },
+    {
+      "indice": 24,
+      "id": "f8bee0fa-5115-4ed3-826e-27ac2b74d104",
+      "slug": "massateste-item-24"
+    },
+    {
+      "indice": 25,
+      "id": "0ea3f33e-17ab-44a7-ae55-23e981e44cf6",
+      "slug": "massateste-item-25"
+    },
+    {
+      "indice": 26,
+      "id": "26d33aab-0410-4ea6-9f53-a5f69db8b41f",
+      "slug": "massateste-item-26"
+    },
+    {
+      "indice": 27,
+      "id": "671e0811-479a-4c44-9521-8ed0b1511543",
+      "slug": "massateste-item-27"
+    },
+    {
+      "indice": 28,
+      "id": "3bae758a-fc82-47d7-aa6a-17e2124218c5",
+      "slug": "massateste-item-28"
+    },
+    {
+      "indice": 29,
+      "id": "a870fdc4-c7f6-4eec-99c9-a85b7377429e",
+      "slug": "massateste-item-29"
+    },
+    {
+      "indice": 30,
+      "id": "0d8fb92f-d9d7-4f97-a64f-90e3fd03c29b",
+      "slug": "massateste-item-30"
+    }
+  ],
+  "store_partners": [
+    {
+      "id": "a9219921-26e5-43e6-98c5-f769e6f5815a",
+      "slug": "massateste-parceiro"
+    }
+  ],
+  "professionals": [
+    {
+      "indice": 1,
+      "id": "c28da64e-4b3b-40c5-ab42-4129f9cfb06f",
+      "slug": "massateste-prof-01"
+    },
+    {
+      "indice": 2,
+      "id": "0797a2c7-5ceb-40bf-9c32-1df09ca193f8",
+      "slug": "massateste-prof-02"
+    },
+    {
+      "indice": 3,
+      "id": "c8d3b7ba-064a-418f-a275-efc0dd91ff99",
+      "slug": "massateste-prof-03"
+    },
+    {
+      "indice": 4,
+      "id": "2151fbf5-8d2d-456a-ac5c-064491d91883",
+      "slug": "massateste-prof-04"
+    },
+    {
+      "indice": 5,
+      "id": "de736b10-da64-458b-a7da-6e3bb590725b",
+      "slug": "massateste-prof-05"
+    },
+    {
+      "indice": 6,
+      "id": "85ad755d-c842-4f1f-8b7b-d4739acdb8ee",
+      "slug": "massateste-prof-06"
+    },
+    {
+      "indice": 7,
+      "id": "ffeb10a6-875a-46b4-9579-0a80e39c36d7",
+      "slug": "massateste-prof-07"
+    },
+    {
+      "indice": 8,
+      "id": "ae0ff8a8-0256-41dd-a9fe-f27e3f41eb32",
+      "slug": "massateste-prof-08"
+    },
+    {
+      "indice": 9,
+      "id": "27f3fa78-7442-401c-b7a2-ace11602c32c",
+      "slug": "massateste-prof-09"
+    },
+    {
+      "indice": 10,
+      "id": "765d5701-3896-48c4-b7dc-89168b5baed4",
+      "slug": "massateste-prof-10"
+    },
+    {
+      "indice": 11,
+      "id": "9475eb3d-ae7e-4a1b-8852-e1f078c7b4ea",
+      "slug": "massateste-prof-11"
+    },
+    {
+      "indice": 12,
+      "id": "41ef4c68-dda7-48c4-b87b-c9ceab3397ed",
+      "slug": "massateste-prof-12"
+    },
+    {
+      "indice": 13,
+      "id": "45a6d9b1-1607-4bca-aba1-c7d76f117583",
+      "slug": "massateste-prof-13"
+    },
+    {
+      "indice": 14,
+      "id": "08c171b5-76c9-499f-89d1-1fc8a0b82e7f",
+      "slug": "massateste-prof-14"
+    },
+    {
+      "indice": 15,
+      "id": "26798fd0-c690-4731-bf98-13b76044475d",
+      "slug": "massateste-prof-15"
+    },
+    {
+      "indice": 16,
+      "id": "93584949-3bc8-42b6-94b0-d95c4c92bcd4",
+      "slug": "massateste-prof-16"
+    },
+    {
+      "indice": 17,
+      "id": "24a56964-6b12-4535-a69f-fb26b143d651",
+      "slug": "massateste-prof-17"
+    },
+    {
+      "indice": 18,
+      "id": "d51c78cd-068e-49a6-a2f7-3c50db3b32bd",
+      "slug": "massateste-prof-18"
+    },
+    {
+      "indice": 19,
+      "id": "eaa0e72d-50d0-41ef-8c78-c5c9a1937677",
+      "slug": "massateste-prof-19"
+    },
+    {
+      "indice": 20,
+      "id": "ccdf8cd0-a307-4a4d-adde-0d58c95dba60",
+      "slug": "massateste-prof-20"
+    },
+    {
+      "indice": 21,
+      "id": "5298426c-2df6-4ef0-aede-e7c9959e4ee4",
+      "slug": "massateste-prof-21"
+    },
+    {
+      "indice": 22,
+      "id": "e07188e8-de7f-4d74-b300-0151fd654940",
+      "slug": "massateste-prof-22"
+    },
+    {
+      "indice": 23,
+      "id": "5e987fbe-5517-4565-aae2-5fa9d5e08d28",
+      "slug": "massateste-prof-23"
+    },
+    {
+      "indice": 24,
+      "id": "d7e09eb3-c465-468c-a776-e6c3eaf1e6c4",
+      "slug": "massateste-prof-24"
+    },
+    {
+      "indice": 25,
+      "id": "2f097e91-fa70-4ce5-a60e-ed841e5633e6",
+      "slug": "massateste-prof-25"
+    },
+    {
+      "indice": 26,
+      "id": "b4054cdd-75f9-462e-b572-a7b43c274941",
+      "slug": "massateste-prof-26"
+    },
+    {
+      "indice": 27,
+      "id": "5ab98ef5-73b5-43f7-a5d5-763cdb128c49",
+      "slug": "massateste-prof-27"
+    },
+    {
+      "indice": 28,
+      "id": "a0502768-a579-4f9f-ad4e-505314191a84",
+      "slug": "massateste-prof-28"
+    },
+    {
+      "indice": 29,
+      "id": "ceccca7b-29bb-44e3-8040-3227d02aa811",
+      "slug": "massateste-prof-29"
+    },
+    {
+      "indice": 30,
+      "id": "b31d7e89-02a7-4839-9815-d3b8f14bced4",
+      "slug": "massateste-prof-30"
+    }
+  ],
+  "user_reference_locations_por_usuario": [
+    "01a156c8-3677-7083-b6b9-3be679fc72fa",
+    "01a156c8-3760-7001-8839-e9c9ad4faba6",
+    "01a156c8-3946-7008-8604-3a3b0452de67",
+    "01a156c8-3a36-7027-bc2f-8b8188b0676e",
+    "01a156c8-3bea-703f-b2f8-504a20d06995",
+    "01a156c8-3ced-70b3-81f9-7ccea4455fb4",
+    "01a156c8-3f1f-7099-939d-c39d955ad8f5",
+    "01a156c8-4010-705e-a176-3952453e7bb5",
+    "01a156c8-420c-70e7-81a8-749842144cf8",
+    "01a156c8-42dd-7043-a84a-2dc649844994",
+    "01a156c8-449d-70af-8263-882e8d8d95ef",
+    "01a156c8-4570-7090-a60a-38e639b32281",
+    "01a156c8-4714-7061-9187-024021fc7c83",
+    "01a156c8-47fc-70fa-bd76-2ffb4948582f",
+    "01a156c8-49b8-703e-bb9b-27d061b2a90a",
+    "01a156c8-4a8d-70f8-91ad-e9eb6cd2eddb",
+    "01a156c8-4c9a-709a-9d6d-630a355e06ca",
+    "01a156c8-4d8a-7005-98ce-ea8a496dec69",
+    "01a156c8-4f44-70d5-96d6-a6d2244a9bcf",
+    "01a156c8-5018-7073-ae00-1c60136c2615"
+  ],
+  "users": [
+    {
+      "indice": 1,
+      "id": "01a156c8-3677-7083-b6b9-3be679fc72fa",
+      "email": "massateste01@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 2,
+      "id": "01a156c8-3760-7001-8839-e9c9ad4faba6",
+      "email": "massateste02@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 3,
+      "id": "01a156c8-386a-7001-af4a-b8e61178ff05",
+      "email": "massateste03@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 4,
+      "id": "01a156c8-3946-7008-8604-3a3b0452de67",
+      "email": "massateste04@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 5,
+      "id": "01a156c8-3a36-7027-bc2f-8b8188b0676e",
+      "email": "massateste05@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 6,
+      "id": "01a156c8-3b15-706e-8504-cafb2c8120ea",
+      "email": "massateste06@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 7,
+      "id": "01a156c8-3bea-703f-b2f8-504a20d06995",
+      "email": "massateste07@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 8,
+      "id": "01a156c8-3ced-70b3-81f9-7ccea4455fb4",
+      "email": "massateste08@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 9,
+      "id": "01a156c8-3e49-7091-a74c-65623eff9a83",
+      "email": "massateste09@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 10,
+      "id": "01a156c8-3f1f-7099-939d-c39d955ad8f5",
+      "email": "massateste10@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 11,
+      "id": "01a156c8-4010-705e-a176-3952453e7bb5",
+      "email": "massateste11@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 12,
+      "id": "01a156c8-4139-7026-860b-bdc2ac18be3d",
+      "email": "massateste12@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 13,
+      "id": "01a156c8-420c-70e7-81a8-749842144cf8",
+      "email": "massateste13@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 14,
+      "id": "01a156c8-42dd-7043-a84a-2dc649844994",
+      "email": "massateste14@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 15,
+      "id": "01a156c8-43b8-702f-bec7-0f72b714b0c4",
+      "email": "massateste15@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 16,
+      "id": "01a156c8-449d-70af-8263-882e8d8d95ef",
+      "email": "massateste16@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 17,
+      "id": "01a156c8-4570-7090-a60a-38e639b32281",
+      "email": "massateste17@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 18,
+      "id": "01a156c8-4643-703c-a277-cfd4c647b56f",
+      "email": "massateste18@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 19,
+      "id": "01a156c8-4714-7061-9187-024021fc7c83",
+      "email": "massateste19@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 20,
+      "id": "01a156c8-47fc-70fa-bd76-2ffb4948582f",
+      "email": "massateste20@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 21,
+      "id": "01a156c8-48d9-70ef-a08a-7588243528c7",
+      "email": "massateste21@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 22,
+      "id": "01a156c8-49b8-703e-bb9b-27d061b2a90a",
+      "email": "massateste22@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 23,
+      "id": "01a156c8-4a8d-70f8-91ad-e9eb6cd2eddb",
+      "email": "massateste23@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 24,
+      "id": "01a156c8-4b64-70a6-a303-ec96e4ef22ce",
+      "email": "massateste24@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 25,
+      "id": "01a156c8-4c9a-709a-9d6d-630a355e06ca",
+      "email": "massateste25@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 26,
+      "id": "01a156c8-4d8a-7005-98ce-ea8a496dec69",
+      "email": "massateste26@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 27,
+      "id": "01a156c8-4e70-701d-9bb0-914ba36931f9",
+      "email": "massateste27@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 28,
+      "id": "01a156c8-4f44-70d5-96d6-a6d2244a9bcf",
+      "email": "massateste28@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 29,
+      "id": "01a156c8-5018-7073-ae00-1c60136c2615",
+      "email": "massateste29@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 30,
+      "id": "01a156c8-50ea-7034-9fce-88d0bf10f984",
+      "email": "massateste30@exemplo-de-teste.invalid"
+    }
+  ],
+  "handles": [
+    "massateste01",
+    "massateste02",
+    "massateste03",
+    "massateste04",
+    "massateste05",
+    "massateste06",
+    "massateste07",
+    "massateste08",
+    "massateste09",
+    "massateste10",
+    "massateste11",
+    "massateste12",
+    "massateste13",
+    "massateste14",
+    "massateste15",
+    "massateste16",
+    "massateste17",
+    "massateste18",
+    "massateste19",
+    "massateste20",
+    "massateste21",
+    "massateste22",
+    "massateste23",
+    "massateste24",
+    "massateste25",
+    "massateste26",
+    "massateste27",
+    "massateste28",
+    "massateste29",
+    "massateste30"
+  ]
+}
