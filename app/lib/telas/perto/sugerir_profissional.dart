@@ -357,14 +357,20 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       }
       setState(() {
         _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.indicarProfissional,
+        );
         _errosDeCampo = _camposRecusados(falha);
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.indicarProfissional,
+        );
       });
     } on Object catch (erro, pilha) {
       // Sem este ramo a fase `enviando` ficaria de pe para sempre num erro que
