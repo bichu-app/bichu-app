@@ -1438,6 +1438,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// relato. Anterior: `145640db9f`.
 /// [lado do ramo, valor de ramo 66fb4850a1] SINO NA BARRA E `criar` FLUTUANTE (19/10/2026, decisao do cliente: *"O botao criar sai da barra"*): `casca_com_abas.dart` monta `SinoDeNotificacoes` no `actions`, tira a porta de criar de la e a desenha no `floatingActionButton`, com respiro de 72 dp no pe da lista; `abas.dart` passa a entregar `AcaoDeCriarFlutuante` (o arquivo do widget mudou de nome e mora em `app/lib/widgets`, fora desta arvore). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 818971c53b). Antes dele: NAVEGACAO DE 18/10/2026 (icones na gaveta, `Meus dados` fora de Pets/Perto, margem da foto); antes: UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 ///
+/// [lado do ramo, valor de ramo 507413a952] O NUMERO DO SINO LIGADO
+/// (19/10/2026): `casca_com_abas.dart` passou a LER
+/// `Escopo.contadorDeAvisos` e a ouvi-lo (`ListenableBuilder` em volta do
+/// `ValueListenableBuilder` que ja existia), e a linha do `actions` virou
+/// `SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas)`;
+/// `notificacoes/caixa_de_notificacoes.dart` passou a zerar o contador no
+/// caminho de SUCESSO de `marcarListaVista`. A busca NAO mora nestes dois
+/// arquivos: ela mora em `sessao/contador_de_avisos.dart` e e disparada pelo
+/// `app.dart`, os dois FORA desta arvore -- os ramos da casca ficam montados
+/// e uma busca aqui sairia uma vez por secao visitada. **Nenhuma porta de
+/// aparelho encostada**: nenhum importe de plugin, nenhum canal de
+/// plataforma, nenhuma permissao, nenhum `dart:io`.
+///
 /// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
 /// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
 /// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
@@ -1826,7 +1839,98 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// cliente e tira-la do `routes:` do ramo e declara-la irma da casca.
 /// Substitui 99cc2437faf7cfabad8e567e698c4a7ae372ecec, e antes dele
 /// 1413454d749f87001859c85e1e6e71d0449c2941.
-const String _arvoreDasTelas = 'e720d4b0f8562baa5768340d9a3a1586bdd4f8b8'; // A FRASE DO `409 contact-channel-unverified` PASSA A FALAR DA ROTA QUE RECUSOU (20/10/2026): QUATRO arquivos de `app/lib/telas` mudam, e nenhum deles encosta em porta de aparelho. Um `type` servia a quatro rotas do servidor com UMA frase, a de pet perdido, e em tres delas ela prometia o que nao ia acontecer -- evento nao tem achador, indicacao nao avisa ninguem, avaliacao de veterinario nao alerta vizinho. (1) `perdido/tela_alcance_do_alerta.dart` declara `AcaoEmCurso.avisarPetPerdido` nos dois `catch` do envio e PARA de manter uma copia literal da frase no bloqueio local -- ela agora vem de `MensagensDeErro.canalNaoVerificadoParaAvisar`. (2) `rede/criar_encontro.dart` declara `AcaoEmCurso.criarEncontro`, e `semEmailConfirmado` aponta para a constante em vez de repetir o texto. (3) `perto/sugerir_profissional.dart` declara `AcaoEmCurso.indicarProfissional` nos dois `catch` (duas linhas, longe do `_saidaDoErro` da PR #45 e do `_Impedimento` da PR #40). (4) `perto/pagina_do_local.dart` declara `AcaoEmCurso.avaliarLocal` na escrita da avaliacao -- a QUARTA rota deste `type`, que o achado nao tinha. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; `escanear/tela_leitor_de_qr.dart` nao foi tocado, e o portao estrutural de diretivas deste mesmo arquivo responde por isso sem depender desta constante. Valor MEDIDO pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com a LINHA DE BASE conferida antes: `2f822c38...` reproduzido sobre `c717f4ae` ANTES de qualquer edicao, e so entao o valor novo medido. **QUEM MESCLAR RECALCULA SOBRE A ARVORE MESCLADA**: as PRs #40 e #45 tocam `perto/sugerir_profissional.dart` e a #45 mexe NESTA constante, e valor de ramo isolado NAO sobrevive a uniao. ANTERIOR: 2f822c3823e97a304c6fee96c88977c8ae45f2b5 (terceiro lote de 20/10, cuja justificativa fica INTEIRA abaixo). // TERCEIRO LOTE DE 20/10/2026, VALOR FINAL com as CINCO frentes mescladas (contador do `AuAu`, contadores de `Pets` e `Rede`, Mural, aviso de login com a volta da ficha do evento, barra fixa). Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com o procedimento VALIDADO antes de ser usado, reproduzindo o valor da base `1413454d...`. Substitui os CINCO valores de RAMO (`4e13c694...`, `8f3222ea...`, `d979a337...`, `7f016247...`, `bc0506b4...`) e os dois intermediarios desta mescla, cujas justificativas ficam INTEIRAS acima.
+///
+/// **CORRECAO DO COMENTARIO DE `podeCriarNaComunidade` (20/10/2026).**
+/// Justificativa do ramo, preservada INTEIRA (ela vinha na linha da
+/// constante, e nao em doc):
+///
+/// CORRECAO DE COMENTARIO EM `telas/abas.dart` (20/10/2026), MESCLADA SOBRE O
+/// SEGUNDO LOTE: SO o cabecalho de `podeCriarNaComunidade` muda, e nenhuma
+/// linha executavel -- o corpo da funcao e todo o resto da pasta vem do lote,
+/// byte a byte. O cabecalho afirmava que `createNetworkEvent` e a rota da
+/// sugestao do diretorio "nao exigem `email_verified` em lugar nenhum de
+/// `src/`" e que a metade "validado" da regra existia "so no app"; as duas
+/// rotas RECUSAM, com `409 contact-channel-unverified` e `next_action:
+/// verify_email` -- medido em hml no commit `458cd005` com conta descartavel
+/// de `email_verified: false`, e `suggestDirectoryEntry` junto com
+/// `createNetworkEvent`. O servidor cobra CANAL DE CONTATO
+/// (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a mesma
+/// redacao em `kysely-network-repository.ts` e `kysely-canal-verificado-do-
+/// chamador.ts`), e e por isso que procurar `email_verified` em `src/` nao
+/// achava a trava: a metade do e-mail mora numa coluna com sufixo `_at`. **O
+/// VALOR DO LOTE NAO SOBREVIVEU A ESTA MESCLA** porque os dois lados tocam
+/// `abas.dart` -- o lote por `Meus eventos` no menu da conta, esta correcao
+/// pelo cabecalho --, e o hash e de ARVORE. Valor RECALCULADO sobre a arvore
+/// MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com a LINHA DE BASE
+/// conferida antes: `origin/development:app/lib/telas` reproduziu
+/// 1413454d749f87001859c85e1e6e71d0449c2941, o valor que o lote travava.
+/// Substitui 1413454d749f87001859c85e1e6e71d0449c2941 (e, do ramo isolado
+/// desta correcao, 5e7f753f673afdabeb3fe709ae04537b816e6051, que media a
+/// arvore de ANTES do lote e por isso nao vale).
+///
+///
+/// DESTRAVADO DE NOVO EM 19/10 PELA TELA DO ACHADO (`/achados/:achadoId`), que
+/// e o destino do botao `Ver o achado` do desfecho e tinha ficado com o desenho
+/// antigo -- um paragrafo, a linha da regiao, a observacao e uma faixa. Quem
+/// volta ao app no dia seguinte para acompanhar o achado chega NELA, e nao no
+/// desfecho, que so existe no instante do envio. Quatro arquivos desta pasta
+/// mudam, e nenhum deles por causa da camera:
+///
+/// - `achado/tela_do_achado.dart`: os tres blocos do desfecho, o gesto de
+///   arrastar-para-atualizar (ela e a **decima segunda** superficie, e ficou
+///   fora do lote de 18/10 porque o recorte daquele dia foi listagem), o estado
+///   lido do SERVIDOR em vez do `Em análise` fixo, e UMA LINHA dizendo onde a
+///   foto esta -- a tela nao tem foto para desenhar e nao finge que tem;
+/// - `achado/textos_do_achado.dart`: a constante da linha da foto. Ela
+///   substitui, nesta tela, uma frase que era FALSA ali: `fotoAindaNaoSubiu`
+///   afirma que o envio nao aconteceu, e o `GET` de um achado nao devolve
+///   estado de envio de foto nenhum;
+/// - `achado/tela_achado_registrado.dart`: o `_Bloco` privado saiu para
+///   `widgets/bloco_de_informacao.dart`, porque agora sao DUAS telas com os
+///   mesmos blocos e uma copia perderia o `header: true` sem ninguem ver;
+/// - `perfil/meus_achados.dart`: `rotuloDoEstado` deixou de ser privado do
+///   cartao. Um segundo `switch` sobre o mesmo `status` na tela do achado seria
+///   a segunda traducao do mesmo campo, e as duas telas estao a dois toques uma
+///   da outra na mesma conta.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. A tela do achado
+/// nao desenha arquivo do aparelho **de proposito** -- dar-lhe uma gaveta por
+/// `achadoId` seria a foto do animal de alguem esperando, num aparelho
+/// compartilhado, a proxima pessoa a entrar.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// deste proprio portao. Este valor tambem e de RAMO ISOLADO --
+/// `claude/achado-detalhe-rico-535cde` sobre `feat/achado-rico-e-loja-sem-preco`
+/// em 1d4a9e1f -- e valor de ramo isolado NAO sobrevive a uniao.
+/// (antes: 6a089b729b)
+///
+///
+/// **REMEDIDO NA SEGUNDA MESCLA DA `development` NO SINO (20/10/2026).** O
+/// segundo lote e esta frente mexeram os dois em `app/lib/telas` -- o lote
+/// trocou `Perto` por `Mural` e tirou o hamburguer da barra; esta frente
+/// ligou o contador do sino. Nenhum dos dois valores de ramo sobrevive:
+/// `1413454d74` mediu a arvore do segundo lote sem o contador, e
+/// `96e2144577` mediu a arvore da primeira mescla sem o segundo lote. O
+/// valor abaixo foi RECALCULADO sobre a arvore MESCLADA pelo procedimento
+/// deste proprio portao, e nao escolhido entre os dois lados. As
+/// justificativas de TODOS os ramos continuam INTEIRAS acima.
+///
+/// [lado do ramo, valor de ramo 96e2144577] O NUMERO DO SINO LIGADO
+/// (19/10/2026): `casca_com_abas.dart` LE `Escopo.contadorDeAvisos` e o ouve
+/// (`ListenableBuilder` em volta do `ValueListenableBuilder` que ja existia),
+/// e a linha do `actions` virou
+/// `SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas)` -- o `const` da
+/// lista saiu porque o numero e valor de execucao, e a lista continua com UM
+/// item. `notificacoes/caixa_de_notificacoes.dart` zera o contador no caminho
+/// de SUCESSO de `marcarListaVista`. A busca NAO mora nestes dois arquivos:
+/// ela mora em `sessao/contador_de_avisos.dart` e e disparada pelo
+/// `app.dart`, os dois FORA desta arvore. **Nenhuma porta de aparelho
+/// encostada**: nenhum importe de plugin, nenhum canal de plataforma,
+/// nenhuma permissao, nenhum `dart:io`.
+const String _arvoreDasTelas = '29e9404b6de4526c876230f5461c3b0eaaf4223e'; // BICHUS-62 -- A SAIDA DO `409` NA TELA DE INDICAR PROFISSIONAL (20/10/2026), RECALCULADO SOBRE A MESCLA COM `origin/development` (`ceff3402`). `perto/sugerir_profissional.dart` ganhou o ramo de `ProximaAcao.verificarEmail` no `_saidaDoErro`, espelhando `rede/criar_encontro.dart`: sem ele o `409 contact-channel-unverified` desenhava a faixa com a frase do servidor e NENHUMA saida -- `FaixaDeAviso` so monta o `TextButton` com rotulo E callback (`widgets/faixa_de_aviso.dart`, linha 97), entao o rotulo `Confirmar meu e-mail` nao saia morto: nao saia. E a unica mudanca deste ramo nesta arvore; todo o resto vem da `development`, e a prosa em doc dela ficou INTEIRA acima, com a justificativa da ONDA 2 adiante nesta mesma linha. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o unico uso novo e `Escopo.of(context)` e `Rotas.verifiqueSeuEmail`, os dois ja importados no arquivo; o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore JA MESCLADA (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), e nao copiado de ramo nem de relato. **LINHA DE BASE conferida RODANDO ESTE PORTAO** num worktree limpo em `ceff3402`: ele passou, e a arvore de la reproduz o `86c644e7d3` que esta linha substitui. **ARMADILHA MEDIDA, e ela custou uma conclusao errada:** `origin/development` andou de `6b59933d` para `ceff3402` NO MEIO desta mescla, e comparar o valor travado de uma revisao com a arvore de outra me fez concluir que o portao estava vermelho na `development` -- nao estava, e as duas revisoes sao consistentes consigo mesmas. Quem conferir base, leia o valor travado e a arvore DA MESMA revisao, com o SHA na mao. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- o PR #40 (`aviso-email-sugestao`) toca O MESMO ARQUIVO e seguia ABERTO nesta data. Substitui o `86c644e7d3` da `development` e, antes dele, o valor de RAMO `2fc783e272` que esta mescla descartou; as justificativas das duas ficam INTEIRAS. // CORRECAO DE COMENTARIO EM `telas/abas.dart` (20/10/2026), TERCEIRA MESCLA, sobre a development de `6b59933d`: SO o cabecalho de `podeCriarNaComunidade` muda, e nenhuma linha executavel. As duas rotas de criar da comunidade RECUSAM conta nao validada com `409 contact-channel-unverified` -- o cabecalho dizia que nao, e que a metade "validado" existia "so no app". O servidor cobra CANAL DE CONTATO (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`), e por isso procurar `email_verified` em `src/` nao achava a trava. Valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com a LINHA DE BASE conferida antes: `origin/development:app/lib/telas` reproduziu c08880b92cd668cc8c630ece0da43714613d0b21. TERCEIRA vez que este ramo recalcula: a development andou 24 e depois 36 commits enquanto este PR de COMENTARIO esperava, e cada PR do app disputa esta mesma constante. Substitui c08880b92c (e, dos ramos anteriores desta correcao, 5e7f753f67, 27399b7b2e e 83b68e5442, que mediam arvores de antes). === HISTORICO, INTEIRO: TERCEIRO LOTE DE 20/10/2026, ONDA 2, VALOR FINAL. Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com o procedimento VALIDADO na base antes de ser usado. Substitui o valor final da onda 1 (`2f822c38...`), os dois intermediarios da onda 2 e os valores de RAMO da correcao do cabecalho, da ficha rica do achado e do sino, cujas justificativas ficam INTEIRAS acima. === A FRASE DO `409 contact-channel-unverified` PASSA A FALAR DA ROTA QUE RECUSOU (20/10/2026), MESCLADA SOBRE A DEVELOPMENT DE `070bfee6` (a entrada do PR #45): QUATRO arquivos de `app/lib/telas` mudam, e nenhum deles encosta em porta de aparelho. Um `type` servia a QUATRO rotas do servidor com UMA frase, a de pet perdido, e em tres delas ela prometia o que nao ia acontecer -- evento nao tem achador, indicacao nao avisa ninguem, avaliacao de veterinario nao alerta vizinho. (1) `perdido/tela_alcance_do_alerta.dart` declara `AcaoEmCurso.avisarPetPerdido` nos dois `catch` do envio e PARA de manter uma copia literal da frase no bloqueio local -- ela agora vem de `MensagensDeErro.canalNaoVerificadoParaAvisar`. (2) `rede/criar_encontro.dart` declara `AcaoEmCurso.criarEncontro`, e `semEmailConfirmado` aponta para a constante em vez de repetir o texto. (3) `perto/sugerir_profissional.dart` declara `AcaoEmCurso.indicarProfissional` nos dois `catch` de `_enviar`. (4) `perto/pagina_do_local.dart` declara `AcaoEmCurso.avaliarLocal` na escrita da avaliacao -- a QUARTA rota deste `type`, que o achado nao tinha. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; `escanear/tela_leitor_de_qr.dart` nao foi tocado, e o portao estrutural de diretivas deste mesmo arquivo responde por isso sem depender desta constante. **O PR #45 E ESTE NAO COLIDEM EM CODIGO, e isso foi MEDIDO e nao presumido**: a #45 mexe em `_saidaDoErro` (que da DESTINO ao rotulo) e este mexe nos dois `catch` de `_enviar` (que mudam o TEXTO da faixa), 330+ linhas de distancia, e o `git merge` juntou os dois arquivos sem conflito. Os dois sao necessarios: so a #45 deixa o botao funcionando com o texto de pet perdido numa tela que nao manda foto; so este deixa o texto certo SEM BOTAO, porque `FaixaDeAviso` (linha 97) so monta o `TextButton` com rotulo E callback. **DOIS valores de ramo nao sobreviveram**: `e720d4b0f8562baa5768340d9a3a1586bdd4f8b8` (medido sobre a arvore isolada deste ramo, base `c717f4ae`) e o intermediario `95d1907f85913761c90edb60b19bef4525f07d4f` (a mescla sobre `ceff3402`, superada quando a #45 entrou e mexeu em `perto/sugerir_profissional.dart`). Valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves: em zsh, sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto. **Isto nao e teoria: a tentativa sem chaves desta mesma mescla devolveu `.../bichu-wt-frase-409/070bfee6...pp/lib/telas`, comendo o `a` de `app`** -- aqui ela falhou alto, mas num `$(...)` dentro de comparacao ela falha calada). LINHA DE BASE conferida nas DUAS pontas da MESMA revisao, com o SHA na mao e nao pelo ref local, que andou DUAS vezes hoje no meio de mescla: em `070bfee6`, `git rev-parse "070bfee6...:app/lib/telas"` e a constante travada dao os dois `43bc80a21582577caa783edc1da0725c0a4167a7`. ANTERIOR: 43bc80a21582577caa783edc1da0725c0a4167a7 (a entrada do PR #45, cuja justificativa e a da ONDA 2 ficam INTEIRAS nesta linha e acima).
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

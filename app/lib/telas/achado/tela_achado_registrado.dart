@@ -5,6 +5,7 @@ import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
+import '../../widgets/bloco_de_informacao.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/previa_da_foto.dart';
@@ -166,7 +167,7 @@ class TelaAchadoRegistrado extends StatelessWidget {
             // ================================================================
             if (achado != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
-              _Bloco(
+              BlocoDeInformacao(
                 titulo: TextosDoAchado.tituloDoQueGuardamos,
                 linhas: <String>[
                   // O estado em PALAVRA, a mesma de `Meus achados`.
@@ -205,7 +206,7 @@ class TelaAchadoRegistrado extends StatelessWidget {
             // quem esta na fila entao e que nao avisou ninguem.
             // ================================================================
             const SizedBox(height: BichuEspaco.e6),
-            _Bloco(
+            BlocoDeInformacao(
               titulo: TextosDoAchado.tituloDeQuemFoiAvisado,
               linhas: <String>[
                 TextosDoAchado.ninguemFoiAvisado,
@@ -219,7 +220,7 @@ class TelaAchadoRegistrado extends StatelessWidget {
             // O QUE FAZER AGORA: tres passos, e o primeiro nao depende de nos.
             // ================================================================
             const SizedBox(height: BichuEspaco.e6),
-            _Bloco(
+            BlocoDeInformacao(
               titulo: TextosDoAchado.tituloDoQueFazerAgora,
               linhas: const <String>[
                 TextosDoAchado.passoDaPlaquinha,
@@ -283,45 +284,6 @@ class TelaAchadoRegistrado extends StatelessWidget {
                 ),
               ],
       ),
-    );
-  }
-}
-
-/// Um bloco de informacao: um titulo e as linhas dele.
-///
-/// **Existe para o leitor de tela, e nao para economizar linha de codigo.** As
-/// tres secoes novas desta tela sao tres assuntos, e sem `header: true` no
-/// titulo quem navega por cabecalho nao tem como pular entre eles -- a tela
-/// inteira seria um bloco corrido de dez paragrafos. E o mesmo
-/// `Semantics(header: true, ...)` que `resultado_da_abertura.dart` usa.
-///
-/// **Linha vazia nao desenha.** Um `Text('')` deixaria o respiro de 8 dp para
-/// nada -- o mesmo buraco que `TelaDeAba` aprendeu a nao abrir com `reforco`
-/// vazio.
-class _Bloco extends StatelessWidget {
-  const _Bloco({required this.titulo, required this.linhas});
-
-  final String titulo;
-  final List<String> linhas;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final cheias = linhas.where((l) => l.isNotEmpty).toList(growable: false);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Semantics(header: true, child: Text(titulo, style: textos.titleMedium)),
-        for (final linha in cheias) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e2),
-          Text(
-            linha,
-            style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
-          ),
-        ],
-      ],
     );
   }
 }

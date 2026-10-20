@@ -108,7 +108,17 @@ const REFRESH_DE_OUTRA_CONTA = 'refresh-de-outra-conta-0002-abcd';
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 
 function hashDe(token: string): TokenHash {
-  return hashDeToken(token).toString('base64') as TokenHash;
+  return hashDeToken(token) as TokenHash;
+}
+
+/**
+ * A chave do mapa, porque `TokenHash` passou a ser `Buffer`: dois `Buffer` de
+ * conteúdo igual são chaves DIFERENTES num `Map`, que compara por identidade.
+ * Sem este passo o dublê devolveria `undefined` para o token certo e os casos
+ * reprovariam por uma razão que não é a deles.
+ */
+function chaveDe(hash: TokenHash): string {
+  return hash.toString('hex');
 }
 
 function naoUsado(nome: string): never {
@@ -172,12 +182,12 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
   public readonly revogacoesEmMassa: { userId: UserId; motivo: MotivoDeRevogacao; agora: Instant }[] =
     [];
 
-  private readonly linhas = new Map<TokenHash, RefreshArmazenado & { revokedAt: Date | null }>();
+  private readonly linhas = new Map<string, RefreshArmazenado & { revokedAt: Date | null }>();
 
   constructor(private readonly conta: Conta | undefined) {
     super();
 
-    this.linhas.set(hashDe(REFRESH_DESTE_APARELHO), {
+    this.linhas.set(chaveDe(hashDe(REFRESH_DESTE_APARELHO)), {
       id: 'refresh-1',
       userId: TUTORA,
       familyId: FAMILIA_DESTE_APARELHO,
@@ -188,7 +198,7 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
       rotatedToId: null,
       revokedAt: null,
     });
-    this.linhas.set(hashDe(REFRESH_DE_OUTRA_CONTA), {
+    this.linhas.set(chaveDe(hashDe(REFRESH_DE_OUTRA_CONTA)), {
       id: 'refresh-2',
       userId: OUTRA_PESSOA,
       familyId: FAMILIA_ALHEIA,
@@ -202,7 +212,7 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
   }
 
   override buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
-    return Promise.resolve(this.linhas.get(hash));
+    return Promise.resolve(this.linhas.get(chaveDe(hash)));
   }
 
   override revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
