@@ -810,6 +810,33 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'platform',
     valores: ['android', 'ios'],
   },
+  // ------------------------------------------------------------------
+  // O MARCADOR DE "JA VI ESTA SECAO" (migracao `20261020000001`, 20/10/2026),
+  // que alimenta os contadores das abas.
+  //
+  // **TRES valores, e o `Mural` NAO esta entre eles de proposito.** A migracao
+  // escreve a razao: a contagem do Mural e de outra frente (o compositor), e
+  // "um valor aceito sem leitor seria casca". Quem a construir troca o `CHECK`
+  // pelo nome dele -- e este registro reprova no dia em que o banco ganhar o
+  // quarto valor sem ninguem declarar.
+  //
+  // E o MESMO conjunto de `#/components/schemas/SectionSeenInput/properties/
+  // section` no contrato, e o mesmo de `SecaoComContador` em
+  // `app/lib/api/contadores_api.dart` -- as tres superficies com a mesma lista
+  // e a mesma ausencia anotada.
+  //
+  // DECLARADO NA ONDA 2 DO TERCEIRO LOTE, e a demora e um achado meu: a
+  // migracao entrou na onda 1 e eu relatei as duas reprovas da integracao
+  // daquela onda como "o par pre-existente do `app_version_policy`", batendo
+  // pelo NOME do caso em vez de abrir a lista que o caso imprime. O numero de
+  // casos nao mudou (duas reprovas na base, duas na onda 1), mas o CONTEUDO de
+  // uma delas mudou: ela passou a cobrir tambem esta lista. Medir o nome do
+  // caso nao e medir o caso.
+  // ------------------------------------------------------------------
+  'public.section_list_views.section_list_views_secao_conhecida': {
+    coluna: 'section',
+    valores: ['pets', 'network_events', 'network_directory'],
+  },
 };
 
 /**
