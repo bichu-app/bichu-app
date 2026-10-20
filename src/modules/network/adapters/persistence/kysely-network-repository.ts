@@ -56,15 +56,19 @@ import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-c
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
+  CapaDoMeuEncontro,
   EstadoDaContaParaCriar,
   LocalDoEncontro,
+  MeuEncontro,
   NetworkRepository,
   PaginaDaAgenda,
+  PaginaDosMeusEncontros,
   PaginaDosMeusPedidos,
   PaginaPorDistancia,
   PedidoDaConta,
   RecorteDaAgenda,
   RecorteDaAgendaPorDistancia,
+  RecorteDosMeusEncontros,
   RecorteDosMeusPedidos,
   TransacaoDaComunidade,
 } from '../../ports/network-repository.js';
@@ -182,6 +186,47 @@ function colunasDoEncontro() {
         FROM network_event_images i JOIN catalog_images c ON c.id = i.image_id
        WHERE i.event_id = e.id AND c.status = 'ready' AND c.public_key IS NOT NULL)`.as('images'),
   ] as const;
+}
+
+/**
+ * A capa **com o estado dela**, para a lista do DONO (19/10/2026).
+ *
+ * `colunasDoEncontro` carrega so imagem `ready` com chave publica, porque e isso
+ * que a agenda pode mostrar. A consequencia medida: a capa recusada nao
+ * aparecia em superficie nenhuma e quem a enviou nunca descobria. Esta coluna
+ * existe para a leitura do dono, e **so para ela**.
+ *
+ * `ORDER BY i.position LIMIT 1`: a capa e a imagem de posicao 0, a mesma
+ * definicao da agenda. Nulo quando o encontro nao tem imagem nenhuma -- e isso
+ * e diferente de `processing`.
+ */
+function capaDoDono() {
+  return sql<{ s: 'processing' | 'ready' | 'rejected'; k: string | null; r: string | null } | null>`(
+    SELECT json_build_object('s', c.status, 'k', c.public_key, 'r', c.rejection_reason)
+      FROM network_event_images i JOIN catalog_images c ON c.id = i.image_id
+     WHERE i.event_id = e.id
+     ORDER BY i.position
+     LIMIT 1)`.as('capa_do_dono');
+}
+
+type LinhaDaCapaDoDono = {
+  readonly capa_do_dono: { s: 'processing' | 'ready' | 'rejected'; k: string | null; r: string | null } | null;
+};
+
+/** A linha da capa do dono na forma da porta. */
+function comoCapaDoDono(
+  linha: LinhaDaCapaDoDono,
+  urlDeMidia: (chave: string) => string,
+): CapaDoMeuEncontro | null {
+  const capa = linha.capa_do_dono;
+  if (capa === null || capa === undefined) return null;
+  return {
+    estado: capa.s,
+    // A url sai **so** em `ready` com chave: montar o endereco de um objeto que
+    // o worker ainda nao gravou e uma promessa que a tela descobre quebrada.
+    url: capa.s === 'ready' && capa.k !== null ? urlDeMidia(capa.k) : null,
+    motivoDaRecusa: capa.s === 'rejected' ? capa.r : null,
+  };
 }
 
 /**
@@ -609,6 +654,91 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .execute()) as unknown as LinhaDoPedido[];
 
     return { itens: linhas.map((l) => comoPedido(l, this.urlDeMidia)), total: Number(contagem?.total ?? 0) };
+  }
+
+  /**
+   * `listMyNetworkEvents`: os encontros desta conta (19/10/2026).
+   *
+   * ## A AUTORIA ESTA NA CLAUSULA `WHERE`, por semi-juncao
+   *
+   * `network_events_da_conta` (migracao `20261019000010`) devolve o CONJUNTO de
+   * `id` do autor, lido pelo indice, e a consulta o usa com `IN`. Nao e um
+   * predicado booleano por linha de proposito: assim a leitura por autor
+   * acontece uma vez, e nao uma por encontro visivel da tabela inteira. Funcao
+   * e nao `WHERE` escrito aqui porque o nome da coluna de autoria e reprovado
+   * neste arquivo (ver o cabecalho de `consultaBase`).
+   *
+   * ## A ORDEM, e por que ela tem tres chaves
+   *
+   * A decisao que esta lista oferece -- cancelar -- so existe para o que ainda
+   * NAO terminou, e por isso esse grupo vem primeiro (chave 1). Dentro dele a
+   * ordem e crescente: o encontro de amanha e o que corre risco de acontecer
+   * errado, e ele fica no alto (chave 2, nula para o passado). O que passou vem
+   * depois, do mais recente para o mais antigo (chave 3): ele e historico, e
+   * historico se le de tras para frente.
+   *
+   * Uma chave so nao resolve: `starts_at ASC` poria o encontro de ano passado
+   * no topo, e `DESC` poria o mais distante no futuro antes do de amanha.
+   */
+  async listarMeusEncontros(recorte: RecorteDosMeusEncontros): Promise<PaginaDosMeusEncontros> {
+    const agora = comoData(recorte.agora);
+    const naoTerminou = sql<SqlBool>`COALESCE(e.ends_at, e.starts_at) > ${agora}::timestamptz`;
+    const base = consultaBase(this.db).where(
+      sql<SqlBool>`e.id IN (SELECT id FROM network_events_da_conta(${recorte.chamador}::uuid))`,
+    );
+
+    const contagem = await base
+      .select((eb) => eb.fn.countAll<string>().as('total'))
+      .executeTakeFirst();
+    const linhas = (await base
+      .select([...colunasDoEncontro(), capaDoDono()])
+      .orderBy(sql`CASE WHEN ${naoTerminou} THEN 0 ELSE 1 END`, 'asc')
+      .orderBy(sql`CASE WHEN ${naoTerminou} THEN e.starts_at END`, 'asc')
+      .orderBy('e.starts_at', 'desc')
+      // O desempate estavel: sem ele, dois encontros no mesmo instante trocam
+      // de lugar entre paginas e um deles nunca aparece.
+      .orderBy('e.slug', 'asc')
+      .limit(recorte.limit)
+      .offset((recorte.page - 1) * recorte.limit)
+      .execute()) as unknown as (LinhaDoEncontro & LinhaDaCapaDoDono)[];
+
+    return {
+      itens: linhas.map((l) => ({
+        encontro: comoEncontro(l, this.urlDeMidia, this.baseDoInstagram),
+        capa: comoCapaDoDono(l, this.urlDeMidia),
+      })),
+      total: Number(contagem?.total ?? 0),
+    };
+  }
+
+  /**
+   * `getMyNetworkEvent`: o encontro desta conta COM A VERSAO.
+   *
+   * **A unica leitura da Rede que carrega `version`**, e e ela que alimenta o
+   * `ETag`. A regra de autoria e a MESMA da escrita, pela MESMA funcao de banco
+   * (`network_events_do_autor`, migracao `20261001000005`): nao existe uma
+   * segunda definicao de "este encontro e meu" em lugar nenhum. Zero linhas para
+   * inexistente, de outra conta, do painel e removido -- o mesmo 404.
+   *
+   * `consultaBase` continua no caminho, e com ela o predicado de visibilidade e
+   * o do autor com conta ativa: a projecao do dono sai do MESMO ponto unico que
+   * a agenda, e um campo novo na leitura da Rede chega aqui sozinho.
+   */
+  async buscarMeuEncontro(slug: string, chamador: string): Promise<MeuEncontro | undefined> {
+    const linha = (await consultaBase(this.db)
+      .where(
+        sql<SqlBool>`e.id IN (SELECT id FROM network_events_do_autor(${slug}, ${chamador}::uuid))`,
+      )
+      .select([...colunasDoEncontro(), capaDoDono(), 'e.version as version'])
+      .executeTakeFirst()) as unknown as
+      | (LinhaDoEncontro & LinhaDaCapaDoDono & { version: number })
+      | undefined;
+    if (linha === undefined) return undefined;
+    return {
+      encontro: comoEncontro(linha, this.urlDeMidia, this.baseDoInstagram),
+      capa: comoCapaDoDono(linha, this.urlDeMidia),
+      versao: Number(linha.version),
+    };
   }
 
   // ------------------------------------------------------------- a escrita

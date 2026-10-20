@@ -193,6 +193,72 @@ const Set<String> tiposDeFotoAceitos = <String>{
   'image/webp',
 };
 
+/// A lista fechada de `NetworkEventCoverIntentInput.content_type`: **os mesmos
+/// quatro MENOS o HEIC**.
+///
+/// Copiada do contrato, nao inventada, e ela existe aqui porque a razao da
+/// diferenca e do servidor e nao da tela: *"HEIC fica de fora porque a derivada
+/// de catalogo e processada pelo mesmo caminho do painel, que nao o aceita"*.
+/// Afrouxar o enum empurraria a falha para DEPOIS do envio, quando a pessoa ja
+/// viu a previa e ja gastou a rede dela -- e e justamente isso que
+/// [recusaDeTipoDaFoto] existe para evitar.
+///
+/// **A capa do encontro ainda nao sobe por nenhuma tela deste app** (medido em
+/// 19/10/2026: `criar_encontro.dart` nao pergunta a capa, e nenhum arquivo de
+/// `app/lib` chama `createNetworkEventCoverUploadIntent`). Esta constante e o
+/// que a frente que a construir usa em vez de redigitar o enum -- a terceira
+/// copia de um enum e a que esquece de mudar.
+const Set<String> tiposDeFotoAceitosSemHeic = <String>{
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+};
+
+/// A recusa por TIPO, dita **antes** de o envio sair, ou nulo quando o tipo
+/// serve.
+///
+/// ## Por que ela e necessaria mesmo com o seletor recodificando
+///
+/// Medido em 19/10/2026, nas duas plataformas: o seletor **nunca entrega HEIC a
+/// este app**. No iOS, `FLTImagePickerPhotoAssetUtil` reconhece JPEG, PNG e GIF
+/// pelo primeiro byte e manda todo o resto -- HEIC incluido -- para
+/// `UIImageJPEGRepresentation`; no Android, `ImageResizer` recodifica em JPEG
+/// (ou PNG quando o bitmap tem canal alfa) porque esta porta passa
+/// `maxWidth`, `maxHeight` e `imageQuality` juntos. E `XFile(path)` nasce **sem
+/// `mimeType`** nas duas (`cross_file` nao o deduz do caminho), entao
+/// [fotoLocalDoArquivo] cai sempre em `image/jpeg`.
+///
+/// Entao esta funcao nao conserta o seletor: ela e o que faz a recusa ser
+/// **legivel e antes do envio** para o destino cujo enum e mais estreito que o
+/// da foto de pet -- a capa do encontro. Sem ela, o unico caminho de recusa de
+/// tipo seria o worker marcando `rejected` depois de os bytes subirem.
+///
+/// Funcao pura e nao metodo de tela, pelo mesmo motivo de
+/// [estadoDaPermissaoDoPlugin]: e aqui que mora a regra, e e aqui que ela tem
+/// isca sem aparelho.
+String? recusaDeTipoDaFoto(String tipoDeConteudo, Set<String> aceitos) {
+  final tipo = tipoDeConteudo.trim().toLowerCase();
+  if (aceitos.contains(tipo)) return null;
+  // Os nomes vem do PROPRIO conjunto, e nao de uma lista escrita a mao: a
+  // frase de um destino que aceita HEIC e a de um que nao aceita sao
+  // diferentes, e duas redacoes divergiriam na primeira mudanca de enum.
+  final nomes = aceitos.map(_nomeDoTipo).toList()..sort();
+  final lista = nomes.length > 1
+      ? '${nomes.sublist(0, nomes.length - 1).join(', ')} ou ${nomes.last}'
+      : nomes.join();
+  return 'Esse tipo de imagem não é aceito aqui. Escolha uma foto $lista.';
+}
+
+String _nomeDoTipo(String tipo) => switch (tipo) {
+      'image/jpeg' => 'JPEG',
+      'image/png' => 'PNG',
+      'image/heic' => 'HEIC',
+      'image/webp' => 'WebP',
+      // O tipo que o contrato acrescentar sem passar por aqui aparece como ele
+      // e, em vez de desaparecer da frase em silencio.
+      _ => tipo,
+    };
+
 /// O lado maior, em pixels, com que a foto e recodificada antes de virar
 /// [FotoLocal].
 ///

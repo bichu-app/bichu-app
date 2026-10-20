@@ -116,6 +116,23 @@ export const MODULES = [
   // predicado que os outros modulos realmente precisam, `bloqueio_entre`, nao
   // passa nem por `ports/`: e funcao SQL, chamada na clausula `WHERE`.
   'safety',
+  // 19/10/2026, pedido do cliente: *"um metodo que force a atualizacao do app
+  // quando realizarmos um novo deployment em producao"*. A POLITICA DE VERSAO
+  // do aplicativo e modulo proprio e nao um canto de `identity` nem de
+  // `notifications`, por duas razoes:
+  //
+  // DE FRONTEIRA: ela nao e de ninguem. O veredito e respondido SEM CONTA e
+  // nao fala de pessoa nenhuma -- nao tem usuario, nao tem pet, nao tem
+  // aparelho. Dentro de `identity` ela seria um dominio sem relacao com o
+  // dominio da casa, que e o mesmo argumento que `transfers` e `addresses`
+  // registram.
+  //
+  // DE CONSEQUENCIA, e e a que decide: `app_version_policy` e a unica tabela
+  // do produto capaz de DESLIGAR o aplicativo de todos os usuarios ao mesmo
+  // tempo. A fronteira e o que garante que nenhum outro modulo a leia ou a
+  // escreva a nao ser por `ports/` -- onde NAO existe operacao de escrita, de
+  // proposito: a politica e trocada a mao, no banco, por quem opera o deploy.
+  'app-release',
   // FATIA G da frente de comunidade (19/10/2026). O PERFIL DE OUTRA PESSOA e
   // modulo proprio, e a razao e de fronteira: ele e uma LEITURA que junta
   // `handles` e `users` (identity), a contagem de `pets` (pets), o estado e a

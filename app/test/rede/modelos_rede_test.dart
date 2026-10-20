@@ -14,11 +14,6 @@ import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/api/modelos_rede.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/api/rede_api.dart';
-import 'package:bichu/intencao/deposito_de_intencao.dart';
-import 'package:bichu/intencao/guarda_de_acao.dart';
-import 'package:bichu/intencao/intencao_pendente.dart';
-import 'package:bichu/intencao/pedido_de_participacao_como_intencao.dart';
-import 'package:bichu/roteamento/rotas.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -313,10 +308,11 @@ void main() {
     });
 
     test('listNearbyNetworkEvents nao recebe visibility nem coordenada', () {
-      const r = RecorteDaRede(
-        visibilidade: VisibilidadeDoEncontro.publico,
-        distanciaMaxima: DistanciaMaxima.ate5km,
-      );
+      // `visibilidade` saiu de `RecorteDaRede` em 19/10/2026 (o filtro
+      // `Público ou privado` saiu do app). O caso FICA e continua medindo o
+      // que importava: `queryPorPerto` nao manda `visibility` -- e agora nao
+      // tem de onde o mandar, que e uma garantia mais forte.
+      const r = RecorteDaRede(distanciaMaxima: DistanciaMaxima.ate5km);
       final q = r.queryPorPerto(ordemPorPerto: OrdemPorPerto.distancia);
       expect(q.containsKey('visibility'), isFalse);
       expect(q['max_km'], '5');
@@ -326,111 +322,44 @@ void main() {
       }
     });
 
-    test('listMyNetworkEventJoinRequests nao recebe admission nem size', () {
-      const r = RecorteDaRede(
-        termo: 'border',
-        entrada: TipoDeEntrada.pago,
-        porte: Porte.grande,
-        estadoDoPedido: EstadoDoPedido.aprovado,
-      );
-      expect(r.queryDePedidos, <String, String>{
-        'q': 'border',
-        'state': 'approved',
-        'sort': 'proximos',
-        'page': '1',
-        'limit': '20',
-      });
-    });
+    // **O CASO `listMyNetworkEventJoinRequests nao recebe admission nem size`
+    // SAIU** (19/10/2026). Ele media `RecorteDaRede.queryDePedidos`, que era
+    // a consulta da aba `Meus pedidos`. A aba saiu do app por decisao do
+    // cliente -- *"vamos deixar apenas os eventos abertos por enquanto, no
+    // futuro analisamos a necessidade de ter eventos privados tambem"* -- e o
+    // montador da consulta saiu com ela.
+    //
+    // **Nao foi enfraquecido: o que ele protegia virou impossivel.** Ele
+    // existia para garantir que `admission` e `size` nao fossem para uma
+    // operacao que nao os aceita; agora nao ha consulta nenhuma sendo montada
+    // para aquela operacao. A operacao continua no contrato, aposentada com
+    // data e com a frase dele em `api/rastreabilidade-backoffice-rede.yaml`.
+    //
+    // O caso que entrou no lugar vive em `agenda_da_rede_test.dart`:
+    // `ISCA -- nenhuma chamada do app vai a /network/join-requests`.
   });
 
-  group('a intencao de pedir depois do login', () {
-    test('manda o POST sem corpo e volta para o encontro', () async {
-      final chamadas = <http.Request>[];
-      final api = ApiClient(
-        config: AppConfig.carregar(apiBaseUrlDeTeste: 'http://localhost:3000'),
-        cliente: MockClient((req) async {
-          chamadas.add(req);
-          return http.Response(
-            jsonEncode(pedido('requested')),
-            200,
-            headers: <String, String>{'content-type': 'application/json'},
-          );
-        }),
-        tokenDeAcesso: () async => 'token-de-teste',
-      );
-      final intencao = intencaoDePedirParaParticipar(
-        slugPrivado,
-        criadaEm: DateTime.utc(2026, 9, 28),
-      );
-      expect(intencao.acao, AcaoDeIntencao.pedirParaParticipar);
-      expect(Rotas.rotaDaTelaDeUx(intencao.telaDeRetorno), Rotas.rede);
-
-      final resultado = await pedidoDeParticipacaoExecutavel(api).executar(intencao);
-      expect(chamadas.single.method, 'POST');
-      expect(chamadas.single.url.path, '/v1/network/events/$slugPrivado/join-request');
-      expect(chamadas.single.body, isEmpty);
-      expect(resultado.rota, '/rede/encontros/$slugPrivado');
-    });
-  });
-
-  group('a intencao de pedir: falhas depois do login', () {
-    ApiClient apiQueResponde(http.Response Function(http.Request) r) => ApiClient(
-          config: AppConfig.carregar(apiBaseUrlDeTeste: 'http://localhost:3000'),
-          cliente: MockClient((req) async => r(req)),
-          tokenDeAcesso: () async => 'token-de-teste',
-        );
-
-    http.Response problemaDe(String slug, int status) => http.Response(
-          jsonEncode(<String, dynamic>{
-            'type': 'https://api.bichu.app/problems/$slug',
-            'title': 'x',
-            'status': status,
-            'code': 'event_ended',
-          }),
-          status,
-          headers: <String, String>{'content-type': 'application/problem+json'},
-        );
-
-    Future<(DestinoPosLogin, String?)> depoisDoLogin(http.Response resposta) async {
-      final deposito = DepositoDeIntencaoEmMemoria();
-      final guarda = GuardaDeAcao(
-        deposito: deposito,
-        rotaDaTela: Rotas.rotaDaTelaDeUx,
-        acoes: <AcaoDeIntencao, AcaoExecutavel>{
-          AcaoDeIntencao.pedirParaParticipar:
-              pedidoDeParticipacaoExecutavel(apiQueResponde((_) => resposta)),
-        },
-      );
-      await guarda.guardar(
-        intencaoDePedirParaParticipar(slugPrivado, criadaEm: DateTime.now()),
-      );
-      final destino = await guarda.executarDepoisDoLogin();
-      return (destino, await deposito.ler());
-    }
-
-    test(
-        'ISCA -- falha definitiva (event_ended): volta ao encontro com o erro e '
-        'o envelope morre', () async {
-      // ISCA: em `pedidoDeParticipacaoExecutavel`, apague o `try/catch` em
-      // volta de `pedir`. O 400 sobe, a guarda guarda o envelope e este caso
-      // reprova no envelope.
-      final (destino, envelope) = await depoisDoLogin(problemaDe('validation-failed', 400));
-      expect(destino, isA<DestinoDeResultado>());
-      final d = destino as DestinoDeResultado;
-      expect(d.rota, '/rede/encontros/$slugPrivado');
-      expect(d.extra, isA<RetomadaDoPedido>());
-      expect(envelope, isNull);
-    });
-
-    test('falha transitoria (500): volta ao encontro, e o envelope fica', () async {
-      final (destino, envelope) = await depoisDoLogin(problemaDe('internal-error', 500));
-      expect(destino, isA<DestinoDeRetorno>());
-      final d = destino as DestinoDeRetorno;
-      expect(d.rota, '/rede/encontros/$slugPrivado');
-      expect(d.extra, isA<RetomadaDoPedido>());
-      expect(envelope, isNotNull);
-    });
-  });
+  // ---------------------------------------------------------------------
+  // OS TRES CASOS DA INTENCAO DE PEDIR SAIRAM (19/10/2026)
+  // ---------------------------------------------------------------------
+  //
+  // Eram `a intencao de pedir depois do login > manda o POST sem corpo e
+  // volta para o encontro`, `a intencao de pedir: falhas depois do login >
+  // ISCA -- falha definitiva (event_ended): volta ao encontro com o erro e o
+  // envelope morre` e `... > falha transitoria (500): volta ao encontro, e o
+  // envelope fica`.
+  //
+  // Eles mediam `pedidoDeParticipacaoExecutavel`, e o executavel saiu junto
+  // com a tela que criava a intencao: a pagina de detalhe do evento era o
+  // unico lugar do app que tocava em `Pedir para participar`, e ela saiu por
+  // decisao do cliente. Os tres esperavam voltar para `/rede/encontros/<slug>`
+  // -- um endereco que nao existe mais.
+  //
+  // **Nao foram enfraquecidos, foram removidos com o mecanismo.** `RedeApi` e
+  // os modelos do pedido (`PedidoDeParticipacao`, `EstadoDoPedido`,
+  // `PaginaDeMeusPedidos`) continuam medidos pelos casos deste arquivo que
+  // ficaram: o contrato nao mudou, e `Meus pedidos` continua lendo
+  // `listMyNetworkEventJoinRequests`.
 
   group('resposta fora do contrato vira FormatException, nunca TypeError', () {
     ApiClient apiQueDevolve(Map<String, dynamic> corpo) => ApiClient(

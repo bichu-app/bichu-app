@@ -260,23 +260,34 @@ void main() {
         reason: 'REPROVA: a casca honesta voltou. Com a rota registrada, '
             'dizer "em construcao" e afirmar sobre dado que a tela CARREGA.',
       );
-      // Deslogado e sem cidade guardada no aparelho, a lista nao inventa
-      // cidade: `city` e `required` no contrato. UMA linha, e uma SAIDA -- o
-      // campo de cidade digitada, que o cliente autorizou em 18/10/2026.
+      // **ESTAS DUAS MEDIDAS TROCARAM DE LADO EM 19/10/2026**, por decisao do
+      // cliente: *"o campo cidade do filtro da pagina pet nao deve ser
+      // obrigatorio"*.
+      //
+      // O que elas cobravam: deslogado e sem cidade guardada, a tela mostrava
+      // a linha *"Escolha uma cidade para ver os pets perdidos por perto."* e
+      // o botao `Escolher cidade`, porque `city` era `required` e a lista nao
+      // podia carregar. Agora a lista carrega sem cidade, e as duas sairam da
+      // tela: a fase `semCidade` nao existe mais.
+      //
+      // O que este caso cobra no lugar e o MESMO valor -- que o visitante sem
+      // conta nao fica num beco --, agora pelo caminho que de fato existe: a
+      // lista chama a rota e o gatilho de filtro esta la para quem quiser
+      // recortar. Quem mede o conteudo da lista e
+      // `perdidos_e_meus_achados_test.dart`; aqui basta que a secao `Pets` nao
+      // peca nada antes de servir.
       expect(
-        find.text(
-          'Escolha uma cidade para ver os pets perdidos por perto.',
-        ),
-        findsOneWidget,
-        reason: 'REPROVA: sem conta a tela ou inventou cidade ou afirmou que '
-            'nao ha perdido. As duas sao afirmacao sem medida.',
+        find.text('Escolha uma cidade para ver os pets perdidos por perto.'),
+        findsNothing,
+        reason: 'REPROVA: a fase `semCidade` voltou. A lista abre sem cidade '
+            'desde 19/10/2026, e pedir uma antes de listar e o beco que a '
+            'decisao do cliente desfez.',
       );
       expect(
         find.text('Escolher cidade'),
-        findsOneWidget,
-        reason: 'REPROVA: a linha unica ficou sem saida. A barra nao nasce com '
-            '`total: 0`, entao sem este botao o visitante le o que falta e nao '
-            'tem caminho nenhum -- o beco que o criterio 2 proibe.',
+        findsNothing,
+        reason: 'REPROVA: o botao da fase `semCidade` voltou. Ele era a saida '
+            'de um estado que nao existe mais.',
       );
     });
   });

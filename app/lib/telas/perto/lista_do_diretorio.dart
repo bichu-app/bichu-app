@@ -324,7 +324,10 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         // e a acao flutuante nao ocupa linha nenhuma do fluxo.
         //
         // Quem desenha e `AcaoDeCriarFlutuante`; quem a entrega a casca e
-        // `AbaPerto`, em `abas.dart`.
+        // `SecaoDaRede`, em `rede/secao_da_rede.dart`. **Era `AbaPerto`, em
+        // `abas.dart`, ate 19/10**: a secao `Perto` deixou de existir e esta
+        // lista virou o corpo da aba `Comunidade` da `Rede`, onde a acao
+        // flutuante TROCA com a aba.
         //
         // **E ela deixou de aparecer para quem nao pode usa-la**, que era o
         // segundo defeito que ele relatou no mesmo dia: a porta convidava

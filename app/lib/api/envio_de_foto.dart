@@ -126,7 +126,7 @@ class AutorizacaoDeEnvio {
 ///
 /// Tres implementacoes, e as tres existem porque o contrato tem tres rotas de
 /// intencao com corpos diferentes ([FotoDePet] manda `pet_id`, [FotoDeAchado]
-/// manda `found_report_id` e [FotoDoUsuario] nao manda dono nenhum -- o dono e
+/// manda `found_report_id` e a da propria pessoa nao manda dono nenhum -- o dono e
 /// o portador do token). O envio dos bytes nao sabe qual das tres esta em uso,
 /// e nao precisa saber.
 abstract class DestinoDaFoto {
@@ -222,40 +222,94 @@ class FotoDeAchado implements DestinoDaFoto {
   Future<void> confirmar(String uploadId) async {}
 }
 
-/// A foto do PROPRIO usuario: intencao sem corpo de dono, e confirmacao por
-/// `PATCH /v1/me` (cliente, 18/10/2026).
-///
-/// ## Por que a intencao nao manda de quem e a foto
-///
-/// `MyPhotoIntentInput` tem `content_type` e `byte_size`, e mais nada -- nem
-/// `user_id`, nem `purpose`. **O dono e o portador do token**: o servidor grava
-/// a intencao amarrada a conta que a pediu, e `updateMe` so aceita
-/// `upload_id` cuja intencao e da propria conta (a conferencia esta na
-/// clausula `WHERE`). Um campo de dono no corpo seria um campo que o cliente
-/// poderia mentir.
-///
-/// ## A confirmacao existe, e ela e um PATCH e nao uma rota de foto
-///
-/// Ao contrario de [FotoDePet] (que tem `confirmPetPhoto`) e de [FotoDeAchado]
-/// (que nao tem nada a confirmar), aqui o terceiro passo e
-/// `MeUpdate.photo_upload_id`. Pular esse passo deixa os bytes no
-/// armazenamento e a conta sem foto -- a intencao nao confirmada vence em dez
-/// minutos e o varredor a recolhe.
-///
-/// ## [corpoDoMe] existe para poupar uma leitura, e nao por comodidade
-///
-/// O PATCH de confirmacao **devolve o `/me` novo**, ja com
-/// `photo.status`/`photo.url`. Guardar esse corpo aqui e o que permite a tela
-/// desenhar a foto recem-enviada sem um `GET /v1/me` a mais logo depois do
-/// envio. Por isso esta classe nao e `const`: ela carrega o desfecho.
-class FotoDoUsuario implements DestinoDaFoto {
-  FotoDoUsuario({required this.api});
+// -------------------------------------------------------------------------
+// A foto do PROPRIO usuario: intencao sem corpo de dono.
+//
+// ## `FotoDoUsuario` SAIU em 19/10/2026, e a ausencia e a decisao
+//
+// Ate aqui existia uma classe `FotoDoUsuario` que fazia os tres passos de uma
+// vez e confirmava com um `PATCH /v1/me` proprio, chamada pelo botao
+// `Salvar a foto` de `Meus dados`. O cliente mandou tirar esse botao
+// (19/10/2026): o envio passa a sair na ESCOLHA e a confirmacao passa a sair
+// no `Salvar` do formulario, dentro do mesmo PATCH do nome.
+//
+// Deixar as duas classes vivas deixaria **dois caminhos de confirmacao da
+// mesma foto** -- um no corpo do PATCH do formulario e um num PATCH proprio --
+// e e exatamente o tipo de copia que diverge na primeira edicao. Quem envia a
+// foto da propria pessoa agora usa [EnvioParaConfirmarDepois] com
+// `MeApi.intencaoDeFotoDoUsuario`, e quem a confirma e `MeApi.atualizar`.
+//
+// Por que a intencao nao manda de quem e a foto: `MyPhotoIntentInput` tem
+// `content_type` e `byte_size`, e mais nada -- nem `user_id`, nem `purpose`.
+// **O dono e o portador do token**, e `updateMe` so aceita `upload_id` cuja
+// intencao e da propria conta (a conferencia esta na clausula `WHERE`).
 
-  final IntencaoEGravacaoDaFotoDoUsuario api;
+/// Um destino que **envia os bytes e nao confirma nada** -- quem confirma e o
+/// `Salvar` do formulario.
+///
+/// ## Por que ele existe, e por que ele NAO inventa rota
+///
+/// Pedido do cliente em 19/10/2026, literal: *"remova esse botao de salvar
+/// foto, quando o usuario fizer o upload de qualquer foto no app, voce deve
+/// fazer o upload e apresentar como vai ficar de preview, e ao salvar o voce
+/// salva a foto"*.
+///
+/// O contrato ja separa os tres passos por desenho -- intencao, envio,
+/// confirmacao --, e o pedido do cliente e **exatamente** mover o terceiro
+/// passo para outro toque. Nenhuma rota nova: a intencao e a mesma
+/// (`createMyPhotoUploadIntent`), os bytes vao para o mesmo armazenamento, e a
+/// confirmacao continua sendo `MeUpdate.photo_upload_id` -- so que agora ela
+/// viaja **no mesmo `PATCH /v1/me`** que o nome e o telefone, em vez de num
+/// PATCH proprio.
+///
+/// ## [confirmar] GUARDA o identificador em vez de chamar a rede
+///
+/// Isso nao e contorno: `EnvioDeFoto` chama `confirmar` **apos** os bytes
+/// chegarem, e e esse o unico momento em que o `upload_id` ja esta pago. Um
+/// destino que o devolvesse antes devolveria o identificador de um envio que
+/// pode nao ter acontecido -- e o formulario gravaria `photo_upload_id` de
+/// bytes que nunca subiram, que o servidor recusa com `upload_not_usable` sem
+/// dizer por que.
+///
+/// [uploadId] continua nulo quando o envio nao terminou bem, e e por isso que
+/// a tela pode distinguir "ha foto para gravar" de "ha foto escolhida".
+///
+/// ## O que fica no armazenamento quando ninguem salva
+///
+/// A intencao nao confirmada **vence em dez minutos** e o varredor a recolhe
+/// (medido contra a homologacao em 19/10/2026: `expires_at` veio 599 s a frente
+/// do instante do pedido). Entao o custo de um formulario abandonado e um
+/// objeto por abandono, por dez minutos, e nao lixo permanente.
+///
+/// ## Trocar de foto antes de salvar
+///
+/// O segundo envio produz um `upload_id` novo e **substitui** o primeiro nesta
+/// instancia -- quem o usa monta um destino por escolha. O primeiro objeto cai
+/// no mesmo expurgo de dez minutos: nao ha rota de cancelamento de intencao no
+/// contrato, e inventar uma seria inventar rota.
+///
+/// ## Ele nao escolhe `purpose`, e nao poderia
+///
+/// [pedir] e a FUNCAO DA ROTA, e e a rota que fixa o proposito:
+/// `MyPhotoIntentInput` e `ShowcasePhotoIntentInput` nao tem campo `purpose`
+/// justamente para o cliente nao poder pedir autorizacao de imagem de produto
+/// por uma rota de perfil. Passar a funcao, e nao uma etiqueta, e o que impede
+/// a troca que o repositorio ja pagou hoje -- a vitrine chamando o registrador
+/// de capa de encontro e gravando `network_event` numa foto de pessoa.
+class EnvioParaConfirmarDepois implements DestinoDaFoto {
+  EnvioParaConfirmarDepois({required this.pedir});
 
-  /// O corpo de `GET /v1/me` que o PATCH de confirmacao devolveu, ou nulo
-  /// quando [confirmar] ainda nao correu (ou falhou).
-  Map<String, dynamic>? corpoDoMe;
+  /// A rota de intencao, passada como funcao. Para a foto da propria pessoa e
+  /// `MeApi.intencaoDeFotoDoUsuario`; para a vitrine,
+  /// `VitrineApi.intencaoDeFotoDaVitrine`.
+  final Future<Map<String, dynamic>> Function({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) pedir;
+
+  /// O identificador que o formulario vai confirmar, ou nulo enquanto os bytes
+  /// nao chegaram.
+  String? uploadId;
 
   @override
   Future<AutorizacaoDeEnvio> pedirAutorizacao({
@@ -263,31 +317,33 @@ class FotoDoUsuario implements DestinoDaFoto {
     required int tamanhoEmBytes,
   }) async {
     return AutorizacaoDeEnvio.doJson(
-      await api.intencaoDeFotoDoUsuario(
+      await pedir(
         tipoDeConteudo: tipoDeConteudo,
         tamanhoEmBytes: tamanhoEmBytes,
       ),
     );
   }
 
+  /// **Nao fala com a rede**, e guardar aqui e o contrato desta classe.
   @override
   Future<void> confirmar(String uploadId) async {
-    corpoDoMe = await api.gravarFotoDoUsuario(uploadId);
+    this.uploadId = uploadId;
   }
 }
 
-/// O que `MeApi` precisa expor para ser um destino. Interface estreita pelo
-/// mesmo motivo de [IntencaoEConfirmacaoDePet]: o mecanismo de envio nao deve
-/// alcancar `atualizar` -- um envio que pudesse chamar o PATCH completo
-/// poderia sobrescrever telefone e endereco de referencia ao gravar uma foto.
-abstract class IntencaoEGravacaoDaFotoDoUsuario {
+/// O que `MeApi` precisa expor para a foto da propria pessoa. Interface
+/// estreita pelo mesmo motivo de [IntencaoEConfirmacaoDePet]: o mecanismo de
+/// envio nao deve alcancar `atualizar` -- um envio que pudesse chamar o PATCH
+/// completo poderia sobrescrever telefone e endereco de referencia ao gravar
+/// uma foto.
+///
+/// **So a INTENCAO**, desde 19/10/2026: a gravacao saiu daqui porque ela deixou
+/// de ser passo do envio e passou a ser campo do `Salvar` do formulario.
+abstract class IntencaoDeFotoDoUsuario {
   Future<Map<String, dynamic>> intencaoDeFotoDoUsuario({
     required String tipoDeConteudo,
     required int tamanhoEmBytes,
   });
-
-  /// `PATCH /v1/me` com so `photo_upload_id`. Devolve o corpo de `/me`.
-  Future<Map<String, dynamic>> gravarFotoDoUsuario(String uploadId);
 }
 
 /// O que `PetsApi` precisa expor para ser um destino. Interface estreita, e
