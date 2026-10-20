@@ -97,13 +97,24 @@ class CartaoDePet extends StatelessWidget {
     return partes.join(' · ');
   }
 
+  /// Se o selo de perdido se aplica, pelos DOIS campos da ficha.
+  ///
+  /// Era só `status == perdido`, e o selo nunca apareceu: medido em 20/10/2026,
+  /// **nada em `src/` nem em `migrations/` escreve `pets.status = 'lost'`** —
+  /// abrir um caso grava em `lost_cases`, e `open_case_id` é o campo que o
+  /// contrato declara para isso. É o mesmo par que `_jaProcurado` lê em
+  /// `tela_detalhe_do_pet.dart` e que `TelaDeQuemEOCaso.jaProcuradoPeloPar` usa
+  /// para decidir elegibilidade: três telas, um critério.
+  static bool procuradoDe(Pet pet) =>
+      pet.status == StatusDoPet.perdido || pet.idDoCasoAberto != null;
+
   /// O nome acessivel do cartao inteiro, na ordem em que a tela le.
   ///
   /// Uma frase so, porque o cartao e um no so. O selo entra por **texto**, e
   /// nao por cor: quem usa leitor de tela nao recebe a borda de urgencia.
   static String rotuloAcessivelDe(Pet pet, {String? linhaDeAviso}) {
     final partes = <String>[
-      if (pet.status == StatusDoPet.perdido) 'Perdido',
+      if (procuradoDe(pet)) 'Perdido',
       pet.nome,
       atributosDe(pet),
       if (pet.semTag) convitePlaquinha,
@@ -119,7 +130,7 @@ class CartaoDePet extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final perdido = pet.status == StatusDoPet.perdido;
+    final perdido = procuradoDe(pet);
 
     return Semantics(
       container: true,

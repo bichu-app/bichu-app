@@ -33,6 +33,96 @@ import 'textos_do_cadastro.dart';
 abstract final class TextosDoDetalhe {
   // -- Detalhe (T.1) --------------------------------------------------------
 
+  // -- Compartilhar o caso (cliente, 20/10/2026) ----------------------------
+
+  /// O rotulo da acao. `Compartilhar` e nao `Compartilhar no WhatsApp`: o
+  /// cliente pediu *"aquela barra no celular para o usuario selecionar onde ele
+  /// quer compartilhar"*, e o WhatsApp e **uma** das opcoes que o sistema
+  /// lista, junto de Telegram, mensagem, e-mail e copiar. Prometer um
+  /// aplicativo no rotulo seria prometer o que nao e nosso para garantir -- e
+  /// mentiria no aparelho que nao o tem instalado.
+  static const String compartilhar = 'Compartilhar';
+
+  /// O rotulo acessivel: diz DE QUEM e o caso, porque numa lista de acoes o
+  /// leitor de tela le os rotulos fora de contexto.
+  static String compartilharAcessivel(String nome) =>
+      'Compartilhar o desaparecimento de $nome';
+
+  /// Quando a folha do sistema nao abriu.
+  ///
+  /// **Nao diz "WhatsApp"** e nao manda instalar nada: quem decide o que a
+  /// folha mostra e o sistema, e a unica coisa que o app sabe aqui e que ela
+  /// nao abriu. Oferece o que resta -- o link ja esta na pagina do caso.
+  static const String folhaNaoAbriu =
+      'Não conseguimos abrir as opções de compartilhamento agora. Tente de novo.';
+
+  /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
+  ///
+  /// ## De onde cada parte vem, e por que ela esta aqui
+  ///
+  /// **`$nome sumiu`** e literal da voz ja aprovada do alerta de vizinhanca
+  /// (`notifications/domain/conteudo-do-push.ts`, `alertaDeVizinhanca`:
+  /// `` `${nome} sumiu${lugar}` ``). Nenhuma voz nova foi inventada para esta
+  /// acao: a mensagem fala com o mesmo vizinho, no mesmo momento, sobre o
+  /// mesmo fato.
+  ///
+  /// **O lugar entra VERBATIM, como [rotuloDaArea] chegou do servidor.** Ele e
+  /// o `area_label` de `LostCase`, composto por `shared/lugar/rotulo-de-area.ts`
+  /// como `"Bairro, Cidade"` -- e **a coordenada nunca entra la**. Esta funcao
+  /// nao recorta, nao reordena e nao acrescenta: para alguem conseguir por uma
+  /// rua nesta mensagem teria de mudar o servidor, e e isso que torna a isca de
+  /// privacidade dificil de furar por descuido. Lugar ausente vira a variante
+  /// SEM lugar, e nao um lugar vago inventado aqui.
+  ///
+  /// **`A foto e os sinais estao nesta pagina`** e adaptado de
+  /// "Toque para ver a foto e os sinais" (UX 12.2). "Toque" saiu porque esta
+  /// mensagem e lida FORA do app, num grupo de bairro, onde nao ha o que tocar.
+  ///
+  /// **`falar com quem procura`** diz que existe um canal sem prometer aviso a
+  /// ninguem -- o push esta bloqueado em producao e nao funciona no iPhone do
+  /// cliente, e tres lugares desta casa ja afirmaram juntos um aviso que nao
+  /// acontecia. E e `quem procura`, e nao `comigo`, porque a mensagem e
+  /// REPASSADA: quem a cola no terceiro grupo nao e o tutor.
+  ///
+  /// **O link e [url], que veio do servidor em `share_url`.** Ele nunca e
+  /// montado aqui a partir de identificador: `LostCase` nao carrega
+  /// `share_token` -- so `id`, que e UUID e que o ADR-0010 item 6 proibe em
+  /// saida publica. O app **nao tem** com o que montar o endereco, e isso e
+  /// proposital.
+  ///
+  /// ## O que esta ausente de proposito
+  ///
+  /// Telefone, endereco, recompensa (o ADR-0010 a proibe em qualquer forma),
+  /// qualquer afirmacao de que alguem foi avisado, e qualquer identificador
+  /// interno. A isca `o texto compartilhado nao carrega endereco exato nem
+  /// identificador interno` cobra as tres primeiras linhas desta lista contra o
+  /// texto REAL montado, e nao contra um literal de tela.
+  static String mensagemDeCompartilhar({
+    required String nome,
+    required String? rotuloDaArea,
+    required String url,
+  }) {
+    final lugar = rotuloDaArea?.trim() ?? '';
+    final abertura = lugar.isEmpty ? '$nome sumiu.' : '$nome sumiu — $lugar.';
+    return '$abertura\n'
+        'A foto e os sinais estão nesta página, e por ela dá para falar com '
+        'quem procura:\n'
+        '$url';
+  }
+
+  /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
+  /// quando o destino escolhido na folha e um aplicativo de e-mail.
+  ///
+  /// **Sem o link**: o assunto de um e-mail nao e lugar de endereco, e o corpo
+  /// ja o carrega. Mesmo lugar verbatim da mensagem, pela mesma razao.
+  static String assuntoDeCompartilhar({
+    required String nome,
+    required String? rotuloDaArea,
+  }) {
+    final lugar = rotuloDaArea?.trim() ?? '';
+    return lugar.isEmpty ? '$nome sumiu' : '$nome sumiu — $lugar';
+  }
+
   static const String editar = 'Editar';
   static const String excluir = 'Excluir';
 

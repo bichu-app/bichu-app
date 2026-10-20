@@ -194,14 +194,20 @@ void describe('toda consulta de pet que responde a um tutor carrega o dono no WH
     );
   });
 
-  void it('a leitura do dono liga o dono a $2, e não a $1: a subconsulta de tags vem antes', () => {
+  void it('a leitura do dono liga o dono a $3, e não a $1: DUAS subconsultas vem antes', () => {
     // O detalhe que torna `parameters[0]` uma leitura errada: o `count(*)` de
-    // tags ativas liga `'active'` em `$1`, e o dono só aparece em `$2`.
+    // tags ativas liga `'active'` em `$1`, a subconsulta do caso aberto liga
+    // `'open'` em `$2`, e o dono só aparece em `$3`.
+    //
+    // Era `$2` até 20/10/2026. A posição andou porque `open_case_id` passou a
+    // sair da consulta em vez de ser fixado em nulo em `comoPet` -- ver
+    // `caso-aberto-na-leitura-do-pet.test.ts`. O caso continua medindo o que
+    // media: que ler o dono por posição fixa só vale com a posição conferida.
     const compilada = construtorDaLeituraDoDono(semBanco, DONO).compile();
 
     assert.deepEqual(
       [...compilada.parameters],
-      ['active', DONO],
+      ['active', 'open', DONO],
       'a ordem dos parâmetros mudou; a leitura por posição continua certa, mas a tabela de ' +
         'prova do cabeçalho precisa ser refeita',
     );

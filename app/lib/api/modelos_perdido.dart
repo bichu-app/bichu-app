@@ -45,6 +45,53 @@ import 'modelos_pet.dart';
 /// (`api/openapi.yaml`, 19/10/2026). Um `all` aqui voltaria em
 /// `applied_filters` e a tela abriria dizendo "1 filtro ativo" sem ninguem ter
 /// escolhido nada, que e o defeito que o cliente reclamou em 18/10.
+/// `case_state` de `listPublicLostPets`: QUAL CONJUNTO a pagina de `Pets` pede.
+///
+/// Decisao do cliente de 20/10/2026: *"o pet ganha um selo/filtro na pagina de
+/// pets como encontrado por 30 dias e depois ele expira e sai"*.
+///
+/// **A ausencia nao e "sem recorte", e por isso [RecorteDePerdidos.estado] e
+/// nulo por padrao em vez de valer [aberto].** Nulo e nao mandar o parametro, e
+/// nao mandar e o recorte PADRAO do servidor: os casos abertos **mais** os
+/// reencontrados na janela de 30 dias, na mesma pagina. E a segunda decisao do
+/// cliente de 20/10/2026 -- perguntado se o reencontrado devia aparecer so no
+/// filtro ou tambem na lista de sempre, a resposta foi **"Tambem na lista
+/// padrao"**.
+///
+/// Marcar [aberto] pede SO os abertos, e ai ele volta em `applied_filters`; a
+/// tela precisa poder dizer que abriu sem recorte nenhum, e `period` pagou por
+/// isso em 18/10/2026.
+///
+/// [reencontrado] traz SO os encerrados com reencontro **pela comunidade**, e so
+/// dentro da janela de 30 dias. As duas condicoes sao do SERVIDOR: o app nao
+/// refaz a conta de 30 dias e nao sabe dizer quem encontrou. Ver a Emenda 4 do
+/// ADR-0010.
+///
+/// **Com a lista padrao misturando os dois, quem distingue cada cartao e
+/// `PerdidoPublico.encontradoPelaComunidade`** -- campo da RESPOSTA, por item.
+/// Sem ele, um pet que voltou apareceria no meio dos procurados.
+enum EstadoDoCasoNaLista {
+  aberto('open', 'Perdidos'),
+  reencontrado('reunited', 'Encontrados');
+
+  const EstadoDoCasoNaLista(this.codigo, this.rotulo);
+
+  final String codigo;
+  final String rotulo;
+
+  /// O valor do contrato, ou **nulo** para codigo desconhecido.
+  ///
+  /// Nulo e nao [aberto] de proposito: quem le isto e a folha de filtros, e
+  /// codigo que ela nao conhece tem de virar "nenhuma pastilha marcada", que e
+  /// o estado em que a pagina abre.
+  static EstadoDoCasoNaLista? de(String? codigo) {
+    for (final e in EstadoDoCasoNaLista.values) {
+      if (e.codigo == codigo) return e;
+    }
+    return null;
+  }
+}
+
 enum JanelaDePerdidos {
   umDia('24h', '24 horas'),
   seteDias('7d', '7 dias'),
@@ -84,6 +131,7 @@ class PerdidoPublico {
     this.rotuloDaArea,
     this.urlDaFoto,
     this.urlDeCompartilhamento,
+    this.encontradoPelaComunidade = false,
   });
 
   /// Opaco, o mesmo do `share_url`. **Não é UUID e não é ordenável.**
@@ -117,6 +165,18 @@ class PerdidoPublico {
 
   final String? urlDeCompartilhamento;
 
+  /// `found_by_community`: o SELO de reencontro pela comunidade.
+  ///
+  /// **O app nao deduz este campo**, nem do `case_state` que ele mandou nem de
+  /// data nenhuma. Quem decide e o servidor, no ramo `reencontrado` da consulta,
+  /// onde a existencia de conversa ligada ao caso e predicado. Deduzir aqui pelo
+  /// pedido faria o cartao -- que e componente compartilhado -- mentir na
+  /// proxima tela que o reaproveitasse.
+  ///
+  /// `false` e o padrao porque e o valor de todo item do conjunto de casos
+  /// abertos, que e o que a pagina devolve quando ninguem pede nada.
+  final bool encontradoPelaComunidade;
+
   /// **`share_token`, `pet_display_name`, `species`, `size` e `lost_since` são
   /// lidos sem `??`**, de propósito: o contrato os declara obrigatórios, e um
   /// perdido sem nome ou sem data não é um perdido degradado — é uma resposta
@@ -140,6 +200,11 @@ class PerdidoPublico {
       vistoPorUltimoEm: DateTime.parse(json['lost_since'] as String),
       urlDaFoto: json['photo_url'] as String?,
       urlDeCompartilhamento: json['share_url'] as String?,
+      // `?? false` e seguro aqui, e esta e a direcao certa do padrao: ausencia
+      // vira "sem selo". Um `?? true` poria o selo em todo pet de uma versao
+      // de servidor que nao o emite -- e esta casa ja pagou por um `?? true`
+      // que afirmava aviso ao tutor sem aviso nenhum.
+      encontradoPelaComunidade: json['found_by_community'] as bool? ?? false,
     );
   }
 }
@@ -192,6 +257,7 @@ class PaginaDePerdidos {
 /// animais perdidos.
 class RecorteDePerdidos {
   const RecorteDePerdidos({
+    this.estado,
     this.cidade,
     this.bairro,
     this.especie,
@@ -208,6 +274,11 @@ class RecorteDePerdidos {
   /// e o servidor nao recorta por cidade -- a lista abre com os 20 casos mais
   /// recentes de qualquer cidade. Era `required` e obrigava a tela a uma fase
   /// propria (`_Fase.semCidade`) antes de ter o que mostrar.
+  /// `case_state`, ou **nulo quando ninguem escolheu conjunto**.
+  ///
+  /// Nulo e a pagina como ela abre: os casos abertos, sem o parametro na
+  /// consulta. Ver [EstadoDoCasoNaLista].
+  final EstadoDoCasoNaLista? estado;
   final String? cidade;
   final String? bairro;
   final Especie? especie;
@@ -269,6 +340,10 @@ class RecorteDePerdidos {
   }
 
   Map<String, String> get query => <String, String>{
+    // `case_state` SO VAI QUANDO HA ESCOLHA, pela mesma forma `'chave': ?valor`
+    // de `period` e `q`: nao mandar e pedir os casos abertos, que e o recorte
+    // que esta rota sempre teve.
+    'case_state': ?estado?.codigo,
     // `city` SO VAI QUANDO HA CIDADE. Mandar `city=` vazio nao e o mesmo que
     // omitir: o `minLength: 2` do contrato responde 400 ao vazio, enquanto a
     // omissao e geografia aberta. A forma `'chave': ?valor` e a mesma que
@@ -284,6 +359,11 @@ class RecorteDePerdidos {
   };
 
   RecorteDePerdidos copiar({
+    // **Sentinela**, pelo mesmo motivo de `janela` e de `cidade`: com o estado
+    // podendo ser nulo de verdade, `estado ?? this.estado` nao consegue
+    // LIMPA-LO -- e tirar a pastilha de `Encontrados` deixaria o conjunto
+    // anterior valendo, que e o defeito que o cliente reclamou em `period`.
+    Object? estado = _naoMexer,
     // **Sentinela, e nao `String?`**, pelo mesmo motivo de `janela`: com a
     // cidade podendo ser nula de verdade, `cidade ?? this.cidade` nao consegue
     // LIMPA-LA -- passar nulo seria indistinguivel de nao passar nada, e
@@ -302,6 +382,7 @@ class RecorteDePerdidos {
   }) {
     T? v<T>(Object? novo, T? atual) => novo == _naoMexer ? atual : novo as T?;
     return RecorteDePerdidos(
+      estado: v<EstadoDoCasoNaLista>(estado, this.estado),
       cidade: v<String>(cidade, this.cidade),
       bairro: v<String>(bairro, this.bairro),
       especie: v<Especie>(especie, this.especie),

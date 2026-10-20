@@ -45,6 +45,7 @@ import {
 } from '../../domain/previa-do-alcance.js';
 import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import { linksDoCaso } from '../../domain/projecao-publica-do-caso.js';
+import type { DisponibilidadeDaPagina } from '../../ports/disponibilidade-da-pagina.js';
 import type { DisparoGravado } from '../../ports/registro-de-disparos.js';
 import type {
   CandidatoDoCaso,
@@ -250,6 +251,21 @@ export interface DependenciasDasRotasDeCaso {
   readonly clock: Clock;
   /** Base das páginas públicas: de onde saem o link de compartilhar e o cartaz. */
   readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * O interruptor das páginas públicas do site (`site_page_availability`).
+   *
+   * **MEDIDO em 20/10/2026:** `{baseDaWeb}/p/{shareToken}` e
+   * `{baseDaWeb}/cartaz/{shareToken}` respondem **404** em homologação e em
+   * produção, e `web/src/pages/` não tem as duas pastas. `baseDaWeb` diz ONDE a
+   * página moraria; esta porta diz SE ela existe, e as duas perguntas são
+   * diferentes — montar o endereço sempre deu certo, e é exatamente por isso que
+   * ninguém notou que o destino não existia.
+   *
+   * Sem ela, `share_url` sairia apontando para um 404 cuja pré-visualização diz
+   * `og:title: Página não encontrada · Bichu` — e o aplicativo ofereceria
+   * compartilhar isso num grupo de bairro.
+   */
+  readonly paginas: DisponibilidadeDaPagina;
 }
 
 function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
@@ -406,9 +422,45 @@ function comoRespostaDoAlerta(
   };
 }
 
+/**
+ * Quais endereços públicos deste caso podem SAIR na resposta.
+ *
+ * Dois booleanos e não um: `/p/{shareToken}` e `/cartaz/{shareToken}` são duas
+ * páginas (ADR-0017, quadro das oito rotas), e um booleano só obrigaria a
+ * mentir sobre uma das duas no dia em que a primeira subisse. `poster_url`
+ * termina em papel colado em poste, que não se corrige.
+ */
+interface LinksQuePodemSair {
+  readonly caso: boolean;
+  readonly cartaz: boolean;
+}
+
+/**
+ * O corpo de `LostCase`, lendo o interruptor das páginas antes de montá-lo.
+ *
+ * Existe para que os CINCO pontos que respondem `LostCase` — abrir, ler,
+ * corrigir, encerrar e reabrir — passem pelo mesmo lugar. Enquanto a leitura do
+ * interruptor ficasse em cada um deles, o sexto ponto nasceria sem ela, e o
+ * defeito seria `share_url` voltando a sair sozinho num caminho só.
+ */
+async function corpoDoCaso(
+  deps: DependenciasDasRotasDeCaso,
+  casoComAlerta: CasoComAlerta,
+): Promise<Record<string, unknown>> {
+  // As duas leituras em paralelo: são duas linhas por chave primária na mesma
+  // tabela, e `estaPublicada` não lança (ver a porta). `Promise.all` aqui não
+  // esconde falha nenhuma, porque não há falha a esconder.
+  const [caso, cartaz] = await Promise.all([
+    deps.paginas.estaPublicada('lost_case'),
+    deps.paginas.estaPublicada('poster'),
+  ]);
+  return comoRespostaDoCaso(casoComAlerta, deps.baseDaWeb, { caso, cartaz });
+}
+
 function comoRespostaDoCaso(
   { caso, alerta }: CasoComAlerta,
   baseDaWeb: AbsoluteUrl,
+  publicados: LinksQuePodemSair,
 ): Record<string, unknown> {
   // Um montador só para os links do caso, o mesmo das rotas públicas. Enquanto
   // eram dois, este saía em `/c/`, que é a conversa do achador (ADR-0017), e o
@@ -429,8 +481,19 @@ function comoRespostaDoCaso(
     alert: comoRespostaDoAlerta(caso, alerta),
     candidate_count: 0,
     unread_message_count: 0,
-    share_url: links.shareUrl,
-    poster_url: links.posterUrl,
+    // **AUSENTES enquanto a página não existir**, e `share_url` é opcional no
+    // contrato desde sempre (`LostCase.required` lista só `id`, `pet_id`,
+    // `status`, `opened_at` e `alert`) -- então omitir é resposta legítima, e
+    // não contrato quebrado.
+    //
+    // A ausência é o interruptor, e isso é deliberado: um booleano novo ao lado
+    // do endereço poderia DISCORDAR do endereço, e aí alguém teria de decidir
+    // qual dos dois manda. O endereço não discorda de si mesmo, e o aplicativo
+    // não tem como remontá-lo -- `LostCase` não carrega `share_token`, só `id`,
+    // que é UUID e o ADR-0010 proíbe em saída pública. Sem o campo não há como
+    // oferecer a ação, nem por descuido de quem escrever a tela depois.
+    ...(publicados.caso ? { share_url: links.shareUrl } : {}),
+    ...(publicados.cartaz ? { poster_url: links.posterUrl } : {}),
     // `LostCase.reopen_deadline`, que o contrato declara e **nada emitia**. Sem
     // ele o aplicativo não tem como saber se a janela de 7 dias ainda está
     // aberta, e a alternativa seria o app refazer a conta de 7 dias em cima de
@@ -652,7 +715,8 @@ export function registrarRotasDeCasos(
         },
         async () => ({
           status: 201,
-          body: comoRespostaDoCaso(
+          body: await corpoDoCaso(
+            deps,
             await deps.casos.abrir(
               petId as PetId,
               {
@@ -667,7 +731,6 @@ export function registrarRotasDeCasos(
               },
               chamador,
             ),
-            deps.baseDaWeb,
           ),
         }),
       );
@@ -681,7 +744,7 @@ export function registrarRotasDeCasos(
     const { caseId } = request.params as { caseId?: string };
     if (typeof caseId !== 'string' || caseId === '') throw problemas.naoEncontrado();
     const caso = await deps.casos.buscar(caseId as CaseId, chamador);
-    return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+    return reply.status(200).send(await corpoDoCaso(deps, caso));
   });
 
   /**
@@ -738,7 +801,7 @@ export function registrarRotasDeCasos(
         },
         chamador,
       );
-      return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+      return reply.status(200).send(await corpoDoCaso(deps, caso));
     },
   );
 
@@ -838,7 +901,7 @@ export function registrarRotasDeCasos(
         corpo.note,
         chamador,
       );
-      return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+      return reply.status(200).send(await corpoDoCaso(deps, caso));
     },
   );
 
@@ -868,7 +931,7 @@ export function registrarRotasDeCasos(
       if (caseId === undefined) throw problemas.naoEncontrado();
 
       const caso = await deps.casos.reabrir(caseId, chamador);
-      return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+      return reply.status(200).send(await corpoDoCaso(deps, caso));
     },
   );
 

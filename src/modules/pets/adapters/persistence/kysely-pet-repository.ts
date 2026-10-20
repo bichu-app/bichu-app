@@ -78,6 +78,7 @@ interface LinhaDoPet {
   updated_at: Date;
   breed_list_label: string | null;
   active_tag_count: number | string;
+  open_case_id: string | null;
 }
 
 function comoPet(linha: LinhaDoPet): PetGravado {
@@ -110,9 +111,29 @@ function comoPet(linha: LinhaDoPet): PetGravado {
     slug: linha.slug,
     publicProfileEnabled: linha.public_profile_enabled,
     activeTagCount: Number(linha.active_tag_count),
-    // O caso de perdido chega com o módulo `lostfound`. Nulo é o valor
-    // verdadeiro hoje; inventar um identificador aqui seria pior que ausência.
-    openCaseId: null,
+    // O CASO ABERTO, lido da consulta e não fixado em nulo.
+    //
+    // Até 20/10/2026 esta linha era `openCaseId: null`, com o comentário "o caso
+    // de perdido chega com o módulo `lostfound`". O módulo chegou; a linha ficou.
+    // Consequência MEDIDA na mesma data, contra Postgres de verdade: com um caso
+    // `open` no banco, `GET /v1/pets/{petId}` respondia `200` com
+    // `"status":"active","open_case_id":null` — e `pets.status` também fica
+    // `active`, de propósito (ver o cabeçalho de `kysely-perfil-publico.ts`: o
+    // caso aberto é a fonte da verdade sobre "perdido", e abrir um caso não
+    // escreve em `pets.status`).
+    //
+    // Os DOIS campos que o aplicativo lê para saber que o animal está sendo
+    // procurado diziam, juntos, que ele não estava. `Encontrei meu pet` — a ação
+    // de desmarcar — não era desenhada para nenhum pet, em nenhum estado, porque
+    // ela vive no ramo `_jaProcurado` de `tela_detalhe_do_pet.dart`, que é o OU
+    // desses dois campos. O servidor encerrava o caso certo (`closeLostCase`
+    // medido: `200`, `status: closed_reunited`, `reopen_deadline` a 7 dias); o
+    // botão para pedir isso nunca apareceu.
+    //
+    // Nulo continua sendo o valor de pet sem caso aberto, e o índice único
+    // parcial `lost_cases_um_aberto_por_pet` é o que garante que a subconsulta
+    // devolve no máximo uma linha.
+    openCaseId: linha.open_case_id,
     createdAt: linha.created_at,
     updatedAt: linha.updated_at,
   };
@@ -196,6 +217,31 @@ export function construtorDaLeituraDoDono(db: DbExecutor, dono: UserId) {
         .where('pet_tags.status', '=', 'active')
         .select(({ fn }) => fn.countAll().as('n'))
         .as('active_tag_count'),
+      // `Pet.open_case_id` do contrato, que `comoPet` fixava em nulo.
+      //
+      // Subconsulta correlacionada e não `LEFT JOIN`: juntar `lost_cases` na
+      // consulta base multiplicaria a linha do pet por caso quando um pet tiver
+      // histórico de vários encerrados, e `listarDoTutor` passaria a devolver o
+      // mesmo animal mais de uma vez. Mesma forma de `active_tag_count`, logo
+      // acima, e pelo mesmo motivo.
+      //
+      // `status = 'open'` é o recorte, e ele é o campo: o contrato chama a coluna
+      // `open_case_id`, e o índice único parcial `lost_cases_um_aberto_por_pet`
+      // garante no máximo uma linha por pet. Caso ENCERRADO volta a nulo, que é o
+      // que `reabrir` e `encerrar` fazem com o estado do caso — nenhum campo de
+      // `Pet` aponta para o caso que fechou, e a prosa de `_casoEncerradoAgora`
+      // em `tela_detalhe_do_pet.dart` já registra essa limitação.
+      //
+      // Sem predicado de dono aqui, e a ausência é correta: a correlação é por
+      // `pets.id`, e a consulta externa já carrega `pets.owner_user_id = :dono`
+      // (ADR-0021). Um caso cujo `owner_user_id` divergisse do dono do pet seria
+      // banco inconsistente, e não um vazamento por este caminho.
+      eb
+        .selectFrom('lost_cases')
+        .whereRef('lost_cases.pet_id', '=', 'pets.id')
+        .where('lost_cases.status', '=', 'open')
+        .select('lost_cases.id')
+        .as('open_case_id'),
     ])
     .where('pets.owner_user_id', '=', dono)
     .where('pets.deleted_at', 'is', null);

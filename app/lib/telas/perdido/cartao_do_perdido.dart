@@ -88,6 +88,27 @@ class CartaoDoPerdido extends StatelessWidget {
   /// usa leitor de tela não recebe a cor da borda.
   static const String selo = 'Perdido';
 
+  /// O SELO do pet que voltou **pela comunidade** (cliente, 20/10/2026).
+  ///
+  /// Texto e nao so cor (WCAG 2.1 SC 1.4.1): quem nao distingue a cor do chip
+  /// recebe a mesma informacao pela palavra, e e a palavra que entra no rotulo
+  /// do leitor de tela em [rotuloAcessivelDe].
+  ///
+  /// *"pela comunidade"* esta no rotulo de proposito, e nao e enfeite: o selo so
+  /// existe quando houve plaquinha lida que virou aviso ou achado confirmado --
+  /// tutor que achou sozinho encerra o caso igual e **nao** aparece nesta lista.
+  /// Um selo escrito so "Encontrado" afirmaria o reencontro e nao a ajuda, e a
+  /// ajuda e o que o cliente pediu para mostrar.
+  static const String seloDoReencontro = 'Encontrado pela comunidade';
+
+  /// O selo deste item: o do reencontro quando o servidor o marcou, e o de
+  /// perdido em todo o resto.
+  ///
+  /// **Le o campo da RESPOSTA**, e nao o conjunto que a tela pediu: ver a prosa
+  /// de `PerdidoPublico.encontradoPelaComunidade`.
+  static String seloDe(PerdidoPublico p) =>
+      p.encontradoPelaComunidade ? seloDoReencontro : selo;
+
   /// O texto do [rotuloDaArea] nulo. **É do cliente, e não do servidor**: um
   /// rótulo fixo dentro de um campo de dado seria indistinguível de um bairro
   /// com esse nome, e é por isso que o contrato manda `area_label` nulo quando o
@@ -151,7 +172,11 @@ class CartaoDoPerdido extends StatelessWidget {
   /// só, porque o cartão é **uma única parada de leitor de tela**.
   static String rotuloAcessivelDe(PerdidoPublico p, DateTime agora) {
     return <String>[
-      selo,
+      // O SELO DESTE ITEM, e nao o literal `selo`. Com o literal, o leitor de
+      // tela diria "Perdido" sobre um pet que voltou -- e seria um caso verde
+      // afirmando o contrario do que a tela mostra, que e o defeito recorrente
+      // deste repositorio.
+      seloDe(p),
       p.nome,
       atributosDe(p),
       p.rotuloDaArea ?? semRegiao,
@@ -203,7 +228,10 @@ class CartaoDoPerdido extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                _Selo(texto: selo),
+                _Selo(
+                  texto: seloDe(perdido),
+                  doReencontro: perdido.encontradoPelaComunidade,
+                ),
                 const SizedBox(height: BichuEspaco.e2),
                 Text(perdido.nome, style: textos.titleMedium),
                 const SizedBox(height: BichuEspaco.e1),
@@ -245,28 +273,52 @@ class CartaoDoPerdido extends StatelessWidget {
 }
 
 class _Selo extends StatelessWidget {
-  const _Selo({required this.texto});
+  const _Selo({required this.texto, this.doReencontro = false});
 
   final String texto;
+
+  /// Qual das duas tintas. O chip e o MESMO componente nos dois estados: dois
+  /// widgets para o mesmo papel divergem no dia em que alguem mexe num so.
+  final bool doReencontro;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
+    // AS DUAS TINTAS, e as duas saem do sistema -- nenhum valor literal aqui.
+    //
+    // O chip de perdido continua `primaryContainer`/`onPrimaryContainer`, byte
+    // por byte como estava. O do reencontro usa `successContainer`, que e o
+    // token de desfecho bom do sistema (`sage-100`, o mesmo chao que
+    // `pecas_da_rede.dart` desenha).
+    //
+    // **O texto e `textPrimary` e NAO `success`, e a escolha foi medida**: o
+    // chip usa `labelSmall`, que e texto pequeno e cobra 4,5:1 (WCAG 2.1 SC
+    // 1.4.3). Relacao de contraste calculada sobre os tokens de
+    // `bichu_tokens.g.dart`:
+    //
+    //   claro   success #1F7A46 sobre successContainer #DDEFE6 -> 4,47:1  REPROVA
+    //   claro   textPrimary #1C1B19 sobre #DDEFE6              -> 14,39:1
+    //   escuro  success #A9CFBB sobre successContainer #0E3A21 ->  7,49:1
+    //   escuro  textPrimary #F3F0E7 sobre #0E3A21              -> 11,20:1
+    //
+    // `success` passaria no tema escuro e reprovaria no claro. Nao ha token
+    // `onSuccessContainer` no sistema, e inventar um valor aqui seria o caminho
+    // inverso do Figma -- `textPrimary` e a escolha que o sistema ja oferece e
+    // que passa nos dois temas.
+    final fundo = doReencontro ? cores.successContainer : cores.primaryContainer;
+    final tinta = doReencontro ? cores.textPrimary : cores.onPrimaryContainer;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: BichuEspaco.e2,
         vertical: BichuEspaco.e1,
       ),
       decoration: BoxDecoration(
-        color: cores.primaryContainer,
+        color: fundo,
         borderRadius: BorderRadius.circular(BichuRaio.full),
       ),
       child: Text(
         texto,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: cores.onPrimaryContainer),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tinta),
       ),
     );
   }

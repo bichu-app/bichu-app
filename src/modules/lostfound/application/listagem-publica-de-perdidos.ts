@@ -26,6 +26,7 @@ import {
   type BasesPublicas,
 } from '../domain/projecao-publica-do-caso.js';
 import type {
+  ConjuntoDePerdidos,
   JanelaDePerdidos,
   ListagemPublicaDePerdidos,
   RecorteDePerdidos,
@@ -47,7 +48,35 @@ export type Relogio = Clock;
  * 19/10/2026 (decisão do cliente: *"o campo cidade do filtro da página pet não
  * deve ser obrigatório"*).
  */
+/** `case_state` como o contrato o escreve. */
+export type EstadoDoCasoPedido = 'open' | 'reunited';
+
+/**
+ * A traducao de `case_state` para o conjunto da porta, e **o unico lugar** onde
+ * a ausencia do parametro se torna `padrao`.
+ *
+ * `padrao` e a UNIAO -- abertos mais reencontrados na janela --, pela decisao do
+ * cliente de 20/10/2026: **"Tambem na lista padrao"**. Era `aberto` na primeira
+ * entrega do mesmo dia, quando o reencontrado aparecia so sob o filtro.
+ *
+ * Um `?? 'padrao'` dentro do adaptador faria a consulta decidir sozinha, e um
+ * `default` no contrato faria o Ajv escrever o valor na consulta de quem nao
+ * mandou nada -- `applied_filters` citaria um filtro que ninguem aplicou, que e
+ * o defeito que `period` pagou em 18/10/2026.
+ */
+export function conjuntoPedido(estado: EstadoDoCasoPedido | undefined): ConjuntoDePerdidos {
+  switch (estado) {
+    case 'reunited':
+      return 'reencontrado';
+    case 'open':
+      return 'aberto';
+    case undefined:
+      return 'padrao';
+  }
+}
+
 export interface PedidoDePerdidos {
+  readonly caseState?: EstadoDoCasoPedido | undefined;
   readonly city?: string | undefined;
   readonly neighborhood?: string | undefined;
   readonly species?: EspecieDoCaso | undefined;
@@ -118,6 +147,7 @@ export class ListagemPublicaDePerdidosService {
     const cidade = aparado(pedido.city);
 
     const recorte: RecorteDePerdidos = {
+      conjunto: conjuntoPedido(pedido.caseState),
       cidade,
       bairro,
       especie: pedido.species,
@@ -142,6 +172,10 @@ export class ListagemPublicaDePerdidosService {
       // ninguem escolheu seria a tela afirmando um recorte que o servidor nao
       // aplicou.
       applied_filters: recortesAplicados({
+        // `case_state` entra aqui SO quando foi enviado, e a ausencia nao entra:
+        // a pagina precisa poder dizer que abriu sem recorte, e o conjunto de
+        // casos abertos e o que ela sempre devolveu.
+        case_state: pedido.caseState,
         city: cidade,
         neighborhood: bairro,
         species: pedido.species,

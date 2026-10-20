@@ -79,6 +79,17 @@ void describe('projeção pública do caso (PublicLostCase)', () => {
       care_notes: 'É medroso. Não corra atrás.',
       can_report_sighting: true,
       poster_url: `https://web.exemplo.invalid/cartaz/${TOKEN}`,
+      // `found_by_community` CHEGA PELO `allOf`: `PublicLostCase` e
+      // `allOf: [PublicLostPet, ...]`, e o campo entrou em `PublicLostPet` em
+      // 20/10/2026 com o selo de reencontro da listagem (Emenda 4 do ADR-0010).
+      //
+      // **`false` e o valor MEDIDO**, e nao um padrao conveniente: a leitura
+      // por token so resolve caso ABERTO -- caso encerrado responde `410` com
+      // `lost-case-closed` --, entao nenhuma resposta desta projecao pode
+      // trazer um reencontro. O `deepEqual` e o que garante que ele saia: um
+      // campo declarado no contrato e nao emitido faria o documento prometer a
+      // quatro clientes uma propriedade que nunca chega.
+      found_by_community: false,
     });
   });
 

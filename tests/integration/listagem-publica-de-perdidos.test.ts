@@ -142,7 +142,12 @@ async function criarCaso(s: Semente): Promise<string> {
 }
 
 function recorte(ajustes: Partial<RecorteDePerdidos> = {}): RecorteDePerdidos {
-  return { pagina: 1, limite: 20, agora: AGORA, ...ajustes };
+  // `conjunto: 'aberto'` é SOMENTE os abertos, que é o que este arquivo sempre
+  // mediu. A ausência de `case_state` passou a ser `padrao` (a união com os
+  // reencontrados) em 20/10/2026, e a união é medida em
+  // `selo-de-reencontro-na-listagem-publica.test.ts` — inclusive a propriedade
+  // de que ela não tira nenhum aberto.
+  return { conjunto: 'aberto', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
 }
 
 void describe(

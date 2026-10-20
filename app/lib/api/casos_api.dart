@@ -89,6 +89,33 @@ class CasosApi {
     return CasoDePerdido.doJson(json);
   }
 
+  /// `GET /lost-cases/{caseId}` (`getLostCase`).
+  ///
+  /// ## Por que ela faltava, e o que ela destrava
+  ///
+  /// **A ficha do pet nao tinha como saber nada do caso aberto dele.** Ate
+  /// 20/10/2026 `GET /pets/{petId}` devolvia `open_case_id` sempre nulo
+  /// (literal no mapeador, `kysely-pet-repository.ts`), e por isso ninguem
+  /// precisava desta leitura: sem o `caseId` nao havia o que buscar. Com o
+  /// conserto daquele campo, esta e a unica porta pelo contrato que entrega o
+  /// `share_url` e o `area_label` do caso -- os dois campos de que a acao de
+  /// compartilhar vive.
+  ///
+  /// **`share_url` so sai do servidor, nunca daqui.** `LostCase` nao carrega
+  /// `share_token`: carrega `id`, que e UUID, e o ADR-0010 item 6 proibe UUID
+  /// interno em saida publica. Nao ha, e nao pode haver, montagem de endereco
+  /// publico neste lado -- e e por isso que a AUSENCIA de `share_url` e um
+  /// interruptor que o app nao consegue contornar nem por descuido.
+  ///
+  /// Nao trata falha: 404 e "nao existe, nao e seu, ou nao esta aberto" (ADR-0021,
+  /// as tres indistinguiveis de proposito), e falha de rede e "nao consegui
+  /// perguntar". Quem chama decide, e no detalhe do pet as duas levam ao mesmo
+  /// lugar -- a acao de compartilhar nao aparece.
+  Future<CasoDePerdido> buscarCaso(String caseId) async {
+    final json = await _api.get('/lost-cases/$caseId');
+    return CasoDePerdido.doJson(json);
+  }
+
   /// `GET /lost-cases/{caseId}/candidates` (`listLostCaseCandidates`).
   ///
   /// **A leitura que faltava para a decisao fazer sentido.** A rota de decidir

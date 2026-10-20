@@ -67,13 +67,30 @@ class TelaDeQuemEOCaso extends StatefulWidget {
       'Já está sendo procurado. Você abriu esse caso antes, e ele continua '
       'aberto.';
 
+  /// Se este pet **já está sendo procurado**, pelos DOIS campos da ficha.
+  ///
+  /// Era só `status == perdido` até 20/10/2026, e isso não funcionava: medido
+  /// contra Postgres de verdade, **nada em `src/` nem em `migrations/` escreve
+  /// `pets.status = 'lost'`** — abrir um caso grava em `lost_cases` e nada mais,
+  /// e o cabeçalho de `kysely-perfil-publico.ts` diz que o caso aberto é a fonte
+  /// da verdade sobre "perdido". Consequência: um pet COM caso aberto aparecia
+  /// aqui como elegível, o toque chegava em `openLostCase` e o desfecho era um
+  /// `409 pet-already-lost` depois de duas telas — exatamente o que o critério
+  /// 13 existe para evitar.
+  ///
+  /// É o MESMO par que `_jaProcurado` lê em `tela_detalhe_do_pet.dart`, e é de
+  /// propósito que são o mesmo: duas telas decidindo "este pet está perdido" por
+  /// critérios diferentes é como elas divergem sem ninguém ver.
+  static bool jaProcuradoPeloPar(Pet p) =>
+      p.status == StatusDoPet.perdido || p.idDoCasoAberto != null;
+
   /// Os pets que **podem** receber um caso novo.
   static List<Pet> elegiveis(List<Pet> pets) =>
-      pets.where((p) => p.status != StatusDoPet.perdido).toList(growable: false);
+      pets.where((p) => !jaProcuradoPeloPar(p)).toList(growable: false);
 
   /// Os que já têm caso aberto.
   static List<Pet> jaPerdidos(List<Pet> pets) =>
-      pets.where((p) => p.status == StatusDoPet.perdido).toList(growable: false);
+      pets.where(jaProcuradoPeloPar).toList(growable: false);
 
   @override
   State<TelaDeQuemEOCaso> createState() => _TelaDeQuemEOCasoState();

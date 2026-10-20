@@ -7,6 +7,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_caso.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
+import '../../dispositivo/saida_do_app.dart';
 import '../../escopo.dart';
 import '../../formato/quando.dart';
 import '../../perdido/rascunho_do_caso.dart';
@@ -169,6 +170,43 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   /// e esse acontece com a tela na frente da pessoa.
   CasoDePerdido? _casoEncerradoAgora;
 
+  /// O CASO ABERTO deste pet, lido do servidor. Nulo e o estado normal.
+  ///
+  /// ## Por que ele e uma LEITURA, e por que ela nao existia antes
+  ///
+  /// A acao de compartilhar precisa de duas coisas que `Pet` nao tem:
+  /// `share_url` -- o endereco publico do caso -- e `area_label`, o lugar no
+  /// teto de precisao que o ADR-0010 admite. As duas moram em `LostCase`, e
+  /// `GET /lost-cases/{caseId}` e a unica porta do contrato que as entrega.
+  ///
+  /// **Esta leitura era impossivel ate 20/10/2026**, e nao por falta de
+  /// vontade: `GET /pets/{petId}` devolvia `open_case_id` SEMPRE nulo (literal
+  /// no mapeador do repositorio), entao a tela nunca tinha o `caseId` com que
+  /// buscar. Medi isso em homologacao antes de escrever uma linha disto. Com
+  /// aquele campo consertado, o `caseId` existe e esta leitura passa a ter
+  /// sentido.
+  ///
+  /// **Nulo cobre TRES coisas diferentes, e as tres levam ao mesmo lugar** --
+  /// sem acao de compartilhar:
+  ///
+  /// 1. o pet nao tem caso aberto (`open_case_id` nulo): a leitura nem sai;
+  /// 2. a leitura saiu e falhou (rede, 404 de ADR-0021, corpo fora do
+  ///    contrato);
+  /// 3. o caso voltou **sem `share_url`** -- o interruptor do servidor, que e
+  ///    o unico jeito de a pagina publica ser declarada existente.
+  ///
+  /// Nao vira fase de erro, pelo mesmo motivo de [_carregarOPedidoDaPlaquinha]:
+  /// um pet que carregou nao pode virar "servidor fora" porque uma leitura
+  /// secundaria caiu.
+  CasoDePerdido? _casoAberto;
+
+  /// O que deu errado ao abrir a FOLHA de compartilhamento, se deu.
+  ///
+  /// **Campo proprio**, e nao [_erroAoEncerrar]: os dois erros aparecem no
+  /// mesmo trecho da tela e um sobreviveria ao outro no mesmo campo -- a faixa
+  /// do encerramento ficaria explicando uma folha que nao abriu.
+  String? _erroAoCompartilhar;
+
   /// Se a reabertura esta em curso. Mesmo papel de [_encerrandoOCaso].
   bool _reabrindoOCaso = false;
 
@@ -208,6 +246,7 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       // espera a plaquinha para desenhar o animal.
       await _carregarOQr(pet);
       await _carregarOPedidoDaPlaquinha(pet);
+      await _carregarOCasoAberto(pet);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -266,6 +305,79 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       if (!mounted) return;
       setState(() => _temPedidoDePlaquinha = false);
     }
+  }
+
+  /// Le o caso ABERTO do pet, quando ha um.
+  ///
+  /// **Nenhuma falha daqui muda a fase da tela**, e nenhuma delas aparece: o
+  /// desfecho de toda falha e "nao ofereca compartilhar", que ja e o estado
+  /// inicial. Uma faixa de erro aqui faria a pagina do pet reclamar de uma
+  /// leitura que a pessoa nem sabe que existe -- a mesma decisao, pelo mesmo
+  /// motivo, de [_carregarOPedidoDaPlaquinha].
+  ///
+  /// **Sem `open_case_id` a chamada nao sai.** Nao e economia: montar
+  /// `/lost-cases//` seria 404, e perguntar pelo caso de um pet que nao tem
+  /// caso e perguntar o que a resposta anterior ja respondeu.
+  Future<void> _carregarOCasoAberto(Pet pet) async {
+    final caseId = pet.idDoCasoAberto;
+    if (caseId == null || caseId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _casoAberto = null);
+      return;
+    }
+    try {
+      final caso = await Escopo.of(context).casos.buscarCaso(caseId);
+      if (!mounted) return;
+      setState(() => _casoAberto = caso);
+    } on Object {
+      // Silencioso DE PROPOSITO. `FalhaDeChamada` e o que nao e ela (corpo 200
+      // fora do contrato estoura `TypeError` dentro de `CasoDePerdido.doJson`)
+      // chegam aqui, e as duas produzem o mesmo: sem caso, sem acao.
+      if (!mounted) return;
+      setState(() => _casoAberto = null);
+    }
+  }
+
+  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do caso.
+  ///
+  /// ## As duas guardas, e por que elas sao cinto e nao o desenho
+  ///
+  /// O desenho e [_Conteudo._linkDoCaso]: a acao **nao e desenhada** sem caso
+  /// aberto e sem `share_url`. Estas duas linhas existem para o caso de alguem
+  /// chamar isto de outro lugar depois -- e porque um `!` aqui diria menos.
+  ///
+  /// ## O que acontece quando a folha nao abre
+  ///
+  /// [SaidaDoApp.compartilharTexto] devolve `false` quando nao ha atividade que
+  /// responda a `ACTION_SEND` ou o plugin nao esta no binario. A tela **diz**,
+  /// numa faixa, em vez de ficar calada ou de deixar vazar uma excecao crua: um
+  /// toque que nao faz nada e indistinguivel de um toque que nao chegou, e a
+  /// pessoa toca de novo.
+  ///
+  /// **Nao ha tratamento de "WhatsApp nao instalado"**, e a ausencia e
+  /// deliberada: quem decide o que a folha lista e o sistema, e nenhum
+  /// aplicativo em particular e nosso para garantir. O cliente pediu a barra,
+  /// e a barra mostra o que existe no aparelho.
+  Future<void> _compartilharOCaso(Pet pet) async {
+    final caso = _casoAberto;
+    final url = caso?.urlDeCompartilhar;
+    if (caso == null || url == null || url.isEmpty) return;
+
+    final abriu = await SaidaDoApp.atual.compartilharTexto(
+      texto: TextosDoDetalhe.mensagemDeCompartilhar(
+        nome: pet.nome,
+        // VERBATIM do servidor. Ver a prosa de `mensagemDeCompartilhar`: o app
+        // nao compoe lugar, e e isso que impede uma rua de entrar no texto.
+        rotuloDaArea: caso.rotuloDaArea,
+        url: url,
+      ),
+      assunto: TextosDoDetalhe.assuntoDeCompartilhar(
+        nome: pet.nome,
+        rotuloDaArea: caso.rotuloDaArea,
+      ),
+    );
+    if (!mounted || abriu) return;
+    setState(() => _erroAoCompartilhar = TextosDoDetalhe.folhaNaoAbriu);
   }
 
   /// Busca a tag em vigor e, com o `tagId` dela, a IMAGEM do QR.
@@ -498,6 +610,22 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     setState(() {
       _casoEncerradoAgora = encerrado;
       _erroAoReabrir = null;
+      // **O CASO ABERTO DEIXA DE EXISTIR AQUI, e nao na releitura do pet.**
+      //
+      // Esta linha e o terceiro estado do pedido do cliente: compartilhar um pet
+      // REENCONTRADO manda a vizinhanca procurar um animal que esta em casa.
+      // Ela nao espera o `GET /pets` abaixo de proposito -- aquela releitura
+      // pode falhar, e o `catch` dela deixa a tela com o pet ANTIGO, que ainda
+      // tem `open_case_id`. Sem esta linha, a janela entre o 200 do
+      // encerramento e uma releitura que falhou seria exatamente o momento em
+      // que a tela segura um caso com `share_url` valido e oferece
+      // compartilha-lo -- com o caso ja fechado no servidor.
+      //
+      // `_casoEncerradoAgora` recebe o caso encerrado logo acima e TEM
+      // `share_url`. Ele serve a oferta de reabrir, e nunca a de compartilhar:
+      // sao dois campos de proposito.
+      _casoAberto = null;
+      _erroAoCompartilhar = null;
     });
 
     try {
@@ -643,6 +771,12 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
         _pet = atualizado;
         _reabrindoOCaso = false;
       });
+      // O caso voltou a estar aberto, e a acao de compartilhar volta a fazer
+      // sentido -- mas ela so volta se o servidor confirmar, relendo. O caso
+      // que a reabertura devolveu nao e aproveitado aqui de proposito: `Pet` e
+      // quem diz se ha caso aberto, e e com o `open_case_id` dele que esta
+      // leitura casa.
+      await _carregarOCasoAberto(atualizado);
     } on Object {
       if (!mounted) return;
       setState(() => _reabrindoOCaso = false);
@@ -759,6 +893,9 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
             final caso = _casoEncerradoAgora;
             if (caso != null) _reabrirOCaso(caso);
           },
+          casoAberto: _casoAberto,
+          erroAoCompartilhar: _erroAoCompartilhar,
+          aoCompartilhar: () => _compartilharOCaso(_pet!),
           temPedidoDePlaquinha: _temPedidoDePlaquinha,
           aoAcompanharPlaquinha: () =>
               context.push(Rotas.acompanharPlaquinhaDe(_pet!.id)),
@@ -832,6 +969,9 @@ class _Conteudo extends StatelessWidget {
     required this.reabrindoOCaso,
     required this.erroAoReabrir,
     required this.aoReabrirOCaso,
+    required this.casoAberto,
+    required this.erroAoCompartilhar,
+    required this.aoCompartilhar,
     required this.temPedidoDePlaquinha,
     required this.aoAcompanharPlaquinha,
   });
@@ -865,6 +1005,16 @@ class _Conteudo extends StatelessWidget {
 
   final VoidCallback aoReabrirOCaso;
 
+  /// O caso ABERTO deste pet, quando o servidor o entregou. Ver o campo de
+  /// mesmo nome no estado: nulo cobre "nao tem caso", "nao consegui ler" e
+  /// "o caso veio sem `share_url`".
+  final CasoDePerdido? casoAberto;
+
+  /// O que deu errado ao abrir a folha de compartilhamento. Nulo e o normal.
+  final String? erroAoCompartilhar;
+
+  final VoidCallback aoCompartilhar;
+
   /// Se ha pedido da plaquinha para este pet. Ver o campo de mesmo nome no
   /// estado da tela: `false` tambem e o que a leitura que falhou produz.
   final bool temPedidoDePlaquinha;
@@ -881,6 +1031,53 @@ class _Conteudo extends StatelessWidget {
   /// telas -- exatamente o que o criterio 13 existe para evitar.
   bool get _jaProcurado =>
       pet.status == StatusDoPet.perdido || pet.idDoCasoAberto != null;
+
+  /// O ENDERECO PUBLICO do caso, ou `null` quando nao ha o que compartilhar.
+  ///
+  /// ## Este getter E o interruptor, e ele tem tres travas em serie
+  ///
+  /// 1. **Caso aberto.** Sem [casoAberto] nao ha endereco: pet que nao esta
+  ///    perdido nao tem o que compartilhar. E `casoAberto` e nulo tambem
+  ///    enquanto a leitura nao voltou, o que mantem a acao escondida durante o
+  ///    carregamento em vez de piscar.
+  /// 2. **Caso ABERTO de verdade**, e nao qualquer caso: `status == 'open'`. O
+  ///    pet reencontrado e o terceiro estado do pedido, e ele e o mais caro dos
+  ///    tres -- compartilhar depois de o animal voltar manda a vizinhanca
+  ///    procurar quem esta em casa. A tela ja limpa `_casoAberto` ao encerrar;
+  ///    esta linha e a segunda trava, para o caso de o servidor devolver um
+  ///    caso fechado por aqui.
+  /// 3. **`share_url` PRESENTE.** E o interruptor do servidor, e ele e a razao
+  ///    de este getter devolver um endereco em vez de um booleano.
+  ///
+  /// ## Por que a AUSENCIA do endereco e o interruptor, e nao uma bandeira
+  ///
+  /// **MEDIDO em 20/10/2026**, de fora, nos dois ambientes: `GET /p/<token>`
+  /// responde **404** em `hml.bichu.app` e em `bichu.app`, e `web/src/pages/`
+  /// nao tem a pasta `p/`. O cartao de pre-visualizacao que aquele 404 serve
+  /// diz, com estas letras, `og:title: Pagina nao encontrada · Bichu` -- ou
+  /// seja, o link compartilhado afirmaria num grupo de bairro que a pagina do
+  /// pet nao existe. O cliente decidiu construir o app antes do site, e a
+  /// condicao foi que a acao nascesse DESLIGADA e acendesse sem APK novo.
+  ///
+  /// Quem acende e `site_page_availability` (migracao `20261020000005`): um
+  /// `UPDATE ... SET is_published = true`, com a API de pe, e `share_url` passa
+  /// a sair. Enquanto ele disser `false`, o campo **nao vem**, e sem campo nao
+  /// ha acao.
+  ///
+  /// Uma bandeira booleana ao lado do endereco poderia DISCORDAR do endereco, e
+  /// alguem teria de decidir qual dos dois manda. O endereco nao discorda de si
+  /// mesmo. E o app **nao tem como remonta-lo**: `LostCase` nao carrega
+  /// `share_token`, so `id`, que e UUID e que o ADR-0010 item 6 proibe em saida
+  /// publica. Nao existe atalho, nem por descuido de quem escrever a tela
+  /// depois.
+  String? get _linkDoCaso {
+    final caso = casoAberto;
+    if (caso == null) return null;
+    if (caso.status != 'open') return null;
+    final url = caso.urlDeCompartilhar;
+    if (url == null || url.isEmpty) return null;
+    return url;
+  }
 
   /// A ACAO DE ESTADO DO ANIMAL, nas DUAS direcoes e com **aparencia
   /// diferente em cada uma** (cliente, 18/10/2026).
@@ -959,6 +1156,39 @@ class _Conteudo extends StatelessWidget {
           ),
         ),
         const SizedBox(height: BichuEspaco.e4),
+        // `COMPARTILHAR`, **so com caso aberto e so com endereco publico**
+        // (cliente, 20/10/2026). Ver `_linkDoCaso`: as tres travas em serie e
+        // por que a ausencia do endereco e o interruptor.
+        //
+        // ## Por que ela vem ANTES de `Encontrei meu pet`
+        //
+        // Duas razoes, e a segunda e de seguranca de toque. A primeira: com o
+        // animal na rua, compartilhar e a acao que o tutor REPETE -- num grupo,
+        // depois noutro --, e `Encontrei meu pet` e terminal. A segunda: as
+        // duas sao vizinhas de efeito muito diferente, e entre elas fica o
+        // `space/6` do sistema e nao o `space/2`, o mesmo cuidado de 11.1 que
+        // separa `Reabrir o caso` de `Marcar como perdido`. Quem erra o alvo
+        // acerta a acao que nao encerra nada.
+        //
+        // `BotaoSecundario` e nao primario: a acao principal deste estado
+        // continua sendo a do estado do animal, e duas acoes com o mesmo peso
+        // na mesma dobra fazem a pessoa escolher pela posicao.
+        if (_linkDoCaso != null) ...<Widget>[
+          if (erroAoCompartilhar != null) ...<Widget>[
+            Semantics(
+              liveRegion: true,
+              container: true,
+              child: FaixaDeAviso(texto: erroAoCompartilhar!),
+            ),
+            const SizedBox(height: BichuEspaco.e4),
+          ],
+          BotaoSecundario(
+            rotulo: TextosDoDetalhe.compartilhar,
+            nomeAcessivel: TextosDoDetalhe.compartilharAcessivel(pet.nome),
+            aoTocar: aoCompartilhar,
+          ),
+          const SizedBox(height: BichuEspaco.e6),
+        ],
         // O ERRO DO ENCERRAMENTO, **acima** do botao que o produziu e so quando
         // ha um. Em faixa de `erro` e nao `informativo`: ha acao a tomar, que e
         // tentar de novo, e o botao logo abaixo e onde se toma.

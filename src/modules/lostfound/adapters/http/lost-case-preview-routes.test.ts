@@ -71,6 +71,11 @@ function comoToken(userId: UserId): string {
 }
 
 interface Cenario {
+  /**
+   * O interruptor de `site_page_availability`. **Ausente = desligado**, que e o
+   * estado de producao: `/p/{shareToken}` da 404 (medido em 20/10/2026).
+   */
+  readonly paginasPublicadas?: boolean;
   /** O que `AlcanceDoAlerta` responde. `null` = não foi possível contar. */
   readonly contagem?: number | null;
   readonly temFotoPronta?: boolean;
@@ -238,6 +243,13 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     contrato: carregarContrato('api/openapi.yaml'),
     clock,
     baseDaWeb: BASE_DA_WEB,
+    // O interruptor das paginas publicas. **DESLIGADO por padrao**, que e o
+    // estado de producao em 20/10/2026 (`/p/` e `/cartaz/` dao 404, medido).
+    // O caso que cobra a FORMA dos links liga-o explicitamente -- ver
+    // `getLostCase: os links do caso apontam para as paginas do site`.
+    paginas: {
+      estaPublicada: () => Promise.resolve(cenario.paginasPublicadas === true),
+    },
   });
 
   return app;
@@ -583,7 +595,14 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
       closureChannel: null,
       closureNote: null,
     };
-    const resposta = await servidor({ casoDoDono: caso }).inject({
+    const resposta = await servidor({
+      casoDoDono: caso,
+      // **LIGADO de proposito.** Este caso cobra a FORMA dos links; com o
+      // interruptor no padrao (desligado) os dois campos nao sairiam e as duas
+      // asercoes abaixo comparariam `undefined` com `undefined` -- passando sem
+      // medir nada, que e a vacuidade que este repositorio paga caro.
+      paginasPublicadas: true,
+    }).inject({
       method: 'GET',
       url: `/lost-cases/${caso.id}`,
       headers: { authorization: comoToken(DONO) },
@@ -592,5 +611,59 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
     const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
     assert.equal(corpo['share_url'], `${BASE_DA_WEB}/p/${caso.shareToken}`);
     assert.equal(corpo['poster_url'], `${BASE_DA_WEB}/cartaz/${caso.shareToken}`);
+  });
+
+  /**
+   * O OUTRO LADO DO MESMO INTERRUPTOR, e ele e o que protege o produto hoje.
+   *
+   * MEDIDO em 20/10/2026, de fora, nos dois ambientes: `GET /p/<token>` responde
+   * **404** em `hml.bichu.app` e em `bichu.app`, e `web/src/pages/` nao tem a
+   * pasta. O cartao de pre-visualizacao que o 404 serve diz
+   * `og:title: Pagina nao encontrada · Bichu`.
+   *
+   * Entao, enquanto a linha de `site_page_availability` disser `false`, os dois
+   * enderecos **nao saem**. A asercao e sobre a CHAVE e nao sobre o valor
+   * (`in`), porque `corpo['share_url'] === undefined` passaria tambem se o campo
+   * saisse com valor nulo -- e nulo e um endereco que o aplicativo poderia
+   * tentar abrir.
+   */
+  void it('com a pagina NAO publicada, share_url e poster_url nao saem', async () => {
+    const caso: CasoGravado = {
+      id: '018f3a2b-0000-7000-8000-0000000000ef' as CaseId,
+      petId: PET_DO_DONO,
+      status: 'open',
+      lastSeenAt: new Date('2026-09-20T18:30:00.000Z'),
+      hasLocation: false,
+      areaLabel: 'Pinheiros, São Paulo',
+      description: null,
+      shareToken: 'k3J9-share-token-opaco-0002',
+      shareToPublicList: true,
+      openedAt: new Date('2026-09-20T19:00:00.000Z'),
+      closedAt: null,
+      reopenDeadline: null,
+      closureOutcome: null,
+      closureChannel: null,
+      closureNote: null,
+    };
+    const resposta = await servidor({ casoDoDono: caso }).inject({
+      method: 'GET',
+      url: `/lost-cases/${caso.id}`,
+      headers: { authorization: comoToken(DONO) },
+    });
+    assert.equal(resposta.statusCode, 200, resposta.body);
+    const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
+    assert.equal(
+      'share_url' in corpo,
+      false,
+      'Com a pagina em 404 o endereco nao pode sair: o aplicativo o usa para ' +
+        'oferecer compartilhar, e o cartao que o WhatsApp mostraria diz que a ' +
+        'pagina do pet nao existe.',
+    );
+    assert.equal('poster_url' in corpo, false, 'O cartaz tambem da 404 hoje.');
+    // O CONTROLE: o caso saiu de verdade. Sem esta linha as duas asercoes acima
+    // passariam com a rota respondendo um corpo vazio, ou 200 sem caso nenhum.
+    assert.equal(corpo['share_token'], undefined, 'LostCase nunca carregou share_token.');
+    assert.equal(corpo['id'], caso.id, 'O caso TEM de estar na resposta.');
+    assert.equal(corpo['area_label'], 'Pinheiros, São Paulo');
   });
 });

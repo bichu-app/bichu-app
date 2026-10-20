@@ -43,6 +43,56 @@ import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 export type JanelaDePerdidos = '24h' | '7d' | '30d';
 
 /**
+ * QUAL CONJUNTO a pagina devolve (`case_state` do contrato), e sao TRES.
+ *
+ * - `padrao` -- o que a ausencia do parametro significa: os casos **abertos
+ *   MAIS** os reencontrados pela comunidade dentro da janela de 30 dias. E a
+ *   decisao do cliente de 20/10/2026, na segunda rodada do mesmo dia:
+ *   perguntado se o reencontrado devia aparecer so no filtro ou tambem na lista
+ *   de sempre, a resposta foi **"Tambem na lista padrao"**.
+ * - `aberto` -- SOMENTE os casos abertos. E o recorte que esta operacao tinha
+ *   antes de 20/10/2026, e quem o pede agora o pede de proposito.
+ * - `reencontrado` -- SOMENTE os reencontrados na janela.
+ *
+ * **A ausencia nao e "sem recorte", e por isso ele nao e um campo opcional como
+ * [RecorteDePerdidos.cidade]**: ausencia de cidade e "nao recorte por isto",
+ * ausencia de `case_state` e o conjunto `padrao`.
+ *
+ * ## O que a uniao MANTEM, e foi medido
+ *
+ * **Nenhuma linha do conjunto aberto sai.** Medido em 20/10/2026 com 16 000
+ * casos abertos publicos: `count(*)` dos abertos sozinhos e `count(*)` dos
+ * abertos de dentro da uniao dao o MESMO 16 000. Reencontrado ACRESCENTA; ele
+ * nao desloca nem esconde pet que ainda esta na rua -- o que ele disputa e
+ * posicao na pagina, nao presenca na lista.
+ *
+ * ## E o que a uniao NAO resolve, dito aqui porque e visivel ao cliente
+ *
+ * A ordem da rota e `last_seen_at DESC`, e um pet reencontrado foi visto por
+ * ultimo ANTES de voltar: o `last_seen_at` dele e necessariamente mais velho que
+ * o de um caso aberto hoje. MEDIDO com massa realista (reencontrados encerrados
+ * nos ultimos 30 dias, caso durando de 1 a 14 dias): a pagina 1 sai com **20 de
+ * 20 abertos e ZERO reencontrados**, e o primeiro reencontrado cai na **posicao
+ * 250, pagina 13**. O corte da pagina 1 estava em `last_seen_at` de ~2 h atras
+ * e o reencontrado mais recente tinha 27 h.
+ *
+ * Trocar a ordem e decisao de produto, nao de implementacao: ela mexe na lista
+ * pela qual a vizinhanca acha o animal que sumiu. Esta pergunta esta com o
+ * cliente, com os numeros acima.
+ */
+export type ConjuntoDePerdidos = 'padrao' | 'aberto' | 'reencontrado';
+
+/**
+ * A JANELA DO SELO, em dias. Decisao do cliente de 20/10/2026, nas palavras
+ * dele: *"por 30 dias e depois ele expira e sai"*.
+ *
+ * Numero aqui e nao no adaptador porque a isca de borda o importa: ela precisa
+ * montar um caso de 29 dias e um de 31, e dois lugares com o numero dariam uma
+ * isca que mede a copia dela mesma.
+ */
+export const DIAS_DO_SELO_DE_REENCONTRO = 30;
+
+/**
  * O recorte pedido.
  *
  * **`cidade` DEIXOU DE SER OBRIGATÓRIA EM 19/10/2026**, por decisão do cliente:
@@ -68,6 +118,13 @@ export type JanelaDePerdidos = '24h' | '7d' | '30d';
  * aparecer em lista.
  */
 export interface RecorteDePerdidos {
+  /**
+   * Qual conjunto. **Sem `?`, de propósito**: quem monta o recorte tem de
+   * decidir, e `undefined` aqui faria a consulta escolher sozinha num `??`
+   * espalhado por três arquivos. Quem traduz a ausência do parâmetro em
+   * `padrao` é o serviço, num lugar só.
+   */
+  readonly conjunto: ConjuntoDePerdidos;
   /**
    * A cidade pedida, ou **indefinida quando ninguém pediu nenhuma**.
    *
@@ -136,6 +193,22 @@ export interface PerdidoPublico {
    * `Loja` já cometeu.
    */
   readonly chaveDaFoto: string | null;
+  /**
+   * `found_by_community` do contrato: o SELO.
+   *
+   * **Lido do `status` da LINHA, e nunca do conjunto que o pedido escolheu.**
+   * Com a união do conjunto `padrao` (decisão do cliente de 20/10/2026, *"Também
+   * na lista padrão"*), a mesma resposta traz caso aberto e reencontrado lado a
+   * lado — então um valor derivado do pedido marcaria os dois iguais, e o selo
+   * passaria a dizer que o animal voltou na mesma lista em que a vizinhança está
+   * procurando por ele.
+   *
+   * `status = 'closed_reunited'` basta e é honesto: nos conjuntos `padrao` e
+   * `reencontrado`, uma linha encerrada só chega aqui tendo passado pela janela
+   * de 30 dias E pelo `EXISTS` da conversa, que são predicados do `WHERE`. No
+   * conjunto `aberto` nenhuma linha é encerrada, então ele sai falso sem custo.
+   */
+  readonly encontradoPelaComunidade: boolean;
 }
 
 export interface PaginaDePerdidos {

@@ -2405,6 +2405,30 @@ export interface AppVersionPolicyTable {
   updated_at: AtualizadoEm;
 }
 
+/**
+ * Quais paginas publicas do site existem de verdade (`20261020000005`).
+ *
+ * Irma de [AppVersionPolicyTable] na forma e **oposta no sentido da ausencia**:
+ * la toda ausencia LIBERA, aqui toda ausencia ESCONDE. O motivo esta no
+ * cabecalho da migracao -- link morto compartilhado num grupo de bairro nao se
+ * desfaz com um `UPDATE`.
+ */
+export interface SitePageAvailabilityTable {
+  /** A pagina, dominio fechado pelo `CHECK`: a mao humana escreve aqui. */
+  page: 'lost_case' | 'poster';
+  /**
+   * A pagina serve 200 com as marcas de Open Graph? **Somente `true` explicito
+   * acende a acao de compartilhar.**
+   *
+   * `Generated` porque a coluna tem `DEFAULT false`: um `INSERT` que omita o
+   * campo nasce desligado, que e o lado seguro.
+   */
+  is_published: Generated<boolean>;
+  /** Quem publicou. Texto livre: quem escreve esta no `psql`. */
+  updated_by: string | null;
+  updated_at: AtualizadoEm;
+}
+
 export interface Database {
   handles: HandlesTable;
   user_connections: UserConnectionsTable;
@@ -2485,6 +2509,7 @@ export interface Database {
   photo_reports: PhotoReportsTable;
   publication_reports: PublicationReportsTable;
   app_version_policy: AppVersionPolicyTable;
+  site_page_availability: SitePageAvailabilityTable;
   'audit.events': AuditEventsTable;
 }
 
