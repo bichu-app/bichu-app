@@ -216,7 +216,7 @@ export function construtorDoConsumoDaJanela(db: DbExecutor, consumo: ConsumoDeJa
   return db
     .updateTable('reauth_tokens')
     .set({ consumed_at: new Date(consumo.agora) })
-    .where('token_hash', '=', Buffer.from(consumo.tokenHash))
+    .where('token_hash', '=', consumo.tokenHash)
     .where('user_id', '=', consumo.userId)
     .where('scope', '=', consumo.escopoExigido)
     .where('access_jti', '=', consumo.acessoJti)
@@ -238,7 +238,7 @@ export function construtorDaLeituraDaJanela(db: DbExecutor, tokenHash: TokenHash
   return db
     .selectFrom('reauth_tokens')
     .select(['id', 'user_id', 'scope', 'access_jti', 'issued_at', 'expires_at', 'consumed_at'])
-    .where('token_hash', '=', Buffer.from(tokenHash));
+    .where('token_hash', '=', tokenHash);
 }
 
 /**
@@ -724,7 +724,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           id: novo.id,
           user_id: novo.userId,
           family_id: novo.familyId,
-          token_hash: Buffer.from(novo.tokenHash, 'base64'),
+          token_hash: novo.tokenHash,
           // Explícito, e não pelo `DEFAULT now()` da coluna: é este valor que
           // `renovar()` compara com `sessions_invalid_before`, que também é
           // gravado pelo relógio da aplicação.
@@ -756,7 +756,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           'rotated_to_id',
           'revoked_at',
         ])
-        .where('token_hash', '=', Buffer.from(hash, 'base64'))
+        .where('token_hash', '=', hash)
         .executeTakeFirst();
 
       if (linha === undefined) return undefined;
@@ -785,7 +785,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             id: sucessor.id,
             user_id: sucessor.userId,
             family_id: sucessor.familyId,
-            token_hash: Buffer.from(sucessor.tokenHash, 'base64'),
+            token_hash: sucessor.tokenHash,
             issued_at: new Date(sucessor.issuedAt),
             expires_at: new Date(sucessor.expiresAt),
             absolute_expires_at: new Date(sucessor.absoluteExpiresAt),
@@ -873,7 +873,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           id: novo.id,
           user_id: novo.userId,
           purpose: novo.proposito,
-          token_hash: Buffer.from(novo.tokenHash),
+          token_hash: novo.tokenHash,
           sent_to: novo.enviadoPara,
           expires_at: new Date(novo.expiraEm),
           created_ip_hmac: novo.ipHmac === null ? null : Buffer.from(novo.ipHmac),
@@ -888,7 +888,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const linha = await db
         .updateTable('verification_tokens')
         .set({ consumed_at: new Date(agora) })
-        .where('token_hash', '=', Buffer.from(hash))
+        .where('token_hash', '=', hash)
         .where('purpose', '=', proposito)
         .where('consumed_at', 'is', null)
         .where('expires_at', '>', new Date(agora))
@@ -904,7 +904,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const linha = await db
         .selectFrom('verification_tokens')
         .select(['user_id', 'sent_to'])
-        .where('token_hash', '=', Buffer.from(hash))
+        .where('token_hash', '=', hash)
         .where('purpose', '=', proposito)
         .where('consumed_at', 'is', null)
         .where('expires_at', '>', new Date(agora))
@@ -929,7 +929,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           user_id: nova.userId,
           access_jti: nova.acessoJti,
           scope: nova.escopo,
-          token_hash: Buffer.from(nova.tokenHash),
+          token_hash: nova.tokenHash,
           issued_at: new Date(nova.emitidaEm),
           expires_at: new Date(nova.expiraEm),
           created_ip_hmac: nova.ipHmac === null ? null : Buffer.from(nova.ipHmac),

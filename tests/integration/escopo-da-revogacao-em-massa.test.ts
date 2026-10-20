@@ -113,7 +113,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
@@ -169,9 +169,17 @@ async function criarConta(): Promise<UserId> {
   return id;
 }
 
-/** Um hash de refresh distinto por chamada, no formato que a porta espera. */
+/**
+ * Um hash de refresh distinto por chamada, no formato que a porta espera: os
+ * **32 bytes** do resumo.
+ *
+ * Eram 16 bytes de um UUID virados em texto base64 -- o formato que `TokenHash`
+ * tinha antes de 19/10, e que a coluna `bytea` recebia como 44 bytes de ASCII.
+ * Agora e `bytea` de verdade, e `refresh_tokens_token_hash_32_bytes` reprova
+ * qualquer outro tamanho.
+ */
 function hashDeRefresh(): TokenHash {
-  return Buffer.from(randomUUID().replaceAll('-', ''), 'hex').toString('base64') as TokenHash;
+  return randomBytes(32) as TokenHash;
 }
 
 interface RefreshCriado {
