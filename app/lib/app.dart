@@ -31,6 +31,9 @@ import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
+import 'api/conversas_api.dart';
+import 'dispositivo/distintivo_do_aplicativo.dart';
+import 'sessao/contadores_de_nao_lido.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
 import 'intencao/achado_como_intencao.dart';
@@ -66,9 +69,20 @@ class BichuApp extends StatefulWidget {
     this.agora,
     this.depositoDaFila,
     this.depositoDeFotos,
+    this.distintivoDoApp,
   });
 
   final AppConfig config;
+
+  /// Injetavel para teste. Em producao e `null`, e `ContadoresDeNaoLido` cai
+  /// em [DistintivoInerte].
+  ///
+  /// **O padrao INERTE e o valor correto de hoje, nao um esboco.** As quatro
+  /// pendencias que o mantem assim estao em `distintivo_do_aplicativo.dart`:
+  /// a carga do push nao leva contagem, o push nao sai, nao ha pacote que
+  /// pinte o numero com o app vivo, e o iOS nao tem a chave APNs. O ponto de
+  /// injecao existe para o portao exercer o caminho sem acender nada.
+  final DistintivoDoAplicativo? distintivoDoApp;
 
   /// Injetavel para teste. Em producao e o chaveiro do sistema.
   final DepositoDeSessao? deposito;
@@ -267,6 +281,14 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
   late final OuvinteDeAvisos _avisosRecebidos;
+  /// A porta de conversas. **Ela nao existia neste arquivo** -- a area de
+  /// mensagens construia a sua propria (`ConversasApi(Escopo.of(context).api)`)
+  /// --, e o contador precisa dela fora de qualquer tela: ele pergunta na
+  /// abertura e na retomada, quando tela de mensagens nao ha.
+  late final ConversasApi _conversas;
+
+  /// O CONTADOR DE NAO LIDO da barra de baixo (20/10/2026).
+  late final ContadoresDeNaoLido _contadores;
 
   /// A consulta ao veredito de versao (19/10/2026). Fica aqui, e nao no
   /// `Escopo`, porque **um unico widget a consome** -- o portao de versao, no
@@ -305,6 +327,22 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _achados = AchadosApi(_api);
     _diretorio = DiretorioApi(_api);
     _loja = LojaApi(_api);
+    // A PORTA DE CONVERSAS NO ESCOPO, e nao so dentro da area de mensagens: o
+    // contador da aba `AuAu` pergunta o numero na abertura e na retomada, e
+    // nos dois momentos nao existe tela de mensagens para ter a porta dela.
+    _conversas = ConversasApi(_api);
+    // O CONTADOR, com o caminho do icone do aplicativo pendurado nele.
+    //
+    // `widget.distintivoDoApp ?? const DistintivoInerte()`: o padrao e o
+    // INERTE, e e o valor correto de hoje -- ver
+    // `distintivo_do_aplicativo.dart` para as quatro pendencias que o mantem
+    // assim. O ponto de injecao existe para o portao poder exercer o caminho
+    // sem acender nada, e e por ele que a implementacao de verdade entra no
+    // dia em que o push sair.
+    _contadores = ContadoresDeNaoLido(
+      _conversas,
+      distintivo: widget.distintivoDoApp,
+    );
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -481,6 +519,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // esta certo. A isca esta em
         // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
         _avisoDeCadastro.limpar,
+        // O CONTADOR ENTRA AQUI, e pelo mesmo critério das linhas acima: o
+        // numero e da CONTA. `esquecer()` o devolve a NULO -- "ninguem contou
+        // ainda" -- e nao a zero: zero afirmaria que a conta que acabou de
+        // sair nao tinha recado nenhum, e a aba pintaria essa afirmacao para
+        // quem nem conta tem. Sem esta linha, o tutor seguinte neste aparelho
+        // veria na aba `AuAu` o numero de mensagens do anterior.
+        () async => _contadores.esquecer(),
       ],
       // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
       // paga o preco da correcao do servidor.
@@ -505,7 +550,15 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       // mantem `OportunidadesDeAviso` fora dela. Zerar no logout tambem seria
       // redundante, porque `esquecerEReconciliar` zera no login seguinte, que
       // e o unico momento em que ha sessao para registrar o aparelho.
-      aoEntrar: <AoEntrar>[_vigiaDeAviso.esquecerEReconciliar],
+      // O CONTADOR PERGUNTA DEPOIS DE TODO LOGIN, e mora aqui pelo mesmo
+      // motivo do re-registro do aparelho: sao quatro caminhos de login hoje e
+      // nada garante que o quinto lembre. Sem esta entrada, quem acaba de
+      // entrar com doze recados na caixa ve a aba `AuAu` apagada ate a
+      // primeira retomada do app.
+      aoEntrar: <AoEntrar>[
+        _vigiaDeAviso.esquecerEReconciliar,
+        _contadores.atualizar,
+      ],
     );
     _roteador = criarRoteador(_sessao);
     _arrancar();
@@ -535,6 +588,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     await _avisosRecebidos.ligar();
     await _retomarAsFotos();
     await _drenarAFila();
+    // O CONTADOR DA ABA `AuAu`, uma chamada por abertura do app.
+    //
+    // Por ultimo de proposito: ele e o menos urgente dos quatro -- a fila
+    // carrega caso de pet sumido, e um numero na aba pode esperar uma volta do
+    // laco de eventos. **Atras da sessao, como os dois acima**: a rota e
+    // `bearerAuth`, e a guarda vive dentro de `_contarNaoLidas`.
+    await _contarNaoLidas();
   }
 
   /// A fila offline sai do disco. **O primeiro dos DOIS momentos**; o outro e a
@@ -594,10 +654,44 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   ///
   /// `unawaited` porque o ciclo de vida nao tem como esperar, e a varredura nao
   /// pode segurar a volta do app. A falha e tratada dentro de `_drenarAFila`.
+  /// O contador da aba `AuAu` pergunta ao servidor. **Atras da sessao.**
+  ///
+  /// `GET /v1/conversations` e `bearerAuth`: sem token ela responde 401, e uma
+  /// pergunta no arranque de quem esta deslogado gastaria uma requisicao para
+  /// receber um erro. A guarda e a mesma de `_drenarAFila` e de
+  /// `_retomarAsFotos`, e por isso tem a mesma forma.
+  ///
+  /// **Deslogado o contador fica NULO e nao zero**, e e `esquecer()` quem
+  /// garante isso no logout: sair da conta nao e a afirmacao de que nao ha
+  /// mensagem.
+  ///
+  /// A falha da chamada e engolida DENTRO de `atualizar()`, com o motivo
+  /// escrito la: um numero velho e mais verdadeiro que um zero inventado.
+  Future<void> _contarNaoLidas() async {
+    try {
+      if (await _sessao.tokenValido() == null) return;
+      await _contadores.atualizar();
+    } on Object {
+      return;
+    }
+  }
+
+  /// O app voltou para o primeiro plano: a fila drena **e o contador pergunta**.
+  ///
+  /// **A retomada e a politica inteira de atualizacao do contador, junto com a
+  /// abertura e com a propria area de mensagens -- e NAO HA INTERVALO.** A
+  /// razao, com o custo em requisicoes, esta em `ContadoresDeNaoLido`. O preco
+  /// esta dito la em voz alta: com o app aberto parado em outra aba, o numero
+  /// so muda na proxima retomada. Instagram e LinkedIn resolvem isso por push,
+  /// e o push deste produto nao sai.
+  ///
+  /// `unawaited` pelo mesmo motivo da fila: o ciclo de vida nao espera, e um
+  /// contador nao pode segurar a volta do app.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(_drenarAFila());
+    unawaited(_contarNaoLidas());
   }
 
   @override
@@ -642,6 +736,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       cidadeEscolhida: _cidadeEscolhida,
       cofreDoQr: _cofreDoQr,
       avisoDeCadastro: _avisoDeCadastro,
+      contadores: _contadores,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,

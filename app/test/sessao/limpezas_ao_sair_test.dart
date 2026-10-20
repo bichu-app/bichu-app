@@ -56,6 +56,8 @@ import 'package:http/http.dart' as http;
 import '../api/pets_api_listar_test.dart' show petDoContrato;
 import '../telas/a_foto_sobe_de_verdade_test.dart'
     show grupoDaIscaDaFotoPendente;
+import '../telas/contador_do_auau_test.dart'
+    show grupoDaIscaDoContadorNoLogout;
 import '../telas/ajuda_de_tela.dart';
 
 /// O nome do grupo desta isca, escrito uma vez so.
@@ -131,6 +133,23 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
   '_avisoDeCadastro': (
     arquivo: 'test/sessao/registro_do_aviso_de_cadastro_test.dart',
     grupo: 'ISCA — o registro SOME no logout',
+  ),
+  // ACRESCENTADA PELO CONTADOR DE NAO LIDO DA ABA `AuAu` (20/10/2026).
+  //
+  // A unica entrada da lista que NAO guarda em disco e e VISIVEL: as outras
+  // apagam dado que vive em memoria ou em arquivo, e o pior caso delas e uma
+  // leitura. Este numero esta PINTADO na barra de baixo, e a barra aparece
+  // deslogada de proposito -- deslogado e estado de navegacao, nao muro. Sem
+  // esta entrada, a proxima pessoa a abrir o app neste aparelho ve na aba
+  // `AuAu` quantos recados a anterior tinha, sem precisar entrar em conta
+  // nenhuma.
+  //
+  // E a limpeza e `esquecer()`, que devolve o contador a NULO -- "ninguem
+  // contou ainda" -- e nao a zero: zero afirmaria que a conta que saiu nao
+  // tinha recado nenhum, e a barra pintaria essa afirmacao.
+  '_contadores': (
+    arquivo: 'test/telas/contador_do_auau_test.dart',
+    grupo: grupoDaIscaDoContadorNoLogout,
   ),
 };
 

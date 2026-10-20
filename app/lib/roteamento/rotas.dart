@@ -1086,7 +1086,22 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
       GoRoute(
         path: RotasDeMensagens.area,
-        builder: (context, estado) => const AreaDeMensagens(),
+        builder: (context, estado) {
+        // AS DUAS COSTURAS DO CONTADOR DA ABA `AuAu` (20/10/2026).
+        //
+        // Elas sao ligadas AQUI, e nao dentro da tela, porque o contador mora
+        // no `Escopo` e a tela nao conhece a barra -- que e exatamente a razao
+        // pela qual `AreaDeMensagens` publica por callback em vez de ler um
+        // estado global.
+        //
+        // `aoContarNaoLidas` nao custa requisicao nenhuma: o numero vem na
+        // resposta que a lista ja pediu.
+        final contadores = Escopo.of(context).contadores;
+        return AreaDeMensagens(
+          aoContarNaoLidas: contadores.definir,
+          aoVerAArea: contadores.marcarMensagensVistas,
+        );
+      },
       ),
       // A CONVERSA, pelo id. **E este o destino do toque na notificacao do
       // aviso ao tutor**, e por isso ela nao pode faltar: sem esta rota o

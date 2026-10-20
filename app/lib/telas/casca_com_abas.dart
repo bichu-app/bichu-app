@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
+import '../sessao/contadores_de_nao_lido.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../widgets/arrastar_para_atualizar.dart';
 import '../widgets/aviso_que_chegou.dart';
@@ -204,6 +205,46 @@ class DestinoDeNavegacao {
   /// pelo texto visivel contido no nome. Por o reforco antes quebra o comando
   /// em alguns motores; depois, nunca quebra.
   String get semanticsLabel => '$rotulo, $reforcoAcessivel';
+
+  /// O nome acessivel QUANDO HA CONTAGEM, com o numero por extenso e INTEIRO.
+  ///
+  /// Pedido do cliente (20/10/2026): o numero na aba tem de significar algo
+  /// para quem ouve a tela -- `AuAu, 3 mensagens novas`, e nunca `3`.
+  ///
+  /// **A contagem entra DEPOIS do rotulo e ANTES do reforco**, e as duas
+  /// posicoes sao decididas:
+  ///
+  ///   * depois do rotulo, porque o SC 2.5.3 exige o texto visivel primeiro e
+  ///     literal: quem usa comando de voz diz "tocar em AuAu";
+  ///   * no lugar do reforco e nao somado a ele, porque `AuAu, 3 mensagens
+  ///     novas` ja DIZ o assunto -- `AuAu, 3 mensagens novas, mensagens`
+  ///     repetiria a palavra que o leitor de tela acabou de ler.
+  ///
+  /// **O numero vai INTEIRO, e e aqui que isso importa.** O distintivo pintado
+  /// encurta em `9+` porque o circulo nao cresce; essa restricao e de quem VE,
+  /// e aplica-la a quem ouve seria contar "nove mais" a quem tem 23. Com 100 e
+  /// com 1000 o rotulo diz 100 e 1000, e o pintado continua `9+`.
+  /// **O substantivo e `mensagem` porque `AuAu` e a UNICA aba com fonte
+  /// medida.** As outras quatro -- pet novo na regiao, evento novo,
+  /// profissional novo, publicacao de quem a pessoa segue -- nao tem de onde
+  /// contar hoje (a tabela, o marcador de "ja vi", ou os dois), e por isso
+  /// nenhuma delas chama este metodo. O `assert` abaixo e quem impede que a
+  /// proxima pessoa o chame para `Pets` e receba "3 mensagens novas" numa aba
+  /// de pets: quando houver fonte para outra aba, o substantivo entra no
+  /// registro do destino, e nao aqui.
+  String nomeAcessivelCom(int? naoLidas) {
+    final selo = DistintivoDaAba.textoDe(naoLidas);
+    if (selo == null) return semanticsLabel;
+    assert(
+      campoSemantico == CampoSemantico.conversa,
+      'nomeAcessivelCom diz "mensagens novas", e esta aba e $rotulo. A unica '
+      'aba com fonte de contagem medida e AuAu; para outra aba, o substantivo '
+      'tem de entrar no registro do destino.',
+    );
+    final n = naoLidas!;
+    final plural = n == 1 ? 'mensagem nova' : 'mensagens novas';
+    return '$rotulo, $n $plural';
+  }
 }
 
 /// A casca de navegacao: **cinco** destinos, barra sempre visivel, **inclusive
@@ -680,6 +721,12 @@ class _CascaComAbasState extends State<CascaComAbas> {
     // a barra afirmando uma secao em que a pessoa nao esta, que e pior que
     // nenhuma acesa. Quem mostra onde ela esta e o avatar da barra de topo.
     final selecionado = ramos.indexOf(navegacao.currentIndex);
+    // O CONTADOR DE NAO LIDO, do escopo (20/10/2026).
+    //
+    // Do escopo e nao do `State` desta casca: o numero e da CONTA, quem o
+    // atualiza na abertura e na retomada e o `app.dart`, e quem o derruba e a
+    // area de mensagens -- que e outro ramo. Uma copia aqui perderia as tres.
+    final contadores = Escopo.of(context).contadores;
     return Scaffold(
       key: _casca,
       // **A GAVETA FOI OCULTADA EM 19/10/2026, e quem decidiu foi ele.**
@@ -729,7 +776,57 @@ class _CascaComAbasState extends State<CascaComAbas> {
           Expanded(child: navegacao),
         ],
       ),
-      bottomNavigationBar: DecoratedBox(
+      // **SO A BARRA RECONSTROI quando o numero muda**, e nao a casca inteira:
+      // o `body` carrega o `StatefulNavigationShell` com as cinco secoes
+      // dentro, e reconstruir aquilo por causa de um digito seria pagar a
+      // arvore toda a cada mensagem que chega.
+      bottomNavigationBar: ListenableBuilder(
+        listenable: contadores,
+        builder: (context, _) => _barraDeBaixo(
+          context,
+          cores: cores,
+          visiveis: visiveis,
+          ramos: ramos,
+          selecionado: selecionado,
+          navegacao: navegacao,
+          naoLidasDe: (destino) => _naoLidasDaAba(destino, contadores),
+        ),
+      ),
+    );
+  }
+
+  /// Quantas nao lidas ESTA aba mostra, ou **nulo**.
+  ///
+  /// **Nulo para quatro das cinco abas, e isso e medido e nao provisorio por
+  /// descuido.** So `AuAu` tem fonte: `unread_count` de
+  /// `GET /v1/conversations`, da conta inteira, com a autorizacao no `WHERE` do
+  /// servidor. `Pets`, `Rede`, `Mural` e `Loja` devolvem nulo porque nao ha de
+  /// onde contar -- a tabela, o marcador de "ja vi", ou os dois. A conta
+  /// completa esta em `ContadoresDeNaoLido`.
+  ///
+  /// **Nulo nao e zero.** Aba sem fonte nao mostra zero nem erro: nao mostra
+  /// NADA. Um `0` pintado em `Mural` afirmaria que ninguem que a pessoa segue
+  /// publicou -- e nao existe nem a tabela de publicacao para afirmar isso.
+  static int? _naoLidasDaAba(
+    DestinoDeNavegacao destino,
+    ContadoresDeNaoLido contadores,
+  ) {
+    if (destino.campoSemantico != CampoSemantico.conversa) return null;
+    return contadores.mensagens;
+  }
+
+  /// A barra de baixo. Extraida do `build` so para o `ListenableBuilder` acima
+  /// ter um corpo legivel; nenhuma decisao mudou de lugar com ela.
+  Widget _barraDeBaixo(
+    BuildContext context, {
+    required BichuCores cores,
+    required List<DestinoDeNavegacao> visiveis,
+    required List<int> ramos,
+    required int selecionado,
+    required StatefulNavigationShell navegacao,
+    required int? Function(DestinoDeNavegacao) naoLidasDe,
+  }) {
+    return DecoratedBox(
         // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
         // system 22.1): a barra usa `surface`, que esta a 1,04:1 do corpo da
         // pagina, e sem o filete ela **nao existe visualmente**.
@@ -769,6 +866,9 @@ class _CascaComAbasState extends State<CascaComAbas> {
           },
           destinations: <Widget>[
             for (final destino in visiveis)
+              // O NUMERO DA ABA (20/10/2026). `naoLidasDe` devolve nulo para
+              // as quatro abas sem fonte, e nulo nao pinta nada -- nem zero,
+              // nem erro.
               // O nome acessivel entra num `Semantics` que embrulha o destino,
               // e nao no `label`: o `label` e o texto **pintado**, e ele
               // precisa continuar sendo a palavra curta que cabe em 64,0 dp.
@@ -778,15 +878,21 @@ class _CascaComAbasState extends State<CascaComAbas> {
               // o criterio 7 pede que a aba ativa seja identificavel sem
               // depender de cor.
               Semantics(
-                label: destino.semanticsLabel,
+                label: destino.nomeAcessivelCom(naoLidasDe(destino)),
                 child: NavigationDestination(
                   // O icone e **decorativo** e nao entra na arvore: icone com
                   // nome proprio ao lado de um rotulo que diz a mesma coisa e
                   // anuncio duplo, que e ruido no VoiceOver e no TalkBack
                   // (UX 27.7, regra 2). `Icon` sem `semanticLabel` ja nao
                   // entra.
-                  icon: Icon(destino.icone),
-                  selectedIcon: Icon(destino.iconeSelecionado),
+                  icon: DistintivoDaAba(
+                    glifo: Icon(destino.icone),
+                    naoLidas: naoLidasDe(destino),
+                  ),
+                  selectedIcon: DistintivoDaAba(
+                    glifo: Icon(destino.iconeSelecionado),
+                    naoLidas: naoLidasDe(destino),
+                  ),
                   label: destino.rotulo,
                   // O tooltip continua sendo **so o rotulo visivel**: ele e
                   // dica visual de quem pressiona e segura, e um paragrafo ali
@@ -797,7 +903,120 @@ class _CascaComAbasState extends State<CascaComAbas> {
             ],
           ),
         ),
-      ),
+      );
+  }
+}
+
+/// O DISTINTIVO DA ABA: numero por cima do glifo, e cor como REFORCO.
+///
+/// Pedido do cliente (20/10/2026), literal: *"o icone do auau vai ficar de
+/// outra cor com o +1, +2 dependendo a quantidade de mensagens não lida"*.
+///
+/// ## O NUMERO e o sinal primario, e a cor nao vai sozinha (SC 1.4.1)
+///
+/// Ele pediu as duas coisas, e a ordem entre elas e decisao de desenho: **o
+/// numero e o que informa, a cor e o que chama o olho**. Cor sozinha nao
+/// comunica -- e exatamente a decisao que este projeto ja tomou em 19/10,
+/// quando o cinza da foto de evento cancelado saiu por ser sinal so por cor.
+/// Entao o distintivo **nunca** aparece sem numero: nao existe estado "aba
+/// colorida e sem digito". Quem nao distingue a cor le o digito, e quem nao
+/// ve nenhum dos dois ouve [DestinoDeNavegacao.nomeAcessivelCom].
+///
+/// ## POR CIMA DO GLIFO, e e isso que salva o rotulo
+///
+/// O slot da aba e de **64,00 dp** em 320 dp, e os cinco rotulos ja gastam
+/// 37,15 a 50,90 dp dele. Um distintivo AO LADO do rotulo entraria nessa
+/// disputa e `Mural`, com 13,10 dp de folga, seria o primeiro a quebrar.
+/// Desenhado sobre o glifo -- que e centrado e mede 24 dp --, ele gasta a
+/// folga VERTICAL do slot e **nao toca na largura do rotulo**: o `Positioned`
+/// sai do fluxo, e o `Stack` toma o tamanho do icone. As larguras com 1, 2 e 3
+/// digitos estao medidas em `test/telas/contador_do_auau_test.dart`.
+///
+/// ## O TETO E `9+`, e ele e herdado de proposito
+///
+/// `seloDoContador` em `modelos_conversa.dart` e `SinoDeNotificacoes` ja
+/// cortam em `9+`, e **a mesma ideia nao pode ter dois recortes no mesmo
+/// app**: um `99+` aqui faria a barra de baixo e a de cima discordarem sobre o
+/// que "muitos" quer dizer, para o mesmo numero, na mesma tela. O argumento
+/// contra esta escrito no proprio arquivo do sino -- *"duas tintas diferentes
+/// para a mesma ideia de 'ha algo novo aqui' seriam duas linguagens no mesmo
+/// app"* --, e vale igual para dois tetos.
+///
+/// **Com 100 e com 1000 o pintado e `9+` e o anunciado e `100` e `1000`**, e e
+/// por isso que o teto nao mente: a perda de informacao fica so em quem ve, e
+/// quem ve tem o rotulo acessivel e a propria aba a um toque. O teto escolhido
+/// NAO e por falta de espaco -- tres digitos cabem, e esta medido --, e sim por
+/// unidade de linguagem; se ele mudar um dia, muda nos tres lugares de uma vez.
+class DistintivoDaAba extends StatelessWidget {
+  const DistintivoDaAba({required this.glifo, required this.naoLidas, super.key});
+
+  /// O icone da aba, do registro do destino.
+  final Widget glifo;
+
+  /// Quantas, ou **nulo**. Nulo e "ninguem contou ainda" e nao pinta nada.
+  ///
+  /// **Nulo nao e zero**, e nesta aba a diferenca e visivel: zero seria a
+  /// afirmacao de que nao ha mensagem nova, e so o servidor pode fazer essa
+  /// afirmacao. A aba sem fonte -- que hoje sao as outras quatro -- nao mostra
+  /// zero nem erro: nao mostra NADA.
+  final int? naoLidas;
+
+  /// O que o distintivo PINTA, ou nulo quando nao ha o que pintar.
+  ///
+  /// Mesmo recorte de `seloDoContador` e de `SinoDeNotificacoes.distintivoDe`,
+  /// e repetido aqui em vez de importado de um dos dois: o do sino e privado da
+  /// barra de topo e o de `modelos_conversa.dart` e da camada de API, e a aba
+  /// nao deve depender de nenhum dos dois para desenhar. O portao de
+  /// `test/telas/contador_do_auau_test.dart` cobra que os tres continuem
+  /// concordando.
+  static String? textoDe(int? naoLidas) {
+    if (naoLidas == null || naoLidas <= 0) return null;
+    return naoLidas > 9 ? '9+' : '$naoLidas';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = textoDe(naoLidas);
+    if (texto == null) return glifo;
+
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Stack(
+      // `Clip.none`: o distintivo passa da caixa do glifo de proposito, e
+      // cortar aqui comeria o digito em vez de mover o desenho.
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        // A COR DE REFORCO MORA AQUI, no glifo, e e o "icone de outra cor" que
+        // ele pediu. Ela acompanha o distintivo e nunca aparece sozinha: as
+        // duas saem do mesmo `texto != null`.
+        IconTheme.merge(data: IconThemeData(color: cores.primary), child: glifo),
+        Positioned(
+          right: -BichuEspaco.e1,
+          top: -BichuEspaco.e1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: BichuEspaco.e1),
+            constraints: const BoxConstraints(minWidth: BichuEspaco.e4),
+            // Os MESMOS papeis do distintivo do sino e do de filtros
+            // (`primary` sobre `onActionFill`). Cor escrita a mao reprova no
+            // portao de tokens, e uma tinta de alerta propria seria a terceira
+            // linguagem para a mesma ideia.
+            decoration: BoxDecoration(
+              color: cores.primary,
+              borderRadius: BorderRadius.circular(BichuRaio.full),
+            ),
+            child: Text(
+              texto,
+              textAlign: TextAlign.center,
+              // **NAO ANUNCIA.** Quem anuncia e o `Semantics` da aba, com o
+              // numero INTEIRO; deixar este `Text` na arvore faria o leitor de
+              // tela dizer `9+` depois de dizer `12`.
+              semanticsLabel: '',
+              style: textos.labelSmall?.copyWith(color: cores.onActionFill),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
