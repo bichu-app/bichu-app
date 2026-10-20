@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/contadores_api.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../sessao/controlador_de_sessao.dart';
@@ -125,6 +128,23 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
   late final TabController _abas = TabController(length: 2, vsync: this);
 
   @override
+  void initState() {
+    super.initState();
+    // A SUB-ABA EM QUE A SECAO ABRE TAMBEM FOI VISTA (BICHUS-278).
+    //
+    // Sem esta linha, o selo da `Rede` nunca zeraria a parcela de `Eventos`
+    // para quem abre a secao e nao troca de aba -- que e o caminho normal, ja
+    // que `Eventos` e a aba inicial. O marcador por sub-aba so funciona se a
+    // sub-aba INICIAL contar como vista.
+    //
+    // `addPostFrameCallback` porque `Escopo.of` depende do `InheritedWidget`
+    // acima, e `initState` corre antes de `didChangeDependencies`.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _marcarVista(_aba);
+    });
+  }
+
+  @override
   void dispose() {
     _abas.dispose();
     super.dispose();
@@ -133,6 +153,26 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
   void _trocarAba(AbaDaSecaoRede aba) {
     if (aba == _aba) return;
     setState(() => _aba = aba);
+    // TROCAR DE SUB-ABA E UMA VISITA NOVA, e e aqui que o marcador separado se
+    // paga: `Eventos` e `Comunidade` tem marcadores DIFERENTES
+    // (`section_list_views`), entao ver uma derruba so a parcela dela e o selo
+    // da aba `Rede` -- que e a SOMA das duas -- desce em dois passos.
+    //
+    // Um marcador unico para a secao faria entrar em `Eventos` apagar a
+    // contagem de `Comunidade`: o app teria afirmado que a pessoa viu um
+    // profissional novo que nunca apareceu na tela dela.
+    _marcarVista(aba);
+  }
+
+  /// Avisa o contador de que esta sub-aba foi vista. **A falha e engolida
+  /// dentro de `marcarSecaoVista`**, pelo mesmo motivo da lista de perdidos:
+  /// isto nao e dado que a pessoa pediu.
+  void _marcarVista(AbaDaSecaoRede aba) {
+    final secao = switch (aba) {
+      AbaDaSecaoRede.eventos => SecaoComContador.eventosDaRede,
+      AbaDaSecaoRede.comunidade => SecaoComContador.comunidadeDaRede,
+    };
+    unawaited(Escopo.of(context).contadores.marcarSecaoVista(secao));
   }
 
   @override

@@ -1112,6 +1112,28 @@ export interface ConversationListViewsTable {
 }
 
 /**
+ * BICHUS-278 (20/10/2026) -- quando a conta VIU cada area com contador.
+ *
+ * Irma de {@link ConversationListViewsTable}, com a area como VALOR e nao como
+ * coluna. Zera o selo da aba e **nao** marca item nenhum como lido. Por conta e
+ * nao por aparelho, pelo mesmo motivo da irma.
+ *
+ * `network_events` e `network_directory` sao duas linhas de proposito: as duas
+ * contagens caem na mesma aba `Rede`, que tem um selo so, mas entrar numa
+ * sub-aba nao pode zerar a contagem da outra -- isso afirmaria que a pessoa viu
+ * um profissional que nunca apareceu na tela dela.
+ */
+export type SecaoComContador = 'pets' | 'network_events' | 'network_directory';
+
+export interface SectionListViewsTable {
+  /** Metade da PK, e FK para `users`. A outra metade e `section`. */
+  user_id: string;
+  section: SecaoComContador;
+  /** Sem `DEFAULT` no banco: a linha nao pode nascer dizendo que viu. */
+  seen_at: Date;
+}
+
+/**
  * BICHUS-66. Os cinco estados da troca de tutor.
  *
  * `accepted` e o unico que carrega prazo: dele para `effective` passam 24 h em
@@ -2248,6 +2270,7 @@ export interface Database {
   conversation_messages: ConversationMessagesTable;
   conversation_reads: ConversationReadsTable;
   conversation_list_views: ConversationListViewsTable;
+  section_list_views: SectionListViewsTable;
   conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;

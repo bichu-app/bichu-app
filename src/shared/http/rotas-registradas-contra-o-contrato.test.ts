@@ -69,6 +69,7 @@ import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/adm
 // 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import * as contadoresDeSecao from '../../modules/sections/adapters/http/section-counter-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
 // 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
@@ -154,6 +155,11 @@ const MODULOS: readonly Record<string, unknown>[] = [
   saude,
   // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
   caixaDeNotificacoes,
+  // 20/10/2026. Os contadores das abas `Pets` e `Rede` (2 rotas). Modulo novo
+  // entra AQUI: sem esta linha o ultimo caso deste arquivo reprova contando
+  // `defineRoute` no disco, e o primeiro reprova por operacao do contrato sem
+  // rota -- os dois acusaram a ausencia na primeira execucao da suite.
+  contadoresDeSecao,
   comunicadosAdministrativos,
   // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
   // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele

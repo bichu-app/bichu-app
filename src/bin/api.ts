@@ -51,6 +51,12 @@ import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http
 // duas moram em `notifications` pelo mesmo argumento que trouxe o aparelho para
 // ca: o modulo e o do aviso, e nao o da identidade.
 import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import { registrarRotasDosContadoresDeSecao } from '../modules/sections/adapters/http/section-counter-routes.js';
+import { criarContadoresDeSecaoService } from '../modules/sections/application/contadores-de-secao-service.js';
+import { criarMarcadoresDeSecao } from '../modules/sections/adapters/persistence/kysely-marcadores-de-secao.js';
+import { criarContagemDePerdidosNovos } from '../modules/lostfound/adapters/persistence/kysely-contagem-de-perdidos-novos.js';
+import { criarContagemDeEventosNovos } from '../modules/network/adapters/persistence/kysely-contagem-de-eventos-novos.js';
+import { criarContagemDeEntradasNovas } from '../modules/professionals/adapters/persistence/kysely-contagem-de-entradas-novas.js';
 import { registrarRotasDeComunicado } from '../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import { criarCaixaDeNotificacoes } from '../modules/notifications/adapters/persistence/kysely-caixa-de-notificacoes.js';
 import { criarRepositorioDeComunicados } from '../modules/notifications/adapters/persistence/kysely-comunicados.js';
@@ -729,6 +735,29 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // OS CONTADORES DAS ABAS `Pets` E `Rede` (BICHUS-278, cliente 20/10/2026).
+  // Mesmo molde da caixa: o modulo recebe um `autenticar` e nao o servico de
+  // identidade. Cada contagem REUSA o construtor da propria listagem, e e
+  // isso que impede o selo de contar um recorte diferente do que a aba abre --
+  // a conta esta no cabecalho de cada um dos tres adaptadores de contagem.
+  const dependenciasDasRotasDosContadores = {
+    contadores: criarContadoresDeSecaoService({
+      // O MARCADOR e deste modulo; as TRES CONTAGENS sao de quem tem a tabela.
+      // A fronteira de modulo reprova quem alcanca `adapters` alheio, e o
+      // desenho que saiu dessa reprovacao e melhor: cada contagem mora ao lado
+      // da listagem com que ela tem de concordar.
+      marcadores: criarMarcadoresDeSecao(db),
+      perdidos: criarContagemDePerdidosNovos(db),
+      eventos: criarContagemDeEventosNovos(db),
+      diretorio: criarContagemDeEntradasNovas(db),
+      clock: systemClock,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
   // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
   // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
@@ -1180,6 +1209,7 @@ export async function main(): Promise<void> {
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
+    registrarRotasDosContadoresDeSecao(escopo, dependenciasDasRotasDosContadores);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
