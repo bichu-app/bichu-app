@@ -1500,7 +1500,20 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
 /// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
 /// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
-const String _arvoreDasTelas = 'c46ae91fdb80c21c16742669fb38d8d1e83a2e4c'; // LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+///
+/// [lado do ramo feat/versao-minima-do-app, valor de ramo 6622873a56] VERSAO MINIMA DO APP (19/10/2026, pedido do cliente): a pasta NOVA `app/lib/telas/atualizacao/` entrou com a tela de bloqueio, o aviso brando, os textos e o portao. Valor MEDIDO pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves: em zsh, sem elas o `$T:app/...` aplica o modificador `:a` e devolve caminho absurdo em SILENCIO), sobre `f8c74714`. Valor anterior: `145640db9fb6764eccb543b350c43caef8e2f2b3` (uniao das quatorze, 18/10). Nenhum dos quatro arquivos novos encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege: a tela de bloqueio abre o link da loja pela porta `SaidaDoApp`, como `pagina_do_local` e `lista_do_diretorio`, e o portao de diretivas abaixo continua respondendo por isso sem depender desta constante. **QUEM MESCLAR RECALCULA SOBRE A ARVORE MESCLADA**: ha um lote de 19/10 em mescla, e valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA MESCLA (19/10/2026, A VERSAO QUE O APP MANDA).** Nenhum dos
+/// dois valores acima sobrevive: `c46ae91fdb` e de `origin/development` e
+/// `6622873a56` e do ramo do bloqueio por versao, e os DOIS lados tocam
+/// `app/lib/telas`. Este valor foi RECALCULADO sobre a arvore MESCLADA pelo
+/// procedimento deste proprio portao (`GIT_INDEX_FILE` temporario,
+/// `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves: em zsh, sem elas o shell
+/// aplica o modificador `:a` e devolve caminho absoluto em SILENCIO), e nao
+/// copiado de ramo nem de relato. As justificativas dos dois lados ficaram
+/// INTEIRAS acima, de proposito.
+const String _arvoreDasTelas = '0a06fa54046ec281cbc65bf0faea63bfca78017f'; // MESCLA DE `feat/versao-minima-do-app` COM `origin/development` (19/10/2026): recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os dois valores de ramo: 6622873a566c3176eb78b427d408827e2b2e3848 (bloqueio por versao) e c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (lote de 19/10 na development). Justificativa do lado development: LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

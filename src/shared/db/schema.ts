@@ -2179,6 +2179,32 @@ export interface PublicationReportsTable extends DenunciaDaComunidade {
     | 'other';
 }
 
+export interface AppVersionPolicyTable {
+  /**
+   * A chave. Politica por plataforma e requisito: hoje so o Android e
+   * publicado (decisao do cliente de 23/09) e o iOS esta dormente, instalado
+   * por cabo com provisionamento gratuito. Uma politica unica bloquearia o
+   * build de cabo junto, e naquele build "va para a loja" e instrucao
+   * impossivel.
+   */
+  platform: 'android' | 'ios';
+  /**
+   * Abaixo desta versao o aplicativo FECHA. **Nula = ninguem bloqueado**, e e
+   * assim que a migracao `20261019000007` a semeia.
+   *
+   * Sem `Generated`: o `DEFAULT` nao existe de proposito. Um padrao aqui seria
+   * um numero que ninguem escolheu trancando aparelho de verdade.
+   */
+  minimum_version: string | null;
+  /** A partir desta versao o app so AVISA, de forma dispensavel. Nula = sem aviso. */
+  recommended_version: string | null;
+  /** Destino do botao. Nula hoje: nao ha loja. Nula, o app nao desenha botao. */
+  store_url: string | null;
+  /** Quem trocou o numero. Texto livre: quem escreve esta no `psql`. */
+  updated_by: string | null;
+  updated_at: AtualizadoEm;
+}
+
 export interface Database {
   handles: HandlesTable;
   user_connections: UserConnectionsTable;
@@ -2254,6 +2280,7 @@ export interface Database {
   profile_reports: ProfileReportsTable;
   photo_reports: PhotoReportsTable;
   publication_reports: PublicationReportsTable;
+  app_version_policy: AppVersionPolicyTable;
   'audit.events': AuditEventsTable;
 }
 
