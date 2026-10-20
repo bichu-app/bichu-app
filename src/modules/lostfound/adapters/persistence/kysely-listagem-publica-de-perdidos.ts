@@ -138,9 +138,9 @@
  * que é a contenção que existe hoje. Criar o índice é uma migração, e migração
  * não entrou neste trabalho.
  */
-import { sql, type SqlBool } from 'kysely';
+import { sql, type ExpressionBuilder, type SqlBool } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
-import type { StatusDoPet } from '../../../../shared/db/schema.js';
+import type { Database, StatusDoPet } from '../../../../shared/db/schema.js';
 import {
   DIAS_DO_SELO_DE_REENCONTRO,
   type JanelaDePerdidos,
@@ -215,20 +215,20 @@ export function construtorDaListagemPublicaDePerdidos(
         .on('pet_photos.deleted_at', 'is', null),
     );
 
-  // 1. O ESTADO DO CASO, e ele é um RAMO e não um filtro (decisão do cliente de
-  //    20/10/2026: *"o pet ganha um selo/filtro na pagina de pets como
-  //    encontrado por 30 dias e depois ele expira e sai"*).
+  // 1. O ESTADO DO CASO. Decisão do cliente de 20/10/2026, em duas rodadas do
+  //    mesmo dia: primeiro *"o pet ganha um selo/filtro na pagina de pets como
+  //    encontrado por 30 dias e depois ele expira e sai"*; depois, perguntado se
+  //    o reencontrado devia aparecer só no filtro ou também na lista de sempre,
+  //    **"Também na lista padrão"**.
   //
-  // **O ramo `aberto` ocupa a posição EXATA do predicado que estava escrito
-  // aqui**, e isso não é capricho de diagramação: com ele nesta posição, o SQL
-  // compilado do conjunto de casos abertos é IDÊNTICO, caractere por caractere,
-  // ao de antes desta mudança — mesmos predicados, mesma ordem, mesmos
-  // parâmetros. A lista que a vizinhança abre para achar o animal que sumiu é a
-  // consulta mais cara de mexer deste produto, e a forma de não mexer nela é
-  // essa. `selo-de-reencontro-na-listagem.test.ts` compara os dois textos.
+  // São TRÊS conjuntos, e o `padrao` é a UNIÃO:
   //
-  // O ramo `reencontrado` acrescenta TRÊS predicados, e os três são obrigatórios
-  // juntos — um sem o outro é um selo errado numa superfície pública:
+  //   padrao        status = 'open'  OU  (reencontrado na janela, com conversa)
+  //   aberto        status = 'open'
+  //   reencontrado  status = 'closed_reunited' AND janela AND conversa
+  //
+  // Os TRÊS predicados do lado reencontrado andam juntos, e um sem o outro é um
+  // selo errado numa superfície pública:
   //
   //   a) `status = 'closed_reunited'`. Encerramento `not_found` e `false_alarm`
   //      não entram em janela nenhuma: `not_found` é a busca que não acabou bem,
@@ -243,6 +243,20 @@ export function construtorDaListagemPublicaDePerdidos(
   //      `INSERT` dos dois exige `pets.owner_user_id IS DISTINCT FROM` quem
   //      avisa — então tutor que lê a própria plaquinha **não** produz selo.
   //
+  // **A UNIÃO NÃO TIRA NENHUM ABERTO, e isso foi medido** (20/10/2026, 16 000
+  // abertos públicos): `count(*)` dos abertos sozinhos e `count(*)` dos abertos
+  // de dentro da união dão o MESMO número. O lado esquerdo do `OR` é, letra por
+  // letra, o predicado que a lista da vizinhança sempre teve; o `OR`
+  // ACRESCENTA. `selo-de-reencontro-na-listagem.test.ts` cobra as duas coisas —
+  // o predicado intacto dentro da união, e a contagem.
+  //
+  // **A ORDEM NÃO FOI TOCADA**, e a consequência está medida e dita em voz alta:
+  // a rota ordena por `last_seen_at DESC`, e o reencontrado foi visto por último
+  // ANTES de voltar. Com massa realista a página 1 sai com 20 de 20 abertos, e o
+  // primeiro reencontrado cai na posição 250. Trocar a ordem mexe na lista pela
+  // qual a vizinhança acha o animal que sumiu, e isso é decisão de produto — ela
+  // está com o cliente, com o número.
+  //
   // `tag_scans` NÃO é o sinal, e a diferença decide se o selo mente: aquela
   // tabela grava a leitura da página, sem conta, sem identidade e sem mensagem.
   // Ela conta o próprio tutor, o robô que pré-visualiza o link e quem abriu por
@@ -252,20 +266,30 @@ export function construtorDaListagemPublicaDePerdidos(
   // `resolution.reunion_channel` também não participa: o enum existe em
   // `LostCaseClosure` e NENHUMA tela o preenche — medido em 20/10/2026, nulo em
   // todo o dado. Decidir por ele seria decidir por um campo vazio.
-  const comOEstado =
-    recorte.conjunto === 'aberto'
-      ? comAsJuncoes.where('lost_cases.status', '=', 'open')
-      : comAsJuncoes
-          .where('lost_cases.status', '=', 'closed_reunited')
-          .where('lost_cases.closed_at', '>=', inicioDaJanelaDoSelo(recorte.agora))
-          .where((eb) =>
-            eb.exists(
-              eb
-                .selectFrom('conversations')
-                .whereRef('conversations.case_id', '=', 'lost_cases.id')
-                .select('conversations.id'),
-            ),
-          );
+  const reencontradoNaJanela = (eb: ExpressionBuilder<Database, 'lost_cases'>) =>
+    eb.and([
+      eb('lost_cases.status', '=', 'closed_reunited'),
+      eb('lost_cases.closed_at', '>=', inicioDaJanelaDoSelo(recorte.agora)),
+      eb.exists(
+        eb
+          .selectFrom('conversations')
+          .whereRef('conversations.case_id', '=', 'lost_cases.id')
+          .select('conversations.id'),
+      ),
+    ]);
+
+  const comOEstado = (() => {
+    switch (recorte.conjunto) {
+      case 'aberto':
+        return comAsJuncoes.where('lost_cases.status', '=', 'open');
+      case 'reencontrado':
+        return comAsJuncoes.where(reencontradoNaJanela);
+      case 'padrao':
+        return comAsJuncoes.where((eb) =>
+          eb.or([eb('lost_cases.status', '=', 'open'), reencontradoNaJanela(eb)]),
+        );
+    }
+  })();
 
   let consulta = comOEstado
     // 2. O tutor deixou o caso aparecer na LISTA. O link dele continua valendo
@@ -347,6 +371,11 @@ export function criarListagemPublicaDePerdidos(db: Db): ListagemPublicaDePerdido
       const linhas = await base
         .select([
           'lost_cases.share_token as share_token',
+          // O ESTADO DA LINHA, e ele é o que vira o selo. Entrou com a união do
+          // conjunto `padrao`: aberto e reencontrado chegam na MESMA resposta, e
+          // marcar os dois pelo conjunto que o pedido escolheu diria que o
+          // animal voltou na lista em que a vizinhança o procura.
+          'lost_cases.status as status',
           'lost_cases.last_seen_at as last_seen_at',
           'lost_cases.last_seen_city as last_seen_city',
           'lost_cases.last_seen_neighborhood as last_seen_neighborhood',
@@ -384,17 +413,17 @@ export function criarListagemPublicaDePerdidos(db: Db): ListagemPublicaDePerdido
             cidade: linha.last_seen_city,
             bairro: linha.last_seen_neighborhood,
             chaveDaFoto: linha.thumb_key,
-            // O SELO. Ele não é lido de coluna nenhuma e não é eco do pedido: no
-            // ramo `reencontrado` a existência da conversa é predicado do
-            // `WHERE` logo acima, então todo item deste conjunto a tem, e no ramo
-            // `aberto` o selo não tem significado. Avaliar o `EXISTS` por linha
-            // também no ramo aberto seria custo novo na consulta que a
-            // vizinhança abre, pago por um valor que já se sabe.
+            // O SELO, lido do `status` DA LINHA e não do conjunto pedido.
             //
-            // O que sustenta a frase "todo item deste conjunto a tem" é a isca
-            // de SQL compilado: `selo-de-reencontro-na-listagem.test.ts` cobra o
-            // `EXISTS` e os outros dois predicados do ramo, por nome.
-            encontradoPelaComunidade: recorte.conjunto === 'reencontrado',
+            // Com a união isso deixou de ser estilo e passou a ser correção: a
+            // mesma resposta traz aberto e reencontrado, e um valor derivado do
+            // pedido marcaria os dois iguais.
+            //
+            // `closed_reunited` basta porque a janela de 30 dias e o `EXISTS` da
+            // conversa são predicados do `WHERE`: linha encerrada que não passou
+            // pelos dois não chega aqui. O que sustenta essa frase é a isca de
+            // SQL compilado, que cobra os três predicados por nome.
+            encontradoPelaComunidade: linha.status === 'closed_reunited',
           }),
         ),
       };

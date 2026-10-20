@@ -1,14 +1,23 @@
--- OS DOIS INDICES DO CONJUNTO `case_state=reunited` DE `listPublicLostPets`.
+-- OS TRES INDICES QUE O SELO DE REENCONTRO PEDIU EM `listPublicLostPets`.
 --
 -- POR QUE AGORA: em 20/10/2026 o cliente decidiu que *"o pet ganha um
 -- selo/filtro na pagina de pets como encontrado por 30 dias e depois ele expira
 -- e sai"*, e que o sinal de "encontrado pela comunidade" e *"depois de um
 -- usuario ter escaneado a tag do usuario ou ter entrado em contato"*.
 --
--- A operacao ganhou o parametro `case_state`. Ausente ou `open`, ela responde o
--- conjunto que sempre respondeu e NADA nesta migracao a toca. Com
--- `case_state=reunited`, ela responde outro conjunto, com tres predicados que
--- nenhum indice de hoje serve:
+-- A operacao ganhou o parametro `case_state`, com TRES conjuntos:
+--
+--   ausente       os abertos MAIS os reencontrados na janela (o recorte PADRAO,
+--                 pela segunda decisao do cliente no mesmo dia: perguntado se o
+--                 reencontrado devia aparecer so no filtro ou tambem na lista de
+--                 sempre, a resposta foi "Tambem na lista padrao")
+--   open          somente os abertos (o recorte de antes do selo)
+--   reunited      somente os reencontrados na janela
+--
+-- `open` responde o que sempre respondeu e NADA nesta migracao o toca. Os outros
+-- dois precisam de indice, e por motivos DIFERENTES.
+--
+-- O conjunto `reunited` tem tres predicados que nenhum indice de hoje serve:
 --
 --   status = 'closed_reunited'
 --   AND closed_at >= :agora - 30 dias
@@ -58,15 +67,59 @@
 --     SEM os indices   10 251 buffers   (mesmo arranjo)
 --     COM os indices   27,7 ms
 --
---   pagina 1, SEM `case_state` (o conjunto de casos ABERTOS, que e a lista que a
---   vizinhanca abre)
---     SEM os indices   Index Scan em lost_cases_publicos_por_visto   242 buffers   11,9 ms
---     COM os indices   Index Scan em lost_cases_publicos_por_visto   242 buffers   11,5 ms
+--   pagina 1, `case_state=open` (o recorte de antes do selo)
+--     SEM os indices   Index Scan em lost_cases_publicos_por_visto          0,85 ms
+--     COM os tres      Index Scan em lost_cases_publicos_do_recorte_padrao  0,30 ms
 --
--- A ULTIMA LINHA E A QUE IMPORTA MAIS: os indices novos sao parciais sobre
--- `closed_reunited`, entao a consulta dos casos abertos nem os considera -- mesmo
--- plano, mesmo indice, mesmos buffers. A lista pela qual a vizinhanca acha o
--- animal que sumiu nao paga nada por isto.
+-- Os dois indices do bloco acima sao parciais sobre `closed_reunited`, entao o
+-- recorte `open` nao os considera. O TERCEIRO ele considera, e PASSOU a
+-- escolher: o predicado dele (`status IN ('open','closed_reunited')`) tambem e
+-- implicado por `status = 'open'`, e o planejador o prefere. MEDIDO, e nao
+-- suposto -- e esta dito aqui porque a versao anterior deste comentario afirmava
+-- que o recorte `open` "nem os considera", e com tres indices isso deixou de ser
+-- verdade. O tempo caiu (0,85 -> 0,30 ms) e a resposta e a mesma: o indice novo
+-- e um superconjunto ordenado pela mesma ordem.
+--
+-- `lost_cases_publicos_por_visto` FICA. Ele e mais estreito (so abertos) e e o
+-- indice que a migracao `20261019000008` justifica; tira-lo seria apagar o
+-- caminho medido de outra decisao para economizar 2880 kB.
+--
+-- ===========================================================================
+-- O TERCEIRO INDICE, E ELE NASCEU DE UMA REGRESSAO QUE EU MEDI
+-- ===========================================================================
+-- O recorte PADRAO virou a UNIAO, e a uniao e um `OR`:
+--
+--   (status = 'open' OR (status = 'closed_reunited' AND janela AND conversa))
+--
+-- **Nenhum indice parcial de hoje atende um `OR` assim.** Um indice
+-- `WHERE status = 'open'` nao pode ser usado por uma consulta que tambem aceita
+-- linha encerrada, e o planejador cai para varredura. MEDIDO, na mesma massa:
+--
+--   pagina 1, SEM `case_state` (o recorte PADRAO, a lista que todo mundo abre)
+--     SEM o terceiro indice   Seq Scan em lost_cases (18 000 linhas) + Seq Scan
+--                             em conversations + Seq Scan em pets + top-N sort
+--                             51 773 buffers   182,1 ms
+--     COM o terceiro indice   Index Scan em lost_cases_publicos_do_recorte_padrao
+--                                239 buffers     3,1 ms
+--
+-- **182 ms contra 3 ms, e 51 773 buffers contra 239, na consulta mais aberta do
+-- produto.** Sem este indice, a decisao de por o reencontrado na lista padrao
+-- custaria uma varredura de `lost_cases` por abertura da pagina de pets, e o
+-- custo cresce com o numero de casos -- nao com o numero de reencontrados.
+--
+-- POR QUE O PREDICADO E `status IN ('open','closed_reunited')` E NAO SO
+-- `share_to_public_list`: os dois funcionam (medidos, 237 buffers cada, 3,58 ms
+-- contra 3,20 ms), e o planejador escolhe qualquer um dos dois -- o provador de
+-- implicacao do Postgres resolve `(A OR (B AND C)) => (A OR B)`, o que eu nao
+-- supus: eu medi, criando um de cada vez. O dos dois estados fica porque ele
+-- EXCLUI `closed_not_found` e `closed_false_alarm`, que nenhum conjunto desta
+-- rota pode devolver -- indice que indexa linha que a rota nunca pede e disco e
+-- escrita pagos por nada. Tamanho medido na massa: 1512 kB.
+--
+-- A ORDEM da rota (`last_seen_at DESC, share_token`) e a do indice, e e por isso
+-- que o `LIMIT 20` para cedo: ele caminha o indice em ordem e os predicados
+-- residuais (`closed_at`, o `EXISTS`, `conta_habilitada`) sao avaliados por linha
+-- caminhada. Como quase toda linha aberta passa, a pagina 1 custa ~20 linhas.
 --
 -- O QUE O INDICE **NAO** RESOLVE, e esta dito para ninguem prometer: o
 -- `top-N heapsort` FICA. O planejador escolhe `Bitmap Index Scan`, que nao
@@ -86,11 +139,18 @@
 -- mesmo dia (migracao nao comitada em outro worktree e invisivel para ele).
 --
 -- NENHUM `ALTER TABLE`, nenhuma coluna, nenhum CHECK reescrito: esta migracao
--- cria dois indices e nada mais. Nao ha dado a perder e nao ha o que provar em
+-- cria tres indices e nada mais. Nao ha dado a perder e nao ha o que provar em
 -- BEGIN/ROLLBACK sobre desfecho de caso -- os seis `purpose` em vigor e o
 -- `CHECK lost_cases_encerrado_tem_desfecho` nao sao tocados.
 
 -- Up Migration
+
+CREATE INDEX lost_cases_publicos_do_recorte_padrao
+  ON lost_cases (last_seen_at DESC, share_token)
+  WHERE share_to_public_list AND status IN ('open', 'closed_reunited');
+
+COMMENT ON INDEX lost_cases_publicos_do_recorte_padrao IS
+  'listPublicLostPets SEM case_state (cliente, 20/10/2026: "Tambem na lista padrao"): o recorte PADRAO e a UNIAO de abertos com reencontrados na janela, e um OR nao pode usar indice parcial de um estado so. Sem este indice a consulta mais aberta do produto cai para Seq Scan: 51 773 buffers e 182,1 ms contra 239 e 3,1 ms (medido com 20 000 casos). O predicado exclui closed_not_found e closed_false_alarm porque nenhum conjunto desta rota os devolve. NAO substitui lost_cases_publicos_por_visto, que serve case_state=open, nem lost_cases_reencontrados_por_visto, que serve case_state=reunited -- os tres caminhos foram medidos com os tres indices no lugar.';
 
 CREATE INDEX lost_cases_reencontrados_por_visto
   ON lost_cases (last_seen_at DESC, share_token)
@@ -115,3 +175,7 @@ COMMENT ON INDEX conversations_do_caso IS
 -- tenha, e o selo continua correto, so mais caro.
 DROP INDEX IF EXISTS conversations_do_caso;
 DROP INDEX IF EXISTS lost_cases_reencontrados_por_visto;
+-- Descer este devolve o recorte PADRAO -- a pagina que todo mundo abre -- ao
+-- `Seq Scan` medido acima: 51 773 buffers e 182,1 ms. E a descida que mais
+-- custa das tres, e ela nao perde dado nenhum.
+DROP INDEX IF EXISTS lost_cases_publicos_do_recorte_padrao;

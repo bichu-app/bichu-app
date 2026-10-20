@@ -47,14 +47,23 @@
  * morre em `resolve image config`, saida 137). Cada desligamento foi confirmado
  * por diferenca de conteudo do arquivo ANTES de a suite rodar.
  *
- * Base deste arquivo: 7 casos, 7 passaram.
+ * Base deste arquivo: 10 casos, 10 passaram.
  *
- * | o que foi desligado em `kysely-listagem-publica-de-perdidos.ts` | placar | reprovaram, por nome |
+ * | o que foi desligado | placar | reprovaram, por nome |
  * |---|---|---|
- * | `.where('lost_cases.closed_at', '>=', ...)` | 4/3 | `o caso de 31 dias NAO aparece: a janela expirou`, e por arrasto `o reencontro SEM conversa nao ganha selo` e `encerrar com not_found nunca aparece` -- os tres leem a MESMA lista, e o caso de 31 dias vazando muda os tres |
- * | o `exists` da conversa | 5/2 | `o reencontro SEM conversa nao ganha selo` e, por arrasto, `encerrar com not_found nunca aparece` |
- * | o ramo inteiro (a condicao virando `true`) | 3/4 | os quatro casos do primeiro bloco |
- * | `encontradoPelaComunidade: recorte.conjunto === 'reencontrado'` virando `false` | 6/1 | `o caso de 29 dias com conversa aparece com o selo` |
+ * | `.where('lost_cases.closed_at', '>=', ...)` | 6/4 | `o caso de 31 dias NAO aparece: a janela expirou`, `o reencontrado de 31 dias nao entra NEM no padrao`, e por arrasto `o reencontro SEM conversa nao ganha selo` e `encerrar com not_found nunca aparece` |
+ * | o `exists` da conversa | 7/3 | `o reencontro SEM conversa nao ganha selo`, `o reencontrado de 31 dias nao entra NEM no padrao`, `encerrar com not_found nunca aparece` |
+ * | `encontradoPelaComunidade: linha.status === 'closed_reunited'` virando `false` | 7/3 | `o caso de 29 dias com conversa aparece com o selo`, `o reencontrado na janela APARECE no recorte padrao, com o selo`, `A UNIAO NAO TIRA NENHUM ABERTO` |
+ * | **o `eb.or` do conjunto `padrao` virando `eb.and`** | 6/4 | `o caso ABERTO aparece no recorte padrao, e sem selo`, `o reencontrado na janela APARECE no recorte padrao, com o selo`, `A UNIAO NAO TIRA NENHUM ABERTO`, `a conversa de um caso ABERTO nao o tira da lista nem o marca` |
+ *
+ * A ULTIMA LINHA e o pior desfecho desta mudanca: com `AND` nenhuma linha
+ * satisfaz os dois lados, a pagina de pets abre VAZIA, e nao ha erro nem faixa
+ * de falha -- so uma lista sem nada. O SQL compilado tambem o acusa, mas e aqui
+ * que ele aparece como o cliente o veria.
+ *
+ * A linha da PROJECAO tem o contrapeso que importa: com ela desligada o arquivo
+ * de SQL compilado fica INTEIRO verde (14/0). A projecao e metade do selo e nao
+ * aparece em consulta nenhuma.
  *
  * O arrasto esta dito em voz alta de proposito: tres casos deste arquivo leem a
  * mesma lista com nomes esperados diferentes, entao um item a mais reprova mais
@@ -139,7 +148,13 @@ function sufixoDaTag(tag: string): string {
 }
 
 function recorte(ajustes: Partial<RecorteDePerdidos> = {}): RecorteDePerdidos {
-  return { conjunto: 'aberto', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
+  // `padrao` e o conjunto que a AUSENCIA de `case_state` escolhe desde
+  // 20/10/2026 (*"Tambem na lista padrao"*), e por isso e o padrao deste
+  // ajudante: o caso que nao diz nada tem de medir o que a pessoa de fato
+  // recebe. A primeira escrita deste arquivo deixou `aberto` aqui, e DOIS casos
+  // da uniao reprovaram pelo ajudante em vez de pelo produto -- o conjunto que
+  // eles mediam nao era o que o nome deles dizia.
+  return { conjunto: 'padrao', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
 }
 
 /**
@@ -367,45 +382,124 @@ void describe('o selo de reencontro pela comunidade, contra Postgres', () => {
   });
 });
 
-void describe('a lista de casos ABERTOS nao muda de comportamento', () => {
-  void it('o caso ABERTO aparece no conjunto de sempre, e sem selo', async () => {
+void describe('o recorte PADRAO e a uniao, e ela nao tira nenhum aberto', () => {
+  void it('o caso ABERTO aparece no recorte padrao, e sem selo', async () => {
     const montado = await montarCaso('Procurado', { estado: 'open', comConversa: false });
 
     const pagina = await listagem.listar(recorte({ cidade: MARCA }));
 
-    assert.equal(pagina.total, 1, `trouxe ${String(pagina.total)} itens em vez de 1`);
-    assert.equal(pagina.itens[0]?.shareToken, montado.token);
+    assert.ok(
+      pagina.itens.some((i) => i.shareToken === montado.token),
+      'o caso aberto saiu do recorte padrao. A uniao ACRESCENTA o reencontrado; ' +
+        'ela nao pode custar a presenca de um animal que ainda esta na rua.',
+    );
     assert.equal(
-      pagina.itens[0]?.encontradoPelaComunidade,
+      pagina.itens.find((i) => i.shareToken === montado.token)?.encontradoPelaComunidade,
       false,
-      'um caso ABERTO veio com o selo de reencontro. O chip diria que o animal voltou na ' +
-        'mesma lista em que a vizinhanca esta procurando por ele.',
+      'um caso ABERTO veio com o selo de reencontro. O chip diria que o animal ' +
+        'voltou na mesma lista em que a vizinhanca esta procurando por ele -- e ' +
+        'com a uniao os dois chegam lado a lado, entao este e o erro que custa ' +
+        'alguem sair de casa atras de um pet que esta na sala do dono.',
     );
   });
 
-  void it('NENHUM reencontrado entra no conjunto de abertos, nem dentro da janela', async () => {
-    // Os quatro casos dos blocos acima continuam no banco, e um deles e o
-    // reencontrado de 29 dias COM conversa — o unico que o selo aceita. Se o
-    // ramo vazar, e aqui que ele vaza: a lista de abertos ganharia um item que
-    // ocupa vaga de um animal que ainda esta na rua.
+  void it('o reencontrado na janela APARECE no recorte padrao, com o selo', async () => {
+    // A decisao do cliente, medida: *"Tambem na lista padrao"*. Antes desta
+    // rodada ele aparecia so sob `case_state=reunited`.
     const pagina = await listagem.listar(recorte({ cidade: MARCA }));
 
-    assert.deepEqual(
-      pagina.itens.map((i) => i.petNome).sort(),
-      ['Procurado'],
-      'reencontrado vazou para a lista de casos abertos. A Emenda 4 do ADR-0010 promete que os ' +
-        'dois conjuntos nao se misturam: a lista pela qual a vizinhanca acha o animal que sumiu ' +
-        'tem vinte vagas na pagina 1, e nenhuma delas e de um pet que ja voltou.',
+    const voltou = pagina.itens.find((i) => i.petNome === 'Voltou');
+    assert.ok(
+      voltou !== undefined,
+      'o reencontrado na janela NAO entrou no recorte padrao. E a decisao do ' +
+        'cliente de 20/10/2026, e sem ela o selo existe so para quem souber ' +
+        'abrir o filtro.',
     );
-    assert.equal(pagina.total, 1, `o \`total\` do conjunto aberto virou ${String(pagina.total)}`);
+    assert.equal(voltou.encontradoPelaComunidade, true, 'e entrou sem selo');
+  });
+
+  void it('A UNIAO NAO TIRA NENHUM ABERTO: a contagem dos abertos e a mesma', async () => {
+    // **A propriedade que substituiu a igualdade de SQL.** Na primeira entrega
+    // de 20/10 a promessa era "a lista dos abertos nao muda"; com *"Tambem na
+    // lista padrao"* ela mudou, e o que ficou de pe e que ela nao PERDE linha.
+    //
+    // Contado com o `limite` alto de proposito: a pagina de 20 nao distingue
+    // "saiu da lista" de "foi para a pagina 2", e e a primeira coisa que a
+    // uniao poderia quebrar.
+    const soAbertos = await listagem.listar(
+      recorte({ conjunto: 'aberto', cidade: MARCA, limite: 100 }),
+    );
+    const padrao = await listagem.listar(recorte({ cidade: MARCA, limite: 100 }));
+
+    const abertosNoPadrao = padrao.itens.filter((i) => !i.encontradoPelaComunidade);
+
+    assert.equal(
+      abertosNoPadrao.length,
+      soAbertos.itens.length,
+      `o recorte padrao trouxe ${String(abertosNoPadrao.length)} abertos e o recorte ` +
+        `\`case_state=open\` trouxe ${String(soAbertos.itens.length)}. A uniao ESTA ` +
+        'tirando pet que ainda esta na rua, e isso e o unico efeito dela que o ' +
+        'cliente nao pediu.',
+    );
+    assert.deepEqual(
+      abertosNoPadrao.map((i) => i.shareToken).sort(),
+      soAbertos.itens.map((i) => i.shareToken).sort(),
+      'os abertos do padrao nao sao os MESMOS do recorte so-abertos: a contagem ' +
+        'bateu por coincidencia, trocando um por outro.',
+    );
+    assert.ok(
+      padrao.total > soAbertos.total,
+      `o \`total\` do padrao (${String(padrao.total)}) nao e maior que o dos abertos ` +
+        `(${String(soAbertos.total)}): o reencontrado nao esta sendo somado, e a ` +
+        'tela diria "1 a 20 de N" sobre um recorte diferente do que desenhou.',
+    );
+  });
+
+  void it('o reencontrado de 31 dias nao entra NEM no padrao', async () => {
+    // A janela vale nos dois recortes. Sem isto, "expira e sai" valeria so no
+    // filtro, e o pet ficaria na pagina principal para sempre.
+    const pagina = await listagem.listar(recorte({ cidade: MARCA, limite: 100 }));
+
+    assert.ok(
+      !pagina.itens.some((i) => i.petNome === 'Expirou'),
+      'o caso encerrado ha 31 dias entrou no recorte padrao. A Emenda 4 do ' +
+        'ADR-0010 promete 30 dias, e o prazo e o unico limite dessa exposicao.',
+    );
+    assert.ok(
+      !pagina.itens.some((i) => i.petNome === 'Sozinho'),
+      'o reencontro SEM conversa entrou no recorte padrao: o selo passou a ' +
+        'afirmar ajuda da comunidade sobre um pet que o tutor achou sozinho, na ' +
+        'pagina principal.',
+    );
+    assert.ok(
+      !pagina.itens.some((i) => i.petNome === 'NaoAchou'),
+      '`closed_not_found` entrou no recorte padrao',
+    );
+  });
+
+  void it('`case_state=open` continua devolvendo SO os abertos', async () => {
+    const pagina = await listagem.listar(
+      recorte({ conjunto: 'aberto', cidade: MARCA, limite: 100 }),
+    );
+
+    assert.ok(
+      pagina.itens.every((i) => !i.encontradoPelaComunidade),
+      'o recorte historico passou a trazer reencontrado. Quem pede ' +
+        '`case_state=open` pede a lista de antes do selo, de proposito.',
+    );
+    assert.ok(
+      !pagina.itens.some((i) => i.petNome === 'Voltou'),
+      'o reencontrado na janela apareceu em `case_state=open`',
+    );
   });
 
   void it('a conversa de um caso ABERTO nao o tira da lista nem o marca', async () => {
-    // O `EXISTS` nao e avaliado no ramo aberto, e este caso prova que a ausencia
-    // de avaliacao nao virou uma avaliacao invertida em algum refatoramento.
+    // O `EXISTS` vive no lado DIREITO da uniao. Este caso prova que ele nao
+    // escorreu para o lado esquerdo em algum refatoramento -- um aberto com
+    // conversa continua aberto e continua sem selo.
     const montado = await montarCaso('ComAviso', { estado: 'open', comConversa: true });
 
-    const pagina = await listagem.listar(recorte({ cidade: MARCA }));
+    const pagina = await listagem.listar(recorte({ cidade: MARCA, limite: 100 }));
 
     const item = pagina.itens.find((i) => i.shareToken === montado.token);
     assert.ok(item !== undefined, 'o caso aberto COM conversa saiu da lista de perdidos');

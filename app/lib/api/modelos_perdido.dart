@@ -52,15 +52,24 @@ import 'modelos_pet.dart';
 ///
 /// **A ausencia nao e "sem recorte", e por isso [RecorteDePerdidos.estado] e
 /// nulo por padrao em vez de valer [aberto].** Nulo e nao mandar o parametro, e
-/// nao mandar e o conjunto de casos ABERTOS -- que e o que a lista sempre
-/// devolveu. Mandar `open` pede o mesmo conjunto dizendo o nome, e ai ele volta
-/// em `applied_filters`; a tela precisa poder dizer que abriu sem recorte
-/// nenhum, e `period` pagou por isso em 18/10/2026.
+/// nao mandar e o recorte PADRAO do servidor: os casos abertos **mais** os
+/// reencontrados na janela de 30 dias, na mesma pagina. E a segunda decisao do
+/// cliente de 20/10/2026 -- perguntado se o reencontrado devia aparecer so no
+/// filtro ou tambem na lista de sempre, a resposta foi **"Tambem na lista
+/// padrao"**.
 ///
-/// `reencontrado` traz os casos encerrados com reencontro **pela comunidade**,
-/// e so dentro da janela de 30 dias. As duas condicoes sao do SERVIDOR: o app
-/// nao refaz a conta de 30 dias e nao sabe dizer quem encontrou. Ver a Emenda 4
-/// do ADR-0010.
+/// Marcar [aberto] pede SO os abertos, e ai ele volta em `applied_filters`; a
+/// tela precisa poder dizer que abriu sem recorte nenhum, e `period` pagou por
+/// isso em 18/10/2026.
+///
+/// [reencontrado] traz SO os encerrados com reencontro **pela comunidade**, e so
+/// dentro da janela de 30 dias. As duas condicoes sao do SERVIDOR: o app nao
+/// refaz a conta de 30 dias e nao sabe dizer quem encontrou. Ver a Emenda 4 do
+/// ADR-0010.
+///
+/// **Com a lista padrao misturando os dois, quem distingue cada cartao e
+/// `PerdidoPublico.encontradoPelaComunidade`** -- campo da RESPOSTA, por item.
+/// Sem ele, um pet que voltou apareceria no meio dos procurados.
 enum EstadoDoCasoNaLista {
   aberto('open', 'Perdidos'),
   reencontrado('reunited', 'Encontrados');

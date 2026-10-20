@@ -43,26 +43,44 @@ import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 export type JanelaDePerdidos = '24h' | '7d' | '30d';
 
 /**
- * QUAL CONJUNTO a pagina devolve (`case_state` do contrato), e a distincao nao e
- * um filtro a mais.
+ * QUAL CONJUNTO a pagina devolve (`case_state` do contrato), e sao TRES.
  *
- * `aberto` e o conjunto que esta operacao sempre devolveu, e e o que a ausencia
- * do parametro significa -- por isso ele **nao** e um campo opcional como
- * [RecorteDePerdidos.cidade]: ausencia de cidade e "nao recorte por isto",
- * ausencia de `case_state` e "o recorte historico".
+ * - `padrao` -- o que a ausencia do parametro significa: os casos **abertos
+ *   MAIS** os reencontrados pela comunidade dentro da janela de 30 dias. E a
+ *   decisao do cliente de 20/10/2026, na segunda rodada do mesmo dia:
+ *   perguntado se o reencontrado devia aparecer so no filtro ou tambem na lista
+ *   de sempre, a resposta foi **"Tambem na lista padrao"**.
+ * - `aberto` -- SOMENTE os casos abertos. E o recorte que esta operacao tinha
+ *   antes de 20/10/2026, e quem o pede agora o pede de proposito.
+ * - `reencontrado` -- SOMENTE os reencontrados na janela.
  *
- * `reencontrado` e o conjunto da decisao do cliente de 20/10/2026 -- *"o pet
- * ganha um selo/filtro na pagina de pets como encontrado por 30 dias e depois
- * ele expira e sai"* -- e ele carrega DOIS predicados a mais que ninguem pode
- * pedir separado: a janela de 30 dias sobre `closed_at` e a existencia de
- * conversa ligada ao caso.
+ * **A ausencia nao e "sem recorte", e por isso ele nao e um campo opcional como
+ * [RecorteDePerdidos.cidade]**: ausencia de cidade e "nao recorte por isto",
+ * ausencia de `case_state` e o conjunto `padrao`.
  *
- * **Os dois conjuntos nao se misturam**, e isso e decisao de produto e nao de
- * implementacao: a lista de casos ABERTOS e como a vizinhanca acha o animal que
- * sumiu, e um reencontrado ocupando uma das vinte vagas da pagina 1 e uma vaga
- * que o animal perdido perdeu.
+ * ## O que a uniao MANTEM, e foi medido
+ *
+ * **Nenhuma linha do conjunto aberto sai.** Medido em 20/10/2026 com 16 000
+ * casos abertos publicos: `count(*)` dos abertos sozinhos e `count(*)` dos
+ * abertos de dentro da uniao dao o MESMO 16 000. Reencontrado ACRESCENTA; ele
+ * nao desloca nem esconde pet que ainda esta na rua -- o que ele disputa e
+ * posicao na pagina, nao presenca na lista.
+ *
+ * ## E o que a uniao NAO resolve, dito aqui porque e visivel ao cliente
+ *
+ * A ordem da rota e `last_seen_at DESC`, e um pet reencontrado foi visto por
+ * ultimo ANTES de voltar: o `last_seen_at` dele e necessariamente mais velho que
+ * o de um caso aberto hoje. MEDIDO com massa realista (reencontrados encerrados
+ * nos ultimos 30 dias, caso durando de 1 a 14 dias): a pagina 1 sai com **20 de
+ * 20 abertos e ZERO reencontrados**, e o primeiro reencontrado cai na **posicao
+ * 250, pagina 13**. O corte da pagina 1 estava em `last_seen_at` de ~2 h atras
+ * e o reencontrado mais recente tinha 27 h.
+ *
+ * Trocar a ordem e decisao de produto, nao de implementacao: ela mexe na lista
+ * pela qual a vizinhanca acha o animal que sumiu. Esta pergunta esta com o
+ * cliente, com os numeros acima.
  */
-export type ConjuntoDePerdidos = 'aberto' | 'reencontrado';
+export type ConjuntoDePerdidos = 'padrao' | 'aberto' | 'reencontrado';
 
 /**
  * A JANELA DO SELO, em dias. Decisao do cliente de 20/10/2026, nas palavras
@@ -104,7 +122,7 @@ export interface RecorteDePerdidos {
    * Qual conjunto. **Sem `?`, de propósito**: quem monta o recorte tem de
    * decidir, e `undefined` aqui faria a consulta escolher sozinha num `??`
    * espalhado por três arquivos. Quem traduz a ausência do parâmetro em
-   * `aberto` é o serviço, num lugar só.
+   * `padrao` é o serviço, num lugar só.
    */
   readonly conjunto: ConjuntoDePerdidos;
   /**
@@ -178,17 +196,17 @@ export interface PerdidoPublico {
   /**
    * `found_by_community` do contrato: o SELO.
    *
-   * Verdadeiro só no conjunto `reencontrado`, onde a existência da conversa é
-   * **predicado do `WHERE`** — então todo item daquele conjunto o tem, e o
-   * valor não é um eco do pedido: ele é implicado pelo predicado, e é a isca do
-   * SQL compilado que mantém o predicado no lugar.
+   * **Lido do `status` da LINHA, e nunca do conjunto que o pedido escolheu.**
+   * Com a união do conjunto `padrao` (decisão do cliente de 20/10/2026, *"Também
+   * na lista padrão"*), a mesma resposta traz caso aberto e reencontrado lado a
+   * lado — então um valor derivado do pedido marcaria os dois iguais, e o selo
+   * passaria a dizer que o animal voltou na mesma lista em que a vizinhança está
+   * procurando por ele.
    *
-   * Falso no conjunto `aberto`, e ali ele **não é medido**: selo de reencontro
-   * num caso aberto não tem significado, e avaliar o `EXISTS` por linha na
-   * lista que a vizinhança abre seria custo novo na consulta que menos pode
-   * ganhar custo (`conversations` não tem índice por `case_id` até a migração
-   * `20261020000004`, e mesmo com ele a avaliação por linha seria paga por
-   * nada).
+   * `status = 'closed_reunited'` basta e é honesto: nos conjuntos `padrao` e
+   * `reencontrado`, uma linha encerrada só chega aqui tendo passado pela janela
+   * de 30 dias E pelo `EXISTS` da conversa, que são predicados do `WHERE`. No
+   * conjunto `aberto` nenhuma linha é encerrada, então ele sai falso sem custo.
    */
   readonly encontradoPelaComunidade: boolean;
 }

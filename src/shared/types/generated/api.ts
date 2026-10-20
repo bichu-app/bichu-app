@@ -7737,9 +7737,15 @@ export interface components {
             share_url?: string;
             /**
              * @description **O SELO de reencontro pela comunidade** (decisao do cliente,
-             *     20/10/2026). Verdadeiro so para item devolvido com
-             *     `case_state=reunited`; falso em todo item do conjunto de casos
-             *     abertos, que e o que a pagina responde quando ninguem pede nada.
+             *     20/10/2026). Verdadeiro quando ESTE item e um caso encerrado com
+             *     reencontro dentro da janela de 30 dias; falso quando e um caso
+             *     aberto.
+             *
+             *     **Ele e por ITEM, e nao por pagina**, e isso passou a ser essencial
+             *     com *"Tambem na lista padrao"*: sem `case_state` a resposta traz
+             *     aberto e reencontrado LADO A LADO, e sem este campo a tela nao tem
+             *     como distinguir os dois -- um pet que voltou apareceria no meio dos
+             *     procurados e alguem sairia atras de um animal que esta em casa.
              *
              *     O campo sai na resposta e nao e inferido do pedido de proposito: o
              *     cartao do pet e componente compartilhado, e cartao que descobre o
@@ -16588,29 +16594,44 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description **QUAL DOS DOIS CONJUNTOS a pagina devolve.** Entrou em 20/10/2026
+                 * @description **QUAL DOS TRES CONJUNTOS a pagina devolve.** Entrou em 20/10/2026
                  *     pela decisao do cliente: *"o pet ganha um selo/filtro na pagina de
-                 *     pets como encontrado por 30 dias e depois ele expira e sai"*.
+                 *     pets como encontrado por 30 dias e depois ele expira e sai"*, e, na
+                 *     segunda rodada do mesmo dia, perguntado se o reencontrado devia
+                 *     aparecer so no filtro ou tambem na lista de sempre: **"Tambem na
+                 *     lista padrao"**.
                  *
-                 *     - **ausente** -- os casos **abertos**, exatamente como esta operacao
-                 *       sempre respondeu. Byte por byte: mesmos predicados, mesma ordem,
-                 *       mesmo `total`.
-                 *     - `open` -- o mesmo conjunto, dito em voz alta. Ele aparece em
-                 *       `applied_filters` quando enviado, e a ausencia **nao** aparece.
-                 *     - `reunited` -- os casos encerrados com **reencontro pela
-                 *       comunidade**, e **somente** os que satisfazem as duas condicoes
-                 *       abaixo. Todo item deste conjunto vem com
-                 *       `found_by_community: true`.
+                 *     - **ausente** -- os casos **abertos MAIS** os reencontrados pela
+                 *       comunidade dentro da janela de 30 dias, na mesma pagina. Cada item
+                 *       diz qual dos dois ele e, em `found_by_community`.
+                 *     - `open` -- **somente** os casos abertos. E o recorte que esta
+                 *       operacao tinha antes de 20/10/2026, e quem o pede agora o pede de
+                 *       proposito. Ele aparece em `applied_filters` quando enviado, e a
+                 *       ausencia **nao** aparece.
+                 *     - `reunited` -- **somente** os reencontrados na janela. Todo item
+                 *       deste conjunto vem com `found_by_community: true`.
+                 *
+                 *     **A uniao NAO TIRA NENHUM ABERTO**, e isso foi medido em 20/10/2026
+                 *     com 16 000 casos abertos publicos: a contagem dos abertos sozinhos e
+                 *     a contagem dos abertos de dentro da uniao dao o mesmo numero.
+                 *     Reencontrado ACRESCENTA; nenhum pet que ainda esta na rua sai da
+                 *     lista. O que ele disputa e POSICAO na pagina, nao presenca.
+                 *
+                 *     **A ORDEM NAO MUDOU, e a consequencia esta medida.** A rota ordena
+                 *     por `last_seen_at DESC`, e um pet reencontrado foi visto por ultimo
+                 *     ANTES de voltar -- o `last_seen_at` dele e necessariamente mais velho
+                 *     que o de um caso aberto hoje. Medido com massa realista, a pagina 1
+                 *     sai com 20 de 20 abertos e o primeiro reencontrado cai na posicao
+                 *     250. Trocar a ordem mexe na lista pela qual a vizinhanca acha o
+                 *     animal que sumiu, e e decisao de produto em aberto.
                  *
                  *     **A ausencia NAO e "sem recorte", e esta e a diferenca em relacao a
                  *     `city` e a `period` logo abaixo.** Aquelas duas sao filtros que
-                 *     recortam um conjunto; esta escolhe QUAL conjunto. A lista publica de
-                 *     perdidos sempre foi a dos casos abertos -- e continua sendo quando
-                 *     ninguem pede nada --, entao a ausencia carrega o recorte historico e
-                 *     nao a abertura dele. Por isso tambem **nao ha `default`**: o
-                 *     `useDefaults: true` do Ajv escreveria o valor na consulta de quem nao
-                 *     mandou nada, e `applied_filters` passaria a citar um filtro que
-                 *     ninguem aplicou -- o defeito que `period` pagou em 18/10/2026.
+                 *     recortam um conjunto; esta escolhe QUAL conjunto. Por isso tambem
+                 *     **nao ha `default`**: o `useDefaults: true` do Ajv escreveria o valor
+                 *     na consulta de quem nao mandou nada, e `applied_filters` passaria a
+                 *     citar um filtro que ninguem aplicou -- o defeito que `period` pagou
+                 *     em 18/10/2026.
                  *
                  *     ## As duas condicoes de `reunited`, e nenhuma delas e opcional
                  *

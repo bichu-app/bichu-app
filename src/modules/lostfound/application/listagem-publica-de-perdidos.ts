@@ -53,15 +53,26 @@ export type EstadoDoCasoPedido = 'open' | 'reunited';
 
 /**
  * A traducao de `case_state` para o conjunto da porta, e **o unico lugar** onde
- * a ausencia do parametro se torna `aberto`.
+ * a ausencia do parametro se torna `padrao`.
  *
- * Um `?? 'aberto'` dentro do adaptador faria a consulta decidir sozinha, e um
- * `default: open` no contrato faria o Ajv escrever o valor na consulta de quem
- * nao mandou nada -- `applied_filters` citaria um filtro que ninguem aplicou,
- * que e o defeito que `period` pagou em 18/10/2026.
+ * `padrao` e a UNIAO -- abertos mais reencontrados na janela --, pela decisao do
+ * cliente de 20/10/2026: **"Tambem na lista padrao"**. Era `aberto` na primeira
+ * entrega do mesmo dia, quando o reencontrado aparecia so sob o filtro.
+ *
+ * Um `?? 'padrao'` dentro do adaptador faria a consulta decidir sozinha, e um
+ * `default` no contrato faria o Ajv escrever o valor na consulta de quem nao
+ * mandou nada -- `applied_filters` citaria um filtro que ninguem aplicou, que e
+ * o defeito que `period` pagou em 18/10/2026.
  */
 export function conjuntoPedido(estado: EstadoDoCasoPedido | undefined): ConjuntoDePerdidos {
-  return estado === 'reunited' ? 'reencontrado' : 'aberto';
+  switch (estado) {
+    case 'reunited':
+      return 'reencontrado';
+    case 'open':
+      return 'aberto';
+    case undefined:
+      return 'padrao';
+  }
 }
 
 export interface PedidoDePerdidos {

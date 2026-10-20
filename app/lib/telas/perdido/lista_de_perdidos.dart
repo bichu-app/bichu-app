@@ -659,14 +659,17 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // dias e depois ele expira e sai"*).
         //
         // Primeiro porque ele não recorta a mesma lista que os outros quatro:
-        // ele troca a lista. Lido depois de `Espécie` e `Porte`, pareceria um
-        // filtro a mais sobre os perdidos.
+        // ele diz QUAIS casos a lista traz. Lido depois de `Espécie` e `Porte`,
+        // pareceria um filtro a mais sobre os perdidos.
         //
         // **Nasce SEM pastilha marcada**, pelo mesmo motivo de `period`: nulo é
-        // a página como ela abre — os casos abertos, sem `case_state` na
-        // consulta. Marcar `Perdidos` por padrão poria o parâmetro na query e o
+        // a página como ela abre — e desde a segunda decisão do cliente de
+        // 20/10/2026 (*"Também na lista padrão"*) isso quer dizer os abertos
+        // **mais** os reencontrados na janela, juntos, cada cartão com o seu
+        // selo. Marcar `Perdidos` por padrão poria o parâmetro na query e o
         // devolveria em `applied_filters`, e a linha do recorte diria que há um
-        // filtro aplicado numa página que ninguém filtrou.
+        // filtro aplicado numa página que ninguém filtrou — além de ESCONDER os
+        // reencontrados de quem nunca abriu a folha.
         GrupoDeFiltro(
           chave: 'case_state',
           titulo: 'Estado',
@@ -675,12 +678,16 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
             for (final e in EstadoDoCasoNaLista.values)
               OpcaoDeRecorte(codigo: e.codigo, rotulo: e.rotulo),
           ],
-          // A nota diz as DUAS condições, e nenhuma delas é promessa: os 30
-          // dias e a ajuda de alguém. Sem ela, `Encontrados` pareceria "todos
-          // os que já voltaram", e a lista vazia de quem escolheu a pastilha
-          // viraria um defeito aparente.
-          nota: 'Encontrados mostra quem voltou com a ajuda de alguém da '
-              'comunidade, nos últimos 30 dias.',
+          // A nota diz TRÊS coisas, e nenhuma delas é promessa: que a lista
+          // já vem com os dois, o que `Encontrados` quer dizer, e os 30 dias.
+          //
+          // A primeira entrou com a união: sem ela, a pessoa que vê um cartão
+          // com selo na lista não entende de onde ele veio, e quem escolhe
+          // `Encontrados` e acha pouco não sabe que o resto estava junto. A
+          // terceira evita que `Encontrados` pareça "todos os que já voltaram",
+          // e a lista curta vire defeito aparente.
+          nota: 'A lista já traz os dois. Encontrados mostra só quem voltou com '
+              'a ajuda de alguém da comunidade, nos últimos 30 dias.',
         ),
         // O bairro só entra quando há UM para oferecer, e o único que este app
         // conhece é o da própria região cadastrada. Uma lista de bairros da

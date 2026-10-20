@@ -22,13 +22,13 @@ que escaneou a plaquinha — nada disso sai, e é ali que o motivo da regra
 anterior continua inteiro. Ver o fim do documento.
 
 **Emenda 4, 20/10/2026 (decisão do cliente):** a **listagem pública de
-perdidos** passa a poder devolver, sob pedido explícito, o caso **encerrado com
-reencontro pela comunidade**, por uma janela de **30 dias** contada do
-encerramento. É exposição nova e não reformatação: hoje encerrar o caso remove o
-animal da superfície pública no mesmo instante. A janela é o limite, e ela é
-predicado de servidor. Nenhum campo novo além do booleano `found_by_community`;
-o nível máximo de precisão geográfica continua **bairro e cidade**. Ver o fim do
-documento.
+perdidos** passa a devolver o caso **encerrado com reencontro pela comunidade**
+por uma janela de **30 dias** contada do encerramento — **no recorte padrão**,
+junto dos casos abertos, e também sob pedido explícito. É exposição nova e não
+reformatação: até aqui, encerrar o caso removia o animal da superfície pública
+no mesmo instante. A janela é o limite, e ela é predicado de servidor. Nenhum
+campo novo além do booleano `found_by_community`; o nível máximo de precisão
+geográfica continua **bairro e cidade**. Ver o fim do documento.
 
 ## Contexto
 
@@ -454,7 +454,7 @@ estar escrito aqui com data e com dono, e não só no contrato.
 
 | | |
 |---|---|
-| **Onde** | `GET /v1/public/lost-pets` (`listPublicLostPets`), e **somente** com `case_state=reunited` no pedido |
+| **Onde** | `GET /v1/public/lost-pets` (`listPublicLostPets`), **no recorte padrão** (sem `case_state`) e sob `case_state=reunited` |
 | **O que** | os MESMOS campos de `PublicLostPet` que o caso aberto já devolvia, mais `found_by_community: true` |
 | **Por quanto tempo** | 30 dias contados de `lost_cases.closed_at`. No 31º dia o caso sai, e sai também deste conjunto |
 | **Para quem** | qualquer um, inclusive sem conta — é a mesma superfície da lista de perdidos |
@@ -473,10 +473,13 @@ de `lost_since` ela fecha uma linha do tempo que ninguém pediu. O selo precisa
 dizer apenas que voltou. A janela de 30 dias é aplicada pelo servidor e não
 precisa ser contável pelo cliente.
 
-Ele sai na resposta, e não é inferido do pedido, por um motivo de implementação
-que também é de privacidade: o cartão do pet é componente compartilhado, e cartão
-que descobre o estado do animal relendo a URL que o trouxe é cartão que mente na
-próxima tela que o reaproveitar.
+Ele sai na resposta **por item**, e não é inferido do pedido. Com o recorte
+padrão sendo a união, isso deixou de ser estilo e passou a ser o que impede o
+pior desfecho desta emenda: aberto e reencontrado chegam na MESMA página, e sem
+um campo por item a tela mostraria um pet que já voltou no meio dos procurados —
+alguém sairia de casa atrás de um animal que está na sala do dono. O cartão do
+pet é componente compartilhado, e cartão que descobre o estado do animal relendo
+a URL que o trouxe é cartão que mente na próxima tela que o reaproveitar.
 
 ## O item 6 continua inteiro, e o 7 e o 8 também
 
@@ -537,11 +540,26 @@ Predicado não tem dia em que não roda.
 
 ## O que esta emenda NÃO decide, e portanto continua proibido
 
-- **a lista de casos abertos não muda.** Sem `case_state`, ou com
-  `case_state=open`, a resposta é a de sempre — o SQL compilado é idêntico,
-  caractere por caractere, e há isca comparando os dois textos. Reencontrado
-  **não** ocupa vaga da página 1 dos abertos: a lista pela qual a vizinhança acha
-  o animal que sumiu não foi tocada;
+- **nenhum caso aberto sai da lista.** Esta é a forma que a promessa tomou
+  depois de *"Também na lista padrão"*, e ela é mais fraca do que a da primeira
+  redação desta emenda — que dizia que a lista dos abertos não mudava. Mudou, por
+  decisão dele, e o que ficou de pé está medido: com 16 000 casos abertos
+  públicos, a contagem dos abertos sozinhos e a contagem dos abertos de dentro da
+  união dão o MESMO número, e o predicado dos abertos continua intacto, letra por
+  letra, do lado esquerdo do `OR`. Reencontrado **acrescenta**; ele não desloca
+  nem esconde pet que ainda está na rua. O que ele disputa é posição na página,
+  não presença na lista. `case_state=open` continua devolvendo só os abertos, para
+  quem quiser o recorte antigo de propósito;
+- **a ORDEM não foi tocada, e a consequência é visível.** A rota ordena por
+  `last_seen_at DESC`, e um pet reencontrado foi visto por último ANTES de voltar.
+  Medido em 20/10/2026 com massa realista (reencontrados encerrados nos últimos 30
+  dias, caso durando de 1 a 14 dias): a página 1 sai com **20 de 20 abertos**, e o
+  primeiro reencontrado cai na **posição 250, página 13** — o corte da página 1
+  estava em `last_seen_at` de ~2 h atrás e o reencontrado mais recente tinha 27 h.
+  Ou seja: a decisão de pôr o reencontrado no padrão está implementada e, com a
+  ordem de hoje, ele quase não aparece na primeira página. Trocar a ordem mexe na
+  lista pela qual a vizinhança acha o animal que sumiu, e **esta emenda não
+  decide isso** — a pergunta está com o cliente, com o número medido;
 - **encerramento `not_found` e `false_alarm` nunca aparecem**, em nenhuma
   janela. `not_found` é a busca que não acabou bem e `false_alarm` é o caso que
   nunca existiu; publicar qualquer um dos dois seria contar uma história que o

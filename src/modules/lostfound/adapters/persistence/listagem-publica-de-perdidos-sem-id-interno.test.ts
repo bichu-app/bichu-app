@@ -48,7 +48,10 @@ const AGORA = new Date('2026-10-18T12:00:00.000Z');
  * ninguém escolheu nada.
  */
 const RECORTE_MINIMO: RecorteDePerdidos = {
-  // `aberto` é o conjunto que a ausência de `case_state` escolhe (20/10/2026).
+  // `aberto` é SOMENTE os casos abertos, que é o recorte que este arquivo
+  // sempre mediu. A ausência de `case_state` passou a ser `padrao` (a união com
+  // os reencontrados) na segunda rodada de 20/10/2026, e a união tem arquivo
+  // próprio: `selo-de-reencontro-na-listagem.test.ts`.
   conjunto: 'aberto',
   cidade: 'São Paulo',
   pagina: 1,

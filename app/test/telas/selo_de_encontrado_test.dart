@@ -7,9 +7,10 @@
 // O QUE ESTE ARQUIVO MEDE, E O QUE ELE NAO CONSEGUE MEDIR
 // ===========================================================================
 // Ele mede o lado do APLICATIVO, e so ele: que o selo sai do campo da RESPOSTA
-// e nao do pedido, que o rotulo do leitor de tela acompanha o selo, que a
-// pastilha manda `case_state` na consulta, que limpa-la o tira, e que o cartao
-// nao ganhou informacao nenhuma alem do selo.
+// e nao do pedido, que a lista PADRAO desenha os dois conjuntos com um selo
+// cada, que o rotulo do leitor de tela acompanha o selo, que as pastilhas
+// mandam `case_state` na consulta, que limpa-las o tiram, e que o cartao nao
+// ganhou informacao nenhuma alem do selo.
 //
 // Ele **nao** mede nem pode medir as duas condicoes do selo -- a janela de 30
 // dias e o sinal da comunidade. As duas sao do servidor, e um caso de widget que
@@ -27,23 +28,26 @@
 // ===========================================================================
 // A ISCA, E COMO ELA FOI PROVADA
 // ===========================================================================
-// Em 20/10/2026, Flutter test. Base: 8 casos, 8 passaram. Cada desligamento foi
+// Em 20/10/2026, Flutter test. Base: 9 casos, 9 passaram. Cada desligamento foi
 // confirmado por diferenca de conteudo do arquivo ANTES de a suite rodar.
 //
-// | o que foi desligado | reprovaram, por nome |
-// |---|---|
-// | `_Selo(texto: seloDe(perdido), ...)` voltando a `_Selo(texto: selo)` | `ISCA: o item marcado desenha o selo do reencontro, e NAO "Perdido"`, `o cartao do reencontrado NAO ganha informacao alem do selo`, `ISCA: a pastilha Encontrados manda case_state=reunited` |
-// | `seloDe(p)` voltando a `selo` em `rotuloAcessivelDe` | `ISCA: o leitor de tela ouve o selo do reencontro, e nao "Perdido"` -- e SO ele, que e o ponto: o selo visual continuava certo |
-// | o `GrupoDeFiltro` de `case_state` em `lista_de_perdidos.dart` | `ISCA: a pastilha Encontrados manda case_state=reunited`, `ISCA: limpar a pastilha tira case_state da consulta`, `a folha oferece os DOIS conjuntos, e nenhum nasce marcado` |
-// | `estado:` do `copiar` em `_aplicarAFolha` | `ISCA: a pastilha Encontrados manda case_state=reunited`, `ISCA: limpar a pastilha tira case_state da consulta` |
-// | `'case_state': ?estado?.codigo` da `query` em `modelos_perdido.dart` | os dois acima |
-// | `found_by_community` lido em `PerdidoPublico.doJson` | os quatro casos do primeiro grupo mais `ISCA: a pastilha Encontrados manda case_state=reunited` |
+// | o que foi desligado | placar | reprovaram, por nome |
+// |---|---|---|
+// | `_Selo(texto: seloDe(perdido), ...)` voltando a `_Selo(texto: selo)` | 5/4 | `ISCA: o item marcado desenha o selo do reencontro, e NAO "Perdido"`, `o cartao do reencontrado NAO ganha informacao alem do selo`, `ISCA: sem case_state, a lista desenha aberto E reencontrado`, `ISCA: a pastilha Encontrados manda case_state=reunited` |
+// | `seloDe(p)` voltando a `selo` em `rotuloAcessivelDe` | 8/1 | `ISCA: o leitor de tela ouve o selo do reencontro, e nao "Perdido"` -- e SO ele, que e o ponto: o selo visual continuava certo |
+// | o `GrupoDeFiltro` de `case_state` em `lista_de_perdidos.dart` | 5/4 | `ISCA: a pastilha Perdidos pede SO os abertos`, `ISCA: a pastilha Encontrados manda case_state=reunited`, `ISCA: limpar a pastilha tira case_state da consulta`, `a folha oferece os DOIS conjuntos, e nenhum nasce marcado` |
+// | `estado:` do `copiar` em `_aplicarAFolha` | 6/3 | os tres casos de pastilha acima |
+// | `'case_state': ?estado?.codigo` da `query` em `modelos_perdido.dart` | 6/3 | os mesmos tres |
+// | `found_by_community` lido em `PerdidoPublico.doJson` | 4/5 | os quatro casos do primeiro grupo mais `ISCA: sem case_state, a lista desenha aberto E reencontrado` |
 //
 // A SEGUNDA LINHA e a que vale sublinhar: desligar so o rotulo acessivel deixa a
 // tela visualmente certa e reprova UM caso, pelo nome. Sem ele, quem usa leitor
 // de tela ouviria "Perdido" sobre um pet que voltou, com a suite verde -- e e
 // exatamente a forma do `MergeSemantics` que esta casa achou escondendo titulo
 // de leitor de tela nesta mesma rodada.
+//
+// A ULTIMA e a que a uniao tornou mais importante: com os dois conjuntos na
+// MESMA pagina, um selo que nao venha por item marca o pet errado.
 
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
@@ -107,25 +111,33 @@ Future<http.Response> Function(http.Request) redeQueRespeitaOConjunto({
     }
     urls.add(req.url);
     final estado = req.url.queryParameters['case_state'];
+    final mel = perdidoDoContrato(token: 'tk-mel', nome: 'Mel');
+    final voltou = perdidoDoContrato(
+      token: 'tk-voltou',
+      nome: 'Voltou',
+      encontradoPelaComunidade: true,
+    );
     if (estado == 'reunited') {
       return json200(
         paginaDePerdidos(
-          <Map<String, dynamic>>[
-            perdidoDoContrato(
-              token: 'tk-voltou',
-              nome: 'Voltou',
-              encontradoPelaComunidade: true,
-            ),
-          ],
+          <Map<String, dynamic>>[voltou],
           filtros: const <String, String>{'case_state': 'reunited'},
         ),
       );
     }
-    return json200(
-      paginaDePerdidos(<Map<String, dynamic>>[
-        perdidoDoContrato(token: 'tk-mel', nome: 'Mel'),
-      ]),
-    );
+    if (estado == 'open') {
+      return json200(
+        paginaDePerdidos(
+          <Map<String, dynamic>>[mel],
+          filtros: const <String, String>{'case_state': 'open'},
+        ),
+      );
+    }
+    // SEM `case_state`: a UNIAO, que e o recorte padrao desde a segunda decisao
+    // do cliente de 20/10/2026 (*"Tambem na lista padrao"*). O duble responde
+    // os DOIS, como o servidor responde, e e isso que permite medir se a tela
+    // distingue cada cartao pelo campo da resposta.
+    return json200(paginaDePerdidos(<Map<String, dynamic>>[mel, voltou]));
   };
 }
 
@@ -361,10 +373,14 @@ void main() {
     );
   });
 
-  group('o filtro escolhe o conjunto, e a lista abre sem escolher nada', () {
+  group('a lista PADRAO traz os dois, e cada cartao diz qual e', () {
     testWidgets(
-      'CONTRAPESO: a lista abre SEM `case_state` na consulta',
+      'ISCA: sem `case_state`, a lista desenha aberto E reencontrado, cada um com o seu selo',
       (tester) async {
+        // A decisao do cliente de 20/10/2026, segunda rodada: *"Tambem na lista
+        // padrao"*. O risco dela e este caso: os dois chegam na MESMA pagina, e
+        // um selo por pagina (em vez de por item) poria o chip de "encontrado"
+        // num pet que ainda esta na rua -- ou tiraria o chip do que voltou.
         final urls = <Uri>[];
         await abrirPets(tester, rede: redeQueRespeitaOConjunto(urls: urls));
 
@@ -373,10 +389,44 @@ void main() {
           urls.single.queryParameters.containsKey('case_state'),
           isFalse,
           reason: 'REPROVA: a pagina abriu MANDANDO o conjunto. A ausencia e o '
-              'recorte historico (casos abertos), e mandar `open` o devolveria '
-              'em `applied_filters` como filtro numa pagina que ninguem '
-              'filtrou -- o defeito que `period` pagou em 18/10/2026.',
+              'recorte padrao do servidor, e mandar `open` ESCONDERIA os '
+              'reencontrados de quem nunca abriu a folha -- alem de voltar em '
+              '`applied_filters` como filtro numa pagina que ninguem filtrou.',
         );
+
+        expect(find.text('Mel'), findsOneWidget);
+        expect(find.text('Voltou'), findsOneWidget);
+        expect(
+          find.text('Perdido'),
+          findsOneWidget,
+          reason: 'REPROVA: o selo de perdido nao esta em exatamente UM cartao. '
+              'Se esta em dois, o reencontrado foi marcado como procurado e '
+              'alguem sai atras de um animal que esta em casa.',
+        );
+        expect(
+          find.text('Encontrado pela comunidade'),
+          findsOneWidget,
+          reason: 'REPROVA: o selo de reencontro nao esta em exatamente UM '
+              'cartao na lista misturada.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: a pastilha Perdidos pede SO os abertos',
+      (tester) async {
+        // O caminho de volta para o recorte de antes do selo. Sem ele, quem nao
+        // quer ver reencontrado nao tem como.
+        final urls = <Uri>[];
+        await abrirPets(tester, rede: redeQueRespeitaOConjunto(urls: urls));
+        await escolherNaFolha(tester, 'Perdidos');
+
+        expect(
+          urls.last.queryParameters['case_state'],
+          'open',
+          reason: 'REPROVA: escolher `Perdidos` nao pediu o recorte so-abertos.',
+        );
+        expect(find.text('Voltou'), findsNothing);
         expect(find.text('Mel'), findsOneWidget);
       },
     );
@@ -439,7 +489,9 @@ void main() {
           reason: 'REPROVA: limpar a pastilha nao tirou o conjunto da consulta. '
               'Quem escolheu `Encontrados` por curiosidade ficaria preso nele.',
         );
+        // E a lista volta a trazer os DOIS, que e o recorte padrao.
         expect(find.text('Mel'), findsOneWidget);
+        expect(find.text('Voltou'), findsOneWidget);
       },
     );
 
@@ -457,8 +509,8 @@ void main() {
         expect(find.text('Encontrados'), findsOneWidget);
         expect(
           find.text(
-            'Encontrados mostra quem voltou com a ajuda de alguém da '
-            'comunidade, nos últimos 30 dias.',
+            'A lista já traz os dois. Encontrados mostra só quem voltou com a '
+            'ajuda de alguém da comunidade, nos últimos 30 dias.',
           ),
           findsOneWidget,
           reason: 'REPROVA: a folha nao diz as duas condicoes do selo. Sem a '

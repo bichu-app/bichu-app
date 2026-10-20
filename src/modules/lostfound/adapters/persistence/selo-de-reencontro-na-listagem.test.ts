@@ -30,32 +30,50 @@
  * adaptador: uma conferencia que procurasse `conversations` no arquivo casaria
  * com a mencao dentro deste proprio comentario.
  *
- * ## A ISCA DA REGRESSAO MAIS CARA, e ela e a primeira do arquivo
+ * ## A PROPRIEDADE DA PRIMEIRA SECAO MUDOU, e ela nao foi apagada
  *
- * A lista de casos ABERTOS e como a vizinhanca acha o animal que sumiu. O
- * primeiro caso deste arquivo compara o SQL do conjunto aberto com o texto
- * LITERAL que `origin/development` compilava antes desta mudanca, caractere por
- * caractere. Nao e um `assert.ok(sql.includes(...))`: e igualdade.
+ * Na primeira entrega de 20/10/2026 o reencontrado aparecia SO sob o filtro, e a
+ * propriedade era *"a lista da vizinhanca nao muda"* -- provada comparando o SQL
+ * do conjunto padrao com o texto literal de `fb3a0fba`, por igualdade.
+ *
+ * Na segunda rodada do mesmo dia o cliente decidiu **"Tambem na lista padrao"**,
+ * e aquela propriedade deixou de ser verdade: o recorte padrao virou a UNIAO.
+ * Apagar o caso seria perder o instrumento; o que ele mede passou a ser outra
+ * coisa, e continua valendo a pena:
+ *
+ * 1. **`case_state=open` devolve o recorte HISTORICO**, byte por byte igual ao
+ *    de `fb3a0fba` -- quem quer a lista de antes tem como pedi-la, e ela nao
+ *    derivou junto;
+ * 2. **o predicado dos abertos continua INTACTO dentro da uniao**, no lado
+ *    esquerdo do `OR`, com o mesmo operador e o mesmo valor ligado;
+ * 3. **a uniao e um `OR`, e nao um `AND`** -- escrita com `AND` ela devolveria
+ *    zero linhas (nenhum caso e `open` e `closed_reunited` ao mesmo tempo), e a
+ *    pagina de pets ficaria VAZIA. E o pior desfecho possivel desta mudanca, e
+ *    e o unico que nenhum teste de resposta com massa pequena pegaria de graca.
+ *
+ * A propriedade de CONTAGEM -- a uniao nao tira nenhum aberto -- nao e deste
+ * arquivo: ela e de `tests/integration/selo-de-reencontro-na-listagem-publica.test.ts`,
+ * que conta as linhas que o Postgres devolveu.
  *
  * ## A isca, e como ela foi provada
  *
  * Em 20/10/2026, Node v22.23.2. Cada desligamento foi confirmado por diferenca
  * de conteudo do arquivo ANTES de a suite rodar.
  *
- * Base deste arquivo: 11 casos, 11 passaram.
+ * Base deste arquivo: 14 casos, 14 passaram.
  *
  * | o que foi desligado em `kysely-listagem-publica-de-perdidos.ts` | placar | reprovaram, por nome |
  * |---|---|---|
- * | `.where('lost_cases.closed_at', '>=', ...)` do ramo | 10/1 | `a janela de 30 dias e predicado, e ela conta de closed_at` |
- * | o `exists` da conversa | 10/1 | `o sinal da comunidade e a CONVERSA ligada ao caso` |
- * | `'closed_reunited'` virando `'closed_not_found'` | 10/1 | `o ramo do selo le SO o encerramento com reencontro` |
- * | o ramo inteiro (a condicao virando `true`, e o conjunto do selo caindo no de abertos) | 7/4 | os tres acima e mais `o conjunto reencontrado NAO e o conjunto aberto` |
- * | o ramo movido para DEPOIS de `share_to_public_list` | 10/1 | `o SQL do conjunto ABERTO e identico ao de antes desta mudanca` |
+ * | `'closed_reunited'` virando `'closed_not_found'` | 12/2 | `o ramo do selo le SO o encerramento com reencontro`, `o conjunto PADRAO carrega o predicado dos abertos INTACTO` |
+ * | o ramo movido para DEPOIS de `share_to_public_list` | 11/2 | `case_state=open devolve o recorte HISTORICO, identico ao de antes do selo`, `o conjunto PADRAO carrega o predicado dos abertos INTACTO` |
+ * | o `eb.or` do conjunto `padrao` virando `eb.and` | 12/2 | `o conjunto PADRAO carrega o predicado dos abertos INTACTO`, `o conjunto PADRAO e UNIAO, e nao intersecao` |
+ * | `.where('lost_cases.closed_at', ...)` do lado reencontrado | 12/2 | `a janela de 30 dias e predicado, e ela conta de closed_at`, `o conjunto PADRAO traz os TRES predicados do selo do lado direito` |
+ * | o `exists` da conversa | 12/2 | `o sinal da comunidade e a CONVERSA ligada ao caso`, `o conjunto PADRAO traz os TRES predicados do selo do lado direito` |
+ * | `encontradoPelaComunidade: linha.status === 'closed_reunited'` virando `false` | **14/0** | NENHUM caso deste arquivo. A projecao nao aparece no SQL compilado, e e metade do selo -- quem a acusa e o arquivo de integracao |
  *
- * A ULTIMA LINHA e a que justifica a igualdade: mover o predicado de lugar nao
- * muda resultado nenhum, e e justamente por isso que nenhum teste de resposta
- * acusaria. O que ela protege e a promessa da Emenda 4 -- *a consulta da
- * vizinhanca nao foi tocada* --, e promessa sem instrumento e fe.
+ * A PENULTIMA LINHA e a que justifica a igualdade: mover o predicado de lugar
+ * nao muda resultado nenhum, e e justamente por isso que nenhum teste de
+ * resposta acusaria. A ULTIMA e a que protege a pagina de pets de ficar vazia.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -91,7 +109,10 @@ const semBanco = new Kysely<Database>({
 const AGORA = new Date('2026-10-20T13:00:00.000Z');
 
 function recorte(ajustes: Partial<RecorteDePerdidos> = {}): RecorteDePerdidos {
-  return { conjunto: 'aberto', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
+  // `padrao` e o conjunto que a AUSENCIA de `case_state` escolhe desde
+  // 20/10/2026 (*"Tambem na lista padrao"*), e por isso e o padrao deste
+  // ajudante: o caso que nao diz nada mede o que a pessoa de fato recebe.
+  return { conjunto: 'padrao', pagina: 1, limite: 20, agora: AGORA, ...ajustes };
 }
 
 function compilado(ajustes: Partial<RecorteDePerdidos> = {}) {
@@ -132,17 +153,16 @@ function ondeDe(sql: string): string {
   return sql.slice(i);
 }
 
-void describe('a lista de casos ABERTOS nao muda, e e ela que a vizinhanca abre', () => {
-  void it('o SQL do conjunto ABERTO e identico ao de antes desta mudanca', () => {
-    const compilada = compilado();
+void describe('o recorte dos abertos nao derivou, e a uniao o carrega intacto', () => {
+  void it('case_state=open devolve o recorte HISTORICO, identico ao de antes do selo', () => {
+    const compilada = compilado({ conjunto: 'aberto' });
 
     assert.equal(
       ondeDe(compilada.sql),
       ONDE_DO_CONJUNTO_ABERTO_ANTES,
-      'o `WHERE` do conjunto de casos abertos mudou. Esta e a consulta pela qual a vizinhanca ' +
-        'acha o animal que sumiu, e a Emenda 4 do ADR-0010 promete que ela nao foi tocada: ' +
-        'mesmos predicados, mesma ordem. Se a mudanca for deliberada, ela e uma decisao de ' +
-        'produto e nao um efeito colateral do selo.',
+      'o `WHERE` de `case_state=open` mudou. Este e o recorte que a rota tinha ' +
+        'antes do selo, e quem o pede agora o pede de proposito -- se ele tambem ' +
+        'derivou, nao sobrou nenhum jeito de pedir a lista de antes.',
     );
     assert.deepEqual(
       [...compilada.parameters],
@@ -151,17 +171,67 @@ void describe('a lista de casos ABERTOS nao muda, e e ela que a vizinhanca abre'
     );
   });
 
-  void it('o conjunto ABERTO nao olha `conversations` nem `closed_at`', () => {
+  void it('o conjunto PADRAO carrega o predicado dos abertos INTACTO', () => {
+    // Letra por letra, e no LADO ESQUERDO do `OR`: e a forma do predicado que a
+    // vizinhanca sempre teve. A uniao ACRESCENTA; ela nao reescreve o lado de
+    // quem ainda esta na rua.
     const { sql } = compilado();
+
+    assert.match(
+      sql,
+      /where \("lost_cases"\."status" = \$(\d+) or \(/,
+      'o predicado dos abertos nao abre a uniao, ou nao e mais uma igualdade ' +
+        `simples sobre \`status\`. SQL: ${sql}`,
+    );
+    const posicao = /where \("lost_cases"\."status" = \$(\d+) or \(/.exec(sql)?.[1];
+    assert.ok(posicao !== undefined);
+    assert.equal(
+      compilado().parameters[Number(posicao) - 1],
+      'open',
+      'o valor ligado ao lado esquerdo da uniao nao e `open`: o conjunto padrao ' +
+        'deixou de incluir os casos abertos, e a lista pela qual a vizinhanca ' +
+        'acha o animal que sumiu passou a responder outra coisa.',
+    );
+  });
+
+  void it('o conjunto PADRAO e UNIAO, e nao intersecao', () => {
+    // **O pior desfecho desta mudanca mora aqui.** Nenhum caso e `open` e
+    // `closed_reunited` ao mesmo tempo, entao um `AND` no lugar do `OR` devolve
+    // ZERO linhas -- a pagina de pets fica vazia, sem erro, sem faixa de falha,
+    // sem nada que pareca defeito. E um teste de resposta com massa de dois
+    // casos poderia nem notar.
+    const { sql } = compilado();
+
+    assert.match(
+      sql,
+      /"lost_cases"\."status" = \$\d+ or \("lost_cases"\."status" = \$\d+ and/,
+      'a uniao do conjunto padrao nao e um `OR`. Com `AND` ela devolve zero ' +
+        `linhas e a pagina de pets abre VAZIA. SQL: ${sql}`,
+    );
+  });
+
+  void it('o conjunto `aberto` nao olha `conversations` nem `closed_at`', () => {
+    const { sql } = compilado({ conjunto: 'aberto' });
 
     assert.doesNotMatch(
       sql,
       /conversations/,
-      `a lista de abertos passou a avaliar o sinal da comunidade por linha. Nao ha valor a ` +
-        `medir ali -- selo de reencontro em caso aberto nao tem significado -- e o custo cai ` +
-        `na consulta que menos pode ganhar custo. SQL: ${sql}`,
+      `o recorte historico passou a avaliar o sinal da comunidade. SQL: ${sql}`,
     );
     assert.doesNotMatch(sql, /closed_at/, `SQL: ${sql}`);
+  });
+
+  void it('o conjunto PADRAO traz os TRES predicados do selo do lado direito', () => {
+    // A uniao nao afrouxa o selo: quem entra pelo lado direito do `OR` passa
+    // pelos mesmos tres predicados do conjunto `reencontrado`.
+    const { sql } = compilado();
+
+    assert.match(sql, /"lost_cases"\."status" = \$\d+ and "lost_cases"\."closed_at" >= \$\d+/, `SQL: ${sql}`);
+    assert.match(
+      sql,
+      /exists \(select "conversations"\."id" from "conversations" where "conversations"\."case_id" = "lost_cases"\."id"\)/,
+      `o sinal da comunidade saiu do lado direito da uniao. SQL: ${sql}`,
+    );
   });
 });
 
@@ -242,7 +312,7 @@ void describe('o conjunto do selo carrega os TRES predicados, e nenhum e opciona
   });
 
   void it('o conjunto reencontrado NAO e o conjunto aberto', () => {
-    const aberto = compilado();
+    const aberto = compilado({ conjunto: 'aberto' });
     const reencontrado = compilado({ conjunto: 'reencontrado' });
 
     assert.notEqual(
