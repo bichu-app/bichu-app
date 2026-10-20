@@ -134,6 +134,26 @@ enum ProblemTipo {
   /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
   limiteDeTentativas('rate-limited'),
 
+  // Os DOIS de `If-Match` (ADR-0027). Eles sao dois tipos e nao um porque a
+  // tela reage diferente: um e falha do APP, o outro e colisao entre PESSOAS.
+
+  /// O `ETag` apresentado nao e a versao atual: alguem salvou depois de voce
+  /// ter lido. 412.
+  ///
+  /// **Tipo proprio, e nao a faixa generica de erro.** Sem ele o 412 cai em
+  /// [desconhecido] e a tela diz "algo deu errado", que e a frase que esconde
+  /// justamente o que a pessoa precisa saber -- o encontro mudou enquanto ela
+  /// olhava, e recarregar resolve. Medido em 19/10/2026: o enum tinha os dois
+  /// faltando e `deUri` devolvia [desconhecido] para ambos.
+  precondicaoFalhou('precondition-failed'),
+
+  /// Escrita sobre recurso existente sem `If-Match`. Nada foi gravado. 428.
+  ///
+  /// **Nao e erro para a pessoa ler**: e defeito de quem chamou, porque o app
+  /// deixou de mandar a versao que leu. A tela recarrega e tenta de novo em
+  /// vez de culpar quem tocou no botao.
+  precondicaoNecessaria('precondition-required'),
+
   /// Chegou um `type` que este build nao conhece.
   ///
   /// Nao e caso de erro: versao antiga do app continua instalada por semanas e

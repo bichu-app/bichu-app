@@ -192,6 +192,55 @@ class RedeApi {
     return _ler(() => PedidoDeParticipacao.doJson(json));
   }
 
+  /// `POST /v1/network/events/{eventSlug}/cancellation`
+  /// (`cancelNetworkEvent`), com conta.
+  ///
+  /// **Cancelar nao e apagar**: `status` vira `cancelled` e o encontro
+  /// continua visivel na agenda ate o fim previsto, porque quem ia precisa
+  /// descobrir que nao vai mais acontecer.
+  ///
+  /// [ifMatch] e o `ETag` da ultima leitura e e OBRIGATORIO pelo contrato.
+  /// **E aqui esta o defeito que esta entrega NAO fecha**: nenhuma leitura da
+  /// secao `Rede` devolve `ETag` -- nem `listNetworkEvents`, nem
+  /// `getNetworkEvent`, nem o `201` de `createNetworkEvent` --, e isso foi
+  /// medido contra homologacao em 19/10/2026, nao deduzido do contrato. As
+  /// unicas operacoes da secao que devolvem `ETag` sao as duas ESCRITAS
+  /// (`updateNetworkEvent` e esta), e um valor que so a escrita entrega nao
+  /// serve para autorizar a primeira escrita. Por isso este metodo RECEBE o
+  /// valor em vez de busca-lo: quando a fonte existir, ela entra em um lugar
+  /// so.
+  ///
+  /// [nota] e o motivo e vai **so para a trilha**: o app nao mostra motivo de
+  /// cancelamento (`CommunityNetworkEventCancellation`, 2 a 280 caracteres).
+  ///
+  /// Nao trata recusa, pela mesma razao de [criar]: `412`
+  /// (`precondition-failed`, alguem salvou depois de voce ter lido), `428`
+  /// (`precondition-required`, o app deixou de mandar a versao) e `404`
+  /// (encontro de outra pessoa, que pela ADR-0021 NAO e 403) sobem como
+  /// `FalhaDaApi` e quem chama os distingue por `ProblemTipo`. Os quatro
+  /// caminhos foram medidos em homologacao.
+  Future<EncontroPublico> cancelar(
+    String slug, {
+    required String ifMatch,
+    required String nota,
+  }) async {
+    final json = await _api.post(
+      '${_caminho(slug)}/cancellation',
+      corpo: <String, dynamic>{'note': nota},
+      ifMatch: ifMatch,
+    );
+    return _ler(() {
+      final encontro = EncontroDaRede.doJson(json);
+      if (encontro is! EncontroPublico) {
+        throw const FormatException(
+          'cancelNetworkEvent devolveu encontro que nao e publico; o encontro '
+          'da comunidade e sempre publico pelo contrato',
+        );
+      }
+      return encontro;
+    });
+  }
+
   /// `GET /v1/network/join-requests` (`listMyNetworkEventJoinRequests`).
   Future<PaginaDeMeusPedidos> meusPedidos(Map<String, String> query) async {
     final json = await _api.get('/network/join-requests', query: query);

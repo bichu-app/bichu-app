@@ -57,6 +57,7 @@ class ApiClient {
     String caminho, {
     Object? corpo,
     String? idempotencyKey,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
     return _enviar(
@@ -64,16 +65,37 @@ class ApiClient {
       caminho,
       corpo: corpo,
       idempotencyKey: idempotencyKey,
+      ifMatch: ifMatch,
       exigeToken: exigeToken,
     );
   }
 
+  /// `PATCH`.
+  ///
+  /// [ifMatch] e o `ETag` da ULTIMA LEITURA, e nao um enfeite: e controle de
+  /// concorrencia (`#/components/parameters/IfMatch`). Treze operacoes do
+  /// contrato o exigem -- `updateNetworkEvent` e `cancelNetworkEvent` do app,
+  /// mais onze do painel --, e nenhum verbo desta classe tinha como mandar o
+  /// cabecalho antes de 19/10/2026: a lista de cabecalhos de [_enviar] e
+  /// fechada, e quem chamava so podia escolher `Idempotency-Key`. A operacao
+  /// respondia **428** (`precondition-required`) em toda tentativa, medido em
+  /// homologacao.
+  ///
+  /// Ausente quando a operacao exige: `428`. Diferente da versao atual:
+  /// `412`, e outra pessoa salvou depois de voce ter lido.
   Future<Map<String, dynamic>> patch(
     String caminho, {
     Object? corpo,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('PATCH', caminho, corpo: corpo, exigeToken: exigeToken);
+    return _enviar(
+      'PATCH',
+      caminho,
+      corpo: corpo,
+      ifMatch: ifMatch,
+      exigeToken: exigeToken,
+    );
   }
 
   /// `PUT`, **e sem `Idempotency-Key`**.
@@ -89,16 +111,24 @@ class ApiClient {
   Future<Map<String, dynamic>> put(
     String caminho, {
     Object? corpo,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('PUT', caminho, corpo: corpo, exigeToken: exigeToken);
+    return _enviar(
+      'PUT',
+      caminho,
+      corpo: corpo,
+      ifMatch: ifMatch,
+      exigeToken: exigeToken,
+    );
   }
 
   Future<Map<String, dynamic>> delete(
     String caminho, {
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('DELETE', caminho, exigeToken: exigeToken);
+    return _enviar('DELETE', caminho, ifMatch: ifMatch, exigeToken: exigeToken);
   }
 
   /// Baixa o corpo binario de uma rota **autenticada desta API**.
@@ -186,6 +216,7 @@ class ApiClient {
     Object? corpo,
     Map<String, String>? query,
     String? idempotencyKey,
+    String? ifMatch,
     bool exigeToken = true,
   }) async {
     final uri = _url(caminho, query);
@@ -200,6 +231,9 @@ class ApiClient {
     }
     if (idempotencyKey != null) {
       cabecalhos['Idempotency-Key'] = idempotencyKey;
+    }
+    if (ifMatch != null) {
+      cabecalhos['If-Match'] = ifMatch;
     }
     if (exigeToken) {
       final token = await tokenDeAcesso?.call();
