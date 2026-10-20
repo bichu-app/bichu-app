@@ -254,15 +254,26 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
 
     try {
-      final encontro = await RedeApi(escopo.api).criar(
-        corpo,
-        idempotencyKey: chave,
-      );
+      await RedeApi(escopo.api).criar(corpo, idempotencyKey: chave);
       if (!mounted) return;
-      // **Vai para o proprio encontro, que ja esta em publico.** Mostrar uma
-      // tela de "pronto" seria esconder o resultado que a pessoa precisa ver:
-      // o encontro como a comunidade o ve.
-      context.pushReplacement(Rotas.encontroDaRedeDe(encontro.slug));
+      // **VAI PARA A AGENDA, e nao mais para o proprio encontro.**
+      //
+      // Ate 19/10/2026 esta linha era
+      // `context.pushReplacement(Rotas.encontroDaRedeDe(encontro.slug))`, com
+      // a razao escrita: *"mostrar uma tela de pronto seria esconder o
+      // resultado que a pessoa precisa ver: o encontro como a comunidade o
+      // ve"*. A RAZAO CONTINUA VALENDO e e ela que escolhe este destino -- o
+      // que mudou foi onde a comunidade ve o evento. A pagina de detalhe saiu
+      // por decisao do cliente, e o lugar onde o evento aparece para todo
+      // mundo passou a ser o cartao da agenda.
+      //
+      // `go` e nao `pushReplacement`, como em `perto/sugerir_profissional.dart`:
+      // `/rede` e um ramo da casca de abas, e empilha-lo poria a casca
+      // dentro de uma tela irma da casca. `go` troca de ramo e fecha a tarefa.
+      //
+      // `encontro.slug` deixou de ser lido aqui; `criar` continua devolvendo o
+      // encontro inteiro, e o campo segue no contrato.
+      context.go(Rotas.rede);
     } on FalhaDeConexao {
       if (!mounted) return;
       // **NAO vai para a fila offline.** Criar encontro publica na hora; uma

@@ -845,11 +845,13 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return <Widget>[
       for (var i = 0; i < _itens.length; i++) ...<Widget>[
         if (i > 0) const SizedBox(height: BichuEspaco.e4),
-        CartaoDoEncontro(
-          encontro: _itens[i].encontro,
-          distanciaEmMetros: _itens[i].distancia,
-          estadoDoPedido: _itens[i].pedido,
-        ),
+        // **So o encontro.** O cartao mostra foto e titulo, e a distancia e
+        // o estado do pedido deixaram de ter onde aparecer (cliente,
+        // 19/10/2026). `_ItemDaAgenda` continua carregando as duas: a
+        // distancia porque e a resposta de `listNearbyNetworkEvents` que
+        // revela se ha regiao cadastrada -- e e isso que decide se `Mais
+        // perto` e `Distância` aparecem na barra.
+        CartaoDoEncontro(encontro: _itens[i].encontro),
       ],
       const SizedBox(height: BichuEspaco.e4),
       _LinhaDaPagina(naTela: _itens.length, total: _total),

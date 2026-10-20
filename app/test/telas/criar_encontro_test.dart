@@ -29,6 +29,7 @@
 import 'dart:convert';
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/criar_encontro.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
@@ -484,6 +485,71 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+        'ISCA — criar evento CONTINUA funcionando, e o desfecho é a agenda',
+        (tester) async {
+      // ISCA (duas metades, e cada uma reprova numa assercao diferente):
+      //   1. em `rotas.dart`, apague a rota `Rotas.criarEncontroDaRede`. A
+      //      porta nao abre e `find.byType(TelaCriarEncontro)` reprova.
+      //   2. em `criar_encontro.dart`, troque `context.go(Rotas.rede)` por
+      //      `context.go(Rotas.encontroDaRedeDe(...))` -- um endereco que nao
+      //      existe mais. O `GoRouter` cai na pagina de erro e a assercao do
+      //      destino reprova.
+      //
+      // **ESTE CASO EXISTE PORQUE A ENTREGA DE 19/10 REMOVEU A TELA DE
+      // DETALHE DO EVENTO**, e o desfecho de criar era ela: a linha era
+      // `context.pushReplacement(Rotas.encontroDaRedeDe(encontro.slug))`.
+      // Criar evento e a acao flutuante da secao e o cliente nao pediu para
+      // tira-la -- este caso e quem prova que ela sobreviveu a remocao.
+      final enviados = <Map<String, dynamic>>[];
+      // A agenda devolve o evento criado DEPOIS do POST: e assim que a pessoa
+      // ve o resultado agora que nao ha pagina dele.
+      var criou = false;
+      await abrirAgenda(
+        tester,
+        rede: (req) async {
+          if (req.url.path == '/v1/network/events' && req.method == 'GET') {
+            return json200(
+              pagina(<Map<String, dynamic>>[
+                if (criou) encontroPublico(title: 'Mutirão de banho'),
+              ]),
+            );
+          }
+          if (req.url.path == '/v1/network/events' && req.method == 'POST') {
+            enviados.add(jsonDecode(req.body) as Map<String, dynamic>);
+            criou = true;
+            return json200(encontroPublico(), status: 201);
+          }
+          return problema('not-found', 404);
+        },
+      );
+
+      // (1) A PORTA ABRE a tela de criar.
+      await abrirAPorta(tester);
+      expect(
+        find.byType(TelaCriarEncontro),
+        findsOneWidget,
+        reason: 'REPROVA: a porta de criar evento nao abre mais a tela. O '
+            'cliente removeu a pagina de DETALHE do evento em 19/10/2026, e '
+            'nao a de criar.',
+      );
+
+      // (2) O POST SAI.
+      await preencherEMarcar(tester);
+      expect(enviados, hasLength(1), reason: 'REPROVA: nada foi enviado.');
+
+      // (3) E O DESFECHO E A AGENDA, com a tela de criar fechada e nenhuma
+      // pagina de erro de rota no caminho.
+      expect(
+        find.byType(AgendaDaRede),
+        findsOneWidget,
+        reason: 'REPROVA: criar evento nao termina na agenda. Era a pagina do '
+            'proprio evento, e ela saiu: o lugar onde a comunidade ve o '
+            'evento passou a ser o cartao da agenda.',
+      );
+      expect(find.byType(TelaCriarEncontro), findsNothing);
+    });
 
     testWidgets('campo opcional vazio NÃO entra como `null`', (tester) async {
       final enviados = <Map<String, dynamic>>[];

@@ -3,9 +3,13 @@
 // Todo esperado esta escrito por extenso, com acento: nenhum `expect` compara
 // o texto renderizado com a constante que o produz.
 
+import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
+import 'package:bichu/telas/rede/pecas_da_rede.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:bichu/escopo.dart';
@@ -101,9 +105,43 @@ void main() {
     });
   });
 
-  group('cartões', () {
-    testWidgets('público: data, horário no fuso do evento, lugar e valor',
-        (tester) async {
+  // ---------------------------------------------------------------------
+  // O CARTAO: FOTO E TITULO, E NADA MAIS (cliente, 19/10/2026)
+  // ---------------------------------------------------------------------
+  //
+  // **TRES CASOS SAIRAM DAQUI**, porque mediam o que o cartao deixou de
+  // mostrar: `público: data, horário no fuso do evento, lugar e valor`,
+  // `ISCA -- teaser privado: só título, data e o selo Privado` e
+  // `cancelado: o nome acessível começa por "Cancelado:"`. O que entrou no
+  // lugar deles mede o cartao NOVO -- e mede pela CONTAGEM de filhos, e nao
+  // por `findsNothing` sobre literais.
+  group('cartões: a foto e o título, e nada mais', () {
+    // POR QUE A CONTAGEM, E NAO UM `findsNothing` POR LITERAL.
+    //
+    // Um caso montado como
+    //     expect(find.textContaining('outubro'), findsNothing);
+    // passaria com a tela EM BRANCO, com o cartao fora da arvore, com a
+    // resposta vazia e com a agenda em estado de falha. Esta e a familia de
+    // defeito que o repositorio inteiro ja pagou: dez portoes cegos numa
+    // rodada. Aqui a medida e positiva e fechada -- o titulo TEM de estar, a
+    // imagem TEM de estar, e o numero de `Text` DENTRO do cartao tem de ser
+    // exatamente 1. Um campo que voltasse, qualquer que fosse, quebraria a
+    // contagem sem o caso precisar saber o nome dele.
+    int textosNoCartao(WidgetTester tester) => find
+        .descendant(
+          of: find.byType(CartaoDoEncontro),
+          matching: find.byType(Text),
+        )
+        .evaluate()
+        .length;
+
+    testWidgets(
+        'ISCA -- público com capa: um Text só, e ele é o título', (tester) async {
+      // ISCA: em `cartao_do_encontro.dart`, acrescente ao `Padding` do titulo
+      // qualquer linha de volta -- por exemplo
+      //     Text(e is EncontroPublico ? e.resumo : ''),
+      // Este caso reprova em `textosNoCartao`, que passa de 1 para 2, SEM
+      // precisar conhecer o campo que voltou.
       await abrirRede(
         tester,
         rede: redeComAgenda(
@@ -115,49 +153,103 @@ void main() {
                 'currency': 'BRL',
                 'unit': 'per_dog',
               },
+              images: <Map<String, dynamic>>[
+                imagem('https://midia.bichu.app/rede/capa.jpg', 'A praça'),
+              ],
             ),
           ],
         ),
         logado: false,
       );
 
+      // (1) O CARTAO ESTA NA ARVORE. Sem esta linha, tudo abaixo mediria o
+      // nada e aprovaria.
+      expect(find.byType(CartaoDoEncontro), findsOneWidget);
+
+      // (2) O TITULO ESTA ESCRITO.
       expect(find.text('Passeio matinal na Benedito Calixto'), findsOneWidget);
-      // 12:00Z e 9h em America/Sao_Paulo, qualquer que seja o fuso do
-      // aparelho de teste.
-      expect(find.text('Sábado, 3 de outubro · Das 9h às 11h'), findsOneWidget);
-      expect(find.text('Praça Benedito Calixto · Pinheiros'), findsOneWidget);
-      // A fixture manda `per_dog`, que e legado: aparece como "por pet", o
-      // mesmo texto do painel (01/10).
-      expect(find.text('R\$ 15 por pet'), findsOneWidget);
-      // Sem selo "Público": o normal não tem selo (UX 28.7.2).
-      expect(find.text('Público'), findsNothing);
+
+      // (3) A FOTO ESTA DESENHADA, com a derivada do cartao.
+      final imagens = find.descendant(
+        of: find.byType(CartaoDoEncontro),
+        matching: find.byType(Image),
+      );
+      expect(imagens, findsOneWidget);
+      // `ResizeImage`, e nao `NetworkImage` solto: e `cacheWidth` que o
+      // embrulha, e o embrulho E a prova de que ele esta sendo passado. Sem
+      // ele, a derivada de 1024 x 576 custa 2.359.296 bytes decodificados por
+      // cartao, e a agenda monta os 20 da pagina de uma vez.
+      final provedor = tester.widget<Image>(imagens).image;
+      expect(
+        provedor,
+        isA<ResizeImage>(),
+        reason: 'REPROVA: a capa do cartao voltou a ser decodificada no '
+            'tamanho do arquivo. `cacheWidth` e o que limita o custo em '
+            'memoria, e sao 20 cartoes por pagina.',
+      );
+      final redimensionada = provedor as ResizeImage;
+      expect(
+        (redimensionada.imageProvider as NetworkImage).url,
+        'https://midia.bichu.app/rede/capa.jpg',
+      );
+      // A largura pedida ao decodificador e a PINTADA, em pixeis do aparelho:
+      // nunca a do arquivo.
+      final larguraPintada = tester
+          .getRect(find.descendant(
+            of: find.byType(CartaoDoEncontro),
+            matching: find.byType(Image),
+          ))
+          .width;
+      final fator = tester.view.devicePixelRatio;
+      expect(redimensionada.width, (larguraPintada * fator).round());
+
+      // (4) E O CARTAO TEM UM `Text` SO. Esta e a assercao que nao envelhece:
+      // ela reprova por qualquer campo que volte, nomeado ou nao.
+      expect(
+        textosNoCartao(tester),
+        1,
+        reason: 'REPROVA: o cartao do evento voltou a escrever mais do que o '
+            'titulo. O cliente pediu "apenas a foto e o titulo do evento, sem '
+            'informações adicionais" em 19/10/2026.',
+      );
     });
 
-    testWidgets('ISCA -- teaser privado: só título, data e o selo Privado',
+    testWidgets('ISCA -- teaser privado: o banner da marca e o título',
         (tester) async {
       // ISCA: em `cartao_do_encontro.dart`, troque
-      //     if (e is EncontroPublico) seloDeValor(e.entrada),
-      // por um selo fixo `Gratuito` para os dois casos. Este caso reprova no
-      // `expect` de `Gratuito`.
+      //     url: e is EncontroPublico ? e.urlDaCapa : null,
+      // por `url: 'https://midia.bichu.app/x.jpg'`. O teaser passa a baixar
+      // uma imagem que o contrato nao manda e este caso reprova no `Image`.
       await abrirRede(
         tester,
         rede: redeComAgenda(proximos: <Map<String, dynamic>>[teaserPrivado()]),
         logado: false,
       );
 
+      expect(find.byType(CartaoDoEncontro), findsOneWidget);
       expect(find.text('Clube dos border collies'), findsOneWidget);
-      expect(find.text('Domingo, 4 de outubro'), findsOneWidget);
-      expect(find.text('Privado'), findsOneWidget);
-      expect(find.text('Gratuito'), findsNothing);
-      // Sem capa: o banner da marca e pintado, nao baixado.
+      // Sem capa: o banner da marca e PINTADO, e nao baixado.
       expect(find.byType(Image), findsNothing);
-      // Nenhum horario: o teaser nao tem.
-      expect(textoDaTela(tester), isNot(contains('Das ')));
+      expect(
+        find.descendant(
+          of: find.byType(CartaoDoEncontro),
+          matching: find.byType(BannerDaMarca),
+        ),
+        findsOneWidget,
+      );
+      expect(textosNoCartao(tester), 1);
     });
 
-    testWidgets('cancelado: o nome acessível começa por "Cancelado:"',
+    testWidgets(
+        'ISCA -- cancelado desenha IGUAL: nenhum selo, nenhum distintivo',
         (tester) async {
-      final semantica = tester.ensureSemantics();
+      // ISCA: em `cartao_do_encontro.dart`, embrulhe o `Text` do titulo num
+      // `Column` com `DistintivoDeSituacao` -- ou qualquer coisa que a
+      // situacao faca aparecer. Este caso reprova na contagem.
+      //
+      // **ISTO E CONSEQUENCIA MEDIDA, e nao desenho pedido:** o cliente pediu
+      // "sem informações adicionais", e o distintivo `Cancelado` era uma
+      // delas. Um evento cancelado ficou indistinguivel na lista.
       await abrirRede(
         tester,
         rede: redeComAgenda(
@@ -167,19 +259,122 @@ void main() {
         ),
         logado: false,
       );
-      expect(find.text('Cancelado'), findsOneWidget);
-      expect(
-        find.bySemanticsLabel(RegExp(r'^Cancelado: Manhã dos labradores')),
-        findsOneWidget,
+
+      expect(find.byType(CartaoDoEncontro), findsOneWidget);
+      expect(find.text('Manhã dos labradores'), findsOneWidget);
+      expect(textosNoCartao(tester), 1);
+    });
+
+    testWidgets(
+        'ISCA -- o cartão NÃO abre nada: nenhum InkWell e nenhuma rota de '
+        'detalhe de evento', (tester) async {
+      // ISCA (duas metades, e as duas reprovam aqui):
+      //   1. em `cartao_do_encontro.dart`, embrulhe o `Container` num
+      //      `InkWell(onTap: () {})`. A primeira metade reprova.
+      //   2. em `rotas.dart`, devolva `encontros/:slug` ao ramo da `Rede`.
+      //      A segunda metade reprova no `GoRouter`.
+      await abrirRede(
+        tester,
+        rede: redeComAgenda(
+          proximos: <Map<String, dynamic>>[encontroPublico()],
+        ),
+        logado: false,
       );
+      expect(find.byType(CartaoDoEncontro), findsOneWidget);
+
+      // (1) NENHUM CONTROLE DENTRO DO CARTAO. Medido DENTRO do cartao, e nao
+      // na tela: a `AppBar` e a barra de abas tem controles proprios, e
+      // contar a tela inteira mediria o app em volta.
+      for (final tipo in <Finder>[
+        find.byType(InkWell),
+        find.byType(GestureDetector),
+      ]) {
+        expect(
+          find.descendant(of: find.byType(CartaoDoEncontro), matching: tipo),
+          findsNothing,
+          reason: 'REPROVA: o cartao do evento voltou a ser tocavel. Nao ha '
+              'pagina de detalhe para ele abrir desde 19/10/2026.',
+        );
+      }
+
+      // (2) E O NO QUE FALA O EVENTO NAO E BOTAO.
+      //
+      // Medido pelo ROTULO e nao pela subarvore do widget: `getSemantics`
+      // sobe ate o no mais proximo, que e o da lista inteira, e contar botoes
+      // ali mediria a barra de abas junto -- foi assim que a primeira versao
+      // deste caso achou dois botoes que nao eram do cartao.
+      //
+      // Ate 19/10/2026 o cartao publicava um no com `button: true` e
+      // `label: nomeAcessivel` -- uma string que COMECA pelo titulo. Entao
+      // procurar o titulo no rotulo acha o no certo nas duas versoes, e so na
+      // antiga ele e botao. **As duas assercoes importam**: a primeira prova
+      // que ha no com o titulo (sem ela a segunda passaria com a arvore
+      // vazia), e a segunda prova que ele e conteudo.
+      final semantica = tester.ensureSemantics();
+      final comOTitulo = <SemanticsNode>[];
+      void colher(SemanticsNode n) {
+        if (n.label.contains('Passeio matinal na Benedito Calixto')) {
+          comOTitulo.add(n);
+        }
+        n.visitChildren((f) {
+          colher(f);
+          return true;
+        });
+      }
+
+      colher(tester.getSemantics(find.byType(Scaffold).last));
+      expect(
+        comOTitulo,
+        isNotEmpty,
+        reason: 'a arvore semantica nao tem no nenhum com o titulo do evento: '
+            'a assercao seguinte passaria por vazio',
+      );
+      for (final n in comOTitulo) {
+        expect(
+          n.flagsCollection.isButton,
+          isFalse,
+          reason: 'REPROVA: o no que anuncia o evento ainda e um botao. Nao '
+              'ha pagina de detalhe para ele abrir desde 19/10/2026.',
+        );
+      }
       semantica.dispose();
+
+      // (3) E A ROTA NAO EXISTE. Esta e a metade que o `InkWell` nao cobre:
+      // um link direto, um `push` de outra tela ou um `deep link` chegariam
+      // na tela de detalhe sem passar pelo cartao.
+      final contexto = tester.element(find.byType(AgendaDaRede));
+      final roteador = GoRouter.of(contexto);
+      expect(
+        roteador.configuration.findMatch(
+          Uri.parse('/rede/encontros/$slugPublico'),
+        ).routes,
+        isEmpty,
+        reason: 'REPROVA: `/rede/encontros/<slug>` voltou a casar com uma '
+            'rota. A tela de detalhe do evento saiu em 19/10/2026 e a rota '
+            'saiu com ela -- rota orfa leva a pagina de erro, e nao a nada.',
+      );
     });
   });
 
   group('distância pela região cadastrada', () {
+    // **DOIS CASOS SAIRAM DESTE GRUPO** com a linha de distancia do cartao:
+    // `ISCA -- a distância nunca aparece em privado` (que media
+    // `CartaoDoEncontro.distanciaVisivel`, metodo que nao existe mais) e
+    // `encerrado e cancelado não mostram distância`. Os tres filtros que
+    // aquele metodo aplicava -- privado nunca, encerrado nunca, cancelado
+    // nunca -- viraram UM: ninguem mostra distancia.
+    //
+    // O caso abaixo FICOU e trocou de alvo: ele media a linha na tela e
+    // agora mede a PERGUNTA, que continua saindo e continua sem coordenada.
     testWidgets(
-        'com conta, a segunda pergunta é listNearbyNetworkEvents com '
-        'sort=proximos, e o cartão público mostra a distância', (tester) async {
+        'ISCA -- a pergunta de distância continua saindo, sem coordenada, e '
+        'a distância NÃO é pintada', (tester) async {
+      // ISCA: em `agenda_da_rede.dart`, acrescente `lat` e `lon` a
+      // `queryDePerto`. Este caso reprova no laco de chaves proibidas.
+      //
+      // A pergunta nao e desperdicio: e a resposta dela que revela se ha
+      // regiao cadastrada, e e isso que decide se `Mais perto` e `Distância`
+      // aparecem na barra -- o caso seguinte mede esse par.
       final rede = redeComAgenda();
       await abrirRede(tester, rede: rede);
 
@@ -191,47 +386,17 @@ void main() {
         expect(perto.single.url.queryParameters.containsKey(chave), isFalse);
       }
       expect(perto.single.headers['Authorization'], startsWith('Bearer '));
-      expect(find.text('A cerca de 1 km da sua região'), findsOneWidget);
-    });
 
-    testWidgets('ISCA -- a distância nunca aparece em privado', (tester) async {
-      // ISCA: em `agenda_da_rede.dart`, troque
-      //     distancia: e is EncontroPublico ? medidas[e.slug] : null,
-      // por `distancia: medidas[e.slug]`, e em
-      // `CartaoDoEncontro.distanciaVisivel` apague a linha
-      //     if (encontro is! EncontroPublico) return null;
-      // Este caso reprova: a resposta abaixo traz, fora do contrato, o
-      // privado com medida.
-      final rede = redeComAgenda(
-        proximos: <Map<String, dynamic>>[teaserPrivado()],
-        porPertoCorpo: paginaPorPerto(<Map<String, dynamic>>[
-          <String, dynamic>{...teaserPrivado(), 'distance_m': 800},
-        ]),
-      );
-      await abrirRede(tester, rede: rede);
-
-      expect(find.text('Clube dos border collies'), findsOneWidget);
-      expect(textoDaTela(tester), isNot(contains('da sua região')));
-      final cartao = tester.widget<CartaoDoEncontro>(find.byType(CartaoDoEncontro));
+      // E A RESPOSTA NAO VIRA TEXTO. Ancorado no cartao que ESTA na arvore
+      // com a medida de 1200 m na resposta: sem a primeira linha, o
+      // `findsNothing` abaixo passaria com a tela em branco.
+      expect(find.byType(CartaoDoEncontro), findsWidgets);
       expect(
-        CartaoDoEncontro.distanciaVisivel(cartao.encontro, 800),
-        isNull,
+        find.textContaining('da sua região'),
+        findsNothing,
+        reason: 'REPROVA: a linha de distancia voltou ao cartao. O cliente '
+            'pediu so a foto e o titulo em 19/10/2026.',
       );
-    });
-
-    testWidgets('encerrado e cancelado não mostram distância', (tester) async {
-      await abrirRede(
-        tester,
-        rede: redeComAgenda(
-          proximos: <Map<String, dynamic>>[
-            encontroPublico(status: 'cancelled'),
-          ],
-          porPertoCorpo: paginaPorPerto(<Map<String, dynamic>>[
-            porPerto(encontroPublico(status: 'cancelled'), 1200),
-          ]),
-        ),
-      );
-      expect(textoDaTela(tester), isNot(contains('da sua região')));
     });
 
     testWidgets(
@@ -387,8 +552,19 @@ void main() {
             .queryParameters['sort'],
         'proximos',
       );
-      expect(find.text('Pedido enviado'), findsNWidgets(2));
-      expect(find.text('Pedido aprovado'), findsOneWidget);
+      // **A PILULA SAIU DO CARTAO** (cliente, 19/10/2026: "sem informações
+      // adicionais"). Ate aqui este caso media `Pedido enviado` duas vezes e
+      // `Pedido aprovado` uma. Agora ele mede o contrario -- e mede ANCORADO
+      // nos tres cartoes, porque um `findsNothing` sozinho passaria com a aba
+      // vazia, que e exatamente o que o estado de `Meus pedidos` virou.
+      expect(find.byType(CartaoDoEncontro), findsNWidgets(3));
+      for (final pilula in <String>['Pedido enviado', 'Pedido aprovado']) {
+        expect(
+          find.text(pilula),
+          findsNothing,
+          reason: 'REPROVA: a pilula do pedido voltou ao cartao.',
+        );
+      }
 
       final tela = textoDaTela(tester).toLowerCase();
       for (final proibido in <String>['recusad', 'não aprovado', 'negad']) {

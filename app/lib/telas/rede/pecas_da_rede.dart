@@ -1,33 +1,32 @@
 import 'package:flutter/material.dart';
 
-import '../../api/modelos_rede.dart';
-import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
-/// As pecas que o cartao da agenda e a pagina do encontro dividem.
+/// As pecas do cartao da agenda, e as duas proporcoes que a `Loja` divide com
+/// ela.
 ///
-/// Design system 24.12 a 24.17. Nenhuma cor escrita a mao: tudo sai de
-/// `BichuColors` ou de `BichuCores.claro` (o banner, abaixo, explica por que o
-/// claro fixo).
+/// ## O que saiu em 19/10/2026, e por que
+///
+/// A pagina do encontro saiu do app (*"sem informações adicionais ou pagina
+/// de detalhes do evento"*) e o cartao virou foto e titulo. Com as duas
+/// coisas, estas pecas deixaram de ter quem as desenhasse e sairam: o bloco
+/// de dia (`SÁB` / `27` / `SET`), o distintivo de situacao (`Acontecendo
+/// agora`, `Encerrado`, `Cancelado`), `rotuloDaSituacao` e os selos
+/// (`SeloDoEncontro`, `seloDeValor`, `seloPrivado`).
+///
+/// Ficaram as tres que ainda tem chamador: [proporcaoDaCapa] e
+/// [BannerDaMarca], que [ImagemDoEncontroOuBanner] usa, e [proporcaoDaFoto],
+/// que e de `loja/produto_da_loja.dart` -- e e por ela que este arquivo
+/// continua sendo importado de fora da `Rede`.
+///
+/// Nenhuma cor escrita a mao: tudo sai de `BichuCores.claro` (o banner,
+/// abaixo, explica por que o claro fixo).
 
 /// A proporcao 16:9 da capa e do cartao (pedido de token P-M5, 24.12.7).
 const double proporcaoDaCapa = 16 / 9;
 
 /// A proporcao 4:3 das fotos (pedido de token P-M5).
 const double proporcaoDaFoto = 4 / 3;
-
-/// O rotulo da situacao que a data nao diz, ou nulo.
-///
-/// `upcoming` nao ganha rotulo: a data ja diz. Os outros tres ganham.
-String? rotuloDaSituacao(SituacaoDoEncontro? situacao) {
-  return switch (situacao) {
-    SituacaoDoEncontro.acontecendo => 'Acontecendo agora',
-    SituacaoDoEncontro.encerrado => 'Encerrado',
-    SituacaoDoEncontro.cancelado => 'Cancelado',
-    SituacaoDoEncontro.aVir => null,
-    null => null,
-  };
-}
 
 /// O banner da marca, no lugar da capa que nao existe ou que nao pode sair.
 ///
@@ -110,213 +109,73 @@ class _PintorDoBanner extends CustomPainter {
   bool shouldRepaint(covariant _PintorDoBanner oldDelegate) => false;
 }
 
-/// A imagem 16:9 do cartao e da pagina: a capa, ou o banner da marca.
+/// A imagem 16:9 do cartao: a capa da derivada `cover_image_url`, ou o banner
+/// da marca quando nao ha capa (ou quando ela nao carrega).
 ///
-/// [cancelado] poe a imagem em escala de cinza (filtro de imagem, sem cor
-/// nova): continua reconhecivel e deixa de parecer convite (24.12.6).
+/// ## `cacheWidth` pela largura PINTADA, e por que ele entrou agora
 ///
-/// A imagem fica **fora da arvore** quando [textoAlternativo] e nulo (cartao:
-/// o nome do cartao ja diz o encontro). Na pagina, a capa tem o texto
-/// alternativo da imagem de posicao 0 (`images[0].alt_text`).
+/// Ate 19/10/2026 esta peca era um `Image.network` sem `cacheWidth` -- a
+/// excecao do app, porque a politica de `widgets/imagem_da_rede.dart` nunca
+/// chegou aqui. O custo em memoria de um `ui.Image` e `largura x altura x 4`
+/// bytes da imagem DECODIFICADA, e nao os bytes do JPEG: sem `cacheWidth`, a
+/// derivada de 1024 x 576 custa **2.359.296 bytes por cartao**, e uma pagina
+/// de 20 cartoes custa 47.185.920 -- a agenda monta os 20 de uma vez, numa
+/// `Column` e nao numa lista preguicosa, entao sao os 20 ao mesmo tempo.
+///
+/// Com `cacheWidth` pela largura pintada o decodificador nunca passa do que a
+/// tela usa. A derivada CONTINUA sendo `cover_image_url` (1024 x 576): o
+/// cartao pinta 326 dp de largura, que da 978 px a 3x -- `cover_banner_url`
+/// (1280 x 720) desperdicaria 30% em cada um dos 20 cartoes para ganhar
+/// nitidez que ninguem ve, e a derivada de 480 da galeria borraria.
+///
+/// **A imagem fica fora da arvore de acessibilidade.** O cartao mostra foto e
+/// titulo, e o titulo esta logo abaixo, em texto: um rotulo aqui faria o
+/// leitor de tela dizer o encontro duas vezes.
 class ImagemDoEncontroOuBanner extends StatelessWidget {
-  const ImagemDoEncontroOuBanner({
-    required this.url,
-    super.key,
-    this.textoAlternativo,
-    this.cancelado = false,
-  });
+  const ImagemDoEncontroOuBanner({required this.url, super.key});
 
   final String? url;
-  final String? textoAlternativo;
-  final bool cancelado;
-
-  static const ColorFilter _cinza = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0, 0, 0, 1, 0, //
-  ]);
 
   @override
   Widget build(BuildContext context) {
     final endereco = url;
-    Widget imagem = endereco == null
-        ? const BannerDaMarca()
-        : Image.network(
-            endereco,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            semanticLabel: textoAlternativo,
-            excludeFromSemantics: textoAlternativo == null,
-            // Foto que nao carrega vira o banner, e nao um retangulo cinza:
-            // o retangulo promete algo que nao vem (24.12.2).
-            errorBuilder: (_, _, _) => const BannerDaMarca(),
+    if (endereco == null) {
+      return const AspectRatio(
+        aspectRatio: proporcaoDaCapa,
+        child: BannerDaMarca(),
+      );
+    }
+    // Fora do `LayoutBuilder`: o fator de pixel e do aparelho, nao do espaco
+    // disponivel. Mesma razao de `widgets/imagem_da_rede.dart`.
+    final fatorDePixel = MediaQuery.devicePixelRatioOf(context);
+    return AspectRatio(
+      aspectRatio: proporcaoDaCapa,
+      child: LayoutBuilder(
+        builder: (context, limites) {
+          final largura = limites.maxWidth;
+          // `maxWidth` infinito nao da numero para pedir ao decodificador, e
+          // desenhar sem `cacheWidth` seria exatamente o que estas linhas
+          // existem para impedir: entra o banner, que nao baixa nada.
+          if (!largura.isFinite || largura <= 0) {
+            return const BannerDaMarca();
+          }
+          return ExcludeSemantics(
+            child: Image.network(
+              endereco,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              // **O numero que decide o custo em memoria.** Em pixeis do
+              // aparelho, pela largura que o cartao PINTA.
+              cacheWidth: (largura * fatorDePixel).round(),
+              excludeFromSemantics: true,
+              // Foto que nao carrega vira o banner, e nao um retangulo cinza:
+              // o retangulo promete algo que nao vem (24.12.2).
+              errorBuilder: (_, _, _) => const BannerDaMarca(),
+            ),
           );
-    if (cancelado) imagem = ColorFiltered(colorFilter: _cinza, child: imagem);
-    return AspectRatio(aspectRatio: proporcaoDaCapa, child: imagem);
-  }
-}
-
-/// O bloco de dia: `SÁB` / `27` / `SET`.
-class BlocoDoDia extends StatelessWidget {
-  const BlocoDoDia({required this.dia, super.key, this.comFundo = true});
-
-  final DiaDoEncontro dia;
-
-  /// No cartao, sobre a imagem, o bloco tem fundo e sombra proprios; na caixa
-  /// `Quando`, ele fica sobre `surfaceAlt`, sem fundo.
-  final bool comFundo;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final escuro = Theme.of(context).brightness == Brightness.dark;
-
-    final conteudo = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          dia.diaAbreviado,
-          style: textos.labelSmall?.copyWith(color: cores.primary),
-        ),
-        Text(
-          '${dia.numero}',
-          style: textos.titleLarge?.copyWith(color: cores.textPrimary),
-        ),
-        Text(
-          dia.mesAbreviado,
-          style: textos.labelSmall?.copyWith(color: cores.textSecondary),
-        ),
-      ],
-    );
-
-    // A data por extenso esta sempre ao lado, em texto: o bloco e ornamento
-    // de leitura rapida e sai da arvore para nao ser lido duas vezes.
-    return ExcludeSemantics(
-      child: !comFundo
-          ? conteudo
-          : Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: BichuEspaco.e3,
-                vertical: BichuEspaco.e2,
-              ),
-              decoration: BoxDecoration(
-                color: cores.surface,
-                borderRadius: BorderRadius.circular(BichuRaio.md),
-                boxShadow: escuro ? null : BichuSombra.sm,
-                border: escuro
-                    ? Border.all(color: cores.outline, width: BichuBorda.hairline)
-                    : null,
-              ),
-              child: conteudo,
-            ),
-    );
-  }
-}
-
-/// O distintivo de situacao: `Acontecendo agora`, `Encerrado`, `Cancelado`.
-///
-/// `Cancelado` e o unico invertido (`surfaceInverse` com `textOnInverse`): o
-/// par de maior contraste do sistema, sem cor de erro nem de urgencia
-/// (24.11). A diferenca nao depende de cor: a palavra esta la (SC 1.4.1).
-class DistintivoDeSituacao extends StatelessWidget {
-  const DistintivoDeSituacao({
-    required this.situacao,
-    super.key,
-    this.grande = false,
-  });
-
-  final SituacaoDoEncontro situacao;
-  final bool grande;
-
-  @override
-  Widget build(BuildContext context) {
-    final rotulo = rotuloDaSituacao(situacao);
-    if (rotulo == null) return const SizedBox.shrink();
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final invertido = situacao == SituacaoDoEncontro.cancelado;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: grande ? BichuEspaco.e4 : BichuEspaco.e3,
-        vertical: grande ? BichuEspaco.e2 : BichuEspaco.e1,
-      ),
-      decoration: BoxDecoration(
-        color: invertido ? cores.surfaceInverse : cores.surface,
-        borderRadius: BorderRadius.circular(BichuRaio.full),
-        border: invertido
-            ? null
-            : Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
-      child: Text(
-        rotulo,
-        style: (grande ? textos.titleMedium : textos.labelMedium)?.copyWith(
-          color: invertido ? cores.textOnInverse : cores.textPrimary,
-        ),
+        },
       ),
     );
   }
 }
-
-/// Um selo neutro com icone e palavra: `Gratuito`, `R$ 15 por cão`,
-/// `Privado`.
-///
-/// Neutro de proposito: a palavra e a informacao, e nenhuma cor diz nada
-/// (24.13.1). **Nao ha selo `Público`** (UX 28.7.2): o normal nao tem selo.
-class SeloDoEncontro extends StatelessWidget {
-  const SeloDoEncontro({required this.icone, required this.texto, super.key});
-
-  final IconData icone;
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: BichuEspaco.e3,
-        vertical: BichuEspaco.e1,
-      ),
-      decoration: BoxDecoration(
-        color: cores.surface,
-        borderRadius: BorderRadius.circular(BichuRaio.full),
-        border: Border.all(
-          color: cores.outlineControl,
-          width: BichuBorda.hairline,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ExcludeSemantics(
-            child: Icon(icone, size: BichuEspaco.e5, color: cores.primary),
-          ),
-          const SizedBox(width: BichuEspaco.e1),
-          Flexible(
-            child: Text(
-              texto,
-              style: textos.labelMedium?.copyWith(color: cores.textPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// O selo de valor. Recebe a entrada ja lida do contrato.
-SeloDoEncontro seloDeValor(EntradaDoEncontro entrada) => SeloDoEncontro(
-      icone: Icons.payments_outlined,
-      texto: entrada.rotuloDoSelo,
-    );
-
-/// O selo `Privado`.
-const SeloDoEncontro seloPrivado = SeloDoEncontro(
-  icone: Icons.lock_outline,
-  texto: 'Privado',
-);

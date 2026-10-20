@@ -37,7 +37,6 @@ import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
-import 'intencao/pedido_de_participacao_como_intencao.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
@@ -387,11 +386,17 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
         // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
-        // `pedir_para_participar`: depois de autenticar, o pedido e ENVIADO e
-        // a pessoa volta ao encontro com a caixa em `Pedido enviado`
-        // (design system 24.17.1, item 5).
-        AcaoDeIntencao.pedirParaParticipar:
-            pedidoDeParticipacaoExecutavel(_api),
+        // **`pedir_para_participar` NAO esta mais aqui.** O executavel dela
+        // mandava o pedido depois do login e devolvia a pessoa ao detalhe do
+        // evento; a tela de detalhe saiu em 19/10/2026 por decisao do
+        // cliente, e com ela o unico lugar do app que criava essa intencao.
+        //
+        // O valor do `enum` FICA em `intencao/intencao_pendente.dart`, de
+        // proposito: um envelope `pedir_para_participar` ja gravado no disco
+        // de alguem continua legivel, `GuardaDeAcao` nao acha executavel para
+        // ele e a pessoa cai na agenda da `Rede` em vez de num erro. Tirar o
+        // valor do `enum` faria a leitura do envelope LANCAR -- caminho que o
+        // registro de erro cobre, mas que nao ha motivo para exercitar.
       },
     );
     _sessao = ControladorDeSessao(

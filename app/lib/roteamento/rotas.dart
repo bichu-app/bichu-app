@@ -49,12 +49,10 @@ import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
-import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
 import '../telas/perto/pagina_do_local.dart';
 import '../telas/perto/sugerir_profissional.dart';
 import '../telas/rede/criar_encontro.dart';
-import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -77,15 +75,22 @@ abstract final class Rotas {
   static const String pets = '/pets';
   static const String rede = '/rede';
 
-  /// O encontro da `Rede`, sob o ramo da secao: a barra de abas continua, e
-  /// voltar devolve a agenda. Endereco proprio porque a guarda de acao do
-  /// `Pedir para participar` volta para ca depois do login (UX 8.3).
-  static const String encontroDaRede = 'encontros/:slug';
-
-  static const String parametroDoEncontro = 'slug';
-
-  static String encontroDaRedeDe(String slug) =>
-      '/rede/encontros/${Uri.encodeComponent(slug)}';
+  // **NAO HA MAIS ENDERECO DE DETALHE DE EVENTO**, e isso e decisao do
+  // cliente de 19/10/2026: *"sem informações adicionais ou pagina de detalhes
+  // do evento"*. O que morava aqui era `encontros/:slug`, sob o ramo da
+  // secao, com `parametroDoEncontro` e `encontroDaRedeDe`.
+  //
+  // **A rota saiu junto com a tela, e nao antes dela.** Rota apontando para
+  // tela que nao existe e o pior dos dois mundos: o `go_router` casa o
+  // caminho, nao acha o `builder` e a pessoa cai numa pagina de erro no lugar
+  // de nao ter chegado ali.
+  //
+  // Com o endereco saiu tambem a guarda de acao de `Pedir para participar`,
+  // que voltava para ca depois do login -- o pedido de participacao nascia na
+  // tela de detalhe e nao nasce em lugar nenhum agora.
+  //
+  // `criarEncontroDaRede`, abaixo, FICA: criar evento continua sendo a acao
+  // flutuante da secao, e o desfecho dela virou a propria agenda.
 
   /// **Marcar um encontro da `Rede`: IRMA da casca, e nao sob o ramo.**
   ///
@@ -96,8 +101,9 @@ abstract final class Rotas {
   ///
   /// **Declarada ANTES do ramo da casca**, como `/pets/novo` em relacao a
   /// `/pets`: o `go_router` casa na ordem de registro, e o
-  /// `encontros/:slug` do ramo engoliria qualquer segmento -- o formulario
-  /// abriria o detalhe de um encontro chamado "novo".
+  /// `/rede` do ramo da casca engoliria o segmento se a ordem se invertesse.
+  /// A regra fica escrita aqui porque ela sobreviveu a saida de
+  /// `encontros/:slug`: a ordem de registro e o que a sustenta.
   static const String criarEncontroDaRede = '/rede/encontros/novo';
   static const String perto = '/perto';
 
@@ -117,8 +123,8 @@ abstract final class Rotas {
   /// Esta e a porta.
   ///
   /// **Sob o ramo, e nao irma da casca**, pela mesma escolha de
-  /// [produtoDaLoja] e [encontroDaRede] e pelo mesmo motivo: a pagina de um
-  /// local e LEITURA, nao tarefa. A barra de abas continua, e voltar devolve a
+  /// [produtoDaLoja] e pelo mesmo motivo: a pagina de um local e LEITURA, nao
+  /// tarefa. A barra de abas continua, e voltar devolve a
   /// lista com a busca e o filtro de quem estava procurando intactos -- quem
   /// esta comparando tres veterinarios quer continuar comparando, e esconder
   /// as outras quatro secoes para mostrar uma ficha tiraria o app de quem so
@@ -144,8 +150,8 @@ abstract final class Rotas {
   /// cadastro: o detalhe de um produto e leitura, nao tarefa. Quem esta
   /// comparando produtos quer continuar comparando, e esconder a barra de abas
   /// para mostrar uma ficha de produto tiraria as outras quatro secoes de
-  /// quem so foi ver uma foto maior. E a mesma escolha de
-  /// [encontroDaRede], pelo mesmo motivo.
+  /// quem so foi ver uma foto maior. E a mesma escolha de [localDoPerto],
+  /// pelo mesmo motivo.
   static const String produtoDaLoja = 'produtos/:slug';
 
   static const String parametroDoProduto = 'slug';
@@ -800,8 +806,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
       // detalhe de um achado chamado "novo".
       // As duas ESCRITAS da comunidade, irmas da casca porque sao tarefa.
-      // Declaradas antes do ramo da casca: `encontros/:slug` engoliria
-      // `encontros/novo` e o formulario abriria um detalhe inexistente.
+      // Declaradas antes do ramo da casca. O motivo original era
+      // `encontros/:slug`, que engolia `encontros/novo` e abria um detalhe
+      // inexistente; a rota de detalhe saiu em 19/10/2026 e a ordem ficou,
+      // porque ela e de graca e o ramo `/rede` continua acima.
       GoRoute(
         path: Rotas.criarEncontroDaRede,
         builder: (context, estado) => const TelaCriarEncontro(),
@@ -1086,25 +1094,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               GoRoute(
                 path: Rotas.rede,
                 builder: (context, estado) => const AbaRede(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: Rotas.encontroDaRede,
-                    builder: (context, estado) => TelaDoEncontro(
-                      slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
-                      // A distancia vem do cartao, que a leu de
-                      // `listNearbyNetworkEvents`. Por link direto ela nao vem,
-                      // e a linha some sem aviso.
-                      distanciaEmMetros: estado.extra is int
-                          ? estado.extra! as int
-                          : null,
-                      // O pedido feito depois do login nao saiu: a caixa do
-                      // privado diz por que.
-                      erroDoPedido: estado.extra is RetomadaDoPedido
-                          ? (estado.extra! as RetomadaDoPedido).erro.texto
-                          : null,
-                    ),
-                  ),
-                ],
+                // **Sem rota filha.** O ramo da `Rede` tinha uma,
+                // `encontros/:slug`, e ela saiu com a tela de detalhe do
+                // evento em 19/10/2026. `encontros/novo` continua, mas IRMA
+                // da casca e nao filha: preencher formulario e tarefa.
               ),
             ],
           ),
