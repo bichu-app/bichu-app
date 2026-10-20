@@ -93,14 +93,21 @@ const AFETADAS = [
   ['conversation_reports', 'conversation_id', 'conversas'],
   ['conversations', 'id', 'conversas'],
   ['match_candidates', 'found_report_id', 'avisos'],
-  ['upload_intents', 'found_report_id', 'avisos'],
   ['found_reports', 'id', 'avisos'],
+  // POR `id`, e nao por `found_report_id`: desde o acrescimo de 19/10 a massa
+  // tem intencao de envio de FOTO DE PET, que carrega `pet_id` e deixa
+  // `found_report_id` nulo. Contar por `found_report_id` punha as 30 do lado
+  // de fora (`coluna is null` conta como de fora, e esta certo que conte), e a
+  // prova acusaria divergencia num `DELETE` correto.
+  ['upload_intents', 'id', 'intencoes'],
+  ['alert_recipients', 'dispatch_id', null],
+  ['alert_dispatches', 'case_id', 'casos'],
   ['tag_scans', 'tag_id', 'plaquinhas'],
   ['pet_tags', 'id', 'plaquinhas'],
   ['collar_tag_requests', 'pet_id', 'pets'],
-  ['pet_photos', 'pet_id', 'pets'],
+  ['pet_photos', 'id', 'fotos'],
   ['pet_transfers', 'pet_id', 'pets'],
-  ['lost_cases', 'pet_id', 'pets'],
+  ['lost_cases', 'id', 'casos'],
   ['pets', 'id', 'pets'],
   // As cinco filhas do encontro pedem SQL proprio: a chave delas e `event_id`,
   // e o manifesto guarda SLUG. Contar a tabela inteira dizia que as linhas da
@@ -139,7 +146,9 @@ const AFETADAS = [
   ['notification_items', 'recipient_user_id', 'contas'],
   ['notification_counter_state', 'user_id', 'contas'],
   ['catalog_upload_intents', 'user_id', 'contas'],
-  ['alert_recipients', 'user_id', 'contas'],
+  ['alert_recipients_por_conta', null, null, null,
+    `select count(*)::int as n from alert_recipients
+      where user_id is null or user_id <> all($1::uuid[])`, 'contas'],
   ['user_blocks', 'blocker_user_id', 'contas'],
   ['user_connections', 'requester_user_id', 'contas'],
   ['profile_reports', 'reporter_user_id', 'contas'],
@@ -177,6 +186,9 @@ function vetores(manifesto) {
     itens: manifesto.store_items.map((i) => i.id),
     parceiros: manifesto.store_partners.map((p) => p.id),
     profissionais: manifesto.professionals.map((p) => p.id),
+    casos: (manifesto.lost_cases ?? []).map((c) => c.id),
+    fotos: (manifesto.pet_photos ?? []).map((f) => f.id),
+    intencoes: manifesto.upload_intents ?? [],
     contas: manifesto.users.map((u) => u.id),
     apelidos: manifesto.handles,
   };
@@ -229,6 +241,8 @@ async function conferirFronteira(cliente, manifesto) {
   const contas = manifesto.users.map((u) => u.id);
   const profissionais = manifesto.professionals.map((p) => p.id);
   const conversas = manifesto.conversations;
+  const lostCases = (manifesto.lost_cases ?? []).map((c) => c.id);
+  const avisos = manifesto.found_reports ?? [];
   const achados = [];
 
   const perguntar = async (rotulo, sql, parametros) => {
@@ -317,6 +331,36 @@ async function conferirFronteira(cliente, manifesto) {
       where from_user_id = any($1::uuid[]) or to_user_id = any($1::uuid[])`,
     [contas],
   );
+  // O ALERTA DE 5 km ALCANCA QUEM ESTA PERTO, E ISSO INCLUI QUEM NAO E DA MASSA.
+  //
+  // Caso de perdido com coordenada dispara alerta, e `alert_recipients` guarda
+  // UMA LINHA POR PESSOA ALCANCADA. A linha tem `dispatch_id` em CASCADE para
+  // `alert_dispatches`, que esta em CASCADE para `lost_cases` -- entao apagar um
+  // caso da massa apaga, em silencio, o registro de que uma pessoa DE FORA foi
+  // avisada. Para ela isso e o oposto de invisivel: ela recebeu a notificacao.
+  //
+  // Esta pergunta nao existia na primeira rodada porque a massa nao tinha
+  // `lost_cases`. Agora tem 30, e 20 deles com ponto.
+  await perguntar(
+    'vizinho DE FORA alertado por um caso da massa (o registro do aviso dele morre no DELETE)',
+    `select r.user_id, r.dispatch_id from alert_recipients r
+       join alert_dispatches d on d.id = r.dispatch_id
+      where d.case_id = any($1::uuid[]) and r.user_id <> all($2::uuid[])`,
+    [lostCases, contas],
+  );
+  await perguntar(
+    'conta da massa alertada por um caso DE FORA',
+    `select r.user_id, r.dispatch_id from alert_recipients r
+       join alert_dispatches d on d.id = r.dispatch_id
+      where r.user_id = any($1::uuid[]) and d.case_id <> all($2::uuid[])`,
+    [contas, lostCases],
+  );
+  await perguntar(
+    'correspondencia entre um caso da massa e um aviso DE FORA (ou o inverso)',
+    `select case_id, found_report_id, status from match_candidates
+      where (case_id = any($1::uuid[])) <> (found_report_id = any($2::uuid[]))`,
+    [lostCases, avisos],
+  );
   await perguntar(
     'conversa de FORA em que uma conta da massa e o achador (a conversa dele perde o outro lado)',
     `select id, tutor_user_id, finder_user_id from conversations
@@ -393,6 +437,70 @@ async function principal() {
     }
 
     const v = vetores(manifesto);
+
+    // ===================================================================
+    // FASE 0: OS OBJETOS DE ARMAZENAMENTO, ANTES DAS LINHAS
+    // ===================================================================
+    // "Objeto primeiro, linha depois. Sempre." -- a regra e de
+    // `varrer-envios-vencidos.ts` e o argumento dela e a assimetria da falha:
+    //
+    //   - nesta ordem, o residuo e LINHA VIVA apontando para objeto que saiu.
+    //     Visivel (a imagem quebra na tela), nomeavel, e a rodada seguinte
+    //     termina o servico. Autocuravel.
+    //   - na ordem inversa, o residuo e OBJETO SEM PONTEIRO. A chave so vivia
+    //     na linha que acabou de sair; ninguem sabe que ele existe nem de quem
+    //     era, e **nao existe varredura de orfaos em lugar nenhum deste
+    //     repositorio** (o cabecalho de `apagar-objetos-da-conta.ts` diz isso
+    //     com estas palavras). Permanente.
+    //
+    // O custo desta escolha, dito por honestidade: se o `DELETE` das linhas
+    // reprovar e desfizer, a massa fica na tela com as imagens quebradas ate
+    // alguem rodar a remocao de novo. Para massa de teste isso e barato; lixo
+    // permanente em balde cobrado por volume nao e.
+    const objetos = manifesto.objetos ?? [];
+    let objetosApagados = 0;
+    if (objetos.length > 0) {
+      if (process.argv.includes('--sem-objetos')) {
+        console.error(
+          `AVISO: --sem-objetos. ${String(objetos.length)} objeto(s) do manifesto NAO serao\n`
+          + 'apagados do armazenamento. Use isto so onde nao HA armazenamento (a prova em\n'
+          + 'Postgres descartavel). Em homologacao isto deixa lixo permanente.',
+        );
+      } else {
+        const dist = process.env['BICHU_DIST'] ?? '/app/dist';
+        let criarObjectStorage;
+        let loadAppConfig;
+        try {
+          ({ criarObjectStorage } = await import(`${dist}/modules/media/adapters/external/s3-object-storage.js`));
+          ({ loadAppConfig } = await import(`${dist}/shared/config/app-config.js`));
+        } catch (erro) {
+          throw new Error(
+            'RECUSADO: o manifesto lista objetos de armazenamento e eu nao consegui carregar\n'
+            + `o adaptador do projeto em ${dist}.\n`
+            + `  motivo: ${erro instanceof Error ? erro.message : String(erro)}\n\n`
+            + 'NAO reimplemento assinatura S3 aqui: `s3-object-storage.ts` e, nas palavras do\n'
+            + 'proprio arquivo, "o unico arquivo do sistema que sabe que existe S3" (ADR-0007).\n'
+            + 'Rode de dentro do conteiner da aplicacao, ou aponte BICHU_DIST para o `dist`\n'
+            + 'compilado. Se este banco nao tem armazenamento nenhum, passe --sem-objetos e\n'
+            + 'saiba que os bytes ficam.',
+          );
+        }
+        const armazenamento = criarObjectStorage(loadAppConfig().objectStorage);
+        for (const objeto of objetos) {
+          // O `delete` da porta trata 404 como sucesso, e e isso que torna a
+          // repeticao segura: uma rodada que morreu no meio reapaga o que ja
+          // saiu sem erro nenhum.
+          await armazenamento.delete(objeto.classe, objeto.chave);
+          objetosApagados += 1;
+        }
+        console.error(
+          `objetos apagados do armazenamento: ${String(objetosApagados)} de `
+          + `${String(objetos.length)} (${String(objetos.filter((o) => o.classe === 'privado').length)} `
+          + `privados, ${String(objetos.filter((o) => o.classe === 'publico').length)} publicos)`,
+        );
+      }
+    }
+
     await cliente.query('begin');
     const apagados = {};
     const apagar = async (rotulo, sql, parametros) => {
@@ -421,7 +529,28 @@ async function principal() {
     await apagar('pet_tags',
       'delete from pet_tags where id = any($1::uuid[])', [v.plaquinhas]);
 
-    // 10 pets.
+    // 10..13 o caso de perdido e o que pende dele. ANTES dos pets, e
+    // explicito em vez de por cascata: `alert_recipients` guarda quem foi
+    // AVISADO, e a conferencia de fronteira ja provou que nenhuma dessas
+    // pessoas e de fora -- mas a prova vale por ter sido feita, nao por a
+    // cascata ser conveniente.
+    await apagar('alert_recipients',
+      `delete from alert_recipients where dispatch_id in
+         (select id from alert_dispatches where case_id = any($1::uuid[]))`, [v.casos]);
+    await apagar('alert_dispatches',
+      'delete from alert_dispatches where case_id = any($1::uuid[])', [v.casos]);
+    await apagar('match_candidates_do_caso',
+      'delete from match_candidates where case_id = any($1::uuid[])', [v.casos]);
+    await apagar('lost_cases',
+      'delete from lost_cases where id = any($1::uuid[])', [v.casos]);
+
+    // 14..15 a FOTO antes da INTENCAO, e a ordem e obrigatoria:
+    // `pet_photos.upload_intent_id` e `ON DELETE RESTRICT` (medido no catalogo
+    // de homologacao). Na ordem inversa o `DELETE` em `upload_intents` reprova.
+    await apagar('pet_photos', 'delete from pet_photos where id = any($1::uuid[])', [v.fotos]);
+    await apagar('upload_intents', 'delete from upload_intents where id = any($1::uuid[])', [v.intencoes]);
+
+    // 16 pets.
     await apagar('pets', 'delete from pets where id = any($1::uuid[])', [v.pets]);
 
     // 11 encontros da Rede, pelo slug (que e UNIQUE e e o que a rota devolve).
@@ -478,6 +607,8 @@ async function principal() {
       [
         randomUUID(), manifesto.lote, JSON.stringify(apagados),
         JSON.stringify({
+          objetos_apagados: objetosApagados,
+          objetos_no_manifesto: objetos.length,
           lote_criado_em: manifesto.criado_em,
           audit_event_da_criacao: manifesto.marcas?.audit_event_id ?? null,
           removido_por: 'infra/massa-de-homologacao/remover.mjs',
@@ -530,6 +661,10 @@ async function principal() {
     await sobrou('store_partners', 'id', v.parceiros);
     await sobrou('network_events', 'slug', v.encontrosSlug, 'text[]');
     await sobrou('user_reference_locations', 'user_id', v.contas);
+    await sobrou('lost_cases', 'id', v.casos);
+    await sobrou('alert_dispatches', 'case_id', v.casos);
+    await sobrou('pet_photos', 'id', v.fotos);
+    await sobrou('upload_intents', 'id', v.intencoes);
     if (restos.length > 0) {
       await cliente.query('rollback');
       throw new Error(`DESFEITO (ROLLBACK): sobrou massa:\n  ${restos.join('\n  ')}`);

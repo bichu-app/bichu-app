@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global console, process */
+/* global console, process, URL */
 /**
  * A PROVA da remocao, em Postgres descartavel. Nao toca homologacao.
  *
@@ -61,6 +61,8 @@ const FORA_COMO_EM_HOMOLOGACAO = {
   users: 12, pets: 7, network_events: 13, professionals: 1, store_items: 1,
   store_partners: 4, conversations: 3, conversation_messages: 6,
   found_reports: 7, lost_cases: 1, pet_tags: 4, handles: 52,
+  // Fotos dele: 4 linhas em `pet_photos` em 19/10, cada uma com 3 objetos.
+  pet_photos_dele: 4,
 };
 
 function refPublica() {
@@ -171,6 +173,59 @@ async function criarAvisoEConversa(cliente, { pet, tag, tutor }) {
   return { aviso, conversa };
 }
 
+/**
+ * Foto de pet + a intencao de envio que a sustenta, por `INSERT`.
+ *
+ * `pet_photos.upload_intent_id` e `ON DELETE RESTRICT`, e e exatamente essa
+ * aresta que a ordem de remocao tem de respeitar -- entao a prova precisa
+ * dela de pe. As chaves de objeto sao nomes plausiveis: aqui nao ha balde, e
+ * o que esta sob prova e a LINHA. Os bytes tem prova propria, contra o
+ * armazenamento de verdade (`prova-da-remocao-de-imagem.mjs`).
+ */
+async function criarFoto(cliente, dono, pet, k) {
+  const intencao = randomUUID();
+  const original = `pets/${pet}/original/sonda-${String(k)}`;
+  await cliente.query(
+    `insert into upload_intents (id, user_id, pet_id, kind, object_key, declared_type,
+                                 max_bytes, expires_at, confirmed_at)
+     values ($1, $2, $3, 'pet_photo', $4, 'image/jpeg', 5242880,
+             now() + interval '10 minutes', now())`,
+    [intencao, dono, pet, original],
+  );
+  const foto = randomUUID();
+  await cliente.query(
+    `insert into pet_photos (id, pet_id, upload_intent_id, status, original_key,
+                             thumb_key, card_key, is_primary, processed_at)
+     values ($1, $2, $3, 'ready', $4, $5, $6, true, now())`,
+    [foto, pet, intencao, original, `pets/thumb/sonda-${String(k)}`, `pets/card/sonda-${String(k)}`],
+  );
+  return { foto, intencao, objetos: [
+    { classe: 'privado', chave: original },
+    { classe: 'publico', chave: `pets/thumb/sonda-${String(k)}` },
+    { classe: 'publico', chave: `pets/card/sonda-${String(k)}` },
+  ] };
+}
+
+async function criarCaso(cliente, pet, cidade, k) {
+  const id = randomUUID();
+  await cliente.query(
+    `insert into lost_cases (id, pet_id, owner_user_id, last_seen_at, last_seen_city,
+                             last_seen_neighborhood, last_seen_state, share_token)
+     values ($1, $2, (select owner_user_id from pets where id = $2),
+             now() - ($3 || ' days')::interval, $4, 'Centro', 'SP', $5)`,
+    [id, pet, String(k + 1), cidade, randomBytes(16).toString('base64url')],
+  );
+  // O despacho do alerta, que e o que a remocao tem de tirar antes do caso.
+  const despacho = randomUUID();
+  await cliente.query(
+    `insert into alert_dispatches (id, case_id, radius_m, reach_status,
+                                   recipients_total, requested_at, dispatched_at)
+     values ($1, $2, 5000, 'computed', 0, now(), now())`,
+    [despacho, id],
+  );
+  return { id, despacho };
+}
+
 async function criarEncontro(cliente, autor, { slug, title, summary, place, starts_at, ends_at }) {
   const id = randomUUID();
   await cliente.query(
@@ -227,13 +282,15 @@ async function principal() {
       deFora.conversas.push(par.conversa);
       deFora.avisos.push(par.aviso);
     }
-    // Um caso de pet perdido DELE: nenhuma massa escreve em `lost_cases`, e a
-    // prova precisa dizer que ele continua la depois.
-    await cliente.query(
-      `insert into lost_cases (id, pet_id, owner_user_id, last_seen_at, last_seen_city, share_token)
-       values ($1, $2, (select owner_user_id from pets where id = $2), now(), 'Sao Paulo', $3)`,
-      [randomUUID(), deFora.pets[0], randomBytes(16).toString('base64url')],
-    );
+    // As fotos DELE, e o caso de perdido DELE. Desde o acrescimo de 19/10 a
+    // massa TAMBEM escreve nessas duas tabelas, entao elas deixaram de ser
+    // "tabelas em que a massa nao mexe" e passaram a ser onde um `DELETE` mal
+    // recortado faria o estrago menos visivel.
+    for (let i = 0; i < FORA_COMO_EM_HOMOLOGACAO.pet_photos_dele; i += 1) {
+      const { rows } = await cliente.query('select owner_user_id from pets where id = $1', [deFora.pets[i]]);
+      await criarFoto(cliente, rows[0].owner_user_id, deFora.pets[i], 1000 + i);
+    }
+    await criarCaso(cliente, deFora.pets[0], 'Sao Paulo', 0);
     for (let i = 0; i < FORA_COMO_EM_HOMOLOGACAO.network_events; i += 1) {
       deFora.encontros.push(await criarEncontro(cliente, deFora.usuarios[i % deFora.usuarios.length], {
         slug: `encontro-dele-${String(i).padStart(2, '0')}`,
@@ -285,6 +342,7 @@ async function principal() {
       conversations: [], found_reports: [], tag_scans_por_tag: [], pet_tags: [],
       pets: [], network_events: [], store_items: [], store_partners: [],
       professionals: [], user_reference_locations_por_usuario: [], users: [], handles: [],
+      objetos: [], lost_cases: [], pet_photos: [], upload_intents: [],
     };
 
     for (const conta of contas()) {
@@ -316,6 +374,21 @@ async function principal() {
     for (const pet of pets()) {
       const id = await criarPet(cliente, idDaConta(pet.contaIndice), pet.name, pet.indice);
       manifesto.pets.push({ indice: pet.indice, id, conta: pet.contaIndice });
+    }
+
+    // Foto em TODO pet da massa, e caso de perdido em 30 deles -- a mesma forma
+    // do que o acrescimo de 19/10 pos em homologacao.
+    for (const pet of manifesto.pets) {
+      const r = await criarFoto(cliente, idDaConta(pet.conta), pet.id, pet.indice);
+      manifesto.pet_photos.push({ indice: pet.indice, id: r.foto, pet: pet.id });
+      manifesto.upload_intents.push(r.intencao);
+      for (const o of r.objetos) manifesto.objetos.push(o);
+    }
+    const CIDADES_DO_CASO = ['Sao Paulo', 'Guarulhos', 'Campinas', 'Santos', 'Niteroi'];
+    for (let k = 0; k < QUANTIDADE; k += 1) {
+      const pet = manifesto.pets[k];
+      const r = await criarCaso(cliente, pet.id, CIDADES_DO_CASO[k % CIDADES_DO_CASO.length], k);
+      manifesto.lost_cases.push({ indice: k + 1, id: r.id, pet: pet.id });
     }
 
     const petsDaVitrine = manifesto.pets.filter((p) => p.conta === 1).slice(0, PETS_DA_VITRINE);
@@ -449,6 +522,9 @@ async function principal() {
     const profDeles = await conferir('profissionais DELE (tem de ser 1)', 'select count(*)::int as n from professionals');
     const itensDele = await conferir('itens DELE (tem de ser 1)', 'select count(*)::int as n from store_items');
     const parceirosDele = await conferir('parceiros DELE (tem de ser 4)', 'select count(*)::int as n from store_partners');
+    const fotosDele = await conferir('fotos DELE (tem de ser 4)', 'select count(*)::int as n from pet_photos');
+    const intencoesDele = await conferir('intencoes DELE (tem de ser 4)', 'select count(*)::int as n from upload_intents');
+    const despachosDele = await conferir('despachos de alerta DELE (tem de ser 1)', 'select count(*)::int as n from alert_dispatches');
     const trilha = await conferir('audit.events do lote (2: criacao e remocao)',
       "select count(*)::int as n from audit.events where resource_kind = 'lote_de_massa'");
 
@@ -466,6 +542,9 @@ async function principal() {
       ['professionals dele', profDeles.n, FORA_COMO_EM_HOMOLOGACAO.professionals],
       ['store_items dele', itensDele.n, FORA_COMO_EM_HOMOLOGACAO.store_items],
       ['store_partners dele', parceirosDele.n, FORA_COMO_EM_HOMOLOGACAO.store_partners],
+      ['pet_photos dele', fotosDele.n, FORA_COMO_EM_HOMOLOGACAO.pet_photos_dele],
+      ['upload_intents dele', intencoesDele.n, FORA_COMO_EM_HOMOLOGACAO.pet_photos_dele],
+      ['alert_dispatches dele', despachosDele.n, FORA_COMO_EM_HOMOLOGACAO.lost_cases],
       ['audit.events do lote', trilha.n, 2],
     ];
     const erradas = esperado.filter(([, obtido, alvo]) => obtido !== alvo);
@@ -484,7 +563,10 @@ async function rodarRemocao(manifesto, url) {
   const { spawnSync } = await import('node:child_process');
   const r = spawnSync(
     process.execPath,
-    [new URL('./remover.mjs', import.meta.url).pathname, '--manifesto', manifesto],
+    [new URL('./remover.mjs', import.meta.url).pathname, '--manifesto', manifesto,
+      // Aqui NAO HA armazenamento. `remover.mjs` recusa pular os objetos em
+      // silencio -- quem quer pular tem de dizer, e e isto que diz.
+      '--sem-objetos'],
     { env: { ...process.env, DATABASE_URL: url }, encoding: 'utf8' },
   );
   return { code: r.status, saida: `${r.stdout ?? ''}${r.stderr ?? ''}` };

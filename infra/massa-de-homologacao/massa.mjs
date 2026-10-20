@@ -533,3 +533,171 @@ if (process.argv[1]?.endsWith('massa.mjs')) {
     + `com coordenada ${String(contas().filter((c) => temCoordenada(c.indice)).length)}\n`,
   );
 }
+
+/* ==========================================================================
+ * O ACRESCIMO DE 19/10 (segunda rodada): 30 CASOS DE PET PERDIDO, COM FOTO
+ * ==========================================================================
+ * A primeira rodada deixou `lost_cases` sem massa, e o motivo estava medido:
+ * `openLostCase` responde 409 enquanto o pet nao tem foto `ready`
+ * (`kysely-lost-case-repository.ts:119`). O que estava ERRADO era a conclusao
+ * de que foto exigia o painel.
+ *
+ * Exige o painel a imagem de PRODUTO da Loja e a do DIRETORIO: so
+ * `AdminCatalogImageIntentInput` declara `purpose`, e ela vive atras da sessao
+ * administrativa. A foto de PET nao: `POST /v1/media/pet-photo-intents` e rota
+ * do aplicativo, com `UploadIntentInput` (`content_type` em
+ * `[image/jpeg, image/png, image/heic, image/webp]`, `byte_size` ate 5 MiB).
+ * Entao a Loja e o diretorio seguem sem imagem -- e isso continua certo --, e
+ * os 30 pets passam a ter foto de verdade.
+ */
+
+/**
+ * As 12 cidades dos casos de perdido, e por que sao 12 e nao 1.
+ *
+ * Outra frente (`feat/pets-por-distancia`, ainda nao mesclada) tornou `city`
+ * OPCIONAL em `GET /v1/public/lost-pets`, e o recorte padrao passou a ser os 20
+ * mais recentes do pais inteiro. Trinta casos na mesma cidade deixariam essa
+ * tela com uma cidade so -- ela abriria "cheia" e ainda assim nao exercitaria
+ * nada. Espalhados em 12 cidades e 5 estados, a lista sem cidade e variada E o
+ * filtro por cidade continua cortando de verdade.
+ */
+const CIDADES_DOS_PERDIDOS = [
+  { city: 'Sao Paulo', state: 'SP', neighborhood: 'Bela Vista' },
+  { city: 'Sao Paulo', state: 'SP', neighborhood: 'Pinheiros' },
+  { city: 'Sao Paulo', state: 'SP', neighborhood: 'Tatuape' },
+  { city: 'Guarulhos', state: 'SP', neighborhood: 'Centro' },
+  { city: 'Campinas', state: 'SP', neighborhood: 'Cambui' },
+  { city: 'Santos', state: 'SP', neighborhood: 'Gonzaga' },
+  { city: 'Rio de Janeiro', state: 'RJ', neighborhood: 'Tijuca' },
+  { city: 'Niteroi', state: 'RJ', neighborhood: 'Icarai' },
+  { city: 'Belo Horizonte', state: 'MG', neighborhood: 'Savassi' },
+  { city: 'Curitiba', state: 'PR', neighborhood: 'Batel' },
+  { city: 'Porto Alegre', state: 'RS', neighborhood: 'Moinhos de Vento' },
+  { city: 'Florianopolis', state: 'SC', neighborhood: 'Trindade' },
+];
+
+const RELATOS = [
+  'Fugiu pelo portao quando chegou visita. Atende pelo nome e tem medo de moto.',
+  'Sumiu na hora do passeio, soltou da coleira ao ver outro cachorro.',
+  'Saiu pela janela do quintal durante a chuva forte da tarde.',
+  'Foi visto pela ultima vez perto da padaria da esquina, sem coleira.',
+  'Escapou durante a mudanca, quando a porta ficou aberta.',
+  'Desapareceu a noite; costuma procurar lugar quente para dormir.',
+];
+
+/**
+ * Os 30 casos. `last_seen_at` espalhado em dias DISTINTOS, do mais antigo ao
+ * mais recente, porque a listagem publica ordena por `last_seen_at DESC` com
+ * desempate por `share_token`: trinta casos no mesmo instante provariam o
+ * desempate e nao a ordenacao, e a paginacao de 20 + 10 nao diria nada sobre a
+ * ordem.
+ *
+ * Coordenada pela MESMA regra de `temCoordenada` (dois tercos sim, um terco
+ * nao, intercalado de tres em tres). Ela decide se vai `last_seen_location`; o
+ * caso sem ponto NAO dispara o alerta de 5 km, por desenho
+ * (`AlertDispatch.reach_status`), e e esse estado que a tela precisa ter o que
+ * mostrar.
+ *
+ * **`last_seen_area` VAI SEMPRE, inclusive junto do ponto**, e isto foi
+ * corrigido depois de medir. O `anyOf` do `LostCaseInput` exige UM dos dois,
+ * e a primeira versao desta massa leu isso como "um ou o outro". Errado: a
+ * rota mapeia os dois campos INDEPENDENTEMENTE para o mesmo objeto `onde`
+ * (`lost-case-routes.ts:660-664`), entao mandar os dois e aceito -- e e o que
+ * o aplicativo faz, porque ele tem o ponto E o bairro digitado.
+ *
+ * A consequencia de ter mandado so o ponto foi medida em homologacao: o
+ * ADR-0006 PROIBE geocodificacao reversa, entao o servidor nao deriva cidade
+ * de coordenada, e os 20 casos nasceram com `last_seen_city` NULO. Na
+ * listagem publica, que filtra por cidade digitada, eles ficaram
+ * INVISIVEIS -- `select ... where texto_para_busca(last_seen_city) = ...`
+ * nunca casa com nulo. Dos 30 casos, so 10 apareciam por cidade.
+ */
+export function casosDePerdido(agoraMs) {
+  return Array.from({ length: QUANTIDADE }, (_, i) => {
+    const n = i + 1;
+    const lugar = CIDADES_DOS_PERDIDOS[i % CIDADES_DOS_PERDIDOS.length];
+    // Do 44o dia atras ate ontem, um por dia e sempre no passado: "visto por
+    // ultima vez" no futuro seria recusado, e seria mentira.
+    const visto = new Date(agoraMs - (QUANTIDADE - i + 14) * 86400000);
+    visto.setUTCHours(9 + (i % 10), (i * 7) % 60, 0, 0);
+    return {
+      indice: n,
+      vistoEm: visto.toISOString(),
+      lugar,
+      comPonto: temCoordenada(n),
+      ponto: temCoordenada(n) ? coordenadaDe(n) : null,
+      descricao: `${MARCA_VISIVEL} ${RELATOS[i % RELATOS.length]}`,
+    };
+  });
+}
+
+/**
+ * A FOTO, gerada aqui e nao baixada de ninguem.
+ *
+ * 600 x 600 porque e o minimo que o processamento exige
+ * (`DIMENSAO_MINIMA_DA_FOTO_DE_PET`, `derivadas.ts:335`); menor que isso o
+ * worker recusa e a foto nasce `rejected`, e sem foto `ready` nao ha caso de
+ * perdido.
+ *
+ * SEM TEXTO, e isso e medido e nao preferencia: o conteiner da aplicacao nao
+ * tem fontconfig (`Fontconfig error: Cannot load default config file`), entao
+ * `<text>` renderiza em branco. Como o requisito e so "distinguiveis entre
+ * si", o numero entra como BARRAS -- `n` barras na faixa de baixo --, que sao
+ * geometria e nao dependem de fonte. Matiz propria por indice (12 graus de
+ * passo) da a segunda dimensao de distincao.
+ *
+ * SVG entra como ENTRADA do sharp, que o rasteriza. Ele nunca e enviado como
+ * imagem: `SVG nunca entra nesta lista -- e documento com script, nao imagem`
+ * (o proprio contrato). O que sobe e o JPEG que sai daqui.
+ */
+export function svgDaFoto(indice) {
+  const matiz = (indice * 12) % 360;
+  const fundo = `hsl(${String(matiz)}, 42%, 38%)`;
+  const claro = `hsl(${String(matiz)}, 55%, 86%)`;
+  const barras = Array.from({ length: indice }, (_, k) => {
+    const x = 20 + k * 18.6;
+    return `<rect x="${x.toFixed(1)}" y="500" width="11" height="80" fill="${claro}"/>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">`
+    + `<rect width="600" height="600" fill="${fundo}"/>`
+    + `<circle cx="300" cy="250" r="150" fill="${claro}"/>`
+    + `<circle cx="248" cy="215" r="22" fill="${fundo}"/>`
+    + `<circle cx="352" cy="215" r="22" fill="${fundo}"/>`
+    + `<ellipse cx="300" cy="300" rx="38" ry="26" fill="${fundo}"/>`
+    + `<rect x="0" y="470" width="600" height="130" fill="${fundo}" opacity="0.55"/>`
+    + barras
+    + `</svg>`;
+}
+
+/**
+ * Os pets EXTRAS que o teto de casos abertos obriga, e o calculo que os obriga.
+ *
+ * `TETO_DE_CASOS_ABERTOS_POR_CONTA = 3` e `lost_cases_um_aberto_por_pet` (UNIQUE
+ * em `pet_id` onde `status = 'open'`) juntos dao: casos abertos maximos =
+ * `soma(min(pets_da_conta, 3))`.
+ *
+ * A massa tem 30 pets como 6 + 24 x 1, e os 6 da conta vitrine nao sao
+ * negociaveis -- sao eles que levam 5 plaquinhas cada e produzem as 30 conversas
+ * numa lista so, que e a unica forma de a paginacao daquela tela ser testavel.
+ * Logo o maximo e 3 + 24 = 27, e 30 casos com 30 pets NAO EXISTE.
+ *
+ * Esta funcao devolve os pets que faltam, um por conta sem pet (a massa deixou
+ * 5 contas assim de proposito). Cada um sobe com foto, porque sem foto `ready`
+ * nao ha caso. O conjunto de pets passa de 30 para 33, e e esse numero que vai
+ * ao manifesto e ao relatorio -- em vez de anunciar 30 casos e entregar 27.
+ */
+export function petsExtras(quantos, contas, jaExistem) {
+  return Array.from({ length: quantos }, (_, k) => {
+    const i = jaExistem + k;
+    return {
+      indice: i + 1,
+      contaIndice: contas[k],
+      name: `${MARCA_VISIVEL} ${NOMES_DE_PET[i % NOMES_DE_PET.length]} II`,
+      species: ESPECIES[i % ESPECIES.length],
+      size: PORTES[i % PORTES.length],
+      sex: SEXOS[i % SEXOS.length],
+      neutered: i % 2 === 0,
+      distinctive_marks: SINAIS[i % SINAIS.length],
+    };
+  });
+}

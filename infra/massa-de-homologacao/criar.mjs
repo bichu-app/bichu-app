@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global console, process */
+/* global console, process, fetch, Buffer */
 /**
  * Cria a massa de homologacao e ESCREVE O MANIFESTO.
  *
