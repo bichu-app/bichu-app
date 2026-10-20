@@ -35,6 +35,7 @@ import {
   DERIVADAS_DA_FOTO_DE_USUARIO,
   DERIVADAS_DA_FOTO_DO_LOCAL,
   DERIVADAS_DA_LOGO,
+  DERIVADAS_DA_PUBLICACAO,
   DERIVADAS_DA_VITRINE_DO_USUARIO,
   DERIVADAS_DO_ENCONTRO,
   DERIVADAS_DO_PRODUTO,
@@ -65,6 +66,11 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   // `card` de 512 de `user_photo` servem a grade -- a primeira seria AMPLIADA
   // 1,8x, a segunda e 1,6x dado demais, e a grade desenha NOVE de uma vez.
   user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
+  // A FOTO DA PUBLICACAO (20/10/2026): UMA derivada, `card` 1024 x 1024. Sem
+  // `thumb`, e a ausencia e medida -- nao ha grade no Mural, e derivada que
+  // nenhuma superficie pinta e peso pago em todo envio. Ver
+  // `DERIVADAS_DA_PUBLICACAO`.
+  user_publication: DERIVADAS_DA_PUBLICACAO,
 };
 
 /** O texto que o painel mostra, por motivo. Nao e codigo de erro. */

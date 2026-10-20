@@ -279,9 +279,44 @@ export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio
   if (uf !== undefined && uf !== '') {
     consulta = consulta.where(sql<boolean>`upper(state) = upper(${uf})`);
   }
+  // O BAIRRO COMPARA POR `texto_para_busca`, PELO MESMO MOTIVO DA CIDADE.
+  //
+  // Era `lower(neighborhood) = lower($1)`, que baixa a caixa e **nao tira o
+  // acento** -- o defeito identico ao da cidade logo acima, deixado de pe
+  // quando ela foi corrigida porque o pedido daquele dia era so a cidade.
+  //
+  //   GET /v1/directory/entries                               -> "neighborhood":"Jardim América"
+  //   GET /v1/directory/entries?neighborhood=Jardim%20America -> {"items":[],"total":0}
+  //
+  // Quem digita `Jardim America` sem acento nao acha `Jardim América`, e a
+  // tela nao diz que o filtro falhou: ela desenha o estado vazio do recorte,
+  // que AFIRMA que nao ha profissional naquele bairro.
+  //
+  // E A MESMA NORMALIZACAO DA LISTAGEM PUBLICA DE PERDIDOS, que ja comparava
+  // bairro por `texto_para_busca(lost_cases.last_seen_neighborhood) =
+  // texto_para_busca($1)` (`kysely-listagem-publica-de-perdidos.ts`). Ate
+  // aqui o produto tinha DUAS regras de comparacao de bairro: o mesmo texto
+  // digitado do mesmo jeito achava o pet perdido no bairro e nao achava o
+  // veterinario dele.
+  //
+  // O indice e `professionals_bairro_normalizado` (migracao
+  // 20261019000011), B-tree sobre `texto_para_busca(neighborhood)`. A
+  // expressao aqui e a do indice, caractere a caractere; divergir deixa o
+  // filtro CORRETO e LENTO, sem erro nenhum.
+  // `professionals_publicados_por_lugar_texto`, em `(state, city,
+  // neighborhood)` cru, nunca atendeu este predicado -- nenhum B-tree sobre a
+  // coluna crua responde uma funcao sobre ela, e medido em 19/10 o plano de
+  // `lower(neighborhood)` era Seq Scan.
+  //
+  // **A NORMALIZACAO E DA COMPARACAO, E NUNCA DA SAIDA.** A coluna
+  // `neighborhood` continua selecionada crua na projecao, e a resposta
+  // continua devolvendo `"Jardim América"` com acento: normalizar a saida
+  // devolveria `jardim america` minusculo e sem acento para a tela mostrar.
   const bairro = recorte.neighborhood?.trim();
   if (bairro !== undefined && bairro !== '') {
-    consulta = consulta.where(sql<boolean>`lower(neighborhood) = lower(${bairro})`);
+    consulta = consulta.where(
+      sql<boolean>`texto_para_busca(professionals.neighborhood) = texto_para_busca(${bairro})`,
+    );
   }
   if (recorte.kind !== undefined) {
     consulta = consulta.where('kind', '=', recorte.kind);

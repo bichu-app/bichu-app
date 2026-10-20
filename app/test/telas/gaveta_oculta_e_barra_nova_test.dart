@@ -45,7 +45,6 @@ import 'package:bichu/telas/perto/minhas_indicacoes.dart';
 import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
-import 'package:bichu/widgets/acoes_de_criar_flutuantes.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
 import 'package:flutter/material.dart';
@@ -1089,33 +1088,48 @@ void main() {
     });
 
     // ======================================================================
-    // A FORMA MUDOU EM 19/10/2026, e a decisão é dele
+    // A FORMA MUDOU DUAS VEZES, e as duas foram decisao dele
     // ======================================================================
     //
-    // As três nasceram dentro de UMA folha, atrás de um alvo de `add`. Eu
-    // perguntei qual delas era *"adicionar um novo pet perdido"* e ele
-    // respondeu: ***"botão para escanear o pet"***.
+    // **19/10:** as tres nasceram dentro de UMA folha, atras de um alvo de
+    // `add`. Eu perguntei qual delas era *"adicionar um novo pet perdido"* e
+    // ele respondeu: ***"botão para escanear o pet"***. Entao `Escanear uma
+    // tag` virou a acao de UM TOQUE -- alvo de 56 dp no canto -- e as outras
+    // duas ficaram atras de um alvo SECUNDARIO ao lado.
     //
-    // Então `Escanear uma tag` é a ação de **UM TOQUE** -- alvo de 56 dp no
-    // canto, sem folha no caminho -- e as outras duas ficaram atrás do alvo
-    // SECUNDÁRIO ao lado. São três casos e não um: a suíte diz QUAL ação
-    // quebrou, e o caminho de cada uma é diferente.
+    // **20/10:** ele mandou o alvo secundario sair, literal: *"na pagina pet,
+    // remova o icone dos ..., so deixe o de escanear a tag"*. Com ele saiu a
+    // folha, e as duas acoes que moravam nela mudaram de casa:
     //
-    // **O DESTINO DE CADA UMA é medido pelo TIPO DA TELA.** Medir "saiu da
-    // casca" era mais fraco e mais frágil: `Cadastrar pet` abre um assistente
-    // que continua tendo barra em alguns passos, e um caso que só olhasse a
-    // ausência da barra reprovaria por um motivo que não é o da isca.
+    //   | acao                      | casa de hoje                         |
+    //   |---------------------------|--------------------------------------|
+    //   | `Registrar achado avulso` | `Perfil` > grupo `Bichos na rua`     |
+    //   | `Cadastrar pet`           | `Perfil` > grupo `Meus pets`         |
+    //
+    // **`Cadastrar pet` NAO ganhou um `ItemDeMenu`, e isso e medido:** o
+    // `BotaoPrimario` `Cadastrar meu pet`, dentro do bloco `Meus pets`,
+    // empurra a MESMA `Rotas.cadastrarPet` -- um item novo seria um segundo
+    // controle para a mesma rota, a um cabecalho de distancia. O que ela tinha
+    // era um buraco de FASE (a porta existia em 2 das 6 fases do bloco), e o
+    // conserto esta em `meus_pets.dart`. As iscas por fase estao em
+    // `barra_fixa_em_toda_tela_test.dart`, grupo `(d)`.
+    //
+    // **O DESTINO DE CADA UMA e medido pelo TIPO DA TELA.** Medir "saiu da
+    // casca" era mais fraco e, desde 20/10, FALSO: a tela empilhada tem barra
+    // de baixo agora, e um caso que olhasse a ausencia dela reprovaria por um
+    // motivo que nao e o da isca.
     testWidgets(
-      '`Escanear uma tag` é a ação de UM TOQUE, sem folha no caminho',
+      '`Escanear uma tag` e a UNICA acao flutuante de `Pets`, e e de UM TOQUE',
       (tester) async {
-        // **A ISCA DO PEDIDO DELE, e ela mede os DOIS lados:** que o toque
-        // abre o leitor, e que ele abre o leitor **direto** -- sem a folha
-        // aparecer no meio. Um caso que só medisse o destino ficaria verde com
-        // a ação de volta dentro da folha, que é exatamente o que ele mandou
-        // desfazer.
+        // **A ISCA DOS DOIS PEDIDOS DELE, e ela mede tres coisas:** que o
+        // alvo e UM so (20/10), que o toque abre o leitor, e que ele abre o
+        // leitor **direto** -- sem folha no meio (19/10). Um caso que so
+        // medisse o destino ficaria verde com a acao de volta dentro de uma
+        // folha, que e o arranjo que ele mandou desfazer duas vezes.
         //
-        // DESLIGAMENTO: em `abas.dart`, mova `Escanear uma tag` de `principal`
-        // para dentro de `outras`. Este caso reprova no primeiro passo.
+        // DESLIGAMENTO: em `abas.dart`, troque `AcaoDeCriarFlutuante` de volta
+        // por `AcoesDeCriarFlutuantes` com as duas secundarias. Este caso
+        // reprova na contagem de alvos.
         tester.view.physicalSize = const Size(1125, 3000);
         tester.view.devicePixelRatio = 3;
         addTearDown(tester.view.reset);
@@ -1128,13 +1142,20 @@ void main() {
         await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
         await tester.pumpAndSettle();
 
-        final principal = find.byKey(AcoesDeCriarFlutuantes.chaveDoPrincipal);
+        final alvos = find.byType(FloatingActionButton);
         expect(
-          principal,
+          alvos,
           findsOneWidget,
-          reason: 'REPROVA: a seção `Pets` não tem o alvo flutuante '
-              'principal. O cliente pediu o leitor de plaquinha a UM TOQUE: '
-              '"botão para escanear o pet".',
+          reason: 'REPROVA: a seção `Pets` tem '
+              '${alvos.evaluate().length} alvos flutuantes, e o cliente pediu '
+              'UM: *"na pagina pet, remova o icone dos ..., so deixe o de '
+              'escanear a tag"*.',
+        );
+        expect(
+          find.byIcon(Icons.more_horiz),
+          findsNothing,
+          reason: 'REPROVA: `Pets` ainda desenha `more_horiz`, o glifo do '
+              'alvo que ele mandou remover em 20/10.',
         );
 
         // **O GLIFO É `qr_code_scanner` e não `qr_code_2`**, e a distinção é a
@@ -1142,11 +1163,11 @@ void main() {
         // plaquinha, o outro EXIBE a própria. Esta porta lê.
         expect(
           find.descendant(
-            of: principal,
+            of: alvos,
             matching: find.byIcon(Icons.qr_code_scanner),
           ),
           findsOneWidget,
-          reason: 'REPROVA: o alvo principal de `Pets` não desenha '
+          reason: 'REPROVA: o alvo flutuante de `Pets` não desenha '
               '`qr_code_scanner`. `qr_code_2` é EXIBIR a plaquinha do próprio '
               'pet, e esta porta LÊ a de um bicho na rua.',
         );
@@ -1155,133 +1176,140 @@ void main() {
         // de onde o Flutter publica o nome da árvore de semântica; sem ele o
         // leitor de tela anuncia só "botão".
         expect(
-          tester.widget<FloatingActionButton>(principal).tooltip,
+          tester.widget<FloatingActionButton>(alvos).tooltip,
           'Escanear uma tag',
-          reason: 'REPROVA: o nome acessível do alvo principal não é o verbo '
+          reason: 'REPROVA: o nome acessível do alvo flutuante não é o verbo '
               'do que o toque faz. `Adicionar` diria o que o app faz com o '
               'resultado, e quem usa leitor de tela ouviria uma palavra que '
               'não descreve nada do que vem depois do toque.',
         );
 
-        await tester.tap(principal);
+        await tester.tap(alvos);
         await tester.pumpAndSettle();
 
-        // **NENHUMA FOLHA NO CAMINHO.** Esta linha é a metade que o pedido
-        // dele criou: com a ação de volta dentro da folha, o destino ainda
-        // abriria -- depois de um toque a mais.
-        expect(
-          find.byKey(AcoesDeCriarFlutuantes.chaveDaFolha),
-          findsNothing,
-          reason: 'REPROVA: tocar no alvo principal abriu a FOLHA. O cliente '
-              'pediu um toque: "botão para escanear o pet".',
-        );
         expect(
           find.byType(TelaLeitorDeQr),
           findsOneWidget,
-          reason: 'REPROVA: o alvo principal de `Pets` não abriu o leitor de '
+          reason: 'REPROVA: o alvo flutuante de `Pets` não abriu o leitor de '
               'QR. Ele pinta o glifo do leitor e não leva a lugar nenhum: a '
               'função continua perdida, agora com um ícone em cima dela.',
         );
       },
     );
 
-    for (final (rotulo, tela) in <(String, Type)>[
-      ('Registrar achado avulso', TelaRegistrarAchado),
-      ('Cadastrar pet', TelaCadastrarIdentificacao),
-    ]) {
-      testWidgets(
-          '`$rotulo` é alcançável pelo alvo SECUNDÁRIO de `Pets`',
-          (tester) async {
-        // **O CAMINHO É VISÍVEL, e é por isso que ele serve.** O briefing
-        // proibiu pressão longa como único caminho -- ela não é descobrível e
-        // `onLongPress` não entra na árvore de semântica com nome, então quem
-        // usa TalkBack ou VoiceOver não teria como saber que estas duas
-        // existem. O alvo secundário é um `FloatingActionButton` de 56 dp com
-        // `tooltip`: visível, tocável e anunciado.
-        //
-        // DESLIGAMENTO: em `abas.dart`, apague a `OpcaoDeCriar` desta ação de
-        // `outras`. **UM** caso deste grupo reprova, e ele nomeia a ação.
-        tester.view.physicalSize = const Size(1125, 3000);
-        tester.view.devicePixelRatio = 3;
-        addTearDown(tester.view.reset);
+    testWidgets(
+        '`Registrar achado avulso` e alcancavel pela FOTO, na casa nova dela',
+        (tester) async {
+      // **ELA ERA A MAIS EXPOSTA DAS DUAS, e isto foi medido antes de mover:**
+      // `Rotas.registrarAchado` aparecia em `lib/` so em tres lugares -- a
+      // folha do alvo secundario, a declaracao da rota e a propria tela.
+      // Remover o alvo sem dar casa a ela deixaria uma tela construida
+      // inalcancavel **em silencio**, que e o mesmo achado de `Pedidos de
+      // conexão` e `Pessoas bloqueadas` em 19/10.
+      //
+      // DESLIGAMENTO: em `abas.dart`, apague o `ItemDeMenu` de `Registrar
+      // achado avulso`. Este caso reprova, e nenhum outro da suíte acusa.
+      tester.view.physicalSize = const Size(1125, 3000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
 
-        await abrirOApp(
-          tester,
-          rede: redeDasCincoListagens,
-          deposito: depositoLogado(),
-        );
-        await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
-        await tester.pumpAndSettle();
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AvatarDaConta));
+      await tester.pumpAndSettle();
 
-        final secundario = find.byKey(
-          AcoesDeCriarFlutuantes.chaveDoSecundario,
-        );
-        expect(
-          secundario,
-          findsOneWidget,
-          reason: 'REPROVA: a seção `Pets` não tem o alvo secundário. Sem ele '
-              '"$rotulo" -- que era item VIVO da gaveta oculta -- não tem '
-              'caminho nenhum, e nenhum outro caso da suíte acusaria isso: a '
-              'rota existe e a tela monta.',
-        );
-        // O nome acessível dele diz o que o toque faz, e não nomeia uma das
-        // duas: nomear uma mentiria sobre a outra.
-        expect(
-          tester.widget<FloatingActionButton>(secundario).tooltip,
-          'Mais ações',
-          reason: 'REPROVA: o alvo secundário perdeu o nome acessível, ou ele '
-              'passou a nomear uma das ações. Sem `tooltip` o leitor de tela '
-              'anuncia só "botão".',
-        );
-
-        await tester.tap(secundario);
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text(rotulo),
-          findsOneWidget,
-          reason: 'REPROVA: a folha do alvo secundário não oferece "$rotulo". '
-              'Ele era item VIVO da gaveta, e com o menu oculto esta folha é a '
-              'casa dele -- sem ela, a função desaparece em silêncio.',
-        );
-
-        await tester.tap(find.text(rotulo));
-        await tester.pumpAndSettle();
-        expect(
-          find.byType(tela),
-          findsOneWidget,
-          reason: 'REPROVA: tocar em "$rotulo" não abriu $tela. A opção pinta '
-              'o nome do item que a gaveta perdeu e não leva a lugar nenhum: a '
-              'função continua perdida, agora com um rótulo em cima.',
-        );
-      });
-    }
+      final item = find.widgetWithText(ItemDeMenu, 'Registrar achado avulso');
+      await tester.scrollUntilVisible(item, 200);
+      expect(
+        item,
+        findsOneWidget,
+        reason: 'REPROVA: a tela da conta não oferece `Registrar achado '
+            'avulso`. Ela perdeu a folha do alvo secundário em 20/10 e **não '
+            'tinha nenhuma outra porta em `lib/`**.',
+      );
+      await tester.tap(item);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(TelaRegistrarAchado),
+        findsOneWidget,
+        reason: 'REPROVA: tocar em `Registrar achado avulso` não abriu '
+            '$TelaRegistrarAchado. Item que pinta o nome e não navega é ação '
+            'sem destino, e continuaria sendo função perdida com um rótulo em '
+            'cima.',
+      );
+    });
 
     testWidgets(
-      'os DOIS alvos dividem a MESMA linha, e a invasão do pé continua 72,00 dp',
+        '`Cadastrar pet` e alcancavel pela FOTO, pelo bloco `Meus pets`',
+        (tester) async {
+      // **A CASA DELA E O `BotaoPrimario` que ja existia**, e nao um item
+      // novo: `Cadastrar meu pet` empurra a MESMA `Rotas.cadastrarPet` que a
+      // opcao da folha empurrava. Este caso prova o CAMINHO; as iscas por
+      // FASE do bloco -- que e onde estava o buraco -- estao no grupo `(d)` de
+      // `barra_fixa_em_toda_tela_test.dart`.
+      //
+      // DESLIGAMENTO: em `meus_pets.dart`, apague `_acaoDeCadastrar`. Este
+      // caso reprova, e os tres do grupo `(d)` tambem.
+      tester.view.physicalSize = const Size(1125, 3000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AvatarDaConta));
+      await tester.pumpAndSettle();
+
+      final porta = find.widgetWithText(FilledButton, 'Cadastrar meu pet');
+      await tester.scrollUntilVisible(porta, 200);
+      expect(
+        porta,
+        findsOneWidget,
+        reason: 'REPROVA: a tela da conta não oferece `Cadastrar meu pet`. '
+            'Desde 20/10 ela é a ÚNICA porta de `Rotas.cadastrarPet` no app: '
+            'o alvo secundário de `Pets`, que tinha a outra, saiu por pedido '
+            'do cliente.',
+      );
+      await tester.tap(porta);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(TelaCadastrarIdentificacao),
+        findsOneWidget,
+        reason: 'REPROVA: tocar em `Cadastrar meu pet` não abriu '
+            '$TelaCadastrarIdentificacao.',
+      );
+    });
+
+    testWidgets(
+      'o alvo que ficou e UM, e a invasão do pé continua 72,00 dp',
       (tester) async {
         // ====================================================================
-        // O CRITÉRIO 3 DO BRIEFING, medido
+        // O CRITÉRIO 3 DO BRIEFING DE 19/10, confirmado depois de 20/10
         // ====================================================================
         //
         // O alvo flutuante invade os últimos 72,00 dp da lista (56 de desenho
         // + 16 de assentamento do `Scaffold`), pagos com respiro rolável no
-        // `padding`. Um alvo secundário come mais -- **e quanto depende de
-        // onde ele fica.**
+        // `padding`. Com DOIS alvos na mesma linha a invasão continuava 72,00
+        // -- a altura é a do alvo mais alto --, e **tirar o segundo em 20/10
+        // tirou LARGURA do canto e não altura**: a conta não mudou, e o
+        // briefing pediu para confirmar isso em vez de supor.
         //
-        // EMPILHADOS em coluna: `56 + 16 + 56 = 128` dp de altura, e a invasão
-        // iria a **144,00 dp**. Em 320 x 568 dp (barra de topo 64 + barra de
-        // baixo 72, corpo de ~432) isso é um TERÇO da altura visível da lista
-        // reservado para não ser coberto.
+        // (Empilhados em coluna seriam `56 + 16 + 56 = 128` dp de altura e a
+        // invasão iria a 144,00 -- um terço da altura visível da lista em
+        // 320 x 568 dp. Foi por isso que eles ficaram na mesma linha enquanto
+        // eram dois.)
         //
-        // NA MESMA LINHA a altura é a do alvo mais alto: 56 dp. **A invasão
-        // continua 72,00** e o respiro que já existe continua pagando-a
-        // inteira. O que o segundo alvo custa é LARGURA do canto inferior
-        // direito, e largura não cobre item -- o respiro vertical é que decide
-        // isso.
-        //
-        // DESLIGAMENTO: em `AcoesDeCriarFlutuantes`, troque a `Row` por uma
-        // `Column`. A invasão vai a 144,00 e este caso reprova com os dois
+        // DESLIGAMENTO: em `TelaDeAba`, tire `_folgaDaAcaoFlutuante` do
+        // `padding` do `ListView`. O segundo `expect` reprova com os dois
         // números na mensagem.
         await abrirOApp(
           tester,
@@ -1291,48 +1319,29 @@ void main() {
         await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
         await tester.pumpAndSettle();
 
-        final principal = tester.getRect(
-          find.byKey(AcoesDeCriarFlutuantes.chaveDoPrincipal),
+        final alvos = find.byType(FloatingActionButton);
+        expect(
+          alvos,
+          findsOneWidget,
+          reason: 'REPROVA: `Pets` tem ${alvos.evaluate().length} alvos '
+              'flutuantes. O cliente pediu UM em 20/10, e a conta da invasão '
+              'abaixo é a de um alvo só.',
         );
-        final secundario = tester.getRect(
-          find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario),
-        );
+        final alvo = tester.getRect(alvos);
 
-        // (1) MESMA LINHA: os centros verticais coincidem.
-        expect(
-          secundario.center.dy,
-          closeTo(principal.center.dy, 0.01),
-          reason: 'REPROVA: os dois alvos não estão na mesma linha (centros em '
-              '${secundario.center.dy} e ${principal.center.dy}). Empilhados, '
-              'a invasão do pé da lista dobra para 144,00 dp.',
-        );
-        // (2) O SECUNDÁRIO À ESQUERDA: o principal fica no canto, ao alcance
-        // do polegar. É daí que vem a hierarquia, porque os dois têm 56 dp.
-        expect(
-          secundario.right,
-          lessThanOrEqualTo(principal.left),
-          reason: 'REPROVA: o alvo secundário não está à ESQUERDA do '
-              'principal. O principal fica no canto de propósito: é a ação de '
-              'um toque, e é ela que o polegar alcança primeiro.',
-        );
-        // (3) OS DOIS CUMPREM O PISO DE 48 dp do SC 2.5.8.
+        // (1) O PISO DE 48 dp do SC 2.5.8.
         //
         // `FloatingActionButton.small` (40 x 40) seria o padrão do Material
-        // para o secundário e FURA o piso. Os dois ficaram em 56.
-        for (final (nome, r) in <(String, Rect)>[
-          ('principal', principal),
-          ('secundário', secundario),
-        ]) {
-          expect(
-            r.shortestSide,
-            greaterThanOrEqualTo(BichuAlvoDeToque.min),
-            reason: 'REPROVA: o alvo $nome mede ${r.shortestSide} dp no menor '
-                'lado, abaixo do piso de ${BichuAlvoDeToque.min} dp do '
-                'SC 2.5.8. `FloatingActionButton.small` tem 40 e não serve.',
-          );
-        }
+        // para um alvo secundário e FURA o piso. O que ficou tem 56.
+        expect(
+          alvo.shortestSide,
+          greaterThanOrEqualTo(BichuAlvoDeToque.min),
+          reason: 'REPROVA: o alvo flutuante mede ${alvo.shortestSide} dp no '
+              'menor lado, abaixo do piso de ${BichuAlvoDeToque.min} dp do '
+              'SC 2.5.8. `FloatingActionButton.small` tem 40 e não serve.',
+        );
 
-        // (4) A INVASÃO, e o RESPIRO que a paga.
+        // (2) A INVASÃO, e o RESPIRO que a paga.
         final lista = find
             .descendant(
               of: find.byType(Scaffold),
@@ -1342,23 +1351,23 @@ void main() {
         final corpo = tester.getRect(lista);
         final respiro =
             (tester.widget<ListView>(lista).padding as EdgeInsets).bottom;
-        final invasao = corpo.bottom - principal.top;
+        final invasao = corpo.bottom - alvo.top;
         expect(
           invasao,
           closeTo(72.0, 0.01),
-          reason: 'REPROVA: os alvos flutuantes invadem '
+          reason: 'REPROVA: o alvo flutuante invade '
               '${invasao.toStringAsFixed(2)} dp do pé do corpo, e o medido é '
-              '72,00 (56 de desenho + 16 de assentamento). Se eles foram '
-              'empilhados, a invasão virou 144,00 e o respiro abaixo tem de '
-              'dobrar com ela.',
+              '72,00 (56 de desenho + 16 de assentamento). Tirar o alvo '
+              'secundário em 20/10 não podia mexer neste número: ele era '
+              'LARGURA do canto, e largura não cobre item.',
         );
         expect(
           respiro,
           greaterThanOrEqualTo(invasao),
           reason: 'REPROVA: o pé da lista reserva '
-              '${respiro.toStringAsFixed(2)} dp e os alvos cobrem '
+              '${respiro.toStringAsFixed(2)} dp e o alvo cobre '
               '${invasao.toStringAsFixed(2)} dp. O último cartão de pet '
-              'perdido termina embaixo deles, em toda rolagem.',
+              'perdido termina embaixo dele, em toda rolagem.',
         );
       },
     );

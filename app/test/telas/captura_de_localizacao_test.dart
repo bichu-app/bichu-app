@@ -43,6 +43,9 @@
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/contadores_api.dart';
+import 'package:bichu/api/conversas_api.dart';
+import 'package:bichu/sessao/contadores_de_nao_lido.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/conexoes_api.dart';
@@ -145,6 +148,15 @@ Future<_Caixa> _montar(
       // nenhuma, e um `EnvioDeFoto` com camera de verdade nao mudaria nada
       // aqui -- ele so age quando alguem chama `enviar`.
       envioDeFoto: envioDeFoto,
+      // O CONTADOR DA ABA `AuAu` entrou no escopo em 20/10/2026. Aqui ele
+      // entra com a porta de conversas deste mesmo `api` de teste: este caso
+      // nao mede contador nenhum, e o objeto so pergunta quando alguem chama
+      // `atualizar()`.
+      contadores: ContadoresDeNaoLido(
+        ConversasApi(api),
+        secoes: ContadoresApi(api),
+        cidade: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
+      ),
       retomadaDeFotos: RetomadaDeFotos(
         envio: envioDeFoto,
         registro: FotosPendentes(deposito: DepositoDeFotosEmMemoria()),

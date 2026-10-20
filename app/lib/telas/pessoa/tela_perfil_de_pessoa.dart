@@ -14,6 +14,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../seguranca/menu_do_perfil.dart';
@@ -168,6 +169,15 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   bool _carregando = true;
   bool _perdeuOAlvo = false;
   String? _falha;
+
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  ///
+  /// Separado de [_falha] porque os dois desenham coisas diferentes, e porque
+  /// o que esta tela desenhava para o 401 era o defeito de 19/10 inteiro: o
+  /// catalogo devolve `texto: ''` para `unauthenticated` desde 18/10, entao a
+  /// faixa saia com o icone de ERRO, NENHUMA frase e um `Tentar de novo` ao
+  /// lado -- e tentar de novo sai igualmente sem conta.
+  bool _faltaConta = false;
   bool _agindo = false;
 
   @override
@@ -180,6 +190,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     setState(() {
       _carregando = true;
       _falha = null;
+      _faltaConta = false;
     });
     try {
       final perfil = await widget.pessoas.perfil(widget.apelido);
@@ -198,6 +209,11 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         // tentando em laço. O 404 é um desfecho; o resto é uma falha.
         if (falha is FalhaDaApi && falha.tipo == ProblemTipo.naoEncontrado) {
           _perdeuOAlvo = true;
+          _perfil = null;
+        } else if (faltaConta(falha)) {
+          // SEM CONTA NAO E ERRO. Decidido pelo `next_action` do corpo, e nao
+          // pelo status. Ver `widgets/convite_para_entrar.dart`.
+          _faltaConta = true;
           _perfil = null;
         } else {
           _falha = MensagensDeErro.de(falha).texto;
@@ -227,6 +243,15 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         _agindo = false;
         if (falha is FalhaDaApi && falha.tipo == ProblemTipo.naoEncontrado) {
           _perdeuOAlvo = true;
+          _perfil = null;
+          return;
+        }
+        // A SESSAO CAIU NO MEIO DA ACAO. O corpo do perfil ja esta na tela, e
+        // ele e que sai: a pessoa nao pode aceitar nem recusar nada sem conta,
+        // e deixar os botoes de pe com uma faixa vazia em cima e o defeito que
+        // este campo existe para fechar.
+        if (faltaConta(falha)) {
+          _faltaConta = true;
           _perfil = null;
           return;
         }
@@ -287,7 +312,16 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
               ),
               const SizedBox(height: BichuEspaco.e4),
             ],
-            if (_perdeuOAlvo)
+            // SEM CONTA VEM PRIMEIRO, e os dois estados sao exclusivos por
+            // construcao: `_carregar` liga UM dos dois, e uma acao so pode
+            // falhar com o perfil carregado -- que e justamente quando
+            // `_perdeuOAlvo` e falso. A ordem esta escrita para o dia em que
+            // alguem acrescentar um terceiro caminho: sem conta o servidor
+            // nao chegou a dizer se o alvo existe, e afirmar `nao
+            // encontramos` seria a tela contando o que nao mediu.
+            if (_faltaConta)
+              const ConviteParaEntrar(secao: SecaoComConta.paginaDaPessoa)
+            else if (_perdeuOAlvo)
               _semAlvo(cores, textos)
             else if (_carregando && perfil == null)
               const Center(

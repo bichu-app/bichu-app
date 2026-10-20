@@ -22,7 +22,7 @@
 ///    nenhum, porque a busca acontece em volta dele.
 library;
 
-/// As seis ações que o produto guarda (UX 8.3).
+/// As ações que o produto guarda (UX 8.3).
 ///
 /// Enum fechado, e não `String` livre: um envelope com ação que este build não
 /// conhece precisa ser recusado na leitura, e não descoberto na hora de
@@ -37,7 +37,19 @@ enum AcaoDeIntencao {
 
   /// Pedir para participar de um encontro privado da `Rede` (design system
   /// 24.17.1, item 5). O `alvo` e o `slug` do encontro.
-  pedirParaParticipar('pedir_para_participar');
+  pedirParaParticipar('pedir_para_participar'),
+
+  /// **VER** um conteúdo que exige conta (20/10/2026). O `alvo` é a ROTA.
+  ///
+  /// É a única entrada deste enum que não escreve nada: ver
+  /// `intencao/leitura_como_intencao.dart`, que explica por que uma leitura
+  /// entra num mecanismo feito para ações e o que ela deliberadamente não faz
+  /// (não chama o servidor e não guarda rascunho).
+  ///
+  /// Ela entrou porque o convite de deslogado das páginas de conteúdo mandava
+  /// a pessoa para `/pets` depois do login — medido —, e não para a página que
+  /// ela tinha pedido.
+  verConteudo('ver_conteudo');
 
   const AcaoDeIntencao(this.valor);
 

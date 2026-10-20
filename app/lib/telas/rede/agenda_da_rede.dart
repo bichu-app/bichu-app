@@ -9,12 +9,15 @@ import '../../api/modelos_pet.dart';
 import '../../api/modelos_rede.dart';
 import '../../api/rede_api.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
+import 'encontro_da_rede.dart';
 
 /// `Rede`: a agenda dos encontros (design system 24.14 com 24.15 a 24.17,
 /// textos da UX 28.7.4).
@@ -514,6 +517,58 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   bool get _temMais => _itens.length < _total;
 
+  /// O TOQUE NO CARTAO, e a decisao de sessao mora AQUI (20/10/2026).
+  ///
+  /// Pedido do cliente, em duas rodadas. Em 19/10 ele pediu *"remover o clique
+  /// para o usuario nnao conseguir acessar a pagina de detalhes"* e a entrega
+  /// apagou a pagina inteira; em 20/10 ele corrigiu -- *"eu nao pedi pra voce
+  /// remover, eu pedi para remover o clique"* -- e disse o que o toque tem de
+  /// fazer: *"quando o usuario estiver deslogado e tentar clicar para ver
+  /// detalhes de algum conteudo, como por exemplo os eventos, que ele precisa
+  /// estar logado para ver mais informacoes"*.
+  ///
+  /// **Deslogado nao e um toque morto, e nao e um cartao desabilitado.** As
+  /// duas alternativas foram medidas contra o que ele pediu:
+  ///
+  ///   - **cartao nao tocavel** e o estado de 19/10, e e exatamente a
+  ///     reclamacao: a pessoa toca, nada acontece, e ela nao recebe
+  ///     informacao nenhuma;
+  ///   - **cartao desabilitado** anuncia uma recusa antes de a pessoa pedir, e
+  ///     ela nao tem como saber que basta entrar.
+  ///
+  /// A folha diz o que falta e oferece a saida, no lugar do toque. A escolha
+  /// entre folha, texto no cartao e convite de tela cheia esta medida em
+  /// `widgets/convite_para_entrar.dart` -- e a razao curta e que **a agenda
+  /// continua publica**: `GET /v1/network/events` responde 200 sem conta
+  /// (medido em 20/10/2026), e trocar a lista por um muro esconderia conteudo
+  /// que o servidor entrega.
+  ///
+  /// **A volta e a propria pagina do encontro.** Depois de entrar, a guarda de
+  /// acao devolve a pessoa a `/rede/encontros/<slug>` em vez de a `/pets` --
+  /// ver `intencao/leitura_como_intencao.dart`.
+  void _tocarNoCartao(_ItemDaAgenda item, {required bool logado}) {
+    final slug = item.encontro.slug;
+    if (!logado) {
+      unawaited(
+        mostrarConviteParaEntrar(
+          context,
+          secao: SecaoComConta.encontroDaRede,
+          rotaDeVolta: Rotas.encontroDaRedeDe(slug),
+        ),
+      );
+      return;
+    }
+    unawaited(
+      TelaDoEncontro.abrir(
+        context,
+        slug,
+        // A distancia vem desta lista, e nao da pagina: quem a leu foi
+        // `listNearbyNetworkEvents`.
+        distanciaEmMetros: item.distancia,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessao = Escopo.of(context).sessao;
@@ -634,7 +689,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                 ordenacao: ordenacao,
                 aoAplicar: _aplicarAFolha,
               ),
-            ..._corpo(),
+            ..._corpo(logado: logado),
           ],
         );
       },
@@ -910,7 +965,11 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
-  List<Widget> _corpo() {
+  /// O corpo. **[logado] e PARAMETRO e nao `Escopo.of(context)`**: quem
+  /// decide o estado desenhado e o `AnimatedBuilder` do `build`, e ler a
+  /// sessao de novo aqui abriria a porta para o corpo discordar da casca no
+  /// quadro em que a sessao muda.
+  List<Widget> _corpo({required bool logado}) {
     if (_fase == _Fase.carregando) {
       return <Widget>[
         Semantics(
@@ -942,13 +1001,18 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return <Widget>[
       for (var i = 0; i < _itens.length; i++) ...<Widget>[
         if (i > 0) const SizedBox(height: BichuEspaco.e4),
-        // **So o encontro.** O cartao mostra foto e titulo, e a distancia e
-        // o estado do pedido deixaram de ter onde aparecer (cliente,
-        // 19/10/2026). `_ItemDaAgenda` continua carregando as duas: a
-        // distancia porque e a resposta de `listNearbyNetworkEvents` que
-        // revela se ha regiao cadastrada -- e e isso que decide se `Mais
-        // perto` e `Distância` aparecem na barra.
-        CartaoDoEncontro(encontro: _itens[i].encontro),
+        // **So o encontro NO CARTAO.** Ele mostra foto e titulo, e a
+        // distancia e o estado do pedido nao voltaram para dentro dele
+        // (cliente, 19/10/2026, confirmado em 20/10). `_ItemDaAgenda` continua
+        // carregando a distancia: ela e a resposta de
+        // `listNearbyNetworkEvents` que revela se ha regiao cadastrada -- e e
+        // isso que decide se `Mais perto` e `Distância` aparecem na barra --,
+        // e ela agora tambem viaja no `extra` do toque, para a pagina nao
+        // perguntar de novo o que esta lista ja sabe.
+        CartaoDoEncontro(
+          encontro: _itens[i].encontro,
+          aoTocar: () => _tocarNoCartao(_itens[i], logado: logado),
+        ),
       ],
       const SizedBox(height: BichuEspaco.e4),
       _LinhaDaPagina(naTela: _itens.length, total: _total),

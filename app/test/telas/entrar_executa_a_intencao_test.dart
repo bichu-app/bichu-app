@@ -28,6 +28,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/sessao/controlador_de_sessao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:bichu/telas/pet/rascunho_de_pet.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -162,8 +163,21 @@ void main() {
       // A tela de resultado, F1.6.
       expect(find.text('Pet cadastrado'), findsOneWidget);
       // E a home não apareceu em momento nenhum (regra 4).
+      //
+      // **A MEDIDA DEIXOU DE SER A AUSÊNCIA DA BARRA DE BAIXO (20/10/2026).**
+      // Ela era `find.byType(NavigationBar), findsNothing`, e isso funcionava
+      // por um acidente que acabou: a barra existia só na casca das abas, toda
+      // rota empilhada cobria a casca, e "sem barra" era sinônimo de "fora da
+      // home". O cliente mandou fixar a barra em todas as páginas (*"quando o
+      // usuário vai para a mensagem, o menu inferior some, mantenha ele fixo
+      // em todas as páginas"*), e a tela de resultado passou a ter barra
+      // também — a asserção antiga reprovaria com a regra 4 **cumprida**.
+      //
+      // O que a regra 4 diz é que a pessoa não aterrissa numa RAIZ DE SEÇÃO, e
+      // é isso que esta linha mede agora: `raizDeSecao` é a condição que
+      // define a home em `TelaDeAba`, e nenhuma outra tela a declara.
       expect(
-        find.byType(NavigationBar),
+        find.byWidgetPredicate((w) => w is TelaDeAba && w.raizDeSecao),
         findsNothing,
         reason: 'REPROVA: a pessoa passou pela home. 8.3 regra 4: nunca a '
             'home, exceto quando a intenção expirou.',
@@ -250,8 +264,11 @@ void main() {
 
       await entrar(tester);
 
+      // **A RAIZ DE SEÇÃO, e não a ausência da barra de baixo.** Ver a nota
+      // longa no caso da regra 3, acima: desde 20/10 a barra está em toda
+      // tela empilhada, e medi-la aqui reprovaria com a regra 4 cumprida.
       expect(
-        find.byType(NavigationBar),
+        find.byWidgetPredicate((w) => w is TelaDeAba && w.raizDeSecao),
         findsNothing,
         reason: 'REPROVA: a falha da execução jogou a pessoa na home, com o '
             'rascunho dela perdido (UX 8.3, regra 4).',
