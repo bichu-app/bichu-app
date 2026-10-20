@@ -42,12 +42,19 @@
 -- -- a conversao errada foi uma mudanca de representacao, nao uma perda. Ela se
 -- desfaz inteira:
 --
---   decode(convert_from(token_hash, 'UTF8'), 'base64')
+--   decode(encode(token_hash, 'escape'), 'base64')
 --
--- `convert_from` le os 44 bytes como o texto que eles sao, `decode` o resolve de
--- volta aos 32 bytes do digest. Nenhum link pendente deixa de resolver, nenhuma
--- linha de trilha perde o valor que a enderecava, e o 410 sem explicacao que o
--- plano aceitava como sintoma nao acontece.
+-- `encode(..., 'escape')` le os 44 bytes como o texto que eles sao, `decode` o
+-- resolve de volta aos 32 bytes do digest. Nenhum link pendente deixa de
+-- resolver, nenhuma linha de trilha perde o valor que a enderecava, e o 410 sem
+-- explicacao que o plano aceitava como sintoma nao acontece.
+--
+-- `encode(..., 'escape')` e nao `convert_from(..., 'UTF8')`, que seria a leitura
+-- obvia: `convert_from` LEVANTA EXCECAO diante de bytes que nao formam UTF-8
+-- valido, e o `AND` do `WHERE` nao tem ordem garantida -- uma linha de 44 bytes
+-- que nao fosse o texto base64 derrubaria a migracao inteira em vez de ser
+-- deixada de lado. `encode(..., 'escape')` nunca levanta: byte fora do
+-- imprimivel sai como `\nnn`, que a expressao abaixo nao casa.
 --
 -- A conversao e GUARDADA, e nao so aplicada: `octet_length = 44` e o texto
 -- casando o alfabeto base64 com o enchimento no fim. Linha que nao satisfaca as
@@ -110,33 +117,34 @@ DECLARE
   convertidas_reauth       bigint;
   convertidas_refresh      bigint;
 BEGIN
-  -- `octet_length = 44` E o texto conferido contra o alfabeto base64 (com o
-  -- enchimento, que 32 bytes sempre produzem: 32 nao e multiplo de 3). As duas
-  -- condicoes juntas, e nao so o tamanho: `decode` de algo que nao e base64
-  -- levanta excecao e derrubaria a migracao inteira por uma linha estranha.
+  -- `octet_length = 44` E o texto conferido contra o alfabeto base64: 43
+  -- caracteres do alfabeto mais UM `=` de enchimento, que e exatamente a forma
+  -- do base64 de 32 bytes (32 = 3*10 + 2, entao sobra um grupo de dois bytes).
+  -- As duas condicoes juntas, e nao so o tamanho: `decode` de algo que nao e
+  -- base64 levanta excecao e derrubaria a migracao por uma linha estranha.
   WITH convertidas AS (
     UPDATE verification_tokens
-       SET token_hash = decode(convert_from(token_hash, 'UTF8'), 'base64')
+       SET token_hash = decode(encode(token_hash, 'escape'), 'base64')
      WHERE octet_length(token_hash) = 44
-       AND convert_from(token_hash, 'UTF8') ~ '^[A-Za-z0-9+/]{43}=$'
+       AND encode(token_hash, 'escape') ~ '^[A-Za-z0-9+/]{43}=$'
     RETURNING 1
   )
   SELECT count(*) INTO convertidas_verification FROM convertidas;
 
   WITH convertidas AS (
     UPDATE reauth_tokens
-       SET token_hash = decode(convert_from(token_hash, 'UTF8'), 'base64')
+       SET token_hash = decode(encode(token_hash, 'escape'), 'base64')
      WHERE octet_length(token_hash) = 44
-       AND convert_from(token_hash, 'UTF8') ~ '^[A-Za-z0-9+/]{43}=$'
+       AND encode(token_hash, 'escape') ~ '^[A-Za-z0-9+/]{43}=$'
     RETURNING 1
   )
   SELECT count(*) INTO convertidas_reauth FROM convertidas;
 
   WITH convertidas AS (
     UPDATE refresh_tokens
-       SET token_hash = decode(convert_from(token_hash, 'UTF8'), 'base64')
+       SET token_hash = decode(encode(token_hash, 'escape'), 'base64')
      WHERE octet_length(token_hash) = 44
-       AND convert_from(token_hash, 'UTF8') ~ '^[A-Za-z0-9+/]{43}=$'
+       AND encode(token_hash, 'escape') ~ '^[A-Za-z0-9+/]{43}=$'
     RETURNING 1
   )
   SELECT count(*) INTO convertidas_refresh FROM convertidas;

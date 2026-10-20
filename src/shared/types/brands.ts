@@ -69,8 +69,10 @@ export type OpaqueToken = Brand<string, 'OpaqueToken'>;
  *
  * A marca continua, e não é decoração: ela é o que impede passar um `ipHmac` —
  * também 32 bytes de `Buffer` — onde se espera o resumo do token. Construir um
- * exige o `as TokenHash` de `comoTokenHash`, que é o único lugar do módulo onde
- * ele nasce.
+ * exige um `as TokenHash`, e no módulo de identidade isso acontece em dois
+ * lugares e só dois: `comoTokenHash` em `auth-service.ts` e a emissão do link
+ * de "não fui eu" em `aviso-de-reuso.ts`. Os dois são `hashDeToken(x) as
+ * TokenHash` — uma linha, sem conversão no meio.
  */
 export type TokenHash = Brand<Buffer, 'TokenHash'>;
 

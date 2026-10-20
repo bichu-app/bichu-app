@@ -169,8 +169,9 @@ export interface Autenticado {
  * `src/shared/types/brands.ts`.
  *
  * Agora não há conversão: `hashDeToken` devolve os bytes do digest e eles
- * atravessam até o `bytea` sem passar por texto. Este é o único lugar do módulo
- * onde um `TokenHash` nasce.
+ * atravessam até o `bytea` sem passar por texto. O outro lugar do módulo onde
+ * um `TokenHash` nasce é a emissão do link de "não fui eu", em
+ * `aviso-de-reuso.ts`, e ele faz a mesma coisa nesta mesma única linha.
  */
 function comoTokenHash(valor: string): TokenHash {
   return hashDeToken(valor) as TokenHash;
