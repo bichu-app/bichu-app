@@ -699,6 +699,28 @@ void ligarPortaDoPerfilDoParticipante() {
   };
 }
 
+/// Uma rota EMPILHADA que carrega a barra de baixo por baixo da tela.
+///
+/// **O embrulho e no `builder` e nao num `ShellRoute`, e isso foi medido.** A
+/// razao esta no bloco de rotas que usa esta funcao: `ShellRoute` cria um
+/// `Navigator` proprio e apaga a seta automatica do `AppBar` da primeira tela
+/// empilhada -- sete telas desta arvore dependem dela e ficavam sem saida no
+/// topo. Aqui a pagina continua no `Navigator` raiz e nada de navegacao muda.
+///
+/// Ela e **o unico lugar** que poe [CascaFixa] em producao: uma rota nova que
+/// precise da barra troca `GoRoute` por esta funcao, e uma que nao precise
+/// entra em `semBarraPorDecisao`, no portao
+/// `test/telas/barra_fixa_em_toda_tela_test.dart`, com o motivo escrito.
+GoRoute _comBarraFixa({
+  required String path,
+  required Widget Function(BuildContext, GoRouterState) builder,
+}) {
+  return GoRoute(
+    path: path,
+    builder: (context, estado) => CascaFixa(child: builder(context, estado)),
+  );
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
   // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
   // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
@@ -800,15 +822,59 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaDoCasoPublico(shareToken: token);
         },
       ),
+      // =====================================================================
+      // A CASCA FIXA: A BARRA DE BAIXO NAS TELAS EMPILHADAS (20/10/2026)
+      // =====================================================================
+      //
+      // Pedido do cliente, literal: *"quando o usuario vai para a mensagem, o
+      // menu inferior some, mantenha ele fixo em todas as paginas"*.
+      //
+      // **AS 29 ROTAS ABAIXO SAO `_comBarraFixa` E NAO `GoRoute`, e e a UNICA
+      // coisa que mudou nelas.** Mesmo endereco, mesma ordem, mesmo `builder`:
+      // o que o embrulho faz e por [CascaFixa] -- um `Scaffold` com a barra --
+      // em volta da tela que o `builder` devolve. A conta das tres saidas esta
+      // na prosa de [CascaFixa].
+      //
+      // **POR QUE NAO UM `ShellRoute`, que foi a primeira tentativa.** Um
+      // `ShellRoute` em volta deste bloco e o que a saida (c) sugere, e ele
+      // FUNCIONOU para a barra e **quebrou a saida de sete telas** -- medido,
+      // nao suposto. O `ShellRoute` cria um `Navigator` proprio, e a primeira
+      // tela empilhada passa a ser a UNICA pagina dele: o `AppBar` decide a
+      // seta automatica por `ModalRoute.impliesAppBarDismissal`, que e
+      // local ao `Navigator`, entao ela deixava de aparecer em
+      // `/mensagens`, `/pessoa/:apelido`, `/conexoes/pedidos`,
+      // `/perfil/bloqueados`, `/perfil/minhas-fotos`, `/rede/indicacoes` e
+      // `/adocoes` -- as sete que nao desenham `SaidaDaTela` a mao e dependem
+      // da seta do componente. O caso `(g) ninguem ficou sem saida` reprovou
+      // nas sete, nominalmente.
+      //
+      // Com o embrulho no `builder`, as paginas continuam no `Navigator` RAIZ:
+      // `canPop`, a seta automatica e o gesto do sistema ficam exatamente como
+      // eram, e o que muda e so o que ha por baixo da tela.
+      //
+      // **AS OITO QUE FICARAM DE FORA, e por que cada uma:** `/` (a abertura e
+      // um desvio, nao tem conteudo), `/entrar`, `/criar-conta`,
+      // `/verifique-seu-email` e `/esqueci-minha-senha` (quem nao tem sessao
+      // nao esta em secao nenhuma, e a barra ofereceria cinco lugares a quem
+      // ainda esta na porta), `/escanear` (**o design system 11.11 PROIBE a
+      // barra sobre a camera**, e o caso `o leitor nao leva barra de topo NEM
+      // barra de abas` cobra isso), e `/t/:codigo` e `/p/:shareToken` (as duas
+      // portas publicas: quem chega de uma plaquinha ou de um link
+      // compartilhado chega de FORA do app).
+      //
+      // Elas estao declaradas ACIMA deste bloco, e a ordem continua
+      // importando: endereco literal antes de padrao, como `/pets/novo` antes
+      // de `/pets/:petId`.
+
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem
       // pela porta das ONGs em `Perto`.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.adocoes,
         builder: (context, estado) => const TelaDeAdocoes(),
       ),
       // O assistente de cadastro de pet. As quatro telas cobrem a casca de
       // abas, como as de conta, e por isso cada uma tem saida propria.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.cadastrarPet,
         builder: (context, estado) => TelaCadastrarIdentificacao(
           // Nulo faz a tela criar um rascunho novo: e o que faz o link direto
@@ -816,7 +882,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           rascunhoExistente: _rascunhoDoExtra(estado.extra),
         ),
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.cadastrarPetFoto,
         builder: (context, estado) {
           final rascunho = _rascunhoDoExtra(estado.extra);
@@ -827,7 +893,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaCadastrarFoto(rascunho: rascunho);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.cadastrarPetSinais,
         builder: (context, estado) {
           final extra = estado.extra;
@@ -853,7 +919,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // direto para um passo do meio e caso real (F5, App Links), e uma tela
       // que nasce sem o pet nao sabe de qual animal fala.
       // ---------------------------------------------------------------
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.escolherPetPerdido,
         builder: (context, estado) {
           final pets = estado.extra;
@@ -864,7 +930,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaDeQuemEOCaso(pets: pets);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.marcarPerdido,
         builder: (context, estado) {
           final extra = estado.extra;
@@ -878,7 +944,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaOndeEQuando(rascunho: extra);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.marcarPerdidoAlcance,
         builder: (context, estado) {
           final rascunho = estado.extra;
@@ -904,11 +970,11 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `encontros/:slug`, que engolia `encontros/novo` e abria um detalhe
       // inexistente; a rota de detalhe saiu em 19/10/2026 e a ordem ficou,
       // porque ela e de graca e o ramo `/rede` continua acima.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.criarEncontroDaRede,
         builder: (context, estado) => const TelaCriarEncontro(),
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.sugerirProfissional,
         builder: (context, estado) => const TelaSugerirProfissional(),
       ),
@@ -919,11 +985,11 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       //
       // IRMA da casca, como `Meus achados` e `Meus dados`: ela cobre a casca e
       // ganha `Voltar`. A porta que a abre e o pe da aba `Comunidade`.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.minhasIndicacoes,
         builder: (context, estado) => const TelaDeMinhasIndicacoes(),
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.registrarAchado,
         builder: (context, estado) {
           final extra = estado.extra;
@@ -942,7 +1008,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           );
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.achadoRegistrado,
         builder: (context, estado) {
           final resultado = estado.extra;
@@ -956,14 +1022,14 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaAchadoRegistrado(resultado: resultado);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.achado,
         builder: (context, estado) {
           final id = estado.pathParameters[Rotas.parametroDoAchadoId] ?? '';
           return TelaDoAchado(achadoId: id);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.casoAberto,
         builder: (context, estado) {
           final resultado = estado.extra;
@@ -974,7 +1040,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaCasoAberto(resultado: resultado);
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.petCadastrado,
         builder: (context, estado) {
           final resultado = estado.extra as ResultadoDoCadastro?;
@@ -990,7 +1056,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // assistente e real: ela nao depende de um passo anterior, ela carrega os
       // pets do tutor sozinha. O `extra` so pre-seleciona, e um link direto
       // abre o formulario com a lista inteira -- estado valido, e nao erro.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.solicitarPlaquinha,
         builder: (context, estado) {
           final petId = estado.extra;
@@ -1006,7 +1072,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // O pet vem do CAMINHO e nao de `extra`: esta pagina le o pedido do
       // servidor, e um link direto para ela e legitimo -- ela pergunta antes
       // de afirmar qualquer coisa.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.acompanharPlaquinha,
         builder: (context, estado) => TelaAcompanharPlaquinha(
           petId: estado.pathParameters['petId'] ?? '',
@@ -1023,13 +1089,13 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // Cobrem a casca de abas, como o assistente, e por isso cada uma tem
       // saida propria: `Perfil` > `Meus pets` continua vivo no ramo de baixo,
       // e voltar devolve a pessoa onde ela estava.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.detalheDoPet,
         builder: (context, estado) => TelaDetalheDoPet(
           petId: estado.pathParameters[Rotas.parametroDoPetId]!,
         ),
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.editarPet,
         builder: (context, estado) {
           // A edicao recebe o pet JA CARREGADO em `extra`, porque quem a abre
@@ -1052,13 +1118,13 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // especifico por ser exato. Cobre a casca de abas, e por isso tem saida
       // propria -- o `Perfil` continua vivo no ramo de baixo e voltar devolve
       // a pessoa onde ela estava.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.dadosPessoais,
         builder: (context, estado) => const TelaDadosPessoais(),
       ),
       // `Perfil` > `Meus achados`. Irma da de cima e pelo mesmo motivo: ela
       // cobre a barra de baixo e volta para `Perfil`.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.meusAchados,
         builder: (context, estado) => const MeusAchados(),
       ),
@@ -1070,7 +1136,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // **Sem parametro no construtor**: a tela tira a `RedeApi` do `Escopo`,
       // como `MeusAchados` faz com a `AchadosApi`. Acrescentar campo
       // obrigatorio ao `Escopo` quebraria toda tela de teste que o constroi.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.meusEventos,
         builder: (context, estado) => const MeusEventos(),
       ),
@@ -1084,14 +1150,14 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDeMensagens.area,
         builder: (context, estado) => const AreaDeMensagens(),
       ),
       // A CONVERSA, pelo id. **E este o destino do toque na notificacao do
       // aviso ao tutor**, e por isso ela nao pode faltar: sem esta rota o
       // toque no aviso cai numa rota que nao existe.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDeMensagens.conversa,
         builder: (context, estado) => TelaDaConversa(
           conversaId:
@@ -1101,7 +1167,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // A CAIXA DE NOTIFICACOES. Rota IRMA da casca: ela cobre a barra de
       // baixo, de proposito, e o sino chega nela por `push` -- ver a razao em
       // `SinoDeNotificacoes`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDaCaixa.caixa,
         builder: (context, estado) => const CaixaDeNotificacoes(),
       ),
@@ -1117,7 +1183,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // **A camera e o envio saem do `Escopo`**, que e onde o app os guarda: o
       // envio carrega um cliente HTTP proprio, sem o token da sessao, e um
       // construido aqui seria o segundo.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.minhaVitrine,
         builder: (context, estado) {
           final escopo = Escopo.of(context);
@@ -1131,7 +1197,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           );
         },
       ),
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.pedidosDeConexao,
         builder: (context, estado) =>
             TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
@@ -1140,7 +1206,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `ApiClient` do `Escopo`, como a da vitrine e as do perfil de pessoa:
       // acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de teste
       // que o constroi.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.pessoasBloqueadas,
         builder: (context, estado) =>
             TelaDeBloqueados(seguranca: SegurancaApi(Escopo.of(context).api)),
@@ -1164,7 +1230,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // pedir. Quem emitir convite (caso devolvido, encontro em comum, codigo
       // presencial) passa `extra: <o token>` neste `push` -- e e o unico lugar
       // que precisa mudar.
-      GoRoute(
+      _comBarraFixa(
         path: Rotas.perfilDePessoa,
         builder: (context, estado) {
           final escopo = Escopo.of(context);
