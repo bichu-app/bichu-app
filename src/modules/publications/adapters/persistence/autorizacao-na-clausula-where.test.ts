@@ -37,6 +37,8 @@
  * desta fatia.
  */
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   DummyDriver,
@@ -799,5 +801,133 @@ void describe('CURTIR E COMENTAR -- o recorte e UM, e a contagem sai das LINHAS'
     for (const agulha of ['parent_comment_id', 'k.image_id', 'comment_image']) {
       assert.ok(!sql.includes(agulha), `\`${agulha}\` entrou na leitura de comentario`);
     }
+  });
+});
+
+void describe('O TEXTO ALTERNATIVO SAI COM A IMAGEM -- o gatilho da `20261020000007`', () => {
+  // **ESTE BLOCO LE MIGRACAO, e nao SQL compilado**, porque o que ele guarda e
+  // um objeto de BANCO: um gatilho `BEFORE UPDATE`. A forma e a de
+  // `safety/adapters/persistence/bloqueio-e-ocultacao-na-clausula-where.test.ts`,
+  // que le as funcoes SQL das migracoes pelo mesmo motivo.
+  //
+  // ## O defeito que ele existe para nao deixar voltar
+  //
+  // A `20261020000002` escreveu duas declaracoes certas que **nao podiam valer
+  // juntas**: `image_id` com `ON DELETE SET NULL` (*"imagem apagada deixa o
+  // TEXTO de pe"*) e `user_publications_texto_alternativo_pede_imagem`
+  // proibindo `alt_text` sem imagem. Apagar a imagem de uma publicacao COM
+  // `alt_text` reprovava com **SQLSTATE 23514**, a imagem ficava impossivel de
+  // apagar, e a exclusao logica **nao a liberava** -- medido em BEGIN/ROLLBACK
+  // em 20/10/2026, e achado pelo agente da mescla do lote 3.
+  //
+  // Pior: quem escrevia descricao de acessibilidade era quem criava a linha
+  // presa.
+  //
+  // **O que estes casos NAO provam** e que o Postgres se comporta como o texto
+  // diz -- a ordem `BEFORE` antes do `CHECK` foi medida a mao, contra Postgres
+  // descartavel, e a saida esta no relatorio da fatia. Aqui se prova que o
+  // objeto existe, com a forma certa, e que as duas declaracoes originais NAO
+  // foram afrouxadas -- que e a metade que um refator quebra.
+  const MIGRACOES = 'migrations';
+
+  function migracao(trecho: string): string {
+    const arquivo = readdirSync(MIGRACOES).find((nome) => nome.includes(trecho));
+    assert.ok(arquivo !== undefined, `a migracao \`${trecho}\` sumiu de \`${MIGRACOES}\`.`);
+    return readFileSync(join(MIGRACOES, arquivo), 'utf8');
+  }
+
+  const conserto = migracao('o-texto-alternativo-sai-com-a-imagem');
+  const original = migracao('o-mural-a-publicacao-do-usuario');
+
+  void it('ISCA -- o gatilho e `BEFORE UPDATE`, e NUNCA `AFTER`', () => {
+    // **A ordem de avaliacao e o mecanismo inteiro**: a acao referencial e um
+    // `UPDATE ... SET image_id = NULL`, e `CHECK` roda DEPOIS dos gatilhos de
+    // linha `BEFORE`. Em `AFTER` o `CHECK` ja teria reprovado e o gatilho nunca
+    // chegaria a rodar -- o defeito voltaria inteiro, com o gatilho no lugar.
+    assert.match(
+      conserto,
+      /CREATE TRIGGER user_publications_texto_sai_com_a_imagem\s+BEFORE UPDATE ON user_publications/,
+      'o gatilho deixou de ser `BEFORE UPDATE` em `user_publications`',
+    );
+    assert.ok(
+      !/AFTER UPDATE ON user_publications/.test(conserto),
+      'o gatilho virou `AFTER`: o `CHECK` reprovaria antes de ele rodar, e o 23514 volta',
+    );
+    assert.match(conserto, /FOR EACH ROW/, 'gatilho de sentenca nao enxerga `NEW`');
+  });
+
+  void it('ISCA -- o `WHEN` cobre os DOIS caminhos, e cada um por TRANSICAO', () => {
+    // (a) a imagem deixa de existir; (b) a publicacao e apagada logicamente --
+    // e e o (b) que LIBERA a imagem para o expurgo. Sem ele, a imagem de uma
+    // publicacao apagada ficaria presa para sempre, porque a exclusao logica e
+    // um `UPDATE` e nao dispara `ON DELETE` de nada.
+    assert.match(
+      conserto,
+      /\(OLD\.image_id IS NOT NULL AND NEW\.image_id IS NULL\)/,
+      'o caminho da IMAGEM APAGADA saiu do `WHEN`',
+    );
+    assert.match(
+      conserto,
+      /\(OLD\.deleted_at IS NULL AND NEW\.deleted_at IS NOT NULL\)/,
+      'o caminho da EXCLUSAO LOGICA saiu do `WHEN`: a imagem voltaria a ficar presa',
+    );
+    // Por TRANSICAO (`OLD` -> `NEW`), e nao por estado: linha que ja estava
+    // apagada e sofre outro `UPDATE` nao dispara, e editar `body` tambem nao.
+    assert.ok(
+      !/WHEN \(\s*NEW\.\w+ IS (NOT )?NULL\s*\)/.test(conserto),
+      'o `WHEN` passou a olhar so o estado novo: ele dispararia em escrita que nao muda nada',
+    );
+  });
+
+  void it('ISCA -- o corpo anula `alt_text` nos dois ramos, e `image_id` no da exclusao', () => {
+    assert.match(conserto, /IF NEW\.image_id IS NULL THEN\s+NEW\.alt_text := NULL;/);
+    assert.match(
+      conserto,
+      /IF NEW\.deleted_at IS NOT NULL THEN\s+NEW\.image_id := NULL;\s+NEW\.alt_text := NULL;/,
+      'o ramo da exclusao logica deixou de anular os DOIS: so `image_id` deixaria `alt_text` ' +
+        'orfao e o `CHECK` reprovaria o proprio apagamento',
+    );
+    // E NUNCA toca `body`: o texto que a pessoa escreveu nao e descricao de
+    // foto nenhuma, e perde-lo seria o defeito que o `CASCADE` teria causado.
+    assert.ok(
+      !/NEW\.body := /.test(conserto),
+      'o gatilho passou a mexer em `body`: o texto da pessoa nao e descricao de foto',
+    );
+  });
+
+  void it('ISCA -- o `CHECK` original NAO foi afrouxado nem removido', () => {
+    // Tira-lo deixaria `alt_text` orfao descrevendo nada, que e o defeito que
+    // ele existe para impedir. O conserto nao o toca.
+    assert.match(
+      original,
+      /CONSTRAINT user_publications_texto_alternativo_pede_imagem\s+CHECK \(image_id IS NOT NULL OR alt_text IS NULL\)/,
+      'o `CHECK` de `alt_text` sem imagem saiu da `20261020000002`',
+    );
+    assert.ok(
+      !/DROP CONSTRAINT user_publications_texto_alternativo_pede_imagem/.test(conserto),
+      'o conserto DERRUBOU o `CHECK` em vez de reconciliar as duas declaracoes',
+    );
+  });
+
+  void it('ISCA -- o `SET NULL` NAO virou `CASCADE`', () => {
+    // `CASCADE` faria apagar uma imagem apagar a PUBLICACAO INTEIRA, levando o
+    // texto que a pessoa escreveu -- o oposto exato da razao escrita na propria
+    // linha (*"imagem apagada deixa o TEXTO de pe"*).
+    assert.match(
+      original,
+      /REFERENCES catalog_images \(id\) ON DELETE SET NULL/,
+      'a chave da imagem deixou de ser `SET NULL`',
+    );
+    assert.ok(
+      !/REFERENCES catalog_images \(id\) ON DELETE CASCADE/.test(original),
+      '`image_id` virou `CASCADE`: apagar uma imagem apagaria a publicacao e o texto dela',
+    );
+  });
+
+  void it('CONTRAPESO -- o `down` desfaz o gatilho E a funcao', () => {
+    // Sem ele, as iscas acima passariam numa migracao que nao sabe descer -- e
+    // `make migrar-baixo` existe justamente para provar que o `down` roda.
+    assert.match(conserto, /DROP TRIGGER user_publications_texto_sai_com_a_imagem ON user_publications;/);
+    assert.match(conserto, /DROP FUNCTION publicacao_texto_alternativo_sai_com_a_imagem\(\);/);
   });
 });

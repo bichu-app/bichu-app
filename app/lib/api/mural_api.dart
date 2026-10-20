@@ -208,16 +208,26 @@ abstract class EscritaDoMural implements IntencaoDeFotoDaPublicacao {
 
 /// `#/components/schemas/MyPublicationImage/properties/status` do contrato.
 ///
-/// O estado de processamento da foto. `processing` -> `ready` | `rejected`, e
-/// **nunca volta**.
+/// O estado de processamento da imagem de uma publicacao:
+/// `processing` -> `ready` | `rejected`, e **nunca volta**.
 ///
-/// **A ANCORA E O CODIGO DE FIO ENTRARAM NA MESCLA DO TERCEIRO LOTE DE
-/// 20/10/2026.** Este enum nasceu sem os dois e `verificar-conformidade-do-app`
-/// passou de UMA divergencia para DUAS -- a frente do Mural copiou a forma
-/// antiga do irmao `EstadoDaFoto` de `vitrine_api.dart`, que e justamente a
-/// que o portao ja acusava. A forma usada aqui e a MESMA que a sessao que
-/// conserta o irmao escolheu, para as duas nao divergirem: o codigo de fio mora
-/// no enum, e nao dentro do decodificador.
+/// **O PONTEIRO NAO E DECORACAO, e a falta dele foi um defeito meu medido.**
+/// `verificar-conformidade-do-app` exige que todo enum de `app/lib/api/` ou
+/// aponte para a lista fechada que ele espelha, ou diga `/// Local:` com o
+/// motivo -- *"sem isso o portao nao sabe se deveria conferi-lo, e o silencio
+/// vira aprovacao"*. Este nasceu sem ponteiro e levou o portao de **1
+/// divergencia pre-existente para 2**; o agente da mescla do lote 3 consertou,
+/// e esta forma e a que a sessao irma escolheu, para as duas nao colidirem.
+///
+/// Com o ponteiro, o portao RESOLVE a ancora contra a spec e confere os tres
+/// valores -- isto e, ele passa a medir, em vez de so aprovar.
+/// **ENUM COM O VALOR DE FIO, e nao um `switch` ao lado.** O portao resolve a
+/// ancora e le os tres valores DAQUI; com o `switch` separado ele acusava
+/// `enum-sem-valores-lidos` -- *"comparar conjunto vazio com o contrato aprova
+/// qualquer coisa"*. E a forma de `PendenciaDeCadastro`, em `modelos.dart`.
+///
+/// O ganho nao e so de portao: o valor de fio passa a ter **um dono**. Antes ele
+/// vivia no `switch`, e o enum nao sabia o proprio nome no contrato.
 enum EstadoDaFotoDaPublicacao {
   processando('processing'),
   pronta('ready'),
@@ -225,19 +235,24 @@ enum EstadoDaFotoDaPublicacao {
 
   const EstadoDaFotoDaPublicacao(this.codigo);
 
-  /// O codigo de fio, e a UNICA copia dele: `_estadoDe` le desta lista. O
-  /// portao de conformidade compara estes valores com o contrato, e so
-  /// consegue porque eles moram no enum, e nao dentro do decodificador.
+  /// O valor que o contrato declara em `MyPublicationImage.status`, e a UNICA
+  /// copia dele: `_estadoDe` le desta lista.
+  ///
+  /// **Chama-se `codigo` e nao `valor`, decidido na mescla do terceiro lote**:
+  /// e o nome que a sessao irma usou em `EstadoDaFoto` de `vitrine_api.dart`
+  /// -- os dois enums irmaos ficam com a MESMA forma, que e o que a prosa
+  /// acima promete --, e evita `e.valor == valor` comparando campo com
+  /// parametro de mesmo nome logo abaixo.
   final String codigo;
 }
 
 EstadoDaFotoDaPublicacao _estadoDe(Object? valor) {
-  for (final estado in EstadoDaFotoDaPublicacao.values) {
-    if (estado.codigo == valor) return estado;
+  for (final e in EstadoDaFotoDaPublicacao.values) {
+    if (e.codigo == valor) return e;
   }
-  // Qualquer outra coisa — inclusive um estado novo que o servidor passe a
-  // mandar — cai em `processando`. E o estado em que a tela nao promete
-  // imagem nenhuma, e portanto o unico seguro para o desconhecido.
+  // Qualquer outra coisa, inclusive um estado novo que o servidor passe a
+  // mandar, cai em `processando`. E o estado em que a tela nao promete imagem
+  // nenhuma, e portanto o unico seguro para o desconhecido.
   return EstadoDaFotoDaPublicacao.processando;
 }
 
