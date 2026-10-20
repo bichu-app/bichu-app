@@ -1644,7 +1644,43 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
 /// copiado de ramo nem de relato.
-const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
+/// ---------------------------------------------------------------------------
+/// ## 20/10/2026, `fix/localizacao-nos-pets`: O BOTAO DE LOCALIZACAO DOS PETS
+///
+/// **VALOR DE RAMO, e quem mesclar TEM DE RECALCULAR** sobre a arvore mesclada:
+/// ha outras sessoes nesta rodada em `app/lib/telas`, e valor de ramo isolado
+/// nao sobrevive a uniao. Anterior: `1413454d74` (o valor final do segundo lote
+/// de 19/10, com as oito frentes -- a justificativa dele fica INTEIRA acima).
+///
+/// **O QUE ESTA FRENTE SOMOU A PASTA**, e e um arquivo so:
+/// `perdido/lista_de_perdidos.dart`. Duas coisas, as duas medidas em teste de
+/// widget e nenhuma em aparelho:
+///
+/// 1. **A CAUSA do relato do cliente** (*"o botao de usar minha localizacao na
+///    secao do pets nao esta funcionando"*): `_resolverEAplicar` era um metodo
+///    so para a resolucao de ABERTURA e para o TOQUE, e o guarda
+///    `if (_pessoaMexeu) return;` -- correto para a abertura -- DESCARTAVA o
+///    resultado do toque. Ele passou a receber `porToque`, e no toque a escolha
+///    da pessoa e o proprio toque.
+/// 2. **As quatro frases do toque.** Permissao recusada, servico desligado,
+///    cidade nao descoberta e cidade descoberta sem pet nenhum deixaram de ser
+///    desfechos mudos. A resolucao de ABERTURA segue muda nos oito motivos, e a
+///    assimetria e decisao: la ninguem pediu nada.
+/// 3. **O teto da espera** (`tetoDaEsperaDaResolucao`), que fecha a lacuna que
+///    o proprio conserto abriria: `prazoDaResolucao` cobre a MEDICAO do ponto
+///    e nao a resolucao do nome da cidade, e nao ha `timeout` em lugar nenhum
+///    do `geocoding` nem do `geocoding_android` (varrido). Sem teto,
+///    `Procurando sua localizacao...` seria uma frase que nunca sai.
+///
+/// Nenhuma tela NASCEU e nenhuma SAIU, e nenhuma porta nova foi aberta: a
+/// `Localizacao` que esta tela usa ja vinha do `Escopo` desde 19/10/2026.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves, porque sem
+/// elas o zsh aplica o modificador `:a` e devolve caminho absurdo em silencio),
+/// e nao copiado de relato.
+const String _arvoreDasTelas = '563392a143b46a86670c5dbe3315b7a4d07474e6'; // VALOR DE RAMO de `fix/localizacao-nos-pets` (20/10/2026). RECALCULE na mescla. Anterior: `1413454d74`, o valor final do segundo lote de 19/10 com as OITO frentes, cuja justificativa fica INTEIRA acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

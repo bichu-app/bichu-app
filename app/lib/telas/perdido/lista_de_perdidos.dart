@@ -107,6 +107,31 @@ import 'cartao_do_perdido.dart';
 /// é real, os dois medidos no pacote. A tela não distingue os oito — ela cai
 /// para a reserva e diz qual recorte ficou valendo.
 ///
+/// ## MAS O TOQUE RESPONDE, E ISSO É O CONSERTO DE 20/10/2026
+///
+/// Cliente: *"o botão de usar minha localização na seção do pets não está
+/// funcionando"*. Duas coisas foram medidas em teste de widget, sem aparelho:
+///
+/// 1. **A causa.** `_resolverEAplicar` era um método só para os dois
+///    chamadores, e o guarda `if (_pessoaMexeu) return;` — correto para a
+///    resolução de abertura — **descartava o resultado do TOQUE**. Quem
+///    digitou uma cidade no filtro, ou tocou `Ver todas`, ficava com
+///    `_pessoaMexeu` verdadeiro pelo resto da sessão: o botão continuava
+///    oferecido e habilitado, o toque pedia a permissão, gastava uma resolução
+///    do teto de uso, recebia a cidade e não trocava um pixel. Ver
+///    [_EstadoDaListaDePerdidos._resolverEAplicar].
+/// 2. **O defeito de produto por trás do relato.** A reserva foi desenhada
+///    para nunca travar a tela, e o preço era que o toque tinha **quatro
+///    desfechos mudos**. A tela passa a dizer qual foi, em quatro frases
+///    diferentes — [ListaDePerdidos.avisoSemPermissao],
+///    [ListaDePerdidos.avisoServicoDesligado],
+///    [ListaDePerdidos.avisoCidadeNaoDescoberta] e
+///    [ListaDePerdidos.avisoSemPetsNaCidade] —, mais
+///    [ListaDePerdidos.avisoProcurando] no meio.
+///
+/// **A assimetria entre abertura e toque é a regra:** a abertura segue muda nos
+/// oito motivos, porque ninguém pediu nada ali.
+///
 /// ---------------------------------------------------------------------------
 /// ## A CIDADE NÃO É OBRIGATÓRIA, E A TELA ABRE MESMO SEM NENHUMA
 ///
@@ -215,6 +240,83 @@ class ListaDePerdidos extends StatefulWidget {
   static const String falha = 'Não foi possível carregar os pets perdidos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
+  // -------------------------------------------------------------------------
+  // AS QUATRO FRASES DO TOQUE EM `Usar minha localização`
+  // -------------------------------------------------------------------------
+  //
+  // **Elas nascem do defeito de 20/10/2026**, relatado pelo cliente assim: *"o
+  // botão de usar minha localização na seção do pets não está funcionando"*. A
+  // cadeia de reserva foi desenhada para nunca travar a tela, e o efeito
+  // colateral era que NADA acontecia visivelmente quando ela caía — a pessoa
+  // toca e o app parece quebrado.
+  //
+  // **São QUATRO e não uma.** A genérica ("não foi possível usar sua
+  // localização") mandaria quem está com o serviço desligado procurar uma
+  // permissão que ela já concedeu, e diria "não deu" a quem a localização
+  // funcionou perfeitamente e a cidade simplesmente não tem caso aberto. É a
+  // mesma regra dos cinco motivos de `TextosDaLocalizacao`, pelo mesmo motivo.
+  //
+  // **Nenhuma culpa a pessoa, e nenhuma é erro de fluxo**: a lista está na
+  // tela em todas, pela reserva, e todas dizem o caminho de volta. Por isso o
+  // peso é [PesoDaFaixa.informativo] e nunca `erro` — a faixa Brasa de 2 px é
+  // da urgência, e nada aqui é urgente.
+
+  /// 1. A localização não está liberada para este app.
+  ///
+  /// Cobre `negada`, `negadaPermanentemente` e a recusa que volta do diálogo
+  /// do sistema. **Não diz "você negou"**: quem nega por engano, quem nega e
+  /// esquece e quem tem a permissão bloqueada por política do aparelho leem a
+  /// mesma frase, e para as três a saída é a mesma.
+  static const String avisoSemPermissao =
+      'A localização não está liberada para o Bichu. Dá para liberar nos '
+      'ajustes do aparelho, ou escolher a cidade no filtro.';
+
+  /// 2. A permissão existe e o serviço do aparelho está desligado.
+  ///
+  /// **Separada da 1 de propósito**, e a separação é a razão de a porta ter
+  /// `servicoLigado()` apartado de `estado()`: mandar quem desligou a
+  /// localização nos ajustes procurar uma permissão já concedida é o defeito
+  /// que a porta do aparelho existe para não cometer.
+  static const String avisoServicoDesligado =
+      'A localização do aparelho está desligada. Dá para ligar nos ajustes, '
+      'ou escolher a cidade no filtro.';
+
+  /// 3. Veio coordenada e não veio nome de cidade.
+  ///
+  /// Os cinco motivos que terminam aqui — sem fix no prazo, indisponível no
+  /// build, geocoder ausente, teto de uso estourado e resolução sem resultado
+  /// — **são todos de fora do app**, e nenhum deles tem ação diferente para
+  /// oferecer: tentar de novo, ou escolher a cidade. Distinguir os cinco na
+  /// tela daria cinco frases para uma ação única.
+  static const String avisoCidadeNaoDescoberta =
+      'Não deu para descobrir sua cidade agora. Dá para tentar de novo, ou '
+      'escolher a cidade no filtro.';
+
+  /// 4. A localização FUNCIONOU, e a cidade não tem pet perdido.
+  ///
+  /// **É a frase que responde à pergunta do cliente**, e ela é a única das
+  /// quatro que afirma sucesso. Sem ela, o desfecho bom com lista vazia é
+  /// indistinguível do botão não ter feito nada: a linha do recorte troca para
+  /// uma cidade e o corpo continua dizendo que não há pet nenhum.
+  static String avisoSemPetsNaCidade(String cidade) =>
+      'A localização funcionou: você está em $cidade. Não há nenhum pet '
+      'perdido cadastrado aí agora.';
+
+  /// O que a pessoa lê ENQUANTO o aparelho mede.
+  ///
+  /// Não é uma das quatro: é o que falta entre o toque e a resposta. O prazo
+  /// da resolução é de [prazoDaResolucao], e no aparelho ele é gasto de
+  /// verdade — doze segundos sem sinal nenhum na tela são doze segundos em que
+  /// o botão "não está funcionando".
+  static const String avisoProcurando = 'Procurando sua localização…';
+
+  /// As duas saídas das faixas. **Nomes distintos do `Tentar de novo` da
+  /// falha de carga**: as duas faixas podem estar na tela ao mesmo tempo, e
+  /// dois rótulos iguais com destinos diferentes são a mesma armadilha que
+  /// `BarraDeListagem` resolve com slot único.
+  static const String rotuloDeAbrirAjustes = 'Abrir os ajustes';
+  static const String rotuloDeTentarALocalizacao = 'Tentar a localização de novo';
+
   static const String rotuloDaBusca = 'Buscar pet perdido';
   static const String dicaDaBusca = 'Buscar pelo nome do pet';
 
@@ -242,6 +344,24 @@ enum _Fase { carregando, lista, falha }
 /// pessoa esperar.
 const Duration prazoDaResolucao = Duration(seconds: 12);
 
+/// O TETO DA ESPERA DA TELA, e ele existe porque [prazoDaResolucao] **não
+/// cobre a resolução inteira.**
+///
+/// Medido em 20/10/2026 no pacote: `cidadeAproximada` repassa o prazo a
+/// `pontoAproximado`, que o entrega ao `timeLimit` do `geolocator` — e depois
+/// chama `isPresent()` e `placemarkFromCoordinates` **sem prazo nenhum**. Não
+/// há `timeout` em lugar nenhum do `geocoding` nem do `geocoding_android`
+/// (varrido: zero ocorrência de `timeout` no pacote). Um canal de plataforma
+/// que não responde penduraria a espera para sempre.
+///
+/// Enquanto o toque não dizia nada, isso era invisível — o nada não tem prazo.
+/// Com `Procurando sua localização…` na tela, pendurar virou **uma frase que
+/// nunca sai**, e isso é pior que o silêncio que esta frente foi consertar. O
+/// teto é o dobro do prazo da medição: a resolução legítima gasta o prazo do
+/// ponto MAIS a ida ao serviço de plataforma, e estreitar daria desistência em
+/// cima de tentativa boa.
+const Duration tetoDaEsperaDaResolucao = Duration(seconds: 24);
+
 /// De onde veio a cidade que esta valendo. E o que a tela MOSTRA.
 enum _OrigemDaCidade {
   /// A pessoa digitou (ou apagou) na folha de filtro.
@@ -264,6 +384,39 @@ enum _OrigemDaCidade {
 
   /// Nenhuma: os 20 mais recentes do pais inteiro.
   nenhuma,
+}
+
+/// O QUE O TOQUE EM `Usar minha localização` DEIXOU NA TELA.
+///
+/// **Existe por causa do defeito de 20/10/2026.** Antes dele, o toque tinha um
+/// desfecho visível (a lista recortada) e **quatro desfechos mudos**: permissão
+/// recusada, serviço desligado, cidade não descoberta e cidade descoberta sem
+/// pet nenhum. Os quatro caíam para a reserva sem uma palavra, e o cliente leu
+/// isso do único jeito que dava para ler — o botão não funciona.
+///
+/// **Nulo é o estado normal**, e não um quinto valor: ninguém tocou nada, ou o
+/// toque deu certo e a lista trocou. A linha do recorte já diz qual recorte
+/// ficou valendo, e repetir "deu certo" numa faixa seria o app comentando o
+/// óbvio.
+///
+/// A resolução de ABERTURA nunca produz nenhum destes valores, e a assimetria é
+/// deliberada: lá ninguém pediu nada, e um aviso seria erro inventado em cima
+/// de uma reserva que o ADR chama de reserva.
+enum _AvisoDaLocalizacao {
+  /// O aparelho está medindo. O botão fica desabilitado enquanto isto vale.
+  procurando,
+
+  /// A localização não está liberada para este app.
+  semPermissao,
+
+  /// A permissão existe e o serviço do aparelho está desligado.
+  servicoDesligado,
+
+  /// Veio coordenada e não veio nome de cidade.
+  cidadeNaoDescoberta,
+
+  /// Deu certo, e a cidade não tem caso aberto.
+  semPetsNaCidade,
 }
 
 class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
@@ -314,6 +467,19 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   /// A permissão de localização, como a porta a vê. Nula antes da primeira
   /// leitura — e nula não é "negada": é "ainda não sei".
   PermissaoDeLocalizacao? _permissao;
+
+  /// O que o último TOQUE em `Usar minha localização` deixou na tela.
+  ///
+  /// Ver [_AvisoDaLocalizacao]: nulo é o estado normal, e a resolução de
+  /// abertura nunca o preenche.
+  _AvisoDaLocalizacao? _aviso;
+
+  /// A cidade que [_AvisoDaLocalizacao.semPetsNaCidade] nomeia.
+  ///
+  /// **Guardada à parte de [_cidadeDoAparelho] de propósito**: a frase precisa
+  /// continuar verdadeira depois de a pessoa mexer no filtro, e ler a cidade em
+  /// uso faria a faixa dizer "você está em Campinas" sobre uma cidade digitada.
+  String? _cidadeDoAviso;
 
   bool _carregandoMais = false;
   bool _falhaAoCarregarMais = false;
@@ -447,7 +613,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     if (!mounted) return;
     setState(() => _permissao = permissao);
     if (permissao != PermissaoDeLocalizacao.concedida) return;
-    await _resolverEAplicar(porta);
+    await _resolverEAplicar(porta, porToque: false);
   }
 
   /// O caminho do TOQUE: pede a permissão e, concedida, resolve.
@@ -457,42 +623,154 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   /// rótulo dizendo o que vai acontecer. Negada em definitivo, abre os
   /// ajustes, porque pedir de novo não abre diálogo nenhum.
   Future<void> _pedirEResolver() async {
+    // Dois toques seguidos pediriam permissão duas vezes e gastariam o teto de
+    // uso do geocoder duas vezes. O botão desabilita enquanto `procurando`
+    // vale (ver [_LinhaDoRecorte.aoUsarLocalizacao]), e esta guarda cobre o
+    // toque que escapa entre o gesto e o quadro.
+    if (_aviso == _AvisoDaLocalizacao.procurando) return;
     final porta = Escopo.of(context).localizacao;
+    // **A TELA RESPONDE AO TOQUE ANTES DE TER RESPOSTA.** `cidadeAproximada`
+    // pode gastar os doze segundos de [prazoDaResolucao] mais a ida ao serviço
+    // de plataforma, e doze segundos sem nada na tela são doze segundos em que
+    // o botão "não está funcionando".
+    setState(() => _aviso = _AvisoDaLocalizacao.procurando);
     final antes = await porta.estado();
     if (!mounted) return;
     if (antes == PermissaoDeLocalizacao.negadaPermanentemente) {
+      // Abrir os ajustes continua sendo o certo — pedir de novo não abre
+      // diálogo nenhum. **O que mudou é a tela DIZER isso:** quem volta dos
+      // ajustes sem liberar, e quem não chega a sair do app, lia o nada.
+      setState(() {
+        _permissao = antes;
+        _aviso = _AvisoDaLocalizacao.semPermissao;
+      });
       await porta.abrirAjustesDoSistema();
       return;
     }
     final depois = await porta.pedir();
     if (!mounted) return;
     setState(() => _permissao = depois);
-    if (depois != PermissaoDeLocalizacao.concedida) return;
-    await _resolverEAplicar(porta);
+    switch (depois) {
+      case PermissaoDeLocalizacao.negada:
+      case PermissaoDeLocalizacao.negadaPermanentemente:
+      case PermissaoDeLocalizacao.naoPedida:
+        // `naoPedida` depois de `pedir()` é o diálogo que a pessoa dispensou
+        // sem responder (o `grantResults` vazio que o plugin registra). Para a
+        // tela é o mesmo que recusar: não há permissão.
+        setState(() => _aviso = _AvisoDaLocalizacao.semPermissao);
+        return;
+      case PermissaoDeLocalizacao.indisponivel:
+        // Não é recusa, é ausência — e ausência não manda ninguém para ajuste
+        // nenhum. Cai na terceira frase, que é a que oferece o filtro.
+        setState(() => _aviso = _AvisoDaLocalizacao.cidadeNaoDescoberta);
+        return;
+      case PermissaoDeLocalizacao.concedida:
+        break;
+    }
+    await _resolverEAplicar(porta, porToque: true);
   }
 
-  Future<void> _resolverEAplicar(Localizacao porta) async {
-    final resultado = await porta.cidadeAproximada(prazo: prazoDaResolucao);
+  /// Resolve a cidade e aplica, **por um dos DOIS caminhos**.
+  ///
+  /// ## [porToque] NÃO É UM PARÂMETRO DE CONVENIÊNCIA: ELE É O CONSERTO
+  ///
+  /// Este método era um só para os dois chamadores, e a confusão deles **era a
+  /// causa do defeito de 20/10/2026** (*"o botão de usar minha localização na
+  /// seção do pets não está funcionando"*).
+  ///
+  /// O guarda era `if (_pessoaMexeu) return;`, escrito — corretamente — para a
+  /// resolução de ABERTURA: ela corre sozinha depois da primeira pintura, e
+  /// trocar a lista debaixo de quem acabou de digitar uma cidade é o pior
+  /// desfecho possível. No TOQUE ele invertia o sentido do botão.
+  ///
+  /// **Medido em teste de widget, sem aparelho:** basta digitar uma cidade no
+  /// filtro, ou tocar `Ver todas`, para `_pessoaMexeu` ficar verdadeiro **pelo
+  /// resto da sessão**. Dali em diante o botão continuava oferecido e
+  /// habilitado, o toque pedia a permissão ao sistema, gastava uma resolução do
+  /// teto de uso da plataforma, recebia a cidade — e **jogava fora**, sem
+  /// trocar um pixel. Dois dos três caminhos que levam alguém a tocar nesse
+  /// botão (ver a lista de outra cidade e querer voltar; ter tocado `Ver todas`
+  /// e querer o recorte de volta) passam por `_pessoaMexeu`.
+  ///
+  /// No toque, **a pessoa acabou de escolher a localização**: ela é a escolha
+  /// mais nova e ganha do que foi digitado antes. Por isso [porToque] limpa
+  /// [_pessoaMexeu] e [_cidadeDigitada] — sem limpar os dois, a precedência de
+  /// [_cidadeEmUso] devolveria a cidade digitada e a resolução continuaria sem
+  /// efeito.
+  Future<void> _resolverEAplicar(
+    Localizacao porta, {
+    required bool porToque,
+  }) async {
+    // **O `timeout` NÃO é rede sobre rede.** Ver [tetoDaEsperaDaResolucao]: o
+    // prazo que a porta recebe cobre a MEDIÇÃO do ponto, e não a resolução do
+    // nome da cidade, que não tem prazo em pacote nenhum. `semFixNoPrazo` é o
+    // motivo certo para desistência por tempo, e ele cai na terceira frase
+    // junto com os outros quatro de fora do app.
+    final resultado = await porta
+        .cidadeAproximada(prazo: prazoDaResolucao)
+        .timeout(
+          tetoDaEsperaDaResolucao,
+          onTimeout: () =>
+              const CidadeNaoResolvida(MotivoDeNaoTerCidade.semFixNoPrazo),
+        );
     if (!mounted) return;
     switch (resultado) {
-      case CidadeNaoResolvida():
-        // Os oito motivos terminam aqui, e aqui não faz nada: a lista já está
-        // na tela com a reserva. Pintar aviso seria transformar em erro o que
-        // o ADR chama de reserva.
+      case CidadeNaoResolvida(motivo: final motivo):
+        // **NA ABERTURA, os oito motivos continuam caindo para a reserva sem
+        // uma palavra**, e isso é decisão e não omissão: ninguém pediu nada, e
+        // faixa ali seria erro inventado em cima de uma reserva.
+        if (!porToque) return;
+        // **NO TOQUE, alguém pediu.** Não responder é o defeito.
+        setState(
+          () => _aviso = switch (motivo) {
+            MotivoDeNaoTerCidade.permissaoNegada ||
+            MotivoDeNaoTerCidade.permissaoNegadaPermanentemente =>
+              _AvisoDaLocalizacao.semPermissao,
+            MotivoDeNaoTerCidade.servicoDesligado =>
+              _AvisoDaLocalizacao.servicoDesligado,
+            MotivoDeNaoTerCidade.semFixNoPrazo ||
+            MotivoDeNaoTerCidade.indisponivel ||
+            MotivoDeNaoTerCidade.geocoderAusente ||
+            MotivoDeNaoTerCidade.tetoDeUsoEstourado ||
+            MotivoDeNaoTerCidade.semResultado =>
+              _AvisoDaLocalizacao.cidadeNaoDescoberta,
+          },
+        );
         return;
       case CidadeResolvida(cidade: final cidade):
-        // Quem mexeu no filtro enquanto a resolução corria MANDA: trocar a
-        // lista debaixo de quem acabou de escolher é o pior desfecho possível.
-        if (_pessoaMexeu) return;
-        if (cidade == _cidadeDoAparelho) return;
-        // A resolucao GANHA da guardada e da regiao: ela e a unica que diz
-        // onde a pessoa esta AGORA.
-        if (cidade == _cidadeEmUso) {
-          setState(() => _cidadeDoAparelho = cidade);
-          return;
+        if (porToque) {
+          // A ESCOLHA MAIS NOVA É O TOQUE. Ver o cabeçalho deste método.
+          _pessoaMexeu = false;
+          _cidadeDigitada = null;
+        } else {
+          // Quem mexeu no filtro enquanto a resolução de abertura corria
+          // MANDA: trocar a lista debaixo de quem acabou de escolher é o pior
+          // desfecho possível.
+          if (_pessoaMexeu) return;
+          if (cidade == _cidadeDoAparelho) return;
+          // A resolucao GANHA da guardada e da regiao: ela e a unica que diz
+          // onde a pessoa esta AGORA.
+          if (cidade == _cidadeEmUso) {
+            setState(() => _cidadeDoAparelho = cidade);
+            return;
+          }
         }
-        setState(() => _cidadeDoAparelho = cidade);
+        setState(() {
+          _cidadeDoAparelho = cidade;
+          _aviso = null;
+        });
         await _carregar();
+        if (!mounted || !porToque) return;
+        // **A QUARTA FRASE, e ela só é verificável DEPOIS da resposta.** A
+        // localização funcionou e a cidade não tem caso aberto: sem dizer isso,
+        // o desfecho bom com lista vazia é indistinguível do botão não ter
+        // feito nada.
+        if (_fase == _Fase.lista && _itens.isEmpty) {
+          setState(() {
+            _cidadeDoAviso = cidade;
+            _aviso = _AvisoDaLocalizacao.semPetsNaCidade;
+          });
+        }
     }
   }
   /// A região cadastrada do tutor. **Lida só pelo filtro de bairro**: a cidade
@@ -718,6 +996,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // "não mexeu" numa precedência escrita com `??`.
     _pessoaMexeu = true;
     _cidadeDigitada = escolha.filtros['city'];
+    // A faixa falava do TOQUE anterior, e o recorte acabou de trocar: manter a
+    // frase a transformaria em afirmação sobre uma lista que ela não descreve.
+    _aviso = null;
+    _cidadeDoAviso = null;
     _trocarRecorte(
       base.copiar(
         // `escolha.filtros['city']` nulo ou vazio limpa a cidade: quem apaga o
@@ -751,10 +1033,53 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     return _permissao != PermissaoDeLocalizacao.indisponivel;
   }
 
+  /// A frase da faixa do toque, ou nula quando não há faixa.
+  String? get _textoDoAviso => switch (_aviso) {
+        null => null,
+        _AvisoDaLocalizacao.procurando => ListaDePerdidos.avisoProcurando,
+        _AvisoDaLocalizacao.semPermissao => ListaDePerdidos.avisoSemPermissao,
+        _AvisoDaLocalizacao.servicoDesligado =>
+          ListaDePerdidos.avisoServicoDesligado,
+        _AvisoDaLocalizacao.cidadeNaoDescoberta =>
+          ListaDePerdidos.avisoCidadeNaoDescoberta,
+        _AvisoDaLocalizacao.semPetsNaCidade =>
+          ListaDePerdidos.avisoSemPetsNaCidade(_cidadeDoAviso ?? ''),
+      };
+
+  /// A saída que a faixa oferece, **e ela não é a mesma nas quatro**.
+  ///
+  /// `procurando` não oferece nada porque não há o que fazer esperando, e
+  /// `semPetsNaCidade` não oferece nada porque **nada deu errado**: a saída
+  /// dali é o filtro, que já está na tela logo abaixo.
+  String? get _rotuloDaAcaoDoAviso => switch (_aviso) {
+        _AvisoDaLocalizacao.semPermissao ||
+        _AvisoDaLocalizacao.servicoDesligado =>
+          ListaDePerdidos.rotuloDeAbrirAjustes,
+        _AvisoDaLocalizacao.cidadeNaoDescoberta =>
+          ListaDePerdidos.rotuloDeTentarALocalizacao,
+        _AvisoDaLocalizacao.procurando ||
+        _AvisoDaLocalizacao.semPetsNaCidade ||
+        null =>
+          null,
+      };
+
+  VoidCallback? get _acaoDoAviso => switch (_aviso) {
+        _AvisoDaLocalizacao.semPermissao ||
+        _AvisoDaLocalizacao.servicoDesligado =>
+          () => Escopo.of(context).localizacao.abrirAjustesDoSistema(),
+        _AvisoDaLocalizacao.cidadeNaoDescoberta => _pedirEResolver,
+        _AvisoDaLocalizacao.procurando ||
+        _AvisoDaLocalizacao.semPetsNaCidade ||
+        null =>
+          null,
+      };
+
   /// `Ver todas`: tira a cidade do recorte, venha ela de onde vier.
   void _verTodas() {
     _pessoaMexeu = true;
     _cidadeDigitada = null;
+    _aviso = null;
+    _cidadeDoAviso = null;
     final base = _recorte ?? const RecorteDePerdidos();
     _trocarRecorte(base.copiar(cidade: null, pagina: 1));
   }
@@ -815,7 +1140,29 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
                 origem: _origemDaCidade,
                 podeOferecerLocalizacao: _podeOferecerLocalizacao,
                 aoVerTodas: _verTodas,
-                aoUsarLocalizacao: _pedirEResolver,
+                // **Nulo DESABILITA o botão**, e só enquanto o aparelho mede:
+                // um segundo toque pediria a permissão de novo e gastaria o
+                // teto de uso da plataforma de novo, pela mesma resposta.
+                aoUsarLocalizacao: _aviso == _AvisoDaLocalizacao.procurando
+                    ? null
+                    : _pedirEResolver,
+              ),
+              const SizedBox(height: BichuEspaco.e4),
+            ],
+            // **A FAIXA DO TOQUE VIVE FORA DA GUARDA DE `carregando`**, e isso
+            // é o ponto: o desfecho bom recarrega a lista, e uma faixa que
+            // desaparecesse durante a recarga deixaria a quarta frase sem
+            // chance de aparecer. `Procurando sua localização…` também
+            // sobrevive à recarga por isto.
+            if (_textoDoAviso != null) ...<Widget>[
+              FaixaDeAviso(
+                texto: _textoDoAviso!,
+                // **`informativo`, nunca `erro`.** Nenhum dos quatro desfechos
+                // é falha do fluxo: a lista está na tela em todos, pela
+                // reserva. A tinta Brasa com borda de 2 px é da urgência.
+                peso: PesoDaFaixa.informativo,
+                rotuloDaAcao: _rotuloDaAcaoDoAviso,
+                aoTocarNaAcao: _acaoDoAviso,
               ),
               const SizedBox(height: BichuEspaco.e4),
             ],
@@ -948,6 +1295,12 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 /// `Ver todas` não aparece quando não há cidade, porque já é o estado atual;
 /// `Usar minha localização` não aparece quando a cidade do aparelho já está
 /// valendo, nem quando a localização não existe neste build.
+///
+/// **O que o TOQUE deixa na tela não é desenhado aqui**, e a separação é de
+/// propósito: a faixa das quatro frases é irmã desta linha na coluna da seção,
+/// e não filha dela. Dentro, ela desapareceria junto com a linha enquanto a
+/// recarga do desfecho bom corre — e a quarta frase ("a localização funcionou,
+/// e não há pet aí") só existe depois dessa recarga.
 class _LinhaDoRecorte extends StatelessWidget {
   const _LinhaDoRecorte({
     required this.cidade,
@@ -961,7 +1314,11 @@ class _LinhaDoRecorte extends StatelessWidget {
   final _OrigemDaCidade origem;
   final bool podeOferecerLocalizacao;
   final VoidCallback aoVerTodas;
-  final VoidCallback aoUsarLocalizacao;
+
+  /// **Nulo desenha o botão DESABILITADO**, e não o esconde. Esconder o único
+  /// controle que a pessoa acabou de tocar faria o toque parecer ter apagado
+  /// a saída; desabilitado ela vê que o toque foi recebido.
+  final VoidCallback? aoUsarLocalizacao;
 
   String get _texto {
     final c = cidade;
