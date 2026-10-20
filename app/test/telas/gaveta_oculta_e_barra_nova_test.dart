@@ -545,10 +545,21 @@ void main() {
   // =========================================================================
   // ISCA (d) — O FILTRO ABSORVEU AS TRÊS ABAS DA AGENDA
   // =========================================================================
-  group('(d) o filtro absorveu `Próximos`, `Encerrados` e `Meus pedidos`', () {
+  group('(d) o filtro absorveu `Próximos` e `Encerrados`, e `Meus pedidos` saiu',
+      () {
     // DESLIGAMENTO: em `rede/agenda_da_rede.dart`, tire `Próximos` e
-    // `Encerrados` das opções do grupo `when`, ou tire o grupo
-    // `Meu envolvimento` inteiro. Cada passo reprova um caso daqui.
+    // `Encerrados` das opções do grupo `when`. Cada passo reprova um caso daqui.
+    //
+    // **`Meus pedidos` NÃO virou filtro, e a união do lote de 19/10 é que
+    // decidiu isso.** Esta frente converteu as TRÊS abas em recorte e deixou a
+    // terceira viva como o grupo `Meu envolvimento`;
+    // `feat/evento-simples-e-sem-telefone` REMOVEU a aba no mesmo método, por
+    // decisão do cliente no mesmo dia (*"vamos deixar apenas os eventos
+    // abertos por enquanto"*). A remoção ganhou porque o outro lado não
+    // compilaria: `RecorteDaRede` perdeu `visibilidade`, `estadoDoPedido` e
+    // `queryDePedidos`. Os dois casos que mediam `Só onde eu pedi` foram
+    // INVERTIDOS aqui, e não apagados: eles agora medem a ausência do
+    // CAMINHO, que é o que a decisão pediu.
     testWidgets('as três NÃO são mais abas, em lugar nenhum da seção',
         (tester) async {
       await abrirOApp(
@@ -585,32 +596,44 @@ void main() {
       await abrirAFolha(tester);
 
       final pintados = gruposDaFolha(tester);
-      for (final esperado in <String>[
-        'Quando',
-        'Próximos',
-        'Encerrados',
-        'Meu envolvimento',
-        'Só onde eu pedi',
-      ]) {
+      for (final esperado in <String>['Quando', 'Próximos', 'Encerrados']) {
         expect(
           pintados,
           contains(esperado),
           reason: 'REPROVA: a folha de filtro da `Rede` não oferece '
-              '"$esperado". As três abas da agenda viraram recortes DESTA '
-              'folha, e uma que não aparece aqui é função perdida -- não '
+              '"$esperado". As DUAS abas de tempo da agenda viraram recortes '
+              'DESTA folha, e uma que não aparece aqui é função perdida -- não '
               'função movida. Pintados: $pintados',
+        );
+      }
+      for (final proibido in <String>['Meu envolvimento', 'Só onde eu pedi']) {
+        expect(
+          pintados,
+          isNot(contains(proibido)),
+          reason: 'REPROVA: "$proibido" está na folha. A aba `Meus pedidos` '
+              'NÃO virou filtro: ela saiu do app em 19/10/2026 por decisão do '
+              'cliente, e as sete operações do pedido ficaram declaradas e sem '
+              'chamador em `api/rede_api.dart`. Pintados: $pintados',
         );
       }
     });
 
     testWidgets(
-      'ISCA: `Só onde eu pedi` TROCA A OPERAÇÃO, e vai para a rota dos pedidos',
+      'ISCA: NENHUM caminho da folha chega à rota dos pedidos',
       (tester) async {
-        // **A medida é a CHAMADA DE REDE, e não a pastilha marcada.** Um caso
-        // que só olhasse a folha ficaria verde com um filtro que a tela aceita
-        // e nunca manda a lugar nenhum -- que é o filtro que mente sobre o
-        // alcance, exatamente o que `barra_de_listagem.dart` existe para
-        // impedir.
+        // **ESTE CASO FOI INVERTIDO NA UNIÃO DO LOTE DE 19/10, e não apagado.**
+        //
+        // Ele media `Só onde eu pedi` TROCANDO a operação para
+        // `GET /v1/network/join-requests`. A decisão do cliente removeu a aba
+        // `Meus pedidos` e, com ela, esse recorte -- então o que resta a medir
+        // é o inverso, e ele vale mais: que NENHUM caminho da folha chega
+        // àquela rota. **Medido nesta mescla**: antes da inversão o caso
+        // reprovava procurando `Só onde eu pedi`, que a folha já não oferecia.
+        //
+        // **A medida continua sendo a CHAMADA DE REDE, e não a pastilha
+        // ausente.** Um caso que só olhasse a folha ficaria verde com um
+        // recorte que a tela aceita por outro caminho e manda à rota
+        // aposentada; a rota é que não pode ser pedida.
         final pedidos = <http.Request>[];
         Future<http.Response> comEspiao(http.Request req) {
           pedidos.add(req);
@@ -628,23 +651,36 @@ void main() {
         expect(
           pedidos.where((r) => r.url.path == '/v1/network/join-requests'),
           isEmpty,
-          reason: 'REPROVA: a agenda pediu a lista de PEDIDOS sem ninguém ter '
-              'escolhido `Só onde eu pedi`. O recorte nasce desligado.',
+          reason: 'REPROVA: a agenda pediu a lista de PEDIDOS na abertura. '
+              'Nenhuma tela do app cria pedido de participação desde '
+              '19/10/2026, e `listMyNetworkEventJoinRequests` ficou sem '
+              'chamador de propósito.',
         );
 
-        await abrirAFolha(tester);
-        await tester.tap(find.text('Só onde eu pedi'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(FilledButton, 'Aplicar'));
-        await tester.pumpAndSettle();
+        // Aplica TODO recorte de tempo que a folha oferece. Se algum deles
+        // trocar a operação, o espião acusa.
+        for (final recorte in <String>['Encerrados', 'Próximos']) {
+          await abrirAFolha(tester);
+          await tester.tap(find.text(recorte));
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(FilledButton, 'Aplicar'));
+          await tester.pumpAndSettle();
+        }
 
         expect(
           pedidos.where((r) => r.url.path == '/v1/network/join-requests'),
+          isEmpty,
+          reason: 'REPROVA: algum recorte da folha pediu '
+              '`GET /v1/network/join-requests`. A operação continua no '
+              'contrato, aposentada com data em '
+              '`api/rastreabilidade-backoffice-rede.yaml`, e sem ninguém para '
+              'alimentá-la.',
+        );
+        // E a lista não caiu: se a chamada proibida tivesse saído e levado
+        // 404, a agenda estaria em falha e o `isEmpty` acima seria vácuo.
+        expect(
+          pedidos.where((r) => r.url.path == '/v1/network/events'),
           isNotEmpty,
-          reason: 'REPROVA: aplicar `Só onde eu pedi` não pediu '
-              '`GET /v1/network/join-requests`. O recorte troca a OPERAÇÃO, e '
-              'não um parâmetro da lista: "só os eventos em que eu pedi para '
-              'ir" é `listMyNetworkEventJoinRequests`, com outra resposta.',
         );
       },
     );
@@ -705,8 +741,9 @@ void main() {
       // compilar na linha abaixo -- e um `grep` no fonte seria o portão de
       // palavra que este repositório já teve verde sobre um defeito real.
       //
-      // O que resta no lugar dele é um `bool` de estado privado e o grupo da
-      // folha, e os dois estão medidos nos casos acima.
+      // O que resta no lugar dele é o grupo `Quando` da folha, medido nos
+      // casos acima. O `bool _soOndePedi` que esta frente havia deixado no
+      // lugar da terceira aba também saiu, na união do lote de 19/10.
       expect(
         AgendaDaRede.rotuloDeMarcar,
         'Criar evento',

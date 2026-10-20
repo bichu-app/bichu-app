@@ -630,7 +630,7 @@ void main() {
       // ISCA: em `modelos_rede.dart`, em `RecorteDaRede.queryDaAgenda`,
       // apague a linha
       //     'visibility': VisibilidadeDoEncontro.publico.codigo,
-      // Este caso reprova nas DUAS abas.
+      // Este caso reprova nos DOIS recortes de tempo.
       final rede = redeComAgenda(
         encerrados: <Map<String, dynamic>>[encontroPublico(status: 'ended')],
       );
@@ -641,19 +641,24 @@ void main() {
       expect(
         emProximos.last.url.queryParameters['visibility'],
         'public',
-        reason: 'REPROVA: a aba `Próximos` nao pede so eventos abertos.',
+        reason: 'REPROVA: o recorte `Próximos` nao pede so eventos abertos.',
       );
 
-      await tester.tap(find.widgetWithText(Tab, 'Encerrados'));
-      await tester.pumpAndSettle();
+      // **`Encerrados` E RECORTE E NAO ABA desde a uniao do lote de 19/10.**
+      // `feat/barra-com-mural-e-rede-unificada` converteu as abas em grupo
+      // `Quando` da folha; o toque em `Tab` que estava aqui deixou de achar
+      // widget e o caso REPROVAVA -- medido nesta mescla. O grupo `Quando` e
+      // oferecido sem conta, e e por isso que este caso continua valendo com
+      // `logado: false`.
+      await aplicarNaFolha(tester, <String>['Encerrados']);
       final emEncerrados = rede.chamadasA('GET /v1/network/events').last;
       expect(emEncerrados.url.queryParameters['when'], 'past');
       expect(
         emEncerrados.url.queryParameters['visibility'],
         'public',
-        reason: 'REPROVA: a aba `Encerrados` nao pede so eventos abertos. Fixar '
-            'o parametro em UM lugar (`queryDaAgenda`) existe exatamente para '
-            'nenhuma das abas esquecer.',
+        reason: 'REPROVA: o recorte `Encerrados` nao pede so eventos abertos. '
+            'Fixar o parametro em UM lugar (`queryDaAgenda`) existe exatamente '
+            'para nenhum dos recortes esquecer.',
       );
     });
 
