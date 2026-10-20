@@ -13,6 +13,7 @@ import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/achado/textos_do_achado.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
+import 'package:bichu/telas/perdido/lista_de_perdidos.dart';
 import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
@@ -1651,6 +1652,84 @@ void main() {
         pedidos.last.url.queryParameters.containsKey('page'),
         isFalse,
         reason: 'REPROVA: `listMyFoundReports` nao aceita `page`.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('`Usar minha localizacao` e um ATO DA PESSOA, e ele tem efeito', () {
+    // **O DEFEITO QUE ESTE GRUPO FECHA, relatado pelo cliente em 20/10/2026:**
+    // *"o botao de usar minha localizacao na secao do pets nao esta
+    // funcionando"*.
+    //
+    // E nao estava: a guarda `_pessoaMexeu` de `_resolverEAplicar` valia para
+    // os DOIS caminhos -- o automatico e o do toque --, e por isso o botao nao
+    // fazia nada no UNICO estado em que ele e oferecido. A conta:
+    // `_podeOferecerLocalizacao` so o oferece quando nao ha cidade do aparelho
+    // **ou** `_pessoaMexeu`; quem ja tem cidade do aparelho e toca em
+    // `Ver todas` cai no segundo caso, e ai a resolucao chegava, via
+    // `_pessoaMexeu` ligado e voltava na primeira linha. Sem erro, sem faixa,
+    // sem nada na tela.
+    //
+    // DESLIGAMENTO: em `_resolverEAplicar`, troque o ramo `if (porToque)` por
+    // um `return` ou devolva a guarda `if (_pessoaMexeu) return;` para antes
+    // dele. Este caso reprova com `city` nulo na ultima consulta.
+    //
+    // **O caso mede a CONSULTA e nao a tela**, de proposito: a linha do
+    // recorte podia trocar de texto e a lista continuar com o recorte antigo,
+    // que e o defeito visto pelo cliente. Quem diz o que a lista esta
+    // mostrando e o `city` que saiu na requisicao.
+    testWidgets('depois de `Ver todas`, o toque VOLTA a cidade do aparelho ao '
+        'recorte', (tester) async {
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.concedida,
+        resultadoDaCidade: CidadeResolvida('São Paulo'),
+      );
+      await abrirPets(
+        tester,
+        logado: false,
+        localizacao: porta,
+        rede: redeDosPerdidos(
+          paginaDePerdidos(<Map<String, dynamic>>[
+            perdidoDoContrato(vistoEm: '2026-10-16T12:00:00.000Z'),
+          ]),
+          pedidos: pedidos,
+        ),
+      );
+
+      // A abertura resolveu e a cidade do aparelho entrou no recorte.
+      expect(
+        pedidos.last.url.queryParameters['city'],
+        'São Paulo',
+        reason: 'PRE-CONDICAO: a abertura nao aplicou a cidade do aparelho.',
+      );
+
+      // `Ver todas` tira a cidade -- e e isto que liga `_pessoaMexeu`.
+      await tester.tap(find.text(ListaDePerdidos.rotuloDeVerTodas));
+      await tester.pumpAndSettle();
+      expect(
+        pedidos.last.url.queryParameters['city'],
+        isNull,
+        reason: 'PRE-CONDICAO: `Ver todas` nao tirou a cidade do recorte.',
+      );
+
+      // O botao tem de estar oferecido agora.
+      expect(
+        find.text(ListaDePerdidos.rotuloDeUsarLocalizacao),
+        findsOneWidget,
+        reason: 'PRE-CONDICAO: `Usar minha localizacao` nao esta na tela.',
+      );
+
+      await tester.tap(find.text(ListaDePerdidos.rotuloDeUsarLocalizacao));
+      await tester.pumpAndSettle();
+
+      expect(
+        pedidos.last.url.queryParameters['city'],
+        'São Paulo',
+        reason: 'REPROVA: tocar em `Usar minha localizacao` nao trouxe a '
+            'cidade do aparelho de volta ao recorte. A ultima consulta foi '
+            '${pedidos.last.url.query}',
       );
     });
   });
