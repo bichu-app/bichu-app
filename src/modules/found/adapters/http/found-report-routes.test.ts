@@ -718,16 +718,22 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('SVG nunca passa, e ele é recusado na BORDA pelo enum do contrato', async () => {
-    // **Divergência medida, e ela é anterior a esta história.** O contrato
-    // declara `content_type` como enum fechado, então o schema do corpo recusa
-    // SVG antes do handler e o status é 400, não 415 — e nem
-    // `createFoundReportPhotoUploadIntent` nem `createPetPhotoUploadIntent`
-    // declaram 400 nas respostas. As duas têm a mesma forma e o mesmo furo.
+    // **Quem recusa é o schema do corpo, antes do handler.** O contrato declara
+    // `content_type` como enum fechado, com a mesma lista de `TIPOS_ACEITOS`
+    // (`media/domain/chave-de-objeto.ts`), então SVG não chega ao serviço e o
+    // status é 400. Isso NÃO é divergência com o contrato: medido em
+    // `api/openapi.yaml`, `createFoundReportPhotoUploadIntent` declara 400, o
+    // caso afirma 400, e os dois concordam — o mesmo vale para
+    // `createPetPhotoUploadIntent` e para as outras três operações de upload
+    // intent, que declaram 400 e 415.
     //
-    // O caso afirma o que o sistema FAZ, e não o que eu gostaria que ele
-    // fizesse: uma asserção em 415 aqui ficaria vermelha sem nenhum defeito, e
-    // uma que aceitasse os dois esconderia a divergência. Está na pauta de
-    // refinamento como pergunta fechada.
+    // **O que mudou é que o 415 deixou de ser alcançável nesta operação.** Os
+    // dois caminhos que o produziam — tipo fora da lista e tamanho acima do
+    // teto — agora são recusados pelo schema com 400, e o 415 próprio do
+    // Fastify (cabeçalho `Content-Type` da requisição) vira 400 em
+    // `src/shared/http/server.ts`. O 415 continua declarado e NÃO deve sair do
+    // contrato sem decisão do cliente: remover resposta declarada é quebra de
+    // contrato.
     const app = servidor();
     const { status, corpo } = await pedir(app, {
       metodo: 'POST',
@@ -752,15 +758,23 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
     // `UploadIntentInput.byte_size`. O caso lê a constante de propósito: um
     // `2 * 1024 * 1024` escrito aqui é exatamente o que divergiu.
     //
-    // **E o 415 deixou de ser alcançável por este caminho, que é divergência
-    // medida e não defeito.** Enquanto o schema aceitava 10 MB e o serviço
-    // recusava em 2, o que respondia era o serviço, com o 415 que o contrato
-    // declara. Agora os dois carregam o MESMO número, então quem recusa é o
-    // schema do corpo, antes do handler, com 400 — a mesma forma do caso do SVG
-    // logo acima, e o mesmo furo (`createFoundReportPhotoUploadIntent` não
-    // declara 400). O caso afirma o que o sistema FAZ: a conferência do serviço
-    // continua escrita, por defesa em profundidade, e não é mais ela que
-    // responde aqui.
+    // **E o 415 deixou de ser alcançável por este caminho.** Enquanto o schema
+    // aceitava 10 MB e o serviço recusava em 2, o que respondia era o serviço,
+    // com 415. Agora os dois carregam o MESMO número (`byte_size.maximum:
+    // 5242880` no contrato, `TETO_DE_BYTES` em
+    // `media/domain/chave-de-objeto.ts`), então quem recusa é o schema do
+    // corpo, antes do handler, com 400 — a mesma forma do caso do SVG logo
+    // acima. E 400 é o que o contrato declara aqui: medido em
+    // `api/openapi.yaml`, `createFoundReportPhotoUploadIntent` tem
+    // `'400': ValidationFailed`, então o caso e o contrato concordam.
+    //
+    // O 415 segue declarado sem caminho que o produza: os dois que o produziam
+    // viraram 400 no schema, e o 415 próprio do Fastify (cabeçalho
+    // `Content-Type` da requisição) é convertido em 400 por
+    // `src/shared/http/server.ts`. Tirá-lo do contrato é quebra de contrato e
+    // depende de decisão do cliente. A conferência de `ehTipoAceito` e
+    // `TETO_DE_BYTES` no serviço continua escrita, por defesa em profundidade,
+    // e não é mais ela que responde aqui.
     const app = servidor();
     const acimaDoTeto = await pedir(app, {
       metodo: 'POST',
