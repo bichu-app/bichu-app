@@ -297,6 +297,7 @@ class LocalizacaoDeTeste implements Localizacao {
     this.estadoAtual, {
     this.depoisDePedir,
     this.resultado,
+    this.resultadoDaCidade,
     this.servico = true,
   });
 
@@ -309,10 +310,25 @@ class LocalizacaoDeTeste implements Localizacao {
   /// que e o que a implementacao de verdade faz.
   final ResultadoDaCaptura? resultado;
 
+  /// O que `cidadeAproximada` devolve.
+  ///
+  /// **Nulo NAO e "sem cidade": e "decida pelo estado"**, como o `resultado`
+  /// acima. Os oito motivos de [MotivoDeNaoTerCidade] sao passados por este
+  /// campo, um por caso -- e e assim que os cinco caminhos de reserva da
+  /// pagina de pets sao exercitados sem aparelho.
+  final ResultadoDaCidade? resultadoDaCidade;
+
   bool servico;
 
   int vezesQuePediu = 0;
   int vezesQueMediu = 0;
+
+  /// **Quantas vezes a resolucao de cidade foi chamada.**
+  ///
+  /// Existe para ser MEDIDO: "quantas resolucoes por abertura da tela" e a
+  /// pergunta que decide se o teto de uso da plataforma e gasto a esmo, e sem
+  /// este contador ela seria respondida por leitura de codigo.
+  int vezesQueResolveu = 0;
   bool abriuAjustes = false;
 
   @override
@@ -354,6 +370,29 @@ class LocalizacaoDeTeste implements Localizacao {
         ),
       PermissaoDeLocalizacao.indisponivel =>
         const CapturaSemPonto(MotivoDeNaoTerPonto.indisponivel),
+    };
+  }
+
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({required Duration prazo}) async {
+    vezesQueResolveu += 1;
+    final pedido = resultadoDaCidade;
+    if (pedido != null) return pedido;
+    // Sem resultado pedido, decide pelo estado -- o mesmo criterio de
+    // `pontoAproximado`. Concedida e servico ligado resolve `Sao Paulo`, que e
+    // a cidade do ponto que o dublê devolve.
+    return switch (estadoAtual) {
+      PermissaoDeLocalizacao.concedida => servico
+          ? CidadeResolvida('Sao Paulo')
+          : const CidadeNaoResolvida(MotivoDeNaoTerCidade.servicoDesligado),
+      PermissaoDeLocalizacao.negada ||
+      PermissaoDeLocalizacao.naoPedida =>
+        const CidadeNaoResolvida(MotivoDeNaoTerCidade.permissaoNegada),
+      PermissaoDeLocalizacao.negadaPermanentemente => const CidadeNaoResolvida(
+          MotivoDeNaoTerCidade.permissaoNegadaPermanentemente,
+        ),
+      PermissaoDeLocalizacao.indisponivel =>
+        const CidadeNaoResolvida(MotivoDeNaoTerCidade.indisponivel),
     };
   }
 }

@@ -192,7 +192,7 @@ class PaginaDePerdidos {
 /// animais perdidos.
 class RecorteDePerdidos {
   const RecorteDePerdidos({
-    required this.cidade,
+    this.cidade,
     this.bairro,
     this.especie,
     this.porte,
@@ -201,7 +201,14 @@ class RecorteDePerdidos {
     this.pagina = 1,
   });
 
-  final String cidade;
+  /// A cidade pedida, ou **nulo quando ninguem pediu nenhuma**.
+  ///
+  /// **Nasce nula desde 19/10/2026** (cliente: *"o campo cidade do filtro da
+  /// pagina pet nao deve ser obrigatorio"*). Nula, `city` fica FORA da consulta
+  /// e o servidor nao recorta por cidade -- a lista abre com os 20 casos mais
+  /// recentes de qualquer cidade. Era `required` e obrigava a tela a uma fase
+  /// propria (`_Fase.semCidade`) antes de ter o que mostrar.
+  final String? cidade;
   final String? bairro;
   final Especie? especie;
   final Porte? porte;
@@ -233,8 +240,40 @@ class RecorteDePerdidos {
   /// responderia 400.
   static const int limite = 20;
 
+  /// A cidade pronta para a consulta: **aparada e com espaço colapsado**.
+  ///
+  /// **O colapso de espaço NÃO é zelo, e foi medido** em 19/10/2026 contra
+  /// `texto_para_busca` do banco, que é a função dos dois lados da comparação
+  /// de cidade:
+  ///
+  /// | forma | normaliza para | casa com `sao paulo` |
+  /// |---|---|---|
+  /// | `São Paulo` | `sao paulo` | sim |
+  /// | `SAO PAULO` | `sao paulo` | sim |
+  /// | `Mogi das Cruzes` / `Mogi Das Cruzes` | `mogi das cruzes` | sim |
+  /// | `' São Paulo '` | `' sao paulo '` | **NÃO** |
+  /// | `São  Paulo` | `sao  paulo` | **NÃO** |
+  ///
+  /// Ela absorve **acento e caixa**, e **não absorve espaço**. Isso importa
+  /// porque a cidade deixou de ser só digitada: ela vem do serviço de
+  /// plataforma, que decide a forma do nome. Deixar o espaço passar produziria
+  /// uma lista VAZIA com cara de defeito — a pior saída possível, porque ela
+  /// não acusa nada.
+  ///
+  /// Aparar resolve a borda; colapsar resolve o meio. O servidor não faz nem
+  /// um nem outro, e corrigir lá seria mudar a semântica de `texto_para_busca`
+  /// para todas as consultas que a usam.
+  String? get cidadeLimpa {
+    final c = cidade?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return (c == null || c.isEmpty) ? null : c;
+  }
+
   Map<String, String> get query => <String, String>{
-    'city': cidade,
+    // `city` SO VAI QUANDO HA CIDADE. Mandar `city=` vazio nao e o mesmo que
+    // omitir: o `minLength: 2` do contrato responde 400 ao vazio, enquanto a
+    // omissao e geografia aberta. A forma `'chave': ?valor` e a mesma que
+    // `period` e `q` ja usavam.
+    'city': ?cidadeLimpa,
     if (bairro != null && bairro!.trim().isNotEmpty) 'neighborhood': bairro!.trim(),
     if (especie != null) 'species': especie!.valor,
     if (porte != null) 'size': porte!.valor,
@@ -245,7 +284,11 @@ class RecorteDePerdidos {
   };
 
   RecorteDePerdidos copiar({
-    String? cidade,
+    // **Sentinela, e nao `String?`**, pelo mesmo motivo de `janela`: com a
+    // cidade podendo ser nula de verdade, `cidade ?? this.cidade` nao consegue
+    // LIMPA-LA -- passar nulo seria indistinguivel de nao passar nada, e
+    // apagar o campo de cidade na folha deixaria a cidade anterior valendo.
+    Object? cidade = _naoMexer,
     Object? bairro = _naoMexer,
     Object? especie = _naoMexer,
     Object? porte = _naoMexer,
@@ -259,7 +302,7 @@ class RecorteDePerdidos {
   }) {
     T? v<T>(Object? novo, T? atual) => novo == _naoMexer ? atual : novo as T?;
     return RecorteDePerdidos(
-      cidade: cidade ?? this.cidade,
+      cidade: v<String>(cidade, this.cidade),
       bairro: v<String>(bairro, this.bairro),
       especie: v<Especie>(especie, this.especie),
       porte: v<Porte>(porte, this.porte),

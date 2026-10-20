@@ -42,9 +42,13 @@ type PublicLostPetPage = components['schemas']['PublicLostPetPage'];
  */
 export type Relogio = Clock;
 
-/** O pedido como a borda o entrega: tudo opcional menos a cidade. */
+/**
+ * O pedido como a borda o entrega: **tudo opcional**, a cidade inclusive desde
+ * 19/10/2026 (decisão do cliente: *"o campo cidade do filtro da página pet não
+ * deve ser obrigatório"*).
+ */
 export interface PedidoDePerdidos {
-  readonly city: string;
+  readonly city?: string | undefined;
   readonly neighborhood?: string | undefined;
   readonly species?: EspecieDoCaso | undefined;
   readonly size?: PorteDoCaso | undefined;
@@ -105,9 +109,16 @@ export class ListagemPublicaDePerdidosService {
     const limite = pedido.limit ?? TAMANHO_PADRAO;
     const bairro = aparado(pedido.neighborhood);
     const termo = aparado(pedido.q);
+    // `aparado` e nao `.trim()`: `city="   "` passa pelo `minLength: 2` do
+    // contrato com dois espacos dentro, e `"   ".trim()` seria `""` -- uma
+    // cidade vazia que o adaptador compararia contra `texto_para_busca('')` e
+    // que nao casaria com nada, devolvendo uma pagina vazia em vez da lista
+    // aberta. `aparado` transforma os dois casos (ausente e so-espaco) na MESMA
+    // coisa, que e a unica leitura defensavel: ninguem pediu cidade.
+    const cidade = aparado(pedido.city);
 
     const recorte: RecorteDePerdidos = {
-      cidade: pedido.city.trim(),
+      cidade,
       bairro,
       especie: pedido.species,
       porte: pedido.size,
@@ -125,8 +136,13 @@ export class ListagemPublicaDePerdidosService {
       page: pagina,
       limit: limite,
       total: resultado.total,
+      // `city` entra em `applied_filters` **so quando foi pedida**, pelo mesmo
+      // `recortesAplicados` que ja omitia `period` ausente: a tela le esta
+      // lista para escrever a linha que explica o corte, e citar uma cidade que
+      // ninguem escolheu seria a tela afirmando um recorte que o servidor nao
+      // aplicou.
       applied_filters: recortesAplicados({
-        city: recorte.cidade,
+        city: cidade,
         neighborhood: bairro,
         species: pedido.species,
         size: pedido.size,
