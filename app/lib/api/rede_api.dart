@@ -12,8 +12,36 @@ import 'modelos_rede.dart';
 /// Declarar os metodos sem o cabecalho produziria 428 em toda chamada, que e
 /// pior que a ausencia -- ver o relato da entrega.
 ///
-/// O resto do que o app escreve e o pedido de participacao da propria conta, e
-/// a desistencia dele.
+/// ## AS SETE OPERACOES APOSENTADAS (19/10/2026)
+///
+/// Decisao do cliente, palavra por palavra: *"vamos deixar apenas os eventos
+/// abertos por enquanto, no futuro analisamos a necessidade de ter eventos
+/// privados tambem"*. Sete metodos desta classe **ficam declarados e nao tem
+/// chamador nenhum no app**:
+///
+/// - [detalhar] (`getNetworkEvent`), [localizacao]
+///   (`getNetworkEventLocation`) e [detalhesDoPrivado]
+///   (`getNetworkEventPrivateDetails`): eram da pagina de detalhe do evento,
+///   que saiu no mesmo dia, por outro pedido dele (*"sem informações
+///   adicionais ou pagina de detalhes do evento"*);
+/// - [pedir] (`requestToJoinNetworkEvent`), [meuPedido]
+///   (`getMyNetworkEventJoinRequest`) e [desistir]
+///   (`withdrawNetworkEventJoinRequest`): o pedido de participacao nascia
+///   naquela pagina;
+/// - [meusPedidos] (`listMyNetworkEventJoinRequests`): era a aba `Meus
+///   pedidos` da agenda, que saiu com esta decisao.
+///
+/// **Ficam, e isto e deliberado.** Ele disse *"no futuro analisamos"*, e nao
+/// "nunca": apagar os sete faria a proxima pessoa reescrever a leitura de
+/// `NetworkEventJoinRequest` do zero, sem a prosa que explica por que a recusa
+/// nao existe aqui. Quem as reabrir le o registro em
+/// `api/rastreabilidade-backoffice-rede.yaml`, secao `contrato_sem_tela`, que
+/// e onde o projeto ja declara operacao de contrato sem tela.
+///
+/// **O que NAO fica e caminho de tela ate elas.** Nenhum widget, nenhuma rota
+/// e nenhum recorte da agenda chama qualquer uma das sete; `RecorteDaRede`
+/// perdeu `visibilidade`, `estadoDoPedido` e `queryDePedidos` no mesmo
+/// commit, e `queryDaAgenda` passou a fixar `visibility=public`.
 ///
 /// ## Quem leva token
 ///
@@ -56,6 +84,26 @@ class RedeApi {
   ///
   /// Datas em UTC com `Z`, como `format: date-time` pede. O fuso de exibicao e
   /// `time_zone`, separado, e o servidor o aplica.
+  ///
+  /// **A CAPA ENTRA AQUI, no MESMO corpo** (19/10/2026, pedido do cliente:
+  /// *"a foto que eu estou falando para criar do evento e a da capa do
+  /// evento"*). `CommunityNetworkEventInput.cover_image` e um
+  /// `CommunityNetworkEventCoverInput`, e **ele exige os dois campos**:
+  /// `upload_id` (do `createNetworkEventCoverUploadIntent`) e `alt_text`
+  /// (`minLength: 2`, `maxLength: 150`), com a razao escrita no contrato --
+  /// *"a imagem sem texto alternativo e a imagem que nao existe para quem usa
+  /// leitor de tela"*.
+  ///
+  /// **Um caminho de confirmacao, e so um.** A capa e confirmada no mesmo
+  /// `POST` que cria o encontro, como a foto da pessoa e confirmada no mesmo
+  /// `PATCH /v1/me` do nome. Era o argumento que fez `FotoDoUsuario` ser
+  /// removida: dois caminhos de confirmacao da mesma foto divergem na primeira
+  /// edicao.
+  ///
+  /// Sem capa o campo **nao entra no corpo** (o esquema e
+  /// `additionalProperties: false`, e `cover_image: null` so existe no PATCH,
+  /// onde significa "tira a capa"); o encontro sem capa e estado normal, e
+  /// `cover_image_url` sai nulo.
   static Map<String, dynamic> corpoDeCriacao({
     required String titulo,
     required String resumo,
@@ -66,6 +114,8 @@ class RedeApi {
     required DateTime comecaEm,
     DateTime? terminaEm,
     String? observacoes,
+    String? capaUploadId,
+    String? textoAlternativoDaCapa,
   }) {
     return <String, dynamic>{
       'title': titulo,
@@ -80,7 +130,52 @@ class RedeApi {
       if (terminaEm != null) 'ends_at': terminaEm.toUtc().toIso8601String(),
       if (observacoes != null && observacoes.isNotEmpty)
         'notes': observacoes,
+      // Os DOIS, ou nenhum: `CommunityNetworkEventCoverInput` declara
+      // `required: [upload_id, alt_text]`. Mandar so o `upload_id` e um `400`
+      // depois de a pessoa ter escolhido a foto e esperado o envio.
+      if (capaUploadId != null &&
+          capaUploadId.isNotEmpty &&
+          textoAlternativoDaCapa != null &&
+          textoAlternativoDaCapa.isNotEmpty)
+        'cover_image': <String, dynamic>{
+          'upload_id': capaUploadId,
+          'alt_text': textoAlternativoDaCapa,
+        },
     };
+  }
+
+  /// `POST /v1/media/network-event-cover-intents`
+  /// (`createNetworkEventCoverUploadIntent`), com conta.
+  ///
+  /// **O corpo e `content_type` e `byte_size`, e nada mais.**
+  /// `NetworkEventCoverIntentInput` e `additionalProperties: false` e **nao
+  /// declara `purpose`**: o proposito (`network_event`) e fixado pela ROTA, e a
+  /// razao esta escrita no proprio contrato -- *"deixar o cliente escolhe-lo
+  /// seria deixa-lo pedir uma autorizacao de imagem de produto por uma rota do
+  /// app"*.
+  ///
+  /// **Medido contra a homologacao em 19/10/2026** (commit `458cd005`): a
+  /// intencao desta rota nasce no prefixo `events/`
+  /// (`events/original/qdJO39PNSnUqeRFILHv8hA`), e a da vitrine no prefixo
+  /// `people/` -- os dois prefixos sao a cara dos dois `purpose`, e e por isso
+  /// que a troca de rota e visivel sem abrir o banco. No servidor,
+  /// `kysely-network-repository.ts` grava `purpose: 'network_event'` literal.
+  ///
+  /// O enum de `content_type` desta rota **nao tem HEIC** (so `image/jpeg`,
+  /// `image/png` e `image/webp`), ao contrario do da foto de pet e do da
+  /// vitrine: quem chama recusa por `tiposDeFotoAceitosSemHeic` ANTES de
+  /// enviar, em vez de pagar a subida para ouvir `400`.
+  Future<Map<String, dynamic>> intencaoDeCapaDoEncontro({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      '/media/network-event-cover-intents',
+      corpo: <String, dynamic>{
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
   }
 
   /// `POST /v1/network/events` (`createNetworkEvent`), com conta.

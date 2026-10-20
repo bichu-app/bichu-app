@@ -11,7 +11,6 @@
 
 
 import 'package:bichu/api/modelos.dart';
-import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -258,21 +257,10 @@ Future<void> abrirRede(
   await tester.pumpAndSettle();
 }
 
-/// Abre o primeiro cartao cujo titulo e [titulo].
-Future<void> abrirCartao(WidgetTester tester, String titulo) async {
-  // O cartao e mais alto que a tela de teste: toca-se no TITULO dele, que
-  // esta dentro do mesmo `InkWell`.
-  final alvo = find.descendant(
-    of: find.byWidgetPredicate(
-      (w) => w is CartaoDoEncontro && w.encontro.titulo == titulo,
-    ),
-    matching: find.text(titulo),
-  );
-  await tester.ensureVisible(alvo);
-  await tester.pumpAndSettle();
-  await tester.tap(alvo);
-  await tester.pumpAndSettle();
-}
+// **`abrirCartao` SAIU** (19/10/2026). Ela tocava no titulo do cartao para
+// abrir a pagina de detalhe do evento, que nao existe mais: o cartao deixou de
+// ser tocavel por decisao do cliente. Nenhuma ajuda de teste finge abrir o que
+// nao abre -- isso daria um `tap` em nada e um `pumpAndSettle` verde.
 
 /// Todo o texto visivel da tela, numa string so, para as iscas procurarem o
 /// que NAO pode estar la.

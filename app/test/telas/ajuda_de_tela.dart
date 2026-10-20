@@ -787,6 +787,18 @@ Future<void> rolarAte(
   /// Positivo desce, negativo sobe. `scrollUntilVisible` so procura num
   /// sentido, entao quem procura algo acima da dobra precisa dizer.
   double passo = 120,
+
+  /// QUAL lista rolar. Nulo usa `find.byType(Scrollable).first`, que e o
+  /// padrao historico e serve a tela que e a unica na pilha.
+  ///
+  /// **Ele entrou em 19/10/2026, e nao e conveniencia.** Uma tela EMPILHADA
+  /// sobre a casca de abas tem TRES `Scrollable` montados na arvore, e
+  /// `.first` pode ser o da casca -- e quando ele e, `scrollUntilVisible`
+  /// arrasta a lista errada e estoura `Bad state: No element` apontando para o
+  /// lugar errado. O defeito so aparece quando o alvo esta FORA da dobra: com
+  /// o alvo construido este helper nem chega ao `scrollUntilVisible`, e e por
+  /// isso que ele ficou invisivel ate uma tela crescer.
+  Finder? scrollable,
 }) async {
   if (alvo.evaluate().isNotEmpty) {
     await tester.ensureVisible(alvo);
@@ -796,7 +808,7 @@ Future<void> rolarAte(
   await tester.scrollUntilVisible(
     alvo,
     passo,
-    scrollable: find.byType(Scrollable).first,
+    scrollable: scrollable ?? find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
 }

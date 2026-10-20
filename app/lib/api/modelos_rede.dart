@@ -297,13 +297,11 @@ enum EstadoDoPedido {
   /// entrega.
   final String? rotulo;
 
-  /// O filtro `Situação do pedido` so oferece os dois que aparecem na lista
-  /// (design system 24.17.3): desistido nao volta em `Meus pedidos`, e o
-  /// encontro que passou vai para `Encerrados`.
-  static const List<EstadoDoPedido> doFiltro = <EstadoDoPedido>[
-    enviado,
-    aprovado,
-  ];
+  // **`doFiltro` SAIU** (19/10/2026). Era a lista de dois valores (`enviado`,
+  // `aprovado`) que o grupo `Situação do pedido` oferecia, e o grupo saiu com
+  // a aba `Meus pedidos`. O `enum` FICA inteiro: ele e o vocabulario de
+  // `NetworkEventJoinRequestState` no contrato, e o portao de conformidade do
+  // app o confere valor por valor contra a lista fechada.
 
   static EstadoDoPedido? porCodigo(Object? codigo) {
     for (final e in EstadoDoPedido.values) {
@@ -1372,7 +1370,20 @@ class PaginaDaRede {
     return PaginaDaRede(
       itens: <EncontroDaRede>[
         for (final bruto in itens)
-          if (bruto is Map<String, dynamic>) EncontroDaRede.doJson(bruto),
+          // **SO EVENTO ABERTO** (cliente, 19/10/2026: *"vamos deixar apenas
+          // os eventos abertos por enquanto, no futuro analisamos a
+          // necessidade de ter eventos privados tambem"*).
+          //
+          // Duas metades, e esta e a segunda: a primeira e
+          // `queryDaAgenda`, que pede `visibility=public`. Esta nao depende
+          // do servidor obedecer -- um privado que chegasse apesar do
+          // parametro e DESCARTADO aqui, e nao desenhado.
+          //
+          // Descartar, e nao lancar: um privado na resposta nao pode
+          // derrubar a agenda inteira na faixa de falha. Mesmo tratamento e
+          // mesma razao de `PaginaPorPerto.doJson`, logo abaixo.
+          if (bruto is Map<String, dynamic> && bruto['visibility'] == 'public')
+            EncontroDaRede.doJson(bruto),
       ],
       pagina: _inteiro(json['page'], 1),
       limite: _inteiro(json['limit'], 20),
@@ -1492,12 +1503,10 @@ class RecorteDaRede {
     this.termo,
     this.quando,
     this.entrada,
-    this.visibilidade,
     this.cidade,
     this.porte,
     this.distanciaMaxima,
     this.ordem,
-    this.estadoDoPedido,
     this.pagina = 1,
     this.limite = 20,
   });
@@ -1507,7 +1516,6 @@ class RecorteDaRede {
   /// Um dos sub-recortes de `Próximos`; nulo e `upcoming`.
   final QuandoDaRede? quando;
   final TipoDeEntrada? entrada;
-  final VisibilidadeDoEncontro? visibilidade;
   final String? cidade;
   final Porte? porte;
   final DistanciaMaxima? distanciaMaxima;
@@ -1515,7 +1523,6 @@ class RecorteDaRede {
   /// `proximos`, `recentes` ou `distancia`. O terceiro so vale em
   /// `listNearbyNetworkEvents`.
   final String? ordem;
-  final EstadoDoPedido? estadoDoPedido;
   final int pagina;
   final int limite;
 
@@ -1528,12 +1535,10 @@ class RecorteDaRede {
         termo: semTermo ? null : termo,
         quando: quando,
         entrada: entrada,
-        visibilidade: visibilidade,
         cidade: cidade,
         porte: porte,
         distanciaMaxima: distanciaMaxima,
         ordem: ordem,
-        estadoDoPedido: estadoDoPedido,
         pagina: pagina ?? this.pagina,
         limite: limite,
       );
@@ -1555,14 +1560,19 @@ class RecorteDaRede {
   }
 
   /// Quantos GRUPOS de filtro estao ativos. A busca nao conta.
+  ///
+  /// **`visibilidade` e `estadoDoPedido` sairam desta conta e desta classe**
+  /// em 19/10/2026, com os dois grupos de filtro que os alimentavam
+  /// (`Público ou privado` e `Situação do pedido`). O numero importa: ele e o
+  /// que diz "Nenhum evento com esses filtros" em vez de "A Rede ainda nao
+  /// tem eventos", e um campo sempre nulo na lista inflaria o `length` sem
+  /// nunca somar.
   int get quantidadeDeFiltros => <Object?>[
         quando,
         entrada,
-        visibilidade,
         cidade,
         porte,
         distanciaMaxima,
-        estadoDoPedido,
       ].where((v) => v != null).length;
 
   bool get temBusca => termoLimpo != null;
@@ -1572,6 +1582,16 @@ class RecorteDaRede {
       ordem == OrdemPorPerto.distancia.codigo || distanciaMaxima != null;
 
   /// `listNetworkEvents`, com o `when` da aba.
+  ///
+  /// **`visibility` e FIXO em `public`, e nao mais um filtro.** Decisao do
+  /// cliente de 19/10/2026: *"vamos deixar apenas os eventos abertos por
+  /// enquanto, no futuro analisamos a necessidade de ter eventos privados
+  /// tambem"*. Era `if (visibilidade != null) 'visibility': ...`, alimentado
+  /// pelo grupo `Público ou privado` da folha de filtros, que saiu.
+  ///
+  /// Fixo AQUI e nao na tela: a agenda tem duas abas e tres caminhos de
+  /// carga, e um deles esqueceria. E o par desta linha e o descarte em
+  /// `PaginaDaRede.doJson` -- pedir nao e garantir.
   Map<String, String> queryDaAgenda({required QuandoDaRede quandoDaAba}) =>
       <String, String>{
         'q': ?termoLimpo,
@@ -1580,7 +1600,7 @@ class RecorteDaRede {
         if (ordem != null && OrdemDaRede.porCodigo(ordem) != null)
           'sort': ordem!,
         if (entrada != null) 'admission': entrada!.codigo,
-        if (visibilidade != null) 'visibility': visibilidade!.codigo,
+        'visibility': VisibilidadeDoEncontro.publico.codigo,
         if (porte != null) 'size': porte!.valor,
         'page': '$pagina',
         'limit': '$limite',
@@ -1601,12 +1621,8 @@ class RecorteDaRede {
         'limit': '$limite',
       };
 
-  /// `listMyNetworkEventJoinRequests`: so `q` (titulo), `state` e `sort`.
-  Map<String, String> get queryDePedidos => <String, String>{
-        'q': ?termoLimpo,
-        if (estadoDoPedido != null) 'state': estadoDoPedido!.codigo,
-        'sort': 'proximos',
-        'page': '$pagina',
-        'limit': '$limite',
-      };
+  // **`queryDePedidos` SAIU** (19/10/2026). Montava a consulta de
+  // `listMyNetworkEventJoinRequests` (`q`, `state`, `sort`), e a aba `Meus
+  // pedidos` era quem a usava. A operacao continua no contrato, aposentada
+  // com registro em `api/rastreabilidade-backoffice-rede.yaml`.
 }

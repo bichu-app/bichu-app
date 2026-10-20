@@ -42,7 +42,6 @@ import 'package:bichu/telas/pet/textos_do_cadastro.dart';
 import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/criar_encontro.dart';
-import 'package:bichu/telas/rede/encontro_da_rede.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// O que uma mensagem de erro **nao** pode ser: um adjetivo sozinho.
@@ -242,17 +241,13 @@ void main() {
       );
     });
 
-    test('o pedido para participar continua declarando o que a equipe ve', () {
-      final frase = TelaDoEncontro.avisoDeTransparencia.toLowerCase();
-      expect(frase, contains('nome de exibição'));
-      expect(
-        frase,
-        contains('e-mail'),
-        reason: 'REPROVA: o aviso de transparencia do pedido saiu. Ele e '
-            'tambem o `Semantics.hint` do botao: quem usa leitor de tela ouve '
-            'o que sera compartilhado ANTES de tocar.',
-      );
-    });
+    // **O caso do pedido para participar SAIU** (19/10/2026). Ele cobrava
+    // `TelaDoEncontro.avisoDeTransparencia`, e a tela de detalhe do evento
+    // saiu do app por decisao do cliente: nao ha mais pedido de participacao,
+    // nao ha mais aviso de transparencia e nao ha mais o que o caso proteja.
+    // **Nao foi enfraquecido: foi removido junto com o que ele media.** Caso
+    // sobre constante que nao existe nao compila; caso sobre constante
+    // orfa passaria verde para sempre, medindo uma string que ninguem desenha.
   });
 
   group('5. recusa explicada: por que a acao nao vai, e o que fazer', () {
@@ -268,20 +263,12 @@ void main() {
       dizOQueFazer(TelaCriarEncontro.entreParaMarcar, 'entreParaMarcar');
     });
 
-    test('o evento privado explica por que o local nao esta na tela', () {
-      final frase = TelaDoEncontro.textoDoPrivado.toLowerCase();
-      expect(frase, contains('local'));
-      expect(
-        frase,
-        contains('aprovar'),
-        reason: 'REPROVA: a caixa do privado deixou de dizer POR QUE o local '
-            'nao aparece. Conteudo escondido sem motivo dito parece defeito.',
-      );
-    });
-
-    test('o evento cancelado continua dizendo que nao vai acontecer', () {
-      dizOQueFazer(TelaDoEncontro.avisoDeCancelado, 'avisoDeCancelado');
-    });
+    // **DOIS casos sairam daqui em 19/10/2026**, pela mesma razao do grupo
+    // acima: eles cobravam `TelaDoEncontro.textoDoPrivado` (por que o local
+    // do privado nao esta na tela) e `TelaDoEncontro.avisoDeCancelado` (o
+    // evento nao vai acontecer). A tela que dizia as duas frases saiu, e com
+    // ela as frases. O cartao da agenda nao tem onde diz-las: ele mostra a
+    // foto e o titulo.
 
     test('quem negou o aviso continua sabendo o que perdeu e o que cobre', () {
       dizOQueFazer(TextosDaAntessala.semAvisoPorPerto, 'semAvisoPorPerto');
@@ -315,8 +302,10 @@ void main() {
       final vazios = <String, String>{
         'MeusPets.explicacaoDoVazio': MeusPets.explicacaoDoVazio,
         'AgendaDaRede.explicacaoDoVazio': AgendaDaRede.explicacaoDoVazio,
-        'AgendaDaRede.explicacaoDoVazioDePedidos':
-            AgendaDaRede.explicacaoDoVazioDePedidos,
+        // `AgendaDaRede.explicacaoDoVazioDePedidos` saiu desta tabela em
+        // 19/10/2026: a aba `Meus pedidos` saiu do app com o evento privado,
+        // e a constante saiu com ela. Frase que ninguem desenha nao precisa
+        // de piso de qualidade -- precisa deixar de existir.
         'AgendaDaRede.explicacaoDoVazioDeEncerrados':
             AgendaDaRede.explicacaoDoVazioDeEncerrados,
         'AgendaDaRede.explicacaoDoVazioFiltrado':
