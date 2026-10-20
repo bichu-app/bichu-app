@@ -634,13 +634,25 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         _enviando = false;
         // O nome do campo recusado vem do `Problem`, e e o que diz a quem
         // escreveu 1600 caracteres qual dos dois campos o servidor negou.
-        _erroDoFormulario = MensagensDeErro.de(falha).texto;
+        //
+        // **`acaoEmCurso` e o que faz o `409 contact-channel-unverified` desta
+        // rota falar de avaliacao.** Sem ele esta faixa dizia a quem avaliou um
+        // veterinario que *"os tutores por perto vao receber a foto"*: o `type`
+        // e o mesmo de abrir caso de pet perdido, de proposito, e era a frase
+        // de la que chegava aqui.
+        _erroDoFormulario = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.avaliarLocal,
+        ).texto;
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        _erroDoFormulario = MensagensDeErro.de(falha).texto;
+        _erroDoFormulario = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.avaliarLocal,
+        ).texto;
       });
     } on FormatException catch (erro) {
       if (!mounted) return;

@@ -125,9 +125,14 @@ class TelaCriarEncontro extends StatefulWidget {
 
   static const String rotuloDeMarcar = 'Criar evento';
 
+  /// **A frase mora em `MensagensDeErro`, e esta constante aponta para ela.**
+  /// O bloqueio que esta tela sabe de antemao e a recusa do servidor
+  /// (`409 contact-channel-unverified`, a rede de seguranca de quem confirmou
+  /// o e-mail noutro aparelho) sao a MESMA regra, e diziam a mesma coisa em
+  /// duas redacoes -- que e o jeito de elas divergirem na primeira correcao.
+  /// O nome publico fica: os testes de widget o usam.
   static const String semEmailConfirmado =
-      'Confirme seu e-mail antes de criar. O evento vai aparecer para toda '
-      'a comunidade com o seu nome.';
+      MensagensDeErro.canalNaoVerificadoParaCriarEncontro;
 
   static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
 
@@ -552,14 +557,20 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       }
       setState(() {
         _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.criarEncontro,
+        );
         _errosDeCampo = _camposRecusados(falha);
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.criarEncontro,
+        );
       });
     } on Object catch (erro, pilha) {
       // Sem este ramo a fase `enviando` ficaria de pe para sempre num erro que

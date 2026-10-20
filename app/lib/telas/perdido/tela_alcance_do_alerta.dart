@@ -242,13 +242,19 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
       }
       setState(() {
         _fase = _Fase.pronta;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.avisarPetPerdido,
+        );
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _fase = _Fase.pronta;
-        _erro = MensagensDeErro.de(falha);
+        _erro = MensagensDeErro.de(
+          falha,
+          acaoEmCurso: AcaoEmCurso.avisarPetPerdido,
+        );
       });
     } on Object catch (erro, pilha) {
       // O QUE NAO E FalhaDeChamada. Sem este ramo `_Fase.enviando` ficava de
@@ -457,12 +463,15 @@ class _Bloqueio extends StatelessWidget {
     final email = Escopo.of(context).sessao.usuario?.email ?? '';
 
     return switch (bloqueio) {
-      // Texto da secao 9 do UX, ja em uso em `MensagensDeErro`.
+      // Texto da secao 9 do UX. **A frase vem de `MensagensDeErro`, nao de uma
+      // copia dela.** Eram duas redacoes identicas do mesmo texto -- esta e a
+      // do `409` -- para a MESMA regra: o bloqueio que a tela sabe de antemao
+      // (`blockers` do contrato) e a recusa do servidor para quem confirmou o
+      // e-mail noutro aparelho com esta tela em pe. Duas copias divergem na
+      // primeira correcao, e aqui elas dizem a mesma coisa por construcao.
       BloqueioDoCaso.canalDeContatoNaoVerificado => FaixaDeAviso(
-          texto: 'Confirme seu e-mail antes de avisar. Os tutores por perto '
-              'vão receber a foto. Se alguém encontrar, é pelo seu e-mail que '
-              'a gente avisa.',
-          rotuloDaAcao: 'Confirmar meu e-mail',
+          texto: MensagensDeErro.canalNaoVerificadoParaAvisar,
+          rotuloDaAcao: MensagensDeErro.confirmarMeuEmail,
           aoTocarNaAcao: () =>
               context.push(Rotas.verifiqueSeuEmail, extra: email),
         ),

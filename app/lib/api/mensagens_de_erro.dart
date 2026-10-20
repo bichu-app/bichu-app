@@ -42,11 +42,67 @@ class MensagemDeErro {
   final String? rotaDaAcao;
 }
 
+/// O que a pessoa estava tentando fazer quando a recusa chegou.
+///
+/// Existe por causa de **um `type` que serve a quatro rotas**:
+/// `contact-channel-unverified` recusa abrir caso de pet perdido, criar
+/// encontro na `Rede`, indicar profissional no `Perto` e avaliar um local do
+/// diretorio. O servidor manda o mesmo `type` nos quatro de proposito e isso
+/// esta escrito em `src/shared/http/errors.ts` tres vezes: *"a regua de conta
+/// validada e uma so no produto, e um segundo `type` para a mesma pergunta
+/// faria o app decidir por dois onde ha um conceito"*. O `type` e um; o texto
+/// nao pode ser, porque a consequencia de cada uma e diferente.
+///
+/// **E a SITUACAO que esta nomeada aqui, nao a rota.** O nome do membro diz o
+/// que a pessoa estava fazendo, em palavras do produto, e nao o metodo e o
+/// caminho HTTP. Dois motivos: o mesmo caminho pode servir a duas situacoes de
+/// tela, e amarrar microcopy a `POST /v1/...` poria vocabulario de transporte
+/// dentro do vocabulario de tela.
+///
+/// **Por que o parametro e geral e nao um `bool` deste `type`.** O arquivo ja
+/// tinha um precedente de situacao vinda de quem chama -- `codigoDigitado`, que
+/// separa o 404 da tag digitada do 404 da tag escaneada --, e a forma dele nao
+/// escala: um `bool` por rota viraria quatro `bool` neste `type` e outros
+/// tantos no proximo. Declarado assim, a proxima recusa que precisar variar por
+/// tela reusa o mesmo canal, e quem chama ja passa a situacao sem mudar
+/// assinatura.
+enum AcaoEmCurso {
+  /// `POST /v1/lost-cases` (F3.1), a partir de `perdido/tela_alcance_do_alerta`.
+  avisarPetPerdido,
+
+  /// `POST /v1/community/events`, a partir de `rede/criar_encontro`.
+  criarEncontro,
+
+  /// `POST` da sugestao do diretorio, a partir de `perto/sugerir_profissional`.
+  indicarProfissional,
+
+  /// A escrita da minha avaliacao, a partir de `perto/pagina_do_local`.
+  avaliarLocal,
+}
+
 /// Traduz uma falha de chamada na mensagem da tela.
 ///
 /// **A decisao e por `type` e por situacao, nunca pelo texto que o servidor
 /// mandou.** Mudar `title` ou `detail` no backend nao pode mudar o que a tela
 /// faz, e ha teste que exige isso.
+///
+/// **E por isso que [AcaoEmCurso] existe em vez de a tela mostrar o `detail`.**
+/// O servidor JA manda texto diferente por rota no `409
+/// contact-channel-unverified`: sao quatro fabricas em
+/// `src/shared/http/errors.ts`, com quatro `title` e quatro `detail`. Pegar
+/// esse texto resolveria a frase errada numa linha, e e justamente o que este
+/// arquivo nao faz -- por duas razoes medidas, nao por gosto:
+///
+/// 1. `app/test/api/problem_test.dart` exige o contrario: mudar `title` e
+///    `detail` no backend nao pode mudar nada na tela, e esse teste e criterio
+///    de aceite.
+/// 2. O app instalado sobrevive ao servidor. Uma versao antiga continua no
+///    aparelho por semanas depois de o backend mudar, e e o mesmo argumento
+///    que ja esta escrito em [_limiteDePets] sobre nao gravar o numero do teto
+///    no binario -- aplicado ao texto.
+///
+/// A situacao vem de quem chama **a chamada**, que e quem sabe o que a pessoa
+/// estava fazendo, e a frase mora aqui.
 abstract final class MensagensDeErro {
   /// Texto da acao que da para enfileirar e vai sair quando o sinal voltar.
   static const String semConexaoEnfileirada =
@@ -190,6 +246,85 @@ abstract final class MensagensDeErro {
       'hífen, em maiúscula ou minúscula. Se confundir I com 1 ou O com 0, a '
       'gente entende.';
 
+  /// A saida das quatro recusas de canal nao verificado. **Uma**: o movimento
+  /// que resolve e o mesmo nas quatro, e so o motivo muda.
+  static const String confirmarMeuEmail = 'Confirmar meu e-mail';
+
+  /// `contact-channel-unverified` ao **abrir caso de pet perdido**.
+  ///
+  /// Era esta a frase que os quatro desfechos devolviam, e nos outros tres ela
+  /// prometia coisa que nao ia acontecer. Aqui ela esta certa, e e por isso que
+  /// ela nao virou texto generico: este e o unico dos quatro casos em que o
+  /// e-mail E o canal pelo qual a pessoa vai ser avisada, e dizer isso e o que
+  /// torna o pedido de confirmar razoavel para quem esta em panico.
+  ///
+  /// Texto da secao 9 do UX. A copia que `perdido/tela_alcance_do_alerta`
+  /// mantinha palavra por palavra no bloqueio local virou referencia a esta
+  /// constante: a mesma regra recusada no app e recusada pelo servidor nao pode
+  /// ser dita com duas redacoes que divergem na primeira correcao.
+  static const String canalNaoVerificadoParaAvisar =
+      'Confirme seu e-mail antes de avisar. Os tutores por perto vão receber '
+      'a foto. Se alguém encontrar, é pelo seu e-mail que a gente avisa.';
+
+  /// `contact-channel-unverified` ao **criar encontro na `Rede`**.
+  ///
+  /// Nao fala de foto nem de achador, porque um evento nao tem nenhum dos
+  /// dois. O que pesa aqui e a publicacao: o encontro entra na agenda na hora,
+  /// com o nome de quem marcou.
+  ///
+  /// Mesma frase que `rede/criar_encontro` ja usava no bloqueio local, e e a
+  /// constante de la que passou a apontar para esta.
+  static const String canalNaoVerificadoParaCriarEncontro =
+      'Confirme seu e-mail antes de criar. O evento vai aparecer para toda '
+      'a comunidade com o seu nome.';
+
+  /// `contact-channel-unverified` ao **indicar profissional no `Perto`**.
+  ///
+  /// Nao avisa ninguem, nao manda foto e nao publica: a indicacao nasce
+  /// pendente e vai para fila de conferencia humana, e a propria tela promete
+  /// isso acima dos campos. O que pesa aqui e o **terceiro** -- um
+  /// estabelecimento de verdade que nao pediu para aparecer --, e quem confere
+  /// precisa saber de quem a indicacao veio.
+  ///
+  /// **Redacao da PR #40**, copiada e nao reescrita: a sessao do aviso antes do
+  /// formulario ja decidiu esta microcopy com o motivo escrito, e uma quinta
+  /// redacao da mesma frase e exatamente o defeito que esta tarefa veio fechar.
+  static const String canalNaoVerificadoParaIndicar =
+      'Confirme seu e-mail antes de indicar. A indicação fala de um '
+      'estabelecimento de verdade, e quem confere precisa saber de quem ela '
+      'veio.';
+
+  /// `contact-channel-unverified` ao **avaliar um local do diretorio**.
+  ///
+  /// O quarto desfecho, **que nao estava no achado**: ele sai de
+  /// `directory-routes.ts` na escrita da minha avaliacao, e chega a faixa do
+  /// formulario de `perto/pagina_do_local`. Ate aqui essa tela dizia a quem
+  /// avaliou um veterinario que os tutores por perto iam receber a foto.
+  ///
+  /// O motivo e o que a propria tela ja declara no bloqueio local dela: a
+  /// avaliacao sai com o nome de quem escreveu, na pagina de um negocio real.
+  /// **A frase e nossa, nao a do servidor**: o `detail` daquela rota diz a
+  /// mesma coisa porque a decisao e a mesma, e nao porque este texto venha de
+  /// lá -- ver [de].
+  static const String canalNaoVerificadoParaAvaliar =
+      'Confirme seu e-mail antes de avaliar. A avaliação aparece com o seu '
+      'nome na página de um negócio real.';
+
+  /// `contact-channel-unverified` **sem situacao declarada por quem chama**.
+  ///
+  /// Nao e o texto generico que esta tarefa recusou: e o fundo de poco para
+  /// quem nao passou a situacao -- um caminho que nao existe hoje, e que vai
+  /// existir no dia em que uma quinta rota recusar por este `type` sem o
+  /// `acaoEmCurso` dela.
+  ///
+  /// **Nao promete nada**, e e so por isso que ela serve a qualquer rota: diz a
+  /// regra e a saida, sem descrever consequencia nenhuma. A frase de pet
+  /// perdido no lugar disto e o defeito que acabou de ser consertado, ao
+  /// contrario.
+  static const String canalNaoVerificadoSemSituacao =
+      'Confirme seu e-mail antes de continuar. É a confirmação do e-mail que '
+      'libera criar e escrever na comunidade.';
+
   /// `validation-failed` que chegou **sem nomear campo nenhum** (UX 12.6).
   ///
   /// O contrato manda o servidor nomear o campo em `errors[]`, e quando ele
@@ -203,6 +338,11 @@ abstract final class MensagensDeErro {
   /// [podeEnfileirar] separa as duas linhas de "sem conexao" da tabela 12.4:
   /// acao que o produto consegue guardar para reenviar, e acao que exige
   /// servidor agora. A diferenca nao e de tom, e de verdade.
+  /// [acaoEmCurso] diz **o que a pessoa estava fazendo**, e so o `409
+  /// contact-channel-unverified` muda de texto por causa dele hoje -- ver
+  /// [AcaoEmCurso] para por que ele e geral e nao um `bool` daquele `type`.
+  /// Omiti-lo nao quebra a tela: ela cai em [canalNaoVerificadoSemSituacao],
+  /// que nao promete nada.
   /// [codigoDigitado] diz que o codigo saiu do campo de digitacao, e nao da
   /// camera. **So o 404 da tag muda de texto por causa dele** (BICHUS-153);
   /// todos os outros desfechos, inclusive o 400 de [codigoMalformado],
@@ -213,6 +353,7 @@ abstract final class MensagensDeErro {
     FalhaDeChamada falha, {
     bool podeEnfileirar = false,
     bool codigoDigitado = false,
+    AcaoEmCurso? acaoEmCurso,
   }) {
     return switch (falha) {
       FalhaDeConexao() => MensagemDeErro(
@@ -222,7 +363,8 @@ abstract final class MensagensDeErro {
           texto: tempoEsgotado,
           acao: tentarDeNovo,
         ),
-      FalhaDaApi(:final problem) => _daApi(problem, codigoDigitado),
+      FalhaDaApi(:final problem) =>
+          _daApi(problem, codigoDigitado, acaoEmCurso),
       // O endereco veio de um corpo de resposta e nao e desta API, entao a
       // requisicao NAO saiu e o token NAO viajou. Para quem esta lendo a tela
       // isso e indistinguivel de servidor fora, e o movimento util e o mesmo;
@@ -234,7 +376,11 @@ abstract final class MensagensDeErro {
     };
   }
 
-  static MensagemDeErro _daApi(Problem problem, [bool codigoDigitado = false]) {
+  static MensagemDeErro _daApi(
+    Problem problem, [
+    bool codigoDigitado = false,
+    AcaoEmCurso? acaoEmCurso,
+  ]) {
     final saida = problem.proximaAcao;
 
     final porTipo = switch (problem.tipo) {
@@ -243,11 +389,12 @@ abstract final class MensagensDeErro {
           acao: 'Entrar com este e-mail',
           proximaAcao: ProximaAcao.entrar,
         ),
-      ProblemTipo.canalDeContatoNaoVerificado => const MensagemDeErro(
-          texto: 'Confirme seu e-mail antes de avisar. Os tutores por perto '
-              'vão receber a foto. Se alguém encontrar, é pelo seu e-mail que '
-              'a gente avisa.',
-          acao: 'Confirmar meu e-mail',
+      // **Um `type`, quatro textos.** A escolha e por [AcaoEmCurso], que quem
+      // chama declara; a saida e a mesma nos quatro, porque o movimento que
+      // resolve e um so.
+      ProblemTipo.canalDeContatoNaoVerificado => MensagemDeErro(
+          texto: _canalNaoVerificado(acaoEmCurso),
+          acao: confirmarMeuEmail,
           proximaAcao: ProximaAcao.verificarEmail,
         ),
       ProblemTipo.limiteDeEncontrosDaComunidade =>
@@ -457,6 +604,22 @@ abstract final class MensagensDeErro {
     // nenhum caminho daqui afirma que a credencial nao confere.
     return de(falha);
   }
+
+  /// A frase do `409 contact-channel-unverified`, pela situacao de quem chama.
+  ///
+  /// **O `switch` nomeia os quatro membros em vez de usar `_ =>`**, e isso e o
+  /// portao: no dia em que uma quinta situacao entrar em [AcaoEmCurso], este
+  /// arquivo deixa de compilar e alguem tem de decidir a frase dela. Com
+  /// `_ =>` a quinta rota herdaria em silencio o texto de outra, que e
+  /// literalmente o defeito que esta funcao veio fechar.
+  static String _canalNaoVerificado(AcaoEmCurso? acaoEmCurso) =>
+      switch (acaoEmCurso) {
+        AcaoEmCurso.avisarPetPerdido => canalNaoVerificadoParaAvisar,
+        AcaoEmCurso.criarEncontro => canalNaoVerificadoParaCriarEncontro,
+        AcaoEmCurso.indicarProfissional => canalNaoVerificadoParaIndicar,
+        AcaoEmCurso.avaliarLocal => canalNaoVerificadoParaAvaliar,
+        null => canalNaoVerificadoSemSituacao,
+      };
 
   /// `pet-limit-reached`, 409 (UX 12.6).
   ///
