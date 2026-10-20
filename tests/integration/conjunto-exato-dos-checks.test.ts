@@ -837,6 +837,32 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'section',
     valores: ['pets', 'network_events', 'network_directory'],
   },
+  // ------------------------------------------------------------------
+  // As DUAS paginas publicas do site cuja existencia o app consulta antes de
+  // oferecer o compartilhamento. Entrou com a migracao `20261020000005`, da
+  // frente `feat/compartilhar-o-caso`, e a tabela e irma de
+  // `app_version_policy`: linha escrita a mao no `psql`, sem conta a que se
+  // vincular.
+  //
+  // **A ASSIMETRIA DESTA TABELA E INVERTIDA EM RELACAO A DA IRMA, e isto fica
+  // escrito aqui porque e onde alguem vai ler antes de mexer:** em
+  // `app_version_policy` toda ausencia LIBERA (sem politica, nenhuma versao e
+  // bloqueada); aqui toda ausencia ESCONDE (sem linha `true`, o botao de
+  // compartilhar nao aparece). Quem mexer num default tem de conferir em qual
+  // dos dois sentidos esta mexendo. Esta entrada NAO mexe em default nenhum:
+  // ela so declara o dominio fechado do `CHECK`.
+  //
+  // DECLARADO NA ONDA 3 DO TERCEIRO LOTE, e a falta era da branch e nao da
+  // uniao: medido que nem `ac8407d9` (a frente), nem `070bfee6` (a base), nem
+  // a minha arvore mesclada declaravam a entrada -- a frente criou o `CHECK` e
+  // nunca o registrou, e so a suite de INTEGRACAO acusa isso. Reprovou 1 de
+  // 710 por este caso, e nao por carga: a carga da `did not complete` e
+  // `timeout` de pool, nao uma lista com nome e sobrenome.
+  // ------------------------------------------------------------------
+  'public.site_page_availability.site_page_availability_page_check': {
+    coluna: 'page',
+    valores: ['lost_case', 'poster'],
+  },
 };
 
 /**
