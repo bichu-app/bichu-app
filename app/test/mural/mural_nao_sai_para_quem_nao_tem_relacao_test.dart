@@ -49,6 +49,13 @@ import '../telas/ajuda_de_tela.dart';
 const String urlDaImagemDaPublicacao =
     'https://img.exemplo/people/card/aaaa.jpeg';
 
+/// A `thumb` de 176 da foto do AUTOR (Emenda 5 do ADR-0010). **Caminho
+/// diferente da imagem da publicacao de proposito**: e o que permite os casos
+/// distinguirem as duas `ImagemDaRede` do cartao pela URL, em vez de pela ordem
+/// na arvore -- que mudaria no dia em que o cartao ganhasse mais uma imagem.
+const String urlDoIconeDoAutorDeTeste =
+    'https://img.exemplo/people/thumb/bbbb.jpeg';
+
 Map<String, dynamic> publicacao({
   required String ref,
   required String texto,
@@ -57,6 +64,7 @@ Map<String, dynamic> publicacao({
   bool minha = false,
   bool comFoto = false,
   String? textoAlternativo,
+  String? urlDoIconeDoAutor,
 }) {
   return <String, dynamic>{
     'ref': ref,
@@ -68,7 +76,11 @@ Map<String, dynamic> publicacao({
             'alt_text': textoAlternativo,
           }
         : null,
-    'author': <String, dynamic>{'handle': apelido, 'display_name': nome},
+    'author': <String, dynamic>{
+      'handle': apelido,
+      'display_name': nome,
+      'photo_icon_url': urlDoIconeDoAutor,
+    },
     'mine': minha,
   };
 }
@@ -121,7 +133,11 @@ Future<List<http.Request>> montarOMural(
       home: Scaffold(
         body: SingleChildScrollView(
           child: CorpoDoMural(
+            // UMA porta, DUAS interfaces estreitas -- a mesma fiacao de
+            // `AbaMural`. E e a porta DE VERDADE: um duble responderia igual
+            // para qualquer rota, e os casos de CAMINHO nao teriam o que medir.
             leitura: MuralApi(api),
+            interacao: MuralApi(api),
             aoDenunciar: aoDenunciar,
             aoApagar: aoApagar,
           ),
@@ -578,68 +594,242 @@ void main() {
   });
 
   // =========================================================================
+  // (5b) A FOTO DO AUTOR — EMENDA 5 DO ADR-0010 (20/10/2026)
+  // =========================================================================
+
+  testWidgets(
+      'EMENDA 5 — a foto do autor DESENHA, redonda, 40 dp, pela `thumb` 176',
+      (tester) async {
+    // Decisao do cliente: *"tras a foto, algo bem parecido com o instagram"*.
+    //
+    // ISCA: em `_FotoDoAutor.build`, trocar `ImagemDaRede` por `Image.network`
+    // cru. A tela pareceria igual e perderia `cacheWidth` e `errorBuilder` --
+    // 1 MiB por cartao em vez de 57,6 KiB. Este caso reprova pelo nome.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'o Bidu no parque',
+          urlDoIconeDoAutor: urlDoIconeDoAutorDeTeste,
+        ),
+      ],
+    );
+    final iconesDoAutor = tester
+        .widgetList<ImagemDaRede>(find.byType(ImagemDaRede))
+        .where((i) => i.url == urlDoIconeDoAutorDeTeste)
+        .toList();
+    expect(iconesDoAutor, hasLength(1), reason: 'a foto do autor nao foi desenhada');
+    final icone = iconesDoAutor.single;
+    // 40 dp: e este numero que vira `cacheWidth` dentro de `ImagemDaRede`.
+    expect(icone.largura, 40);
+    expect(icone.proporcao, 1);
+    // Redonda: metade do lado.
+    expect(icone.raio, 20);
+    // DECORATIVA: o nome esta ao lado, na mesma linha, e rotular a imagem faria
+    // o leitor de tela anunciar a pessoa duas vezes na mesma parada de foco.
+    expect(icone.descricao, isNull);
+    // O retrato de uma pessoa falhando pede outro desenho que uma fachada.
+    expect(icone.simboloDeFalha, Icons.person_outline);
+  });
+
+  testWidgets(
+      'EMENDA 5 — ISCA: sem foto o cartao desenha a INICIAL, e nao um buraco',
+      (tester) async {
+    // Nula e o estado normal, em tres casos que a tela nao distingue: a pessoa
+    // nao tem foto, a foto nao esta `ready`, ou a conta esta desabilitada.
+    //
+    // ISCA: em `_FotoDoAutor.build`, devolver `SizedBox.shrink()` no caminho
+    // nulo. O cartao perderia o alinhamento e a pessoa sem foto viraria uma
+    // linha diferente das outras. Este caso reprova pelo nome.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'sem foto', nome: 'Joana'),
+      ],
+    );
+    expect(find.byType(ImagemDaRede), findsNothing);
+    expect(find.text('J'), findsOneWidget, reason: 'a inicial de reserva nao foi desenhada');
+    expect(find.text('Joana'), findsOneWidget);
+  });
+
+  testWidgets(
+      'EMENDA 5 — ISCA: nome VAZIO cai no ponto, e nao numa inicial inventada',
+      (tester) async {
+    // `display_name` vazio acontece: o servidor manda `''` quando a conta nao
+    // tem nome de exibicao. `characters.first` numa cadeia vazia LANCA, e a
+    // tela inteira cairia.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'anonimo', nome: ''),
+      ],
+    );
+    expect(find.text('\u00b7'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'EMENDA 5 — a foto do autor NAO e um controle: nenhum toque sem destino',
+      (tester) async {
+    // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
+    // outro lado. Aqui o apelido pode ser nulo, e um circulo que se anuncia
+    // como botao e nao leva a lugar nenhum e o toque sem desfecho que o
+    // criterio 2 da BICHUS-62 proibe.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'x',
+          urlDoIconeDoAutor: urlDoIconeDoAutorDeTeste,
+        ),
+      ],
+    );
+    // **A CONFERENCIA E NA SUBARVORE DA FOTO, e nao no cartao inteiro.**
+    //
+    // A primeira versao deste caso exigia ZERO `InkWell` no cartao -- e isso
+    // ficou errado em 20/10, quando curtir e comentar trouxeram dois
+    // `IconButton` (que contem `InkWell`). Uma conferencia de cartao inteiro
+    // passaria a reprovar os controles LEGITIMOS, e portao que reprova o certo e
+    // portao que alguem desliga.
+    //
+    // O que importa continua valendo: **a FOTO nao e um controle.** Na conversa
+    // o icone abre o perfil, porque la ele e o unico endereco do outro lado;
+    // aqui o apelido pode ser nulo, e um circulo que se anuncia como botao e nao
+    // leva a lugar nenhum e o toque sem desfecho que o criterio 2 da BICHUS-62
+    // proibe.
+    final aFoto = find.byType(ImagemDaRede);
+    expect(aFoto, findsOneWidget);
+    expect(
+      find.ancestor(of: aFoto, matching: find.byType(InkWell)),
+      findsNothing,
+      reason: 'a foto do autor virou um controle, e o apelido pode ser nulo',
+    );
+    expect(
+      find.ancestor(of: aFoto, matching: find.byType(GestureDetector)),
+      findsNothing,
+    );
+  });
+
+  test(
+      'EMENDA 5 — `AutorDaPublicacao.doJson` le `photo_icon_url`, e nulo quando falta',
+      () {
+    final com = AutorDaPublicacao.doJson(<String, dynamic>{
+      'handle': 'marina-vet',
+      'display_name': 'Marina',
+      'photo_icon_url': urlDoIconeDoAutorDeTeste,
+    });
+    expect(com.urlDoIcone, urlDoIconeDoAutorDeTeste);
+    final sem = AutorDaPublicacao.doJson(<String, dynamic>{'display_name': 'Joana'});
+    expect(sem.urlDoIcone, isNull, reason: 'campo ausente tem de virar nulo, e nao estourar');
+    expect(sem.apelido, isNull);
+  });
+
+  // =========================================================================
   // (6) O CARTAO NAO DESENHA PET, CURTIDA NEM CONTADOR
   // =========================================================================
 
   test(
-      'ISCA — o cartao do Mural nao tem curtida, contador nem pet no '
-      'codigo-fonte', () {
-    // Curtir e comentar sao decisao do cliente para a primeira versao e **nao
-    // foram construidos**: nao ha tabela, nao ha operacao e nao ha campo no
-    // contrato. Desenhar um coracao que nao conta nada seria uma acao sem
-    // destino.
+      'ISCA — o cartao do Mural nao liga PET, e nao tem LISTA de quem curtiu nem '
+      'contagem de seguidores', () {
+    // **ESTE CASO PERDEU DUAS AGULHAS EM 20/10/2026, e as duas estavam certas
+    // quando foram escritas.** Ele proibia `favorite`, `like_count` e
+    // `comment_count` porque curtir e comentar **nao existiam**: nao havia
+    // tabela, nem operacao, nem campo, e desenhar um coracao que nao conta nada
+    // seria uma acao sem destino.
     //
-    // E pet: foto de pet DENTRO da foto da publicacao e permitida (cliente,
-    // 19/10); ligar a ficha dele agruparia os pets de um tutor (item 7 do
-    // ADR-0010).
-    final fonte = File('lib/telas/mural/tela_do_mural.dart').readAsStringSync();
-    // A busca e no CODIGO, e nao na prosa: os comentarios citam as ausencias de
-    // proposito, e uma varredura de texto puro reprovaria exatamente as frases
-    // que documentam que elas nao existem.
-    final codigo = fonte
-        .split('\n')
-        .where((l) => !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'))
-        .join('\n');
+    // As duas existem desde a migracao `20261020000006`, por decisao do cliente
+    // de 19/10. Manter as agulhas reprovaria o codigo certo.
+    //
+    // **O que FICA, e e o que o caso sempre quis dizer:**
+    //
+    //   - PET nao se liga a publicacao (item 7 do ADR-0010). Foto de pet DENTRO
+    //     da foto da publicacao e permitida (cliente, 19/10); ligar a ficha
+    //     dele, nao;
+    //   - nao existe LISTA de quem curtiu, em superficie nenhuma. O que o
+    //     cartao desenha e a CONTAGEM -- item 7 da Emenda 5 do ADR-0010: a
+    //     decisao de 19/10 sobre curtir e contagem, e contagem nao diz quem;
+    //   - nao existe contagem de SEGUIDORES, porque nao existe seguir -- e
+    //     "parecido com o Instagram" foi dito sobre a FOTO.
+    final codigo = codigoDe(File('lib/telas/mural/tela_do_mural.dart'));
     for (final agulha in <String>[
-      'favorite',
-      'thumb_up',
-      'like_count',
-      'comment_count',
+      // PET, em qualquer forma.
       'Icons.pets',
       'petId',
+      'pet_slug',
+      // LISTA de quem curtiu.
+      'likedBy',
+      'quemCurtiu',
+      '/likes',
+      // SEGUIR.
+      'follower',
+      'seguidores',
+      'following',
     ]) {
       expect(
         codigo.contains(agulha),
         isFalse,
         reason:
-            '`$agulha` entrou no cartao do Mural. Curtir e comentar nao foram '
-            'construidos (nao ha tabela, operacao nem campo), e ligar pet a '
-            'publicacao e o item 7 do ADR-0010',
+            '`$agulha` entrou no cartao do Mural. Ligar pet a publicacao e o item 7 '
+            'do ADR-0010; lista de quem curtiu e contagem de seguidores sao o item 7 '
+            'da Emenda 5 -- curtir e CONTAGEM, e nao existe seguir',
       );
     }
+    // CONTRAPESO: as duas contagens que DEVEM estar, estao.
+    expect(codigo.contains('curtidas'), isTrue, reason: 'o cartao perdeu a contagem de curtidas');
+    expect(
+      codigo.contains('comentarios'),
+      isTrue,
+      reason: 'o cartao perdeu a contagem de comentarios',
+    );
   });
 
-  test('o corpo do Mural nao conhece `photo_icon_url`', () {
-    // A Emenda 3 do ADR-0010 abriu a foto de pessoa em
-    // `Conversation.participants[]` *"e em mais nenhuma resposta deste
-    // contrato"*. `PublicationAuthor` nao tem o campo, entao nao ha o que ler
-    // -- e este caso reprova quem o ler de um contrato futuro sem passar pelo
-    // cliente.
+  test(
+      'EMENDA 5 — o Mural le `photo_icon_url` em UM lugar so, e e o AUTOR',
+      () {
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 20/10/2026, e a mudanca esta medida.**
+    //
+    // Ele dizia que o Mural nao conhecia `photo_icon_url` -- e estava certo: a
+    // Emenda 3 limitava a foto de pessoa a `Conversation.participants[]` *"e em
+    // mais nenhuma resposta deste contrato"*. A Emenda 5 nomeou esta superficie,
+    // entao a afirmacao antiga deixou de ser verdade.
+    //
+    // **O que substituiu nao e "pode ler": e "le em UM lugar so".** O campo
+    // aparece na leitura do AUTOR e em nenhuma outra, e nenhum dos dois
+    // arquivos lê a `card` de 512 -- a emenda nomeia a `thumb` de 176, e a
+    // conta dela e medida.
+    final leituras = <String, int>{};
     for (final caminho in <String>[
       'lib/telas/mural/tela_do_mural.dart',
       'lib/api/mural_api.dart',
     ]) {
-      final fonte = File(caminho).readAsStringSync();
-      final codigo = fonte
-          .split('\n')
-          .where((l) => !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'))
-          .join('\n');
+      final codigo = codigoDe(File(caminho));
+      leituras[caminho] = RegExp('photo_icon_url').allMatches(codigo).length;
+      // **A `card` de 512 nao entra em lugar nenhum.** Ela seria 4,27x mais
+      // dado do que o icone de 40 dp pinta, vinte vezes por pagina.
       expect(
-        codigo.contains('photo_icon_url'),
+        codigo.contains("'photo_card_url'") || codigo.contains('photo_url'),
         isFalse,
-        reason: '`$caminho` le a foto de pessoa, e a Emenda 3 fecha essa superficie',
+        reason: '`$caminho` passou a ler outra derivada da foto de pessoa',
       );
     }
+    // UMA leitura, e ela e a do modelo (`mural_api.dart`). A TELA le o modelo,
+    // nunca o JSON: ela nao deve conhecer nome de campo do contrato.
+    expect(
+      leituras['lib/api/mural_api.dart'],
+      1,
+      reason:
+          'o modelo le `photo_icon_url` mais de uma vez, ou nenhuma. Uma leitura e '
+          'a da Emenda 5; duas sao dois lugares onde o nome do campo pode divergir',
+    );
+    expect(
+      leituras['lib/telas/mural/tela_do_mural.dart'],
+      0,
+      reason:
+          'a TELA passou a ler o nome do campo do contrato. Ela le o modelo '
+          '(`autor.urlDoIcone`), e e o modelo que conhece o contrato',
+    );
   });
 
   // =========================================================================

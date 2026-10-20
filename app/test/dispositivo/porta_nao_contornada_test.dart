@@ -1651,12 +1651,18 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// O que mudou em `app/lib/telas` nesta frente, e por que cada mudanca e de
 /// OUTRA historia e legitima -- o pedido do cliente de 20/10: *"na secao do
 /// mural, nao tem a caixa de texto para o usuario escrever uma mensagem, subir
-/// uma foto e publicar o conteudo."*:
+/// uma foto e publicar o conteudo."*, mais as duas decisoes dele que chegaram
+/// durante a frente (a foto do autor, e curtir e comentar):
 ///
 ///   - `mural/publicar_no_mural.dart` (NOVO) -- a caixa de texto, a foto e o
 ///     `Publicar`;
+///   - `mural/comentarios_da_publicacao.dart` (NOVO) -- os comentarios, por
+///     decisao dele de 19/10 (*"curtir e comentar"*), com o carimbo de migracao
+///     `20261020000006`;
 ///   - `mural/tela_do_mural.dart` -- o estado inicial honesto virou a linha do
-///     tempo, porque agora existe `GET /timeline` para desenhar;
+///     tempo, porque agora existe `GET /timeline` para desenhar; mais a foto do
+///     autor (Emenda 5 do ADR-0010, *"tras a foto, algo bem parecido com o
+///     instagram"*) e a linha de curtir e comentar;
 ///   - `abas.dart` -- `AbaMural` ganhou a acao flutuante `Publicar`, que a
 ///     frente de 19/10 deliberadamente NAO desenhou por nao haver destino.
 ///
@@ -1666,7 +1672,8 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// nao fala com o aparelho: ela recebe `CameraEGaleria` por construtor, nao
 /// importa `dart:io` (a previa e `PreviaDaFoto`, que mora em `lib/widgets/`
 /// justamente por isso) e nao importa `image_picker` nem
-/// `permission_handler`. O grupo "o espirito do criterio 10" deste mesmo
+/// `permission_handler`. `ComentariosDaPublicacao` nao toca o aparelho em forma
+/// nenhuma -- ela e texto. O grupo "o espirito do criterio 10" deste mesmo
 /// arquivo mede isso mecanicamente, e ele continua verde -- que e o que
 /// distingue trocar o hash por mudanca legitima de trocar o hash para calar o
 /// portao.
@@ -1676,7 +1683,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
 /// -- COM as chaves, porque em zsh sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo EM SILENCIO.
-const String _arvoreDasTelas = '33570e31b38685266636c91077f4bee814404b43'; // MURAL, 20/10/2026 (BICHUS-278): a caixa de publicar, a linha do tempo e a acao flutuante da secao. Ver o bloco acima. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA.
+const String _arvoreDasTelas = '4d8ad8a36dd84ac3e2c5a4d437cfcda8ca59a52e'; // MURAL, 20/10/2026 (BICHUS-278): a caixa de publicar, a linha do tempo, a acao flutuante, a foto do autor (Emenda 5 do ADR-0010) e os comentarios. Ver o bloco acima. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

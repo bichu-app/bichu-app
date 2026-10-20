@@ -140,16 +140,32 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     }
   });
 
-  void it('EMENDA 3 -- `photo_icon_url` tem UM hospedeiro, e ele é `Conversation`', () => {
-    // Duas ocorrências da PROPRIEDADE significam um segundo caminho até a foto
-    // de outra pessoa. A busca é por linha de propriedade (`^\s+photo_icon_url:`)
-    // e não por substring: as menções dentro das descrições são prosa, e uma
-    // conferência por substring contaria três e reprovaria a si mesma — que foi
-    // o defeito de um portão desta casa.
+  void it('EMENDA 3 -- o hospedeiro DELA continua sendo `Conversation`', () => {
+    // **ESTE CASO PERDEU METADE DO TRABALHO EM 20/10/2026, e a metade foi para
+    // um lugar melhor.** Ele contava UMA ocorrência da propriedade e com isso
+    // afirmava duas coisas de uma vez: "a emenda 3 tem hospedeiro" e "não existe
+    // outro". A emenda 5 trouxe o segundo hospedeiro legítimo
+    // (`PublicationAuthor`), e subir o número de 1 para 2 aqui teria afrouxado a
+    // conferência: ela passaria a aceitar QUALQUER dois.
+    //
+    // Então a metade "e nenhuma outra" virou a LISTA FECHADA, por nome e por
+    // caminho, no caso `photo_icon_url` tem uma LISTA FECHADA de hospedeiros.
+    // Este caso guarda a outra metade, que continua valendo literalmente: a
+    // superfície que a emenda 3 nomeou é a conversa mediada, e ela não mudou.
+    //
+    // A busca é por linha de propriedade (`^\s+photo_icon_url:`) e não por
+    // substring: as menções dentro das descrições são prosa, e uma conferência
+    // por substring contaria as duas emendas mais os comentários — que foi o
+    // defeito de um portão desta casa.
     const linhas = contrato.match(/^\s+photo_icon_url:\s*$/gm) ?? [];
-    assert.equal(linhas.length, 1, 'um segundo `photo_icon_url` é uma superfície a mais');
+    assert.equal(
+      linhas.length,
+      2,
+      'o número de declarações de `photo_icon_url` mudou. Duas são as emendas 3 e 5; ' +
+        'QUEM SÃO está no caso da lista fechada, e é lá que uma terceira reprova',
+    );
     const conversa = JSON.stringify(spec.components.schemas['Conversation']);
-    assert.match(conversa, /photo_icon_url/);
+    assert.match(conversa, /photo_icon_url/, 'a emenda 3 perdeu o hospedeiro dela');
   });
 
   void it('EMENDA 3 -- a foto do participante NÃO carrega estado de moderação', () => {
@@ -230,12 +246,114 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     // estabelecimento e sai só na superfície administrativa). Uma terceira é
     // superfície nova e precisa de decisão do cliente.
     //
-    // **A emenda 3 não acrescentou um `photo:`**, e isso é de propósito: o campo
-    // dela é `photo_icon_url`, uma URL escalar sem estado. Se alguém um dia o
-    // trocar por um objeto `photo:`, este número vira 3 e o caso reprova — que
-    // é o resultado certo, porque objeto abre espaço para `status` e
-    // `rejection_reason` voltarem para dentro de uma resposta de terceiro.
+    // **Nem a emenda 3 nem a emenda 5 acrescentaram um `photo:`**, e isso é de
+    // propósito: o campo das duas é `photo_icon_url`, uma URL escalar sem
+    // estado. Se alguém um dia o trocar por um objeto `photo:`, este número vira
+    // 3 e o caso reprova — que é o resultado certo, porque objeto abre espaço
+    // para `status` e `rejection_reason` voltarem para dentro de uma resposta de
+    // terceiro.
     assert.equal(ocorrencias.length, 2, 'um `photo:` a mais é uma superfície a mais');
+  });
+
+  void it('`photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao DOIS', () => {
+    // **ESTE CASO SUBSTITUI UMA CONTAGEM POR UMA LISTA, e a diferença é o
+    // ponto.** Até 20/10/2026 a emenda 3 tinha UM hospedeiro e um `assert.equal`
+    // de contagem bastava. A emenda 5 trouxe o segundo, e subir o número de 1
+    // para 2 teria afrouxado a conferência: ela passaria a aceitar QUALQUER
+    // duas superfícies, inclusive uma pública.
+    //
+    // **São DOIS, e não três.** A contagem de campos `photo:` continua sendo
+    // DOIS e não precisou subir, porque a emenda 5 não acrescentou um `photo:`:
+    // o campo dela é `photo_icon_url`, escalar e sem estado, exatamente como o
+    // da emenda 3. Medido, e não suposto.
+    //
+    // Então a conferência passou a ser a lista, por NOME e por CAMINHO. Uma
+    // superfície nova não cabe aqui sem alguém escrever o nome dela — e é isso
+    // que o portão existe para cobrar.
+    //
+    // **A varredura desce a árvore inteira**, e descobrir que isso era
+    // necessário valeu o caso irmão em
+    // `publicacao-nao-sai-para-quem-nao-tem-relacao.test.ts`: em
+    // `Conversation.participants[]` o participante é um objeto INLINE — não há
+    // schema `ConversationParticipant` —, e uma varredura que olhasse só as
+    // propriedades de primeiro nível dos schemas NOMEADOS achava ZERO e ficava
+    // verde **afirmando que o campo não existia em lugar nenhum**.
+    const hospedeiros: string[] = [];
+    const andar = (no: unknown, caminho: string): void => {
+      if (no === null || typeof no !== 'object') return;
+      if (Array.isArray(no)) {
+        no.forEach((item, i) => andar(item, `${caminho}[${String(i)}]`));
+        return;
+      }
+      const objeto = no as Record<string, unknown>;
+      const propriedades = objeto['properties'];
+      if (
+        propriedades !== null &&
+        typeof propriedades === 'object' &&
+        Object.prototype.hasOwnProperty.call(propriedades, 'photo_icon_url')
+      ) {
+        hospedeiros.push(caminho);
+      }
+      for (const [chave, valor] of Object.entries(objeto)) {
+        andar(valor, caminho === '' ? chave : `${caminho}.${chave}`);
+      }
+    };
+    andar(spec, '');
+
+    assert.deepEqual(
+      hospedeiros.sort(),
+      [
+        // Emenda 3 (19/10/2026): a conversa mediada, entre conexões aceitas.
+        // Objeto INLINE, e é por isso que a varredura desce a árvore.
+        'components.schemas.Conversation.properties.participants.items',
+        // Emenda 5 (20/10/2026): o autor de uma publicação do Mural. O
+        // predicado da emenda 3 é satisfeito por construção ali — a linha do
+        // tempo só devolve publicação de conexão aceita.
+        'components.schemas.PublicationAuthor',
+      ].sort(),
+      'a foto de pessoa ganhou hospedeiro novo, ou perdeu um. O ADR-0010 a limita ' +
+        'às superfícies das emendas 3 e 5, por nome, e abrir uma terceira é decisão ' +
+        'do cliente — não de quem implementa. `FinderConversation.participants` NÃO ' +
+        'está nesta lista, e a ausência é estrutural: ele serve o achador SEM CONTA, ' +
+        'que não tem conexão com ninguém.',
+    );
+  });
+
+  void it('ISCA: a varredura de hospedeiro REPROVA um `photo_icon_url` INLINE novo', () => {
+    // Sem esta isca, o caso de cima passaria por não haver hospedeiro novo — e
+    // não por ele saber reconhecer um. E a mutação usa a forma INLINE de
+    // propósito, que é justamente a que a versão antiga não enxergava.
+    const achados: string[] = [];
+    const andar = (no: unknown, caminho: string): void => {
+      if (no === null || typeof no !== 'object') return;
+      const objeto = no as Record<string, unknown>;
+      const propriedades = objeto['properties'];
+      if (
+        propriedades !== null &&
+        typeof propriedades === 'object' &&
+        Object.prototype.hasOwnProperty.call(propriedades, 'photo_icon_url')
+      ) {
+        achados.push(caminho);
+      }
+      for (const [chave, valor] of Object.entries(objeto)) {
+        andar(valor, caminho === '' ? chave : `${caminho}.${chave}`);
+      }
+    };
+    andar(
+      {
+        components: {
+          schemas: {
+            PublicLostPet: {
+              properties: {
+                tutor: { properties: { photo_icon_url: { type: 'string' } } },
+              },
+            },
+          },
+        },
+      },
+      '',
+    );
+    assert.deepEqual(achados, ['components.schemas.PublicLostPet.properties.tutor']);
   });
 
   void it('não existe campo de escrita de selo: `MeUpdate` aceita foto e NÃO aceita validação', () => {

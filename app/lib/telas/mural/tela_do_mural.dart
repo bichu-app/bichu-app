@@ -7,6 +7,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
+import 'comentarios_da_publicacao.dart';
 import '../casca_com_abas.dart';
 
 /// O corpo da secao `Mural`: **a linha do tempo.**
@@ -69,12 +70,23 @@ import '../casca_com_abas.dart';
 /// ele nao e chamado. **No dia em que o servidor oferecer um recorte, a barra
 /// aparece no lugar padrao, sem desenho novo.**
 class CorpoDoMural extends StatefulWidget {
-  const CorpoDoMural({required this.leitura, super.key, this.aoDenunciar, this.aoApagar});
+  const CorpoDoMural({
+    required this.leitura,
+    required this.interacao,
+    super.key,
+    this.aoDenunciar,
+    this.aoApagar,
+  });
 
   /// A leitura, por interface ESTREITA: esta tela nao alcanca `publicar` nem
   /// `apagar` por aqui. Quem publica e a tela de publicar, aberta pela acao
   /// flutuante.
   final LeituraDoMural leitura;
+
+  /// Curtir, descurtir e comentar. Interface ESTREITA, pelo mesmo motivo de
+  /// [leitura]: o cartao que curte nao deve alcancar `apagar` da publicacao --
+  /// um toque errado apagaria a publicacao em vez de descurtir.
+  final InteracaoDoMural interacao;
 
   /// Abre a denuncia de uma publicacao de OUTRA pessoa. Nulo nao desenha a
   /// opcao — `reportPublication` existe no contrato, e quem a liga na tela e
@@ -200,6 +212,7 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
         for (final publicacao in linha) ...<Widget>[
           _CartaoDaPublicacao(
             publicacao: publicacao,
+            interacao: widget.interacao,
             aoDenunciar: widget.aoDenunciar,
             aoApagar: widget.aoApagar == null
                 ? null
@@ -217,29 +230,52 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
 
 /// Um cartao da linha do tempo.
 ///
+/// ## A FOTO DO AUTOR (Emenda 5 do ADR-0010, 20/10/2026)
+///
+/// Decisao do cliente: *"tras a foto, algo bem parecido com o instagram"*. Ela
+/// nasceu ausente, de proposito -- a Emenda 3 limitava a foto de pessoa a
+/// `Conversation.participants[]` *"e em mais nenhuma resposta deste contrato"*
+/// --, a frente parou e perguntou, e a emenda nomeou esta superficie.
+///
+/// Redonda, 40 dp, pela derivada `thumb` de 176 que a emenda nomeia. Quem pinta
+/// e [ImagemDaRede], nunca `Image.network` cru: ela passa `cacheWidth` pela
+/// largura PINTADA, e e esse numero que decide o custo em memoria. A 3x cada
+/// foto custa 120 x 120 x 4 = **57,6 KiB** decodificados; com a `card` de 512 e
+/// sem `cacheWidth` seriam 1 MiB por cartao.
+///
+/// **Nula e o estado normal**, em tres casos que a tela nao distingue: a pessoa
+/// nao tem foto, a foto nao esta `ready`, ou a conta esta desabilitada. Ai
+/// desenha a INICIAL do nome, como a conversa mediada ja faz.
+///
+/// **"Parecido com o Instagram" foi dito sobre a FOTO**, e o item 7 da Emenda 5
+/// registra que isso nao e autorizacao de redesenho: nao entra contagem de
+/// seguidores (nao existe seguir), nao entra carrossel, nao entra lista de quem
+/// curtiu.
+///
 /// ## O QUE ELE NAO DESENHA, e cada ausencia tem dono
 ///
-/// - **nenhuma foto de pessoa.** `PublicationAuthor` nao tem o campo, porque a
-///   Emenda 3 do ADR-0010 abriu `photo_icon_url` em
-///   `Conversation.participants[]` *"e em mais nenhuma resposta deste
-///   contrato"*. O autor aparece pelo NOME, e so;
 /// - **nenhum pet**: nem nome, nem miniatura, nem link. Foto de pet dentro da
 ///   foto da publicacao e permitida (cliente, 19/10); LIGAR a ficha dele
 ///   agruparia os pets de um tutor (item 7 do ADR-0010), e nao ha campo que o
 ///   permita;
-/// - **nenhuma curtida e nenhum contador.** O cliente decidiu "curtir e
-///   comentar" para a primeira versao, e as duas **nao foram construidas**:
-///   nao ha tabela, nao ha operacao e nao ha campo. Desenhar um coracao que nao
-///   conta nada seria uma acao sem destino;
+/// - **nenhuma LISTA de quem curtiu.** Curtir e comentar existem desde
+///   20/10/2026 (migracao `20261020000006`), e o que o cartao desenha e a
+///   CONTAGEM -- nunca quem. O item 7 da Emenda 5 do ADR-0010 registra que a
+///   decisao do cliente de 19/10 sobre curtir e contagem, e contagem nao diz
+///   quem; nao existe `GET /publications/{ref}/likes`, entao nao ha o que abrir;
+/// - **nenhuma contagem de seguidores.** Nao existe seguir neste produto, e
+///   "parecido com o Instagram" foi dito sobre a FOTO (item 7 da Emenda 5);
 /// - **nenhum lugar** (ADR-0006).
 class _CartaoDaPublicacao extends StatelessWidget {
   const _CartaoDaPublicacao({
     required this.publicacao,
+    required this.interacao,
     required this.aoDenunciar,
     required this.aoApagar,
   });
 
   final PublicacaoDaLinha publicacao;
+  final InteracaoDoMural interacao;
   final void Function(PublicacaoDaLinha)? aoDenunciar;
   final Future<void> Function()? aoApagar;
 
@@ -262,6 +298,8 @@ class _CartaoDaPublicacao extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
+              _FotoDoAutor(autor: publicacao.autor),
+              const SizedBox(width: BichuEspaco.e3),
               Expanded(
                 child: Text(
                   publicacao.autor.nomeExibido,
@@ -296,6 +334,9 @@ class _CartaoDaPublicacao extends StatelessWidget {
               proporcao: 1,
             ),
           ],
+
+          const SizedBox(height: BichuEspaco.e2),
+          _AcoesDaPublicacao(publicacao: publicacao, interacao: interacao),
         ],
       ),
     );
@@ -335,6 +376,218 @@ class _CartaoDaPublicacao extends StatelessWidget {
         }
         aoDenunciar?.call(publicacao);
       },
+    );
+  }
+}
+
+/// A FOTO DO AUTOR no cartao do Mural — **Emenda 5 do ADR-0010 (20/10/2026)**.
+///
+/// ## Por que ela nao reusa `MarcaNeutraDoParticipante`
+///
+/// Aquele widget existe, faz o mesmo desenho e mora em
+/// `telas/mensagens/area_de_mensagens.dart` — mas a API dele e sobre uma
+/// CONVERSA: ele recebe `ParticipanteDaConversa?` e decide o toque por
+/// `PortaDoPerfilDoParticipante`. Reusa-lo aqui acoplaria o Mural ao modulo de
+/// mensagens e ao modelo da conversa, e generaliza-lo exigiria mexer naquela
+/// tela — mais raio de alteracao do que esta frente tem.
+///
+/// **O que NAO esta duplicado e a regra que importa.** `cacheWidth` pela
+/// largura pintada, `errorBuilder` sempre e a politica de decodificacao moram
+/// em [ImagemDaRede], e e ela que pinta nos dois lugares. O que se repete aqui
+/// sao as poucas linhas da inicial de reserva.
+///
+/// **No dia em que aparecer a terceira superficie**, este widget e o irmao dele
+/// viram um so, em `lib/widgets/` — e ai o lugar certo e aquele, nao aqui.
+class _FotoDoAutor extends StatelessWidget {
+  const _FotoDoAutor({required this.autor});
+
+  final AutorDaPublicacao autor;
+
+  /// 40 dp, o tamanho para o qual a `thumb` de 176 foi medida: 120 px reais a
+  /// 3x, 1,47x de cobertura. **Nao e numero escolhido aqui** — ele vem da
+  /// Emenda 3 e a Emenda 5 o reusa por nome.
+  static const double lado = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final url = autor.urlDoIcone;
+
+    // **A FOTO NAO E UM CONTROLE, e a ausencia de toque e deliberada.**
+    //
+    // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
+    // outro lado. Aqui o cartao inteiro ja e conteudo e o apelido pode ser
+    // nulo; um circulo que se anuncia como botao e nao leva a lugar nenhum e o
+    // toque sem desfecho que o criterio 2 da BICHUS-62 proibe. Quem trouxer o
+    // toque para o perfil traz com ele o estado de apelido nulo.
+    if (url == null || url.isEmpty) {
+      final inicial = autor.nomeExibido.trim();
+      return Container(
+        width: lado,
+        height: lado,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: cores.primaryContainer,
+          shape: BoxShape.circle,
+        ),
+        // DECORATIVA para o leitor de tela: o nome esta ao lado, na mesma
+        // linha, e rotular a inicial faria ele anunciar a pessoa duas vezes na
+        // mesma parada de foco.
+        child: ExcludeSemantics(
+          child: Text(
+            inicial.isEmpty ? '·' : inicial.characters.first.toUpperCase(),
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: cores.primary),
+          ),
+        ),
+      );
+    }
+
+    return ImagemDaRede(
+      url: url,
+      // DECORATIVA, pelo mesmo motivo da inicial acima.
+      descricao: null,
+      // E este numero que vira `cacheWidth` dentro de `ImagemDaRede`.
+      largura: lado,
+      proporcao: 1,
+      // Circulo: metade do lado.
+      raio: lado / 2,
+      // O retrato de uma pessoa falhando pede outro desenho que uma fachada
+      // falhando.
+      simboloDeFalha: Icons.person_outline,
+    );
+  }
+}
+
+/// A LINHA DE ACOES do cartao: **curtir e comentar**, decisao do cliente de
+/// 19/10/2026.
+///
+/// ## O coracao e OTIMISTA, e o servidor manda
+///
+/// O toque pinta o estado novo na hora e so depois espera a resposta -- curtir
+/// tem de parecer instantaneo. **Mas o numero que fica e o do SERVIDOR**: a
+/// resposta devolve `like_count` lido das linhas, e e ele que substitui o
+/// palpite. Se a chamada falhar, o estado volta ao que era.
+///
+/// E por isso que `curtir` e idempotente do outro lado: dois toques rapidos
+/// mandam duas requisicoes, e as duas respondem a MESMA contagem -- a unicidade
+/// e a chave primaria de `publication_likes`, no banco, nao nesta tela.
+///
+/// ## NAO HA LISTA DE QUEM CURTIU, e o numero nao e um toque
+///
+/// O contador e TEXTO, e nao botao. Nao existe `GET /publications/{ref}/likes`
+/// no contrato, entao um toque no numero nao levaria a lugar nenhum -- e o
+/// criterio 2 da BICHUS-62 proibe renderizar acao sem destino. A ausencia da
+/// rota e o item 7 da Emenda 5 do ADR-0010: a decisao de 19/10 sobre curtir e
+/// CONTAGEM, e contagem nao diz quem.
+class _AcoesDaPublicacao extends StatefulWidget {
+  const _AcoesDaPublicacao({required this.publicacao, required this.interacao});
+
+  final PublicacaoDaLinha publicacao;
+  final InteracaoDoMural interacao;
+
+  static const String curtir = 'Curtir';
+  static const String descurtir = 'Descurtir';
+  static const String comentar = 'Comentar';
+
+  @override
+  State<_AcoesDaPublicacao> createState() => _AcoesDaPublicacaoState();
+}
+
+class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
+  late bool _curti = widget.publicacao.curtiEu;
+  late int _curtidas = widget.publicacao.curtidas;
+  late int _comentarios = widget.publicacao.comentarios;
+  bool _emVoo = false;
+
+  Future<void> _alternarCurtida() async {
+    if (_emVoo) return;
+    final eraCurti = _curti;
+    final eramCurtidas = _curtidas;
+    // OTIMISTA: pinta agora. Ver o cabecalho.
+    setState(() {
+      _emVoo = true;
+      _curti = !eraCurti;
+      _curtidas = eraCurti ? eramCurtidas - 1 : eramCurtidas + 1;
+    });
+    try {
+      final reacao = eraCurti
+          ? await widget.interacao.descurtir(widget.publicacao.ref)
+          : await widget.interacao.curtir(widget.publicacao.ref);
+      if (!mounted) return;
+      // **O NUMERO DO SERVIDOR SUBSTITUI O PALPITE.** Ele foi lido das linhas,
+      // e o palpite era so para a tela nao esperar.
+      setState(() {
+        _emVoo = false;
+        _curti = reacao.curtiEu;
+        _curtidas = reacao.curtidas;
+      });
+    } on FalhaDeChamada {
+      if (!mounted) return;
+      // VOLTA ao que era: deixar o coracao pintado depois de uma falha seria a
+      // tela afirmando uma curtida que o servidor nao tem.
+      setState(() {
+        _emVoo = false;
+        _curti = eraCurti;
+        _curtidas = eramCurtidas;
+      });
+    }
+  }
+
+  Future<void> _abrirComentarios() async {
+    final total = await Navigator.of(context).push<int>(
+      MaterialPageRoute<int>(
+        builder: (_) => ComentariosDaPublicacao(
+          ref: widget.publicacao.ref,
+          interacao: widget.interacao,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    // A folha devolve o TOTAL que passou a valer: comentar ou apagar lá muda o
+    // numero aqui, e sem isto o cartao ficaria com o numero velho até a
+    // proxima recarga da linha do tempo.
+    if (total != null) setState(() => _comentarios = total);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Row(
+      children: <Widget>[
+        IconButton(
+          onPressed: _emVoo ? null : _alternarCurtida,
+          // O nome acessivel diz o que o toque FAZ, e muda com o estado: quem
+          // usa leitor de tela ouve `Descurtir` no que ja esta curtido.
+          tooltip: _curti
+              ? _AcoesDaPublicacao.descurtir
+              : _AcoesDaPublicacao.curtir,
+          icon: Icon(
+            _curti ? Icons.favorite : Icons.favorite_border,
+            color: _curti ? cores.urgency : cores.textSecondary,
+          ),
+        ),
+        // O CONTADOR E TEXTO, e nao botao: nao existe rota de lista de quem
+        // curtiu, e um toque aqui nao levaria a lugar nenhum.
+        Text(
+          '$_curtidas',
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+        const SizedBox(width: BichuEspaco.e4),
+        IconButton(
+          onPressed: _abrirComentarios,
+          tooltip: _AcoesDaPublicacao.comentar,
+          icon: Icon(Icons.mode_comment_outlined, color: cores.textSecondary),
+        ),
+        Text(
+          '$_comentarios',
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+      ],
     );
   }
 }

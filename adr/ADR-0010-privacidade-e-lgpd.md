@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1, 2 e 3
+**Status:** aceito, com emendas 1, 2, 3 e 5
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -20,6 +20,23 @@ conexão**. O apelido viaja junto, pelo mesmo predicado, porque é ele que dá
 endereço ao toque. Para quem **não** é conexão aceita — inclusive o estranho
 que escaneou a plaquinha — nada disso sai, e é ali que o motivo da regra
 anterior continua inteiro. Ver o fim do documento.
+
+**Emenda 5, 20/10/2026 (decisão do cliente):** a **foto de perfil** de uma
+pessoa passa a sair numa **segunda** superfície — o **autor de uma publicação
+do Mural** (`PublicationAuthor`) —, na mesma derivada `thumb` de 176 px e pelo
+mesmo predicado da emenda 3, que ali é satisfeito **por construção**: o Mural
+só mostra publicação de conexão aceita. Nada mais muda: a foto continua fora da
+denúncia, fora de toda projeção pública, e o Mural **não** ganha lista de
+pessoas. Ver o fim do documento.
+
+**Não existe emenda 4 neste documento, e o salto é deliberado.** Medido em
+20/10/2026: `# Emenda 4` não aparece em ADR-0010 em **nenhuma** ref deste
+repositório — nem em `origin/development`, nem em ramo de sessão. O número 4
+foi reservado por quem distribui, e inventar uma emenda 4 para fechar o buraco
+seria escrever decisão que ninguém tomou. É o mesmo critério que
+`infra/verificacao/verificar-numero-de-adr.mjs` já aplica aos ADR: ele aprova
+com buraco e anota *"buraco é esperado quando um número foi reservado numa
+branch que ainda não mesclou"*.
 
 ## Contexto
 
@@ -413,3 +430,106 @@ conversa for de um achado; e não aparece com quem não é conexão. Confirma?"*
   existe rota de disponibilidade de apelido e a descoberta por link está morta;
 - **nenhum identificador interno.** O item 6 continua inteiro: nem `users.id`,
   nem `users.public_ref`, nem UUID de espécie nenhuma em `participants`.
+
+---
+
+# Emenda 5 — 20/10/2026: a foto do autor no Mural, e a superfície nomeada
+
+**Decisão do cliente, 20/10/2026.** A pergunta foi levada com a medição na
+mesa, e não como pedido: a emenda 3 abriu `photo_icon_url` em
+`Conversation.participants[]` **"e em mais nenhuma resposta deste contrato"**, e
+fechou com *"nenhuma outra superfície ganha foto de pessoa"*. O Mural satisfaz o
+critério dela — só mostra autor que já é conexão aceita —, mas satisfazer o
+critério não é estar nomeado, e ler o complemento de uma regra como a regra é
+invenção de quem implementa.
+
+A frente parou ali e perguntou. A decisão dele, literal:
+
+> "tras a foto, algo bem parecido com o instagram"
+
+## O que exatamente passa a sair, e onde
+
+**Um campo, em `PublicationAuthor`, e em mais nenhuma resposta deste
+contrato:**
+
+- **`photo_icon_url`** — a derivada **`thumb` de 176 × 176** da foto única da
+  pessoa (`users.photo_image_id`, `catalog_images.purpose = 'user_photo'`).
+  **A MESMA que a emenda 3 nomeia, e pela mesma conta medida:** o ícone do
+  cartão pinta **40 dp**, que a 3× são 120 px reais — a de 176 cobre isso sem
+  ampliar (1,47×) e a `card` de 512 seria **4,27× mais dado do que a célula
+  pinta**, vinte vezes por página de linha do tempo. Não é a `card`, e não é
+  derivada nova.
+
+`handle` e `display_name` já saíam, desde o nascimento do Mural. Esta emenda
+**não os toca**.
+
+## Por que isto é emenda e não revogação, e o argumento é por construção
+
+**O predicado da emenda 3 não foi relaxado: ele é satisfeito por construção
+nesta superfície.**
+
+A conversa mediada precisou de um predicado explícito porque ela **pode** ter do
+outro lado alguém que não é conexão: o achador sem conta, o estranho que
+escaneou a plaquinha. O Mural **não tem esse outro lado**. A cláusula `WHERE` de
+`getMyTimeline` só devolve publicação cujo autor é quem chama **ou** é conexão
+`accepted` dele, com `conta_habilitada` nas duas pontas, sem `bloqueio_entre` e
+sem ocultação por denúncia. Todo autor que aparece já está dentro do conjunto
+que a emenda 3 autoriza.
+
+As três razões que o plano da comunidade usou para recusar o avatar na conversa
+sobrevivem inteiras, e nenhuma delas alcança o Mural:
+
+| Razão | Por que ela não alcança esta superfície |
+|---|---|
+| o achador pode **não ter conta** | não existe caminho sem conta até o Mural: `getMyTimeline` exige `bearerAuth` sem alternativa vazia, e quem não tem conta não tem conexão |
+| **golpe do falso achador** | o golpe é praticado por **estranho**, e estranho não é `accepted` — a consulta que traria a foto dele **não existe** |
+| a conversa **atravessa o bloqueio** | o Mural não atravessa: `NOT bloqueio_entre(autor, quem chama)` está no mesmo `WHERE`, e publicação de par bloqueado não entra na resposta |
+
+## Onde a autorização mora, e por que isto não é um `if`
+
+ADR-0021. A chave da derivada sai de uma subconsulta cujo `WHERE` carrega o
+predicado inteiro, em
+`publications/adapters/persistence/kysely-publicacoes.ts` — e não de um `if` do
+serviço nem da borda. Chamar aquela leitura de um caminho novo devolve `NULL`
+no lugar da foto, e não a foto de quem não devia.
+
+**Nenhuma leitura nova de conexão em TypeScript.** `LeitorDeConexao` não é
+chamado daqui, pela mesma razão que a emenda 3 registra: uma página carrega até
+cinquenta publicações, e perguntar a aresta por publicação seriam cinquenta idas
+ao banco por rolada — além de mover o recorte para a memória, que é o que o
+ADR-0021 proíbe.
+
+## O que esta emenda NÃO decide, e portanto continua proibido
+
+1. **a foto não sai na denúncia.** `POST /publications/{ref}/reports` responde
+   `202` com corpo fixo, sem identificador e sem pessoa; a fila do painel mostra
+   `target_subject` (o nome de exibição) e **nunca** foto;
+2. **a foto não sai para quem não é conexão aceita.** Nenhuma projeção nova, e o
+   `getPersonProfile` de não-conexão continua com nome, contagem de pets e
+   contagem de conexões, sem foto e sem timeline (emenda 2);
+3. **nenhuma projeção pública ganha foto de pessoa.** `/t/<codigo>`,
+   `/@<slug>`, `/cartaz/<token>`, a listagem pública de perdidos e a `Rede`
+   continuam sem ela — o ADR-0025 decisão 2 não foi tocado;
+4. **o Mural não ganha lista de pessoas.** A linha do tempo devolve
+   **publicações**, e o conjunto de autores de uma página é o recorte de quem
+   publicou naquela janela — não a lista de conexões, que o plano 4-B mantém em
+   "nunca" para todos, inclusive o dono;
+5. **nenhum identificador interno.** O item 6 continua inteiro: o autor sai por
+   `handle` e `display_name`, e não sai `users.id`, nem `users.public_ref`, nem
+   UUID de espécie nenhuma;
+6. **nenhum pet.** O item 7 continua valendo no Mural em toda forma — nome,
+   miniatura, slug, link e contagem: a exceção da emenda 2 é **só**
+   `getPersonProfile`, por nome;
+7. **"parecido com o Instagram" é sobre a FOTO, e não é autorização de
+   redesenho.** Não entra contagem de seguidores (não existe seguir), não entra
+   carrossel, não entra lista de quem curtiu — a decisão de 19/10 sobre curtir é
+   **contagem**, e contagem não diz quem;
+8. **`MyPublication` não ganha o campo.** A publicação do próprio dono não tem
+   autor na resposta, de propósito: quem lê aquela lista é o autor, e repetir a
+   própria foto ali seria uma terceira superfície dela sem consumidor — a mesma
+   razão pela qual a emenda 3 deixou o próprio lado com os dois nulos.
+
+**Pendência de confirmação com o cliente**, nestes termos: *"a foto do autor
+aparece no cartão do Mural, redonda, no tamanho de ícone. Ela NÃO aparece em
+nenhum outro lugar novo — nem na denúncia, nem para quem não é sua conexão.
+Confirma?"*

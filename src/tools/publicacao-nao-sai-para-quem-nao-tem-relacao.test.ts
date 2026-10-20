@@ -68,6 +68,14 @@ const ESQUEMAS_DE_LEITURA = [
   'MyPublication',
   'MyPublicationPage',
   'MyPublicationImage',
+  // 20/10/2026: curtir e comentar. `PublicationComment` carrega
+  // `PublicationAuthor` por `$ref`, e `PublicationAuthor` carrega a foto de
+  // pessoa pela Emenda 5 -- entao os schemas do comentario entram nesta lista
+  // pelo mesmo motivo que os da publicacao: uma operacao SEM CONTA que os
+  // carregasse reprova pelo mesmo caso.
+  'PublicationComment',
+  'PublicationCommentPage',
+  'PublicationCommentCreated',
 ] as const;
 
 /**
@@ -84,6 +92,12 @@ const OPERACOES_COM_PUBLICACAO = new Set([
   'get /timeline',
   'get /me/publications',
   'post /me/publications',
+  // 20/10/2026: as tres de COMENTARIO que carregam `PublicationAuthor` (e com
+  // ele a foto da Emenda 5). **`put`/`delete .../like` NAO estao aqui**, e a
+  // ausencia e medida: `PublicationReaction` tem dois inteiros e um booleano,
+  // nao alcanca `$ref` nenhum, e por isso nao carrega publicacao.
+  'get /publications/{publicationRef}/comments',
+  'post /publications/{publicationRef}/comments',
 ]);
 
 /** Os schemas alcançáveis a partir de um bloco, seguindo `$ref` **em profundidade**. */
@@ -214,10 +228,33 @@ void describe('ISCA (b): a publicacao sai em DUAS operacoes, e em mais nenhuma',
     // que quem chama recebeu de outro lugar, e teria de repetir o recorte
     // inteiro num segundo lugar -- e segundo lugar e onde uma correcao falta.
     assert.equal(spec.paths['/publications/{publicationRef}'], undefined);
+    // **O criterio e o SCHEMA, e nao o prefixo do caminho**, e a precisao e
+    // necessaria desde 20/10: `get /publications/{ref}/comments` existe e e
+    // legitima -- ela devolve COMENTARIOS, nao a publicacao. Reprovar por
+    // prefixo reprovaria o certo, e portao que reprova o certo e portao que
+    // alguem desliga.
     const avulsas = OPERACOES.filter(
-      ({ chave }) => /^get \/publications\//.test(chave) || chave === 'get /publications',
+      ({ chave, carrega, operacao }) =>
+        chave.startsWith('get /publications/') &&
+        String(operacao.operationId) !== 'listPublicationComments' &&
+        (carrega.includes('Publication') || carrega.includes('PublicationPage')),
     ).map(({ chave }) => chave);
-    assert.deepEqual(avulsas, [], 'nasceu uma leitura publica de publicacao por endereco');
+    assert.deepEqual(
+      avulsas,
+      [],
+      'nasceu uma leitura de PUBLICACAO por endereco: ela teria de repetir o recorte ' +
+        'inteiro num segundo lugar, e segundo lugar e onde uma correcao falta',
+    );
+    // E nao nasceu uma LISTA de quem curtiu: item 7 da Emenda 5 do ADR-0010.
+    const curtidores = OPERACOES.filter(({ chave }) =>
+      /\/likes($|\/)/.test(chave),
+    ).map(({ chave }) => chave);
+    assert.deepEqual(
+      curtidores,
+      [],
+      'nasceu uma rota de lista de quem curtiu. A decisao de 19/10 sobre curtir e ' +
+        'CONTAGEM, e contagem nao diz quem (item 7 da Emenda 5 do ADR-0010)',
+    );
   });
 
   void it('ISCA (b) -- nao existe COLECAO de publicacoes de OUTRA pessoa', () => {
@@ -303,8 +340,15 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     additionalProperties?: boolean;
   };
 
-  void it('`PublicationAuthor` tem DOIS campos, e a lista e fechada', () => {
-    assert.deepEqual(Object.keys(autor.properties ?? {}), ['handle', 'display_name']);
+  void it('`PublicationAuthor` tem TRES campos, e a lista e fechada', () => {
+    // Eram DOIS ate 20/10/2026. A Emenda 5 do ADR-0010 acrescentou o terceiro,
+    // e a lista continua FECHADA -- um quarto campo e uma decisao a tomar, nao
+    // um detalhe a acrescentar.
+    assert.deepEqual(Object.keys(autor.properties ?? {}), [
+      'handle',
+      'display_name',
+      'photo_icon_url',
+    ]);
     assert.equal(
       autor.additionalProperties,
       false,
@@ -312,26 +356,37 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     );
   });
 
-  void it('ISCA -- NAO HA foto de pessoa: a Emenda 3 do ADR-0010 fecha essa superficie', () => {
-    // Literal da emenda: `photo_icon_url` sai em `Conversation.participants[]`
-    // *"e em mais nenhuma resposta deste contrato"*, e ela fecha com *"nenhuma
-    // outra superficie ganha foto de pessoa"*.
+  void it('EMENDA 5 -- a foto e a `thumb` de 176, e NUNCA a `card` de 512', () => {
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 20/10/2026.** Ele dizia que nao havia
+    // foto de pessoa aqui -- e estava certo: a Emenda 3 limitava a
+    // `Conversation.participants[]` *"e em mais nenhuma resposta deste
+    // contrato"*. A frente parou e perguntou; a Emenda 5 nomeou esta
+    // superficie.
     //
-    // O Mural so mostra autor que JA E conexao aceita -- o mesmo predicado que a
-    // emenda autoriza --, mas ler o complemento da regra como a regra e decisao
-    // do cliente, nao desta frente. A pergunta esta no relatorio. Este caso
-    // reprova quem abrir o campo sem passar por ele.
+    // **O que substituiu nao e "pode ter foto": e QUAL foto.** A conta e da
+    // propria emenda: o icone pinta 40 dp (120 px reais a 3x); a `thumb` de 176
+    // cobre sem ampliar (1,47x) e a `card` de 512 seria 4,27x mais dado do que
+    // a celula pinta, vinte vezes por pagina. O campo e um so, escalar e sem
+    // estado -- e nunca um objeto `photo:`, que abriria espaco para `status` e
+    // `rejection_reason` voltarem para uma resposta de terceiro.
+    const foto = (autor.properties ?? {})['photo_icon_url'] as
+      | { type?: string; format?: string; nullable?: boolean }
+      | undefined;
+    assert.ok(foto !== undefined, 'a foto do autor saiu do contrato');
+    assert.equal(foto.type, 'string', 'a foto virou objeto: `photo_icon_url` e escalar');
+    assert.equal(foto.format, 'uri');
+    assert.equal(foto.nullable, true, 'nula e o estado normal em tres casos, e nenhum e erro');
+    // Nenhum campo de ESTADO entrou com ela.
     const campos = Object.keys(autor.properties ?? {});
-    for (const proibido of ['photo_icon_url', 'photo_url', 'photo', 'avatar_url', 'avatar']) {
+    for (const proibido of ['status', 'rejection_reason', 'photo', 'photo_url', 'avatar_url']) {
       assert.ok(
         !campos.includes(proibido),
-        `\`PublicationAuthor.${proibido}\` entrou. A Emenda 3 do ADR-0010 limita a foto de ` +
-          'pessoa a `Conversation.participants[]`; abrir uma segunda superficie e decisao do cliente',
+        `\`PublicationAuthor.${proibido}\`: a Emenda 5 abre UM campo escalar e sem estado`,
       );
     }
   });
 
-  void it('ISCA -- `photo_icon_url` continua com UM hospedeiro no contrato inteiro', () => {
+  void it('ISCA -- `photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao DOIS', () => {
     // A varredura e sobre o CONTRATO, e nao sobre esta fatia: ela reprova
     // qualquer resposta nova que ganhe o campo, de qualquer frente.
     //
@@ -345,10 +400,17 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     const hospedeiros = caminhosDaPropriedade(spec, 'photo_icon_url');
     assert.deepEqual(
       hospedeiros,
-      ['components.schemas.Conversation.properties.participants.items'],
-      'a foto de pessoa ganhou hospedeiro novo. A Emenda 3 do ADR-0010 a limita a ' +
-        '`Conversation.participants[]` -- "e em mais nenhuma resposta deste contrato" --, ' +
-        'e abri-la em outra superficie e decisao do cliente',
+      [
+        // Emenda 3 (19/10/2026): a conversa mediada. Objeto INLINE -- e e por
+        // isso que esta varredura desce a arvore.
+        'components.schemas.Conversation.properties.participants.items',
+        // Emenda 5 (20/10/2026): o autor de uma publicacao, e com ele o autor
+        // de um COMENTARIO -- que reusa o mesmo schema de proposito.
+        'components.schemas.PublicationAuthor',
+      ].sort(),
+      'a foto de pessoa ganhou hospedeiro novo, ou perdeu um. O ADR-0010 a limita as ' +
+        'superficies das emendas 3 e 5, por nome, e abrir uma terceira e decisao do ' +
+        'cliente -- nao de quem implementa',
     );
   });
 
@@ -508,18 +570,24 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
     assert.equal(contarEtiqueta('safety'), 6, 'a etiqueta `safety` mudou de tamanho');
   });
 
-  void it('`publications` tem CINCO operacoes, e sao estas', () => {
+  void it('`publications` tem DEZ operacoes, e sao estas', () => {
+    // Eram CINCO ate 20/10/2026; curtir e comentar trouxeram as outras cinco.
     const ids = OPERACOES.filter(({ operacao }) =>
       ((operacao.tags ?? []) as readonly string[]).includes('publications'),
     )
       .map(({ operacao }) => String(operacao.operationId))
       .sort();
     assert.deepEqual(ids, [
+      'commentOnPublication',
       'createPublication',
       'createPublicationPhotoUploadIntent',
+      'deleteMyComment',
       'deleteMyPublication',
       'getMyTimeline',
+      'likePublication',
       'listMyPublications',
+      'listPublicationComments',
+      'unlikePublication',
     ]);
   });
 

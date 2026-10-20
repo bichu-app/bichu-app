@@ -471,10 +471,17 @@ class _AbaMuralState extends State<AbaMural> {
             )
           : null,
       filhos: <Widget>[
-        CorpoDoMural(
-          key: ValueKey<int>(_publicacoes),
-          leitura: MuralApi(escopo.api),
-        ),
+        () {
+          // UMA porta, DUAS interfaces estreitas: a tela que desenha nao
+          // alcanca `apagar`, e o cartao que curte nao alcanca `publicar`. E a
+          // mesma fiacao de `Rotas.minhaVitrine`.
+          final porta = MuralApi(escopo.api);
+          return CorpoDoMural(
+            key: ValueKey<int>(_publicacoes),
+            leitura: porta,
+            interacao: porta,
+          );
+        }(),
       ],
     );
   }

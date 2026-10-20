@@ -46,12 +46,16 @@ import {
   type PreparadorDeEnvioDeCatalogo,
 } from '../../media/ports/imagem-de-catalogo.js';
 import {
+  conferirComentarioPedido,
   conferirLimite,
   conferirPublicacaoPedida,
   lerCursor,
   type PublicacaoPedida,
 } from '../domain/publicacao.js';
 import type {
+  ComentarioVisivel,
+  ContagemDaReacao,
+  PaginaDeComentarios,
   PaginaDePublicacoes,
   PublicacaoDoDono,
   PublicacaoNaLinha,
@@ -212,6 +216,90 @@ export class Mural {
   async apagar(dono: UserId, ref: string): Promise<void> {
     const apagou = await this.deps.publicacoes.apagar(dono, ref, this.deps.clock.now());
     if (!apagou) throw problemas.naoEncontrado();
+  }
+
+  /**
+   * Curte. **IDEMPOTENTE** -- ver a porta e a chave primaria de
+   * `publication_likes`. `undefined` do repositorio e `404`, nunca `403`.
+   */
+  async curtir(quemCurte: UserId, ref: string): Promise<ContagemDaReacao> {
+    const contagem = await this.deps.publicacoes.curtir(quemCurte, ref);
+    if (contagem === undefined) throw problemas.naoEncontrado();
+    return contagem;
+  }
+
+  async descurtir(quemCurte: UserId, ref: string): Promise<ContagemDaReacao> {
+    const contagem = await this.deps.publicacoes.descurtir(quemCurte, ref);
+    if (contagem === undefined) throw problemas.naoEncontrado();
+    return contagem;
+  }
+
+  /**
+   * Os comentarios. **Publicacao invisivel e `404`, e nao lista vazia** -- uma
+   * lista vazia afirmaria que a publicacao existe e nao tem comentario.
+   */
+  async comentarios(
+    quemOlha: UserId,
+    ref: string,
+    pedido: RecortePedido,
+  ): Promise<PaginaDeComentarios> {
+    const pagina = await this.deps.publicacoes.comentarios(
+      quemOlha,
+      ref,
+      this.recorte(pedido),
+    );
+    if (pagina === undefined) throw problemas.naoEncontrado();
+    return pagina;
+  }
+
+  /**
+   * Comenta. A conferencia de forma vem ANTES da transacao, como em `publicar`.
+   *
+   * **O `ref` do comentario e sorteado AQUI**, pela mesma razao do da
+   * publicacao: 128 bits de `ids.random128()` em base64url, 22 simbolos, e a
+   * fonte de aleatoriedade e a do processo. Colisao nao e tratada -- o `UNIQUE`
+   * do banco recusa alto e visivel, e um laco de retentativa seria codigo que
+   * nunca roda escondendo o unico sinal de que a fonte quebrou.
+   */
+  async comentar(
+    autor: UserId,
+    ref: string,
+    corpo: unknown,
+  ): Promise<{ readonly comentario: ComentarioVisivel; readonly total: number }> {
+    const conferido = conferirComentarioPedido(corpo);
+    if ('recusas' in conferido) throw problemas.validacao([...conferido.recusas]);
+
+    const desfecho = await this.deps.publicacoes.comentar(
+      autor,
+      ref,
+      conferido.ok,
+      Buffer.from(this.deps.ids.random128()).toString('base64url'),
+      this.deps.clock.now(),
+    );
+    if (desfecho === undefined) throw problemas.naoEncontrado();
+    return desfecho;
+  }
+
+  /**
+   * Apaga um comentario. **So o autor DELE apaga** -- ver
+   * `construtorDoApagarComentario`.
+   *
+   * `undefined` (publicacao invisivel) e `null` (comentario nao atingido) sao o
+   * MESMO `404`: distinguir revelaria que o comentario existe.
+   */
+  async apagarComentario(
+    autorDoComentario: UserId,
+    ref: string,
+    refDoComentario: string,
+  ): Promise<number> {
+    const total = await this.deps.publicacoes.apagarComentario(
+      autorDoComentario,
+      ref,
+      refDoComentario,
+      this.deps.clock.now(),
+    );
+    if (total === undefined || total === null) throw problemas.naoEncontrado();
+    return total;
   }
 
   /**

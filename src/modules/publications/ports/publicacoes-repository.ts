@@ -25,9 +25,10 @@
  *
  * ## Nenhum método devolve um conjunto de pessoas
  *
- * `linhaDoTempo` devolve publicações, e cada uma carrega `handle` e
- * `displayName` do autor — que é o que `ConnectionPerson` já entrega a quem é
- * conexão. **Não existe método que liste as conexões de alguém**, e o conjunto
+ * `linhaDoTempo` devolve publicações, e cada uma carrega `handle`,
+ * `displayName` e a `thumb` da foto do autor (Emenda 5 do ADR-0010) — o que
+ * `ConnectionPerson` já entrega a quem é conexão, mais a foto que a emenda
+ * nomeou para esta superfície. **Não existe método que liste as conexões de alguém**, e o conjunto
  * de autores de uma página não é a lista de conexões: ele é o recorte das
  * conexões que publicaram, naquela janela de tempo, e quem não publicou não
  * aparece. É a mesma diferença que faz `pedidosRecebidos` não ser uma lista de
@@ -81,6 +82,28 @@ export interface PublicacaoNaLinha {
   /** O apelido do autor. **Nulo** quando ele não tem apelido: o toque não nasce. */
   readonly handle: string | null;
   readonly displayName: string;
+  /**
+   * A chave da derivada `thumb` 176 da foto do AUTOR — **Emenda 5 do ADR-0010**.
+   *
+   * **Nula em três estados, e nenhum é erro**: a pessoa não tem foto, a foto
+   * dela não está `ready` (em `processing` ela carrega o EXIF do celular,
+   * ADR-0010 item 4), ou a conta está desabilitada. Com nula o cartão desenha a
+   * inicial do nome, como a conversa mediada já faz.
+   *
+   * **Não há estado aqui** — nem `status`, nem `rejection_reason`: motivo de
+   * recusa de uma foto é entre o dono e quem modera. Mesma redução da Emenda 3.
+   */
+  readonly autorThumbKey: ObjectKey | null;
+  /**
+   * Quantas pessoas curtiram. **Lida das LINHAS**, e nao de coluna
+   * denormalizada -- a ausencia dessa coluna e a defesa contra o defeito
+   * classico desta superficie, que e a contagem divergir do que existe.
+   */
+  readonly curtidas: number;
+  /** Quantos comentarios VIVOS (`deleted_at IS NULL`). */
+  readonly comentarios: number;
+  /** Se quem chama curtiu. `EXISTS` sobre a chave primaria de `publication_likes`. */
+  readonly curtiEu: boolean;
   /** `true` quando quem chama é o autor. Decide `Apagar` ou `Denunciar` no cartão. */
   readonly minha: boolean;
 }
@@ -110,6 +133,32 @@ export interface NovaPublicacao {
 
 /** O que a escrita de publicação pode recusar, e o motivo chega legível à borda. */
 export type RecusaDaPublicacao = 'envio-nao-encontrado' | 'envio-ja-usado' | 'envio-vencido';
+
+/** Um comentario, como a linha do tempo o entrega. */
+export interface ComentarioVisivel {
+  readonly ref: string;
+  readonly corpo: string;
+  readonly criadoEm: Date;
+  readonly handle: string | null;
+  readonly displayName: string;
+  readonly autorThumbKey: ObjectKey | null;
+  /** `true` quando quem chama escreveu o comentario. Decide se o `Apagar` nasce. */
+  readonly meu: boolean;
+}
+
+/** A contagem que passou a valer, lida das LINHAS. */
+export interface ContagemDaReacao {
+  readonly curtidas: number;
+  readonly curtiEu: boolean;
+}
+
+/** Uma pagina de comentarios, com o TOTAL da publicacao e nao o da pagina. */
+export interface PaginaDeComentarios {
+  readonly itens: readonly ComentarioVisivel[];
+  readonly proximoCursor: string | null;
+  /** O total de comentarios VIVOS. `items.length` e o tamanho da PAGINA. */
+  readonly total: number;
+}
 
 export interface PublicacoesRepository {
   /**
@@ -146,4 +195,54 @@ export interface PublicacoesRepository {
    * apagada são o mesmo `false`, e a borda os transforma no mesmo `404`.
    */
   apagar(dono: UserId, ref: string, agora: Instant): Promise<boolean>;
+
+  /**
+   * Curte. **IDEMPOTENTE**: `ON CONFLICT DO NOTHING` sobre a chave primaria
+   * `(publication_id, user_id)`. Curtir duas vezes nao conta duas, e a segunda
+   * chamada devolve a mesma contagem.
+   *
+   * `undefined` quando a publicacao nao e visivel a quem chama -- e a borda
+   * transforma em `404`, nunca `403`.
+   */
+  curtir(quemCurte: UserId, ref: string): Promise<ContagemDaReacao | undefined>;
+
+  /** Descurte. Tambem idempotente: descurtir o que nao estava curtido e `200`. */
+  descurtir(quemCurte: UserId, ref: string): Promise<ContagemDaReacao | undefined>;
+
+  /** Os comentarios, mais ANTIGO primeiro. `undefined` = publicacao invisivel. */
+  comentarios(
+    quemOlha: UserId,
+    ref: string,
+    recorte: RecorteDaLinhaDoTempo,
+  ): Promise<PaginaDeComentarios | undefined>;
+
+  /**
+   * Comenta. `undefined` quando a publicacao nao e visivel a quem chama.
+   *
+   * Devolve o comentario **e** a contagem nova, numa transacao: sem a contagem
+   * a tela precisaria de uma segunda ida ao servidor para atualizar o numero.
+   */
+  comentar(
+    autor: UserId,
+    ref: string,
+    corpo: string,
+    refDoComentario: string,
+    agora: Instant,
+  ): Promise<{ readonly comentario: ComentarioVisivel; readonly total: number } | undefined>;
+
+  /**
+   * Apaga um comentario, **e so o AUTOR DELE apaga**. O dono da publicacao nao
+   * apaga comentario de terceiro -- ver `construtorDoApagarComentario`.
+   *
+   * `undefined` quando a publicacao nao e visivel; `null` quando ela e visivel
+   * mas o comentario nao foi atingido (de outra pessoa, inexistente, ou ja
+   * apagado) -- os dois viram `404`, e a distincao existe para a borda nao
+   * precisar de uma segunda consulta.
+   */
+  apagarComentario(
+    autorDoComentario: UserId,
+    ref: string,
+    refDoComentario: string,
+    agora: Instant,
+  ): Promise<number | null | undefined>;
 }

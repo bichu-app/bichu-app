@@ -50,6 +50,7 @@ import type {
   RecortePedido,
 } from '../../application/mural-service.js';
 import type {
+  ComentarioVisivel,
   PaginaDePublicacoes,
   PublicacaoDoDono,
   PublicacaoNaLinha,
@@ -97,6 +98,56 @@ export const rotaDeIntencaoDaFotoDaPublicacao = defineRoute({
   path: '/me/publications/photo-intents',
   effects: ['irreversible_write'],
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * Curtir e descurtir, **no MESMO caminho e com verbos diferentes**.
+ *
+ * `PUT` curte e `DELETE` descurte, porque as duas sao a mesma ARESTA vista dos
+ * dois lados -- e `PUT` e o verbo de uma escrita idempotente. `POST /likes`
+ * sugeriria uma colecao de curtidas, que e exatamente a lista que o item 7 da
+ * Emenda 5 do ADR-0010 recusa.
+ *
+ * `x-effects: []` e nao `irreversible_write`: curtir se desfaz com um toque, e e
+ * o unico par de escritas desta fatia que se desfaz.
+ */
+export const rotaDeCurtir = defineRoute({
+  operationId: 'likePublication',
+  method: 'put',
+  path: '/publications/:publicationRef/like',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeDescurtir = defineRoute({
+  operationId: 'unlikePublication',
+  method: 'delete',
+  path: '/publications/:publicationRef/like',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDosComentarios = defineRoute({
+  operationId: 'listPublicationComments',
+  method: 'get',
+  path: '/publications/:publicationRef/comments',
+  effects: [],
+});
+
+export const rotaDeComentar = defineRoute({
+  operationId: 'commentOnPublication',
+  method: 'post',
+  path: '/publications/:publicationRef/comments',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeApagarComentario = defineRoute({
+  operationId: 'deleteMyComment',
+  method: 'delete',
+  path: '/publications/:publicationRef/comments/:commentRef',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
 export interface Autenticador {
@@ -195,10 +246,10 @@ function comoMinhaPublicacao(
  * mesma que `PersonShowcasePhoto` fez sobre `ShowcasePhoto`: sem `status`, sem
  * `rejection_reason` e sem `upload_id`.
  *
- * **O autor sai com `handle` e `display_name`, e com mais nada.** Sem foto (a
- * Emenda 3 do ADR-0010 abriu `photo_icon_url` em `Conversation.participants[]`
- * *"e em mais nenhuma resposta deste contrato"*), sem `public_ref`, sem UUID e
- * sem pet em forma nenhuma.
+ * **O autor sai com `handle`, `display_name` e `photo_icon_url`** — a foto pela
+ * **Emenda 5 do ADR-0010** (20/10/2026), que nomeou esta superfície depois de a
+ * frente parar e perguntar. Sem `public_ref`, sem UUID e sem pet em forma
+ * nenhuma, e sem estado na foto.
  */
 function comoPublicacaoDaLinha(
   publicacao: PublicacaoNaLinha,
@@ -215,8 +266,44 @@ function comoPublicacaoDaLinha(
             url: url(baseDeMidia, publicacao.foto.abertaKey),
             alt_text: publicacao.foto.altText,
           },
-    author: { handle: publicacao.handle, display_name: publicacao.displayName },
+    like_count: publicacao.curtidas,
+    comment_count: publicacao.comentarios,
+    liked_by_me: publicacao.curtiEu,
+    author: {
+      handle: publicacao.handle,
+      display_name: publicacao.displayName,
+      // A `thumb` 176, e nunca a `card` de 512: o icone pinta 40 dp (120 px
+      // reais a 3x), e a de 512 seria 4,27x mais dado do que a celula pinta --
+      // vinte vezes por pagina. A conta e da propria Emenda 5.
+      photo_icon_url: url(baseDeMidia, publicacao.autorThumbKey),
+    },
     mine: publicacao.minha,
+  };
+}
+
+/**
+ * Um comentario, como o contrato o declara.
+ *
+ * **O autor usa o MESMO `PublicationAuthor` da publicacao**, e o reuso e
+ * deliberado: e a mesma pessoa, com os mesmos tres campos e a mesma derivada de
+ * foto (Emenda 5). Um `CommentAuthor` separado seria a segunda definicao da
+ * mesma coisa -- e foi assim que `photo_icon_url` quase ganhou um hospedeiro que
+ * o portao nao vigiava.
+ */
+function comoComentario(
+  comentario: ComentarioVisivel,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
+  return {
+    ref: comentario.ref,
+    body: comentario.corpo,
+    created_at: comentario.criadoEm.toISOString(),
+    author: {
+      handle: comentario.handle,
+      display_name: comentario.displayName,
+      photo_icon_url: url(baseDeMidia, comentario.autorThumbKey),
+    },
+    mine: comentario.meu,
   };
 }
 
@@ -289,6 +376,91 @@ export function registrarRotasDoMural(
       const { publicationRef } = request.params as { publicationRef: string };
       await deps.mural.apagar(dono, publicationRef);
       return reply.status(204).send();
+    },
+  );
+
+  // CURTIR e DESCURTIR. `200` nas duas, com a contagem que passou a valer: sem
+  // ela a tela precisaria refazer a leitura da linha do tempo a cada toque.
+  registrarRota(
+    app,
+    rotaDeCurtir,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const quemCurte = await donoAutenticado(request, deps);
+      const { publicationRef } = request.params as { publicationRef: string };
+      const contagem = await deps.mural.curtir(quemCurte, publicationRef);
+      return reply
+        .status(200)
+        .send({ like_count: contagem.curtidas, liked_by_me: contagem.curtiEu });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeDescurtir,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const quemCurte = await donoAutenticado(request, deps);
+      const { publicationRef } = request.params as { publicationRef: string };
+      const contagem = await deps.mural.descurtir(quemCurte, publicationRef);
+      return reply
+        .status(200)
+        .send({ like_count: contagem.curtidas, liked_by_me: contagem.curtiEu });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDosComentarios,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const quemOlha = await donoAutenticado(request, deps);
+      const { publicationRef } = request.params as { publicationRef: string };
+      const pagina = await deps.mural.comentarios(quemOlha, publicationRef, recorteDa(request));
+      return reply.status(200).send({
+        items: pagina.itens.map((item) => comoComentario(item, deps.baseDeMidia)),
+        next_cursor: pagina.proximoCursor,
+        // O TOTAL da publicacao, e nao `items.length` -- que e o tamanho desta
+        // pagina. A tela mostra o total no cartao e a pagina na folha.
+        comment_count: pagina.total,
+      });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeComentar,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeComentar.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autor = await donoAutenticado(request, deps);
+      const { publicationRef } = request.params as { publicationRef: string };
+      const desfecho = await deps.mural.comentar(autor, publicationRef, request.body);
+      return reply.status(201).send({
+        comment: comoComentario(desfecho.comentario, deps.baseDeMidia),
+        comment_count: desfecho.total,
+      });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeApagarComentario,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autorDoComentario = await donoAutenticado(request, deps);
+      const { publicationRef, commentRef } = request.params as {
+        publicationRef: string;
+        commentRef: string;
+      };
+      const total = await deps.mural.apagarComentario(
+        autorDoComentario,
+        publicationRef,
+        commentRef,
+      );
+      return reply.status(200).send({ comment_count: total });
     },
   );
 

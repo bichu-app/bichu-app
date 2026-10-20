@@ -2192,6 +2192,94 @@ export interface UserPublicationsTable {
 }
 
 /**
+ * `publication_likes` -- A CURTIDA (`20261020000006`).
+ *
+ * Decisao do cliente de 19/10/2026: *"curtir e comentar"* na primeira versao.
+ *
+ * ## A unicidade e a CHAVE PRIMARIA, e e ela que faz "curtir duas vezes nao
+ * conta duas"
+ *
+ * `PRIMARY KEY (publication_id, user_id)`. Nao e `CHECK`, nao e conferencia em
+ * `src/` e nao e `UPDATE ... count + 1`: sob concorrencia, duas requisicoes
+ * simultaneas da mesma pessoa produzem uma linha e um conflito -- absorvido por
+ * `ON CONFLICT DO NOTHING` na escrita, que e o que torna curtir **idempotente**
+ * sem laco de retentativa. Conferir antes de inserir teria a janela entre a
+ * leitura e a escrita, que e exatamente a janela do toque duplo na tela.
+ *
+ * ## NENHUM `id` proprio, e a ausencia e a defesa
+ *
+ * A curtida nao tem endereco publico e nao sai em resposta individual -- o que
+ * sai dela e a CONTAGEM e o booleano `liked_by_me`. Um `id` aqui seria
+ * identificador sem leitor e, pior, o comeco de uma lista de quem curtiu, que o
+ * item 7 da Emenda 5 do ADR-0010 registra como nao autorizada: *"a decisao de
+ * 19/10 sobre curtir e CONTAGEM, e contagem nao diz quem"*.
+ *
+ * ## Nenhum predicado de visibilidade mora aqui
+ *
+ * Esta tabela e a ARESTA. O recorte -- autor ou conexao aceita, menos bloqueio,
+ * menos ocultacao por denuncia -- e da LEITURA, resolvido na clausula `WHERE`
+ * (ADR-0021). Repeti-lo aqui seria a segunda copia dele.
+ */
+export interface PublicationLikesTable {
+  publication_id: string;
+  /** Quem curtiu. Entra no `WHERE`; **nunca e projetada**. `CASCADE` no expurgo. */
+  user_id: string;
+  created_at: Generated<Date>;
+}
+
+/**
+ * `publication_comments` -- O COMENTARIO (`20261020000006`).
+ *
+ * Molde de `UserPublicationsTable`, coluna por coluna, e a repeticao e o
+ * mecanismo.
+ *
+ * **280 nao e escolha deste tipo**: e o teto do corpo da publicacao, que e o de
+ * `publication_reports.publication_body` e o de `pets.care_notes`. Um quarto
+ * numero para a mesma coisa e o que ninguem consegue explicar depois.
+ *
+ * **TEXTO LIVRE, sem filtro de palavra** -- a decisao do cliente de 18/10 vale
+ * aqui inteira.
+ *
+ * ## O QUE NAO EXISTE, e cada ausencia tem dono
+ *
+ * - **nenhuma coluna de imagem**: comentario com foto seria uma segunda esteira
+ *   de midia em superficie de terceiro, e nao foi pedido;
+ * - **nenhum `parent_comment_id`**: fio de resposta e outro objeto, com outra
+ *   leitura e outra paginacao;
+ * - **nenhuma denuncia aponta para esta tabela, e isso e o que FALTA.** Os cinco
+ *   motivos de `PublicationReportsTable` servem a um comentario sem mudanca; o
+ *   que falta e o ALVO. A fatia que fecha isso e `comment_reports` + a sexta
+ *   perna de `fila_de_moderacao` + `comment` em `ModerationOrigin` + uma
+ *   operacao em `safety`. Enquanto ela nao chega: quem comenta apaga o proprio
+ *   comentario, e **bloquear o autor some com os comentarios dele**.
+ */
+export interface PublicationCommentsTable {
+  /** Identidade interna. Nunca projetada (ADR-0010 item 6). */
+  id: string;
+  /**
+   * A publicacao. `ON DELETE CASCADE`: o expurgo da conta apaga a publicacao de
+   * verdade e leva os comentarios. A exclusao LOGICA da publicacao **nao**
+   * dispara o cascade (ela e um `UPDATE`): os comentarios ficam e param de ser
+   * lidos, porque a leitura exige a publicacao viva.
+   */
+  publication_id: string;
+  /** Quem comentou. Entra no `WHERE`; **nunca e projetada**. */
+  author_user_id: string;
+  /** O endereco publico: 22 simbolos, a MESMA forma de `user_publications`. */
+  public_ref: string;
+  /** O texto, **LIVRE**, 1 a 280. Sem filtro de palavra. */
+  body: string;
+  created_at: Generated<Date>;
+  /**
+   * EXCLUSAO LOGICA, pelo molde da publicacao. Fica logica mesmo sem denuncia
+   * apontando para ela hoje, por duas razoes: a simetria, e o dia em que
+   * `comment_reports` existir -- naquele dia a chave estrangeira dela encontra a
+   * linha de pe, sem migracao de dado.
+   */
+  deleted_at: Date | null;
+}
+
+/**
  * As TRES tabelas de denuncia desta fatia usam a MESMA
  * `DecisaoDaModeracao` declarada acima (a da fila de `20261018000009`):
  * mesma forma e mesmos dois valores -- um estado de espera
@@ -2357,6 +2445,8 @@ export interface Database {
   store_item_images: StoreItemImagesTable;
   user_showcase_images: UserShowcaseImagesTable;
   user_publications: UserPublicationsTable;
+  publication_likes: PublicationLikesTable;
+  publication_comments: PublicationCommentsTable;
   network_events: NetworkEventsTable;
   network_event_bring_items: NetworkEventBringItemsTable;
   network_event_sizes: NetworkEventSizesTable;

@@ -10847,6 +10847,249 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  # ----------------------------------------------------------------------
+  # Mural -- curtir e comentar
+  # ----------------------------------------------------------------------
+  #
+  # Decisao do cliente de 19/10/2026: **"curtir e comentar"** na primeira
+  # versao. Cinco operacoes, mesma etiqueta `publications`.
+  #
+  # **O RECORTE E O MESMO DA PUBLICACAO, e nao ha um segundo.** As cinco
+  # resolvem o alvo pela MESMA consulta que a linha do tempo usa -- autor ou
+  # conexao aceita, menos bloqueio, menos ocultacao por denuncia -- e endereco
+  # que nao passa por ela responde `404`, nunca `403`. Curtida e comentario de
+  # quem nao ve a publicacao **nao existem**.
+  #
+  # **NAO EXISTE LISTA DE QUEM CURTIU**, e a ausencia e o item 7 da Emenda 5 do
+  # ADR-0010: a decisao de 19/10 sobre curtir e CONTAGEM, e contagem nao diz
+  # quem. `GET /publications/{ref}/likes` nao existe, e nao e omissao a ser
+  # preenchida depois -- ela seria a lista de pessoas que o plano 4-B mantem em
+  # "nunca".
+
+  /publications/{publicationRef}/like:
+    parameters:
+      - $ref: '#/components/parameters/PublicationRef'
+    put:
+      operationId: likePublication
+      security:
+        - bearerAuth: []
+      tags: [publications]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "curtir e barato e reversivel; trezentas por hora e o freio de varredura, nao de uso"
+      summary: Curte esta publicacao
+      description: |
+        **`PUT` e nao `POST`, e o verbo e a semantica:** curtir e IDEMPOTENTE.
+        Tocar duas vezes nao conta duas, e a segunda chamada responde o mesmo
+        `200` com a mesma contagem.
+
+        **A unicidade e do BANCO, e nao desta borda.**
+        `publication_likes` tem chave primaria `(publication_id, user_id)`, e a
+        escrita usa `ON CONFLICT DO NOTHING`. Conferir antes de inserir teria a
+        janela entre a leitura e a escrita -- exatamente a janela em que o toque
+        duplo do dedo na tela entra duas vezes. O banco nao tem essa janela.
+
+        **A resposta devolve a CONTAGEM que passou a valer**, lida das linhas na
+        mesma transacao -- e nao um numero incrementado em memoria. Contagem
+        denormalizada que divirja das linhas e o defeito classico aqui, e a
+        defesa e nao existir coluna de contagem.
+
+        Publicacao que quem chama nao ve, endereco inexistente e publicacao
+        apagada sao o MESMO `404`.
+      responses:
+        '200':
+          description: 'A contagem que passou a valer, e `liked_by_me: true`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationReaction' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      operationId: unlikePublication
+      security:
+        - bearerAuth: []
+      tags: [publications]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      summary: Descurte esta publicacao
+      description: |
+        Tambem IDEMPOTENTE: descurtir o que nao estava curtido responde o mesmo
+        `200` com a mesma contagem. **`200` e nao `204`**, ao contrario de
+        `deleteMyPublication`: aqui ha o que devolver -- a contagem que passou a
+        valer --, e obrigar a tela a refazer a leitura da linha do tempo para
+        saber o numero seria uma ida a mais por toque.
+
+        **NAO apaga a publicacao**, e o endereco e o mesmo: o que esta rota
+        remove e a ARESTA entre quem chama e a publicacao, uma linha de
+        `publication_likes`. Quem apaga publicacao e
+        `DELETE /me/publications/{ref}`, que e do AUTOR e mora sob `/me/`.
+      responses:
+        '200':
+          description: 'A contagem que passou a valer, e `liked_by_me: false`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationReaction' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /publications/{publicationRef}/comments:
+    parameters:
+      - $ref: '#/components/parameters/PublicationRef'
+    get:
+      operationId: listPublicationComments
+      security:
+        - bearerAuth: []
+      tags: [publications]
+      x-effects: []
+      summary: Os comentarios desta publicacao
+      description: |
+        Em ordem de escrita -- **o mais ANTIGO primeiro**, ao contrario da linha
+        do tempo. Comentario se le na ordem em que a conversa aconteceu.
+
+        **Quem ve os comentarios e quem ve a publicacao**, pelo MESMO recorte, na
+        clausula `WHERE` (ADR-0021). Publicacao que quem chama nao ve responde
+        `404` -- e nao uma lista vazia, que afirmaria que a publicacao existe e
+        nao tem comentario.
+
+        **Comentario de quem quem chama BLOQUEOU nao aparece**:
+        `NOT bloqueio_entre(autor_do_comentario, quem chama)` esta no `WHERE`. E
+        hoje essa e a unica ferramenta que a pessoa tem sobre um comentario
+        alheio -- ver `commentOnPublication` sobre a denuncia que falta.
+
+        **Paginacao por cursor**, como a linha do tempo, e com o mesmo desempate
+        por `ref` -- nunca por `id`.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 'Os comentarios. `items: []` quando ninguem comentou.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationCommentPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: commentOnPublication
+      security:
+        - bearerAuth: []
+      tags: [publications]
+      x-effects: [irreversible_write]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "comentar e texto de terceiro na publicacao de alguem, e sessenta por hora separa usar de inundar"
+      summary: Comenta nesta publicacao
+      description: |
+        Texto livre, 1 a 280 caracteres -- o MESMO teto da publicacao, que e o de
+        `publication_reports.publication_body` e o de `pets.care_notes`.
+
+        **NAO HA FILTRO DE PALAVRA**, nem aqui nem no banco, e a decisao e a
+        mesma que vale para a publicacao: *"deixe o texto livre na timeline"* e
+        *"quem modera vai ser o administrador, deve ir para a pagina de
+        backoffice"* (cliente, 18/10/2026).
+
+        **E AQUI ESTA O QUE FALTA, DITO EM VOZ ALTA: A DENUNCIA DE COMENTARIO
+        NAO EXISTE.**
+
+        Medido: os CINCO motivos de `PublicationReportInput` servem a um
+        comentario sem mudanca nenhuma -- um comentario pode ser ofensivo, pode
+        anunciar venda de animal, pode inventar um avistamento
+        (`false_lost_pet_info`), pode ser spam. **O que falta nao e motivo: e
+        ALVO.** `publication_reports` e chaveada em `publication_ref`, e apontar
+        a denuncia de um comentario para a publicacao faria o administrador
+        julgar o texto errado.
+
+        A fatia que falta, por extenso: `comment_reports`, a SEXTA perna de
+        `fila_de_moderacao`, o valor `comment` em `ModerationOrigin` (hoje com
+        cinco) e uma operacao nova em `safety` (hoje com seis).
+
+        **O que existe enquanto ela nao chega, e nao e nada:** quem comenta
+        apaga o proprio comentario, e **bloquear o autor some com os comentarios
+        dele**. O que NAO existe e o administrador agir sobre um comentario, e
+        isso e risco conhecido e declarado -- nao surpresa.
+
+        **SEM FOTO e SEM RESPOSTA ANINHADA.** Nao ha campo de imagem (comentario
+        com imagem e uma segunda esteira de midia em superficie de terceiro) nem
+        `parent_ref` (fio de resposta e outro objeto, com outra leitura e outra
+        paginacao). Nenhum dos dois foi pedido.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicationCommentInput' }
+      responses:
+        '201':
+          description: O comentario criado, e a contagem que passou a valer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationCommentCreated' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /publications/{publicationRef}/comments/{commentRef}:
+    parameters:
+      - $ref: '#/components/parameters/PublicationRef'
+      - $ref: '#/components/parameters/CommentRef'
+    delete:
+      operationId: deleteMyComment
+      security:
+        - bearerAuth: []
+      tags: [publications]
+      x-effects: [irreversible_write]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      summary: Apaga um comentario meu
+      description: |
+        **SO O AUTOR DO COMENTARIO apaga**, e o predicado esta na clausula
+        `WHERE` do `UPDATE` (ADR-0021): comentario de outra pessoa, endereco
+        inexistente e comentario ja apagado sao o MESMO `404`.
+
+        **O AUTOR DA PUBLICACAO NAO APAGA COMENTARIO DE TERCEIRO**, e a ausencia
+        e deliberada: isso seria moderacao-por-dono, ninguem a decidiu, e a
+        decisao de 18/10 poe a moderacao no administrador e no backoffice.
+        Inventa-la aqui seria responder uma pergunta de produto que nao foi
+        feita. **Esta e uma pergunta aberta no relatorio desta fatia.**
+
+        Exclusao LOGICA, pelo molde da publicacao: a linha fica e para de ser
+        lida. Hoje nenhuma denuncia aponta para ela (a denuncia de comentario nao
+        existe); fica logica mesmo assim pela simetria e para que, no dia em que
+        `comment_reports` existir, a chave estrangeira dela encontre a linha de
+        pe -- sem migracao de dado.
+
+        **`200` e nao `204`**: a resposta devolve a contagem que passou a valer,
+        pelo mesmo motivo de `unlikePublication`.
+      responses:
+        '200':
+          description: A contagem de comentarios que passou a valer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationCommentCount' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /publications/{publicationRef}/reports:
     parameters:
       - $ref: '#/components/parameters/PublicationRef'
@@ -11395,6 +11638,16 @@ components:
         divergiria de `derivadas.ts` na primeira geometria nova.
       schema: { type: string, minLength: 1, maxLength: 500 }
 
+    CommentRef:
+      name: commentRef
+      in: path
+      required: true
+      description: |
+        O endereco publico e opaco de um comentario: 22 simbolos de base64url,
+        a MESMA forma de `PublicationRef` e de `UserPublicRef`, e pela mesma
+        razao -- `publication_comments.public_ref` cobra
+        `^[A-Za-z0-9_-]{22}$`, e o `id` interno nunca sai (ADR-0010 item 6).
+      schema: { type: string, minLength: 22, maxLength: 22, pattern: '^[A-Za-z0-9_-]{22}$' }
     PublicationRef:
       name: publicationRef
       in: path
@@ -19150,20 +19403,27 @@ components:
 
     PublicationAuthor:
       type: object
-      required: [handle, display_name]
+      required: [handle, display_name, photo_icon_url]
       additionalProperties: false
       description: |
-        Quem publicou, na linha do tempo. **Dois campos, e nada mais.**
+        Quem publicou, na linha do tempo. **Tres campos, e nada mais.**
 
-        **NAO HA FOTO**, e a ausencia e decisao e nao esquecimento. A Emenda 3 do
-        ADR-0010 abriu `photo_icon_url` em `Conversation.participants[]` *"e em
-        mais nenhuma resposta deste contrato"*, e fechou com *"nenhuma outra
-        superficie ganha foto de pessoa"*. O Mural so mostra autor que ja e
-        conexao aceita -- o mesmo predicado que a emenda autoriza --, mas ler o
-        complemento da regra como a regra e decisao do cliente, nao desta frente.
-        A pergunta esta no relatorio; no dia em que ele disser sim, o campo entra
-        AQUI e em nenhum outro lugar, com a derivada `thumb` de 176 x 176 que a
-        emenda nomeia (e nunca a `card` de 512).
+        **A FOTO ENTROU EM 20/10/2026, e e a EMENDA 5 do ADR-0010 que a
+        autoriza.** Ela nasceu sem foto, de proposito: a Emenda 3 abriu
+        `photo_icon_url` em `Conversation.participants[]` *"e em mais nenhuma
+        resposta deste contrato"*, e satisfazer o critério dela nao e estar
+        nomeado -- ler o complemento de uma regra como a regra e invencao de quem
+        implementa. A frente parou e perguntou; a decisao do cliente foi *"tras a
+        foto, algo bem parecido com o instagram"*, e a emenda NOMEIA esta
+        superficie.
+
+        **O predicado da Emenda 3 nao foi relaxado: ele e satisfeito por
+        CONSTRUCAO aqui.** A clausula `WHERE` de `getMyTimeline` so devolve
+        publicacao cujo autor e quem chama ou e conexao `accepted` dele -- entao
+        todo autor que aparece ja esta dentro do conjunto que a Emenda 3
+        autoriza. A conversa precisou de predicado explicito porque ela PODE ter
+        do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
+        esse outro lado.
 
         **NAO HA `public_ref`, nao ha `id`, nao ha UUID** (ADR-0010 item 6): o
         que identifica a pessoa nesta resposta e o apelido, exatamente como em
@@ -19171,6 +19431,11 @@ components:
 
         **NAO HA PET**, em forma nenhuma -- nem nome, nem contagem, nem link.
         A Emenda 2 liberou a contagem **so** em `getPersonProfile`, por nome.
+
+        **NAO HA contagem de seguidores, nem lista de quem curtiu.** "Parecido
+        com o Instagram" foi dito sobre a FOTO, e o item 7 da Emenda 5 registra
+        que isso nao e autorizacao de redesenho: nao existe seguir neste produto,
+        e a decisao de 19/10 sobre curtir e CONTAGEM -- contagem nao diz quem.
       properties:
         handle:
           type: string
@@ -19182,9 +19447,39 @@ components:
         display_name:
           type: string
           description: |
-            Primeiro nome ou apelido. **Nunca** sobrenome completo, telefone,
-            e-mail nem foto de perfil -- a mesma frase que `Conversation.participants`
-            carrega em dois lugares deste contrato.
+            Primeiro nome ou apelido. **Nunca** sobrenome completo, telefone nem
+            e-mail.
+
+            **A frase deste campo e MENOR que a de `Conversation.participants`,
+            e a diferenca e a Emenda 5:** la ela termina em "nem foto de
+            perfil", porque la a foto e campo separado e condicional. Aqui a
+            foto sai em `photo_icon_url`, abaixo, e repetir a proibicao neste
+            campo seria o contrato se contradizendo em duas linhas.
+        photo_icon_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A foto de quem publicou. **Emenda 5 do ADR-0010 (20/10/2026)**, e a
+            UNICA superficie nova que ela abre.
+
+            **A derivada e a `thumb` de 176 x 176 px, e nao a `card` de 512** --
+            a MESMA que a Emenda 3 nomeia, pela MESMA conta medida: o icone do
+            cartao pinta **40 dp**, que a 3x sao 120 px reais; a de 176 cobre
+            isso sem ampliar (1,47x) e a de 512 seria **4,27x mais dado do que a
+            celula pinta**, vinte vezes por pagina de linha do tempo. Nenhuma
+            derivada nova.
+
+            **Nula** em tres estados, e nenhum deles e erro: a pessoa nao tem
+            foto; a foto dela nao esta `ready` (em `processing` ela carrega o
+            EXIF do celular, ADR-0010 item 4); ou a conta esta desabilitada. Com
+            nulo o cartao desenha a inicial do nome, que e o que a conversa
+            mediada ja faz.
+
+            **Sem estado.** `MyPhoto`, que o dono recebe em `getMe`, tem `status`
+            e `rejection_reason`; nenhum dos dois e assunto de terceiro -- motivo
+            de recusa de uma foto e entre o dono e quem modera. E a mesma reducao
+            que a Emenda 3 fez e que `PersonShowcasePhoto` fez antes dela.
 
     PublicationImage:
       type: object
@@ -19217,7 +19512,7 @@ components:
 
     Publication:
       type: object
-      required: [ref, body, image, created_at, author, mine]
+      required: [ref, body, image, created_at, author, mine, like_count, comment_count, liked_by_me]
       additionalProperties: false
       description: |
         Uma publicacao na linha do tempo. **Ela so existe nesta resposta para
@@ -19250,6 +19545,33 @@ components:
             Um campo booleano, e nao o apelido comparado na tela: a tela nao tem
             o apelido de quem chama em toda rolagem, e compara-lo seria a
             autorizacao migrando para o cliente.
+        like_count:
+          type: integer
+          minimum: 0
+          description: |
+            Quantas pessoas curtiram. **Lido das LINHAS de
+            `publication_likes`**, na mesma consulta -- nao ha coluna
+            denormalizada de contagem, e a ausencia dela e a defesa: contagem que
+            divirja das linhas e o defeito classico desta superficie.
+
+            **E a CONTAGEM, nunca a lista.** Nao existe
+            `GET /publications/{ref}/likes`, e a ausencia e o item 7 da Emenda 5
+            do ADR-0010: a decisao de 19/10 sobre curtir e contagem, e contagem
+            nao diz quem.
+        comment_count:
+          type: integer
+          minimum: 0
+          description: |
+            Quantos comentarios VIVOS a publicacao tem, lido das linhas de
+            `publication_comments` com `deleted_at IS NULL`. Comentario apagado
+            nao conta -- e e por isso que `deleteMyComment` devolve a contagem
+            nova em vez de `204`.
+        liked_by_me:
+          type: boolean
+          description: |
+            Se quem chama curtiu esta publicacao. **Vem do SERVIDOR**, de um
+            `EXISTS` na mesma consulta -- a tela nao tem como saber, e deixa-la
+            adivinhar faria o coracao piscar errado na primeira rolagem.
 
     PublicationPage:
       type: object
@@ -19273,6 +19595,146 @@ components:
             linha duas vezes ou nenhuma. **O desempate e o `ref` e nao o `id`**:
             um cursor que carregasse a identidade interna poria um UUID em saida,
             que o item 6 do ADR-0010 proibe mesmo embrulhado em base64.
+
+    PublicationReaction:
+      type: object
+      required: [like_count, liked_by_me]
+      additionalProperties: false
+      description: |
+        O desfecho de curtir ou descurtir: **a contagem que passou a valer**, e
+        nada mais.
+
+        **Nao ha `ref` da curtida**, e a ausencia e deliberada: a curtida nao tem
+        endereco publico, nao se enderecava por nada e nao sai em resposta
+        individual. `publication_likes` nao tem coluna `id` -- um identificador
+        aqui seria o comeco de uma lista de quem curtiu, que o item 7 da Emenda 5
+        do ADR-0010 registra como nao autorizada.
+      properties:
+        like_count:
+          type: integer
+          minimum: 0
+          description: |
+            **Lido das LINHAS, na mesma transacao da escrita** -- e nao um numero
+            incrementado em memoria nem uma coluna denormalizada. Contagem que
+            divirja das linhas e o defeito classico desta superficie, e a defesa
+            e nao existir coluna de contagem para divergir.
+        liked_by_me:
+          type: boolean
+          description: '`true` depois de `likePublication`, `false` depois de `unlikePublication`.'
+
+    PublicationCommentCount:
+      type: object
+      required: [comment_count]
+      additionalProperties: false
+      description: A contagem de comentarios que passou a valer.
+      properties:
+        comment_count:
+          type: integer
+          minimum: 0
+          description: Lida das linhas, como `like_count`.
+
+    PublicationComment:
+      type: object
+      required: [ref, body, created_at, author, mine]
+      additionalProperties: false
+      description: |
+        Um comentario. **Molde de `Publication`**, com os mesmos nomes e as
+        mesmas ausencias.
+
+        **Nao ha `id`:** o endereco e `ref`, 22 simbolos de base64url (ADR-0010
+        item 6). **Nao ha imagem** e **nao ha `parent_ref`**: comentario com foto
+        e fio de resposta sao objetos que ninguem pediu.
+      properties:
+        ref:
+          type: string
+          minLength: 22
+          maxLength: 22
+          pattern: '^[A-Za-z0-9_-]{22}$'
+          description: O endereco opaco do comentario. E ele que `deleteMyComment` recebe.
+        body: { type: string, maxLength: 280 }
+        created_at: { type: string, format: date-time }
+        author:
+          allOf:
+            - $ref: '#/components/schemas/PublicationAuthor'
+          description: |
+            **O MESMO schema do autor da publicacao, e o reuso e deliberado**: e
+            a mesma pessoa, com os mesmos tres campos e a mesma derivada de foto
+            (Emenda 5 do ADR-0010). Um `CommentAuthor` separado seria a segunda
+            definicao da mesma coisa, e a segunda e onde uma correcao falta --
+            foi assim que `photo_icon_url` quase ganhou um hospedeiro que o
+            portao nao vigiava.
+        mine:
+          type: boolean
+          description: |
+            `true` quando quem chama escreveu o comentario. **E ele que decide se
+            o `Apagar` nasce**, e vem do SERVIDOR como coluna calculada -- a tela
+            nao tem o apelido de quem chama em toda rolagem, e comparar ali seria
+            a autorizacao migrando para o cliente.
+
+            **Nao existe `mine` do dono da PUBLICACAO**, e a ausencia e a mesma
+            decisao de `deleteMyComment`: o autor da publicacao nao apaga
+            comentario de terceiro, porque ninguem decidiu que ele pode.
+
+    PublicationCommentPage:
+      type: object
+      required: [items, next_cursor, comment_count]
+      additionalProperties: false
+      description: |
+        Os comentarios, **mais ANTIGO primeiro** -- ao contrario da linha do
+        tempo. Comentario se le na ordem em que a conversa aconteceu.
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicationComment' }
+        next_cursor:
+          type: string
+          nullable: true
+          description: |
+            Opaco. Carrega `created_at` **e o `ref` publico** do ultimo
+            comentario, pela mesma razao da linha do tempo: so o instante
+            empataria dois comentarios do mesmo milissegundo. **Nunca o `id`** --
+            base64 nao e segredo, e o item 6 do ADR-0010 proibe UUID em saida.
+        comment_count:
+          type: integer
+          minimum: 0
+          description: |
+            O total de comentarios VIVOS da publicacao, lido das linhas -- e nao
+            `items.length`, que e so o tamanho desta pagina. A tela mostra o
+            total no cartao e a pagina na folha, e sao numeros diferentes.
+
+    PublicationCommentInput:
+      type: object
+      required: [body]
+      additionalProperties: false
+      description: |
+        O texto do comentario, e **nada mais**.
+
+        `additionalProperties: false` e o que impede imagem, mencao de pessoa e
+        `parent_ref` de entrarem sem ninguem decidir -- os tres sao objetos que
+        o cliente nao pediu.
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 280
+          description: |
+            Texto **livre**, 1 a 280. Nao ha filtro de palavra, nem aqui, nem em
+            `src/`, nem no banco: decisao do cliente de 18/10/2026. A moderacao e
+            a denuncia mais a fila do painel -- e **a denuncia de comentario
+            ainda nao existe**, o que esta dito por extenso em
+            `commentOnPublication`.
+
+    PublicationCommentCreated:
+      type: object
+      required: [comment, comment_count]
+      additionalProperties: false
+      description: |
+        O comentario criado **e** a contagem que passou a valer, numa resposta
+        so: sem ela a tela precisaria de uma segunda ida ao servidor para
+        atualizar o numero no cartao.
+      properties:
+        comment: { $ref: '#/components/schemas/PublicationComment' }
+        comment_count: { type: integer, minimum: 0 }
 
     PublicationReportInput:
       type: object

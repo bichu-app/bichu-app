@@ -133,6 +133,49 @@ export function conferirPublicacaoPedida(
   return { ok: { corpo, uploadId, textoAlternativo } };
 }
 
+/** O corpo de `commentOnPublication`. */
+export interface ComentarioPedido {
+  readonly body?: unknown;
+}
+
+/**
+ * Confere o comentário pedido. **O MESMO teto e o MESMO `trim` da publicação**,
+ * e a repetição é deliberada: um comentário é texto curto que uma pessoa
+ * escreve nesta casa, e um segundo teto para a mesma coisa é o que ninguém
+ * consegue explicar depois.
+ *
+ * **Nenhum filtro de conteúdo**, pela mesma decisão do cliente de 18/10/2026.
+ */
+export function conferirComentarioPedido(
+  pedido: unknown,
+): { readonly ok: string } | { readonly recusas: readonly CampoRecusado[] } {
+  const corpo =
+    typeof (pedido as ComentarioPedido | null)?.body === 'string'
+      ? ((pedido as ComentarioPedido).body as string).trim()
+      : '';
+  if (corpo === '') {
+    return {
+      recusas: [{ field: 'body', code: 'required', message: 'Escreva um comentário.' }],
+    };
+  }
+  // `[...corpo]` e não `corpo.length`, pela mesma razão da publicação: `length`
+  // conta unidades UTF-16 e um emoji fora do BMP conta DOIS, enquanto o
+  // `char_length` do Postgres conta pontos de código. A divergência faria esta
+  // camada recusar um texto que o `CHECK` aceita.
+  if ([...corpo].length > TETO_DO_CORPO_DA_PUBLICACAO) {
+    return {
+      recusas: [
+        {
+          field: 'body',
+          code: 'maximum',
+          message: `No máximo ${String(TETO_DO_CORPO_DA_PUBLICACAO)} caracteres.`,
+        },
+      ],
+    };
+  }
+  return { ok: corpo };
+}
+
 /**
  * O cursor da linha do tempo: **o instante e o `ref` público da última linha.**
  *

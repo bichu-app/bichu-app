@@ -26,7 +26,11 @@ import 'api_client.dart';
 /// de vencidos apagaria a foto dez minutos depois, que foi o que aconteceu com a
 /// foto do achado.
 class MuralApi
-    implements IntencaoDeFotoDaPublicacao, LeituraDoMural, EscritaDoMural {
+    implements
+        IntencaoDeFotoDaPublicacao,
+        LeituraDoMural,
+        EscritaDoMural,
+        InteracaoDoMural {
   const MuralApi(this._cliente);
 
   final ApiClient _cliente;
@@ -84,6 +88,55 @@ class MuralApi
     await _cliente.delete('/me/publications/$ref');
   }
 
+  /// Curte. **IDEMPOTENTE**: `PUT`, e tocar duas vezes nao conta duas -- a
+  /// unicidade e a chave primaria de `publication_likes` no servidor.
+  @override
+  Future<ReacaoDaPublicacao> curtir(String ref) async {
+    return ReacaoDaPublicacao.doJson(
+      await _cliente.put('/publications/$ref/like'),
+    );
+  }
+
+  @override
+  Future<ReacaoDaPublicacao> descurtir(String ref) async {
+    return ReacaoDaPublicacao.doJson(
+      await _cliente.delete('/publications/$ref/like'),
+    );
+  }
+
+  /// Os comentarios, **mais ANTIGO primeiro**. `404` quando a publicacao nao e
+  /// visivel, e nao lista vazia: lista vazia afirmaria que ela existe e nao tem
+  /// comentario.
+  @override
+  Future<PaginaDeComentarios> comentarios(String ref, {String? cursor}) async {
+    return PaginaDeComentarios.doJson(
+      await _cliente.get(
+        '/publications/$ref/comments',
+        query: cursor == null ? null : <String, String>{'cursor': cursor},
+      ),
+    );
+  }
+
+  @override
+  Future<ComentarioCriado> comentar(String ref, String texto) async {
+    return ComentarioCriado.doJson(
+      await _cliente.post(
+        '/publications/$ref/comments',
+        corpo: <String, dynamic>{'body': texto},
+      ),
+    );
+  }
+
+  /// Apaga um comentario. **So o autor DELE apaga**: o dono da publicacao nao
+  /// apaga comentario de terceiro, e isso e decisao de produto ainda aberta.
+  @override
+  Future<int> apagarComentario(String ref, String refDoComentario) async {
+    final corpo = await _cliente.delete(
+      '/publications/$ref/comments/$refDoComentario',
+    );
+    return (corpo['comment_count'] as num?)?.toInt() ?? 0;
+  }
+
   @override
   Future<Map<String, dynamic>> intencaoDeFotoDaPublicacao({
     required String tipoDeConteudo,
@@ -116,6 +169,18 @@ abstract class LeituraDoMural {
 /// O que o mecanismo de envio precisa desta API. Interface ESTREITA, e nao a
 /// classe: um envio que alcancasse [MuralApi.apagar] poderia apagar uma
 /// publicacao ao gravar uma foto.
+/// O que o CARTAO e a folha de comentarios precisam. Interface ESTREITA, pelo
+/// mesmo motivo das outras: o cartao que curte nao deve alcancar
+/// [MuralApi.apagar] -- um toque errado apagaria a publicacao em vez de
+/// descurtir.
+abstract class InteracaoDoMural {
+  Future<ReacaoDaPublicacao> curtir(String ref);
+  Future<ReacaoDaPublicacao> descurtir(String ref);
+  Future<PaginaDeComentarios> comentarios(String ref, {String? cursor});
+  Future<ComentarioCriado> comentar(String ref, String texto);
+  Future<int> apagarComentario(String ref, String refDoComentario);
+}
+
 abstract class IntencaoDeFotoDaPublicacao {
   Future<Map<String, dynamic>> intencaoDeFotoDaPublicacao({
     required String tipoDeConteudo,
@@ -217,20 +282,27 @@ class ImagemDaMinhaPublicacao {
   final String? textoAlternativo;
 }
 
-/// Quem publicou, na linha do tempo. **Dois campos, e nada mais.**
+/// Quem publicou, na linha do tempo. **Tres campos, e nada mais.**
 ///
-/// **NAO HA FOTO**, e a ausencia vem do contrato: a Emenda 3 do ADR-0010 abriu
-/// `photo_icon_url` em `Conversation.participants[]` *"e em mais nenhuma
-/// resposta deste contrato"*. `PublicationAuthor` nao tem o campo, entao nao ha
-/// o que ler aqui — e no dia em que o cliente o abrir, ele entra no contrato
-/// primeiro e nesta classe depois.
+/// **A FOTO ENTROU EM 20/10/2026** pela Emenda 5 do ADR-0010 — decisao do
+/// cliente, *"tras a foto, algo bem parecido com o instagram"*. Ela nasceu
+/// ausente de proposito: a Emenda 3 limitava a foto de pessoa a
+/// `Conversation.participants[]` *"e em mais nenhuma resposta deste contrato"*,
+/// a frente parou e perguntou, e a emenda NOMEOU esta superficie.
+///
+/// A derivada e a `thumb` de 176, a MESMA da Emenda 3 — nunca a `card` de 512.
 class AutorDaPublicacao {
-  const AutorDaPublicacao({required this.apelido, required this.nomeExibido});
+  const AutorDaPublicacao({
+    required this.apelido,
+    required this.nomeExibido,
+    required this.urlDoIcone,
+  });
 
   factory AutorDaPublicacao.doJson(Map<String, dynamic> json) {
     return AutorDaPublicacao(
       apelido: json['handle'] as String?,
       nomeExibido: json['display_name'] as String? ?? '',
+      urlDoIcone: json['photo_icon_url'] as String?,
     );
   }
 
@@ -240,9 +312,111 @@ class AutorDaPublicacao {
   final String? apelido;
 
   final String nomeExibido;
+
+  /// A `thumb` de 176 da foto do autor. **Nula em tres estados**, e nenhum e
+  /// erro: a pessoa nao tem foto, a foto nao esta `ready` (em `processing` ela
+  /// carrega o EXIF do celular), ou a conta esta desabilitada. A tela nao os
+  /// distingue — com nula ela desenha a inicial do nome.
+  final String? urlDoIcone;
 }
 
 /// Uma publicacao na linha do tempo.
+class ReacaoDaPublicacao {
+  const ReacaoDaPublicacao({required this.curtidas, required this.curtiEu});
+
+  factory ReacaoDaPublicacao.doJson(Map<String, dynamic> json) {
+    return ReacaoDaPublicacao(
+      curtidas: (json['like_count'] as num?)?.toInt() ?? 0,
+      curtiEu: json['liked_by_me'] as bool? ?? false,
+    );
+  }
+
+  final int curtidas;
+  final bool curtiEu;
+}
+
+/// Um comentario.
+///
+/// **O autor usa o MESMO [AutorDaPublicacao]** da publicacao, e o reuso vem do
+/// contrato: e a mesma pessoa, com os mesmos tres campos e a mesma derivada de
+/// foto (Emenda 5 do ADR-0010).
+class ComentarioDaPublicacao {
+  const ComentarioDaPublicacao({
+    required this.ref,
+    required this.texto,
+    required this.criadoEm,
+    required this.autor,
+    required this.meu,
+  });
+
+  factory ComentarioDaPublicacao.doJson(Map<String, dynamic> json) {
+    return ComentarioDaPublicacao(
+      ref: json['ref'] as String? ?? '',
+      texto: json['body'] as String? ?? '',
+      criadoEm: DateTime.tryParse(json['created_at'] as String? ?? ''),
+      autor: AutorDaPublicacao.doJson(
+        (json['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      // Padrao `false`: na duvida o `Apagar` NAO nasce. Oferecer apagar o
+      // comentario de outra pessoa levaria a um 404, e a tela teria mentido.
+      meu: json['mine'] as bool? ?? false,
+    );
+  }
+
+  final String ref;
+  final String texto;
+  final DateTime? criadoEm;
+  final AutorDaPublicacao autor;
+
+  /// `true` quando quem chama escreveu o comentario. **Vem do SERVIDOR.**
+  final bool meu;
+}
+
+/// Uma pagina de comentarios, com o TOTAL da publicacao.
+class PaginaDeComentarios {
+  const PaginaDeComentarios({
+    required this.itens,
+    required this.proximoCursor,
+    required this.total,
+  });
+
+  factory PaginaDeComentarios.doJson(Map<String, dynamic> json) {
+    return PaginaDeComentarios(
+      itens: (json['items'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(ComentarioDaPublicacao.doJson)
+          .toList(),
+      proximoCursor: json['next_cursor'] as String?,
+      total: (json['comment_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final List<ComentarioDaPublicacao> itens;
+  final String? proximoCursor;
+
+  /// O total da PUBLICACAO, e nao `itens.length`, que e o tamanho desta pagina.
+  /// A tela mostra o total no cartao e a pagina na folha.
+  final int total;
+}
+
+/// O comentario criado **e** a contagem nova, numa resposta so: sem ela a tela
+/// precisaria de uma segunda ida ao servidor para atualizar o numero no cartao.
+class ComentarioCriado {
+  const ComentarioCriado({required this.comentario, required this.total});
+
+  factory ComentarioCriado.doJson(Map<String, dynamic> json) {
+    return ComentarioCriado(
+      comentario: ComentarioDaPublicacao.doJson(
+        (json['comment'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      total: (json['comment_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final ComentarioDaPublicacao comentario;
+  final int total;
+}
+
 class PublicacaoDaLinha {
   const PublicacaoDaLinha({
     required this.ref,
@@ -251,6 +425,9 @@ class PublicacaoDaLinha {
     required this.imagem,
     required this.autor,
     required this.minha,
+    required this.curtidas,
+    required this.comentarios,
+    required this.curtiEu,
   });
 
   factory PublicacaoDaLinha.doJson(Map<String, dynamic> json) {
@@ -269,6 +446,9 @@ class PublicacaoDaLinha {
       // O caminho errado aqui seria oferecer apagar a publicacao de outra
       // pessoa, e o servidor responderia 404 — mas a tela teria mentido.
       minha: json['mine'] as bool? ?? false,
+      curtidas: (json['like_count'] as num?)?.toInt() ?? 0,
+      comentarios: (json['comment_count'] as num?)?.toInt() ?? 0,
+      curtiEu: json['liked_by_me'] as bool? ?? false,
     );
   }
 
@@ -283,6 +463,18 @@ class PublicacaoDaLinha {
   /// em toda rolagem, e comparar aqui seria a autorizacao migrando para o
   /// cliente.
   final bool minha;
+
+  /// Quantas pessoas curtiram. **Lida das linhas no servidor**, e nao de coluna
+  /// denormalizada. A tela mostra o numero e **nunca quem**: nao existe lista de
+  /// quem curtiu (item 7 da Emenda 5 do ADR-0010).
+  final int curtidas;
+
+  /// Quantos comentarios VIVOS. Comentario apagado nao conta.
+  final int comentarios;
+
+  /// Se quem chama curtiu. Vem do servidor: a tela nao teria como saber, e
+  /// deixa-la adivinhar faria o coracao piscar errado na primeira rolagem.
+  final bool curtiEu;
 }
 
 /// Uma publicacao do DONO.
