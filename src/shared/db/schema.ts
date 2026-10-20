@@ -19,8 +19,73 @@ export interface UsersTable {
   /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, de propósito. */
   id: string;
   email: string;
+  /**
+   * O instante da verificacao do e-mail. **E ELE o selo de validado** que o
+   * cliente pediu em 18/10/2026 ("um selo na foto dele, se ele estiver
+   * validado"): o conceito ja existe e ja sai como `Me.email_verified`. Nao ha
+   * nem pode haver uma segunda coluna dizendo a mesma coisa.
+   */
   email_verified_at: Date | null;
+  /**
+   * A foto que a PROPRIA pessoa cadastrou (migracao `20261018000008`,
+   * `catalog_images.purpose = 'user_photo'`).
+   *
+   * **Visivel so para o dono.** Ela sai em `GET /v1/me` e em nenhuma outra
+   * resposta -- nao ha coluna de visibilidade para terceiros, porque mostrar a
+   * outros contraria decisao registrada (ADR-0025 item 2 proibe avatar na
+   * `Rede`; o contrato proibe foto de perfil em `Conversation.participants`) e
+   * isso e decisao do cliente, nao de implementacao.
+   *
+   * O id **nunca sai em resposta**: o app recebe a URL da derivada.
+   */
+  photo_image_id: string | null;
+  /**
+   * O ENDERECO PUBLICO E OPACO DA PESSOA: 22 simbolos de base64url, 128 bits
+   * sorteados por linha (migracao `20261018000031`).
+   *
+   * Existe porque bloquear e denunciar precisam APONTAR para alguem e `users`
+   * nao tinha endereco nenhum: `id` e UUID interno e o ADR-0010 item 6 o
+   * proibe em saida publica. Desenho do ADR-0024 -- `id` primaria, endereco
+   * publico ao lado, nenhuma chave estrangeira sobre o endereco publico.
+   *
+   * **NAO e o apelido (`@`)**: aquele e alias escolhido e MUTAVEL, de outra
+   * fatia, e endereco mutavel nao serve de endereco estavel. Este e imutavel:
+   * nao ha caminho de escrita que o troque.
+   */
+  public_ref: string;
   display_name: string | null;
+  /**
+   * A data de nascimento declarada no cadastro, para a idade mínima de 16 anos
+   * (cliente, 18/10/2026). `20261018000021`.
+   *
+   * **`ColumnType` com escrita em `string` e leitura em `Date`**: a coluna é
+   * `date` e o driver devolve `Date`, mas o que a aplicação tem é `YYYY-MM-DD`
+   * — a forma canônica que `verificarDataDeNascimento` produz. Converter para
+   * `Date` antes de gravar reintroduziria fuso numa data que não tem hora, e é
+   * assim que uma data de nascimento anda um dia.
+   *
+   * **`| null` na leitura porque a coluna é anulável**, e ela é anulável por
+   * causa das 7 contas que já existiam em 18/10/2026. A obrigatoriedade mora
+   * em `RegisterRequest.required` e em `NovaConta.birthDate`, não aqui.
+   *
+   * **Nenhuma consulta de leitura a seleciona** (ela não está em
+   * `COLUNAS_DA_CONTA`), e `Conta` não a carrega: ela não sai em resposta
+   * nenhuma.
+   */
+  birth_date: ColumnType<Date | null, string | undefined, string>;
+  /**
+   * O apelido (`@`) escolhido pela pessoa, já normalizado, apontando para
+   * `handles.handle` (FK). `20261018000021`.
+   *
+   * Anulável porque **nenhum fluxo obriga a escolher** (plano 4-C.8): a tela
+   * cai para o nome de exibição com apelido nulo, e as 7 contas de 18/10/2026
+   * continuam no banco sem apelido.
+   *
+   * `citext` no banco, `string` aqui: a insensibilidade de caixa é do índice, e
+   * a aplicação já grava minúsculo -- as duas metades, e nenhuma substitui a
+   * outra.
+   */
+  handle: ColumnType<string | null, string | undefined, string>;
   phone_e164: string | null;
   phone_verified_at: Date | null;
   reference_postal_code: string | null;
@@ -40,6 +105,50 @@ export interface UsersTable {
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
   deleted_at: Date | null;
+}
+
+/**
+ * O espaço de nomes do `@`, **compartilhado** entre pessoa, pet e reservadas.
+ * `20261018000021`.
+ *
+ * Tabela e não coluna com índice único porque o site publica o pet em
+ * `/@{slug}` (ADR-0028) e o `@` é um símbolo só para quem lê: `@bidu` não pode
+ * ser um pet para um leitor e uma pessoa para outro. Dois índices únicos em
+ * duas tabelas não conversam.
+ *
+ * **Não há rota de disponibilidade** (plano 4-C.5): a decisão é no envio, por
+ * `handles_pkey` e `handles_esqueleto_unico`.
+ */
+export interface HandlesTable {
+  /** `citext`: `@Leandro` e `@leandro` não coexistem, e quem garante é a chave. */
+  handle: string;
+  /**
+   * Derivado pelo gatilho `handles_esqueleto_derivado`, **nunca** pelo que a
+   * aplicação manda: o esqueleto é o índice que separa os parecidos, e quem o
+   * mandasse errado de propósito o contornaria.
+   *
+   * `Generated` é o que diz isso no tipo -- o valor enviado é descartado.
+   */
+  handle_esqueleto: Generated<string>;
+  kind: 'pessoa' | 'pet' | 'reservado';
+  /**
+   * A conta dona, quando `kind = 'pessoa'`. **Preservado** quando o apelido
+   * vira `reservado` numa troca: é ele que diz para quem a linha está guardada
+   * nos 180 dias (plano 4-C.7).
+   */
+  user_id: string | null;
+  /**
+   * Quando o apelido passou a valer. A regra de troca de 60 dias é lida daqui.
+   *
+   * **A ESCRITA ACEITA `Date` E NADA MAIS**, e o estreitamento é a correção de
+   * um defeito medido em 18/10/2026: o tipo aceitava `number`, `atualizarPerfil`
+   * passava o `Instant` (milissegundos desde a época) e o Postgres recusava com
+   * `22008 date/time field value out of range` -- `PATCH /v1/me` com `handle`
+   * devolvia 500 em toda troca e toda escolha de apelido. `number` não servia
+   * para nada aqui: ninguém grava epoch nesta coluna de propósito, e o único
+   * efeito de aceitá-lo era deixar o erro compilar.
+   */
+  claimed_at: ColumnType<Date, Date | undefined, Date>;
 }
 
 export interface UserIdentitiesTable {
@@ -476,7 +585,19 @@ export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
  * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
  * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
  */
-export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
+export type PropositoDaImagemDeCatalogo =
+  | 'store_item'
+  | 'network_event'
+  // 18/10/2026: a logo e a foto do profissional recomendado (enviadas pelo
+  // administrador) e a foto do proprio usuario (enviada pela pessoa). Mesma
+  // esteira, propositos novos -- ver `migrations/20261018000008`.
+  | 'directory_logo'
+  | 'directory_photo'
+  | 'user_photo'
+  // A VITRINE de fotos do usuario -- ver `migrations/20261018000040`. Separado
+  // de `user_photo`: aquele e a foto UNICA do perfil, este sao as ate nove da
+  // vitrine, com geometria e tabela de ordem proprias.
+  | 'user_showcase';
 
 export interface UploadIntentsTable {
   id: string;
@@ -622,6 +743,86 @@ export type TipoDeEventoDeEntrega =
  * exclusão quando a conta pedir remoção (ADR-0010 item 6). O endereço vive só
  * dentro da requisição, o tempo de achar a conta e marcar `email_deliverable`.
  */
+/**
+ * A CAIXA DE NOTIFICACOES (migracao `20261018000020`): uma linha por aviso e
+ * por destinatario.
+ *
+ * **`src/` quase nao escreve nesta tabela.** Quem insere sao os GATILHOS nas
+ * tabelas de origem, e quem le sao as funcoes SQL `caixa_de_notificacoes`,
+ * `contagem_de_notificacoes` e `notificacao_marcar_lida`. O tipo existe aqui
+ * para o Kysely conhecer a tabela (as iscas inserem direto) e para o nome das
+ * colunas ter UM lugar.
+ */
+export interface NotificationItemsTable {
+  id: Generated<string>;
+  /** Identificador opaco, 22 caracteres base64url. **Nao e UUID** (ADR-0010). */
+  ref: string;
+  recipient_user_id: string;
+  item_kind: TipoDeAvisoDaCaixa;
+  /** Nome do pet, titulo do encontro, nome indicado. */
+  subject_label: string | null;
+  /**
+   * Quem causou o aviso. Existe SO para agrupar por (tipo, autor, dia), e NAO
+   * sai na resposta: a caixa nao tem autor nem avatar na tela, de proposito.
+   */
+  author_user_id: string | null;
+  source_kind: string;
+  source_id: string;
+  /** Quando o FATO aconteceu, e nao quando a linha nasceu. */
+  occurred_at: Date;
+  /** O item foi ABERTO. Nulo e nao lido. Ver a LISTA nao mexe nisto. */
+  read_at: Date | null;
+  created_at: Generated<Date>;
+}
+
+/**
+ * Os tipos de aviso da caixa. Espelha o `CHECK` de `notification_items.item_kind`
+ * e o `enum` `NotificationKind` do contrato.
+ */
+export type TipoDeAvisoDaCaixa =
+  | 'tag_scanned'
+  | 'found_reported'
+  | 'match_suggested'
+  | 'neighborhood_alert'
+  | 'event_join_requested'
+  | 'event_join_decided'
+  | 'event_cancelled'
+  | 'suggestion_decided'
+  | 'tag_request_updated'
+  | 'broadcast';
+
+/**
+ * Quando esta conta viu a lista pela ultima vez (migracao `20261018000020`).
+ *
+ * Abrir a caixa empurra `zeroed_at` para agora, e o contador passa a ignorar
+ * todo item anterior a isso SEM marcar nenhum como lido. Tabela propria e nao
+ * coluna em `users` de proposito: `users` e a tabela mais disputada deste
+ * repositorio, e este estado nao e identidade.
+ */
+export interface NotificationCounterStateTable {
+  user_id: string;
+  zeroed_at: Date;
+}
+
+/**
+ * Os COMUNICADOS disparados pelo painel (migracao `20261018000020`).
+ *
+ * Nao ha coluna de exclusao e nao ha rota de apagar: comunicado disparado fica
+ * registrado, por requisito.
+ */
+export interface NotificationBroadcastsTable {
+  id: Generated<string>;
+  /** Identificador opaco. Nao e UUID (ADR-0010). */
+  ref: string;
+  title: string;
+  body: string;
+  /** Conta do PAINEL (`admin_accounts`), nunca `users`. */
+  dispatched_by_admin: string;
+  dispatched_at: Generated<Date>;
+  /** Quantas caixas ele alcancou NO INSTANTE do disparo. */
+  recipients_total: number;
+}
+
 export interface NotificationDeliveriesTable {
   id: string;
   /** `MessageID` do provedor. Texto: o formato é dele, não nosso. */
@@ -805,6 +1006,18 @@ export interface ConversationsTable {
   /** Invisível aos dois lados de propósito. Ver a migração. */
   held_for_review_at: Date | null;
   held_reason: MotivoDeRetencao | null;
+  /**
+   * A REMOCAO LOGICA pela fila de moderacao do painel (`20261018000009`).
+   *
+   * Nao e `blocked_at` (acao de um dos dois lados, BICHUS-40), nao e
+   * `closed_at` (encerramento) e nao e `held_for_review_at` (retencao
+   * automatica). `conversation_messages` continua inteira: o que estas duas
+   * colunas fazem e tirar a conversa das LEITURAS dos dois lados, nas quatro
+   * consultas de `kysely-conversation-repository.ts`.
+   */
+  moderation_removed_at: Date | null;
+  /** O motivo, obrigatorio quando ha remocao por `CHECK`. **Nunca sai para o aplicativo.** */
+  moderation_reason: string | null;
 }
 
 /**
@@ -824,6 +1037,19 @@ export interface ConversationReportsTable {
   created_at: Generated<Date>;
   last_reported_at: Generated<Date>;
   resolved_at: Date | null;
+  /**
+   * O QUE o administrador decidiu (`20261018000009`). Nulo enquanto na fila.
+   *
+   * Sem esta coluna, denuncia descartada e denuncia cujo conteudo foi removido
+   * ficariam indistinguiveis -- as duas com `resolved_at` preenchido.
+   *
+   * Resolver LIBERA o par (conversa, papel) para uma denuncia nova, pelo
+   * indice unico PARCIAL desta tabela, e isso e legitimo aqui: a conversa
+   * continua, e um abuso novo depois da decisao e item de fila novo.
+   */
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao. Nao publicado, e nao chega a nenhum dos dois lados. */
+  resolution_reason: string | null;
 }
 
 /** BICHUS-43. A mensagem, com o texto **já redigido**. */
@@ -839,6 +1065,50 @@ export interface ConversationMessagesTable {
   /** Chave de objeto, nunca URL. */
   photo_object_key: string | null;
   created_at: Generated<Date>;
+  /**
+   * Especie da mensagem do Bichu, para a EXCECAO do contador (BICHUS-278).
+   *
+   * `scan_notice` e `found_notice` NAO saem do contador quando a pessoa abre a
+   * lista -- sao a coisa mais importante que o produto tem para dizer. Nulo nas
+   * linhas gravadas antes da coluna: nao da para classificar retroativamente, e
+   * nulo cai na regra geral.
+   */
+  system_kind: EspecieDaMensagemDoSistema | null;
+}
+
+/**
+ * BICHUS-278. As tres especies de mensagem do Bichu.
+ *
+ * As duas primeiras sao AVISO e por isso tem tratamento proprio no contador; a
+ * terceira e explicacao de interface e sai do contador pela regra geral.
+ */
+export type EspecieDaMensagemDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
+
+/**
+ * BICHUS-278. Ate quando cada LADO leu a conversa.
+ *
+ * Chave por (conversa, PAPEL) e nao por usuario, pela mesma razao de
+ * `conversations.blocked_by_role`: o achador pode nao ter conta, e a maioria nao
+ * tem. Ausencia de linha significa **nunca abriu**, que e o estado em que toda
+ * mensagem esta nao lida -- e e por isso que nao ha `DEFAULT now()`.
+ *
+ * Escrito ao ABRIR A CONVERSA, nunca ao abrir a lista: "lido" e o item aberto.
+ */
+export interface ConversationReadsTable {
+  conversation_id: string;
+  role: 'tutor' | 'finder';
+  last_read_at: Date;
+}
+
+/**
+ * BICHUS-278. Quando a CONTA abriu a area de mensagens.
+ *
+ * Zera o contador do sino e **nao** marca item nenhum como lido. Por conta e
+ * nao por aparelho: o contador e o mesmo nos dois telefones da mesma pessoa.
+ */
+export interface ConversationListViewsTable {
+  user_id: string;
+  seen_at: Date;
 }
 
 /**
@@ -918,15 +1188,214 @@ export type StatusDoPerfil = 'draft' | 'published' | 'hidden' | 'removed';
  */
 export type NivelDeVerificacao = 'none' | 'contact_verified' | 'document_verified';
 
+/**
+ * A avaliacao de um local do diretorio `Perto` (migracao `20261017000017`).
+ *
+ * Pedido do cliente de 18/10/2026: nota de 1 a 5 e recomendacao em texto,
+ * visiveis para os outros usuarios, "como acontece na playstore". O esquema e o
+ * do ADR-0011 secao 3, que o especificava desde 21/09 e cuja secao 5.4 o
+ * declarava fora daquela migracao por falta de autorizacao.
+ *
+ * **`author_user_id` ESTA AQUI, e a diferenca em relacao a coluna de quem
+ * convidou a entidade e o ponto.** Aquela carrega a marca `NUNCA sai do
+ * servidor` e `src/tools/portao-colunas-que-nao-saem.ts` reprova o nome dela em
+ * todo `.ts` de `src/` -- e por isso ela nao esta em `ProfessionalsTable`. Esta
+ * nao carrega a marca porque `src/` PRECISA dela na clausula `WHERE`: toda
+ * escrita de avaliacao e "a MINHA", resolvida por igualdade com quem chama
+ * (ADR-0021). O que nao acontece e ela ser PROJETADA: nenhuma leitura a
+ * seleciona para a resposta, e `DirectoryReview` nao tem campo de autor alem do
+ * nome de exibicao.
+ */
+export interface ProfessionalReviewsTable {
+  /** UUIDv7 gerado pela aplicacao, como em `pets` e em `professionals`. */
+  id: string;
+  /**
+   * O identificador publico e opaco (128 bits base64url), que e o que sai em
+   * resposta. Existe porque `id` e UUID interno e o ADR-0010 item 6 o proibe em
+   * saida publica. Sorteado por linha e nunca derivado do autor.
+   */
+  ref: string;
+  professional_id: string;
+  author_user_id: string;
+  /** Inteira de 1 a 5. O `CHECK` da migracao cobra a faixa no banco. */
+  rating: number;
+  /**
+   * A recomendacao em texto. **Nulo e o caso comum** (o cliente decidiu que o
+   * texto e opcional). Nunca string vazia: o `CHECK` recusa, para nao haver
+   * duas representacoes de "sem texto".
+   */
+  body: string | null;
+  /** Do ADR-0011. Nenhuma rota o preenche hoje e ele nao esta no contrato. */
+  service_kind: string | null;
+  created_at: Generated<Date>;
+  /** Quando o AUTOR editou. A moderacao mexe em `status` e nao toca aqui. */
+  edited_at: Date | null;
+  /**
+   * `published` e o DEFAULT, e o default E a decisao do cliente de 18/10: a
+   * avaliacao aparece na hora e **nao ha valor `pending`** porque nao ha fila.
+   *
+   * Nao confundir com a INDICACAO de local novo (`directory_suggestions` e
+   * `professionals.status`), que continua passando por revisao do
+   * administrador. Sao regras diferentes e uma nao afrouxa a outra.
+   */
+  status: Generated<'published' | 'hidden' | 'removed'>;
+  /** Escrito por quem moderou. **Nunca projetado em leitura publica.** */
+  moderation_reason: string | null;
+  moderated_at: Date | null;
+}
+
+/**
+ * A denuncia de uma avaliacao (migracao `20261017000017`).
+ *
+ * Contrapeso de a avaliacao publicar na hora. **Ela NAO esconde a avaliacao**:
+ * se escondesse, uma denuncia seria todo o custo de apagar a avaliacao de um
+ * concorrente. Enfileira para a moderacao, que decide e escreve o motivo em
+ * `professional_reviews.moderation_reason`.
+ *
+ * Tem coluna de usuario, ao contrario de `conversation_reports`, e a diferenca
+ * e que ali o achador pode nao ter conta: aqui a rota EXIGE conta, e sem a
+ * coluna nao haveria como deduplicar nem como recusar a denuncia da propria
+ * avaliacao.
+ */
+export interface ProfessionalReviewReportsTable {
+  id: string;
+  review_id: string;
+  reporter_user_id: string;
+  reason: 'spam' | 'offensive' | 'false_information' | 'not_about_this_place' | 'other';
+  detail: string | null;
+  /** A insistencia da MESMA pessoa, sem criar linha nova. */
+  repeat_count: Generated<number>;
+  created_at: Generated<Date>;
+  last_reported_at: Generated<Date>;
+  /** Escrito por quem modera. Nulo e "na fila". */
+  resolved_at: Date | null;
+  /** O QUE o administrador decidiu (`20261018000009`). Nulo enquanto na fila. */
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao. Nao publicado, e nao chega a quem denunciou. */
+  resolution_reason: string | null;
+}
+
+/**
+ * **A DECISAO da fila de moderacao, nas duas tabelas de denuncia.**
+ *
+ * Dois valores e nao tres: a fila tem um estado de espera (`resolved_at IS
+ * NULL`) e dois de saida. Um terceiro valor convidaria a primeira pessoa com
+ * pressa a inventar um fluxo que ninguem desenhou.
+ */
+export type DecisaoDaModeracao = 'content_removed' | 'dismissed';
+
+/**
+ * A VISAO `fila_de_moderacao` (`20261018000009`): UMA LINHA POR DENUNCIA,
+ * juntando as origens que existem.
+ *
+ * Hoje duas pernas: `review` (denuncia de avaliacao do `Perto`) e
+ * `conversation` (denuncia de conversa mediada, que ate 18/10/2026 era gravada
+ * e **nunca lida por ninguem**). Denuncia de PERFIL e de FOTO vem na frente de
+ * comunidade e custa uma perna de `UNION ALL` na visao, um valor de `enum` no
+ * contrato e um rotulo na tela -- **nenhuma linha daqui**, porque a consulta le
+ * a visao e nao as tabelas. Desenho DECLARADO, nao construido.
+ *
+ * `reporter_active` e BOOLEANO de proposito: nenhuma coluna de autoria
+ * atravessa a visao. Ele vem das funcoes
+ * `denuncia_de_*_com_denunciante_ativo(uuid)`, que delegam a
+ * `conta_habilitada(uuid)`.
+ *
+ * `target_body` e `target_rating` sao NULOS na perna da conversa, e a
+ * assimetria e escolhida: a avaliacao e conteudo PUBLICADO, e quem modera
+ * precisa ler o que todo mundo le; a conversa e privada entre duas pessoas, e
+ * nada neste produto autoriza o administrador a le-la.
+ */
+export interface FilaDeModeracaoView {
+  origin: string;
+  /** `professional_reviews.ref` na perna da avaliacao; `conversations.id` na da conversa. */
+  target_ref: string;
+  report_id: string;
+  reason: string;
+  /** O texto que o denunciante escreveu PARA QUEM MODERA. */
+  detail: string | null;
+  repeat_count: number;
+  created_at: Date;
+  last_reported_at: Date;
+  resolved_at: Date | null;
+  resolution: DecisaoDaModeracao | null;
+  resolution_reason: string | null;
+  /** Falso tambem quando a denuncia nao existe: a rota responde 404 e nunca 403 (ADR-0021). */
+  reporter_active: boolean;
+  target_removed: boolean;
+  target_rating: number | null;
+  /** O conteudo denunciado. **Nulo na conversa**, e isso e desenho e nao falta. */
+  target_body: string | null;
+  /** O nome do local na perna da avaliacao; o nome do pet na da conversa. */
+  target_subject: string;
+  /**
+   * Esta denuncia PESA na ordem da fila? (coluna acrescentada em 18/10/2026,
+   * na uniao, pela `20261018000032`.)
+   *
+   * **Nao e filtro.** A denuncia que nao pesa entra na fila igual; quem filtra
+   * e [reporter_active]. Sai de `denunciante_ordena_a_fila(reporter_user_id)`
+   * em quatro pernas e e `false` fixo na da conversa, que nao tem coluna de
+   * denunciante -- o achador pode nao ter conta.
+   */
+  reporter_weighs: boolean;
+}
+
 export interface ProfessionalsTable {
   /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
   id: string;
   kind: TipoDeProfissional;
+  /**
+   * O QUE a entrada e, eixo SEPARADO de `kind` (que e a ATIVIDADE). ONG e
+   * `organization`. `Generated` porque a `20261018000012` a criou com
+   * `NOT NULL DEFAULT 'professional'`: a escrita pode omiti-la e o banco
+   * preenche, que e o que faz a coluna ser aditiva.
+   */
+  entity_kind: Generated<TipoDeEntidade>;
   display_name: string;
   about: string | null;
   city: string | null;
   state: string | null;
   neighborhood: string | null;
+  /**
+   * O ENDERECO DE RUA, acrescentado pela migracao `20261018000001`.
+   *
+   * Os quatro existem porque a decisao 9.2 foi respondida pelo cliente em
+   * 18/10/2026: o painel passa a poder cadastrar CEP, logradouro, numero e
+   * complemento de uma entrada do diretorio.
+   *
+   * **Ele autorizou QUEM PREENCHE, e nao O QUE APARECE EM PUBLICO.** Estes
+   * quatro campos sao lidos e escritos pela superficie administrativa e
+   * **nenhuma consulta de leitura do diretorio do aplicativo os seleciona** --
+   * `DirectoryEntrySummary` continua com bairro, cidade e UF. Estar no tipo
+   * permite a ESCRITA; a ausencia na projecao publica e o que mantem a saida
+   * como estava.
+   *
+   * `postal_code` tem oito digitos sem mascara, pelo `CHECK
+   * professionals_cep_oito_digitos` -- mesmo formato de
+   * `collar_tag_requests.postal_code`. `street_number` e TEXTO: `s/n`, `120A`
+   * e `KM 32` sao numeros de porta.
+   */
+  postal_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
+  /**
+   * A LOGO e a FOTO da entidade, acrescentadas pela migracao `20261018000008`
+   * (pedido do cliente de 18/10/2026).
+   *
+   * Duas colunas porque sao DOIS PROPOSITOS: a logo e quadrada e pequena, e
+   * aparece ao lado do nome na lista do `Perto`; a foto e da fachada ou do
+   * ambiente, e e olhada grande no detalhe. As derivadas tem geometrias
+   * diferentes (`derivadas.ts`), e um campo so obrigaria uma tela a esticar a
+   * outra.
+   *
+   * **As duas sao ANULAVEIS, e nulo e o estado normal**: entrada sem logo e sem
+   * foto existe e publica como antes desta migracao.
+   *
+   * O valor e `catalog_images.id`, e ele **NUNCA sai em resposta** (ADR-0010
+   * item 6): quem le recebe a URL da derivada, montada na leitura.
+   */
+  logo_image_id: string | null;
+  photo_image_id: string | null;
   /**
    * `geography(Point,4326)`. `never` nos tres sentidos, como
    * `user_reference_locations.reference_point` e `found_reports.found_point`: o
@@ -982,6 +1451,12 @@ export interface ProfessionalsTable {
   published_at: Date | null;
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
+  /**
+   * A versao para `If-Match`, acrescentada pela migracao `20261017000011`.
+   * Mesma forma de `store_partners` e `network_events`: ela cresce na propria
+   * clausula `WHERE` do `UPDATE`, e nao e lida para ser comparada em memoria.
+   */
+  version: Generated<number>;
 }
 
 export type TipoDeEntidade = 'professional' | 'organization';
@@ -1010,6 +1485,85 @@ export interface EntityVerificationsTable {
   reviewed_at: Date | null;
   rejection_reason: string | null;
   created_at: CriadoEm;
+}
+
+/** O `CHECK` `directory_suggestions_contato_conhecido` (`20261017000004`). */
+export type TipoDeContatoSugerido = 'phone' | 'website' | 'instagram';
+
+/** O `CHECK` `directory_suggestions_revisao_conhecida` (`20261017000004`). */
+export type RevisaoDaSugestao = 'pending' | 'approved' | 'declined';
+
+/**
+ * A fila de revisao de `Perto`: o que a comunidade SUGERIU para o diretorio
+ * (migracao `20261017000004`, operacao `suggestDirectoryEntry`).
+ *
+ * **Nao e `professionals`, e nao vira `professionals` por conta propria.** A
+ * emenda 1 do ADR-0011 tirou `'community'` de `professionals.source`: a entrada
+ * do diretorio nasce por convite e aceite, e o que esta tabela guarda e o
+ * pedido de revisao. Nenhuma escrita deste caminho toca `professionals`.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra --
+ * a mesma de `ProfessionalsTable` e de `NetworkEventsTable`: a coluna que
+ * guarda QUEM SUGERIU e vinculo entre duas pessoas, leva a marca
+ * `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao, e
+ * `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts` de `src/`
+ * pelo nome literal dela: declara-la aqui **reprova o build**.
+ *
+ * Quem a escreve e a funcao `directory_suggestions_registrar` da propria
+ * migracao, chamada por SQL cru -- aqui a autoria e `NOT NULL`, entao nao ha
+ * linha intermediaria para carimbar depois e a funcao faz o `INSERT` inteiro.
+ * O construtor tipado nao pode nem oferece a coluna, e o que nao esta no tipo
+ * nao atravessa a borda por descuido.
+ *
+ * **Sem `geo`, sem `street_address` e sem documento** (ADR-0006, ADR-0011
+ * secao 4): as ausencias estao escritas por extenso no cabecalho da migracao,
+ * para que ninguem complete a tabela achando que faltou.
+ */
+export interface DirectorySuggestionsTable {
+  /** UUIDv7 gerado pela aplicacao, como em `pets` e em `professionals`. */
+  id: string;
+  /** 128 bits em base64url. E ele que sai no recibo, e nunca o `id`. */
+  ref: string;
+  display_name: string;
+  kind: TipoDeProfissional;
+  city: string;
+  /** A UF. E por esta coluna que o estado da revisao se chama `review_status`. */
+  state: string;
+  neighborhood: string | null;
+  /**
+   * O CEP do estabelecimento, oito digitos SEM hifen (`CHECK` da
+   * `20261017000015`, mesma forma de `tag_requests.postal_code`).
+   *
+   * **Guardado para quem REVISA, nunca publicado**: rua e CEP nao saem em
+   * superficie publica (ADR-0010 itens 4 e 5), nao ha operacao de leitura
+   * desta tabela no contrato, e `postal_code` ja e nome proibido em resposta
+   * sem conta em `tools/portao-contrato-publico.ts` e em
+   * `shared/http/vazamento-publico.ts`.
+   */
+  postal_code: string | null;
+  contact_kind: TipoDeContatoSugerido;
+  contact_value: string;
+  note: string | null;
+  review_status: Generated<RevisaoDaSugestao>;
+  created_at: Generated<Date>;
+  /** Nulo enquanto pendente, por `CHECK`. */
+  decided_at: Date | null;
+  /**
+   * O motivo da recusa, escrito pelo administrador para o PROXIMO revisor
+   * (`20261017000016`). Nulo em tudo que nao foi recusado, por `CHECK`. Nao e
+   * publicado e nao chega a quem indicou.
+   */
+  decline_reason: string | null;
+  /**
+   * A entrada do diretorio que a aprovacao produziu -- ou a que ja existia e a
+   * que a indicacao foi ligada, que e o caso da duplicata
+   * (`20261017000016`). Nulo em tudo que nao foi aprovado, por `CHECK`.
+   *
+   * **Este UUID nunca sai em resposta** (ADR-0010 item 6): a projecao devolve o
+   * `slug` da entrada, lido por `JOIN`. Ele esta no tipo porque a escrita da
+   * aprovacao precisa dele, e nao porque alguma leitura o projeta.
+   */
+  approved_entry_id: string | null;
 }
 
 /**
@@ -1175,6 +1729,29 @@ export interface StoreItemTagsTable {
 }
 
 /** Ate 8 imagens por item; `position = 0` e a principal (ADR-0027 A.2.1). */
+/**
+ * A VITRINE DE FOTOS DO USUARIO (migracao `20261018000040`), no molde de
+ * `store_item_images` e `network_event_images`.
+ *
+ * **Visivel so ao dono.** Projetada em `GET /me/showcase` e em NENHUMA outra
+ * resposta: o ADR-0025 item 2 proibe avatar de pessoa na superficie da `Rede`,
+ * e `Conversation.participants` nunca traz foto. Nao ha coluna de
+ * visibilidade porque nao ha o que configurar.
+ */
+export interface UserShowcaseImagesTable {
+  user_id: string;
+  /** `catalog_images.id`, com `purpose = 'user_showcase'`. Identidade interna: nunca projetada. */
+  image_id: string;
+  /** `0` e a capa. Ate `8`: o teto de NOVE e este intervalo mais a unicidade por conta. */
+  position: number;
+  /**
+   * **Anulavel, e e a unica diferenca do molde.** Nao ha terceiro que leia esta
+   * vitrine, e legenda esta fora de proposito; nulo faz o leitor de tela cair
+   * no rotulo da grade. Quando vem, de 2 a 150 caracteres.
+   */
+  alt_text: string | null;
+}
+
 export interface StoreItemImagesTable {
   item_id: string;
   image_id: string;
@@ -1354,6 +1931,81 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
+/**
+ * O `CHECK` `collar_tag_requests_decisao_conhecida`: a DECISAO do painel, e so
+ * ela. Nao diz onde a encomenda esta -- isso e [PassoDaEntregaDaPlaquinha].
+ */
+export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O `CHECK` `collar_tag_requests_entrega_conhecida`: os tres passos da ENTREGA,
+ * acrescentados pela `20261018000004` -- solicitado, em transporte, chegou.
+ *
+ * Eixo SEPARADO de [DecisaoDoPedidoDePlaquinha] porque acrescentar valor a uma
+ * `enum` de resposta quebra o contrato (`oasdiff`,
+ * `response-property-enum-value-added`). Os dois eixos nao sao independentes:
+ * `collar_tag_requests_entrega_exige_atendimento` proibe sair de `requested`
+ * sem o pedido estar `fulfilled`.
+ */
+export type PassoDaEntregaDaPlaquinha = 'requested' | 'in_transit' | 'arrived';
+
+/**
+ * O pedido do OBJETO FISICO da plaquinha da coleira.
+ *
+ * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
+ * Guarda o endereco de entrega desde a `20261017000012` (decisao do cliente de
+ * 17/10) e a ENTREGA desde a `20261018000004`; o VALOR segue fora, e cobranca
+ * continua fora de escopo por decisao dele.
+ *
+ * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
+ * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
+ */
+export interface CollarTagRequestsTable {
+  id: string;
+  ref: string;
+  pet_id: string;
+  requested_by: string;
+  notes: string | null;
+  /**
+   * O endereco de entrega. **Dado pessoal**: nao sai em superficie publica,
+   * nao entra na trilha de auditoria e nao e geocodificado (ADR-0006) -- nao
+   * ha `lat`, nao ha `lon` e nenhum servico externo resolve o CEP.
+   */
+  recipient_name: string;
+  /** E.164 do Brasil (`+55` e 10 ou 11 digitos). Dado pessoal. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  status: Generated<DecisaoDoPedidoDePlaquinha>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+  /**
+   * O passo da ENTREGA. `Generated` porque a coluna e
+   * `NOT NULL DEFAULT 'requested'`: o `INSERT` do pedido nao o escreve, e todo
+   * pedido que existe -- inclusive os de antes da `20261018000004` -- tem um
+   * passo. **Nunca nulo**, e e isso que faz a tela nao inferir passo de ausencia.
+   */
+  delivery_state: Generated<PassoDaEntregaDaPlaquinha>;
+  /**
+   * O codigo de rastreio, TEXTO que o administrador digita. Opcional: nem todo
+   * envio tem rastreio. **Sem validacao de formato de transportadora** e **sem
+   * integracao com transportadora nenhuma** -- so teto de tamanho (3 a 64).
+   */
+  tracking_code: string | null;
+  /** Quando saiu. Nulo enquanto `delivery_state` e `requested`. */
+  shipped_at: Date | null;
+  /** Quando chegou. Nulo em tudo que nao chegou. */
+  delivered_at: Date | null;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -1368,7 +2020,194 @@ export type OrigemDoEncontro = 'admin' | 'community';
  */
 export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
 
+/**
+ * FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com pedido e
+ * aceite, **uma linha por par**.
+ *
+ * `pair_low`/`pair_high` NAO estao declarados aqui, e a ausencia e a regra: eles
+ * sao derivados pelo gatilho `user_connections_par_derivado` e **o construtor
+ * tipado nao pode nem oferece as duas colunas**. O que nao esta no tipo nao
+ * atravessa a borda por descuido -- mesma forma da coluna de autoria de
+ * `DirectorySuggestionsTable`, que tambem nao esta declarada ali.
+ *
+ * (E o nome dela NAO e citado aqui de proposito: ela carrega a marca "nunca sai
+ * do servidor", e `portao-colunas-que-nao-saem` reprova o nome literal em todo
+ * `.ts` de `src/` -- inclusive em comentario. Custou uma reprovacao para
+ * lembrar.)
+ *
+ * `requester_user_id` e `addressee_user_id` **estao** aqui, e a diferenca
+ * importa: `src/` PRECISA das duas na clausula `WHERE`, porque toda leitura e
+ * toda escrita desta tabela e "a MINHA aresta", resolvida por igualdade com quem
+ * chama (ADR-0021). O que nao acontece e elas serem PROJETADAS: nenhuma leitura
+ * as seleciona para a resposta, e o que sai e `ref`, nome de exibicao e apelido.
+ *
+ * **Nao existe tabela nem coluna de "seguir"**, e nao existe leitura que devolva
+ * a LISTA de conexoes de alguem -- nem do proprio dono (plano 4-B).
+ */
+export interface UserConnectionsTable {
+  /** UUIDv7 gerado pela aplicacao. Nunca sai em resposta (ADR-0010 item 6). */
+  id: string;
+  /** 128 bits em base64url (22 caracteres). E ele que sai, e e DA ARESTA. */
+  ref: string;
+  requester_user_id: string;
+  addressee_user_id: string;
+  state: Generated<EstadoDaConexao>;
+  origin: OrigemDoPedidoDeConexao;
+  requested_at: Generated<Date>;
+  expires_at: Date;
+  responded_at: Date | null;
+  rest_until: Date | null;
+}
+
+/**
+ * O `CHECK` `user_connections_estado_conhecido`.
+ *
+ * **`bloqueado` NAO e valor daqui**: ele e `user_blocks` (fatia E), e e
+ * ferramenta pessoal, nao estado desta aresta. `nenhum` e a ausencia de linha.
+ */
+export type EstadoDaConexao = 'pending' | 'accepted' | 'declined';
+
+/**
+ * O `CHECK` `user_connections_origem_fechada`. Os tres caminhos que o desenho
+ * reconhece como relacao, e **nao ha quarto**: a descoberta por link morreu na
+ * decisao do cliente de 18/10/2026.
+ */
+export type OrigemDoPedidoDeConexao = 'anchored_case' | 'anchored_event' | 'presence_code';
+
+/**
+ * `user_blocks` -- o BLOQUEIO, ferramenta pessoal e nao moderacao
+ * (`20261018000031`).
+ *
+ * **Nao entra na fila do painel**, de proposito: bloquear nao tem
+ * administrador, nao tem revisao e tem efeito imediato na leitura.
+ *
+ * O predicado de leitura e `bloqueio_entre(uuid, uuid)`, SIMETRICO.
+ *
+ * **DESDE 19/10/2026 HA UMA SAIDA, e ela e ASSIMETRICA de proposito**
+ * (`listMyBlocks`): a lista de quem EU bloqueei, lida por
+ * `blocker_user_id = quem chama` na clausula `WHERE`. `blocker_user_id`
+ * continua sem sair em resposta nenhuma -- ele e sempre quem chama --, e
+ * `blocked_user_id` sai so resolvido no apelido, no nome e no `public_ref`
+ * daquela pessoa, **e so para quem a bloqueou**.
+ *
+ * **O bloqueado continua sem saber**, e a razao e a assimetria: nao ha leitura,
+ * nem contagem, nem existencia, de quem bloqueou quem chama. `bloqueio_entre` e
+ * simetrica e NAO e chamada naquela consulta, justamente para que a segunda
+ * metade do par nao apareca.
+ */
+export interface UserBlocksTable {
+  id: string;
+  /** Quem bloqueou. Entra no `WHERE`; nunca sai em resposta. */
+  blocker_user_id: string;
+  /** Quem foi bloqueado. `ON DELETE CASCADE`: a linha morre com o expurgo. */
+  blocked_user_id: string;
+  created_at: Generated<Date>;
+}
+
+/**
+ * As TRES tabelas de denuncia desta fatia usam a MESMA
+ * `DecisaoDaModeracao` declarada acima (a da fila de `20261018000009`):
+ * mesma forma e mesmos dois valores -- um estado de espera
+ * (`resolved_at IS NULL`) e dois de saida, sem `escalated`. A uniao de
+ * 18/10/2026 trouxe os dois ramos com a mesma declaracao; ela ficou UMA,
+ * porque duas definicoes do mesmo tipo e onde elas comecam a divergir.
+ */
+
+/** As colunas que as tres tabelas de denuncia desta fatia compartilham. */
+interface DenunciaDaComunidade {
+  id: string;
+  /**
+   * Quem denunciou. SEM A MARCA do portao de saida, pela mesma decisao de
+   * `professional_review_reports.reporter_user_id`: `src/` precisa dela no
+   * `WHERE` para a ocultacao imediata, para os tetos e para recusar a denuncia
+   * do proprio conteudo. Nenhuma resposta a projeta.
+   */
+  reporter_user_id: string;
+  /** Relato opcional. Nao e o motivo: e contexto sobre o motivo escolhido. */
+  detail: string | null;
+  /** Quantas vezes a MESMA pessoa denunciou o MESMO alvo nesta linha aberta. */
+  repeat_count: Generated<number>;
+  created_at: Generated<Date>;
+  last_reported_at: Generated<Date>;
+  /** Nulo e "na fila". Escrito por quem modera. */
+  resolved_at: Date | null;
+  resolution: DecisaoDaModeracao | null;
+  /** O motivo da decisao, para quem auditar. Nao chega a nenhum dos dois lados. */
+  resolution_reason: string | null;
+}
+
+/** Denuncia de PERFIL: cinco motivos, sobre quem a pessoa e. */
+export interface ProfileReportsTable extends DenunciaDaComunidade {
+  /** `SET NULL`: a denuncia SOBREVIVE ao expurgo da conta do denunciado. */
+  subject_user_id: string | null;
+  /** `users.public_ref` em COPIA. E ele o `target_ref` da fila. */
+  subject_ref: string;
+  reason: 'impersonation' | 'harassment' | 'pet_ransom_scam' | 'minor_suspected' | 'other';
+}
+
+/** Denuncia de FOTO: seis motivos, e o alvo e a esteira de imagem. */
+export interface PhotoReportsTable extends DenunciaDaComunidade {
+  image_id: string | null;
+  /** `catalog_images.public_key` em COPIA. E o `target_ref` E o `target_body`. */
+  image_public_key: string;
+  owner_user_id: string | null;
+  reason:
+    | 'nudity_or_sexual'
+    | 'child_at_risk'
+    | 'animal_violence'
+    | 'i_am_in_it'
+    | 'impersonation'
+    | 'other';
+}
+
+/** Denuncia de PUBLICACAO: cinco motivos, e a terceira lista e so deste produto. */
+export interface PublicationReportsTable extends DenunciaDaComunidade {
+  /**
+   * SEM chave estrangeira: `user_publications` e de outra fatia e nao existe
+   * nesta base. O `ALTER` de uma linha que a liga esta no fim da
+   * `20261018000032`.
+   */
+  publication_id: string | null;
+  publication_ref: string;
+  /** O texto denunciado, CONGELADO: editar depois nao muda o que foi julgado. */
+  publication_body: string | null;
+  reason:
+    | 'offensive_or_discriminatory'
+    | 'scam_or_animal_sale'
+    | 'false_lost_pet_info'
+    | 'spam_or_repetition'
+    | 'other';
+}
+
+export interface AppVersionPolicyTable {
+  /**
+   * A chave. Politica por plataforma e requisito: hoje so o Android e
+   * publicado (decisao do cliente de 23/09) e o iOS esta dormente, instalado
+   * por cabo com provisionamento gratuito. Uma politica unica bloquearia o
+   * build de cabo junto, e naquele build "va para a loja" e instrucao
+   * impossivel.
+   */
+  platform: 'android' | 'ios';
+  /**
+   * Abaixo desta versao o aplicativo FECHA. **Nula = ninguem bloqueado**, e e
+   * assim que a migracao `20261019000007` a semeia.
+   *
+   * Sem `Generated`: o `DEFAULT` nao existe de proposito. Um padrao aqui seria
+   * um numero que ninguem escolheu trancando aparelho de verdade.
+   */
+  minimum_version: string | null;
+  /** A partir desta versao o app so AVISA, de forma dispensavel. Nula = sem aviso. */
+  recommended_version: string | null;
+  /** Destino do botao. Nula hoje: nao ha loja. Nula, o app nao desenha botao. */
+  store_url: string | null;
+  /** Quem trocou o numero. Texto livre: quem escreve esta no `psql`. */
+  updated_by: string | null;
+  updated_at: AtualizadoEm;
+}
+
 export interface Database {
+  handles: HandlesTable;
+  user_connections: UserConnectionsTable;
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;
@@ -1401,13 +2240,21 @@ export interface Database {
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
   notification_deliveries: NotificationDeliveriesTable;
+  notification_items: NotificationItemsTable;
+  notification_counter_state: NotificationCounterStateTable;
+  notification_broadcasts: NotificationBroadcastsTable;
   lost_cases: LostCasesTable;
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;
+  conversation_reads: ConversationReadsTable;
+  conversation_list_views: ConversationListViewsTable;
   conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
+  professional_reviews: ProfessionalReviewsTable;
+  professional_review_reports: ProfessionalReviewReportsTable;
   entity_verifications: EntityVerificationsTable;
+  directory_suggestions: DirectorySuggestionsTable;
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_categories: StoreCategoriesTable;
@@ -1419,12 +2266,21 @@ export interface Database {
   store_tags: StoreTagsTable;
   store_item_tags: StoreItemTagsTable;
   store_item_images: StoreItemImagesTable;
+  user_showcase_images: UserShowcaseImagesTable;
   network_events: NetworkEventsTable;
   network_event_bring_items: NetworkEventBringItemsTable;
   network_event_sizes: NetworkEventSizesTable;
   network_event_amenities: NetworkEventAmenitiesTable;
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
+  collar_tag_requests: CollarTagRequestsTable;
+  /** VISAO, e nao tabela. Somente leitura: nada escreve aqui (`20261018000009`). */
+  fila_de_moderacao: FilaDeModeracaoView;
+  user_blocks: UserBlocksTable;
+  profile_reports: ProfileReportsTable;
+  photo_reports: PhotoReportsTable;
+  publication_reports: PublicationReportsTable;
+  app_version_policy: AppVersionPolicyTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -474,6 +474,52 @@ class Pet {
   }
 }
 
+/// `PetTag`: a tag do pet como o **dono** a ve em `GET /v1/pets/{petId}/tags`.
+///
+/// **Ela nao tem o codigo, e a ausencia e o contrato.** A rota "nunca devolve
+/// o codigo em claro, nem para o dono: apenas os quatro ultimos caracteres,
+/// para que ele consiga identificar a plaquinha fisica". Quem quer o codigo
+/// inteiro de novo nao tem por onde: ele saiu uma vez, em [TagEmitida], na
+/// F1.6, e o contrato manda o cliente **nao** persistir aquele valor.
+///
+/// Por isso [TagDoPet] existe com tres campos e nao com quatro: o caminho de
+/// recuperacao do codigo e a IMAGEM (`qr.png`), que o servidor desenha, e nao
+/// um codigo guardado no aparelho. A consequencia de desenho esta na tela do
+/// detalhe: o rotulo acessivel do QR **nao pode** ser o codigo por extenso,
+/// porque o app nao o tem.
+class TagDoPet {
+  const TagDoPet({
+    required this.id,
+    required this.ativa,
+    required this.sufixo,
+    this.apelido,
+  });
+
+  final String id;
+
+  /// `status == 'active'`. O contrato fecha o enum em `active` e `revoked`, e
+  /// a tela so tem o que fazer com a primeira: tag revogada responde 410 no
+  /// `qr.png` ("A tag revogada. O QR nao e reimpresso"), entao pedir a imagem
+  /// dela seria pedir uma recusa.
+  final bool ativa;
+
+  /// `code_suffix`: os quatro ultimos caracteres. **Tudo o que o app tem** do
+  /// codigo depois da F1.6.
+  final String sufixo;
+
+  /// `label`: o apelido que distingue uma plaquinha da outra. Nao viaja no QR.
+  final String? apelido;
+
+  factory TagDoPet.doJson(Map<String, dynamic> json) {
+    return TagDoPet(
+      id: json['id'] as String? ?? '',
+      ativa: (json['status'] as String?) == 'active',
+      sufixo: json['code_suffix'] as String? ?? '',
+      apelido: json['label'] as String?,
+    );
+  }
+}
+
 /// `PetTagIssued`: a **unica** resposta do contrato que traz o codigo em claro.
 ///
 /// `GET /v1/pets/{petId}/tags` nunca mais devolve [codigo], nem para o dono:
@@ -588,10 +634,15 @@ class TagResolvida {
 
   /// `pet.photo_url`.
   ///
-  /// **Hoje ele vem `null` nesta rota, e isso e desenho do servidor, nao
-  /// pendencia.** O campo existe aqui porque o contrato o declara; a tela
-  /// trata a ausencia pela regra 5.4 do design system e **nunca** promete uma
-  /// foto que nao vai chegar.
+  /// **Ele vem preenchido desde 18/10, e a tela o desenha.** Ate ali o servidor
+  /// mandava `null` fixo nesta rota -- o contrato sempre declarou o campo, e o
+  /// exemplo de 200 de `resolveTagCode` sempre trouxe um endereco --, e o
+  /// sintoma era o do relato do cliente: escaneou a plaquinha, a tela abriu sem
+  /// a foto do pet.
+  ///
+  /// Continua anulavel, e o nulo continua tendo significado: pet sem foto de
+  /// capa pronta. Nesse caso a tela trata a ausencia pela regra 5.4 do design
+  /// system e **nunca** promete uma foto que nao vai chegar.
   final String? fotoUrl;
 
   final bool estaPerdido;
@@ -653,13 +704,20 @@ class AvisoDoAchadorCriado {
   /// `conversation_url`: o endereco da conversa mediada, montado pelo servidor.
   final String urlDaConversa;
 
-  /// `owner_notified`.
+  /// `owner_notified` — **verdadeiro so quando a entrega ao tutor foi
+  /// enfileirada**.
   ///
-  /// **Falso NAO significa que o aviso se perdeu**: o contrato diz que ele e
-  /// falso apenas quando a notificacao foi **agrupada** a um aviso recente, e
-  /// que o aviso em si nunca e descartado. A tela do achador continua dizendo
-  /// que o tutor foi avisado, porque foi -- mudar o texto para "talvez" faria
-  /// quem esta com o animal na mao duvidar e ir embora.
+  /// O paragrafo que estava aqui dizia que falso significa apenas "agrupado a
+  /// um aviso recente" e que a tela "continua dizendo que o tutor foi avisado,
+  /// porque foi". **Nao foi.** Medido em 18/10/2026: o servidor devolvia
+  /// `true` em todo primeiro escaneamento e nenhuma entrega era enfileirada --
+  /// o unico push emitido em producao e o alerta de vizinhanca. Quem achou o
+  /// animal lia que o tutor foi avisado e soltava o bicho.
+  ///
+  /// **Falso continua NAO significando que o aviso se perdeu**: o registro
+  /// existe e o tutor o encontra ao abrir o aplicativo. O que falso diz e que
+  /// ninguem garante que o telefone dele apitou, e a tela precisa dizer
+  /// exatamente isso -- nem mais, nem menos.
   final bool tutorAvisado;
 
   /// `pet_display_name`. Opcional no contrato.
@@ -669,8 +727,215 @@ class AvisoDoAchadorCriado {
     return AvisoDoAchadorCriado(
       tokenDoAchador: json['finder_token'] as String? ?? '',
       urlDaConversa: json['conversation_url'] as String? ?? '',
-      tutorAvisado: json['owner_notified'] as bool? ?? true,
+      // **O ausente vale FALSO**, e o padrao era `true`. Um corpo que nao
+      // trouxe o campo nao autoriza a tela a prometer que o tutor foi
+      // avisado: na duvida, a frase que nao faz ninguem soltar o animal.
+      tutorAvisado: json['owner_notified'] as bool? ?? false,
       nomeDoPet: json['pet_display_name'] as String?,
+    );
+  }
+}
+
+/// A resposta de `GET /tags/{code}/owner-context` (`TagOwnerContext`).
+///
+/// **Os dois identificadores internos da tag, e eles so saem por `bearerAuth`.**
+/// Eles vivem numa rota propria, e nao dentro de `TagResolution`, porque
+/// `GET /tags/{code}` tem caminho anonimo: enquanto `pet_id` e `tag_id`
+/// moraram no corpo daquela operacao, estavam protegidos apenas por uma frase
+/// de descricao (ADR-0010 item 6; SEC-001).
+///
+/// **Custa uma ida a mais so no caminho do dono**, que e o raro: quem escaneia
+/// a plaquinha na rua e um estranho, e para ele esta rota nunca e chamada.
+class ContextoDoDonoDaTag {
+  const ContextoDoDonoDaTag({required this.petId, required this.tagId});
+
+  /// `pet_id`. E o endereco da pagina do pet (`T.1`), que e para onde o dono
+  /// vai quando escaneia a propria plaquinha.
+  final String petId;
+
+  /// `tag_id`. Endereca as operacoes de plaquinha do tutor.
+  final String tagId;
+
+  factory ContextoDoDonoDaTag.doJson(Map<String, dynamic> json) {
+    return ContextoDoDonoDaTag(
+      petId: json['pet_id'] as String? ?? '',
+      tagId: json['tag_id'] as String? ?? '',
+    );
+  }
+}
+
+/// O endereco para onde a plaquinha e enviada (`DeliveryAddress`).
+///
+/// **Dado pessoal, e o minimo para entregar.** Sem documento e sem data de
+/// nascimento. O telefone entrou em 17/10 por decisao do cliente: a
+/// transportadora costuma exigir um para entregar.
+///
+/// **Nenhum campo vira coordenada** (ADR-0006): nao ha latitude, nao ha
+/// longitude e nada aqui e geocodificado. O CEP **preenche** rua, bairro,
+/// cidade e estado desde 17/10, por decisao do cliente, e isso e TEXTO --
+/// quem busca e `api/busca_de_cep.dart`, e o que vem de la a pessoa pode
+/// corrigir inteiro.
+///
+/// O `uf` e a sigla de dois caracteres. A lista dos 27 nomes vive em
+/// `estados_brasileiros.dart`, e e ela que o formulario mostra; o que viaja e
+/// a sigla.
+class EnderecoDeEntrega {
+  const EnderecoDeEntrega({
+    required this.destinatario,
+    required this.cep,
+    required this.logradouro,
+    required this.numero,
+    required this.bairro,
+    required this.cidade,
+    required this.uf,
+    required this.telefone,
+    this.complemento,
+  });
+
+  /// Quem recebe, como vai na etiqueta.
+  final String destinatario;
+
+  /// Oito digitos, **sem mascara**: o contrato declara `^[0-9]{8}$`.
+  final String cep;
+
+  final String logradouro;
+
+  /// Texto, e nao numero: `s/n`, `120A` e `KM 32` sao numeros de porta.
+  final String numero;
+
+  /// O unico campo opcional do endereco.
+  final String? complemento;
+
+  final String bairro;
+  final String cidade;
+
+  /// A sigla de dois caracteres.
+  final String uf;
+
+  /// **E.164**, `+55` e 10 ou 11 digitos, como o contrato exige. Obrigatorio:
+  /// transportadora costuma precisar dele para entregar.
+  final String telefone;
+
+  Map<String, dynamic> paraJson() {
+    return <String, dynamic>{
+      'recipient_name': destinatario,
+      'postal_code': cep,
+      'street': logradouro,
+      'street_number': numero,
+      if (complemento != null && complemento!.isNotEmpty)
+        'complement': complemento,
+      'neighborhood': bairro,
+      'city': cidade,
+      'state': uf,
+      'recipient_phone': telefone,
+    };
+  }
+}
+
+/// O pedido da plaquinha da coleira, como o app o ve.
+///
+/// **Solicitar nao e emitir.** [TagEmitida] e o CODIGO, irreversivel
+/// (ADR-0004) e visivel uma unica vez; este e o pedido do PLASTICO, e ele nao
+/// carrega codigo nenhum.
+///
+/// Sem `ref` e sem identificador: o `ref` serve ao caminho do painel, e o
+/// contrato nao o projeta para o app (ADR-0010 item 6).
+class PedidoDePlaquinha {
+  const PedidoDePlaquinha({
+    required this.ref,
+    required this.status,
+    required this.solicitadoEm,
+    this.passoDaEntrega = 'requested',
+    this.decididoEm,
+    this.codigoDeRastreio,
+    this.despachadoEm,
+    this.entregueEm,
+    this.observacao,
+  });
+
+  /// O identificador OPACO do pedido, como o servidor o devolveu.
+  ///
+  /// **Nunca gerado aqui.** Ele e o mesmo `ref` de 128 bits que a fila do
+  /// painel usa, e e o numero que a pessoa tem para falar sobre o pedido
+  /// dela. Um identificador inventado no app nao serviria para nada: ninguem
+  /// do outro lado saberia procura-lo.
+  final String ref;
+
+  /// `pending`, `fulfilled` ou `declined`, como o contrato os escreve.
+  ///
+  /// **Texto e nao enum**, de proposito: a fila do painel pode ganhar estados
+  /// de entrega, e um enum fechado faria uma versao antiga do app quebrar ao
+  /// receber um valor que ainda nao conhece. Quem traduz para passo de tela e
+  /// `AcompanhamentoDoPedido`, com um ramo explicito para o desconhecido.
+  final String status;
+
+  final DateTime? solicitadoEm;
+
+  /// Quando o painel decidiu, ou nulo enquanto ninguem decidiu.
+  final DateTime? decididoEm;
+
+  /// O PASSO DA ENTREGA: `requested`, `in_transit` ou `arrived`.
+  ///
+  /// **E este campo que a tela desenha, e nao [status].** Os dois sao eixos
+  /// diferentes: [status] e a DECISAO do painel (atender ou recusar) e este e
+  /// ONDE A ENCOMENDA ESTA. Desenhar o trilho a partir de [status] faria o
+  /// pedido atendido parecer entregue no instante em que alguem clicou em
+  /// "atender", muito antes de a plaquinha sair.
+  ///
+  /// **Texto e nao enum**, pelo mesmo motivo de [status]: um valor novo numa
+  /// versao futura do painel nao pode quebrar o app que ja esta no aparelho.
+  ///
+  /// **Padrao `requested` e nao nulo**: a coluna do banco e
+  /// `NOT NULL DEFAULT 'requested'`, entao todo pedido tem um passo escrito --
+  /// inclusive os criados antes de a entrega existir -- e a tela nao tem nulo
+  /// a tratar. Resposta antiga sem a chave cai no mesmo lugar.
+  final String passoDaEntrega;
+
+  /// O codigo de rastreio da transportadora, quando existir.
+  ///
+  /// **Vem PREENCHIDO quando ha despacho com rastreio.** Ate 18/10/2026 nao
+  /// havia coluna que o guardasse e este campo era sempre nulo; a migracao
+  /// `20261018000004` criou a coluna e a tela de entrega do painel a escreve.
+  /// Nulo continua sendo o caso comum e NAO e defeito: nem todo envio tem
+  /// rastreio, e nenhum pedido tem rastreio antes de sair. A tela so o desenha
+  /// quando ele vem preenchido -- campo de rastreio vazio e pior que nenhum.
+  final String? codigoDeRastreio;
+
+  /// Quando a plaquinha SAIU, ou nulo enquanto ela nao saiu.
+  final DateTime? despachadoEm;
+
+  /// Quando a plaquinha CHEGOU, ou nulo em tudo que nao chegou.
+  final DateTime? entregueEm;
+
+  final String? observacao;
+
+  /// Verdadeiro enquanto ninguem decidiu.
+  bool get aguardando => status == 'pending';
+
+  factory PedidoDePlaquinha.doJson(Map<String, dynamic> json) {
+    final quando = json['requested_at'];
+    final decidido = json['decided_at'];
+    // `tracking_code` vazio conta como ausente: um codigo em branco nao e um
+    // codigo, e deixa-lo passar faria a tela desenhar um campo vazio.
+    final rastreio = json['tracking_code'] as String?;
+    final despachado = json['shipped_at'];
+    final entregue = json['delivered_at'];
+    // `delivery_state` ausente cai em `requested`, que e o passo INICIAL: o
+    // contrato o declara `NOT NULL DEFAULT 'requested'` do lado do banco, e
+    // supor "chegou" na ausencia seria a tela afirmando uma entrega.
+    final passo = json['delivery_state'] as String?;
+    return PedidoDePlaquinha(
+      ref: json['ref'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending',
+      solicitadoEm: quando is String ? DateTime.tryParse(quando) : null,
+      passoDaEntrega:
+          passo == null || passo.trim().isEmpty ? 'requested' : passo.trim(),
+      decididoEm: decidido is String ? DateTime.tryParse(decidido) : null,
+      codigoDeRastreio:
+          rastreio == null || rastreio.trim().isEmpty ? null : rastreio.trim(),
+      despachadoEm: despachado is String ? DateTime.tryParse(despachado) : null,
+      entregueEm: entregue is String ? DateTime.tryParse(entregue) : null,
+      observacao: json['notes'] as String?,
     );
   }
 }

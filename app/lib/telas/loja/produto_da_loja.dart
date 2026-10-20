@@ -291,7 +291,9 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
       // que nao leva a lugar nenhum.
       if (item.destinoExterno case final Uri destino) ...<Widget>[
         const SizedBox(height: BichuEspaco.e6),
-        _Margem(child: BotaoDeSaidaDaLoja(item: item, destino: destino)),
+        _Margem(
+          child: BotaoDeSaidaDaLoja(item: item, destino: destino),
+        ),
       ],
     ];
   }
@@ -482,12 +484,28 @@ class _Miniatura extends StatelessWidget {
 // O resto da pagina
 // ---------------------------------------------------------------------------
 
-/// Titulo, parceiro, categoria e preco.
+/// Titulo, parceiro e categoria. **Sem preco desde 18/10/2026.**
 ///
-/// O preco sai da MESMA `ItemDaLoja.linhaDoPreco` que o cartao usa: valor,
-/// rotulo e data num bloco so, simultaneamente, sem interacao (criterio 15 da
-/// BICHUS-185). Uma segunda formatacao aqui seria um segundo lugar para o
-/// numero aparecer sem a data.
+/// O preco saiu da secao `Loja` inteira por pedido literal do cliente --
+/// *"Retire o preco dos produtos da loja e o texto de 'preco de referencia'"*
+/// --, e "inteira" inclui esta pagina. Ela esta PARADA e sem entrada desde
+/// 17/10 (nada no aplicativo navega para ca), e e exatamente por isso que o
+/// preco saiu daqui tambem: deixado de pe, ele voltaria a tela no dia em que
+/// alguem reabrisse a rota, e a decisao do cliente precisaria ser aplicada uma
+/// segunda vez por alguem que nao a conhece.
+///
+/// **O que saiu**, nos mesmos tres pedacos do cartao: o valor
+/// (`item.linhaDoPreco`), o `semanticsLabel` que carregava
+/// "Preco de referencia" junto dele, e o ramo de
+/// `VitrineDaLoja.precoNaoConfirmado` -- a clausula visual que acompanhava o
+/// preco vencido e que fica orfa sem valor nenhum na tela.
+///
+/// **O que NAO saiu:** a clausula juridica dos termos. Ela continua inteira em
+/// `web/src/conteudo/juridico/termos.md`, e fala do que a plataforma e -- nao
+/// vende nada, precos sao referencia -- e nao do que esta pagina pinta.
+///
+/// O arranjo da pagina continua intocado no resto, como a decisao de 17/10
+/// manda: nada foi redesenhado aqui, so o preco deixou de ser desenhado.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.item});
 
@@ -497,7 +515,6 @@ class _Cabecalho extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final linhaDoPreco = item.linhaDoPreco;
     // A CLASSIFICACAO, e nao mais so a categoria. O detalhe do produto nasceu
     // no lote anterior de 17/10, quando a categoria era um `enum` do binario e
     // `item.categoria` era o proprio valor com `rotulo`. Na mescla dos dois
@@ -525,19 +542,8 @@ class _Cabecalho extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e3),
           _PilulaDaCategoria(rotulo: classificacao),
         ],
-        if (linhaDoPreco != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e3),
-          Text(
-            linhaDoPreco,
-            style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-          ),
-        ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e3),
-          Text(
-            VitrineDaLoja.precoNaoConfirmado,
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-        ],
+        // **O PRECO ERA DESENHADO AQUI**, e os dois ramos sairam em
+        // 18/10/2026 por pedido do cliente. Ver a prosa da classe.
       ],
     );
   }

@@ -40,6 +40,7 @@ import * as referencia from '../../modules/pets/adapters/http/reference-data-rou
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
 import * as casoPublico from '../../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import * as perdidosPublicos from '../../modules/lostfound/adapters/http/listagem-publica-de-perdidos-routes.js';
 import * as perfilPublico from '../../modules/pets/adapters/http/perfil-publico-routes.js';
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
@@ -54,8 +55,25 @@ import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
 import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-store-routes.js';
 import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
+import * as conexoes from '../../modules/connections/adapters/http/connection-routes.js';
+import * as pessoas from '../../modules/people/adapters/http/person-profile-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
+import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
+import * as sugestaoDoDiretorio from '../../modules/professionals/adapters/http/directory-suggestion-routes.js';
+import * as diretorioAdministrativo from '../../modules/professionals/adapters/http/admin-directory-routes.js';
+import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+import * as vitrineDeFotos from '../../modules/showcase/adapters/http/showcase-routes.js';
+import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
+// 18/10/2026. A fila de moderacao do painel.
+import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
+import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
+import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
+// 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
+// sonda e deliberadamente separado dela.
+import * as vereditoDeVersao from '../../modules/app-release/adapters/http/version-status-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -68,7 +86,14 @@ const MODULOS: readonly Record<string, unknown>[] = [
   casos,
   // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
   casoPublico,
+  // A listagem publica de perdidos: a operacao saiu de
+  // `OPERACOES_AINDA_SEM_ROTA` no mesmo commit que trouxe esta linha.
+  perdidosPublicos,
   perfilPublico,
+  // A VITRINE DE FOTOS DO USUARIO (18/10/2026). Modulo novo entra AQUI, e o
+  // terceiro caso deste arquivo e quem cobra: sem esta linha ele reprova
+  // contando `defineRoute` no disco -- e foi o que ele fez.
+  vitrineDeFotos,
   // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   achados,
@@ -99,7 +124,42 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
   // prefixo /v1/admin.
   redeAdministrativa,
+  // FATIA F (18/10). A conexao entre pessoas, SIMETRICA, com aceite. Modulo
+  // novo entra AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha
+  // ele reprova contando `defineRoute` no disco -- foi exatamente assim que a
+  // ausencia dela apareceu, na primeira execucao da suite desta fatia.
+  conexoes,
+  // FATIA G (19/10). O perfil de OUTRA pessoa, pelo apelido. Modulo novo entra
+  // AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha
+  // um deles reprova contando `defineRoute` no disco (175 contra 176) e o
+  // outro reprova dizendo que `getPersonProfile` e operacao do contrato sem
+  // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
+  // suite desta fatia.
+  pessoas,
+  // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
+  // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
+  // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
+  // no disco -- foi exatamente assim que a ausencia delas apareceu.
+  cep,
+  sugestaoDoDiretorio,
+  diretorioAdministrativo,
+  indicacoesAdministrativas,
+  pedidoDePlaquinha,
+  plaquinhasAdministrativas,
+  moderacaoAdministrativa,
+  // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
+  // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele
+  // reprova contando `defineRoute` no disco.
+  seguranca,
   saude,
+  // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
+  caixaDeNotificacoes,
+  comunicadosAdministrativos,
+  // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
+  // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele
+  // reprova contando `defineRoute` no disco -- foi exatamente assim que a
+  // ausencia dela apareceu, na primeira execucao da suite desta historia.
+  vereditoDeVersao,
 ];
 
 /**
@@ -143,7 +203,9 @@ const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
  * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
  * duas delas servidas pela borda (a lista acima), sobrando 11. Cinco delas
  * ganharam rota depois (as tres do caso de perdido e as duas da conversa do lado
- * com conta), e a divida esta em SEIS.
+ * com conta), e a divida esta em SEIS. Com `reopenLostCase`, que o contrato
+ * prometia como reversao por 7 dias e nunca ganhou rota, a divida esta em
+ * CINCO.
  *
  * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
  * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
@@ -162,9 +224,17 @@ const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   // DECIDIR sobre um candidato que nao tinha como ver, e so o achador tinha
   // bloqueio e denuncia). Quem implementa uma linha daqui tira a linha no mesmo
   // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
-  'reopenLostCase',
+  // `reopenLostCase` SAIU desta lista: ela ganhou rota
+  // (`rotaDeReabertura`, em `lost-case-routes.ts`) no commit que fechou o
+  // desfazer do encerramento. O contrato prometia, em `closeLostCase`, que
+  // "encerrar e reversivel por 7 dias" e nomeava a operacao -- e ela respondia
+  // 404. Quem implementa uma linha daqui tira a linha no mesmo commit, e e
+  // esta lista exata nos dois sentidos que cobra o contrario.
   'snoozeLostCaseReminder',
-  'listPublicLostPets',
+  // `listPublicLostPets` SAIU desta lista: ela ganhou rota
+  // (`listagem-publica-de-perdidos-routes.ts`) no commit que encheu a aba
+  // `Pets`, que era a tela em que o aplicativo abre e que dizia "a lista de
+  // pets perdidos esta em construcao".
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {

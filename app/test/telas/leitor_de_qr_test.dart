@@ -67,8 +67,7 @@ void main() {
       camera: camera ?? CameraDeTeste(permissao),
       leitorDeQr: leitor ?? LeitorDeQrDeTeste(),
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
   }
 
   testWidgets('o leitor nao leva barra de topo NEM barra de abas, e ainda '
@@ -476,6 +475,14 @@ void main() {
           return problema('tag-code-not-found', 404);
         },
       );
+
+      // **O CONTADOR ZERA AQUI, e isto nao afrouxa nada.** Desde 18/10/2026 o
+      // app abre na `Rede`, e a agenda pede `GET /v1/network/events` no
+      // arranque -- uma chamada que acontece ANTES de este caso existir e que
+      // nao tem nada a ver com o que ele mede. O que ele mede e a janela entre
+      // a leitura do QR e a recusa: zerar aqui deixa a conta exata em vez de
+      // trocar o `0` por `1`, que seria afrouxar.
+      chamou = 0;
 
       leitor.ler('https://exemplo.com.br/promocao');
       await tester.pump();

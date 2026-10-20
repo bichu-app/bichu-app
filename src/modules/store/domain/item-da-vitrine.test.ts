@@ -45,6 +45,7 @@ function item(ajustes: Partial<ItemDaVitrine> = {}): ItemDaVitrine {
     subcategoryLabel: 'Ração úmida',
     imageUrl: null,
     imageAltText: null,
+    imagens: [],
     species: ['dog'],
     tags: [],
     targetUrl: 'https://mundo-pet.example/racao-umida-sache-frango',

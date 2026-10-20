@@ -5,6 +5,7 @@ import '../achado/rascunho_do_achado.dart';
 import '../dispositivo/avisos_recebidos.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
+import '../telas/mensagens/area_de_mensagens.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
@@ -38,6 +39,47 @@ import '../theme/bichu_tokens.g.dart';
 /// `X`, ou o toque que leva ao destino.
 class AvisoQueChegou extends StatelessWidget {
   const AvisoQueChegou({super.key});
+
+  /// O rotulo da acao do aviso da plaquinha escaneada.
+  ///
+  /// Diferente de [rotuloDeVerAgora] de proposito: "Vi este pet" e a fala de
+  /// quem ACHOU um animal de outra pessoa (o alerta de vizinhanca). Aqui quem
+  /// le e o TUTOR, e o que ele quer e chegar a quem avisou.
+  static const String rotuloDeVerMeusPets = 'Ver meus pets';
+
+  /// O rotulo quando a area de mensagens estiver na arvore. Ver
+  /// [rotaDoAvisoDaPlaquinha].
+  static const String rotuloDeVerAMensagem = 'Ver a mensagem';
+
+  // ---------------------------------------------------------------------
+  // O PONTO UNICO DO DESTINO DO AVISO DA PLAQUINHA.
+  //
+  // Sao DUAS LINHAS, e sao as unicas que mudam quando
+  // `feat/area-de-mensagens-no-app` for mesclada. Nada mais deste arquivo,
+  // nada de `avisos_recebidos.dart`, e nada dos testes -- a isca de widget
+  // compara contra estas constantes de proposito, e nao contra um literal.
+  //
+  // TROCADAS NA UNIAO DE 18/10/2026, exatamente estas duas, com o `import`
+  // junto. **O nome da constante e `area`, e nao `raiz`**: o recado deixado
+  // aqui dizia `RotasDeMensagens.raiz`, e o que o arquivo do outro agente
+  // declara e `RotasDeMensagens.area` (o valor e o mesmo, `/mensagens`).
+  // Ficou o nome que existe.
+  //
+  // **E a LISTA, e nao `RotasDeMensagens.conversaDe(id)`**: nao existe
+  // identificador publico de conversa, e o push nao pode carregar o UUID
+  // interno (ADR-0010 item 6). A medicao inteira esta em
+  // `DestinoDoAviso.areaDeMensagens`.
+  //
+  // O desvio para a secao `Pets` existiu enquanto a area de mensagens nao
+  // estava na arvore. Ela esta, e o tutor que recebe o aviso da plaquinha
+  // chega agora a quem avisou -- que e o que ele quer quando le isso.
+  // ---------------------------------------------------------------------
+
+  /// Para onde o toque no aviso da plaquinha leva.
+  static const String rotaDoAvisoDaPlaquinha = RotasDeMensagens.area;
+
+  /// O rotulo do botao desse destino.
+  static const String rotuloDoAvisoDaPlaquinha = rotuloDeVerAMensagem;
 
   /// O rotulo da acao quando ha destino.
   static const String rotuloDeVerAgora = 'Vi este pet';
@@ -86,6 +128,14 @@ class _Faixa extends StatelessWidget {
           Rotas.registrarAchado,
           extra: RascunhoDoAchado(shareToken: aviso.referencia),
         );
+      case DestinoDoAviso.areaDeMensagens:
+        // `go` e nao `push`: o destino e uma raiz de secao, e empilha-la sobre
+        // a tela corrente deixaria duas barras de aba na pilha.
+        //
+        // **Sem `extra` e sem identificador**, e e isso que faz este destino
+        // servir tambem ao pet sem caso aberto, cujo push sai sem `ref`. Ver
+        // `AvisoQueChegou.rotaDoAvisoDaPlaquinha`.
+        context.go(AvisoQueChegou.rotaDoAvisoDaPlaquinha);
       case DestinoDoAviso.mostrarNoApp:
         // Nao ha para onde ir neste build, e a faixa acabou de ser fechada:
         // quem tocou ja leu. Ver a lacuna declarada em
@@ -98,8 +148,19 @@ class _Faixa extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final temDestino =
-        OuvinteDeAvisos.destinoDe(aviso) != DestinoDoAviso.mostrarNoApp;
+    final destino = OuvinteDeAvisos.destinoDe(aviso);
+    final temDestino = destino != DestinoDoAviso.mostrarNoApp;
+    // O rotulo e do DESTINO, e nao do tipo: dois tipos que caiam no mesmo
+    // lugar amanha dizem a mesma coisa sem ninguem ter de lembrar.
+    final rotuloDaAcao = switch (destino) {
+      DestinoDoAviso.registrarAchado => AvisoQueChegou.rotuloDeVerAgora,
+      DestinoDoAviso.areaDeMensagens =>
+        AvisoQueChegou.rotuloDoAvisoDaPlaquinha,
+      // Nao e renderizado: `temDestino` esconde o botao. O ramo existe porque
+      // o `switch` e exaustivo, e exaustivo e o que faz um destino novo
+      // aparecer aqui como erro de compilacao em vez de rotulo errado.
+      DestinoDoAviso.mostrarNoApp => AvisoQueChegou.rotuloDeVerAgora,
+    };
     // `tagEscaneada` e o aviso mais urgente do produto: alguem esta com o
     // animal na mao. Ele chega em preenchimento solido, como a faixa da F2.2,
     // e nao com a mesma tinta de um lembrete.
@@ -147,7 +208,7 @@ class _Faixa extends StatelessWidget {
                         TextButton(
                           onPressed: () => _ir(context),
                           child: Text(
-                            AvisoQueChegou.rotuloDeVerAgora,
+                            rotuloDaAcao,
                             style: textos.labelLarge?.copyWith(
                               color: corDoTexto,
                               decoration: TextDecoration.underline,

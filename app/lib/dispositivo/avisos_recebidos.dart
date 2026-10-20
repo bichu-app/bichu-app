@@ -277,6 +277,51 @@ enum DestinoDoAviso {
 
   /// Levar a pessoa a tela de registrar um achado, com o caso ja vinculado.
   registrarAchado,
+
+  /// Levar o TUTOR a **area de mensagens**, na LISTA e nao numa conversa.
+  ///
+  /// ## Por que a lista, e nao `/mensagens/:conversaId`
+  ///
+  /// A rota da conversa existe (`RotasDeMensagens.conversaDe`), e ela seria o
+  /// destino ideal. **Ela nao pode ser alcancada por um push, e isso foi
+  /// medido no contrato, nao suposto:**
+  ///
+  /// - `components.parameters.ConversationId` e
+  ///   `{ type: string, format: uuid }`, e `Conversation.id` tambem. A tabela
+  ///   `conversations` (migracao 20260922000012) tem `id uuid PRIMARY KEY` e
+  ///   **nenhuma** coluna `ref`, `slug` ou token opaco -- nem na criacao nem em
+  ///   `ALTER TABLE` nenhum depois. **Nao existe identificador publico de
+  ///   conversa.**
+  /// - O ADR-0010 item 6 proibe UUID de banco em superficie publica, e push E
+  ///   superficie publica: ele acende na tela de bloqueio, passa em claro por
+  ///   um terceiro e fica no historico do sistema. A porteira de
+  ///   `conteudo-do-push.ts` **estoura** com o UUID, com ou sem hifens, e a
+  ///   chave `conversation_id` esta na lista de nomes proibidos dela.
+  /// - O proprio produto ja diz isso do outro lado: a rota do achador e
+  ///   `/finder/conversation`, **sem id no caminho** (SEC-001), e
+  ///   `FinderConversation` nao tem `id`.
+  ///
+  /// Foi exatamente o motivo pelo qual `/pets/:petId` foi recusada antes. A
+  /// regra nao muda por a tela ter ficado pronta.
+  ///
+  /// ## A lista nao precisa de identificador nenhum, e e suficiente
+  ///
+  /// `/mensagens` consome `listConversations`, que e a lista do chamador
+  /// autenticado. **Toda** leitura de plaquinha abre conversa --
+  /// `tag-service.avisar` chama `conversaDoAviso.aoRegistrarAviso` em todo
+  /// aviso de `tag_scan`, com ou sem caso aberto --, entao o tutor que chega na
+  /// lista tem a conversa dele la, com o nome do pet que o push acabou de
+  /// nomear. Isso vale **inclusive** para o pet sem caso aberto, que e o caso
+  /// mais urgente: o destino dele nao depende de `ref`, e por isso nao quebra.
+  ///
+  /// ## Nesta arvore ele aponta para outro lugar, de propósito
+  ///
+  /// A area de mensagens vem de `feat/area-de-mensagens-no-app`, que **nao
+  /// esta mesclada aqui**. O endereco vive num ponto unico --
+  /// `AvisoQueChegou.rotaDoAvisoDaPlaquinha` -- e hoje ele vale `Rotas.pets`,
+  /// que existe. Na mescla, troca-se aquela constante (e o rotulo ao lado).
+  /// Nada mais neste arquivo muda.
+  areaDeMensagens,
 }
 
 /// Liga os tres estados a um lugar so, e avisa quem escuta.
@@ -382,10 +427,11 @@ class OuvinteDeAvisos extends ChangeNotifier {
   ///   chegou pelo push de um caso especifico". O vizinho que recebeu o alerta
   ///   e viu o animal diz "vi este pet", e o achado e vinculado **direto**
   ///   aquele caso, sem depender do cruzamento por atributos.
-  /// - `tagEscaneada` → [DestinoDoAviso.mostrarNoApp]. O destino dele e a
-  ///   **conversa com o achador**, que nao existe neste app. Mandar o tutor
-  ///   para um lugar parecido seria pior que nao mandar: ele chegaria numa tela
-  ///   que nao diz quem esta com o animal dele.
+  /// - `tagEscaneada` → [DestinoDoAviso.areaDeMensagens]. **Era
+  ///   `mostrarNoApp`, e isso era um `break`: o toque nao levava a tela
+  ///   nenhuma.** Ele leva a LISTA de mensagens, e nao a conversa especifica,
+  ///   porque **nao existe identificador publico de conversa** -- a medicao do
+  ///   contrato esta em [DestinoDoAviso.areaDeMensagens].
   /// - `possivelCorrespondencia` → [DestinoDoAviso.mostrarNoApp]. Precisa da
   ///   tela de confirmar candidato, que nao existe.
   /// - `lembreteDeDesfecho` → [DestinoDoAviso.mostrarNoApp]. Precisa da acao de
@@ -402,7 +448,12 @@ class OuvinteDeAvisos extends ChangeNotifier {
       TipoDeAvisoRecebido.alertaDeVizinhanca => aviso.referencia.isEmpty
           ? DestinoDoAviso.mostrarNoApp
           : DestinoDoAviso.registrarAchado,
-      TipoDeAvisoRecebido.tagEscaneada ||
+      // O AVISO MAIS URGENTE DO PRODUTO, e ele passou a ter para onde ir.
+      // **Nao depende de `ref`**, e isso e o desenho e nao um resto: a lista de
+      // mensagens nao e enderecada por chave, e e por isso que ela serve ao pet
+      // SEM caso aberto -- cujo push sai sem `ref`, e que e o caso em que o
+      // tutor ainda nao sabe de nada.
+      TipoDeAvisoRecebido.tagEscaneada => DestinoDoAviso.areaDeMensagens,
       TipoDeAvisoRecebido.possivelCorrespondencia ||
       TipoDeAvisoRecebido.lembreteDeDesfecho ||
       TipoDeAvisoRecebido.desconhecido => DestinoDoAviso.mostrarNoApp,

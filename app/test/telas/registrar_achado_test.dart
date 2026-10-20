@@ -26,6 +26,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bichu/achado/rascunho_do_achado.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/roteamento/rotas.dart';
@@ -148,7 +149,12 @@ Future<void> preencherOMinimo(
     await rolarAte(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
     await tocar(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
   }
-  await rolarAte(tester, find.text('Agora'));
+  // `passo: -120`, para CIMA: `Quando?` e o PRIMEIRO bloco do passo 2
+  // (`tela_registrar_achado.dart`, linhas 659-665) e a localizacao vem depois
+  // dele, entao a lista ja rolou para baixo quando se chega aqui. Com passo
+  // positivo o `scrollUntilVisible` procura para baixo o que ficou para tras,
+  // roda ate o fim e estoura `Bad state: No element`.
+  await rolarAte(tester, find.text('Agora'), passo: -120);
   await tocar(tester, find.text('Agora'));
 }
 
@@ -392,13 +398,15 @@ void main() {
       await irPara(tester, Rotas.registrarAchado);
       await preencherOMinimo(tester, digitarACidade: false);
 
-      // `passo` negativo: o aviso fica ACIMA de `Quando?`, e o ultimo toque
-      // de `preencherOMinimo` rolou a lista para baixo. `scrollUntilVisible`
-      // so procura num sentido.
+      // `passo` POSITIVO, para baixo. O aviso do lugar e desenhado DEPOIS do
+      // bloco de localizacao (`tela_registrar_achado.dart`, linhas 693-702),
+      // e nao acima de `Quando?` como esta isca supunha: a ordem do passo 2 e
+      // `Quando?` (linha 659), `Onde?` (linha 686), a captura (linha 693) e o
+      // aviso (linha 700). O ultimo toque de `preencherOMinimo` e em `Agora`,
+      // que fica no topo, entao daqui o aviso esta ABAIXO da dobra.
       await rolarAte(
         tester,
         find.text(TextosDoAchado.semRotuloDeArea),
-        passo: -120,
       );
       expect(
         find.text(TextosDoAchado.semRotuloDeArea),
@@ -426,11 +434,9 @@ void main() {
       await preencherOMinimo(tester);
 
       expect(find.text(TextosDoAchado.semRotuloDeArea), findsNothing);
-      await rolarAte(
-        tester,
-        find.text(TextosDoAchado.semCoordenada),
-        passo: -120,
-      );
+      // Para baixo, pelo mesmo motivo do caso de cima: o aviso do lugar vem
+      // DEPOIS da captura de localizacao no passo 2.
+      await rolarAte(tester, find.text(TextosDoAchado.semCoordenada));
       expect(
         find.text(TextosDoAchado.semCoordenada),
         findsOneWidget,
@@ -559,4 +565,81 @@ void main() {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // ISCA — o contador do recado promete o que o servidor aceita
+  //
+  // DESLIGAR PARA VER REPROVAR: em `lib/achado/rascunho_do_achado.dart`,
+  // volte `limiteDaObservacao` para 1000. Os dois casos deste grupo reprovam.
+  //
+  // O contador era 1000 e o contrato ja dizia 500 (`StrayFoundReportInput.notes`,
+  // o mesmo teto da coluna `found_reports.notes`). A pessoa escrevia 700 sem
+  // nenhum aviso na tela e o servidor recusava o aviso INTEIRO no envio --
+  // contador que promete o que o servidor recusa e pior que contador nenhum,
+  // porque ele garante que a pessoa so descobre depois de ter escrito.
+  //
+  // Sem texto de apoio: o contador basta (pedido do cliente de 18/10/2026).
+  // -------------------------------------------------------------------------
+  group('ISCA — o contador do recado nao promete mais que o servidor aceita', () {
+    testWidgets('o contador do recado abre em `0/500`', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _Rede().call,
+        deposito: depositoLogado(),
+        localizacao: localizacaoConcedida(),
+      );
+      await irPara(tester, Rotas.registrarAchado);
+      await rolarAte(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Médio'));
+      await tocar(tester, find.text('Médio'));
+      await avancarParaOPasso2(tester);
+      await rolarAte(tester, _campo(TextosDoAchado.rotuloDaObservacao));
+
+      expect(
+        RascunhoDoAchado.limiteDaObservacao,
+        500,
+        reason: 'REPROVA: o limite da tela deixou de ser o do contrato e da '
+            'coluna `found_reports.notes` (500).',
+      );
+      expect(
+        find.text('0/500'),
+        findsOne,
+        reason: 'REPROVA: o contador do recado nao diz 500. O limite tem de ser '
+            'sabido ANTES de a pessoa escrever: ela esta de pe, com uma mao, '
+            'com um animal que achou na rua.',
+      );
+    });
+
+    testWidgets('o campo PARA em 500 e nao deixa digitar o 501', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _Rede().call,
+        deposito: depositoLogado(),
+        localizacao: localizacaoConcedida(),
+      );
+      await irPara(tester, Rotas.registrarAchado);
+      await rolarAte(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Médio'));
+      await tocar(tester, find.text('Médio'));
+      await avancarParaOPasso2(tester);
+      final recado = _campo(TextosDoAchado.rotuloDaObservacao);
+      await rolarAte(tester, recado);
+
+      // 501 digitados: o campo tem de guardar 500 e o contador tem de dizer
+      // 500/500. E a borda de cima, medida na tela, antes de qualquer envio.
+      await tester.enterText(recado, 'a' * 501);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(recado).controller?.text.length,
+        500,
+        reason: 'REPROVA: a tela guardou mais de 500 caracteres. O servidor vai '
+            'recusar o aviso inteiro e o recado se perde.',
+      );
+      expect(find.text('500/500'), findsOne);
+    });
+  });
+
 }

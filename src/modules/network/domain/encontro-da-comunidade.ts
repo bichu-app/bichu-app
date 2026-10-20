@@ -48,6 +48,7 @@ import {
   errosDeTexto,
   normalizarParaConferencia,
   temContatoOuPagamento,
+  temContatoOuPagamentoSemEndereco,
   type Lugar,
 } from './escrita-do-encontro.js';
 
@@ -173,10 +174,14 @@ const COMPLEMENTO = /\b(?:apto|apartamento|bloco|bl|casa|cs|fundos|sobrado|conju
  *   ("Av. Brasil 1578", "Rua das Flores 12");
  * - **complemento residencial** ("bloco 2", "apto 51", "condominio").
  *
- * E, com `code: contact_or_payment_detected`, o que D59 ja recusa em texto de
- * usuario: telefone, e-mail, link, encurtador, perfil `@usuario`, chave PIX e
- * dados bancarios. **A conferencia e a mesma funcao** que as observacoes usam,
- * e nao uma copia.
+ * E, com `code: contact_or_payment_detected` e **antes** da conferencia do
+ * endereco, o que D59 ja recusa em texto de usuario: telefone, e-mail, link,
+ * encurtador, perfil `@usuario`, chave PIX e dados bancarios -- por
+ * `temContatoOuPagamentoSemEndereco`, que e o detector das observacoes **menos
+ * a parte de endereco dele**, porque o endereco aqui e julgado pelas regras
+ * acima, que distinguem o nome da porta. Sem esse recorte o detector recusaria
+ * "Avenida Paulista" por endereco; sem essa ordem, um telefone escrito no nome
+ * do lugar sairia como `address_in_place_name`.
  *
  * O que NAO e recusado, de proposito: palavra de logradouro sozinha, e numero
  * que e parte do nome. "Avenida Paulista", "Rua 25 de Marco", "Praca 14 de
@@ -186,6 +191,19 @@ const COMPLEMENTO = /\b(?:apto|apartamento|bloco|bl|casa|cs|fundos|sobrado|conju
 export function errosDoNomeDoLugar(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 2, 80);
   if (tamanho.length > 0) return tamanho;
+  // D59 vem ANTES do endereco, e com o detector SEM a parte de endereco. As
+  // duas metades foram medidas, e cada uma conserta um erro de recusa:
+  //
+  // - **antes**: "Praca do Bairro (11) 98765-4321" tem telefone, e o telefone
+  //   casa a regra do numero de quatro digitos. Com o endereco primeiro, a
+  //   pessoa leria "escreva so o nome do lugar" para um texto cujo problema e
+  //   o telefone -- a recusa certa pelo motivo errado, e a frase nao diz o que
+  //   tirar;
+  // - **sem endereco**: o detector inteiro recusa palavra de logradouro (ver
+  //   `temContatoOuPagamentoSemEndereco`), e "Avenida Paulista" e como o lugar
+  //   se chama. O endereco embutido continua recusado -- pela regra deste
+  //   campo, logo abaixo, que distingue o nome da porta.
+  if (temContatoOuPagamentoSemEndereco(valor)) return [erroDeContato(campo)];
   const { base, letras } = normalizarParaConferencia(valor.normalize('NFKC'));
   // O numero que e parte do nome do logradouro sai do texto antes de a
   // conferencia do numero olhar: "Rua 25 de Marco" e um nome, e nao uma porta.
@@ -209,7 +227,17 @@ export function errosDoNomeDoLugar(campo: string, valor: string): ProblemFieldEr
       },
     ];
   }
-  return errosDeTextoDeUsuario(campo, valor, 2, 80);
+  return [];
+}
+
+/** A recusa de D59, na forma que `errosDeTextoDeUsuario` tambem devolve. */
+function erroDeContato(campo: string): ProblemFieldError {
+  return {
+    field: campo,
+    code: 'contact_or_payment_detected',
+    message:
+      'Este texto não pode ter telefone, e-mail, link, perfil, chave PIX nem dados de pagamento.',
+  };
 }
 
 /**
@@ -230,14 +258,7 @@ export function errosDeTextoDeUsuario(
   const tamanho = errosDeTexto(campo, valor, minimo, maximo);
   if (tamanho.length > 0) return tamanho;
   if (!temContatoOuPagamento(valor)) return [];
-  return [
-    {
-      field: campo,
-      code: 'contact_or_payment_detected',
-      message:
-        'Este texto não pode ter telefone, e-mail, link, perfil, chave PIX nem dados de pagamento.',
-    },
-  ];
+  return [erroDeContato(campo)];
 }
 
 // ---------------------------------------------------------------------------

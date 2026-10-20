@@ -26,6 +26,7 @@
 library;
 
 import '../../api/modelos_pet.dart';
+import '../perdido/tela_de_quem_e_o_caso.dart';
 import 'textos_do_cadastro.dart';
 
 /// Os textos de T.1, da edicao e da exclusao.
@@ -34,6 +35,27 @@ abstract final class TextosDoDetalhe {
 
   static const String editar = 'Editar';
   static const String excluir = 'Excluir';
+
+  /// `Marcar como perdido`, trazida para a pagina do pet (cliente, 18/10).
+  ///
+  /// **E um apelido para o titulo de F3.0, e nao uma quarta copia da frase.**
+  /// `TelaDeQuemEOCaso.titulo` ja e `Marcar como perdido`, e `Perfil` >
+  /// `Meus pets` tem a mesma palavra num terceiro lugar. Escrever o literal
+  /// aqui criaria o dia em que uma das tres muda e as outras nao.
+  ///
+  /// **Nao e importado de `perfil/meus_pets.dart` de proposito**: aquela tela
+  /// esta sendo reescrita para virar so menus, e perder a acao. Prender o
+  /// rotulo da pagina do pet a uma constante que esta saindo faria esta tela
+  /// quebrar com a reescrita da outra. O destino -- F3.0/F3.1 -- nao esta
+  /// saindo de lugar nenhum.
+  static const String marcarComoPerdido = TelaDeQuemEOCaso.titulo;
+
+  /// O link para a pagina de acompanhamento do pedido da plaquinha.
+  ///
+  /// **So aparece quando ha pedido** -- ver `TelaDetalheDoPet`. Texto curto,
+  /// sem frase de apoio: o cliente mandou tirar os paragrafos explicativos do
+  /// app em 18/10.
+  static const String acompanharPlaquinha = 'Acompanhar o pedido da plaquinha';
 
   /// O titulo da tela de edicao. O nome nao entra: ele e o primeiro campo, e
   /// repeti-lo na barra gasta a largura que o 11.23.4 reserva para o titulo
@@ -57,11 +79,153 @@ abstract final class TextosDoDetalhe {
       'Ou ele foi excluído, ou o endereço é de outra conta. Volte para Meus '
       'pets para ver os seus.';
 
+  // -- A ACAO INVERSA DE `Marcar como perdido` (cliente, 18/10/2026) ---------
+
+  /// `Encontrei meu pet`: a acao que faltava.
+  ///
+  /// O cliente mediu a falta com estas palavras: *"no perfil do cachorro, o
+  /// botao de marcar como perdido esta funcionando. Mas nao tem uma opcao de
+  /// desmarcar como perdido ou que foi encontrado."*
+  ///
+  /// **`Encontrei meu pet` e nao `Desmarcar como perdido`.** As duas descrevem
+  /// o mesmo toque e pedem coisas diferentes de quem le: a segunda descreve o
+  /// efeito no banco, e a primeira descreve o que aconteceu na vida da pessoa.
+  /// A operacao do contrato tambem nao e um desmarcar -- ela ENCERRA o caso com
+  /// desfecho declarado (`outcome: reunited`), e o desfecho e o que o contrato
+  /// chama de instrumento de medicao do produto.
+  static const String encontreiMeuPet = 'Encontrei meu pet';
+
+  /// O que a tela diz depois de o caso encerrar.
+  ///
+  /// **Afirma no passado porque, quando esta frase aparece, o servidor
+  /// respondeu 200.** Nao e tela de sucesso antes do sucesso, que e o que o
+  /// criterio 2 da BICHUS-31 proibe.
+  ///
+  /// ## A SEGUNDA FRASE FOI CORRIGIDA, e a correcao e o ponto
+  ///
+  /// Ela dizia *"quem estava ajudando foi avisado"*. Isso era **falso em dois
+  /// niveis, medidos nesta branch**:
+  ///
+  /// 1. **Nada e enviado a ninguem ao encerrar.** `LostCaseService.encerrar`
+  ///    nao toca em conversa nenhuma, e nao existe no servidor caminho que
+  ///    grave mensagem de sistema no encerramento -- embora o contrato o
+  ///    prometa (*"Ao encerrar, toda conversa aberta recebe a mensagem de
+  ///    sistema que avisa quem ajudou"*). O que acontece e que a conversa passa
+  ///    a `closed`, DERIVADO do estado do caso a cada leitura
+  ///    (`estadoDaConversa`, com o sinal `casoEncerrado`): ela vira modo
+  ///    leitura. Nada e gravado, e ninguem e acordado.
+  /// 2. **O push nao sai.** O envio esta bloqueado em producao por falta de
+  ///    permissao da conta de servico na VM, e no iPhone do cliente nao
+  ///    funciona nenhum (provisionamento gratuito, sem capacidade de
+  ///    notificacao).
+  ///
+  /// Esta casa ja pagou por esta classe de defeito: o servidor devolvia
+  /// `owner_notified: true`, a tela afirmava isso em texto fixo E o
+  /// desserializador tinha `?? true` -- tres lugares mentindo juntos. A frase
+  /// agora diz o que **de fato** acontece, no tempo certo: a conversa para de
+  /// receber mensagem. Quem ajudou descobre quando abrir a conversa, e e isso
+  /// que o texto promete.
+  static String casoEncerrado(String nome) =>
+      '${_o(nome)} está de volta. O caso foi encerrado e as conversas abertas '
+      'não recebem mais mensagem.';
+
+  // -- A FOLHA DE CONFIRMACAO DO ENCERRAMENTO -------------------------------
+  //
+  // Antes dela, `Encontrei meu pet` era UM TOQUE sem volta aparente: ele
+  // chamava `closeLostCase` direto, e a operacao de desfazer que o contrato
+  // promete (`reopenLostCase`) nao tinha rota no servidor. A folha e a metade
+  // de tela deste trabalho; a rota e a outra.
+
+  /// O titulo da folha. Pergunta, e nao afirmacao: quem abriu a folha ainda
+  /// nao decidiu nada.
+  static String tituloDoEncerramento(String nome) =>
+      'Encontrou ${_o(nome)}?';
+
+  /// O corpo da folha: **o que vai acontecer**, e nada mais.
+  ///
+  /// Uma frase por consequencia, no futuro, porque nada aconteceu ainda.
+  static String corpoDoEncerramento(String nome) =>
+      'Encerrar o caso tira ${_o(nome)} da lista pública de pets perdidos e '
+      'encerra a busca.';
+
+  /// As consequencias, em lista. **Cada linha e uma coisa que foi MEDIDA.**
+  ///
+  /// A primeira: o caso sai da lista publica e a pagina publica dele deixa de
+  /// abrir (`getPublicLostCase` responde 410 em caso encerrado).
+  ///
+  /// A segunda: as conversas abertas viram modo leitura. **Ela NAO diz que
+  /// alguem foi avisado**, e a diferenca nao e de estilo -- e o que o texto
+  /// afirma sobre o mundo. O que o servidor faz ao encerrar e deixar
+  /// `estadoDaConversa` devolver `closed` na proxima leitura daquela conversa:
+  /// ninguem recebe nada, e quem estava ajudando descobre quando voltar lá.
+  /// Nenhuma mensagem de sistema e gravada (o contrato promete uma e o servidor
+  /// nao a grava), e o push esta bloqueado em producao e nao funciona no
+  /// iPhone do cliente. Escrever "sera avisado" aqui seria repetir, de novo, o
+  /// defeito dos tres lugares mentindo juntos.
+  ///
+  /// A terceira: a janela de 7 dias. O numero esta aqui porque e o do contrato
+  /// e do servidor -- `reopen_deadline` grava `agora + 7 dias` --, e ele e o
+  /// que torna a decisao reversivel para quem esta lendo.
+  static List<String> oQueAconteceAoEncerrar(String nome) => <String>[
+        '${_o(nome)} sai da lista pública de pets perdidos, e a página pública '
+            'do caso deixa de abrir.',
+        'As conversas abertas do caso param de aceitar mensagem nova e ficam '
+            'em modo leitura. Quem estava ajudando vê isso ao abrir a conversa.',
+        'Dá para reabrir o caso por 7 dias, se você encerrar sem querer.',
+      ];
+
+  /// O rotulo do botao que confirma. Diz a ACAO, e nao "Confirmar".
+  static const String confirmarEncerramento = 'Encerrar o caso';
+
+  /// O nome acessivel do botao de confirmar: ele precisa dizer SOBRE O QUE e.
+  ///
+  /// Quem navega por leitor de tela chega no botao sem o contexto que a pessoa
+  /// vidente tem da folha inteira na frente dela.
+  static String confirmarEncerramentoAcessivel(String nome) =>
+      'Encerrar o caso de ${_o(nome)}';
+
+  /// O rotulo de cancelar, nesta folha. `Agora não` e nao `Cancelar`: quem
+  /// abriu a folha por engano nao esta cancelando um pedido, esta dizendo que
+  /// o animal ainda nao voltou.
+  static const String naoEncontreiAinda = 'Ainda não encontrei';
+
+  // -- A REABERTURA (`reopenLostCase`) --------------------------------------
+
+  /// `Reabrir o caso`: o desfazer que o contrato prometia e nao existia.
+  static const String reabrirOCaso = 'Reabrir o caso';
+
+  /// A faixa que explica a oferta de reabrir, com o prazo.
+  ///
+  /// **O prazo sai da RESPOSTA** (`reopen_deadline`), e nao de uma conta de 7
+  /// dias refeita no aparelho: numero de produto escrito no binario continua
+  /// sendo dito por versao antiga do app depois de o servidor mudar o valor. E
+  /// a mesma regra do `Retry-After` e do teto de pets.
+  static String podeReabrirAte(String dia) =>
+      'Encerrou sem querer? Dá para reabrir este caso até $dia.';
+
+  /// O que a tela diz depois de o caso REABRIR.
+  ///
+  /// **Nao promete alerta novo**, e a ausencia e medida: reabrir nao dispara
+  /// nada. Quem quer avisar a vizinhanca de novo usa o reenvio do alerta, que
+  /// tem teto de um por dia e e um toque explicito.
+  static String casoReaberto(String nome) =>
+      'O caso ${_de(nome)} está aberto de novo. O alerta não foi reenviado.';
+
   // -- Sinais e vazios ------------------------------------------------------
 
-  static String semSinais(String nome) =>
-      'Nenhum sinal cadastrado. Sinais são o que faz alguém reconhecer '
-      '${_o(nome)} na rua.';
+  /// O rotulo do campo de sinais **no detalhe**.
+  ///
+  /// `Sinais particulares`, e nao `Sinais`: o cliente leu `Sinais` nesta tela e
+  /// PERGUNTOU o que era (18/10/2026). O nome do campo no contrato e
+  /// `distinctive_marks`, e o formulario que o preenche sempre o chamou de
+  /// `Sinais particulares` -- quem cadastrava escrevia num campo com um nome e
+  /// relia noutro.
+  ///
+  /// **E a constante do cadastro, e nao um literal novo**: duas redacoes para o
+  /// mesmo campo sao duas redacoes que divergem na primeira manutencao.
+  static const String rotuloDosSinais = TextosDoCadastro.rotuloDosSinais;
+
+  static const String semSinais = 'Nenhum sinal cadastrado.';
 
   static const String adicionarSinais = 'Adicionar sinais';
 
@@ -81,6 +245,72 @@ abstract final class TextosDoDetalhe {
 
   static const String naoConseguimosSalvar =
       'Não conseguimos salvar. Seus dados continuam aqui.';
+
+  // -- A foto na edicao -----------------------------------------------------
+
+  /// O rotulo do bloco. "Foto" e nao "Foto do pet": o nome do pet ja esta no
+  /// primeiro campo da mesma tela.
+  static const String tituloDaFoto = 'Foto';
+
+  static const String adicionarFoto = 'Adicionar foto';
+  static const String trocarAFoto = 'Trocar a foto';
+  static const String removerAFoto = 'Remover a foto';
+
+  static const String semFotoAinda = 'Nenhuma foto ainda.';
+
+  /// **Campo vazio a preencher, e nao pendencia acusada.** O criterio 10 da
+  /// BICHUS-61 pede isso por nome: a ausencia de foto nao e erro de quem
+  /// cadastrou, e a tela nao a trata como um problema a consertar.
+  static const String fotoEmProcessamento =
+      'A foto está sendo processada. Ela aparece aqui em instantes.';
+
+  static const String fotoSubindo = 'Enviando a foto…';
+
+  static const String fotoEnviada =
+      'Foto enviada. Ela aparece aqui quando o processamento terminar.';
+
+  static const String fotoSemSinal =
+      'Sem conexão para enviar a foto. Ela sai sozinha quando o sinal voltar.';
+
+  static const String fotoRecusada =
+      'O envio foi recusado. Tente outra foto.';
+
+  static const String naoConseguimosRemoverAFoto =
+      'Não conseguimos remover a foto. Ela continua aqui.';
+
+  /// O 409 de `deletePetPhoto`, se o servidor algum dia o emitir.
+  ///
+  /// Texto escrito **agora** de proposito: o contrato declara a recusa, e um
+  /// `switch` que nao a cobre devolveria a mensagem generica no unico caso em
+  /// que ha algo concreto a dizer.
+  static const String fotoPresaAoCasoAberto =
+      'Esta é a única foto, e o caso de perdido está aberto. Sem foto o alerta '
+      'não funciona. Troque a foto, ou encerre o caso antes de removê-la.';
+
+  static const String tituloDaRemocaoDaFoto = 'Remover a foto?';
+
+  static String corpoDaRemocaoDaFoto(String nome) =>
+      'Isso apaga a foto ${_de(nome)} do cadastro. Você pode enviar outra '
+      'depois.';
+
+  static const String confirmarRemocaoDaFoto = 'Remover';
+
+  static String confirmarRemocaoDaFotoAcessivel(String nome) =>
+      'Remover a foto de $nome do cadastro';
+
+  /// O texto alternativo da foto atual (SC 1.1.1). Diz **de quem** e a foto:
+  /// "Foto" sozinho nao informa nada a quem usa leitor de tela.
+  static String fotoAtualDe(String nome) => 'Foto atual de $nome';
+
+  /// A camera negada para sempre: o mesmo texto do cadastro, e **a mesma
+  /// razao**. Nao ha microcopy nova aqui -- duas frases diferentes para o
+  /// mesmo estado do aparelho e como as telas divergem sem ninguem ver.
+  static const String cameraNegada = TextosDoCadastro.cameraNegada;
+  static const String abrirOsAjustes = TextosDoCadastro.abrirOsAjustes;
+  static const String cameraNaoEmbarcada =
+      TextosDoCadastro.cameraNaoEmbarcada;
+  static const String tirarFoto = TextosDoCadastro.tirarFoto;
+  static const String escolherDaGaleria = TextosDoCadastro.escolherDaGaleria;
 
   // -- Exclusao (BICHUS-60) -------------------------------------------------
 

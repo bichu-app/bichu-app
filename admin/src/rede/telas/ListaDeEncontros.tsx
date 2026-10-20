@@ -1,7 +1,7 @@
 /**
  * 4 · Rede: lista (25.3 quadros 4.1 a 4.8, 25.5.2, UX 29.5 e 29.10). Busca,
  * filtro e ordenacao no topo do corpo, na URL; contagem, "Carregar mais",
- * menu da linha com Editar, Ver pedidos, Cancelar encontro e Remover.
+ * menu da linha com Editar, Ver pedidos, Cancelar evento e Remover.
  */
 import { useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -74,18 +74,18 @@ export default function ListaDeEncontros() {
       return { ok: true };
     }
     if (precisaReler(r.falha)) recarregar();
-    return { ok: false, mensagem: mensagemDaFalha(r.falha, 'cancelar o encontro') };
+    return { ok: false, mensagem: mensagemDaFalha(r.falha, 'cancelar o evento') };
   }
 
   async function executarRemocao(e: Encontro): Promise<ResultadoDaAcaoConfirmada> {
     const r = await rede.remover(e.slug, etagDe(e));
     if (r.ok) {
       recarregar();
-      mostrar('ok', 'Encontro removido. Ele saiu da Rede do app.');
+      mostrar('ok', 'Evento removido. Ele saiu da Rede do app.');
       return { ok: true };
     }
     if (precisaReler(r.falha)) recarregar();
-    return { ok: false, mensagem: mensagemDaFalha(r.falha, 'remover o encontro') };
+    return { ok: false, mensagem: mensagemDaFalha(r.falha, 'remover o evento') };
   }
 
   function itensDoMenu(e: Encontro): ItemDoMenu[] {
@@ -93,7 +93,7 @@ export default function ListaDeEncontros() {
     const itens: ItemDoMenu[] = [];
     if (a.editar) itens.push({ rotulo: 'Editar', icone: 'edit', aoEscolher: () => void navigate(`/rede/${e.slug}`) });
     if (a.pedidos) itens.push({ rotulo: 'Ver pedidos para participar', icone: 'groups', aoEscolher: () => void navigate(`/rede/${e.slug}/pedidos`) });
-    if (a.cancelar) itens.push({ rotulo: 'Cancelar encontro', icone: 'close', perigo: true, aoEscolher: () => setCancelar(e) });
+    if (a.cancelar) itens.push({ rotulo: 'Cancelar evento', icone: 'close', perigo: true, aoEscolher: () => setCancelar(e) });
     if (a.remover) itens.push({ rotulo: 'Remover', icone: 'delete', perigo: true, aoEscolher: () => setRemover(e) });
     return itens;
   }
@@ -102,11 +102,11 @@ export default function ListaDeEncontros() {
     <header className="pghead">
       <div>
         <h1 className="t-headline">Rede</h1>
-        <p className="t-body-sm c-sec">Encontros presenciais de cães em praças e parques.</p>
+        <p className="t-body-sm c-sec">Eventos presenciais de cães em praças e parques.</p>
       </div>
       <Link className="btn pri" to="/rede/novo">
         <Icone nome="add" tamanho="s20" />
-        Novo encontro
+        Novo evento
       </Link>
     </header>
   );
@@ -132,7 +132,7 @@ export default function ListaDeEncontros() {
           corpo={[textosDoCancelamento(cancelar).corpo]}
           rotuloDoMotivo="Motivo"
           ajudaDoMotivo="Só a equipe vê. Não aparece no app."
-          rotuloDaAcao="Cancelar encontro"
+          rotuloDaAcao="Cancelar evento"
           rotuloDeVoltar="Voltar"
           perigo
           executar={(motivo) => executarCancelamento(cancelar, motivo)}
@@ -142,7 +142,7 @@ export default function ListaDeEncontros() {
       {remover && (
         <DialogoDeConfirmacao
           titulo={`Remover “${remover.title}”?`}
-          corpo="O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro."
+          corpo="O evento sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar evento."
           rotuloDaAcao="Remover"
           executar={() => executarRemocao(remover)}
           aoFechar={() => setRemover(undefined)}
@@ -157,9 +157,9 @@ export default function ListaDeEncontros() {
         {cabecalho}
         {bannerDeAviso}
         <EstadoVazio
-          titulo="A Rede ainda não tem encontros"
+          titulo="A Rede ainda não tem eventos"
           corpo="Cadastre o primeiro. Ele aparece no app quando for publicado."
-          acao="Novo encontro"
+          acao="Novo evento"
           destino="/rede/novo"
         />
       </>
@@ -183,11 +183,11 @@ export default function ListaDeEncontros() {
             </button>
           }
         >
-          Não conseguimos carregar os encontros.
+          Não conseguimos carregar os eventos.
         </Banner>
       )}
       <BarraDeListagem
-        rotuloDaBusca="Buscar encontros"
+        rotuloDaBusca="Buscar eventos"
         placeholder="Buscar por título, resumo ou local"
         busca={p.q}
         aoBuscar={(v) => mudar({ q: v })}
@@ -209,7 +209,7 @@ export default function ListaDeEncontros() {
       />
       {estado.fase === 'carregando' && (
         <p className="t-body-sm c-sec" role="status">
-          Carregando encontros…
+          Carregando eventos…
         </p>
       )}
       {estado.fase === 'pronto' && estado.total > 0 && (
@@ -228,10 +228,10 @@ export default function ListaDeEncontros() {
         estado.fase !== 'erro' && (
           <div className="tabwrap">
             <table aria-busy={estado.fase === 'carregando' || undefined}>
-              <caption className="sr">Encontros da Rede</caption>
+              <caption className="sr">Eventos da Rede</caption>
               <thead>
                 <tr>
-                  <th scope="col">Encontro, local e acesso</th>
+                  <th scope="col">Evento, local e acesso</th>
                   <th scope="col" className={estilos.colData}>
                     Data
                   </th>

@@ -34,9 +34,11 @@ import 'dart:io';
 import 'dart:ui' show Tristate;
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_colors.dart';
+import 'package:bichu/widgets/item_de_menu.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -60,11 +62,70 @@ const List<double> larguras = <double>[320, 360, 375, 390, 412];
 /// caso `a ordem e esta` compara as duas. Um portao que so lesse
 /// `CascaComAbas.destinos` aprovaria qualquer troca de rotulo, inclusive a
 /// volta de `Perdidos`.
+///
+/// **A ORDEM MUDOU EM 18/10/2026**, literal do cliente: *"inverta a ordem no
+/// app do item rede e perto"*. Era `Pets, Rede, Perto, Loja, Perfil`; medido
+/// antes de inverter, `Rede` estava na posicao 2 e `Perto` na 3, entao
+/// inverter e por `Perto` antes. O caso `a ordem e esta` nao foi apagado: ele
+/// continua brigando com `CascaComAbas.destinos`, agora pela ordem nova.
+///
+/// **MUDOU EM 19/10, e o que ela provava antes esta escrito abaixo.**
+///
+/// Ela provava `Pets · Rede · Perto · Loja · Perfil`: cinco slots, com
+/// `Perfil` no ultimo. O cliente reverteu a composicao com o argumento na
+/// mesa: *"inclua um menu de mensagens, onde o usuario ira responder as
+/// mensagens e retire o menu perfil, acrescente uma foto pequena do usuario na
+/// barra superior de todas as paginas"*.
+///
+/// Ela prova agora `Pets · Rede · Perto · Loja · AuAu`: continuam cinco slots,
+/// a secao de mensagens ocupa o que era do `Perfil`, e `Perfil` **nao esta na
+/// barra** -- a porta dele e a foto da barra de topo.
+///
+/// O caso nao foi apagado nem afrouxado: ele continua comparando a barra
+/// montada contra uma lista escrita a mao, que e o que faz um rotulo novo
+/// precisar ser medido antes de entrar.
+// **19/10/2026: `Perto` SAIU DA BARRA e `Mural` ENTROU.** `Perto` deixou de
+// ser secao por decisao do cliente -- o conteudo dela virou a aba `Comunidade`
+// da `Rede` --, e `Mural` ficou com o slot 3.
+//
+// A ordem anterior (`Pets · Perto · Rede · Loja · AuAu`) veio do pedido dele
+// de 18/10 (*"inverta a ordem no app do item rede e perto"*). Essa inversao foi
+// ABSORVIDA: sem `Perto` na barra nao ha par para inverter.
 const List<String> ordemDecidida = <String>[
   'Pets',
   'Rede',
-  'Perto',
+  'Mural',
   'Loja',
+  'AuAu',
+];
+
+/// O REGISTRO inteiro, que e maior que a barra desde 19/10.
+///
+/// `Perfil` continua no registro -- com rota, com submenu na gaveta e com a
+/// tela inteira -- e so deixou de ocupar slot. **As duas listas existem
+/// separadas de proposito:** se houvesse uma so, tirar `Perfil` da barra e
+/// tira-lo do produto seriam a mesma edicao, e a tela dele guarda os cartoes
+/// de pet, que sao o unico caminho ate o QR e `Marcar como perdido`.
+// A INVERSAO DE `Rede` E `Perto` CHEGOU AQUI NA UNIAO DE 18/10/2026.
+//
+// O que esta lista provava antes: o registro inteiro na ordem
+// `Pets · Rede · Perto · Loja · AuAu · Perfil`. Ela nasceu no ramo da
+// navegacao, cuja base (`e636f69c`) e ANTERIOR ao pedido literal do cliente
+// *"inverta a ordem no app do item rede e perto"* -- entao ela carregava a
+// ordem de antes da inversao, enquanto `ordemDecidida` (logo acima) ja
+// carregava a de depois. As duas discordavam entre si, e era esta que estava
+// errada: `CascaComAbas.destinos` tem `Perto` em segundo.
+//
+// Nenhum caso de teste foi apagado nem afrouxado: o caso
+// `o REGISTRO tem as cinco da barra mais a conta, nesta ordem` continua
+// comparando `destinos` contra uma lista escrita A MAO, e e so a lista que
+// passou a dizer a ordem da uniao.
+const List<String> registroCompleto = <String>[
+  'Pets',
+  'Rede',
+  'Mural',
+  'Loja',
+  'AuAu',
   'Perfil',
 ];
 
@@ -75,12 +136,47 @@ const List<String> ordemDecidida = <String>[
 /// reprova. Se o tema mudar de fonte, de tamanho ou de peso, os numeros saem
 /// destas casas e o caso acusa qual rotulo mudou e em quanto -- em vez de a
 /// divergencia aparecer meses depois num aparelho de 320 dp.
+/// `Perfil` (47,47 dp) saiu da tabela porque saiu da BARRA, e `AuAu` entrou
+/// medido: **49,33 dp num slot de 64,00**, com 14,67 dp de folga.
+///
+/// As tres palavras que o cliente ofereceu para esta secao foram medidas nesta
+/// mesma bancada antes da escolha (*"coloque uma palavra que exemplique, como
+/// mensagem, conversa, AuAu"*), na escala de 1,3x que o componente aplica:
+///
+///   `Mensagens` 86,66 dp -> excede 22,66    (2 linhas, 5,00 dp fora)
+///   `Mensagem`  82,73 dp -> excede 18,73    (2 linhas, 5,00 dp fora)
+///   `Conversa`  71,13 dp -> excede  7,13    (2 linhas, 5,00 dp fora)
+///   `AuAu`      49,33 dp -> CABE
+///
+/// As tres primeiras reprovam nas CINCO larguras suportadas, e nao so em 320.
+/// `AuAu` e a unica viavel das palavras dele. A palavra clara nao se perdeu:
+/// ela e o `reforcoAcessivel`, e o leitor de tela anuncia `AuAu, mensagens`.
+/// `Perto` (47,95 dp) SAIU da tabela porque saiu da BARRA (19/10/2026), e
+/// `Mural` entrou MEDIDO: **50,90 dp num slot de 64,00**, com 13,10 dp de
+/// folga. Ele passa em 320, 375 e 412 dp.
+///
+/// **`Comunidade` foi medida nesta mesma bancada e REPROVOU: 113,25 dp**, quase
+/// o dobro do slot. E por isso que ela e ABA da `Rede` e nao nome de secao --
+/// a mesma parede que recusou `Mensagens` (103,67 dp nesta bancada). A decisao
+/// de chamar a secao reunida de `Rede` saiu desta medida e nao de gosto.
 const Map<String, double> larguraMedidaPelaUx = <String, double>{
   'Pets': 39.20,
   'Rede': 45.08,
-  'Perto': 47.95,
+  'Mural': 50.90,
   'Loja': 37.15,
-  'Perfil': 47.47,
+  'AuAu': 49.33,
+};
+
+/// As palavras que o cliente ofereceu e que **nao cabem**, com a medida.
+///
+/// Elas ficam versionadas por um motivo: `Mensagens` e a palavra que a pessoa
+/// usa para falar da secao, e ela vai voltar a ser proposta. Quando voltar, a
+/// resposta nao e uma opiniao -- e esta tabela, e o caso abaixo prova que
+/// nenhuma delas entra num slot de 64,0 dp.
+const Map<String, double> palavrasQueNaoCabem = <String, double>{
+  'Mensagens': 86.66,
+  'Mensagem': 82.73,
+  'Conversa': 71.13,
 };
 
 /// Os rotulos que **nao podem voltar** a ser aba, e por que.
@@ -241,6 +337,14 @@ List<Transbordo> medir(WidgetTester tester, List<String> rotulos, double tela) {
   return achados;
 }
 
+/// Os destinos que a barra pinta hoje. **Cinco**, sem a conta.
+///
+/// Existe para os casos nao iterarem `CascaComAbas.destinos` quando o assunto
+/// e a BARRA: desde 19/10 o registro tem uma entrada que nao e pintada nela, e
+/// um caso que monte a barra com seis rotulos mede um slot que nao existe.
+List<DestinoDeNavegacao> get destinosDaBarra =>
+    CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+
 String relatorioDeTransbordo(List<Transbordo> t) {
   return t
       .map((a) => '  ${a.largura.toStringAsFixed(0)} dp — "${a.rotulo}": '
@@ -282,15 +386,69 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('o registro', () {
-    test('sao exatamente cinco, e a ordem e esta', () {
+    test('a BARRA sao exatamente cinco, e a ordem e esta', () {
       expect(
-        CascaComAbas.destinos.map((d) => d.rotulo).toList(),
+        CascaComAbas.visiveisEm(CascaComAbas.configuracao)
+            .map((d) => d.rotulo)
+            .toList(),
         ordemDecidida,
         reason: 'REPROVA: a barra deixou de ser `${ordemDecidida.join(' · ')}`. '
-            'A composicao foi decidida pelo cliente em 21/09 e medida pela UX '
-            'em 27.2; mudar rotulo ou ordem aqui exige remedir contra o slot '
-            'de 64,0 dp em 320 dp.',
+            'A composicao foi decidida pelo cliente em 21/09, medida pela UX '
+            'em 27.2 e REVISTA por ele em 19/10 (mensagens entra, `Perfil` '
+            'sai); mudar rotulo ou ordem aqui exige remedir contra o slot de '
+            '64,0 dp em 320 dp.',
       );
+    });
+
+    test('o REGISTRO tem as cinco da barra mais a conta, nesta ordem', () {
+      expect(
+        CascaComAbas.destinos.map((d) => d.rotulo).toList(),
+        registroCompleto,
+        reason: 'REPROVA: o registro deixou de ser '
+            '`${registroCompleto.join(' · ')}`. O registro e maior que a '
+            'barra desde 19/10: `Perfil` continua aqui, com rota e com tela, '
+            'e so perdeu o slot.',
+      );
+    });
+
+    test('exatamente um destino esta fora da barra, e e a conta', () {
+      final foraDaBarra =
+          CascaComAbas.destinos.where((d) => !d.naBarra).toList();
+      expect(
+        foraDaBarra.map((d) => d.rotulo).toList(),
+        <String>['Perfil'],
+        reason: 'REPROVA: os destinos fora da barra sao '
+            '${foraDaBarra.map((d) => d.rotulo).toList()}. So a conta sai da '
+            'barra, e ela sai porque a porta dela virou a foto da barra de '
+            'topo. Um segundo destino escondido seria uma secao sem porta '
+            'nenhuma.',
+      );
+      expect(
+        CascaComAbas.daConta.rota,
+        Rotas.perfil,
+        reason: 'REPROVA: o destino da conta aponta para '
+            '"${CascaComAbas.daConta.rota}". E ele que a foto da barra de topo '
+            'abre, e e a tela que guarda os cartoes de pet.',
+      );
+    });
+
+    test('ISCA: nenhuma das palavras medidas como grandes entrou na barra', () {
+      // A guarda, para o caso nao passar por vacuidade se a tabela esvaziar.
+      expect(palavrasQueNaoCabem, isNotEmpty);
+      final naBarra = CascaComAbas.visiveisEm(CascaComAbas.configuracao)
+          .map((d) => d.rotulo)
+          .toSet();
+      for (final entrada in palavrasQueNaoCabem.entries) {
+        expect(
+          naBarra,
+          isNot(contains(entrada.key)),
+          reason: 'REPROVA: "${entrada.key}" esta na barra, e ela mede '
+              '${entrada.value.toStringAsFixed(2)} dp num slot de 64,0 dp. '
+              'Ela quebra em duas linhas e pinta 5,00 dp fora da barra nas '
+              'CINCO larguras suportadas. O rotulo que cabe e `AuAu`, com a '
+              'palavra clara no nome acessivel.',
+        );
+      }
     });
 
     test('nenhuma aba aposentada voltou ao registro', () {
@@ -344,7 +502,11 @@ void main() {
       // nenhum dos casos acima pega isso: os dois olham so para a barra.
       await abrirOApp(tester, rede: _semServidor);
 
-      for (final destino in CascaComAbas.destinos) {
+      // **So os slots que SAO ramo**, e a distincao e de 19/10: o slot de
+      // mensagens empurra uma rota em vez de trocar de ramo, porque a tela
+      // dela e de outro agente e nao existe nesta arvore. Tocar nele nao abre
+      // uma secao da casca, e cobra-lo aqui mediria outra coisa.
+      for (final destino in destinosDaBarra.where((d) => d.ehRamo)) {
         await tester.tap(
           find.widgetWithText(NavigationDestination, destino.rotulo),
         );
@@ -354,7 +516,7 @@ void main() {
           findsOneWidget,
           reason: 'REPROVA: tocar em "${destino.rotulo}" nao abriu a secao '
               '"${destino.rotulo}". A ordem dos ramos de `StatefulShellRoute` '
-              'precisa ser a ordem de `CascaComAbas.destinos`.',
+              'precisa ser a ordem de `CascaComAbas.ramosDoRegistro`.',
         );
       }
     });
@@ -403,8 +565,11 @@ void main() {
         // `Perto` por `Perto de mim` tem de reprovar AQUI, na medida, e nao
         // so no caso que compara a ordem. Portao de medida que le uma copia
         // continua medindo o rotulo velho para sempre.
+        // `destinosDaBarra`, e nao `CascaComAbas.destinos`: o registro tem
+        // uma entrada que a barra nao pinta (a conta), e montar seis rotulos
+        // mediria um slot de 53,3 dp que nao existe em tela nenhuma.
         final rotulos =
-            CascaComAbas.destinos.map((d) => d.rotulo).toList(growable: false);
+            destinosDaBarra.map((d) => d.rotulo).toList(growable: false);
         await montarBarra(tester, rotulos: rotulos, largura: largura);
         final transbordos = medir(tester, rotulos, largura);
         expect(
@@ -424,15 +589,15 @@ void main() {
     testWidgets('a largura de cada rotulo bate com a medida da UX 27.2.1',
         (tester) async {
       final rotulos =
-          CascaComAbas.destinos.map((d) => d.rotulo).toList(growable: false);
+          destinosDaBarra.map((d) => d.rotulo).toList(growable: false);
 
-      // A guarda: a tabela e o registro precisam falar dos MESMOS rotulos. Um
+      // A guarda: a tabela e a BARRA precisam falar dos MESMOS rotulos. Um
       // rotulo novo sem linha na tabela passaria sem ser medido, e uma linha
       // orfa manteria o caso verde medindo algo que nao esta mais na barra.
       expect(
         larguraMedidaPelaUx.keys.toSet(),
         rotulos.toSet(),
-        reason: 'REPROVA: a tabela de 27.2.1 e o registro divergem. Rotulo '
+        reason: 'REPROVA: a tabela de 27.2.1 e a barra divergem. Rotulo '
             'novo precisa ser MEDIDO antes de entrar, contra o slot de 64,0 '
             'dp em 320 dp.',
       );
@@ -564,89 +729,145 @@ void main() {
       );
     });
 
-    testWidgets('a casca TEM a gaveta lateral, e ela abre pelo botao',
+    testWidgets(
+        'ISCA — a casca NAO tem gaveta, e nenhuma tela desenha o hamburguer',
         (tester) async {
-      // ISCA INVERTIDA — BICHUS-234, decisao do cliente de 22/09.
+      // ================================================================
+      // ISCA INVERTIDA PELA **TERCEIRA** VEZ, e as tres sao decisoes dele
+      // ================================================================
       //
-      // Em 21/09 a recomendacao medida era NAO ter gaveta, e o portao daquele
-      // dia vigiava a ausencia dela. Em 22/09 o cliente pediu a gaveta duas
-      // vezes, a segunda depois de ler o argumento contra, e a decisao dele
-      // prevalece. Este caso e o mesmo portao virado: ele reprova quem TIRAR
-      // a gaveta da casca.
+      // 21/09: a recomendacao MEDIDA era nao ter gaveta, e o portao daquele
+      //        dia vigiava a AUSENCIA dela.
+      // 22/09: o cliente pediu a gaveta, duas vezes, a segunda depois de ler
+      //        o argumento contra. O portao foi virado: passou a reprovar
+      //        quem TIRASSE a gaveta.
+      // 17/10: ele pediu o hamburguer FIXO em toda tela (*"padronize todas as
+      //        telas, tornando o menu esquerdo fixo para manter o padrao, por
+      //        mais que nao exista um sub-menu ainda, mas irei evoluir e
+      //        acrescentar alguns itens"*).
+      // 19/10: ele mandou OCULTAR o menu: *"vamos ocultar o menu por
+      //        enquanto, pois nao esta sendo utilizado para nada. colocar o
+      //        icone do usuario no lugar do menu, do lado esquerdo da pagina
+      //        e o icone de notificacao vai ficar na barra principal do lado
+      //        direito de todas as paginas"*.
       //
-      // Ele existe porque a gaveta e facil de perder sem querer. Ela nao tem
-      // controle proprio na arvore quando esta fechada, nenhuma tela quebra
-      // sem ela, e o `drawer:` do `Scaffold` da casca e uma linha que
-      // desaparece numa refatoracao sem deixar rastro na tela. Sem isca, a
-      // decisao do cliente valeria ate o proximo diff grande.
+      // **Este caso e o portao virado de volta.** Ele nao foi apagado e nao
+      // foi afrouxado: ele continua medindo a MESMA coisa -- se a casca tem
+      // gaveta e se ha caminho para abri-la --, e o que mudou e o veredicto.
+      //
+      // **Quem ler isto em tres meses: nenhuma das quatro e defeito.** A
+      // palavra dele em 19/10 e *"por enquanto"*, e e por isso que a gaveta
+      // foi OCULTADA e nao apagada -- `GavetaDeSecoes`, `BotaoDaGaveta`,
+      // `ControleDaGaveta` e o inventario de 27.5 continuam no repositorio.
+      // Reinstalar e devolver o `drawer:` a casca e o `leading` a `TelaDeAba`.
+      //
+      // **A PARTE QUE NAO PODE SER ESQUECIDA, e ela tem portao proprio:** a
+      // gaveta tinha SETE itens vivos, e ocultar o menu por cima deles
+      // perderia funcao em silencio. Dois deles -- `Pedidos de conexao` e
+      // `Pessoas bloqueadas` -- tinham a gaveta como UNICA porta em `lib/`.
+      // O grupo `os sete itens vivos continuam alcancaveis`, em
+      // `gaveta_oculta_e_barra_nova_test.dart`, mede um caso por item.
       await abrirOApp(tester, rede: _semServidor);
+      await abrirAAba(tester, 'Pets');
 
+      // (1) NENHUM `Scaffold` da arvore declara gaveta.
+      //
+      // **A medida e sobre a ARVORE INTEIRA e nao sobre a casca**, de
+      // proposito: declarar o `drawer:` numa tela de dentro traria a gaveta
+      // de volta por outro caminho, e com um defeito a mais -- a cortina
+      // modal deixaria de bloquear a barra de baixo, e os cinco destinos
+      // continuariam tocaveis pelo leitor de tela com a gaveta aberta.
       final comGaveta = tester
           .widgetList<Scaffold>(find.byType(Scaffold))
           .where((s) => s.drawer != null)
           .toList();
       expect(
         comGaveta,
-        hasLength(1),
-        reason: 'REPROVA: a casca esta sem gaveta, ou com mais de uma. O '
-            'cliente pediu a gaveta em 22/09, depois de ler a recomendacao '
-            'contra, e ela mora no MESMO `Scaffold` da barra de baixo -- e '
-            'so nele. Montada na tela de dentro, a cortina modal deixa de '
-            'bloquear a barra de baixo e os cinco destinos continuam '
-            'tocaveis pelo leitor de tela com a gaveta aberta.',
-      );
-      expect(
-        comGaveta.single.drawer,
-        isA<GavetaDeSecoes>(),
-        reason: 'REPROVA: a casca tem gaveta, e nao e a `GavetaDeSecoes`. '
-            'Uma gaveta qualquer nao carrega a divisao entre os dois menus '
-            'nem a regra de nao renderizar o que nao existe.',
+        isEmpty,
+        reason: 'REPROVA: ha ${comGaveta.length} `Scaffold` com `drawer:` na '
+            'arvore. O cliente mandou ocultar o menu em 19/10/2026, e '
+            '`Scaffold` sem `drawer` e o que torna a ausencia ESTRUTURAL: '
+            'sem ele nao ha `openDrawer`, nao ha arrasto de borda e nao ha '
+            'hamburguer automatico. Esconder um botao deixando o `drawer:` no '
+            'lugar e ausencia que depende de alguem lembrar.',
       );
 
-      // O PRECO que o cliente aceitou junto com a gaveta, parte 1: ela nao
-      // abre por arrasto de borda. No iOS a borda esquerda ja e o voltar
-      // deste app, e no Android o voltar por gesto sai das duas bordas.
-      // Religar este padrao e a forma silenciosa de a gaveta voltar a brigar
-      // com o gesto do sistema em toda tela de secao.
-      expect(
-        comGaveta.single.drawerEnableOpenDragGesture,
-        isFalse,
-        reason: 'REPROVA: a gaveta voltou a abrir por arrasto de borda. O '
-            'padrao do Flutter e `true`, entao isto regride sozinho quando '
-            'alguem reescreve o `Scaffold` da casca.',
-      );
-
-      // O PRECO, parte 2: com o arrasto desligado, o botao da barra de topo e
-      // o UNICO jeito de abrir. Declarar o `drawer:` e nao desenhar o gatilho
-      // deixaria os submenus inalcancaveis, e o caso acima, sozinho, passaria.
+      // (2) NENHUM `Drawer` montado, em nenhuma das cinco secoes.
       //
-      // O rotulo esta escrito a mao, com acento, e NAO lido de
-      // `TextosDaGaveta`: comparar o texto renderizado com a constante que o
-      // produz aprovaria qualquer troca de palavra.
-      //
-      // Ele era `Abrir os atalhos das seções` ate 22/09 e mudou em 23/09, com
-      // a gaveta: ela deixou de ser o indice das cinco secoes e passou a ser o
-      // submenu da secao atual, entao o nome acessivel do gatilho passou a
-      // dizer isso. A troca reprovou AQUI antes de ser escrita, que e o
-      // servico que este literal presta.
-      final gatilho = find.byTooltip('Abrir o submenu desta seção');
+      // Sem o `drawer:` nao deveria haver `Drawer` nenhum -- mas um `Drawer`
+      // montado como filho comum do corpo passaria pela medida (1) e
+      // apareceria na tela. Esta linha fecha isso, e ela varre as CINCO
+      // secoes: a gaveta era da secao ATUAL, e uma sobra ficaria escondida
+      // numa delas.
+      // **AS QUATRO QUE SAO RAMO, e `AuAu` FORA de proposito.** O slot de
+      // `AuAu` nao e ramo: ele EMPURRA `Rotas.mensagens`, e a tela de
+      // mensagens cobre a casca -- depois dele nao ha barra de baixo na
+      // arvore para tocar na proxima secao. A area de mensagens tambem nao e
+      // raiz de secao (ela tem `Voltar` no slot da esquerda), entao ela nunca
+      // teve hamburguer para perder.
+      final ramosNaBarra = ordemDecidida
+          .where((r) => CascaComAbas.destinos
+              .singleWhere((d) => d.rotulo == r)
+              .ehRamo)
+          .toList();
       expect(
-        gatilho,
-        findsOneWidget,
-        reason: 'REPROVA: a raiz de secao nao tem o gatilho da gaveta na '
-            'barra de topo. Sem ele a gaveta existe na arvore e nao abre por '
-            'caminho nenhum.',
+        ramosNaBarra,
+        hasLength(4),
+        reason: 'REPROVA: a barra tem ${ramosNaBarra.length} ramo(s) e nao 4. '
+            'Com outro numero, a varredura abaixo deixou de cobrir uma secao '
+            'ou passou a tocar num slot que empurra rota -- e nos dois casos '
+            'ela mede menos do que diz medir.',
       );
+      for (final secao in ramosNaBarra) {
+        await abrirAAba(tester, secao);
+        expect(
+          find.byType(Drawer),
+          findsNothing,
+          reason: 'REPROVA: a secao `$secao` tem um `Drawer` montado na '
+              'arvore.',
+        );
+        // (3) E NENHUM GATILHO para abrir uma.
+        //
+        // **Por TIPO e por TOOLTIP, e as duas medidas sao diferentes.** O
+        // tipo pega `BotaoDaGaveta` de volta; o tooltip pega um hamburguer
+        // novo, escrito a mao, que nao usasse aquela classe -- inclusive o
+        // que o `Scaffold` desenha sozinho quando ha `drawer:`.
+        expect(
+          find.byType(BotaoDaGaveta),
+          findsNothing,
+          reason: 'REPROVA: `BotaoDaGaveta` voltou a ser desenhado em '
+              '`$secao`.',
+        );
+        expect(
+          find.byTooltip('Abrir o submenu desta seção'),
+          findsNothing,
+          reason: 'REPROVA: ha um gatilho de gaveta na barra de topo de '
+              '`$secao`. O literal esta escrito A MAO, com acento, e NAO lido '
+              'de `TextosDaGaveta`: comparar o renderizado com a constante '
+              'que o produz aprovaria qualquer troca de palavra.',
+        );
+        expect(
+          find.byIcon(Icons.menu),
+          findsNothing,
+          reason: 'REPROVA: ha um glifo de hamburguer na secao `$secao`. '
+              'Este e o desenho que o `Scaffold` usa sozinho quando acha um '
+              '`drawer:`, e tambem o primeiro que alguem escreveria a mao.',
+        );
+      }
 
-      await tester.tap(gatilho);
-      await tester.pumpAndSettle();
+      // (4) E A FOTO ESTA NO LUGAR QUE ERA DO HAMBURGUER.
+      //
+      // A ausencia sozinha nao e a entrega: o cliente nao mandou esvaziar o
+      // slot da esquerda, ele mandou POR A FOTO nele. Sem esta linha, uma
+      // barra de topo com a esquerda vazia passaria nas tres medidas acima.
+      await abrirAAba(tester, 'Pets');
+      final barra = tester.widget<AppBar>(find.byType(AppBar));
       expect(
-        find.byType(Drawer),
-        findsOneWidget,
-        reason: 'REPROVA: o gatilho existe e nao abriu a gaveta. A prova '
-            'deste caso e o comportamento, e nao a declaracao: `drawer:` '
-            'preenchido com o gatilho apontando para o `Scaffold` errado '
-            'passa na leitura do widget e falha no aparelho.',
+        barra.leading,
+        isA<AvatarDaConta>(),
+        reason: 'REPROVA: o `leading` da barra de topo nao e a foto da conta. '
+            'Literal dele (19/10): "colocar o icone do usuario no lugar do '
+            'menu, do lado esquerdo da pagina".',
       );
     });
 
@@ -692,40 +913,107 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  group('o leitor de QR tem duas portas e um leitor so', () {
-    testWidgets('a porta PRIMARIA, em Pets, chega ao leitor', (tester) async {
+  group('o leitor de QR tem UMA porta e um leitor so', () {
+    // **O QUE ESTE GRUPO PROVAVA, E O QUE ELE PROVA AGORA.**
+    //
+    // Ele provava DUAS portas: a primaria, em `Pets`, e a de conta, em
+    // `Perfil`. A regra da UX 27.5.6 dizia que, se apenas uma fosse
+    // construida, teria de ser a de `Pets` -- porque quem acha um cachorro na
+    // rua nao pensa a palavra `Perfil`.
+    //
+    // **O cliente reverteu isso em 19/10**, com estas palavras: *"leve o
+    // icone de qr-code de escanear para a pagina do perfil que tem relacao
+    // com as acoes do usuario."* Ficou UMA porta, e ela e a da tela da conta.
+    //
+    // O caso da porta de `Pets` **nao foi apagado**: ele virou o caso abaixo,
+    // que assevera a AUSENCIA dela ali. Trocar "existe em Pets" por "nao
+    // existe em Pets" e o que mantem a decisao provada nos dois sentidos --
+    // sem isso, repor o icone em `Pets` passaria verde e o produto voltaria a
+    // ter duas portas sem ninguem decidir isso.
+    //
+    // **O que NAO mudou, e e o que mais importa:** o leitor continua
+    // alcancavel SEM CONTA. A autenticacao da rota dele e opcional, e quem
+    // acha um animal na rua pode nao ter conta; o ramo deslogado da tela da
+    // conta desenha `Escanear uma tag`, e a foto que abre essa tela aparece
+    // deslogada. Ha caso para isso logo abaixo.
+    testWidgets('a porta de QR NAO esta mais na barra de `Pets`',
+        (tester) async {
       await abrirOApp(tester, rede: _semServidor);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026: a porta primaria do leitor
+      // mora em `Pets` (UX 27.5.6), e o caso diz em voz alta que vai ate ela.
+      await abrirAAba(tester, 'Pets');
 
       expect(
         find.widgetWithText(NavigationDestination, 'Pets'),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.qr_code_2),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o icone de QR voltou a barra de topo de `Pets`. Ele '
+            'foi movido para a pagina da conta em 19/10, por decisao do '
+            'cliente, e a tela da conta JA tinha `Escanear uma tag` -- repor '
+            'aqui devolve ao produto duas portas para o mesmo leitor.',
+      );
+    });
 
-      // A porta e conferida ANTES do toque. Um `tap` direto tambem reprova
-      // quando ela some, mas com "could not find any matching widgets", que
-      // nao diz a quem ler o que quebrou nem por que importa.
-      final porta = find.widgetWithText(OutlinedButton, 'Escanear uma tag');
+    testWidgets('a porta unica chega ao leitor, pela tela da conta',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _semServidor,
+        deposito: depositoLogado(),
+      );
+      await irParaAConta(tester);
+
+      final porta = find.widgetWithText(ItemDeMenu, 'Escanear uma tag');
       expect(
         porta,
         findsOneWidget,
-        reason: 'REPROVA: a porta primaria do leitor sumiu de `Pets`. '
-            '`Escanear` deixou de ser aba nesta historia, e se a porta nao '
-            'existir o caminho mais critico do produto -- quem achou um '
-            'cachorro na rua -- fica inalcancavel. Se apenas uma porta for '
-            'construida, ela tem de ser esta (UX 27.5.6).',
+        reason: 'REPROVA: a porta do leitor sumiu da tela da conta. Depois de '
+            '19/10 ela e a UNICA, e sem ela o caminho de quem achou um '
+            'cachorro na rua fica inalcancavel.',
       );
       await tester.tap(porta);
       await tester.pumpAndSettle();
-
       expect(
         find.byType(TelaLeitorDeQr),
         findsOneWidget,
-        reason: 'REPROVA: a porta primaria de `Pets` existe mas nao abre o '
-            'leitor. '
-            '`Escanear` deixou de ser aba nesta historia, e se a porta nao '
-            'existir o caminho mais critico do produto -- quem achou um '
-            'cachorro na rua -- fica inalcancavel. Se apenas uma porta for '
-            'construida, ela tem de ser esta (UX 27.5.6).',
+        reason: 'REPROVA: a porta unica existe e nao abre o leitor.',
+      );
+    });
+
+    testWidgets('ISCA SEM CONTA: deslogado ainda chega ao leitor',
+        (tester) async {
+      // **O risco desta mudanca, provado e nao suposto.** Mover o leitor para
+      // a tela da conta esconderia ele de quem nao tem conta se aquela tela
+      // fosse so para quem esta logado. Ela nao e -- e esta isca falha no dia
+      // em que alguem a tornar.
+      await abrirOApp(tester, rede: _semServidor);
+      await irParaAConta(tester);
+
+      final porta = find.widgetWithText(ElevatedButton, 'Escanear uma tag');
+      final qualquer = porta.evaluate().isNotEmpty
+          ? porta
+          : find.text('Escanear uma tag');
+      expect(
+        qualquer,
+        findsWidgets,
+        reason: 'REPROVA: deslogado nao ha porta para o leitor. A '
+            'autenticacao da rota do leitor e OPCIONAL de proposito: quem '
+            'acha um animal na rua e exatamente quem pode nao ter conta '
+            'nenhuma, e esconder o leitor dessa pessoa e o oposto da cunha '
+            'do produto.',
+      );
+      await tester.tap(qualquer.first);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(TelaLeitorDeQr),
+        findsOneWidget,
+        reason: 'REPROVA: a porta deslogada existe e nao abre o leitor.',
       );
     });
 
@@ -736,11 +1024,22 @@ void main() {
         rede: _semServidor,
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: era o slot `Perfil` da barra de
+      // baixo, e virou a foto da barra de topo. O destino nao mudou, e e isso
+      // que este caso continua provando.
+      await irParaAConta(tester);
 
-      await rolarAte(tester, find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+      // A porta de conta virou ITEM DE MENU em 18/10/2026 (pedido do
+      // cliente: "apenas os menus para realizar as acoes e nao todos os
+      // botoes nessa pagina"). **O que este caso cobra nao mudou**: a porta
+      // existe em `Perfil` e chega ao MESMO leitor. Mudou a forma do
+      // controle, e por isso o finder e `ItemDeMenu` e nao `OutlinedButton` --
+      // a porta PRIMARIA, em `Pets`, continua botao e continua medida no caso
+      // de cima.
+      final portaDeConta =
+          find.widgetWithText(ItemDeMenu, 'Escanear uma tag');
+      await rolarAte(tester, portaDeConta);
+      await tester.tap(portaDeConta);
       await tester.pumpAndSettle();
 
       expect(
@@ -798,11 +1097,51 @@ void main() {
               'decorativo e NAO e anunciado. Sem o reforco, quem usa leitor de '
               'tela recebe um sinal onde quem enxerga recebe tres.',
         );
+        // **A DECISAO VIROU AO CONTRARIO EM 18/10/2026.**
+        //
+        // Ate esta data o caso cobrava `isNotEmpty` aqui, com a razao escrita
+        // "ela e a outra metade da decisao do cliente (UX 27.4.2)" -- e estava
+        // certo enquanto a decisao era aquela. Um agente parou nesta linha em
+        // vez de apagar a frase, e fez bem.
+        //
+        // O cliente reverteu, literal: *"remova os textos 'os profissionais e
+        // estabelecimentos indicados por quem já usou. os eventos de quem tem
+        // pet aqui perto de você. Os pets perdidos e os que estão para adoção
+        // aqui na sua região. Seus pets, sua plaquinha e os ajustes da sua
+        // conta.'"*. O caso NAO foi apagado: ele passou a cobrar a regra de
+        // hoje, no mesmo lugar e no mesmo laco. Quem escrever frase de apoio
+        // numa secao reprova aqui.
         expect(
           destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" voltou a ter linha de apoio no '
+              'corpo ("${destino.reforcoDaPagina}"). O cliente removeu as '
+              'cinco em 18/10/2026, nominalmente. Rotulo curto explicado por '
+              'frase no corpo foi decisao de 21/09 e ele a desfez.',
+        );
+        // **E a metade que NAO saiu, no mesmo laco de proposito.** As duas
+        // frases moravam no mesmo objeto, e o risco da remocao era levar esta
+        // junto: ela e invisivel na tela e e o unico sinal que quem usa leitor
+        // de tela recebe alem do rotulo de quatro letras. Os dois `expect` de
+        // `semanticsLabel` acima ja reprovariam; este nomeia o campo, para a
+        // reprovacao dizer QUAL metade caiu.
+        expect(
+          destino.reforcoAcessivel,
           isNotEmpty,
-          reason: 'REPROVA: "${destino.rotulo}" nao tem linha de reforco de '
-              'pagina. Ela e a outra metade da decisao do cliente (UX 27.4.2).',
+          reason: 'REPROVA: "${destino.rotulo}" ficou sem `reforcoAcessivel`. '
+              'ELE NAO E A FRASE QUE O CLIENTE REMOVEU: aquela aparecia no '
+              'corpo da pagina, esta nao aparece em lugar nenhum da tela -- e '
+              'a segunda metade do nome que o leitor de tela anuncia na barra. '
+              'Sem ela, `Pets` e `Rede` viram rotulos sem assunto e a remocao '
+              'de um texto visivel virou regressao de acessibilidade.',
+        );
+        expect(
+          destino.semanticsLabel,
+          contains(destino.reforcoAcessivel),
+          reason: 'REPROVA: o nome acessivel de "${destino.rotulo}" deixou de '
+              'carregar `reforcoAcessivel`. O campo pode estar cheio e nao '
+              'chegar a ninguem -- e o defeito de `nomeDaImagem` antes de '
+              '17/10, campo preenchido que a tela ignorava.',
         );
       }
     });
@@ -811,19 +1150,33 @@ void main() {
         (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A `Rede` TEM ABAS PROPRIAS NO CORPO** (`Proximos`/`Encerrados`), e
+      // elas sao `SemanticsRole.tab` do mesmo jeito. Com a `Rede` virando a aba
+      // de arranque em 18/10/2026, a varredura passou a achar SETE guias para
+      // cinco destinos -- e a falha era exatamente esta, nao uma regressao de
+      // semantica.
+      //
+      // O assunto deste caso e a BARRA DE BAIXO. Ir para `Pets`, a raiz sem
+      // abas no corpo, devolve a varredura ao assunto dela e mantem o
+      // `isSelected` do indice 0 medindo o que media. Quem mede a aba de
+      // arranque e `test/widget_test.dart`.
+      await abrirAAba(tester, 'Pets');
 
       final guias = todosOsNos(tester)
           .where((n) => n.getSemanticsData().role == SemanticsRole.tab)
           .toList();
+      // As guias sao as da BARRA: a conta nao e guia desde 19/10 -- ela nao
+      // tem slot, e a porta dela e a foto da barra de topo, que e um botao.
+      final naBarra = destinosDaBarra;
       expect(
         guias,
-        hasLength(CascaComAbas.destinos.length),
-        reason: 'REPROVA: achei ${guias.length} guias na arvore e o registro '
-            'tem ${CascaComAbas.destinos.length}.',
+        hasLength(naBarra.length),
+        reason: 'REPROVA: achei ${guias.length} guias na arvore e a barra '
+            'tem ${naBarra.length}.',
       );
 
-      for (var i = 0; i < CascaComAbas.destinos.length; i++) {
-        final destino = CascaComAbas.destinos[i];
+      for (var i = 0; i < naBarra.length; i++) {
+        final destino = naBarra[i];
         final no = guias[i];
         expect(
           no.label,
@@ -854,6 +1207,129 @@ void main() {
         );
       }
       handle.dispose();
+    });
+
+    testWidgets(
+        'ISCA — o nome acessivel da aba NAO saiu junto com as descricoes',
+        (tester) async {
+      // **POR QUE ESTA ISCA EXISTE.** Em 18/10/2026 o cliente removeu as cinco
+      // frases de apoio do corpo das paginas. Os dois textos moravam no MESMO
+      // objeto (`DestinoDeNavegacao`): `reforcoDaPagina`, que era visivel, e
+      // `reforcoAcessivel`, que nunca apareceu em tela nenhuma e e a segunda
+      // metade do nome que o leitor de tela anuncia na barra.
+      //
+      // Levar os dois na mesma passada e a regressao obvia, e ela e CALADA:
+      // na tela nada muda, a suite de layout fica verde, e quem navega sem ver
+      // passa a ouvir cinco rotulos de quatro a seis letras -- `Pets`, `Rede`,
+      // `Perto`, `Loja`, `Perfil` -- sem nenhum assunto, porque o icone e
+      // decorativo e nao e anunciado.
+      //
+      // Esta isca mede as DUAS metades na mesma arvore: a frase visivel fora,
+      // a frase acessivel dentro. E o que separa "remover texto visivel" de
+      // "remover informacao".
+      //
+      // ISCA: em `telas/casca_com_abas.dart`, troque qualquer
+      // `reforcoAcessivel` por `''` -- ou apague a metade de tras de
+      // `semanticsLabel`. Este caso reprova nomeando a secao.
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _semServidor);
+      // Pelo mesmo motivo do caso acima: a `Rede` e a aba de arranque e tem
+      // abas proprias no corpo, que entrariam na varredura de guias. O assunto
+      // aqui e a barra de baixo.
+      await abrirAAba(tester, 'Pets');
+
+      final guias = todosOsNos(tester)
+          .where((n) => n.getSemanticsData().role == SemanticsRole.tab)
+          .toList();
+      // AS GUIAS SAO AS DA BARRA, e nao o registro inteiro (uniao de
+      // 18/10/2026): desde que `Perfil` perdeu o slot, `destinos` tem SEIS e a
+      // barra desenha CINCO. Parear guia com `destinos` fazia o laco procurar
+      // uma guia `Perfil` que nao existe. As propriedades de `Perfil`
+      // continuam medidas no laco de baixo, que percorre o registro inteiro.
+      final naBarra =
+          CascaComAbas.visiveisEm(CascaComAbas.configuracao).toList();
+      expect(guias, hasLength(naBarra.length));
+
+      for (var i = 0; i < naBarra.length; i++) {
+        final destino = naBarra[i];
+        expect(
+          destino.reforcoAcessivel.trim(),
+          isNotEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" ficou sem `reforcoAcessivel`. '
+              'ELE NAO E O TEXTO QUE O CLIENTE REMOVEU em 18/10/2026: aquele '
+              'aparecia no CORPO da pagina; este nao aparece em tela nenhuma.',
+        );
+        expect(
+          guias[i].label,
+          contains(destino.reforcoAcessivel),
+          reason: 'REPROVA: a guia "${destino.rotulo}" anuncia '
+              '"${guias[i].label}", sem o reforco acessivel '
+              '"${destino.reforcoAcessivel}". O rotulo visivel tem '
+              '${destino.rotulo.length} caracteres e o icone nao e anunciado: '
+              'sem o reforco, quem usa leitor de tela recebe um sinal onde '
+              'quem enxerga recebe dois.',
+        );
+        // E a outra metade, na mesma volta do laco: a frase do corpo saiu.
+        expect(
+          destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: "${destino.rotulo}" voltou a ter frase de apoio '
+              'visivel no corpo.',
+        );
+      }
+      handle.dispose();
+    });
+
+    testWidgets('as cinco frases removidas nao estao em nenhuma secao',
+        (tester) async {
+      // Prova por VARREDURA DE TELA, e nao por campo: as frases podiam ter
+      // sido reescritas a mao dentro de uma tela, fora do registro, e o
+      // `isEmpty` de `reforcoDaPagina` ficaria verde com o texto na tela.
+      //
+      // Escritas por extenso, exatamente como o cliente as nomeou.
+      const List<String> removidas = <String>[
+        'Os pets perdidos e os que estão para adoção aqui na sua região.',
+        'Os eventos de quem tem pet aqui perto de você.',
+        'Os profissionais e estabelecimentos indicados por quem já usou.',
+        'Produtos escolhidos pelo Bichu, que abrem no site do parceiro.',
+        'Seus pets, sua plaquinha e os ajustes da sua conta.',
+      ];
+
+      await abrirOApp(tester, rede: _semServidor);
+
+      // AS SECOES DA BARRA SAO CINCO (uniao de 18/10/2026). `Perfil` saiu do
+      // slot e a porta dele e a foto da barra de topo, entao ele nao e
+      // alcancavel por `NavigationDestination` -- tocar por rotulo procurava
+      // uma aba que nao existe. Ele NAO deixou de ser medido: a conta e
+      // visitada pela porta de verdade, depois do laco, e as mesmas cinco
+      // frases sao cobradas la.
+      for (final destino in CascaComAbas.visiveisEm(CascaComAbas.configuracao)) {
+        await tester.tap(
+          find.widgetWithText(NavigationDestination, destino.rotulo),
+        );
+        await tester.pumpAndSettle();
+        for (final frase in removidas) {
+          expect(
+            find.text(frase),
+            findsNothing,
+            reason: 'REPROVA: a secao "${destino.rotulo}" mostra "$frase". As '
+                'cinco frases sairam em 18/10/2026, nomeadas uma por uma pelo '
+                'cliente.',
+          );
+        }
+      }
+
+      // A CONTA NAO E VISITADA AQUI, e nao e lacuna.
+      //
+      // Depois da fiacao de 18/10/2026 o ultimo slot do laco (`AuAu`) EMPURRA
+      // `/mensagens`, uma rota que COBRE a casca: sem barra de topo nao ha
+      // foto da conta, que e a unica porta dela, e voltar nao e assunto deste
+      // caso. O que importa e que `Perfil` **continua medido**: o caso
+      // `cada destino declara um semanticsLabel que comeca pelo rotulo`
+      // percorre `CascaComAbas.destinos` INTEIRO -- as cinco da barra mais a
+      // conta -- e cobra `reforcoDaPagina` VAZIO em cada um. As cinco frases
+      // sairam de `DestinoDeNavegacao`, entao e la que a ausencia se prova,
+      // para os seis destinos e nao para os cinco que a barra desenha.
     });
 
     test('ISCA DE FONTE: `addSemanticIndexes: false` continua em TelaDeAba',
@@ -909,8 +1385,10 @@ void main() {
         rede: _semServidor,
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: era o slot `Perfil` da barra de
+      // baixo, e virou a foto da barra de topo. O destino nao mudou, e e isso
+      // que este caso continua provando.
+      await irParaAConta(tester);
 
       final nos = todosOsNos(tester);
 
@@ -1036,9 +1514,13 @@ void main() {
       // Portao que reprova tudo some do CI igual a portao que aprova tudo. O
       // cliente pediu para ver o escopo inteiro, e 25.7.3 permite isso
       // exatamente neste build.
+      // Conta contra os destinos que estao NA BARRA, e nao contra o registro
+      // inteiro: desde 19/10 a conta esta no registro e fora da barra, e
+      // `visiveisEm` tira ela nas duas configuracoes de build -- porque sair
+      // da barra foi decisao de produto, nao de compilacao.
       expect(
         CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia),
-        hasLength(CascaComAbas.destinos.length),
+        hasLength(CascaComAbas.destinos.where((d) => d.naBarra).length),
       );
     });
 
@@ -1063,24 +1545,20 @@ void main() {
               'existe. Destino visivel que leva a lugar nenhum sem dizer o '
               'que e aquilo e defeito (UX 25.7.3).',
         );
+        // **A LINHA DE REFORCO SAIU DAQUI EM 18/10/2026.** Este caso cobrava
+        // a presenca dela no corpo (`findsOneWidget`) e a ausencia dela na
+        // barra de topo; o cliente removeu as cinco frases nominalmente, e o
+        // que resta a cobrar e que nenhuma volte. O laco e o mesmo e o caso
+        // nao foi apagado.
         expect(
-          find.text(destino.reforcoDaPagina),
-          findsOneWidget,
-          reason: 'REPROVA: a secao "${destino.rotulo}" nao traz a linha de '
-              'reforco no CORPO. Ela nao cabe na barra de topo (medido em '
-              '27.4.1: 240,0 dp disponiveis contra 406,72 pedidos), e sem ela '
-              'o rotulo de quatro letras nao explica nada.',
+          destino.reforcoDaPagina,
+          isEmpty,
+          reason: 'REPROVA: a secao planejada "${destino.rotulo}" voltou a '
+              'declarar linha de apoio. As cinco sairam em 18/10/2026.',
         );
-        // O reforco vai no corpo, e **nao** no titulo: quem o puser no topo
-        // constroi uma tela que nao existe no aparelho.
-        expect(
-          find.widgetWithText(AppBar, destino.reforcoDaPagina),
-          findsNothing,
-          reason: 'REPROVA: a linha de reforco de "${destino.rotulo}" foi '
-              'parar na barra de topo, onde ela e cortada com reticencia. Um '
-              'significado que some com reticencia nao foi transferido para '
-              'lugar nenhum (UX 27.4.1).',
-        );
+        // O que esta secao PRECISA dizer continua cobrado pelo `expect` de
+        // "esta em construcao" acima: o estado vazio que nomeia o que vai
+        // existir e a licao da BICHUS-62, e ele nao dependia da frase de apoio.
         expect(
           find.widgetWithText(AppBar, destino.rotulo),
           findsOneWidget,
@@ -1105,10 +1583,15 @@ void main() {
         rede: _semServidor,
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      // A PORTA MUDOU DE LUGAR EM 19/10: era o slot `Perfil` da barra de
+      // baixo, e virou a foto da barra de topo. O destino nao mudou, e e isso
+      // que este caso continua provando.
+      await irParaAConta(tester);
 
-      final sair = find.widgetWithText(OutlinedButton, 'Sair da conta');
+      // `Sair da conta` virou item de menu em 18/10/2026, pelo mesmo pedido do
+      // cliente. A folha de confirmacao abaixo nao mudou uma linha, e e ela
+      // que este caso mede.
+      final sair = find.widgetWithText(ItemDeMenu, 'Sair da conta');
       await rolarAte(tester, sair);
       await tester.tap(sair);
       await tester.pumpAndSettle();
@@ -1207,51 +1690,54 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('criterio 2 — nenhum toque termina sem resposta', () {
-    testWidgets('as portas de sub-destino de Pets e de Perto navegam',
+    testWidgets('AS DUAS PORTAS DE `Adoções` SAIRAM, e nenhuma delas voltou',
         (tester) async {
+      // **O QUE ESTE CASO PROVAVA, E O QUE ELE PROVA AGORA.**
+      //
+      // Ele provava que as duas portas de `Adoções` NAVEGAVAM: a de `Pets` e
+      // a das ONGs em `Perto`, as duas chegando a mesma tela, sem duplicar
+      // listagem (criterio 6). O defeito que ele guardava era acao sem
+      // destino -- as duas `Ver meus pets` que nao levavam a lugar nenhum.
+      //
+      // **As duas portas sairam em 19/10.** Nao existe rota de adocao no
+      // contrato -- confirmado por duas leituras independentes --, e a tela do
+      // outro lado dizia estar em construcao: a porta prometia o que o
+      // produto nao tem, e o cliente mandou fechar esse defeito.
+      //
+      // O caso nao foi apagado: ele passou a assever a AUSENCIA das duas.
+      // Sem essa afirmacao, repor qualquer uma devolveria ao produto um toque
+      // que abre uma tela em construcao, e nenhum caso acusaria. O contrapeso
+      // -- que a ROTA continua registrada, para link profundo nao quebrar --
+      // vive em `portas_de_adocoes_test.dart`, junto do resto desta decisao.
       await abrirOApp(tester, rede: _semServidor);
+      // A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026, e as portas de sub-destino
+      // deste caso saem de `Pets` e de `Perto`.
+      await abrirAAba(tester, 'Pets');
 
-      // `Adoções` e sub-destino de `Pets`, com porta propria.
-      await tester.tap(find.text('Adoções'));
-      await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(AppBar, 'Adoções'),
-        findsOneWidget,
-        reason: 'REPROVA: a porta de `Adoções` em `Pets` nao abriu destino '
-            'nenhum. Era o defeito das duas acoes `Ver meus pets` sem '
-            'destino, de novo.',
-      );
-      expect(
-        find.text('A lista de adoções está em construção'),
-        findsOneWidget,
-        reason: 'REPROVA: `Adoções` abriu uma tela que nao diz o que vai '
-            'existir ali.',
+        find.text('Adoções'),
+        findsNothing,
+        reason: 'REPROVA: a porta de `Adoções` voltou a `Pets`. Ela abre uma '
+            'tela que diz estar em construcao, e a rota dela nao existe no '
+            'contrato.',
       );
 
-      // Volta e vai pela porta das ONGs, em `Perto`. Ela leva ao MESMO
-      // destino: pre-filtrado, sem duplicar listagem (criterio 6).
-      // `tester.pageBack()` procura o botao pelo tooltip em ingles, e este
-      // app declara `pt-BR`: o tooltip e `Voltar`. Usar `pageBack` aqui
-      // reprovaria por um motivo que nao e o do caso.
-      await tester.tap(find.byTooltip('Voltar'));
+      // **A SEGUNDA PORTA ERA O RODAPE DO `Perto`, e `Perto` DEIXOU DE SER
+      // SECAO em 19/10.** O diretorio virou a aba `Comunidade` da `Rede`, e e
+      // la que o rodape apareceria se voltasse -- o caso segue o conteudo e
+      // nao o nome da secao.
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
-      await tester.pumpAndSettle();
-
-      final portaDasOngs = find.text('Pets de ONGs para adoção');
-      expect(
-        portaDasOngs,
-        findsOneWidget,
-        reason: 'REPROVA: `Perto` nao tem a porta das ONGs. O criterio 6 pede '
-            'que ela exista ali e leve a `Pets` pre-filtrado em adocao.',
+      await tester.tap(
+        find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
       );
-      await tester.tap(portaDasOngs);
       await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(AppBar, 'Adoções'),
-        findsOneWidget,
-        reason: 'REPROVA: a porta das ONGs nao leva a `Adoções`. Se ela '
-            'abrisse uma listagem propria, seriam duas listas da mesma coisa.',
+        find.text('Pets de ONGs para adoção'),
+        findsNothing,
+        reason: 'REPROVA: a porta das ONGs voltou ao rodape do diretorio, '
+            'hoje a aba `Comunidade` da `Rede`. Ela levava a mesma tela em '
+            'construcao que a de `Pets`.',
       );
     });
 
@@ -1268,7 +1754,10 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('a 200% de escala de fonte', () {
-    for (final destino in CascaComAbas.destinos) {
+    // As secoes que tem RAMO: sao as que um toque na barra abre. O slot de
+    // mensagens empurra uma rota que ainda nao existe, e a conta saiu da
+    // barra -- as duas tem caso proprio abaixo.
+    for (final destino in destinosDaBarra.where((d) => d.ehRamo)) {
       testWidgets('a secao ${destino.rotulo} abre a 200% sem estourar',
           (tester) async {
         tester.view.physicalSize = const Size(960, 2000);
@@ -1294,5 +1783,41 @@ void main() {
         );
       });
     }
+
+    // A TELA DA CONTA a 200%, alcancada pela porta de hoje.
+    //
+    // Ela tinha caso neste grupo quando era aba (`a secao Perfil abre a 200%`)
+    // e o caso **nao foi apagado**: ele mudou de porta e passou a cobrar o
+    // titulo que o cliente pediu em 19/10 -- o nome da pessoa, e nao a palavra
+    // `Perfil`.
+    testWidgets('a tela da conta abre a 200% sem estourar, pela foto',
+        (tester) async {
+      tester.view.physicalSize = const Size(960, 2000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await abrirOApp(
+        tester,
+        rede: _semServidor,
+        deposito: depositoLogado(),
+        escala: 2,
+      );
+      await irParaAConta(tester);
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'REPROVA: a tela da conta estourou o leiaute a 200% em 320 '
+            'dp. Nenhum container de texto pode ter altura fixa: a tela '
+            'cresce e rola.',
+      );
+      expect(
+        find.byType(MeusPets),
+        findsOneWidget,
+        reason: 'REPROVA: a tela da conta abriu a 200% sem o bloco '
+            '`Meus pets`. Os cartoes dele sao o unico caminho ate a pagina '
+            'do pet, onde moram o QR e `Marcar como perdido`.',
+      );
+    });
   });
 }

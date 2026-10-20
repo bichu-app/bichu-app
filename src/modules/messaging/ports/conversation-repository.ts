@@ -47,7 +47,14 @@ export interface ConversaDoChamador {
   readonly id: ConversationId;
   readonly caseId: CaseId | null;
   readonly petDisplayName: string;
-  /** Quando ela nasceu. É por aqui que a lista ordena e pagina. */
+  /**
+   * Quando ela nasceu.
+   *
+   * **A lista NÃO ordena mais por aqui** (18/10/2026): ela ordena por
+   * `coalesce(ultimaMensagemEm, abertaEm)`, porque a conversa que se procura é
+   * a que acabou de receber recado. Este campo é o segundo termo desse
+   * `coalesce` — o único instante que a conversa sem mensagem tem.
+   */
   readonly abertaEm: Date;
   /** De que lado está quem chamou. Sai da consulta, não de um `if` depois dela. */
   readonly papelDoChamador: Exclude<Papel, 'system'>;
@@ -58,6 +65,68 @@ export interface ConversaDoChamador {
   readonly casoEncerrado: boolean;
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
+  /**
+   * As duas pontas desabilitaram a conta? (17/10)
+   *
+   * `users.deleted_at !== null` de cada lado. O domínio usa isto para duas
+   * coisas: despersonalizar o lado que saiu (`participantesVisiveis`) e travar
+   * a conversa nos dois sentidos (`estadoDaConversa` devolve `closed`).
+   *
+   * Dois campos e não um: o lado que saiu é o que perde o nome, e um booleano
+   * só não diria qual.
+   */
+  readonly tutorDesabilitado: boolean;
+  readonly achadorDesabilitado: boolean;
+  /**
+   * Há mensagem que ESTE lado ainda não leu (BICHUS-278).
+   *
+   * Não conta a mensagem do próprio chamador, e **não** é afetado por ele ter
+   * aberto a lista: "lido" é o item aberto. Ver a migração
+   * `20261018000014_leitura-da-conversa-por-participante.sql`.
+   */
+  readonly naoLida: boolean;
+  /**
+   * O corpo da última mensagem, **como está no banco** — isto é, já redigido.
+   *
+   * `null` quando a conversa não tem mensagem. O corte é do domínio
+   * (`previaDaMensagem`), e não da consulta: cortar no SQL faria o teto virar
+   * um número escrito em dois lugares.
+   */
+  readonly corpoDaUltima: string | null;
+  readonly ultimaMensagemEm: Date | null;
+  /**
+   * **O APELIDO DO OUTRO LADO, e so quando ele e CONEXAO ACEITA de quem chama**
+   * (emenda 3 do ADR-0010, decisao do cliente de 19/10/2026).
+   *
+   * `null` funde cinco estados, e a fusao e a regra (ADR-0021): nao e conexao
+   * aceita, o par esta bloqueado, o outro lado nao tem conta, o outro lado
+   * desabilitou a conta, ou e conexao e nao escolheu apelido -- nenhum fluxo
+   * obriga a escolher (plano 4-C.8).
+   *
+   * **O recorte e a clausula `WHERE` da subconsulta que produz este campo**, e
+   * nao um `if` de camada acima. Chamar a leitura de um caminho novo devolve
+   * `null` em vez de apelido: e esta metade que sobrevive a alguem mexer no
+   * servico, e e ela que a isca de SQL mede.
+   */
+  readonly apelidoDoOutro: string | null;
+  /**
+   * **A CHAVE da derivada `thumb` (176 x 176) da foto do OUTRO LADO**, pela
+   * mesma regra e no mesmo `WHERE` de [apelidoDoOutro].
+   *
+   * CHAVE e nao URL: o banco guarda a chave do objeto e a URL e montada na
+   * borda, com o dominio de midia do ambiente. Gravar URL absoluta amarraria a
+   * linha ao provedor do dia em que ela foi escrita (§11.1 proibicao 9).
+   *
+   * `thumb` e nao `card`: o icone da conversa pinta 40 dp, que a 3x sao 120 px
+   * reais -- a de 176 cobre sem ampliar, e a `card` de 512 seria 4,3x mais dado
+   * do que a celula pinta, dez vezes por pagina.
+   *
+   * `null` nos cinco estados de [apelidoDoOutro], mais um sexto: a conexao
+   * aceita cuja foto nao esta `ready`. Foto em `processing` carrega o EXIF do
+   * celular ate o trabalhador reescrever a derivada, e servi-la entregaria a
+   * coordenada de onde ela foi tirada (ADR-0010 item 4).
+   */
+  readonly chaveDaFotoDoOutro: string | null;
 }
 
 export interface MensagemGravada {
@@ -88,6 +157,18 @@ export interface NovaMensagem {
 }
 
 /**
+ * As três espécies de mensagem do Bichu (BICHUS-278).
+ *
+ * As duas primeiras são AVISO, e por isso não saem do contador quando a pessoa
+ * abre a lista. A terceira é explicação de interface e sai pela regra geral.
+ *
+ * Existe para que a espécie seja ARGUMENTO de quem grava, e não deduzida depois
+ * pelo texto: uma heurística sobre a microcopy quebraria no dia em que a frase
+ * mudasse, e quebraria em silêncio — o aviso sumiria do contador.
+ */
+export type EspecieDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
+
+/**
  * A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41).
  *
  * `id` está aqui para o serviço gravar a mensagem na conversa certa, e **não
@@ -101,6 +182,9 @@ export interface ConversaDoAchador {
   readonly bloqueadaEm: Date | null;
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
+  /** Ver `ConversaDoChamador`: as duas pontas desabilitadas (17/10). */
+  readonly tutorDesabilitado: boolean;
+  readonly achadorDesabilitado: boolean;
   /**
    * O resumo GRAVADO do token do aviso. O serviço o compara com o resumo do
    * token apresentado em tempo constante: a igualdade do índice já achou a
@@ -137,6 +221,29 @@ export interface Pagina {
   readonly depoisDe: { readonly criadaEm: Date; readonly id: string } | undefined;
 }
 
+/**
+ * A janela da LISTA de conversas: a de [Pagina], mais o recorte da busca.
+ *
+ * **Interface própria, e não um campo opcional em [Pagina].** `Pagina` também
+ * paginha as MENSAGENS de uma conversa (`mensagens`), e ali não existe busca:
+ * um `termo` opcional ali seria um campo que metade dos chamadores precisa
+ * ignorar, e campo que se ignora é campo que alguém um dia passa sem efeito.
+ *
+ * `termo` é **obrigatório e explicitamente `undefined`**, no mesmo estilo de
+ * `depoisDe`: quem monta a janela precisa dizer que não há recorte, em vez de
+ * esquecer a chave e receber "sem recorte" por omissão.
+ */
+export interface PaginaDaLista extends Pagina {
+  /**
+   * O termo da busca, já sem espaço nas pontas, ou `undefined`.
+   *
+   * O piso de 2 caracteres é do contrato (`ConversationSearch`) e é cobrado
+   * pela validação da rota, e não aqui: a porta recebe o que o contrato já
+   * aceitou.
+   */
+  readonly termo: string | undefined;
+}
+
 export interface ConversationRepository {
   /**
    * Abre a conversa do aviso, uma vez. Repetir com o mesmo `foundReportId` não
@@ -152,7 +259,21 @@ export interface ConversationRepository {
   /** A conversa daquele aviso, para anexar o segundo escaneamento do mesmo achador. */
   porAviso(foundReportId: FoundReportId): Promise<ConversationId | undefined>;
 
-  listarDoChamador(chamador: UserId, pagina: Pagina): Promise<readonly ConversaDoChamador[]>;
+  listarDoChamador(
+    chamador: UserId,
+    pagina: PaginaDaLista,
+  ): Promise<readonly ConversaDoChamador[]>;
+
+  /**
+   * Quantas conversas o recorte tem, **sem `limit`** (`ConversationPage.total`).
+   *
+   * Consulta separada da lista, e não `items.length`: a linha de resumo da
+   * listagem diz quantas existem, e o tamanho da página diria `10` a quem tem
+   * 57. O mesmo `WHERE` da lista — a autorização está nele (ADR-0021), então
+   * uma contagem que não passasse pelo mesmo predicado contaria conversa de
+   * terceiro.
+   */
+  contarDoChamador(chamador: UserId, termo: string | undefined): Promise<number>;
 
   buscarDoChamador(
     conversa: ConversationId,
@@ -174,9 +295,18 @@ export interface ConversationRepository {
 
   gravarMensagem(mensagem: NovaMensagem): Promise<MensagemGravada>;
 
-  /** Mensagem do Bichu. Sem remetente humano, e por isso sem chamador. */
+  /**
+   * Mensagem do Bichu. Sem remetente humano, e por isso sem chamador.
+   *
+   * `especie` é obrigatória desde a BICHUS-278: é ela que decide se o aviso
+   * sobrevive a uma passada de olho na lista. Obrigatória e não opcional de
+   * propósito — um default silencioso faria a próxima mensagem de sistema
+   * nascer fora do contador sem ninguém decidir isso.
+   */
   gravarMensagemDeSistema(
-    mensagem: Omit<NovaMensagem, 'senderRole' | 'senderUserId'>,
+    mensagem: Omit<NovaMensagem, 'senderRole' | 'senderUserId'> & {
+      readonly especie: EspecieDoSistema;
+    },
   ): Promise<MensagemGravada>;
 
   /** Quantas mensagens este papel mandou nesta conversa desde o instante dado. */
@@ -262,4 +392,47 @@ export interface ConversationRepository {
    * conversa (`accept_and_deduplicate`).
    */
   registrarDenuncia(denuncia: NovaDenuncia): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // A LEITURA, e o contador do sino (BICHUS-278)
+  //
+  // Três métodos e não um, porque são três fatos diferentes. Juntá-los faria
+  // abrir a lista marcar tudo como lido — o defeito exato que a regra proíbe.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Quantas conversas entram no contador do sino AGORA.
+   *
+   * **Não é "quantas estão não lidas".** Abrir a lista zera este número e deixa
+   * as marcas de item como estavam; o aviso de plaquinha lida e o de achado
+   * (`system_kind`) **não** saem daqui ao abrir a lista — só quando a conversa
+   * deles é aberta.
+   *
+   * Derivado na leitura, nunca materializado: duas fontes para o mesmo fato
+   * divergem no primeiro caminho que esquecer de decrementar uma delas.
+   */
+  contarParaOSino(chamador: UserId): Promise<number>;
+
+  /**
+   * A CONTA viu a área de mensagens. Zera o contador, **sem** marcar item.
+   *
+   * Idempotente por `ON CONFLICT`: chamar duas vezes seguidas grava o instante
+   * novo e responde igual. Não recebe lista de conversas de propósito — se
+   * recebesse, alguém acabaria passando todas e marcando-as como lidas.
+   */
+  marcarListaVista(chamador: UserId, agora: Instant): Promise<void>;
+
+  /**
+   * ESTE LADO abriu a conversa: marca o item como lido até `agora`.
+   *
+   * O `chamador` entra no `WHERE` da própria escrita, como em todo método deste
+   * arquivo: conversa que não é dele não é marcada. O PAPEL **não** vem por
+   * argumento — ele é derivado do lado em que o chamador está, pela mesma razão
+   * de `bloquearPeloChamador`.
+   */
+  marcarConversaLida(
+    conversa: ConversationId,
+    chamador: UserId,
+    agora: Instant,
+  ): Promise<void>;
 }

@@ -7,6 +7,8 @@
  */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { AppError, problemas } from '../../../shared/http/errors.js';
+import { verificarDataDeNascimento } from '../../../shared/idade/idade-minima.js';
+import { verificarApelido } from '../../../shared/apelido/apelido.js';
 import type { Instant, OpaqueToken, TokenHash, UserId } from '../../../shared/types/brands.js';
 import { emailTemFormaValida, normalizarEmail } from '../domain/email.js';
 import {
@@ -27,10 +29,12 @@ import {
 } from '../domain/session.js';
 import type {
   CamposDoPerfil,
+  FotoDoPerfil,
   Conta,
   MotivoDeRevogacao,
   PropositoDoToken,
 } from '../ports/identity-repository.js';
+import { EnvioDeFotoNaoServe } from '../ports/identity-repository.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 import {
   expiracaoDaJanela,
@@ -56,9 +60,74 @@ type MotivoDeRevogacaoEmMassa = Extract<
   'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
+/**
+ * O teto do nome de exibicao, igual ao `maxLength` de `display_name` no
+ * contrato (`RegisterRequest` e `MeUpdate`, os dois com 80).
+ *
+ * Esta constante existe para a recusa do servidor dizer o MESMO numero que o
+ * schema: deixar o 80 solto no meio da frase de erro e como as duas metades
+ * divergem, e a divergencia aparece como "o app disse 80 e a API recusou em
+ * 64" para quem esta digitando.
+ */
+const LIMITE_DO_NOME = 80;
+
+/**
+ * A recusa do nome de exibicao, para o cadastro e a atualizacao nao divergirem.
+ *
+ * Nasceu em `cadastrar` em 18/10/2026 e subiu para ca no mesmo dia, quando o
+ * cliente fechou a assimetria: *"nao permitir atualizar o cadastro, se nao
+ * tiver algum nome cadastrado"*. Duas copias da mesma regra em duas operacoes
+ * da mesma conta e como o cadastro passa a exigir o que a atualizacao deixa
+ * apagar -- que era exatamente o estado do produto antes desta linha.
+ *
+ * Devolve o nome **aparado**. `trim` e o ponto: `required` e `minLength: 1` do
+ * schema recusam a chave ausente e a string vazia, e nao recusam `"   "`, que
+ * tem comprimento 3 e nenhum nome dentro.
+ *
+ * `code: 'required'` e `code: 'too_long'` sao os codigos que o contrato ja
+ * declara e que outras chamadas deste repositorio ja usam: nao ha codigo novo.
+ */
+function nomeDeExibicaoAparado(bruto: string | null | undefined): string {
+  const aparado = (bruto ?? '').trim();
+  if (aparado.length === 0) {
+    throw problemas.validacao([
+      { field: 'display_name', code: 'required', message: 'Diga como você quer ser chamado.' },
+    ]);
+  }
+  if (aparado.length > LIMITE_DO_NOME) {
+    throw problemas.validacao([
+      {
+        field: 'display_name',
+        code: 'too_long',
+        message: `Use no máximo ${LIMITE_DO_NOME} caracteres no nome.`,
+      },
+    ]);
+  }
+  return aparado;
+}
+
 export interface EntradaDeCadastro {
   readonly email: string;
   readonly password: string;
+  /**
+   * A data de nascimento como ela chegou, **sem conferir nada ainda**.
+   *
+   * `unknown` de propósito: quem confere é `verificarDataDeNascimento`, e
+   * declarar `string` aqui faria o tipo afirmar que o campo veio quando a rota
+   * é pública e ele pode não ter vindo. O `required` do schema recusa a
+   * ausência antes de chegar aqui, e a recusa do serviço existe para quem
+   * contorna o schema — não para o caminho felizes.
+   */
+  readonly birthDate: unknown;
+  /**
+   * O apelido (`@`) como ele chegou, **sem conferir nada ainda**.
+   *
+   * `unknown` pela mesma razão de `birthDate`: quem confere é
+   * `verificarApelido`. **Opcional**, porque o campo é opcional no contrato
+   * (ver `Handle` em `api/openapi.yaml`) -- ausente significa "não escolhi",
+   * e a conta nasce sem apelido, com a tela caindo para o nome de exibição.
+   */
+  readonly handle?: unknown;
   readonly displayName?: string | undefined;
   readonly acceptedTermsVersion?: string | undefined;
 }
@@ -577,7 +646,23 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     // agora visível como erro em vez de silencioso. Um `catch` mudo com
     // resposta de sucesso seria a falha silenciosa que este repositório já
     // registrou cinco vezes.
-    const aparelhosRemovidos = await deps.removerPushDaConta(userId);
+    //
+    // A EXCECAO, e ela e de 17/10: `account_deleted` NAO apaga o cadastro.
+    //
+    // O cliente trocou o desenho da exclusao de conta no dia 17/10, por escrito:
+    // *"nao delete os dados do usuario, apenas desabilite na plataforma"*. O
+    // cadastro de aparelho e dado do usuario, entao ele passa a ser RETIDO, e o
+    // que o faz parar de receber alerta e a consulta de alcance
+    // (`kysely-alcance-por-postgis.ts`, `u.deleted_at IS NULL` desde 22/09), que
+    // nao devolve conta desabilitada com ou sem linha em `user_devices`.
+    //
+    // Os outros tres motivos continuam apagando, e a diferenca nao e detalhe:
+    // em `logout_all`, `password_changed` e `not_me` apagar E O REMEDIO que a
+    // pessoa pediu -- o aparelho pode estar na mao de outra pessoa, e nenhuma
+    // clausula de consulta protege de um token de push que continua valido numa
+    // conta que segue ATIVA. O SEC-019 permanece fechado nos tres.
+    const aparelhosRemovidos =
+      motivo === 'account_deleted' ? 0 : await deps.removerPushDaConta(userId);
     await deps.trilha.record({
       actorKind: 'user',
       actorUserId: userId,
@@ -634,6 +719,51 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
+  /**
+   * A TRAVA DO NOME, numa função só, para os DOIS atos de `PATCH /v1/me`.
+   *
+   * Decisão do cliente de 18/10/2026: *"não permitir atualizar o cadastro, se
+   * não tiver algum nome cadastrado"*. Ela vale para o corpo inteiro, e a foto
+   * faz parte do cadastro.
+   *
+   * ## POR QUE ELA PRECISOU SAIR DE DENTRO DE `atualizarMeuPerfil`
+   *
+   * Porque a rota faz dois atos, e eles estão em transações diferentes:
+   * `trocarMinhaFoto` primeiro, `atualizarMeuPerfil` depois. Com a trava só no
+   * segundo, um `PATCH` de conta sem nome **confirmava a foto, comitava, e
+   * depois devolvia 400**. Medido em 18/10/2026 na pilha de integração: a
+   * resposta era
+   * `400 {"errors":[{"field":"display_name","code":"required"}]}` e o `GET
+   * /v1/me` seguinte já trazia `photo.status: "processing"` -- a foto gravada
+   * por um pedido que o servidor disse ter recusado. É o pior dos dois mundos:
+   * o app diz "não deu" e o estado mudou.
+   *
+   * Chamada ANTES do primeiro ato, nada é escrito e a resposta é a mesma.
+   *
+   * `nomeNoCorpo` é o `display_name` do `PATCH`: presente (mesmo vazio) é o
+   * caso 1 -- quem está preenchendo o nome, e esse `PATCH` é justamente a saída
+   * de quem está sem nome, então a leitura não acontece e a regra de forma fica
+   * com `atualizarMeuPerfil`. Ausente é o caso 2, e aí a conta precisa já ter
+   * nome.
+   */
+  async function exigirNomeJaCadastrado(
+    userId: UserId,
+    nomeNoCorpo: string | null | undefined,
+  ): Promise<void> {
+    if (nomeNoCorpo !== undefined) return;
+    const antes = await deps.repositorio.buscarContaPorId(userId);
+    if (antes === undefined) throw problemas.naoAutenticado();
+    if ((antes.displayName ?? '').trim().length === 0) {
+      throw problemas.validacao([
+        {
+          field: 'display_name',
+          code: 'required',
+          message: 'Diga como você quer ser chamado para continuar.',
+        },
+      ]);
+    }
+  }
+
   return {
     async cadastrar(
       entrada: EntradaDeCadastro,
@@ -647,16 +777,92 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           { field: 'email', code: 'format', message: 'Confira o endereço de e-mail.' },
         ]);
       }
+
+      // O NOME É OBRIGATÓRIO, E A RECUSA É DAQUI — NÃO DA TELA.
+      //
+      // Queixa do cliente de 18/10/2026: *"o campo de nome no cadastro do
+      // usuário é obrigatorio, hoje ele esta cadastrando sem esse campo"*. O
+      // campo já existia na `F1.1` e já aparecia sem "(opcional)" no rótulo;
+      // o que não existia era alguém exigindo. A tela mandava `null` quando
+      // estava vazio e este serviço aceitava.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`): a tela
+      // é conveniência, e quem chama `POST /v1/auth/register` direto não passa
+      // por ela. Validar só no app seria trocar a exigência por uma sugestão.
+      //
+      // `trim` é o ponto todo. `required` no schema e `minLength: 1` recusam a
+      // chave ausente e a string vazia; **não recusam `"   "`**, que tem
+      // comprimento 3 e nenhum nome dentro. Era este o caso que escapava, e é
+      // ele que faz a conta nascer "sem nome" para as outras pessoas.
+      //
+      // `code: 'required'` é o código que o contrato já declara e que outras
+      // sete chamadas deste repositório já usam — não há código novo aqui.
+      const displayName = nomeDeExibicaoAparado(entrada.displayName);
+      // A IDADE MÍNIMA É CONFERIDA AQUI, E NÃO NA TELA.
+      //
+      // Decisão do cliente de 18/10/2026, verbatim: *"coloque maiores de 16
+      // anos"*. Antes dela não havia freio de idade em nenhuma camada — sem
+      // coluna em `users`, sem campo no contrato, sem campo na tela — e a
+      // política de privacidade afirmava isso por escrito no item 10.
+      //
+      // **A trava mora aqui porque a rota é pública** (`security: []`), igual
+      // à do nome: a tela é conveniência, e quem chama
+      // `POST /v1/auth/register` direto não passa por ela. Freio de idade que
+      // só existe no app é um freio que qualquer `curl` contorna.
+      //
+      // A regra inteira — fuso, data futura, data absurda e a conta dos anos —
+      // mora em `shared/idade/idade-minima.ts`, e **esta linha é a única
+      // chamada dela no cadastro**. Uma fonte só: duas cópias da conta de
+      // aniversário divergiriam em um dia, e um dia aqui é a diferença entre
+      // aceitar e recusar alguém no próprio aniversário.
+      //
+      // **Antes da senha, de propósito.** `validarSenha` é a conferência mais
+      // cara desta função (ela varre listas de senha vazada), e cobrar os 16
+      // anos primeiro é o que evita gastá-la com quem não vai poder criar
+      // conta de todo modo.
+      const birthDate = verificarDataDeNascimento(entrada.birthDate, agora);
+
+      // O APELIDO É OPCIONAL, E É POR ISSO QUE A CONFERÊNCIA É CONDICIONAL.
+      //
+      // Decisão do cliente de 18/10/2026: *"o apelido esta livre, vai estar no
+      // cadastro do usuário e na pagina de edição do perfil"*. Ele disse que o
+      // campo ESTÁ no cadastro, não que é exigido -- e o desenho fechado
+      // (plano 4-C.8) diz que a coluna é anulável e que **nenhum fluxo obriga
+      // a escolher apelido**. Exigi-lo aqui contradiria o desenho.
+      //
+      // `undefined` e string vazia são a mesma coisa NESTE ponto e só neste:
+      // conta nascendo sem apelido. O `?? undefined` é o que impede que
+      // `handle: ''` de um cliente desatento vire uma recusa em vez de uma
+      // ausência.
+      //
+      // **A disponibilidade não é conferida aqui**, e não há consulta antes:
+      // quem decide é o índice de `handles`, na escrita, e a violação vira
+      // `code: 'taken'`. Conferir antes e confiar é o defeito -- a janela
+      // entre conferir e gravar é onde a corrida mora (plano 4-C.5).
+      const apelidoVeio =
+        typeof entrada.handle === 'string' && entrada.handle.trim().length > 0;
+      const handle = apelidoVeio ? verificarApelido(entrada.handle) : undefined;
       const errosDeSenha = validarSenha(entrada.password, {
         email,
-        displayName: entrada.displayName,
+        displayName,
       });
       if (errosDeSenha.length > 0) throw problemas.senhaFraca(errosDeSenha);
 
       const passwordPhc = await gerarHashDeSenha(entrada.password);
       const conta = await deps.repositorio.criarContaLocal({
         email,
-        displayName: entrada.displayName,
+        // A data **conferida e canônica**, e não o que chegou no corpo: o que
+        // o banco guarda é o que passou pela regra.
+        birthDate,
+        // O apelido **normalizado**, ou `undefined`. Gravar `@Maria ` deixaria
+        // a caixa e o espaço aparecerem em toda tela que o mostra, e faria
+        // duas formas do mesmo apelido no banco -- que é o que `citext` e a
+        // normalização daqui existem para impedir, cada um do seu lado.
+        handle,
+        // O nome **aparado**, e não o que chegou. Gravar `" Marina "` deixaria
+        // o espaço aparecer em toda tela que mostra o nome, e faria a conta
+        // ordenar antes de todas as outras em qualquer lista alfabética.
+        displayName,
         acceptedTermsVersion: entrada.acceptedTermsVersion,
         passwordPhc,
         agora,
@@ -1092,7 +1298,82 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       contexto: ContextoDaRequisicao,
     ): Promise<Conta> {
       const agora = deps.clock.now();
-      const conta = await deps.repositorio.atualizarPerfil(userId, campos, agora);
+
+      // O NOME NAO PODE SER APAGADO, E A CONTA SEM NOME NAO ATUALIZA SEM
+      // PREENCHE-LO. Decisao do cliente de 18/10/2026: *"nao permitir
+      // atualizar o cadastro, se nao tiver algum nome cadastrado"*.
+      //
+      // Duas situacoes, e elas sao diferentes:
+      //
+      // 1. O nome VEIO no corpo. Entao ele precisa ter nome dentro. Era este o
+      //    caminho que apagava: `display_name: ""` e `display_name: null`
+      //    chegavam aqui, entravam no `SET` (o repositorio so ignora
+      //    `undefined`) e zeravam a coluna. A tela de `Meus dados` oferecia
+      //    isso em texto.
+      //
+      // 2. O nome NAO veio. `PATCH` de um campo so e legitimo e continua
+      //    sendo: nao se cobra o nome de quem esta mudando o telefone. Mas se
+      //    a conta ainda NAO TEM nome, a atualizacao para -- e e aqui que mora
+      //    o cuidado que importa.
+      //
+      // **ISTO NAO E UM BECO, E A SAIDA E O CASO 1.** Quem esta sem nome
+      // manda `display_name` junto e salva: o caso 1 aceita, e a conta sai do
+      // estado. Em homologacao ha 2 contas assim (de 7, medido em 18/10), e
+      // elas aparecem para as outras pessoas como "Tutor"
+      // (`conversa-mediada.ts`) -- era esta a razao da decisao. Tornar o campo
+      // obrigatorio NAO preenche o que ja esta vazio, e a trava daqui e o que
+      // faz essas contas serem cobradas em vez de esquecidas.
+      //
+      // A leitura ANTES da escrita e o que o caso 2 custa. Ela e a mesma
+      // consulta que `meuPerfil` faz, e sem ela nao da para saber se a conta
+      // tem nome: `atualizarPerfil` devolve o estado DEPOIS, quando a escrita
+      // ja aconteceu.
+      // O APELIDO, QUANDO ELE VEM NO CORPO.
+      //
+      // Cliente, 18/10/2026: *"o apelido esta livre, vai estar no cadastro do
+      // usuário e na pagina de edição do perfil"*. Esta é a segunda metade.
+      //
+      // `undefined` significa "não mexer", como em todo campo deste `PATCH`.
+      // **Não existe "apagar"**: `CamposDoPerfil.handle` é `string |
+      // undefined` e nunca `null`, porque soltar um apelido de volta ao pool é
+      // o furo do plano 4-C.7 -- quem o pegasse herdaria o que a vizinhança
+      // associava a quem o tinha. Trocar é permitido; abandonar não é.
+      //
+      // A conferência de FORMA é a mesma do cadastro, da mesma função: duas
+      // cópias da faixa divergiriam, e divergência de faixa entre dois
+      // caminhos da mesma conta é como `@maria-silva` entra por uma porta e é
+      // recusado na outra.
+      //
+      // **A TROCA (1 vez a cada 60 dias) e a RESERVA do anterior (180 dias)
+      // são do repositório**, e não daqui: as duas precisam ler `claimed_at` e
+      // escrever duas linhas de `handles` na MESMA transação da conta. Partir
+      // isso entre serviço e repositório deixaria uma janela em que o apelido
+      // novo está gravado e o antigo não está reservado -- que é exatamente a
+      // janela que o plano 4-C.7 fecha.
+      //
+      // **AS DUAS REGRAS NUMA DECLARACAO SO.** Elas nasceram em ramos
+      // separados -- o nome em `feat/nome-obrigatorio-cadastro`, o apelido
+      // aqui -- e as duas transformam `campos` antes de gravar. Duas
+      // declaracoes `const camposParaGravar` nao compilariam, e escolher uma
+      // desfaria a decisao da outra em silencio.
+      const campaNome = campos.displayName;
+      const camposParaGravar: CamposDoPerfil = {
+        ...campos,
+        ...(campaNome === undefined
+          ? {}
+          : { displayName: nomeDeExibicaoAparado(campaNome) }),
+        ...(campos.handle === undefined
+          ? {}
+          : { handle: verificarApelido(campos.handle) }),
+      };
+
+      // A MESMA trava que a rota já cobrou antes da foto (`exigirNomeJaCadastrado`).
+      // Ela continua AQUI, e não só na rota, porque é invariante do caso de uso:
+      // quem chamar `atualizarMeuPerfil` por outro caminho não pode escapar
+      // dela. Na rota ela roda primeiro para nada ser escrito antes da recusa.
+      await exigirNomeJaCadastrado(userId, campaNome);
+
+      const conta = await deps.repositorio.atualizarPerfil(userId, camposParaGravar, agora);
       if (conta === undefined) throw problemas.naoAutenticado();
 
       await deps.trilha.record({
@@ -1106,6 +1387,80 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         // O QUE mudou, nunca o valor: telefone e endereço são justamente o que a
         // trilha não pode guardar (docs/04-seguranca.md 9).
         metadata: { campos: Object.keys(campos).filter((c) => campos[c as keyof CamposDoPerfil] !== undefined) },
+      });
+
+      return conta;
+    },
+
+    /**
+     * A trava do nome, exposta para a ROTA cobrá-la antes do primeiro ato.
+     *
+     * `PATCH /v1/me` faz dois atos em transações diferentes (a foto, depois os
+     * campos). Com a trava só no segundo, um `PATCH` de conta sem nome comitava
+     * a foto e devolvia 400 -- resposta de recusa com efeito gravado. Ver o
+     * cabeçalho de `exigirNomeJaCadastrado`.
+     */
+    exigirNomeJaCadastrado,
+
+    /** A foto do perfil desta conta, para a resposta `Me`. */
+    async minhaFoto(userId: UserId): Promise<FotoDoPerfil | null> {
+      return deps.repositorio.fotoDoPerfil(userId);
+    },
+
+    /**
+     * Troca ou TIRA a foto do perfil (cliente, 18/10/2026).
+     *
+     * **Quem vê a foto é o dono, e só.** Esta operação e `meuPerfil` são as
+     * únicas que a tocam, as duas exigem a conta autenticada, e nenhuma outra
+     * resposta do contrato a carrega. Mostrar a foto a terceiros — em avaliação
+     * do `Perto`, em participante de evento, em conversa — é exposição de
+     * pessoa física e **depende de decisão do cliente**: o ADR-0025 item 2
+     * proíbe avatar na `Rede` por nome, e o contrato diz por extenso que
+     * `Conversation.participants` nunca traz foto de perfil.
+     *
+     * **O selo de validado não passa por aqui.** Ele é `emailVerifiedAt`, que
+     * a resposta já projeta como `email_verified` — nenhum campo novo, nenhuma
+     * escolha de quem envia a foto.
+     *
+     * `uploadId` nulo tira a foto. A trilha registra O QUE mudou e nunca a
+     * chave do objeto: chave de objeto em trilha append-only é um ponteiro
+     * permanente para um arquivo que pode ser trocado.
+     */
+    async trocarMinhaFoto(
+      userId: UserId,
+      uploadId: string | null,
+      contexto: ContextoDaRequisicao,
+    ): Promise<Conta> {
+      const agora = deps.clock.now();
+      let conta: Conta | undefined;
+      try {
+        conta = await deps.repositorio.trocarFotoDoPerfil(userId, uploadId, agora);
+      } catch (erro) {
+        if (erro instanceof EnvioDeFotoNaoServe) {
+          // Inexistente, de outra conta, de outro propósito, vencido ou de
+          // imagem alheia: a MESMA recusa, sem dizer qual (ADR-0021).
+          throw problemas.validacao([
+            {
+              field: 'photo_upload_id',
+              code: 'upload_not_usable',
+              message: 'Essa imagem não serve para esta conta. Envie-a de novo.',
+            },
+          ]);
+        }
+        throw erro;
+      }
+      if (conta === undefined) throw problemas.naoAutenticado();
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'profile.updated',
+        resourceKind: 'user',
+        resourceId: userId,
+        // `photo` como BOOLEANO, nunca a chave do objeto nem a URL.
+        metadata: { campos: ['photo'], photo: uploadId !== null },
       });
 
       return conta;
@@ -1759,11 +2114,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
      *
      * ## O que ela é, e o que ela não é
      *
-     * Ela **não apaga linha nenhuma**. O contrato diz o que ela faz, e a
-     * palavra está lá: *"Exclusão lógica imediata, expurgo definitivo em 30
-     * dias"*. O apagamento físico é {@link expurgarContasExcluidas}, no worker,
-     * e é ele que dispara as cascatas do banco. Responder 202 e não 204 é
-     * exatamente isso: o pedido foi aceito e o efeito completo tem prazo.
+     * Ela **não apaga linha nenhuma**, e desde 17/10 **nada apaga**: o cliente
+     * decidiu por escrito que *"não delete os dados do usuário, apenas
+     * desabilite na plataforma"*. O expurgo de 30 dias ficou inócuo
+     * (`expurgar-contas-excluidas.ts`) e o `DELETE FROM users` saiu da porta de
+     * identidade. A conta passa a DESABILITADA, e o que a tira do produto é
+     * cláusula de consulta -- não ausência de linha. Responder 202 e não 204
+     * continua certo por outro motivo: o efeito é imediato, mas é assíncrono do
+     * ponto de vista de quem pediu (e-mail, plaquinhas, sessões em outros
+     * aparelhos).
      *
      * ## A ORDEM, que não é estilo
      *
@@ -1827,14 +2186,19 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await avisarSemDerrubarOEfeito(
         {
           para: conta.email,
-          assunto: 'Sua conta do Bichu foi excluida',
+          assunto: 'Sua conta do Bichu foi desativada',
+          // A FRASE "apagados definitivamente em 30 dias" SAIU, e a remocao e
+          // obrigatoria: desde 17/10 nada e apagado, e um aviso que prometesse
+          // apagamento seria informacao falsa ao titular sobre o tratamento dos
+          // proprios dados -- defeito maior do que o texto antigo era util.
           corpo:
-            'Recebemos o seu pedido de exclusao e a sua conta ja foi desativada: ' +
-            'as sessoes foram encerradas em todos os aparelhos e as plaquinhas dos ' +
-            'seus pets pararam de responder.\n\n' +
-            'Os dados serao apagados definitivamente em 30 dias.\n\n' +
-            'Se nao foi voce que pediu, responda esta mensagem agora: dentro desse ' +
-            'prazo ainda da para desfazer.',
+            'Recebemos o seu pedido e a sua conta ja foi desativada: as sessoes ' +
+            'foram encerradas em todos os aparelhos, as plaquinhas dos seus pets ' +
+            'pararam de responder e o seu perfil, os seus pets e os seus ' +
+            'anuncios nao aparecem mais no Bichu.\n\n' +
+            'Os seus dados ficam guardados e inacessiveis no aplicativo. Para pedir ' +
+            'o apagamento definitivo, responda esta mensagem.\n\n' +
+            'Se nao foi voce que pediu, responda tambem: da para reativar.',
         },
         { evento: 'account.deletion_requested', correlationId: contexto.correlationId },
       );

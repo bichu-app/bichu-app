@@ -157,6 +157,41 @@ enum EstadoDaSessao {
   logado,
 }
 
+/// POR QUE nao ha conta agora. **Deslogado nao e um estado so.**
+///
+/// Medido em 19/10/2026, e e o defeito que esta distincao existe para matar:
+/// `_renovar` recusado com 401 fazia `_mudar(EstadoDaSessao.deslogado, null)`,
+/// exatamente como `iniciar()` faz quando o chaveiro esta VAZIO. Depois disso
+/// nada no app conseguia separar *"esta pessoa nunca entrou"* de *"esta pessoa
+/// estava dentro e acabou de ser posta para fora"* -- e a diferenca nao e de
+/// tom, e de SAIDA: para a primeira, `Criar conta` e o caminho; para a
+/// segunda, oferecer `Criar conta` manda alguem que JA TEM conta criar uma
+/// segunda, perdendo os pets, as conversas e os achados da primeira.
+///
+/// O servidor diz qual dos dois e, e diz por `type`: `unauthenticated` quando
+/// nenhum token foi apresentado, `token-expired` quando o refresh foi recusado
+/// (medido na homologacao em 19/10, os dois com `next_action: sign_in`). Mas
+/// **a tela nunca ve o `token-expired`**: ele chega em `POST /auth/refresh`,
+/// dentro de [ControladorDeSessao._renovar], e a chamada da tela que vem
+/// depois sai sem `Authorization` e volta `unauthenticated`. Por isso a
+/// lembranca mora AQUI, e nao na tela.
+enum MotivoSemConta {
+  /// Nao havia sessao guardada, ou a pessoa saiu da conta por decisao dela.
+  ///
+  /// Sair por vontade propria cai aqui, e nao em [sessaoCaiu], de proposito:
+  /// quem acabou de tocar em `Sair da conta` nao teve sessao nenhuma expirando
+  /// debaixo dela, e dizer que expirou seria a tela mentindo sobre o que a
+  /// propria pessoa fez.
+  nuncaEntrou,
+
+  /// A pessoa estava logada e a renovacao foi recusada.
+  ///
+  /// O access token vale 900 s e o refresh 30 dias (medido: `expires_in: 900`,
+  /// `refresh_expires_in: 2592000`). Chegar aqui significa que o refresh
+  /// venceu, foi revogado ou foi reapresentado -- nos tres casos havia conta.
+  sessaoCaiu,
+}
+
 /// A sessao do app: le o chaveiro no arranque, renova quando expira e avisa
 /// quem depende disso.
 ///
@@ -203,9 +238,17 @@ class ControladorDeSessao extends ChangeNotifier {
   Sessao? _sessao;
   Future<String?>? _renovacaoEmCurso;
 
+  MotivoSemConta _motivoSemConta = MotivoSemConta.nuncaEntrou;
+
   EstadoDaSessao get estado => _estado;
   Usuario? get usuario => _sessao?.usuario;
   bool get logado => _estado == EstadoDaSessao.logado;
+
+  /// Por que nao ha conta agora. Ver [MotivoSemConta].
+  ///
+  /// Logado, o valor e o da ULTIMA ausencia e nao tem leitor: quem o consome
+  /// so e desenhado quando [logado] e falso.
+  MotivoSemConta get motivoSemConta => _motivoSemConta;
 
   /// Le o que estiver guardado. Chamado uma vez, no arranque.
   ///
@@ -234,6 +277,10 @@ class ControladorDeSessao extends ChangeNotifier {
   /// erro aparece, e a pessoa fica fora da base de alerta.
   Future<void> abrir(Sessao sessao) async {
     await _deposito.gravar(sessao);
+    // O motivo volta ao piso no login, e nao na proxima saida: sem isto, quem
+    // tomou um refresh recusado, entrou de novo e mais tarde saiu por vontade
+    // propria continuaria lendo "sua sessao expirou" na tela seguinte.
+    _motivoSemConta = MotivoSemConta.nuncaEntrou;
     _mudar(EstadoDaSessao.logado, sessao);
     await _reporOQueOLoginRepoe();
   }
@@ -283,6 +330,27 @@ class ControladorDeSessao extends ChangeNotifier {
   /// um segundo. Este caminho **nao** toca essa coluna: ela e por pessoa, e
   /// empurra-la aqui derrubaria o tablet e o celular de quem ficou em casa.
   ///
+  /// Repoe o usuario da sessao com o que o servidor acabou de devolver.
+  ///
+  /// Quem chama e `Perfil` › `Meus dados`, depois de `PATCH /me`. **Nao abre
+  /// sessao e nao fecha nenhuma**: os tokens continuam os mesmos objetos, e por
+  /// isso nao ha `_aoEntrar`, nao ha limpeza e nao ha troca de estado -- um
+  /// `abrir()` aqui refaria o registro do aparelho a cada nome corrigido.
+  ///
+  /// Grava no deposito porque o usuario mora dentro da sessao guardada: sem
+  /// isto, fechar e reabrir o app traria de volta o nome antigo.
+  ///
+  /// Sem sessao aberta nao faz nada. Nao e caso teorico: a sessao pode cair
+  /// entre o PATCH e a volta dele (401 em `_renovar`), e criar sessao a partir
+  /// de uma resposta de perfil seria ressuscitar uma conta que acabou de sair.
+  Future<void> atualizarUsuario(Usuario usuario) async {
+    final atual = _sessao;
+    if (atual == null) return;
+    final nova = atual.comUsuario(usuario);
+    await _deposito.gravar(nova);
+    _mudar(EstadoDaSessao.logado, nova);
+  }
+
   /// A revogacao perdida **nao e retentada**, e isso e decisao e nao omissao
   /// (ADR-0002, emenda 1, secao 6): retentar exigiria guardar o refresh no
   /// aparelho ate a revogacao passar, o que manteria a credencial no disco
@@ -388,6 +456,10 @@ class ControladorDeSessao extends ChangeNotifier {
         debugPrint('Bichu/sessao: uma limpeza de logout falhou ($erro).');
       }
     }
+    // SAIR NAO E EXPIRAR. Este caminho e o do botao `Sair da conta` (e o da
+    // exclusao de conta, que passa por ele): a pessoa decidiu, e a tela de
+    // deslogado dela e a de quem chega, com `Entrar` e `Criar conta`.
+    _motivoSemConta = MotivoSemConta.nuncaEntrou;
     _mudar(EstadoDaSessao.deslogado, null);
   }
 
@@ -413,7 +485,12 @@ class ControladorDeSessao extends ChangeNotifier {
     } on FalhaDaApi catch (falha) {
       if (falha.problem.status == 401) {
         // Token invalido, expirado ou reutilizado. A sessao acabou de verdade.
+        //
+        // **E E AQUI, e em nenhum outro lugar, que se sabe que havia conta.**
+        // A chamada da tela que vier depois disto sai sem `Authorization` e
+        // volta `unauthenticated`, indistinguivel de quem nunca entrou.
         await _deposito.apagar();
+        _motivoSemConta = MotivoSemConta.sessaoCaiu;
         _mudar(EstadoDaSessao.deslogado, null);
         return null;
       }

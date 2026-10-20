@@ -59,9 +59,15 @@ class AcaoExecutavel {
       retomar;
 
   /// A rota da tela de retorno quando ela depende do ALVO, e nao so do ID de
-  /// tela. Nulo usa `rotaDaTela(telaDeRetorno)`, como ate aqui. O encontro da
-  /// `Rede` precisa disto: a volta de um pedido que falhou e o proprio
-  /// encontro (`/rede/encontros/<slug>`), e o `slug` esta no `alvo`.
+  /// tela. Nulo usa `rotaDaTela(telaDeRetorno)`, como ate aqui.
+  ///
+  /// **Nenhuma acao deste build usa este campo hoje.** Quem precisava dele era
+  /// o `Pedir para participar` da `Rede`: a volta de um pedido que falhou era
+  /// o proprio encontro (`/rede/encontros/<slug>`), com o `slug` no `alvo`. A
+  /// pagina de detalhe do evento saiu em 19/10/2026 por decisao do cliente, e
+  /// a acao saiu com ela. O campo FICA: ele e o unico jeito de uma intencao
+  /// voltar para um endereco que depende do alvo, e a proxima que precisar
+  /// disso nao deveria ter de reinventa-lo.
   final String? Function(IntencaoPendente intencao)? rotaDeRetorno;
 }
 

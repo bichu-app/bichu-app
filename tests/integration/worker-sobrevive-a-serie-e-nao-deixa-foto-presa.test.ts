@@ -164,9 +164,29 @@ function programaDaSerie(): string {
   const adaptador = import.meta.resolve(
     '../../src/modules/media/adapters/external/sharp-image-processor.js',
   );
+  // AS DERIVADAS SAEM DE `domain/derivadas.ts`, E NAO DE DOIS NUMEROS AQUI.
+  //
+  // O programa chamava `imagens.derivar(bytes, 1024)` e `derivar(bytes, 160)`,
+  // que era a assinatura antiga da porta -- `(bytes, largura)`. Hoje
+  // `ImageProcessor.derivar` recebe um `PedidoDeDerivada`
+  // (`src/modules/media/ports/image-processor.ts`, linhas 78-86), e o adaptador
+  // percorre `pedido.escada`. Com um numero no lugar do objeto, o filho morria
+  // em `TypeError: pedido.escada is not iterable` -- saida 1, a MESMA cor da
+  // isca pega, e a mensagem do caso dizia "137 e o cgroup matando por memoria".
+  // Ou seja: o caso reprovava por assinatura velha e acusava um defeito de
+  // memoria que nao estava acontecendo.
+  //
+  // Agora a serie pede EXATAMENTE o que `processar-foto.ts` pede (linhas
+  // 135-141): a lista `DERIVADAS_DA_FOTO_DE_PET`, a escada do porte e o teto
+  // de bytes. Isso e mais forte do que os dois numeros: o pior caso de memoria
+  // e o do produto, com o corte em proporcao e a escada de qualidade descendo
+  // degrau por degrau, e nao uma reducao simples que nunca roda em producao.
+  const derivadasDoDominio = import.meta.resolve('../../src/modules/media/domain/derivadas.js');
   return [
     "import { readFileSync } from 'node:fs';",
     `import { criarImageProcessor } from ${JSON.stringify(adaptador)};`,
+    'import { DERIVADAS_DA_FOTO_DE_PET, TETO_DE_BYTES_DA_DERIVADA, escadaDo } from ' +
+      `${JSON.stringify(derivadasDoDominio)};`,
     'const bytes = readFileSync(process.argv[2]);',
     'const quantas = Number(process.argv[3]);',
     'const imagens = criarImageProcessor();',
@@ -177,8 +197,20 @@ function programaDaSerie(): string {
     "    console.log(JSON.stringify({ evento: 'recusada', i, motivo: inspecao }));",
     '    process.exit(3);',
     '  }',
-    '  await imagens.derivar(bytes, 1024);',
-    '  await imagens.derivar(bytes, 160);',
+    // Sequencial, como em `processar-foto.ts`: decodificar em paralelo e como
+    // este worker morreu antes, e paralelizar aqui mediria outra coisa.
+    '  for (const especificacao of DERIVADAS_DA_FOTO_DE_PET) {',
+    '    const derivada = await imagens.derivar(bytes, {',
+    '      largura: especificacao.largura,',
+    '      ...(especificacao.altura === undefined ? {} : { altura: especificacao.altura }),',
+    '      escada: escadaDo(especificacao.porte),',
+    '      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,',
+    '    });',
+    "    if (typeof derivada === 'string') {",
+    "      console.log(JSON.stringify({ evento: 'recusada', i, motivo: derivada }));",
+    '      process.exit(3);',
+    '    }',
+    '  }',
     '  const rss = Math.round(process.memoryUsage.rss() / 1048576);',
     '  if (rss > picoMiB) picoMiB = rss;',
     "  console.log(JSON.stringify({ evento: 'foto', i, rssMiB: rss, picoMiB }));",
@@ -253,7 +285,7 @@ async function criarFotoEmProcessamento(): Promise<{ foto: string; pet: PetId }>
   const foto = randomUUID();
   const chave = `pets/${pet.replace(/-/g, '')}/original/foto.jpg`;
 
-  await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
+  await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     tutor,
     `orfao-${tutor}@${DOMINIO_DE_TESTE}`,
   ]);

@@ -499,13 +499,23 @@ telas:
   # App, secao Rede (docs/prototipos/rede-encontro.html)
   # ====================================================================
 
-  - tela: "Agenda: abas Proximos, Meus pedidos, Encerrados"
+  # SO EVENTO ABERTO, E A AGENDA PERDEU UMA ABA (cliente, 19/10/2026):
+  # "vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos
+  # a necessidade de ter eventos privados tambem".
+  #
+  # A aba `Meus pedidos` saiu, e com ela `listMyNetworkEventJoinRequests` (que
+  # desceu para `contrato_sem_tela`) e o filtro `query:visibility` -- a agenda
+  # agora FIXA `visibility=public` em toda chamada, e o parametro deixou de
+  # ser escolha de quem usa. Ele continua declarado e continua sendo enviado:
+  # por isso `query:visibility` FICA nesta lista, com a nota.
+  - tela: "Agenda: abas Proximos e Encerrados"
     prototipo: rede-encontro.html
     estados: [normal, carregando, erro, vazio, vazio_com_busca, vazio_com_filtro]
     operacoes:
       - operationId: listNetworkEvents
         situacao: pendente
         onde: "feat/secao-rede (BICHUS-251), emenda em ADR-0027 12.10 e 12.14"
+        nota: "19/10/2026: `visibility` deixou de ser filtro de quem usa e passou a ser FIXO em `public` (`RecorteDaRede.queryDaAgenda`); a resposta ainda e filtrada de novo em `PaginaDaRede.doJson`, porque pedir nao e garantir"
         usa:
           - query:q
           - query:when
@@ -524,61 +534,437 @@ telas:
           - query:max_km
           - query:sort
           - resp:items[].distance_m
-      - operationId: listMyNetworkEventJoinRequests
-        situacao: pendente
-        onde: "ADR-0027 12.14"
-        usa:
-          - query:q
-          - query:state
-          - query:sort
 
-  - tela: "Pagina do encontro"
-    prototipo: rede-encontro.html
-    estados: [carregado, carregando, erro, semponto, encerrado, cancelado, priv-nenhum, priv-enviado, priv-aprovado]
+  # A TELA "Pagina do encontro" SAIU DESTA MATRIZ em 19/10/2026, porque a tela
+  # saiu do app: "você deve mostrar apenas a foto e o titulo do evento, sem
+  # informações adicionais ou pagina de detalhes do evento". As cinco
+  # operacoes dela desceram para `contrato_sem_tela`, com o registro da
+  # decisao. Nenhuma foi removida do contrato.
+
+  # ====================================================================
+  # App, `Perfil` > `Meus eventos` (19/10/2026)
+  # ====================================================================
+  #
+  # ESTA TELA EXISTE EM CODIGO E NAO EM PROTOTIPO, como a do diretorio de
+  # `Perto`: ela nasceu em `app/lib/telas/perfil/meus_eventos.dart` no mesmo
+  # despacho das duas operacoes novas, e nao passou por
+  # `docs/prototipos/rede-encontro.html` -- por isso `prototipo: nenhum`, e nao
+  # um arquivo que ninguem escreveu. O desenho foi autorizado sem Figma (decisao
+  # do cliente de 23/09: sem cota, o prototipo e HTML ou e codigo).
+  #
+  # POR QUE ELA EXISTE: `cancelNetworkEvent` entrou no contrato em 17/10 e NAO
+  # TINHA CAMINHO NENHUM -- nada na resposta da agenda diz de quem e o encontro,
+  # e `NetworkEventPublic` nao pode ganhar campo de autoria (item 7 do
+  # ADR-0010). O cliente escolheu o lugar em 19/10: *"uma tela com os eventos
+  # que voce criou, e o cancelar mora la"*.
+  #
+  # `cancelNetworkEvent` SAIU DE `contrato_sem_tela` por causa desta entrada, e
+  # a saida nao e redatacao: a `resolucao` dela era "tela: resolvido quando a
+  # tela existir", e a tela existe. Em `telas` o portao cobra MAIS -- cada `usa`
+  # tem de resolver contra o contrato --, e `contrato_sem_tela` so pedia uma
+  # nota. `updateNetworkEvent` FICA la: a tela de editar e de outro despacho.
+
+  - tela: "Perfil > Meus eventos"
+    prototipo: nenhum
+    estados: [lista, vazio, carregando, erro, deslogado, capa_recusada, confirmando, conflito_de_versao, saiu_da_conta]
     operacoes:
-      - operationId: getNetworkEvent
-        situacao: pendente
-        onde: "feat/secao-rede (BICHUS-251), ADR-0027 12.10"
+      - operationId: listMyNetworkEvents
+        situacao: contrato
         usa:
-          - resp:title
-          - resp:local_date
-          - resp:visibility
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:items[].slug
+          - resp:items[].title
+          - resp:items[].starts_at
+          - resp:items[].ends_at
+          - resp:items[].time_zone
+          - resp:items[].status
+          - resp:items[].cover
+          - resp:items[].cover.status
+          - resp:items[].cover.url
+          - resp:items[].cover.rejection_reason
+          - enum:NetworkEventStatus.cancelled
+          - problem:unauthenticated
+      # A FONTE DO `ETag` DA SECAO. A tela a chama ao abrir a folha de
+      # confirmacao, e manda o valor recebido no `If-Match` do cancelamento.
+      - operationId: getMyNetworkEvent
+        situacao: contrato
+        usa:
+          - path:eventSlug
+          - resp:slug
           - resp:status
-      - operationId: getNetworkEventLocation
-        situacao: pendente
-        onde: "ADR-0027 12.5"
+          - problem:not-found
+      - operationId: cancelNetworkEvent
+        situacao: contrato
         usa:
-          - resp:point
-      - operationId: getNetworkEventPrivateDetails
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:place
-          - resp:summary
-          - resp:images
-          - resp:admission
-          - resp:accepted_sizes
-          - resp:dog_age
-          - resp:vaccination_required
-          - resp:fenced_off_leash_area
-          - resp:amenities
-          - resp:bring_items
-          - resp:notes
-      - operationId: requestToJoinNetworkEvent
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:state
-      - operationId: getMyNetworkEventJoinRequest
-        situacao: pendente
-        onde: "ADR-0027 12.11"
-        usa:
-          - resp:state
+          - path:eventSlug
+          - header:If-Match
+          - req:note
+          - resp:status
+          - problem:precondition-failed
+          - problem:precondition-required
+          - problem:not-found
 
 # ======================================================================
 # Correspondencias codigo -> rotulo. Os rotulos ficam no cliente; o que o
 # portao cobra e que a correspondencia seja 1 para 1 e que todo codigo exista.
 # ======================================================================
+
+  # ====================================================================
+  # Diretorio de `Perto` -- a escrita administrativa (BICHUS-189, 17/10/2026)
+  # ====================================================================
+  #
+  # ESTA TELA EXISTE EM CODIGO E NAO EM PROTOTIPO. Ela nasceu em
+  # `admin/src/diretorio/` (ListaDeEntradas.tsx, FormularioDaEntrada.tsx) no
+  # mesmo despacho que as quatro operacoes, sem passar por
+  # `docs/prototipos/backoffice.html` -- por isso `prototipo: nenhum`, e nao um
+  # arquivo que ninguem escreveu. Classificada aqui, e nao em
+  # `contrato_sem_tela`, porque dizer que nao ha tela seria falso.
+  #
+  # NAO CADASTRA ONG: `professionals` nao tem `entity_kind`, e `ProfessionalKind`
+  # nao tem valor para organizacao. A ausencia e decisao pendente do cliente.
+
+  - tela: "Diretorio de Perto · lista, cadastro e edicao"
+    prototipo: nenhum
+    estados: [lista, vazio, filtrada, cadastrando, editando, publicando, conflito_de_versao, recusada]
+    operacoes:
+      - operationId: listAdminDirectoryEntries
+        situacao: contrato
+        usa:
+          - query:q
+          - query:kind
+          - query:status
+          - query:city
+          - query:state
+          - query:sort
+          - resp:items
+          - resp:total
+          - resp:applied_filters
+          - enum:DirectoryEntryStatus.draft
+          - enum:DirectoryEntryStatus.published
+          - enum:DirectoryEntryStatus.hidden
+          - enum:DirectoryEntryStatus.removed
+          - enum:ProfessionalKind.vet
+          - enum:ProfessionalKind.clinic
+          - enum:ProfessionalKind.walker
+      - operationId: createAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - req:slug
+          - req:kind
+          - req:display_name
+          - req:about
+          - req:city
+          - req:state
+          - req:neighborhood
+          - req:phone_e164
+          - resp:slug
+          - resp:status
+          - resp:missing_to_publish
+          - resp:version
+      # A BUSCA DE CEP DO FORMULARIO (18/10/2026). Ela entra em `telas`, e nao
+      # em `contrato_sem_tela`, porque a tela EXISTE e e esta mesma: quem chama
+      # e `admin/src/diretorio/FormularioDaEntrada.tsx`, para poupar digitacao
+      # de rua, bairro, cidade e UF. O ramo que trouxe a operacao nao a
+      # classificou, e sem esta entrada o portao de rastreabilidade reprova por
+      # "operacao administrativa fora da matriz" -- que e exatamente o defeito
+      # que ele existe para pegar.
+      - operationId: lookupAdminPostalCode
+        situacao: contrato
+        usa:
+          - path:postalCode
+          - resp:street
+          - resp:neighborhood
+          - resp:city
+          - resp:state
+      - operationId: getAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - path:entrySlug
+          - resp:display_name
+          - resp:missing_to_publish
+          - resp:version
+          - resp:verification
+          - resp:claim_status
+      - operationId: updateAdminDirectoryEntry
+        situacao: contrato
+        usa:
+          - path:entrySlug
+          - header:If-Match
+          - req:display_name
+          - req:phone_e164
+          - req:status
+          - resp:status
+          - resp:version
+          - resp:published_at
+
+  # ====================================================================
+  # Diretorio de `Perto` -- A FILA DE REVISAO DAS INDICACOES (18/10/2026)
+  # ====================================================================
+  #
+  # A queixa do cliente, literal: "no backoffice nao tem um menu para aprovar os
+  # profissionais que as pessoas estao indicando". `suggestDirectoryEntry` existe
+  # desde 17/10 e grava em `directory_suggestions` com `review_status =
+  # pending`; os quatro menus do diretorio no painel vieram de outra branch, e
+  # nenhuma das duas fez a tela que LE a fila. As duas subiram em hml assim.
+  #
+  # TELA EM CODIGO E NAO EM PROTOTIPO, como a irma de cima: `prototipo: nenhum`,
+  # e nao um arquivo que ninguem escreveu.
+  #
+  # `pending_total` esta em `usa` porque e ele que o item do menu mostra -- a
+  # contagem do aviso. Ela passa pelo mesmo filtro de conta desabilitada da
+  # listagem e da leitura, nos tres lugares.
+
+  - tela: "Diretorio de Perto - fila de indicacoes da comunidade"
+    prototipo: nenhum
+    estados: [fila, vazio, decidida, aprovando, duplicata, recusando, recusada]
+    operacoes:
+      - operationId: listAdminDirectorySuggestions
+        situacao: contrato
+        usa:
+          - query:review_status
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:pending_total
+          - enum:DirectorySuggestionState.pending
+          - enum:DirectorySuggestionState.approved
+          - enum:DirectorySuggestionState.declined
+          - enum:DirectorySuggestionContactKind.phone
+          - enum:DirectorySuggestionContactKind.website
+          - enum:DirectorySuggestionContactKind.instagram
+      - operationId: getAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - resp:reference
+          - resp:display_name
+          - resp:kind
+          - resp:city
+          - resp:state
+          - resp:neighborhood
+          - resp:public_contact.kind
+          - resp:public_contact.value
+          - resp:note
+          - resp:review_status
+          - resp:created_at
+          - resp:decided_at
+          - resp:decline_reason
+          - resp:entry_slug
+      - operationId: approveAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - req:slug
+          - req:phone_e164
+          - resp:suggestion
+          - resp:entry
+          - resp:entry_created
+      - operationId: declineAdminDirectorySuggestion
+        situacao: contrato
+        usa:
+          - path:suggestionRef
+          - req:reason
+          - resp:review_status
+          - resp:decline_reason
+
+
+  # ======================================================================
+  # A PLAQUINHA DA COLEIRA: a fila de pedidos e a ENTREGA (18/10/2026).
+  #
+  # Pedido do cliente, palavras dele: "deve ser inserido uma rota no backoffice
+  # para o adminstrador mudar o status da entrega e inserir o codigo de rastreio
+  # e atualizar a entrega".
+  #
+  # DOIS EIXOS, e a escolha foi medida: `status` e a DECISAO
+  # (pending/fulfilled/declined) e `delivery_state` e a ENTREGA
+  # (requested/in_transit/arrived). Alargar `status` com um quarto valor foi a
+  # primeira forma escrita, e `oasdiff` a reprovou quatro vezes pela regra
+  # `response-property-enum-value-added`; dispensar portao nao era opcao, entao o
+  # desenho mudou. Os eixos nao sao independentes: o `CHECK`
+  # `collar_tag_requests_entrega_exige_atendimento` proibe sair de `requested`
+  # sem o pedido estar `fulfilled`.
+  #
+  # O ENDERECO DE ENTREGA sai nesta tela e so nela, e nao entra na trilha de
+  # auditoria (regra 4 da migracao `20261017000012`, mantida).
+  # ======================================================================
+  - tela: "Plaquinha da coleira - fila de pedidos e entrega"
+    prototipo: nenhum
+    estados: [fila, vazio, atendendo, recusando, despachando, em_transporte, chegou, recusada]
+    operacoes:
+      - operationId: listAdminCollarTagRequests
+        situacao: contrato
+        usa:
+          - query:status
+          - query:delivery_state
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - enum:AdminCollarTagRequestStatus.pending
+          - enum:AdminCollarTagRequestStatus.fulfilled
+          - enum:AdminCollarTagRequestStatus.declined
+          - enum:CollarTagDeliveryState.requested
+          - enum:CollarTagDeliveryState.in_transit
+          - enum:CollarTagDeliveryState.arrived
+      - operationId: getAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:ref
+          - resp:pet
+          - resp:delivery_address
+          - resp:notes
+          - resp:status
+          - resp:requested_at
+          - resp:decided_at
+          - resp:delivery_state
+          - resp:tracking_code
+          - resp:shipped_at
+          - resp:delivered_at
+      - operationId: updateAdminCollarTagRequestDelivery
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - req:delivery_state
+          - req:tracking_code
+          - resp:delivery_state
+          - resp:tracking_code
+          - resp:shipped_at
+          - resp:delivered_at
+      - operationId: fulfillAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:status
+      - operationId: declineAdminCollarTagRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:status
+
+  # ======================================================================
+  # A FILA DE MODERACAO (18/10/2026)
+  # ======================================================================
+  #
+  # Decisao do cliente, literal: "quem modera vai ser o administrador, deve ir
+  # para a pagina de backoffice".
+  #
+  # AS QUATRO OPERACOES NASCEM EM `telas`, E NAO EM `contrato_sem_tela`. A tela
+  # vem no mesmo commit (`admin/src/moderacao/FilaDeModeracao.tsx`), e e o que
+  # as tres entradas da fila da plaquinha ensinaram em 18/10: elas ficaram meses
+  # em `contrato_sem_tela` com `resolucao: "tela: resolvido quando a tela
+  # existir"` -- e `contrato_sem_tela` so pedia uma nota, enquanto `telas` cobra
+  # que cada `usa` resolva contra o contrato.
+  #
+  # O ITEM E O ALVO, e nao a denuncia: tres pessoas denunciando a mesma
+  # avaliacao viram UMA linha com `report_count: 3`. `repeat_total` e o sinal
+  # que separa briga de problema real, e e por isso que os dois numeros estao
+  # em `usa` -- uma tela que parasse de ler um deles reprova aqui.
+  #
+  # `resp:content` ENTRA em `usa` de proposito, apesar de ser SEMPRE NULO na
+  # origem `conversation`: a tela le o campo e escreve a frase que explica a
+  # ausencia (`conteudoDo` em `moderacao/fila.ts`), e isso e uso.
+  #
+  # NAO HA OPERACAO DE CONTA nesta entrada, e a ausencia e a regra: desabilitar
+  # conta e outro poder, com outro evento de trilha, e nao entra nesta fila.
+  # Tambem nao ha operacao de notificacao: ninguem e avisado.
+  # ======================================================================
+  - tela: "Moderacao - fila de denuncias"
+    prototipo: nenhum
+    estados: [fila, vazio, removendo, descartando, decidida, conteudo_ja_removido]
+    operacoes:
+      - operationId: listAdminModerationReports
+        situacao: contrato
+        usa:
+          - query:state
+          - query:origin
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:total
+          - resp:pending_total
+          - enum:ModerationQueueState.open
+          - enum:ModerationQueueState.resolved
+          - enum:ModerationOrigin.review
+          - enum:ModerationOrigin.conversation
+      - operationId: removeAdminModerationContent
+        situacao: contrato
+        usa:
+          - path:origin
+          - path:targetRef
+          - req:reason
+          - resp:origin
+          - resp:target_ref
+          - resp:subject
+          - resp:content
+          - resp:rating
+          - resp:reason
+          - resp:reasons
+          - resp:detail
+          - resp:report_count
+          - resp:repeat_total
+          - resp:first_reported_at
+          - resp:last_reported_at
+          - resp:content_removed
+          - resp:resolution
+          - resp:resolution_reason
+          - resp:resolved_at
+      - operationId: dismissAdminModerationReport
+        situacao: contrato
+        usa:
+          - path:origin
+          - path:targetRef
+          - req:reason
+          - resp:content_removed
+          - resp:resolution
+          - resp:resolution_reason
+          - resp:resolved_at
+  # 18/10/2026. O COMUNICADO -- o unico aviso do produto com alcance total.
+  #
+  # As telas existem nesta mesma entrega: `admin/src/comunicados/`, uma lista do
+  # que ja saiu e um formulario com pre-visualizacao obrigatoria antes do
+  # disparo. Nao ha estado `salvo` nem `rascunho` na lista de estados, e as duas
+  # ausencias sao a regra: comunicado nao tem rascunho (a pre-visualizacao nao
+  # grava nada) e nao tem edicao nem exclusao (disparado fica registrado).
+  - tela: "Comunicados: lista e disparo"
+    prototipo: "nao ha prototipo; a tela nasceu com o backend, em 18/10/2026"
+    estados: [dados, paginada, carregando, vazia, erro, previa, teto, sessao12h]
+    operacoes:
+      - operationId: listAdminBroadcasts
+        situacao: contrato
+        usa:
+          - query:page
+          - query:limit
+          - resp:items[].ref
+          - resp:items[].title
+          - resp:items[].body
+          - resp:items[].dispatched_at
+          - resp:items[].dispatched_by
+          - resp:items[].recipients_total
+          - resp:page
+          - resp:limit
+          - resp:total
+      - operationId: getAdminBroadcastDispatchWindow
+        situacao: contrato
+        usa:
+          - resp:would_reach
+          - resp:remaining_today
+          - resp:daily_cap
+      - operationId: dispatchAdminBroadcast
+        situacao: contrato
+        usa:
+          - req:title
+          - req:body
+          - resp:ref
+          - resp:title
+          - resp:dispatched_at
+          - resp:dispatched_by
+          - resp:recipients_total
+          - problem:broadcast-daily-cap-reached
 
 correspondencias:
   # ====================================================================
@@ -728,14 +1114,79 @@ contrato_sem_tela:
   - operationId: updateAdminStoreTag
     resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
+  # A MODERACAO DAS AVALIACOES DO DIRETORIO (18/10/2026). O backend entra junto
+  # da funcionalidade, e a TELA do painel nao: a sessao Backoffice e dona dela.
+  #
+  # A operacao nasce AGORA, e nao no despacho da tela, porque a avaliacao
+  # PUBLICA NA HORA (decisao do cliente de 18/10, "como acontece na
+  # playstore") e isto fala de negocio real com nome e endereco. Publicacao
+  # imediata sem caminho de remocao e uma funcionalidade que nao se pode
+  # desligar -- entao a remocao entra na mesma fatia, mesmo sem tela.
+  #
+  # ENQUANTO A TELA NAO EXISTIR, o administrador remove por `reviewRef`, que ele
+  # obtem pela leitura publica da pagina do local. Funciona, e nao e uma tela.
+  #
+  # O QUE A TELA VAI PRECISAR, e nao existe no contrato ainda: LISTAR as
+  # denuncias (a fila, com `repeat_count` e o motivo) e LISTAR as avaliacoes de
+  # um local com o `reviewRef` a vista. As duas sao leitura de pessoa, entao
+  # entram com `x-audit` de leitura e teto por `rows_returned` (D55/D56), como
+  # `listAdminNetworkJoinRequests`. Sem elas o painel nao tem como DESCOBRIR o
+  # que moderar -- so como agir sobre o que alguem ja achou.
+  - operationId: removeAdminDirectoryReview
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "remove a avaliacao do ar com o motivo na trilha (exclusao logica: status='removed' + moderation_reason). A tela de moderacao do diretorio e da sessao Backoffice e ainda nao existe; faltam tambem as DUAS operacoes de leitura que ela exige (fila de denuncias e avaliacoes de um local com o reviewRef). Nao ha rota de restaurar: status aceita 'published' de volta, entao restaurar nao exige migracao, so a rota"
   - operationId: closeAllAdminSessions
     resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"
+  # ====================================================================
+  # AS SETE OPERACOES DA REDE APOSENTADAS EM 19/10/2026
+  # ====================================================================
+  #
+  # DUAS decisoes do cliente, no mesmo dia, e a frase de cada uma esta
+  # repetida na `nota` de cada operacao de proposito -- quem abre uma linha
+  # sozinha precisa ler o motivo sem subir ate aqui.
+  #
+  #   (1) "a pagina perto e rede tem que ser unificado e você deve mostrar
+  #       apenas a foto e o titulo do evento, sem informações adicionais ou
+  #       pagina de detalhes do evento e sem aparecer o telefone quando for
+  #       profissionais/clinicas"
+  #   (2) "vamos deixar apenas os eventos abertos por enquanto, no futuro
+  #       analisamos a necessidade de ter eventos privados tambem"
+  #
+  # AS SETE FICAM NO CONTRATO, E AS ROTAS DO SERVIDOR FICAM DE PE. Elas nao
+  # estao em `OPERACOES_AINDA_SEM_ROTA` (`src/shared/http/rotas-registradas-contra-o-contrato.test.ts`)
+  # porque aquela lista e de operacao SEM ROTA, e estas sete tem rota: o que
+  # falta a elas e CONSUMIDOR no app. `contrato_sem_tela` e o lugar que o
+  # projeto ja tem para isso, e o portao `src/tools/portao-rastreabilidade.ts`
+  # confere que cada `operationId` daqui existe no contrato.
+  #
+  # POR QUE FICAM, e nao saem: ele disse "no futuro analisamos", e nao
+  # "nunca". Aposentada com data e com a frase dele e diferente de esquecida.
+  #
+  # O QUE FOI REMOVIDO foi o caminho de tela, e nada no contrato: a pagina de
+  # detalhe do evento, a aba `Meus pedidos`, os filtros `Público ou privado` e
+  # `Situação do pedido`, e `RecorteDaRede.queryDePedidos`.
+  - operationId: getNetworkEvent
+    resolucao: "tela: resolvido quando a pagina do evento voltar a existir"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Era a leitura da pagina de detalhe do evento, removida por decisao do cliente: 'você deve mostrar apenas a foto e o titulo do evento, sem informações adicionais ou pagina de detalhes do evento'. A agenda usa `listNetworkEvents`, que traz titulo e `cover_image_url`, e o cartao nao precisa de mais nada. A rota do servidor continua de pe"
+  - operationId: getNetworkEventLocation
+    resolucao: "tela: resolvido quando a pagina do evento voltar a existir"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Era o ponto do mapa estatico da pagina de detalhe (ADR-0027 12.5), e `rede/local_do_encontro.dart` foi apagado com ela. Nenhuma outra tela pede coordenada de evento"
+  - operationId: getNetworkEventPrivateDetails
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. Decisao do cliente: 'vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem'. Era o conteudo oculto que o pedido aprovado liberava, na pagina de detalhe"
+  - operationId: requestToJoinNetworkEvent
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era `Pedir para participar`, na pagina de detalhe do evento privado; a guarda de acao que mandava o pedido depois do login (`pedido_de_participacao_como_intencao.dart`) foi apagada junto"
+  - operationId: getMyNetworkEventJoinRequest
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era a leitura que decidia o estado da caixa do privado (nenhum, enviado, aprovado) na pagina de detalhe"
   - operationId: withdrawNetworkEventJoinRequest
-    situacao: pendente
-    onde: "ADR-0027 12.11 (BICHUS-251)"
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto'. Era `Desistir do pedido` (ADR-0027 12.11), e esta linha existia aqui desde BICHUS-251 com `situacao: pendente` e a nota 'o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX' -- o gesto chegou em 19/10 e saiu no MESMO dia, com a pagina que o hospedava. `situacao: pendente` saiu daqui porque a operacao existe no contrato desta branch"
+  - operationId: listMyNetworkEventJoinRequests
+    resolucao: "tela: resolvido quando o evento privado voltar"
+    nota: "APOSENTADA 19/10/2026 sem consumidor no app. 'vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem'. Era a aba `Meus pedidos` da agenda da Rede, com os filtros `q`, `state` e `sort`. A aba existia porque havia pedido de participacao; o pedido nascia na pagina de detalhe, a pagina saiu em 19/10 e a aba ficou sem origem. Esta decisao e o veredito sobre isso: nao volta por ora. Nenhum caminho do app le esta operacao -- `RecorteDaRede.queryDePedidos` e `RedeApi.meusPedidos` nao tem chamador (o metodo fica, aposentado com registro no cabecalho de `app/lib/api/rede_api.dart`)"
   # ADR-0025 emenda 3 (17/10/2026): o backend do encontro criado pela
   # comunidade. Ele PUBLICA DIRETO -- nao ha fila de moderacao, e por isso nao
   # ha operacao de painel aqui. As telas do app sao do despacho seguinte, e por
@@ -746,12 +1197,49 @@ contrato_sem_tela:
   - operationId: updateNetworkEvent
     resolucao: "tela: resolvido quando a tela existir"
     nota: "quem criou administra o proprio encontro (decisao do cliente de 17/10); a tela de editar e do mesmo despacho da de criar"
-  - operationId: cancelNetworkEvent
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "cancelar o proprio encontro, com a nota que fica so na trilha; mesma tela da edicao"
+  # `cancelNetworkEvent` SAIU DAQUI EM 19/10/2026, e nao foi redatada: a
+  # `resolucao` dela era "tela: resolvido quando a tela existir", e a TELA
+  # EXISTE -- `app/lib/telas/perfil/meus_eventos.dart`, construida junto das
+  # duas operacoes de leitura do dono. O motivo dela CADUCOU pelo unico desfecho
+  # que ela mesma previa. Ela passou para `telas`, na entrada
+  # "Perfil > Meus eventos", onde o portao cobra MAIS: cada `usa` tem de
+  # resolver contra o contrato.
+  #
+  # `updateNetworkEvent`, logo acima, FICA: a tela de editar e de outro
+  # despacho, e dizer que ela existe seria falso.
   - operationId: createNetworkEventCoverUploadIntent
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet"
+    resolucao: "RESOLVIDO 19/10/2026: a tela existe e chama esta operacao"
+    nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet. RESOLVIDO EM 19/10/2026, por pedido do cliente ('a foto que eu estou falando para criar do evento e a da capa do evento'): `app/lib/telas/rede/criar_encontro.dart` pergunta a capa e chama esta operacao por `RedeApi.intencaoDeCapaDoEncontro`, e a capa e confirmada no MESMO `POST /v1/network/events`, em `cover_image.upload_id`. A linha FICA aqui, com a data, porque o historico de por que a tela nasceu depois do backend e o que explica a forma do contrato -- esta secao e o registro de operacao de contrato sem tela, e esta deixou de ser uma. Medido contra a homologacao: `image/heic` -> 400 (`field: content_type`, `code: enum`), `image/jpeg` -> 201 com a chave em `events/original/`, e o `POST` da criacao -> 201"
+  # 18/10/2026. A LEITURA DE UM ITEM da fila de moderacao, e ela esta AQUI e nao
+  # em `telas` porque a tela de verdade nao a chama -- e a ausencia e declarada,
+  # nao esquecida.
+  #
+  # `listAdminModerationReports` ja devolve o item inteiro: conteudo, relato,
+  # motivos, as duas contagens e a decisao. A tela abre o dialogo com a linha
+  # que ja tem na mao, e uma segunda viagem ao servidor para reler o que acabou
+  # de chegar seria trafego por nada.
+  #
+  # Ela existe no contrato porque a fila VAI precisar dela: quando a origem
+  # `conversation` ganhar o que mostrar, ou quando houver tela de item com
+  # endereco proprio (recarregar a pagina sobre uma decisao em andamento), a
+  # leitura e por onde isso entra. Inventa-la depois mudaria o contrato; deixa-la
+  # declarada agora nao custa nada e nao e quebra.
+  - operationId: getAdminModerationReport
+    resolucao: "tela: resolvido quando a tela de item existir"
+    nota: "a listagem ja devolve o item inteiro e a tela usa a linha que tem na mao; a leitura existe para a tela de item com endereco proprio, que e do despacho seguinte"
+  # AS TRES ENTRADAS DA FILA DA PLAQUINHA SAIRAM DAQUI EM 18/10/2026, e nao
+  # foram redatadas: `listAdminCollarTagRequests`,
+  # `fulfillAdminCollarTagRequest` e `declineAdminCollarTagRequest`.
+  #
+  # A `resolucao` das tres era, nas tres, "tela: resolvido quando a tela
+  # existir", e a TELA EXISTE: `admin/src/plaquinhas/FilaDePlaquinhas.tsx`,
+  # construida junto da entrega. O motivo delas CADUCOU pelo unico desfecho que
+  # elas mesmas previam.
+  #
+  # As tres passaram para `telas`, na entrada "Plaquinha da coleira - fila de
+  # pedidos e entrega", junto das duas operacoes novas da entrega. Elas nao
+  # deixaram de ser cobradas: em `telas` o portao cobra MAIS -- cada `usa` tem
+  # de resolver contra o contrato --, e `contrato_sem_tela` so pedia uma nota.
   - campo: "AdminNetworkEvent.origin=community"
     nota: "a lista do painel ainda nao distingue o encontro da comunidade do encontro do painel; o campo sai na resposta desde 17/10"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"

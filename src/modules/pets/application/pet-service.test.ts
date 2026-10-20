@@ -13,7 +13,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { PetService, TETO_DE_PETS_POR_CONTA } from './pet-service.js';
+import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
+import { PetService, TETO_DE_CARE_NOTES, TETO_DE_PETS_POR_CONTA } from './pet-service.js';
 import type { EntradaDoPet } from './pet-service.js';
 import type { DadosDoPet, PetGravado, PetRepository } from '../ports/pet-repository.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
@@ -326,5 +327,174 @@ void describe('cadastro do pet — pet de outro tutor', () => {
       },
     );
     assert.equal(repo.excluiu, false);
+  });
+});
+
+/**
+ * A REDAÇÃO CRESCE O TEXTO, E O TETO É CONFERIDO DEPOIS DELA.
+ *
+ * O defeito medido em 18/10/2026: `pets.care_notes` declara 280 no contrato e
+ * 280 na coluna (`pets_care_notes_tamanho`) — **iguais**, e é justamente a
+ * igualdade que não deixa folga. A redação roda DEPOIS da validação do schema e
+ * substitui o trecho achado por uma marca MAIS LONGA que ele:
+ *
+ * | o que entra | o que sai | delta | nota de 280 vira |
+ * |---|---|---|---|
+ * | `11987654321` (11) | `[telefone removido]` (19) | +8 | 288 |
+ * | `(11) 98765-4321` (15) | `[telefone removido]` (19) | +4 | 284 |
+ * | `a@b.co` (6) | `[e-mail removido]` (17) | +11 | 291 |
+ * | `x.io` (4) | `[link removido]` (15) | +11 | 291 |
+ *
+ * Medido chamando `redigirCanalMediado` sobre textos de exatamente 280: os
+ * quatro estouram. Sem conferência pós-redação é o `CHECK` do banco que recusa,
+ * e um `CHECK` violado sai como ERRO DE SERVIDOR — a pessoa escreveu uma nota
+ * dentro do limite e recebeu 500.
+ *
+ * **O teto desta bancada vem do `CHECK` DA MIGRAÇÃO**, nunca do contrato: uma
+ * isca que lê o `maxLength` do contrato acompanha quem o sabota.
+ *
+ * **O dobre do repositório imita o `CHECK`** em vez de aceitar tudo. Um dobre
+ * que grava qualquer tamanho não distingue "o serviço recusou explicando" de "o
+ * serviço deixou passar e o banco vai derrubar depois" — e era a segunda que
+ * acontecia.
+ */
+void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
+  /**
+   * O teto destes casos. É `TETO_DE_CARE_NOTES`, e não o `maxLength` do
+   * contrato, de propósito: `application/` não lê disco (pureza do domínio,
+   * `eslint.config.mjs`), então quem prende este número ao `CHECK` da coluna é
+   * `adapters/persistence/teto-de-care-notes-vem-da-coluna.test.ts`. A corrente
+   * é isca -> constante -> `pets_care_notes_tamanho`, e o contrato não entra
+   * nela em nenhum ponto — uma isca que lesse o `maxLength` do contrato
+   * acompanharia quem o sabota.
+   */
+  function tetoDaColuna(): number {
+    return TETO_DE_CARE_NOTES;
+  }
+
+  /** Nota de EXATAMENTE `teto` caracteres, com o trecho dentro. */
+  function notaDe(teto: number, trecho: string): string {
+    const nota = `nota ${trecho} ${'a'.repeat(teto - 6 - trecho.length)}`;
+    assert.equal([...nota].length, teto, 'a montagem da nota errou o tamanho');
+    return nota;
+  }
+
+  /**
+   * O repositório que recusa como o Postgres recusa. `quantosGravou` existe para
+   * o contrapeso: ele prova que a nota aceita FOI gravada, e não só não explodiu.
+   */
+  class RepositorioQueImitaOCheck extends RepositorioFalso {
+    public readonly teto: number;
+
+    constructor(teto: number) {
+      super();
+      this.teto = teto;
+    }
+
+    override criar(id: PetId, dono: UserId, dados: DadosDoPet): Promise<PetGravado> {
+      if (dados.careNotes !== null && [...dados.careNotes].length > this.teto) {
+        // A forma do erro que o node-pg-migrate/pg devolve: violação de CHECK,
+        // sem campo nem mensagem para quem chamou. É o que vira 500.
+        return Promise.reject(
+          Object.assign(
+            new Error(
+              `new row for relation "pets" violates check constraint "pets_care_notes_tamanho"`,
+            ),
+            { code: '23514', constraint: 'pets_care_notes_tamanho' },
+          ),
+        );
+      }
+      return super.criar(id, dono, dados);
+    }
+  }
+
+  function montarComOCheck(teto: number): { servico: PetService; repo: RepositorioQueImitaOCheck } {
+    const repo = new RepositorioQueImitaOCheck(teto);
+    const servico = new PetService({
+      repositorio: repo,
+      ids: {
+        uuidv7: () => 'pet-1',
+        opaqueToken: () => 'x' as never,
+        random128: () => new Uint8Array(16),
+        random80: () => new Uint8Array(10),
+      },
+      clock: relogioParado(),
+      trilha: {
+        record: () => Promise.resolve(),
+      },
+    });
+    return { servico, repo };
+  }
+
+  void it('a redação REALMENTE cresce: nota no teto com telefone dentro passa dele', () => {
+    // Este caso é a medição, e não uma garantia: sem ele os dois casos abaixo
+    // poderiam estar medindo um texto que nunca estourou.
+    const teto = tetoDaColuna();
+    const nota = notaDe(teto, '11987654321');
+    const depois = [...redigirCanalMediado(nota).texto].length;
+    assert.ok(
+      depois > teto,
+      `a redação não cresceu o texto (${String(teto)} -> ${String(depois)}). Se a marca de ` +
+        'remoção encurtou, os casos abaixo deixaram de medir o estouro e precisam ser refeitos',
+    );
+  });
+
+  void it('nota no teto COM telefone dentro não produz erro de servidor: é 400 com o limite', async () => {
+    const teto = tetoDaColuna();
+    const { servico, repo } = montarComOCheck(teto);
+    await assert.rejects(
+      () => servico.criar({ ...entradaBase, careNotes: notaDe(teto, '11987654321') }, chamador),
+      (e: Error & { problemType?: string; status?: number; code?: string }) => {
+        assert.notEqual(
+          e.code,
+          '23514',
+          'a nota chegou ao banco e o `CHECK` a derrubou. Para quem chamou isso é 500, e ' +
+            'ninguém sabe que o problema foi o tamanho DEPOIS da redação',
+        );
+        assert.equal(e.problemType, 'validation-failed');
+        assert.equal(e.status, 400);
+        const campos = (e as unknown as { errors?: { field?: string; message?: string }[] }).errors;
+        const doCampo = campos?.find((c) => c.field === 'care_notes');
+        assert.ok(doCampo, 'a recusa não nomeia `care_notes`, e a tela não sabe onde apontar');
+        assert.match(
+          doCampo.message ?? '',
+          new RegExp(String(teto)),
+          'a recusa não diz qual é o limite. Sem o número a pessoa encurta às cegas',
+        );
+        return true;
+      },
+    );
+    assert.equal(repo.criados.length, 0, 'recusou e gravou: a recusa precisa ser antes da escrita');
+  });
+
+  void it('CONTRAPESO: a MESMA nota no teto SEM telefone é aceita e gravada', async () => {
+    // O contrapeso do caso acima. Sem ele, um serviço que recusasse toda nota de
+    // 280 passaria igual, e a isca mediria o teto em vez do CRESCIMENTO.
+    const teto = tetoDaColuna();
+    const nota = notaDe(teto, 'coleira azul');
+    const { servico, repo } = montarComOCheck(teto);
+    const pet = await servico.criar({ ...entradaBase, careNotes: nota }, chamador);
+    assert.equal(pet.careNotes, nota, 'o texto da pessoa foi alterado sem nada ter sido retirado');
+    assert.equal([...(repo.criados[0]?.dados.careNotes ?? '')].length, teto);
+    assert.deepEqual(repo.criados[0]?.dados.careNotesRedactions, []);
+  });
+
+  void it('CONTRAPESO: o dobre do banco recusa de verdade, e não é inerte', async () => {
+    // Prova que o `assert.notEqual(e.code, '23514')` do caso principal mede algo:
+    // um dobre que aceitasse tudo deixaria o caso passar por outro motivo.
+    const teto = tetoDaColuna();
+    const { repo } = montarComOCheck(teto);
+    await assert.rejects(
+      () =>
+        repo.criar('p-1' as PetId, DONO, {
+          ...entradaBase,
+          careNotes: 'a'.repeat(teto + 1),
+          careNotesRedactions: [],
+        }),
+      (e: Error & { code?: string }) => {
+        assert.equal(e.code, '23514');
+        return true;
+      },
+    );
   });
 });

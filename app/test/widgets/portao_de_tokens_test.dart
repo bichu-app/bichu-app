@@ -32,14 +32,25 @@ const List<String> arquivosDaHistoria = <String>[
   // peca em que um hex literal entra sem ninguem notar.
   'lib/widgets/barra_de_listagem.dart',
   'lib/telas/perto/lista_do_diretorio.dart',
-  // A `Rede` no desenho novo (BICHUS-251/279): capa, selos, bloco de dia,
-  // mapa e banner da marca sao pecas em que um hex ou um 12 solto entrariam
-  // sem ninguem notar. O banner usa `BichuCores.claro` e nao hex.
+  // A `Rede` (BICHUS-251/279): a capa e o banner da marca sao pecas em que um
+  // hex ou um 12 solto entrariam sem ninguem notar. O banner usa
+  // `BichuCores.claro` e nao hex.
+  //
+  // **DOIS CAMINHOS SAIRAM DESTA LISTA em 19/10/2026**, e os arquivos sairam
+  // do repositorio: `rede/encontro_da_rede.dart` (a pagina de detalhe do
+  // evento, que o cliente removeu) e `rede/local_do_encontro.dart` (o mapa
+  // estatico, que so aquela pagina desenhava). O portao LE os arquivos da
+  // lista: caminho que nao existe o faria reprovar por leitura, e nao por
+  // token -- e e por isso que a lista encolheu junto, no mesmo commit.
   'lib/telas/rede/agenda_da_rede.dart',
   'lib/telas/rede/cartao_do_encontro.dart',
-  'lib/telas/rede/encontro_da_rede.dart',
-  'lib/telas/rede/local_do_encontro.dart',
   'lib/telas/rede/pecas_da_rede.dart',
+  // O `Perfil` so com menus e a tela de dados pessoais (18/10/2026): o item de
+  // menu e um controle novo com borda, icone e dois niveis de texto, e o
+  // formulario tem bloco de leitura com fundo proprio -- exatamente o tipo de
+  // peca em que um hex ou um 12 solto entram sem ninguem notar.
+  'lib/widgets/item_de_menu.dart',
+  'lib/telas/perfil/tela_dados_pessoais.dart',
 ];
 
 /// Um achado do portao: o arquivo, a linha e o motivo.

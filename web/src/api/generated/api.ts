@@ -487,6 +487,258 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A caixa de notificacoes, agrupada e paginada
+         * @description Ordem decrescente de quando a coisa aconteceu. **Pagina de 30**, e a
+         *     retencao e de **90 dias**: o que e mais antigo nao aparece.
+         *
+         *     **AGRUPAMENTO** por tipo, autor quando houver, e janela de 24 h -- uma
+         *     linha por combinacao por dia, e `grouped_count` diz quantos avisos ela
+         *     resume. **`tag_scanned` e `found_reported` NUNCA agrupam**, e a ausencia
+         *     e deliberada: cada um e um animal e uma acao distintos, e "2 avisos de
+         *     plaquinha" esconderia qual pet.
+         *
+         *     **Nenhuma imagem.** A caixa nao devolve avatar nem foto de pet, de
+         *     proposito: sao 0 KB de imagem por pagina, para nao trazer a foto do pet
+         *     a uma quarta superficie.
+         *
+         *     `unread_total` vem junto para a tela nao precisar de uma segunda
+         *     chamada. **Esta operacao NAO zera o contador** -- quem zera e
+         *     `markNotificationsListSeen`, e a separacao e o que torna "abrir a lista
+         *     nao marca os itens" verificavel.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/showcase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Minha vitrine de fotos
+         * @description As fotos da vitrine da **propria conta**, em ordem; a de `position: 0` e
+         *     a CAPA. Lista vazia e estado normal e completo, e nao ausencia de
+         *     recurso: a vitrine e opcional.
+         *
+         *     **Esta e a unica operacao que devolve a vitrine.** Nenhuma outra resposta
+         *     deste contrato carrega foto de vitrine de ninguem.
+         */
+        get: operations["getMyShowcase"];
+        /**
+         * Substitui a vitrine inteira, na ordem
+         * @description O corpo manda a vitrine INTEIRA, na ordem, e e a **unica escrita**: ela
+         *     trata acrescentar, reordenar, **trocar a capa** e remover de uma vez.
+         *     `photos: []` tira todas. E o mesmo desenho de `CatalogImagesInput`, e
+         *     quatro rotas separadas seriam quatro lugares para o teto de nove
+         *     divergir.
+         *
+         *     A **posicao e o indice no vetor**, e nunca um numero que o cliente
+         *     manda: assim nao ha buraco nem empate a resolver, e a capa e sempre a
+         *     primeira do vetor que chegou.
+         *
+         *     **O TETO DE NOVE E COBRADO AQUI, NO SERVIDOR** (`400`, `field: photos`,
+         *     `code: maximum`), e nao so na tela. O banco o cobra de novo pelo `CHECK
+         *     (position BETWEEN 0 AND 8)` somado a unicidade por conta: dois lugares
+         *     conferindo o mesmo numero e o desenho. `upload_id` repetido e recusado
+         *     com `400` (`code: duplicate`), e nao resolvido escolhendo um deles.
+         *
+         *     `upload_id` de outra conta, de outro proposito ou inexistente responde
+         *     `404`, e nunca `403`: distinguir os dois revelaria que o envio existe
+         *     (ADR-0021).
+         *
+         *     **`200` e nao `202`**: a resposta e o estado que passou a valer. As fotos
+         *     novas voltam com `status: processing` e `grid_url: null`, porque antes de
+         *     o worker reescrever a derivada elas carregam o EXIF do celular -- o
+         *     contrato diz isso no status, em vez de deixar o app descobrir pela
+         *     ausencia da URL.
+         */
+        put: operations["replaceMyShowcase"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O numero do sino
+         * @description **E a fonte do numero que a barra superior exibe.** Operacao propria, e
+         *     nao um campo de outra leitura, porque a barra vive em toda tela e nao
+         *     pode pagar uma pagina de 30 linhas para desenhar um numero.
+         *
+         *     O numero sai **inteiro**. O recorte em `9+` e regra da barra -- tres
+         *     digitos comem o espaco do titulo --, e recortar aqui apagaria a
+         *     diferenca entre 10 e 400 para quem for medir uso depois.
+         *
+         *     **O que o numero conta**, e esta e a regra inteira: aviso ainda nao
+         *     ABERTO cujo instante e posterior a ultima vez que a lista foi vista.
+         *     Abrir a lista derruba o numero sem marcar item nenhum. A excecao
+         *     nomeada: **`tag_scanned` e `found_reported` NAO saem do contador ao
+         *     abrir a lista** -- eles so saem quando o item e aberto, porque os dois
+         *     dizem que ha um pet na rua agora.
+         */
+        get: operations["getNotificationCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A lista foi aberta -- zera o numero sem marcar os itens
+         * @description **Zera o contador e NAO marca nada como lido.** Os dois efeitos sao
+         *     separados por requisito: "lido" e o item aberto, nao a lista vista.
+         *
+         *     E `POST` e nao efeito de `listNotifications` porque aquela e `GET`, e
+         *     `GET` que escreve e `GET` que nao pode ser repetido nem cacheado.
+         *
+         *     Idempotente: chamar duas vezes deixa o mesmo estado.
+         */
+        post: operations["markNotificationsListSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar todas como lidas
+         * @description Acao **explicita**, pedida na tela. Existe separada de
+         *     `markNotificationsListSeen` porque abrir a lista so derruba o numero:
+         *     sem esta operacao nao haveria como limpar de verdade uma caixa grande,
+         *     nem tirar do contador a plaquinha e o achado, que atravessam o zero de
+         *     proposito.
+         *
+         *     Respeita a mesma janela de 90 dias da listagem: nao mexe no que a caixa
+         *     nao mostra mais.
+         */
+        post: operations["markAllNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationRef}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010). */
+                notificationRef: components["parameters"]["NotificationRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca UM aviso como lido (o item foi aberto)
+         * @description Idempotente: marcar duas vezes responde `204` nas duas, porque o
+         *     aparelho reenvia.
+         *
+         *     **Aviso de outra conta responde `404`, nunca `403`** (ADR-0021): a
+         *     autorizacao e a propria clausula `WHERE`, e um `403` confirmaria que o
+         *     `ref` existe.
+         */
+        post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/showcase/photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto de uma foto da vitrine
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, no prefixo
+         *     `people/`; a derivada publica e criada pelo worker.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O teto de 5 MB esta na POLITICA ASSINADA**, e nao numa conferencia
+         *     posterior: o backend nao recebe os bytes, e recusar depois seria recusar
+         *     o que ja foi gravado e pago. `byte_size` acima do teto e recusado aqui,
+         *     **antes** de assinar, para a tela dizer o motivo.
+         *
+         *     **HEIC entra**, ao contrario de `NetworkEventCoverIntentInput`: a vitrine
+         *     sai de um CELULAR, e foto de iPhone e HEIC. A derivada sai sempre em
+         *     JPEG -- HEIC entra e nunca sai, e a conversao e nossa, no servidor.
+         *     SVG nunca, e por IGUALDADE e nunca por prefixo.
+         *
+         *     Dimensao minima 600 x 600, a mesma da capa do encontro e da foto de pet:
+         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
+         *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
+         *     worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada**, e tambem nao acrescenta foto a vitrine: a
+         *     foto entra por `replaceMyShowcase`. A intencao que ninguem confirma vence
+         *     em dez minutos e o varredor a recolhe. Com nove fotos na vitrine esta
+         *     operacao responde `400` em vez de assinar -- assinar a decima seria
+         *     entregar autorizacao de escrita que a vitrine nunca vai aceitar, e o
+         *     objeto ficaria no balde ate o varredor passar.
+         */
+        post: operations["createShowcasePhotoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pets": {
         parameters: {
             query?: never;
@@ -750,6 +1002,67 @@ export interface paths {
          *     **500** onde a resposta certa e 400.
          */
         post: operations["issuePetTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pets/{petId}/tag-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Os pedidos da plaquinha deste pet
+         * @description A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app (decisao do
+         *     cliente, 18/10): privada, exige sessao, e a pessoa ve **so as
+         *     plaquinhas dela**.
+         *
+         *     **A autorizacao esta na clausula `WHERE`, e por isso a resposta de pet
+         *     de outra conta e `404` e nunca `403`** (ADR-0021): o `SELECT` carrega
+         *     `pets.owner_user_id = <chamador>` e simplesmente nao encontra linha.
+         *     Um `403` confirmaria que o pet existe.
+         *
+         *     **Nenhum endereco de entrega sai aqui.** Ele e dado pessoal, ja foi
+         *     digitado por quem pede, e a unica superficie que o projeta segue sendo
+         *     a fila do painel (`AdminCollarTagRequest`).
+         *
+         *     Ordenado do pedido mais recente para o mais antigo. Um pet costuma ter
+         *     um pedido; a lista existe porque a segunda plaquinha e um pedido
+         *     legitimo depois do primeiro ser atendido.
+         */
+        get: operations["listCollarTagRequests"];
+        put?: never;
+        /**
+         * Pedir a plaquinha da coleira de um pet
+         * @description Cria o pedido do tutor para UM pet dele e responde **200** com o estado
+         *     que o app ve. Pet de outra pessoa **nao existe**: a autorizacao esta na
+         *     clausula `WHERE` e a resposta e `404`, nunca `403` (ADR-0021).
+         *
+         *     **Idempotente sem chave de idempotencia**: ha no maximo um pedido
+         *     `pending` por pet (indice parcial unico no banco), e pedir de novo
+         *     devolve o pedido que ja existe em vez de encher a fila com a mesma
+         *     coisa. Depois de atendido, um pedido novo e aceito -- a segunda
+         *     plaquinha e um pedido legitimo.
+         *
+         *     **O `ref` do pedido SAI aqui desde 18/10**, para que a pessoa saia
+         *     desta tela com o numero que identifica o pedido dela. Ele e o mesmo
+         *     `ref` opaco da fila do painel, e **nenhum UUID interno sai**
+         *     (ADR-0010 item 6).
+         *
+         *     **O endereco e obrigatorio e nao volta na resposta.** Ele e dado
+         *     pessoal, quem o enviou acabou de digita-lo, e devolve-lo seria uma
+         *     copia a mais numa resposta que nao precisa dela. Campo de endereco
+         *     faltando ou malformado responde `400` apontando **qual** campo, pelo
+         *     `errors[].field` de `validation-failed`: e isso que deixa o formulario
+         *     dizer o que falta, campo por campo, em vez de recusar calado.
+         */
+        post: operations["requestCollarTag"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1531,6 +1844,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca a area de mensagens como vista
+         * @description Zera `ConversationPage.unread_count` e **nao marca conversa nenhuma
+         *     como lida**: `Conversation.unread` continua como estava.
+         *
+         *     As duas coisas sao fatos diferentes -- "eu vi que tenho mensagens" e
+         *     "eu li esta conversa" --, e uma rota que fizesse as duas apagaria a
+         *     unica pista de QUAL conversa guarda o recado.
+         *
+         *     **Nao zera o aviso de plaquinha lida nem o de achado.** Esses dois
+         *     continuam no contador ate que a conversa deles seja aberta. Ver
+         *     `ConversationPage.unread_count`.
+         *
+         *     Idempotente: chamar duas vezes seguidas responde igual.
+         */
+        post: operations["markMyConversationsSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{conversationId}": {
         parameters: {
             query?: never;
@@ -1662,6 +2006,481 @@ export interface paths {
         get: operations["listDirectoryEntries"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Minhas indicações
+         * @description As indicações que **a propria conta** fez para o `Perto`, com o estado
+         *     de cada uma. Pedido literal do cliente em 18/10/2026: *"e a aba de
+         *     minhas indicacoes, com o status se esta pendente ou se ja foi aprovado
+         *     pelo administrador?"*.
+         *
+         *     ## O LADO QUE FALTAVA, e o que ele desfaz
+         *
+         *     `suggestDirectoryEntry` existe desde 17/10 e devolve um recibo com
+         *     `reference`, `state` e `created_at` -- e nada mais depois disso. A
+         *     `20261017000016` deu ao PAINEL as quatro operacoes da fila; nenhuma
+         *     operacao deste contrato lia `directory_suggestions` do lado de **quem
+         *     indicou**, e por isso a pessoa nao tinha como saber se alguem olhou.
+         *
+         *     **Isto REVERTE uma frase, e a reversao esta declarada.** O
+         *     `COMMENT ON COLUMN` de `decline_reason` dizia "nao chega a quem
+         *     indicou", e `AdminDirectorySuggestion.decline_reason` repetia. A partir
+         *     de 18/10/2026 **o motivo da recusa chega a quem indicou**, por esta
+         *     operacao: recusa sem motivo faz a mesma clinica ser indicada outra vez,
+         *     e e a unica forma de resposta que nao ensina nada a ninguem. A migracao
+         *     `20261018000003` reescreve aquele `COMMENT` e justifica a troca; quem
+         *     recusa passa a escrever **para a pessoa**, e nao so para o proximo
+         *     revisor.
+         *
+         *     ## A autorizacao esta no `WHERE`, e por isso nao ha `403`
+         *
+         *     A consulta passa pela funcao `indicacoes_do_autor(uuid)` da migracao
+         *     `20261018000003`, que tem a conta na propria clausula `WHERE`. Nao e um
+         *     filtro aplicado depois de ler e nao e um `if` sobre a linha lida: a
+         *     indicacao de outra conta **nao existe** para quem chama. Nao ha `403`
+         *     nesta operacao, e nao ha por que haver (ADR-0021).
+         *
+         *     **Conta desabilitada devolve lista vazia**, pela mesma funcao, que
+         *     delega a `conta_habilitada(uuid)` (`20261017000013`) -- o ponto unico da
+         *     definicao, nao copiado aqui.
+         *
+         *     ## Nada de quem indicou sai na resposta
+         *
+         *     **Nenhum identificador interno** (ADR-0010): sem `id`, e o enderecamento
+         *     e por `reference`, o mesmo opaco de 128 bits que o recibo devolveu. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` no
+         *     `COMMENT ON COLUMN` da `20261017000004` (ADR-0011 secao 4, BICHUS-174) e
+         *     **nao e projetada** pela funcao: ela e parametro e filtro, nunca saida.
+         *
+         *     ## `entry_slug` SO VEM PUBLICADO, e o nulo tem significado
+         *
+         *     Aprovada **nao** quer dizer no ar. Uma entrada nascida de indicacao cujo
+         *     contato publico e `website` ou `instagram` nasce `draft` -- ela nao tem
+         *     `phone_e164`, que e o canal unico de `professionals` --, e `Perto` so
+         *     lista `status = 'published'`. Por isso `entry_slug` e devolvido
+         *     **apenas quando a entrada esta publicada**: devolver o `slug` do
+         *     rascunho faria a tela oferecer um caminho para uma pagina que nao esta
+         *     no `Perto`.
+         *
+         *     Entao `review_status: approved` com `entry_slug: null` e um estado com
+         *     nome, e a tela o diz com palavras em vez de prometer link: aprovada,
+         *     ainda nao no `Perto`.
+         *
+         *     ## `state` existe e `q` NAO, e as duas decisoes sao medidas
+         *
+         *     O padrao de listagem do projeto poe filtro e ordenacao no corpo da
+         *     tela -- e os poe **sobre o que o contrato aceita**. Um filtro aplicado
+         *     so na pagina carregada mentiria no `total` e no paginador: com `limit`
+         *     de 20 e uma lista que cresce 5 por dia (o teto de
+         *     `suggestDirectoryEntry`), "pendentes" filtrado no aplicativo mostraria
+         *     as pendentes **da pagina 1** e diria que sao todas. Entao `state` e do
+         *     SERVIDOR, e `total` passa a ser o do recorte.
+         *
+         *     **`q` nao existe, e a ausencia e a mesma medida ao contrario:** buscar
+         *     por nome numa lista de poucas dezenas de itens que a pessoa mesma
+         *     escreveu e um campo a mais para manter em troca de nada -- e seria a
+         *     unica busca do projeto sem indice por tras. Ordenacao tambem nao: a
+         *     ordem e uma so, e e a unica que faz sentido aqui (a mais recente
+         *     primeiro, porque e sobre ela que a pessoa quer noticia).
+         */
+        get: operations["listMyDirectorySuggestions"];
+        put?: never;
+        /**
+         * Sugerir um estabelecimento ou profissional para o `Perto`
+         * @description A comunidade **sugere** uma entrada do diretorio. A sugestao nasce
+         *     `pending` e **NAO publica nada**, nem agora nem automaticamente depois.
+         *
+         *     ## Por que esta operacao nao publica, ao contrario de `createNetworkEvent`
+         *
+         *     Criar encontro e a pessoa falando **dela mesma**: ela escolheu o lugar,
+         *     marcou a hora e responde pelo que escreveu. Sugerir uma clinica e
+         *     publicar sobre um **TERCEIRO** que nao pediu, nao sabe e pode
+         *     discordar -- do texto, da categoria e de aparecer. O encontro publica
+         *     direto porque o autor e o assunto sao a mesma pessoa; aqui eles nao
+         *     sao, e nao existe no produto quem represente o assunto.
+         *
+         *     Isso nao e zelo novo: e a **emenda 1 do ADR-0011**, escrita no `CHECK`
+         *     de `professionals.source`, que **nao tem** o valor `'community'` --
+         *     *"nenhum perfil nasce sem o aceite de quem ele descreve; a comunidade
+         *     convida e avalia, nunca cria"*. Uma rota da comunidade que inserisse em
+         *     `professionals` desfaria aquela decisao em vez de implementar esta.
+         *
+         *     **Esta operacao nao escreve em `professionals`.** Ela grava em
+         *     `directory_suggestions`, que e fila de revisao e nada mais. Quem cria a
+         *     entrada do diretorio continua sendo o painel, a partir da sugestao, e
+         *     pelo caminho de convite e aceite do ADR-0011.
+         *
+         *     ## O que a resposta NAO devolve
+         *
+         *     Sem `id` (ADR-0010 item 6): o recibo e `reference`, 128 bits aleatorios
+         *     em base64url, pelo mesmo desenho de `AdminJoinRequest.ref`. Sem o nome
+         *     de quem sugeriu, sem contagem de sugestoes da mesma entidade e sem o
+         *     proprio texto sugerido: o conteudo so volta a existir em publico se o
+         *     painel aprovar, e devolve-lo aqui faria o recibo parecer publicacao.
+         *
+         *     ## Dado pessoal: o minimo, e so de entidade
+         *
+         *     `display_name`, `kind`, `city`/`state`, `neighborhood`, `postal_code` e
+         *     **um contato publico** -- o que a entidade ja divulga para ser
+         *     contratada. **Nao ha campo de documento** (CRMV, CNPJ) e **nao ha
+         *     campo de pessoa fisica**: documento e prova de verificacao, mora em
+         *     `entity_verifications` e so entra por quem o apresenta; pedi-lo aqui
+         *     seria coletar o documento de um terceiro pela mao de um estranho.
+         *
+         *     **Sem coordenada e sem logradouro** (ADR-0006): nao ha mapa nem
+         *     geocodificacao neste caminho. `city`, `state`, `neighborhood` e
+         *     `postal_code` sao texto, e o CEP **nao** e convertido em ponto -- nem
+         *     aqui nem no app, que ignora de proposito a coordenada que o servico de
+         *     CEP devolve. O ponto do mapa e trabalho do painel, com mapa de toque,
+         *     como a propria `listDirectoryEntries` descreve.
+         *
+         *     **O CEP e guardado para o REVISOR** (cliente, 18/10: "pode armazenar o
+         *     cep sim!") e **nunca publicado**: ver `DirectorySuggestionInput.
+         *     postal_code`. Nao ha operacao de leitura de `directory_suggestions`
+         *     neste contrato, e o recibo abaixo nao o devolve.
+         *
+         *     ## As conferencias de texto, porque ninguem mais confere antes da fila
+         *
+         *     `display_name` e `note` recusam contato e pagamento (D59,
+         *     `code: contact_or_payment_detected`) e controle bidirecional
+         *     (`code: bidi_control`), como todo texto que a pessoa escreve. O contato
+         *     publico e a UNICA posicao em que telefone, site ou perfil pode entrar,
+         *     e ele e conferido pelo formato do proprio `public_contact.kind`.
+         *
+         *     ## Moderacao de palavras (`code: inappropriate_language`)
+         *
+         *     `display_name` e `note` recusam tambem xingamento e injuria, **na hora
+         *     da escrita** (pedido do cliente, 18/10/2026). A trava e do SERVIDOR: um
+         *     aviso de formulario evita que a pessoa perca o texto digitado, mas nao
+         *     protege nada, porque esta operacao atende chamada direta.
+         *
+         *     A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+         *     nem em `errors[]` nem em `detail`: devolve-la transformaria o `400` em
+         *     oraculo de quem quer descobrir o filtro. A mensagem e sempre a mesma e
+         *     diz o que fazer.
+         *
+         *     **Isto nao e a prova de contorno, e nao substitui a revisao.** A lista
+         *     pega palavra escrita por extenso; frase ofensiva sem palavra proibida,
+         *     palavra grudada em outra e troca de caractere nao prevista passam. A
+         *     protecao de fundo continua sendo a remocao pelo painel e a denuncia.
+         *
+         *     Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+         *     tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+         *     (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+         *     tolerancia. `city`, `state` e `neighborhood` nao passam pela moderacao.
+         */
+        post: operations["suggestDirectoryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A pagina de um profissional ou estabelecimento
+         * @description A tela de detalhe que o cartao de `Perto` passou a abrir. Mesmos campos
+         *     do cartao, mais a pontuacao agregada.
+         *
+         *     **EXIGE CONTA, pelo mesmo motivo de `listDirectoryEntries`** e nao por
+         *     um motivo novo: ela devolve `phone_e164`, e
+         *     `src/tools/portao-contrato-publico.ts` reprova esse campo em qualquer
+         *     operacao alcancavel sem conta. Afrouxar o `security` daqui reprova
+         *     nominalmente, igual lá.
+         *
+         *     **So entrada publicada.** `slug` de rascunho, oculto ou removido
+         *     responde `404`, e nao `403`: a autorizacao mora na clausula `WHERE`
+         *     (ADR-0021) e um `403` confirmaria que aquele endereco existe. Quem
+         *     chega por link de um perfil que saiu do ar le "nao encontramos",
+         *     que e a verdade que ele tem direito de saber.
+         *
+         *     **Nenhum campo novo de cadastro apareceu aqui.** Site, e-mail,
+         *     WhatsApp, redes sociais, horario de funcionamento e foto **nao
+         *     existem** em `professionals` -- nao ha coluna e nao ha painel que as
+         *     preencha. Esta operacao devolve o que ha. Declarar campo que ninguem
+         *     pode preencher produziria uma tela com seis linhas vazias permanentes,
+         *     que e pior do que uma tela curta.
+         *
+         *     ## A distancia, e por que ela e NULA aqui com mais frequencia
+         *
+         *     Mesma regra de `listDirectoryEntries`: `distance_m` arredondada a 100 m
+         *     (ADR-0006), nula quando a entrada nao tem coordenada ou quando quem
+         *     chama nao tem localizacao de referencia valida. **A coordenada nao
+         *     entra pela requisicao** -- o servidor usa a que ja guarda (BICHUS-92).
+         *     Nao ha geocodificacao neste produto: `city`, `state` e `neighborhood`
+         *     sao rotulo e filtro, jamais fonte de ponto.
+         */
+        get: operations["getDirectoryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * As avaliacoes que outras pessoas escreveram
+         * @description A lista que a pagina do local mostra, no formato que o cliente pediu:
+         *     quem escreveu, a nota, a data e o texto.
+         *
+         *     **A avaliacao de quem desabilitou a conta NAO E LISTADA, e nao vira
+         *     anonima.** O predicado e `conta_habilitada(uuid)` (migracao
+         *     `20261017000013`), que e o ponto unico da definicao e trata o NULO como
+         *     habilitado. A contagem e a media de `getDirectoryEntry` usam o MESMO
+         *     predicado, entao "128 avaliacoes" e a lista nunca discordam -- que e o
+         *     defeito que aparece quando a agregacao e o filtro da lista sao escritos
+         *     em dois lugares.
+         *
+         *     **`author_display_name` e nulavel**, e nulo nao e falha: conta sem nome
+         *     de exibicao e estado normal, e a tela escreve "Alguem da comunidade".
+         *     **Nenhuma outra coisa sobre o autor sai daqui** -- nem conta, nem
+         *     quantos pets tem, nem as outras avaliacoes dele. A BICHUS-174 proibe
+         *     expor vinculo entre duas pessoas, e uma lista de avaliacoes que
+         *     identificasse o autor de forma navegavel seria exatamente isso.
+         *
+         *     **A minha avaliacao tambem aparece nesta lista**, marcada com
+         *     `mine: true`, e nao em um bloco separado do servidor: a tela e que
+         *     decide tirá-la do fluxo e por o campo de edicao no lugar. Isso evita a
+         *     resposta em que a mesma avaliacao vem duas vezes.
+         *
+         *     **Texto vazio e normal.** Quem deu so a nota tem `body` nulo, e a lista
+         *     o inclui -- a nota e a avaliacao, e o texto e o opcional (decisao do
+         *     cliente, 18/10).
+         */
+        get: operations["listDirectoryEntryReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grava a minha avaliacao deste local, ou atualiza a que ja escrevi
+         * @description **`PUT` e nao `POST`, e a escolha e a regra de produto escrita no
+         *     metodo.** O cliente decidiu "uma avaliacao por pessoa por local, que
+         *     ela possa editar e apagar; enviar de novo ATUALIZA a dela, nao cria
+         *     segunda". Com `POST` o segundo envio seria `409` e a tela precisaria de
+         *     um segundo caminho ("ja existe, agora chame o outro verbo"); com `PUT`
+         *     o segundo envio e a propria edicao. O banco cobra o mesmo com
+         *     `UNIQUE (professional_id, author_user_id)`, entao a regra vale mesmo se
+         *     esta prosa for ignorada.
+         *
+         *     O corpo da resposta diz qual dos dois aconteceu em `created`, para a
+         *     tela escolher entre "Avaliacao publicada" e "Avaliacao atualizada".
+         *
+         *     ## Quem pode avaliar
+         *
+         *     **Conta com E-MAIL CONFIRMADO**, a mesma regua que o cliente definiu
+         *     para criar evento ("so usuarios com os dados validados conseguem criar
+         *     eventos"). Sem canal verificado: **`409`
+         *     `contact-channel-unverified`**, que e **o mesmo tipo de problema que
+         *     criar encontro devolve** -- reusado de proposito, e nao um codigo novo:
+         *     a regra e a mesma regra, e dois tipos para um conceito fariam o app
+         *     decidir por dois caminhos onde ha um. O que muda e o texto, e ele
+         *     precisa mudar ("confirme seu e-mail para propor um encontro" numa tela
+         *     de avaliar local manda a pessoa para o lugar errado).
+         *
+         *     **Este 409 e sobre QUEM CHAMA, nao sobre o recurso**, e por isso ele
+         *     nao contradiz o ADR-0021. A regra de `404` daquele ADR protege a
+         *     EXISTENCIA do recurso; aqui o recurso ja foi confirmado como existente
+         *     pela leitura, e o que falta e um atributo da propria conta de quem
+         *     pede. Responder `404` esconderia de alguem a razao pela qual o proprio
+         *     botao dele nao funciona.
+         *
+         *     **Na pratica isso e e-mail**, porque nada em `src/` grava
+         *     `phone_verified_at`: a coluna existe e so e zerada. O predicado e o
+         *     mesmo `OR` de `estadoParaCriarEncontro` (e-mail OU telefone
+         *     verificado), copiado dele e nao escolhido aqui.
+         *
+         *     **Visitante sem conta nao escreve e nao e surpreendido**: `401`, e a
+         *     tela nem oferece o campo (ela sabe se ha sessao antes de desenhar).
+         *
+         *     **A avaliacao APARECE NA HORA.** Nao ha fila de aprovacao, e a ausencia
+         *     e decisao do cliente de 18/10, pedida com estas palavras: "onde ficara
+         *     disponivel para outros usuarios, como acontece na playstore". **Nao
+         *     confundir com a INDICACAO de um local novo**, que continua passando por
+         *     revisao do administrador: aquela cria um negocio com nome e endereco,
+         *     esta opina sobre um que ja esta no ar.
+         *
+         *     O contrapeso de a publicacao ser imediata e a denuncia
+         *     (`reportDirectoryEntryReview`) e a remocao pelo administrador
+         *     (`removeAdminDirectoryReview`), que entram junto nesta mesma fatia
+         *     exatamente porque isto fala de negocio real com nome e endereco.
+         *
+         *     ## O TETO QUE NAO EXISTE, e a lacuna e declarada
+         *
+         *     O teto acima e por CONTA (20/h). Ele impede uma conta de escrever em
+         *     massa, e a unicidade `(local, autor)` ja limita a UMA avaliacao por
+         *     pessoa por local -- entao uma conta so nao consegue empilhar notas
+         *     contra um negocio.
+         *
+         *     **O que ele NAO cobre e o ataque por MUITAS contas contra UM local.**
+         *     Para isso o balde precisaria ser por ALVO, e nao por quem chama -- uma
+         *     entrada `[directory_entry]` em `x-rate-limit`. Ela nao entrou porque
+         *     `directory_entry` nao esta em `DIMENSOES_CONHECIDAS` de
+         *     `src/shared/http/aplicacao-de-teto.ts`, e aquele arquivo e explicito
+         *     sobre o que isso significa: **dimensao nova e decisao de politica, nao
+         *     detalhe de rota.** Foi a mesma razao que manteve `q` fora do contrato
+         *     ate 22/09.
+         *
+         *     Inventar a dimensao aqui decidiria sozinho uma politica de plataforma
+         *     -- e um teto por alvo tem um custo de produto real que precisa ser
+         *     aceito por quem decide: um local que vira assunto legitimo (uma boa
+         *     indicacao que circula num grupo) passa a recusar avaliacao de gente de
+         *     boa-fe. **Fica relatado e nao resolvido.** Enquanto nao houver, a
+         *     contencao desse caso e a denuncia e a remocao pelo administrador, que e
+         *     humana e posterior.
+         *
+         *     ## Avaliar perfil nao reivindicado e permitido
+         *
+         *     Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao
+         *     reivindicado e permitida e fica visivel: e o que da valor ao diretorio
+         *     antes de os profissionais chegarem". Como hoje NENHUMA entrada e
+         *     reivindicada, este e o unico caso que existe.
+         */
+        put: operations["putMyDirectoryEntryReview"];
+        post?: never;
+        /**
+         * Apaga a minha avaliacao deste local
+         * @description **So a minha**, e o dono e resolvido na clausula `WHERE` e nao num
+         *     ramo de permissao: a consulta apaga onde `author_user_id` e quem chama.
+         *     Nao ha caminho em que esta rota alcance a avaliacao de outra pessoa,
+         *     nem com o identificador dela na mao -- ela nao aceita identificador de
+         *     avaliacao nenhum.
+         *
+         *     **Apagar e do AUTOR, nunca do avaliado.** O ADR-0011 e explicito: o
+         *     profissional "ganha direito de resposta publica, uma por avaliacao, e
+         *     nunca o direito de apagar". Quem contesta denuncia, e quem remove e a
+         *     moderacao, com o motivo na trilha. Esta rota nao abre aquela porta: o
+         *     avaliado nao e o autor.
+         *
+         *     **Idempotente.** Nao ter avaliacao e chamar isto devolve `204`, e nao
+         *     `404`: o estado pedido ("eu nao tenho avaliacao aqui") e o estado
+         *     final, e um erro aqui faria a tela tratar como falha um toque duplo no
+         *     botao. O `404` fica reservado para o local que nao existe ou nao esta
+         *     publicado.
+         *
+         *     A media e a contagem do local caem junto, porque sao calculadas na
+         *     consulta e nao guardadas (ver `DirectoryRating`).
+         */
+        delete: operations["deleteMyDirectoryEntryReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/directory/entries/{slug}/reviews/{reviewRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia uma avaliacao para a moderacao
+         * @description O contrapeso de a avaliacao aparecer na hora. Sem ela, a unica resposta
+         *     a uma avaliacao caluniosa sobre um negocio com nome e endereco seria
+         *     esperar que alguem da equipe passasse por ali.
+         *
+         *     **A denuncia NAO esconde a avaliacao**, e isso e deliberado: se
+         *     esconder, uma denuncia e todo o custo de apagar a avaliacao de um
+         *     concorrente, e o primeiro uso que alguem daria a esta rota seria esse.
+         *     Ela enfileira para a moderacao, que decide e registra o motivo
+         *     (ADR-0011). Quem remove e `removeAdminDirectoryReview`.
+         *
+         *     **`202` e nao `200`**: o que esta rota promete e que o pedido foi
+         *     recebido, nao que alguem ja olhou. Prometer decisao seria mentir sobre
+         *     o que existe -- nao ha equipe de moderacao de plantao.
+         *
+         *     **Denunciar duas vezes a mesma avaliacao nao duplica a fila** e
+         *     tambem nao devolve erro: a segunda chamada responde `202` e incrementa
+         *     a contagem de repeticao, igual a `conversation_reports` (migracao
+         *     `20260928000009`). Erro aqui ensinaria a quem denuncia que ele ja
+         *     denunciou, o que nao e informacao dele e nao muda nada.
+         *
+         *     **A propria avaliacao nao pode ser denunciada por quem a escreveu**
+         *     (`400`, `code: own_review`): quem quer tirar a sua do ar usa o
+         *     `DELETE`, que e a porta certa e imediata.
+         */
+        post: operations["reportDirectoryEntryReview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1814,9 +2633,16 @@ export interface paths {
         /**
          * Um item da vitrine, com todas as imagens
          * @description O detalhe do item: o mesmo `StoreItemSummary` da lista, mais **todas as
-         *     imagens prontas**, na ordem do painel (ADR-0027 item 16). A lista
-         *     continua trazendo so a principal, em `image_url`, para nao pesar a
-         *     vitrine.
+         *     imagens prontas**, na ordem do painel (ADR-0027 item 16).
+         *
+         *     **A lista TAMBEM traz as imagens desde 17/10/2026**, em
+         *     `StoreItemSummary.images` (campo aditivo e opcional, com `image_url`
+         *     intocado), e a vitrine desenha carrossel com elas. O que este detalhe
+         *     acrescenta ao resumo e `images` deixar de ser opcional -- aqui ele
+         *     sempre sai. O paragrafo que estava aqui dizia que a lista trazia so a
+         *     principal "para nao pesar a vitrine"; o peso real esta em BAIXAR as
+         *     imagens, e nao em receber os enderecos delas, e quem resolve isso e o
+         *     carregamento sob demanda no cliente.
          *
          *     Publica, pela mesma razao de `listStoreItems`, e com as mesmas regras:
          *     nenhum UUID sai, e o preco vencido **sai sem valor**, com
@@ -1827,6 +2653,60 @@ export interface paths {
         get: operations["getStoreItem"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/my-photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da foto do proprio usuario
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `people/`, que e proprio e nao compartilhado com a `Loja`, a
+         *     `Rede` nem o diretorio: foto de pessoa e foto de estabelecimento tem
+         *     regimes de privacidade diferentes (ADR-0010), e prefixos separados sao o
+         *     que permite uma politica de balde valer para uma e nao para a outra.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O envio e da CONTA.** `updateMe` so confirma `upload_id` cuja intencao
+         *     e da propria conta (a conferencia esta na clausula `WHERE`), e
+         *     `upload_id` de outra pessoa, de outro proposito, ja usado ou vencido e
+         *     recusado com `400` (`code: upload_not_usable`), sem dizer qual dos casos
+         *     ocorreu.
+         *
+         *     **O teto e 5 MB e ele vale no SERVIDOR**: `byte_size` acima dele e
+         *     recusado aqui, antes de qualquer assinatura, e a politica assinada leva o
+         *     mesmo numero dentro dela -- e ela que impede o envio direto ao
+         *     armazenamento de passar por cima da recusa. A tela diz o numero tambem,
+         *     mas a tela nao e a regra.
+         *
+         *     Dimensao minima 300 x 300: `width`/`height` sao opcionais e, quando vem
+         *     abaixo dela, respondem `422 image-too-small` **antes** de assinar. Quem
+         *     decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; conta sem foto e estado normal
+         *     (`Me.photo` nulo).
+         *
+         *     **Quem ve a foto: so o dono.** Ela sai em `getMe` e em nenhuma outra
+         *     resposta. O selo de validado nao e enviado nem escolhido aqui -- ele e
+         *     `Me.email_verified`.
+         */
+        post: operations["createMyPhotoUploadIntent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2318,6 +3198,187 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir conexao a partir de um convite
+         * @description Cria o pedido de conexao e responde **201** com a aresta no vocabulario
+         *     do app. A conexao e **SIMETRICA, com aceite**: nao existe "seguir", e
+         *     nao existe conexao de mao unica (decisao do cliente de 18/10/2026).
+         *
+         *     **O corpo carrega um TOKEN DE CONVITE, e nunca um identificador de
+         *     pessoa**, e isto e o coracao do desenho. A regra dele: *"o que nao pode
+         *     e ser publico, sem ter nenhum relacionamento"*. Aceitar aqui um apelido
+         *     seria busca de pessoas pela porta de tras e um oraculo de existencia de
+         *     apelido; aceitar um identificador de pessoa seria o endereco estavel e
+         *     compartilhavel que matou a descoberta por link. **Nao existe nenhum dos
+         *     dois, em nenhuma operacao deste contrato.**
+         *
+         *     O convite nasce de uma das duas formas, e as duas ja carregam a relacao
+         *     exigida: **conexao ancorada** no contexto (caso de pet encerrado como
+         *     devolvido, ou encontro em que os dois estiveram) e **codigo presencial**
+         *     lido cara a cara, com token rotativo de 5 minutos. **Nenhuma das duas
+         *     esta implementada**, entao hoje toda chamada desta operacao responde
+         *     **404** -- e isso e o desenho, nao uma lacuna.
+         *
+         *     **Idempotente.** Pedir de novo sobre uma aresta viva devolve o que ja
+         *     existe e nao cria linha nova. **A recusa e invisivel**: para quem pediu,
+         *     a recusada se projeta como `pending_sent` ate expirar, e nenhuma
+         *     resposta distingue recusado de nao respondido.
+         *
+         *     Token inexistente, expirado, de outra conta, apontando para a propria
+         *     conta, para conta desabilitada ou para quem bloqueou quem chama: o
+         *     **mesmo 404** (ADR-0021), nunca 403.
+         */
+        post: operations["requestConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os pedidos de conexao da propria conta
+         * @description Uma das **duas caixas de pedidos** da propria conta: `received` (o que
+         *     chegou e espera decisao) e `sent` (o que a conta enviou).
+         *
+         *     **Esta NAO e a lista de conexoes, e a lista de conexoes nao existe neste
+         *     contrato** -- nem de terceiro, nem do proprio dono. Pedido aceito **nao
+         *     aparece em nenhuma das duas caixas**, e e essa linha que impede a lista
+         *     de conexoes de nascer por descuido dentro de uma caixa de pedidos. O que
+         *     o dono tem sobre as proprias conexoes e a **contagem**, em
+         *     `getMyConnectionSummary`: contagem nao diz QUEM, e e essa diferenca que
+         *     a torna publicavel onde a lista nao e.
+         *
+         *     `received` traz so pendente vivo. `sent` traz pendente **e recusado**
+         *     dentro da validade, os dois com `state: pending_sent` -- e e assim que a
+         *     recusa fica silenciosa: a recusada desaparece quando a validade de 30
+         *     dias passa, exatamente como um pedido que ninguem respondeu. **Nao ha
+         *     valor `declined` em `ConnectionAppState`.**
+         *
+         *     **Sem busca, sem ordenacao escolhida e sem filtro de pessoa.** A ordem e
+         *     fixa (mais recentes primeiro) porque qualquer recorte por pessoa aqui
+         *     seria uma superficie de enumeracao.
+         */
+        get: operations["listMyConnectionRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os numeros das proprias conexoes
+         * @description **So numeros, e so da propria conta.** E o que permite a tela dizer
+         *     "voce tem 12 de 150" sem existir lista de conexoes em lugar nenhum.
+         *
+         *     `connection_limit` vem do servidor e nao e constante do aplicativo: o
+         *     teto e numero que se **sobe** depois (e nunca se desce), e um build
+         *     antigo com o numero gravado mostraria um limite que deixou de valer.
+         */
+        get: operations["getMyConnectionSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{connectionRef}/acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceitar um pedido de conexao
+         * @description **So o destinatario de um pendente vivo aceita**, e e este o unico
+         *     caminho que cria uma conexao: **sem aceite nao ha conexao**, e nenhum
+         *     dado de conectado (pets nomeados, vitrine, publicacoes, bairro) tem por
+         *     onde aparecer antes dele.
+         *
+         *     `ref` de aresta alheia, pendente expirado, pedido ja aceito, pedido que
+         *     a propria conta enviou, conta desabilitada de qualquer um dos dois lados
+         *     e par bloqueado: o **mesmo 404** (ADR-0021), nunca 403. Os predicados
+         *     moram na clausula `WHERE` do `UPDATE`.
+         *
+         *     Aceitar cria conexao para os **dois**, entao o teto de 150 e cobrado nos
+         *     dois lados (`400`, `code: connection_limit_reached` ou
+         *     `addressee_connection_limit_reached`). Linha que **ja existe** nunca e
+         *     recusada retroativamente: o teto vale para o pedido e o aceite novos.
+         */
+        post: operations["acceptConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{connectionRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Recusar, cancelar ou desfazer
+         * @description **Uma operacao para as tres**, e o corpo da resposta e **vazio nas
+         *     tres** (204). Do lado de fora as tres sao "esta aresta deixa de existir
+         *     para mim", e a diferenca e **derivada** do estado e do papel, no
+         *     servidor -- nunca recebida de quem chama. Um cliente que pudesse mandar
+         *     a intencao lavaria a recusa mandando "desfazer" num pendente.
+         *
+         *     **O 204 e o que mantem a recusa silenciosa.** Um corpo que dissesse
+         *     "recusado" seria o *"ela recusou voce"* que o desenho recusa, e e isso
+         *     que faz as pessoas aceitarem estranhos para nao criar atrito. O que de
+         *     fato aconteceu vai para a trilha, nunca para a resposta.
+         *
+         *     O que o servidor faz em cada caso: **recusa** (pendente, quem chama
+         *     recebeu) guarda a recusa e um descanso de 90 dias, porque apagar a linha
+         *     faria o proximo pedido nascer pendente e lavaria a recusa;
+         *     **cancelamento** (pendente, quem chama pediu) e **desfazer** (aceita,
+         *     qualquer um dos dois) apagam a linha. **Desfazer nao avisa ninguem.**
+         *
+         *     `ref` desconhecido, de aresta alheia, de aresta ja encerrada, de conta
+         *     desabilitada de qualquer lado e de par bloqueado: o mesmo 404.
+         */
+        delete: operations["endConnection"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3470,6 +4531,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/directory/reviews/{reviewRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove uma avaliacao do ar, com o motivo na trilha
+         * @description **Remocao e EXCLUSAO LOGICA**: `status` vai para `'removed'` e
+         *     `moderation_reason` guarda o motivo. A linha fica. O ADR-0011 manda a
+         *     remocao ser "decisao de moderacao nossa, registrada na trilha com o
+         *     motivo", e trilha que aponta para uma linha apagada nao e trilha.
+         *
+         *     A avaliacao sai imediatamente da lista, da media e da contagem --
+         *     porque as tres leem `status = 'published'` na mesma clausula.
+         *
+         *     **O motivo e OBRIGATORIO**, e e a diferenca entre moderacao e
+         *     arbitrio: quem remove escreve por que, e isso fica legivel para quem
+         *     auditar depois. Ele **nunca sai para o app**: nenhuma resposta de
+         *     leitura publica projeta `moderation_reason`.
+         *
+         *     **Nao ha rota de restaurar nesta fatia.** Ela e a continuacao obvia e
+         *     ficou de fora conscientemente; `status` aceita `'published'` de volta,
+         *     entao restaurar nao exige migracao nova.
+         */
+        delete: operations["removeAdminDirectoryReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/network/join-requests/{requestRef}/decline": {
         parameters: {
             query?: never;
@@ -3493,6 +4598,832 @@ export interface paths {
          *     e nao recoloca o pedido na fila (ADR-0027 item 17 e 12.11). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
          */
         post: operations["declineAdminNetworkJoinRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Entradas do diretorio de Perto, em qualquer situacao
+         * @description A lista do painel. Diferente de `listDirectoryEntries`, que serve o
+         *     aplicativo, esta traz **rascunho, oculta e removida** junto com a
+         *     publicada: quem administra precisa achar o que ainda nao esta no ar.
+         *
+         *     **Nao ha ordem por distancia aqui.** Distancia depende da localizacao
+         *     de referencia de quem chama (ADR-0006), e o painel e operado de uma
+         *     mesa que nao tem relacao nenhuma com onde a entrada atende. A ordem e
+         *     por nome ou por ultima alteracao.
+         */
+        get: operations["listAdminDirectoryEntries"];
+        put?: never;
+        /**
+         * Cadastra uma entrada do diretorio
+         * @description **A entrada nasce RASCUNHO** (`professionals.status` tem
+         *     `DEFAULT 'draft'`), e so aparece em `Perto` depois de um `PATCH` com
+         *     `status: published`. Nao e zelo: o cadastro de um estabelecimento tem
+         *     campos que o operador costuma buscar em duas sessoes, e publicar na
+         *     criacao faria o diretorio mostrar meia clinica.
+         *
+         *     **`source` e `import`, e `claim_status` e `unclaimed`.** Nao e atalho:
+         *     sao os unicos valores que o `CHECK professionals_aceite_antes_do_perfil`
+         *     admite para uma entrada sem titular, e e exatamente o que esta
+         *     acontecendo -- o painel cadastrou a entidade, e ninguem do outro lado
+         *     reivindicou o perfil ainda. `self` e `invited` sao os caminhos que
+         *     passam por aceite de quem o perfil descreve, e dizer um deles aqui
+         *     seria gravar um aceite que nao houve.
+         *
+         *     **Nenhum documento e pedido.** `cnpj`, `crmv_number` e `crmv_uf`
+         *     existem na tabela e **nao estao neste corpo**: um profissional pode ser
+         *     pessoa fisica, e o painel nao precisa de documento dele para publicar
+         *     uma entrada de diretorio. Quem prova o que, e com qual evidencia, e
+         *     `entity_verifications`, que tem fluxo proprio e nao passa por aqui.
+         *
+         *     **`verification_level` tambem nao esta aqui**, e o corpo e fechado
+         *     (`additionalProperties: false`), entao manda-lo e `400` e nao campo
+         *     ignorado em silencio: o nivel deriva da verificacao aprovada mais forte
+         *     da entidade, e um perfil que declarasse o proprio nivel tornaria a
+         *     verificacao decorativa.
+         *
+         *     **`geo` nao esta aqui** (decisao 9.4 pendente): nao ha geocodificacao
+         *     neste produto (ADR-0006), entao cidade e bairro digitados nunca viram
+         *     ponto. A entrada e publicavel sem coordenada e simplesmente nao
+         *     participa da ordenacao por distancia, que `distance_available: false`
+         *     ja sabe dizer.
+         */
+        post: operations["createAdminDirectoryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/entries/{entrySlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma entrada do diretorio
+         * @description A entrada em qualquer situacao, com o `ETag` para a proxima escrita.
+         */
+        get: operations["getAdminDirectoryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Altera, publica ou retira uma entrada do diretorio
+         * @description `If-Match` obrigatorio: dois administradores editando a mesma entrada
+         *     nao se sobrescrevem em silencio.
+         *
+         *     **Editar NAO despublica.** Uma entrada publicada continua publicada
+         *     depois de uma edicao de campo. Se editar derrubasse para rascunho, o
+         *     operador corrigiria um telefone e a clinica sumiria de `Perto` sem
+         *     ninguem ser avisado -- o modo de falhar mais caro que um diretorio tem,
+         *     porque e silencioso e do lado de quem nao consegue ver.
+         *
+         *     **O que a edicao nao pode fazer e QUEBRAR a publicacao.** Se o corpo
+         *     deixaria uma entrada publicada sem `city`, sem `state` ou sem nenhum
+         *     canal de contato, a escrita e recusada com `400` nomeando os campos, e
+         *     nao aceita e despublicada em silencio. A mesma regua vale para a
+         *     transicao `draft -> published` (ADR-0023 secao 2, camada 2): duas
+         *     definicoes de "completo" e exatamente o que aquela secao proibe. Toda
+         *     leitura da entrada ja traz a lista em `missing_to_publish`, para a tela
+         *     dizer o que falta antes de alguem clicar em publicar.
+         *
+         *     **Despublicar e ato explicito**, com `status: hidden` ou `removed`, e
+         *     nunca efeito colateral de outra coisa.
+         *
+         *     `phone_e164` passa a ser **escrito** por aqui. Ele continua sendo o
+         *     telefone COMERCIAL de quem aceitou aparecer para ser contratado
+         *     (ADR-0011 secao 4), e o formato e E.164 (`+` e 8 a 15 digitos): o painel
+         *     recebe o numero com mascara brasileira e manda E.164.
+         */
+        patch: operations["updateAdminDirectoryEntry"];
+        trace?: never;
+    };
+    "/admin/postal-codes/{postalCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O endereco de um CEP, para poupar digitacao no cadastro
+         * @description Troca um CEP por **rua, bairro, cidade e UF -- texto**, que e exatamente
+         *     o que o operador digitaria. Serve o formulario de entrada do diretorio
+         *     de `Perto`, e serve qualquer formulario nosso com campo de CEP.
+         *
+         *     **ISTO NAO E GEOCODIFICACAO, e a distincao e o que autoriza a
+         *     operacao.** A ADR-0006 proibe transformar endereco em COORDENADA; aqui
+         *     o caminho e o contrario. A reserva (BrasilAPI) devolve
+         *     `location.coordinates` com latitude e longitude -- medido em 17/10/2026
+         *     --, e o adaptador le quatro campos e **ignora o resto de proposito**.
+         *     Nenhuma latitude, nenhuma longitude, nenhum ponto, nenhum indice
+         *     espacial, e nenhuma coluna onde guardar.
+         *
+         *     **O que sai do nosso servidor para o terceiro e so o CEP.** Oito
+         *     digitos, que sao um codigo postal publico e nao o endereco de ninguem:
+         *     sem numero e sem nome, ele aponta para um trecho de rua, nao para uma
+         *     casa. Nem conta, nem sessao, nem nome, nem token vao na chamada de
+         *     saida.
+         *
+         *     **Nenhum desfecho desta operacao impede um cadastro.** `404` quer dizer
+         *     "este CEP nao existe nas bases" e `503` quer dizer "nao conseguimos
+         *     consultar agora"; nos dois a tela continua inteira, com os campos
+         *     editaveis e o botao de salvar vivo. CEP e conveniencia de digitacao, e
+         *     servico de terceiro fora do ar nao pode travar o cadastro de uma
+         *     clinica.
+         *
+         *     **Nada e guardado aqui.** A operacao nao escreve linha nenhuma: quem
+         *     grava o endereco e `createAdminDirectoryEntry` /
+         *     `updateAdminDirectoryEntry`, com o que o operador confirmou na tela.
+         */
+        get: operations["lookupAdminPostalCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de indicacoes que a comunidade mandou para o Perto
+         * @description So existe no painel: nenhuma operacao do aplicativo lista indicacao de
+         *     ninguem, nem como contagem. Sem filtro, vem a fila de `pending`, da
+         *     indicacao mais antiga para a mais nova -- a unica ordem justa numa fila
+         *     de trabalho humano, e e a ordem do indice parcial
+         *     `directory_suggestions_fila_de_revisao`.
+         *
+         *     **A indicacao decidida nao sai da fila nem do banco**: com
+         *     `review_status=approved` ou `review_status=declined` ela continua
+         *     legivel, com o motivo da recusa e o endereco da entrada que a aprovacao
+         *     produziu. Recusar nao apaga.
+         *
+         *     **`pending_total` e a contagem do aviso do menu**, e ela ignora o filtro
+         *     de proposito: o numero que o item da navegacao mostra responde "quanto
+         *     trabalho esta esperando", nao "quantas linhas esta pagina trouxe". Ele
+         *     passa pelo MESMO filtro de conta desabilitada da listagem -- um numero
+         *     que contasse o que a lista nao mostra faria o painel apontar para uma
+         *     fila vazia.
+         *
+         *     **Nada de quem indicou.** Nem nome, nem contagem por entidade, nem a
+         *     existencia de uma conta por tras: a coluna da autoria nunca sai do
+         *     servidor (ADR-0011 secao 4). O que a fila mostra e a ENTIDADE indicada,
+         *     mais o recado que a pessoa escreveu para quem revisa.
+         */
+        get: operations["listAdminDirectorySuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma indicacao da fila
+         * @description A indicacao em qualquer estado da revisao, para a tela de decisao poder
+         *     mostrar o contato publico e o recado inteiros antes de alguem decidir.
+         *
+         *     **Nao ha `ETag` aqui**, e a ausencia e a mesma das outras duas filas: a
+         *     decisao nao e uma edicao campo a campo, e decidir o que ja foi decidido
+         *     responde `400` com `code: suggestion_not_pending`.
+         *
+         *     Indicacao que nao existe e indicacao de **conta desabilitada** respondem
+         *     o mesmo `404`, e o predicado esta no `WHERE` e nao num `if` depois da
+         *     leitura (ADR-0021): para esta rota ela nao existe, e nunca `403`.
+         */
+        get: operations["getAdminDirectorySuggestion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprova a indicacao, e a entrada do diretorio passa a existir
+         * @description **Aprovar e o ponto da fila inteira: aprovado quer dizer que aparece no
+         *     `Perto`.** A operacao faz tres coisas numa transacao, e a trilha e a
+         *     quarta: marca a indicacao `approved`, grava a entrada do diretorio e
+         *     liga uma na outra.
+         *
+         *     **A entrada e escrita pelo MESMO caminho de `createAdminDirectoryEntry`**
+         *     -- a mesma transacao, o mesmo `inserirEntrada`, o mesmo
+         *     `source: import` e `claim_status: unclaimed`. Nao ha segunda escrita de
+         *     entrada neste produto: duas escritas seriam duas definicoes de como uma
+         *     entrada nasce, e e isso que o ADR-0023 secao 2 proibe.
+         *
+         *     `source` continua `import` e **nunca `community`**: a emenda 1 do
+         *     ADR-0011 tirou esse valor do `CHECK` de `professionals.source`, e quem
+         *     grava aqui e o painel decidindo -- exatamente a mesma situacao de um
+         *     operador que digita a clinica na mao, que e o que `import` descreve.
+         *     A indicacao da comunidade e o que trouxe o nome ate a mesa; ela nao e o
+         *     aceite, e nenhum aceite e gravado por aqui.
+         *
+         *     ## O LOCAL JA EXISTE: `slug` e o que resolve a duplicata
+         *
+         *     `slug` e obrigatorio e e o endereco publico da entrada. **Se ja existir
+         *     entrada com esse `slug`, nada e criado e nada na entrada existente e
+         *     alterado**: a indicacao e marcada `approved` e ligada aquela entrada, e
+         *     a resposta volta com `entry_created: false`. E assim, e nao com `409`,
+         *     porque duplicata e o caso COMUM desta fila -- duas pessoas indicam a
+         *     mesma clinica, ou indicam uma que o painel ja cadastrou -- e um conflito
+         *     deixaria a indicacao presa em `pending` para sempre, sem caminho nenhum
+         *     de sair. O operador procura o nome em `Perto`, acha
+         *     `clinica-sao-jorge`, aprova com esse `slug` e a fila anda.
+         *
+         *     Com `slug` novo, a entrada e criada e a resposta volta com
+         *     `entry_created: true`. **Ela vai ao ar (`published`) quando estiver
+         *     completa** pela mesma regua de `missing_to_publish` -- endereco, cidade,
+         *     UF e um canal de contato --, e fica em `draft` quando nao estiver. Quem
+         *     fica em `draft` e, na pratica, a indicacao cujo contato publico e
+         *     `website` ou `instagram`: `professionals` so tem `phone_e164` como canal,
+         *     e inventar coluna para carregar os outros dois nao e trabalho desta
+         *     fila. Para esses casos o corpo aceita `phone_e164`, que e o telefone
+         *     COMERCIAL da entidade: informado, a entrada nasce no ar; omitido, ela
+         *     nasce rascunho e `entry.missing_to_publish` diz o que falta.
+         *
+         *     **Indicacao ja decidida responde `400`** (`code: suggestion_not_pending`):
+         *     aprovar duas vezes criaria uma segunda entrada do mesmo lugar, que e a
+         *     duplicata que esta operacao existe para evitar. Indicacao inexistente, ou
+         *     de conta desabilitada, responde `404` (ADR-0021).
+         *
+         *     **Sem geocodificacao** (ADR-0006): `city`, `state` e `neighborhood` da
+         *     indicacao sao copiados como ROTULO DE TEXTO, e nao viram ponto. A
+         *     entrada publicada sem coordenada simplesmente nao participa da ordem por
+         *     distancia, e `distance_available: false` ja sabe dizer isso.
+         *
+         *     **O recado de quem indicou (`note`) NAO e copiado para a entrada.** Ele
+         *     e para quem revisa, e publica-lo faria o diretorio carregar avaliacao da
+         *     comunidade -- outro modelo, que nao existe (ADR-0011 secao 5.4).
+         */
+        post: operations["approveAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa a indicacao, com o motivo escrito
+         * @description **O motivo e obrigatorio**, ao contrario das outras duas filas do painel
+         *     -- e a diferenca e de proposito. La o motivo seria mensagem para o tutor,
+         *     e mensagem e v2. Aqui o motivo e para o PROXIMO REVISOR: a mesma clinica
+         *     vai ser indicada outra vez, e sem o motivo escrito quem olhar depois
+         *     refaz a checagem que alguem ja fez -- "nao atende pet", "fechou",
+         *     "telefone de pessoa fisica". O motivo nao e publicado em lugar nenhum e
+         *     nao chega a quem indicou.
+         *
+         *     **A indicacao NAO e apagada.** Ela fica com `review_status: declined`,
+         *     `decided_at` preenchido e `decline_reason` gravado, e continua legivel
+         *     em `listAdminDirectorySuggestions` com
+         *     `review_status=declined`. A `20261017000004` ja recusa a propria descida
+         *     quando ha indicacao gravada, pelo mesmo motivo: o que a comunidade
+         *     escreveu, e a memoria de quem revisou, nao se descarta em silencio.
+         *
+         *     **Indicacao ja decidida responde `400`**
+         *     (`code: suggestion_not_pending`), e nao `409`: recusar o que foi aprovado
+         *     apagaria uma entrada que ja pode estar no ar. Reverter decisao nao e
+         *     operacao desta fila -- a entrada se retira por
+         *     `updateAdminDirectoryEntry` com `status: hidden`, que e onde essa decisao
+         *     mora.
+         *
+         *     Indicacao inexistente, ou de conta desabilitada, responde `404`
+         *     (ADR-0021).
+         */
+        post: operations["declineAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de moderacao -- o que a comunidade denunciou
+         * @description So existe no painel: nenhuma operacao do aplicativo lista denuncia de
+         *     ninguem, nem como contagem. Sem filtro, vem a fila ABERTA, da denuncia
+         *     mais antiga para a mais nova -- a unica ordem justa numa fila de
+         *     trabalho humano, e e a ordem dos indices parciais das duas tabelas de
+         *     denuncia.
+         *
+         *     ## O ITEM E O ALVO, E NAO A DENUNCIA
+         *
+         *     Tres pessoas denunciando a mesma avaliacao viram UM item, com
+         *     `report_count: 3`. Se o item fosse a denuncia, quem modera decidiria a
+         *     mesma coisa tres vezes sem nunca ver o numero que importa --
+         *     **`repeat_total` e o sinal que separa briga de problema real**: uma
+         *     briga de vizinho da 1 e 1, um problema real da 7 e 11.
+         *
+         *     Consequencia: as duas acoes resolvem TODAS as denuncias abertas daquele
+         *     alvo de uma vez. Nao existe "esta denuncia sim, aquela nao" sobre o
+         *     mesmo conteudo -- ele ou sai do ar ou fica.
+         *
+         *     ## AS ORIGENS: duas construidas
+         *
+         *     `review` (denuncia de avaliacao do `Perto`) e `conversation` (denuncia
+         *     de conversa mediada). **Denuncia de PERFIL e de FOTO vem na frente de
+         *     comunidade e NAO existe**: nao ha tabela de nenhuma das duas neste
+         *     repositorio, e `ModerationOrigin` nao as declara de proposito -- um
+         *     valor de `enum` sem tabela por tras faria o contrato prometer o que
+         *     nenhuma consulta devolve. O que esta pronto para elas e o caminho: a
+         *     visao `fila_de_moderacao` (migracao `20261018000009`) recebe cada
+         *     origem como uma perna de `UNION ALL`, e nenhuma consulta de `src/` muda.
+         *
+         *     ## `pending_total` E A CONTAGEM DO AVISO DO MENU
+         *
+         *     Ela IGNORA o filtro de proposito: o numero que o item da navegacao
+         *     mostra responde "quanto trabalho esta esperando", nao "quantas linhas
+         *     esta pagina trouxe". Passa pelo MESMO filtro de conta desabilitada da
+         *     listagem e da leitura -- **os tres lugares**, porque filtrar em um so
+         *     faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito que a
+         *     fila da Rede ja produziu.
+         *
+         *     ## NADA DO DENUNCIANTE E NADA DO DENUNCIADO
+         *
+         *     Em campo nenhum: nem nome, nem UUID, nem a existencia de uma conta por
+         *     tras. Os dois sao pessoas que nao pediram para estar numa tela de
+         *     administrador, e a decisao e sobre o CONTEUDO.
+         */
+        get: operations["listAdminModerationReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um item da fila de moderacao
+         * @description O item em qualquer estado, para a tela de decisao poder mostrar o
+         *     conteudo e o relato inteiros antes de alguem decidir -- e para poder
+         *     reabrir um item ja decidido e LER O MOTIVO da decisao, que e o que
+         *     impede o proximo moderador de refazer o juizo que alguem ja fez.
+         *
+         *     **Nao ha `ETag`**, e a ausencia e a mesma das outras filas do painel: a
+         *     decisao nao e uma edicao campo a campo, e decidir o que ja foi decidido
+         *     responde `400` com `code: report_already_resolved`.
+         *
+         *     Alvo que nao existe, alvo sem denuncia nenhuma e denuncia de **conta
+         *     desabilitada** respondem o mesmo `404`, e o predicado esta no `WHERE` e
+         *     nao num `if` depois da leitura (ADR-0021): para esta rota ela nao
+         *     existe, e nunca `403`.
+         */
+        get: operations["getAdminModerationReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}/removal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove o conteudo denunciado do ar, com o motivo escrito
+         * @description **EXCLUSAO LOGICA, e nunca `DELETE`.** E por isso que esta operacao e
+         *     `POST` em sub-recurso de acao e nao `DELETE`: um `DELETE` diria o
+         *     contrario do que ela faz.
+         *
+         *     O que acontece, numa transacao, com a trilha como ultimo passo:
+         *
+         *     1. o conteudo sai do ar -- `professional_reviews.status = 'removed'` na
+         *        origem `review`, `conversations.moderation_removed_at` na origem
+         *        `conversation` --, com o motivo gravado na propria linha do
+         *        conteudo, por `CHECK` cruzado que nao deixa um sem o outro;
+         *     2. **todas** as denuncias abertas daquele alvo recebem
+         *        `resolution: content_removed` e o motivo. A linha da denuncia FICA.
+         *
+         *     A ordem e esta de proposito: marcar a denuncia antes de esconder o
+         *     conteudo deixaria, numa falha no meio, uma denuncia resolvida sobre
+         *     conteudo que continua no ar -- e a fila nao mostraria mais o item para
+         *     ninguem consertar.
+         *
+         *     ## O MOTIVO E OBRIGATORIO, e e a diferenca entre moderacao e arbitrio
+         *
+         *     De 3 a 500 simbolos, o mesmo par do `CHECK` do banco. Ele vai para a
+         *     trilha e para a linha do conteudo. **Nao e publicado, nao chega a quem
+         *     denunciou e nao chega a quem foi denunciado.**
+         *
+         *     ## NINGUEM E AVISADO, e isso e decisao de desenho
+         *
+         *     O denunciante NAO recebe resultado e o denunciado NAO e avisado --
+         *     avisar o denunciado e retaliacao. Nenhuma notificacao e enfileirada por
+         *     esta operacao, em nenhum canal.
+         *
+         *     ## NENHUMA ACAO SOBRE A CONTA DA PESSOA
+         *
+         *     Esta operacao nao desabilita, nao suspende e nao marca conta nenhuma.
+         *     Desabilitar conta e outro poder, com outro evento de trilha, e nao
+         *     entra nesta fila.
+         *
+         *     ## O que responde o que
+         *
+         *     - conteudo JA fora do ar: `404`. Nao `409`: o motivo da primeira
+         *       remocao e de quem auditar, e sobrescreve-lo apagaria a decisao que
+         *       valeu. Mesma escolha de `removeAdminDirectoryReview`;
+         *     - denuncia ja resolvida: `400`, `code: report_already_resolved`;
+         *     - alvo inexistente, ou denuncia de conta desabilitada: `404` (ADR-0021).
+         */
+        post: operations["removeAdminModerationContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/reports/{origin}/{targetRef}/dismissal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Descarta a denuncia, com o motivo escrito. O conteudo fica no ar
+         * @description **A DENUNCIA NAO E APAGADA.** Ela fica com `resolution: dismissed`,
+         *     `resolved_at` e `resolution_reason` gravados, e continua legivel em
+         *     `listAdminModerationReports` com `state=resolved`. O `down` da migracao
+         *     `20261018000009` recusa a propria descida enquanto houver decisao
+         *     gravada, pelo mesmo motivo: o juizo de uma pessoa nao se descarta em
+         *     silencio.
+         *
+         *     **O conteudo nao e tocado**: `content_removed` volta como estava.
+         *
+         *     ## O MOTIVO E OBRIGATORIO AQUI TAMBEM, e nao e zelo
+         *
+         *     Descartar e uma decisao sobre o trabalho de outra pessoa -- alguem
+         *     denunciou e um administrador disse que nao procedia. Sem o motivo
+         *     gravado, o proximo que receber a MESMA denuncia refaz o juizo que
+         *     alguem ja fez; e na origem `conversation` isso acontece de verdade,
+         *     porque o indice unico daquela tabela e PARCIAL (`WHERE resolved_at IS
+         *     NULL`) e resolver libera o par (conversa, papel) para denunciar de novo.
+         *
+         *     ## NINGUEM E AVISADO, E NENHUMA ACAO SOBRE A CONTA
+         *
+         *     Mesmas duas regras da remocao, e pelos mesmos motivos: quem denunciou
+         *     nao recebe resultado, quem foi denunciado nao e avisado, e nenhuma
+         *     conta e desabilitada por aqui.
+         *
+         *     Denuncia ja resolvida responde `400` (`code: report_already_resolved`);
+         *     alvo inexistente ou denuncia de conta desabilitada, `404` (ADR-0021).
+         */
+        post: operations["dismissAdminModerationReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de pedidos da plaquinha da coleira
+         * @description So existe no painel. Sem filtro, vem a fila de `pending`, do pedido
+         *     mais antigo para o mais novo.
+         *
+         *     **Devolve o ENDERECO DE ENTREGA**, que e o que o administrador le para
+         *     enviar a plaquinha (decisao do cliente, 17/10). E dado pessoal, e por
+         *     isso: so nesta superficie, nunca em resposta sem conta, nunca na
+         *     trilha de auditoria e nunca geocodificado (ADR-0006).
+         *
+         *     **Nenhum PERFIL do solicitante sai aqui**: nem e-mail, nem telefone,
+         *     nem UUID, nem identificador estavel. A unica leitura de conta do
+         *     backoffice v1 segue sendo a fila de pedidos de encontro (D53 a D57).
+         *
+         *     **Nao traz o codigo da plaquinha.** O codigo e credencial ao portador
+         *     (ADR-0004) e hoje sai em duas superficies, as duas do tutor; uma
+         *     terceira, no painel, e decisao que o cliente ainda nao tomou. O que
+         *     identifica o pedido para quem atende e `ref` e o nome do pet.
+         */
+        get: operations["listAdminCollarTagRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um pedido da plaquinha
+         * @description A leitura de UM pedido, para a tela de entrega do painel: quem atende
+         *     abre o pedido, confere o endereco, digita o rastreio e marca o passo.
+         *     Sem ela a tela teria de achar o pedido dentro da pagina da listagem, e
+         *     perderia a linha a cada recarga.
+         *
+         *     Mesma projecao da listagem (`AdminCollarTagRequest`), e as mesmas
+         *     regras: **devolve o ENDERECO DE ENTREGA** (dado pessoal, so nesta
+         *     superficie, nunca na trilha, nunca geocodificado -- ADR-0006); **nenhum
+         *     PERFIL do solicitante**; e **nao traz o codigo da plaquinha**, que e
+         *     credencial ao portador (ADR-0004).
+         *
+         *     **Pedido de conta desabilitada responde `404`**, e nao uma leitura
+         *     parcial: decisao do cliente de 17/10 -- conta desabilitada nao e mais
+         *     encontrada em nenhuma pagina nem funcionalidade. O filtro esta na
+         *     clausula `WHERE`, e nao num ramo de JavaScript. `404` tambem para `ref`
+         *     desconhecido e para pedido de pet ja excluido; nao ha `403` nesta
+         *     superficie (ADR-0021).
+         */
+        get: operations["getAdminCollarTagRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atualiza a entrega da plaquinha
+         * @description O estado da entrega e o codigo de rastreio, numa escrita so -- que e
+         *     como o cliente pediu em 18/10: "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega".
+         *
+         *     As transicoes aceitas, o que acontece com cada uma e por que nao se
+         *     volta atras estao em `AdminCollarTagDeliveryUpdate`. Transicao fora da
+         *     tabela responde `400` com `code: invalid_delivery_transition`;
+         *     rastreio so com espaco responde `400` com `code: blank_tracking_code`.
+         *
+         *     **`POST` e nao `PATCH`**, e nao por indecisao: as outras duas escritas
+         *     desta fila sao `POST` em sub-recurso de acao
+         *     (`/fulfillment`, `/decline`), e esta e a terceira irma delas. Um `PATCH`
+         *     aqui obrigaria o painel a falar dois dialetos com a mesma fila.
+         *
+         *     **Sem `If-Match`**, ao contrario de `updateAdminDirectoryEntry`. La o
+         *     recurso tem `version` e a escrita e de formulario inteiro, onde duas
+         *     pessoas se sobrescrevem em silencio. Aqui a trava e a propria maquina de
+         *     estados, sob `FOR UPDATE`: quem chega com a tela velha tenta uma
+         *     transicao que o estado atual nao permite e leva `400` em voz alta. Um
+         *     `ETag` para esta fila seria uma segunda trava para a mesma propriedade,
+         *     e uma coluna `version` que so ela usaria.
+         *
+         *     **Nao apaga nada.** Nao existe exclusao de pedido nesta superficie, e o
+         *     que seria cancelar e `declined` -- estado, e por
+         *     `declineAdminCollarTagRequest`.
+         *
+         *     **Nao emite codigo** (ADR-0004) e **nao consulta transportadora
+         *     nenhuma**: o rastreio e texto digitado.
+         *
+         *     Pedido de conta desabilitada responde `404`, pela mesma clausula `WHERE`
+         *     da leitura.
+         */
+        post: operations["updateAdminCollarTagRequestDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/fulfillment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca que a plaquinha saiu
+         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
+         *     outros casos). Pedido que nao existe, ou de pet ja excluido, responde
+         *     `404`.
+         *
+         *     **Nao emite codigo nenhum.** Emitir e `issuePetTag`, e o codigo e
+         *     irreversivel: um painel que emitisse criaria plaquinha sem o tutor
+         *     pedir. Aqui so se registra que o objeto fisico saiu.
+         */
+        post: operations["fulfillAdminCollarTagRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa o pedido da plaquinha
+         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
+         *     outros casos). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+         *
+         *     **O que o tutor ve depois da recusa e decisao de produto em aberto** e
+         *     nao esta resolvida aqui: hoje `requestCollarTag` devolve o estado
+         *     verdadeiro, inclusive `declined`. A outra fila do painel esconde a
+         *     recusa por decisao do cliente de 23/09; essa decisao foi tomada para
+         *     encontro privado e nao para plaquinha, e copia-la seria decidir no
+         *     lugar dele.
+         */
+        post: operations["declineAdminCollarTagRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3524,10 +5455,441 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/broadcasts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os comunicados ja disparados
+         * @description Do mais recente para o mais antigo. **Nao ha rascunho e nao ha
+         *     exclusao**: a lista e o registro do que foi disparado, e e por isso que
+         *     ela existe -- sem ela, "quem mandou aquilo" nao tem resposta na tela.
+         *
+         *     Sem `x-audit`: `x-audit` em `GET` administrativo e so da leitura de
+         *     PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e esta
+         *     lista nao le pessoa nenhuma -- ela le comunicados e o nome de exibicao
+         *     de quem os disparou, que e conta de painel. Mesma ausencia, e pelo
+         *     mesmo motivo, da fila da plaquinha e da fila de indicacoes.
+         */
+        get: operations["listAdminBroadcasts"];
+        put?: never;
+        /**
+         * Dispara o comunicado para todas as caixas
+         * @description **Irreversivel.** Nao ha como apagar um comunicado nem desfazer o
+         *     disparo: ele entra na caixa de toda conta habilitada no mesmo instante,
+         *     e e por isso que `previewAdminBroadcast` existe e que a tela do painel
+         *     obriga a passar por ela.
+         *
+         *     **Teto de 3 por dia**, contado a partir da meia-noite UTC, aplicado no
+         *     banco e na mesma transacao da gravacao -- teto conferido numa consulta
+         *     anterior e teto que duas abas furam. O quarto responde `409`
+         *     (`broadcast-daily-cap-reached`).
+         *
+         *     `recipients_total` na resposta e quantas caixas ele alcancou **no
+         *     instante do disparo**, guardado e nao recalculado depois.
+         *
+         *     Nao dispara e-mail nem push.
+         */
+        post: operations["dispatchAdminBroadcast"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/broadcasts/dispatch-window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quanto o disparo alcancaria, e quantos ainda cabem hoje
+         * @description O que a tela precisa do SERVIDOR para pre-visualizar um comunicado:
+         *     quantas contas o disparo alcancaria agora, quantos ainda cabem hoje, e
+         *     qual e o teto. **Nao grava nada e nao alcanca caixa nenhuma.**
+         *
+         *     **Por que ela nao recebe o rascunho.** A primeira forma desta operacao
+         *     era um `POST /admin/broadcasts/preview` que mandava titulo e corpo e os
+         *     devolvia. Ela nao se sustentou por duas razoes que apontam para o mesmo
+         *     lugar:
+         *
+         *     1. `portao-contrato-administrativo` (ADR-0027 item 7, regra 2) exige
+         *        `x-audit` de **toda** operacao sob `/admin/` de metodo nao seguro --
+         *        e com razao: sob `/admin`, metodo nao seguro E escrita, e "esta aqui
+         *        nao escreve" e exatamente a afirmacao que um portao nao pode aceitar
+         *        na palavra de quem escreveu a rota. Dar `x-audit` a uma
+         *        pre-visualizacao gravaria trilha por tecla digitada e afogaria a
+         *        trilha do disparo, que e a que importa.
+         *     2. **O servidor nao precisa do texto.** `would_reach` e
+         *        `remaining_today` nao dependem de uma letra do rascunho. Renderizar
+         *        o titulo e o corpo e trabalho do painel, que ja os tem na mao.
+         *
+         *     Entao ela e `GET`, sem corpo: o rascunho nao atravessa a rede, nao
+         *     aparece em registro de acesso de borda nenhum, e a operacao e o que ela
+         *     sempre foi -- uma leitura. **A pre-visualizacao continua obrigatoria
+         *     antes do disparo**; ela so deixou de precisar de uma ida ao servidor
+         *     carregando o texto.
+         *
+         *     Sem `x-audit`: e `GET` e nao le pessoa nenhuma -- `would_reach` e uma
+         *     CONTAGEM de contas, nunca uma lista delas (`x-audit` em `GET`
+         *     administrativo e so da leitura de pessoa auditada, D55/D56).
+         */
+        get: operations["getAdminBroadcastDispatchWindow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userRef}/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bloqueia esta pessoa
+         * @description Unilateral e **silencioso**. Quem bloqueia decide sozinho; quem e
+         *     bloqueado nao e avisado e **nao descobre pela resposta**.
+         *
+         *     **O efeito e nos DOIS SENTIDOS, e e aplicado na LEITURA do servidor** --
+         *     nunca num `if` de tela, pelo argumento que o ADR-0025 ja escreveu:
+         *     *"enquanto o dado sair da API, ele sai para qualquer cliente, inclusive
+         *     o que ninguem escreveu."* Quem bloqueou deixa de ver o bloqueado, e o
+         *     bloqueado deixa de ver quem o bloqueou. A segunda metade e a que
+         *     importa para quem bloqueia por estar sendo perseguido.
+         *
+         *     **O bloqueado recebe `404` IDENTICO ao de pessoa inexistente** -- mesmo
+         *     corpo, mesmo codigo (ADR-0021: autorizacao na clausula `WHERE`, `404` e
+         *     nunca `403`). Um `404` diferente seria um oraculo, e descobrir que foi
+         *     bloqueado e o que gera retaliacao.
+         *
+         *     **Idempotente.** Bloquear de novo responde `204` e nao `409`: erro aqui
+         *     contaria a quem chama um estado que ele ja escolheu, e obrigaria a tela
+         *     a ter um segundo caminho para nada.
+         *
+         *     ## O QUE ESTE BLOQUEIO NAO FECHA, e e a decisao mais consequente da fatia
+         *
+         *     **Ele NAO fecha a conversa mediada de um caso de pet ABERTO.**
+         *
+         *     O mecanismo para fechar existe e foi medido: a conversa mediada deriva
+         *     `status` de `estadoDaConversa`, e conta desabilitada em qualquer das duas
+         *     pontas a leva a `closed`, o que trava o envio **nos dois sentidos** com
+         *     `410 conversation-closed` e corpo fixo. Ligar o bloqueio nesse mesmo
+         *     derivador custaria um sinal novo e nada mais.
+         *
+         *     **Nao ligamos, de proposito.** Bloquear o achador no meio de um caso
+         *     aberto cortaria o UNICO canal entre quem esta com o animal e quem o
+         *     perdeu, e o resultado dessa economia de codigo e um cachorro que nao
+         *     volta porque duas pessoas se desentenderam. A conversa mediada ja e o
+         *     canal mais blindado do produto -- redige telefone, e-mail e endereco,
+         *     rotula os lados como `Tutor`/`Quem achou` e proibe foto por extenso --,
+         *     e ja tem a ferramenta certa para o caso em que ela precisa parar:
+         *     `blockConversation`, que e um ato explicito, por conversa, e nao um
+         *     efeito colateral de um gesto feito em outra tela.
+         *
+         *     Dar ao mesmo toque duas consequencias tao diferentes -- "nao quero ver
+         *     esta pessoa" e "desligue o canal do meu pet perdido" -- e o que nao
+         *     fazemos.
+         */
+        post: operations["blockUser"];
+        /**
+         * Desfaz o bloqueio desta pessoa
+         * @description So quem bloqueou desbloqueia, resolvido por igualdade com quem chama na
+         *     clausula `WHERE` (ADR-0021) -- nao existe caminho por aqui para desfazer
+         *     o bloqueio de outra pessoa, e por isso a resposta e `404` e nunca `403`.
+         *
+         *     **Desbloquear nao devolve nada do que o bloqueio desfez.** Quando a
+         *     conexao existir, ela nao volta; o desbloqueio devolve visibilidade, e
+         *     nada mais.
+         *
+         *     **Idempotente**, pela mesma razao do `POST`.
+         */
+        delete: operations["unblockUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia este perfil para a moderacao
+         * @description Sobre **quem a pessoa e**: apelido, nome de exibicao, capa. A foto se
+         *     denuncia **na foto** (`reportPhoto`) e a publicacao **no cartao**
+         *     (`reportPublication`), porque o dano esta ali e quem modera precisa
+         *     saber *qual*.
+         *
+         *     **`202` e nao `200`**: o que esta rota promete e que o pedido foi
+         *     recebido, nao que alguem ja olhou.
+         *
+         *     **Denunciar o mesmo perfil de novo nao duplica a fila e nao devolve
+         *     erro**: a segunda chamada responde `202` e incrementa a contagem de
+         *     repeticao, igual a `conversation_reports` e a
+         *     `reportDirectoryEntryReview`. Erro ensinaria a quem denuncia que ele ja
+         *     denunciou, o que nao e informacao dele e nao muda nada.
+         *
+         *     **O proprio perfil nao pode ser denunciado** (`400`,
+         *     `code: own_profile`).
+         *
+         *     **O que o administrador faz com uma denuncia de perfil**, ja que a fila
+         *     nao tem acao sobre conta: remove o **artefato** ofensivo -- apelido,
+         *     nome de exibicao ou capa, um de cada vez, com motivo obrigatorio --,
+         *     nunca a conta.
+         */
+        post: operations["reportUserProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+                 *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+                 *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+                 *     servidor.
+                 *
+                 *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+                 *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+                 *     divergiria de `derivadas.ts` na primeira geometria nova.
+                 */
+                photoRef: components["parameters"]["PhotoPublicRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia esta foto para a moderacao
+         * @description **Denuncia-se NA FOTO**, e nao no perfil de quem a enviou: o
+         *     administrador precisa saber *qual* imagem, e uma denuncia de perfil que
+         *     dissesse "tem uma foto ruim" o obrigaria a adivinhar entre as fotos da
+         *     pessoa.
+         *
+         *     O endereco e a **chave da derivada publica** -- a mesma pela qual a
+         *     imagem foi servida a quem a viu. Nao e UUID: o ADR-0010 item 6 proibe
+         *     UUID interno em saida publica, e a chave carrega 128 bits aleatorios
+         *     (ADR-0007).
+         *
+         *     **Lista de seis motivos**, uma a mais que as outras duas, e as duas que
+         *     nao existem em nenhuma outra lista sao de imagem: `child_at_risk`, que
+         *     vai ao topo da fila, e `i_am_in_it` -- quem aparece numa foto nao e quem
+         *     a enviou e nao tem outro caminho, que e o mesmo direito de oposicao que
+         *     o ADR-0011 emenda 1 deu ao profissional cadastrado por terceiro.
+         *
+         *     Mesmo comportamento da denuncia de perfil em todo o resto: `202`,
+         *     repeticao que soma em vez de duplicar, **o denunciado nao e avisado**,
+         *     **nenhum prazo prometido** e ocultacao imediata para quem denunciou.
+         */
+        post: operations["reportPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{publicationRef}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+                 *     `20261018000032`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denuncia esta publicacao para a moderacao
+         * @description **Ponto de acesso no proprio cartao**, pelo mesmo principio da foto:
+         *     denuncia-se onde o dano esta.
+         *
+         *     **Terceira lista fechada, e nao reuso de uma das outras duas**: "nudez"
+         *     e "maus-tratos" sao de imagem, e "nao e quem diz ser" e de perfil.
+         *
+         *     `false_lost_pet_info` -- *informacao falsa sobre um pet perdido* -- so
+         *     existe neste produto, e e por isso que ela nao cabia em `other`: **um
+         *     avistamento inventado manda a pessoa para o bairro errado e custa horas
+         *     de busca**.
+         *
+         *     Mesmo comportamento das outras duas em todo o resto: `202`, repeticao
+         *     que soma, **o denunciado nao e avisado**, **nenhum prazo prometido** e
+         *     ocultacao imediata para quem denunciou.
+         *
+         *     **O que o administrador le:** o texto da publicacao **como ele estava
+         *     quando foi denunciado**, congelado na denuncia. Sem o congelamento,
+         *     editar a publicacao depois de denunciada faria o administrador julgar um
+         *     texto que ninguem denunciou.
+         */
+        post: operations["reportPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
+         *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
+         *     nem qualquer forma de endereca-la: a regra do cliente de 18/10/2026 e
+         *     *"o que nao pode e ser publico, sem ter nenhum relacionamento"*, e um
+         *     campo que aceitasse pessoa reabriria o caminho que a decisao fechou.
+         *
+         *     Quem emite o token sao as duas formas de convite (conexao ancorada no
+         *     contexto e codigo presencial de 5 minutos), **nenhuma delas
+         *     implementada**. O token nao e enumeravel e nao e identificador estavel
+         *     de ninguem.
+         */
+        ConnectionInvite: {
+            /** @description O token do convite. Opaco, de uso unico e de vida curta. */
+            invite_token: string;
+        };
+        /**
+         * @description O estado da aresta no vocabulario do aplicativo.
+         *
+         *     **Nao existe `declined`**, pela mesma razao que `JoinRequestAppState`
+         *     tambem nao tem: a recusa e silenciosa. Para quem pediu, a aresta
+         *     recusada responde `pending_sent` ate a validade de 30 dias passar, e
+         *     depois desaparece -- indistinguivel de um pedido que ninguem respondeu.
+         *
+         *     **Nao existe `following` nem `follower`**: a conexao e simetrica e nao ha
+         *     "seguir" neste produto.
+         * @enum {string}
+         */
+        ConnectionAppState: "pending_sent" | "pending_received" | "connected";
+        /**
+         * @description Como a outra ponta da aresta e **nomeada**, e nada alem disso.
+         *
+         *     **Nunca carrega identificador interno** (ADR-0010 item 6): nem `id`, nem
+         *     UUID de nenhuma especie. O que identifica e `handle`, o apelido escolhido
+         *     pela pessoa, e ele e **opcional** -- com nulo a leitura cai para
+         *     `display_name`, e com os dois nulos quem desenha decide o texto.
+         *
+         *     **Nada de conectado entra aqui**: sem bairro, sem cidade, sem pets, sem
+         *     contagens, sem foto, sem publicacoes. Esta forma e a mesma no pedido
+         *     recebido e na conexao aceita, de proposito: o que muda com o aceite e o
+         *     que as OUTRAS superficies passam a mostrar, nao esta.
+         */
+        ConnectionPerson: {
+            /** @description O apelido (`@`), 5 a 20 caracteres, minusculas, digitos e hifen. Nulo quando a pessoa nao escolheu um. */
+            handle: string | null;
+            /** @description O nome de exibicao. Nulo nas contas que nasceram sem ele. */
+            display_name: string | null;
+        };
+        /**
+         * @description Uma aresta do grafo de conexao, **simetrica**, na perspectiva de quem
+         *     pergunta.
+         *
+         *     `ref` e opaco e e **DA ARESTA, nunca da pessoa** -- e esta e a diferenca
+         *     que sustenta a regra do cliente. Um identificador publico por PESSOA
+         *     seria um endereco estavel e compartilhavel, que *"vira endereco publico
+         *     no primeiro grupo em que alguem o cola"*, e foi exatamente por isso que
+         *     a descoberta por link morreu. Com `ref` por aresta, so quem e uma das
+         *     duas pontas o conhece, e a clausula `WHERE` da leitura cobra isso.
+         */
+        Connection: {
+            /** @description O identificador opaco da ARESTA. Nao e UUID e nao e de ninguem. */
+            ref: string;
+            state: components["schemas"]["ConnectionAppState"];
+            /** Format: date-time */
+            requested_at: string;
+            person: components["schemas"]["ConnectionPerson"];
+        };
+        /**
+         * @description Uma pagina de **pedidos** -- recebidos ou enviados. **Nunca de
+         *     conexoes**: aceito nao aparece aqui.
+         */
+        ConnectionRequestPage: {
+            items: components["schemas"]["Connection"][];
+            total: number;
+            page: number;
+            limit: number;
+        };
+        /**
+         * @description Os numeros das conexoes **da propria conta**, e nenhum nome.
+         *
+         *     Contagem existe onde lista nao pode porque contagem **nao diz quem**. E
+         *     o unico jeito de a tela do dono falar das proprias conexoes sem que
+         *     exista, em lugar nenhum, uma lista de pessoas.
+         */
+        ConnectionSummary: {
+            /** @description Conexoes aceitas, contando os dois lados. Conta desabilitada SAI desta contagem, e a linha nao e apagada -- reabilitar devolve a conexao. */
+            connected_count: number;
+            pending_sent_count: number;
+            requests_received_count: number;
+            /** @description Quantos pedidos ainda cabem na janela CORRIDA de 24 h. Corrida e nao "ate a meia-noite", senao 20 pedidos caberiam em dois minutos na virada do dia. */
+            remaining_requests_today: number;
+            /** @description O teto de conexoes, do servidor. Hoje 150. */
+            connection_limit: number;
+        };
         /** @description RFC 9457. O cliente decide por `type`, nunca pelo texto. */
         Problem: {
             /** Format: uri */
@@ -3567,11 +5929,139 @@ export interface components {
         PetSize: "P" | "M" | "G" | "GG";
         /** @enum {string} */
         Sex: "male" | "female" | "unknown";
+        /**
+         * @description O **apelido (`@`)**: identificador escolhido pela pessoa, unico, que
+         *     **nao deriva** do nome, do e-mail nem do telefone. Decisao do cliente
+         *     de 18/10/2026: *"o apelido esta livre, vai estar no cadastro do usuario
+         *     e na pagina de edicao do perfil"*, e antes dela *"slug nao tem relacao
+         *     com informacoes pessoais, e um id que o usuario escolhe e voce deve
+         *     verificar para garantir que nao tem dois iguais"*.
+         *
+         *     **A FAIXA AQUI E A MESMA DO BANCO E DA TELA, caractere a caractere.**
+         *     `minLength: 5` / `maxLength: 20` / `pattern` espelham o `CHECK` de
+         *     `handles.handle` (`20261018000021`) e o regex de
+         *     `app/lib/formato/apelido.dart`. Isto esta escrito porque esta casa ja
+         *     pagou pela divergencia: o recado do achado aceitava **1000** no
+         *     contrato e a coluna recusava acima de **500**, e a pessoa recebia erro
+         *     de servidor em vez de recusa explicada.
+         *
+         *     **O teto de 20 e do apelido NORMALIZADO, e por construcao ele e
+         *     identico ao digitado**: o conjunto e ASCII restrito, normalizar e so
+         *     minusculo e aparo, e maiuscula para minuscula e um para um. Nao ha
+         *     como digitado e normalizado divergirem em comprimento -- ganho direto
+         *     de ter recusado acento.
+         *
+         *     **Um separador so: o hifen.** Ponto e sublinhado foram recusados de
+         *     proposito: com os tres, `@maria.silva`, `@maria_silva` e
+         *     `@maria-silva` conviveriam.
+         *
+         *     **Guardado minusculo.** `@Leandro` e `@leandro` sao o mesmo apelido, e
+         *     quem garante e o indice (`citext`), nao o cliente.
+         *
+         *     **NAO EXISTE ROTA DE "ESTE APELIDO ESTA DISPONIVEL?"**, e a ausencia e
+         *     a decisao: ela deixaria varrer a base. A disponibilidade e decidida
+         *     **no envio**, pelo indice unico -- quem repetir recebe 400
+         *     `validation-failed` com `code: taken`, e a tela oferece tres sugestoes
+         *     derivadas do que foi digitado. Nenhum cliente deve conferir antes e
+         *     confiar: a janela entre conferir e gravar e onde a corrida mora.
+         *
+         *     **O espaco de nomes e COMPARTILHADO com `pets.slug`**: o site publica o
+         *     pet em `/@{slug}` (ADR-0028) e o `@` e um simbolo so para quem le.
+         *     Apelido de pessoa e slug de pet **nao coexistem iguais**, e quem
+         *     garante e a tabela `handles`.
+         *
+         *     **Parecidos nao coexistem.** `@maria-silva`, `@mariasilva` e
+         *     `@mar1a-silva` sao o mesmo apelido para o indice de esqueleto, que
+         *     colapsa `{0,o}`, `{1,i,l}`, `{5,s}` e `{3,e}` e tira o hifen.
+         *
+         *     **Palavras reservadas sao recusadas** com `code: reserved`. Para
+         *     `bichu` a regra e **CONTEM**, em qualquer posicao e sobre o esqueleto:
+         *     `@suporte-bichu` e `@b1chu-suporte` sao a forma real do golpe.
+         */
+        Handle: string;
+        /**
+         * @description **DUAS EXIGENCIAS NOVAS, do mesmo dia (18/10/2026), e as duas sao do
+         *     cliente.** `display_name` veio de *"o campo de nome no cadastro do
+         *     usuario e obrigatorio"* e `birth_date` de *"coloque maiores de 16
+         *     anos"*. Elas nasceram em ramos separados e se encontraram aqui: o
+         *     `required` desta operacao carrega **as duas**, e nenhuma substitui a
+         *     outra.
+         *
+         *     **As duas sao quebra de contrato, e as duas tem dispensa datada em
+         *     `.github/quality-gates.yml`** -- quatro entradas no total, porque o
+         *     juizo casa um par regra+operacao por entrada. O APK em campo nao tem
+         *     nenhum dos dois campos e deixa de criar conta ate sair APK novo; o
+         *     cliente aceitou esse custo nos dois casos.
+         *
+         *     **`display_name` e obrigatorio desde 18/10/2026**, por queixa do
+         *     cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+         *     ele esta cadastrando sem esse campo"*.
+         *
+         *     **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+         *     que nao manda a chave passa a receber 400 `validation-failed` com
+         *     `errors[].field: display_name` e `code: required`. O APK em campo que
+         *     nao preenche o nome deixa de criar conta -- a correcao e APK novo, e nao
+         *     afrouxar o campo.
+         *
+         *     **`minLength: 1` nao esgota a regra, e de proposito.** O caso que escapa
+         *     do schema e o nome **so com espaco em branco** (`"   "`), que tem
+         *     comprimento 1 e nao tem nome nenhum dentro. Quem recusa esse e o
+         *     servidor, depois de `trim`, com o mesmo `code: required`: JSON Schema
+         *     nao tem como exprimir "sobra caractere depois de aparar", e inventar
+         *     `pattern` aqui faria a recusa do schema e a do servidor divergirem.
+         *
+         *     **`birth_date` e obrigatorio desde 18/10/2026**, por decisao do cliente:
+         *     *"coloque maiores de 16 anos"*.
+         *
+         *     **Isto e mudanca quebradora e esta declarada como tal**: cliente antigo
+         *     que nao manda a chave passa a receber 400 `validation-failed` com
+         *     `errors[].field: birth_date` e `code: required`. O APK em campo que nao
+         *     tem o campo **deixa de criar conta** -- a correcao e APK novo, e nao
+         *     afrouxar a exigencia. E o mesmo custo que `display_name` cobrou no
+         *     mesmo dia, e o cliente o aceitou nos dois casos.
+         *
+         *     **O `format: date` nao esgota a regra, e de proposito.** O schema recusa
+         *     o que nao e data (`"ontem"`, `"32/13/2010"`), e **nao recusa**:
+         *
+         *     - data no **futuro** (`2030-01-01` e data valida);
+         *     - data **absurda** (`1203-04-05` e data valida);
+         *     - quem tem **menos de 16 anos**, que e a regra que motivou o campo.
+         *
+         *     Os tres sao recusados pelo **servidor**, em
+         *     `src/shared/idade/idade-minima.ts`, com `code: 'invalid'` e
+         *     `code: 'too_young'`. A idade e calculada **no servidor**, no fuso
+         *     `America/Sao_Paulo`, e **nunca lida de um campo de idade enviado pelo
+         *     cliente** -- nao existe campo de idade neste contrato, e nao e descuido:
+         *     idade que o cliente informa e idade que o cliente escolhe.
+         *
+         *     `minimum`/`maximum` de data nao existem em JSON Schema, e um `pattern`
+         *     aqui faria a recusa do schema e a do servidor divergirem -- a mesma
+         *     divisao de trabalho que `display_name` ja usa.
+         *
+         *     **A data de nascimento NAO VOLTA em resposta nenhuma**, nem para o
+         *     proprio dono: `Me`, `MeUpdate` e `RegisterResponse` nao a declaram. Com
+         *     idade minima de 16 o titular pode ser adolescente, e a data existe para
+         *     ser **conferida** no cadastro, nao para ser exibida.
+         */
         RegisterRequest: {
             /** Format: email */
             email: string;
             password: components["schemas"]["Password"];
-            display_name?: string;
+            display_name: string;
+            /**
+             * Format: date
+             * @description A data de nascimento de quem esta criando a conta, em `YYYY-MM-DD`.
+             *
+             *     Quem tem **menos de 16 anos nao cria conta** (cliente, 18/10/2026).
+             *     A conta precisa ter **16 anos ou mais no dia de hoje**, contado no
+             *     fuso `America/Sao_Paulo`: quem completa 16 anos hoje **passa**, e
+             *     quem os completa amanha nao. O limite de um dia aqui e a diferenca
+             *     entre recusar e aceitar alguem no proprio aniversario, e por isso o
+             *     calculo e civil (ano/mes/dia no fuso do produto) e nao uma subtracao
+             *     de instantes em UTC.
+             */
+            birth_date: string;
+            handle?: components["schemas"]["Handle"];
             accepted_terms_version?: string;
             stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
@@ -3645,6 +6135,60 @@ export interface components {
              */
             email_deliverable: boolean;
             display_name?: string | null;
+            /**
+             * @description O apelido (`@`) da **propria conta**, ou `null` quando ela nao
+             *     escolheu nenhum.
+             *
+             *     **O destinatario e sempre o DONO, e as rotas sao CINCO e nao
+             *     uma** -- medido resolvendo `$ref` sobre o contrato inteiro, e nao
+             *     suposto. `getMe` e `updateMe` exigem conta; e
+             *     `SessionResponse.user` aponta para este schema, entao o apelido
+             *     viaja tambem em `registerUser`, `login`, `refreshSession` e
+             *     `confirmEmailVerification`. Essas quatro tem `security: []`, **mas
+             *     nao sao anonimas**: cada uma entrega a sessao a quem acabou de
+             *     provar identidade com senha, com refresh ou com token de e-mail --
+             *     e sao exatamente as quatro que `portao-contrato-publico` dispensa
+             *     da varredura de campos, por este motivo escrito la.
+             *
+             *     Ele precisa sair por uma razao concreta: a **pagina de edicao do
+             *     perfil** mostra o apelido atual para a pessoa poder trocar de
+             *     apelido, e um campo que nao volta e um campo que a tela abre vazio
+             *     e sobrescreve com o que a pessoa digitar.
+             *
+             *     **`birth_date` nao sai em resposta nenhuma** -- zero, pela mesma
+             *     medicao. A assimetria e a decisao: o apelido *"nao tem relacao com
+             *     informacoes pessoais"* (cliente, 18/10/2026) e o dono precisa dele
+             *     de volta; a data existe para ter sido conferida no cadastro.
+             *
+             *     **Nenhuma rota de TERCEIRO declara este campo**, e a dependencia
+             *     esta registrada no plano 4-C: *"o apelido nao pode aparecer para
+             *     outra pessoa antes da fatia E"*. Esta fatia nao abre superficie
+             *     nenhuma -- nao existe `/@{apelido}` de pessoa, e nenhuma listagem,
+             *     nenhum teaser e nenhuma conversa o devolvem.
+             *
+             *     `null` e um estado legitimo e permanente: **nenhum fluxo obriga a
+             *     escolher apelido** (plano 4-C.8), e a tela cai para
+             *     `display_name` -- que e o que ela ja faz.
+             * @example maria-silva
+             */
+            handle?: string | null;
+            /**
+             * @description A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
+             *
+             *     **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
+             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
+             *     Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
+             *     terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
+             *     pessoas (ADR-0025 item 2, que proibe avatar por nome) e
+             *     `Conversation.participants` continua dizendo por extenso que nunca
+             *     traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
+             *     pessoa fisica e **depende de decisao do cliente**, nao de
+             *     implementacao.
+             *
+             *     Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
+             *     inteira sem foto.
+             */
+            photo?: components["schemas"]["MyPhoto"] | null;
             /** @example +5511999998888 */
             phone_e164?: string | null;
             /** @default false */
@@ -3670,6 +6214,15 @@ export interface components {
          */
         MeUpdate: {
             display_name?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createMyPhotoUploadIntent`, **da propria conta**:
+             *     envio de outra pessoa, de outro proposito, ja usado ou vencido e
+             *     recusado com `400` (`code: upload_not_usable`), sem dizer qual dos
+             *     casos ocorreu -- a conferencia da conta esta na clausula `WHERE`.
+             */
+            photo_upload_id?: string | null;
+            handle?: components["schemas"]["Handle"];
             phone_e164?: string;
             reference_area?: {
                 postal_code?: string;
@@ -4088,6 +6641,13 @@ export interface components {
             pet_display_name?: string;
         };
         FoundReportEnrichment: {
+            /**
+             * @description 500, o mesmo teto de `found_reports.notes` no banco
+             *     (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+             *     entre 501 e 1000 passava pela validacao e morria no banco como erro
+             *     de servidor -- o recado se perdia com o animal na mao de quem ajuda.
+             *     Mesmo alinhamento que `StrayFoundReportInput.notes` ja tinha.
+             */
             message?: string;
             /**
              * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
@@ -4127,6 +6687,15 @@ export interface components {
          *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
          */
         FinderFoundReportEnrichment: {
+            /**
+             * @description **1000 de proposito, e nao os 500 da rota com conta.** Este `message`
+             *     NAO e gravado em `found_reports.notes`: ele entra na conversa mediada
+             *     como mensagem do achador (`aviso-do-achador.ts`, "para onde vai cada
+             *     campo"), isto e em `mediated_messages.body`, cujo CHECK aceita 4000.
+             *     O numero casa com `body` de `postFinderMessage`, que e o mesmo
+             *     destino. Apertar aqui para 500 nao corrigiria descasamento nenhum e
+             *     cortaria pela metade o recado de quem avisa SEM CONTA.
+             */
             message?: string;
             /**
              * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
@@ -4168,6 +6737,14 @@ export interface components {
              *     `breed_code` em `outro_*`, pela mesma razao de `PetInput`.
              */
             breed_free_text?: string | null;
+            /**
+             * @description 40, o mesmo teto de `found_reports.ref_data_version` no banco
+             *     (`found_reports_ref_data_version_tamanho`, de 1 a 40). O contrato
+             *     nao declarava teto nenhum: 41 caracteres passavam pela validacao e
+             *     morriam no `CHECK` como erro de servidor, enquanto o caminho
+             *     equivalente de `PetInput` ja devolvia 400 (`pet-service.ts`
+             *     confere a versao contra `ref_data_versions` antes de gravar).
+             */
             ref_data_version?: string | null;
             size: components["schemas"]["PetSize"];
             primary_color_code?: string;
@@ -4509,10 +7086,63 @@ export interface components {
                 display_name: string;
             }[];
             messages: components["schemas"]["Message"][];
+            /**
+             * @description Esta conversa tem mensagem que o chamador ainda nao leu.
+             *
+             *     **"Lido" e o ITEM ABERTO, nao a lista vista** (BICHUS-278). Abrir
+             *     `listConversations` ZERA `unread_count`, e **nao** mexe neste campo:
+             *     quem abre a area de mensagens para de ver o numero no sino, mas
+             *     continua vendo QUAL conversa ainda nao leu. Sem essa separacao, uma
+             *     passada de olho na lista apagaria a unica pista de onde esta o
+             *     recado.
+             *
+             *     Nao conta a mensagem do proprio chamador. Vira falso quando ele
+             *     abre a conversa (`getConversation`).
+             */
+            unread: boolean;
+            /**
+             * @description O inicio da ultima mensagem, cortado, para a linha da lista.
+             *
+             *     **Sai de `Message.body`, que ja esta REDIGIDO** -- telefone, e-mail,
+             *     endereco e link externo foram retirados antes de o texto ser
+             *     gravado. A previa nao pode desfazer a redacao porque nao existe, em
+             *     coluna nenhuma, o texto cru de onde ela desfaria: o que a pessoa
+             *     digitou nao e guardado. O recado original do achador vive em
+             *     `found_reports.notes`, em claro, e a previa **nao sai de la**.
+             *
+             *     Nulo quando a conversa nao tem mensagem visivel ao chamador.
+             */
+            last_message_preview?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando foi a ultima mensagem, para a lista mostrar "quando" sem
+             *     abrir cada conversa. Nulo junto com `last_message_preview`.
+             */
+            last_message_at?: string | null;
             next_cursor?: string | null;
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
+            /**
+             * @description Quantas conversas entram no **contador do sino** agora.
+             *
+             *     **Nao e "quantas estao nao lidas"**, e a diferenca e a regra de
+             *     produto: abrir a area de mensagens (`markMyConversationsSeen`)
+             *     zera este numero e deixa os itens nao lidos. Ver `Conversation.unread`.
+             *
+             *     **A EXCECAO NOMEADA:** o aviso de **plaquinha lida** e o de
+             *     **achado** NAO saem deste numero quando a pessoa abre a lista. Eles
+             *     sao a coisa mais importante que o produto tem para dizer -- alguem
+             *     esta com o animal na mao agora --, e deixar uma passada de olho na
+             *     lista apaga-los seria perder o recado pelo outro caminho. Eles saem
+             *     quando a conversa daquele aviso e ABERTA, e so ai.
+             *
+             *     **A tela exibe no maximo `9+`.** Tres digitos comem o espaco do
+             *     titulo na barra de topo. O numero aqui e o real, sem teto: o corte
+             *     e de apresentacao, e um teto na resposta impediria qualquer outra
+             *     superficie de dizer a verdade.
+             */
+            unread_count: number;
             next_cursor?: string | null;
         };
         Message: {
@@ -4668,15 +7298,59 @@ export interface components {
             poster_url?: string;
         };
         /**
-         * @description A atividade. Espelha `professionals.kind` e a entrada
+         * @description A atividade: o que a entrada FAZ, o que se contrata dela. Espelha
+         *     `professionals.kind` e a entrada
          *     `public.professionals.professionals_kind_check` do teste de conjunto
-         *     exato. **Nao ha valor para ONG**, e a ausencia e decisao pendente do
-         *     modelo, nao esquecimento: `professionals` nao tem `entity_kind` e
-         *     `kind` nao tem valor para organizacao. A porta das ONGs em `Perto` leva
-         *     hoje a lista de pets filtrada em adocao (UX 27.2.4), que e outra coisa.
+         *     exato.
+         *
+         *     **Continua sem valor para ONG, e agora a ausencia e desenho concluido
+         *     e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
+         *     do modelo" porque `professionals` nao tinha `entity_kind`; desde
+         *     `20261018000012` ela tem, e o tipo de entidade passou a ser EIXO
+         *     PROPRIO (`EntityKind`). ONG nao entra nesta lista por duas razoes, e a
+         *     segunda e a que manda:
+         *
+         *     1. acrescentar valor a um `enum` que sai em RESPOSTA quebra o contrato
+         *        -- `oasdiff`, regra `response-property-enum-value-added`, **12 erros
+         *        medidos em 18/10/2026** em `listDirectoryEntries`,
+         *        `getDirectoryEntry`, `listMyDirectorySuggestions` e nove operacoes
+         *        de `/admin/directory/*`;
+         *     2. uma ONG nao e uma ATIVIDADE. Poe-la aqui afirmaria que organizacao
+         *        e um tipo de profissional, que era exatamente a pergunta aberta.
+         *        Uma ONG tem atividade (`clinic`, `vet`) **e** tipo de entidade
+         *        (`organization`) -- os dois eixos ao mesmo tempo, e e por isso que
+         *        um so campo nao os expressava.
          * @enum {string}
          */
         ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic";
+        /**
+         * @description O QUE a entrada e, e nao o que ela faz -- eixo SEPARADO de
+         *     `ProfessionalKind` de proposito. Ver a prosa daquele campo para por que
+         *     alargar a lista de la nao era caminho.
+         *
+         *     **Os valores e o nome sao os de `entity_verifications.entity_kind`**
+         *     (`20260921000002`), que carrega `organization` desde antes de existir
+         *     uma linha: a revisao de 17/09 do ADR-0011 generalizou a verificacao de
+         *     profissional para ENTIDADE precisamente para que a primeira entidade
+         *     nao-profissional nao obrigasse a refazer tabela. Uma segunda convencao
+         *     para o mesmo conceito e a convencao que diverge, entao nao ha vocabulario
+         *     novo aqui.
+         *
+         *     Espelha `professionals.entity_kind` e a entrada
+         *     `public.professionals.professionals_entity_kind_check` do teste de
+         *     conjunto exato.
+         *
+         *     **Aditivo, e com padrao.** Toda entrada que existia antes de
+         *     `20261018000012` vale como `professional`, que e o `DEFAULT` da coluna
+         *     -- nenhuma linha foi reescrita e nenhum cliente deixa de entender a
+         *     resposta, porque o campo e NOVO e nao um valor novo num campo antigo.
+         *
+         *     **Isto nao constroi adocao.** ONG aqui e tipo de ESTABELECIMENTO do
+         *     diretorio. Pet em adocao e outro assunto, nao tem rota neste contrato,
+         *     e nao ganhou nenhuma aqui.
+         * @enum {string}
+         */
+        EntityKind: "professional" | "organization";
         /**
          * @description O que foi provado, derivado da verificacao aprovada mais forte da
          *     entidade. `none` e estado legitimo e publicavel: passeador, hospedagem,
@@ -4713,6 +7387,7 @@ export interface components {
         DirectoryEntrySummary: {
             slug: components["schemas"]["Slug"];
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
             state?: string | null;
@@ -4729,6 +7404,56 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * @description A pontuacao agregada, **para o cartao da lista mostrar a media e a
+             *     quantidade** -- o cliente pediu os dois "na lista e na pagina"
+             *     (18/10/2026).
+             *
+             *     **OPCIONAL, e a opcionalidade e deliberada e nao timidez.** O APK
+             *     publicado le esta resposta e nao conhece este campo; tornar o campo
+             *     obrigatorio seria mudanca de contrato para ele. Alem disso, uma
+             *     resposta que nao conseguiu agregar e melhor sem o campo do que com
+             *     media zero -- zero se le como "pessimo", e um local sem avaliacao
+             *     nao e pessimo. **O cartao sem `rating` nao desenha estrela
+             *     nenhuma**, e nao desenha "0,0".
+             *
+             *     **O custo da agregacao e por PAGINA e nao por entrada**, e isso
+             *     importa porque esta operacao ja carrega `x-effects:
+             *     [expensive_query]`: a contagem sai de um unico `GROUP BY` sobre
+             *     `professional_reviews (professional_id, status, created_at DESC)`
+             *     restrito aos no maximo 20 `professional_id` da pagina, e nao de 20
+             *     chamadas a `pontuacao_do_local`. Vinte chamadas a funcao seriam o
+             *     N+1 que uma lista paginada convida a escrever.
+             *
+             *     O recorte e o MESMO da pagina do local e da lista de avaliacoes
+             *     (`status = 'published'` e `conta_habilitada(author_user_id)`), para
+             *     a media do cartao e a da pagina nunca discordarem.
+             */
+            rating?: components["schemas"]["DirectoryRating"];
+            /**
+             * Format: uri
+             * @description A LOGO da entidade, liberada para o aplicativo pelo cliente em
+             *     18/10/2026 ("pode liberar as imagens do profissional no app"). E
+             *     ela que o cartao desenha ao lado do nome.
+             *
+             *     **E a URL da DERIVADA publica, nunca do original.** O original mora
+             *     no armazenamento privado e nao e servido a cliente nenhum; a chave
+             *     da derivada tem 128 bits aleatorios no nome e a forma
+             *     `directory/{card|thumb}/{nome}.jpeg`. A URL e montada na leitura a
+             *     partir de `MEDIA_PUBLIC_BASE_URL` (ADR-0007 §11.1 proibicao 9).
+             *
+             *     **Nula e o estado normal**, em tres casos que a tela trata igual:
+             *     a entrada nao tem logo; a logo foi enviada e o worker ainda nao
+             *     terminou; a logo foi recusada nos bytes. Em nenhum deles o cartao
+             *     deixa de existir -- ele desenha o nome sem imagem.
+             *
+             *     **A FOTO EM FAIXA NAO ESTA AQUI, e a ausencia e medida.** Ela e
+             *     1280 x 720 e pertence a pagina do local (`DirectoryEntryDetail.
+             *     photo_url`): mandar a faixa em lista de ate 20 cartoes multiplicaria
+             *     o peso da primeira pintura, que neste projeto ja chegou a 9,8 MB por
+             *     excesso de imagem em lista. Logo na lista, foto no detalhe.
+             */
+            logo_url?: string | null;
             verification: components["schemas"]["DirectoryVerification"];
             /**
              * @description Distancia ate a localizacao de referencia de quem chama,
@@ -4767,6 +7492,1130 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description Que tipo de contato **publico** da entidade foi informado. O tipo e
+         *     declarado e nao adivinhado: o servidor confere o formato de `value`
+         *     contra ele, e um palpite por heuristica aceitaria um telefone no campo
+         *     de site e vice-versa.
+         * @enum {string}
+         */
+        DirectorySuggestionContactKind: "phone" | "website" | "instagram";
+        /**
+         * @description **Um** contato publico da entidade, e so um. Ele e o que o painel usa
+         *     para convidar quem a sugestao descreve (ADR-0011: convite e aceite);
+         *     sem ele a sugestao e um nome que ninguem consegue checar.
+         *
+         *     **E contato de ENTIDADE, divulgado por ela para ser contratada.** Nunca
+         *     o telefone de uma pessoa fisica, nunca o contato de quem sugeriu -- a
+         *     conta de quem sugeriu o servidor ja conhece, e ela nao entra no corpo.
+         */
+        DirectorySuggestionContact: {
+            kind: components["schemas"]["DirectorySuggestionContactKind"];
+            /**
+             * @description Conforme `kind`: `phone` e E.164 (`+5511...`), `website` e URL
+             *     `https://` completa (a mesma regua dos campos de site do painel) e
+             *     `instagram` e o perfil com `@`. Formato errado responde `400` com o
+             *     campo `public_contact.value` nomeado.
+             */
+            value: string;
+        };
+        /**
+         * @description A sugestao da comunidade. **O minimo que permite checar**, e nada alem:
+         *     nome, atividade, cidade, bairro e CEP opcionais, um contato publico e
+         *     um recado curto para quem revisa.
+         *
+         *     **Nao tem** `crmv_number`, `cnpj`, `verification_level`, `status`,
+         *     `slug`, `about`, `geo`, `street_address`, `source` nem
+         *     `claim_status` -- a sugestao nao e a entrada, e nenhum desses campos e
+         *     de quem sugere. Verificacao e prova de quem a apresenta
+         *     (`entity_verifications`); publicacao, nivel e ponto do mapa sao do
+         *     painel.
+         *
+         *     **`postal_code` entrou em 18/10/2026 e `street_address` NAO**, e a
+         *     diferenca nao e descuido. O CEP e opcional, aponta para um trecho de
+         *     rua e nao para uma porta, e tem destinatario: o revisor do painel, que
+         *     precisa achar o estabelecimento para convida-lo. Logradouro e numero
+         *     apontam para a porta de um terceiro que nao pediu nada, e nao tem
+         *     destinatario nenhum -- o endereco publico da entrada continua sendo
+         *     trabalho do painel (ADR-0011). Nenhum dos dois sai em superficie
+         *     publica (ADR-0010).
+         */
+        DirectorySuggestionInput: {
+            /**
+             * @description O nome do estabelecimento ou do profissional, como ele se anuncia.
+             *     Mesmo teto de `professionals.display_name`.
+             */
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            city: string;
+            state: string;
+            neighborhood?: string;
+            /**
+             * @description O CEP do estabelecimento, **oito digitos, sem mascara e sem
+             *     hifen** -- a MESMA forma de `TagRequestInput.postal_code`, e nao
+             *     uma segunda redacao dela. O campo do app so aceita digito, e uma
+             *     forma canonica no banco e o que faz duas sugestoes do mesmo lugar
+             *     serem comparaveis; `05435-000` e `05435000` guardados lado a lado
+             *     nao sao.
+             *
+             *     **OPCIONAL, e nao e exigencia nova.** Quem indica uma clinica de
+             *     outro bairro quase sempre nao sabe o CEP dela, e cobra-lo trocaria
+             *     uma indicacao por um campo inventado -- o mesmo juizo de
+             *     `neighborhood`. `required` nao mudou.
+             *
+             *     O app tambem o usa para BUSCAR bairro, cidade e estado em servico
+             *     publico (ViaCEP, com BrasilAPI de reserva) e preencher os campos,
+             *     **que seguem editaveis** -- decisao do cliente de 17/10. Isso e
+             *     texto e nao coordenada: **nada aqui e geocodificado** (ADR-0006),
+             *     e o servidor nao participa da busca nem a repete.
+             *
+             *     ## Guardado para o REVISOR, e nunca publicado
+             *
+             *     O cliente autorizou guardar em 18/10 ("pode armazenar o cep
+             *     sim!"), e o destinatario e a fila de revisao do painel: ela precisa
+             *     achar o estabelecimento para convida-lo (ADR-0011, convite e
+             *     aceite).
+             *
+             *     **Guardar para quem revisa nao e mostrar em publico, e a regra de
+             *     superficie publica continua inteira:** rua e CEP nao saem no
+             *     diretorio (ADR-0010, itens 4 e 5 -- bairro e cidade sao o teto).
+             *     `postal_code` ja esta nas duas listas de campo proibido em
+             *     resposta sem conta (`src/tools/portao-contrato-publico.ts` e
+             *     `src/shared/http/vazamento-publico.ts`), e nao ha operacao de
+             *     LEITURA de `directory_suggestions` neste contrato -- nem publica
+             *     nem com conta. O recibo desta operacao e
+             *     `additionalProperties: false` e nao o traz de volta.
+             */
+            postal_code?: string;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            /**
+             * @description Opcional, **para quem revisa** e nao para o diretorio: por que a
+             *     pessoa recomenda. Nao e publicado, nem se a sugestao for aprovada --
+             *     avaliacao da comunidade e outro modelo, e ele nao existe
+             *     (ADR-0011 secao 5.4). Texto puro: contato e pagamento sao recusados
+             *     (D59), porque o canal do contato e o campo acima.
+             */
+            note?: string;
+        };
+        /**
+         * @description O estado da sugestao. Nasce sempre `pending`, e so o painel a move.
+         *     `approved` **nao** quer dizer que a entrada esta no ar: quer dizer que a
+         *     revisao aceitou seguir com o convite do ADR-0011.
+         * @enum {string}
+         */
+        DirectorySuggestionState: "pending" | "approved" | "declined";
+        /**
+         * @description O recibo. **Nao e o recurso sugerido**, de proposito: devolver o texto
+         *     de volta faria a tela parecer que algo foi publicado.
+         */
+        DirectorySuggestionReceipt: {
+            /**
+             * @description O identificador opaco da sugestao: 128 bits aleatorios em
+             *     base64url. **Nao e UUID** (ADR-0010 item 6), e nao carrega o
+             *     instante de criacao dentro, ao contrario de um UUIDv7.
+             */
+            reference: string;
+            state: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        /**
+         * @description Uma indicacao, como **quem a fez** a ve.
+         *
+         *     ## Nao e `AdminDirectorySuggestion`, e a diferenca nao e de organizacao
+         *
+         *     Sao duas audiencias com direitos diferentes sobre a mesma linha. O
+         *     painel ve `note` -- o recado PARA QUEM REVISA --, e esta projecao
+         *     **nao**: ele nao e conteudo da pessoa sobre a entidade, e devolve-lo
+         *     aqui faria a tela parecer um rascunho guardado. Esta projecao devolve
+         *     `entry_slug` **so publicado**; a do painel devolve sempre, porque o
+         *     painel precisa pular para o rascunho que ele mesmo vai completar.
+         *
+         *     Um `allOf` sobre a do painel acoplaria as duas: o dia em que o painel
+         *     ganhar um campo, a pessoa o receberia junto. A duplicacao aqui e
+         *     deliberada e e a fronteira.
+         *
+         *     ## Nada de identificador interno, e nada da autoria
+         *
+         *     **Sem `id`** (ADR-0010 item 6): o enderecamento e por `reference`. A
+         *     coluna da autoria leva a marca `NUNCA sai do servidor` e nao e
+         *     projetada pela funcao que serve esta operacao.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state`
+         *     aqui e a UF, na mesma projecao, exatamente como na tabela e como em
+         *     `AdminDirectorySuggestion`.
+         */
+        MyDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description **O motivo da recusa, e ele CHEGA a quem indicou** -- decisao de
+             *     18/10/2026, que reverte a frase anterior deste contrato e o
+             *     `COMMENT ON COLUMN` da `20261017000016` (ver a descricao de
+             *     `listMyDirectorySuggestions` e o cabecalho da `20261018000003`).
+             *
+             *     Nulo em tudo que nao foi recusado. Continua fora da entrada do
+             *     diretorio e continua nao publicado para terceiros: quem o le e a
+             *     conta que indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco da entrada no `Perto`, **e so quando ela esta
+             *     publicada**.
+             *
+             *     Nulo com `review_status: approved` **tem significado**: a entrada
+             *     existe mas esta `draft`, e nao esta no `Perto`. Isso acontece
+             *     quando a indicacao foi aprovada sem telefone -- entrada nascida de
+             *     contato `website` ou `instagram` nasce rascunho, porque
+             *     `professionals` tem `phone_e164` como canal unico. A tela diz isso
+             *     com palavras e **nao oferece link**, porque link para rascunho leva
+             *     a pagina que nao esta la.
+             */
+            entry_slug?: string | null;
+        };
+        /**
+         * @description A pagina, **da mais recente para a mais antiga**. Sem `pending_total`:
+         *     aquele numero e o aviso do menu do PAINEL ("quanto trabalho esta
+         *     esperando"), e nao tem sentido na tela de quem indicou -- aqui o que
+         *     importa e o estado de cada uma, nao o tamanho de uma fila alheia.
+         */
+        MyDirectorySuggestionPage: {
+            items: components["schemas"]["MyDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /**
+             * @description Quantas indicacoes o RECORTE desta chamada tem -- todas, quando
+             *     `state` esta ausente. Alimenta "Mostrando 1 a 20 de 87" e o
+             *     paginador, e e por isso que ele acompanha o filtro: um total que
+             *     ignorasse `state` faria o paginador oferecer paginas vazias.
+             */
+            total: number;
+        };
+        /**
+         * @description De onde a denuncia veio.
+         *
+         *     **DUAS ORIGENS, E AS DUAS EXISTEM DE VERDADE:**
+         *
+         *     - `review` -- denuncia de avaliacao do `Perto`
+         *       (`professional_review_reports`, migracao `20261017000017`);
+         *     - `conversation` -- denuncia de conversa mediada
+         *       (`conversation_reports`, migracao `20260928000009`), que ate
+         *       18/10/2026 era gravada e **nunca lida por ninguem**: nenhuma rota do
+         *       painel a resolvia.
+         *
+         *     **CINCO ORIGENS DESDE A UNIAO DE 18/10/2026.** As tres novas sao:
+         *
+         *     - `profile` -- denuncia de perfil (`profile_reports`);
+         *     - `photo` -- denuncia de foto (`photo_reports`);
+         *     - `publication` -- denuncia de publicacao (`publication_reports`).
+         *
+         *     As tres tabelas e as tres pernas de `UNION ALL` da visao
+         *     `fila_de_moderacao` existem (migracoes `20261018000031` e
+         *     `20261018000032`), e por isso os valores entram: o `enum` so promete o
+         *     que alguma consulta devolve. Nenhuma linha de consulta de `src/` mudou
+         *     -- a fila le a VISAO e nao as tabelas, que era exatamente a aposta do
+         *     desenho de `20261018000009`.
+         *
+         *     **`publication` responde, e a tabela dela aceita linha orfa.** A
+         *     chave estrangeira para `user_publications` NAO entrou, porque a tabela
+         *     de publicacoes nao existe nesta arvore (a timeline nao foi construida).
+         *     A perna da visao sobrevive a isso porque o texto denunciado fica
+         *     CONGELADO em `publication_reports.publication_body`, e nao no alvo.
+         * @enum {string}
+         */
+        ModerationOrigin: "review" | "conversation" | "profile" | "photo" | "publication";
+        /**
+         * @description `open` e a fila: denuncia esperando decisao. `resolved` e o que ja foi
+         *     decidido -- **nada e apagado**, e o motivo da decisao continua legivel
+         *     ali, que e o que impede o proximo moderador de refazer um juizo que
+         *     alguem ja fez.
+         * @enum {string}
+         */
+        ModerationQueueState: "open" | "resolved";
+        /**
+         * @description O que o administrador decidiu.
+         *
+         *     **Dois valores e nao tres**: a fila tem um estado de espera e dois de
+         *     saida. Nao ha `escalated` nem `pending_review` -- um terceiro valor
+         *     convidaria a primeira pessoa com pressa a ligar um fluxo que ninguem
+         *     desenhou.
+         *
+         *     Sem esta distincao, denuncia descartada e denuncia cujo conteudo foi
+         *     removido ficariam indistinguiveis (as duas com `resolved_at`
+         *     preenchido), e e justamente essa diferenca que alguem vai querer contar.
+         * @enum {string}
+         */
+        ModerationResolution: "content_removed" | "dismissed";
+        /**
+         * @description Um item da fila de moderacao: **um ALVO, com as denuncias dele
+         *     agregadas** -- e nao uma denuncia.
+         *
+         *     Tres pessoas denunciando a mesma avaliacao viram UM item com
+         *     `report_count: 3`. Se o item fosse a denuncia, quem modera decidiria a
+         *     mesma coisa tres vezes sem nunca ver o numero que importa.
+         *
+         *     ## NADA DO DENUNCIANTE E NADA DO DENUNCIADO
+         *
+         *     Em campo nenhum: nem nome, nem UUID, nem a existencia de uma conta por
+         *     tras. Os dois sao pessoas que nao pediram para estar numa tela de
+         *     administrador, e a decisao e sobre o CONTEUDO. O filtro de conta
+         *     desabilitada do denunciante tira o item da fila inteira (tres lugares),
+         *     e nem para isso o nome dele sai do servidor: o predicado do banco
+         *     devolve booleano.
+         *
+         *     **Nada de `id`** (ADR-0010 item 6): o enderecamento e por
+         *     `(origin, target_ref)`.
+         */
+        AdminModerationItem: {
+            origin: components["schemas"]["ModerationOrigin"];
+            /** @description O identificador publico do conteudo denunciado. Ver `parameters/ModerationTargetRef`. */
+            target_ref: string;
+            /**
+             * @description O que identifica o alvo para quem decide: o NOME DO LOCAL na origem
+             *     `review`, o NOME DO PET na origem `conversation`. Nao e nome de
+             *     pessoa em nenhuma das duas.
+             */
+            subject: string;
+            /**
+             * @description **O CONTEUDO DENUNCIADO, quando ele e PUBLICADO.**
+             *
+             *     O texto da avaliacao na origem `review`: ela esta na pagina do
+             *     local, qualquer pessoa a le, e quem modera precisa ler exatamente o
+             *     que todo mundo esta lendo para decidir. Nulo quando a avaliacao foi
+             *     dada so com nota, que e um caso comum.
+             *
+             *     **SEMPRE NULO na origem `conversation`, e isso e desenho e nao
+             *     falta.** A conversa mediada e privada entre duas pessoas, o texto
+             *     que elas trocaram foi escrito esperando que ninguem mais lesse, e
+             *     nada neste produto autoriza o administrador a le-lo
+             *     (`docs/04-seguranca.md` 9 proibe conteudo de mensagem na trilha
+             *     pelo mesmo juizo). O que a origem `conversation` entrega para quem
+             *     decide e `reason`, `detail` -- o relato que o denunciante escreveu,
+             *     que e o canal desenhado para isso e e por isso que ele aceita 1000
+             *     simbolos --, `repeat_total` e `subject`. **E uma limitacao real
+             *     desta fila, declarada aqui para quem for decidir alarga-la saber que
+             *     a estreiteza foi escolhida.**
+             */
+            content?: string | null;
+            /** @description A nota da avaliacao. Nula na origem `conversation`, que nao tem nota. */
+            rating?: number | null;
+            /**
+             * @description O MOTIVO ESCOLHIDO na denuncia mais antiga aberta deste alvo -- a que
+             *     abriu o item de fila. Lista fechada no banco, e os valores diferem
+             *     por origem (`spam`, `offensive`, `false_information`,
+             *     `not_about_this_place`, `other` na avaliacao; `extortion`,
+             *     `harassment`, `spam`, `impersonation`, `other` na conversa). Sai
+             *     como cadeia livre de proposito: um `enum` unico aqui misturaria os
+             *     dois vocabularios e passaria a valer como se fosse um.
+             */
+            reason: string;
+            /** @description Os motivos DISTINTOS de todas as denuncias deste recorte, para a triagem. */
+            reasons: string[];
+            /**
+             * @description O que o denunciante escreveu PARA QUEM MODERA, da denuncia mais
+             *     antiga. Na origem `conversation` e a informacao mais importante do
+             *     item, porque o conteudo nao sai.
+             */
+            detail?: string | null;
+            /** @description Quantas denuncias (de pessoas diferentes) este alvo tem neste recorte. */
+            report_count: number;
+            /**
+             * @description **A CONTAGEM DE REPETICAO, e e o sinal que separa briga de problema
+             *     real.** A soma de `repeat_count` das denuncias do alvo: a insistencia
+             *     de cada denunciante somada. Uma briga de vizinho da 1 e 1; um
+             *     problema real da 7 e 11.
+             */
+            repeat_total: number;
+            /**
+             * Format: date-time
+             * @description QUANDO a denuncia mais antiga deste alvo chegou. E a ordem da fila.
+             */
+            first_reported_at: string;
+            /** Format: date-time */
+            last_reported_at: string;
+            /**
+             * @description O conteudo esta fora do ar? Verdadeiro depois de
+             *     `removeAdminModerationContent` -- e tambem quando a avaliacao foi
+             *     removida pela rota direta `removeAdminDirectoryReview`, que continua
+             *     valendo e grava a mesma coluna.
+             */
+            content_removed: boolean;
+            /**
+             * @description Nula enquanto na fila. Ver `ModerationResolution`.
+             * @enum {string|null}
+             */
+            resolution?: "content_removed" | "dismissed" | null;
+            /**
+             * @description O motivo da decisao, escrito pelo administrador. Nulo enquanto na
+             *     fila. **Nao e publicado, nao chega a quem denunciou e nao chega a
+             *     quem foi denunciado.**
+             */
+            resolution_reason?: string | null;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto na fila.
+             */
+            resolved_at?: string | null;
+        };
+        AdminModerationItemPage: {
+            items: components["schemas"]["AdminModerationItem"][];
+            page: number;
+            limit: number;
+            /** @description Quantos ALVOS o recorte desta chamada tem, com o filtro aplicado -- e nao quantas denuncias. */
+            total: number;
+            /**
+             * @description **A CONTAGEM DO AVISO DO MENU**, e ela IGNORA o filtro de proposito:
+             *     o numero que o item da navegacao mostra responde "quanto trabalho
+             *     esta esperando". Passa pelo mesmo filtro de conta desabilitada da
+             *     listagem e da leitura -- **os tres lugares**, porque filtrar em um
+             *     so faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito
+             *     que a fila da Rede ja produziu.
+             */
+            pending_total: number;
+        };
+        /**
+         * @description O corpo das DUAS acoes, e uma forma so porque e a mesma decisao: o
+         *     motivo escrito.
+         *
+         *     **Obrigatorio nas duas**, e nao so na remocao. Descartar tambem e uma
+         *     decisao sobre o trabalho de outra pessoa, e sem o motivo gravado o
+         *     proximo que receber a mesma denuncia refaz o juizo que alguem ja fez.
+         *
+         *     **Nao ha campo de conta aqui**, e nao ha como pedir acao sobre a pessoa
+         *     por este corpo: desabilitar conta e outro poder e nao entra nesta fila.
+         *     Nao ha campo de mensagem: ninguem e avisado.
+         */
+        AdminModerationDecision: {
+            /**
+             * @description De 3 a 500 simbolos, o MESMO par do `CHECK` do banco
+             *     (`professional_reviews.moderation_reason` e as duas colunas
+             *     `resolution_reason`). Nao e o 2..280 da fila de indicacao: la o
+             *     motivo e um rotulo curto para o proximo revisor, e aqui ele e a
+             *     justificativa de ter tirado conteudo de pessoa do ar, que e o que
+             *     alguem vai ler numa contestacao.
+             */
+            reason: string;
+        };
+        /**
+         * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
+         *
+         *     **Nada de quem indicou**, em campo nenhum: nem nome, nem contagem por
+         *     entidade, nem a existencia de uma conta por tras. A coluna da autoria
+         *     leva a marca `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao
+         *     `20261017000004` (ADR-0011 secao 4, BICHUS-174), e o que nao chega ao
+         *     tipo do servidor nao tem como sair daqui. **Nada de `id`** (ADR-0010
+         *     item 6): o enderecamento e por `reference`.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state` aqui
+         *     e a UF, na mesma projecao, exatamente como na tabela.
+         *     `DirectorySuggestionReceipt` pode chamar o seu de `state` porque o
+         *     recibo do aplicativo nao devolve a UF.
+         */
+        AdminDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O mesmo que o aplicativo recebeu no recibo. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            /**
+             * @description O recado PARA QUEM REVISA. Sai aqui porque esta fila e justamente
+             *     quem revisa; ele **nao** e copiado para a entrada do diretorio na
+             *     aprovacao, e nao e publicado em lugar nenhum (ADR-0011 secao 5.4).
+             */
+            note?: string | null;
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description O motivo da recusa, escrito pelo administrador para o PROXIMO
+             *     revisor. Nulo em tudo que nao foi recusado. Nao e publicado e nao
+             *     chega a quem indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco publico da entrada do diretorio que a aprovacao produziu
+             *     -- ou da entrada que **ja existia** e a que a indicacao foi ligada.
+             *     Nulo em tudo que nao foi aprovado. E por ele que o painel pula da
+             *     fila para a entrada.
+             */
+            entry_slug?: string | null;
+        };
+        AdminDirectorySuggestionPage: {
+            items: components["schemas"]["AdminDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /** @description Quantas linhas o recorte desta chamada tem, com o filtro aplicado. */
+            total: number;
+            /**
+             * @description **A contagem do aviso do menu**, e ela IGNORA o filtro de proposito:
+             *     o numero que o item da navegacao mostra responde "quanto trabalho
+             *     esta esperando". Passa pelo mesmo filtro de conta desabilitada da
+             *     listagem e da leitura -- os tres lugares, porque filtrar em um so
+             *     faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito
+             *     que a fila da Rede ja produziu.
+             */
+            pending_total: number;
+        };
+        /**
+         * @description O corpo da aprovacao. **`slug` e o endereco publico da entrada**, e e
+         *     ele que resolve a duplicata: se ja existir entrada com esse `slug`, nada
+         *     e criado, nada na entrada existente e alterado, e a indicacao e ligada
+         *     aquela entrada (`entry_created: false`).
+         *
+         *     **Nao ha `city`, `state`, `kind` nem `display_name` aqui**: esses vem da
+         *     indicacao, e deixar o operador reescreve-los faria a aprovacao ser um
+         *     formulario de cadastro com outro nome -- para isso existe
+         *     `createAdminDirectoryEntry`. Corrigir a entrada depois de aprovada e
+         *     `updateAdminDirectoryEntry`.
+         *
+         *     **Nao ha `status`.** Publicar nao e parametro: a entrada vai ao ar
+         *     quando estiver completa pela regua de `missing_to_publish`, e fica em
+         *     `draft` quando nao estiver.
+         */
+        AdminDirectorySuggestionApproval: {
+            slug: components["schemas"]["Slug"];
+            /**
+             * @description O telefone COMERCIAL da entidade (ADR-0011 secao 4), opcional, e so
+             *     usado quando a entrada e criada agora. Existe porque
+             *     `professionals` so tem `phone_e164` como canal de contato: a
+             *     indicacao cujo contato publico e `website` ou `instagram` nao tem o
+             *     que copiar, e sem telefone a entrada nasce `draft` e nao aparece no
+             *     `Perto`. Informado, a entrada nasce no ar. Ignorado quando a
+             *     indicacao e ligada a uma entrada que ja existe -- alterar a entrada
+             *     existente e `updateAdminDirectoryEntry`, que tem `If-Match`.
+             */
+            phone_e164?: string;
+        };
+        /** @description A indicacao aprovada, a entrada do diretorio, e qual dos dois caminhos aconteceu. */
+        AdminDirectorySuggestionApproved: {
+            suggestion: components["schemas"]["AdminDirectorySuggestion"];
+            entry: components["schemas"]["AdminDirectoryEntry"];
+            /**
+             * @description `true` quando a entrada nasceu desta aprovacao; `false` quando a
+             *     indicacao foi ligada a uma entrada que ja existia, que e a
+             *     duplicata. A tela diz as duas coisas com palavras diferentes:
+             *     "entrada criada" e "ligada a entrada que ja estava no Perto".
+             */
+            entry_created: boolean;
+        };
+        /**
+         * @description O corpo da recusa. **O motivo e obrigatorio**, ao contrario das outras
+         *     duas filas do painel: ele e para o PROXIMO revisor, porque a mesma
+         *     entidade vai ser indicada outra vez. Nao e publicado e nao chega a quem
+         *     indicou.
+         */
+        AdminDirectorySuggestionDecline: {
+            /**
+             * @description Por que a indicacao foi recusada. Texto puro, com o mesmo teto do
+             *     recado da indicacao: contato e pagamento sao recusados (D59) e
+             *     controle bidirecional tambem, como todo texto que uma pessoa
+             *     escreve neste produto.
+             */
+            reason: string;
+        };
+        /**
+         * @description O que a busca de CEP devolve: **texto, nunca coordenada** (ADR-0006).
+         *
+         *     Os quatro campos sao os que um formulario preenche, e sao os mesmos
+         *     quatro que `app/lib/api/busca_de_cep.dart` ja lia das duas bases desde
+         *     17/10/2026 -- esta forma espelha a dele e nao inventa uma segunda.
+         *
+         *     **O que foi deixado de fora, e cada ausencia e deliberada:**
+         *
+         *     - `location.coordinates` da BrasilAPI (latitude e longitude). Ler isso
+         *       transformaria uma busca de texto num geocodificador, que e o que a
+         *       ADR-0006 proibe. Nao ha campo aqui, nao ha coluna no banco e o
+         *       adaptador nunca o le.
+         *     - `ibge`, `timezoneName` e `service`: nenhum tem campo em formulario
+         *       nenhum, e guardar dado sem finalidade e o oposto da minimizacao.
+         *     - `complemento` do ViaCEP. **Ele NAO e o complemento de quem preenche**:
+         *       vem como "ate 609 - lado impar" e descreve a FAIXA da rua. Jogar isso
+         *       num campo de complemento poria o conjunto de ninguem no endereco de
+         *       uma clinica.
+         */
+        PostalCodeAddress: {
+            /**
+             * @description O logradouro. **Pode vir vazio**, e isso nao e erro: CEP de cidade
+             *     inteira ("CEP geral") nao aponta para uma rua. A tela deixa o campo
+             *     para quem preenche.
+             */
+            street: string;
+            /** @description O bairro. Vazio pelo mesmo motivo de `street`. */
+            neighborhood: string;
+            city: string;
+            /**
+             * @description A UF, duas letras maiusculas. Quando a base nao devolve cidade ou
+             *     devolve UF que nao tem dois caracteres, a resposta nao e `200`: o
+             *     adaptador trata como "nao encontrado" em vez de entregar endereco
+             *     pela metade, que apagaria o que a pessoa ja tinha digitado.
+             */
+            state: string;
+        };
+        /**
+         * @description A situacao da entrada. Espelha `professionals.status` e a entrada
+         *     `public.professionals.professionals_status_check` do teste de conjunto
+         *     exato. So `published` aparece em `Perto`.
+         *
+         *     `hidden` e retirada temporaria (moderacao, estabelecimento fechado para
+         *     reforma) e `removed` e retirada definitiva **sem apagar a linha**: a
+         *     entrada sai do diretorio e continua existindo para a trilha.
+         * @enum {string}
+         */
+        DirectoryEntryStatus: "draft" | "published" | "hidden" | "removed";
+        /**
+         * @description Como a linha nasceu. Espelha `professionals.source`. **Somente
+         *     leitura**: nao ha campo para enviar `source`, e o painel grava sempre
+         *     `import`, que e o unico valor que o `CHECK
+         *     professionals_aceite_antes_do_perfil` admite para uma entrada sem
+         *     titular. `self` e `invited` sao os caminhos que passam pelo aceite de
+         *     quem o perfil descreve, e o painel nao tem como produzir esse aceite.
+         * @enum {string}
+         */
+        DirectoryEntryOrigin: "self" | "invited" | "import";
+        /**
+         * @description Quem responde pelo perfil. Espelha `professionals.claim_status`.
+         *     **Somente leitura.** A entrada cadastrada pelo painel nasce
+         *     `unclaimed`: a entidade existe no diretorio e ninguem do outro lado
+         *     reivindicou o perfil. **Isto nao e um vinculo entre pessoas** -- quem
+         *     reivindicou nunca sai do servidor, e esta resposta nao o carrega.
+         * @enum {string}
+         */
+        DirectoryEntryClaimStatus: "unclaimed" | "claim_pending" | "claimed" | "disputed";
+        /**
+         * @description Um campo que falta para a entrada poder ir ao ar. `slug` esta na lista
+         *     porque `DirectoryEntrySummary.slug` e `required` na listagem do
+         *     aplicativo: uma entrada publicada sem endereco publico nao teria como
+         *     ser serializada, e o defeito apareceria como erro de serializacao em
+         *     producao, longe de quem o causou.
+         *
+         *     `phone_e164` e hoje o **unico** canal de contato que a tabela tem: nao
+         *     existe coluna para site, e-mail, WhatsApp nem rede social. Quando
+         *     existirem, "ao menos um canal" passa a ser uma disjuncao.
+         * @enum {string}
+         */
+        AdminDirectoryEntryMissingField: "slug" | "city" | "state" | "phone_e164";
+        /**
+         * @description O cadastro de uma entrada, **em rascunho**. Ver
+         *     `createAdminDirectoryEntry` para o que deliberadamente nao esta aqui:
+         *     documento (`cnpj`, `crmv_*`), nivel de verificacao e coordenada.
+         *
+         *     **ONG passou a caber, e por `entity_kind`.** A frase anterior aqui
+         *     excluia "qualquer coisa de ONG" porque nao havia onde guardar o tipo de
+         *     entidade; desde `20261018000012` ha. O que continua de fora e ADOCAO:
+         *     pet em adocao nao e campo de cadastro de estabelecimento e nao tem rota
+         *     neste contrato.
+         */
+        AdminDirectoryEntryInput: {
+            /**
+             * @description O endereco publico da entrada, e tambem como o painel a endereca.
+             *     **Obrigatorio ja no rascunho**, e nao so na publicacao: a
+             *     unicidade e global sobre nao-nulo desde a `20260922000021`, e
+             *     exigir o endereco no cadastro move a recusa de conflito de nome
+             *     para quem esta cadastrando, com o formulario na tela, em vez de
+             *     para o momento de publicar.
+             */
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            /**
+             * @description O tipo de entidade. **Opcional, e ausente vale `professional`** --
+             *     o mesmo `DEFAULT` da coluna. Exigi-lo aqui tornaria obrigatorio um
+             *     campo que nao existia, que e quebra de contrato de REQUISICAO
+             *     (`request-property-became-required`) e derrubaria todo painel ja
+             *     carregado no navegador de quem esta cadastrando agora.
+             * @default professional
+             */
+            entity_kind: components["schemas"]["EntityKind"];
+            /** @description O nome do estabelecimento ou de quem atende, como aparece em `Perto`. */
+            display_name: string;
+            /** @description Texto puro, renderizado como texto no app (D47). Nenhuma marcacao. */
+            about?: string;
+            city?: string;
+            /** @description A UF, duas letras. */
+            state?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de um envio com `purpose: directory_logo` desta mesma
+             *     sessao do painel. Envio de outro proposito, ja usado em outra
+             *     entrada ou vencido e recusado com `400`
+             *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+             */
+            logo_upload_id?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de um envio com `purpose: directory_photo`. Mesma
+             *     regra de recusa da logo.
+             */
+            photo_upload_id?: string;
+            neighborhood?: string;
+            /**
+             * @description CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
+             *     de `CollarTagShippingAddress.postal_code`, copiado dele. O painel
+             *     recebe com mascara e manda assim.
+             *
+             *     `GET /v1/admin/postal-codes/{postalCode}` o troca por rua, bairro,
+             *     cidade e UF **para poupar digitacao**, e o resultado e editavel: o
+             *     servidor nao refaz a busca e nao confere o endereco contra o CEP.
+             *     Quem cadastra manda o que conferiu na tela.
+             */
+            postal_code?: string;
+            street?: string;
+            /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. Mesma decisao de `CollarTagShippingAddress.street_number`. */
+            street_number?: string;
+            complement?: string;
+            /**
+             * @description Telefone **comercial** em E.164, publicado de proposito pela
+             *     entidade que aceitou aparecer para ser contratada (ADR-0011 secao
+             *     4). Deliberadamente diferente do telefone de conta de usuario, que
+             *     aceita so Brasil. O painel recebe o numero com mascara brasileira e
+             *     manda E.164.
+             */
+            phone_e164?: string;
+        };
+        /**
+         * @description A edicao. `null` **apaga** o campo e ausente **nao mexe** -- a
+         *     distincao e o que separa "limpar o bairro" de "editar so o telefone".
+         *     `slug`, `kind` e `display_name` nao aceitam `null`: a entrada nao
+         *     existe sem eles.
+         */
+        AdminDirectoryEntryPatch: {
+            /** @description Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver. */
+            slug?: components["schemas"]["Slug"];
+            kind?: components["schemas"]["ProfessionalKind"];
+            /**
+             * @description Corrigir o tipo de entidade e permitido. **Nao aceita `null`**,
+             *     como `slug`, `kind` e `display_name`: a entrada nao existe sem ele,
+             *     e "nenhum tipo de entidade" nao e estado que o banco guarde (a
+             *     coluna e `NOT NULL`).
+             */
+            entity_kind?: components["schemas"]["EntityKind"];
+            display_name?: string;
+            about?: string | null;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            /** Format: uuid */
+            logo_upload_id?: string | null;
+            /** Format: uuid */
+            photo_upload_id?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
+            /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
+            phone_e164?: string | null;
+            /**
+             * @description **Sem este campo o estado nao muda.** E assim que "editar nao
+             *     despublica" deixa de ser uma frase: nao existe caminho que mexa em
+             *     `status` sem o corpo ter pedido.
+             */
+            status?: components["schemas"]["DirectoryEntryStatus"];
+        };
+        /**
+         * @description A entrada como o painel a ve. **Nao tem `id`** (ADR-0010 item 6, e o
+         *     painel endereca por `slug` como em `Loja` e `Rede`), nao tem coordenada,
+         *     nao tem quem convidou a entidade e nao tem quem a reivindicou: as duas
+         *     ultimas ligam a entrada a uma conta de pessoa, e a BICHUS-174 proibe
+         *     expor vinculo entre duas pessoas inclusive como contagem e como
+         *     existencia.
+         *
+         *     **`cnpj`, `crmv_number` e `crmv_uf` tambem nao saem aqui.** Eles existem
+         *     na tabela, o painel nao os escreve, e devolve-los faria uma tela de
+         *     cadastro mostrar documento de terceiro sem nenhuma necessidade.
+         */
+        AdminDirectoryEntry: {
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
+            display_name: string;
+            about?: string | null;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            postal_code?: string | null;
+            street?: string | null;
+            street_number?: string | null;
+            complement?: string | null;
+            phone_e164?: string | null;
+            /**
+             * @description A logo da entidade, quadrada. `status: processing` enquanto o worker
+             *     nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
+             *     imagem, nao um erro.
+             */
+            logo?: components["schemas"]["AdminCatalogImage"] | null;
+            /**
+             * @description A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
+             *     `status` e `url` da logo.
+             */
+            photo?: components["schemas"]["AdminCatalogImage"] | null;
+            status: components["schemas"]["DirectoryEntryStatus"];
+            /**
+             * @description **Somente leitura**, derivada de `entity_verifications`. Esta aqui
+             *     para a tela poder dizer O QUE foi verificado, e nao para ser
+             *     escrita: nao ha campo de verificacao em nenhum corpo desta secao.
+             */
+            verification: components["schemas"]["DirectoryVerification"];
+            source: components["schemas"]["DirectoryEntryOrigin"];
+            claim_status: components["schemas"]["DirectoryEntryClaimStatus"];
+            /**
+             * @description O que falta para a entrada ir ao ar, **vazio quando nada falta**. A
+             *     tela mostra isso antes de alguem clicar em publicar; a mesma regua
+             *     recusa a publicacao com `400` se tentarem de outro jeito.
+             */
+            missing_to_publish: components["schemas"]["AdminDirectoryEntryMissingField"][];
+            /**
+             * Format: date-time
+             * @description Desde quando a entrada esta no ar. Nulo enquanto ela nunca foi
+             *     publicada. **Nao e `created_at`**: a entrada nasce rascunho e pode
+             *     ser publicada meses depois, e uma correcao de telefone numa entrada
+             *     ja publicada nao muda esta resposta.
+             */
+            published_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminDirectoryEntryPage: {
+            items: components["schemas"]["AdminDirectoryEntry"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
+             *     foi informado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia. Mesma forma de `DirectoryEntryPage.applied_filters`.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description A pontuacao agregada de um local, no formato que a Play Store tornou
+         *     legivel: a media, quantas pessoas avaliaram e como as notas se
+         *     distribuem.
+         *
+         *     **CALCULADA NA CONSULTA, nao materializada.** Nao ha coluna
+         *     `rating_average` em `professionals` e nao ha gatilho que a mantenha. O
+         *     motivo e consistencia e nao preguica: media guardada tem quatro
+         *     caminhos de invalidacao (criar, editar, apagar, remover pela moderacao)
+         *     mais um quinto invisivel -- o autor desabilitar a conta, que muda a
+         *     media de todo local que ele avaliou sem tocar em nenhuma avaliacao. Um
+         *     gatilho em `professional_reviews` nao enxerga esse quinto caminho, e a
+         *     media ficaria errada em silencio, que e o pior defeito desta classe.
+         *     Com `AVG` sobre o indice de `(professional_id, status)` a conta sai da
+         *     mesma consulta da pagina, e a pagina le UM local.
+         *
+         *     **O recorte da conta e identico ao da lista** (`status = 'published'` e
+         *     `conta_habilitada(author_user_id)`), e isso e o que impede "128
+         *     avaliacoes" sobre uma lista que mostra 126.
+         *
+         *     **`average` e nulo quando `count` e zero**, e nao zero: zero e uma nota
+         *     possivel de se ler como "pessimo", e um local sem avaliacao nao e
+         *     pessimo. A tela escreve "Ainda sem avaliacoes" e nao desenha estrela
+         *     nenhuma.
+         */
+        DirectoryRating: {
+            /**
+             * Format: double
+             * @description A media das notas publicadas, **com uma casa decimal** (o servidor
+             *     arredonda; a tela nao decide). Nula quando `count` e zero.
+             */
+            average?: number | null;
+            /** @description Quantas avaliacoes publicadas o local tem. */
+            count: number;
+            /**
+             * @description Quantas avaliacoes em cada nota. **As cinco chaves vem sempre**,
+             *     inclusive com zero: a barra de uma nota que ninguem deu precisa
+             *     existir vazia, senao o grafico muda de forma e deixa de ser
+             *     comparavel entre locais.
+             */
+            histogram: {
+                1: number;
+                2: number;
+                3: number;
+                4: number;
+                5: number;
+            };
+        };
+        /**
+         * @description A pagina do local. **Os mesmos campos de `DirectoryEntrySummary`**,
+         *     mais `rating` e `my_review_ref`.
+         *
+         *     Ela repete os campos em vez de usar `allOf` com o resumo porque o
+         *     gerador de tipos de `src/`, `admin/` e `web/` produz uniao de
+         *     interseccao para `allOf`, e um campo nulavel atravessa isso perdendo a
+         *     nulabilidade. Os tres geradores leem este arquivo.
+         *
+         *     **A FOTO E A LOGO PASSARAM A EXISTIR**, e esta frase substitui a
+         *     anterior, que dizia que "foto nao e coluna de `professionals`". Era
+         *     verdade e deixou de ser: a migracao `20261018000008` criou
+         *     `logo_image_id` e `photo_image_id`, e o cliente liberou as duas para o
+         *     aplicativo em 18/10/2026. Site, e-mail, WhatsApp, redes sociais e
+         *     horario continuam sem coluna e continuam fora -- declarar campo que
+         *     ninguem pode preencher produziria uma tela com linhas vazias
+         *     permanentes.
+         *
+         *     **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
+         *     quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
+         *     (ADR-0010 item 6 e BICHUS-174).
+         */
+        DirectoryEntryDetail: {
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
+            display_name: string;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            about?: string | null;
+            /**
+             * @description Telefone **comercial** (ADR-0011 secao 4), e a unica acao de
+             *     contato que a pagina oferece. Mesmo aviso de
+             *     `DirectoryEntrySummary`: este campo so pode existir porque a
+             *     operacao exige conta -- ele esta na lista de proibidos de
+             *     `src/tools/portao-contrato-publico.ts`.
+             */
+            phone_e164?: string | null;
+            /**
+             * Format: uri
+             * @description A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma
+             *     regra: derivada publica, nunca o original, nula quando nao ha, quando
+             *     ainda processa e quando foi recusada. A pagina a desenha ao lado do
+             *     nome, como o cartao.
+             */
+            logo_url?: string | null;
+            /**
+             * Format: uri
+             * @description A FOTO do lugar -- fachada ou ambiente --, liberada para o
+             *     aplicativo pelo cliente em 18/10/2026. Faixa 16:9, derivada
+             *     `banner` de 1280 x 720, e e a imagem que a pessoa olha GRANDE antes
+             *     de decidir se leva o animal ali.
+             *
+             *     **So no detalhe, e nunca na listagem.** Ela nao existe em
+             *     `DirectoryEntrySummary` de proposito: a faixa em ate 20 cartoes
+             *     multiplicaria o peso da primeira pintura, e a lista desenha a logo.
+             *
+             *     **E a URL da DERIVADA publica, nunca do original**, com a forma
+             *     `directory/{banner|card}/{nome}.jpeg`. Nula quando nao ha foto,
+             *     quando o worker ainda nao terminou e quando os bytes foram
+             *     recusados -- nos tres a pagina existe sem a faixa.
+             */
+            photo_url?: string | null;
+            verification: components["schemas"]["DirectoryVerification"];
+            /**
+             * @description Arredondada a 100 m, que e a grade do ADR-0006. Nula quando a
+             *     entrada nao tem coordenada ou quando quem chama nao tem localizacao
+             *     de referencia valida. **Nunca sai o ponto.**
+             */
+            distance_m?: number | null;
+            rating: components["schemas"]["DirectoryRating"];
+            /**
+             * @description O `ref` da MINHA avaliacao deste local, ou nulo se eu nao avaliei.
+             *
+             *     Existe para a tela saber, **antes de montar**, se desenha o campo
+             *     vazio ou a minha avaliacao com `Editar` e `Apagar`. Sem ele a tela
+             *     teria de varrer a paginacao inteira das avaliacoes procurando
+             *     `mine: true`, e a minha pode estar na pagina 7.
+             */
+            my_review_ref?: string | null;
+            /**
+             * @description **Se EU posso avaliar agora**, e nao se a funcionalidade existe. E
+             *     falso para conta sem e-mail confirmado -- a mesma regua de criar
+             *     encontro.
+             *
+             *     Ele existe para a tela nao oferecer um campo que vai levar `403`.
+             *     **Nao substitui a checagem do servidor**: `putMyDirectoryEntryReview`
+             *     reavalia a condicao, porque um campo de resposta e uma dica de
+             *     interface e nunca a autorizacao.
+             */
+            can_review?: boolean;
+            /**
+             * @description Por que `can_review` e falso, para a tela escrever a frase certa e
+             *     oferecer a acao certa (confirmar o e-mail) em vez de um "nao e
+             *     possivel" sem saida. Nulo quando `can_review` e verdadeiro.
+             *
+             *     Enum de um valor so hoje, e aberto de proposito: quando houver
+             *     bloqueio por moderacao ele entra aqui e nao em um segundo booleano.
+             * @enum {string|null}
+             */
+            review_blocked_reason?: "unverified_channel" | null;
+        };
+        /**
+         * @description Uma avaliacao, como a lista e a pagina a mostram.
+         *
+         *     **Nao ha identificador do autor, de nenhuma forma.** Nem conta, nem
+         *     `slug`, nem ref opaco estavel entre locais. `ref` identifica a
+         *     AVALIACAO e e sorteado por linha: duas avaliacoes da mesma pessoa em
+         *     locais diferentes nao tem nada em comum na resposta. A BICHUS-174
+         *     proibe expor vinculo entre duas pessoas "inclusive como contagem e como
+         *     existencia", e um ref de autor permitiria montar o historico de
+         *     qualquer um.
+         */
+        DirectoryReview: {
+            /**
+             * @description O identificador opaco da avaliacao, usado por
+             *     `reportDirectoryEntryReview` e pela remocao do painel. **Nao e
+             *     UUID** (ADR-0010 item 6) e nao e derivado do autor.
+             */
+            ref: string;
+            /** @description A nota, inteira de 1 a 5. Nunca nula: a nota E a avaliacao. */
+            rating: number;
+            /**
+             * @description A recomendacao em texto. **Nula e estado normal e frequente**: o
+             *     cliente decidiu que o texto e opcional, e dar so a nota tem de
+             *     funcionar. A tela mostra o item com as estrelas e sem paragrafo.
+             *
+             *     **Texto puro, sem HTML e sem marcacao.** O servidor recusa `<` e
+             *     `>` no corpo (`400`) em vez de escapar na saida: escapar depende de
+             *     toda tela futura lembrar de escapar, e recusar na entrada vale uma
+             *     vez. Quem escrever "nota 10 <3" leva `400` -- custo aceito e
+             *     preferivel ao inverso.
+             */
+            body?: string | null;
+            /**
+             * @description O nome de exibicao de quem escreveu, **ou nulo**. Nulo e estado
+             *     normal (conta sem nome), e a tela escreve "Alguem da comunidade" em
+             *     vez de deixar a linha muda.
+             */
+            author_display_name?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a avaliacao foi publicada pela primeira vez.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Quando o autor a editou pela ultima vez, ou nulo se nunca editou.
+             *     **A tela diz "editada"**: uma avaliacao reescrita depois de quem
+             *     respondeu a ela ter lido a primeira versao e um formato conhecido
+             *     de ma-fe, e marcar a edicao e o que o torna visivel.
+             */
+            edited_at?: string | null;
+            /**
+             * @description Verdadeiro na avaliacao de quem chama. A tela a tira do fluxo e a
+             *     mostra no bloco de edicao, com `Editar` e `Apagar`.
+             */
+            mine: boolean;
+        };
+        DirectoryReviewPage: {
+            items: components["schemas"]["DirectoryReview"][];
+            page: number;
+            limit: number;
+            /**
+             * @description O total de avaliacoes publicadas do local, **o mesmo numero de
+             *     `DirectoryRating.count`**, porque as duas consultas usam o mesmo
+             *     recorte. Dois numeros diferentes na mesma tela e o defeito que a
+             *     duplicacao de recorte produz.
+             */
+            total: number;
+        };
+        /** @description O corpo de `putMyDirectoryEntryReview`. */
+        DirectoryReviewInput: {
+            /**
+             * @description **Inteira de 1 a 5**, e obrigatoria. Nota fora da faixa e `400`, e
+             *     o `CHECK` da tabela cobra o mesmo no banco -- duas recusas, porque
+             *     uma delas e a que sobra se a outra for contornada.
+             *
+             *     Nao ha meia estrela: o cliente pediu nota de 1 a 5 e meia estrela
+             *     mudaria o tipo da coluna depois de haver dado gravado.
+             */
+            rating: number;
+            /**
+             * @description **Opcional.** Enviar so a nota funciona, e e o caso comum.
+             *
+             *     O limite de 1500 e o limite da coluna, nao um numero de tela: o
+             *     `CHECK` em `professional_reviews.body` recusa 1501. Texto maior e
+             *     `400`.
+             *
+             *     **Sem HTML**: `<` e `>` sao recusados (`400`,
+             *     `code: html_not_allowed`). String vazia ou so com espaco e tratada
+             *     como ausente e grava nulo -- gravar `''` criaria duas
+             *     representacoes de "sem texto" e toda tela teria de conhecer as
+             *     duas.
+             */
+            body?: string | null;
+        };
+        /** @description A resposta de `putMyDirectoryEntryReview`. */
+        DirectoryReviewWritten: {
+            review: components["schemas"]["DirectoryReview"];
+            /**
+             * @description Verdadeiro quando esta foi a PRIMEIRA avaliacao desta pessoa neste
+             *     local; falso quando o envio atualizou a que ja existia.
+             *
+             *     A tela escolhe entre "Avaliacao publicada" e "Avaliacao
+             *     atualizada" com este campo. Sem ele ela teria de adivinhar pelo
+             *     estado que tinha antes, que e exatamente o estado que pode estar
+             *     velho.
+             */
+            created: boolean;
+            /**
+             * @description A pontuacao do local **ja com esta avaliacao dentro**. Vem na mesma
+             *     resposta para a tela nao precisar de uma segunda chamada so para
+             *     atualizar a media que o proprio toque acabou de mudar -- e porque
+             *     uma segunda chamada deixaria a media velha na tela se ela falhasse.
+             */
+            rating: components["schemas"]["DirectoryRating"];
+        };
+        /**
+         * @description O corpo de `reportDirectoryEntryReview`.
+         *
+         *     **Motivo de lista fechada e nao texto livre**, pelo mesmo desenho de
+         *     `conversation_reports` (migracao `20260928000009`): a fila de moderacao
+         *     precisa ser triada, e campo livre nao tria. O `detail` existe para o
+         *     caso que a lista nao cobre, e e opcional.
+         */
+        DirectoryReviewReportInput: {
+            /**
+             * @description `not_about_this_place` existe porque e o caso mais comum e mais
+             *     facil de verificar num diretorio: a pessoa avaliou o lugar errado.
+             *     `false_information` e o caso que motiva a rota existir -- negocio
+             *     real com nome e endereco, e uma afirmacao falsa sobre ele tem
+             *     consequencia fora do app.
+             * @enum {string}
+             */
+            reason: "spam" | "offensive" | "false_information" | "not_about_this_place" | "other";
+            /**
+             * @description Opcional, e o mesmo limite de `conversation_reports.detail`. Sem
+             *     HTML, como o corpo da avaliacao.
+             */
+            detail?: string | null;
+        };
+        /** @description O corpo de `removeAdminDirectoryReview`. */
+        DirectoryReviewRemovalInput: {
+            /**
+             * @description **Obrigatorio**: e a diferenca entre moderacao e arbitrio. Vai para
+             *     `professional_reviews.moderation_reason` e para a trilha, e **nunca
+             *     sai para o app** -- nenhuma leitura publica projeta esta coluna.
+             */
+            reason: string;
         };
         /**
          * @description O **codigo** da categoria do produto, primeiro dos dois niveis
@@ -4893,6 +8742,42 @@ export interface components {
              *     de deixar a imagem sem nome acessivel.
              */
             image_alt_text?: string | null;
+            /**
+             * @description Todas as imagens prontas do item, na ordem do painel; a primeira e
+             *     a mesma de `image_url`. A vitrine desenha carrossel quando ha mais
+             *     de uma.
+             *
+             *     **ADITIVO, e `image_url` NAO foi tocado** (17/10/2026). O APK
+             *     instalado le `image_url` e nada mais; renomear ou remover aquele
+             *     campo quebraria o app que esta no bolso das pessoas, e isso ja
+             *     aconteceu neste produto com a unidade de preco. A licao esta
+             *     aplicada aqui: campo novo ao lado, o antigo intacto, e o cliente
+             *     velho continua desenhando uma imagem sem saber que ha oito.
+             *
+             *     **OPCIONAL de proposito.** Nao entra em `required`: resposta sem o
+             *     campo continua valida, e e o que permite ao servidor passar a
+             *     emiti-lo sem sincronizar a publicacao das quatro aplicacoes.
+             *
+             *     **`maxItems: 8` e o MESMO teto de `StoreItemDetail.images`, e a
+             *     igualdade e obrigatoria, nao estetica.** `StoreItemDetail` e
+             *     `allOf: [StoreItemSummary, {required: [images]}]`, e `allOf` e
+             *     intersecao: um teto menor aqui valeria TAMBEM para o detalhe e
+             *     encolheria a galeria do produto de 8 para o numero escrito aqui,
+             *     calado, sem ninguem ter pedido. Quem quiser limitar quantas imagens
+             *     o RESUMO devolve limita no servidor, que e onde a decisao nao
+             *     atravessa para a outra tela.
+             *
+             *     **Peso: a vitrine carrega SOB DEMANDA.** A derivada de produto e
+             *     uma so (`card`, 1024 px, teto de 500 KB), e nao ha miniatura de
+             *     produto no contrato nem no pipeline. Uma pagina cheia (20 itens)
+             *     que baixasse as 8 de cada cartao pediria ate 80 MB; o app desenha a
+             *     primeira imagem de cada cartao e so busca as seguintes quando a
+             *     pessoa arrasta, o que mantem a primeira pintura no peso de hoje.
+             *     `thumb_url` em `StoreItemImage` foi considerado e recusado: o
+             *     pipeline de produto nao emite `thumb`, e o campo sairia nulo em
+             *     toda imagem -- o endereco de um objeto que ninguem gravou.
+             */
+            images?: components["schemas"]["StoreItemImage"][];
             /**
              * Format: uri
              * @description O destino no site do parceiro. **Nenhum identificador de pessoa
@@ -5143,6 +9028,130 @@ export interface components {
          *     em link. Mudar as observacoes avisa todos os administradores (D60).
          */
         NetworkEventNotes: string;
+        /**
+         * @description Uma foto da vitrine do DONO. `grid_url` e `open_url` sao compostas na
+         *     leitura a partir das chaves da imagem: o banco nao guarda URL
+         *     (`docs/07-devops.md` 3.6).
+         *
+         *     **Nao ha `id`.** A identidade interna da imagem (`catalog_images.id`)
+         *     nunca sai em resposta; o identificador que sai e o `upload_id`, como nas
+         *     duas galerias da casa.
+         *
+         *     **Nao ha legenda, curtida, contador nem pessoa marcada**, e nenhuma das
+         *     quatro e omissao a ser preenchida depois. `alt_text` nao e legenda: e o
+         *     rotulo que o leitor de tela anuncia, e nunca e desenhado como texto.
+         */
+        ShowcasePhoto: {
+            /**
+             * Format: uuid
+             * @description O envio que originou a foto, e e por ele que `replaceMyShowcase`
+             *     diz "esta foto, nesta posicao". **Nulo** depois que o varredor
+             *     apagou a intencao de envio: a foto continua na vitrine e deixa de
+             *     poder ser reordenada por ela. Estado raro e previsto, nao erro.
+             */
+            upload_id: string | null;
+            /** @description `0` e a CAPA. Reordenar troca a capa, e por isso nao existe campo `is_cover` para divergir da ordem. */
+            position: number;
+            /**
+             * @description `processing` -> `ready` ou `rejected`, e NUNCA volta. Em
+             *     `processing` as duas URLs sao nulas: antes de o worker reescrever a
+             *     derivada a foto carrega o EXIF do celular, e servi-la seria entregar
+             *     a coordenada de onde ela foi tirada.
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada de **320 x 320 px (1:1)**, para a GRADE do perfil, que
+             *     desenha celulas de 104 dp -- 312 px reais a 3x. **E ela que a grade
+             *     deve pedir, e nunca `open_url`**: a derivada de 1024 px e 1,6x mais
+             *     dado do que a celula pinta, e a grade desenha ate NOVE de uma vez,
+             *     entao o desperdicio e multiplicado por nove. O original nunca sai:
+             *     ele nao tem derivada publica.
+             *
+             *     Nula enquanto `status` e `processing`: antes de o worker reescrever a
+             *     derivada a foto carrega o EXIF do celular.
+             */
+            grid_url: string | null;
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, para a foto ABERTA -- a
+             *     unica que a pessoa olha grande, e portanto a unica que mira a faixa
+             *     de 300 a 500 KB. Nula enquanto `status` e `processing`.
+             */
+            open_url: string | null;
+            /**
+             * @description O motivo, em texto, quando `status` e `rejected`. Sem ele a tela
+             *     diria "recusada" e a pessoa nao teria como saber o que consertar.
+             *     Nulo em `processing` e em `ready`.
+             */
+            rejection_reason: string | null;
+            /**
+             * @description **Opcional**, e e a unica diferenca em relacao as duas galerias da
+             *     casa, onde ele e obrigatorio. Lá quem escreve e um administrador
+             *     descrevendo conteudo que terceiros vao ver; aqui NAO HA TERCEIRO --
+             *     a vitrine e visivel so ao dono, e o unico leitor possivel do texto e
+             *     quem tirou a foto. Nulo faz o leitor de tela cair no rotulo da grade.
+             */
+            alt_text: string | null;
+        };
+        /**
+         * @description A vitrine da PROPRIA conta. `photos: []` e estado normal e completo: a
+         *     vitrine e opcional, e **pedir uma foto nunca e cobrar as nove**.
+         */
+        MyShowcase: {
+            /** @description Ate 9, em ordem de `position`; a primeira e a capa. Vazia e estado normal. */
+            photos: components["schemas"]["ShowcasePhoto"][];
+            /**
+             * @description O teto, na resposta, para a tela nao guardar uma segunda copia do
+             *     numero. Ele e cobrado no SERVIDOR e no `CHECK` do banco; este campo e
+             *     so o que a tela mostra.
+             * @enum {integer}
+             */
+            max_photos: 9;
+        };
+        ShowcasePhotoInput: {
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createShowcasePhotoUploadIntent`, ou o de uma foto
+             *     que ja esta na vitrine (para mante-la). Repetido no mesmo corpo e
+             *     recusado com `400` (`code: duplicate`).
+             */
+            upload_id: string;
+            /** @description Opcional. Rotulo para leitor de tela, e nao legenda. */
+            alt_text?: string | null;
+        };
+        /**
+         * @description A vitrine INTEIRA, na ordem: a posicao e o indice no vetor, e `photos:
+         *     []` tira todas. Mais de 9 e recusado com `400` (`field: photos`, `code:
+         *     maximum`) **no servidor**, e nao so na tela.
+         */
+        ShowcaseInput: {
+            photos: components["schemas"]["ShowcasePhotoInput"][];
+        };
+        /**
+         * @description O pedido de autorizacao de envio de uma foto da vitrine. **Sem
+         *     `purpose`**, ao contrario de `AdminCatalogImageIntentInput`: esta
+         *     operacao existe para um proposito so (`user_showcase`), e deixar o
+         *     cliente escolhe-lo seria deixa-lo pedir autorizacao de imagem de produto
+         *     por uma rota do app.
+         */
+        ShowcasePhotoIntentInput: {
+            /**
+             * @description **HEIC entra**, porque a vitrine sai de um CELULAR e foto de iPhone e
+             *     HEIC -- recusa-lo na entrada tiraria a vitrine da mao de metade dos
+             *     aparelhos. A derivada sai sempre em JPEG: HEIC entra e nunca sai.
+             *     SVG nunca (D50), e por IGUALDADE, nunca por prefixo -- `image/`
+             *     aceitaria `image/svg+xml`, que e documento com script.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
+            byte_size: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            width?: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            height?: number;
+        };
         /**
          * @description Uma imagem da galeria do encontro. A primeira da lista e a capa.
          *     `url` e `thumb_url` sao compostas na leitura a partir das chaves da
@@ -5415,6 +9424,58 @@ export interface components {
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"];
             cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
+        };
+        /**
+         * @description A foto do proprio usuario, como o DONO a ve (cliente, 18/10/2026).
+         *
+         *     **Nao tem `id` nem `upload_id`** (ADR-0010 item 6): o app grava por
+         *     `MeUpdate.photo_upload_id` e le a URL da derivada. Nao tem `original_url`
+         *     tambem: o original fica no armazenamento privado e nunca e servido ao
+         *     cliente, aqui como na foto de pet.
+         *
+         *     **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e `Me.email_verified`, que ja
+         *     existia e e o MESMO conceito que o resto do produto usa. A moldura do app
+         *     desenha o selo em cima da foto quando `email_verified` e verdadeiro, e
+         *     nao desenha quando e falso. Gravar o selo dentro do JPEG faria a imagem
+         *     mentir no dia em que a pessoa trocasse de e-mail.
+         */
+        MyPhoto: {
+            /**
+             * @description `processing` enquanto o worker nao terminou -- `url` e nula nesse
+             *     intervalo, e a tela mostra o lugar da foto em vez de um erro.
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada `card` (512 x 512, JPEG), no armazenamento publico com 128
+             *     bits aleatorios no nome. Nula enquanto processa e quando recusada.
+             */
+            url?: string | null;
+            /** @description O motivo medido nos bytes reais, quando `status` e `rejected`. */
+            rejection_reason?: string | null;
+        };
+        /**
+         * @description O pedido de autorizacao de envio da foto do proprio usuario. **Sem
+         *     `purpose`**, pelo mesmo motivo de `NetworkEventCoverIntentInput`: esta
+         *     operacao existe para um proposito so (`user_photo`), e deixar o cliente
+         *     escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de produto por
+         *     uma rota do app.
+         */
+        MyPhotoIntentInput: {
+            /**
+             * @description **HEIC entra aqui**, e nao entra em `AdminCatalogImageIntentInput`:
+             *     esta foto sai de um celular, metade dos celulares e iPhone, e o
+             *     cliente autorizou HEIC na entrada por causa disso (18/10/2026). A
+             *     conversao para JPEG e nossa, no servidor. SVG nunca, e por
+             *     IGUALDADE, nunca por prefixo `image/`.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o cliente a le. Abaixo de 300 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
         };
         /**
          * @description O pedido de autorizacao de envio da capa. **Sem `purpose`**, ao
@@ -5706,9 +9767,20 @@ export interface components {
              * @description Fica gravado no envio. A escrita que confirma o envio exige o mesmo
              *     proposito, e recusa foto de pet, de achador ou de outro proposito
              *     (T9).
+             *
+             *     `directory_logo` e `directory_photo` entraram em 18/10/2026, com a
+             *     logo e a foto do profissional recomendado. Sao DOIS propositos e nao
+             *     um: a logo e quadrada e pequena (minima 256 x 256, derivadas 512 x
+             *     512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
+             *     600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
+             *     outro e `400 upload_not_usable`.
+             *
+             *     **`user_photo` nao esta aqui, de proposito**: a foto da propria
+             *     pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
+             *     app, e nao pelo painel.
              * @enum {string}
              */
-            purpose: "store_item" | "network_event";
+            purpose: "store_item" | "network_event" | "directory_logo" | "directory_photo";
             /**
              * @description SVG nunca. HEIC nao, porque a origem e um computador de mesa.
              * @enum {string}
@@ -6455,6 +10527,13 @@ export interface components {
             /**
              * @description Todas as imagens prontas, na ordem do painel; a primeira e a
              *     mesma de `image_url`. Vazia e estado normal.
+             *
+             *     **O que este bloco acrescenta ao resumo e so `required`.**
+             *     Desde 17/10/2026 `StoreItemSummary` tambem declara `images`,
+             *     com o MESMO `maxItems: 8`; aqui o campo deixa de ser opcional,
+             *     porque o detalhe sempre o emite. A repeticao do teto e
+             *     deliberada: `allOf` e intersecao, e dois numeros diferentes nos
+             *     dois lugares fariam valer o menor nas duas telas.
              */
             images: components["schemas"]["StoreItemImage"][];
         };
@@ -6561,8 +10640,526 @@ export interface components {
             limit: number;
             total: number;
         };
+        /**
+         * @description O corpo do pedido da plaquinha. O **endereco de entrega e
+         *     obrigatorio** (decisao do cliente, 17/10): sem ele a administracao nao
+         *     cumpre o pedido, e um pedido que nao se cumpre nao deveria poder
+         *     existir. `notes` segue opcional.
+         *
+         *     **Valor e cobranca continuam fora**, por decisao do cliente: nao ha
+         *     preco, nao ha forma de pagamento e nao ha status de cobranca.
+         */
+        CollarTagRequestInput: {
+            delivery_address: components["schemas"]["DeliveryAddress"];
+            /** @description Observacao livre do tutor. Opcional; pedir sem dizer nada e o caminho comum. */
+            notes?: string;
+        };
+        /**
+         * @description O endereco para onde a plaquinha e enviada. **Dado pessoal**, e o
+         *     tratamento vai junto da definicao:
+         *
+         *     - **nao sai em superficie publica**. Ele aparece para quem pediu e para
+         *       a administracao, e mais ninguem. Nenhuma resposta sem conta o
+         *       projeta;
+         *     - **nao entra na trilha de auditoria**. `audit.events` registra que
+         *       houve pedido e qual foi a decisao, pelo `ref`; o endereco nunca e
+         *       copiado para la;
+         *     - **nao e geocodificado, e o CEP nao e resolvido**. A ADR-0006 proibe,
+         *       e nao ha mapa nem busca de endereco neste produto. Todo campo e
+         *       DIGITADO, e nenhum servico externo completa nenhum outro: o servidor
+         *       nao tem como saber se o bairro confere com o CEP;
+         *     - **so o necessario para entregar**. Sem documento e sem data de
+         *       nascimento. `recipient_phone` entrou em 17/10 por decisao do
+         *       cliente: transportadora costuma exigir um telefone para entregar.
+         *
+         *     `state` e a sigla de dois caracteres, no mesmo formato de `Area.state`
+         *     -- **sem `enum`**, porque o conjunto das 27 siglas nao existe no
+         *     servidor e declara-lo aqui criaria a segunda fonte para divergir da
+         *     lista do app.
+         */
+        DeliveryAddress: {
+            /** @description Quem recebe, como vai na etiqueta. */
+            recipient_name: string;
+            /**
+             * @description E.164, **o mesmo padrao de `MeUpdate.phone_e164`** e nao uma
+             *     segunda forma dele. O app mostra mascarado e envia assim.
+             * @example +5511987654321
+             */
+            recipient_phone: string;
+            /**
+             * @description CEP com oito digitos, **sem mascara e sem hifen**.
+             *
+             *     O app o usa para BUSCAR rua, bairro, cidade e estado em servico
+             *     publico (ViaCEP, com BrasilAPI de reserva) e preencher os campos,
+             *     **que seguem editaveis** -- decisao do cliente de 17/10. Isso e
+             *     texto e nao coordenada: nada aqui e geocodificado (ADR-0006), e o
+             *     servidor nao participa da busca nem a repete.
+             */
+            postal_code: string;
+            street: string;
+            /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. */
+            street_number: string;
+            /** @description O UNICO campo opcional do endereco; casa sem complemento e o caso comum. */
+            complement?: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+        };
+        /**
+         * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
+         *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
+         *
+         *     **Nao diz onde a encomenda esta** -- isso e `delivery_state`, que e o
+         *     eixo da entrega e carrega os passos que o tutor acompanha.
+         *
+         *     `fulfilled` NAO quer dizer que o codigo foi emitido: emitir e
+         *     `issuePetTag`, e o codigo e irreversivel (ADR-0004).
+         * @enum {string}
+         */
+        CollarTagRequestStatus: "pending" | "fulfilled" | "declined";
+        /**
+         * @description O EIXO DA ENTREGA, e os tres passos que o cliente nomeou em 18/10:
+         *
+         *     | valor | passo, nas palavras dele |
+         *     | --- | --- |
+         *     | `requested` | solicitado |
+         *     | `in_transit` | em transporte |
+         *     | `arrived` | chegou |
+         *
+         *     **Nunca nulo e nunca ausente**: a coluna e `NOT NULL DEFAULT
+         *     'requested'`, entao todo pedido tem um passo escrito -- inclusive os
+         *     criados antes de a entrega existir. A tela le UM campo e desenha UM
+         *     passo, e nao infere "solicitado" de uma ausencia.
+         *
+         *     ## Por que e um eixo separado de `status`, e nao mais um valor dele
+         *
+         *     O desenho de UM eixo so -- `delivered` acrescentado a
+         *     `CollarTagRequestStatus` -- foi escrito primeiro e **reprovado por
+         *     `oasdiff`**: acrescentar valor a `enum` de RESPOSTA e quebra de contrato
+         *     pela regra `response-property-enum-value-added`, e ela saiu em nivel
+         *     `error` quatro vezes, uma por operacao que projeta o estado. Campo
+         *     ACRESCENTADO nao quebra ninguem; valor acrescentado a `enum` existente
+         *     quebra. O eixo separado e o desenho que nao precisa de dispensa.
+         *
+         *     ## E as combinacoes impossiveis?
+         *
+         *     Os dois eixos **nao sao independentes**, e quem garante isso e o banco:
+         *     `collar_tag_requests_entrega_exige_atendimento` proibe sair de
+         *     `requested` sem o pedido estar `fulfilled`. Com isso
+         *     recusado-que-chegou e pendente-em-transporte deixam de existir, e nao ha
+         *     par a conferir na aplicacao.
+         * @enum {string}
+         */
+        CollarTagDeliveryState: "requested" | "in_transit" | "arrived";
+        /**
+         * @description O pedido da plaquinha como o APP o ve.
+         *
+         *     **`ref` PASSOU A SAIR AQUI, em 18/10.** Ate entao esta projecao nao o
+         *     trazia, e o motivo escrito era que o app "nao tem o que fazer com
+         *     ele". O cliente deu o que fazer: a pessoa acompanha o pedido e precisa
+         *     de um numero para pedir ajuda sobre ele. Continua sendo o MESMO `ref`
+         *     opaco de 128 bits da fila do painel -- **nao ha identificador novo, e
+         *     nenhum UUID interno sai** (ADR-0010 item 6). O pet e o do caminho.
+         *
+         *     **Sem endereco de entrega**: dado pessoal, ja digitado por quem pede, e
+         *     a unica superficie que o projeta e `AdminCollarTagRequest`.
+         */
+        CollarTagRequest: {
+            /**
+             * @description O identificador opaco do pedido, 128 bits em base64url. O MESMO
+             *     valor de `AdminCollarTagRequest.ref`, e nao um segundo
+             *     identificador. Nao e UUID.
+             */
+            ref: string;
+            status: components["schemas"]["CollarTagRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description Quando o painel decidiu, ou nulo enquanto `pending`.
+             */
+            decided_at?: string | null;
+            /** @description A observacao que o tutor escreveu, ou nulo. */
+            notes?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio da encomenda, ou nulo. **Sai para o DONO do
+             *     pedido**, que e quem acompanha a entrega, e nunca em superficie sem
+             *     conta.
+             *
+             *     Nulo e o caso comum e NAO e defeito: nem todo envio tem rastreio
+             *     (entrega em maos, correio simples), e nenhum pedido tem rastreio
+             *     antes de sair. A tela mostra o passo sem o codigo em vez de mostrar
+             *     um campo vazio.
+             *
+             *     **Sem validacao de formato de transportadora**: ver
+             *     `AdminCollarTagDeliveryUpdate.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha SAIU, o carimbo do passo "em transporte". Nulo
+             *     enquanto `delivery_state` e `requested`.
+             *
+             *     Coluna propria, e **nao `decided_at` reaproveitado**: `decided_at`
+             *     guarda tambem o instante da RECUSA, e chamar aquilo de "saiu" seria
+             *     mentir sobre uma plaquinha que nunca foi despachada. Nao volta a
+             *     nulo quando a encomenda chega -- `arrived` tambem ja saiu.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha CHEGOU, o carimbo do passo "chegou". Nulo em tudo
+             *     que nao chegou.
+             *
+             *     Com `requested_at` e `shipped_at`, fecha os TRES carimbos dos tres
+             *     passos -- a pagina privada do aplicativo nao precisa derivar nenhuma
+             *     data de nenhum estado.
+             */
+            delivered_at?: string | null;
+        };
+        /**
+         * @description Os pedidos da plaquinha de UM pet, do mais recente para o mais antigo.
+         *     Sem paginacao: o teto de 3 pedidos por conta por dia e o indice parcial
+         *     de um pendente por pet mantem a lista curta por construcao.
+         */
+        CollarTagRequestPage: {
+            items: components["schemas"]["CollarTagRequest"][];
+        };
+        /**
+         * @description Os mesmos tres valores de `CollarTagRequestStatus`, que e o eixo da
+         *     DECISAO. Como filtro de `listAdminCollarTagRequests`, e a aba que o
+         *     painel abre; para recortar por passo da ENTREGA o filtro e
+         *     `delivery_state`, e os dois podem ser combinados.
+         * @enum {string}
+         */
+        AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
+        /**
+         * @description Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
+         *     projecao do pet e minima e fechada: sai o nome de exibicao e a
+         *     especie, que e o que identifica qual plaquinha prensar.
+         *
+         *     **O ENDERECO DE ENTREGA SAI AQUI**, e e o que o administrador le para
+         *     enviar a plaquinha (decisao do cliente, 17/10). Ele e o unico dado
+         *     pessoal desta resposta, e vem como `DeliveryAddress` -- a mesma forma
+         *     que o tutor digitou, sem geocodificacao e sem resolucao de CEP
+         *     (ADR-0006).
+         *
+         *     **Nenhum PERFIL do solicitante sai aqui**: nem e-mail, nem telefone,
+         *     nem UUID, nem identificador estavel, nem historico. O nome que aparece
+         *     e `delivery_address.recipient_name`, que e quem recebe a encomenda e
+         *     nao uma leitura de conta -- a unica leitura de pessoa do backoffice v1
+         *     segue sendo a outra fila (D53 a D57).
+         *
+         *     Tambem **nao traz o codigo da plaquinha**, que e credencial ao portador
+         *     (ADR-0004).
+         */
+        AdminCollarTagRequest: {
+            /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
+            ref: string;
+            pet: {
+                display_name: string;
+                species: string;
+            };
+            delivery_address: components["schemas"]["DeliveryAddress"];
+            notes?: string | null;
+            status: components["schemas"]["AdminCollarTagRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio que o administrador digitou, ou nulo. O mesmo
+             *     valor que o dono do pedido le em `CollarTagRequest.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha saiu. Nulo enquanto `delivery_state` e `requested`.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha chegou. Nulo em tudo que nao chegou.
+             */
+            delivered_at?: string | null;
+        };
+        /**
+         * @description A ATUALIZACAO DA ENTREGA: o passo e o codigo de rastreio, numa escrita
+         *     so. Palavras do cliente (18/10): "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega" -- uma operacao, e nao duas.
+         *
+         *     ## As transicoes que esta operacao aceita
+         *
+         *     | de | para | o que e |
+         *     | --- | --- | --- |
+         *     | `requested` | `in_transit` | a plaquinha saiu |
+         *     | `in_transit` | `arrived` | a plaquinha chegou |
+         *     | `in_transit` | `in_transit` | so o rastreio mudou |
+         *     | `arrived` | `arrived` | so o rastreio mudou |
+         *
+         *     Qualquer outra responde `400` com `code: invalid_delivery_transition`.
+         *
+         *     **O pedido precisa estar `fulfilled`.** Nao se despacha o que o painel
+         *     nao aceitou: pedido em `pending` responde `400` com
+         *     `code: request_not_fulfilled`, e o caminho e `fulfillAdminCollarTagRequest`
+         *     antes. Pedido `declined` responde o mesmo -- recusado nao anda. Isto nao
+         *     e uma conferencia escrita a mao em paralelo ao banco: e a mesma regra do
+         *     `CHECK` `collar_tag_requests_entrega_exige_atendimento`, traduzida para
+         *     uma resposta que diz qual e o proximo passo em vez de estourar.
+         *
+         *     **Nao se volta atras**: `arrived` nao vira `in_transit`, e nada volta a
+         *     `requested`. Desfazer uma chegada marcada por engano nao e uma
+         *     transicao: e um pedido novo, ou um ajuste por quem opera o banco.
+         *
+         *     **`requested` -> `arrived` nao e aceito**, apesar de ser "para frente".
+         *     O passo "em transporte" e o que carrega o rastreio e o carimbo de
+         *     despacho, e pular direto para a chegada deixaria a entrega sem registro
+         *     de que ela saiu. Sao dois cliques, e o painel os oferece em sequencia.
+         *
+         *     **Nada aqui APAGA pedido.** Nao existe exclusao nesta superficie; o que
+         *     o cliente chamaria de cancelar e `declined`, que e estado e e da outra
+         *     operacao.
+         */
+        AdminCollarTagDeliveryUpdate: {
+            /**
+             * @description O passo desejado. So os dois passos que se alcanca: `requested` e o
+             *     inicial e ninguem volta a ele.
+             *
+             *     Repetir o passo atual (`in_transit` sobre `in_transit`, `arrived`
+             *     sobre `arrived`) e aceito de proposito: e o caminho de corrigir so o
+             *     rastreio, e e por isso que o campo e obrigatorio em vez de opcional
+             *     -- um corpo sem passo faria a operacao adivinhar.
+             * @enum {string}
+             */
+            delivery_state: "in_transit" | "arrived";
+            /**
+             * @description O codigo de rastreio, TEXTO que o administrador digita.
+             *
+             *     Tres casos, e os tres sao diferentes:
+             *
+             *     - **ausente**: o rastreio nao muda. E o que acontece quando so se
+             *       marca a chegada de uma encomenda que ja tinha codigo;
+             *     - **texto**: passa a ser este. Espaco nas bordas e removido antes de
+             *       gravar;
+             *     - **`null`**: o rastreio e APAGADO. Existe para o engano -- codigo da
+             *       encomenda errada -- e nao para uso comum.
+             *
+             *     **Sem validacao de formato de transportadora**, de proposito:
+             *     Correios tem 13 simbolos, FedEx de 12 a 22, DHL 10, e transportadora
+             *     regional tem o que quiser e muda. Um formato cravado aqui recusaria,
+             *     em producao e sem aviso, o rastreio legitimo de amanha. Recusa-se so
+             *     o claramente invalido: de 3 a 64 simbolos, e texto que seja **so
+             *     espaco** responde `400` com `code: blank_tracking_code`.
+             *
+             *     **Nao ha integracao com transportadora.** Nada neste projeto consulta
+             *     Correios nem ninguem: seria custo recorrente, e a decisao e do
+             *     cliente.
+             */
+            tracking_code?: string | null;
+        };
+        AdminCollarTagRequestPage: {
+            items: components["schemas"]["AdminCollarTagRequest"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
         StoreTagPage: {
             items: components["schemas"]["StoreTagRef"][];
+        };
+        /**
+         * @description O tipo do aviso. Lista FECHADA, e cada valor tem fonte medida no banco.
+         *
+         *     **Os dois que NAO estao aqui, e as ausencias sao medidas:**
+         *
+         *     - **evento movido** (`event_relocated`): nao existe coluna que registre
+         *       a mudanca de lugar ou de hora. `starts_at` e o endereco mudam em cima
+         *       da linha, e a unica memoria do movimento e a trilha de auditoria com
+         *       `admin.network_event.relocated` -- trilha forense de ator
+         *       administrativo, nao fonte de produto. Um aviso de "movido" exige
+         *       coluna nova ou evento de produto, e isso e decisao, nao conserto.
+         *     - **caso devolvido** (`case_reunited`): a linha existe
+         *       (`closure_outcome: reunited`), mas nao tem destinatario de SINO --
+         *       quem fecha o caso e o proprio tutor, e para os vizinhos a noticia e
+         *       de terceiro e informativa, quer dizer, Petline.
+         *
+         *     **`friend_post` nao existe e nao vai existir aqui**: post de amigo e da
+         *     Petline, por decisao de desenho (21 avisos por dia empurrariam a
+         *     plaquinha para a 22a posicao).
+         * @enum {string}
+         */
+        NotificationKind: "tag_scanned" | "found_reported" | "match_suggested" | "neighborhood_alert" | "event_join_requested" | "event_join_decided" | "event_cancelled" | "suggestion_decided" | "tag_request_updated" | "broadcast";
+        /**
+         * @description Uma linha da caixa. **Nao traz imagem nenhuma** -- sem avatar e sem foto
+         *     de pet, de proposito, para nao trazer a foto a uma quarta superficie. E
+         *     nao traz autor: o autor existe no servidor so para agrupar.
+         */
+        NotificationItem: {
+            /** @description Identificador opaco. **Nao e UUID** (ADR-0010). */
+            ref: string;
+            kind: components["schemas"]["NotificationKind"];
+            /**
+             * @description O nome do pet, o titulo do encontro ou o nome indicado -- o que a
+             *     linha e sobre, em texto ja pronto. Nulo quando o aviso nao tem
+             *     assunto proprio.
+             */
+            subject?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando o FATO aconteceu, e nao quando a linha nasceu.
+             */
+            occurred_at: string;
+            /**
+             * @description O item foi ABERTO. **Ver a lista nao marca nada** -- abrir a lista
+             *     zera o contador e deixa isto em `false`.
+             */
+            read: boolean;
+            /**
+             * @description Quantos avisos esta linha resume. `1` quando ela e um aviso so.
+             *     **Sempre `1` para `tag_scanned` e `found_reported`**, que nunca
+             *     agrupam porque cada um e um animal e uma acao distintos.
+             */
+            grouped_count: number;
+        };
+        NotificationPage: {
+            items: components["schemas"]["NotificationItem"][];
+            page: number;
+            limit: number;
+            /** @description Total de LINHAS ja agrupadas, e nao de avisos. */
+            total: number;
+            /**
+             * @description O mesmo numero de `getNotificationCount`, junto para a tela nao
+             *     precisar de uma segunda chamada. Conta AVISOS nao abertos, nao
+             *     linhas.
+             */
+            unread_total: number;
+        };
+        NotificationCount: {
+            /**
+             * @description Inteiro, sem recorte. O `9+` e regra da barra, e recortar aqui
+             *     apagaria a diferenca entre 10 e 400 para quem for medir uso.
+             */
+            unread_total: number;
+        };
+        AdminBroadcastDraft: {
+            title: string;
+            /**
+             * @description **Texto puro.** O painel o mostra como texto e nunca como HTML, e o
+             *     `eslint` dele proibe `dangerouslySetInnerHTML` (ADR-0027 item 6).
+             */
+            body: string;
+        };
+        AdminBroadcast: {
+            /** @description Identificador opaco. Nao e UUID (ADR-0010). */
+            ref: string;
+            title: string;
+            body: string;
+            /** Format: date-time */
+            dispatched_at: string;
+            /**
+             * @description O **nome de exibicao** da conta de painel que disparou. Nao e o
+             *     e-mail e nao e o UUID: a pergunta que a tela responde e "quem
+             *     mandou isto", e o nome a responde sem publicar identificador.
+             */
+            dispatched_by: string;
+            /** @description Quantas caixas ele alcancou NO INSTANTE do disparo. */
+            recipients_total: number;
+        };
+        AdminBroadcastPage: {
+            items: components["schemas"]["AdminBroadcast"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        AdminBroadcastDispatchWindow: {
+            /**
+             * @description Quantas contas habilitadas o disparo alcancaria AGORA. E uma
+             *     CONTAGEM e nunca uma lista: o painel nao monta quem recebeu o que.
+             *
+             *     Estimativa por construcao -- o numero muda entre a leitura e o
+             *     disparo --, e e por isso que `AdminBroadcast.recipients_total` e
+             *     gravado em separado, no instante do disparo.
+             */
+            would_reach: number;
+            /**
+             * @description Quantos comunicados ainda cabem hoje. **Zero aqui e o que a tela usa
+             *     para desabilitar o disparo antes de tentar**, em vez de descobrir
+             *     pelo `409`.
+             */
+            remaining_today: number;
+            /**
+             * @description O teto diario (hoje, 3). Vem do servidor em vez de ser uma constante
+             *     do painel: duas copias do mesmo numero divergem, e a que diverge e a
+             *     que diz "resta 1" sobre um teto que o banco ja fechou.
+             */
+            daily_cap: number;
+        };
+        /**
+         * @description **LISTA FECHADA DE CINCO, SEM TEXTO LIVRE DE MOTIVO** (ADR-0023 secao
+         *     3). Campo de motivo livre vira desabafo e nao se tria -- e uma fila que
+         *     nao se tria e uma fila que ninguem trabalha.
+         *
+         *     `detail` e opcional e **nao e o motivo**: e o contexto que a pessoa
+         *     quiser dar sobre o motivo que ela ja escolheu.
+         */
+        ProfileReportInput: {
+            /**
+             * @description - `impersonation` — *Nao e quem diz ser*
+             *     - `harassment` — *Esta incomodando ou ameacando*
+             *     - `pet_ransom_scam` — *Golpe ou cobranca para devolver um pet*.
+             *       Especifico deste produto: o golpe do falso achador esta nomeado no
+             *       ADR-0010
+             *     - `minor_suspected` — *Parece ser menor de 16 anos*. **Vai ao topo
+             *       da fila**, e a idade e 16 porque foi o que o cliente decidiu
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "impersonation" | "harassment" | "pet_ransom_scam" | "minor_suspected" | "other";
+            /**
+             * @description Contexto opcional. Mesmo teto e mesmas duas recusas de
+             *     `DirectoryReviewReportInput.detail`: ate 1000 simbolos e sem os
+             *     sinais `<` e `>`.
+             */
+            detail?: string;
+        };
+        /**
+         * @description **LISTA FECHADA DE SEIS**, uma a mais que as outras duas. As duas que
+         *     nao existem em nenhuma outra lista sao de imagem.
+         */
+        PhotoReportInput: {
+            /**
+             * @description - `nudity_or_sexual` — *Nudez ou conteudo sexual*
+             *     - `child_at_risk` — *Crianca em situacao de risco*. **Topo da fila**
+             *     - `animal_violence` — *Violencia ou maus-tratos a animal*
+             *     - `i_am_in_it` — *Apareco nesta foto e nao autorizei*. Quem aparece
+             *       numa foto nao e quem a enviou e nao tem outro caminho: e o direito
+             *       de oposicao do ADR-0011 emenda 1
+             *     - `impersonation` — *Nao e quem diz ser*
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "nudity_or_sexual" | "child_at_risk" | "animal_violence" | "i_am_in_it" | "impersonation" | "other";
+            detail?: string;
+        };
+        /**
+         * @description **TERCEIRA LISTA FECHADA, DE CINCO**, e nao reuso de uma das outras
+         *     duas: "nudez" e "maus-tratos" sao de imagem, e "nao e quem diz ser" e de
+         *     perfil.
+         */
+        PublicationReportInput: {
+            /**
+             * @description - `offensive_or_discriminatory` — *Ofensa ou discriminacao*
+             *     - `scam_or_animal_sale` — *Golpe, cobranca ou venda de animal*
+             *     - `false_lost_pet_info` — *Informacao falsa sobre um pet perdido*.
+             *       **So existe neste produto**: um avistamento inventado manda a
+             *       pessoa para o bairro errado e custa horas de busca
+             *     - `spam_or_repetition` — *Propaganda ou repeticao*
+             *     - `other` — *Outro motivo*
+             * @enum {string}
+             */
+            reason: "offensive_or_discriminatory" | "scam_or_animal_sale" | "false_lost_pet_info" | "spam_or_repetition" | "other";
+            detail?: string;
         };
     };
     responses: {
@@ -6777,6 +11374,18 @@ export interface components {
         };
         /** @description Teto de 20 pets por conta. */
         PetLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Teto de 3 comunicados por dia, ja atingido. A saida nao e tentar de
+         *     novo: e esperar o proximo dia ou nao mandar.
+         */
+        BroadcastDailyCapReached: {
             headers: {
                 [name: string]: unknown;
             };
@@ -7023,10 +11632,45 @@ export interface components {
         PartnerSlug: components["schemas"]["Slug"];
         /** @description O endereco publico do item. */
         ItemSlug: components["schemas"]["Slug"];
+        /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+        EntrySlug: components["schemas"]["Slug"];
         /** @description O endereco publico do encontro. */
         EventSlug: components["schemas"]["Slug"];
         /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
         JoinRequestRef: string;
+        /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+        CollarTagRequestRef: string;
+        /**
+         * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+         *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+         *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+         *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+         *     aprovacao.
+         */
+        DirectorySuggestionRef: string;
+        /**
+         * @description O endereco publico da entrada do diretorio, como
+         *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+         *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+         *     saida publica.
+         */
+        DirectoryEntrySlug: components["schemas"]["Slug"];
+        /**
+         * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+         *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+         *     publico por pessoa seria endereco estavel e compartilhavel, que e
+         *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+         *     `AdminJoinRequest.ref`.
+         */
+        ConnectionRefParam: string;
+        /**
+         * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+         *     UUID** e nao e derivado de quem escreveu: um identificador que
+         *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+         *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+         *     formato de `AdminJoinRequest.ref`.
+         */
+        DirectoryReviewRef: string;
         /**
          * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
          *     existente do backoffice: dois administradores editando o mesmo recurso
@@ -7034,8 +11678,67 @@ export interface components {
          *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
          */
         IfMatch: string;
+        /**
+         * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+         *     na frente de comunidade e nao existem ainda -- ver
+         *     `ModerationOrigin`.
+         */
+        ModerationOriginPath: components["schemas"]["ModerationOrigin"];
+        /**
+         * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+         *
+         *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+         *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+         *       pelo painel";
+         *     - `conversation`: o `conversationId`, que **ja e** o identificador
+         *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+         *       por `getConversation`, `blockConversation` e `reportConversation`).
+         *       Inventar um segundo identificador para a mesma linha seria exposicao
+         *       nova, e nao menos.
+         *
+         *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+         */
+        ModerationTargetRef: string;
+        /** @description O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010). */
+        NotificationRef: string;
         AdminPage: number;
         AdminLimit: number;
+        /**
+         * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+         *     de base64url, 128 bits sorteados por linha.
+         *
+         *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+         *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+         *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+         *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+         *
+         *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+         *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+         *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+         *     caminho de escrita que o troque.
+         */
+        UserPublicRef: string;
+        /**
+         * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+         *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+         *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+         *     servidor.
+         *
+         *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+         *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+         *     divergiria de `derivadas.ts` na primeira geometria nova.
+         */
+        PhotoPublicRef: string;
+        /**
+         * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+         *     mesmo formato de `UserPublicRef` e pela mesma razao.
+         *
+         *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+         *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+         *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+         *     `20261018000032`.
+         */
+        PublicationRef: string;
     };
     requestBodies: never;
     headers: {
@@ -7823,6 +12526,200 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    listNotifications: {
+        parameters: {
+            query?: {
+                page?: number;
+                /** @description Pagina de 30 por decisao de desenho. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da caixa. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMyShowcase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A vitrine do dono. `photos: []` quando nao ha nenhuma. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyShowcase"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    replaceMyShowcase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowcaseInput"];
+            };
+        };
+        responses: {
+            /** @description A vitrine como passou a valer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyShowcase"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getNotificationCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O contador. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationCount"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markNotificationsListSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contador zerado. Os itens continuam nao lidos. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    markAllNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quantas foram marcadas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        marked: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010). */
+                notificationRef: components["parameters"]["NotificationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marcado como lido. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createShowcasePhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowcasePhotoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listMyPets: {
         parameters: {
             query?: never;
@@ -8087,6 +12984,7 @@ export interface operations {
                     "application/json": components["schemas"]["Pet"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Slug ja usado ou reservado. */
             409: {
@@ -8287,6 +13185,61 @@ export interface operations {
             };
         };
     };
+    listCollarTagRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os pedidos deste pet, do mais recente para o mais antigo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollarTagRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestCollarTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollarTagRequestInput"];
+            };
+        };
+        responses: {
+            /** @description O estado do pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getPetTagQrImage: {
         parameters: {
             query?: never;
@@ -8348,6 +13301,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTag"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -9244,6 +14198,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Passou dos 7 dias. */
             410: {
@@ -9274,6 +14229,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -9299,6 +14255,25 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markMyConversationsSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marcada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -9503,6 +14478,289 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listMyDirectorySuggestions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Filtra pelo estado da revisao. Ausente, devolve **todos** os
+                 *     estados -- que e a pergunta de quem abre a tela.
+                 *
+                 *     Do SERVIDOR e nao do aplicativo: filtrar a pagina carregada
+                 *     mentiria no `total` e no paginador. Com o filtro, `total` e o do
+                 *     recorte.
+                 */
+                state?: components["schemas"]["DirectorySuggestionState"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina das indicacoes da conta, **da mais recente para a mais
+             *     antiga** -- ao contrario da fila do painel, que e trabalho humano e
+             *     se atende do mais antigo.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyDirectorySuggestionPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    suggestDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorySuggestionInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description A sugestao foi registrada e esta **na fila de revisao**. A tela diz
+             *     isso com estas palavras: nada aparece no `Perto` ate alguem olhar.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectorySuggestionReceipt"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`): so
+             *     conta VALIDADA sugere. O tipo e o mesmo de `createNetworkEvent` e de
+             *     `openLostCase`, porque a pergunta e a mesma; o texto muda. A trava e
+             *     do SERVIDOR: a tela esconde o botao de quem nao validou, e o botao
+             *     escondido nao recusa quem chama a rota direto.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A entrada publicada, com a pontuacao agregada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryEntryDetail"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listDirectoryEntryReviews: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `recent` e o padrao, e e o padrao de proposito: numa pagina sem
+                 *     historico a avaliacao de ontem informa mais do que a melhor de
+                 *     2026. `rating_desc` e `rating_asc` existem porque o cliente pediu o
+                 *     formato da Play Store, e la a ordenacao e um controle visivel.
+                 *
+                 *     **Nao ha ordenacao por "mais util"**: nao ha voto de utilidade
+                 *     neste produto, e oferecer a ordem sem o voto ordenaria por nada.
+                 */
+                sort?: "recent" | "rating_desc" | "rating_asc";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma pagina de avaliacoes publicadas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryReviewPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    putMyDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description A avaliacao gravada, ja publicada. `created` distingue a primeira
+             *     da edicao.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryReviewWritten"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Sem canal de contato verificado
+             *     (`contact-channel-unverified`). **O mesmo tipo e o mesmo status de
+             *     `createNetworkEvent`**, porque e a mesma regra do cliente: so
+             *     quem tem os dados validados escreve. Declarado em linha e nao como
+             *     componente novo pelo mesmo motivo -- e assim que a operacao de
+             *     encontro o declara, e um componente aqui criaria a segunda forma de
+             *     dizer a mesma coisa.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deleteMyDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nao ha mais avaliacao minha neste local. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportDirectoryEntryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico da entrada do diretorio, como
+                 *     `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+                 *     `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+                 *     saida publica.
+                 */
+                slug: components["parameters"]["DirectoryEntrySlug"];
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listStoreItems: {
         parameters: {
             query?: {
@@ -9643,6 +14901,35 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createMyPhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyPhotoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -10118,6 +15405,149 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    requestConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionInvite"];
+            };
+        };
+        responses: {
+            /** @description O pedido, no vocabulario do app. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyConnectionRequests: {
+        parameters: {
+            query?: {
+                /** @description Qual caixa. Nao ha uma terceira, e nao ha "todas". */
+                direction?: "received" | "sent";
+                page?: number;
+                /** @description O teto de 20 e o mesmo teto de pedidos pendentes enviados, de proposito. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pagina de pedidos da caixa pedida. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyConnectionSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os numeros da propria conta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    acceptConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+                 *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+                 *     publico por pessoa seria endereco estavel e compartilhavel, que e
+                 *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+                 *     `AdminJoinRequest.ref`.
+                 */
+                connectionRef: components["parameters"]["ConnectionRefParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A conexao aceita. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    endConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
+                 *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
+                 *     publico por pessoa seria endereco estavel e compartilhavel, que e
+                 *     exatamente o que a decisao de 18/10/2026 recusou. Mesmo formato de
+                 *     `AdminJoinRequest.ref`.
+                 */
+                connectionRef: components["parameters"]["ConnectionRefParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A aresta foi encerrada. Sem corpo, nas tres semanticas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listPublicLostPets: {
         parameters: {
             query: {
@@ -10125,7 +15555,32 @@ export interface operations {
                 neighborhood?: string;
                 species?: components["schemas"]["Species"];
                 size?: components["schemas"]["PetSize"];
-                /** @description Janela desde a abertura do caso. */
+                /**
+                 * @description Janela desde a ultima vez que o animal foi visto.
+                 *
+                 *     **SEM `default`, e a ausencia dele e a decisao do cliente de
+                 *     18/10/2026**, nas palavras dele: *"a pagina de pets nao deve trazer
+                 *     nenhum item do filtro por padrao, como esta atualmente por ultimos
+                 *     30 dias"*. `period` ausente e **janela ABERTA**: o servidor nao
+                 *     recorta por data nenhuma, e `applied_filters` nao cita `period`.
+                 *
+                 *     O `default: 30d` que estava aqui nao era documentacao: o Ajv que o
+                 *     Fastify monta tem `useDefaults: true`, entao ele ESCREVIA `30d` na
+                 *     query de quem nao mandou nada. O app parou de mandar `period` em
+                 *     `991d0ddc` e a lista continuou recortada em 30 dias, porque quem
+                 *     recebe a ausencia e o servidor.
+                 *
+                 *     **Nao ha valor de enum para "janela aberta", e isso e deliberado.**
+                 *     Um `all` no enum seria um segundo jeito de dizer o que a ausencia
+                 *     ja diz, e ele voltaria em `applied_filters` -- a tela leria um
+                 *     filtro aplicado numa pagina que ninguem filtrou, que e exatamente o
+                 *     defeito reclamado.
+                 *
+                 *     CUSTO MEDIDO: sem janela a consulta le a cidade inteira em vez dos
+                 *     ultimos 30 dias (ver o cabecalho de
+                 *     `kysely-listagem-publica-de-perdidos.ts`). A contencao de hoje sao
+                 *     os tres tetos por `ip` desta operacao e a paginacao de 20.
+                 */
                 period?: "24h" | "7d" | "30d";
                 /**
                  * @description Busca parcial por **nome do pet**, tolerante a acento e a caixa.
@@ -10157,6 +15612,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostPetPage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -11677,6 +17133,42 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    removeAdminDirectoryReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+                 *     UUID** e nao e derivado de quem escreveu: um identificador que
+                 *     carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+                 *     locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+                 *     formato de `AdminJoinRequest.ref`.
+                 */
+                reviewRef: components["parameters"]["DirectoryReviewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryReviewRemovalInput"];
+            };
+        };
+        responses: {
+            /** @description A avaliacao saiu do ar e o motivo esta na trilha. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     declineAdminNetworkJoinRequest: {
         parameters: {
             query?: never;
@@ -11703,6 +17195,669 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EventNotOpen"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminDirectoryEntries: {
+        parameters: {
+            query?: {
+                /** @description Busca por nome, no servidor. Sem acento e sem caixa, pelo indice trigrama de `professionals`. */
+                q?: string;
+                /** @description Filtra pela atividade. Sem o parametro, vem todas. */
+                kind?: components["schemas"]["ProfessionalKind"];
+                /** @description Filtra pela situacao. Sem o parametro, vem todas, inclusive as removidas. */
+                status?: components["schemas"]["DirectoryEntryStatus"];
+                /** @description Filtra pela cidade, igualdade exata. */
+                city?: string;
+                /** @description Filtra pela UF, duas letras. */
+                state?: string;
+                /** @description `name` e a ordem alfabetica; `updated` poe a ultima alteracao em cima. */
+                sort?: "name" | "updated";
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de entradas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectoryEntryInput"];
+            };
+        };
+        responses: {
+            /** @description Entrada criada, em rascunho. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A entrada. O `ETag` e o que o `PATCH` apresenta em `If-Match`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectoryEntryPatch"];
+            };
+        };
+        responses: {
+            /** @description A entrada depois da edicao. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    lookupAdminPostalCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description CEP com oito digitos, **sem mascara e sem hifen** -- o mesmo
+                 *     formato de `CollarTagShippingAddress.postal_code`, copiado dele.
+                 *     A mascara vive na tela.
+                 *
+                 *     CEP torto responde `400` e nao viaja: o ViaCEP devolve **HTML com
+                 *     status 400** nesse caso (medido em 17/10/2026), e deixar a forma
+                 *     ser conferida aqui poupa a chamada de saida inteira.
+                 */
+                postalCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco do CEP, em texto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostalCodeAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Os dois servicos falharam ou nao responderam no prazo de 4 s cada.
+             *     **A tela nao trava**: quem cadastra digita o endereco.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminDirectorySuggestions: {
+        parameters: {
+            query?: {
+                /** @description Sem o parametro, vem a fila de `pending`. `state` nao serve de nome aqui: `state` e a UF da indicacao. */
+                review_status?: components["schemas"]["DirectorySuggestionState"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como nas outras duas filas do painel. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A indicacao. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionApproval"];
+            };
+        };
+        responses: {
+            /**
+             * @description A indicacao aprovada e a entrada do diretorio. `entry_created` diz
+             *     se a entrada nasceu agora ou se a indicacao foi ligada a uma que ja
+             *     existia.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionApproved"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionDecline"];
+            };
+        };
+        responses: {
+            /** @description A indicacao recusada, com o motivo gravado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminModerationReports: {
+        parameters: {
+            query?: {
+                /** @description Sem o parametro, a fila ABERTA. `resolved` traz o que ja foi decidido, com o motivo -- nada e apagado. */
+                state?: components["schemas"]["ModerationQueueState"];
+                /** @description Sem o parametro, todas as origens na mesma fila. */
+                origin?: components["schemas"]["ModerationOrigin"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como nas outras filas do painel. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItemPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminModerationReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeAdminModerationContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminModerationDecision"];
+            };
+        };
+        responses: {
+            /** @description O item, com o conteudo fora do ar e a decisao gravada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    dismissAdminModerationReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description De onde a denuncia veio. **Duas origens construidas**; perfil e foto vem
+                 *     na frente de comunidade e nao existem ainda -- ver
+                 *     `ModerationOrigin`.
+                 */
+                origin: components["parameters"]["ModerationOriginPath"];
+                /**
+                 * @description O identificador PUBLICO do conteudo denunciado, e ele difere por origem:
+                 *
+                 *     - `review`: `professional_reviews.ref`, 22 simbolos em base64url, criado
+                 *       pela migracao `20261017000017` justamente para "a denuncia e a remocao
+                 *       pelo painel";
+                 *     - `conversation`: o `conversationId`, que **ja e** o identificador
+                 *       publico da conversa neste contrato (`parameters/ConversationId`, usado
+                 *       por `getConversation`, `blockConversation` e `reportConversation`).
+                 *       Inventar um segundo identificador para a mesma linha seria exposicao
+                 *       nova, e nao menos.
+                 *
+                 *     Cadeia opaca para o painel, que nunca tenta interpreta-la.
+                 */
+                targetRef: components["parameters"]["ModerationTargetRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminModerationDecision"];
+            };
+        };
+        responses: {
+            /** @description O item, com a denuncia descartada e o conteudo intacto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModerationItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminCollarTagRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AdminCollarTagRequestStatus"];
+                /**
+                 * @description Recorta por PASSO DA ENTREGA, e combina com `status` em vez de
+                 *     substitui-lo: os dois sao eixos diferentes. `status=fulfilled` com
+                 *     `delivery_state=requested` e a fila de trabalho de quem despacha --
+                 *     pedidos aceitos que ainda nao sairam.
+                 */
+                delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como na outra fila que le pessoa (D56). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminCollarTagRequestDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCollarTagDeliveryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Entrega atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    fulfillAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido atendido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido recusado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -11733,6 +17888,260 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
             422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminBroadcasts: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["AdminPage"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina dos comunicados disparados. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBroadcastPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    dispatchAdminBroadcast: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminBroadcastDraft"];
+            };
+        };
+        responses: {
+            /** @description Comunicado disparado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBroadcast"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["BroadcastDailyCapReached"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminBroadcastDispatchWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A janela de disparo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBroadcastDispatchWindow"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    blockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bloqueada. Resposta vazia */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    unblockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desbloqueada. Resposta vazia */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportUserProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da pessoa (`users.public_ref`): 22 simbolos
+                 *     de base64url, 128 bits sorteados por linha.
+                 *
+                 *     **Nao e UUID** (ADR-0010 item 6) e **nao e derivado de nome, e-mail nem
+                 *     telefone**: um endereco que carregasse o dono permitiria cruzar as
+                 *     pegadas de uma pessoa entre superficies, que e o vinculo entre pessoas
+                 *     que a BICHUS-174 proibe. Mesmo formato de `DirectoryReview.ref`.
+                 *
+                 *     **Tambem nao e o apelido (`@`)**, e a diferenca importa: o apelido e um
+                 *     alias ESCOLHIDO e MUTAVEL, e endereco mutavel nao serve de endereco
+                 *     estavel (criterio 2 da BICHUS-19). Este ref e imutavel -- nao ha
+                 *     caminho de escrita que o troque.
+                 */
+                userRef: components["parameters"]["UserPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A chave da derivada publica da imagem (`catalog_images.public_key`): o
+                 *     mesmo endereco pelo qual ela foi servida a quem a viu, com 128 bits
+                 *     aleatorios (ADR-0007). **Nao e o UUID da imagem**, que nunca sai do
+                 *     servidor.
+                 *
+                 *     Nao ha `pattern` aqui, e a ausencia e deliberada: a chave e caminho de
+                 *     armazenamento com prefixo por proposito, e um padrao escrito no contrato
+                 *     divergiria de `derivadas.ts` na primeira geometria nova.
+                 */
+                photoRef: components["parameters"]["PhotoPublicRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhotoReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
+                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
+                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
+                 *     `20261018000032`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationReportInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

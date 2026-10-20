@@ -5,6 +5,8 @@ import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'telas/ajuda_de_tela.dart';
+
 void main() {
   setUp(AppConfig.limparParaTeste);
 
@@ -20,18 +22,33 @@ void main() {
 
   /// Vai para `Perfil`, que e onde moram as portas de conta (BICHUS-232).
   Future<void> irParaPerfil(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
-  testWidgets('abre deslogado em Pets, com as cinco secoes visiveis',
+  testWidgets('abre deslogado em REDE, com as cinco secoes visiveis',
       (tester) async {
+    // **A ABA DE ARRANQUE MUDOU EM 18/10/2026.** Era `Pets`; o cliente pediu
+    // literalmente *"quando o usuário fizer o login ou abrir o app, traga a
+    // pagina da rede como padrão"*, e `Rotas.destinoDoArranque` passou a
+    // devolver `rede`. Este caso e o que MEDE isso, e por isso ele nao foi
+    // apagado nem afrouxado: so trocou de lado.
+    //
+    // **E ele mede deslogado de proposito.** A frase do cliente cobre os dois
+    // arranques, e a `Rede` abre para visitante: a casca de abas e visivel sem
+    // sessao (UX 5.2) e `GET /network/events` e rota publica. Se um dia a
+    // `Rede` passasse a exigir conta, este caso seria o primeiro a acusar.
     await abrirOApp(tester);
 
     // Deslogado e um estado de navegacao, nao um muro: nenhuma aba some,
     // nenhuma fica desabilitada. A lista vem do registro, e nao escrita a
     // mao: escrita a mao ela continuaria dizendo `Perdidos` para sempre.
-    for (final destino in CascaComAbas.destinos) {
+    //
+    // `visiveisEm`, e nao `destinos`: desde 19/10 o registro tem uma entrada
+    // que a barra NAO pinta -- a conta, cuja porta virou a foto da barra de
+    // topo. Cobrar um slot para ela aqui mediria uma barra que nao existe.
+    for (final destino in CascaComAbas.visiveisEm(
+      CascaComAbas.configuracao,
+    )) {
       expect(
         find.widgetWithText(NavigationDestination, destino.rotulo),
         findsOne,
@@ -39,7 +56,17 @@ void main() {
             'deslogada.',
       );
     }
-    expect(find.widgetWithText(AppBar, 'Pets'), findsOne);
+    expect(
+      find.widgetWithText(AppBar, 'Rede'),
+      findsOne,
+      reason: 'REPROVA: o app nao abriu na `Rede`. A aba de arranque e decisao '
+          'do cliente de 18/10/2026 e mora em `Rotas.destinoDoArranque`.',
+    );
+    expect(
+      find.widgetWithText(AppBar, 'Pets'),
+      findsNothing,
+      reason: 'REPROVA: o app voltou a abrir em `Pets`.',
+    );
   });
 
   testWidgets('o app fala pt-BR, e o Flutter tambem', (tester) async {
@@ -74,7 +101,14 @@ void main() {
     //
     // Agora sao as CINCO, e nao tres: `Escanear` deixou de ser aba e virou
     // rota irma da casca, entao nao ha mais a excecao sem barra de topo aqui.
-    for (final destino in CascaComAbas.destinos) {
+    //
+    // **So os slots que SAO ramo**, e a distincao e de 19/10: o slot de
+    // mensagens EMPURRA uma rota em vez de trocar de ramo, porque a tela dela
+    // e de outro agente e nao existe nesta arvore -- tocar nele nao abre uma
+    // secao da casca com titulo proprio. A conta nao tem slot nenhum.
+    for (final destino in CascaComAbas.visiveisEm(
+      CascaComAbas.configuracao,
+    ).where((d) => d.ehRamo)) {
       await tester.tap(
         find.widgetWithText(NavigationDestination, destino.rotulo),
       );
@@ -119,11 +153,20 @@ void main() {
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
 
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem e
+    // Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4). A data
+    // e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta, e sem ela
+    // este caso passaria a medir o bloqueio do botao em vez da recusa da senha.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'curta');
+    await tester.enterText(find.byType(TextField).at(4), 'curta');
     // Sem rolagem: o botao mora na barra fixa do rodape desde 23/09/2026.
     await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
     await tester.pumpAndSettle();
@@ -134,8 +177,7 @@ void main() {
   testWidgets('a tela de entrar oferece a saida para a recuperacao de senha',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
     await tester.pumpAndSettle();
 
@@ -145,8 +187,7 @@ void main() {
   testWidgets('a confirmacao de recuperacao e opaca sobre a conta existir',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Esqueci minha senha'));

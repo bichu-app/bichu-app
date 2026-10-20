@@ -222,6 +222,7 @@ class ItemDaLoja {
     required this.urlDaImagem,
     required this.textoDaImagem,
     required this.urlDeDestino,
+    this.imagens = const <ImagemDoProduto>[],
     required this.parceiro,
     required this.precoEmCentavos,
     required this.consultadoEm,
@@ -258,6 +259,43 @@ class ItemDaLoja {
   /// tela e o caminho para alguem esquecer a reserva e deixar a imagem sem nome
   /// acessivel.
   final String? textoDaImagem;
+
+  /// `images`: TODAS as imagens prontas do item, na ordem do painel
+  /// (17/10/2026). A primeira e a mesma de [urlDaImagem].
+  ///
+  /// **Opcional no contrato, e por isso tem padrao vazio aqui.** O campo e
+  /// aditivo: `StoreItemSummary` nao o declara em `required`, e resposta de
+  /// servidor que ainda nao o emite continua valida. Lista vazia nao e erro --
+  /// e o que este app desenha quando so ha [urlDaImagem], que e exatamente o
+  /// comportamento de antes desta mudanca.
+  ///
+  /// **[urlDaImagem] continua sendo lido e nao foi substituido.** Ele e o campo
+  /// que o APK instalado le, e a capa do cartao sai dele quando esta lista vem
+  /// vazia. Trocar um pelo outro quebraria o app publicado, que foi o que
+  /// aconteceu neste produto com a unidade de preco.
+  final List<ImagemDoProduto> imagens;
+
+  /// Ha mais de uma foto para mostrar?
+  ///
+  /// **O que decide se o cartao vira carrossel.** Com uma foto so nao ha
+  /// indicador, nao ha gesto e nao ha `PageView`: um carrossel de um elemento e
+  /// um controle que promete navegacao e nao tem para onde ir.
+  bool get temGaleria => imagens.length > 1;
+
+  /// As fotos a desenhar no cartao, com a capa de reserva.
+  ///
+  /// Quando `images` vem vazia (servidor antigo, ou item da massa com imagem
+  /// externa), devolve a lista de um elemento montada a partir de
+  /// [urlDaImagem] -- a MESMA composicao que o servidor faz em `galeriaDoItem`.
+  /// Assim a tela tem um caminho so para desenhar foto, e nao dois.
+  List<ImagemDoProduto> get fotosDoCartao {
+    if (imagens.isNotEmpty) return imagens;
+    final capa = urlDaImagem;
+    if (capa == null) return const <ImagemDoProduto>[];
+    return <ImagemDoProduto>[
+      ImagemDoProduto(url: capa, textoAlternativo: textoDaImagem),
+    ];
+  }
 
   final String urlDeDestino;
   final ParceiroDaLoja parceiro;
@@ -297,9 +335,23 @@ class ItemDaLoja {
     final bruto = urlDeDestino.trim();
     if (bruto.isEmpty) return null;
     final u = Uri.tryParse(bruto);
-    if (u == null || !u.isAbsolute) return null;
+    if (u == null) return null;
+    // **Sem `isAbsolute`, e isso nao e descuido.** Em Dart, `Uri.isAbsolute` e
+    // FALSO quando a URI tem fragmento -- e a definicao da linguagem, nao um
+    // detalhe: "an absolute URI has a scheme and no fragment". Com a
+    // conferencia aqui, `https://loja.exemplo.invalid/bola-pop#descricao` era
+    // recusado, e produto com `#` no `target_url` perdia o destino: o cartao
+    // nao fica tocavel e o `Compre agora` nao e desenhado. Ou seja, o link que
+    // o painel gravou nao abria, e nada falhava em lugar nenhum.
+    //
+    // O servidor passou a aceitar query e fragmento em 17/10/2026, entao o
+    // caso nao e teorico.
+    //
+    // As duas linhas abaixo ja dizem tudo o que importa, e dizem melhor: o
+    // esquema tem de ser `https` (o que recusa `http:`, `javascript:`,
+    // `intent:`, `tel:`, `file:` e `market:`, e tambem o caminho relativo, cujo
+    // esquema e vazio) e tem de haver host (o que recusa `https:///caminho`).
     if (u.scheme != 'https') return null;
-    // Sem host nao ha site: `https:///caminho` da `isAbsolute` verdadeiro.
     if (u.host.isEmpty) return null;
     return u;
   }
@@ -363,17 +415,34 @@ class ItemDaLoja {
     return formatarReais(centavos);
   }
 
-  /// A linha inteira do preco, que e a unica forma em que o valor aparece.
+  /// A linha do preco, que e **so o valor**.
   ///
-  /// **O numero nunca aparece sozinho.** O rotulo e a data sao parte do preco,
-  /// nao enfeite dele, e nao ha estado da tela em que o valor apareca e a data
-  /// nao (criterio 15 da BICHUS-185). Por isso esta e **uma** string: duas
-  /// propriedades separadas permitiriam que alguem renderizasse so a primeira.
+  /// **18/10/2026, literal do cliente:** *"remova o texto 'preço de
+  /// referência, consultado em 17/10', porque você já colocou como eu pedi
+  /// acima do titulo"*. O rabo da linha -- o rótulo e a data -- saiu do texto
+  /// VISIVEL: `CartaoDaLoja.rotuloDePrecoDeReferencia` ja diz
+  /// "Preço de referência" acima do nome do produto, e repetir a mesma
+  /// afirmacao duas linhas abaixo era a duplicacao que ele mandou tirar.
+  ///
+  /// **O criterio 15 da BICHUS-185 nao foi jogado fora: mudou de endereco.**
+  /// Ele dizia que o numero nunca aparece sozinho, e quem usa leitor de tela
+  /// ouvia a afirmacao DENTRO deste mesmo no de texto -- e e por isso que o
+  /// rotulo visivel acima do nome e `ExcludeSemantics`. Apagar o rabo e so
+  /// isso deixaria quem nao ve com o numero e nada mais. A afirmacao foi para
+  /// o `semanticsLabel` do proprio no do preco
+  /// (`CartaoDaLoja.rotuloAcessivelDoPreco`), que e o mesmo endereco de antes
+  /// para o leitor de tela e **nao e mais texto na tela**.
+  ///
+  /// **A guarda da data FICA.** `consultadoEm` saiu da TELA, nao da condicao:
+  /// sem ela, um item que chegasse com valor e sem data passaria a mostrar um
+  /// preco que hoje nao mostra -- e isso seria mudanca de produto, nao remocao
+  /// de texto. `dataCurta` continua existindo e continua coberta por teste
+  /// proprio; o que saiu foi o uso dela nesta frase.
   String? get linhaDoPreco {
     final valor = precoFormatado;
     final data = consultadoEm;
     if (valor == null || data == null) return null;
-    return '$valor · preço de referência, consultado em ${dataCurta(data)}';
+    return valor;
   }
 
   /// A linha de classificacao do cartao: "Rações · Ração seca".
@@ -427,6 +496,14 @@ class ItemDaLoja {
           : null,
       urlDaImagem: imagem is String ? imagem : null,
       textoDaImagem: texto is String ? texto : null,
+      // `images` e OPCIONAL no contrato: ausente e nulo sao o mesmo caso, e
+      // nenhum dos dois e erro. Item que nao e lista tambem cai aqui, em vez de
+      // explodir a pagina inteira por causa de um campo acessorio.
+      imagens: json['images'] is List
+          ? (json['images'] as List<dynamic>)
+              .map(ImagemDoProduto.doJson)
+              .toList(growable: false)
+          : const <ImagemDoProduto>[],
       urlDeDestino: destino,
       parceiro: ParceiroDaLoja.doJson(json['partner']),
       precoEmCentavos: preco is int ? preco : null,

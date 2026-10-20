@@ -110,8 +110,7 @@ void main() {
     DepositoDeSessao? deposito,
   }) async {
     await abrirOApp(tester, rede: redeVazia(), deposito: deposito);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   group('ISCA — o Perfil nao fala de termos nem de privacidade', () {
@@ -142,8 +141,17 @@ void main() {
     testWidgets('logado', (tester) async {
       await abrirOPerfilCom(tester, deposito: depositoLogado());
 
+      // A ANCORA DE SANIDADE: prova que a aba `Perfil` logada abriu, antes da
+      // varredura abaixo afirmar qualquer coisa sobre o que NAO esta nela.
+      //
+      // Era o e-mail (`textContaining('marina@exemplo.com.br')`): desde 18/10
+      // o `Perfil` e so menus, e o e-mail era a linha de apoio do item
+      // `Meus dados`. No fim do mesmo dia o cliente removeu essa linha
+      // (*"não traga o e-mail no menu, deixe apenas o titulo meus dados"*), e
+      // a ancora passou a ser o ROTULO do item -- que e o que sobrou e e
+      // logado-exclusivo do mesmo jeito.
       expect(
-        find.text('marina@exemplo.com.br'),
+        find.text('Meus dados'),
         findsOneWidget,
         reason: 'A aba Perfil logada nao abriu; a varredura abaixo estaria '
             'olhando outra tela e passaria sem ter conferido nada.',

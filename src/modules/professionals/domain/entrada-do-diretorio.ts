@@ -30,16 +30,30 @@ import {
 } from './nivel-de-verificacao.js';
 
 /**
- * A lista fechada de `professionals.kind`, **espelhada** em
- * `src/shared/db/schema.ts`.
+ * A lista fechada de `professionals.kind`: a ATIVIDADE, o que se contrata.
+ * **Espelhada** em `src/shared/db/schema.ts`.
  *
- * **Nao ha valor para ONG**, e a ausencia e decisao pendente do modelo e nao
- * esquecimento: `professionals` nao tem `entity_kind`, `kind` nao tem valor
- * para organizacao, e `organization` so existe como tipo de VERIFICACAO e como
- * tipo de CONTA. Acrescentar um valor aqui decidiria por conta propria que uma
- * ONG e um tipo de profissional, que e justamente a pergunta.
+ * **Continua sem valor para ONG, e a ausencia agora e desenho concluido.** O
+ * texto anterior aqui dizia "decisao pendente do modelo" e nomeava a coluna que
+ * faltava; desde `20261018000012` ela existe, e o tipo de entidade e eixo
+ * proprio (`TipoDeEntidade`). ONG nao entra nesta lista porque **uma ONG nao e
+ * uma atividade**: ela tem atividade (`clinic`, `vet`) E tipo de entidade
+ * (`organization`), os dois ao mesmo tempo. Acrescentar valor aqui tambem
+ * quebraria o contrato -- `oasdiff`, `response-property-enum-value-added`, 12
+ * erros medidos em 18/10.
  */
 export type TipoDeProfissional = 'vet' | 'groomer' | 'walker' | 'sitter' | 'trainer' | 'clinic';
+
+/**
+ * A lista fechada de `professionals.entity_kind`: o QUE a entrada e.
+ *
+ * Mesmo nome e mesmos valores de `entity_verifications.entity_kind`
+ * (`20260921000002`), que carrega `organization` desde antes de existir linha
+ * -- a revisao de 17/09 do ADR-0011 generalizou a verificacao para ENTIDADE
+ * exatamente para isso. Segunda convencao para o mesmo conceito e a convencao
+ * que diverge.
+ */
+export type TipoDeEntidade = 'professional' | 'organization';
 
 /**
  * A grade em que o produto quantiza a localizacao do usuario (ADR-0006).
@@ -54,6 +68,7 @@ export const GRADE_EM_METROS = 100;
 export interface EntradaDoDiretorio {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
   readonly about: string | null;
   readonly city: string | null;
@@ -67,6 +82,17 @@ export interface EntradaDoDiretorio {
    * resultado; zero seria uma mentira a 100 m de distancia.
    */
   readonly distanciaEmMetros: number | null;
+  /**
+   * A LOGO, liberada para o aplicativo pelo cliente em 18/10/2026.
+   *
+   * `null` em TRES casos que a tela trata igual: a entrada nao tem logo; a logo
+   * existe e o worker ainda nao terminou (`status <> 'ready'`); a logo foi
+   * recusada nos bytes. Quem resolve os tres e a consulta, que seleciona a
+   * chave so quando `status = 'ready'` -- e e por isso que o tipo aqui e uma
+   * chave e nao um objeto de estado: o aplicativo nao tem o que fazer com
+   * "processando" numa lista.
+   */
+  readonly logoPublicKey: string | null;
 }
 
 export interface VerificacaoPublica {
@@ -78,6 +104,7 @@ export interface VerificacaoPublica {
 export interface EntradaPublica {
   readonly slug: string;
   readonly kind: TipoDeProfissional;
+  readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly city: string | null;
   readonly state: string | null;
@@ -86,6 +113,7 @@ export interface EntradaPublica {
   readonly phone_e164: string | null;
   readonly verification: VerificacaoPublica;
   readonly distance_m: number | null;
+  readonly logo_url: string | null;
 }
 
 /**
@@ -100,10 +128,40 @@ export function distanciaNaGrade(metros: number | null): number | null {
   return Math.max(GRADE_EM_METROS, Math.round(metros / GRADE_EM_METROS) * GRADE_EM_METROS);
 }
 
-export function projetarEntrada(entrada: EntradaDoDiretorio): EntradaPublica {
+/**
+ * A FORMA DE UMA CHAVE DE DERIVADA PUBLICA, e por que ela e conferida AQUI.
+ *
+ * `{categoria}/{thumb|card|banner}/{nome}.{ext}`. O original tem a forma
+ * `{categoria}/original/{128 bits}` e **nunca** casa com esta expressao.
+ *
+ * A conferencia existe porque o que sai desta projecao vai para o aplicativo, e
+ * o original mora no armazenamento PRIVADO: uma URL de original seria ou um 403
+ * na tela, ou -- no dia em que alguem afrouxasse a politica do balde -- a foto
+ * com EXIF, com a coordenada de onde ela foi tirada, servida publicamente. O
+ * tipo `string | null` nao distingue as duas chaves; esta funcao distingue.
+ *
+ * Ela devolve `null` em vez de lancar: uma linha com chave torta e defeito de
+ * dado, e derrubar a listagem inteira por causa de uma entrada seria trocar um
+ * cartao sem imagem por uma tela sem nada.
+ */
+const FORMA_DA_DERIVADA = /^[a-z-]+\/(?:thumb|card|banner)\/[A-Za-z0-9_-]+\.[a-z]+$/;
+
+export function urlDaDerivada(
+  chave: string | null,
+  urlDeMidia: (chave: string) => string,
+): string | null {
+  if (chave === null || !FORMA_DA_DERIVADA.test(chave)) return null;
+  return urlDeMidia(chave);
+}
+
+export function projetarEntrada(
+  entrada: EntradaDoDiretorio,
+  urlDeMidia: (chave: string) => string,
+): EntradaPublica {
   return {
     slug: entrada.slug,
     kind: entrada.kind,
+    entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     city: entrada.city,
     state: entrada.state,
@@ -115,5 +173,7 @@ export function projetarEntrada(entrada: EntradaDoDiretorio): EntradaPublica {
       evidence_kinds: evidenciasAprovadas(entrada.verificacoes),
     },
     distance_m: distanciaNaGrade(entrada.distanciaEmMetros),
+    // A derivada, nunca o original. `urlDaDerivada` recusa pela FORMA da chave.
+    logo_url: urlDaDerivada(entrada.logoPublicKey, urlDeMidia),
   };
 }

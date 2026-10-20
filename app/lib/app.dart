@@ -5,23 +5,28 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import 'api/busca_de_cep.dart';
 import 'api/achados_api.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
+import 'api/conexoes_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
+import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
@@ -33,11 +38,11 @@ import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
-import 'intencao/pedido_de_participacao_como_intencao.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
+import 'telas/atualizacao/portao_de_versao.dart';
 import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
@@ -54,6 +59,7 @@ class BichuApp extends StatefulWidget {
     this.localizacao,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
+    this.depositoDaCidade,
     this.cofreDoQr,
     this.depositoDeOportunidades,
     this.depositoDoAvisoDeCadastro,
@@ -159,6 +165,14 @@ class BichuApp extends StatefulWidget {
   /// servidor em sequencia.
   final CacheDeMeusPets? cacheDeMeusPets;
 
+  /// Onde a ultima cidade escolhida na listagem de perdidos e guardada.
+  ///
+  /// **Injetavel para teste, e aqui a injecao nao e conveniencia.** O padrao
+  /// chama `getApplicationDocumentsDirectory()`, que em teste de widget trava o
+  /// `pumpAndSettle` para sempre, sem mensagem -- a mesma armadilha do
+  /// deposito de intencao, e por isso a mesma saida.
+  final DepositoDaCidade? depositoDaCidade;
+
   /// Injetavel para teste, pelo mesmo motivo do [cacheDeMeusPets]: um caso
   /// precisa conseguir OLHAR dentro dele depois do logout, e o que ele guarda
   /// e uma credencial.
@@ -226,10 +240,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final ConexoesApi _conexoes;
+  late final MeApi _me;
   late final AchadosApi _achados;
   late final DiretorioApi _diretorio;
   late final LojaApi _loja;
   late final EnvioDeFoto _envioDeFoto;
+  late final BuscaDeCep _buscaDeCep;
   late final FotosPendentes _fotosPendentes;
   late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
@@ -244,11 +261,19 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
   late final CacheDeMeusPets _cacheDeMeusPets;
+  late final CidadeEscolhida _cidadeEscolhida;
   late final CofreDaImagemDoQr _cofreDoQr;
   late final OportunidadesDeAviso _oportunidades;
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
   late final OuvinteDeAvisos _avisosRecebidos;
+
+  /// A consulta ao veredito de versao (19/10/2026). Fica aqui, e nao no
+  /// `Escopo`, porque **um unico widget a consome** -- o portao de versao, no
+  /// `builder` abaixo. Nenhuma tela chama esta porta, e nenhuma deve: o
+  /// veredito nao e informacao de tela, e a decisao de fechar o aplicativo
+  /// mora num lugar so.
+  late final VersaoApi _versao;
 
   @override
   void initState() {
@@ -258,6 +283,10 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
     _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
+    // SEM limpeza ao sair, de proposito: o nome de uma cidade e do
+    // APARELHO e nao da conta, e sair da conta nao muda em que cidade este
+    // telefone esta. Ver o cabecalho de `cidade_escolhida.dart`.
+    _cidadeEscolhida = CidadeEscolhida(deposito: widget.depositoDaCidade);
     _cofreDoQr = widget.cofreDoQr ?? CofreDaImagemDoQr();
     _api = ApiClient(
       config: widget.config,
@@ -265,8 +294,14 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       tokenDeAcesso: () => _sessao.tokenValido(),
     );
     _auth = AuthApi(_api);
+    _versao = VersaoApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    // A porta das conexoes, do mesmo `ApiClient` das outras (uniao 18/10/2026).
+    _conexoes = ConexoesApi(_api);
+    // As rotas `tags: [me]`, ligadas pela tela de dados pessoais (18/10/2026).
+    // Antes dela nenhuma tela chamava `GET /me` nem `PATCH /me`.
+    _me = MeApi(_api);
     _achados = AchadosApi(_api);
     _diretorio = DiretorioApi(_api);
     _loja = LojaApi(_api);
@@ -297,6 +332,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
     // importa: este cliente nao conhece o token da sessao, e o endereco para
     // onde os bytes vao e outro host, escolhido pelo servidor.
+    // A busca de CEP, pelo MESMO padrao do envio de fotos acima: cliente
+    // injetado em teste, proprio em producao, e **sem o token da sessao**.
+    // Ela fala com servico publico de terceiro (BrasilAPI, ViaCEP) e o unico
+    // dado que sai e o CEP -- ver `api/busca_de_cep.dart`.
+    _buscaDeCep = BuscaDeCep(cliente: widget.clienteHttp);
     _envioDeFoto = EnvioDeFoto(
       camera: _camera,
       cliente: widget.clienteHttp,
@@ -332,7 +372,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    _localizacao = widget.localizacao ?? const LocalizacaoPorGeolocator();
+    // **SEM `const`**: `LocalizacaoPorGeolocator` deixou de ser constante em
+    // 19/10/2026, quando ganhou a memoria da ultima resolucao de cidade (a
+    // grade de ~100 m que a emenda 1 do ADR-0006 exige). Objeto com estado nao
+    // e `const`, e a instancia aqui e uma por processo de qualquer forma.
+    _localizacao = widget.localizacao ?? LocalizacaoPorGeolocator();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -356,11 +400,17 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
         // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
-        // `pedir_para_participar`: depois de autenticar, o pedido e ENVIADO e
-        // a pessoa volta ao encontro com a caixa em `Pedido enviado`
-        // (design system 24.17.1, item 5).
-        AcaoDeIntencao.pedirParaParticipar:
-            pedidoDeParticipacaoExecutavel(_api),
+        // **`pedir_para_participar` NAO esta mais aqui.** O executavel dela
+        // mandava o pedido depois do login e devolvia a pessoa ao detalhe do
+        // evento; a tela de detalhe saiu em 19/10/2026 por decisao do
+        // cliente, e com ela o unico lugar do app que criava essa intencao.
+        //
+        // O valor do `enum` FICA em `intencao/intencao_pendente.dart`, de
+        // proposito: um envelope `pedir_para_participar` ja gravado no disco
+        // de alguem continua legivel, `GuardaDeAcao` nao acha executavel para
+        // ele e a pessoa cai na agenda da `Rede` em vez de num erro. Tirar o
+        // valor do `enum` faria a leitura do envelope LANCAR -- caminho que o
+        // registro de erro cobre, mas que nao ha motivo para exercitar.
       },
     );
     _sessao = ControladorDeSessao(
@@ -568,10 +618,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      conexoes: _conexoes,
+      me: _me,
       diretorio: _diretorio,
       loja: _loja,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
+      buscaDeCep: _buscaDeCep,
       retomadaDeFotos: _retomadaDeFotos,
       fila: _fila,
       tags: _tags,
@@ -586,6 +639,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,
+      cidadeEscolhida: _cidadeEscolhida,
       cofreDoQr: _cofreDoQr,
       avisoDeCadastro: _avisoDeCadastro,
       child: MaterialApp.router(
@@ -614,7 +668,19 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
           );
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: escala),
-            child: filho ?? const SizedBox.shrink(),
+            // O PORTAO DE VERSAO EMBRULHA TODA ROTA, e e por isso que ele
+            // esta no `builder` e nao numa rota: instalado como rota, ele
+            // seria contornavel por um deep link apontando para outra. Aqui
+            // nao ha rota a que escapar.
+            //
+            // Ele nasce LIBERADO e nao espera resposta nenhuma para pintar o
+            // app: `PortaoDeVersao` so troca de estado se o servidor disser
+            // explicitamente que esta versao nao serve.
+            child: PortaoDeVersao(
+              versaoApi: _versao,
+              versaoDoApp: widget.config.versaoDoApp,
+              child: filho ?? const SizedBox.shrink(),
+            ),
           );
         },
       ),

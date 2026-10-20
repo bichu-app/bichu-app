@@ -81,7 +81,7 @@ const ids = { uuidv7: (): string => randomUUID() };
 
 async function criarConta(): Promise<UserId> {
   const id = randomUUID() as UserId;
-  await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
+  await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     id,
     `bichus91-${id}@${DOMINIO_DE_TESTE}`,
   ]);
@@ -629,25 +629,54 @@ void describe('a exclusão da conta leva os aparelhos junto', () => {
 });
 
 /**
- * SEC-019, segunda camada: o gatilho da migração `20260923000001`.
+ * SEC-019, E A REVERSÃO DELE EM 17/10: A CONTA É DESABILITADA, E DESABILITAR
+ * NÃO APAGA NADA.
  *
- * A primeira camada é de aplicação e está em `derrubarTodasAsSessoes`, por onde
- * `excluirMinhaConta` passa. Esta é a de banco, e existe pelo precedente que o
- * repositório já escolheu para o mesmo problema em `20260922000006`.
+ * ===========================================================================
+ * ESTE BLOCO AFIRMAVA O CONTRÁRIO ATÉ 18/10, E A INVERSÃO É DELIBERADA
+ * ===========================================================================
+ * Ele se chamava "SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na
+ * hora" e exigia que `UPDATE users SET deleted_at = now()` deixasse
+ * `user_devices` em ZERO, pelo gatilho `users_exclusao_logica_apaga_aparelhos`
+ * da `20260928000007`. A migração
+ * `20261017000013_conta-desabilitada-nao-apaga-aparelho.sql` **derrubou aquele
+ * gatilho de propósito**, por decisão literal do cliente de 17/10:
  *
- * **Ela é a única prova de que a migração roda.** Uma migração de gatilho sem
- * caso que a exercite passa despercebida até o dia em que alguém depende dela —
- * e foi por falta do marcador `-- Up Migration` que "sair de todos" ficou 500
- * por vinte horas em 22/09.
+ * > *"Mantenha a foto e não delete os dados do usuário, apenas desabilite na
+ * > plataforma e filtro as páginas para que esse usuário não seja mais
+ * > encontrado em nenhuma pagina ou funcionalidade"*
+ *
+ * O cabeçalho daquela migração diz, por extenso, que o gatilho "APAGA DADO DO
+ * USUÁRIO, e dado do usuário passou a ser retido".
+ *
+ * ===========================================================================
+ * E O DEFEITO QUE O GATILHO FECHAVA NÃO VOLTOU
+ * ===========================================================================
+ * O risco era um só: "o aparelho continua sendo destinatário válido de alerta
+ * de pet perdido numa conta que a pessoa já mandou apagar". Quem decide isso é
+ * a consulta de alcance, `kysely-alcance-por-postgis.ts`, e ela JÁ junta
+ * `users` e exige `u.deleted_at IS NULL` (camada escrita pela BICHUS-88 em
+ * 22/09). A prova viva disso é o caso `BICHUS-88: a conta logicamente excluída
+ * sai do alcance`, em `alcance-e-disparo.test.ts`, que passa.
+ *
+ * O endereço de entrega deixa de ser alcançável **por propriedade da
+ * consulta**, e não por ausência de linha. É a mesma troca que o cliente pediu
+ * para as páginas, aplicada ao push. E é por isso que estes casos medem a
+ * RETENÇÃO: eles são o contrapeso de `alcance-e-disparo.test.ts`, não um
+ * substituto dele.
+ *
+ * `expurgo-de-conta-conclui.test.ts` tem o outro lado da mesma prova, pelo
+ * CATÁLOGO: `ISCA: nenhum gatilho de users apaga user_devices`.
  */
-void describe('SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na hora', () => {
-  void it('marcar `deleted_at` leva a linha de `user_devices` junto', async () => {
+void describe('17/10: a exclusão LÓGICA da conta RETÉM os aparelhos', () => {
+  void it('marcar `deleted_at` NÃO leva a linha de `user_devices`', async () => {
     const tutora = await criarConta();
-    await repo.registrar(
+    const t = token('sobrevive-a-exclusao');
+    const { aparelho } = await repo.registrar(
       tutora,
       {
         plataforma: 'android',
-        pushToken: token('vai-sumir-na-exclusao'),
+        pushToken: t,
         permissao: 'granted',
         versaoDoApp: null,
         versaoDoSistema: null,
@@ -656,10 +685,7 @@ void describe('SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na hora'
     );
     assert.equal(await linhasDe(tutora), 1, 'o aparelho não foi registrado: nada a medir');
 
-    // A exclusão LÓGICA, como `registrarPedidoDeExclusao` a escreve. O expurgo
-    // definitivo só acontece 30 dias depois, e esperar por ele deixaria trinta
-    // dias de alerta de pet perdido chegando no aparelho de uma conta que a
-    // pessoa já mandou apagar.
+    // A exclusão LÓGICA, como `registrarPedidoDeExclusao` a escreve.
     await cliente.query(
       `UPDATE users SET deleted_at = now(), status = 'deletion_requested',
                         deletion_requested_at = now()
@@ -669,19 +695,30 @@ void describe('SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na hora'
 
     assert.equal(
       await linhasDe(tutora),
-      0,
-      'a conta foi excluída logicamente e o aparelho CONTINUA no cadastro de push. Ele ' +
-        'segue sendo destinatário válido de alerta de pet perdido, com nome do animal e ' +
-        'região, por trinta dias depois do pedido de exclusão. Se o gatilho ' +
-        '`users_exclusao_logica_apaga_aparelhos` não existe, a migração ' +
-        '`20260923000001` não rodou -- confira o marcador `-- Up Migration`.',
+      1,
+      'a linha de `user_devices` foi APAGADA na exclusão lógica. Desde 17/10 nada é apagado: ' +
+        'se o gatilho `users_exclusao_logica_apaga_aparelhos` voltou, ele desfaz a decisão do ' +
+        'cliente ("não delete os dados do usuário") -- ver o cabeçalho da migração ' +
+        '`20261017000013`.',
+    );
+    // E o aparelho continua com o endereço GRAVADO. É isso que torna o
+    // recorte da consulta de alcance a única coisa que tira a conta do
+    // disparo: não há segunda camada escondida no registro de aparelhos.
+    assert.equal(
+      await repo.enderecoDeEnvio(aparelho.id),
+      t,
+      'o endereço de envio sumiu junto com a exclusão lógica. A retenção de 17/10 é da LINHA ' +
+        'inteira; quem corta o alcance é `u.deleted_at IS NULL` em ' +
+        '`kysely-alcance-por-postgis.ts`, e não o esvaziamento do token.',
     );
   });
 
-  void it('CONTRAPESO: a conta VIZINHA não perde o aparelho dela', async () => {
-    // Sem este caso, a implementação mais simples que passa no de cima é um
-    // gatilho sem `WHERE user_id = NEW.id`, que esvazia a tabela inteira na
-    // primeira exclusão de conta do sistema.
+  void it('CONTRAPESO: a conta VIZINHA também não perde o aparelho dela', async () => {
+    // Este caso sobreviveu à inversão com o sinal trocado, e continua
+    // significando a mesma coisa: a exclusão de uma conta não pode alcançar
+    // `user_devices` de ninguém. Antes ele impedia um gatilho sem
+    // `WHERE user_id = NEW.id`; hoje ele impede que um gatilho novo apareça e
+    // esvazie a tabela inteira.
     const queExclui = await criarConta();
     const vizinha = await criarConta();
     const registrar = (dono: UserId, sufixo: string): Promise<unknown> =>
@@ -701,18 +738,40 @@ void describe('SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na hora'
 
     await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [queExclui]);
 
-    assert.equal(await linhasDe(vizinha), 1, 'o gatilho alcançou a conta de outra pessoa');
+    assert.equal(await linhasDe(vizinha), 1, 'a exclusão alcançou a conta de outra pessoa');
+    assert.equal(await linhasDe(queExclui), 1, 'a exclusão lógica apagou o aparelho da própria');
   });
 
-  void it('a REVERSÃO de `deleted_at` não ressuscita aparelho nenhum', async () => {
-    // A cláusula `WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)`
-    // é o que fecha isto. Um gatilho sem ela dispararia de novo na volta, e o
-    // `DELETE` rodaria sobre uma tabela que já está vazia -- inofensivo hoje,
-    // e a porta para alguém trocar o corpo do gatilho por algo que não seja.
+  void it('a REVERSÃO de `deleted_at` encontra o aparelho ainda lá', async () => {
+    // O caso era "a REVERSÃO de `deleted_at` não ressuscita aparelho nenhum", e
+    // ele media a cláusula `WHEN` do gatilho. Sem gatilho, aquela pergunta não
+    // existe -- e a pergunta que EXISTE é a janela de socorro de quem clicou
+    // errado: desfeita a exclusão, a pessoa reabre o app e continua recebendo
+    // alerta SEM registrar o aparelho de novo. Era exatamente isso que o
+    // desenho antigo não entregava.
     const tutora = await criarConta();
+    const t = token('socorro-de-quem-clicou-errado');
+    const { aparelho } = await repo.registrar(
+      tutora,
+      {
+        plataforma: 'android',
+        pushToken: t,
+        permissao: 'granted',
+        versaoDoApp: null,
+        versaoDoSistema: null,
+      },
+      AGORA,
+    );
+
     await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [tutora]);
     await cliente.query('UPDATE users SET deleted_at = NULL WHERE id = $1', [tutora]);
 
-    assert.equal(await linhasDe(tutora), 0);
+    assert.equal(await linhasDe(tutora), 1);
+    assert.equal(
+      await repo.enderecoDeEnvio(aparelho.id),
+      t,
+      'o aparelho teria de ser registrado de novo depois de desfeita a exclusão',
+    );
+    assert.deepEqual([...(await repo.contasAlcancaveisPorPush([tutora]))], [tutora]);
   });
 });

@@ -217,7 +217,8 @@ void main() {
     });
 
     // -------------------------------------------------------------------
-    // `Perto`: os controles de listagem, no app montado
+    // A ABA `Comunidade` da `Rede` (o que era `Perto`): os controles de
+    // listagem, no app montado
     // -------------------------------------------------------------------
     //
     // Os tres controles novos -- o campo de busca, o icone de filtro e o de
@@ -226,10 +227,15 @@ void main() {
     // true)`, que e a forma EXATA dos quatro `btn=true tap=false` que este
     // app ja teve. So a tela montada enxerga isso.
 
-    testWidgets('Perto, com a lista carregada', (tester) async {
+    testWidgets('Comunidade, com a lista carregada', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
 
       // 5 destinos da barra + `Filtrar` + `Ordenar` + `Ligar para ...`.
       //
@@ -245,11 +251,22 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('Perto, a folha de filtros aberta', (tester) async {
+    testWidgets('Comunidade, a folha de filtros aberta', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
-      await tocar(tester, find.byTooltip('Filtrar'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
+      // **`Filtrar e ordenar, Mais perto`**, e nao `Filtrar`. Desde 17/10 ha
+      // UM controle de recorte na barra, e o nome acessivel dele e composto
+      // pelo verbo mais o estado (`barra_de_listagem.dart`, linhas 313-331):
+      // sem filtro ativo e com ordem oferecida ele sai como `Filtrar e
+      // ordenar, Mais perto`. O `byTooltip('Filtrar')` achava zero e `tocar`
+      // estourava `Bad state: No element`.
+      await tocar(tester, find.byTooltip('Filtrar e ordenar, Mais perto'));
 
       // As pastilhas de atividade e de verificacao. `tocaveis` e nao contagem:
       // a folha fica sobre a casca e o que sobra embaixo na arvore nao e
@@ -258,11 +275,31 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('Perto, a folha de ordenacao aberta', (tester) async {
+    testWidgets('Comunidade, a folha de ordenacao aberta', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
-      await tocar(tester, find.byTooltip('Ordenar, Mais perto'));
+      // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
+      // `Perto` deixou de existir por decisao do cliente, e o diretorio virou
+      // a aba `Comunidade` da `Rede`. O que esta varredura mede -- que nenhum
+      // no anunciado como botao fica sem acao -- nao mudou.
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Rede'));
+      await tocar(tester, find.widgetWithText(Tab, 'Comunidade'));
+      // **A ordem passou a morar DENTRO da folha de filtros em 17/10**, e o
+      // controle proprio de ordenacao deixou de existir: nao ha mais um
+      // `Ordenar, Mais perto` na barra para tocar, e o `byTooltip` dele achava
+      // zero.
+      //
+      // Para este caso nao virar copia do de cima, ele varre a folha no OUTRO
+      // estado: com um filtro JA APLICADO. E ai que a folha ganha o `Limpar` e
+      // a pastilha nasce marcada -- controles que o caso de cima nao alcanca,
+      // e e isso que mantem as duas varreduras medindo coisas diferentes.
+      await tocar(tester, find.byTooltip('Filtrar e ordenar, Mais perto'));
+      await tocar(tester, find.text('Veterinário'));
+      await tocar(tester, find.text('Aplicar'));
+      await tocar(
+        tester,
+        find.byTooltip('Filtrar e ordenar, 1 filtro ativo, Mais perto'),
+      );
 
       exigirTodoBotaoComAcao(tester, tela: 'perto-ordenacao', tocaveis: true);
       handle.dispose();
@@ -313,7 +350,7 @@ void main() {
     testWidgets('Perfil > Meus pets', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
 
       // 9 -> 8 em 22/09/2026: saiu do Perfil o `TextButton` de "Termos de uso
       // e privacidade", que tinha `onPressed: null` e nao levava a lugar
@@ -321,7 +358,23 @@ void main() {
       // ficam so na F1.1, onde sao o objeto do aceite. O piso desce porque a
       // tela tem mesmo um controle a menos, e nao porque o portao passou a
       // olhar menos.
-      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 8);
+      // 8 -> 6 em 19/10, e a conta esta aqui porque este numero e um PISO
+      // escrito a mao: ele cai so quando a tela tem mesmo menos controle.
+      //
+      // A tela da conta deixou de ser aba e virou rota irma da casca, aberta
+      // pela foto da barra de topo. O que ela perdeu nao foi acao: perdeu a
+      // barra de baixo e o hamburguer da gaveta, que cobriam a casca e nao
+      // existem numa tela empilhada. O que ela ganhou foi o `Voltar`.
+      //
+      // Os seis, medidos na arvore de semantica, todos com acao de toque:
+      // `Cadastrar meu pet`, `Meus dados`, `Escanear uma tag`,
+      // `Sair da conta`, `Voltar` e a propria foto (`Sua conta`).
+      //
+      // **Nenhum destino da tela desapareceu**: os quatro primeiros sao
+      // exatamente os que a aba `Perfil` tinha, e os cartoes de pet -- o
+      // unico caminho ate o QR e `Marcar como perdido` -- continuam no corpo
+      // (sem pet nesta fixture, por isso nao contam como botao aqui).
+      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 6);
       handle.dispose();
     });
 
@@ -338,7 +391,7 @@ void main() {
     testWidgets('T.1 detalhe do pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
 
       // **3, e nao 7: a casca de abas NAO esta na arvore aqui.** T.1 e
@@ -357,7 +410,7 @@ void main() {
     testWidgets('a folha destrutiva de excluir o pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
       await rolarAte(tester, find.text(TextosDoDetalhe.excluir));
       await tocar(tester, find.text(TextosDoDetalhe.excluir));
@@ -373,7 +426,7 @@ void main() {
     testWidgets('a edicao do pet', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irParaAConta(tester);
       await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
       await rolarAte(tester, find.text(TextosDoDetalhe.editar));
       await tocar(tester, find.text(TextosDoDetalhe.editar));

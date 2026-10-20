@@ -196,8 +196,7 @@ void main() {
       camera: CameraDeTeste(permissao),
       leitorDeQr: leitor,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
   }
 
   // -- DIRECAO 1: COM CAMERA, A MOLDURA E OBRIGATORIA -----------------------

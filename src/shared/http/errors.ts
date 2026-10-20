@@ -278,6 +278,25 @@ export const problemas = {
     }),
 
   /**
+   * 409. O teto de três comunicados por dia, já atingido.
+   *
+   * **409 e não 429, e a diferença é o que a tela faz com cada um.** 429 é teto
+   * de CHAMADA: ele é aplicado pela borda e passa em um minuto, então a tela
+   * oferece "tentar de novo". Este é teto de PRODUTO, e a saída de quem o
+   * encontra é esperar o próximo dia ou não mandar. Tratar os dois com o mesmo
+   * tipo faria o painel oferecer "tentar de novo" para o único caso em que
+   * tentar de novo não resolve.
+   *
+   * A tela do painel normalmente nem chega aqui: a pré-visualização devolve
+   * `remaining_today`, e com zero ela desabilita o disparo antes da tentativa.
+   * Este problema cobre a corrida — outro operador disparou no meio.
+   */
+  tetoDiarioDeComunicados: (): AppError =>
+    new AppError('broadcast-daily-cap-reached', 'Já saíram três comunicados hoje', {
+      detail: 'O limite é de três por dia. O próximo pode ser enviado amanhã.',
+    }),
+
+  /**
    * 409. Nenhum canal de contato verificado.
    *
    * O bloqueio existe porque um caso sem canal alcançável produz **movimento e
@@ -413,6 +432,52 @@ export const problemas = {
   canalDeContatoNaoVerificadoParaEncontro: (): AppError =>
     new AppError('contact-channel-unverified', 'Confirme seu e-mail para propor um encontro', {
       detail: 'Um encontro sem quem responda por ele não vai ao ar. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
+   * 409. Nenhum canal de contato verificado, na sugestão de entrada do `Perto`.
+   *
+   * **O tipo é o MESMO** de abrir caso de pet perdido e de propor encontro, pela
+   * mesma razão escrita acima: a régua de "conta validada" é uma só no produto, e
+   * um terceiro `type` para a mesma pergunta faria o app decidir por três onde há
+   * um conceito. O que muda é o texto, e aqui ele precisa mudar outra vez --
+   * "para avisar a vizinhança" e "para propor um encontro" mandam quem está
+   * sugerindo uma clínica para a tela errada.
+   *
+   * A regra é do cliente, dita duas vezes: sugerir cria TRABALHO HUMANO de
+   * revisão sobre um TERCEIRO que não pediu, e esconder o botão na tela não
+   * recusa o pedido -- quem chama a rota direto passa por cima da tela.
+   *
+   * **Na prática isso é e-mail**, porque nenhuma operação verifica telefone --
+   * nada em `src/` grava `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaSugestao: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para sugerir um lugar', {
+      detail: 'Uma sugestão fala de um estabelecimento que não pediu para aparecer. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
+   * 409. Avaliar um local do diretório exige canal de contato verificado.
+   *
+   * **Mesmo `type` de `canalDeContatoNaoVerificadoParaEncontro`, e isso é o
+   * desenho e não descuido**: a regra é literalmente a mesma regra do cliente
+   * — "só usuários com os dados validados" —, e dois `type` para um conceito
+   * fariam o app decidir por dois caminhos onde há um.
+   *
+   * O que muda é o **texto**, e ele precisa mudar: "confirme seu e-mail para
+   * propor um encontro" numa tela de avaliar um veterinário manda a pessoa
+   * para o lugar errado. É a mesma razão pela qual o irmão de cima existe
+   * separado de `canalDeContatoNaoVerificado`.
+   *
+   * **Na prática isso é e-mail**, porque nada em `src/` grava
+   * `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaAvaliar: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para avaliar', {
+      detail:
+        'A avaliação aparece com o seu nome na página de um negócio real. Confirme seu e-mail e tente de novo.',
       nextAction: 'verify_email',
     }),
 
@@ -609,6 +674,40 @@ export const problemas = {
     }),
 
   /**
+   * 410. A janela de reabertura do caso passou (`reopenLostCase`).
+   *
+   * O contrato declara a resposta e o prazo: *"Encerrar e reversivel por **7
+   * dias**"* em `closeLostCase`, e o 410 de `reopenLostCase` diz *"Passou dos
+   * 7 dias"*.
+   *
+   * **O `type` é `lost-case-closed`, e o tipo NÃO é novo.** `x-problem-types` é
+   * uma lista fechada, o 410 de `reopenLostCase` aponta para o `Problem`
+   * genérico — sem `$ref` para uma resposta nomeada —, e nenhum dos quatro
+   * slugs de 410 do vocabulário significa "a janela venceu". Dos quatro, este é
+   * o único que fala do CASO; os outros três são da conversa do achador, da tag
+   * revogada e do token de uso único. Três construtores já compartilham
+   * `conversation-closed` neste mesmo arquivo pelo mesmo motivo, e é o `type`
+   * que o cliente lê: o app já nomeia este slug (`ProblemTipo.casoEncerrado`).
+   *
+   * **Sem `next_action`, e a ausência é a diferença que importa.**
+   * `casoPublicoEncerrado` carrega `register_stray_found_report` porque lá quem
+   * recebe o 410 é um estranho que abriu um cartaz e pode estar com um animal
+   * no colo. Aqui quem recebe é o **tutor autenticado**, do próprio caso:
+   * mandá-lo registrar um achado avulso do pet dele seria a saída errada. O que
+   * ele faz é abrir um caso novo, e isso a tela dele já oferece.
+   *
+   * O texto diz o prazo porque ele é a informação que falta a quem chegou
+   * tarde, e **não** promete nada sobre o caso antigo: ele continua encerrado,
+   * com o desfecho que foi gravado.
+   */
+  janelaDeReaberturaVencida: (): AppError =>
+    new AppError('lost-case-closed', 'Este caso não dá mais para reabrir', {
+      detail:
+        'A reabertura vale por 7 dias depois do encerramento, e esse prazo já ' +
+        'passou. Se o seu pet sumiu de novo, marque como perdido outra vez.',
+    }),
+
+  /**
    * 429 de janela que REABRE.
    *
    * ## O texto anterior mentia duas vezes
@@ -687,6 +786,21 @@ export const problemas = {
       detail:
         'Este total não reinicia com o tempo, então esperar não libera outro. ' +
         'Se você precisa de mais, fale com a gente.',
+    }),
+
+  /**
+   * Os dois serviços públicos de CEP falharam, ou não responderam no prazo de
+   * 4 s cada (`lookupAdminPostalCode`).
+   *
+   * **Separado de `not-found`**, que é 404, porque a saída da tela é a mesma --
+   * digitar o endereço -- e a frase não é: "este CEP não existe" não é "não
+   * conseguimos consultar agora". Os dois são informativos e **nenhum dos dois
+   * impede o cadastro de ser salvo**: busca de CEP é conveniência de
+   * digitação.
+   */
+  buscaDeCepIndisponivel: (): AppError =>
+    new AppError('postal-code-lookup-unavailable', 'Não conseguimos consultar o CEP agora', {
+      detail: 'Tente de novo, ou preencha o endereço à mão.',
     }),
 
   interno: (cause?: unknown): AppError =>

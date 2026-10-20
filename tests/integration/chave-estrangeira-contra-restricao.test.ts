@@ -751,6 +751,163 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.admin_accounts',
     aoApagar: 'NO ACTION',
   },
+  // A SEGUNDA autoria da mesma tabela, de `users`, da `20261001000005` (linha
+  // 107): a capa do encontro da comunidade e de USUARIO, e o CHECK
+  // `catalog_upload_intents_um_autor` exige exatamente um dos dois. CASCADE
+  // porque a intencao e descartavel -- vence em dez minutos e o varredor a
+  // recolhe --, e e o que o `COMMENT ON COLUMN` da migracao diz por extenso.
+  'public.catalog_upload_intents.catalog_upload_intents_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a intencao de envio da capa do encontro da propria pessoa. Descartavel: ela vence em ' +
+      'dez minutos, e a imagem que ja virou `catalog_images` fica (aquela ligacao e SET NULL).',
+  },
+
+  // -------------------------------------------------------------------------
+  // a taxonomia da Loja em dois niveis (`20261017000003`)
+  // -------------------------------------------------------------------------
+  // Vocabulario curado, sem dado de pessoa nenhum, e por isso a regra e a mesma
+  // de `ref_species` e de `store_partners`: NO ACTION para cima. Categoria e
+  // subcategoria retiradas ficam `active = false`, nunca apagadas -- o
+  // `COMMENT ON COLUMN store_categories.active` diz que apagar "arrastaria os
+  // itens pela chave estrangeira", e NO ACTION e a rede que faz o DELETE
+  // reprovar em voz alta em vez de arrastar.
+  'public.store_subcategories.store_subcategories_category_code_fkey': {
+    colunas: ['category_code'],
+    referencia: 'public.store_categories',
+    aoApagar: 'NO ACTION',
+  },
+  // A unica CASCADE desta arvore, e ela desce DENTRO do vocabulario: apagar uma
+  // subcategoria leva as especies para as quais ela foi levantada, que sao
+  // atributo dela e de mais ninguem.
+  'public.store_subcategory_species.store_subcategory_species_category_code_code_fkey': {
+    colunas: ['category_code', 'code'],
+    referencia: 'public.store_subcategories',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as especies levantadas para a subcategoria apagada. Vocabulario curado, sem dado de ' +
+      'pessoa.',
+  },
+  'public.store_subcategory_species.store_subcategory_species_species_code_fkey': {
+    colunas: ['species_code'],
+    referencia: 'public.ref_species',
+    aoApagar: 'NO ACTION',
+  },
+  // As duas do ITEM para a arvore. Nomes proprios, e nao `_fkey`, porque as
+  // duas entraram por `ALTER TABLE ... ADD CONSTRAINT` nomeado (linhas 358 e
+  // 371 da migracao). A segunda e COMPOSTA, e e ela que faz "a subcategoria
+  // pertence a categoria escolhida" ser invariante de banco e nao `if` de
+  // aplicacao -- ver o `COMMENT ON TABLE store_subcategories`.
+  'public.store_items.store_items_categoria_existe': {
+    colunas: ['category'],
+    referencia: 'public.store_categories',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_items.store_items_subcategoria_e_da_categoria': {
+    colunas: ['category', 'subcategory'],
+    referencia: 'public.store_subcategories',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
+  // o pedido da plaquinha da coleira (`20261017000012`)
+  // -------------------------------------------------------------------------
+  // As duas CASCADE daqui sao a mesma decisao vista de dois lados, e as duas
+  // apagam ENDERECO: a tabela guarda o endereco de entrega, e o item 5 do
+  // cabecalho da migracao diz que a cascata do pet "e o endereco saindo do
+  // banco quando o pet sai".
+  'public.collar_tag_requests.collar_tag_requests_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o pedido de plaquinha do pet apagado, e com ele o endereco de entrega. Pet e pedido ' +
+      'sao da mesma pessoa, e um pedido sobrevivente mandaria o painel prensar o codigo de ' +
+      'um pet que nao existe mais (ADR-0004).',
+  },
+  'public.collar_tag_requests.collar_tag_requests_requested_by_fkey': {
+    colunas: ['requested_by'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos de plaquinha da propria pessoa, com o endereco de entrega. A coluna existe ' +
+      'alem de `pets.owner_id` porque a transferencia do pet troca o dono sem reescrever ' +
+      'quem fez o pedido -- e por isso ela alcanca pedido de pet que hoje e de OUTRA pessoa.',
+  },
+  'public.collar_tag_requests.collar_tag_requests_decided_by_admin_id_fkey': {
+    colunas: ['decided_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'SET NULL',
+  },
+
+  // -------------------------------------------------------------------------
+  // a indicacao do diretorio e a fila dela (`20261017000004`, `20261017000016`)
+  // -------------------------------------------------------------------------
+  'public.directory_suggestions.directory_suggestions_suggested_by_user_id_fkey': {
+    colunas: ['suggested_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as indicacoes que a propria pessoa fez. A ENTRADA aprovada fica: ela aponta para ' +
+      '`professionals`, e aquela ligacao e NO ACTION no outro sentido.',
+  },
+  // NO ACTION escrito por extenso na migracao da fila (linha 72): apagar a
+  // entrada do diretorio passa a ser RECUSADO enquanto houver indicacao
+  // aprovada apontando para ela. `CASCADE` apagaria a indicacao, que e
+  // trabalho de pessoa, e `SET NULL` deixaria a indicacao `approved` sem
+  // entrada -- que e o que o CHECK `entrada_so_na_aprovacao` existe para
+  // impedir.
+  'public.directory_suggestions.directory_suggestions_approved_entry_id_fkey': {
+    colunas: ['approved_entry_id'],
+    referencia: 'public.professionals',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
+  // a avaliacao do local e a denuncia dela (`20261017000017`)
+  // -------------------------------------------------------------------------
+  // QUATRO CASCADE, e DUAS delas atravessam pessoas -- estao em
+  // `CASCATAS_QUE_ATRAVESSAM_PESSOAS`. A avaliacao e de quem escreveu; a
+  // denuncia sobre ela e de um TERCEIRO. Apagar a conta de quem escreveu leva
+  // a avaliacao e, por `review_id`, as denuncias que outras pessoas fizeram
+  // sobre ela.
+  'public.professional_reviews.professional_reviews_professional_id_fkey': {
+    colunas: ['professional_id'],
+    referencia: 'public.professionals',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as avaliacoes da entrada apagada, que sao de OUTRAS pessoas. Nao ha `apagarEntrada` ' +
+      "neste produto -- retirar e `status = 'removed'` --, entao a cascata so anda num " +
+      'expurgo operacional.',
+  },
+  'public.professional_reviews.professional_reviews_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as avaliacoes que a propria pessoa escreveu, e com elas -- por ' +
+      '`professional_review_reports.review_id` -- as denuncias que TERCEIROS fizeram sobre ' +
+      'elas. A denuncia de outra pessoa some com a avaliacao denunciada.',
+  },
+  'public.professional_review_reports.professional_review_reports_review_id_fkey': {
+    colunas: ['review_id'],
+    referencia: 'public.professional_reviews',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias sobre a avaliacao apagada. A avaliacao e de uma pessoa e a denuncia e de ' +
+      'outra: e por aqui que a exclusao de uma conta alcanca a fila de moderacao de um ' +
+      'terceiro.',
+  },
+  'public.professional_review_reports.professional_review_reports_reporter_user_id_fkey': {
+    colunas: ['reporter_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias que a propria pessoa fez. A avaliacao denunciada FICA, e ela e de outra ' +
+      'pessoa: a fila de moderacao perde o pedido, nao o conteudo.',
+  },
 
   // -------------------------------------------------------------------------
   // upload_intents
@@ -775,6 +932,230 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'as intenções de upload da própria pessoa. Atravessa `pet_photos.upload_intent_id`, ' +
       'que é RESTRICT: a exclusão de conta só não trava porque a cascata de `pets` apaga a ' +
       'foto antes. Ver Riscos.',
+  },
+
+  // =========================================================================
+  // O LOTE DE 18/10/2026: VINTE E QUATRO CHAVES QUE ENTRARAM COM A SUITE CEGA
+  // =========================================================================
+  // Elas nao escaparam deste registro por descuido: entre 18/10 e 19/10 o `tsc`
+  // da suite de integracao estourava de memoria e NENHUM caso rodava, entao o
+  // portao que obriga a declarar a acao de delecao estava calado. O escopo de
+  // compilacao da branch base devolveu a execucao, e e por isso que as vinte e
+  // quatro aparecem no mesmo dia.
+  //
+  // A acao de cada uma foi LIDA DO CATALOGO (`confdeltype`) em 19/10, e nao da
+  // migracao: em 22/09 a migracao dizia uma coisa e o banco tinha outra.
+
+  // --- a caixa de notificacoes (20261018000020) ----------------------------
+  'public.notification_items.notification_items_recipient_user_id_fkey': {
+    colunas: ['recipient_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os itens da caixa de quem saiu. A linha e da PROPRIA pessoa: a caixa nao ' +
+      'existe sem o destinatario, e nada de terceiro mora nela.',
+  },
+  'public.notification_items.notification_items_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.notification_counter_state.notification_counter_state_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o contador de nao-lidas da propria pessoa, que e derivado e nao e fato.',
+  },
+  // O comunicado e do PAINEL, e o autor dele e uma conta de `admin_accounts` --
+  // nao de `users`. `RESTRICT` e nao `SET NULL`: comunicado sem autor seria
+  // mensagem que alcancou todos e nao tem de quem cobrar. A conta do painel que
+  // disparou um comunicado nao se apaga; ela se DESATIVA
+  // (`admin_accounts.status`).
+  'public.notification_broadcasts.notification_broadcasts_dispatched_by_admin_fkey': {
+    colunas: ['dispatched_by_admin'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'RESTRICT',
+  },
+
+  // --- a leitura da conversa por participante (20261018000014) -------------
+  'public.conversation_reads.conversation_reads_conversation_id_fkey': {
+    colunas: ['conversation_id'],
+    referencia: 'public.conversations',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a marca de leitura da conversa que sumiu. Ela nao e fato proprio: sem a ' +
+      'conversa nao ha o que estar lido. A conversa, por sua vez, some pela cascata ' +
+      'de `conversations_tutor_user_id_fkey`, que ESTA na lista de cascatas que ' +
+      'atravessam pessoas.',
+  },
+  'public.conversation_list_views.conversation_list_views_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a marca de "abri a lista de conversas" da propria pessoa.',
+  },
+
+  // --- o espaco de nomes do @ (20261018000021) -----------------------------
+  // `SET NULL` e NAO `CASCADE`, e a escolha esta escrita na migracao: apelido de
+  // conta que sai NAO volta ao pool na hora (plano 4-C.7), porque um estranho
+  // pegaria `@maria` e herdaria o que a vizinhanca associava a ela.
+  //
+  // O `SET NULL` sozinho CONTRADIZIA o `CHECK handles_pessoa_tem_dono` da mesma
+  // tabela -- medido em 19/10, 23514 em `DELETE FROM users`. A `20261019000004`
+  // poe um gatilho que transforma o apelido orfao em `reservado` ANTES de o
+  // CHECK ser avaliado: o apelido continua fora do pool, e a exclusao conclui.
+  // O veredito medido do par esta em PARES_DE_NULO_CONTRA_RESTRICAO.
+  'public.handles.handles_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  // A outra ponta: `users.handle` tem chave estrangeira PARA `handles.handle`, e
+  // nao o contrario. `NO ACTION` porque a linha de `users` e o lado dependente:
+  // apagar a conta apaga a referencia, e nao ha nada para propagar.
+  'public.users.users_handle_no_espaco_de_nomes': {
+    colunas: ['handle'],
+    referencia: 'public.handles',
+    aoApagar: 'NO ACTION',
+  },
+
+  // --- bloquear alguem (20261018000031) ------------------------------------
+  // AS DUAS PONTAS SAO CASCADE, e as duas ATRAVESSAM PESSOAS. Apagar a conta de
+  // quem FOI bloqueado apaga a decisao de quem bloqueou: a protecao de A
+  // desaparece por um ato de B. E aceitavel porque sem B nao ha de quem se
+  // proteger -- mas e cascata entre pessoas e esta nomeada como tal na lista.
+  'public.user_blocks.user_blocks_blocker_user_id_fkey': {
+    colunas: ['blocker_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'os bloqueios que a propria pessoa criou. A decisao e dela e vai com ela.',
+  },
+  'public.user_blocks.user_blocks_blocked_user_id_fkey': {
+    colunas: ['blocked_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os bloqueios que OUTRAS pessoas fizeram contra quem saiu. A linha e de um ' +
+      'terceiro, e e por aqui que apagar uma conta apaga a protecao que alguem ' +
+      'montou contra ela. Ver o caso "a cascata atravessa pessoas".',
+  },
+
+  // --- a conexao simetrica com aceite (20261018000030) ---------------------
+  // Um convite e UMA linha com os dois lados. Apagar qualquer um dos dois leva a
+  // linha, e a linha era das DUAS pessoas: a lista de conexoes do que fica perde
+  // uma entrada por um ato do outro.
+  'public.user_connections.user_connections_requester_user_id_fkey': {
+    colunas: ['requester_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o convite que a pessoa enviou -- e, com ele, a conexao do OUTRO lado, que ' +
+      'nao pediu nada. Ver o caso "a cascata atravessa pessoas".',
+  },
+  'public.user_connections.user_connections_addressee_user_id_fkey': {
+    colunas: ['addressee_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o convite que a pessoa recebeu -- e a conexao de quem o enviou. Mesmo ' +
+      'desenho da outra ponta, e mesma travessia.',
+  },
+
+  // --- as tres filas de denuncia (20261018000032) --------------------------
+  // O PADRAO E O MESMO NAS TRES, e ele e deliberado:
+  //
+  //   denunciante -> CASCADE   (a denuncia e o ato DELE, e vai com ele)
+  //   alvo/autor  -> SET NULL  (a denuncia SOBREVIVE ao alvo: a fila precisa
+  //                             continuar lendo o que foi decidido, e o alvo
+  //                             tambem esta em COPIA opaca -- `subject_ref`,
+  //                             `publication_ref` -- justamente para isso)
+  //
+  // O CASCADE do denunciante atravessa pessoas: a fila de quem MODERA perde o
+  // pedido, em silencio, pelo ato de quem o abriu. Mesma classe de
+  // `professional_review_reports_review_id_fkey`, e nomeada na mesma lista.
+  'public.profile_reports.profile_reports_reporter_user_id_fkey': {
+    colunas: ['reporter_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias de perfil que a pessoa abriu. A linha e o ato dela, mas ela ' +
+      'estava NA FILA de quem modera: a fila perde o pedido sem nada acusar.',
+  },
+  'public.profile_reports.profile_reports_subject_user_id_fkey': {
+    colunas: ['subject_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.photo_reports.photo_reports_reporter_user_id_fkey': {
+    colunas: ['reporter_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'as denuncias de foto que a pessoa abriu, e o lugar delas na fila de moderacao.',
+  },
+  'public.photo_reports.photo_reports_owner_user_id_fkey': {
+    colunas: ['owner_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.photo_reports.photo_reports_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+  'public.publication_reports.publication_reports_reporter_user_id_fkey': {
+    colunas: ['reporter_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denuncias de publicacao que a pessoa abriu, e o lugar delas na fila de ' +
+      'moderacao.',
+  },
+  'public.publication_reports.publication_reports_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+
+  // --- a imagem do profissional e a foto do usuario (20261018000008) -------
+  // As TRES apontam para `catalog_images`, e nao para uma tabela de foto nova:
+  // a esteira de imagem deste produto e UMA (ADR-0007, ADR-0027 A.3). `SET NULL`
+  // nas tres porque as tres colunas sao ANULAVEIS e a ausencia e o estado
+  // normal: profissional sem logo e usuario sem foto funcionam.
+  'public.professionals.professionals_logo_image_id_fkey': {
+    colunas: ['logo_image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+  'public.professionals.professionals_photo_image_id_fkey': {
+    colunas: ['photo_image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+  'public.users.users_photo_image_id_fkey': {
+    colunas: ['photo_image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'SET NULL',
+  },
+
+  // --- a vitrine de fotos do usuario (20261018000040) ----------------------
+  // `image_id` e `NO ACTION`, e isso e o MOLDE e nao esquecimento: medido em
+  // 19/10, `store_item_images.image_id` e `network_event_images.image_id` -- as
+  // duas galerias que esta tabela copia -- tambem sao `NO ACTION`. Apagar uma
+  // imagem presa numa galeria reprova com 23503, e e o freio que se quer: quem
+  // tira a imagem tira a ligacao primeiro.
+  'public.user_showcase_images.user_showcase_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
+  'public.user_showcase_images.user_showcase_images_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a ligacao entre a conta e as fotos da vitrine dela. A vitrine e visivel so ' +
+      'ao dono, entao nada de terceiro sai por aqui; os objetos do balde saem pelo ' +
+      'expurgo, que le as chaves ANTES do DELETE.',
   },
 };
 
@@ -874,6 +1255,35 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
       'DELETE FROM users de quem achou, com o aviso registrado por um TERCEIRO (para isolar ' +
       'o par da cascata de `found_reports.reporter_user_id`): conclui, e a conversa sobrevive ' +
       'com finder_user_id = NULL e tutor_user_id preenchido.',
+  },
+
+  // =========================================================================
+  // O APELIDO: O PAR QUE ERA `contradiz` E DEIXOU DE SER, PELA MIGRACAO
+  // =========================================================================
+  // A `20261018000021` poe `ON DELETE SET NULL` em `handles.user_id` e, seis
+  // linhas abaixo, `CHECK (kind <> 'pessoa' OR user_id IS NOT NULL)`. As duas
+  // declaracoes tem razao escrita e NAO PODIAM VALER JUNTAS: em 19/10, medido
+  // em BEGIN/ROLLBACK, `DELETE FROM users` de quem tinha `@` reprovava com
+  // 23514 `handles_pessoa_tem_dono` -- verdadeiro para TODA conta com apelido,
+  // e nao para um caso de teste.
+  //
+  // A `20261019000004` nao mexeu em nenhuma das duas: ela poe o gatilho
+  // `handles_orfao_reservado` (`BEFORE UPDATE OF user_id`, `WHEN OLD.kind =
+  // 'pessoa' AND NEW.user_id IS NULL`) que transforma o apelido orfao em
+  // `reservado` antes de o CHECK ser avaliado. As duas intencoes sobrevivem: o
+  // apelido nao volta ao pool, e nao ha linha `pessoa` sem dono.
+  //
+  // O veredito abaixo e `compativel` por MEDICAO, e a medicao esta viva em
+  // "apagar a conta de quem tinha @ CONCLUI", mais abaixo neste arquivo, com a
+  // isca que derruba o gatilho e exige o 23514 de volta.
+  'public.handles.handles_user_id_fkey + handles_pessoa_tem_dono': {
+    coluna: 'user_id',
+    veredito: 'compativel',
+    medicao:
+      'ANTES da 20261019000004: DELETE FROM users de quem tinha @ reprovava com 23514 ' +
+      "handles_pessoa_tem_dono (Failing row: handle, esqueleto, 'pessoa', null). DEPOIS: " +
+      "o DELETE conclui e a linha fica kind = 'reservado', user_id = NULL, claimed_at " +
+      'preenchido -- o gatilho handles_orfao_reservado reescreve `kind` antes do CHECK.',
   },
 };
 
@@ -1014,6 +1424,29 @@ const CASCATAS_QUE_ATRAVESSAM_PESSOAS: readonly string[] = [
   'public.found_reports.found_reports_reporter_user_id_fkey',
   'public.match_candidates.match_candidates_decided_by_user_id_fkey',
   'public.match_candidates.match_candidates_found_report_id_fkey',
+  // 18/10, com a avaliacao do local (`20261017000017`): apagar a conta de quem
+  // ESCREVEU uma avaliacao leva a avaliacao por `author_user_id`, e a cascata
+  // segue por `review_id` para as denuncias que TERCEIROS fizeram sobre ela.
+  // A fila de moderacao de outra pessoa perde o pedido, em silencio, e e
+  // exatamente a classe de caminho que esta lista existe para nomear.
+  'public.professional_review_reports.professional_review_reports_review_id_fkey',
+  // 19/10, lendo o lote de 18/10 com a suite de volta. Os cinco abaixo foram
+  // MEDIDOS no catalogo como CASCADE e cada um apaga linha que tambem e de
+  // outra pessoa:
+  //
+  //   `user_blocks.blocked_user_id`  -- apagar B apaga a protecao que A montou
+  //                                     contra B.
+  //   `user_connections.*_user_id`   -- o convite e UMA linha com dois donos;
+  //                                     qualquer dos dois a leva.
+  //   `*_reports.reporter_user_id`   -- a denuncia e o ato do denunciante, mas
+  //                                     ela estava na fila de quem MODERA, e a
+  //                                     fila perde o pedido sem nada acusar.
+  'public.user_blocks.user_blocks_blocked_user_id_fkey',
+  'public.user_connections.user_connections_requester_user_id_fkey',
+  'public.user_connections.user_connections_addressee_user_id_fkey',
+  'public.photo_reports.photo_reports_reporter_user_id_fkey',
+  'public.profile_reports.profile_reports_reporter_user_id_fkey',
+  'public.publication_reports.publication_reports_reporter_user_id_fkey',
 ];
 
 const ACAO_POR_CODIGO: Readonly<Record<string, Acao>> = {
@@ -1590,10 +2023,10 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
     await cliente.query('BEGIN');
     try {
       await cliente.query(
-        `insert into users (id, email) values
-           ($1, 'achadora@efeito.test'),
-           ($2, 'dona@efeito.test'),
-           ($3, 'terceira@efeito.test')`,
+        `insert into users (id, email, public_ref) values
+           ($1, 'achadora@efeito.test',  translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')),
+           ($2, 'dona@efeito.test',      translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')),
+           ($3, 'terceira@efeito.test',  translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
         [CONTA, CONTA_DONA, CONTA_TERCEIRA],
       );
       await cliente.query(
@@ -1848,6 +2281,127 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
       );
     });
   });
+
+  // =======================================================================
+  // O APELIDO: A MEDICAO DO PAR `handles_user_id_fkey + handles_pessoa_tem_dono`
+  // =======================================================================
+  // O par esta declarado `compativel` em PARES_DE_NULO_CONTRA_RESTRICAO, e um
+  // veredito escrito nao prova nada: e esta medicao que o sustenta. Ela foi
+  // `contradiz` em 19/10 e deixou de ser pela `20261019000004` -- e por isso o
+  // caso vem com a ISCA ao lado, que derruba o gatilho dentro da transacao e
+  // exige o 23514 de volta. Sem a isca, este caso passaria igual num banco onde
+  // nada segurasse nada.
+  void it('apagar a conta de quem tinha @ CONCLUI, e o apelido fica RESERVADO', async () => {
+    await comMassa(async () => {
+      await cliente.query(
+        `insert into handles (handle, handle_esqueleto, kind, user_id)
+         values ('dona-do-efeito', 'dona-do-efeito', 'pessoa', $1)`,
+        [CONTA_DONA],
+      );
+      await cliente.query('update users set handle = $1 where id = $2', [
+        'dona-do-efeito',
+        CONTA_DONA,
+      ]);
+
+      await cliente.query('delete from users where id = $1', [CONTA_DONA]);
+
+      const { rows } = await cliente.query<{
+        kind: string;
+        sem_dono: boolean;
+        com_marco: boolean;
+      }>(
+        `select kind, user_id is null as sem_dono, claimed_at is not null as com_marco
+           from handles where handle = 'dona-do-efeito'`,
+      );
+      assert.deepEqual(
+        rows[0],
+        { kind: 'reservado', sem_dono: true, com_marco: true },
+        'o apelido de uma conta apagada devia FICAR, sem dono e como `reservado`. Linha que ' +
+          'sumiu significa que a chave virou CASCADE e `@maria` voltou ao pool no instante da ' +
+          'exclusao -- um estranho pega o apelido e herda o que a vizinhanca associava a ela ' +
+          '(o motivo que a 20261018000021 escreveu para NAO usar CASCADE). `kind` ainda ' +
+          '`pessoa` significa que o gatilho da 20261019000004 nao rodou.',
+      );
+    });
+  });
+
+  void it('ISCA: sem o gatilho da 20261019000004, a MESMA exclusao reprova com 23514', async () => {
+    await comMassa(async () => {
+      await cliente.query('drop trigger handles_orfao_reservado on handles');
+      await cliente.query(
+        `insert into handles (handle, handle_esqueleto, kind, user_id)
+         values ('isca-do-apelido', 'isca-do-apelido', 'pessoa', $1)`,
+        [CONTA_DONA],
+      );
+
+      let codigo = '(nao falhou)';
+      let restricao = '(nenhuma)';
+      try {
+        await cliente.query('delete from users where id = $1', [CONTA_DONA]);
+      } catch (erro) {
+        codigo = codigoDoErro(erro);
+        restricao =
+          typeof erro === 'object' && erro !== null && 'constraint' in erro
+            ? String(erro.constraint)
+            : '(sem constraint)';
+      }
+
+      assert.equal(
+        codigo,
+        '23514',
+        'com o gatilho fora, apagar a conta de quem tinha @ TINHA de reprovar: e o defeito ' +
+          'que a 20261019000004 conserta, e uma isca que nao reprova mede outra coisa. ' +
+          '"(nao falhou)" aqui significa que o `ON DELETE SET NULL` ou o CHECK ' +
+          '`handles_pessoa_tem_dono` sairam do banco, e o caso de cima passou a nao provar nada.',
+      );
+      assert.equal(
+        restricao,
+        'handles_pessoa_tem_dono',
+        'reprovou por outra restricao: olhe a mensagem crua antes de mexer no registro.',
+      );
+    });
+  });
+
+  // O lado permissivo do gatilho, e ele existe porque gatilho que reescreve
+  // `kind` em escrita demais seria pior que a contradicao que ele conserta.
+  void it('o gatilho NAO toca apelido de pet, nem troca de dono entre contas', async () => {
+    await comMassa(async () => {
+      // 1. Apelido de `pet`: o `UPDATE` poe nulo onde ja era nulo, e `kind`
+      //    continua `pet`. O `WHEN` do gatilho exige `OLD.kind = 'pessoa'`.
+      await cliente.query(
+        `insert into handles (handle, handle_esqueleto, kind, user_id)
+         values ('pet-do-efeito', 'pet-do-efeito', 'pet', null)`,
+      );
+      await cliente.query(`update handles set user_id = null where handle = 'pet-do-efeito'`);
+
+      // 2. Apelido de pessoa que MUDA de dono (A -> B, nunca para nulo):
+      //    continua `pessoa`, porque o `WHEN` exige `NEW.user_id IS NULL`.
+      await cliente.query(
+        `insert into handles (handle, handle_esqueleto, kind, user_id)
+         values ('troca-de-dono', 'troca-de-dono', 'pessoa', $1)`,
+        [CONTA_DONA],
+      );
+      await cliente.query(`update handles set user_id = $1 where handle = 'troca-de-dono'`, [
+        CONTA_TERCEIRA,
+      ]);
+
+      const { rows } = await cliente.query<{ handle: string; kind: string }>(
+        `select handle, kind from handles
+          where handle in ('pet-do-efeito', 'troca-de-dono') order by handle`,
+      );
+      assert.deepEqual(
+        rows,
+        [
+          { handle: 'pet-do-efeito', kind: 'pet' },
+          { handle: 'troca-de-dono', kind: 'pessoa' },
+        ],
+        'o gatilho da 20261019000004 reescreveu `kind` fora do caso que ele existe para ' +
+          'cobrir (apelido de PESSOA que acabou de perder o dono). Um pet que virasse ' +
+          '`reservado`, ou um apelido que virasse reservado ao trocar de dono, apagaria o ' +
+          'apelido de alguem que esta usando.',
+      );
+    });
+  });
 });
 
 // ===========================================================================
@@ -1901,7 +2455,9 @@ void describe('a quinta forma de `pet_transfers`, medida e não lida', () => {
     await cliente.query('BEGIN');
     try {
       await cliente.query(
-        `insert into users (id, email) values ($1, 'de@transfere.test'), ($2, 'para@transfere.test')`,
+        `insert into users (id, email, public_ref) values
+           ($1, 'de@transfere.test',   translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')),
+           ($2, 'para@transfere.test', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
         [DE, PARA],
       );
       await cliente.query(
@@ -2173,8 +2729,8 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
       await cliente.query("SET LOCAL lock_timeout = '2s'");
       await cliente.query('lock table conversation_messages, users in access exclusive mode');
       await cliente.query(
-        `insert into users (id, email) values
-           ($1, 'achadora@isca.test'), ($2, 'tutora@isca.test')`,
+        `insert into users (id, email, public_ref) values
+           ($1, 'achadora@isca.test', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_')), ($2, 'tutora@isca.test', translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
         [ACHADORA, TUTORA],
       );
       await cliente.query(

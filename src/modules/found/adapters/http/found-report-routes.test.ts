@@ -37,6 +37,8 @@
  * que prova que o caso mede LIMITE, e não a capacidade de contar até quatro.
  */
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
@@ -57,7 +59,10 @@ import type {
   FoundReportId,
   UserId,
 } from '../../../../shared/types/brands.js';
-import { FoundReportService } from '../../application/found-report-service.js';
+import {
+  FoundReportService,
+  TETO_DE_BYTES_DA_FOTO_DO_ACHADO,
+} from '../../application/found-report-service.js';
 import type { AchadoGravado } from '../../domain/registro-de-achado.js';
 import type { Sugestao } from '../../domain/cruzamento.js';
 import type { FoundReportRepository } from '../../ports/found-report-repository.js';
@@ -291,14 +296,37 @@ const CORPO_MINIMO = {
   area: { city: 'São Paulo', neighborhood: 'Pinheiros' },
 };
 
-/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
-function tetoDoRecadoNoContrato(): number {
+/** O `maxLength` que o contrato declara, lido dele e não escrito aqui. */
+function tetoNoContrato(schema: string, campo: string): number {
   const spec = carregarContrato('api/openapi.yaml').spec as {
     components?: { schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }> };
   };
-  const teto = spec.components?.schemas?.['StrayFoundReportInput']?.properties?.['notes']?.maxLength;
-  assert.equal(typeof teto, 'number', 'o contrato não declara `maxLength` em StrayFoundReportInput.notes');
+  const teto = spec.components?.schemas?.[schema]?.properties?.[campo]?.maxLength;
+  assert.equal(typeof teto, 'number', `o contrato não declara \`maxLength\` em ${schema}.${campo}`);
   return teto as number;
+}
+
+/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
+function tetoDoRecadoNoContrato(): number {
+  return tetoNoContrato('StrayFoundReportInput', 'notes');
+}
+
+/**
+ * O teto de `found_reports.notes` lido do **CHECK da migração**, e não escrito
+ * aqui.
+ *
+ * É esta ponta que faz os casos abaixo medirem o defeito de verdade. Ler o teto
+ * do contrato e depois conferir o contrato contra si mesmo é tautologia: com o
+ * contrato de volta em 1000, um caso que envia `teto + 1` manda 1001 e continua
+ * sendo recusado -- ele acompanha o contrato em vez de prendê-lo. O número que
+ * manda é o da COLUNA, porque é ele que produz o erro de servidor, e o contrato
+ * é que tem de casar com ele.
+ */
+function tetoDaColunaNaMigracao(): number {
+  const sql = readFileSync('migrations/20260917000007_tags-e-avisos-do-achador.sql', 'utf8');
+  const achado = /CHECK \(notes IS NULL OR char_length\(notes\) <= (\d+)\)/.exec(sql);
+  assert.ok(achado, '`found_reports_notes_tamanho` não está mais escrito como esta leitura espera');
+  return Number(achado[1]);
 }
 
 void describe('as rotas existem e respondem o que o contrato declara', () => {
@@ -715,24 +743,41 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
     assert.notEqual(status, 201);
   });
 
-  void it('acima de 2 MB responde 415, e o teto NÃO é o de 10 MB da foto de pet', async () => {
-    // Este é o caminho em que o 415 declarado no contrato É alcançável: o schema
-    // aceita até 10 MB (é o `UploadIntentInput` compartilhado com a foto de
-    // pet), e quem recusa em 2 MB é o SEC-009, no serviço.
+  void it('acima do teto ÚNICO de envio não passa, e ele é recusado na BORDA pelo schema', async () => {
+    // **O teto desta rota era 2 MB, e deixou de ser.** O cliente unificou o
+    // envio em 5 MB em 17/10/2026 — "em toda a aplicação, seja para foto do
+    // pet, evento, loja ou qualquer outro recurso que utilize imagem" — e o
+    // número passou a morar num lugar só (`media/domain/derivadas.ts`), de onde
+    // `TETO_DE_BYTES_DA_FOTO_DO_ACHADO` o lê. O contrato diz o mesmo, em
+    // `UploadIntentInput.byte_size`. O caso lê a constante de propósito: um
+    // `2 * 1024 * 1024` escrito aqui é exatamente o que divergiu.
+    //
+    // **E o 415 deixou de ser alcançável por este caminho, que é divergência
+    // medida e não defeito.** Enquanto o schema aceitava 10 MB e o serviço
+    // recusava em 2, o que respondia era o serviço, com o 415 que o contrato
+    // declara. Agora os dois carregam o MESMO número, então quem recusa é o
+    // schema do corpo, antes do handler, com 400 — a mesma forma do caso do SVG
+    // logo acima, e o mesmo furo (`createFoundReportPhotoUploadIntent` não
+    // declara 400). O caso afirma o que o sistema FAZ: a conferência do serviço
+    // continua escrita, por defesa em profundidade, e não é mais ela que
+    // responde aqui.
     const app = servidor();
-    const doisMegasEUm = await pedir(app, {
+    const acimaDoTeto = await pedir(app, {
       metodo: 'POST',
       url: '/media/found-report-photo-intents',
-      corpo: { ...corpoDaFoto, byte_size: 2 * 1024 * 1024 + 1 },
+      corpo: { ...corpoDaFoto, byte_size: TETO_DE_BYTES_DA_FOTO_DO_ACHADO + 1 },
     });
     const dentroDoTeto = await pedir(app, {
       metodo: 'POST',
       url: '/media/found-report-photo-intents',
-      corpo: { ...corpoDaFoto, byte_size: 2 * 1024 * 1024 },
+      corpo: { ...corpoDaFoto, byte_size: TETO_DE_BYTES_DA_FOTO_DO_ACHADO },
     });
     await app.close();
 
-    assert.equal(doisMegasEUm.status, 415);
+    // O que importa de verdade: um byte acima do teto NÃO vira autorização.
+    assert.notEqual(acimaDoTeto.status, 201);
+    assert.equal(acimaDoTeto.status, 400);
+    assert.equal(tipoDe(acimaDoTeto.corpo), 'validation-failed');
     assert.equal(dentroDoTeto.status, 201);
   });
 
@@ -820,6 +865,193 @@ void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
       200,
       'a isca não conseguiu desligar a autorização: os casos de 404 deste arquivo ' +
         'passaram a medir outra coisa',
+    );
+  });
+});
+
+
+/**
+ * O RECADO DO ENRIQUECIMENTO, nas duas bordas.
+ *
+ * `FoundReportEnrichment.message` declarava `maxLength: 1000` e grava em
+ * `found_reports.notes`, que SEMPRE recusou acima de 500
+ * (`found_reports_notes_tamanho`, migração 20260917000007). O texto entre 501 e
+ * 1000 passava pela validação e estourava no banco: quem avisa recebia **erro de
+ * servidor** em vez de recusa explicada, e o recado se perdia -- com o animal na
+ * mão de quem estava tentando ajudar.
+ *
+ * As DUAS bordas, e não só a de cima, porque é em `<=` contra `<` que o erro de
+ * comparação mora: um teto escrito como 499 recusaria 500 e passaria neste
+ * arquivo se só o 501 fosse medido.
+ *
+ * A recusa é medida **chamando a aplicação**, pelo `inject` do Fastify de
+ * verdade -- a tela não participa. O teto sai do contrato (`tetoNoContrato`) e
+ * não de um número escrito aqui: uma cópia deixaria de acusar mudança na spec.
+ */
+void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bordas', () => {
+  void it('500 exatos é ACEITO e chega gravado na resposta', async () => {
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto) },
+    });
+    await app.close();
+
+    assert.equal(teto, 500, 'o CHECK da coluna deixou de ser 500');
+    assert.equal(
+      tetoNoContrato('FoundReportEnrichment', 'message'),
+      teto,
+      'o contrato voltou a prometer mais do que a coluna aceita: é o defeito de novo',
+    );
+    assert.equal(resposta.status, 200);
+    // Gravado, e não apenas aceito: `notes` da resposta é `observacao` do que o
+    // repositório devolveu depois do `UPDATE`.
+    assert.equal(resposta.corpo['notes'], 'a'.repeat(teto));
+  });
+
+  void it('501 é RECUSADO pela validação, com o limite na mensagem, e não chega ao banco', async () => {
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.equal(
+      resposta.status,
+      400,
+      'o caractere a mais que a COLUNA aceita passou pela validação: ele vai estourar no banco como erro de servidor',
+    );
+    assert.equal(tipoDe(resposta.corpo), 'validation-failed');
+
+    // A recusa precisa DIZER O LIMITE: "inválido" manda a pessoa adivinhar
+    // quanto cortar de um texto que ela acabou de escrever.
+    const erros = resposta.corpo['errors'] as { field: string; code: string; message: string }[];
+    const doRecado = erros.find((e) => e.field === 'message');
+    assert.ok(doRecado, `o 400 não nomeia o campo \`message\`: ${resposta.bruto}`);
+    assert.equal(doRecado.code, 'maxLength');
+    assert.match(
+      doRecado.message,
+      new RegExp(String(teto)),
+      `a recusa não diz o limite de ${String(teto)}: ${doRecado.message}`,
+    );
+  });
+
+  void it('o 501 é recusado ANTES do repositório: nada foi gravado', async () => {
+    // Se a validação do contrato deixasse passar, o `UPDATE` iria ao banco e o
+    // 500 viria dele. Aqui o dobre devolveria 200 com o texto inteiro, e é por
+    // isso que o status acima prova a borda e não a sorte.
+    const teto = tetoDaColunaNaMigracao();
+    const app = servidor();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: `/found-reports/${ACHADO_DO_RELATOR}`,
+      corpo: { message: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.notEqual(resposta.corpo['notes'], 'a'.repeat(teto + 1));
+    assert.equal(resposta.status, 400);
+  });
+});
+
+/**
+ * O TETO DE `ref_data_version`, ancorado no `CHECK` DA MIGRAÇÃO.
+ *
+ * O defeito medido: `StrayFoundReportInput.ref_data_version` não tinha
+ * `maxLength` nenhum no contrato, contra `found_reports.ref_data_version` com
+ * `CHECK ... BETWEEN 1 AND 40`. 41 caracteres passavam pela borda e morriam no
+ * `INSERT` — erro de servidor em vez de recusa explicada. É a mesma forma do
+ * caso de `notes` no topo deste arquivo, e a assimetria era com `PetInput`, cujo
+ * caminho já devolvia 400 (`pet-service.ts` confere a versão contra
+ * `ref_data_versions` antes de gravar).
+ *
+ * **O teto vem da COLUNA, não do contrato**, e a diferença não é estilo: uma
+ * isca que lê o `maxLength` do contrato acompanha quem o sabota — sobe o
+ * contrato para 80 e a isca passa a aprovar 80, que é exatamente o número que o
+ * banco recusa. Lido da migração, sabotar o contrato REPROVA.
+ *
+ * As duas bordas (40 e 41) estão aqui porque é onde erro de comparação mora:
+ * `<` no lugar de `<=` passa no teto e reprova uma abaixo dele, e um caso só
+ * não distingue os dois.
+ */
+void describe('o teto de `ref_data_version` é o da coluna, e a recusa diz o limite', () => {
+  /**
+   * O `BETWEEN 1 AND 40` de `found_reports_ref_data_version_tamanho`, lido do
+   * disco. A varredura procura a RESTRIÇÃO em qualquer migração em vez de abrir
+   * um nome de arquivo: migração renomeada derrubaria uma leitura por caminho
+   * fixo, e derrubar é o certo — aprovar por ausência de dado não é.
+   */
+  function tetoDaColuna(): number {
+    const pasta = resolve(process.cwd(), 'migrations');
+    const achados: number[] = [];
+    for (const arquivo of readdirSync(pasta).filter((n) => n.endsWith('.sql'))) {
+      const sql = readFileSync(resolve(pasta, arquivo), 'utf8');
+      const m = /char_length\(ref_data_version\)\s+BETWEEN\s+(\d+)\s+AND\s+(\d+)/.exec(sql);
+      if (m) achados.push(Number(m[2]));
+    }
+    assert.equal(
+      achados.length,
+      1,
+      'não achei exatamente um `CHECK ... char_length(ref_data_version) BETWEEN x AND y` ' +
+        'em `migrations/`. Sem ele esta isca não sabe qual é o teto da coluna, e aprovar ' +
+        'sem saber é o defeito que ela existe para impedir',
+    );
+    return achados[0]!;
+  }
+
+  void it('o teto da coluna é 40, e o contrato declara o MESMO número', () => {
+    const spec = carregarContrato('api/openapi.yaml').spec as {
+      components?: {
+        schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }>;
+      };
+    };
+    const noContrato =
+      spec.components?.schemas?.['StrayFoundReportInput']?.properties?.['ref_data_version']
+        ?.maxLength;
+    assert.equal(tetoDaColuna(), 40);
+    assert.equal(
+      noContrato,
+      tetoDaColuna(),
+      'o `maxLength` de `StrayFoundReportInput.ref_data_version` divergiu de ' +
+        '`found_reports_ref_data_version_tamanho`. Enquanto os dois não são o mesmo número, ' +
+        'existe um texto que a borda aceita e o banco recusa — e isso sai como erro de ' +
+        'servidor, não como recusa explicada',
+    );
+  });
+
+  void it('no teto da coluna o registro passa, e um caractere acima é 400 com o limite na mensagem', async () => {
+    const teto = tetoDaColuna();
+    const app = servidor();
+    const noTeto = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: { ...CORPO_MINIMO, ref_data_version: 'v'.repeat(teto) },
+    });
+    const acima = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: { ...CORPO_MINIMO, ref_data_version: 'v'.repeat(teto + 1) },
+    });
+    await app.close();
+
+    assert.equal(noTeto.status, 201, `o registro recusou ${String(teto)} caracteres, que é o que a coluna ACEITA`);
+    assert.equal(
+      acima.status,
+      400,
+      `${String(teto + 1)} caracteres não foram recusados na borda. Eles chegam ao ` +
+        '`INSERT` e o `CHECK` os derruba como erro de servidor, que não diz nada a quem chamou',
+    );
+    assert.equal(tipoDe(acima.corpo), 'validation-failed');
+    assert.match(
+      acima.bruto,
+      new RegExp(String(teto)),
+      'a recusa não diz qual é o limite. Sem o número, quem chamou não sabe para quanto ' +
+        'encurtar e tenta de novo às cegas',
     );
   });
 });

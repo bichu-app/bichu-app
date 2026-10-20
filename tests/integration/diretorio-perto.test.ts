@@ -84,9 +84,13 @@ import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { semear } from '../../src/bin/seed.js';
 import { MASSA_DO_DIRETORIO, PUBLICADAS } from '../../src/bin/massa-do-diretorio.js';
 import { criarDirectoryRepository } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { projetarEntrada } from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
 import type { DirectoryRepository } from '../../src/modules/professionals/ports/directory-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
+
+/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
@@ -112,7 +116,7 @@ const entradasCriadas: string[] = [];
 
 async function criarConta(): Promise<UserId> {
   const id = randomUUID() as UserId;
-  await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
+  await cliente.query(`INSERT INTO users (id, email, public_ref) VALUES ($1, $2, translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`, [
     id,
     `bichus234-${id}@${DOMINIO_DE_TESTE}`,
   ]);
@@ -235,7 +239,7 @@ async function todasAsPaginas(chamador: UserId): Promise<{ slug: string; nivel: 
       recorte(chamador, { city: 'São Paulo', sort: 'name', page: pagina }),
     );
     for (const item of resultado.itens) {
-      todas.push({ slug: item.slug, nivel: projetarEntrada(item).verification.level });
+      todas.push({ slug: item.slug, nivel: projetarEntrada(item, URL_DE_MIDIA).verification.level });
     }
     if (todas.length >= resultado.total) break;
   }
@@ -260,7 +264,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     db = banco.db;
     cliente = new pg.Client({ connectionString: CONEXAO });
     await cliente.connect();
-    repo = criarDirectoryRepository(db);
+    repo = criarDirectoryRepository(db, criarIdGenerator(() => Date.now()));
   });
 
   after(async () => {
@@ -317,7 +321,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     await criarVerificacao(entrada, titular, 'cnpj', 'rejected');
 
     const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro }));
-    const projetada = projetarEntrada(pagina.itens[0]!);
+    const projetada = projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA);
 
     assert.deepEqual(
       projetada.verification,
@@ -338,7 +342,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     await criarVerificacao(entrada, titular, 'cnpj', 'approved', 'organization');
 
     const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro }));
-    assert.deepEqual(projetarEntrada(pagina.itens[0]!).verification, {
+    assert.deepEqual(projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA).verification, {
       level: 'none',
       evidence_kinds: [],
     });
@@ -355,8 +359,8 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
 
     assert.equal(pagina.distanciaDisponivel, true);
     assert.ok(pagina.itens[0]?.slug.startsWith('perto-'), 'a Sé vem antes do Tatuapé');
-    const perto = projetarEntrada(pagina.itens[0]!).distance_m;
-    const longe = projetarEntrada(pagina.itens[1]!).distance_m;
+    const perto = projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA).distance_m;
+    const longe = projetarEntrada(pagina.itens[1]!, URL_DE_MIDIA).distance_m;
     assert.ok(perto !== null && longe !== null);
     // A Sé fica a uns 2,7 km da Paulista. Com (lat, lon) invertidos o ponto cai
     // no meio da Somália e esta distância vira milhares de quilômetros.
@@ -385,7 +389,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
         'causa de um campo que hoje ninguem consegue preencher -- nao ha painel.',
     );
     assert.ok(pagina.itens[1]?.slug.startsWith('sem-'), '`nulls last` poe a sem ponto no fim');
-    assert.equal(projetarEntrada(pagina.itens[1]!).distance_m, null);
+    assert.equal(projetarEntrada(pagina.itens[1]!, URL_DE_MIDIA).distance_m, null);
   });
 
   void it('localizacao VENCIDA nao mede: distance_available falso, nunca zero', async () => {
@@ -404,7 +408,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       'ISCA: sem `expires_at > agora` na subconsulta, a lista sairia ordenada ' +
         'por uma localizacao de trinta dias atras, sem ninguem saber.',
     );
-    assert.equal(projetarEntrada(pagina.itens[0]!).distance_m, null);
+    assert.equal(projetarEntrada(pagina.itens[0]!, URL_DE_MIDIA).distance_m, null);
   });
 
   void it('sem localizacao nenhuma, ordena por nome e diz que nao mediu', async () => {

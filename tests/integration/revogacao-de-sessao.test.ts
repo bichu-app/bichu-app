@@ -320,6 +320,8 @@ before(async () => {
     contrato,
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
 
@@ -339,7 +341,7 @@ before(async () => {
 
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
-    corpo: { email, password: senhas[0] },
+    corpo: { email, password: senhas[0], display_name: 'Conta de Teste', birth_date: '1990-01-01' },
   });
   assert.equal(
     cadastro.status,

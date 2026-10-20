@@ -40,6 +40,7 @@ Sobre prazos: onde está escrito **"ainda não definido"**, é porque hoje o Bic
 | Nome de exibição | Como você aparece dentro do app, por exemplo na conversa com quem achou o seu pet. Não aparece em página pública | Execução de contrato | Enquanto a conta existir |
 | Telefone (opcional) | Contato da conta. **Nunca aparece para ninguém**, nem para quem acha o seu pet | Execução de contrato | Enquanto a conta existir |
 | Região de referência em texto (CEP, bairro, cidade e UF, todos opcionais) | Mostrar o que é da sua região | Execução de contrato | Enquanto a conta existir |
+| Data de nascimento | Cumprir a idade mínima de 16 anos: calculamos a sua idade no servidor e recusamos o cadastro de quem tem menos. **Nunca aparece para ninguém**, nem em página pública | Execução de contrato | [JURÍDICO: prazo a definir. Hoje a data é guardada junto da conta e apagada com ela; falta decidir se pode ser descartada depois da conferência] |
 | Versão dos termos que você aceitou e a data | Saber o que você aceitou | Exercício regular de direitos (art. 7º, VI) | Enquanto a conta existir |
 
 Quando a conta é excluída, ela deixa de funcionar na hora e os dados acima são apagados da base em até 30 dias. Veja também o item 9.
@@ -180,9 +181,17 @@ Se você escreve para oi@bichu.app ou privacidade@bichu.app, tratamos o que voc�
 
 ### 4.17 O que o Bichu não coleta
 
-Não pedimos CPF, endereço completo, data de nascimento de pessoa, foto de rosto, biometria nem nenhum dado sensível do art. 11 da LGPD (saúde, origem racial, religião, opinião política e outros). Dado de saúde do **animal**, como uma medicação no cartão de manejo, não é dado sensível do tutor, mas passa pela mesma limpeza de contato antes de ser gravado.
+Não pedimos CPF, endereço completo, foto de rosto, biometria nem nenhum dado sensível do art. 11 da LGPD (saúde, origem racial, religião, opinião política e outros). **A data de nascimento, sim, nós pedimos**, e só para cumprir a idade mínima de 16 anos: está no item 4.1 e no item 10. Dado de saúde do **animal**, como uma medicação no cartão de manejo, não é dado sensível do tutor, mas passa pela mesma limpeza de contato antes de ser gravado.
 
-### 4.18 Funções que ainda não estão no ar
+### 4.18 A Loja e os links de parceiro
+
+A Loja é navegável **sem conta**, a lista é a mesma para todo mundo e **não é personalizada**: não guardamos o que você olhou nem em que produto você tocou.
+
+- Ao abrir um produto, o Bichu manda você para o **site do parceiro**, no navegador do seu aparelho, com o endereço exatamente como ele está no nosso catálogo. **Não acrescentamos nenhum identificador seu ao link** — nem e-mail, nem código de conta, nem nada que diga ao parceiro que foi você.
+- Dali em diante você está no site dele, e o que o parceiro faz com os seus dados é governado pela **política de privacidade do parceiro**, não por esta.
+- Preço, venda e disponibilidade não são assunto de dado pessoal: estão no item 13 dos [Termos de Uso](/termos), que diz que o Bichu não vende nada e não controla preço nem estoque.
+
+### 4.19 Funções que ainda não estão no ar
 
 Algumas partes do Bichu estão sendo construídas e **ainda não coletam nada**. Antes de cada uma entrar no ar, esta política será atualizada com o que ela trata, para quê e por quanto tempo:
 
@@ -280,9 +289,19 @@ Pelo art. 18 da LGPD, você pode pedir:
 
 ## 10. Crianças e adolescentes
 
-**O Bichu é para maiores de 18 anos, e não trata de propósito dados de crianças nem de adolescentes.** Quem cria conta declara ter 18 anos ou mais. Hoje o cadastro não confere a idade.
+**O Bichu é para quem tem 16 anos ou mais, e não trata de propósito dados de crianças nem de adolescentes com menos de 16 anos.** No cadastro pedimos a sua data de nascimento. O Bichu calcula a sua idade no servidor e, com menos de 16 anos, não cria a conta.
 
-Se descobrirmos que uma conta é de alguém com menos de 18 anos, ela é suspensa e os dados dela são apagados, como na exclusão de conta (item 9). Se você é responsável por uma criança ou adolescente que usa o Bichu, ou sabe de um caso, escreva para privacidade@bichu.app.
+**Conferimos a data que você informa, e não um documento.** Não pedimos documento de identidade e não temos como saber se a data é verdadeira. A conferência barra quem informa uma data de menor de 16 anos; ela não barra quem informa uma data falsa.
+
+**O que fazemos com a sua data de nascimento:**
+
+- ela serve só para cumprir a idade mínima de 16 anos, e para nada mais;
+- ela **não aparece para outras pessoas**: nem dentro do app, nem em página pública, nem para quem acha o seu pet;
+- por quanto tempo ela fica: veja o item 4.1. [JURÍDICO: definir o prazo de guarda da data de nascimento — se ela pode ser descartada depois da conferência, ou se fica enquanto a conta existir como prova da idade]
+
+Se descobrirmos que uma conta é de alguém com menos de 16 anos, ela é suspensa e os dados dela são apagados, como na exclusão de conta (item 9). Se você é responsável por uma criança ou adolescente que usa o Bichu, ou sabe de um caso, escreva para privacidade@bichu.app.
+
+[JURÍDICO: com a idade mínima em 16 anos, o Bichu passa a ter adolescentes de 16 e 17 anos como titulares. Dizer aqui o que o art. 14 da LGPD exige nesse caso, e se o melhor interesse do adolescente pede alguma informação ou cuidado a mais nesta política]
 
 Quem avisa pela plaquinha sem conta não precisa informar nenhum dado pessoal. Se for menor de idade, pedimos que não escreva no recado nome, telefone, e-mail ou endereço.
 

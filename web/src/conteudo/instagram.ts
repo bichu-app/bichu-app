@@ -1,7 +1,7 @@
 // Bloco do Instagram (P.1.3 e P.2.5). O cliente confirmou @bichu.app como perfil oficial.
 export const INSTAGRAM = {
   titulo: 'Acompanhe a comunidade no Instagram',
-  lead: 'Novidades do Bichu e dos encontros, no perfil oficial.',
+  lead: 'Novidades do Bichu e dos eventos, no perfil oficial.',
   link: 'Seguir @bichu.app',
   linkRotulo: 'Seguir o Bichu no Instagram, @bichu.app (abre em nova aba)',
   gradeRotulo: 'Posts ilustrativos',

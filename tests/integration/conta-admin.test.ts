@@ -218,7 +218,9 @@ void describe('conta-admin criar', TEMPO, () => {
     const endereco = email('d63');
     contasDoPainel.push(endereco);
     const criada = await criarIdentityRepository(banco.db, ids).criarContaLocal({
-      email: endereco, displayName: 'Tutora', acceptedTermsVersion: undefined,
+      // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data
+      // fixa e longe do corte: esta isca mede SENHA, nao idade.
+      email: endereco, displayName: 'Tutora', birthDate: '1990-05-12', handle: undefined, acceptedTermsVersion: undefined,
       passwordPhc: await gerarHashDeSenha(SENHA), agora: systemClock.now(),
     });
     assert.ok(criada !== undefined);

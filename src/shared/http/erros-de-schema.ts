@@ -20,11 +20,23 @@
  * ## `instancePath` não basta, e é aí que mora o caso mais comum
  *
  * O Ajv reporta `required` **no objeto que perdeu a propriedade**, e não na
- * propriedade: `instancePath` vem vazio e o nome está em
- * `params.missingProperty`. Campo obrigatório ausente é o erro mais frequente
- * de qualquer formulário, então ler só `instancePath` deixaria de nomear
- * exatamente o caso que mais precisa ser nomeado. O mesmo vale para
- * `additionalProperties`, cujo nome está em `params.additionalProperty`.
+ * propriedade: o nome está em `params.missingProperty`. Campo obrigatório
+ * ausente é o erro mais frequente de qualquer formulário, então ler só
+ * `instancePath` deixaria de nomear exatamente o caso que mais precisa ser
+ * nomeado. O mesmo vale para `additionalProperties`, cujo nome está em
+ * `params.additionalProperty`.
+ *
+ * As duas pontas se **somam**, e não se escolhem. Dizer "`instancePath` vem
+ * vazio" só vale quando a propriedade que faltou é da RAIZ do corpo. Num
+ * objeto aninhado -- `delivery_address` do pedido de plaquinha, por exemplo --
+ * o `instancePath` vem `/delivery_address` e o nome que falta continua em
+ * `params.missingProperty`. Escolher o primeiro que existisse devolvia
+ * `delivery_address`, ou seja o CONTÊINER, e o formulário voltava a não saber
+ * qual dos oito campos do endereço reclamar: era o mesmo "um ou mais campos"
+ * que este arquivo veio tirar, um nível mais fundo. Medido em 18/10 pela isca
+ * `5. cada campo obrigatorio do endereco, faltando, e NOMEADO no 400`
+ * (`src/modules/tags/adapters/http/pedido-de-plaquinha.test.ts`), que foi quem
+ * acusou. Por isso o campo é o caminho MAIS a propriedade nomeada, juntos.
  *
  * ## O que NÃO sai
  *
@@ -57,16 +69,26 @@ function textoDe(valor: unknown): string | undefined {
 /**
  * O nome do campo que reprovou.
  *
- * Ordem: o caminho da instância quando existe; senão a propriedade que o
- * `keyword` nomeia nos seus `params`. Vazio só quando o achado é sobre o corpo
- * inteiro (um `type` que não bate na raiz, por exemplo), que é o único caso em
- * que não há campo a apontar.
+ * O caminho da instância **mais** a propriedade que o `keyword` nomeia nos seus
+ * `params`, nessa ordem, unidos por ponto. Cada ponta pode faltar:
+ *
+ * - `required` na raiz: caminho vazio, propriedade `delivery_address`
+ *   -> `delivery_address`;
+ * - `required` aninhado: caminho `delivery_address`, propriedade
+ *   `recipient_name` -> `delivery_address.recipient_name`;
+ * - `pattern` num campo: caminho `delivery_address.postal_code`, nenhuma
+ *   propriedade nomeada -> `delivery_address.postal_code`.
+ *
+ * Vazio só quando o achado é sobre o corpo inteiro (um `type` que não bate na
+ * raiz, por exemplo), que é o único caso em que não há campo a apontar.
  */
 export function campoDoErro(erro: ErroDeSchema): string {
   const caminho = (erro.instancePath ?? '').replace(/^\//, '').replace(/\//g, '.');
-  if (caminho !== '') return caminho;
   const params = erro.params ?? {};
-  return textoDe(params['missingProperty']) ?? textoDe(params['additionalProperty']) ?? '';
+  const propriedade =
+    textoDe(params['missingProperty']) ?? textoDe(params['additionalProperty']);
+  if (propriedade === undefined) return caminho;
+  return caminho === '' ? propriedade : `${caminho}.${propriedade}`;
 }
 
 export function campoDoSchema(erro: ErroDeSchema): CampoComErro {

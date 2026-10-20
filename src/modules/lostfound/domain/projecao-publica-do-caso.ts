@@ -27,9 +27,11 @@ import { rotuloDaArea } from './abertura-do-caso.js';
 import type { components } from '../../../shared/types/generated/api.js';
 import type { AbsoluteUrl } from '../../../shared/types/brands.js';
 import type { CasoPublico } from '../ports/leitura-publica-do-caso.js';
+import type { PerdidoPublico } from '../ports/listagem-publica-de-perdidos.js';
 
 type PublicLostCase = components['schemas']['PublicLostCase'];
 type LostCasePoster = components['schemas']['LostCasePoster'];
+type PublicLostPet = components['schemas']['PublicLostPet'];
 
 export interface BasesPublicas {
   /** Onde o site mora: de onde saem o link do caso e o do cartaz. */
@@ -128,5 +130,52 @@ export function cartazDoCaso(caso: CasoPublico, bases: BasesPublicas): LostCaseP
     area_label: rotuloPublicoDaArea(caso),
     photo_url: urlDaFoto(caso, bases.baseDeMidia),
     short_url: linksDoCaso(bases.baseDaWeb, caso.shareToken).shareUrl,
+  };
+}
+
+/**
+ * `PublicLostPet`, campo a campo como o contrato declara — a projeção da
+ * LISTAGEM pública.
+ *
+ * Ela vive aqui, ao lado de `projecaoPublicaDoCaso`, de propósito: as duas
+ * aplicam a **mesma** regra de redação na saída (item 1 do cabeçalho deste
+ * arquivo) e a **mesma** regra de `area_label` nulo (item 3). Uma projeção
+ * irmã em outro arquivo seria a segunda definição das duas regras, e a segunda
+ * definição é a que diverge.
+ *
+ * O que ela tem a menos que `projecaoPublicaDoCaso`, e por quê:
+ *
+ * - **Não há `description`, `care_notes` nem `distinctive_marks`.** Quem tem o
+ *   link está olhando UM caso; a listagem desenha vinte, e texto livre de vinte
+ *   tutores numa página é vinte vezes mais superfície de vazamento pelo mesmo
+ *   benefício nenhum. Quem quiser os sinais abre o caso.
+ * - **Não há `can_report_sighting` nem `poster_url`.** Os dois são ações da
+ *   página do caso, e a listagem não desenha ação nenhuma por cartão além de
+ *   abri-lo.
+ *
+ * `share_url` **fica**, e é o mesmo endereço de `/p/{shareToken}`: é o que o
+ * cartão abre, e é o único identificador que a listagem carrega.
+ */
+export function projecaoPublicaDoPerdido(
+  perdido: PerdidoPublico,
+  bases: BasesPublicas,
+): PublicLostPet {
+  return {
+    share_token: perdido.shareToken,
+    pet_display_name: nomeRedigido(perdido.petNome),
+    species: perdido.especie,
+    breed_label: redigido(perdido.racaRotulo),
+    size: perdido.porte,
+    primary_color: perdido.corRotulo,
+    lost_since: perdido.vistoPorUltimoEm.toISOString(),
+    area_label: rotuloDaArea({
+      city: perdido.cidade ?? undefined,
+      neighborhood: perdido.bairro ?? undefined,
+    }),
+    photo_url:
+      perdido.chaveDaFoto === null
+        ? null
+        : `${semBarraNoFim(bases.baseDeMidia)}/${perdido.chaveDaFoto}`,
+    share_url: linksDoCaso(bases.baseDaWeb, perdido.shareToken).shareUrl,
   };
 }

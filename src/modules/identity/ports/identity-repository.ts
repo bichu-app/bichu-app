@@ -14,6 +14,20 @@ export interface Conta {
   readonly email: string;
   readonly emailVerifiedAt: Date | null;
   readonly displayName: string | null;
+  /**
+   * O apelido (`@`), ou `null` quando a conta não escolheu nenhum.
+   *
+   * **`Conta` carrega o apelido e NÃO carrega a data de nascimento**, e a
+   * assimetria é a decisão: o apelido *"não tem relação com informações
+   * pessoais"* (cliente, 18/10/2026) e o dono precisa dele de volta para poder
+   * trocá-lo na tela de edição; a data de nascimento existe para ter sido
+   * conferida no cadastro e não volta para ninguém.
+   *
+   * Sai só em `GET /v1/me` e no que responde sobre a própria conta. Nenhuma
+   * resposta sem conta o declara -- a dependência está registrada no plano
+   * 4-C: o apelido não aparece para outra pessoa antes da fatia E.
+   */
+  readonly handle: string | null;
   readonly phoneE164: string | null;
   readonly phoneVerifiedAt: Date | null;
   readonly referencePostalCode: string | null;
@@ -27,8 +41,54 @@ export interface Conta {
   readonly createdAt: Date;
 }
 
+/**
+ * A FOTO DO PROPRIO USUARIO, como o dono a ve (cliente, 18/10/2026).
+ *
+ * **Lida por uma consulta propria e nao por coluna de `Conta`**, e a razao e de
+ * risco e nao de estilo: `Conta` e montada em oito caminhos (cadastro, login,
+ * verificacao de e-mail, troca de senha, ...), todos por `COLUNAS_DA_CONTA` e
+ * `paraConta`. Pendurar ali uma subconsulta a `catalog_images` faria toda
+ * escrita de identidade passar a ler a tabela de imagem para nada. A foto
+ * interessa a UMA resposta -- `Me` --, e e ela que a pede.
+ *
+ * **Sem `id` e sem `uploadId`** (ADR-0010 item 6): o que sai e a chave da
+ * derivada, e a URL e montada na leitura.
+ */
+export interface FotoDoPerfil {
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly publicKey: string | null;
+  readonly rejectionReason: string | null;
+}
+
+/**
+ * O envio que nao serve para esta conta: inexistente, de outra pessoa, de outro
+ * proposito, vencido, ou de uma imagem que ja e de outra conta.
+ *
+ * **Os cinco casos sao UM erro so**, traduzido pelo caso de uso para `400
+ * upload_not_usable`. Distinguir entregaria a quem adivinha `upload_id` um
+ * oraculo de "este existe mas e de outra pessoa" (ADR-0021).
+ */
+export class EnvioDeFotoNaoServe extends Error {
+  constructor() {
+    super('envio de foto de perfil nao serve para esta conta');
+    this.name = 'EnvioDeFotoNaoServe';
+  }
+}
+
 export interface CamposDoPerfil {
   readonly displayName?: string | null | undefined;
+  /**
+   * O apelido (`@`), na edição do perfil (cliente, 18/10/2026: *"vai estar no
+   * cadastro do usuário e na pagina de edição do perfil"*).
+   *
+   * **`string | undefined`, e nunca `null`** — ao contrário dos outros campos
+   * desta interface, em que `null` significa "apagar". Não há como abandonar um
+   * apelido: soltá-lo de volta ao pool é o furo do plano 4-C.7, porque quem o
+   * pegasse herdaria o que a vizinhança associava a quem o tinha. Trocar é
+   * permitido; abandonar não é, e a ausência do `null` é essa regra escrita no
+   * tipo.
+   */
+  readonly handle?: string | undefined;
   readonly phoneE164?: string | null | undefined;
   readonly referencePostalCode?: string | null | undefined;
   readonly referenceNeighborhood?: string | null | undefined;
@@ -71,6 +131,37 @@ export interface CredencialLocal {
 
 export interface NovaConta {
   readonly email: string;
+  /**
+   * A data de nascimento em `YYYY-MM-DD`, **já conferida** contra a idade
+   * mínima de 16 anos (`shared/idade/idade-minima.ts`).
+   *
+   * `string` e não `string | undefined`: o cadastro não cria mais conta sem
+   * ela, e deixar o tipo aceitar a ausência aqui seria deixar um caminho de
+   * volta para o estado que a decisão de 18/10/2026 fechou. A **coluna** é
+   * anulável, por causa das contas que já existiam — e isso é outra coisa,
+   * escrita no cabeçalho da `20261018000021`.
+   *
+   * Ela entra só na escrita. Não há método de leitura que a devolva, e
+   * `Conta` não a carrega: a data existe para ser conferida no cadastro, não
+   * para ser exibida.
+   */
+  readonly birthDate: string;
+  /**
+   * O apelido (`@`) **normalizado e conferido**, ou `undefined` quando a
+   * pessoa não escolheu nenhum.
+   *
+   * `undefined` e não `null`: no cadastro não existe "apagar o apelido", só
+   * "não escolhi" — e são a mesma coisa só aqui, onde a conta está nascendo.
+   *
+   * **Opcional de propósito** (plano 4-C.8): a coluna é anulável, a tela cai
+   * para o nome de exibição com apelido nulo, e **nenhum fluxo obriga a
+   * escolher**. Exigi-lo no cadastro seria uma segunda quebra de contrato e
+   * transformaria "achar um apelido livre" em pré-requisito para ter conta.
+   *
+   * **A disponibilidade NÃO é conferida antes.** Quem decide é o índice único
+   * de `handles`, nesta escrita, e a violação vira `code: 'taken'`.
+   */
+  readonly handle: string | undefined;
   readonly displayName: string | undefined;
   readonly acceptedTermsVersion: string | undefined;
   readonly passwordPhc: string;
@@ -159,6 +250,25 @@ export interface IdentityRepository {
    * São coisas diferentes e o `PATCH` precisa das duas.
    */
   atualizarPerfil(id: UserId, campos: CamposDoPerfil, agora: Instant): Promise<Conta | undefined>;
+  /** A foto do perfil desta conta, ou `null` quando nao ha. */
+  fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null>;
+  /**
+   * Troca ou TIRA a foto do perfil, numa transacao so.
+   *
+   * `uploadId` nulo TIRA a foto: o ponteiro da conta sai e **nenhum objeto do
+   * balde e apagado**. Apagamento de arquivo e ato explicito sobre o dado, e a
+   * decisao do cliente de 17/10 (ver `varrer-envios-vencidos.ts`) e que prazo e
+   * efeito colateral nao apagam foto.
+   *
+   * **A confirmacao do envio acontece DENTRO desta transacao.** E ela que grava
+   * `catalog_upload_intents.confirmed_at` e tira a linha da varredura de
+   * vencidos; sem ela a foto que a pessoa acabou de enviar seria apagada do
+   * balde dez minutos depois, que e exatamente o defeito que a foto do achado
+   * sofreu duas vezes.
+   *
+   * Lanca `EnvioDeFotoNaoServe`. `undefined` quando a conta nao existe mais.
+   */
+  trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined>;
   buscarContaPorEmail(email: string): Promise<Conta | undefined>;
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined>;
 
@@ -293,7 +403,8 @@ export interface IdentityRepository {
    *
    * O contrato de `deleteMyAccount` diz o que esta operação é: *"Exclusão
    * lógica imediata, expurgo definitivo em 30 dias"*. Ela não apaga linha
-   * nenhuma — quem apaga é {@link expurgarConta}, 30 dias depois. Aqui a conta
+   * nenhuma — e, desde 17/10, **nada apaga**: o expurgo de 30 dias foi
+   * desligado por decisão do cliente e a conta fica DESABILITADA. Aqui a conta
    * passa a `deletion_requested`, ganha `deleted_at`, e com isso sai do índice
    * `users_email_unico_ativo`: o endereço fica livre para uma conta nova no
    * mesmo instante, que é o que faz a exclusão valer para quem a pediu.
@@ -323,20 +434,24 @@ export interface IdentityRepository {
    */
   contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]>;
 
-  /**
-   * O `DELETE FROM users` de verdade, e o ponto em que as cascatas disparam.
-   *
-   * **Esta é a operação que precisa CONCLUIR**, e a classe de defeito que já
-   * apareceu cinco vezes em 22/09 mora exatamente aqui: contradição entre a
-   * ação de deleção de uma chave estrangeira e uma restrição da mesma tabela
-   * (`23514`), ou `SET NULL` de neto revalidando contra um pai que a cascata do
-   * mesmo comando acabou de levar (`23503`). Nenhuma das duas aparece em teste
-   * unitário, e nenhuma aparece em uso normal.
-   *
-   * Devolve `false` quando não havia o que apagar. O worker trata isso como
-   * sucesso: outra rodada pode ter chegado antes.
-   */
-  expurgarConta(userId: UserId): Promise<boolean>;
+  // `expurgarConta` SAIU DAQUI em 17/10, e a ausência é a mudança.
+  //
+  // Ela era o único `DELETE FROM users` deste produto, e o ponto em que as
+  // cascatas de dezoito tabelas disparavam. O cliente decidiu, por escrito,
+  // que *"não delete os dados do usuário, apenas desabilite na plataforma"*, e
+  // com isso não há mais nenhum caminho de código que apague uma conta: a
+  // exclusão é só lógica, e o que faz a pessoa desaparecer é cláusula de
+  // consulta.
+  //
+  // O método foi REMOVIDO em vez de deixado sem chamador de propósito. Um
+  // `DELETE FROM users` existindo na porta é um convite a ser religado por quem
+  // ler o nome e supor a intenção antiga, e o isca
+  // `tests/integration/expurgo-nao-apaga-nada.test.ts` reprova se ele voltar.
+  //
+  // O apagamento efetivo sob pedido formal do titular (LGPD art. 18, VI) passa
+  // a ser procedimento administrativo, e **não existe hoje**. A emenda de ADR
+  // que registra isso saiu junto desta branch.
+
   // --- Troca de e-mail ----------------------------------------------------
 
   /**

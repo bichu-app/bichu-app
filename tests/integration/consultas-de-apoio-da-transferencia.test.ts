@@ -72,8 +72,9 @@ async function criarConta({ verificado, apagado = false }: OpcoesDaConta): Promi
   const id = randomUUID() as UserId;
   const email = `apoio-${id}@${DOMINIO_DE_TESTE}`;
   await cliente.query(
-    `INSERT INTO users (id, email, email_verified_at)
-     VALUES ($1, $2, CASE WHEN $3::boolean THEN now() ELSE NULL END)`,
+    `INSERT INTO users (id, email, email_verified_at, public_ref)
+     VALUES ($1, $2, CASE WHEN $3::boolean THEN now() ELSE NULL END,
+             translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))`,
     [id, email, verificado],
   );
   contasCriadas.push(id);

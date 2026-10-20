@@ -25,6 +25,7 @@ import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
@@ -36,6 +37,7 @@ import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -295,6 +297,7 @@ class LocalizacaoDeTeste implements Localizacao {
     this.estadoAtual, {
     this.depoisDePedir,
     this.resultado,
+    this.resultadoDaCidade,
     this.servico = true,
   });
 
@@ -307,10 +310,25 @@ class LocalizacaoDeTeste implements Localizacao {
   /// que e o que a implementacao de verdade faz.
   final ResultadoDaCaptura? resultado;
 
+  /// O que `cidadeAproximada` devolve.
+  ///
+  /// **Nulo NAO e "sem cidade": e "decida pelo estado"**, como o `resultado`
+  /// acima. Os oito motivos de [MotivoDeNaoTerCidade] sao passados por este
+  /// campo, um por caso -- e e assim que os cinco caminhos de reserva da
+  /// pagina de pets sao exercitados sem aparelho.
+  final ResultadoDaCidade? resultadoDaCidade;
+
   bool servico;
 
   int vezesQuePediu = 0;
   int vezesQueMediu = 0;
+
+  /// **Quantas vezes a resolucao de cidade foi chamada.**
+  ///
+  /// Existe para ser MEDIDO: "quantas resolucoes por abertura da tela" e a
+  /// pergunta que decide se o teto de uso da plataforma e gasto a esmo, e sem
+  /// este contador ela seria respondida por leitura de codigo.
+  int vezesQueResolveu = 0;
   bool abriuAjustes = false;
 
   @override
@@ -352,6 +370,29 @@ class LocalizacaoDeTeste implements Localizacao {
         ),
       PermissaoDeLocalizacao.indisponivel =>
         const CapturaSemPonto(MotivoDeNaoTerPonto.indisponivel),
+    };
+  }
+
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({required Duration prazo}) async {
+    vezesQueResolveu += 1;
+    final pedido = resultadoDaCidade;
+    if (pedido != null) return pedido;
+    // Sem resultado pedido, decide pelo estado -- o mesmo criterio de
+    // `pontoAproximado`. Concedida e servico ligado resolve `Sao Paulo`, que e
+    // a cidade do ponto que o dublê devolve.
+    return switch (estadoAtual) {
+      PermissaoDeLocalizacao.concedida => servico
+          ? CidadeResolvida('Sao Paulo')
+          : const CidadeNaoResolvida(MotivoDeNaoTerCidade.servicoDesligado),
+      PermissaoDeLocalizacao.negada ||
+      PermissaoDeLocalizacao.naoPedida =>
+        const CidadeNaoResolvida(MotivoDeNaoTerCidade.permissaoNegada),
+      PermissaoDeLocalizacao.negadaPermanentemente => const CidadeNaoResolvida(
+          MotivoDeNaoTerCidade.permissaoNegadaPermanentemente,
+        ),
+      PermissaoDeLocalizacao.indisponivel =>
+        const CidadeNaoResolvida(MotivoDeNaoTerCidade.indisponivel),
     };
   }
 }
@@ -581,6 +622,19 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// `BichuApp` aplica um `clamp` de 1 a 2 no proprio `builder`: um caso que
   /// montasse a arvore sozinho estaria exercitando outra coisa que nao o app.
   double? escala,
+  /// Onde a ultima cidade escolhida na listagem de perdidos e guardada.
+  ///
+  /// O padrao do app e `DepositoDaCidadeEmArquivo`, que chama
+  /// `getApplicationDocumentsDirectory()` -- o mesmo canal de plataforma do
+  /// deposito de intencao, e com o mesmo efeito: ele **trava o `pumpAndSettle`
+  /// para sempre, sem mensagem**. Por isso o padrao daqui e EM MEMORIA, e nao
+  /// o do app: sem esta injecao, todo caso que passa pela aba `Pets` -- que e
+  /// uma das cinco secoes -- trava.
+  ///
+  /// Quem precisa de uma cidade JA guardada, ou de um deposito que ESTOURA
+  /// (`DepositoDaCidadeQueFalha`, o aparelho com armazenamento bloqueado),
+  /// passa o seu: nenhum dos dois estados se produz passando pelo fluxo.
+  DepositoDaCidade? depositoDaCidade,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -608,6 +662,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         depositoDeIntencao: envelopeEmUso,
         clienteHttp: MockClient(rede),
         cacheDeMeusPets: cacheDeMeusPets,
+        depositoDaCidade: depositoDaCidade ?? DepositoDaCidadeEmMemoria(),
         cofreDoQr: cofreDoQr,
         depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
         depositoDeFotos: depositoDeFotos ?? DepositoDeFotosEmMemoria(),
@@ -675,6 +730,66 @@ Set<String> rotasRegistradasDoApp(WidgetTester tester) {
   return achadas;
 }
 
+/// Toca numa aba da barra inferior e espera a secao assentar.
+///
+/// **Existe por causa de 18/10/2026.** A aba de arranque deixou de ser `Pets` e
+/// passou a ser `Rede`, por pedido do cliente (*"quando o usuário fizer o
+/// login ou abrir o app, traga a pagina da rede como padrão"*). Todo caso cujo
+/// assunto e uma porta de `Pets` -- o leitor de QR pela porta primaria (UX
+/// 27.5.6), o cadastro de pet, a gaveta da secao -- herdava a aterrissagem e
+/// parou de achar a porta.
+///
+/// **O caso passa a DIZER em voz alta para onde vai, e isso e o ponto.** Fazer
+/// `abrirOApp` navegar sozinho para `Pets` esconderia a troca de padrao de
+/// todos os casos de uma vez: a suite ficaria verde com o app abrindo em
+/// qualquer aba, e o portao que mede a aba de arranque seria o unico a saber.
+Future<void> abrirAAba(WidgetTester tester, String rotulo) async {
+  await tester.tap(find.widgetWithText(NavigationDestination, rotulo));
+  await tester.pumpAndSettle();
+}
+
+/// Abre a aba `Comunidade` da secao `Rede` -- o que era a secao `Perto`.
+///
+/// ## Por que ela existe, e por que num ponto so (19/10/2026)
+///
+/// A secao `Perto` deixou de existir por decisao do cliente: o conteudo dela
+/// -- a lista do diretorio -- virou a aba `Comunidade` da `Rede`, e o nome da
+/// secao reunida e `Rede` por MEDIDA (`Comunidade` pede 113,25 dp num slot de
+/// barra de 64,00 e reprova nas tres larguras suportadas).
+///
+/// Chegar la deixou de ser UM toque na barra e passou a ser DOIS: o slot da
+/// `Rede` e a aba. **Esta funcao existe para esse par morar num lugar so** --
+/// ele aparece em cinco arquivos de teste, e cinco copias divergiriam na
+/// proxima mudanca de navegacao.
+Future<void> abrirAComunidade(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+
+  final aba = find.widgetWithText(Tab, 'Comunidade');
+  if (aba.evaluate().isEmpty) {
+    // **A `TabBar` MORA DENTRO DO CORPO ROLAVEL da secao**, e nao numa barra
+    // fixa: ela e um dos `filhos` da `TelaDeAba`, que os entrega a um
+    // `ListView`. Com a pagina rolada -- depois de um `Carregar mais`, por
+    // exemplo -- ela nao tem `Element` nenhum, e `find` nao acha o que nao foi
+    // construido. Medido: o caso da paginacao do diretorio reprovou com
+    // *"Found 0 widgets with type Tab"* depois de rolar a lista.
+    //
+    // `find.byType(Scrollable).first` e o corpo da pagina: quando a `TabBar`
+    // nao esta construida, a propria barra rolavel dela tambem nao esta, entao
+    // nao ha ambiguidade -- e `.first` seria o corpo de qualquer jeito, porque
+    // ele e o ancestral.
+    await tester.scrollUntilVisible(
+      aba,
+      -200,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 60,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(aba);
+  await tester.pumpAndSettle();
+}
+
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.
 ///
 /// Pelo roteador, e nao montando a tela solta: o `extra` e parte do contrato
@@ -714,6 +829,18 @@ Future<void> rolarAte(
   /// Positivo desce, negativo sobe. `scrollUntilVisible` so procura num
   /// sentido, entao quem procura algo acima da dobra precisa dizer.
   double passo = 120,
+
+  /// QUAL lista rolar. Nulo usa `find.byType(Scrollable).first`, que e o
+  /// padrao historico e serve a tela que e a unica na pilha.
+  ///
+  /// **Ele entrou em 19/10/2026, e nao e conveniencia.** Uma tela EMPILHADA
+  /// sobre a casca de abas tem TRES `Scrollable` montados na arvore, e
+  /// `.first` pode ser o da casca -- e quando ele e, `scrollUntilVisible`
+  /// arrasta a lista errada e estoura `Bad state: No element` apontando para o
+  /// lugar errado. O defeito so aparece quando o alvo esta FORA da dobra: com
+  /// o alvo construido este helper nem chega ao `scrollUntilVisible`, e e por
+  /// isso que ele ficou invisivel ate uma tela crescer.
+  Finder? scrollable,
 }) async {
   if (alvo.evaluate().isNotEmpty) {
     await tester.ensureVisible(alvo);
@@ -723,7 +850,7 @@ Future<void> rolarAte(
   await tester.scrollUntilVisible(
     alvo,
     passo,
-    scrollable: find.byType(Scrollable).first,
+    scrollable: scrollable ?? find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
 }
@@ -786,4 +913,69 @@ List<String> atenderAAreaDeTransferencia(WidgetTester tester) {
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
   return copiado;
+}
+
+/// Abre a tela da conta pela PORTA DE HOJE: a foto da barra de topo.
+///
+/// Era `tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'))`, e
+/// o slot `Perfil` deixou de existir em 19/10: o cliente tirou a secao da
+/// barra de baixo e pos a porta dela na foto da barra de topo.
+///
+/// **Esta funcao e o que fez a migracao ser uma troca e nao uma reescrita.**
+/// Dezesseis arquivos de teste chegavam a tela da conta por aquele toque; os
+/// dezesseis continuam chegando, por aqui. Nenhum caso foi apagado, e nenhum
+/// deles passou a provar menos: eles provam a mesma coisa pela porta nova.
+///
+/// Se a porta mudar de novo, muda aqui -- e nao em dezesseis lugares.
+Future<void> irParaAConta(WidgetTester tester) async {
+  final foto = find.byType(AvatarDaConta);
+  expect(
+    foto,
+    findsOneWidget,
+    reason: 'REPROVA: nao achei a foto da conta na barra de topo. Ela e a '
+        'UNICA porta da tela da conta desde que `Perfil` saiu da barra de '
+        'baixo (19/10) -- sem ela, `Meus pets`, `Cadastrar meu pet`, '
+        '`Meus dados`, `Escanear uma tag` e `Sair da conta` ficam '
+        'inalcancaveis, e com eles o caminho ate a pagina do pet, onde moram '
+        'o QR da plaquinha e `Marcar como perdido`.',
+  );
+  await tester.tap(foto);
+  await tester.pumpAndSettle();
+}
+
+/// Abre o LEITOR DE QR pela porta de hoje: a tela da conta.
+///
+/// **A porta mudou de lugar em 19/10, por decisao do cliente:** *"leve o icone
+/// de qr-code de escanear para a pagina do perfil que tem relacao com as acoes
+/// do usuario."* Antes era `Icons.qr_code_2` na barra de topo de `Pets`; agora
+/// e `Escanear uma tag` na tela da conta, que e a UNICA porta -- a tela ja
+/// tinha o item, entao a mudanca unificou em vez de acrescentar.
+///
+/// **Ela serve logado E deslogado, e isso nao e conveniencia.** A autenticacao
+/// da rota do leitor e OPCIONAL de proposito: quem acha um animal na rua pode
+/// nao ter conta nenhuma. No ramo logado o controle e um `ItemDeMenu`; no ramo
+/// deslogado e um botao secundario. Os dois dizem `Escanear uma tag` e levam a
+/// mesma tela, e por isso esta funcao acha pelo TEXTO e nao pelo tipo do
+/// widget -- um helper preso ao tipo aprovaria a refatoracao em vez do
+/// comportamento.
+///
+/// Catorze arquivos de teste chegavam ao leitor pelo icone da barra de `Pets`.
+/// Os catorze chegam por aqui agora, e se a porta mudar de novo muda **neste
+/// ponto** -- e nao em catorze lugares.
+Future<void> irAoLeitorDeQr(WidgetTester tester) async {
+  await irParaAConta(tester);
+
+  final porta = find.text('Escanear uma tag');
+  expect(
+    porta,
+    findsWidgets,
+    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta. Desde '
+        '19/10 ela e a UNICA porta do leitor de QR, e o leitor e o caminho de '
+        'quem acha um cachorro na rua -- o mais critico do produto. Se a '
+        'porta sumiu, ele ficou inalcancavel.',
+  );
+  await tester.ensureVisible(porta.first);
+  await tester.pumpAndSettle();
+  await tester.tap(porta.first);
+  await tester.pumpAndSettle();
 }

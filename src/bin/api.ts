@@ -35,6 +35,8 @@ import { rateLimitDriver } from '../shared/config/app-config.js';
 import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
 import { vigiarParametrosDasRotas } from '../shared/http/validacao-de-parametros.js';
 import { registrarSaude } from '../shared/http/health.js';
+import { registrarRotaDoVereditoDeVersao } from '../modules/app-release/adapters/http/version-status-routes.js';
+import { criarLeituraDaPoliticaDeVersao } from '../modules/app-release/adapters/persistence/kysely-politica-de-versao.js';
 import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.js';
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../modules/identity/adapters/external/rs256-token-signer.js';
@@ -45,6 +47,15 @@ import { registrarRotasDeLocalizacao } from '../modules/identity/adapters/http/l
 import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
 import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
 import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http/device-routes.js';
+// 18/10/2026. A CAIXA DE NOTIFICACOES (o destino do sino) e o COMUNICADO. As
+// duas moram em `notifications` pelo mesmo argumento que trouxe o aparelho para
+// ca: o modulo e o do aviso, e nao o da identidade.
+import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import { registrarRotasDeComunicado } from '../modules/notifications/adapters/http/admin-comunicado-routes.js';
+import { criarCaixaDeNotificacoes } from '../modules/notifications/adapters/persistence/kysely-caixa-de-notificacoes.js';
+import { criarRepositorioDeComunicados } from '../modules/notifications/adapters/persistence/kysely-comunicados.js';
+import { CaixaDeNotificacoesService } from '../modules/notifications/application/caixa-de-notificacoes-service.js';
+import { ComunicadosAdministrativos } from '../modules/notifications/application/comunicados-administrativos.js';
 import {
   criarVerificadorDeReautenticacao,
   registrarRotasDeDescoberta,
@@ -65,10 +76,17 @@ import type { PetId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
+// A VITRINE DE FOTOS DO USUARIO (cliente, 18/10/2026), visivel so ao dono.
+import { registrarRotasDaVitrineDeFotos } from '../modules/showcase/adapters/http/showcase-routes.js';
+import { VitrineDeFotos } from '../modules/showcase/application/vitrine-de-fotos-service.js';
+import { criarVitrineRepository } from '../modules/showcase/adapters/persistence/kysely-vitrine.js';
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
 import { registrarRotasDaLeituraPublicaDoCaso } from '../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import { registrarRotaDaListagemDePerdidos } from '../modules/lostfound/adapters/http/listagem-publica-de-perdidos-routes.js';
+import { criarListagemPublicaDePerdidos } from '../modules/lostfound/adapters/persistence/kysely-listagem-publica-de-perdidos.js';
+import { ListagemPublicaDePerdidosService } from '../modules/lostfound/application/listagem-publica-de-perdidos.js';
 import { criarLeituraPublicaDoCaso } from '../modules/lostfound/adapters/persistence/kysely-leitura-publica-do-caso.js';
 import { LeituraPublicaDoCasoService } from '../modules/lostfound/application/leitura-publica-do-caso.js';
 import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
@@ -83,6 +101,13 @@ import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-r
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
 import { criarTagService } from '../modules/tags/application/tag-service.js';
 import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
+import { criarPedidoDePlaquinhaRepository } from '../modules/tags/adapters/persistence/kysely-pedido-de-plaquinha.js';
+import {
+  FilaDePlaquinhasAdministrativa,
+  PedidoDePlaquinhaService,
+} from '../modules/tags/application/pedido-de-plaquinha-service.js';
+import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
@@ -98,7 +123,39 @@ import {
   criarNomeDoPet,
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
+import { criarCanalDeContatoDoChamador } from '../modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
+import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
+import { registrarRotasDeSeguranca } from '../modules/safety/adapters/http/safety-routes.js';
+import { SegurancaDaComunidade } from '../modules/safety/application/seguranca-da-comunidade.js';
+import { criarSafetyRepository } from '../modules/safety/adapters/persistence/kysely-safety-repository.js';
+import { registrarRotaDeBuscaDeCep } from '../modules/addresses/adapters/http/postal-code-routes.js';
+import { criarBuscaDeCep } from '../modules/addresses/adapters/external/viacep-com-brasilapi.js';
+import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
+import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
+import {
+  registrarRotaDasMinhasIndicacoes,
+  registrarRotaDeSugestaoDoDiretorio,
+} from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+// 18/10/2026. A FILA DE REVISAO das indicacoes: o menu que faltava no painel.
+import { registrarRotasDaFilaDeIndicacoes } from '../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+// 18/10/2026. A FILA DE MODERACAO do painel: "quem modera vai ser o
+// administrador, deve ir para a pagina de backoffice".
+import { registrarRotasDaFilaDeModeracao } from '../modules/moderation/adapters/http/admin-moderation-routes.js';
+import { criarFilaDeModeracaoRepository } from '../modules/moderation/adapters/persistence/kysely-fila-de-moderacao.js';
+import { FilaDeModeracao } from '../modules/moderation/application/fila-de-moderacao.js';
+import { criarFilaDeIndicacoesRepository } from '../modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
+import { FilaDeIndicacoes } from '../modules/professionals/application/fila-de-indicacoes.js';
+import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
+// As duas conferencias de texto que `professionals` NAO reimplementa. A
+// composicao mora aqui, fora de `src/modules/`, porque
+// `arquitetura/fronteira-de-modulo` reprova um modulo importar `domain/` de
+// outro -- e escrever um segundo detector de D59 ao lado deste seria manter
+// dois, que divergem calados. Ver
+// `modules/professionals/ports/conferencias-de-texto.ts`.
+import { errosDeTextoDeUsuario } from '../modules/network/domain/encontro-da-comunidade.js';
+import { handleDoInstagram } from '../modules/network/domain/escrita-do-encontro.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import { criarTaxonomiaDaVitrineRepository } from '../modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
@@ -122,7 +179,12 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
-import { registrarIntencaoDeCapaDaComunidade } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import {
+  registrarIntencaoDeCapaDaComunidade,
+  registrarIntencaoDaVitrineDoUsuario,
+  registrarIntencaoDeFotoDoUsuario,
+} from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import { FotoDoProprioUsuario } from '../modules/media/application/foto-do-proprio-usuario.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
 import {
   captchaDeDesenvolvimentoLigado,
@@ -130,6 +192,16 @@ import {
 } from '../modules/admin-access/adapters/external/captcha-de-desenvolvimento-local.js';
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
+import { registrarRotasDeConexao } from '../modules/connections/adapters/http/connection-routes.js';
+import { ConexaoEntrePessoas } from '../modules/connections/application/conexao-entre-pessoas.js';
+import { criarConnectionsRepository } from '../modules/connections/adapters/persistence/kysely-connections-repository.js';
+import { nenhumConviteExiste } from '../modules/connections/ports/convite-de-conexao.js';
+import { semBloqueioConhecido } from '../modules/connections/ports/leitor-de-bloqueio.js';
+import { criarLeitorDeConexao } from '../modules/connections/application/leitor-de-conexao.js';
+// FATIA G (19/10/2026). O perfil de OUTRA pessoa, pelo apelido.
+import { registrarRotasDePessoa } from '../modules/people/adapters/http/person-profile-routes.js';
+import { PerfilDePessoa } from '../modules/people/application/perfil-de-pessoa.js';
+import { criarPerfilDePessoaRepository } from '../modules/people/adapters/persistence/kysely-perfil-de-pessoa.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
@@ -360,6 +432,67 @@ export async function main(): Promise<void> {
     registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
   });
 
+  // BICHUS-189. A escrita administrativa do diretorio de `Perto`. Sem `avisos`:
+  // uma entrada de diretorio nao notifica ninguem.
+  //
+  // **COM `urlDeMidia` E COM `imagens` A PARTIR DE 18/10/2026.** O comentario
+  // anterior dizia que a entrada "nao tem imagem -- nao ha coluna de foto nem
+  // de logotipo em `professionals`, e inventar uma seria decidir produto aqui".
+  // Estava certo, e deixou de estar: o cliente decidiu o produto, com estas
+  // palavras -- *"coloque um campo no backoffice para subir uma imagem do logo
+  // e foto dos profissionais recomendados"* --, e a migracao `20261018000008`
+  // criou as duas colunas. `imagens` e o MESMO `registroDeImagemDeCatalogo`
+  // que a `Loja` e a `Rede` recebem: uma esteira so.
+  const diretorioAdministrativo = new DiretorioAdministrativo({
+    repositorio: criarDiretorioAdministrativoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      imagens: registroDeImagemDeCatalogo,
+    }),
+    ids,
+    clock: systemClock,
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
+  // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`: a queixa do
+  // cliente era que "no backoffice nao tem um menu para aprovar os
+  // profissionais que as pessoas estao indicando". A indicacao grava em
+  // `directory_suggestions` desde 17/10 e nunca houve quem lesse essa fila.
+  //
+  // A trilha e OUTRA instancia da mesma fabrica, e nao a de
+  // `diretorioAdministrativo`: `criarTrilhaTransacional` nao guarda estado
+  // entre chamadas, e compartilhar a instancia amarraria dois repositorios por
+  // um objeto que nenhum dos dois precisa dividir.
+  //
+  // `conferencias` e o MESMO par que a sugestao do aplicativo usa: o motivo da
+  // recusa passa pelo detector de D59 que ja existe, e nao por um segundo.
+  const filaDeIndicacoes = new FilaDeIndicacoes({
+    repositorio: criarFilaDeIndicacoesRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      imagens: registroDeImagemDeCatalogo,
+    }),
+    ids,
+    clock: systemClock,
+    conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+    // A entrada aprovada pela fila nasce sem imagem; a projecao e a mesma do
+    // painel, e por isso ela precisa da funcao.
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
+  // A FILA DE MODERACAO. `conferencias` e o MESMO detector de D59 das outras
+  // duas filas, pela mesma porta e pelo mesmo motivo: um segundo detector
+  // divergiria calado do primeiro. A composicao mora aqui, fora de
+  // `src/modules/`, onde `arquitetura/fronteira-de-modulo` nao se aplica.
+  const filaDeModeracao = new FilaDeModeracao({
+    repositorio: criarFilaDeModeracaoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    clock: systemClock,
+    conferencias: { errosDeTextoDeUsuario },
+  });
+
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
   // `/v1/admin` usa para conferir cookie, papel e janela de reautenticacao. A
   // conta e de `admin_accounts` (ADR-0027 item 20): nada do app entra aqui.
@@ -410,6 +543,9 @@ export async function main(): Promise<void> {
     contrato,
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
+    // 18/10/2026: `Me.photo` precisa da URL da derivada. Mesma montagem da
+    // `Loja`, da `Rede` e do diretorio.
+    urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   };
 
   // A partir daqui `X-Reauth-Token` e conferido de verdade. Quem o chama e
@@ -452,6 +588,10 @@ export async function main(): Promise<void> {
     // texto, porque nada deste arquivo é carregado por teste.
     baseDaTag: config.tagBaseUrl,
     baseDaWeb: config.webBaseUrl,
+    // De onde sai `pet.photo_url` na resolução da plaquinha. É a MESMA base do
+    // perfil público do pet (linhas de `baseDeMidia` acima): as duas
+    // superfícies públicas do mesmo animal apontam para o mesmo objeto.
+    baseDeMidia: config.mediaPublicBaseUrl,
     // `code_hash` é HMAC com esta chave, e não SHA-256 sem sal (ADR-0004,
     // Emenda 1, §3.1). Se ela for a mesma de `tagCodeKey`, `loadAppConfig()`
     // já recusou subir antes desta linha.
@@ -463,9 +603,17 @@ export async function main(): Promise<void> {
     // aviso a uma porta de um metodo so. Quem liga os dois e esta linha.
     conversaDoAviso: {
       aoRegistrarAviso: async (aviso) => {
-        await conversas.abrirPorAviso(aviso);
+        // `scan_notice`: PLAQUINHA LIDA. Este aviso nao sai do contador do sino
+        // quando o tutor abre a lista -- so quando ele abre a conversa
+        // (BICHUS-278). A especie e decidida AQUI porque este arquivo e o unico
+        // que conhece os dois caminhos; `tags` continua indiferente a conversa.
+        await conversas.abrirPorAviso({ ...aviso, especie: 'scan_notice' });
       },
     },
+    // O EMISSOR DO AVISO AO TUTOR. A MESMA fila de `alert.dispatch` e de
+    // `media.process_upload`: o aviso da plaquinha nao ganha esteira propria.
+    // Quem consome `tag.scan_notify` e `bin/worker.ts`.
+    fila: criarJobQueue(db, ids),
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -570,6 +718,57 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // A CAIXA DE NOTIFICACOES. O autenticador chega injetado, como no aparelho: o
+  // modulo recebe um `autenticar` e nao o servico de identidade, entao ele nao
+  // tem como devolver dado de conta por engano.
+  const dependenciasDasRotasDaCaixa = {
+    caixa: new CaixaDeNotificacoesService({ caixa: criarCaixaDeNotificacoes(db) }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
+  // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
+  // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
+  // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
+  // na trilha nao fica de pe.
+  const comunicadosAdministrativos = new ComunicadosAdministrativos({
+    repositorio: criarRepositorioDeComunicados(db),
+    escrita: escritaAuditada,
+  });
+
+  // A VITRINE DE FOTOS DO USUARIO. Reusa a ESTEIRA DE IMAGEM que ja existe: o
+  // mesmo preparador de envio do painel e da capa do encontro, com
+  // `purpose = user_showcase`, o prefixo `people/` e o autor em `users`. Nenhuma
+  // segunda esteira -- intencao, confirmacao, derivadas, higiene de EXIF e
+  // varredura de vencidos continuam tendo uma versao so (ADR-0007).
+  const dependenciasDasRotasDaVitrineDeFotos = {
+    vitrine: new VitrineDeFotos({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      vitrine: criarVitrineRepository(db, ids),
+      // `registrarIntencaoDaVitrineDoUsuario`, E NAO a da capa do encontro.
+      //
+      // Era `registrarIntencaoDeCapaDaComunidade` aqui, e isso gravava
+      // `purpose = 'network_event'` na intencao da VITRINE. A assinatura das
+      // duas funcoes era identica, entao a troca compilou. Medido em
+      // 18/10/2026 contra a pilha de integracao: `POST
+      // /v1/me/showcase/photo-intents` devolvia `201` e `PUT /v1/me/showcase`
+      // devolvia `404` para a mesma `upload_id` -- nenhuma foto de vitrine
+      // podia ser salva, porque a confirmacao procura `purpose =
+      // 'user_showcase'`.
+      registrarIntencao: registrarIntencaoDaVitrineDoUsuario,
+      db,
+      clock: systemClock,
+    }),
+    autenticador: dependenciasDasRotasDePet.autenticador,
+    contrato,
+    baseDeMidia: config.mediaPublicBaseUrl,
+  };
+
   const dependenciasDasRotasDeMidia = {
     // ADR-0025 emenda 3: a capa do encontro da comunidade. O MESMO preparador
     // do painel (prefixo `events/`, `purpose = network_event`), com o autor em
@@ -580,6 +779,18 @@ export async function main(): Promise<void> {
         ids,
       }),
       registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      db,
+      ids,
+    }),
+    // 18/10/2026: a foto do proprio usuario. O MESMO preparador, com o prefixo
+    // `people/` e `purpose = user_photo` -- e com HEIC aceito na entrada,
+    // porque esta foto sai de um celular.
+    fotosDoUsuario: new FotoDoProprioUsuario({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDeFotoDoUsuario,
       db,
       ids,
     }),
@@ -669,7 +880,9 @@ export async function main(): Promise<void> {
       // achado avulso abre no portao da decisao), e nao COMO.
       conversaDaCorrespondencia: {
         aoConfirmarCorrespondencia: async (aviso) => {
-          await conversas.abrirPorAviso(aviso);
+          // `found_notice`: ACHADO confirmado pela decisao humana do tutor.
+          // Mesma regra do `scan_notice`: nao sai do contador ao abrir a lista.
+          await conversas.abrirPorAviso({ ...aviso, especie: 'found_notice' });
         },
       },
     }),
@@ -751,6 +964,23 @@ export async function main(): Promise<void> {
     chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   };
 
+  // O pedido do OBJETO FISICO da plaquinha (o destino que o botao `Fazer a tag
+  // da coleira` nunca teve). **Nao emite codigo**: emitir e `issuePetTag`, e o
+  // codigo e irreversivel (ADR-0004). O repositorio e um so para os dois lados,
+  // porque e a mesma tabela; o que difere e o caso de uso.
+  const repositorioDePedidosDePlaquinha = criarPedidoDePlaquinhaRepository({ db });
+  const pedidosDePlaquinha = new PedidoDePlaquinhaService({
+    repositorio: repositorioDePedidosDePlaquinha,
+    ids,
+  });
+  // A fila do painel usa a MESMA unidade de trabalho auditada das outras
+  // escritas administrativas (D49): decisao e trilha na mesma transacao.
+  const filaDePlaquinhas = new FilaDePlaquinhasAdministrativa({
+    repositorio: repositorioDePedidosDePlaquinha,
+    escrita: escritaAuditada,
+    clock: systemClock,
+  });
+
   // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o
   // que for registrado depois dele. A conferência em si roda no fim, quando
   // todas as rotas já existem.
@@ -789,11 +1019,57 @@ export async function main(): Promise<void> {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDoDiretorio(escopo, {
-      diretorio: criarDirectoryRepository(db),
+      diretorio: criarDirectoryRepository(db, ids),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+      // 18/10/2026: o cliente liberou a logo e a foto do profissional no
+      // aplicativo. A URL da derivada e montada na leitura, como nas outras.
+      urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+    });
+    // A SUGESTAO do diretorio: escrita da comunidade, em arquivo e em
+    // registrador proprios. Ela NAO escreve em `professionals` -- a emenda 1 do
+    // ADR-0011 tirou `'community'` de `professionals.source`, e o que esta
+    // operacao grava e a fila de revisao (`directory_suggestions`). A trilha e
+    // a do app (`trilha`, transacao propria), e nao a transacional do painel.
+    const dependenciasDaSugestao = {
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      sugestoes: new SugestaoDoDiretorio({
+        sugestoes: criarDirectorySuggestionRepository(db, ids),
+        trilha,
+        conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
+        // A trava de conta validada, no SERVIDOR: a mesma condicao de
+        // `estadoParaCriarEncontro`, porque "validado" e uma regua so.
+        canal: criarCanalDeContatoDoChamador(db),
+      }),
+      contrato,
+    };
+    registrarRotaDeSugestaoDoDiretorio(escopo, dependenciasDaSugestao);
+    // MINHAS INDICACOES: o lado de quem indicou, que nunca existiu (cliente,
+    // 18/10/2026). As dependencias sao AS MESMAS da escrita acima, e por isso
+    // o objeto e montado uma vez e passado aos dois registradores: duas
+    // montagens seriam dois `SugestaoDoDiretorio` -- dois caminhos ate a mesma
+    // tabela, com a chance de um deles ganhar um dobre diferente do outro.
+    registrarRotaDasMinhasIndicacoes(escopo, dependenciasDaSugestao);
+    // BLOQUEAR E DENUNCIAR (fatia E da frente de comunidade). Modulo proprio,
+    // e o autenticador e o MESMO do diretorio e da Rede: o modulo recebe a
+    // funcao e continua sem conhecer o servico de identidade.
+    //
+    // A trilha e a do APP (`trilha`, transacao propria) e nao a transacional do
+    // painel: um incidente no esquema de auditoria nao e motivo para alguem
+    // nao conseguir bloquear quem a esta assediando.
+    registrarRotasDeSeguranca(escopo, {
+      seguranca: new SegurancaDaComunidade({
+        repositorio: criarSafetyRepository(db, ids),
+        trilha,
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
     });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
@@ -830,6 +1106,71 @@ export async function main(): Promise<void> {
       }),
       contrato,
     });
+    // FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com aceite.
+    //
+    // **DUAS PORTAS ENTRAM DESLIGADAS, e as duas sao declaracoes e nao esbocos.**
+    //
+    // `nenhumConviteExiste` e a afirmacao executavel de que NENHUMA CONTA
+    // ALCANCA NENHUMA OUTRA nesta fatia: o unico caminho que cria aresta e
+    // `requestConnection`, ele exige um convite, e nao existe emissor de convite
+    // em producao. Toda chamada responde 404, qualquer que seja o token. Os dois
+    // emissores sao as fatias H' (conexao ancorada em caso devolvido ou encontro
+    // em comum) e H'' (codigo presencial, token rotativo de 5 min), e ligar cada
+    // uma e trocar esta linha -- o dominio, o repositorio e as rotas nao mudam.
+    //
+    // `semBloqueioConhecido` esta aqui porque `user_blocks` NAO EXISTE em
+    // `origin/development` (medido em 18/10/2026: nenhuma ref tem a migracao). A
+    // fatia E a cria, e quando ela descer esta linha recebe o leitor dela. Hoje
+    // isso nao custa nada: sem convite nao ha aresta, e sem aresta nao ha par
+    // para bloquear.
+    const conexoesDaComunidade = criarConnectionsRepository(db);
+    registrarRotasDeConexao(escopo, {
+      conexoes: new ConexaoEntrePessoas({
+        conexoes: conexoesDaComunidade,
+        convites: nenhumConviteExiste,
+        bloqueios: semBloqueioConhecido,
+        trilha,
+        ids,
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      contrato,
+    });
+    // FATIA G (19/10/2026). O PERFIL DE OUTRA PESSOA, pelo apelido.
+    //
+    // **Nenhuma porta entra desligada aqui, e a diferenca com a fatia F e o
+    // ponto:** `requestConnection` depende de um emissor de convite que nao
+    // existe, e por isso ela responde 404 a qualquer token; esta leitura
+    // depende de `handles`, `users`, `pets`, `user_connections` e
+    // `user_showcase_images`, e as cinco estao em `origin/development`
+    // (migracoes `...021`, `...030`, `...031`, `...032` e `...040`). Ela
+    // funciona de ponta a ponta no dia em que sobe.
+    //
+    // **`criarLeitorDeConexao` e a primeira implementacao de
+    // `connections/ports/conexao.ts`**, que estava declarada e sem ninguem do
+    // outro lado desde 18/10. Ela entrega TRES LEITURAS e nenhuma escrita: o
+    // repositorio inteiro tem `pedir`, `aceitar` e `encerrar`, e nada disso
+    // atravessa a porta.
+    //
+    // **O bloqueio NAO entra por porta aqui, e e de proposito:** o predicado
+    // de bloqueio desta fatia e a funcao SQL `bloqueio_entre`, chamada na
+    // clausula `WHERE` das duas consultas -- que e a forma que a propria
+    // `src/architecture.rules.mjs` registra para ele. Por isso `people` nao
+    // recebe `semBloqueioConhecido`: ele nao tem um leitor de bloqueio
+    // desligado para ligar depois.
+    registrarRotasDePessoa(escopo, {
+      perfis: new PerfilDePessoa({
+        perfis: criarPerfilDePessoaRepository(db),
+        conexoes: criarLeitorDeConexao(conexoesDaComunidade),
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      baseDeMidia: config.mediaPublicBaseUrl,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.
     registrarRotaDoPerfilPublico(escopo, {
@@ -838,7 +1179,9 @@ export async function main(): Promise<void> {
     });
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
+    registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
+    registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     // BICHUS-76. A pagina do caso e o cartaz, pelo `share_token`. O token e a
     // credencial; a conta, quando vem, so decide `can_report_sighting`. As
@@ -851,8 +1194,23 @@ export async function main(): Promise<void> {
       }),
       autenticador: dependenciasDasRotasDeCaso.autenticador,
     });
+    // A listagem publica de perdidos. **Sem autenticador**: a operacao declara
+    // `security: []` e nao ha campo na resposta que varie com quem pede, ao
+    // contrario da pagina do caso.
+    registrarRotaDaListagemDePerdidos(escopo, {
+      listagem: new ListagemPublicaDePerdidosService(
+        criarListagemPublicaDePerdidos(db),
+        { baseDaWeb: config.webBaseUrl, baseDeMidia: config.mediaPublicBaseUrl },
+        systemClock,
+      ),
+    });
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotaDePedidoDePlaquinha(escopo, {
+      pedidos: pedidosDePlaquinha,
+      autenticador: dependenciasDasRotasDeTag.autenticador,
+      contrato,
+    });
     registrarRotasDeTransferencia(escopo, {
       transferencias,
       autenticador: {
@@ -870,6 +1228,9 @@ export async function main(): Promise<void> {
       contrato,
       idempotencia: criarIdempotencia(db),
       clock: systemClock,
+      // A foto do participante que e conexao aceita (emenda 3 do ADR-0010,
+      // 19/10/2026). Mesma base das outras derivadas publicas.
+      baseDeMidia: config.mediaPublicBaseUrl,
     });
     registrarRotasDoAchador(escopo, {
       conversas: conversaDoAchador,
@@ -894,11 +1255,57 @@ export async function main(): Promise<void> {
           registrarRotasDaLojaAdministrativa(administrativo, { catalogo: catalogoAdministrativo, contrato });
           // BICHUS-273/292. A escrita da Rede e a fila de pedidos.
           registrarRotasDaRedeAdministrativa(administrativo, { rede: redeAdministrativa, contrato });
+          // BICHUS-189. A escrita do diretorio de `Perto`: o menu que faltava
+          // no painel. Ate 17/10/2026 nao havia escrita nenhuma, e as entradas
+          // de qualquer destino vinham de `src/bin/seed.ts`.
+          registrarRotasDoDiretorioAdministrativo(administrativo, {
+            diretorio: diretorioAdministrativo,
+            contrato,
+          });
+          // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`. Fica ao
+          // lado da escrita do diretorio de proposito: aprovar uma indicacao
+          // GRAVA uma entrada, pela mesma transacao e pela mesma funcao.
+          registrarRotasDaFilaDeIndicacoes(administrativo, {
+            fila: filaDeIndicacoes,
+            contrato,
+          });
+
+          // A BUSCA DE CEP, uma integracao e uma so (decisao do cliente de
+          // 18/10). Ela nasce aqui, na superficie administrativa, porque o
+          // chamador que existe hoje e o formulario de entrada do diretorio --
+          // e porque resposta com logradouro e inexprimivel sem conta
+          // (`portao-contrato-publico`) e o painel nao tem Bearer (D36). O
+          // aplicativo passa a usar a MESMA porta quando a rota dele existir:
+          // o adaptador nao muda.
+          registrarRotaDeBuscaDeCep(administrativo, { cep: criarBuscaDeCep() });
+          // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
+          // daqui sai so o que ela chama.
+          registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas, contrato });
+          // A FILA DE MODERACAO (18/10/2026). `conversation_reports` gravava
+          // denuncia desde 28/09 e NENHUMA rota do painel a resolvia.
+          registrarRotasDaFilaDeModeracao(administrativo, { fila: filaDeModeracao, contrato });
+          // O COMUNICADO. Fica DENTRO deste bloco como todas as outras: fora
+          // dele a fronteira de `registrarRota` derruba a subida, e e isso que
+          // garante que nenhuma escrita administrativa suba sem a guarda de
+          // papel, cookie, `Origin` e `X-CSRF-Token` na frente.
+          registrarRotasDeComunicado(administrativo, {
+            comunicados: comunicadosAdministrativos,
+            contrato,
+          });
         },
       );
     } else {
       app.log.warn('ADMIN_ORIGIN ausente: o prefixo /v1/admin nao foi registrado');
     }
+    // O VEREDITO DE VERSAO (pedido do cliente, 19/10/2026). Fica ao lado da
+    // sonda porque as duas sao `tags: [ops]`, e DELIBERADAMENTE separada dela:
+    // o motivo inteiro esta no cabecalho de `version-status-routes.ts`.
+    //
+    // Sem autenticador, e sem nada do escopo de identidade: a rota responde
+    // sem conta e nao fala de pessoa nenhuma.
+    registrarRotaDoVereditoDeVersao(escopo, {
+      politica: criarLeituraDaPoliticaDeVersao(db),
+    });
     registrarSaude(escopo, {
       version: config.version,
       // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que

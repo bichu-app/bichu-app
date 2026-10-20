@@ -75,6 +75,12 @@
  *    subindo enquanto arquivos esvaziassem um a um. A assinatura por arquivo,
  *    nao.
  *
+ * 4. **O placar e o codigo de saida nunca discordam.** Nenhuma das tres acima
+ *    impedia o executor de imprimir "0 falharam" e sair 1 -- ver o bloco de
+ *    `contarReprovados`, com a execucao medida na esteira. Esta quarta e a
+ *    unica que vale para forma de reprovacao que ninguem enumerou, porque ela
+ *    nao pergunta QUAL foi: ela cobra que o numero impresso explique a cor.
+ *
  * Por isso os caminhos vao EXPLICITOS para o `node --test`, calculados do
  * disco, e nunca um curinga entregue ao runner: curinga que casa menos nao tem
  * como ser distinguido, de dentro do runner, de um projeto que tem menos teste.
@@ -194,13 +200,133 @@ function arquivosSemCaso(tap, caminhos) {
   return caminhos.filter((c) => nomes.has(c));
 }
 
-/** `# tests 856` e companhia. `undefined` quando o placar nao esta no relatorio. */
+/**
+ * `# tests 856` e companhia. `undefined` quando o placar nao esta no relatorio.
+ *
+ * Os SEIS rotulos de contagem que o runner do Node emite, e nao tres. Medido no
+ * Node (`--test --test-reporter=tap`, um arquivo com um caso de cada forma):
+ *
+ *   # tests 5      # pass 1   # fail 2
+ *   # suites 0     # cancelled 0   # skipped 1   # todo 1
+ *
+ * A identidade e `tests = pass + fail + cancelled + skipped + todo`. Em
+ * particular `skipped` e `todo` NAO estao dentro de `pass`: ler so tres
+ * rotulos deixa tres formas fora da conta.
+ */
 function placar(tap) {
   const numero = (rotulo) => {
     const casado = new RegExp(`^# ${rotulo} (\\d+)$`, 'm').exec(tap);
     return casado === null ? undefined : Number.parseInt(casado[1], 10);
   };
-  return { total: numero('tests'), passaram: numero('pass'), falharam: numero('fail') };
+  return {
+    total: numero('tests'),
+    passaram: numero('pass'),
+    falharam: numero('fail'),
+    cancelados: numero('cancelled'),
+    pulados: numero('skipped'),
+    pendentes: numero('todo'),
+  };
+}
+
+/**
+ * Quantos casos REPROVARAM, e nao quantos "falharam".
+ *
+ * =========================================================================
+ * O SEGUNDO DEFEITO QUE ESTE ARQUIVO EXISTE PARA IMPEDIR
+ * =========================================================================
+ *
+ * Medido na esteira da `development` (run 39130666267, job 117685104459):
+ *
+ *   ✖ failing tests:
+ *     viacep-com-brasilapi.test.js:158  ✖ ISCA: o prazo e POR SERVICO (...)
+ *       'Promise resolution is still pending but the event loop has already resolved'
+ *   placar: 2782 casos em 199 arquivos, 2781 passaram, 0 falharam
+ *   REPROVADO: 0 caso(s) reprovaram.
+ *   ##[error]Process completed with exit code 1
+ *
+ * Tres coisas que nao fecham de uma vez: o placar diz ZERO falharam, a linha
+ * do veredito diz ZERO, e o processo sai 1. E 2782 casos com 2781 passando e
+ * zero falhando deixa UM caso sem classificacao nenhuma.
+ *
+ * A causa: o caso nao "falhou", ele foi CANCELADO. Quando o laco de eventos
+ * drena com a promessa de um caso ainda pendente, o runner do Node encerra
+ * aquele caso por cancelamento -- ele conta em `# tests`, nao conta em
+ * `# pass`, e nao conta em `# fail`. O executor lia `fail`, achava zero, e
+ * imprimia placar limpo; o codigo de saida vinha do runner e vinha 1.
+ *
+ * Um executor que imprime placar limpo e sai com erro faz todo mundo confiar
+ * no numero errado -- e o numero circula, porque e o numero que se repassa.
+ *
+ * Isto nao era desconhecido aqui: `infra/integracao/iscas/rodar-iscas.mjs` ja
+ * registra, em comentario, "um placar dizendo 0 falharam com a execucao saindo
+ * em 1: um portao estourou antes dos casos e nove sairam cancelados. Placar
+ * sozinho mente". O que faltava era o executor fazer a conta.
+ *
+ * =========================================================================
+ * A CONTA, E POR QUE NAO UMA LISTA DE ROTULOS
+ * =========================================================================
+ *
+ * Reprovado = `fail` + `cancelled` + o RESIDUO. O residuo e
+ * `tests - (pass + fail + cancelled + skipped + todo)`: o que o runner contou
+ * em `# tests` e nao atribuiu a nenhum rotulo que este arquivo conhece.
+ *
+ * O residuo e a parte que nao envelhece. Enumerar rotulos conhecidos protege
+ * contra as formas de hoje; o residuo protege contra a forma que o Node
+ * acrescentar amanha, porque um rotulo novo aparece como caso contado e nao
+ * classificado, e cai em reprovado por falta de classificacao -- e nao em
+ * aprovado por omissao. A direcao do erro e a escolha que importa aqui.
+ *
+ * `skipped` e `todo` ficam FORA de reprovado de proposito: pular e marcar
+ * pendente sao decisoes de quem escreveu o teste, nao defeito do codigo. Mas
+ * entram na conta do residuo, senao cada caso pulado apareceria como
+ * nao classificado e a suite reprovaria por estar certa.
+ */
+function contarReprovados(lido) {
+  const n = (v) => (v === undefined ? 0 : v);
+  const classificados =
+    n(lido.passaram) + n(lido.falharam) + n(lido.cancelados) + n(lido.pulados) + n(lido.pendentes);
+  const semClassificacao = Math.max(0, n(lido.total) - classificados);
+  return {
+    semClassificacao,
+    reprovados: n(lido.falharam) + n(lido.cancelados) + semClassificacao,
+  };
+}
+
+/**
+ * A INVARIANTE, e e ela que importa mais que a lista de rotulos:
+ *
+ *   O CODIGO DE SAIDA E O PLACAR NUNCA PODEM DISCORDAR.
+ *
+ *   - saida diferente de zero  =>  o placar mostra PELO MENOS UM reprovado;
+ *   - placar com zero reprovados  =>  a saida e ZERO.
+ *
+ * Devolve as violacoes. Lista vazia e aprovacao, como as outras regras daqui.
+ *
+ * Ela recebe o codigo de saida JA DECIDIDO, em vez de decidi-lo, de proposito:
+ * conferir o codigo que o executor realmente vai devolver pega tambem o dia em
+ * que alguem mudar a forma de decidi-lo. Uma conferencia que recalcula o que
+ * ela mesma confere so testa a propria aritmetica.
+ *
+ * Com ela no lugar o executor deixa de ter como imprimir placar limpo e sair
+ * com erro: ou ele nomeia reprovado, ou ele sai zero, ou ele acusa que o
+ * proprio relatorio nao explica o codigo de saida. Nenhum dos tres e mentira.
+ */
+function conferirInvariante(codigoDeSaida, reprovados) {
+  const violacoes = [];
+  if (codigoDeSaida !== 0 && reprovados === 0) {
+    violacoes.push(
+      `saida ${String(codigoDeSaida)} com placar de zero reprovados: o runner reprovou de um modo ` +
+        'que o placar nao contou. Placar limpo com saida de erro e o defeito que faz todo mundo ' +
+        'repassar o numero errado.',
+    );
+  }
+  if (codigoDeSaida === 0 && reprovados > 0) {
+    violacoes.push(
+      `saida 0 com ${String(reprovados)} reprovado(s) no placar: aprovacao em cima de placar que ` +
+        'nomeia reprovacao.',
+    );
+  }
+  return violacoes;
 }
 
 // =========================================================================
@@ -306,6 +432,42 @@ function autoteste() {
     ['placar ausente REPROVA: relatorio sem `# tests`',
       placar('TAP version 13\n1..0\n').total === undefined, true],
   ];
+  // =======================================================================
+  // AS ISCAS DA INVARIANTE. Cada uma com UM motivo, sem cadeia, como acima.
+  //
+  // A primeira e a do defeito medido: se o executor voltar a nao classificar
+  // cancelamento, ela reprova. Prova por desligamento (medida): trocando o
+  // `n(lido.cancelados)` de `contarReprovados` por zero, as duas primeiras
+  // reprovam; devolvendo a parcela, as duas passam. Trocando o corpo de
+  // `conferirInvariante` por `return []`, a terceira e a quarta reprovam.
+  // =======================================================================
+  /** O placar literal da esteira: 2782 casos, 2781 passaram, zero falharam, UM cancelado. */
+  const TAP_DA_ESTEIRA =
+    'TAP version 13\n# tests 2782\n# suites 199\n# pass 2781\n# fail 0\n# cancelled 1\n# skipped 0\n# todo 0\n';
+  /** O mesmo buraco de um caso, mas SEM rotulo nenhum para ele: o residuo. */
+  const TAP_COM_RESIDUO = 'TAP version 13\n# tests 3\n# pass 2\n# fail 0\n';
+  /** Placar limpo de verdade: tudo que foi contado passou. */
+  const TAP_LIMPO = 'TAP version 13\n# tests 2\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n';
+  /** Pular e marcar pendente nao sao reprovacao -- e tambem nao sao residuo. */
+  const TAP_PULADO = 'TAP version 13\n# tests 4\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 1\n# todo 1\n';
+
+  const casosDaInvariante = [
+    ['ISCA: o placar da esteira (2782/2781/fail 0/cancelled 1) conta o cancelado como reprovado',
+      contarReprovados(placar(TAP_DA_ESTEIRA)).reprovados > 0, true],
+    ['ISCA: caso contado e nao classificado por rotulo nenhum conta como reprovado',
+      contarReprovados(placar(TAP_COM_RESIDUO)).reprovados > 0, true],
+    ['ISCA: saida diferente de zero com placar de zero reprovados e VIOLACAO',
+      conferirInvariante(1, contarReprovados(placar(TAP_LIMPO)).reprovados).length > 0, true],
+    ['ISCA: placar que nomeia reprovado com saida zero e VIOLACAO',
+      conferirInvariante(0, contarReprovados(placar(TAP_DA_ESTEIRA)).reprovados).length > 0, true],
+    ['o outro lado: placar limpo com saida zero NAO e violacao',
+      conferirInvariante(0, contarReprovados(placar(TAP_LIMPO)).reprovados).length > 0, false],
+    ['o outro lado: pulado e pendente NAO sao reprovacao (senao a suite reprova por estar certa)',
+      contarReprovados(placar(TAP_PULADO)).reprovados > 0, false],
+    ['o outro lado: pulado e pendente tambem NAO sao residuo sem classificacao',
+      contarReprovados(placar(TAP_PULADO)).semClassificacao > 0, false],
+  ];
+  casosDeTap.push(...casosDaInvariante);
   for (const [nome, reprovou, precisaReprovar] of casosDeTap) {
     if (reprovou === precisaReprovar) {
       console.log(`  [    ok   ] ${nome}`);
@@ -430,7 +592,8 @@ function executar(argv) {
     console.log(`copia do relatorio TAP em ${join(destinoDoPlacar, 'unitaria.tap')}`);
   }
 
-  const { total, passaram, falharam } = placar(tap);
+  const lido = placar(tap);
+  const { total, passaram, falharam } = lido;
   if (total === undefined || passaram === undefined || falharam === undefined) {
     morrer(
       'o relatorio TAP nao trouxe o placar (`# tests`, `# pass`, `# fail`). Sem placar nao da ' +
@@ -439,10 +602,28 @@ function executar(argv) {
     );
   }
 
+  const { reprovados, semClassificacao } = contarReprovados(lido);
+
+  // A linha que se repassa. Ela diz REPROVARAM, e nao "falharam": `falharam` e
+  // um dos rotulos do runner, e foi exatamente lendo aquele rotulo como se ele
+  // fosse o total de reprovacoes que esta linha chegou a dizer "0 falharam"
+  // numa execucao que saiu com erro.
   console.log(
     `\nplacar: ${String(total)} casos em ${String(caminhos.length)} arquivos, ` +
-      `${String(passaram)} passaram, ${String(falharam)} falharam`,
+      `${String(passaram)} passaram, ${String(reprovados)} reprovaram`,
   );
+  // A quebra por rotulo so aparece quando ha o que mostrar, e ai ela aparece
+  // SEMPRE: cancelado invisivel no detalhe e cancelado que volta a sumir.
+  const detalhe = [
+    ['falharam', lido.falharam],
+    ['cancelados', lido.cancelados],
+    ['sem classificacao', semClassificacao],
+    ['pulados', lido.pulados],
+    ['pendentes (todo)', lido.pendentes],
+  ].filter(([, quantos]) => quantos !== undefined && quantos > 0);
+  if (detalhe.length > 0) {
+    console.log(`por rotulo: ${detalhe.map(([r, q]) => `${r} ${String(q)}`).join(', ')}`);
+  }
 
   // Por ARQUIVO, e nao pelo total. O runner do Node reporta o arquivo que nao
   // produziu nenhum caso como um teste aprovado com o nome do proprio caminho;
@@ -460,8 +641,25 @@ function executar(argv) {
   if (passaram === 0) {
     morrer('nenhum caso passou. Suite que nao executa nada sai zero, e zero aqui nao e aprovacao.');
   }
-  if (falharam > 0 || execucao.status !== 0) {
-    morrer(`${String(falharam)} caso(s) reprovaram.`);
+
+  // O codigo que este executor vai devolver, decidido ANTES de ser conferido.
+  const codigoDeSaida = reprovados > 0 || execucao.status !== 0 ? 1 : 0;
+  const violacoes = conferirInvariante(codigoDeSaida, reprovados);
+  if (violacoes.length > 0) {
+    // Aqui o executor se recusa a mentir: ele nao tem reprovado para nomear e
+    // tambem nao tem como aprovar, entao ele acusa a propria contradicao. Sai
+    // 1 pelo `morrer`, o que mantem a invariante do lado seguro.
+    morrer(
+      `o placar e o codigo de saida nao fecham. ${violacoes.join(' ')} ` +
+        `Lido do relatorio: tests ${String(total)}, pass ${String(passaram)}, ` +
+        `fail ${String(lido.falharam ?? 0)}, cancelled ${String(lido.cancelados ?? 0)}, ` +
+        `skipped ${String(lido.pulados ?? 0)}, todo ${String(lido.pendentes ?? 0)}; ` +
+        `saida do runner ${String(execucao.status)}. Procure a forma de reprovacao que o runner ` +
+        `emitiu e este executor ainda nao classifica, e acrescente-a a \`contarReprovados\`.`,
+    );
+  }
+  if (reprovados > 0) {
+    morrer(`${String(reprovados)} caso(s) reprovaram.`);
   }
 
   console.log('suite unitaria: APROVADA');

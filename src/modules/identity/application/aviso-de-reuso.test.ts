@@ -54,6 +54,9 @@ function contaDaVitima(): Conta {
     email: ENDERECO_DA_VITIMA,
     emailVerifiedAt: dataFixa(),
     displayName: 'Marina Prado',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: '+5511987654321',
     phoneVerifiedAt: dataFixa(),
     referencePostalCode: '01310-000',

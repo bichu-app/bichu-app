@@ -27,13 +27,16 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
+import { corpoSemPadroes } from '../../../../shared/http/sem-padroes.js';
 import { comoIso } from '../../../../shared/time/clock.js';
+import { comoEtag } from '../../domain/escrita-do-encontro.js';
 import {
   distanciaArredondada,
   estadoDoPedidoNoApp,
   projetarDetalhesPrivados,
   projetarEncontro,
   projetarLocalizacao,
+  projetarMeuEncontro,
   projetarTeaser,
   type EncontroPublicoProjetado,
 } from '../../domain/encontro-da-rede.js';
@@ -120,6 +123,41 @@ export const rotaDaDesistencia = defineRoute({
   path: '/network/events/:eventSlug/join-request',
   effects: [],
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * "Meus eventos": a lista do DONO e a leitura que entrega o `ETag`
+ * (19/10/2026, decisao do cliente).
+ *
+ * **As duas exigem conta e nao tem alternativa vazia**, ao contrario das duas
+ * leituras publicas deste arquivo: a pergunta que elas respondem e "o que EU
+ * criei", e sem conta ela nao tem resposta. O 401 vem antes de qualquer
+ * consulta, como nas outras sete.
+ *
+ * Os tetos sao por `account`, e os numeros sao copiados de operacoes irmas:
+ * 300/1h na lista (o de `listMyNetworkEventJoinRequests`, a outra colecao
+ * "minha") e 600/1h na leitura de um (o do detalhe publico, porque abrir e
+ * fechar a folha de confirmacao varias vezes e uso normal e cada abertura rele
+ * a versao).
+ *
+ * **Nenhuma das duas declara `effects`**: as duas sao leitura. `expensive_query`
+ * tambem nao -- a lista e recortada pela conta, e o teto de 3 encontros ativos
+ * limita o tamanho dela na origem.
+ */
+export const rotaDosMeusEncontros = defineRoute({
+  operationId: 'listMyNetworkEvents',
+  method: 'get',
+  path: '/network/my-events',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDoMeuEncontro = defineRoute({
+  operationId: 'getMyNetworkEvent',
+  method: 'get',
+  path: '/network/my-events/:eventSlug',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
 export const rotaDosMeusPedidos = defineRoute({
@@ -227,6 +265,12 @@ interface QueryDaAgenda {
 interface QueryDosMeusPedidos {
   readonly q?: string;
   readonly state?: 'requested' | 'approved' | 'withdrawn' | 'expired';
+  readonly page?: number;
+  readonly limit?: number;
+}
+
+/** `listMyNetworkEvents` nao aceita recorte nenhum: so a pagina. */
+interface QueryDaPagina {
   readonly page?: number;
   readonly limit?: number;
 }
@@ -373,11 +417,28 @@ export function registrarRotasDaRede(
    * decida isso.
    */
   const corpoDaEdicao = corpoDe(deps.contrato, rotaDaEdicaoDoEncontro.operationId);
+  // Sem os `default` do contrato. `CommunityNetworkEventPatch` herda dois das
+  // formas que a CRIACAO reusa -- `accepted_sizes` (`[P, M, G, GG]`) e
+  // `dog_age` (`any`) --, e numa criacao eles estao certos: o encontro tem de
+  // nascer com porte e idade. Num `PATCH` o `useDefaults` do Ajv os injeta e o
+  // resultado e o contrario do que a operacao promete. Medido em 17/10/2026 com
+  // `{"title": "...", "notes": "..."}`:
+  //
+  //   corpo visto pelo manipulador:
+  //     { title, notes, accepted_sizes: [P,M,G,GG], dog_age: 'any' }
+  //
+  // Duas consequencias, as duas silenciosas: quem aceitava so porte P e corrige
+  // o titulo sai aceitando os quatro, com `200` e sem aviso; e a trilha mente,
+  // porque `fields` sai do `Object.keys` do corpo e passa a nomear campo que o
+  // autor nao tocou. O porque geral esta em `sem-padroes.ts`.
+  //
+  // O guarda de campo desconhecido continua lendo o schema ORIGINAL -- a lista
+  // de nomes aceitos nao muda, e e nela que ele se baseia.
   registrarRota(
     app,
     rotaDaEdicaoDoEncontro,
     {
-      schema: { body: corpoDaEdicao },
+      schema: { body: corpoSemPadroes(corpoDaEdicao) },
       resolvedores: porConta.resolvedores,
       preValidation: [recusarCampoDesconhecido(corpoDaEdicao, rotaDaEdicaoDoEncontro.operationId)],
     },
@@ -565,6 +626,70 @@ export function registrarRotasDaRede(
         .send({ state: 'withdrawn', requested_at: comoIso(desfecho.pedidoEm) });
     },
   );
+
+  /**
+   * A lista do DONO. **A autoria esta na clausula `WHERE`** do repositorio
+   * (ADR-0021): esta borda nao tem parametro de autoria e nao tem `if` que
+   * decida de quem e o encontro -- nao existe forma de pedir a lista de outra
+   * pessoa.
+   *
+   * O corpo e `MyNetworkEvent`, a projecao do dono: sete propriedades, montadas
+   * por `projetarMeuEncontro`. Ela NAO e `projetarEncontro`, e isso e o ponto:
+   * a lista do dono e menor que a vitrine publica de proposito, e o que entra
+   * alem de capa e titulo esta justificado no esquema do contrato.
+   *
+   * **Sem `ETag` aqui**: um cabecalho vale para a resposta inteira, e o
+   * `If-Match` do cancelamento e a versao de UM encontro. A versao sai na rota
+   * de baixo.
+   */
+  registrarRota(
+    app,
+    rotaDosMeusEncontros,
+    porConta,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const query = (request.query ?? {}) as QueryDaPagina;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO;
+      const agora = deps.clock.now();
+      const pagina = await deps.rede.listarMeusEncontros({ chamador, agora, page, limit });
+      return reply.header('Cache-Control', SEM_CACHE).send({
+        items: pagina.itens.map((item) => projetarMeuEncontro(item.encontro, item.capa, agora)),
+        page,
+        limit,
+        total: pagina.total,
+      });
+    },
+  );
+
+  /**
+   * Um encontro meu, **com a versao no `ETag`**.
+   *
+   * ESTA E A FONTE DO `ETag` DA SECAO `Rede`, e e por isso que a rota existe.
+   * Medido contra homologacao em 19/10/2026: nenhuma outra leitura da secao
+   * emite o cabecalho -- nem a agenda, nem o detalhe publico, nem o `201` de
+   * criar --, e so as duas escritas o emitiam. Uma versao que so a escrita
+   * entrega nao autoriza a PRIMEIRA escrita, e por isso cancelar o proprio
+   * encontro era impossivel por construcao.
+   *
+   * O `ETag` sai por `comoEtag`, a MESMA funcao que as duas escritas usam para
+   * montar o valor que elas devolvem: a leitura e a escrita falam da mesma
+   * versao, no mesmo formato, e `lerIfMatch` a le de volta.
+   *
+   * O 404 de encontro alheio vem da clausula `WHERE` (ADR-0021), pela mesma
+   * funcao de banco da escrita: esta borda nao sabe de quem e o encontro.
+   */
+  registrarRota(app, rotaDoMeuEncontro, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
+    const chamador = await chamadorAutenticado(request, deps);
+    const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+    const meu = await deps.rede.buscarMeuEncontro(eventSlug, chamador);
+    // Inexistente, de outra pessoa, do painel e removido: o mesmo 404.
+    if (meu === undefined) throw problemas.naoEncontrado();
+    return reply
+      .header('ETag', comoEtag(meu.versao))
+      .header('Cache-Control', SEM_CACHE)
+      .send(projetarMeuEncontro(meu.encontro, meu.capa, deps.clock.now()));
+  });
 
   registrarRota(
     app,

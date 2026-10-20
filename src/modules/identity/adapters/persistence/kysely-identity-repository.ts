@@ -15,6 +15,7 @@
  */
 import { sql, type Insertable } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import type { Selectable } from 'kysely';
 import type { UsersTable } from '../../../../shared/db/schema.js';
 import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
@@ -34,7 +35,20 @@ import type {
   TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
+import { EnvioDeFotoNaoServe, type FotoDoPerfil } from '../../ports/identity-repository.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-catalogo.js';
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
+import { problemas } from '../../../../shared/http/errors.js';
+
+/**
+ * Uma troca de apelido a cada 60 dias (plano 4-C.7, `9d99ac0f`).
+ *
+ * O prazo não é cerimônia: ele é o que torna o apelido um identificador em que
+ * a vizinhança pode confiar. Sem ele, trocar de `@` todo dia é de graça, e
+ * reconhecer alguém pelo apelido deixa de valer.
+ */
+const DIAS_ENTRE_TROCAS_DE_APELIDO = 60;
+
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -46,12 +60,20 @@ function ehViolacaoDeUnicidade(erro: unknown): boolean {
   );
 }
 
+// `Selectable<UsersTable>` e nao `UsersTable`: as colunas que a aplicacao pode
+// OMITIR no `INSERT` sao declaradas como `ColumnType<...>` no esquema, e
+// `Pick` sobre o tipo cru trazia o `ColumnType` inteiro para ca em vez do tipo
+// LIDO. `handle` foi a primeira a expor isso -- ela e `ColumnType` porque o
+// `INSERT` de `users` acontece ANTES da linha de `handles` (a FK e circular:
+// `users.handle` aponta para `handles.handle` e `handles.user_id` aponta para
+// `users.id`), entao ela entra por um `UPDATE` depois.
 type LinhaDeConta = Pick<
-  UsersTable,
+  Selectable<UsersTable>,
   | 'id'
   | 'email'
   | 'email_verified_at'
   | 'display_name'
+  | 'handle'
   | 'phone_e164'
   | 'phone_verified_at'
   | 'reference_postal_code'
@@ -67,6 +89,7 @@ const COLUNAS_DA_CONTA = [
   'email',
   'email_verified_at',
   'display_name',
+  'handle',
   'phone_e164',
   'phone_verified_at',
   'reference_postal_code',
@@ -93,6 +116,7 @@ function paraConta(linha: LinhaSelecionada): Conta {
     email: linha.email,
     emailVerifiedAt: linha.email_verified_at,
     displayName: linha.display_name,
+    handle: linha.handle,
     phoneE164: linha.phone_e164,
     phoneVerifiedAt: linha.phone_verified_at,
     referencePostalCode: linha.reference_postal_code,
@@ -251,7 +275,29 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const valores: Insertable<UsersTable> = {
         id: userId,
         email: nova.email,
+        // O ENDEREÇO PÚBLICO DA PESSOA nasce com a conta (fatia E, migração
+        // `20261018000031`): 128 bits de CSPRNG em base64url, 22 símbolos, no
+        // mesmo molde de `professional_reviews.ref` e de `upload_ref`.
+        //
+        // Nasce AQUI e não na primeira vez que alguém precisa dele, por duas
+        // razões. A coluna é `NOT NULL`, então um caminho de criação que não o
+        // escrevesse não compilaria — que é exatamente o freio que se quer. E
+        // preenchê-lo tarde obrigaria a leitura de um perfil a ESCREVER na
+        // linha de outra pessoa, o que é contenção e é um `UPDATE` num caminho
+        // que ninguém espera que escreva.
+        //
+        // **Sorteado, e nunca derivado do e-mail nem do nome**: um endereço que
+        // carregasse o dono permitiria cruzar as pegadas de uma pessoa entre
+        // superfícies (BICHUS-174).
+        public_ref: Buffer.from(ids.random128()).toString('base64url'),
         display_name: nova.displayName ?? null,
+        // A data de nascimento entra na ESCRITA e em lugar nenhum mais: ela não
+        // está em `COLUNAS_DA_CONTA` (o `returning` abaixo), e por isso não
+        // volta nem para quem acabou de se cadastrar. Com idade mínima de 16 o
+        // titular pode ser adolescente, e a data existe para ter sido
+        // conferida, não para ser exibida — ver o cabeçalho da
+        // `20261018000021`.
+        birth_date: nova.birthDate,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
         // A conta nasce com a barreira do SEC-006 no segundo da criação: assim
@@ -272,6 +318,41 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .values(valores)
             .returning(COLUNAS_DA_CONTA)
             .executeTakeFirstOrThrow();
+
+          // O APELIDO REIVINDICA O ESPAÇO DE NOMES NA MESMA TRANSAÇÃO.
+          //
+          // `handles` primeiro e `users.handle` depois, e a ordem não é gosto:
+          // `users.handle` tem FK para `handles.handle`, então a ordem inversa
+          // reprovaria por chave estrangeira.
+          //
+          // **É AQUI QUE A DISPONIBILIDADE É DECIDIDA** (plano 4-C.5). Não há
+          // consulta antes, e não pode haver: a janela entre conferir e gravar
+          // é onde a corrida mora. Duas contas pedindo `@maria` ao mesmo tempo
+          // chegam as duas até este `INSERT`; uma viola `handles_pkey` ou
+          // `handles_esqueleto_unico`, e `recusaDeApelidoTomado` traduz.
+          //
+          // `handle_esqueleto` é calculado pelo BANCO, pelo gatilho
+          // `handles_esqueleto_derivado`, e não aqui: o esqueleto é derivado,
+          // sempre, e quem o mandasse errado de propósito contornaria o índice
+          // que separa os parecidos. O valor abaixo é descartado pelo gatilho.
+          if (nova.handle !== undefined) {
+            await trx
+              .insertInto('handles')
+              .values({
+                handle: nova.handle,
+                handle_esqueleto: nova.handle,
+                kind: 'pessoa',
+                user_id: userId,
+                claimed_at: agora,
+              })
+              .execute();
+
+            await trx
+              .updateTable('users')
+              .set({ handle: nova.handle })
+              .where('id', '=', userId)
+              .execute();
+          }
 
           await trx
             .insertInto('user_identities')
@@ -342,15 +423,247 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       // herda a confiança do antigo, e `can_open_lost_case` precisa cair junto.
       if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
 
-      const linha = await db
-        .updateTable('users')
-        .set(mudancas)
-        .where('id', '=', id)
-        .where('deleted_at', 'is', null)
-        .returning(COLUNAS_DA_CONTA)
-        .executeTakeFirst();
+      // O APELIDO NÃO ENTRA NO `mapa` ACIMA, e a ausência dele ali é
+      // deliberada: ele não é um `SET` a mais, é duas linhas de `handles` mais
+      // a coluna, e tudo isso na mesma transação da conta.
+      const apelidoNovo = campos.handle;
+      if (apelidoNovo === undefined) {
+        const linha = await db
+          .updateTable('users')
+          .set(mudancas)
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
 
-      return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      }
+
+      return await db.transaction().execute(async (trx) => {
+        const atual = await trx
+          .selectFrom('users')
+          .select(['handle'])
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .executeTakeFirst();
+        if (atual === undefined) return undefined;
+
+        const anterior = atual.handle;
+
+        // SALVAR O MESMO APELIDO NÃO É TROCA, e tratá-lo como troca gastaria a
+        // única troca de 60 dias de quem só mexeu no telefone com o campo de
+        // apelido preenchido na tela. `citext` compara sem caixa no banco; aqui
+        // a comparação é do valor já normalizado dos dois lados.
+        const ehTroca = anterior !== null && anterior.toLowerCase() !== apelidoNovo;
+
+        if (ehTroca) {
+          // UMA TROCA A CADA 60 DIAS (plano 4-C.7). Lido de `claimed_at` da
+          // linha viva, que é o carimbo de quando o apelido atual passou a
+          // valer -- e não de `users.updated_at`, que qualquer edição de
+          // telefone move.
+          const vivo = await trx
+            .selectFrom('handles')
+            .select(['claimed_at'])
+            .where('user_id', '=', id)
+            .where('kind', '=', 'pessoa')
+            .executeTakeFirst();
+
+          if (vivo !== undefined) {
+            const desde = new Date(vivo.claimed_at).getTime();
+            const dias = (Number(agora) - desde) / 86_400_000;
+            if (dias < DIAS_ENTRE_TROCAS_DE_APELIDO) {
+              const faltam = Math.ceil(DIAS_ENTRE_TROCAS_DE_APELIDO - dias);
+              throw problemas.validacao([
+                {
+                  field: 'handle',
+                  code: 'too_soon',
+                  message: `Você poderá trocar de apelido em ${String(faltam)} dias.`,
+                },
+              ]);
+            }
+          }
+
+          // O ANTERIOR FICA RESERVADO, E NÃO VOLTA AO POOL (plano 4-C.7).
+          //
+          // Este é o passo que não pode faltar: soltar `@maria` na hora deixa
+          // um estranho pegá-lo e **herdar tudo que a vizinhança associava a
+          // quem o tinha**, que é imitação servida pelo produto. A linha deixa
+          // de ser `pessoa` e passa a `reservado`, com o `user_id`
+          // **preservado** -- é o `user_id` que diz para quem ela está
+          // guardada nos 180 dias.
+          //
+          // O índice `handles_uma_pessoa_um_apelido` é parcial em
+          // `kind = 'pessoa'`, e é por isso que esta linha precisa mudar de
+          // `kind` ANTES do `INSERT` do apelido novo: com as duas como
+          // `pessoa`, o índice reprovaria.
+          await trx
+            .updateTable('handles')
+            .set({ kind: 'reservado' })
+            .where('user_id', '=', id)
+            .where('kind', '=', 'pessoa')
+            .execute();
+        }
+
+        if (anterior === null || ehTroca) {
+          await trx
+            .insertInto('handles')
+            .values({
+              handle: apelidoNovo,
+              // Descartado pelo gatilho `handles_esqueleto_derivado`, que o
+              // recalcula. Ver `criarContaLocal`.
+              handle_esqueleto: apelidoNovo,
+              kind: 'pessoa',
+              user_id: id,
+              // `new Date`, E NAO `agora`. `agora` e `Instant` -- milissegundos
+              // desde a epoca, um NUMERO --, e `timestamptz` nao o le: o
+              // Postgres recusa com `22008 date/time field value out of range:
+              // "1792376135079"` e a rota devolve 500. Medido em 18/10/2026,
+              // `PATCH /v1/me` com `handle`, que e o campo do apelido na pagina
+              // de edicao do perfil: TODO salvamento que escolhesse ou trocasse
+              // apelido morria aqui.
+              //
+              // O tipo nao pegou porque `HandlesTable.claimed_at` aceitava
+              // `number` na escrita. Aceitava para nada: ninguem grava epoch
+              // aqui de proposito, e o unico efeito era deixar este erro
+              // compilar. O tipo passou a aceitar so `Date` (shared/db/schema.ts).
+              //
+              // `criarContaLocal` ja fazia certo (`const agora = new
+              // Date(nova.agora)`), e a divergencia entre os dois caminhos da
+              // MESMA coluna e o que fez o defeito aparecer so na edicao.
+              claimed_at: new Date(Number(agora)),
+            })
+            .execute();
+          mudancas['handle'] = apelidoNovo;
+        }
+
+        const linha = await trx
+          .updateTable('users')
+          .set(mudancas)
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
+
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      });
+    },
+
+    /**
+     * A foto do perfil desta conta (cliente, 18/10/2026).
+     *
+     * Uma consulta propria, e nao uma subconsulta em `COLUNAS_DA_CONTA`: so a
+     * resposta `Me` quer a foto, e pendurar a leitura de `catalog_images` em
+     * `paraConta` faria todo login e todo cadastro consultarem a tabela de
+     * imagem sem precisar. O custo e uma busca por chave primaria, pelo
+     * ponteiro que a propria linha da conta carrega.
+     */
+    async fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null> {
+      const linha = await db
+        .selectFrom('users')
+        .innerJoin('catalog_images', 'catalog_images.id', 'users.photo_image_id')
+        .select(['catalog_images.status as status', 'catalog_images.public_key as public_key', 'catalog_images.rejection_reason as rejection_reason'])
+        .where('users.id', '=', id)
+        .where('users.deleted_at', 'is', null)
+        .executeTakeFirst();
+      if (linha === undefined) return null;
+      return {
+        status: linha.status,
+        publicKey: linha.public_key,
+        rejectionReason: linha.rejection_reason,
+      };
+    },
+
+    /**
+     * Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`.
+     *
+     * **A conta na clausula `WHERE` (`u.user_id`) e o que impede confirmar o
+     * envio de outra pessoa**, e e a mesma forma de `capaDoEnvio`
+     * (`kysely-network-repository.ts`): um `if` depois do `SELECT` responderia
+     * sobre envio alheio. `admin_account_id` nao casa aqui nunca -- envio do
+     * painel nao vira foto de pessoa (T9).
+     *
+     * `purpose = 'user_photo'` tambem esta no `WHERE`: a capa de um encontro e
+     * a logo de um profissional, enviadas pela mesma esteira, nao viram foto de
+     * perfil.
+     */
+    async trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined> {
+      return db.transaction().execute(async (trx) => {
+        let imagemId: string | null = null;
+
+        if (uploadId !== null) {
+          const r = await sql<{
+            id: string;
+            expires_at: Date;
+            confirmed_at: Date | null;
+            catalog_image_id: string | null;
+            dono_da_imagem: string | null;
+          }>`
+            SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id,
+                   (SELECT d.id FROM users d WHERE d.photo_image_id = c.id) AS dono_da_imagem
+              FROM catalog_upload_intents u
+              LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
+             WHERE u.id = ${uploadId}::uuid
+               AND u.user_id = ${id}::uuid
+               AND u.purpose = 'user_photo'
+             FOR UPDATE OF u
+          `.execute(trx);
+          const envio = r.rows[0];
+          if (envio === undefined) throw new EnvioDeFotoNaoServe();
+
+          if (envio.confirmed_at !== null) {
+            // Ja confirmado: serve de novo SO para esta mesma conta. Reenviar o
+            // mesmo `upload_id` num segundo `PATCH` nao pode criar imagem nova,
+            // e o app manda o formulario inteiro ao salvar.
+            if (envio.catalog_image_id === null) throw new EnvioDeFotoNaoServe();
+            if (envio.dono_da_imagem !== null && envio.dono_da_imagem !== id) {
+              throw new EnvioDeFotoNaoServe();
+            }
+            imagemId = envio.catalog_image_id;
+          } else {
+            if (envio.expires_at.getTime() <= Number(agora)) throw new EnvioDeFotoNaoServe();
+            imagemId = ids.uuidv7();
+            // ESTE `UPDATE` E O QUE PROTEGE A FOTO DA VARREDURA DE VENCIDOS:
+            // com `confirmed_at` preenchido, a linha sai de
+            // `listarIntencoesVencidas` e o objeto no balde deixa de ser
+            // candidato a limpeza.
+            await trx
+              .updateTable('catalog_upload_intents')
+              .set({ confirmed_at: new Date(Number(agora)) })
+              .where('id', '=', envio.id)
+              .where('confirmed_at', 'is', null)
+              .execute();
+            await trx
+              .insertInto('catalog_images')
+              .values({
+                id: imagemId,
+                upload_intent_id: envio.id,
+                purpose: 'user_photo',
+                public_key: null,
+                rejection_reason: null,
+              })
+              .execute();
+            // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
+            // imagem falharia em laco. Os dois na mesma transacao.
+            await trx
+              .insertInto('jobs')
+              .values({
+                id: ids.uuidv7(),
+                kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+                payload: JSON.stringify({ catalog_image_id: imagemId }),
+              })
+              .execute();
+          }
+        }
+
+        const linha = await trx
+          .updateTable('users')
+          .set({ photo_image_id: imagemId, updated_at: new Date(Number(agora)) })
+          .where('id', '=', id)
+          .where('deleted_at', 'is', null)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      });
     },
 
     async buscarContaPorEmail(email: string): Promise<Conta | undefined> {
@@ -747,14 +1060,10 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.map((linha) => linha.id as UserId);
     },
 
-    async expurgarConta(userId: UserId): Promise<boolean> {
-      const apagadas = await db
-        .deleteFrom('users')
-        .where('id', '=', userId)
-        .where('deleted_at', 'is not', null)
-        .executeTakeFirst();
-      return (apagadas.numDeletedRows ?? 0n) > 0n;
-    },
+    // `expurgarConta` saiu daqui em 17/10 junto da porta. Era o unico
+    // `deleteFrom('users')` de `src/`, e a decisao do cliente -- "nao delete os
+    // dados do usuario, apenas desabilite na plataforma" -- o tornou proibido em
+    // vez de adiado.
 
     async registrarPedidoDeTrocaDeEmail(
       userId: UserId,

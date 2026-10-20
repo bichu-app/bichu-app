@@ -54,6 +54,7 @@ interface LinhaDoCaso {
   share_to_public_list: boolean;
   opened_at: Date;
   closed_at: Date | null;
+  reopen_deadline: Date | null;
   closure_outcome: DesfechoDoCaso | null;
   closure_channel: CanalDoReencontro | null;
   closure_note: string | null;
@@ -75,6 +76,7 @@ function comoCaso(l: LinhaDoCaso): CasoGravado {
     shareToPublicList: l.share_to_public_list,
     openedAt: l.opened_at,
     closedAt: l.closed_at,
+    reopenDeadline: l.reopen_deadline,
     closureOutcome: l.closure_outcome,
     closureChannel: l.closure_channel,
     closureNote: l.closure_note,
@@ -93,7 +95,7 @@ const COLUNAS = sql<LinhaDoCaso>`
   (last_seen_point IS NOT NULL) AS tem_ponto,
   last_seen_city, last_seen_neighborhood, description,
   share_token, share_to_public_list, opened_at,
-  closed_at, closure_outcome, closure_channel, closure_note
+  closed_at, reopen_deadline, closure_outcome, closure_channel, closure_note
 `;
 
 export function criarLostCaseRepository(db: Db): LostCaseRepository {
@@ -257,6 +259,15 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
      *
      * `description` e `share_to_public_list` usam o valor antigo quando o corpo
      * não os traz (ver `AtualizacaoDoCaso`). O contrato não detalha isto.
+     *
+     * **Esses dois ramos dependem da borda, e não só deste arquivo.** O
+     * `undefined` que eles procuram só chega aqui porque a rota valida o corpo
+     * do `PATCH` sem os `default` do contrato (`corpoSemPadroes`, em
+     * `sem-padroes.ts`): `share_to_public_list` tem `default: true` em
+     * `LostCaseInput`, e o `useDefaults` do Ajv o preencheria antes do
+     * manipulador — este `COALESCE` escrito à mão nunca seria alcançado, e a
+     * edição republicaria o caso calada. Tirar aquela chamada reabre o defeito
+     * sem tocar nenhuma linha daqui.
      */
     async atualizarOndeEQuando(entrada: AtualizacaoDoCaso): Promise<CasoGravado | null> {
       const ponto =
@@ -318,6 +329,64 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
          WHERE id = ${entrada.caso}
            AND owner_user_id = ${entrada.dono}
            AND status = 'open'
+        RETURNING ${COLUNAS}
+      `.execute(db);
+      const linha = r.rows[0];
+      return linha === undefined ? null : comoCaso(linha);
+    },
+
+    /**
+     * Reabre o caso encerrado por engano. UMA escrita, QUATRO predicados.
+     *
+     * - `owner_user_id = :dono` -- a autorizacao mora no `WHERE`, como em todo
+     *   este arquivo (ADR-0021).
+     * - `status <> 'open'` -- so caso encerrado reabre. Reabrir um caso aberto
+     *   nao e erro de ninguem: e o reenvio da fila offline, e quem o traduz
+     *   para 200 e o servico.
+     * - `reopen_deadline > :agora` -- a JANELA, e ela vem da COLUNA e nao de
+     *   uma conta refeita aqui. `encerrar` gravou `agora + 7 dias`; refazer a
+     *   conta nesta consulta daria duas fontes para o mesmo prazo, e a segunda
+     *   seria a que ninguem revisita quando o numero mudar. `reopen_deadline`
+     *   nulo (caso encerrado antes de a coluna passar a ser gravada) nao
+     *   satisfaz a comparacao, e isso e o certo: prazo que ninguem gravou nao
+     *   e prazo em aberto.
+     * - `NOT EXISTS (... outro caso aberto do mesmo pet)` -- o indice unico
+     *   parcial `lost_cases_um_aberto_por_pet` imporia isso de todo jeito, mas
+     *   como VIOLACAO, que chegaria a borda como 500. Como predicado ele chega
+     *   como zero linhas, e o servico o distingue dos outros tres relendo o
+     *   caso. A subconsulta carrega `id <> :caso` porque o proprio caso
+     *   ainda nao esta aberto neste instante -- ele e justamente o que esta
+     *   sendo reaberto.
+     *
+     * **As tres colunas do encerramento voltam a `NULL`, e nao e escolha de
+     * estilo**: o `CHECK lost_cases_encerrado_tem_desfecho` exige
+     * `closure_outcome IS NULL AND closed_at IS NULL` para `status = 'open'`,
+     * nos dois sentidos. Deixar o desfecho gravado num caso aberto nao e um
+     * resto inofensivo -- o banco recusa a linha. `closure_channel` e
+     * `closure_note` saem pelo mesmo motivo de produto: eles descrevem um
+     * encerramento que a pessoa acabou de dizer que nao aconteceu, e o
+     * `CHECK lost_cases_canal_so_com_reencontro` amarra o canal ao desfecho.
+     * `reopen_deadline` tambem zera: ele e o prazo DAQUELE encerramento.
+     */
+    async reabrir(entrada): Promise<CasoGravado | null> {
+      const r = await sql<LinhaDoCaso>`
+        UPDATE lost_cases
+           SET status = 'open',
+               closed_at = NULL,
+               closure_outcome = NULL,
+               closure_channel = NULL,
+               closure_note = NULL,
+               reopen_deadline = NULL
+         WHERE id = ${entrada.caso}
+           AND owner_user_id = ${entrada.dono}
+           AND status <> 'open'
+           AND reopen_deadline > ${new Date(Number(entrada.agora))}
+           AND NOT EXISTS (
+                 SELECT 1 FROM lost_cases outro
+                  WHERE outro.pet_id = lost_cases.pet_id
+                    AND outro.id <> lost_cases.id
+                    AND outro.status = 'open'
+               )
         RETURNING ${COLUNAS}
       `.execute(db);
       const linha = r.rows[0];
@@ -466,6 +535,34 @@ function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
 }
 
 /**
+ * O RELATOR DO ACHADO AINDA TEM CONTA HABILITADA?
+ *
+ * Decisao do cliente de 17/10: conta desabilitada "nao e mais encontrada em
+ * nenhuma pagina ou funcionalidade". O candidato e a unica superficie em que o
+ * achado de UMA pessoa aparece na tela de OUTRA -- o tutor le o que o relator
+ * escreveu (cidade, bairro, observacao, instante) para dizer "e o meu pet".
+ * Todas as outras leituras de `found_reports` sao do proprio relator
+ * (`reporter_user_id = :dono`) ou do achador sem conta (`finder_token_hash`), e
+ * a do proprio relator ja e inalcancavel: `autenticar()` passa por
+ * `buscarContaPorId`, que exige `deleted_at is null`, e a conta desabilitada
+ * recebe 401 em qualquer rota autenticada.
+ *
+ * `conta_habilitada` (migracao `20261017000013`) e nao um `innerJoin('users')`:
+ * `reporter_user_id` e NULO no achado do achador sem conta, que e o caminho
+ * normal da plaquinha, e uma juncao interna apagaria esses achados da lista do
+ * tutor em silencio. A funcao devolve verdadeiro para nulo.
+ *
+ * CONSEQUENCIA MEDIDA, e ela vale nas TRES consultas de proposito: se o relator
+ * desabilita a conta depois de ter sido decidido, o reenvio da fila offline
+ * (`construtorDoCandidatoDecidido`, criterio 7) deixa de achar a linha e
+ * responde como candidato inexistente em vez de repetir a resposta anterior.
+ * Preferi isso a manter o candidato vivo em uma das tres: a lista, a escrita da
+ * decisao e a releitura precisam concordar sobre quem existe, ou a tela mostra
+ * um candidato que a decisao recusa.
+ */
+const RELATOR_HABILITADO = sql<boolean>`conta_habilitada(found_reports.reporter_user_id)`;
+
+/**
  * A escrita da decisão, como consulta ainda não executada.
  *
  * ## A autorização é `lost_cases.owner_user_id = :dono`, e ela está AQUI
@@ -519,6 +616,7 @@ export function construtorDaDecisaoDoCandidato(
     .where('match_candidates.status', '=', 'suggested')
     .where('lost_cases.owner_user_id', '=', entrada.dono)
     .where('lost_cases.status', '=', 'open')
+    .where(RELATOR_HABILITADO)
     .returning([
       ...COLUNAS_DO_CANDIDATO,
       'lost_cases.pet_id as pet_id',
@@ -560,7 +658,8 @@ export function construtorDoCandidatoDecidido(
     .where('match_candidates.id', '=', candidato)
     .where('match_candidates.case_id', '=', caso)
     .where('match_candidates.status', '<>', 'suggested')
-    .where('lost_cases.owner_user_id', '=', dono);
+    .where('lost_cases.owner_user_id', '=', dono)
+    .where(RELATOR_HABILITADO);
 }
 
 /**
@@ -623,6 +722,7 @@ export function construtorDosCandidatosDoCaso(
     .where('match_candidates.case_id', '=', caso)
     .where('lost_cases.owner_user_id', '=', dono)
     .where('pets.deleted_at', 'is', null)
+    .where(RELATOR_HABILITADO)
     .orderBy('match_candidates.score', 'desc')
     .orderBy('match_candidates.id', 'desc')
     .limit(pagina.limit);

@@ -18,7 +18,11 @@ describe('hosts externos do painel', () => {
   });
 
   it('o mapa saiu do backoffice (decisao de 01/10): nenhum host de tiles na configuracao', () => {
-    expect(Object.keys(HOSTS_PADRAO)).toEqual(['VITE_URL_DO_SCRIPT_DO_CAPTCHA']);
+    // Lista FECHADA, e nao so "nao tem tiles": host novo aqui pede olhar a
+    // CSP da borda. O do Instagram entrou em 17/10 (exemplo do campo de
+    // Instagram do encontro, `EXEMPLO_DO_INSTAGRAM`), e nao tem relacao com o
+    // mapa que saiu em 01/10.
+    expect(Object.keys(HOSTS_PADRAO)).toEqual(['VITE_URL_DO_SCRIPT_DO_CAPTCHA', 'VITE_URL_DO_PERFIL_DO_INSTAGRAM']);
     expect(JSON.stringify(HOSTS_PADRAO)).not.toMatch(/openstreetmap/);
     expect(() => hostsExternos({ VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'https://u:p@exemplo.test/x.js' })).toThrow(/usuario/);
   });

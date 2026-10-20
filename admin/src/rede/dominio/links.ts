@@ -86,6 +86,8 @@ export {
   LIMITE_DO_SITE,
   MENSAGEM_DO_INSTAGRAM,
   MENSAGEM_DO_SITE,
+  mensagemDoInstagram,
+  mensagemDoSite,
   recusaDoInstagram,
   recusaDoSite,
   type CodigoDoInstagram,

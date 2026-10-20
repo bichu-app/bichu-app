@@ -29,6 +29,7 @@ import type { AbsoluteUrl, OpaqueToken } from '../../../shared/types/brands.js';
 import { INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { IdentityRepository } from '../ports/identity-repository.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
@@ -60,34 +61,11 @@ function naoDeveriaTerChegado(nome: string): never {
 
 /** Toda porta de escrita e de leitura recusa: o caminho não pode chegar a nenhuma. */
 function repositorioQueRecusaTudo(): IdentityRepository {
-  return {
-    criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
-    criarTokenDeVerificacao: () => naoDeveriaTerChegado('criarTokenDeVerificacao'),
-    gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),
-    buscarContaPorEmail: () => naoDeveriaTerChegado('buscarContaPorEmail'),
-    buscarContaPorId: () => naoDeveriaTerChegado('buscarContaPorId'),
-    buscarRefreshPorHash: () => naoDeveriaTerChegado('buscarRefreshPorHash'),
-    revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
-    revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),
-    rotacionar: () => naoDeveriaTerChegado('rotacionar'),
-    atualizarPerfil: () => naoDeveriaTerChegado('atualizarPerfil'),
-    buscarCredencialLocalPorEmail: () => naoDeveriaTerChegado('buscarCredencialLocalPorEmail'),
-    regravarCredencial: () => naoDeveriaTerChegado('regravarCredencial'),
-    registrarLogin: () => naoDeveriaTerChegado('registrarLogin'),
-    invalidarSessoes: () => naoDeveriaTerChegado('invalidarSessoes'),
-    consumirTokenDeVerificacao: () => naoDeveriaTerChegado('consumirTokenDeVerificacao'),
-    conferirTokenDeVerificacao: () => naoDeveriaTerChegado('conferirTokenDeVerificacao'),
-    invalidarTokensPendentes: () => naoDeveriaTerChegado('invalidarTokensPendentes'),
-    marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
-    criarJanelaDeReautenticacao: () => naoDeveriaTerChegado('criarJanelaDeReautenticacao'),
-    consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
-    registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
-    contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
-    expurgarConta: () => naoDeveriaTerChegado('expurgarConta'),
-    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
-    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
-    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
-  };
+  return new (class extends RepositorioQueRecusaTudo {
+    protected recusar(nome: string): never {
+      return naoDeveriaTerChegado(nome);
+    }
+  })();
 }
 
 interface Bancada {
@@ -153,7 +131,13 @@ function montar(): Bancada {
 async function recusaDe(email: string): Promise<AppError> {
   const bancada = montar();
   try {
-    await bancada.servico.cadastrar({ email, password: SENHA_BOA, displayName: 'Tutora' }, CONTEXTO);
+    // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
+    // e longe do corte: o que estes testes medem e o ENDERECO, e idade colada
+    // no limite faria a suite comecar a falhar sozinha com o tempo.
+    await bancada.servico.cadastrar(
+      { email, password: SENHA_BOA, birthDate: '1990-05-12', displayName: 'Tutora' },
+      CONTEXTO,
+    );
   } catch (erro) {
     assert.ok(erro instanceof AppError, 'o serviço fala por AppError, e não por Error cru');
     assert.deepEqual(bancada.eventos, [], 'nenhum evento de trilha para uma conta que não nasceu');
@@ -248,7 +232,12 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     const bancada = montar();
     await assert.rejects(
       bancada.servico.cadastrar(
-        { email: 'ana.paula+bichu@exemplo.com.br', password: SENHA_BOA, displayName: 'Tutora' },
+        {
+          email: 'ana.paula+bichu@exemplo.com.br',
+          password: SENHA_BOA,
+          birthDate: '1990-05-12',
+          displayName: 'Tutora',
+        },
         CONTEXTO,
       ),
       (erro: unknown) => {

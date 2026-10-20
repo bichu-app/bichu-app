@@ -133,6 +133,9 @@ void describe('processamento da imagem de catalogo', () => {
     await processarImagemDeCatalogo(b.deps, { catalog_image_id: 'c7' });
     assert.equal(b.eventos.length, 2);
     assert.match(b.eventos[0] ?? '', /^put:products\/card\//);
-    assert.equal(b.eventos[1], `pronta:${(b.eventos[0] ?? '').slice(4)}`);
+    // `thumb` e `banner` saem como `-` porque a imagem de PRODUTO tem uma
+    // derivada por decisão — é a forma que a bancada acima registra, e o `-`
+    // aqui é o que distingue isso de "imagem de encontro sem miniatura".
+    assert.equal(b.eventos[1], `pronta:${(b.eventos[0] ?? '').slice(4)}:-:-`);
   });
 });

@@ -252,8 +252,13 @@ class BarraDeListagem extends StatefulWidget {
   /// exato caso que a secao de lista vazia manda ela ficar -- a pessoa buscou
   /// e nao sobrou nada.
   ///
-  /// Quem passa `true` desenha [CampoDeBuscaDaListagem] onde quiser, e decide
-  /// se ele aparece com [BarraDeListagem.desenha].
+  /// Quem passa `true` desenha [LinhaDeBuscaDaListagem] onde quiser, e decide
+  /// se ela aparece com [BarraDeListagem.desenha].
+  ///
+  /// **Desde 18/10/2026 isto leva o GATILHO embora junto com o campo.** Os
+  /// dois viraram uma linha so por pedido do cliente (*"colocar na frente do
+  /// campo de busca e nao embaixo"*), e a linha nao pode se partir entre dois
+  /// lugares da tela: com `true`, a barra nao desenha mais o gatilho.
   final bool buscaAcima;
 
   /// Ha pelo menos um controle com desfecho.
@@ -345,6 +350,43 @@ class BarraDeListagem extends StatefulWidget {
   }
 }
 
+/// Abre a folha de filtro e ordem **sem a barra**.
+///
+/// ## Por que ela é pública, e quando usar
+///
+/// A barra só se desenha quando há lista (`BarraDeListagem.desenha` responde
+/// falso com `total: 0` e nenhum recorte aplicado), e essa regra está certa: o
+/// controle de recorte sobre o nada é controle sem desfecho.
+///
+/// Há um caso em que ela deixa de valer, e ele nasceu com a listagem pública de
+/// perdidos: quando a folha tem um [CampoDeTextoDoFiltro] **obrigatório**, ela
+/// não é o que recorta a lista — ela é o que FAZ a lista existir. O visitante
+/// sem conta não tem cidade, a rota não é chamada, `total` é zero, a barra não
+/// nasce, e sem esta função ele leria a linha única sem caminho nenhum para
+/// sair dela. Esse é o beco que o critério 2 da BICHUS-62 proíbe.
+///
+/// Quem chama desenha o próprio controle (um botão, no corpo) e passa os mesmos
+/// três objetos que daria à barra. **A folha é a mesma**, e isso é o ponto: uma
+/// segunda folha divergiria da primeira na primeira edição.
+Future<void> abrirFolhaDeFiltros(
+  BuildContext context, {
+  required void Function(EscolhaDaFolha escolha) aoAplicar,
+  ControleDeFiltro? filtro,
+  ControleDeOrdenacao? ordenacao,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _FolhaDeFiltros(
+      filtro: filtro,
+      ordenacao: ordenacao,
+      aoAplicar: aoAplicar,
+    ),
+  );
+}
+
 class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
   SlotDaBarraDeListagem? _slot;
 
@@ -364,7 +406,27 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     // A lista saiu da tela: o controle da `AppBar` sai junto. Sem isto a
     // barra de topo guardaria um `Filtros` que nao abre mais nada --
     // exatamente o toque sem desfecho que o criterio 2 proibe.
-    _slot?.publicar(null);
+    //
+    // **Depois do quadro, e nao aqui dentro** -- a mesma regra que o `build`
+    // logo abaixo ja seguia, e que este metodo violava. `dispose` roda com a
+    // arvore TRAVADA: mexer no `ValueNotifier` que a casca escuta marca esse
+    // ancestral sujo durante a desmontagem, e o Flutter afirma contra isso com
+    // `setState() or markNeedsBuild() called when widget tree was locked`.
+    //
+    // O notificador e da CASCA e vive mais que este estado, entao limpar
+    // depois do quadro e seguro; o `try` cobre o unico caso em que ele nao
+    // vive mais -- o app inteiro sendo descartado no mesmo quadro --, e ai nao
+    // ha barra de topo para limpar.
+    final slot = _slot;
+    if (slot != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          slot.publicar(null);
+        } on FlutterError {
+          // A casca foi embora junto: nao ha o que limpar.
+        }
+      });
+    }
     super.dispose();
   }
 
@@ -375,13 +437,13 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
   /// vazia e pior do que um que some com ela.
   AcaoDeListagem? _acao(BuildContext context) {
     final b = widget;
-    if (!b._temFolha) return null;
-    if (b.total == 0 && !b._recorteAtivo) return null;
-    final ativos = b.filtro?.ativos ?? 0;
-    return AcaoDeListagem(
-      rotulo: b._rotuloDaFolha,
-      distintivo: ativos == 0 ? null : '$ativos',
-      aoTocar: () => b._abrirFolha(context),
+    return acaoDeRecorte(
+      context,
+      total: b.total,
+      busca: b.busca,
+      filtro: b.filtro,
+      ordenacao: b.ordenacao,
+      aoAplicar: b.aoAplicar,
     );
   }
 
@@ -392,11 +454,25 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     // sujo durante a construcao, que e o erro que o Flutter afirma contra.
     // `AcaoDeListagem` compara por VALOR (e ignora o fecho), entao publicar a
     // cada quadro nao reconstroi a casca -- sem isso isto seria um laco.
+    // **O CONTROLE DE RECORTE VOLTOU PARA O CORPO (19/10).**
+    //
+    // Ele subiu para o slot da `AppBar` em 17/10 e voltou agora, por decisao
+    // do cliente: *"qualquer coisa, pense em outro lugar para colocar o filtro
+    // da pagina"*. O lugar e a casa original dele -- busca, filtro e ordenacao
+    // no topo do CORPO da tela, nunca na barra.
+    //
+    // A publicacao continua existindo e passou a publicar **sempre nulo**: e
+    // ela que garante que nenhuma `AppBar` fique com um `Filtros` pendurado
+    // de uma lista que saiu da tela. O mecanismo nao foi arrancado porque ele
+    // tambem e a limpeza; o que mudou foi o que ele entrega.
+    //
+    // O que isso libera: os 64 dp do slot, que e o que faz o sino da barra de
+    // topo caber ao lado da foto.
     final acao = _acao(context);
     final slot = _slot;
     if (slot != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) slot.publicar(acao);
+        if (mounted) slot.publicar(null);
       });
     }
 
@@ -412,15 +488,41 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **O campo ocupa a largura TOTAL, sempre** (decisao do cliente,
-        // 17/10/2026). Ele nao divide mais a linha com icone nenhum: os dois
-        // que ficavam aqui viraram um so e subiram para a `AppBar`. Nao ha
-        // `Row`, entao nao ha o que encolher -- nem com o teclado aberto, nem
-        // em 320 dp.
-        if (comCampo) ...<Widget>[
-          CampoDeBuscaDaListagem(busca: b.busca!),
-          const SizedBox(height: BichuEspaco.e2),
-        ],
+        // A LINHA DE BUSCA: **o gatilho de recorte NA FRENTE do campo**, na
+        // mesma linha (decisao do cliente, 18/10/2026): *"os campos de filtro
+        // nao devem vir com o texto, apenas com o icone, e colocar na frente
+        // do campo de busca e nao embaixo"*.
+        //
+        // Isto REVERTE duas coisas de 17 e 19/10, e as duas reversoes sao
+        // dele: o campo em largura TOTAL (ele agora divide a linha com um
+        // alvo de 48 dp) e o gatilho com rotulo pintado logo ABAIXO da busca
+        // (ele agora e so o glifo, e vem antes). Quem ler isto em tres meses:
+        // nenhuma das reversoes e defeito.
+        //
+        // Quem desenha a linha e [LinhaDeBuscaDaListagem], e nao esta `Row`
+        // direto, porque a `Rede` e a listagem publica de perdidos a desenham
+        // FORA da barra ([buscaAcima]) e precisam da MESMA linha.
+        if (comCampo)
+          LinhaDeBuscaDaListagem(
+            total: b.total,
+            busca: b.busca!,
+            filtro: b.filtro,
+            ordenacao: b.ordenacao,
+            aoAplicar: b.aoAplicar,
+          ),
+        // **SEM CAMPO AQUI, o gatilho fica sozinho e continua no corpo.**
+        //
+        // Com [buscaAcima] a tela ja desenhou a linha inteira (campo mais
+        // gatilho) acima de si, e repetir o gatilho aqui o faria aparecer
+        // duas vezes. Sem busca nenhuma, nao ha linha a dividir: o gatilho e
+        // o unico controle, e ele se alinha a esquerda.
+        if (!comCampo && !b.buscaAcima && acao != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GatilhoDeRecorteNoCorpo(acao: acao),
+          ),
+        if (comCampo || (!b.buscaAcima && acao != null))
+          const SizedBox(height: BichuEspaco.e3),
         Text(
           b._resumo,
           style: textos.bodySmall?.copyWith(color: cores.textSecondary),
@@ -558,6 +660,7 @@ class GrupoDeFiltro {
     required this.selecionado,
     this.nota,
     this.dependeDe,
+    this.codigoPadrao,
   });
 
   /// O identificador que volta em [ControleDeFiltro.aoAplicar].
@@ -568,6 +671,41 @@ class GrupoDeFiltro {
 
   /// O codigo **aplicado**, ou nulo para "qualquer um".
   final String? selecionado;
+
+  /// O codigo que E a ausencia de recorte, quando o grupo tem um.
+  ///
+  /// ## Por que ele existe (19/10/2026)
+  ///
+  /// Quase todo grupo desta folha expressa "nenhum recorte" por
+  /// `selecionado: null`, e nada mais e preciso. **O grupo `Quando` da `Rede`
+  /// nao consegue:** a lista esta SEMPRE numa janela de tempo -- ela e a
+  /// agenda do que vem, ou a dos encerrados --, e `null` significaria "janela
+  /// nenhuma", que nao e um estado que a rota tenha.
+  ///
+  /// Quando as tres abas da agenda viraram filtro, `Próximos` passou a ser uma
+  /// opcao do grupo, e marca-la por padrao -- que e a verdade da lista --
+  /// fazia [ControleDeFiltro.ativos] contar **1**. As consequencias foram
+  /// MEDIDAS numa agenda vazia e sem recorte nenhum:
+  ///
+  ///   - o distintivo da barra nascia com `1` sobre uma lista que ninguem
+  ///     filtrou;
+  ///   - `_recorteAtivo` virava verdadeiro, a barra passava a ser desenhada
+  ///     sobre a lista vazia, e o estado vazio trocava de frase: em vez de
+  ///     *"A Rede ainda nao tem eventos"* a tela dizia *"Nenhum evento com
+  ///     esses filtros"* e oferecia `Limpar filtro` -- um botao que nao tinha
+  ///     o que limpar.
+  ///
+  /// Com [codigoPadrao], a pastilha da verdade da lista fica MARCADA e **nao
+  /// conta como recorte**. Quem desmarca volta ao mesmo lugar, e o distintivo
+  /// so acende quando ha recorte de verdade.
+  ///
+  /// **Nulo nos outros grupos, e eles nao mudam uma linha:** sem padrao
+  /// declarado, `selecionado != null` continua sendo a conta inteira.
+  final String? codigoPadrao;
+
+  /// Se a escolha atual deste grupo e um recorte DE VERDADE.
+  bool get recortaDeFato =>
+      selecionado != null && selecionado != codigoPadrao;
 
   /// Uma linha de explicacao sob o titulo. `Perto` usa para dizer que o nivel
   /// de verificacao e **piso e nao igualdade**, que e a regra do contrato que
@@ -586,6 +724,80 @@ class GrupoDeFiltro {
   final String? dependeDe;
 }
 
+/// Um recorte que a pessoa **digita**, e nao escolhe de uma lista.
+///
+/// ## Por que ele existe, e por que so agora
+///
+/// Toda a folha era de lista fechada, e isso cobria `Perto`, a `Loja` e a
+/// `Rede`: as opcoes delas sao codigos do contrato, e uma lista fechada e a
+/// forma certa de oferecer codigo. A listagem publica de perdidos trouxe o
+/// primeiro recorte que **nao tem lista**: `city` e obrigatoria no contrato e
+/// o aplicativo nao tem de onde tirar uma lista de cidades -- nao ha operacao
+/// que as devolva, nao ha geocodificacao (ADR-0006) e montar a lista a partir
+/// dos casos que voltaram ofereceria um recorte diferente a cada pagina.
+///
+/// Deslogado, este campo e a **unica** fonte de cidade: sem ele a rota nao e
+/// chamada, e a secao em que o aplicativo abre fica vazia para quem nao tem
+/// conta -- que e exatamente quem a vizinhanca precisa que veja a lista.
+///
+/// ## Ele obedece as mesmas duas regras da folha
+///
+/// 1. **Nada se aplica sozinho.** Digitar nao chama a rota; o `Aplicar` manda,
+///    junto com as pastilhas, numa chamada so. Por isso o valor digitado mora
+///    no estado da folha e nao num `TextEditingController` de quem chama.
+/// 2. **O botao habilitado E o aviso de pendencia.** Nao ha selo e nao ha
+///    faixa; com [obrigatorio] vazio o `Aplicar` nasce desabilitado e o texto
+///    de [textoDeValidacao] aparece sob o campo.
+///
+/// O valor volta em [EscolhaDaFolha.filtros], na mesma chave: para quem recebe
+/// a escolha, texto digitado e pastilha escolhida sao a mesma coisa.
+class CampoDeTextoDoFiltro {
+  const CampoDeTextoDoFiltro({
+    required this.chave,
+    required this.rotulo,
+    required this.valor,
+    this.obrigatorio = false,
+    this.textoDeValidacao,
+    this.limite,
+    this.minimoDeCaracteres = 2,
+    this.exemplo,
+  });
+
+  /// O identificador que volta em [EscolhaDaFolha.filtros].
+  final String chave;
+
+  /// O rotulo, que e tambem o **nome acessivel** do campo: `BichuField` o
+  /// publica com `rotuloVisivel`, e campo com dica e sem rotulo e campo mudo.
+  final String rotulo;
+
+  /// O valor **aplicado** na lista agora. Nulo quando nao ha.
+  final String? valor;
+
+  /// A lista nao existe sem este recorte. Vazio desabilita o `Aplicar`.
+  final bool obrigatorio;
+
+  /// A unica linha de texto que este campo mostra alem do rotulo, e so quando
+  /// o valor nao serve. **Nao e texto de apoio**: o cliente mandou remover os
+  /// de apoio em 18/10/2026, e mensagem de validacao nao e um deles.
+  final String? textoDeValidacao;
+
+  /// O teto de caracteres, que e o do contrato e nao uma escolha da tela.
+  final int? limite;
+
+  /// O piso que o valor precisa alcancar para o `Aplicar` habilitar.
+  final int minimoDeCaracteres;
+
+  /// A dica DENTRO do campo (`BichuField.exemplo`).
+  final String? exemplo;
+
+  /// O valor serve para ir a rota.
+  bool serve(String digitado) {
+    final limpo = digitado.trim();
+    if (limpo.isEmpty) return !obrigatorio;
+    return limpo.length >= minimoDeCaracteres;
+  }
+}
+
 /// Os grupos de filtro da folha.
 ///
 /// **Nao carrega callback.** Quem aplica e a folha inteira, por
@@ -593,14 +805,32 @@ class GrupoDeFiltro {
 /// com ele cada toque numa pastilha fechava a folha e recarregava a lista --
 /// que e exatamente a aplicacao automatica que o cliente recusou.
 class ControleDeFiltro {
-  const ControleDeFiltro({required this.grupos});
+  const ControleDeFiltro({
+    required this.grupos,
+    this.campos = const <CampoDeTextoDoFiltro>[],
+  });
 
   final List<GrupoDeFiltro> grupos;
 
-  int get ativos => grupos.where((g) => g.selecionado != null).length;
+  /// Os recortes que a pessoa DIGITA. Vazio nas tres telas que existiam antes
+  /// deles, e por isso o parametro tem padrao: nenhuma delas muda uma linha.
+  final List<CampoDeTextoDoFiltro> campos;
 
-  /// Ha pelo menos um grupo com opcao. Sem isto o icone nao nasce.
-  bool get temOpcao => grupos.any((g) => g.opcoes.isNotEmpty);
+  /// **O campo obrigatorio NAO conta como filtro ativo.** Ele e a pergunta que
+  /// a rota exige para responder qualquer coisa, e nao um recorte que a pessoa
+  /// escolheu: contado, o distintivo da barra nasceria com `1` numa lista que
+  /// ninguem filtrou.
+  int get ativos =>
+      grupos.where((g) => g.recortaDeFato).length +
+      campos
+          .where((c) =>
+              !c.obrigatorio && (c.valor?.trim().isNotEmpty ?? false))
+          .length;
+
+  /// Ha pelo menos um grupo com opcao, ou um campo para digitar. Sem isto o
+  /// icone nao nasce.
+  bool get temOpcao =>
+      grupos.any((g) => g.opcoes.isNotEmpty) || campos.isNotEmpty;
 }
 
 /// A ordem da lista, e as ordens que a rota aceita.
@@ -829,6 +1059,206 @@ class SlotDaBarraDeListagem extends InheritedWidget {
 /// `rotulo` e `aoTocar` sao exigidos: um `IconButton` sem rotulo e anunciado
 /// como "botão" e nada mais (SC 4.1.2), e um com `onPressed: null` e o
 /// controle mudo que o criterio 2 proibe.
+/// O gatilho de filtro e ordem, **no corpo da tela**.
+///
+/// Ele existe desde 19/10, quando o cliente mandou o filtro sair da barra de
+/// topo: *"qualquer coisa, pense em outro lugar para colocar o filtro da
+/// pagina"*. O lugar e a casa original dele -- busca, filtro e ordenacao no
+/// topo do corpo --, e a saida da barra foi o que liberou os 64 dp de que o
+/// sino precisava.
+///
+/// **Ele nao substitui [BotaoDeAcaoDaListagem], que continua existindo** para
+/// a tela que ainda quiser um controle de canto; o que mudou e quem a
+/// `BarraDeListagem` desenha por padrao.
+///
+/// **SO O ICONE, SEM ROTULO PINTADO, E NA FRENTE DA BUSCA (18/10/2026).**
+///
+/// Pedido literal do cliente: *"os campos de filtro nao devem vir com o texto,
+/// apenas com o icone, e colocar na frente do campo de busca e nao embaixo"*.
+/// Isto REVERTE o rotulo pintado que este gatilho tinha desde 19/10, e a
+/// reversao e dele.
+///
+/// O nome acessivel nao se perdeu com o texto: ele vive no `tooltip`, que e
+/// como este app sempre declarou nome de controle de icone (o gatilho da
+/// gaveta e a foto da conta fazem igual), e e por isso que os portoes o
+/// procuram por `byTooltip`. O rotulo longo continua carregando o estado por
+/// extenso ("Filtrar e ordenar, 2 filtros ativos"), e agora ele e a UNICA
+/// forma de o estado ser anunciado -- por isso o distintivo com o numero
+/// continua pintado sobre o glifo, para quem ve.
+///
+/// A medida e **48 x 48**, quadrada: o piso do SC 2.5.8, e o mesmo do campo de
+/// busca ao lado. Nao e o piso critico de 64 da barra de topo -- ali o
+/// controle disputa a borda com o titulo e com o polegar que segura o
+/// aparelho; aqui ele esta no corpo, com folga em volta.
+class GatilhoDeRecorteNoCorpo extends StatelessWidget {
+  const GatilhoDeRecorteNoCorpo({required this.acao, super.key});
+
+  final AcaoDeListagem acao;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final distintivo = acao.distintivo;
+
+    return Tooltip(
+      message: acao.rotulo,
+      child: OutlinedButton(
+        onPressed: acao.aoTocar,
+        // Quadrado e TRAVADO em 48: sem `fixedSize` o `OutlinedButton` herda
+        // a largura minima de 64 dp do tema e rouba 16 dp da busca.
+        // `padding: zero` porque nao ha mais texto para afastar da borda.
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.square(BichuAlvoDeToque.min),
+          fixedSize: const Size.square(BichuAlvoDeToque.min),
+          padding: EdgeInsets.zero,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            const Icon(Icons.tune),
+            if (distintivo != null)
+              Positioned(
+                right: -BichuEspaco.e2,
+                top: -BichuEspaco.e2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BichuEspaco.e1,
+                  ),
+                  constraints: const BoxConstraints(minWidth: BichuEspaco.e4),
+                  decoration: BoxDecoration(
+                    color: cores.primary,
+                    borderRadius: BorderRadius.circular(BichuRaio.full),
+                  ),
+                  child: Text(
+                    distintivo,
+                    textAlign: TextAlign.center,
+                    // O distintivo repete o que o `tooltip` ja diz, e dois
+                    // anuncios do mesmo estado no mesmo controle e ruido.
+                    semanticsLabel: '',
+                    style: textos.labelSmall?.copyWith(
+                      color: cores.onActionFill,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A LINHA DE BUSCA DA LISTAGEM: o gatilho de recorte **na frente** do campo.
+///
+/// Ela existe pelo pedido do cliente de 18/10/2026 -- *"colocar na frente do
+/// campo de busca e nao embaixo"* --, e e publica pela mesma razao que
+/// [CampoDeBuscaDaListagem] e: a `Rede` e a listagem publica de perdidos
+/// desenham a busca FORA da barra (ver [BarraDeListagem.buscaAcima]), acima
+/// das abas e do reforco da secao, e o gatilho tem de subir junto. Duas copias
+/// desta `Row` divergiriam na primeira edicao.
+///
+/// Quem passa [BarraDeListagem.buscaAcima] desenha ESTA linha, e nao
+/// [CampoDeBuscaDaListagem] sozinho: a barra para de desenhar o gatilho nesse
+/// arranjo, justamente para ele nao aparecer duas vezes.
+///
+/// O gatilho **nao nasce** quando nao ha folha a abrir, nem quando a lista esta
+/// vazia sem recorte: a decisao e a mesma de [BarraDeListagem.desenha], e sai
+/// do mesmo lugar.
+class LinhaDeBuscaDaListagem extends StatelessWidget {
+  const LinhaDeBuscaDaListagem({
+    required this.total,
+    required this.busca,
+    super.key,
+    this.filtro,
+    this.ordenacao,
+    this.aoAplicar,
+  });
+
+  final int total;
+  final ControleDeBusca busca;
+  final ControleDeFiltro? filtro;
+  final ControleDeOrdenacao? ordenacao;
+  final void Function(EscolhaDaFolha escolha)? aoAplicar;
+
+  @override
+  Widget build(BuildContext context) {
+    final acao = acaoDeRecorte(
+      context,
+      total: total,
+      busca: busca,
+      filtro: filtro,
+      ordenacao: ordenacao,
+      aoAplicar: aoAplicar,
+    );
+
+    return Row(
+      // O gatilho e o campo tem alturas proprias (48 dp e a do `BichuField`),
+      // e `center` e o que mantem o glifo na linha do texto da busca.
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        // **A BUSCA VEM PRIMEIRO, E O GATILHO FICA A DIREITA (19/10/2026).**
+        //
+        // **Isto REVERTE o pedido dele de 18/10**, que era o contrario
+        // (*"colocar na frente do campo de busca e nao embaixo"*), e a
+        // reversao e DELE, do dia seguinte. Nao e defeito, nao e descuido e
+        // nao e volta ao arranjo de 17/10: o gatilho continua **so icone**,
+        // continua **na mesma linha** da busca e continua sendo um alvo de
+        // 48 dp -- o que mudou foi so de que lado da linha ele fica.
+        //
+        // **A INVERSAO MORA NESTA UNICA `Row`, e isso foi conferido.** As
+        // cinco telas que usam o padrao de listagem chegam todas aqui: tres
+        // pelo ramo `comCampo` de [BarraDeListagem] (`lista_do_diretorio`,
+        // `minhas_indicacoes`, `vitrine_da_loja`) e duas desenhando esta
+        // linha direto, por `buscaAcima` (`lista_de_perdidos`,
+        // `agenda_da_rede`). Nenhuma delas tem copia desta ordem, e por isso
+        // nenhuma mudou de linha para esta reversao.
+        //
+        // `Expanded` ANTES do gatilho: a largura que o campo recebe e a mesma
+        // de antes -- a linha continua dividida entre um alvo de 48 dp, 8 dp
+        // de respiro e o resto --, e o portao de larguras mede isso nas cinco
+        // larguras suportadas.
+        Expanded(child: CampoDeBuscaDaListagem(busca: busca)),
+        if (acao != null) ...<Widget>[
+          const SizedBox(width: BichuEspaco.e2),
+          GatilhoDeRecorteNoCorpo(acao: acao),
+        ],
+      ],
+    );
+  }
+}
+
+/// O que o gatilho de recorte desenha agora, ou nulo quando nao ha folha.
+///
+/// **Uma verdade so**: [BarraDeListagem] e [LinhaDeBuscaDaListagem] chamam
+/// esta funcao, e nao cada uma a sua copia da decisao. Nulo quando nao ha
+/// folha com desfecho, e nulo quando a lista esta vazia sem recorte -- filtrar
+/// o nada e o toque sem desfecho que o criterio 2 proibe.
+AcaoDeListagem? acaoDeRecorte(
+  BuildContext context, {
+  required int total,
+  ControleDeBusca? busca,
+  ControleDeFiltro? filtro,
+  ControleDeOrdenacao? ordenacao,
+  void Function(EscolhaDaFolha escolha)? aoAplicar,
+}) {
+  final b = BarraDeListagem(
+    total: total,
+    busca: busca,
+    filtro: filtro,
+    ordenacao: ordenacao,
+    aoAplicar: aoAplicar,
+  );
+  if (!b._temFolha) return null;
+  if (total == 0 && !b._recorteAtivo) return null;
+  final ativos = filtro?.ativos ?? 0;
+  return AcaoDeListagem(
+    rotulo: b._rotuloDaFolha,
+    distintivo: ativos == 0 ? null : '$ativos',
+    aoTocar: () => b._abrirFolha(context),
+  );
+}
+
 class BotaoDeAcaoDaListagem extends StatelessWidget {
   const BotaoDeAcaoDaListagem({required this.acao, super.key});
 
@@ -944,6 +1374,10 @@ class _FolhaDeFiltros extends StatefulWidget {
   List<GrupoDeFiltro> get grupos =>
       filtro?.grupos ?? const <GrupoDeFiltro>[];
 
+  /// Os recortes digitados. Vazio nas telas que so tem lista fechada.
+  List<CampoDeTextoDoFiltro> get campos =>
+      filtro?.campos ?? const <CampoDeTextoDoFiltro>[];
+
   /// A folha ordena quando ha mais de uma ordem para escolher.
   bool get ordena => ordenacao?.temEscolha ?? false;
 
@@ -961,9 +1395,44 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// folha nao pinta marcada uma ordem em que a lista nao esta.
   late String? _ordemPendente = widget.ordenacao?.efetiva;
 
-  /// O que esta aplicado na lista agora.
+  /// Um controlador por campo digitado, criado com o valor APLICADO.
+  ///
+  /// Os controladores sao da folha e nao de quem chama, pela mesma razao por
+  /// que `_pendente` e: digitar nao aplica, e um controlador de fora faria o
+  /// texto da folha e o recorte da lista serem a mesma variavel -- que e a
+  /// aplicacao automatica que o cliente recusou.
+  late final Map<String, TextEditingController> _digitado =
+      <String, TextEditingController>{
+    for (final c in widget.campos)
+      c.chave: TextEditingController(text: c.valor ?? ''),
+  };
+
+  @override
+  void dispose() {
+    for (final c in _digitado.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /// O texto de cada campo, aparado. Vazio vira nulo: ausencia nao e texto
+  /// vazio, e `''` numa query string e um recorte que o servidor recusa.
+  Map<String, String?> get _textosPendentes => <String, String?>{
+        for (final c in widget.campos)
+          c.chave: _digitado[c.chave]?.text.trim().isEmpty ?? true
+              ? null
+              : _digitado[c.chave]!.text.trim(),
+      };
+
+  /// Todos os campos digitados servem para ir a rota.
+  bool get _camposServem => widget.campos
+      .every((c) => c.serve(_digitado[c.chave]?.text ?? ''));
+
+  /// O que esta aplicado na lista agora -- pastilhas e campos digitados.
   Map<String, String?> get _aplicado => <String, String?>{
         for (final g in widget.grupos) g.chave: g.selecionado,
+        for (final c in widget.campos)
+          c.chave: (c.valor?.trim().isEmpty ?? true) ? null : c.valor!.trim(),
       };
 
   /// Ha diferenca entre o que a folha mostra e o que a lista tem.
@@ -971,14 +1440,23 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// **E este booleano que habilita o `Aplicar`**, e e so ele que avisa que ha
   /// mudanca pendente: o cliente pediu o botao habilitado e nenhum selo.
   bool get _mudou {
+    // **Campo obrigatorio vazio desabilita o `Aplicar` mesmo com mudanca.**
+    // Aplicar um recorte que a rota recusa gastaria uma chamada para voltar
+    // 400, e a pessoa leria uma falha de servidor onde falta um dado dela.
+    if (!_camposServem) return false;
     final aplicado = _aplicado;
+    final textos = _textosPendentes;
+    if (textos.keys.any((c) => textos[c] != aplicado[c])) return true;
     if (_pendente.keys.any((c) => _pendente[c] != aplicado[c])) return true;
     return _ordemPendente != widget.ordenacao?.efetiva;
   }
 
   /// Ha algum FILTRO pendente para o `Limpar` tirar. A ordem nao entra: uma
   /// lista sempre esta em alguma ordem.
-  bool get _temEscolha => _pendente.values.any((v) => v != null);
+  bool get _temEscolha =>
+      _pendente.values.any((v) => v != null) ||
+      widget.campos.any((c) =>
+          !c.obrigatorio && (_digitado[c.chave]?.text.trim().isNotEmpty ?? false));
 
   /// Os grupos desenhados: com opcao, e com o pai ainda no valor aplicado.
   List<GrupoDeFiltro> get _visiveis {
@@ -1007,7 +1485,12 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
 
   void _aplicar() {
     final escolha = EscolhaDaFolha(
-      filtros: Map<String, String?>.unmodifiable(_pendente),
+      // Pastilhas e textos no MESMO mapa: para quem recebe a escolha, recorte
+      // digitado e recorte escolhido sao a mesma coisa.
+      filtros: Map<String, String?>.unmodifiable(<String, String?>{
+        ..._pendente,
+        ..._textosPendentes,
+      }),
       ordem: widget.ordena ? _ordemPendente : null,
     );
     Navigator.of(context).pop();
@@ -1036,6 +1519,37 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
+                    // OS CAMPOS DIGITADOS VEM PRIMEIRO, e nao e ordem
+                    // arbitraria: o campo obrigatorio e a pergunta sem a qual a
+                    // rota nao responde nada. Pastilhas abaixo de um campo
+                    // vazio ofereceriam recortar uma lista que ainda nao
+                    // existe.
+                    for (final campo in widget.campos) ...<Widget>[
+                      BichuField(
+                        // O rotulo e o nome acessivel, e ele fica VISIVEL:
+                        // campo com dica e sem rotulo e campo mudo.
+                        rotulo: campo.rotulo,
+                        controlador: _digitado[campo.chave]!,
+                        exemplo: campo.exemplo,
+                        limite: campo.limite,
+                        opcional: !campo.obrigatorio,
+                        capitalizacao: TextCapitalization.words,
+                        correcaoAutomatica: false,
+                        // A UNICA linha alem do rotulo, e so quando o valor
+                        // nao serve. Nao ha texto de apoio nesta folha.
+                        erro: campo.serve(_digitado[campo.chave]!.text)
+                            ? null
+                            : campo.textoDeValidacao,
+                        // Digitar nao aplica -- ele so repinta o `Aplicar` e a
+                        // mensagem de validacao. Quem aplica e o botao.
+                        aoMudar: (_) => setState(() {}),
+                        // A tecla de confirmacao do teclado NAO aplica: o
+                        // `Aplicar` manda o recorte inteiro, e aplicar pela
+                        // tecla mandaria o recorte pela metade.
+                        acaoDeTeclado: TextInputAction.done,
+                      ),
+                      const SizedBox(height: BichuEspaco.e6),
+                    ],
                     for (final grupo in visiveis) ...<Widget>[
                       Text(grupo.titulo, style: textos.titleMedium),
                       if (grupo.nota != null) ...<Widget>[
@@ -1116,9 +1630,16 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
             // tocada.
             if (_temEscolha)
               TextButton(
-                onPressed: () => setState(
-                  () => _pendente.updateAll((_, _) => null),
-                ),
+                onPressed: () => setState(() {
+                  _pendente.updateAll((_, _) => null);
+                  // **O obrigatorio NAO e limpo.** Limpa-lo desabilitaria o
+                  // proprio `Aplicar` e deixaria a folha sem saida: a pessoa
+                  // tocaria em `Limpar` e descobriria que precisa redigitar a
+                  // cidade para voltar a ter lista.
+                  for (final c in widget.campos) {
+                    if (!c.obrigatorio) _digitado[c.chave]?.clear();
+                  }
+                }),
                 child: const Text(_FolhaDeFiltros.rotuloDeLimpar),
               ),
             const SizedBox(height: BichuEspaco.e2),

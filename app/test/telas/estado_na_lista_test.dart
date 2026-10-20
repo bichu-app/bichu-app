@@ -62,8 +62,43 @@ void main() {
     });
 
     test('esta em ordem alfabetica por NOME', () {
+      // **A comparacao e SEM acento, porque o alfabeto portugues nao separa
+      // `a` de `ã`.**
+      //
+      // `List<String>.sort()` ordena por unidade de UTF-16, e ali `ã` (U+00E3,
+      // 227) vem depois de qualquer letra minuscula. Com esse criterio o
+      // oraculo exigia `Santa Catarina, Sergipe, São Paulo` e
+      // `Pará, Paraná, Paraíba` -- que nao e ordem alfabetica em portugues, e
+      // nao e a ordem em que alguem procura um estado numa lista de 27. A
+      // lista do app esta certa (`São Paulo` antes de `Sergipe`, `Paraíba`
+      // antes de `Paraná`); o errado era a regua.
+      //
+      // E **sem diferenca de caixa**, pela mesma razao: em UTF-16 toda
+      // maiuscula vem antes de toda minuscula, e por isso o criterio cru poria
+      // `Rio Grande do Norte` antes de `Rio de Janeiro` (`G` 71 < `d` 100).
+      // Em portugues `Rio de Janeiro` vem primeiro, porque `d` vem antes de
+      // `g` -- a caixa nao participa da ordem.
+      //
+      // Tirar o acento e a caixa dos dois lados mantem a afirmacao inteira --
+      // a ordem continua sendo cobrada, item por item -- e passa a cobra-la no
+      // alfabeto certo.
+      String semAcento(String texto) {
+        const comAcento = 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ';
+        const semEla = 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC';
+        final b = StringBuffer();
+        for (final unidade in texto.split('')) {
+          final i = comAcento.indexOf(unidade);
+          b.write(i < 0 ? unidade : semEla[i]);
+        }
+        return b.toString();
+      }
+
       final nomes = estadosBrasileiros.map((ItemDeLista e) => e.rotulo).toList();
-      final ordenados = <String>[...nomes]..sort();
+      final ordenados = <String>[...nomes]
+        ..sort(
+          (a, b) =>
+              semAcento(a).toLowerCase().compareTo(semAcento(b).toLowerCase()),
+        );
       expect(
         nomes,
         ordenados,

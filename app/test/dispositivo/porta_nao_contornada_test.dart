@@ -898,10 +898,753 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `a2ee078f99dbc688f22d69472aaef2f91a48c6b8`
 /// (`feat/loja-detalhe-do-produto`).
 ///
+/// DESTRAVADO EM 17/10 (BICHUS-278, o pedido da plaquinha da coleira). O
+/// motivo, em uma frase: **o botao `Fazer a tag da coleira` nao estava
+/// quebrado, ele nao tinha destino**, e o cliente pediu o destino.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `pet/tela_solicitar_plaquinha.dart`: nasce, o formulario do pedido. Ela
+///     monta `SeletorDeLista`, `BichuField` e `BotaoPrimario` dentro de
+///     `BarraDeAcaoFixa` -- **tres componentes que ja existiam, nenhum widget
+///     novo**, que e a condicao para a tela nascer em codigo em vez de esperar
+///     o desenho;
+///   - `pet/tela_pet_cadastrado.dart`: o botao sai de `aoTocar: null` e passa a
+///     empurrar `Rotas.solicitarPlaquinha`. O `null` era o criterio 2 da
+///     BICHUS-62 sendo cumprido (acao sem destino nao se renderiza), e agora o
+///     destino existe: `POST /v1/pets/{petId}/tag-requests` e a tela acima;
+///   - `pet/tela_detalhe_do_pet.dart`: **so comentario de doc**. A linha que
+///     dizia que as tres acoes da barra fixa "apontam para tela que nao
+///     existe" ficou falsa para uma das tres, e deixa-la seria documentacao
+///     mentindo. A tela continua sem barra de acao fixa, e o codigo dela nao
+///     mudou.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria` e nenhuma ganhou importe
+/// de plugin de aparelho nem `dart:io` -- quem cobra isso e o portao
+/// ESTRUTURAL abaixo, que continua valendo e continua verde. Medido pelo
+/// indice temporario que este portao usa (`GIT_INDEX_FILE` + `read-tree HEAD`
+/// + `add -A -- app/lib/telas` + `write-tree` +
+/// `rev-parse <arvore>:app/lib/telas`), sobre a arvore de trabalho desta
+/// branch, a partir de `1cce9f2` (`origin/development`).
+///
+/// **Nota honesta:** nesta branch nenhuma suite rodou, por decisao de quem
+/// pediu a entrega. Este portao foi o UNICO caso executado isoladamente
+/// (`flutter test test/dispositivo/porta_nao_contornada_test.dart`), que e o
+/// que o procedimento de destravamento cobra. Anterior: `65dcb5c`.
+///
+/// DESTRAVADO DE NOVO EM 17/10, mesma historia, segunda rodada. O cliente
+/// respondeu a pergunta que estava aberta: **o endereco de entrega entra, e e
+/// obrigatorio** -- sem ele a administracao nao cumpre o pedido.
+///
+/// UM arquivo muda: `pet/tela_solicitar_plaquinha.dart`. Ele ganha os sete
+/// campos do endereco (`Quem recebe`, CEP, rua, numero, complemento, bairro,
+/// cidade) e o seletor de UF, que le a lista dos 27 de
+/// `app/lib/api/estados_brasileiros.dart` -- **a tela nao escreve a segunda
+/// lista**, e e por isso que ela pode cobrar a UF sem criar a fonte que
+/// divergiria. A recusa passa a dizer QUAL campo falta, no proprio campo.
+///
+/// Continua sem componente novo (`BichuField` e `SeletorDeLista`, os dois ja
+/// existiam), sem importe de plugin de aparelho e **sem consulta de CEP**: a
+/// ADR-0006 proibe geocodificacao, e digitar o CEP nao preenche campo nenhum.
+/// As outras duas telas do lote anterior nao mudaram nesta rodada. Anterior:
+/// `a0f1b4a`.
+///
+/// DESTRAVADO PELA TERCEIRA VEZ EM 17/10, mesma historia. O cliente pediu duas
+/// coisas: **busca de endereco pelo CEP** e **telefone do destinatario**.
+///
+/// UM arquivo muda, de novo: `pet/tela_solicitar_plaquinha.dart`.
+///
+///   - o CEP passa a preencher rua, bairro, cidade e estado, pelo ViaCEP com
+///     BrasilAPI de reserva. **Quem fala com a rede e `api/busca_de_cep.dart`,
+///     e nao a tela** -- a tela chama uma porta e nao sabe de onde vem a
+///     resposta, que e o mesmo arranjo do envio de fotos;
+///   - **isso nao e geocodificacao**: vem texto (rua, bairro, cidade, UF) e
+///     nunca coordenada. A ADR-0006 proibe a coordenada, e o motivo esta
+///     escrito do lado da chamada para ninguem "consertar" de volta;
+///   - **nada disso pode travar o pedido**: servico fora, lento ou CEP
+///     inexistente deixa os campos abertos e o botao vivo, e ha isca que
+///     derruba a rede de CEP e afirma que o pedido vai assim mesmo;
+///   - o campo de telefone entra, com a mascara de `formato/telefone.dart`
+///     (arquivo novo, fora de `telas/`), mostrando `(11) 98765-4321` e
+///     enviando `+5511987654321`.
+///
+/// Nenhum componente novo -- `BichuField` e `SeletorDeLista` de sempre --,
+/// nenhum importe de plugin de aparelho e nenhum `dart:io` na tela: quem fala
+/// HTTP e a porta, em `app/lib/api/`. Anterior: `6224791`.
+///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '617f56a4d5bcfef6755b8b57b0b9a0d6a1d5ff26'; // BICHUS-278, 17/10 (mescla do lote de TRES ramos -- valor final): recalculado sobre a ARVORE MESCLADA dos tres, porque a trava foi destravada em tres ramos independentes e nenhum dos tres valores isolados sobrevive a uniao (marca 70c03e2, filtros c54de75, achado 0b00866 -- todos mortos pela mescla). Os tres lados estao preservados em `app/lib/telas` e cada bloco abaixo responde pelo que trouxe. Nenhuma porta de aparelho encostada: o portao estrutural de diretivas acima continua respondendo por isso e passa. [LADO A+B -- marca e filtros] BICHUS-278, 17/10 (mescla do lote de tres ramos): recalculado sobre a ARVORE MESCLADA, porque nenhum valor de ramo isolado sobrevive a uniao -- a marca nas duas telas e os filtros com botao aplicar mudam `app/lib/telas` ao mesmo tempo. Os dois lados estao preservados e cada um responde pelo que trouxe. [LADO A -- marca] BICHUS-278, 17/10: a identidade visual entra em DUAS telas a pedido do cliente -- `abas.dart` ganha o `MarcaLockup` no topo do `Perfil` deslogado e `escanear/tela_leitor_de_qr.dart` ganha a plaquinha (`Moldura` + `MarcaSimbolo`) acima do campo do estado `digitando`, escondida com o teclado aberto. Sao dois widgets de marca que ja existiam e nenhum asset novo; nenhuma porta de aparelho encostada -- as duas telas nao importam camera, galeria, permissao, localizacao nem `dart:io` (antes: 65dcb5c) [LADO B -- filtros] BICHUS-278, 17/10 (TERCEIRO destrave do dia): o PRECO em destaque no cartao da vitrine passou a ser so o VALOR, e nao a linha inteira -- um `Text.rich` de dois trechos, porque `ItemDaLoja.linhaDoPreco` e uma string so de proposito (criterio 15 da BICHUS-185: o numero nunca aparece sem o rotulo e a data). Medido no emulador: com a linha inteira em `title-lg`, "R$ 239,90 - preco de referencia, consultado em 17/10" ocupava tres linhas de corpo grande. Anterior: ad26aaf // BICHUS-278, 17/10 (SEGUNDO destrave do dia, quatro pedidos do cliente em sequencia): a ordenacao entra na MESMA folha do filtro e o acesso a folha SOBE PARA A BARRA DE TITULO -- isto REVERTE a regra de 22/09 de manter busca, filtro e ordem no corpo, e a reversao e decisao dele, nao descuido; `casca_com_abas.dart` vira `Stateful` e publica o slot unico de acao; `loja/vitrine_da_loja.dart` perde o dialogo de saida, o aviso do parceiro, a classificacao, o resumo com `Ler mais` e o toque que levava ao detalhe (o cartao inteiro sai para o parceiro, e `Abrir na <parceiro>` virou `Compre agora`); `loja/produto_da_loja.dart` perde o aviso e fica SEM ENTRADA, parada por decisao do cliente e nao apagada; `abas.dart` deixa de desenhar o reforco da `Loja` e da `Rede`. Nenhuma porta de aparelho encostada. Anterior deste dia: e35fe3c // BICHUS-278, 17/10: NADA SE APLICA SOZINHO (pedido do cliente) -- `loja/vitrine_da_loja.dart`, `perto/lista_do_diretorio.dart` e `rede/agenda_da_rede.dart` trocam o callback por grupo do filtro por um `aoAplicar` com o mapa inteiro e perdem a espera por tecla da busca; `rede/agenda_da_rede.dart` recebe o reforco da secao e sobe o campo de busca para cima dele e das abas; `abas.dart` passa o reforco a agenda em vez de a casca. Nenhuma porta de aparelho encostada: nao ha plugin, canal nem permissao em nenhuma das quatro (o portao de diretivas acima continua respondendo por isso). Anterior: 65dcb5c // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095) [LADO C -- achado/localizacao/foto] BICHUS-278, 17/10: o nome do pet sai de baixo da foto no detalhe do tutor e fica so na barra, e a foto ganha rotulo acessivel no lugar (a `Moldura` exclui a semantica do conteudo, entao sem o rotulo o bloco ficaria mudo). Nenhuma porta de aparelho encostada (antes: b92f57ea3041d3c01a860b73d385e5882a85ef35)
+///
+/// DESTRAVADO EM 17/10 (BICHUS-278, as DUAS ESCRITAS DA COMUNIDADE: marcar um
+/// encontro na `Rede` e indicar um profissional no `Perto`). O cliente pediu
+/// "os botoes na rede e no perto para o usuario criar os eventos e recomendar
+/// os profissionais"; `createNetworkEvent` ja existia no contrato sem tela, e
+/// a indicacao do `Perto` nao existia em lugar nenhum.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `rede/criar_encontro.dart`: nasce. O formulario de
+///     `CommunityNetworkEventInput`, com os dois casos de recusa ditos com a
+///     saida que os resolve.
+///   - `perto/sugerir_profissional.dart`: nasce. A indicacao, que **nao
+///     publica**: ela nasce pendente de revisao, porque e texto sobre um
+///     TERCEIRO e nao sobre quem escreve.
+///   - `rede/agenda_da_rede.dart` e `perto/lista_do_diretorio.dart`: cada uma
+///     ganha a porta para a sua tela, no CORPO e acima dos controles de
+///     listagem -- o slot unico de acao da `AppBar` continua livre.
+///
+/// **Esta trava anda na direcao do portao ESTRUTURAL abaixo, e nao contra
+/// ele.** As duas telas novas nao falam com aparelho nenhum: nenhum importe de
+/// plugin, nenhum canal de plataforma, nenhuma coordenada. A capa do encontro
+/// ficou de fora desta rodada justamente por passar pela porta
+/// `CameraEGaleria`, que outra frente esta mexendo -- a porta NAO foi tocada.
+/// O unico recurso de aparelho que entra e `showTimePicker`, do proprio
+/// Flutter, pela mesma via de `showDatePicker` que duas telas ja usam.
+/// Anterior: `65dcb5cd25c486a5e7d537aeaec19566828420d5`.
+/// **Destravado pelo NOME OBRIGATORIO NO CADASTRO (18/10/2026)**, pela queixa
+/// do cliente: *"o campo de nome no cadastro do usuario e obrigatorio, hoje
+/// ele esta cadastrando sem esse campo"*. Um arquivo desta pasta muda,
+/// `conta/tela_criar_conta.dart`:
+///
+/// - o campo `Nome` ganhou `erro`, `limite` e o alvo de rolagem da recusa;
+/// - `_criarConta` passou a recusar nome ausente, vazio e **so com espaco**,
+///   pela regra de `validacao/nome_de_exibicao.dart` (arquivo novo, FORA
+///   desta pasta, e por isso ele nao entra neste hash);
+/// - o botao do rodape ficou bloqueado enquanto nao ha nome, e a linha
+///   `nome: ... .isEmpty ? null : ...` -- que era a que apagava a chave em
+///   silencio -- deixou de existir.
+///
+/// **Nenhuma porta de aparelho encostada**, que e o que o criterio 10
+/// protege: a mudanca e de validacao de formulario. Nenhum importe de
+/// plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` --
+/// e o portao estrutural de diretivas deste mesmo arquivo continua
+/// respondendo por isso.
+///
+/// Valor medido com `git rev-parse HEAD:app/lib/telas` sobre esta arvore
+/// commitada, e nao copiado de relato.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Havia quatro
+/// frentes abertas neste repositorio em 18/10, e ao menos uma mexe em
+/// `app/lib/telas` (`casca_com_abas.dart`, `abas.dart`, `perfil/*`,
+/// `perto/lista_do_diretorio.dart`, `loja/*`). Valor de ramo isolado NAO
+/// sobrevive a uniao -- foi exatamente assim que seis historias erraram o
+/// hash na integracao de 22/09.
+/// Anterior: `45b6093e7fd295e6ba36fb9b0081a8b08f7755b4`.
+/// **Destravado de novo no MESMO DIA (18/10/2026)**, pela segunda metade da
+/// decisao do cliente: *"nao permitir atualizar o cadastro, se nao tiver
+/// algum nome cadastrado"*. Agora e
+/// `perfil/tela_dados_pessoais.dart`, em dois pontos e so dois:
+///
+/// - `_conferir` perdeu o `_nome.text.isNotEmpty &&` que deixava o campo
+///   VAZIO escapar da recusa -- era a porta pela qual `display_name: ""`
+///   saia no PATCH e zerava a coluna;
+/// - a frase `_TextosDosDados.nomeSoComEspaco` (*"Escreva o seu nome, ou
+///   deixe o campo vazio para tira-lo."*) virou `nomePrecisaDeTexto`, numa
+///   linha, porque a segunda metade dela passou a ser instrucao falsa.
+///
+/// **Nenhuma porta de aparelho encostada**: e validacao de formulario e uma
+/// constante de texto. Medido em `app/test/telas/dados_pessoais_exige_nome_test.dart`.
+///
+/// **FRONTEIRA DECLARADA:** este mesmo arquivo de tela foi mexido hoje por
+/// outra frente, no ramo `chore/remover-quatro-textos-18-10` (ainda nao
+/// mesclado), que retira de la a linha do e-mail e os textos de senha. Os
+/// dois pontos acima sao localizados e nao encostam nesses; quem mesclar
+/// **recalcula este hash sobre a arvore mesclada**, como o paragrafo
+/// anterior ja avisa.
+/// Anterior: `26d2076350283395220e65985ba49c29387eed50`.
+/// **Somado na mescla, do ramo `feat/minhas-indicacoes`:** BICHUS-278 18/10 (Minhas indicações): DOIS arquivos desta pasta mudam, e nenhum dos dois encosta em porta de aparelho. (1) `perto/minhas_indicacoes.dart` é ARQUIVO NOVO: a tela que o cliente pediu -- *"e a aba de minhas indicações, com o status se está pendente ou se já foi aprovado pelo administrador?"* -- e ela só lê `GET /v1/directory/suggestions` pela camada de API; nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissão, nenhum `dart:io`. (2) `gaveta_de_secoes.dart`: UMA linha de `SubDestino` na seção `Perto`, que é a porta de entrada da tela -- sem ela a tela fica alcançável só por URL. O portão estrutural de diretivas deste mesmo arquivo continua respondendo pelas duas, e ele passou. Valor LIDO DA PRÓPRIA FALHA deste portão nesta árvore (`encontrado:`), e não copiado de relato nem de outro ramo. **A QUEM MESCLAR: recalcule sobre a árvore MESCLADA**, pelo procedimento escrito acima; valor de ramo isolado não sobrevive à união -- e há cinco ramos tocando `app/lib/telas` nesta rodada. (antes: 45b6093e7f)
+/// **Somado na mescla, do ramo `feat/acompanhar-pedido-plaquinha`:** BICHUS-278 (pedido da plaquinha, 18/10): DOIS arquivos de `app/lib/telas` mudam, e os dois sao pedido direto do cliente. (1) `pet/tela_solicitar_plaquinha.dart`: saiu o exemplo `cor da plaquinha` da observacao ("a cor sera unica") e saiu o botao `Pedir a plaquinha` da tela de sucesso ("ja foi pedido") -- ele ficava DESABILITADO, e o criterio 2 da BICHUS-62 proibe acao sem destino nem habilitada nem desabilitada; o desfecho virou o acompanhamento do pedido. (2) `pet/tela_acompanhar_plaquinha.dart`: ARQUIVO NOVO, a pagina privada de acompanhamento, que LE `GET /v1/pets/{petId}/tag-requests` -- a autorizacao e a clausula `WHERE` do servidor (404 e nunca 403, ADR-0021) e nenhuma conferencia de dono mora na tela. (3) `pet/tela_detalhe_do_pet.dart` e `pet/textos_do_detalhe.dart`: o link para essa pagina, que so aparece quando ha pedido. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`read-tree HEAD` + `add -A -- app/lib/telas` + `write-tree`, em `GIT_INDEX_FILE` proprio), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outros ramos tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 45b6093e7f)
+/// **Somado na mescla, do ramo `feat/minhas-indicacoes`:** BICHUS-278 18/10 (Minhas indicações como ABA do Perto): TRÊS arquivos desta pasta mudam, e nenhum dos três encosta em porta de aparelho. (1) `perto/corpo_do_perto.dart`, ARQUIVO NOVO: a casca de abas da seção (`Profissionais` / `Minhas indicações`), com a mecânica de `rede/agenda_da_rede.dart` reusada. Ela nasceu em arquivo PRÓPRIO de propósito: a casca poderia ter nascido dentro de `perto/lista_do_diretorio.dart`, como a da Rede nasceu dentro da agenda, mas aquele arquivo está sendo editado por outra frente (a logo do profissional no cartão) -- e assim **zero linha** foi tocada lá. (2) `perto/minhas_indicacoes.dart`, ARQUIVO NOVO: o corpo da segunda aba, que só lê `GET /v1/directory/suggestions` pela camada de API. (3) `abas.dart`: `AbaPerto` passa a entregar `CorpoDoPerto` como único filho, com a porta de adoção como rodapé da aba da LISTA -- fora das abas ela apareceria embaixo de `Minhas indicações` também. Nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissão, nenhum `dart:io`; o portão estrutural de diretivas deste mesmo arquivo responde pelos três e passou. Valor LIDO DA PRÓPRIA FALHA deste portão nesta árvore (`encontrado:`), e não copiado de relato nem de outro ramo. **A QUEM MESCLAR: recalcule sobre a árvore MESCLADA**, pelo procedimento escrito acima -- há pelo menos quatro valores diferentes em ramos abertos tocando esta pasta hoje, e valor de ramo isolado não sobrevive à união. (antes: 2379100dab, e antes dele 45b6093e7f)
+///
+/// DESTRAVADO EM 18/10 (QA, rodada final da suite), valor
+/// 45b6093e7fd295e6ba36fb9b0081a8b08f7755b4. QA 18/10 (rodada final da
+/// suite): dois arquivos desta pasta mudam, e os dois sao CONSERTO DE
+/// DEFEITO medido pela propria suite, nao tela nova. (1)
+/// `pet/tela_solicitar_plaquinha.dart`: `_carregarPets()` saiu de
+/// `initState` para `didChangeDependencies`, porque ler `Escopo` (um
+/// `InheritedWidget`) antes de `initState` terminar estoura
+/// `dependOnInheritedWidgetOfExactType ... before initState() completed` --
+/// a tela NUNCA listava os pets e abria dizendo "servidor fora". Mesmo
+/// arranjo e mesmo sinalizador de `pet/tela_editar_pet.dart` e
+/// `perfil/meus_pets.dart`. (2) `perfil/tela_dados_pessoais.dart`: o campo
+/// de telefone passou a ser preenchido por `telefoneDoE164` em vez de
+/// `mascaraDeTelefone`, porque a mascara de DIGITACAO descarta o `+` e lia
+/// `+5511987654321` como digitos locais -- o campo abria `(55) 11987-6543`
+/// e um `Salvar` gravava `+5555119876543` por cima do telefone certo.
+/// **Nenhuma porta de aparelho encostada**: as duas mudancas sao de ciclo
+/// de vida e de formatacao de texto; nenhum importe de plugin, nenhum canal
+/// de plataforma, nenhuma permissao, nenhum `dart:io`, e o portao
+/// estrutural de diretivas deste mesmo arquivo continua respondendo por
+/// isso. Valor LIDO DA PROPRIA FALHA deste portao nesta arvore
+/// (`encontrado:`), e nao copiado de relato nem recalculado com comando de
+/// escrita -- a tarefa desta rodada proibia comando git que escreve. **A
+/// QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima; valor de ramo isolado nao sobrevive a uniao. (antes:
+/// 0c72963525)
+///
+/// DESTRAVADO EM 18/10 (a PINTURA das imagens do profissional e da foto do
+/// proprio usuario). O cliente autorizou as tres: "pode liberar as imagens
+/// do profissional no app" e "coloque um campo para o usuario cadastrar sua
+/// propria foto e um selo na foto dele, se ele estiver validado". O
+/// contrato, o servidor e o modelo Dart ja estavam prontos (1d2ccac1 e
+/// 51696860); o que muda aqui e so a pintura. Tres arquivos desta pasta
+/// mudam: `perto/lista_do_diretorio.dart` (a logo ao lado do nome no
+/// cartao, quadrado de 56 dp, FORA da semantica porque o nome ja e o
+/// rotulo), `perto/pagina_do_local.dart` (a faixa 16:9 com a foto do lugar,
+/// de borda a borda, e so no detalhe: vinte faixas de 1280 x 720 numa
+/// listagem seriam 65,6 MiB de imagem decodificada) e
+/// `perfil/tela_dados_pessoais.dart` (o retrato da propria pessoa, a previa
+/// do arquivo escolhido, o selo de `Me.email_verified` em cima dele e os
+/// tres passos do envio). **Nenhuma porta de aparelho contornada, e o
+/// portao estrutural deste mesmo arquivo responde por isso**: quem desenha
+/// arquivo local continua sendo `widgets/previa_da_foto.dart` e quem
+/// desenha imagem de servidor e `widgets/imagem_da_rede.dart` -- as duas
+/// fora de `lib/telas`, porque `dart:io` e proibido aqui dentro. A tela de
+/// dados pessoais importa `dispositivo/camera_e_galeria.dart`, que e a
+/// PORTA (a mesma que o registro de achado e o cadastro de pet usam), e nao
+/// o plugin: nenhum `package:image_picker/`, nenhum
+/// `package:permission_handler/`, nenhum `dart:io`. Valor LIDO DA PROPRIA
+/// FALHA deste portao nesta arvore (`encontrado:`), e conferido
+/// reproduzindo o calculo do portao num indice temporario -- os dois deram
+/// o mesmo hash. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**,
+/// pelo procedimento escrito acima. Ha pelo menos quatro valores diferentes
+/// em ramos abertos hoje, e valor de ramo isolado nao sobrevive a uniao.
+///
+/// **Destravado em 18/10/2026 pela dinamica do escanear e pelos quatro
+/// defeitos conhecidos** (ramo `feat/escanear-e-quatro-defeitos`, base
+/// `3f9a57c2`). UM arquivo desta pasta muda:
+/// `escanear/tela_do_pet_da_tag.dart`, e as tres mudancas sao a dinamica que
+/// o cliente definiu -- *"se eu escanear o qr-code abre a pagina do pet. se o
+/// tutor marcou como perdido, abre a pagina para o usuario enviar mensagem ao
+/// tutor"*. (1) o modo dono deixou de ser um beco: ele chama
+/// `GET /tags/{code}/owner-context` e faz `pushReplacement` para
+/// `Rotas.detalheDoPet`. (2) com `is_lost: true` a tela virou a pagina de
+/// falar com o tutor, com campo de recado que vira `client_note` (campo que
+/// JA estava no contrato e nenhum caminho do app mandava). (3) o desfecho do
+/// aviso passou a sair de `owner_notified` em vez de afirmar sempre que o
+/// tutor recebeu o push.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o unico
+/// importe novo e `dart:async` (por `unawaited`) mais `go_router` e
+/// `widgets/bichu_field.dart`, e o portao estrutural de diretivas deste mesmo
+/// arquivo responde por isso e passou. A CAMERA continua atras da porta: este
+/// ramo nao encosta em `escanear/tela_leitor_de_qr.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
+/// a uniao. (antes: dd6582d172)
+///
+///
+/// DESTRAVADO EM 18/10 (a LISTAGEM PUBLICA DE PERDIDOS na aba `Pets` e a
+/// lista dos MEUS ACHADOS no `Perfil`). A aba `Pets` -- a secao em que o
+/// aplicativo ABRE -- dizia "A lista de pets perdidos esta em construcao", e
+/// a frase era honesta: `listPublicLostPets` estava no contrato e **nao tinha
+/// rota**, era a ultima linha de `OPERACOES_AINDA_SEM_ROTA`. A rota foi
+/// registrada no mesmo commit. Quatro arquivos desta pasta mudam:
+/// `perdido/lista_de_perdidos.dart` (NOVO, a listagem com `BarraDeListagem`
+/// sem copia -- busca em largura total no corpo, filtro e ordem no slot unico
+/// da barra, e o campo de CIDADE DIGITADA que o cliente autorizou para o
+/// visitante sem conta), `perdido/cartao_do_perdido.dart` (NOVO, o cartao com
+/// foto, bairro e quando o pet foi visto), `perfil/meus_achados.dart` (NOVO, a
+/// lista de `listMyFoundReports`, que existia no servidor e nao tinha chamador
+/// no app) e `abas.dart` (DUAS EDICOES MINIMAS: o `EstadoVazio` do corpo de
+/// `AbaPets` virou `const ListaDePerdidos()`, e um `ItemDeMenu` de
+/// `Meus achados` entrou no menu de `AbaPerfil` entre `Escanear uma tag` e
+/// `Sair da conta`).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Quem desenha
+/// imagem de servidor continua sendo `widgets/imagem_da_rede.dart`, FORA de
+/// `lib/telas`; quem guarda a cidade escolhida no aparelho e
+/// `sessao/cidade_escolhida.dart`, tambem fora, e pelo mesmo motivo.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima. Este valor JA e o da uniao com `origin/development` em
+/// 87979b6d (o lote de oito, as imagens do profissional e a foto do proprio
+/// usuario entre eles): a colisao com 50b766d431 foi resolvida recalculando, e
+/// nao escolhendo um dos dois lados. O CAMPO DE CIDADE DIGITADA entrou depois da mescla, no mesmo ramo, e por isso este valor e o SEGUNDO desta frente. (antes, por ramo isolado: 799b29b7b2; depois da mescla e antes da cidade: 0f927ff7ee;
+/// no lado de development: 50b766d431)
+///
+/// DESTRAVADO EM 18/10 (O PET PERDIDO: pagina interna, acao inversa e os dois
+/// padroes visuais). Quatro pedidos do cliente, nestas palavras: *"quando o pet
+/// esta perdido, deve ter uma pagina interna do pet e um botao caso a pessoa
+/// encontrou o animal"*; *"nao tem uma opcao de desmarcar como perdido ou que
+/// foi encontrado"*; *"esse botao deve ter um padrao visual diferente quando
+/// estiver perdido e quando nao estiver"*; e o campo rotulado `Sinais` passar a
+/// ler `Sinais particulares` -- ele leu `Sinais` na tela e PERGUNTOU o que era.
+///
+/// Quatro arquivos desta pasta mudam:
+/// `perdido/tela_do_caso_publico.dart` (NOVO, a pagina interna do perdido sobre
+/// `getPublicLostCase`, com `Encontrei este animal` levando ao fluxo de achado
+/// que JA existe -- `Rotas.registrarAchado` com o `share_token` no rascunho,
+/// que e o que o contrato manda usar em `can_report_sighting`);
+/// `perdido/lista_de_perdidos.dart` (UMA edicao: `aoTocar` do cartao, que era
+/// nulo porque a tela de destino nao existia);
+/// `perdido/cartao_do_perdido.dart` (SO PROSA: o paragrafo que dizia que aquela
+/// tela "nao existe no app" deixou de ser verdade);
+/// `pet/tela_detalhe_do_pet.dart` (`_acaoDeMarcarPerdido` virou
+/// `_acaoDeEstadoDoPet`, com os dois padroes -- secundario de 48 dp quando nao
+/// perdido, primario `critico` de 64 dp mais faixa de urgencia quando perdido
+/// -- e o `Encontrei meu pet` sobre `closeLostCase`);
+/// `pet/textos_do_detalhe.dart` (os textos novos e o rotulo dos sinais, que
+/// reusa a constante do formulario em vez de criar uma segunda redacao).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Quem desenha
+/// imagem de servidor continua sendo `widgets/imagem_da_rede.dart`, FORA de
+/// `lib/telas`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre `origin/development` em `f8c74714`, e
+/// **nao** copiado de ramo nem de relato. Valor de ramo isolado nao sobrevive a
+/// uniao. (antes: 145640db9f)
+///
+/// DESTRAVADO EM 19/10 (REABRIR O CASO DE PERDIDO: a folha de confirmacao e o
+/// desfazer). O contrato prometia, na descricao de `closeLostCase`, que
+/// *"Encerrar e reversivel por 7 dias"*, e nomeava a operacao que faz a
+/// reversao -- `reopenLostCase`, `POST /v1/lost-cases/{caseId}/reopen`, com um
+/// `410` cuja descricao e *"Passou dos 7 dias"*. Ela **nunca ganhou rota**: era
+/// uma linha de `OPERACOES_AINDA_SEM_ROTA`, e o caminho respondia 404. Entao
+/// `Encontrei meu pet` -- que a branch anterior entregou -- era UM TOQUE, sem
+/// confirmacao e sem desfazer, numa tela que se abre em panico.
+///
+/// DESTRAVADO EM 18/10 (a FOTO DO PERFIL DE QUEM NAO TEM NOME, defeito
+/// relatado pelo cliente contra homologacao). UM arquivo desta pasta muda:
+/// `perfil/tela_dados_pessoais.dart`, e a mudanca sao duas coisas -- uma
+/// constante de texto (`fotoPrecisaDoNome`) e uma guarda local no comeco de
+/// `_enviarAFoto`.
+///
+/// **O que o defeito era, medido e nao suposto.** O terceiro passo do envio da
+/// foto e `PATCH /v1/me` com `photo_upload_id`, e a decisao do cliente de
+/// 18/10/2026 -- *"nao permitir atualizar o cadastro, se nao tiver algum nome
+/// cadastrado"* -- vale para ele. Medido contra a pilha efemera de integracao,
+/// no commit `f8c74714` (o mesmo de `hml.bichu.app`), com uma conta de
+/// `display_name` nulo, que e o estado de 2 das 7 contas de homologacao:
+/// `400 {"errors":[{"field":"display_name","code":"required"}]}`. Do lado de ca
+/// isso chegava como `DesfechoDoEnvio.recusada`, que vira **"O envio foi
+/// recusado. Tente outra foto."** -- e nenhuma outra foto resolve. A pessoa
+/// trocava de arquivo a esmo sem descobrir que faltava o NOME.
+///
+/// A guarda nao afrouxa a trava do servidor: ela conta o que falta, antes de
+/// gastar a leitura do arquivo e dois pedidos de rede, e marca o campo do nome
+/// como o `Salvar` ja marcava. Medida em
+/// `test/telas/foto_do_usuario_e_selo_test.dart`, no grupo `o envio da propria
+/// foto sem nome na conta`, com contrapeso.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo, nenhum canal
+/// de plataforma, nenhuma permissao, nenhum `dart:io`. A camera continua atras
+/// da porta `CameraEGaleria` -- esta mudanca, alias, faz a tela ler MENOS da
+/// porta, porque ela para antes de pedir os bytes. O portao estrutural de
+/// diretivas deste mesmo arquivo responde por isso e passou.
+///
+/// DESTRAVADO EM 18/10 (o botao `Ligar` curto e o GLIFO DO TIPO no lugar da
+/// imagem ausente). Dois pedidos do cliente no mesmo dia, e dois arquivos
+/// desta pasta mudam:
+///
+/// - `perto/lista_do_diretorio.dart`: o botao de ligar passou a ler so
+///   `Ligar`, com o icone de telefone, e **o nome do local saiu do rotulo
+///   VISIVEL sem sair do nome ACESSIVEL** -- quem publica `Ligar para <nome>`
+///   agora e um `Semantics` com `onTap` redeclarado (sem ele,
+///   `excludeSemantics: true` apagaria a acao do `TextButton`, que e o defeito
+///   2 de `test/a11y/acao_de_controle_test.dart`). E o cartao sem logo deixou
+///   de desenhar nada no lugar dela: ele desenha o glifo do TIPO.
+/// - `perto/pagina_do_local.dart`: o mesmo rotulo curto no `BotaoPrimario`
+///   (por `rotulo` + `nomeAcessivel`, que nasceram para isto) e o mesmo glifo
+///   num quadrado ao lado do nome, **so quando nao ha `photo_url`**. A faixa
+///   16:9 vazia foi TENTADA e medida: ela empurrava `Informações` para fora da
+///   arvore do `ListView` em toda entrada sem foto.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os dois importes
+/// novos sao locais -- `widgets/icone_do_inscrito.dart`, que nasceu FORA de
+/// `lib/telas` justamente porque o cartao e a pagina precisam do mesmo glifo,
+/// e `widgets/moldura.dart`, por `BichuMoldura.larguraFotoSm`. A CAMERA
+/// continua atras da porta: este ramo nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
+///
+/// DESTRAVADO EM 18/10 (a BUSCA, a ROLAGEM INFINITA e o TOQUE NO ICONE da area
+/// de mensagens -- os quatro pedidos do cliente para a aba `AuAu`). **UM
+/// arquivo desta pasta muda**: `mensagens/area_de_mensagens.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
+/// a uniao. (antes: 145640db9f)
+/// [lado da uniao, valor de ramo b476e764be] FOTO DO PERFIL SEM NOME (18/10/2026): valor MEDIDO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de relato. Valor de ramo isolado NAO sobrevive a uniao: quem mesclar recalcula.
+///
+/// DESTRAVADO EM 18/10 (BICHUS-62, os dois pedidos do cliente sobre o filtro
+/// das listagens). **Duas** telas desta pasta mudam, e as duas pela mesma
+/// razao: a linha de busca passou a levar o gatilho de filtro junto.
+/// `perdido/lista_de_perdidos.dart` e `rede/agenda_da_rede.dart` desenham a
+/// busca FORA da barra (`BarraDeListagem.buscaAcima`), e trocaram
+/// `CampoDeBuscaDaListagem` por `LinhaDeBuscaDaListagem` -- o campo com o
+/// gatilho so-icone na frente dele, na mesma linha. A listagem de perdidos tem
+/// mais tres edicoes, todas da janela de `period` que deixou de nascer em 30
+/// dias: a pastilha nasce sem selecao, limpar a pastilha nao repoe `30d`, e
+/// "recorte ativo" passou a ser "ha janela" em vez de "a janela nao e 30d".
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo em tela
+/// nenhuma -- `LinhaDeBuscaDaListagem` mora em `widgets/barra_de_listagem.dart`,
+/// que as duas telas JA importavam --, nenhum canal de plataforma, nenhuma
+/// permissao, nenhum `dart:io`. A camera continua atras da porta: este ramo nao
+/// encosta em `escanear/`.
+///
+/// Valor REPRODUZIDO por `git rev-parse HEAD:app/lib/telas` sobre o commit
+/// desta frente, e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a
+/// arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas`, e valor de
+/// ramo isolado nao sobrevive a uniao. (antes: 145640db9f)
+/// [lado do ramo, valor de ramo ac5e2a7c5f] BICHUS-62, 18/10/2026: o gatilho de filtro so-icone na frente da busca, e a pagina de pets sem janela por padrao. A justificativa esta inteira acima, e a da UNIAO DAS QUATORZE ficou junto com as anteriores.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas dos dois lados ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo dd731286dc] LOTE DE 19/10/2026 (filtros-por-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: b476e764be1341b9fc408499e416ebb2bc0aae94, ac5e2a7c5f7e610f85955bb1631db0c14f6c5a4c. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// [lado do ramo, valor de ramo 8f0eeca8b1] UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo f2c3b9209a] LOTE DE 19/10/2026 (ate perto-ligar-e-icone): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: dd731286dc70e5beb66c24768801ed02c93b8dd3, 8f0eeca8b1977b7cbe4b8261b1a34d17545e628a. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DESTRAVADO EM 18/10 PELOS TRES PEDIDOS DO CLIENTE desta rodada -- o
+/// desfecho do achado com foto e informacao util, a retirada do preco da
+/// `Loja` e o arrastar-para-atualizar no app inteiro. Cinco arquivos desta
+/// pasta mudam, e nenhum deles por causa da camera:
+///
+/// - `achado/tela_achado_registrado.dart`: a foto do pet (por `PreviaDaFoto`,
+///   que mora FORA de `lib/telas` -- a tela continua sem `dart:io`), tres
+///   blocos de informacao e a acao de escanear a plaquinha;
+/// - `achado/textos_do_achado.dart`: os textos dos tres blocos, com
+///   `Ninguém foi avisado ainda` reusado de `TelaCasoAberto.avisoDaFila`;
+/// - `loja/vitrine_da_loja.dart` e `loja/produto_da_loja.dart`: o preco, a
+///   linha `Preço de referência` e a clausula orfa do preco vencido sairam
+///   das duas telas da secao;
+/// - `casca_com_abas.dart`: o `ListView` das cinco secoes passou a ser
+///   embrulhado por `ArrastarParaAtualizar.doSlot`, e `TelaDeAba` ganhou o
+///   `RecargaDaSecao` que o corpo de cada secao publica. **Alteracao minima**:
+///   um importe, um campo, o descarte dele e o embrulho.
+///
+/// Mais seis arquivos desta pasta ganharam o gesto, cada um em duas linhas
+/// (`with PublicaAAtualizacao` + `aoArrastarParaAtualizar`), ou no embrulho do
+/// proprio rolavel: `perdido/lista_de_perdidos.dart`,
+/// `rede/agenda_da_rede.dart`, `perto/lista_do_diretorio.dart`,
+/// `perto/minhas_indicacoes.dart`, `perfil/meus_pets.dart`,
+/// `mensagens/area_de_mensagens.dart`,
+/// `notificacoes/caixa_de_notificacoes.dart`, `perfil/meus_achados.dart`,
+/// `perfil/vitrine_de_fotos.dart` e `conexoes/tela_pedidos_de_conexao.dart`
+/// (este ultimo tinha um `RefreshIndicator` cru, e foi convertido).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io` -- quem desenha o
+/// arquivo do aparelho continua sendo `widgets/previa_da_foto.dart`, fora
+/// desta pasta, e e exatamente por isso que ela existe.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor e de RAMO ISOLADO -- `feat/achado-rico-e-loja-sem-preco` sobre
+/// `origin/development` em f8c74714 -- e valor de ramo isolado NAO sobrevive a
+/// uniao. (antes: 145640db9f; e, dentro desta mesma frente, 216959f0cc antes de eu desfazer a reformatacao automatica que o `dart format` havia aplicado a 111 arquivos que esta tarefa nao toca)
+/// [lado do ramo, valor de ramo 6a089b729b] TRES PEDIDOS DE 18/10/2026: valor medido pelo procedimento deste proprio portao sobre o ramo isolado, nao copiado de relato.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo fcd3d1b1f7] LOTE DE 19/10/2026 (ate achado-rico-e-loja-sem-preco): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: f2c3b9209ae248af53da714481c47236dfb26233, 6a089b729b6c275ee46105fda9738069d886ec72. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// [lado do ramo, valor de ramo e6dcbd496e] ESTADO DE DESLOGADO (19/10/2026, pedido do cliente: *"tem que ter uma pagina de deslogado, nao da para mostrar so uma mensagem de erro para atualizar"*): nove telas de `app/lib/telas` passam a desenhar `ConviteParaEntrar` no 401 em vez de faixa de erro com `Atualizar` -- `perto/lista_do_diretorio.dart`, `mensagens/area_de_mensagens.dart`, `notificacoes/caixa_de_notificacoes.dart`, `perfil/meus_pets.dart`, `perfil/meus_achados.dart`, `perfil/vitrine_de_fotos.dart`, `conexoes/tela_pedidos_de_conexao.dart`, `perto/pagina_do_local.dart` e `mensagens/tela_da_conversa.dart`. Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- com as CHAVES, porque em zsh `$T:app/...` aplica o modificador `:a` e devolve caminho absurdo em silencio), e nao copiado de ramo nem de relato. Valor velho: `145640db`, que e a arvore de `origin/development`. **QUEM MESCLAR RECALCULA sobre a arvore MESCLADA**: valor de ramo isolado nao sobrevive a uniao, e seis ramos desta rodada mexeram neste campo. // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo 5d91124f91] LOTE DE 19/10/2026 (ate estado-deslogado-nas-secoes): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: fcd3d1b1f76bbbba40380daa188cc0817969732a, e6dcbd496e15b81b3ef34181ce62c59da45e07ed. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DOIS arquivos desta pasta mudam:
+/// `pet/tela_detalhe_do_pet.dart` (a folha de confirmacao antes do
+/// `closeLostCase` -- `_confirmarEncerramento` mais a `_FolhaDoEncerramento`,
+/// que NAO e a `FolhaDestrutiva`: encerrar nao apaga nada e volta por 7 dias,
+/// e o 24.17.6 separa os dois casos --, mais a oferta de `Reabrir o caso`
+/// sobre `reopenLostCase`, condicionada ao `reopen_deadline` da RESPOSTA e
+/// nunca a uma janela de 7 dias refeita no aparelho);
+/// `pet/textos_do_detalhe.dart` (os textos da folha e da reabertura, e a
+/// CORRECAO da frase de sucesso, que afirmava *"quem estava ajudando foi
+/// avisado"* -- falso nos dois niveis: nada e enviado ao encerrar, a conversa
+/// vira modo leitura por derivacao na leitura, e o push esta bloqueado em
+/// producao e inexistente no iPhone do cliente).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. O unico importe
+/// novo e `formato/quando.dart` (para `QuandoNaLista.diaEMes`, que formata o
+/// prazo), e ele mora FORA de `lib/telas`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`).
+/// Este valor foi calculado assim, sobre a arvore de trabalho desta entrega, e
+/// **nao** copiado de ramo nem de relato. HA OUTRAS TRES BRANCHES tocando
+/// `app/lib/telas` nesta rodada, com valores concorrentes: valor de ramo
+/// isolado NAO sobrevive a uniao. (antes: 1015211855c9e1d2346aab2f0c120e1d0e4a1e0b)
+///
+/// [lado do ramo, valor de ramo 4d66551db6] REABRIR O CASO DE PERDIDO (19/10/2026): valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`) sobre a arvore de trabalho desta entrega -- nao copiado de ramo nem de relato. As justificativas de todos os destravamentos anteriores ficaram INTEIRAS acima. Valor de ramo isolado NAO sobrevive a uniao: a quem mesclar, recalcule.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo 32769dcfb7] LOTE DE 19/10/2026 (ate reabrir-caso-de-perdido): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 5d91124f9101c6b972982385a340418daa4fdca6, 4d66551db6fef958f5c0f42a84913e48bfcc0481. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **Destravado pelos TRES ITENS DE NAVEGACAO de 18/10/2026** (pedido do
+/// cliente: glifo em todo subitem da gaveta, `Meus dados` fora de `Pets` e de
+/// `Perto`, e a margem direita da foto da barra de topo). Mexeu em dois
+/// arquivos de `lib/telas`: `gaveta_de_secoes.dart` (o campo `icone` com a
+/// assercao que cobra glifo em item vivo, os quatro glifos, a saida de
+/// `Meus dados` dos globais e a guarda do filete) e `casca_com_abas.dart` (a
+/// margem INTERNA de 16 dp no alvo da foto, mais a chave do circulo para o
+/// portao poder medir desenho e alvo separados).
+///
+/// Valor **recalculado pelo procedimento deste proprio portao** sobre a
+/// arvore de trabalho -- `GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse <arvore>:app/lib/telas` --, e nao copiado de ramo nem de
+/// relato. Anterior: `145640db9f`.
+/// [lado do ramo, valor de ramo 66fb4850a1] SINO NA BARRA E `criar` FLUTUANTE (19/10/2026, decisao do cliente: *"O botao criar sai da barra"*): `casca_com_abas.dart` monta `SinoDeNotificacoes` no `actions`, tira a porta de criar de la e a desenha no `floatingActionButton`, com respiro de 72 dp no pe da lista; `abas.dart` passa a entregar `AcaoDeCriarFlutuante` (o arquivo do widget mudou de nome e mora em `app/lib/widgets`, fora desta arvore). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 818971c53b). Antes dele: NAVEGACAO DE 18/10/2026 (icones na gaveta, `Meus dados` fora de Pets/Perto, margem da foto); antes: UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+/// [lado da uniao, valor de ramo 1959197b96] LOTE DE 19/10/2026 (ate sino-na-barra-e-criar-flutuante): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao, nao copiado de ramo nem de relato. Valores de ramo que esta uniao substitui: 32769dcfb795143f98d911f430c0b2dae2fbdd58, 66fb4850a1e3e6e20263a8760faf960db81867d9. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// O que mudou nele, e por que cada parte e pedido dele por escrito:
+///
+/// - **O campo de busca**, pelo componente compartilhado `BarraDeListagem`
+///   (*"adicione um campo de busca/filtro na secao de mensagens"*). Sem copia:
+///   `widgets/barra_de_listagem.dart` **nao foi tocado** por esta frente, e
+///   nem precisou -- nao ha filtro nem ordenacao aqui, porque
+///   `listConversations` nao declara recorte de lista fechada, e o proprio
+///   componente nao desenha gatilho sem desfecho.
+/// - **A rolagem infinita de dez em dez** (*"trazendo as 10 ultimas conversas
+///   e incrementando por 10"*): o botao `Carregar mais conversas` saiu, e
+///   entrou um `ScrollController` com gatilho de folga mais um segundo gatilho
+///   para a lista que nao enche a tela -- sem ele, `maxScrollExtent` em zero
+///   deixaria o cursor sem consumidor e a lista pararia em dez, em silencio.
+/// - **O toque no icone da conversa** (*"faca a imagem ser clicada levando o
+///   usuario para o perfil do usuario"*), num ponto unico e nomeado,
+///   `PortaDoPerfilDoParticipante`. Ele nasce devolvendo `null` porque a tela
+///   de perfil de TERCEIRO nao existe em `origin/development` -- ela e de
+///   `feat/comunidade-perfil-e-conexao`, por decisao do cliente --, e com
+///   `null` o icone continua decorativo em vez de se anunciar como um botao
+///   que nao leva a lugar nenhum.
+/// - **A FOTO NAO ENTROU**, e o cabecalho daquele arquivo tem a medida: o
+///   contrato proibe foto de perfil em `participants` por extenso e em dois
+///   pontos, o ADR-0025 item 2 proibe avatar de terceiro, e o desenho da
+///   frente de perfil recusa esta superficie por nome.
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Os importes novos
+/// do arquivo sao `widgets/barra_de_listagem.dart` e nada mais -- o
+/// `widgets/botao_primario.dart` SAIU junto com o botao de carregar mais. A
+/// CAMERA continua atras da porta: esta frente nao encosta em
+/// `escanear/tela_leitor_de_qr.dart`.
+///
+/// Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes
+/// tocando `app/lib/telas` nesta rodada (entre elas a que deixa o gatilho de
+/// filtro so-icone na `BarraDeListagem`), e valor de ramo isolado nao
+/// sobrevive a uniao. (antes: 145640db9f)
+/// **A MESCLA (19/10/2026) juntou os dois lados**: o `_arvoreDasTelas` de cada ramo media a
+/// propria arvore isolada, e a uniao tem as DUAS mudancas (`mensagens/area_de_mensagens.dart`
+/// desta frente e a pasta `pessoa/` mais a linha de `SubDestino` na `gaveta_de_secoes.dart` da
+/// frente de perfil), mais o acendimento da `PortaDoPerfilDoParticipante` desta tarefa. Por isso
+/// o valor abaixo nao e nem um nem outro: foi RECALCULADO sobre a arvore mesclada.
+/// [lado do ramo, valor de ramo 8b070d9dc0] A LISTA DE BLOQUEADOS E O TITULO DE `PERTO` A 200% (19/10/2026), decisao do cliente: TRES arquivos de `app/lib/telas` mudam. (1) `seguranca/tela_de_bloqueados.dart` NASCE -- a lista de quem eu bloqueei, que e o unico caminho de volta de um bloqueio: o bloqueio e SIMETRICO e fechava com 404 o perfil onde o `Desbloquear` do `MenuDoPerfil` morava, e por isso bloquear era irreversivel pelo aplicativo. (2) `gaveta_de_secoes.dart` ganha a porta dela em `Perfil` (+1 linha de importe e +28 de `SubDestino`). (3) `casca_com_abas.dart` declara a abreviacao do titulo: `maxLines: 1`, `softWrap: false`, `overflow: ellipsis` e `semanticsLabel: titulo` -- a 200% em 320 dp `Perto` pede 172,90 dp contra 160,00 de orcamento e corta, e o nome ANUNCIADO continua inteiro. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a tela nova importa so `material`, `dart:async`, a camada de api, o tema e `widgets/faixa_de_aviso.dart`, e `escanear/tela_leitor_de_qr.dart` nao foi tocado -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO da rota NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). ANTERIOR: 045d87197b2276c8e1a93dcfcd3fcd23fa7250dd (a foto na conversa entre conexoes, logo abaixo). === A FOTO NA CONVERSA ENTRE CONEXOES (19/10/2026), emenda 3 do ADR-0010: UM arquivo de `app/lib/telas` muda, `mensagens/area_de_mensagens.dart`, e a mudanca e pedido direto do cliente (*"a foto aparece SO quando as duas pessoas ja aceitaram conexao"*). `MarcaNeutraDoParticipante` passa a desenhar `ImagemDaRede` quando `participante.photoIconUrl` nao e nulo, e a inicial quando e -- e o importe novo e `widgets/imagem_da_rede.dart` e **nada mais**. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a CAMERA continua atras da porta, e `escanear/tela_leitor_de_qr.dart` nao foi tocado -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO do toque NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"`), e nao copiado de relato. ANTERIOR: 40ba5d1cb735a3c0b42c6560fbb6ed00bea6c442 (a MESCLA, logo abaixo). === MESCLA DE MENSAGENS COM PERFIL DE TERCEIRO (19/10/2026), a foto na conversa entre conexoes: valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). Nenhum dos dois valores de ramo sobrevive a uniao, porque os DOIS lados tocam `app/lib/telas`. As justificativas dos dois lados ficam INTEIRAS. === LADO MENSAGENS, 4930ba4dc4b3f15343ffcaa9d37b02040c2fe749: BUSCA, ROLAGEM E TOQUE NA AREA DE MENSAGENS (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao. === LADO PERFIL, c1484355dc615af2fd6a73200134ef60596b7711: FATIA G (19/10/2026), o perfil de OUTRA pessoa: pasta nova `pessoa/` com `tela_perfil_de_pessoa.dart`, mais uma linha de `SubDestino` em `gaveta_de_secoes.dart` (a porta da caixa de pedidos de conexao, que existia sem porta desde 18/10). Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao chutado e nao copiado de relato. ANTERIOR: 145640db9fb6764eccb543b350c43caef8e2f2b3 (UNIAO DAS QUATORZE, 18/10/2026). **QUEM MESCLAR PRECISA RECALCULAR SOBRE A ARVORE MESCLADA**: valor de ramo isolado NAO sobrevive a uniao, e tres frentes desta rodada tocam `app/lib/telas` (gaveta, casca e esta). // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
+/// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
+/// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
+/// arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"`), e nao copiado de ramo nem de relato.
+/// As justificativas de TODOS os ramos ficaram INTEIRAS acima, de proposito.
+///
+/// [lado do ramo feat/versao-minima-do-app, valor de ramo 6622873a56] VERSAO MINIMA DO APP (19/10/2026, pedido do cliente): a pasta NOVA `app/lib/telas/atualizacao/` entrou com a tela de bloqueio, o aviso brando, os textos e o portao. Valor MEDIDO pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves: em zsh, sem elas o `$T:app/...` aplica o modificador `:a` e devolve caminho absurdo em SILENCIO), sobre `f8c74714`. Valor anterior: `145640db9fb6764eccb543b350c43caef8e2f2b3` (uniao das quatorze, 18/10). Nenhum dos quatro arquivos novos encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege: a tela de bloqueio abre o link da loja pela porta `SaidaDoApp`, como `pagina_do_local` e `lista_do_diretorio`, e o portao de diretivas abaixo continua respondendo por isso sem depender desta constante. **QUEM MESCLAR RECALCULA SOBRE A ARVORE MESCLADA**: ha um lote de 19/10 em mescla, e valor de ramo isolado NAO sobrevive a uniao.
+///
+/// **VALOR DESTA MESCLA (19/10/2026, A VERSAO QUE O APP MANDA).** Nenhum dos
+/// dois valores acima sobrevive: `c46ae91fdb` e de `origin/development` e
+/// `6622873a56` e do ramo do bloqueio por versao, e os DOIS lados tocam
+/// `app/lib/telas`. Este valor foi RECALCULADO sobre a arvore MESCLADA pelo
+/// procedimento deste proprio portao (`GIT_INDEX_FILE` temporario,
+/// `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves: em zsh, sem elas o shell
+/// aplica o modificador `:a` e devolve caminho absoluto em SILENCIO), e nao
+/// copiado de ramo nem de relato. As justificativas dos dois lados ficaram
+/// INTEIRAS acima, de proposito.
+/// [valor de ramo 0a06fa5404, SUPERADO pela uniao] MESCLA DE `feat/versao-minima-do-app` COM `origin/development` (19/10/2026): recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os dois valores de ramo: 6622873a566c3176eb78b427d408827e2b2e3848 (bloqueio por versao) e c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (lote de 19/10 na development). Justificativa do lado development: LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+/// [lado do ramo feat/pets-por-distancia, valor de ramo 7e739f5a3b, SUPERADO pela uniao] VALOR FINAL DESTA FRENTE. Recalculado depois de `CidadeEscolhida` recuperar o LEITOR dela: `_lerODeposito()` entrou em `perdido/lista_de_perdidos.dart` e a ultima cidade guardada no aparelho virou a TERCEIRA reserva da cadeia, com rotulo proprio (`da sua ultima busca`, nunca `da sua localizacao` -- cidade guardada semana passada pode ser de outra cidade). Antes disso a tela ESCREVIA no deposito e ninguem lia, que e divida com aparencia de funcao. Mesmo procedimento do portao, mesma arvore de trabalho. SUBSTITUI 4267db1df4d583226bf2d3ad06f5c0f92993e872, cujo comentario abaixo descreve o resto desta mudanca e continua valendo: // A CIDADE VEM DA LOCALIZACAO (19/10/2026, emenda 1 do ADR-0006), decisao do cliente (*"autorizar o gps, e trazer algum valor padrao em caso de fallback"*): UM arquivo de `app/lib/telas` muda, `perdido/lista_de_perdidos.dart`, e o que entra nele e a cadeia de reserva de tres elos -- cidade resolvida pelo aparelho, `Me.reference_area.city`, e nenhuma cidade (os 20 mais recentes do pais). **UMA PORTA DE APARELHO PASSOU A SER ENCOSTADA, e e por isso que este valor merece leitura atenta**: a tela importa `dispositivo/localizacao.dart` e chama `estado()`, `pedir()`, `abrirAjustesDoSistema()` e `cidadeAproximada()`. Ela NAO importa `package:geocoding/` nem `package:geolocator/` -- o portao `sem_geocodificacao_test.dart` reprova o importe do pacote fora da porta, e o portao estrutural de diretivas deste mesmo arquivo responde pelo resto. A permissao nunca e pedida na abertura: `_resolverACidade` chama `estado()`, e `pedir()` roda so a partir do toque em `Usar minha localizacao`. Entra tambem `_LinhaDoRecorte`, que e quem DIZ qual recorte esta valendo e de onde a cidade veio -- cidade derivada em silencio e pior que cidade nenhuma. **`app/lib/widgets/barra_de_listagem.dart` continua NAO TOCADO** (zero linhas nas duas rodadas desta frente): outra frente o esta invertendo. A FIACAO nao esta aqui: `dispositivo/localizacao.dart` (a resolucao e a memoria da grade de ~100 m), `api/modelos_perdido.dart` (o colapso de espaco que `texto_para_busca` nao faz) e `app.dart` (`LocalizacaoPorGeolocator` deixou de ser `const` porque ganhou memoria) estao FORA de `app/lib/telas`. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absurdo em SILENCIO). ANTERIOR: b7d0350bbfb714eaa46a820308ce039629be793c (A CIDADE OPCIONAL NA PAGINA DE PETS, 19/10/2026), decisao do cliente (*"o campo cidade do filtro da pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos 20 ultimos pets cadastrados e deixar que ele altere os filtros manualmente"*): UM arquivo de `app/lib/telas` muda, `perdido/lista_de_perdidos.dart`. O que sai dele: a fase `_Fase.semCidade` e as duas frases dela (`semCidade` e `rotuloDeEscolherCidade`), a porta `if (cidade == null)` de `_carregar()`, e a precedencia de tres fontes de cidade (`_cidadeDigitada`, `_cidadeDaRegiao`, `_cidadeDoAparelho`) com o `_lerOAparelho()` que buscava a ultima cidade do aparelho. O que entra: o recorte nasce `const RecorteDePerdidos()` e a lista abre com os 20 casos mais recentes de qualquer cidade; o campo de cidade da folha perde `obrigatorio` (e o rotulo visivel passa a `Cidade (opcional)`, derivado por `BichuField`); `_temRecorteAtivo` passa a CONTAR a cidade, que e o que mantem o gatilho de filtro vivo numa lista vazia por recorte. **Nenhuma porta de aparelho encostada**: o arquivo PERDEU importes (`sessao/cidade_escolhida.dart`, `widgets/botao_primario.dart` e `dart:async`) e nao ganhou nenhum; nenhum plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`. Pelo contrario, a unica dependencia de armazenamento de plataforma que esta tela tinha -- `CidadeEscolhida`, que chama `getApplicationDocumentsDirectory()` -- deixou de ser lida aqui. **`app/lib/widgets/barra_de_listagem.dart` NAO FOI TOCADO** (zero linhas), e isso e deliberado: outra frente o esta invertendo nesta mesma rodada. `obrigatorio` ja tinha padrao `false` e a folha ja tratava campo opcional em `serve`, em `ativos` e no `Limpar`, entao a mudanca inteira caberia do lado de quem chama. Ele esta FORA de `app/lib/telas` de qualquer forma e nao mexeria neste valor. A FIACAO da rota NAO esta aqui: `app/lib/roteamento/rotas.dart` e `app/lib/api/modelos_perdido.dart` (onde `RecorteDePerdidos.cidade` virou opcional com sentinela) estao FORA de `app/lib/telas` e por isso nao mexem neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+//
+// **ESTA UNIAO (19/10/2026) juntou `fix/foto-no-app-upload-e-previa` com
+// `feat/evento-simples-e-sem-telefone`.** NENHUM dos dois valores de ramo
+// sobrevive: os dois lados tocam `app/lib/telas` (um mexe em
+// `perfil/tela_dados_pessoais.dart`, o outro APAGA `rede/encontro_da_rede.dart`
+// e `rede/local_do_encontro.dart` e reescreve o cartao), e o hash e de ARVORE.
+// As justificativas dos DOIS lados ficam INTEIRAS abaixo, de proposito.
+//
+// === LADO `fix/foto-no-app-upload-e-previa` ===
+// [valor de ramo 169528b830ac6b09354b5c6385748d895039ab74] A FOTO SOBE NA ESCOLHA E E CONFIRMADA NO `Salvar` (19/10/2026), pedido do cliente: UM arquivo de `app/lib/telas` muda, `perfil/tela_dados_pessoais.dart`. O botao `Salvar a foto` SAI (*"remova esse botao de salvar foto, quando o usuario fizer o upload de qualquer foto no app, voce deve fazer o upload e apresentar como vai ficar de preview, e ao salvar o voce salva a foto"*), o envio passa para a ESCOLHA, a confirmacao passa a ser `photo_upload_id` no MESMO `PATCH /v1/me` do `Salvar`, e `Me.photo.status == 'rejected'` passa a desenhar `rejection_reason` em vez de ser tratado igual a sem foto. O defeito que isso conserta foi MEDIDO antes da mudanca: escolher a foto e tocar no `Salvar` lia 0 bytes, mandava 0 intencoes, 0 requisicoes ao armazenamento e 0 `PATCH /v1/me`, e respondia "Nada mudou desde a ultima vez.". **Nenhuma porta de aparelho encostada**: nenhum importe de plugin novo, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- a camera continua atras de `CameraEGaleria` e a previa continua sendo `widgets/previa_da_foto.dart`. O mecanismo de envio (`EnvioParaConfirmarDepois`) e a recusa por tipo (`recusaDeTipoDaFoto`) moram FORA de `app/lib/telas`, em `api/envio_de_foto.dart` e `dispositivo/camera_e_galeria.dart`, e por isso nao mexem neste valor. Valor RECALCULADO pelo procedimento deste proprio portao (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO). ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (LOTE DE 19/10/2026, logo abaixo). === LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+//
+// === LADO `feat/evento-simples-e-sem-telefone` ===
+// [valor de ramo acdd11654f38cd384fcb625129df5665c827e520] SO EVENTO ABERTO (19/10/2026, segunda decisao do cliente no mesmo dia: *"vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem"*). UM arquivo de `app/lib/telas` muda: `rede/agenda_da_rede.dart`. Sai a aba `Meus pedidos` do `enum AbaDaRede` (a agenda passa de tres abas para DUAS, com conta e sem -- `_abasVisiveis` deixou de depender da sessao), sai o ramo de carga que era o UNICO lugar do app que lia `listMyNetworkEventJoinRequests`, saem os dois grupos de filtro `Situação do pedido` (`state`) e `Público ou privado` (`visibility`), sai o campo `pedido` de `_ItemDaAgenda` e saem as duas constantes do vazio de pedidos. O resto da decisao mora FORA desta arvore: `app/lib/api/modelos_rede.dart` fixa `visibility=public` em `queryDaAgenda` e descarta o que nao e publico em `PaginaDaRede.doJson`, e `app/lib/api/rede_api.dart` ganhou o registro das SETE operacoes aposentadas -- os dois ficam em `app/lib/api/`, que esta fora de `app/lib/telas` e por isso nao mexe neste valor. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; o diff da agenda e remocao e prosa, e o portao estrutural de diretivas deste mesmo arquivo responde por isso. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato. ANTERIOR: e4244c57976a57cce656d9380b3f6cea2871a75d (o cartao so com foto e titulo, logo abaixo). **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, e ATENCAO: a frente `feat/barra-com-mural-e-rede-unificada` esta no MESMO metodo -- ela move `Perto` para dentro de `Rede` como aba `Comunidade`, e este commit tira uma aba do mesmo `enum AbaDaRede` e da mesma `_abasVisiveis`. A uniao das duas e textual e precisa ser lida, nao resolvida no automatico. // EVENTO SO COM FOTO E TITULO, E TELEFONE FORA DA TELA (19/10/2026, pedido do cliente: *"a pagina perto e rede tem que ser unificado e você deve mostrar apenas a foto e o titulo do evento, sem informações adicionais ou pagina de detalhes do evento e sem aparecer o telefone quando for profissionais/clinicas"*). CINCO caminhos de `app/lib/telas` mudam, e DOIS deles SOMEM da arvore -- e e por isso que o hash muda mais do que de costume. (1) `rede/encontro_da_rede.dart`: APAGADO. Era a pagina de detalhe do evento, e com ela sairam o pedido de participacao (`Pedir para participar`, `Desistir do pedido`), a guarda de acao que mandava o pedido depois do login, o mapa estatico da `/location`, `Adicionar ao calendário`, os links de convite e Instagram e o conteudo do privado aprovado. (2) `rede/local_do_encontro.dart`: APAGADO. Era o mapa estatico e a caixa de endereco daquela pagina, e nada mais a desenhava. (3) `rede/cartao_do_encontro.dart`: o cartao virou foto 16:9 mais titulo, e nada mais -- sairam o bloco de dia, o distintivo de situacao, a data, o lugar, a distancia da regiao, o resumo, os selos de valor e `Privado` e a pilula de `Meus pedidos`; o `InkWell` e o `Semantics(button: true)` sairam porque nao ha destino, e o criterio 2 da BICHUS-62 proibe controle sem desfecho. (4) `rede/pecas_da_rede.dart`: `rotuloDaSituacao`, `BlocoDoDia`, `DistintivoDeSituacao`, `SeloDoEncontro`, `seloDeValor` e `seloPrivado` sairam por falta de chamador, e `ImagemDoEncontroOuBanner` GANHOU `cacheWidth` pela largura pintada -- era o unico `Image.network` do app sem ele, e a agenda monta os 20 cartoes da pagina de uma vez. (5) `rede/agenda_da_rede.dart`: o cartao passa a receber so `encontro`. (6) `perto/pagina_do_local.dart`: saiu a linha `Telefone comercial: <phone_e164>` da secao `Informações` -- o UNICO lugar do app que pintava o numero --, e a frase do visitante parou de prometer o telefone. O botao `Ligar` FICOU: ele nao mostra numero. (7) `rede/criar_encontro.dart`: o desfecho de criar virou `context.go(Rotas.rede)`, porque a pagina do proprio evento, que era o desfecho, saiu. **A PAGINA DO LOCAL NAO SAIU**: o pedido de 19/10 removeu a pagina do EVENTO, e a do local e pedido dele de 18/10 (nota de 1 a 5 e recomendacao em texto). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo responde por isso, e `rede/encontro_da_rede.dart` e `rede/local_do_encontro.dart` eram DUAS das telas que ele media (o `url_launcher` do convite e o `Uri` do mapa sairam com elas). A FIACAO da rota NAO esta nesta arvore: `app/lib/roteamento/rotas.dart` fica FORA de `app/lib/telas`, e a remocao de `encontros/:slug` nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato. ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras tres frentes tocando `app/lib/telas` nesta rodada (a unificacao da barra e das abas, Pets por geolocalizacao e o Mural), e valor de ramo isolado nao sobrevive a uniao.
+// [lado do ramo feat/evento-simples-e-sem-telefone, valor de ramo bea2650f34, SUPERADO pela uniao] A PALAVRA `Cancelado` NO CARTAO (19/10/2026, terceira decisao do cliente no mesmo dia, sobre a pergunta fechada que a entrega da manha deixou: *"um cartao limpo nao vale alguem sair de casa para um evento que nao existe"*). UM arquivo de `app/lib/telas` muda: `rede/cartao_do_encontro.dart`. O cartao de um evento `status: cancelled` ganha UMA palavra acima do titulo -- sem fundo, sem pilula, sem glifo, sem a data ou o lugar de volta --, e os outros tres estados (`upcoming`, `happening`, `ended`) continuam com o titulo e nada mais. O cartao volta a ter um no `Semantics` com rotulo montado (`Cancelado: <titulo>`), porque MEDI o primeiro desenho e ele estava errado: `MergeSemantics` em volta da coluna publicava `label=Cancelado` e COMIA o titulo -- o leitor de tela anunciaria "Cancelado" sem dizer de qual evento, que e pior que a ausencia da palavra. `excludeSemantics: true` nao apaga acao nenhuma aqui: o cartao deixou de ser tocavel em 19/10 e nao ha `onTap`, `InkWell` nem `TextButton` embaixo dele. **O cinza da foto NAO voltou** -- ele saiu nesta rodada por ser sinal exclusivamente por cor (SC 1.4.1), a palavra abriria a porta para ele voltar como reforco, e a decisao de nao traze-lo esta no relato da entrega. `DistintivoDeSituacao`, `rotuloDaSituacao` e os selos continuam APAGADOS de `rede/pecas_da_rede.dart`: a palavra e um `Text` do proprio cartao, e nao a pilula de volta. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; o unico importe do arquivo continua sendo `material`, a camada de api e o tema. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato. ANTERIOR: acdd11654f38cd384fcb625129df5665c827e520 (so evento aberto, logo abaixo). **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- `feat/barra-com-mural-e-rede-unificada` continua no mesmo `enum AbaDaRede` e na mesma `_abasVisiveis` de `rede/agenda_da_rede.dart`; este commit NAO toca aquele arquivo, e a lista de hunks da colisao esta no relato da entrega anterior. // SO EVENTO ABERTO (19/10/2026, segunda decisao do cliente no mesmo dia: *"vamos deixar apenas os eventos abertos por enquanto, no futuro analisamos a necessidade de ter eventos privados tambem"*). UM arquivo de `app/lib/telas` muda: `rede/agenda_da_rede.dart`. Sai a aba `Meus pedidos` do `enum AbaDaRede` (a agenda passa de tres abas para DUAS, com conta e sem -- `_abasVisiveis` deixou de depender da sessao), sai o ramo de carga que era o UNICO lugar do app que lia `listMyNetworkEventJoinRequests`, saem os dois grupos de filtro `Situação do pedido` (`state`) e `Público ou privado` (`visibility`), sai o campo `pedido` de `_ItemDaAgenda` e saem as duas constantes do vazio de pedidos. O resto da decisao mora FORA desta arvore: `app/lib/api/modelos_rede.dart` fixa `visibility=public` em `queryDaAgenda` e descarta o que nao e publico em `PaginaDaRede.doJson`, e `app/lib/api/rede_api.dart` ganhou o registro das SETE operacoes aposentadas -- os dois ficam em `app/lib/api/`, que esta fora de `app/lib/telas` e por isso nao mexe neste valor. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; o diff da agenda e remocao e prosa, e o portao estrutural de diretivas deste mesmo arquivo responde por isso. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato. ANTERIOR: e4244c57976a57cce656d9380b3f6cea2871a75d (o cartao so com foto e titulo, logo abaixo). **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, e ATENCAO: a frente `feat/barra-com-mural-e-rede-unificada` esta no MESMO metodo -- ela move `Perto` para dentro de `Rede` como aba `Comunidade`, e este commit tira uma aba do mesmo `enum AbaDaRede` e da mesma `_abasVisiveis`. A uniao das duas e textual e precisa ser lida, nao resolvida no automatico. // EVENTO SO COM FOTO E TITULO, E TELEFONE FORA DA TELA (19/10/2026, pedido do cliente: *"a pagina perto e rede tem que ser unificado e você deve mostrar apenas a foto e o titulo do evento, sem informações adicionais ou pagina de detalhes do evento e sem aparecer o telefone quando for profissionais/clinicas"*). CINCO caminhos de `app/lib/telas` mudam, e DOIS deles SOMEM da arvore -- e e por isso que o hash muda mais do que de costume. (1) `rede/encontro_da_rede.dart`: APAGADO. Era a pagina de detalhe do evento, e com ela sairam o pedido de participacao (`Pedir para participar`, `Desistir do pedido`), a guarda de acao que mandava o pedido depois do login, o mapa estatico da `/location`, `Adicionar ao calendário`, os links de convite e Instagram e o conteudo do privado aprovado. (2) `rede/local_do_encontro.dart`: APAGADO. Era o mapa estatico e a caixa de endereco daquela pagina, e nada mais a desenhava. (3) `rede/cartao_do_encontro.dart`: o cartao virou foto 16:9 mais titulo, e nada mais -- sairam o bloco de dia, o distintivo de situacao, a data, o lugar, a distancia da regiao, o resumo, os selos de valor e `Privado` e a pilula de `Meus pedidos`; o `InkWell` e o `Semantics(button: true)` sairam porque nao ha destino, e o criterio 2 da BICHUS-62 proibe controle sem desfecho. (4) `rede/pecas_da_rede.dart`: `rotuloDaSituacao`, `BlocoDoDia`, `DistintivoDeSituacao`, `SeloDoEncontro`, `seloDeValor` e `seloPrivado` sairam por falta de chamador, e `ImagemDoEncontroOuBanner` GANHOU `cacheWidth` pela largura pintada -- era o unico `Image.network` do app sem ele, e a agenda monta os 20 cartoes da pagina de uma vez. (5) `rede/agenda_da_rede.dart`: o cartao passa a receber so `encontro`. (6) `perto/pagina_do_local.dart`: saiu a linha `Telefone comercial: <phone_e164>` da secao `Informações` -- o UNICO lugar do app que pintava o numero --, e a frase do visitante parou de prometer o telefone. O botao `Ligar` FICOU: ele nao mostra numero. (7) `rede/criar_encontro.dart`: o desfecho de criar virou `context.go(Rotas.rede)`, porque a pagina do proprio evento, que era o desfecho, saiu. **A PAGINA DO LOCAL NAO SAIU**: o pedido de 19/10 removeu a pagina do EVENTO, e a do local e pedido dele de 18/10 (nota de 1 a 5 e recomendacao em texto). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo responde por isso, e `rede/encontro_da_rede.dart` e `rede/local_do_encontro.dart` eram DUAS das telas que ele media (o `url_launcher` do convite e o `Uri` do mapa sairam com elas). A FIACAO da rota NAO esta nesta arvore: `app/lib/roteamento/rotas.dart` fica FORA de `app/lib/telas`, e a remocao de `encontros/:slug` nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato. ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras tres frentes tocando `app/lib/telas` nesta rodada (a unificacao da barra e das abas, Pets por geolocalizacao e o Mural), e valor de ramo isolado nao sobrevive a uniao.
+//
+// HISTORICO DA LINHA ANTERIOR (mantido inteiro, de proposito): LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+/// [valor PENDENTE do lote em mescla] 
+/// [lado do ramo feat/capa-do-evento-e-vitrine, valor de ramo db34d3b735, SUPERADO pela uniao] A CAPA DO EVENTO E A VITRINE QUE ACEITA FOTO (19/10/2026), dois pedidos antigos do cliente: *"a foto que eu estou falando para criar do evento e a da capa do evento"* (hoje) e *"perfil do usuario com vitrine de fotos, parecido com instagram"* (18/10). DOIS arquivos de `app/lib/telas` mudam. (1) `rede/criar_encontro.dart`: o formulario passa a PERGUNTAR a capa, no padrao decidido em 19/10 (escolher -> envia na hora -> previa do arquivo local -> `Criar o encontro` confirma), e a confirmacao e `cover_photo_upload_id` no MESMO `POST /v1/network/events` -- nao ha segundo caminho de confirmacao e nao ha botao separado de salvar foto. (2) `perfil/vitrine_de_fotos.dart`: nasce o controle de ADICIONAR foto, que a tela nao tinha (o vazio dizia "Adicione uma foto para comecar a sua vitrine" e nao havia como), pelo mesmo padrao e por `VitrineApi.substituir`, com `purpose` `user_showcase` MEDIDO no contrato. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- a camera continua atras de `dispositivo/camera_e_galeria.dart`, o envio e `api/envio_de_foto.dart` (`EnvioParaConfirmarDepois`) e a previa e `widgets/previa_da_foto.dart`, todos FORA de `app/lib/telas`. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore MESCLADA de trabalho (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de ramo nem de relato.
+/// [valor PENDENTE do lote em mescla] 
+/// [lado do ramo feat/barra-com-mural-e-rede-unificada, valor de ramo 30fdc84cd6, SUPERADO pela uniao] BARRA NOVA, `Rede` REUNIDA E GAVETA OCULTA (19/10/2026, quatro decisoes do cliente): SETE arquivos de `app/lib/telas` mudam, TRES nascem e UM e apagado. (1) `casca_com_abas.dart`: o registro de secoes vira `Pets · Rede · Mural · Loja · AuAu` (`Perto` SAI, `Mural` ENTRA com `dynamic_feed` e `EstadoDaSecao.casca`), o `drawer:` sai do `Scaffold` da casca (*"vamos ocultar o menu por enquanto"*), o `leading` da `TelaDeAba` deixa de ser o hamburguer e passa a ser `AvatarDaConta` (*"colocar o icone do usuario no lugar do menu, do lado esquerdo da pagina"*), `actions` fica so com o sino, e a margem interna da foto troca de lado. O orcamento do titulo foi de 160,00 para **224,00 dp** em 320 dp a 200%, MEDIDO, e com ele a excecao de corte de cinco letras acabou -- `Mural` pede os mesmos 172,90 dp de `Perto` e CABE, com 51,10 de folga. (2) `abas.dart`: `AbaPerto` E APAGADA (a secao deixou de existir), `AbaRede` passa a devolver `SecaoDaRede`, `AbaMural` NASCE, `Pets` ganha `AcoesDeCriarFlutuantes` com as TRES acoes que a gaveta perdeu, e `AbaPerfil` ganha `Pedidos de conexao` e `Pessoas bloqueadas` -- os DOIS itens que tinham a gaveta como UNICA porta em `lib/`, medido antes de ocultar o menu. (3) `rede/secao_da_rede.dart` NASCE: a secao reunida, com as abas `Eventos` e `Comunidade` numa `TabBar` ROLAVEL e uma acao flutuante que troca com a aba. (4) `mural/tela_do_mural.dart` NASCE: o LUGAR da linha do tempo, em estado inicial honesto e SEM acao de publicar -- nao existe `user_publications` nem operacao de publicar nesta arvore, e o conteudo e de outra frente. (5) `perto/tela_de_minhas_indicacoes.dart` NASCE: a porta propria da lista que nao cabe no filtro (a entidade muda -- indicacao em analise nao e local da lista). (6) `perto/corpo_do_perto.dart` E APAGADO: as duas abas dele nao existem mais. (7) `rede/agenda_da_rede.dart`: `AbaDaRede` SAI -- as tres abas viraram FILTRO (`Quando -> Próximos/Encerrados` e `Meu envolvimento -> Só onde eu pedi`), e a `TabBar` sai desta tela (as abas passaram a ser da SECAO). (8) `gaveta_de_secoes.dart`: as OITO linhas de `Perto` mudam de chave para `Rotas.rede` e `Mural` entra com UMA -- o inventario de 27.5 vai de 52 para 53 linhas, 17 destinos e 7 itens vivos (6 destinos distintos). (9) `perto/pagina_do_local.dart` e `perto/sugerir_profissional.dart`: TRES linhas de `Rotas.perto` -> `Rotas.rede` e DOIS rotulos (`Ver o Perto` -> `Ver a Rede`, `Voltar para o Perto` -> `Voltar para a Rede`). **A PASTA `perto/` NAO FOI RENOMEADA, de proposito**: tres frentes editam arquivos dela nesta mesma rodada, e mover a pasta trocaria uma mudanca de composicao por um conflito textual em cada arquivo. O nome da pasta nao aparece em tela nenhuma. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- `AcoesDeCriarFlutuantes` mora em `app/lib/widgets`, FORA desta arvore, e importa so `material` e o tema; a camera continua atras da porta e `escanear/tela_leitor_de_qr.dart` nao foi tocado. O portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. **A FIACAO das rotas NAO esta aqui**: `Rotas.perto` apagada, `Rotas.mural` e `Rotas.minhasIndicacoes` novas e a ordem dos ramos vivem em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras TRES frentes tocando `app/lib/telas` nesta rodada (Pets por geolocalizacao, cartao de evento simples, e o conteudo do Mural), e valor de ramo isolado nao sobrevive a uniao. **SEGUNDA RODADA DO MESMO DIA, a resposta dele a minha ressalva:** eu lhe mostrei as tres opcoes da folha de `Pets` e perguntei qual delas era *"adicionar um novo pet perdido"*; resposta literal, *"botao para escanear o pet"*. `abas.dart` muda de novo: `Escanear uma tag` sai da folha e vira o alvo flutuante PRINCIPAL de `Pets` (um toque, `qr_code_scanner` -- LER a plaquinha, contra `qr_code_2` que e EXIBIR a propria), e `Registrar achado avulso` e `Cadastrar pet` passam para o alvo SECUNDARIO ao lado dele. `AcoesDeCriarFlutuantes` (em `app/lib/widgets`, FORA desta arvore) passou a desenhar os dois alvos numa `Row`, e e essa escolha que mantem a invasao do pe da lista em **72,00 dp**: empilhados em coluna ela iria a 144,00 e o respiro rolavel teria de dobrar. Substitui a68912e09ef07bc154ba498b2e930184f4e730be, e antes dele c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (e o valor intermediario 52d21ea1b0 desta propria frente, de antes dos consertos de prosa em `perto/minhas_indicacoes.dart` -- o cabecalho dela ainda dizia que ela era aba e que "falta uma linha" para ser -- e em `perto/lista_do_diretorio.dart`, que apontava a acao flutuante para `AbaPerto`). // LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+///
+/// **VALOR FINAL DO SEGUNDO LOTE DE 19/10/2026.**
+///
+/// **SETE valores de ramo disputaram este campo, e NENHUM sobreviveu.** O
+/// hash e de ARVORE e cobre `app/lib/telas` inteira; cada frente mediu a SUA
+/// arvore isolada, e seis das sete tocaram a pasta. Os valores superados,
+/// todos com a justificativa INTEIRA preservada acima, de proposito:
+///
+///   c46ae91fdb  `origin/development` (o PRIMEIRO lote de 19/10)
+///   6622873a56  `feat/versao-minima-do-app`
+///   0a06fa5404  `feat/app-manda-a-propria-versao` (a mescla do anterior)
+///   7e739f5a3b  `feat/pets-por-distancia`
+///   db34d3b735  `feat/capa-do-evento-e-vitrine`
+///   bea2650f34  `feat/evento-simples-e-sem-telefone` (a ponta `58d0df28`)
+///   30fdc84cd6  `feat/barra-com-mural-e-rede-unificada`
+///
+/// `fix/cancelar-o-proprio-evento` nao entra na lista: ela nao tocou
+/// `app/lib/telas` e media o valor da propria development.
+///
+/// **O QUE MUDOU NESTA UNIAO, e por que o valor nao e o de nenhum ramo.** As
+/// mudancas se somam na mesma pasta: a pasta NOVA `atualizacao/` (bloqueio
+/// por versao), `perdido/lista_de_perdidos.dart` (a cidade pela
+/// localizacao), `perfil/tela_dados_pessoais.dart` e `perfil/vitrine_de_fotos.dart`
+/// (a foto que sobe na escolha e a vitrine), `rede/encontro_da_rede.dart` e
+/// `rede/local_do_encontro.dart` APAGADAS, `rede/cartao_do_encontro.dart`
+/// (foto e titulo, mais UMA palavra no cancelado), `rede/criar_encontro.dart`
+/// (a capa), `perto/pagina_do_local.dart` (o telefone fora da tela), a pasta
+/// NOVA `mural/`, `rede/secao_da_rede.dart` NOVA, `perto/tela_de_minhas_indicacoes.dart`
+/// NOVA, `perto/corpo_do_perto.dart` APAGADA, mais `abas.dart`,
+/// `casca_com_abas.dart`, `gaveta_de_secoes.dart` e
+/// `rede/agenda_da_rede.dart`.
+///
+/// **`rede/agenda_da_rede.dart` NAO E A SOMA DOS DOIS DIFFS, e isto precisa
+/// ser lido.** `feat/barra-com-mural-e-rede-unificada` e
+/// `feat/evento-simples-e-sem-telefone` estavam no MESMO metodo: a primeira
+/// converteu as tres abas em recorte e deixou a terceira viva como o `bool
+/// _soOndePedi`; a segunda REMOVEU a aba `Meus pedidos` por decisao do
+/// cliente no mesmo dia. **A remocao ganhou, e nao por preferencia de quem
+/// mesclou: o outro lado nao compilaria** -- `RecorteDaRede` perdeu
+/// `visibilidade`, `estadoDoPedido` e `queryDePedidos`, e
+/// `AgendaDaRede.tituloDoVazioDePedidos` deixou de ser declarada. O
+/// resultado tem DUAS abas de secao (`Eventos` e `Comunidade`, em
+/// `rede/secao_da_rede.dart`, `TabBar` rolavel), `Próximos`/`Encerrados`
+/// como grupo `Quando` da folha, `Meus pedidos` INEXISTENTE e
+/// `Minhas indicações` como porta propria.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore
+/// MESCLADA (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
+/// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
+/// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
+/// copiado de ramo nem de relato.
+/// [valor de ramo 0bda41ae9a, SUPERADO pela uniao] SEGUNDO LOTE DE 19/10/2026, VALOR FINAL: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os SETE valores de ramo listados acima, cujas justificativas ficam INTEIRAS.
+/// [lado do ramo feat/meus-eventos-e-cancelar, valor de ramo c87d9e1afc, SUPERADO pela uniao] `Perfil` > `Meus eventos` (19/10/2026): UM arquivo NOVO em `app/lib/telas` -- `perfil/meus_eventos.dart` -- mais UMA linha em `abas.dart` (o `ItemDeMenu` entre `Meus achados` e `Sair da conta`, onde o proprio arquivo declara que item novo entra) e o importe dela. A tela e o UNICO caminho do app ate `cancelNetworkEvent`: nada na resposta da agenda diz de quem e o encontro. **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io`; a tela nova importa so `material`, a camada de api, o `Escopo`, o tema, quatro pecas de `widgets/` (`arrastar_para_atualizar`, `convite_para_entrar`, `faixa_de_aviso`, `folha_destrutiva`, `saida_da_tela`) e `rede/pecas_da_rede.dart` -- o portao estrutural de diretivas deste mesmo arquivo responde por isso. A FIACAO da rota NAO esta aqui: ela mora em `app/lib/roteamento/rotas.dart`, que esta FORA de `app/lib/telas` e por isso nao mexe neste valor. Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de trabalho (GIT_INDEX_FILE proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${arvore}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o modificador de historia `:a` e devolve caminho absurdo em SILENCIO). **QUEM MESCLAR PRECISA RECALCULAR SOBRE A ARVORE MESCLADA**: valor de ramo isolado NAO sobrevive a uniao, e SEIS frentes mexem em `app/lib/telas` nesta rodada. ANTERIOR: c46ae91fdb80c21c16742669fb38d8d1e83a2e4c (o LOTE DE 19/10/2026, logo abaixo). === LOTE DE 19/10/2026, VALOR FINAL: recalculado pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`) depois dos DOIS consertos de ACHADO DA MESCLA: (1) os itens vivos novos da gaveta nasceram sem glifo porque a assercao que o exige veio de outro ramo; (2) `pessoa/tela_perfil_de_pessoa.dart` e `seguranca/tela_de_bloqueados.dart` montavam `RefreshIndicator` CRU, e o ponto unico do gesto veio de outro ramo -- as duas foram convertidas para `ArrastarParaAtualizar`. Substitui 201cb4ec32ee39e427d3645c699d0e9d8da537d5.
+///
+/// **VALOR FINAL DO SEGUNDO LOTE DE 19/10/2026, com as OITO frentes.**
+///
+/// **OITO valores de ramo disputaram este campo, e NENHUM sobreviveu** -- mais
+/// um valor intermediario desta propria mescla, que tambem nao sobreviveu
+/// quando a oitava frente entrou. O hash e de ARVORE e cobre `app/lib/telas`
+/// inteira; cada frente mediu a SUA arvore isolada. Os valores superados, com
+/// a justificativa INTEIRA preservada acima, de proposito:
+///
+///   c46ae91fdb  `origin/development` (o PRIMEIRO lote de 19/10)
+///   6622873a56  `feat/versao-minima-do-app`
+///   0a06fa5404  `feat/app-manda-a-propria-versao` (a mescla do anterior)
+///   7e739f5a3b  `feat/pets-por-distancia`
+///   db34d3b735  `feat/capa-do-evento-e-vitrine`
+///   bea2650f34  `feat/evento-simples-e-sem-telefone` (a ponta `58d0df28`)
+///   30fdc84cd6  `feat/barra-com-mural-e-rede-unificada`
+///   c87d9e1afc  `feat/meus-eventos-e-cancelar`
+///   0bda41ae9a  valor INTERMEDIARIO desta mescla, com SETE frentes, antes de
+///               a oitava entrar -- registrado para ninguem o confundir com o
+///               valor final nem com um valor de ramo
+///
+/// `fix/cancelar-o-proprio-evento` nao entra na lista: ela nao tocou
+/// `app/lib/telas`, e fica CONTIDA em `feat/meus-eventos-e-cancelar`.
+///
+/// **O QUE A OITAVA FRENTE SOMOU A PASTA**, e por que o valor mudou de novo:
+/// `perfil/meus_eventos.dart` NASCE (a lista de quem criou o encontro, e o
+/// unico caminho do app ate `Cancelar`); `abas.dart` ganha o item
+/// `Meus eventos`; e `rede/pecas_da_rede.dart` RECUPERA `rotuloDaSituacao` e
+/// `DistintivoDeSituacao`.
+///
+/// **DUAS COLISOES ENTRE FRENTES FORAM RESOLVIDAS NESTA PASTA, e nenhuma deu
+/// conflito textual na segunda -- ela apareceu como ERRO DE COMPILACAO.**
+///
+/// 1. `abas.dart`, conflito textual: `feat/barra-...` e
+///    `feat/meus-eventos-e-cancelar` acrescentaram item no MESMO ponto do menu
+///    da conta. Os TRES sobrevivem (`Pedidos de conexão`, `Pessoas
+///    bloqueadas`, `Meus eventos`), com `Sair da conta` ainda por ultimo.
+///    Apagar qualquer um deixaria tela construida sem porta.
+///
+/// 2. `rede/pecas_da_rede.dart`, SEM conflito textual: `meus_eventos.dart`
+///    chamava `rotuloDaSituacao`, `DistintivoDeSituacao` e o parametro
+///    `cancelado` da capa, que `feat/evento-simples-e-sem-telefone` havia
+///    apagado. O git dobrou os dois lados em silencio e `flutter analyze`
+///    acusou com QUATRO erros. Os dois primeiros voltaram verbatim da base,
+///    porque o motivo escrito da remocao deles era **falta de chamador** e a
+///    oitava frente traz um chamador noutra tela. O terceiro NAO voltou: ele
+///    saiu por ser sinal exclusivamente por cor (SC 1.4.1), e decisao de
+///    acessibilidade nao se desfaz por conveniencia de mescla.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore
+/// MESCLADA (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
+/// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
+/// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
+/// copiado de ramo nem de relato.
+const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

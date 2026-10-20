@@ -62,6 +62,20 @@ enum ProblemTipo {
   /// por versao antiga do app depois de o servidor ter mudado o valor.
   limiteDePetsAtingido('pet-limit-reached'),
 
+  /// Teto de 3 encontros ATIVOS da comunidade por conta. 409. So aparece ao
+  /// criar encontro na `Rede`.
+  ///
+  /// **Tipo proprio, e nao [limiteDePetsAtingido] nem o 429 de chamada.** O
+  /// contrato declara os tres separados (`#/x-problem-types`), e a diferenca e
+  /// de tela: o 429 pede para esperar, este pede para ENCERRAR ou cancelar um
+  /// encontro -- esperar nao resolve, porque o balde que esta cheio e o de
+  /// encontros em aberto e nao o de chamadas.
+  ///
+  /// O numero **nao e escrito na frase**: ele sai de `limit` na resposta, pela
+  /// mesma razao de [limiteDePetsAtingido] -- uma versao antiga do app fica
+  /// instalada por semanas depois de o servidor mudar o valor.
+  limiteDeEncontrosDaComunidade('community-event-limit-reached'),
+
   /// O texto **nao normaliza para um codigo**: tamanho diferente de 16 depois
   /// da normalizacao, caractere fora do alfabeto, ou **simbolo de verificacao
   /// que nao bate**. 400.
@@ -84,8 +98,61 @@ enum ProblemTipo {
   /// que o recurso de outro tutor existe, e a tela nao pode desfazer isso.
   naoEncontrado('not-found'),
 
+  /// A conversa mediada nao aceita mais mensagem. 410.
+  ///
+  /// **O corpo e FIXO, e os dois motivos chegam como este mesmo tipo**: a
+  /// conversa foi encerrada (ou o caso foi), OU a conta do outro lado foi
+  /// desabilitada. O contrato declara a fusao por extenso em
+  /// `#/x-problem-types`, e ela e de seguranca: distinguir contaria a uma
+  /// pessoa o que aconteceu com a conta de outra.
+  ///
+  /// Por isso a tela trata os dois com a MESMA saida -- modo leitura, sem
+  /// caixa de texto. Ela nao tem como escrever "a conta foi desabilitada", e
+  /// nao deve: o unico sinal desse caso e a despersonalizacao que o servidor
+  /// ja faz em `participants` (`Tutor` / `Quem achou`).
+  conversaEncerrada('conversation-closed'),
+
+  /// O link publico de um caso nao leva mais a caso aberto. 410.
+  ///
+  /// **O corpo cobre CINCO situacoes com a mesma resposta** (`x-problem-types`,
+  /// slug `lost-case-closed`): caso encerrado, pet excluido, pet falecido, pet
+  /// arquivado e token desconhecido. A fusao e de privacidade, e a tela nao
+  /// pode desfaze-la -- distinguir contaria a um estranho o que aconteceu com o
+  /// animal de outra pessoa, ou se aquele token um dia existiu.
+  ///
+  /// **Nao e 404, e a diferenca e de produto**: link impresso num cartaz nao
+  /// pode terminar numa pagina sem saida (mesma razao da tag revogada,
+  /// ADR-0004). O contrato declara a saida em `next_action`:
+  /// `register_stray_found_report` -- quem chegou por um cartaz antigo e esta
+  /// vendo um animal parecido registra o achado avulso, e o cruzamento por
+  /// atributos faz o resto.
+  ///
+  /// **Separado de [conversaEncerrada]** de proposito, e a nota do contrato diz
+  /// por que: *"a tela e outra: quem abre o cartaz nao esta numa conversa"*.
+  casoEncerrado('lost-case-closed'),
+
   /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
   limiteDeTentativas('rate-limited'),
+
+  // Os DOIS de `If-Match` (ADR-0027). Eles sao dois tipos e nao um porque a
+  // tela reage diferente: um e falha do APP, o outro e colisao entre PESSOAS.
+
+  /// O `ETag` apresentado nao e a versao atual: alguem salvou depois de voce
+  /// ter lido. 412.
+  ///
+  /// **Tipo proprio, e nao a faixa generica de erro.** Sem ele o 412 cai em
+  /// [desconhecido] e a tela diz "algo deu errado", que e a frase que esconde
+  /// justamente o que a pessoa precisa saber -- o encontro mudou enquanto ela
+  /// olhava, e recarregar resolve. Medido em 19/10/2026: o enum tinha os dois
+  /// faltando e `deUri` devolvia [desconhecido] para ambos.
+  precondicaoFalhou('precondition-failed'),
+
+  /// Escrita sobre recurso existente sem `If-Match`. Nada foi gravado. 428.
+  ///
+  /// **Nao e erro para a pessoa ler**: e defeito de quem chamou, porque o app
+  /// deixou de mandar a versao que leu. A tela recarrega e tenta de novo em
+  /// vez de culpar quem tocou no botao.
+  precondicaoNecessaria('precondition-required'),
 
   /// Chegou um `type` que este build nao conhece.
   ///

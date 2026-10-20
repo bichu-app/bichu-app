@@ -51,6 +51,9 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio, rotaDoDiretorio } from './directory-routes.js';
 
+/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
+
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000;
@@ -58,6 +61,7 @@ const AGORA = 1_800_000_000_000;
 const ENTRADA: EntradaDoDiretorio = {
   slug: 'clinica-veterinaria-santa-barbara',
   kind: 'clinic',
+  entityKind: 'professional',
   displayName: 'Clínica Veterinária Santa Bárbara',
   about: 'Pronto atendimento 24 horas.',
   city: 'São Paulo',
@@ -66,6 +70,7 @@ const ENTRADA: EntradaDoDiretorio = {
   phoneE164: '+551130612200',
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
+  logoPublicKey: null,
 };
 
 interface Cenario {
@@ -87,6 +92,29 @@ function repositorio(cenario: Cenario): DirectoryRepository {
         distanciaDisponivel: cenario.distanciaDisponivel ?? true,
       });
     },
+    // OS CINCO METODOS DA AVALIACAO (18/10/2026) EXISTEM AQUI E RECUSAM.
+    //
+    // **Nao sao corpos vazios**, e a diferenca e a razao pela qual o cabecalho
+    // da porta avisa contra dobre com metodo vazio: um `async () => undefined`
+    // faria estes casos passarem medindo nada. Este arquivo cobre
+    // `listDirectoryEntries` e so ela; qualquer caso que chegue a um destes
+    // metodos esta exercitando outra rota pelo dobre errado, e o `throw`
+    // reprova esse caso em vez de aprova-lo em silencio.
+    lerLocalPublicado: () => {
+      throw new Error('lerLocalPublicado nao e exercitado por este arquivo');
+    },
+    listarAvaliacoes: () => {
+      throw new Error('listarAvaliacoes nao e exercitado por este arquivo');
+    },
+    gravarMinhaAvaliacao: () => {
+      throw new Error('gravarMinhaAvaliacao nao e exercitado por este arquivo');
+    },
+    apagarMinhaAvaliacao: () => {
+      throw new Error('apagarMinhaAvaliacao nao e exercitado por este arquivo');
+    },
+    denunciarAvaliacao: () => {
+      throw new Error('denunciarAvaliacao nao e exercitado por este arquivo');
+    },
   };
 }
 
@@ -102,6 +130,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     diretorio: repositorio(cenario),
     autenticador: { autenticar: (token: string) => Promise.resolve({ userId: token as UserId }) },
     clock,
+    urlDeMidia: URL_DE_MIDIA,
   });
   return app;
 }

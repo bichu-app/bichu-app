@@ -293,12 +293,34 @@ void main() {
     });
   });
 
-  group('o valor nunca aparece sem o rotulo e sem a data', () {
-    // ISCA -- em `app/lib/api/modelos_loja.dart`, em `linhaDoPreco`, devolva
-    // so o valor:
-    //     return valor;
-    // Este caso reprova: a linha deixa de conter o rotulo e a data.
-    testWidgets('ISCA -- valor, rotulo e data no MESMO texto', (tester) async {
+  group('o preco NAO esta no cartao (18/10/2026)', () {
+    // ========================================================================
+    // **ESTE GRUPO JA VIROU DUAS VEZES NO MESMO DIA, e as duas foram dele.**
+    //
+    //  - de manha ele cobrava valor, rotulo e data no MESMO texto (criterio 15
+    //    da BICHUS-185);
+    //  - no fim da manha virou para "so o valor", por pedido literal: *"remova
+    //    o texto 'preço de referência, consultado em 17/10', porque você já
+    //    colocou como eu pedi acima do titulo"*;
+    //  - agora vira de novo, e e o pedido mais curto dos tres: *"Retire o
+    //    preco dos produtos da loja e o texto de 'preco de referencia'"*.
+    //
+    // Nao e erro de leitura: e reversao deliberada, registrada no diff.
+    //
+    // **Quem mede a remocao por inteiro -- inclusive na arvore de semantica,
+    // onde `find.text` nao chega -- e
+    // `test/telas/loja_preco_de_referencia_test.dart`.** Este grupo cobra a
+    // metade que pertence a este arquivo: a VITRINE com dado de verdade, nos
+    // tres estados de preco que o contrato tem.
+    //
+    // ISCA -- em `CartaoDaLoja.build` (`lib/telas/loja/vitrine_da_loja.dart`),
+    // devolva o `Text(item.linhaDoPreco!, ...)`. Esperado: reprova
+    // `com preco VIGENTE o cartao nao mostra valor nenhum`.
+    // ========================================================================
+
+    testWidgets('com preco VIGENTE o cartao nao mostra valor nenhum', (
+      tester,
+    ) async {
       await abrirLoja(
         tester,
         rede: redeDaVitrine(
@@ -312,15 +334,53 @@ void main() {
         ),
       );
 
+      // ANCORA: o cartao existe e esta inteiro. Sem ela os tres `findsNothing`
+      // abaixo passariam com a vitrine vazia.
+      expect(
+        find.text('Bola Pop'),
+        findsOneWidget,
+        reason:
+            'REPROVA NA ANCORA: o cartao nao esta na tela, e as ausencias '
+            'abaixo nao significariam nada.',
+      );
+      expect(
+        find.text(CartaoDaLoja.rotuloDeSaida),
+        findsOneWidget,
+        reason:
+            'REPROVA NA ANCORA: a saida para o parceiro nao esta no '
+            'cartao.',
+      );
+
       // Escrito por extenso. Um `expect` montado com `formatarReais` ou com a
       // constante da tela acompanharia qualquer erro de digitacao.
       expect(
-        find.text('R\$ 89,90 · preço de referência, consultado em 14/03'),
-        findsOneWidget,
+        find.text('R\$ 89,90'),
+        findsNothing,
+        reason:
+            'REPROVA: o cartao mostra o valor. O item desta massa tem '
+            '`price_amount: 8990` e `price_status: vigente` -- exatamente o '
+            'estado em que o valor aparecia antes de 18/10/2026.',
+      );
+      expect(
+        find.textContaining('Preço de referência'),
+        findsNothing,
+        reason:
+            'REPROVA: a afirmacao "Preço de referência" voltou a tela. Ela '
+            'saiu no mesmo pedido do valor.',
+      );
+      expect(
+        find.textContaining('consultado em'),
+        findsNothing,
+        reason:
+            'REPROVA: a data da consulta continua na tela. Data de '
+            'consulta de um preco que nao esta mais na tela nao se refere a '
+            'nada.',
       );
     });
 
-    testWidgets('preco vencido nao mostra valor nenhum', (tester) async {
+    testWidgets('preco VENCIDO nao mostra valor nem a clausula orfa', (
+      tester,
+    ) async {
       await abrirLoja(
         tester,
         rede: redeDaVitrine(
@@ -333,8 +393,18 @@ void main() {
       );
 
       expect(
-        find.text('Preço não confirmado, veja no site do parceiro'),
+        find.text('Bola Pop'),
         findsOneWidget,
+        reason: 'REPROVA NA ANCORA: o cartao nao esta na tela.',
+      );
+      expect(
+        find.text('Preço não confirmado, veja no site do parceiro'),
+        findsNothing,
+        reason:
+            'REPROVA: o cartao ainda anuncia que o preco nao esta '
+            'confirmado. Era a clausula VISUAL que acompanhava o preco, e ela '
+            'ficou ORFA: existia para ocupar o lugar de um valor que a pessoa '
+            'esperava, e nao ha mais lugar nenhum.',
       );
       // E **nunca** o valor com um adjetivo ao lado.
       expect(find.textContaining('R\$'), findsNothing);
@@ -351,6 +421,21 @@ void main() {
         ),
       );
 
+      // ANCORA, acrescentada em 18/10/2026 junto com a remocao do preco.
+      //
+      // Ate aquele dia este caso tinha sentido sozinho: o cartao DESENHAVA
+      // preco nos outros dois estados, e a ausencia aqui distinguia
+      // `sem_preco` deles. Com o preco fora da tela nos tres estados, os dois
+      // `findsNothing` abaixo passariam com a vitrine VAZIA -- o portao cego
+      // que este repositorio ja produziu duas vezes. O caso fica (ele cobra
+      // que `sem_preco` nao invente "preco sob consulta" nem espaco
+      // reservado) e passa a ancorar no cartao.
+      expect(
+        find.text('Bola Pop'),
+        findsOneWidget,
+        reason: 'REPROVA NA ANCORA: o cartao nao esta na tela, e as ausencias '
+            'abaixo nao significariam nada.',
+      );
       // Nao ha "preco sob consulta" e nao ha espaco reservado vazio.
       expect(find.textContaining('R\$'), findsNothing);
       expect(
@@ -462,6 +547,14 @@ void main() {
       // 17/10, e este caso le o que o duble entregou em `taxonomiaDoContrato`.
       await tester.tap(find.text('Medicamentos'));
       await tester.pumpAndSettle();
+      // **A pastilha nao recorta nada sozinha** (decisao do cliente de 17/10):
+      // `Aplicar` e "o unico caminho de saida com efeito"
+      // (`lib/widgets/barra_de_listagem.dart`, linhas 86-87). Sem esta linha a
+      // rota nunca era chamada com `category`, e o caso irmao de `Perto`
+      // (`perto_com_dados_test.dart`, linhas 869-877) ja afirma os dois lados:
+      // antes do `Aplicar` nao ha recorte, depois ha.
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
 
       // O filtro de fato foi para a rota.
       expect(urls.last.queryParameters['category'], 'health');
@@ -517,9 +610,18 @@ void main() {
         },
       );
 
-      await tester.tap(find.byIcon(Icons.swap_vert));
+      // **Uma folha so, e um `Aplicar` so** (cliente, 17/10): a ordem deixou
+      // de ter controle proprio e passou a morar na mesma folha do filtro --
+      // `_controleDeOrdenacao` entra em `BarraDeListagem.ordenacao` e sai pelo
+      // mesmo `aoAplicar` (`vitrine_da_loja.dart`, linhas 346-348). O
+      // `Icons.swap_vert` que esta isca procurava nao existe mais, e um caso
+      // vizinho deste arquivo ja afirma isso (`findsNothing` sobre
+      // `Icons.swap_vert`, na linha 422).
+      await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Nome'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       // A pessoa pediu `Nome`. A lista saiu em `curadoria`, e e isso que a
@@ -692,10 +794,19 @@ void main() {
       );
     }
 
-    // E o aviso de que a compra e com o parceiro esta la, por extenso.
+    // **E o aviso de que a compra e com o parceiro NAO esta mais la.** A
+    // afirmacao virou do avesso, e nao foi apagada: o cliente pediu em
+    // 17/10/2026 *"Remova o bloco a compra e feita no site do parceiro"*, e o
+    // bloco saiu da vitrine e do detalhe (`vitrine_da_loja.dart`, linhas
+    // 330-337, e `produto_da_loja.dart`, linhas 278-280). O caso irmao de
+    // `loja_detalhe_do_produto_test.dart` (linha 702) ja fez a mesma volta,
+    // com a mesma razao escrita: a remocao de uma afirmacao de natureza
+    // juridica precisa de um caso que reprove se ela voltar por acidente, e
+    // nao de silencio. A redacao exata segue em
+    // `VitrineDaLoja.avisoDeQueNaoSomosOVendedor`.
     expect(
       find.textContaining('O Bichu não é o vendedor'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -791,6 +902,14 @@ void main() {
       // "Medicamentos", e nao "Saúde": o rotulo e dado do servidor desde
       // 17/10, e este caso le o que o duble entregou em `taxonomiaDoContrato`.
       await tester.tap(find.text('Medicamentos'));
+      await tester.pumpAndSettle();
+      // **A pastilha nao recorta nada sozinha** (decisao do cliente de 17/10):
+      // `Aplicar` e "o unico caminho de saida com efeito"
+      // (`lib/widgets/barra_de_listagem.dart`, linhas 86-87). Sem esta linha a
+      // rota nunca era chamada com `category`, e o caso irmao de `Perto`
+      // (`perto_com_dados_test.dart`, linhas 869-877) ja afirma os dois lados:
+      // antes do `Aplicar` nao ha recorte, depois ha.
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
       expect(urls.last.queryParameters['category'], 'health');
@@ -909,7 +1028,15 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       while (b.length < n) {
         b.write('abcd ');
       }
-      return b.toString().substring(0, n).trimRight();
+      final cru = b.toString().substring(0, n);
+      // **Devolve exatamente `n` caracteres.** O `trimRight()` que estava aqui
+      // devolvia `n - 1` sempre que `n` era multiplo de 5: `'abcd '` tem cinco
+      // caracteres, entao o ultimo caractere de `longo(500)` era o espaco da
+      // centesima palavra, e o `trim` o comia -- `longo(500).length` dava 499 e
+      // o caso pedia 500. Trocar o espaco final por uma letra mantem a
+      // propriedade de que ha espaco perto do corte (o corte e no caractere
+      // 500, longe do fim) e faz o tamanho ser o pedido.
+      return cru.endsWith(' ') ? '${cru.substring(0, n - 1)}e' : cru;
     }
 
     testWidgets('a quebra de linha é preservada, e descrição curta não ganha botão', (tester) async {

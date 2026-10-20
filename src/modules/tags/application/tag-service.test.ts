@@ -76,6 +76,7 @@ function petPadrao(): TagResolvida['pet'] {
     distinctiveMarks: 'Coleira vermelha.',
     careNotes: 'É medroso. Não corra atrás.',
     isLost: true,
+    photoKey: null,
   };
 }
 
@@ -223,6 +224,16 @@ function servico(estado: EstadoDoRepositorio) {
     },
   };
 
+  /**
+   * O QUE FOI PARA A FILA, e e o que torna verificavel a frase que faltava:
+   * escanear a plaquinha **enfileira a entrega do aviso ao tutor**.
+   *
+   * Antes desta entrega esta lista ficava vazia em todos os caminhos, e
+   * `owner_notified: true` saia na resposta de qualquer forma: o campo
+   * registrava INTENCAO, nao entrega.
+   */
+  const trabalhosEnfileirados: { kind: string; payload: unknown }[] = [];
+
   return {
     tags: criarTagService({
       repositorio,
@@ -238,14 +249,22 @@ function servico(estado: EstadoDoRepositorio) {
       // primeira leva de plaquinha prensada (ADR-0004).
       baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+      baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,
       chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
       rasterizador,
       conversaDoAviso,
+      fila: {
+        enqueue: (kind, payload) => {
+          trabalhosEnfileirados.push({ kind, payload });
+          return Promise.resolve('trabalho-de-bancada');
+        },
+      },
     }),
     contadores,
     eventos,
     desenhosRasterizados,
     conversasAbertas,
+    trabalhosEnfileirados,
   };
 }
 
@@ -728,5 +747,84 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
       /não normaliza para ele mesmo/u,
       'Um código que a resolução recusaria precisa derrubar a geração, e não virar QR.',
     );
+  });
+});
+
+/**
+ * ISCA — O AVISO AO TUTOR SAI DA FILA, E SO QUANDO DEVE.
+ *
+ * Esta e a prova por desligamento do buraco central do produto. Antes dela,
+ * `avisar` gravava o aviso, abria a conversa, devolvia `owner_notified: true`
+ * e **nao enfileirava entrega nenhuma** — e nenhum teste reprovava, porque
+ * nenhum olhava para a fila.
+ *
+ * Os dois casos sao um par, e nenhum serve sozinho:
+ *
+ * - o primeiro reprova se o emissor for removido ou renomeado;
+ * - o segundo (CONTRAPESO) reprova se o emissor virar incondicional. Um
+ *   `enqueue` solto no comeco de `avisar` passaria no primeiro caso e faria o
+ *   telefone do tutor tocar a cada re-escaneamento do MESMO achador na janela
+ *   de 6 h, que e exatamente o que o agrupamento existe para evitar.
+ */
+void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => {
+  void it('o aviso novo enfileira `tag.scan_notify` com o id do aviso gravado', async () => {
+    const { tags, contadores, trabalhosEnfileirados } = servico({ tag: tagAtiva() });
+
+    const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+
+    assert.equal(criado.ownerNotified, true);
+    assert.equal(
+      trabalhosEnfileirados.length,
+      1,
+      'REPROVA: escanear a plaquinha nao enfileirou entrega nenhuma. ' +
+        '`owner_notified: true` sem trabalho na fila e o defeito original: o ' +
+        'campo registra intencao, e o tutor nao recebe nada.',
+    );
+    assert.equal(trabalhosEnfileirados[0]?.kind, 'tag.scan_notify');
+    // O payload leva SO o identificador (§11.5), e e o id do aviso que esta
+    // linha acabou de gravar -- nao um id novo, nao o do pet, nao o da tag.
+    assert.deepEqual(trabalhosEnfileirados[0]?.payload, {
+      found_report_id: contadores.avisosGravados[0]?.id,
+    });
+  });
+
+  void it('CONTRAPESO: aviso agrupado ao do mesmo achador nao enfileira nada', async () => {
+    const { tags, contadores, trabalhosEnfileirados } = servico({
+      tag: tagAtiva(),
+      avisoRecente: { id: 'aviso-anterior', criadoEm: comoData(AGORA as Instant) },
+    });
+
+    const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+
+    assert.equal(criado.ownerNotified, false);
+    // O aviso continua sendo GRAVADO: agrupar muda a notificacao, nao descarta
+    // o fato. As duas asserccoes juntas e que fecham o cerco.
+    assert.equal(contadores.avisosGravados.length, 1);
+    assert.equal(
+      trabalhosEnfileirados.length,
+      0,
+      'REPROVA: o emissor virou incondicional. Re-escaneamento do mesmo ' +
+        'achador na janela de 6 h passou a tocar o telefone do tutor de novo, ' +
+        'que e o oposto do agrupamento.',
+    );
+  });
+
+  void it('`owner_notified` e o enfileiramento sao a MESMA decisao', async () => {
+    // A isca que impede as duas metades de divergirem no futuro: o que o
+    // achador le na tela e o que o tutor recebe no telefone saem da mesma
+    // expressao. Dois `if` separados divergem, e o divergente aqui e invisivel.
+    for (const recente of [undefined, { id: 'anterior', criadoEm: comoData(AGORA as Instant) }]) {
+      const { tags, trabalhosEnfileirados } = servico({
+        tag: tagAtiva(),
+        ...(recente === undefined ? {} : { avisoRecente: recente }),
+      });
+      const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+      assert.equal(
+        criado.ownerNotified,
+        trabalhosEnfileirados.length === 1,
+        'REPROVA: `owner_notified` e a fila discordaram. A tela do achador ' +
+          'passou a prometer um aviso que nao foi enfileirado, ou o contrario.',
+      );
+    }
   });
 });

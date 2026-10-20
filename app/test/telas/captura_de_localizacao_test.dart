@@ -45,6 +45,8 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
+import 'package:bichu/api/conexoes_api.dart';
+import 'package:bichu/api/me_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
@@ -61,6 +63,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
@@ -127,6 +130,11 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // A porta das conexoes entrou no escopo na uniao de 18/10/2026, junto
+      // com a rota de `Pedidos de conexao`.
+      conexoes: ConexoesApi(api),
+      // As rotas `tags: [me]` entraram no escopo com `Perfil` > `Meus dados`.
+      me: MeApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.
       diretorio: DiretorioApi(api),
       // A vitrine de `Loja` entrou no escopo junto com a listagem dela.
@@ -169,6 +177,11 @@ Future<_Caixa> _montar(
       sessao: sessao,
       guarda: guarda,
       cacheDeMeusPets: CacheDeMeusPets(),
+      // EM MEMORIA, e nao o deposito em arquivo do app: este caso monta o
+      // `Escopo` a mao, e o deposito em arquivo chama
+      // `getApplicationDocumentsDirectory()` -- canal de plataforma que trava o
+      // `pumpAndSettle` para sempre, sem mensagem.
+      cidadeEscolhida: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
       cofreDoQr: CofreDaImagemDoQr(),
       avisoDeCadastro:
           AvisoDeCadastro(deposito: DepositoDoAvisoEmMemoria()),
@@ -231,7 +244,33 @@ Future<void> _escolherOEstado(WidgetTester tester, String sigla) async {
       .rotulo;
   await rolarAte(tester, find.text(TextosDaLocalizacao.escolherOEstado));
   await tocar(tester, find.text(TextosDaLocalizacao.escolherOEstado));
-  await tocar(tester, find.text(nome).last);
+  // **A opcao e a do `ListTile` da folha, e a folha ROLA.**
+  //
+  // `find.text(nome).last` era ambiguo e errava calado: com `São Paulo`
+  // digitado no campo `Cidade`, o texto do CAMPO tambem casa, e a folha de 27
+  // itens so constroi o que cabe -- `São Paulo` e o 25o e nao esta montado.
+  // O toque ia para o campo atras da folha, escorregava para a lista e
+  // selecionava o estado que estivesse naquele ponto: medido, saiu `BA`.
+  // Procurar dentro do `ListTile` separa a opcao do campo, e rolar a folha
+  // constroi o item antes do toque.
+  final opcao = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text(nome),
+  );
+  if (opcao.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      opcao,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tocar(tester, opcao);
 }
 
 void main() {

@@ -5,17 +5,18 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../escopo.dart';
-import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../avisos/aviso_de_cadastro_incompleto.dart';
+import '../../widgets/item_de_menu.dart';
 import '../../widgets/moldura.dart';
 import '../casca_com_abas.dart';
-import '../perdido/tela_de_quem_e_o_caso.dart';
 
 /// O cache de leitura de `GET /pets`, do criterio 7 da BICHUS-62.
 ///
@@ -60,27 +61,27 @@ class CacheDeMeusPets {
 ///
 /// Os cartoes da variante `lista` do paragrafo 11.3 contra `listMyPets`.
 ///
+/// ## O que esta tela PERDEU em 18/10/2026, e para onde foi
+///
+/// A acao `Marcar como perdido`. Ela entrou na BICHUS-21, quando a tela que
+/// ela abre passou a existir, e saiu agora para a **pagina do pet**, junto do
+/// QR da plaquinha. Nao e perda de funcao: e a escolha de qual animal
+/// deixando de ser uma pergunta. F3.0 existia "para prevenir o deslize de
+/// marcar o pet errado quando ha mais de um" (criterio 1), e na pagina de um
+/// animal so nao ha deslize possivel -- quem abriu a pagina da Nina ja
+/// respondeu "a Nina" ao tocar no cartao dela.
+///
+/// **O que esta tela passou a sustentar e a porta de entrada daquela.** Os
+/// cartoes sao o unico caminho do app ate `Rotas.detalheDoPet` (medido em
+/// 18/10: `Rotas.detalheDoPetDe` e empurrada deste arquivo e de mais nenhum
+/// lugar de `app/lib`), e com a acao de perdido e o QR morando la, esconder o
+/// cartao deixaria as duas sem porta. Por isso a reorganizacao do `Perfil` em
+/// menus, do mesmo dia, **nao** transformou esta lista em item de menu: um
+/// item levaria a uma tela de lista que nao existe, e os cartoes ja levam ao
+/// pet.
+///
 /// ## O que esta tela nao tem, e nao e esquecimento
 ///
-/// - **O caso aberto dominando a tela.** Ver abaixo.
-///
-/// ## O que esta tela GANHOU na BICHUS-21
-///
-/// A acao `Marcar como perdido`. Ela faltava por um motivo que deixou de
-/// existir: *"a tela que a acao abre e a BICHUS-21 e nao existe"* (criterio 2
-/// da BICHUS-62). A tela existe agora, e a acao ganhou destino.
-///
-/// **Ela nao mora no cartao, e a razao e de acessibilidade e nao de gosto.**
-/// Um botao dentro do cartao criaria duas paradas de foco no mesmo objeto --
-/// o cartao ja e UMA parada, com `excludeSemantics` e rotulo composto -- e um
-/// controle anunciado dentro de outro controle. A acao e da tela: um toque, e
-/// a escolha de qual animal acontece em F3.0, que existe para isso.
-///
-/// **Ela so aparece quando tem destino.** Sem pet elegivel -- conta vazia,
-/// lista que nao carregou, ou todos os animais ja com caso aberto (criterio 13
-/// da BICHUS-21) -- a acao nao e renderizada, nem desabilitada. E a mesma
-/// regra do criterio 2 da BICHUS-62 que segurava esta acao ate hoje, aplicada
-/// agora a favor dela.
 /// - **O caso aberto dominando a tela.** Ele saiu daqui em 21/09 e virou a
 ///   BICHUS-177, no topo de `Pets`. Quem tem caso aberto esta em panico e nao
 ///   navega; atras de um toque numa aba `Perfil` o estado do caso ficaria
@@ -102,8 +103,7 @@ class MeusPets extends StatefulWidget {
   static const String tituloDoVazio = 'Seu primeiro pet entra aqui.';
 
   static const String explicacaoDoVazio =
-      'Cadastre seu pet para gerar a plaquinha com QR e entrar na rede de quem '
-      'procura e de quem encontra.';
+      'Cadastre seu pet para gerar a plaquinha com QR.';
 
   /// A faixa do criterio 7, palavra por palavra.
   static const String faixaDeCache =
@@ -124,8 +124,21 @@ class MeusPets extends StatefulWidget {
 /// branco", e nenhum deles e "lista vazia por falha".
 enum _Fase { carregando, lista, falhaComCache, falhaSemCache }
 
-class _MeusPetsState extends State<MeusPets> {
+class _MeusPetsState extends State<MeusPets>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
+
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  bool _faltaConta = false;
   List<Pet> _pets = const <Pet>[];
   String? _textoDaFalha;
 
@@ -221,6 +234,7 @@ class _MeusPetsState extends State<MeusPets> {
       _fase = _Fase.carregando;
       _pets = salvo ?? const <Pet>[];
       _textoDaFalha = null;
+      _faltaConta = false;
     });
 
     try {
@@ -234,9 +248,21 @@ class _MeusPetsState extends State<MeusPets> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       final cache = widget.cache.pets(idDoDono);
+      final semConta = faltaConta(falha);
       setState(() {
         _textoDaFalha = MensagensDeErro.de(falha).texto;
-        if (cache != null && cache.isNotEmpty) {
+        _faltaConta = semConta;
+        if (semConta) {
+          // **O CACHE NAO SOBREVIVE A UM 401, e isto nao e zelo.** `idDoDono`
+          // e lido ANTES do `await`, quando a sessao ainda estava de pe, e o
+          // cache responde por aquele id -- entao sem esta guarda a tela
+          // desenharia os pets da sessao que acabou de cair sob uma faixa
+          // informativa, parecendo logada. Pior no caminho do refresh
+          // recusado: `_renovar` apaga o deposito mas NAO roda as limpezas de
+          // `sair()`, entao o cache em memoria continua cheio.
+          _pets = const <Pet>[];
+          _fase = _Fase.falhaSemCache;
+        } else if (cache != null && cache.isNotEmpty) {
           _pets = cache;
           _fase = _Fase.falhaComCache;
         } else {
@@ -267,16 +293,46 @@ class _MeusPetsState extends State<MeusPets> {
     }
   }
 
+  /// ## O TITULO DESTA SECAO (corrigido em 18/10/2026)
+  ///
+  /// Ele era `Text(MeusPets.titulo, style: textos.titleLarge)` com um vao de
+  /// `e4`, e era o que estava **fora do padrao do app** -- a reclamacao do
+  /// cliente, palavra por palavra: "o layout do menu do perfil ficou estranho,
+  /// fora do padrao do app".
+  ///
+  /// Tres desvios medidos, nao opinados:
+  ///
+  /// 1. **`titleLarge` nao e peso de titulo de secao neste app.** Os tres
+  ///    lugares que titulam secao dentro do corpo de uma tela -- o cartao de
+  ///    texto e a secao com icone de `pet/tela_detalhe_do_pet.dart`,
+  ///    `rede/encontro_da_rede.dart` e `loja/produto_da_loja.dart` -- usam
+  ///    `titleMedium`. `titleLarge` no corpo e peso de **titulo de pagina ou
+  ///    de folha**: o `EstadoVazio` da casca, o nome do pet no cabecalho, o
+  ///    titulo da folha de `Sair da sua conta?`. Aqui ele punha um titulo de
+  ///    pagina dentro de uma pagina que ja tem titulo na barra de topo.
+  /// 2. **Sem `Semantics(header: true)`.** Os mesmos tres lugares declaram o
+  ///    papel de cabecalho. Esta era a unica secao do app que titulava sem
+  ///    ele: quem navega por cabecalho no leitor de tela nao parava aqui.
+  /// 3. **Dois cabecalhos com formas diferentes na MESMA tela.** O grupo
+  ///    `Conta` e desenhado por [TituloDeGrupoDeMenu] (`labelMedium` em
+  ///    `textMuted`, vao de `e2`); este era `titleLarge` com vao de `e4`. Dois
+  ///    irmaos na mesma lista com pesos diferentes leem como hierarquia onde
+  ///    nao ha nenhuma.
+  ///
+  /// A correcao e usar [TituloDeGrupoDeMenu], e nao inventar uma quarta forma:
+  /// a documentacao dele diz, desde que ele nasceu, que existe porque "`Conta`
+  /// e `Meus pets` sao coisas diferentes na mesma tela". Os dois grupos sempre
+  /// foram para ser titulados por ele; so um foi ligado. Ele ja carrega
+  /// `Semantics(header: true)` e o vao de `e2`, entao o `SizedBox` daqui saiu
+  /// -- vao de cabecalho e do cabecalho, e dois donos divergem.
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(MeusPets.titulo, style: textos.titleLarge),
-        const SizedBox(height: BichuEspaco.e4),
+        const TituloDeGrupoDeMenu(MeusPets.titulo),
         ..._corpo(cores),
       ],
     );
@@ -305,7 +361,6 @@ class _MeusPetsState extends State<MeusPets> {
         ],
       _Fase.lista => <Widget>[
           ..._cartoes(),
-          ..._acaoDeMarcarPerdido(),
           const SizedBox(height: BichuEspaco.e6),
           // A ACAO PERMANENTE (BICHUS-232).
           //
@@ -326,7 +381,11 @@ class _MeusPetsState extends State<MeusPets> {
           ),
           const SizedBox(height: BichuEspaco.e4),
           ..._cartoes(),
-          ..._acaoDeMarcarPerdido(),
+        ],
+      // SEM CONTA NAO E ERRO, e vem antes dos dois ramos de falha: nao ha
+      // `Atualizar` que resolva um 401. Ver `widgets/convite_para_entrar.dart`.
+      _Fase.falhaSemCache when _faltaConta => const <Widget>[
+          ConviteParaEntrar(secao: SecaoComConta.meusPets),
         ],
       _Fase.falhaSemCache => <Widget>[
           FaixaDeAviso(
@@ -338,46 +397,27 @@ class _MeusPetsState extends State<MeusPets> {
     };
   }
 
-  /// A acao `Marcar como perdido`, quando ela tem destino.
-  ///
-  /// Devolve lista vazia quando nao ha para onde ir. Ver o cabecalho da
-  /// classe: acao sem destino e o que o criterio 2 da BICHUS-62 proibe, e nao
-  /// deixa de ser proibido por a acao estar desabilitada -- um controle
-  /// desabilitado sem motivo dito e o desenho preguicoso que o criterio 5 da
-  /// BICHUS-21 recusa na tela seguinte.
-  List<Widget> _acaoDeMarcarPerdido() {
-    // Fase de carregamento e falha sem cache nao tem lista: a acao nasceria
-    // sobre uma lista que a tela nao sabe se existe.
-    if (_fase != _Fase.lista && _fase != _Fase.falhaComCache) {
-      return const <Widget>[];
-    }
-    final elegiveis = TelaDeQuemEOCaso.elegiveis(_pets);
-    if (elegiveis.isEmpty) return const <Widget>[];
-
-    return <Widget>[
-      const SizedBox(height: BichuEspaco.e4),
-      BotaoSecundario(
-        rotulo: MeusPets.rotuloDeMarcarPerdido,
-        aoTocar: () {
-          // **Um pet: F3.0 nao aparece.** O criterio 1 justifica a escolha
-          // "para prevenir o deslize de marcar o pet errado quando ha mais de
-          // um": com um animal nao ha deslize possivel, e uma tela de
-          // confirmacao seria o mesmo atrito que a pesquisa de UX recusa no
-          // `Quando?`. F3.1 ja mostra a foto e o nome no topo.
-          if (elegiveis.length == 1) {
-            context.push(
-              Rotas.marcarPerdido,
-              extra: RascunhoDoCaso(pet: elegiveis.first),
-            );
-            return;
-          }
-          // A lista INTEIRA, e nao so os elegiveis: F3.0 precisa dos que ja
-          // tem caso aberto para dize-lo (criterio 13).
-          context.push(Rotas.escolherPetPerdido, extra: _pets);
-        },
-      ),
-    ];
-  }
+  // A ACAO `Marcar como perdido` SAIU DESTA TELA (18/10/2026).
+  //
+  // Ela mora agora na PAGINA DO PET (`telas/pet/tela_detalhe_do_pet.dart`),
+  // junto do QR da plaquinha, e a razao e de produto e nao de arrumacao: a
+  // escolha de qual animal deixou de ser uma pergunta. Quem abre a pagina da
+  // Nina ja respondeu "a Nina" ao tocar no cartao dela, e a tela de escolha
+  // (F3.0) existia para prevenir o deslize de marcar o pet errado -- deslize
+  // que nao ha quando a acao esta na pagina de um animal so.
+  //
+  // O que ficou AQUI e o que sustenta aquela porta: **os cartoes**, que sao o
+  // caminho da tela inicial do `Perfil` ate a pagina de cada pet. Medido em
+  // 18/10: `Rotas.detalheDoPetDe` e empurrada daqui e de mais nenhum lugar de
+  // `app/lib`, entao esconder o cartao deixaria a pagina do pet -- e com ela o
+  // QR e a acao de perdido -- sem porta de entrada. E por isso que a lista
+  // continua CONTEUDO desta tela e nao virou item de menu: um item levaria a
+  // uma tela de lista que nao existe, e os cartoes ja levam ao pet.
+  //
+  // `MeusPets.rotuloDeMarcarPerdido` continua publicado logo acima, e nao e
+  // esquecimento: a redacao da acao e UMA no produto inteiro (decisao do
+  // cliente de 21/09), e enquanto a pagina do pet nao publicar a dela este e o
+  // unico lugar que a guarda. Esta tela **nao a renderiza mais**.
 
   /// `Cadastrar meu pet`, construida num lugar so.
   ///

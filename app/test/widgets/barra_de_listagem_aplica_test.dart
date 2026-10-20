@@ -12,6 +12,7 @@
 // `test/telas/loja_com_dados_test.dart` e `test/rede/agenda_da_rede_test.dart`.
 
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,15 +30,71 @@ Future<void> montar(
   bool buscaAcima = false,
   void Function(EscolhaDaFolha)? aoAplicar,
 }) async {
+  final barra = BarraDeListagem(
+    total: total,
+    busca: busca,
+    filtro: filtro,
+    ordenacao: ordenacao,
+    buscaAcima: buscaAcima,
+    aoAplicar: aoAplicar ?? (_) {},
+  );
   await tester.pumpWidget(
     _Casca(
-      child: BarraDeListagem(
-        total: total,
-        busca: busca,
-        filtro: filtro,
-        ordenacao: ordenacao,
-        buscaAcima: buscaAcima,
-        aoAplicar: aoAplicar ?? (_) {},
+      // **Com `buscaAcima`, a casca desenha a LINHA INTEIRA acima da barra**,
+      // como `agenda_da_rede.dart` e `lista_de_perdidos.dart` fazem de
+      // verdade desde 18/10/2026. Antes a casca desenhava so a barra, e o
+      // campo que a tela sobe nao existia em teste nenhum -- o gatilho que
+      // acompanha esse campo nao seria medido em lugar nenhum.
+      child: buscaAcima && busca != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                LinhaDeBuscaDaListagem(
+                  total: total,
+                  busca: busca,
+                  filtro: filtro,
+                  ordenacao: ordenacao,
+                  aoAplicar: aoAplicar ?? (_) {},
+                ),
+                barra,
+              ],
+            )
+          : barra,
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// O corpo de uma tela de aba DE VERDADE: 16 dp de folga em cada lado.
+///
+/// `casca_com_abas.dart` declara `padding: EdgeInsets.all(BichuEspaco.e4)` no
+/// corpo, e e por isso que a largura que a busca recebe num aparelho de 320 dp
+/// se mede sobre 288 dp, e nao sobre 320. Medir sem a folga daria um numero
+/// que nenhuma tela mostra.
+Future<void> montarNoCorpoDaAba(
+  WidgetTester tester, {
+  required int total,
+  required double largura,
+  ControleDeBusca? busca,
+  ControleDeFiltro? filtro,
+  ControleDeOrdenacao? ordenacao,
+  void Function(EscolhaDaFolha)? aoAplicar,
+}) async {
+  tester.view.physicalSize = Size(largura, 800);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    _Casca(
+      child: Padding(
+        padding: const EdgeInsets.all(BichuEspaco.e4),
+        child: BarraDeListagem(
+          total: total,
+          busca: busca,
+          filtro: filtro,
+          ordenacao: ordenacao,
+          aoAplicar: aoAplicar ?? (_) {},
+        ),
       ),
     ),
   );
@@ -84,9 +141,27 @@ class _EstadoDaCasca extends State<_Casca> {
           builder: (context, acao, _) => Scaffold(
             appBar: AppBar(
               title: const Text('Listagem'),
-              actions: acao == null
-                  ? null
-                  : <Widget>[BotaoDeAcaoDaListagem(acao: acao)],
+              // **64 dp, como a casca de verdade.** `casca_com_abas.dart`,
+              // linha 653, fixa `toolbarHeight: BichuAlvoDeToque.critico` com
+              // o motivo escrito ao lado ("64 dp, e nao os 56 do padrao do
+              // M3"). Sem esta linha a casca de teste deixava o padrao do M3
+              // valer, e os 56 da barra ESMAGAVAM o `SizedBox(64, 64)` que o
+              // `BotaoDeAcaoDaListagem` declara -- a medida saia 56 e o caso
+              // do alvo de 64 reprovava um componente correto, por causa do
+              // andaime. Esta casca existe para ser "a casca minima que
+              // `TelaDeAba` oferece de verdade", e a altura da barra e parte
+              // disso.
+              toolbarHeight: BichuAlvoDeToque.critico,
+              // **A BARRA DE TOPO NAO DESENHA MAIS A ACAO DA LISTAGEM**, e a
+              // casca de teste acompanha a de verdade: o `Filtros` voltou
+              // para o corpo em 19/10 e `TelaDeAba` deixou de pintar o slot.
+              //
+              // O `SlotDaBarraDeListagem` acima **fica**, e nao e resto: e
+              // ele que `BarraDeListagem` usa para publicar NULO e limpar a
+              // barra quando a lista sai da tela. Mantendo o slot montado, os
+              // casos continuam exercendo esse caminho; se a casca voltasse a
+              // pintar `acao`, a isca do grupo do corpo reprovaria.
+              actions: const <Widget>[],
             ),
             body: widget.child,
           ),
@@ -486,7 +561,7 @@ void main() {
       return ControleDeBusca(
         controlador: controlador,
         alcance: AlcanceDaBusca.servidor,
-        rotulo: 'Buscar encontro',
+        rotulo: 'Buscar evento',
         termoAplicado: termoAplicado,
         minimoDeCaracteres: minimo,
         aoAplicar: aplicados.add,
@@ -600,10 +675,24 @@ void main() {
       );
 
       // O `(opcional)` saiu com o rotulo visivel.
-      expect(find.text('Buscar encontro (opcional)'), findsNothing);
-      expect(find.text('Buscar encontro'), findsNothing);
+      expect(find.text('Buscar evento (opcional)'), findsNothing);
+      // **O texto existe UMA vez, e DENTRO do campo.** `findsNothing` sobre
+      // `'Buscar evento'` nao podia passar: o `hintText` e desenhado pelo
+      // `InputDecorator` como um `Text` com esse mesmo texto, e a linha de
+      // baixo exige justamente que ele seja a dica -- a isca pedia a ausencia
+      // do que ela mesma cobra em seguida. O que ela quis dizer e que nao ha
+      // rotulo FORA do campo, e e isso que esta medido agora: exatamente um, e
+      // descendente do `TextField`.
+      expect(find.text('Buscar evento'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(TextField),
+          matching: find.text('Buscar evento'),
+        ),
+        findsOneWidget,
+      );
       final campo = tester.widget<TextField>(find.byType(TextField));
-      expect(campo.decoration?.hintText, 'Buscar encontro');
+      expect(campo.decoration?.hintText, 'Buscar evento');
     });
 
     testWidgets('sem rotulo visivel, o campo com texto CONTINUA com nome',
@@ -621,7 +710,7 @@ void main() {
       );
 
       expect(
-        find.bySemanticsLabel(RegExp('Buscar encontro')),
+        find.bySemanticsLabel(RegExp('Buscar evento')),
         findsWidgets,
         reason: 'REPROVA: campo com dica e sem rotulo ficou sem nome '
             'acessivel assim que recebeu texto.',
@@ -630,17 +719,31 @@ void main() {
     });
   });
 
-  group('o filtro mora na BARRA DE TITULO, e a busca ocupa a area toda', () {
-    // **O PADRAO DE LISTAGEM MUDOU POR DECISAO DO CLIENTE (17/10/2026)**:
-    // *"suba todos os filtros para a barra do titulo da pagina e deixe o
-    // campo de busca sempre ocupando a area toda"*. Isto REVERTE a regra de
+  group('o filtro mora no CORPO, e a busca ocupa a area toda', () {
+    // **O PADRAO DE LISTAGEM VOLTOU AO CORPO POR DECISAO DO CLIENTE
+    // (19/10/2026)**: *"qualquer coisa, pense em outro lugar para colocar o
+    // filtro da pagina"*.
+    //
+    // Isto REVERTE a decisao dele de 17/10 ("suba todos os filtros para a
+    // barra do titulo da pagina"), que por sua vez tinha revertido a regra de
     // 22/09 ("busca, filtro e ordenacao no topo do CORPO da tela, nunca na
-    // barra do aplicativo"). Quem ler estes casos em tres meses: a reversao
-    // e dele, e nao um defeito.
+    // barra do aplicativo"). O lugar de hoje e o de 22/09, que e a casa
+    // original. Quem ler estes casos em tres meses: as tres reversoes sao
+    // dele, e nenhuma e defeito.
+    //
+    // **A busca nao mudou**: ela continua em largura TOTAL no corpo, que foi
+    // o outro pedido de 17/10 e que ele nao reverteu.
+    //
+    // O que a saida da barra liberou: os 64 dp do slot. Eles NAO cobriram o
+    // sino de notificacoes -- `Filtros` era condicional (so onde ha lista) e
+    // o sino seria incondicional --, e a medicao disso esta em
+    // `gaveta_com_submenus_test.dart`.
 
-    testWidgets('ISCA -- o controle de filtro nao fica no corpo', (tester) async {
-      // ISCA: devolva o `_BotaoDeFolha` ao `Row` do corpo da barra. Este caso
-      // reprova: passa a haver um `Icons.tune` fora da `AppBar`.
+    testWidgets('ISCA -- o controle de filtro fica no CORPO, e nao na barra',
+        (tester) async {
+      // ISCA: faca `BarraDeListagem` voltar a publicar a acao no slot da
+      // `AppBar`. Este caso reprova: o `Icons.tune` reaparece dentro da
+      // `AppBar` e desaparece do corpo.
       await montar(
         tester,
         total: 3,
@@ -651,25 +754,30 @@ void main() {
       expect(find.byIcon(Icons.tune), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(AppBar),
-          matching: find.byIcon(Icons.tune),
-        ),
-        findsOneWidget,
-        reason: 'REPROVA: o controle de filtro nao esta na barra de titulo.',
-      );
-      expect(
-        find.descendant(
           of: find.byType(BarraDeListagem),
           matching: find.byIcon(Icons.tune),
         ),
+        findsOneWidget,
+        reason: 'REPROVA: o controle de filtro nao esta no corpo da tela. Ele '
+            'voltou para la em 19/10, por decisao do cliente.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.tune),
+        ),
         findsNothing,
-        reason: 'REPROVA: sobrou um controle de filtro no corpo da tela.',
+        reason: 'REPROVA: sobrou um controle de filtro na barra de titulo. Os '
+            '64 dp dele foram devolvidos ao titulo, e `Perto` depende disso.',
       );
     });
 
-    testWidgets('o alvo na barra e de 64 dp, e nao de 48', (tester) async {
-      // 11.23.1 fixa os dois alvos da barra de topo em 64 x 64. Enquanto o
-      // controle morou no corpo, 48 era a medida certa; nao ha mais corpo.
+    testWidgets('o alvo no corpo e de 48 dp, o piso do SC 2.5.8',
+        (tester) async {
+      // **64 -> 48, e a troca acompanha a mudanca de lugar.** O 11.23.1 fixa
+      // 64 x 64 para os controles de CANTO da barra de topo, onde o dedo
+      // disputa a borda com o titulo e com a mao que segura o aparelho. No
+      // corpo essa disputa nao existe: o piso e o do SC 2.5.8, que e 48.
       await montar(
         tester,
         total: 3,
@@ -677,33 +785,43 @@ void main() {
         aoAplicar: (_) {},
       );
 
-      final alvo = tester.getSize(
-        find.ancestor(
-          of: find.byIcon(Icons.tune),
-          matching: find.byType(SizedBox),
-        ).first,
+      final alvo = tester.getSize(find.byType(GatilhoDeRecorteNoCorpo));
+      expect(
+        alvo.height,
+        greaterThanOrEqualTo(48.0),
+        reason: 'REPROVA: o gatilho de filtro no corpo tem ${alvo.height} dp '
+            'de altura, abaixo do piso de 48 dp (SC 2.5.8).',
       );
-      expect(alvo.width, 64.0);
-      expect(alvo.height, 64.0);
     });
 
-    testWidgets('o campo de busca ocupa a LARGURA TOTAL do corpo, em 320 dp',
+    testWidgets(
+        'ISCA -- a BUSCA vem primeiro e o gatilho fica a DIREITA, na MESMA '
+        'linha',
         (tester) async {
-      // "Sempre" inclui a tela mais estreita que o produto desenha. O campo
-      // nao divide mais a linha com icone nenhum, entao nao ha o que
-      // encolher.
-      tester.view.physicalSize = const Size(320, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
+      // **A ORDEM INVERTEU EM 19/10/2026, e a reversao e do cliente.**
+      //
+      // Em 18/10 ele pediu o gatilho *"na frente do campo de busca e nao
+      // embaixo"*, e este caso cobrava exatamente isso. Em 19/10 ele mudou de
+      // ideia: a busca vem primeiro e o gatilho fica a direita. **Nao e
+      // defeito e nao e volta ao arranjo de 17/10** -- o gatilho continua so
+      // icone, continua na mesma linha e continua com 48 dp. Mudou o LADO.
+      //
+      // ISCA: em `LinhaDeBuscaDaListagem.build`, mova
+      // `GatilhoDeRecorteNoCorpo` de volta para ANTES do `Expanded`, ou troque
+      // a `Row` por uma `Column`. Este caso reprova nas duas: na primeira o
+      // gatilho volta a esquerda; na segunda ele deixa de dividir a linha.
+      //
+      // **Ele mede GEOMETRIA, e nao a ordem da lista de `children`.** A ordem
+      // da lista nao e o que o cliente pediu -- ele pediu o controle DEPOIS do
+      // campo e na mesma linha --, e um caso que lesse a lista ficaria verde
+      // com uma `Row` em `textDirection: rtl`.
       final controlador = TextEditingController();
       addTearDown(controlador.dispose);
-      await montar(
+      await montarNoCorpoDaAba(
         tester,
         total: 3,
+        largura: 320,
         filtro: filtroDeDoisGrupos(),
-        aoAplicar: (_) {},
         busca: ControleDeBusca(
           controlador: controlador,
           alcance: AlcanceDaBusca.servidor,
@@ -712,13 +830,173 @@ void main() {
         ),
       );
 
-      final campo = tester.getSize(find.byType(CampoDeBuscaDaListagem));
-      final barra = tester.getSize(find.byType(BarraDeListagem));
+      final gatilho = tester.getRect(find.byType(GatilhoDeRecorteNoCorpo));
+      final campo = tester.getRect(find.byType(CampoDeBuscaDaListagem));
+
       expect(
-        campo.width,
-        barra.width,
-        reason: 'REPROVA: o campo de busca nao ocupa a area toda em 320 dp.',
+        campo.right,
+        lessThanOrEqualTo(gatilho.left),
+        reason: 'REPROVA: o gatilho de filtro nao esta a DIREITA do campo de '
+            'busca. O campo termina em ${campo.right} e o gatilho comeca em '
+            '${gatilho.left}. Em 19/10/2026 o cliente inverteu a ordem que ele '
+            'mesmo pediu em 18/10: a busca vem primeiro.',
       );
+      expect(
+        gatilho.center.dy,
+        allOf(
+          greaterThanOrEqualTo(campo.top),
+          lessThanOrEqualTo(campo.bottom),
+        ),
+        reason: 'REPROVA: o gatilho nao divide a LINHA com a busca. O centro '
+            'dele esta em ${gatilho.center.dy} e o campo ocupa de '
+            '${campo.top} a ${campo.bottom}. O cliente pediu o gatilho na '
+            'mesma linha da busca, e "nao embaixo" continua valendo -- o que '
+            'inverteu em 19/10 foi so o lado.',
+      );
+    });
+
+    testWidgets(
+        'ISCA -- o gatilho e SO O ICONE: nenhuma letra pintada nele',
+        (tester) async {
+      // ISCA: em `GatilhoDeRecorteNoCorpo`, volte o `OutlinedButton.icon` com
+      // `label: Text(_verbo)`. Este caso reprova: "Filtrar" reaparece pintado
+      // dentro do gatilho.
+      //
+      // **Ele olha o WIDGET, e nao um literal.** Procurar
+      // `find.text('Filtrar')` com `findsNothing` ficaria verde a toa no dia
+      // em que o verbo mudasse de palavra -- o defeito de portao cego que
+      // este repositorio ja teve. Aqui o caso varre os `Text` DESCENDENTES do
+      // gatilho e cobra que nenhum tenha letra: o distintivo com o numero de
+      // filtros ativos e o unico texto que pode sobrar ali, e numero nao tem
+      // letra.
+      final controlador = TextEditingController();
+      addTearDown(controlador.dispose);
+      await montarNoCorpoDaAba(
+        tester,
+        total: 3,
+        largura: 320,
+        // COM filtro ativo, de proposito: e o estado em que o rotulo pintado
+        // dizia "Filtrar (1)", e e o unico em que o distintivo existe.
+        filtro: filtroDeDoisGrupos(atividade: 'vet'),
+        busca: ControleDeBusca(
+          controlador: controlador,
+          alcance: AlcanceDaBusca.servidor,
+          termoAplicado: null,
+          aoAplicar: (_) {},
+        ),
+      );
+
+      // O glifo esta la, e o nome acessivel tambem: sem estas duas o caso
+      // acima viraria "o gatilho nao existe", que passa de qualquer jeito.
+      expect(
+        find.descendant(
+          of: find.byType(GatilhoDeRecorteNoCorpo),
+          matching: find.byIcon(Icons.tune),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o gatilho perdeu o glifo. Sem ele o caso abaixo '
+            'mediria a ausencia do controle, e nao a ausencia do texto.',
+      );
+      expect(
+        find.byTooltip('Filtrar, 1 filtro ativo'),
+        findsOneWidget,
+        reason: 'REPROVA: o gatilho so-icone ficou sem nome acessivel. Sem o '
+            'texto pintado, o `tooltip` e a UNICA forma de ele se nomear '
+            '(SC 4.1.2).',
+      );
+
+      final pintados = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byType(GatilhoDeRecorteNoCorpo),
+              matching: find.byType(Text),
+            ),
+          )
+          .map((t) => t.data ?? '')
+          .toList();
+      final comLetra =
+          pintados.where((t) => RegExp('[A-Za-zÀ-ÿ]').hasMatch(t)).toList();
+      expect(
+        comLetra,
+        isEmpty,
+        reason: 'REPROVA: o gatilho de filtro voltou a pintar texto '
+            '($comLetra). O cliente pediu em 18/10/2026: "os campos de filtro '
+            'nao devem vir com o texto, apenas com o icone".',
+      );
+      expect(
+        pintados,
+        <String>['1'],
+        reason: 'REPROVA: o distintivo com o numero de filtros ativos nao '
+            'esta pintado sobre o glifo. Sem o texto do rotulo, ele e a unica '
+            'forma de quem VE saber que ha filtro aplicado.',
+      );
+    });
+
+    testWidgets(
+        'a busca recebe a largura do corpo menos o gatilho, nas CINCO larguras',
+        (tester) async {
+      // A MEDICAO DO ARRANJO COMPACTO, no corpo de verdade (16 dp de cada
+      // lado). Substitui o caso "o campo ocupa a LARGURA TOTAL", que media o
+      // arranjo de 17/10 -- o campo sozinho na linha. Ele nao esta mais
+      // sozinho: divide a linha com um alvo de 48 dp e 8 dp de respiro, e e
+      // esse resto que este caso fixa.
+      //
+      // ISCA: tire o gatilho da `Row` (ou mande-o para uma linha propria). O
+      // campo volta a largura cheia do corpo e os cinco numeros erram por
+      // 56 dp.
+      // Lista de pares, e nao mapa: `double` nao serve de chave de mapa
+      // constante. A primeira medida e a do APARELHO, a segunda a que a busca
+      // tem de receber -- o corpo e a largura menos 32 dp de folga, e a busca
+      // e o corpo menos 48 do gatilho e 8 de respiro.
+      const esperado = <(double, double)>[
+        (320, 232), // corpo 288
+        (360, 272), // corpo 328
+        (375, 287), // corpo 343
+        (390, 302), // corpo 358
+        (412, 324), // corpo 380
+      ];
+
+      for (final (aparelho, larguraDaBusca) in esperado) {
+        final controlador = TextEditingController();
+        addTearDown(controlador.dispose);
+        await montarNoCorpoDaAba(
+          tester,
+          total: 3,
+          largura: aparelho,
+          filtro: filtroDeDoisGrupos(),
+          busca: ControleDeBusca(
+            controlador: controlador,
+            alcance: AlcanceDaBusca.servidor,
+            termoAplicado: null,
+            aoAplicar: (_) {},
+          ),
+        );
+
+        final campo = tester.getSize(find.byType(CampoDeBuscaDaListagem));
+        final barra = tester.getSize(find.byType(BarraDeListagem));
+        final gatilho = tester.getSize(find.byType(GatilhoDeRecorteNoCorpo));
+
+        expect(
+          campo.width,
+          larguraDaBusca,
+          reason: 'REPROVA: em $aparelho dp de aparelho a busca recebeu '
+              '${campo.width} dp, e nao $larguraDaBusca. O corpo tem '
+              '${barra.width} dp e o gatilho ${gatilho.width}.',
+        );
+        expect(
+          campo.width + gatilho.width + BichuEspaco.e2,
+          barra.width,
+          reason: 'REPROVA: em $aparelho dp a linha nao fecha no corpo. '
+              'Busca ${campo.width} + gatilho ${gatilho.width} + 8 nao da '
+              '${barra.width}, e o `Row` estourou ou sobrou folga.',
+        );
+        expect(
+          gatilho.width,
+          BichuAlvoDeToque.min,
+          reason: 'REPROVA: o gatilho tem ${gatilho.width} dp de largura em '
+              '$aparelho dp, e nao os 48 do SC 2.5.8.',
+        );
+      }
     });
 
     testWidgets('sem barra desenhada, a barra de titulo fica sem controle',
@@ -734,7 +1012,17 @@ void main() {
       );
 
       expect(find.byIcon(Icons.tune), findsNothing);
-      expect(tester.widget<AppBar>(find.byType(AppBar)).actions, isNull);
+      // A casca de teste passou a declarar `actions: const <Widget>[]`, como
+      // a de verdade: desde 19/10 a barra de topo nao desenha a acao da
+      // listagem. O que este caso cobra continua sendo o mesmo -- NENHUM
+      // controle de recorte na barra de titulo --, e agora ele cobra a lista
+      // VAZIA em vez de nula.
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).actions,
+        isEmpty,
+        reason: 'REPROVA: a barra de titulo ganhou controle sobre uma lista '
+            'vazia. Filtrar o nada e um toque sem desfecho.',
+      );
     });
   });
 
@@ -834,8 +1122,71 @@ void main() {
         ),
       );
 
-      expect(find.byType(TextField), findsNothing);
+      // **UM campo, e ele e o da TELA.** A casca desenha a linha acima da
+      // barra, como as duas telas de verdade; o que este caso cobra e que a
+      // barra nao desenhe o segundo.
+      expect(find.byType(TextField), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BarraDeListagem),
+          matching: find.byType(TextField),
+        ),
+        findsNothing,
+        reason: 'REPROVA: com `buscaAcima` a barra desenhou o campo de novo, '
+            'e a tela passou a ter dois.',
+      );
       expect(find.text('2 resultados'), findsOneWidget);
+    });
+
+    testWidgets(
+        'ISCA -- com buscaAcima o GATILHO sobe junto, e a barra nao o repete',
+        (tester) async {
+      // ISCA: em `BarraDeListagem.build`, tire o `!b.buscaAcima` da condicao
+      // do gatilho solto. A barra volta a desenhar um segundo gatilho abaixo
+      // da linha, e este caso reprova com dois.
+      //
+      // Por que isto importa: a linha de busca e UMA. Partida entre dois
+      // lugares da tela, o campo fica em cima das abas e o gatilho embaixo
+      // delas -- que e exatamente o "embaixo" que o cliente mandou sair.
+      final controlador = TextEditingController();
+      addTearDown(controlador.dispose);
+      await montar(
+        tester,
+        total: 2,
+        buscaAcima: true,
+        filtro: filtroDeDoisGrupos(),
+        busca: ControleDeBusca(
+          controlador: controlador,
+          alcance: AlcanceDaBusca.servidor,
+          termoAplicado: null,
+          aoAplicar: (_) {},
+        ),
+      );
+
+      expect(
+        find.byType(GatilhoDeRecorteNoCorpo),
+        findsOneWidget,
+        reason: 'REPROVA: com `buscaAcima` ha mais de um gatilho de filtro na '
+            'tela (ou nenhum). A linha de busca e uma so.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BarraDeListagem),
+          matching: find.byType(GatilhoDeRecorteNoCorpo),
+        ),
+        findsNothing,
+        reason: 'REPROVA: a barra desenhou o gatilho mesmo com a linha de '
+            'busca ja desenhada pela tela.',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(LinhaDeBuscaDaListagem),
+          matching: find.byType(GatilhoDeRecorteNoCorpo),
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o gatilho nao esta na linha de busca que a tela '
+            'desenhou.',
+      );
     });
 
     testWidgets('ISCA -- com buscaAcima a barra FICA no vazio buscado',

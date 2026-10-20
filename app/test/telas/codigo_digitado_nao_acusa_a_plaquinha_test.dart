@@ -89,8 +89,7 @@ void main() {
     required Future<http.Response> Function(http.Request) rede,
   }) async {
     await abrirOApp(tester, rede: rede);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     await tester.tap(
       find.widgetWithText(BotaoPrimario, TextosDoCadastro.digitarOCodigo),
     );

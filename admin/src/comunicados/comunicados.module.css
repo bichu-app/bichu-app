@@ -1,0 +1,41 @@
+/*
+ * O que so o Comunicado usa, por cima de theme/componentes.css. Nenhum valor
+ * de cor aqui: a previa reaproveita `.bloco` e os tokens de `tokens.g.css`.
+ */
+
+/*
+ * O corpo do comunicado e TEXTO PURO (ADR-0027 item 6, e o `eslint` do painel
+ * proibe `dangerouslySetInnerHTML`). A quebra de linha que o operador digitou
+ * aparece por CSS, e nunca por marcacao: e por isso que `pre-wrap` esta aqui
+ * em vez de um `<br />` montado a partir do texto.
+ */
+.corpo {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* A previa, dentro de `.bloco`: o titulo colado no corpo, como na caixa. */
+.caixa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-2);
+}
+
+/* O trecho do corpo na tabela: uma linha so, o resto cortado. */
+.trecho {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28rem;
+}
+
+.colQuem {
+  width: 12rem;
+}
+.colCaixas {
+  width: 10rem;
+}
+.colQuando {
+  width: 11rem;
+}

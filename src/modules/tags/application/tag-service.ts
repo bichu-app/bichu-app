@@ -31,6 +31,8 @@ import {
   type TagResolvida,
 } from '../ports/tag-repository.js';
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
+import { TRABALHO_DE_AVISO_AO_TUTOR } from '../ports/aviso-ao-tutor.js';
+import type { JobQueue } from '../../../shared/ports/job-queue.js';
 import type {
   AbsoluteUrl,
   FoundReportId,
@@ -76,6 +78,15 @@ export interface DependenciasDeTags {
   /** Base das páginas públicas, de onde sai `conversation_url`. */
   readonly baseDaWeb: AbsoluteUrl;
   /**
+   * Base pública dos objetos de mídia, de onde sai `pet.photo_url`.
+   *
+   * É a MESMA de `projecaoDoPerfilPublico`, e entra por dependência pelo mesmo
+   * motivo das outras duas: aplicação não lê configuração. Separada de
+   * `baseDaWeb` porque o cliente decidiu hosts diferentes, e trocá-las faz uma
+   * foto apontar para uma página.
+   */
+  readonly baseDeMidia: AbsoluteUrl;
+  /**
    * Chave do índice cego: `code_hash` é HMAC-SHA-256 do código canônico com ela
    * (ADR-0004, Emenda 1, §3.1). Entra por dependência, e não por `import` de
    * configuração, pelo mesmo motivo do relógio: domínio e aplicação não leem
@@ -101,6 +112,26 @@ export interface DependenciasDeTags {
    * dados do aviso e segue. Quem liga os dois é a composição, em `bin/api.ts`.
    */
   readonly conversaDoAviso: AberturaDeConversaPorAviso;
+  /**
+   * BICHUS — O EMISSOR DO AVISO AO TUTOR, e ele e o buraco central que faltava.
+   *
+   * Ate aqui `avisar` gravava o aviso, abria a conversa e devolvia
+   * `owner_notified: true` **sem enfileirar entrega nenhuma**: `owner_notified`
+   * registrava INTENCAO, nao entrega. O texto do push para este caso existia
+   * (`notifications/domain/conteudo-do-push.ts`, chave `tagEscaneada`) e nunca
+   * teve chamador.
+   *
+   * **Enfileirar, e nao enviar aqui.** Quem escaneou a plaquinha esta de pe, na
+   * rua, com o animal no colo, esperando a resposta: um provedor de push lento
+   * dentro desta requisicao viraria um botao que nao responde no momento mais
+   * critico do produto. E o mesmo arranjo do alerta de 5 km (`alert.dispatch`)
+   * e da aprovacao da `Rede` — a MESMA fila, o MESMO worker, o MESMO
+   * `PushSender`. Nao ha segunda esteira.
+   *
+   * `Pick` de um metodo so: este caminho enfileira e nunca reserva, completa
+   * nem falha trabalho.
+   */
+  readonly fila: Pick<JobQueue, 'enqueue'>;
 }
 
 /** A porta acima. O aviso já gravado, na forma que a abertura precisa. */
@@ -129,6 +160,18 @@ export interface ResolucaoDaTag {
     readonly primaryColor: string | null;
     readonly distinctiveMarks: string | null;
     readonly careNotes: string | null;
+    /**
+     * `TagResolution.pet.photo_url`. Nulo quando o pet nao tem foto de capa
+     * pronta -- e SO nesse caso.
+     *
+     * **Ele vinha nulo sempre, e isso era o defeito.** A borda escrevia
+     * `photo_url: null` fixo, com o comentario de que o modulo `media` nao
+     * existia nesta entrega. Ele existe; o contrato declara o campo desde
+     * sempre e o proprio exemplo de 200 de `resolveTagCode` traz um endereco.
+     * Quem escaneia a plaquinha e a pessoa que mais precisa confirmar que o
+     * animal no colo e o da tela.
+     */
+    readonly photoUrl: string | null;
   };
   readonly lost: { readonly isLost: boolean };
   readonly alreadyNotified: boolean;
@@ -179,6 +222,16 @@ function exigirCodigoNormalizado(bruto: string): TagCodeCanonical {
  * não sai: `pet_deceased` numa resposta pública faria alguém descobrir a morte
  * de um animal por uma página web (ADR-0004).
  */
+/**
+ * A chave do objeto virada endereço público, ou nulo.
+ *
+ * Mesma montagem de `projecaoDoPerfilPublico` (barra final da base removida
+ * antes de juntar), porque as duas superfícies têm de endereçar o mesmo objeto.
+ */
+function enderecoDaFoto(chave: string | null, baseDeMidia: AbsoluteUrl): string | null {
+  return chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
+}
+
 function recusarTagInativa(tag: TagResolvida): void {
   if (tag.status === 'revoked' || tag.petIndisponivel) throw problemas.tagRevogada();
 }
@@ -228,6 +281,7 @@ export function criarTagService(deps: DependenciasDeTags) {
           primaryColor: tag.pet.primaryColor,
           distinctiveMarks: tag.pet.distinctiveMarks,
           careNotes: tag.pet.careNotes,
+          photoUrl: enderecoDaFoto(tag.pet.photoKey, deps.baseDeMidia),
         },
         lost: { isLost: tag.pet.isLost },
         alreadyNotified: jaAvisou,
@@ -428,6 +482,20 @@ export function criarTagService(deps: DependenciasDeTags) {
         achadorComConta: chamador.userId ?? null,
         avisoAnteriorId: recente === undefined ? null : (recente.id as FoundReportId),
       });
+
+      // O AVISO SAI DAQUI, e so quando `owner_notified` e verdadeiro.
+      //
+      // Aviso agrupado a um recente do MESMO achador nao enfileira nada, e a
+      // condicao e literalmente a mesma expressao que vai para a resposta: o
+      // que o achador le na tela e o que o tutor recebe no telefone deixam de
+      // poder divergir, porque sao o mesmo booleano.
+      //
+      // O payload leva **so o identificador** (§11.5). Corpo renderizado numa
+      // linha de `jobs` congelaria a URL base do dia em que foi escrita, e e
+      // assim que `localhost` vaza para producao.
+      if (recente === undefined) {
+        await deps.fila.enqueue(TRABALHO_DE_AVISO_AO_TUTOR, { found_report_id: avisoId });
+      }
 
       return {
         finderToken,

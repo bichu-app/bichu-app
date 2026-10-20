@@ -23,6 +23,7 @@ class AppConfig {
     required this.versaoDosTermos,
     required this.urlDosTermos,
     required this.urlDaPrivacidade,
+    required this.versaoDoApp,
   });
 
   /// Raiz da API, **sem** a barra final e **sem** o `/v1`, que a camada de
@@ -58,11 +59,41 @@ class AppConfig {
   /// URL da politica de privacidade. Mesma regra de [urlDosTermos].
   final Uri? urlDaPrivacidade;
 
+  /// A VERSAO DESTE BINARIO, que o app manda ao servidor para receber o
+  /// veredito de `GET /v1/app/version-status`.
+  ///
+  /// Entra por `--dart-define=APP_VERSION=<versionName>`, e ela precisa ser o
+  /// MESMO valor que `--build-name` do comando de build. O lugar certo de
+  /// garantir isso e o comando, e nao este arquivo: as duas saem da mesma
+  /// linha em `infra/verificacao/verificar-apk.sh`.
+  ///
+  /// **Nula quando o build nao declarou, e isso NAO derruba o arranque.** A
+  /// diferenca em relacao a `API_BASE_URL` e de consequencia, como a das tres
+  /// URLs acima: sem `API_BASE_URL` o app nao faz nada; sem `APP_VERSION` ele
+  /// faz tudo, e so o bloqueio por versao minima fica inerte -- o portao
+  /// trata versao desconhecida como "nao consegui perguntar" e LIBERA o uso.
+  ///
+  /// Essa direcao e deliberada e e a mesma do mecanismo inteiro: derrubar o
+  /// arranque, ou bloquear por nao saber a versao, trocaria "a versao velha
+  /// passa por mais um minuto" por "ninguem usa o produto". O preco honesto
+  /// de um `APP_VERSION` esquecido e um mecanismo desligado em silencio, e e
+  /// por isso que ele e exigido pelo script de build e nao descoberto aqui.
+  ///
+  /// **NAO vem de `package_info_plus`**, que leria o `versionName` do proprio
+  /// APK e nao poderia divergir dele. Aquele caminho foi recusado hoje por
+  /// custo: e canal de plataforma, exige dependencia direta nova, e teria de
+  /// morar atras de uma porta em `lib/dispositivo/`. A divergencia possivel
+  /// (build com `--build-name` diferente do `--dart-define`) e o preco, esta
+  /// escrito aqui, e o conserto e trocar esta linha por aquela porta -- sem
+  /// tocar em mais nada, porque quem le isto e so o portao de versao.
+  final String? versaoDoApp;
+
   static const String _chaveApi = 'API_BASE_URL';
   static const String _chaveAmbiente = 'ENVIRONMENT';
   static const String _chaveVersaoDosTermos = 'TERMS_VERSION';
   static const String _chaveUrlDosTermos = 'TERMS_URL';
   static const String _chaveUrlDaPrivacidade = 'PRIVACY_URL';
+  static const String _chaveVersaoDoApp = 'APP_VERSION';
 
   static const String _apiBaseUrlBruta =
       String.fromEnvironment(_chaveApi, defaultValue: '');
@@ -74,6 +105,8 @@ class AppConfig {
       String.fromEnvironment(_chaveUrlDosTermos, defaultValue: '');
   static const String _urlDaPrivacidadeBruta =
       String.fromEnvironment(_chaveUrlDaPrivacidade, defaultValue: '');
+  static const String _versaoDoAppBruta =
+      String.fromEnvironment(_chaveVersaoDoApp, defaultValue: '');
 
   static AppConfig? _instancia;
 
@@ -103,6 +136,7 @@ class AppConfig {
     String? versaoDosTermosDeTeste,
     String? urlDosTermosDeTeste,
     String? urlDaPrivacidadeDeTeste,
+    String? versaoDoAppDeTeste,
   }) {
     final bruta = apiBaseUrlDeTeste ?? _apiBaseUrlBruta;
 
@@ -145,6 +179,14 @@ class AppConfig {
       urlDosTermos: _uriOuNulo(urlDosTermosDeTeste ?? _urlDosTermosBruta),
       urlDaPrivacidade:
           _uriOuNulo(urlDaPrivacidadeDeTeste ?? _urlDaPrivacidadeBruta),
+      // **Nao e validada aqui**, e a ausencia de validacao e deliberada: o
+      // formato de versao e cobrado pelo `pattern` de `AppVersion` do
+      // contrato, que responde 400, e o portao de versao trata 400 como "nao
+      // consegui perguntar". Uma segunda definicao do formato neste arquivo
+      // seria a divergencia que o ADR-0001 existe para nao ter -- e, pior,
+      // uma validacao local que recusasse poderia virar tela de erro por um
+      // valor que o servidor aceitaria.
+      versaoDoApp: _ouNulo(versaoDoAppDeTeste ?? _versaoDoAppBruta),
     );
     _instancia = config;
     return config;

@@ -46,6 +46,38 @@ Directory _raizDoRepositorio() {
   );
 }
 
+/// O bloco de um schema de `components.schemas`, **do nome dele ate o
+/// proximo schema**.
+///
+/// Substitui o `substring(ancora, ancora + 800)` que estava em cada portao:
+/// uma janela de tamanho fixo e uma ancora que a prosa do contrato quebra. Foi
+/// o que aconteceu -- a descricao de `UploadIntentInput` cresceu com a decisao
+/// do cliente de 17/10/2026 (o teto unico de 5 MiB), empurrou `content_type` e
+/// `byte_size` para alem dos 800 caracteres, e os dois portoes passaram a
+/// dizer "nao achei no contrato" sobre campos que estao la. O limite certo e
+/// ESTRUTURAL: o schema termina onde o proximo comeca, na mesma indentacao de
+/// quatro espacos.
+String _blocoDoSchema(String contrato, String nome) {
+  final inicio = contrato.indexOf('    $nome:');
+  if (inicio < 0) return '';
+  final proximo =
+      RegExp(r'\n    [A-Za-z_]\w*:\n').firstMatch(contrato.substring(inicio + 1));
+  return proximo == null
+      ? contrato.substring(inicio)
+      : contrato.substring(inicio, inicio + 1 + proximo.start);
+}
+
+/// O bloco de um caminho de `paths`, do nome dele ate o proximo caminho.
+String _blocoDoCaminho(String contrato, String caminho) {
+  final inicio = contrato.indexOf('  $caminho:');
+  if (inicio < 0) return '';
+  final proximo =
+      RegExp(r'\n  /\S*:\n').firstMatch(contrato.substring(inicio + 1));
+  return proximo == null
+      ? contrato.substring(inicio)
+      : contrato.substring(inicio, inicio + 1 + proximo.start);
+}
+
 void main() {
   group('os quatro estados, um a um', () {
     test('concedida: granted, limited e provisional', () {
@@ -187,22 +219,18 @@ void main() {
       final contrato =
           File('${_raizDoRepositorio().path}/api/openapi.yaml').readAsStringSync();
 
-      // A ANCORA IMPORTA, e ela custou uma execucao vermelha para aparecer.
-      //
-      // Ha DOIS `byte_size ... maximum` no contrato, e o primeiro em ordem de
-      // arquivo NAO e este: `/media/finder-photo-intents` estreita o teto para
-      // 2 MB por `allOf`, porque quem envia ali e o achador, que nao tem
-      // identidade nenhuma. Uma busca solta pega o do achador e acusa
-      // divergencia onde nao ha.
-      final schema = contrato.indexOf('    UploadIntentInput:');
+      // A ANCORA IMPORTA: uma busca solta por `byte_size ... maximum` pegaria
+      // qualquer outro schema. O recorte e o do PROPRIO schema, do nome dele
+      // ate o proximo -- ver `_blocoDoSchema`, que explica por que a janela de
+      // 800 caracteres que estava aqui deixou de funcionar.
+      final bloco = _blocoDoSchema(contrato, 'UploadIntentInput');
       expect(
-        schema,
-        greaterThan(-1),
+        bloco,
+        isNotEmpty,
         reason: 'REPROVA: nao achei o schema `UploadIntentInput` em '
             '`api/openapi.yaml`. Sem ancora, este portao mediria o teto '
             'errado e acusaria divergencia que nao existe.',
       );
-      final bloco = contrato.substring(schema, schema + 800);
 
       final linha =
           RegExp(r'byte_size:\s*\{[^}]*maximum:\s*(\d+)').firstMatch(bloco);
@@ -228,11 +256,11 @@ void main() {
       final contrato =
           File('${_raizDoRepositorio().path}/api/openapi.yaml').readAsStringSync();
 
-      final schema = contrato.indexOf('    UploadIntentInput:');
-      expect(schema, greaterThan(-1));
+      final schema = _blocoDoSchema(contrato, 'UploadIntentInput');
+      expect(schema, isNotEmpty);
       final bloco = RegExp(
         r'content_type:\s*\n\s*type:\s*string\s*\n\s*enum:\s*\[([^\]]+)\]',
-      ).firstMatch(contrato.substring(schema, schema + 800));
+      ).firstMatch(schema);
       expect(
         bloco,
         isNotNull,
@@ -253,34 +281,72 @@ void main() {
       );
     });
 
-    test('o teto do ACHADOR e mais apertado, e esta porta nao serve a ele', () {
-      // Descoberto pela primeira execucao desta isca, e registrado aqui para
-      // nao voltar como surpresa: `/media/finder-photo-intents` estreita
-      // `byte_size` para 2 MB, contra os 10 MiB da foto do pet. Sao caminhos
-      // diferentes, e hoje `CameraDoAparelho` serve so o do pet (F1.4).
+    test('o teto do ACHADOR e o MESMO, e esta porta serve aos dois', () {
+      // **ESTE CASO VIROU DO AVESSO, e nao foi apagado.**
       //
-      // No dia em que a foto do achador (F3) usar esta mesma porta,
-      // `tetoDeBytesDaFoto` deixa de ser o teto certo para aquele caminho, e o
-      // erro so apareceria no envio. Este caso existe para que a diferenca
-      // seja um fato testado, e nao uma linha de YAML que ninguem releu.
+      // Ele afirmava que `/media/finder-photo-intents` estreitava `byte_size`
+      // para 2 MB contra os 10 MiB da foto do pet. Os dois numeros deixaram de
+      // existir em 17/10/2026, por decisao literal do cliente -- *"as imagens
+      // devem conter no maximo 5mb ... em toda a aplicacao"* --, e o contrato
+      // registra a unificacao nos dois lugares, com estas palavras:
+      //
+      //   - em `UploadIntentInput`: "**O teto de 5 MiB vale para TODO envio de
+      //     imagem da aplicacao** ... Antes eram tres numeros: 10 MiB aqui,
+      //     2 MiB no servidor da foto de achado e 5 MiB no catalogo";
+      //   - na rota do achador: "O teto desta rota era 2 MB no SEC-009, e a
+      //     unificacao o afrouxa: o que continua contendo volume aqui e o teto
+      //     de tres fotos por aviso, que nao reabre"; e, no `requestBody`,
+      //     "Sem sobrescrever `byte_size`: ... esta rota o herda de
+      //     `UploadIntentInput`".
+      //
+      // As duas hipoteses que a isca oferecia estavam ERRADAS: o teto nao foi
+      // removido deixando 10 MiB (os 10 MiB e que sairam), e o contrato nao
+      // mudou de forma. O que a isca mede agora e a unificacao, nos dois
+      // sentidos -- e ela reprova no dia em que alguem reabrir um teto proprio
+      // aqui, porque `tetoDeBytesDaFoto` deixaria de ser o teto certo deste
+      // caminho e o erro so apareceria no envio.
       final contrato = File('${_raizDoRepositorio().path}/api/openapi.yaml')
           .readAsStringSync();
-      final doAchador = RegExp(
-        r'finder-photo-intents[\s\S]{0,1600}?byte_size:\s*\{[^}]*maximum:\s*(\d+)',
-      ).firstMatch(contrato);
+      final rota = _blocoDoCaminho(contrato, '/media/finder-photo-intents');
       expect(
-        doAchador,
-        isNotNull,
-        reason: 'REPROVA: o teto proprio de `/media/finder-photo-intents` '
-            'sumiu do contrato. Ou ele foi removido, e a foto do achador '
-            'passou a aceitar 10 MiB de quem nao tem identidade nenhuma, ou o '
-            'contrato mudou de forma e este portao parou de enxergar.',
+        rota,
+        isNotEmpty,
+        reason: 'REPROVA: nao achei a rota `/media/finder-photo-intents` em '
+            '`api/openapi.yaml`.',
+      );
+      // Sem os COMENTARIOS do YAML: a propria rota explica a unificacao
+      // escrevendo "Sem sobrescrever `byte_size`", e uma busca crua acharia
+      // essa frase e acusaria um teto que nao existe. O que conta e uma CHAVE
+      // `byte_size:` declarada, no comeco de uma linha de dados.
+      final semComentarios = rota
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('#'))
+          .join('\n');
+      expect(
+        RegExp(r'^\s*byte_size:', multiLine: true).hasMatch(semComentarios),
+        isFalse,
+        reason: 'REPROVA: a rota do achador voltou a declarar `byte_size` '
+            'proprio. O teto e unico desde 17/10, e um segundo numero aqui '
+            'faria `tetoDeBytesDaFoto` mentir sobre este caminho -- a recusa '
+            'apareceria so no envio.',
       );
       expect(
-        int.parse(doAchador!.group(1)!),
-        lessThan(tetoDeBytesDaFoto),
-        reason: 'REPROVA: o teto do achador deixou de ser mais apertado que o '
-            'do tutor. Quem envia ali nao tem conta.',
+        rota.contains(r"$ref: '#/components/schemas/UploadIntentInput'"),
+        isTrue,
+        reason: 'REPROVA: a rota do achador parou de herdar '
+            '`UploadIntentInput`. Com um corpo proprio, o teto dela deixa de '
+            'ser o do app sem ninguem perceber.',
+      );
+      // E o teto herdado e o que o app carrega.
+      final bloco = _blocoDoSchema(contrato, 'UploadIntentInput');
+      final herdado =
+          RegExp(r'byte_size:\s*\{[^}]*maximum:\s*(\d+)').firstMatch(bloco);
+      expect(herdado, isNotNull);
+      expect(
+        int.parse(herdado!.group(1)!),
+        tetoDeBytesDaFoto,
+        reason: 'REPROVA: o teto herdado pela rota do achador nao e o que o '
+            'app confere.',
       );
     });
 

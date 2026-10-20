@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// F1.1 — o aceite dos termos: a caixa que o cliente pediu, e o REGISTRO dela.
 ///
 /// **O que este arquivo cobra, e por que nao e o widget.** O cliente pediu a
@@ -107,8 +109,7 @@ void main() {
     // A porta de `Criar conta` deslogada mora em `Perfil` (BICHUS-232). Ate
     // 22/09 este caso entrava pelo `Cadastrar meu pet` da secao de
     // aterrissagem, que saiu de la por misturar cadastro com a vizinhanca.
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
   }
@@ -137,11 +138,22 @@ void main() {
     WidgetTester tester, {
     required bool aceitar,
   }) async {
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+    // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+    // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+    // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+    // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+    // passaria a medir o bloqueio em vez do que ele quer medir.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+    await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
     if (aceitar) {
       await rolarAte(tester, caixaDeAceite);
       await tester.tap(caixaDeAceite);
@@ -395,12 +407,40 @@ void main() {
       // COMPORTAMENTO, que e mais forte: comparar alturas continuaria verde
       // numa tela que criasse a conta sem o aceite, desde que a caixa
       // estivesse desenhada acima do botao.
+      // **A JANELA E FIXADA AQUI, em 360 x 560 dp**, e isso passou a ser
+      // necessario em 18/10/2026.
+      //
+      // O cliente mandou remover o aviso do vazamento do pe da lista de
+      // requisitos da senha (*"O servidor também recusa senha que já apareceu
+      // em vazamento conhecido..."*), e o formulario encurtou com ele. Na
+      // janela padrao da suite (800 x 600 dp) a caixa de aceite passou a
+      // nascer DENTRO da area visivel -- medido, topo em 472,0 contra 503,0 de
+      // fundo do rolavel --, e a pre-condicao abaixo deixou de valer.
+      //
+      // Afrouxar a pre-condicao esconderia o caso: ele diz medir a ROLAGEM
+      // ate a caixa, e sem a caixa fora da janela ele nao mede isso. Fixar a
+      // janela no aparelho estreito que o proprio comentario acima nomeia --
+      // 360 dp de largura -- devolve a condicao e mantem a medida honesta.
+      tester.view.devicePixelRatio = 3;
+      tester.view.physicalSize = const Size(360 * 3, 560 * 3);
+      addTearDown(tester.view.reset);
+
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+      // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai.
+      await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+      // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+      // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+      // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+      // entao ela precisa ser preenchida aqui mesmo que este caso nao seja
+      // sobre idade -- sem ela o toque no botao cairia no vazio e o caso
+      // passaria a medir o bloqueio em vez do que ele quer medir.
+      await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
       await tester.enterText(
-        find.byType(TextField).at(1),
+        find.byType(TextField).at(3),
         'marina@exemplo.com.br',
       );
-      await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+      await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
       await tester.pumpAndSettle();
 
       // A caixa comeca FORA da janela: sem isto o caso nao estaria medindo a

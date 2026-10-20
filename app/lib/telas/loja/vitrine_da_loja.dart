@@ -1,3 +1,5 @@
+import '../../widgets/arrastar_para_atualizar.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,6 +12,7 @@ import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/carrossel_de_fotos.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
@@ -101,7 +104,8 @@ class VitrineDaLoja extends StatefulWidget {
   /// (desatualizado)" é o pior dos dois mundos: a pessoa lê o número e ignora
   /// o adjetivo. O valor não chega do servidor, e esta frase ocupa o lugar
   /// dele.
-  static const String precoNaoConfirmado = 'Preço não confirmado, veja no site do parceiro';
+  static const String precoNaoConfirmado =
+      'Preço não confirmado, veja no site do parceiro';
 
   /// Quando o aparelho nao abre o link. **Uma linha**, e e a mesma frase que a
   /// `Rede` usa para o convite: duas redacoes para a mesma falha sao duas
@@ -109,7 +113,6 @@ class VitrineDaLoja extends StatefulWidget {
   static const String falhaAoAbrirOLink = 'Não conseguimos abrir o link.';
 
   static const String rotuloDeAtualizar = 'Atualizar';
-
 
   /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
   ///
@@ -131,7 +134,17 @@ class VitrineDaLoja extends StatefulWidget {
 /// vazia por falha".
 enum _Fase { carregando, lista, falha }
 
-class _VitrineDaLojaState extends State<VitrineDaLoja> {
+class _VitrineDaLojaState extends State<VitrineDaLoja>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 18/10/2026).
+  ///
+  /// **A mesma funcao do `Tentar de novo`**, e nao uma copia: duas buscas com
+  /// dois nomes divergem na primeira correcao de filtro. Quem desenha a roda e
+  /// a casca, por `SlotDeAtualizacao` -- ver
+  /// `widgets/arrastar_para_atualizar.dart`.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   _Fase _fase = _Fase.carregando;
   RecorteDaLoja _recorte = const RecorteDaLoja();
   PaginaDaLoja? _pagina;
@@ -368,11 +381,7 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
       // o termo APLICADO e nao precisa mais de quem a avise.
       minimoDeCaracteres: 2,
       aoAplicar: (termo) => _trocarRecorte(
-        _recorte.com(
-          termo: termo,
-          limparTermo: termo == null,
-          pagina: 1,
-        ),
+        _recorte.com(termo: termo, limparTermo: termo == null, pagina: 1),
       ),
     );
   }
@@ -519,6 +528,12 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
 
 /// O cartao de um item da vitrine: **foto, titulo e preco, e nada mais**.
 ///
+/// A ordem, de cima para baixo: carrossel, a linha de apoio
+/// [rotuloDePrecoDeReferencia], o titulo, a linha do preco e `Compre agora`.
+/// A linha de apoio entrou em 18/10/2026, por pedido literal do cliente, e
+/// **acima do nome** -- posicao dele, nao escolha de desenho. Ela so nasce
+/// quando ha preco, e e `ExcludeSemantics`: ver a constante.
+///
 /// Decisao do cliente, 17/10/2026: *"Na listagem do produto, remova as
 /// informacoes adicionais, descricoes. Deixe apenas a foto, titulo e preco,
 /// como nos e-commerces tradicionais. Coloque o campo de preco em destaque"*.
@@ -540,6 +555,41 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
 /// para `title-lg` com `w700`, nos tokens que ja existem: nenhuma cor nova,
 /// nenhum componente novo. Em `text-primary`, como estava -- preco em cor de
 /// acao pareceria um botao.
+///
+/// **ARRASTAR NAO SAI DA LOJA.** O carrossel entrou DENTRO do alvo de toque do
+/// cartao, e o cartao inteiro agora e o unico destino -- o site do parceiro.
+/// Sem cuidado, arrastar para ver a segunda foto abriria o navegador no meio
+/// do gesto. Nao abre: o `PageView` do carrossel e o alvo mais interno e
+/// reivindica o arrasto horizontal na arena de gestos do Flutter, enquanto o
+/// `InkWell` do cartao responde por `onTap`, que so dispara quando o dedo sobe
+/// sem ter virado arrasto. O autor do carrossel mediu isto no desenho ANTIGO,
+/// em que o cartao levava ao detalhe interno; foi MEDIDO DE NOVO depois desta
+/// mescla, porque o destino do cartao mudou e o gesto com ele. Ver
+/// `app/test/telas/loja_abre_no_navegador_test.dart`.
+///
+/// O botao `Compre agora` tambem e filho do cartao e consome o proprio toque;
+/// como ele leva ao MESMO destino, nao ha mais area de gesto ambigua.
+///
+/// **O cartao mostra as fotos, e a ficha nao tem mais entrada.** A descricao
+/// sem corte, o preco com historico e a ficha moram em `TelaDoProduto`, que
+/// ficou PARADA e nao apagada por decisao do cliente de 17/10: nada no
+/// aplicativo navega para ela.
+///
+/// As fotos passaram a vir na listagem em 17/10/2026, por campo ADITIVO
+/// (`StoreItemSummary.images`, opcional, com `image_url` intocado). O
+/// paragrafo que estava aqui dizia que trazer oito imagens por cartao pesaria
+/// a vitrine, e ele estava certo sobre os BYTES e errado sobre a causa: o que
+/// pesa e BAIXAR as oito, nao recebe-las na lista. Medido em 17/10/2026, para
+/// uma pagina cheia de 20 cartoes:
+///
+/// - o JSON da pagina vai de 12,9 KB para 32,7 KB (+19,9 KB) com 8 imagens por
+///   item -- ao lado de UMA derivada de 500 KB, e troco;
+/// - baixar as 8 de cada cartao pediria ate 78 MB, contra ate 9,8 MB da
+///   primeira pintura.
+///
+/// Por isso o carrossel **carrega sob demanda** (`PageView.builder`): a
+/// primeira pintura baixa uma imagem por cartao, exatamente como antes, e as
+/// outras sete so saem da rede se a pessoa arrastar. Ver [CarrosselDeFotos].
 class CartaoDaLoja extends StatelessWidget {
   const CartaoDaLoja({required this.item, super.key});
 
@@ -553,6 +603,105 @@ class CartaoDaLoja extends StatelessWidget {
   /// botao" repetido em doze cartoes nao diz de qual produto e.
   static const String rotuloDeSaida = 'Compre agora';
 
+  /// A afirmacao da mensagem de apoio que fica **acima do nome do produto**.
+  ///
+  /// Literal do cliente (18/10/2026): *"vamos colocar a mensagem preco de
+  /// referencia, em cima do nome do produto"*.
+  ///
+  /// **Texto fixo do binario, e nao campo do servidor.** Nada foi acrescentado
+  /// ao contrato por causa desta linha: `openapi.yaml` esta intocado.
+  ///
+  /// Sozinha ela e o rotulo de um item SEM data. Com data, o que a tela
+  /// desenha e [rotuloDePrecoComData].
+  static const String rotuloDePrecoDeReferencia = 'Preço de referência';
+
+  /// `consultado em 14/03`, ou **nulo** quando o item nao tem data.
+  ///
+  /// **A redacao e a MESMA do rabo que saiu da linha do preco**, palavra por
+  /// palavra, e a data sai da MESMA [dataCurta]. Nada aqui e formato novo: o
+  /// rabo dizia `preço de referência, consultado em 14/03` depois do valor, e
+  /// isto e aquilo sem o valor.
+  ///
+  /// **Dia e mes, sem ano, porque e o que o produto ja escrevia.** O motivo
+  /// esta em [dataCurta]: um preco que vence em trinta dias nao cruza o ano de
+  /// forma que o ano acrescente informacao. (Um dos dois argumentos de la --
+  /// "tres numeros disputando a mesma leitura" -- valia para a linha que TINHA
+  /// o valor; esta nao tem. O outro continua de pe, e trocar o formato seria
+  /// inventar um, que e justamente o que esta tarefa proibiu.)
+  ///
+  /// **Nulo e o estado que impede "consultado em" com data vazia.** Ele existe
+  /// de verdade: `linhaDoPreco` ja exigia data, mas este rotulo e montado a
+  /// partir do item e nao da linha, e um item com valor e sem data nao pode
+  /// produzir uma frase pela metade.
+  static String? sufixoDaConsulta(ItemDaLoja item) {
+    final data = item.consultadoEm;
+    if (data == null) return null;
+    return 'consultado em ${dataCurta(data)}';
+  }
+
+  /// O rotulo VISIVEL acima do nome do produto: a afirmacao e a data.
+  ///
+  /// **A data voltou aqui em 18/10/2026**, por pedido literal do cliente:
+  /// *"devolve a data onde esta o novo texto de preço de referência"*. Ela
+  /// tinha saido de manha junto com o resto do rabo da linha do preco, e volta
+  /// NESTA linha -- nao naquela, que continua sendo so o valor.
+  ///
+  /// **E isto que torna a clausula dos termos verdadeira de novo.**
+  /// `web/src/conteudo/juridico/termos.md` diz, por escrito, que a data da
+  /// consulta aparece junto do preco na tela. Entre a remocao do rabo e esta
+  /// linha, a afirmacao do juridico estava sem lastro no cartao.
+  ///
+  /// Sem data, so a afirmacao -- e nunca "consultado em" sem o dia.
+  static String rotuloDePrecoComData(ItemDaLoja item) {
+    final sufixo = sufixoDaConsulta(item);
+    if (sufixo == null) return rotuloDePrecoDeReferencia;
+    return '$rotuloDePrecoDeReferencia, $sufixo';
+  }
+
+  /// O nome acessivel do no do preco: **a afirmacao junto do valor**.
+  ///
+  /// Existe porque o rabo da linha do preco saiu em 18/10/2026 por pedido
+  /// literal do cliente. Ate aquele dia a frase "preço de referência" viajava
+  /// DENTRO do mesmo no de texto do numero, e era por isso que o rotulo
+  /// visivel acima do nome podia ser `ExcludeSemantics` sem perda: quem nao ve
+  /// ouvia a afirmacao de qualquer jeito, colada no valor.
+  ///
+  /// Tirar o rabo e parar ai teria deixado o leitor de tela com
+  /// "R\$ 189,90" e mais nada -- regressao de acessibilidade silenciosa, porque
+  /// na tela a informacao continua (ela esta acima do nome, visivel). Este
+  /// rotulo devolve a afirmacao a semantica, no MESMO no do valor, e nada
+  /// disso aparece na tela.
+  ///
+  /// **O rotulo visivel continua `ExcludeSemantics`.** Anunciar os dois faria
+  /// o leitor dizer "Preço de referência" solto antes do nome do produto e de
+  /// novo junto do valor -- que e exatamente o rotulo orfao que aquele
+  /// `ExcludeSemantics` existe para evitar.
+  ///
+  /// ## A data entra AQUI, e nao no rotulo visivel (18/10/2026, tarde)
+  ///
+  /// Quando a data voltou ao rotulo visivel, abriram-se dois caminhos para a
+  /// semantica, e eles nao sao equivalentes:
+  ///
+  /// - **anunciar o rotulo visivel** (tirar o `ExcludeSemantics`) e deixar o
+  ///   no do valor so com o numero: o leitor diria "Preço de referência,
+  ///   consultado em 14/03" ANTES do nome do produto, solto, e depois
+  ///   "R\$ 89,90" sem dizer de que preco fala. Dois nos, nenhum completo --
+  ///   e o rotulo orfao de volta;
+  /// - **manter o visivel excluido e juntar tudo aqui**: um no so, com a
+  ///   afirmacao, o valor e a data, **uma vez cada**, na ordem em que fazem
+  ///   sentido lidos em voz alta.
+  ///
+  /// O segundo e o escolhido. O preco e UMA informacao composta de tres
+  /// partes, e quem nao ve recebe as tres juntas, como quem ve recebe o bloco
+  /// inteiro de uma olhada. **Nada e anunciado duas vezes**, e ha isca que
+  /// reprova se a data aparecer em dois nos.
+  static String rotuloAcessivelDoPreco(ItemDaLoja item) {
+    final valor = item.linhaDoPreco;
+    final sufixo = sufixoDaConsulta(item);
+    final partes = <String>[rotuloDePrecoDeReferencia, ?valor, ?sufixo];
+    return partes.join(', ');
+  }
+
   /// O nome acessivel do botao de saida: diz o produto e para onde leva.
   static String rotuloAcessivelDeSaida(ItemDaLoja item) =>
       '$rotuloDeSaida, ${item.titulo}, no site ${item.parceiro.nome}';
@@ -561,7 +710,10 @@ class CartaoDaLoja extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final linhaDoPreco = item.linhaDoPreco;
+    // **Nenhuma leitura de preco aqui.** `item.linhaDoPreco` e
+    // `item.estadoDoPreco` continuam existindo no modelo -- o contrato nao
+    // mudou --, e este cartao deixou de perguntar por eles em 18/10/2026. Ver
+    // o bloco de comentario mais abaixo, onde o preco era desenhado.
     final destino = item.destinoExterno;
 
     // `Material` + `InkWell`, e nao `GestureDetector` sobre o `Container`: o
@@ -575,7 +727,9 @@ class CartaoDaLoja extends StatelessWidget {
         // Sem destino utilizavel o cartao **nao e tocavel**: um produto mal
         // cadastrado continua na lista, com foto, titulo e preco, e nao ganha
         // um toque que nao leva a lugar nenhum.
-        onTap: destino == null ? null : () => sairDaLoja(context, item, destino),
+        onTap: destino == null
+            ? null
+            : () => sairDaLoja(context, item, destino),
         borderRadius: BorderRadius.circular(BichuRaio.lg),
         child: Container(
           width: double.infinity,
@@ -590,70 +744,65 @@ class CartaoDaLoja extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (item.urlDaImagem != null) ...<Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(BichuRaio.md),
-                  child: Image.network(
-                    item.urlDaImagem!,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    // Nome acessivel em portugues (criterio 11): o texto que o
-                    // administrador escreveu, e `Foto de <titulo>` quando ele nao
-                    // escreveu. A escolha e de `ItemDaLoja.nomeDaImagem`, e nao
-                    // daqui: ate 17/10/2026 esta linha montava a frase generica e
-                    // o texto do painel nunca chegava a ninguem.
-                    semanticLabel: item.nomeDaImagem,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
+              // **O CARROSSEL** (17/10/2026). Com uma foto ele desenha a
+              // mesma `Image` de antes, sem indicador e sem gesto; com varias
+              // vira `PageView` que carrega sob demanda. Nome acessivel por
+              // foto, pela reserva de `ImagemDoProduto.nomeDaImagem`.
+              //
+              // `fotosDoCartao` e nao `imagens`: o item que vem de servidor sem
+              // `images`, ou da massa com imagem externa, cai na lista de um
+              // elemento montada a partir de `image_url` -- e a tela tem um
+              // caminho so para desenhar foto.
+              if (item.fotosDoCartao.isNotEmpty) ...<Widget>[
+                CarrosselDeFotos(
+                  fotos: item.fotosDoCartao,
+                  titulo: item.titulo,
+                  altura: 160,
                 ),
                 const SizedBox(height: BichuEspaco.e3),
               ],
+              // =================================================================
+              // **O PREÇO SAIU DO CARTÃO, INTEIRO** (cliente, 18/10/2026,
+              // literal: *"Retire o preco dos produtos da loja e o texto de
+              // 'preco de referencia'"*).
+              //
+              // **É REVERSÃO DELIBERADA, e do mesmo dia.** Ele pediu o rótulo
+              // "Preço de referência" acima do nome na manhã de 18/10, pediu a
+              // data de volta na tarde do mesmo dia, e agora manda os dois
+              // embora junto com o valor. Quem abrir este arquivo e achar que
+              // o pedido da manhã foi desfeito por descuido está lendo o
+              // commit errado: foi desfeito por ele.
+              //
+              // **TRÊS coisas saíram, e a terceira é a que fica órfã:**
+              //
+              //  1. o VALOR (`item.linhaDoPreco` em `titleLarge` w700, com
+              //     `semanticsLabel: rotuloAcessivelDoPreco`);
+              //  2. a LINHA DE APOIO acima do nome
+              //     (`rotuloDePrecoComData`, "Preço de referência, consultado
+              //     em 14/03", em `ExcludeSemantics`);
+              //  3. `VitrineDaLoja.precoNaoConfirmado` -- "Preço não
+              //     confirmado, veja no site do parceiro". Esta era a cláusula
+              //     VISUAL que acompanhava o preço, no ramo em que ele tinha
+              //     vencido. Sem preço nenhum na tela ela deixa de dizer
+              //     alguma coisa: a frase existia para ocupar o lugar de um
+              //     valor que a pessoa esperava, e já não há lugar. Mantida na
+              //     tela, ela anunciaria a ausência de uma informação que o
+              //     cartão não oferece mais em nenhum estado.
+              //
+              // **O QUE NÃO SAIU, e não é esquecimento:** a cláusula JURÍDICA
+              // de `web/src/conteudo/juridico/termos.md` -- a plataforma não
+              // vende nada e os preços são referência -- continua inteira nos
+              // termos. Ela fala do que o Bichu é, não do que o cartão pinta.
+              // As constantes ficam no arquivo pelo mesmo motivo que
+              // `avisoDeQueNaoSomosOVendedor` ficou: apagar o texto junto com
+              // o widget tiraria do repositório a única cópia do que o produto
+              // afirmava a quem comprava.
+              //
+              // **O que o cartão passa a ter:** carrossel, título e
+              // `Compre agora` -- e o nome do parceiro no nome acessível do
+              // botão de saída, onde ele já estava.
+              // =================================================================
               Text(item.titulo, style: textos.titleMedium),
-              // O preco, quando ha. **Valor, rotulo e data no MESMO bloco e
-              // simultaneamente**, sem interacao nenhuma (criterio 15): nao ha
-              // dica de ferramenta, nao ha icone de informacao e nao ha secao
-              // expansivel. Captura de tela e como isso circula.
-              if (linhaDoPreco != null) ...<Widget>[
-                const SizedBox(height: BichuEspaco.e2),
-                // **O DESTAQUE E DO VALOR, e a linha continua INTEIRA.**
-                //
-                // `ItemDaLoja.linhaDoPreco` e uma string so de proposito (o
-                // criterio 15 da BICHUS-185: o numero nunca aparece sem o
-                // rotulo e a data). Desenhar so `precoFormatado` em corpo
-                // grande seria exatamente o que aquele comentario proibe.
-                //
-                // Entao o texto desenhado E a linha inteira, caractere por
-                // caractere: o que muda e o ESTILO dos primeiros
-                // `precoFormatado.length` caracteres. Um `Text.rich` com dois
-                // trechos e um no de texto so -- nao ha estado em que o valor
-                // apareca e o resto nao.
-                Text.rich(
-                  TextSpan(
-                    children: <InlineSpan>[
-                      TextSpan(
-                        text: linhaDoPreco.substring(0, item.precoFormatado!.length),
-                        style: textos.titleLarge?.copyWith(
-                          color: cores.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      TextSpan(
-                        text: linhaDoPreco.substring(item.precoFormatado!.length),
-                        style: textos.bodySmall?.copyWith(
-                          color: cores.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
-                const SizedBox(height: BichuEspaco.e2),
-                Text(
-                  VitrineDaLoja.precoNaoConfirmado,
-                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-                ),
-              ],
               if (destino != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e3),
                 BotaoDeSaidaDaLoja(item: item, destino: destino),

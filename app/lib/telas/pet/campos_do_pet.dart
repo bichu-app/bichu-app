@@ -426,7 +426,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
         ],
         SeletorDeLista(
           rotulo: TextosDoCadastro.rotuloDaRaca,
-          ajuda: TextosDoCadastro.ajudaDaRaca,
           estadoInicial: TextosDoCadastro.escolherNaLista,
           itens: _itensDeRaca,
           selecionado: rascunho.breedCode,
@@ -446,7 +445,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
             controlador: _racaLivre,
             foco: _focoDaRacaLivre,
             erro: _erroDaRacaLivre,
-            ajuda: TextosDoCadastro.ajudaDaRacaLivre(_nome.text),
             capitalizacao: TextCapitalization.words,
             acaoDeTeclado: TextInputAction.next,
             limite: TextosDoCadastro.limiteDaRacaLivre,
@@ -631,7 +629,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
           // asterisco falha para leitor de tela e para quem nao conhece a
           // convencao (UX secao 13).
           estadoInicial: TextosDoCadastro.escolherNaLista,
-          ajuda: TextosDoCadastro.ajudaDasCores(nome),
           itens: _cores,
           habilitado: listaCarregou,
           selecionado: rascunho.segundaCorCodigo,
@@ -702,11 +699,6 @@ class _BlocoDeCuidados extends StatelessWidget {
           Text(
             TextosDoCadastro.cuidadosSaoPublicos(nome),
             style: textos.bodyMedium,
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-          Text(
-            TextosDoCadastro.cuidadosOQueEscrever(nome),
-            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
           ),
           const SizedBox(height: BichuEspaco.e2),
           Text(

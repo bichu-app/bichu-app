@@ -5,6 +5,8 @@ import { Banner } from '../componentes/basicos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone, MarcaDaNavegacao, type NomeDoIcone } from '../componentes/Icone.tsx';
 import { MenuDeAcoes } from '../componentes/MenuDeAcoes.tsx';
+import { useIndicacoesPendentes } from '../diretorio/fila.ts';
+import { useDenunciasPendentes } from '../moderacao/fila.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 
 interface ItemDaNavegacao {
@@ -17,6 +19,9 @@ interface ItemDaNavegacao {
 
 const eSubDaLoja = (c: string) => c.startsWith('/loja/parceiros') || c.startsWith('/loja/tags');
 
+/** O mesmo arranjo de `eSubDaLoja`: o item pai nao fica aceso quando o filho esta. */
+const ehSubDoPerto = (c: string) => c.startsWith('/perto/indicacoes');
+
 /**
  * A secao Rede e de outra frente (feat/backoffice-telas-rede): aqui so o item
  * da navegacao, que leva a `/rede`. A rota e dela.
@@ -26,7 +31,54 @@ const ITENS: ItemDaNavegacao[] = [
   { para: '/loja/parceiros', rotulo: 'Parceiros', icone: 'open', sub: true, ativo: (c) => c.startsWith('/loja/parceiros') },
   { para: '/loja/tags', rotulo: 'Tags', icone: 'tick', sub: true, ativo: (c) => c.startsWith('/loja/tags') },
   { para: '/rede', rotulo: 'Rede', icone: 'groups', ativo: (c) => c === '/rede' || c.startsWith('/rede/') },
+  // BICHUS-189. O diretorio de `Perto`: estabelecimentos, clinicas e
+  // profissionais. O caminho e `/perto` e nao `/diretorio` porque e assim que a
+  // secao se chama no aplicativo, e o painel fala a lingua do produto.
+  { para: '/perto', rotulo: 'Perto', icone: 'search', ativo: (c) => c === '/perto' || c.startsWith('/perto/') && !ehSubDoPerto(c) },
+  // 18/10/2026. A fila de indicacoes da comunidade: o menu que o cliente mediu
+  // que faltava ("no backoffice nao tem um menu para aprovar os profissionais
+  // que as pessoas estao indicando"). Sub-item de `Perto` pela mesma forma que
+  // Parceiros e Tags sao sub-itens da Loja: e o mesmo assunto, e nao uma secao
+  // nova.
+  { para: '/perto/indicacoes', rotulo: 'Indicações', icone: 'add', sub: true, ativo: (c) => c.startsWith('/perto/indicacoes') },
+  // 18/10/2026. A fila da plaquinha da coleira e a ENTREGA dela. Secao propria,
+  // e nao sub-item: o pedido do objeto fisico nao e assunto da Loja (que vende)
+  // nem do Perto (que lista lugares) -- e trabalho de expedicao, e e dele que
+  // quem atende cuida. **Sem aviso de contagem**: `AdminCollarTagRequestPage`
+  // nao tem `pending_total`, e inventar uma soma na tela contaria o que a
+  // listagem nao mostra, que e o defeito de "1 pendente" sobre fila vazia.
+  { para: '/plaquinhas', rotulo: 'Plaquinhas', icone: 'tick', ativo: (c) => c === '/plaquinhas' || c.startsWith('/plaquinhas/') },
+  // 18/10/2026. A FILA DE MODERACAO: "quem modera vai ser o administrador, deve
+  // ir para a pagina de backoffice". Secao propria e nao sub-item: ela
+  // atravessa Perto (denuncia de avaliacao) e a conversa mediada, e vai
+  // receber perfil e foto -- nao e assunto de nenhuma secao existente.
+  // **COM aviso de contagem**: `AdminModerationItemPage` tem `pending_total`,
+  // que passa pelo mesmo filtro de conta desabilitada dos outros dois lugares.
+  { para: '/moderacao', rotulo: 'Moderação', icone: 'error', ativo: (c) => c === '/moderacao' || c.startsWith('/moderacao/') },
+  { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
+
+/**
+ * O numero ao lado do item do menu, ou `undefined`.
+ *
+ * `undefined` deixa o item SEM numero, e isso e diferente de zero: o servidor
+ * ainda nao respondeu. Zero tambem nao mostra numero -- fila vazia nao precisa
+ * de "(0)".
+ *
+ * Os dois numeros vem do servidor (`pending_total`), e nao de uma soma na tela:
+ * cada um passa pelo mesmo filtro de conta desabilitada da listagem e da
+ * leitura da sua fila, e uma soma local contaria o que a fila nao mostra -- que
+ * e o defeito de dizer "1 pendente" sobre fila vazia.
+ */
+function avisoDoItem(
+  para: string,
+  indicacoes: number | undefined,
+  denuncias: number | undefined,
+): number | undefined {
+  if (para === '/perto/indicacoes') return indicacoes ? indicacoes : undefined;
+  if (para === '/moderacao') return denuncias ? denuncias : undefined;
+  return undefined;
+}
 
 function iniciais(nome: string): string {
   const partes = nome.trim().split(/\s+/).filter(Boolean);
@@ -41,7 +93,13 @@ function iniciais(nome: string): string {
  * de exibicao (BO-1) e abre o menu da conta.
  */
 export function Casca() {
-  const { nome, avisoDoTeto, sair, sairDeTodas } = useSessao();
+  const { nome, avisoDoTeto, sair, sairDeTodas, api } = useSessao();
+  // A CONTAGEM DO AVISO do menu. O numero vem do servidor (`pending_total`), e
+  // nao de uma soma na tela: ele passa pelo mesmo filtro de conta desabilitada
+  // da listagem e da leitura, e uma soma local contaria o que a fila nao mostra
+  // -- que e o defeito de dizer "1 pendente" sobre fila vazia.
+  const indicacoesPendentes = useIndicacoesPendentes(api);
+  const denunciasPendentes = useDenunciasPendentes(api);
   const { pathname } = useLocation();
   const [confirmarTodas, setConfirmarTodas] = useState(false);
   const [saindoDeTodas, setSaindoDeTodas] = useState(false);
@@ -57,6 +115,10 @@ export function Casca() {
         <ul>
           {ITENS.map((item) => {
             const ativo = item.ativo(pathname);
+            // So o item da fila carrega aviso, e so quando o servidor respondeu:
+            // `undefined` deixa o item sem numero, e isso e diferente de zero.
+            const aviso = avisoDoItem(item.para, indicacoesPendentes, denunciasPendentes);
+            const rotulo = aviso === undefined ? item.rotulo : `${item.rotulo} (${aviso})`;
             return (
               <li key={item.para}>
                 <Link
@@ -64,10 +126,14 @@ export function Casca() {
                   className={item.sub ? 'navitem sub t-label' : 'navitem t-label-lg'}
                   aria-current={ativo ? 'page' : undefined}
                   data-cy={`nav-${item.rotulo.toLowerCase()}`}
-                  title={item.rotulo}
+                  title={rotulo}
                 >
                   <Icone nome={item.icone} />
-                  <span className="rot">{item.rotulo}</span>
+                  {/* O numero vai DENTRO de `.rot`: abaixo de 1024 a navegacao
+                      vira trilho de icones e `.rot` e escondido, e um aviso
+                      solto sobraria sem rotulo nenhum ao lado. O `title` leva o
+                      numero para quem ve so o icone. */}
+                  <span className="rot">{rotulo}</span>
                 </Link>
               </li>
             );

@@ -1,12 +1,15 @@
 import 'package:flutter/widgets.dart';
 
+import 'api/busca_de_cep.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/achados_api.dart';
 import 'api/casos_api.dart';
+import 'api/conexoes_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
+import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
@@ -16,6 +19,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
@@ -36,10 +40,13 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.conexoes,
+    required this.me,
     required this.diretorio,
     required this.loja,
     required this.achados,
     required this.envioDeFoto,
+    this.buscaDeCep = const BuscaDeCep(),
     required this.retomadaDeFotos,
     required this.fila,
     required this.tags,
@@ -54,6 +61,7 @@ class Escopo extends InheritedWidget {
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
+    required this.cidadeEscolhida,
     required this.cofreDoQr,
     required this.avisoDeCadastro,
     required super.child,
@@ -66,6 +74,23 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// A porta das CONEXOES entre pessoas (18/10/2026).
+  ///
+  /// Ela entrou aqui na uniao das quatorze: `TelaDePedidosDeConexao` pedia a
+  /// porta por parametro de construtor porque, quando foi escrita, este
+  /// arquivo estava sendo mexido por outra sessao e ligar aqui colidiria. Com
+  /// os ramos unidos, ela mora onde as outras moram -- uma porta por rota, e
+  /// nao uma por tela.
+  final ConexoesApi conexoes;
+
+  /// As rotas `tags: [me]` do contrato: os dados pessoais do tutor.
+  ///
+  /// Fica no escopo, como as outras camadas de API, e nao e construida dentro
+  /// da tela: um `MeApi` por tela seria uma segunda porta para a mesma rota, e
+  /// o teste de widget perderia o ponto de injecao que todas as outras telas
+  /// usam.
+  final MeApi me;
 
   /// O diretorio de `Perto` (`tags: [directory]` do contrato).
   final DiretorioApi diretorio;
@@ -89,9 +114,16 @@ class Escopo extends InheritedWidget {
   /// nomeou. Um envio construido dentro de cada tela seria um cliente por
   /// tela, e a proxima pessoa passaria o cliente da API "para reaproveitar".
   ///
-  /// Um so no app inteiro, e dois consumidores: a foto do pet (F1.6) e a foto
-  /// do achado avulso, quando F3.5 existir.
+  /// Um so no app inteiro, e tres consumidores: a foto do pet (F1.6), a foto
+  /// do achado avulso e a foto do PROPRIO usuario em `Meus dados` (cliente,
+  /// 18/10/2026).
   final EnvioDeFoto envioDeFoto;
+
+  /// A busca de endereco por CEP, para poupar digitacao no pedido da
+  /// plaquinha. **Nao e geocodificacao**: devolve texto, nunca coordenada
+  /// (ver `api/busca_de_cep.dart`). Servico de terceiro fora do ar nao
+  /// impede nenhum pedido.
+  final BuscaDeCep buscaDeCep;
 
   /// O envio da foto **mais o registro do que ficou pendente** (BICHUS-87,
   /// criterios 6 e 7).
@@ -182,6 +214,21 @@ class Escopo extends InheritedWidget {
   /// memoria e por dono; ver [CacheDeMeusPets].
   final CacheDeMeusPets cacheDeMeusPets;
 
+  /// A ultima cidade escolhida na listagem publica de perdidos, **neste
+  /// aparelho**.
+  ///
+  /// Fica no escopo, e nao dentro da tela, pelo mesmo motivo do
+  /// [cacheDeMeusPets] e por um a mais que e de TESTE: o deposito em arquivo
+  /// chama `getApplicationDocumentsDirectory()`, um canal de plataforma que
+  /// **trava o `pumpAndSettle` para sempre, sem mensagem**, em teste de widget.
+  /// E a mesma armadilha que `DepositoDeIntencaoEmArquivo` tem, e a saida e a
+  /// mesma: o objeto entra pela raiz, e o teste injeta um que responde.
+  ///
+  /// Uma tela que o construisse por conta travaria a suite inteira na secao em
+  /// que o aplicativo ABRE, e o sintoma -- `pumpAndSettle timed out` -- nao
+  /// aponta para a causa. Custou uma execucao travada para descobrir.
+  final CidadeEscolhida cidadeEscolhida;
+
   /// Onde a imagem do QR da tag fica depois de baixada (BICHUS-229).
   ///
   /// Fica no escopo pelo mesmo motivo do [cacheDeMeusPets], com um agravante:
@@ -221,8 +268,10 @@ class Escopo extends InheritedWidget {
       auth != anterior.auth ||
       pets != anterior.pets ||
       casos != anterior.casos ||
+      me != anterior.me ||
       achados != anterior.achados ||
       envioDeFoto != anterior.envioDeFoto ||
+      buscaDeCep != anterior.buscaDeCep ||
       retomadaDeFotos != anterior.retomadaDeFotos ||
       fila != anterior.fila ||
       tags != anterior.tags ||
@@ -237,6 +286,7 @@ class Escopo extends InheritedWidget {
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
+      cidadeEscolhida != anterior.cidadeEscolhida ||
       cofreDoQr != anterior.cofreDoQr ||
       avisoDeCadastro != anterior.avisoDeCadastro;
 }

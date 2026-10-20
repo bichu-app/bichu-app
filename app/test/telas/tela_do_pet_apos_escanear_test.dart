@@ -51,8 +51,12 @@ void main() {
 
   /// `GET /v1/tags/{code}` como o contrato o declara.
   ///
-  /// `photo_url` vai **nulo por padrao**, que e como esta rota responde hoje:
-  /// a foto nao e servida por aqui, de proposito. Um teste que mandasse uma
+  /// `photo_url` vai **nulo por padrao** porque os casos deste arquivo medem
+  /// outra coisa, e nao porque a rota responda sempre nulo -- ela passou a
+  /// mandar a foto em 18/10/2026, e quem mede isso e
+  /// `foto_do_pet_na_tela_da_tag_test.dart`. O grupo da ISCA 4 aqui continua
+  /// valendo com o mesmo texto: sem foto a tela nao promete moldura nenhuma.
+  /// Um teste que mandasse uma
   /// URL de foto por conveniencia estaria exercitando um servidor que nao
   /// existe.
   Future<http.Response> Function(http.Request) redeComTag({
@@ -132,8 +136,7 @@ void main() {
       leitorDeQr: leitor,
       deposito: logado ? depositoLogado() : null,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     leitor.ler(qrDaPlaquinha);
     await tester.pumpAndSettle();
     return leitor;
@@ -515,31 +518,64 @@ void main() {
   // ISCA 5 — nenhuma acao sem destino
   // -----------------------------------------------------------------------
   group('ISCA — nenhuma acao desta tela aponta para o vazio', () {
-    testWidgets('`Avisar o tutor` esta na tela, e ele TEM destino', (
-      tester,
-    ) async {
-      await escanear(
-        tester,
-        rede: redeComTag(viewer: 'anonymous', perdido: true),
-      );
-
+    testWidgets('a acao do achador esta na tela nas DUAS formas, e ela TEM '
+        'destino', (tester) async {
       // Este caso era o inverso: ele cobrava a AUSENCIA do botao, porque
       // `POST /v1/tags/{code}/found-reports` nao tinha cliente no app e um
       // botao que nao avisa ninguem e pior que nenhum botao. O cliente entrou
       // (`TagsApi.avisarOTutor`), e o caso virou junto -- o proprio texto que
       // ele carregava pedia isso.
       //
-      // **A prova de que o botao AVISA de verdade nao esta aqui**: ela exige
+      // **ATUALIZADO EM 18/10/2026, e o rotulo mudou com caso aberto.** A
+      // dinamica do escanear que o cliente definiu -- *"se o tutor marcou como
+      // perdido, abre a pagina para o usuario enviar mensagem ao tutor"* --
+      // separou as duas formas do achador: com caso aberto a tela e a de falar
+      // com o tutor, e a acao se chama `Enviar mensagem ao tutor`; sem caso
+      // aberto ela continua sendo `Avisar o tutor`.
+      //
+      // O caso media so a forma de PERDIDO, e com um rotulo so. Agora ele mede
+      // as duas, porque o que esta isca pergunta e "nenhuma acao desta tela
+      // aponta para o vazio" -- e uma forma sem acao nenhuma e o defeito, nao
+      // importa qual das duas.
+      //
+      // **A prova de que a acao AVISA de verdade nao esta aqui**: ela exige
       // medir a requisicao que sai, e mora em
-      // `test/telas/aviso_ao_tutor_pela_tag_test.dart`. Aqui a pergunta e a
-      // desta isca: nenhuma acao desta tela aponta para o vazio.
+      // `test/telas/aviso_ao_tutor_pela_tag_test.dart`.
+      // DUAS plaquinhas no MESMO app, pelo mecanismo que o cabecalho deste
+      // arquivo descreve: `pumpWidget` com o mesmo tipo reaproveita o `State`,
+      // e um segundo `escanear` nao voltaria para a aterrissagem.
+      final leitor = await escanear(
+        tester,
+        rede: redeComTag(
+          viewer: 'anonymous',
+          perdido: true,
+          outroViewer: 'anonymous',
+        ),
+      );
+      expect(
+        find.widgetWithText(FilledButton, 'Enviar mensagem ao tutor'),
+        findsOneWidget,
+        reason:
+            'REPROVA: com caso aberto a tela do achador nao tem `Enviar '
+            'mensagem ao tutor`. E a terceira etapa do laco do produto, e sem '
+            'ela quem esta com o animal no colo chega aqui e vai embora sem '
+            'caminho.',
+      );
+      // E o rotulo do pet perdido nao vaza para a forma sem caso aberto.
+      expect(find.widgetWithText(FilledButton, 'Avisar o tutor'), findsNothing);
+
+      await escanearAOutra(tester, leitor);
       expect(
         find.widgetWithText(FilledButton, 'Avisar o tutor'),
         findsOneWidget,
         reason:
-            'REPROVA: a tela do achador nao tem `Avisar o tutor`. E a '
-            'terceira etapa do laco do produto, e sem ela quem esta com o '
-            'animal no colo chega aqui e vai embora sem caminho.',
+            'REPROVA: sem caso aberto a tela do achador nao tem `Avisar o '
+            'tutor`. A forma de pet perdido ganhou destino e esta perdeu o '
+            'dela.',
+      );
+      expect(
+        find.widgetWithText(FilledButton, 'Enviar mensagem ao tutor'),
+        findsNothing,
       );
     });
 

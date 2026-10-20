@@ -45,7 +45,6 @@ import type {
 import type {
   ConsequenciasDaExclusao,
   Conta,
-  IdentityRepository,
   MotivoDeRevogacao,
   NovoTokenDeVerificacao,
   PropositoDoToken,
@@ -56,6 +55,7 @@ import type { TokenSigner } from '../ports/token-signer.js';
 import type { Autenticado } from './auth-service.js';
 import { criarAuthService, PRAZO_DE_EXPURGO_EM_MS } from './auth-service.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const EMAIL = 'tutora@exemplo.test';
@@ -77,6 +77,9 @@ function contaViva(): Conta {
     email: EMAIL,
     emailVerifiedAt: dataFixa(),
     displayName: 'Tutora',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
@@ -114,6 +117,14 @@ interface LinhaDeToken {
 }
 
 /**
+ * A recusa deste arquivo, pelo nome da porta. Mesma mensagem que cada stub
+ * carregava antes de o dublê compartilhado assumir as portas não exercitadas.
+ */
+function naoUsado(nome: string): never {
+  throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
+}
+
+/**
  * Um pedaço do banco que se comporta como o banco.
  *
  * Só o que estes casos observam: as linhas de refresh com o motivo gravado, a
@@ -122,7 +133,20 @@ interface LinhaDeToken {
  * sem querer estoura nomeando, em vez de devolver `undefined` e fazer a
  * afirmação seguinte passar por acidente.
  */
-class BancoDeMentira implements IdentityRepository {
+class BancoDeMentira extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
+  /**
+   * Recusa com mensagem PRÓPRIA, e não a genérica: a varredura de expurgo é do
+   * worker, e um caso deste arquivo que chegasse aqui estaria exercitando outra
+   * coisa. A distinção existia antes do dublê compartilhado e segue valendo.
+   */
+  override contasAExpurgar(): never {
+    throw new Error('contasAExpurgar: é do worker, não do serviço');
+  }
+
   public conta: Conta = contaViva();
   public readonly refresh: LinhaDeRefresh[] = [
     { familyId: 'fam-celular', revokedAt: null, revokedReason: null },
@@ -138,11 +162,11 @@ class BancoDeMentira implements IdentityRepository {
     if (this.quebrar === onde) throw new BancoCaiu(onde);
   }
 
-  buscarContaPorId(id: UserId): Promise<Conta | undefined> {
+  override buscarContaPorId(id: UserId): Promise<Conta | undefined> {
     return Promise.resolve(id === TUTORA ? this.conta : undefined);
   }
 
-  revogarTodasAsFamilias(
+  override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
     agora: Instant,
@@ -161,7 +185,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve(caidas);
   }
 
-  invalidarSessoes(userId: UserId, barreira: Instant): Promise<void> {
+  override invalidarSessoes(userId: UserId, barreira: Instant): Promise<void> {
     this.conferirInterruptor('invalidarSessoes');
     if (userId !== TUTORA) return Promise.resolve();
     // `GREATEST`: a coluna só anda para a frente.
@@ -172,7 +196,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve();
   }
 
-  registrarPedidoDeExclusao(
+  override registrarPedidoDeExclusao(
     userId: UserId,
     agora: Instant,
   ): Promise<ConsequenciasDaExclusao | undefined> {
@@ -183,7 +207,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve({ tagsRevogadas: 3 });
   }
 
-  criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+  override criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
     this.tokens.push({
       hash: novo.tokenHash,
       proposito: novo.proposito,
@@ -194,7 +218,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve();
   }
 
-  conferirTokenDeVerificacao(
+  override conferirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
@@ -211,7 +235,7 @@ class BancoDeMentira implements IdentityRepository {
     );
   }
 
-  consumirTokenDeVerificacao(
+  override consumirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
@@ -228,7 +252,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve({ userId: TUTORA, enviadoPara: linha.enviadoPara });
   }
 
-  invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+  override invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
     this.tokensInvalidados += 1;
     let n = 0;
     if (userId === TUTORA) {
@@ -241,74 +265,11 @@ class BancoDeMentira implements IdentityRepository {
     }
     return Promise.resolve(n);
   }
-
-  // O resto da porta. Recusa alto: um caso que chegue aqui está exercitando
-  // outra coisa, e devolver `undefined` faria a afirmação seguinte passar por
-  // acidente — que é a forma de um portão aprovar por ausência.
-  criarContaLocal(): never {
-    throw new Error('criarContaLocal: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  atualizarPerfil(): never {
-    throw new Error('atualizarPerfil: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarContaPorEmail(): never {
-    throw new Error('buscarContaPorEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarCredencialLocalPorEmail(): never {
-    throw new Error('buscarCredencialLocalPorEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
   buscarCredencialLocalPorUsuario(): never {
     throw new Error('buscarCredencialLocalPorUsuario: nenhum caso deste arquivo deveria chegar');
   }
-  regravarCredencial(): never {
-    throw new Error('regravarCredencial: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  gravarRefresh(): never {
-    throw new Error('gravarRefresh: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarRefreshPorHash(): never {
-    throw new Error('buscarRefreshPorHash: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  rotacionar(): never {
-    throw new Error('rotacionar: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  registrarLogin(): never {
-    throw new Error('registrarLogin: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  revogarFamilia(): never {
-    throw new Error('revogarFamilia: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  marcarEmailVerificado(): never {
-    throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  contasAExpurgar(): never {
-    throw new Error('contasAExpurgar: é do worker, não do serviço');
-  }
   expurgarConta(): never {
     throw new Error('expurgarConta: é do worker, não do serviço');
-  }
-  criarJanelaDeReautenticacao(): never {
-    throw new Error(
-      'criarJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error(
-      'consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  registrarPedidoDeTrocaDeEmail(): never {
-    throw new Error(
-      'registrarPedidoDeTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  concluirTrocaDeEmail(): never {
-    throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  cancelarTrocaDeEmailPendente(): never {
-    throw new Error(
-      'cancelarTrocaDeEmailPendente: nenhum caso deste arquivo deveria chegar aqui',
-    );
   }
 }
 
@@ -542,10 +503,27 @@ void describe('exclusão de conta (BICHUS-215, critério 3 — gatilho 3 do SEC-
     const mensagem = bancada.mensagens[0]!;
     assert.equal(mensagem.para, EMAIL);
     assert.match(mensagem.corpo, /plaquinhas/i);
-    assert.match(mensagem.corpo, /30 dias/);
+    // O PRAZO DE 30 DIAS NÃO PODE APARECER, e a ausência dele é a asserção.
+    //
+    // Era `assert.match(mensagem.corpo, /30 dias/)`, resíduo do desenho antigo.
+    // Em 17/10 o cliente decidiu por escrito: *"Mantenha a foto e nao delete os
+    // dados do usuario, apenas desabilite na plataforma"*. Autoridades na
+    // árvore: `migrations/20261017000013_conta-desabilitada-nao-apaga-aparelho.sql`
+    // (linhas 6-9, a decisão literal; a migração REVERTE o gatilho que apagava
+    // `user_devices`) e
+    // `src/modules/identity/application/expurgar-contas-excluidas.ts`, onde o
+    // expurgo é inócuo de propósito e não há mais `DELETE FROM users` em
+    // `src/`. Prometer apagamento em 30 dias num aviso ao titular, quando nada
+    // é apagado, é informação falsa sobre o tratamento dos próprios dados —
+    // defeito maior do que o texto antigo era útil.
+    assert.doesNotMatch(mensagem.corpo, /30 dias/);
+    // E o que entrou no lugar do prazo tem de estar dito: os dados ficam, e o
+    // apagamento definitivo passa a ser pedido por resposta ao e-mail.
+    assert.match(mensagem.corpo, /guardados e inacessiveis/i);
+    assert.match(mensagem.corpo, /apagamento definitivo/i);
     // "Se não foi você" é o que dá socorro a quem teve a conta tomada e
-    // excluída por outra pessoa. Sem esta frase, o prazo de 30 dias é um
-    // detalhe de infraestrutura e não uma janela de recuperação.
+    // excluída por outra pessoa. Sem esta frase, a desativação é um detalhe de
+    // infraestrutura e não uma janela de recuperação.
     assert.match(mensagem.corpo, /se nao foi voce/i);
   });
 
@@ -729,36 +707,70 @@ void describe('"Não fui eu" (BICHUS-215, critério 4 — gatilho 4 do SEC-006)'
 });
 
 /**
- * SEC-019, caminhos 4 e 5: "não fui eu" e exclusão de conta também apagam o
- * cadastro de push.
+ * SEC-019 depois de 17/10: "não fui eu" apaga o cadastro de push; a EXCLUSÃO
+ * DE CONTA, NÃO.
  *
- * Os dois herdam de `derrubarTodasAsSessoes`, e é por isso que não há
- * implementação nova aqui. O que estes casos guardam é a HERANÇA: quem separar
- * um dos dois caminhos da função comum, para tratá-lo à parte, reabre o buraco
- * naquele caminho e só naquele — que é exatamente como a redefinição de senha
- * ficou meses empurrando a barreira sem revogar família nenhuma.
+ * ## O que mudou, e por que o caso virou do avesso
  *
- * Isca rodada em 23/09/2026: com a chamada `deps.removerPushDaConta(userId)`
- * comentada em `derrubarTodasAsSessoes`, os dois casos abaixo reprovaram.
+ * Até 17/10 este bloco tinha dois casos simétricos, e o primeiro exigia que a
+ * exclusão de conta apagasse `user_devices` na hora. O cliente trocou o desenho
+ * no mesmo dia, por escrito:
+ *
+ * > *"Mantenha a foto e não delete os dados do usuário, apenas desabilite na
+ * > plataforma e filtro as páginas para que esse usuário não seja mais
+ * > encontrado em nenhuma pagina ou funcionalidade"*
+ *
+ * Então o caso foi INVERTIDO em vez de apagado, e a inversão é o registro de
+ * que a troca foi deliberada: hoje ele reprova se a exclusão voltar a apagar a
+ * linha.
+ *
+ * ## O SEC-019 continua fechado, e não é por confiança
+ *
+ * O risco do SEC-019 é um aparelho continuar sendo destinatário VÁLIDO de alerta
+ * de pet perdido. Quem decide isso é a consulta de alcance
+ * (`kysely-alcance-por-postgis.ts`), que junta `users` e exige
+ * `u.deleted_at IS NULL` desde 22/09 (BICHUS-88). Conta desabilitada não entra
+ * no conjunto de notificados **com ou sem** linha em `user_devices`. A linha
+ * deixa de ser alcançável por propriedade da consulta, que é exatamente a troca
+ * que o cliente pediu para as páginas, aplicada ao push.
+ *
+ * ## A assimetria é o ponto, e ela é de produto
+ *
+ * `logout_all`, `password_changed` e `not_me` CONTINUAM apagando, e a diferença
+ * não é descuido: nesses três a conta segue **ativa**, o aparelho pode estar na
+ * mão de outra pessoa, e nenhuma cláusula de consulta protege de um token de
+ * push válido numa conta ativa. Ali apagar é o remédio que a pessoa pediu. Na
+ * exclusão, a conta sai do conjunto por estado, e apagar seria apagar dado que
+ * o cliente mandou reter.
+ *
+ * Isca a rodar (NÃO rodada nesta branch, por instrução do cliente): tirar o
+ * `motivo === 'account_deleted' ? 0 :` de `derrubarTodasAsSessoes` deve reprovar
+ * o primeiro caso; recolocar a chamada em todos os motivos deve reprovar só ele.
  */
 const AINDA_RECEBE_APOS =
   'o aparelho continuaria recebendo alerta de pet perdido: a sessão caiu e a linha de ' +
   '`user_devices` ficou, com o token e a permissão intactos. É o SEC-019.';
 
-void describe('SEC-019: exclusão e "não fui eu" apagam o endereço de entrega', () => {
-  void it('a exclusão da conta tira os aparelhos do push na hora, e não em 30 dias', async () => {
-    // §19, item 4: os aparelhos precisam sair na exclusão LÓGICA. Esperar o
-    // expurgo deixaria trinta dias de alerta chegando num aparelho de uma conta
-    // que a pessoa já mandou apagar.
+const APAGOU_O_QUE_DEVIA_RETER =
+  'a exclusão de conta APAGOU a linha de `user_devices`. Desde 17/10 nada é apagado: a ' +
+  'conta é desabilitada e o aparelho para de receber pela cláusula `u.deleted_at IS NULL` ' +
+  'da consulta de alcance, não por ausência de linha.';
+
+void describe('SEC-019 depois de 17/10: "não fui eu" apaga o push, a exclusão retém', () => {
+  void it('ISCA: a exclusão da conta NÃO apaga `user_devices` -- a conta é desabilitada', async () => {
     const bancada = montar();
+    const antes = bancada.push.linhas.size;
+    assert.ok(antes > 0, 'a bancada precisa começar com aparelho, senão o caso não mede nada');
+
     await bancada.servico.excluirMinhaConta(autenticada(bancada.repo), CONTEXTO);
-    assert.equal(bancada.push.linhas.size, 0, AINDA_RECEBE_APOS);
+
+    assert.equal(bancada.push.linhas.size, antes, APAGOU_O_QUE_DEVIA_RETER);
   });
 
   void it('"não fui eu" tira os aparelhos do push', async () => {
     // É o caminho de quem foi avisado de reuso de refresh: alguém está com a
-    // credencial dela. Derrubar a sessão e deixar o push é entregar o alerta
-    // de pet perdido justamente a esse alguém.
+    // credencial dela, e a conta continua ATIVA. Derrubar a sessão e deixar o
+    // push é entregar o alerta de pet perdido justamente a esse alguém.
     const bancada = montar();
     darUmLinkValido(bancada.repo);
 

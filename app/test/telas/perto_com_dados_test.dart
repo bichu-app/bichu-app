@@ -11,13 +11,17 @@
 // a microcopy reprova -- que e o ponto.
 
 import 'dart:convert';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'dart:io';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
+import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/rodape_da_paginacao.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -43,10 +47,16 @@ Map<String, dynamic> entradaDoContrato({
   String level = 'document_verified',
   List<String> evidence = const <String>['cnpj', 'crmv'],
   int? distanceM,
+  // `entity_kind` do contrato (`EntityKind`). **Ausente por padrao, de
+  // proposito**: o campo e novo (migracao `20261018000012`) e um servidor que
+  // nao subiu nao o manda. O padrao da massa e o caso que o APK publicado ja
+  // le hoje; quem precisa do eixo o passa.
+  Object? entityKind,
 }) {
   return <String, dynamic>{
     'slug': slug,
     'kind': kind,
+    'entity_kind': ?entityKind,
     'display_name': displayName,
     'city': city,
     'state': state,
@@ -185,7 +195,21 @@ Future<void> abrirPerto(
   required Future<http.Response> Function(http.Request) rede,
 }) async {
   await abrirOApp(tester, rede: rede, deposito: depositoLogado());
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.**
+  //
+  // A secao `Perto` deixou de existir por decisao do cliente: o diretorio
+  // virou a aba `Comunidade` da `Rede`. Tocar em `Perto` na barra nao acha
+  // nada -- o slot nem existe.
+  //
+  // **Este helper e a porta de entrada de SETE arquivos de teste**, e e por
+  // isso que ele faz a navegacao inteira em vez de cada caso repetir os dois
+  // toques: sete copias divergiriam na proxima mudanca de navegacao, e foi
+  // essa concentracao que fez a mudanca de hoje custar UMA edicao aqui.
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -355,14 +379,37 @@ void main() {
   // -------------------------------------------------------------------------
   // 2. ISCA — a ordem por nome nao passa calada
   // -------------------------------------------------------------------------
-  group('ISCA — a lista nao sai por nome sem dizer', () {
-    // DESLIGAR PARA VER REPROVAR: em
-    // `lib/telas/perto/lista_do_diretorio.dart`, em `_controleDeOrdenacao`,
-    // troque `final divergiu = pedida != efetiva;` por `const divergiu =
-    // false;`. A lista continua saindo por nome e a tela para de dizer. Este
-    // caso e o da linha de resumo abaixo reprovam.
+  group('a lista nao sai por nome sem MOSTRAR que e por nome', () {
+    // **O GRUPO VIROU DE LADO EM 18/10/2026, e e o fim de uma pergunta
+    // aberta.**
+    //
+    // Ele cobrava a FAIXA de explicacao: "Esta lista esta em ordem alfabetica,
+    // nao por proximidade. O Bichu ainda nao tem a sua regiao de referencia,
+    // entao nao da para calcular a distancia ate cada um." O cliente mandou
+    // remover o bloco, literal: *"remova o bloco do texto: essa lista está em
+    // ordem alfabética"*.
+    //
+    // **A decisao que estava em aberto era esta.** O caso `quem PEDIU nome nao
+    // recebe explicacao nenhuma`, logo abaixo, ficava VERMELHO de proposito:
+    // duas decisoes deliberadas colidiam (a faixa deve calar quando a pessoa
+    // aceita a ordem, ou deve ficar enquanto a distancia nao existir?) e o
+    // comentario dele dizia, com todas as letras, que escolher um lado nao era
+    // decisao de quem escreve codigo. O cliente escolheu um TERCEIRO lado: nao
+    // ha faixa. Com isso aquele caso fica verde pela regra, e nao por
+    // afrouxamento.
+    //
+    // **O que o grupo continua provando e o que importa**: a tela nao esconde
+    // a ordem real. A ordem EFETIVA aparece no controle de ordenacao e na
+    // linha de resumo ("10 resultados · Nome"), medidos nos casos abaixo --
+    // e e isso que impede a tela de mentir sobre proximidade. O que a pessoa
+    // perdeu e a explicacao de POR QUE nao ha distancia.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `lib/widgets/barra_de_listagem.dart`,
+    // troque `efetiva: efetiva.codigo` por `efetiva: pedida.codigo` na tela. A
+    // linha de resumo passa a dizer `Mais perto` com a lista alfabetica, e os
+    // casos de ordem efetiva reprovam.
     testWidgets(
-        '`distance_available: false` faz a tela dizer que a ordem e alfabetica',
+        '`distance_available: false` NAO desenha mais a faixa de explicacao',
         (tester) async {
       await abrirPerto(
         tester,
@@ -378,26 +425,39 @@ void main() {
         ),
       );
 
-      // A frase esta escrita por extenso de proposito. Comparar com
-      // `ListaDoDiretorio.semLocalizacao` seria comparar a constante com ela
-      // mesma, e passaria com a tela mostrando qualquer coisa.
+      // As duas frases escritas por extenso, e por extenso de proposito:
+      // comparar com uma constante que nao existe mais nao compila, e
+      // comparar com outra passaria com a tela mostrando qualquer coisa.
       expect(
         find.textContaining(
           'Esta lista está em ordem alfabética, não por proximidade.',
         ),
-        findsOneWidget,
-        reason: 'REPROVA: a lista saiu por nome e a tela nao disse. Mostrar '
-            'ordem errada em silencio e a forma mais barata de mentir sobre '
-            'proximidade.',
+        findsNothing,
+        reason: 'REPROVA: a faixa de ordem alfabetica voltou. O cliente a '
+            'removeu nominalmente em 18/10/2026.',
       );
-      // **E nao ha botao nenhum.** O que falta e a regiao de referencia que o
-      // servidor guarda, e nenhuma tela deste app a escreve: um `Ligar a
-      // localização` aqui ligaria o GPS e a resposta continuaria a mesma, que
-      // e acao sem destino com cara de conserto.
-      expect(find.text('Ligar a localização'), findsNothing);
       expect(
         find.textContaining('O Bichu ainda não tem a sua região de referência'),
+        findsNothing,
+        reason: 'REPROVA: a segunda metade da faixa removida voltou a tela.',
+      );
+      // **E nao ha botao nenhum**, que nao era desta remocao e continua
+      // valendo. O que falta e a regiao de referencia que o servidor guarda, e
+      // nenhuma tela deste app a escreve: um `Ligar a localização` aqui
+      // ligaria o GPS e a resposta continuaria a mesma, que e acao sem destino
+      // com cara de conserto.
+      expect(find.text('Ligar a localização'), findsNothing);
+      // **A CONTRAPROVA, e ela e o que impede este caso de virar afirmacao de
+      // ausencia e nada mais.** Sem a faixa, o unico lugar em que a pessoa
+      // descobre a ordem real e o controle de ordenacao e a linha de resumo --
+      // e `distance_available: false` tem de chegar neles como `Nome`.
+      expect(
+        find.textContaining('· Nome'),
         findsOneWidget,
+        reason: 'REPROVA: a lista saiu por nome e a tela nao MOSTRA nome. Com '
+            'a faixa de explicacao fora, esta linha e o que sobra para a '
+            'pessoa saber que nao esta vendo proximidade -- e mostrar ordem '
+            'errada em silencio e a forma mais barata de mentir sobre ela.',
       );
     });
 
@@ -472,11 +532,55 @@ void main() {
       // A ordem mora DENTRO da folha de filtros desde 17/10.
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Nome').last);
+
+      // **`tocar` E NAO `tap`, e a troca consertou um erro de medida que ja
+      // estava aqui.**
+      //
+      // A opcao `Nome` nasce no PE da folha, e na janela da suite (800 x 600
+      // dp) ela cai em `Rect.fromLTRB(321,6, 576,0, 386,2, 600,0)` -- centro
+      // em y=588, dentro da faixa da barra de baixo. Um `tap` nessa coordenada
+      // nunca tocou na opcao: ele tocava na ABA que estivesse naquele x.
+      //
+      // Ate 18/10/2026 isso passava sem aparecer, porque a aba naquele ponto
+      // era `Perto` -- a propria secao aberta, e o toque era um nada. No mesmo
+      // dia o cliente inverteu `Rede` e `Perto` na barra, aquele ponto virou
+      // `Rede`, e o toque passou a NAVEGAR: a folha fechava, e o `Aplicar`
+      // seguinte nao achava nada. A inversao nao criou o defeito, ela o
+      // revelou.
+      //
+      // `tocar` faz `ensureVisible` antes do toque -- que e o que a pessoa faz
+      // --, e com isso o caso passa a exercitar de verdade o que ele diz
+      // exercitar: pedir `Nome` por esta folha.
+      await tocar(tester, find.text('Nome').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Aplicar'));
+      await tocar(tester, find.text('Aplicar'));
       await tester.pumpAndSettle();
 
+      // ---------------------------------------------------------------------
+      // **ESTE CASO FICOU VERDE EM 18/10/2026, e nao por afrouxamento.**
+      //
+      // Ele ficava VERMELHO de proposito, e o motivo estava medido aqui em vez
+      // de escondido num `skip`: com `distance_available: false`, a ordem
+      // EFETIVA ja era `nome` e a PEDIDA nascia `distancia`, entao `divergiu`
+      // era verdadeiro e a faixa aparecia -- e nao havia como pedir `Nome` por
+      // esta folha, porque `_ordemPendente` nasce na ordem efetiva e o
+      // `Aplicar` ficava desabilitado.
+      //
+      // Duas decisoes deliberadas colidiam, e o comentario antigo dizia, com
+      // todas as letras, que escolher um lado nao era decisao de quem escreve
+      // codigo:
+      //   (a) a faixa cala quando a pessoa aceita a ordem alfabetica;
+      //   (b) a faixa fica enquanto a distancia nao existir.
+      //
+      // **O cliente decidiu, e escolheu um terceiro lado: nao ha faixa.**
+      // Literal: *"remova o bloco do texto: essa lista está em ordem
+      // alfabética"*. Com `porQueNaoEAPedida` fora de `_controleDeOrdenacao`,
+      // a pergunta deixou de existir e este `expect` passa pela REGRA.
+      //
+      // A colisao de folha que o comentario antigo descrevia continua de pe
+      // como assunto de desenho (`_ordemPendente` nasce na ordem efetiva), mas
+      // ela nao e mais um lado desta pergunta: nao ha faixa para calar.
+      // ---------------------------------------------------------------------
       expect(
         find.textContaining('Esta lista está em ordem alfabética'),
         findsNothing,
@@ -566,7 +670,19 @@ void main() {
 
       expect(find.text('Sem telefone'), findsOneWidget);
       expect(find.byIcon(Icons.call_outlined), findsNothing);
-      expect(find.textContaining('Ligar para'), findsNothing);
+      // **`Ligar`, e nao `Ligar para`.** Ate 18/10/2026 esta linha procurava
+      // `textContaining('Ligar para')`, e ela PAROU DE MEDIR no dia em que o
+      // rotulo visivel encurtou para `Ligar`: um botao indevido passaria a
+      // existir sem que a busca o achasse. Verde por vazio e exatamente a
+      // familia de defeito que este arquivo guarda.
+      expect(
+        find.text('Ligar'),
+        findsNothing,
+        reason: 'REPROVA: ha botao de ligar num cartao sem `phone_e164`. '
+            'Cartao sem telefone nao ganha botao desabilitado: ganha nenhum '
+            'botao.',
+      );
+      expect(find.textContaining('Ligar'), findsNothing);
     });
 
     testWidgets('com `phone_e164`, o botao existe e nomeia PARA QUEM',
@@ -592,9 +708,69 @@ void main() {
 
       // Um botao, e nao dois: a segunda entrada nao tem telefone.
       expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+
+      // (1) O ROTULO VISIVEL E SO `Ligar`. Pedido do cliente em 18/10/2026:
+      // o nome da clinica nao deve se repetir dentro do botao.
+      expect(
+        find.text('Ligar'),
+        findsOneWidget,
+        reason: 'REPROVA: o rotulo visivel do botao nao e `Ligar`. O cliente '
+            'pediu `Ligar` com o icone, e o nome do local esta tres linhas '
+            'acima, no titulo do mesmo cartao.',
+      );
+
+      // (2) E O NOME NAO VOLTA DENTRO DO BOTAO. Medido DENTRO do
+      // `TextButton`, e nao na tela: o nome esta no titulo do cartao de
+      // proposito, e um `findsNothing` na tela inteira reprovaria a tela
+      // certa.
+      expect(
+        find.descendant(
+          of: find.byType(TextButton),
+          matching: find.textContaining('Santa Bárbara'),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o nome do local voltou ao texto VISIVEL do botao.',
+      );
+
+      // (3) E O LEITOR DE TELA CONTINUA DIZENDO PARA QUEM. Esta e a asserção
+      // que carrega o caso: o rotulo visivel encurtou, o nome acessivel NAO.
       // Numa lista de dez entradas, dez controles chamados so `Ligar` sao dez
-      // paradas indistinguiveis no leitor de tela.
-      expect(find.text('Ligar para Clínica Santa Bárbara'), findsOneWidget);
+      // paradas indistinguiveis (WCAG 2.1 SC 4.1.2).
+      final nodo = tester.getSemantics(find.byIcon(Icons.call_outlined));
+
+      // O GUARDA CONTRA O VERDE POR VAZIO, e ele tem historia: este
+      // repositorio ja teve um rotulo de semantica VAZIO fazendo um
+      // `isNot(contains(...))` passar vacuamente -- a afirmacao era verdadeira
+      // e nao media nada. Aqui a asserção e de IGUALDADE com a string escrita
+      // a mao, com acento, e rotulo vazio reprova nela; este `isNotEmpty`
+      // existe para a mensagem dizer QUAL dos dois defeitos ocorreu.
+      expect(
+        nodo.label,
+        isNotEmpty,
+        reason: 'REPROVA: o no do botao de ligar tem rotulo VAZIO. Um rotulo '
+            'vazio nao e "sem repeticao do nome": e um controle sem nome, e '
+            'ele faz asserção de ausencia passar sem medir nada.',
+      );
+      expect(
+        nodo.label,
+        'Ligar para Clínica Santa Bárbara',
+        reason: 'REPROVA: o nome acessivel do botao e "${nodo.label}". O '
+            'rotulo VISIVEL encurtou para `Ligar` (cliente, 18/10/2026) e o '
+            'nome ACESSIVEL tem de continuar dizendo para quem a ligacao vai. '
+            'Quem publica essa string e o `Semantics` de `CartaoDoDiretorio`, '
+            'por `ligarPara`.',
+      );
+
+      // (4) E A ACAO CHEGOU AO NO. `excludeSemantics: true` apaga a arvore do
+      // filho e leva junto a acao que o `TextButton` publicava; sem o `onTap`
+      // redeclarado, o leitor de tela anuncia um botao que nao responde. E o
+      // defeito 2 de `test/a11y/acao_de_controle_test.dart`.
+      expect(
+        nodo.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: 'REPROVA: o no anunciado como botao de ligar nao tem acao de '
+            'toque. Ver `test/a11y/acao_de_controle_test.dart`.',
+      );
     });
   });
 
@@ -650,28 +826,94 @@ void main() {
         );
       }
 
-      // **O cartao sem telefone nao tem NENHUM ponto tocavel.** Aqui nao ha
-      // botao de ligar para confundir a contagem: qualquer `InkWell` com acao
-      // e o cartao inteiro tendo virado um caminho.
+      // -------------------------------------------------------------------
+      // REPONTADO: **a pagina do profissional EXISTE**, e o cartao leva a
+      // ela.
+      //
+      // `lib/telas/perto/pagina_do_local.dart` foi construida, e
+      // `CartaoDoDiretorio` a abre (`lista_do_diretorio.dart`, linha 580:
+      // `PaginaDoLocal.abrir(context, entrada.slug)`). O criterio 2 da
+      // BICHUS-62 proibe acao SEM destino; com o destino de pe, o cartao
+      // tocavel passou a ser o desenho certo, e esta isca media a versao
+      // anterior do produto -- ela afirmava `0` tocaveis e `nao ha tela de
+      // detalhe nesta versao`, e as duas coisas deixaram de ser verdade.
+      //
+      // A volta dela FECHA um vao em vez de abrir um: `grep -rn
+      // 'PaginaDoLocal' app/test` nao achava NADA antes desta edicao -- nenhum
+      // caso media que o cartao alcanca a pagina.
+      // -------------------------------------------------------------------
+
+      // **UM ponto tocavel no cartao sem telefone**: o bloco de nome,
+      // atividade, lugar e distancia, que leva a pagina do local. Dois
+      // significariam duas portas para o mesmo lugar.
       expect(
         tocaveisComAcao(semFone),
-        0,
-        reason: 'REPROVA: o cartao do diretorio virou tocavel. O criterio 2 da '
-            'BICHUS-62 proibe acao sem destino, e a tela de detalhe do '
-            'profissional nao existe nesta versao.',
+        1,
+        reason: 'REPROVA: o cartao do diretorio tem numero de pontos tocaveis '
+            'diferente de um. O desenho e UM bloco que leva a pagina do '
+            'local, e nada mais.',
       );
 
-      // **O cartao COM telefone tem exatamente um**, e ele e o botao de
-      // ligar. Dois significam que o cartao ganhou destino por fora do botao.
+      // **DOIS no cartao com telefone**: o mesmo bloco, mais o `Ligar`.
       expect(
         tocaveisComAcao(comFone),
-        1,
-        reason: 'REPROVA: o cartao com telefone tem mais de um ponto tocavel. '
-            'O unico controle com desfecho que ele pode ter e `Ligar`.',
+        2,
+        reason: 'REPROVA: o cartao com telefone nao tem exatamente o bloco e o '
+            '`Ligar`.',
       );
       expect(
         find.descendant(of: comFone, matching: find.byType(TextButton)),
         findsOneWidget,
+      );
+
+      // **E o `Ligar` fica FORA da area que navega.** E este o invariante que
+      // o cartao descreve em prosa (`lista_do_diretorio.dart`, linhas
+      // 572-580): o `InkWell` embrulha o `MergeSemantics`, e nao o cartao
+      // inteiro, para o toque no botao de ligar LIGAR em vez de abrir a
+      // pagina. Com o botao dentro do bloco, os dois gestos disputariam a
+      // mesma area e o caso de cima continuaria verde.
+      expect(
+        find.descendant(
+          of: find.descendant(
+            of: comFone,
+            matching: find.byType(MergeSemantics),
+          ),
+          matching: find.byType(TextButton),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o `Ligar` esta dentro do bloco que leva a pagina do '
+            'local. Tocar para ligar passaria a navegar.',
+      );
+
+      // **E o bloco de fato chega la.** Sem esta linha, as contagens acima
+      // ficariam verdes com um `InkWell` que nao leva a lugar nenhum -- que e
+      // a acao sem destino que o criterio 2 proibe, so com outra cara.
+      // `ensureVisible` ANTES do toque, e nao e cerimonia de teste: a secao
+      // `Perto` ganhou a barra de abas (`Profissionais` / `Minhas
+      // indicacoes`) em 18/10, e os ~48 dp dela empurram o SEGUNDO cartao
+      // abaixo da area que recebe toque na janela de teste. Sem isto o `tap`
+      // avisa "would not hit test on the specified widget" e o caso reprova
+      // por posicao, nao por comportamento -- o mesmo arranjo que
+      // `tocarEmCarregarMais` neste arquivo e `abrirAGaveta` em
+      // `gaveta_com_submenus_test.dart` ja usam.
+      //
+      // **`ensureVisible` antes do toque, e a razao e de 19/10.** O gatilho de
+      // filtro voltou para o topo do CORPO (decisao do cliente), e com ele a
+      // lista desceu alguns dp. O primeiro cartao passou a nascer na dobra, e
+      // um `tap` seco acertava fora dele -- o caso reprovava dizendo que o
+      // cartao nao abre a pagina, quando o que falhava era o toque.
+      //
+      // O que o caso prova nao mudou: o cartao LEVA ao destino.
+      final alvoDoCartao =
+          find.descendant(of: semFone, matching: find.byType(InkWell)).first;
+      await tester.ensureVisible(alvoDoCartao);
+      await tester.pumpAndSettle();
+      await tester.tap(alvoDoCartao);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(PaginaDoLocal),
+        findsOneWidget,
+        reason: 'REPROVA: tocar no cartao nao abriu a pagina do local.',
       );
     });
 
@@ -1162,25 +1404,106 @@ void main() {
       await tocarEmCarregarMais(tester);
       expect(urls.last.queryParameters['page'], '2');
 
-      // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais`.
+      // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais` --
+      // e o controle de recorte subiu para a `AppBar` em 18/10, entao ele esta
+      // visivel de todo jeito. O `ensureVisible` fica porque ele e barato e
+      // porque o dia em que o controle voltar ao corpo nao pode ser o dia em
+      // que este caso para de alcancar o defeito.
       await tester.ensureVisible(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+
+      // A fronteira da medicao: o que vier DEPOIS deste ponto e o que o toque
+      // em `Aplicar` produziu, e nada antes dele conta.
+      final antesDeAplicar = urls.length;
+
       await tester.tap(find.text('Veterinário'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
 
-      expect(urls.last.queryParameters['kind'], 'vet');
+      // ---------------------------------------------------------------------
+      // ESTE CASO FICOU VERMELHO ATE 18/10/2026, E HOJE ESTA VERDE PORQUE O
+      // DEFEITO SAIU -- e o paragrafo anterior, que dizia "este caso fica
+      // vermelho", esta aqui embaixo em vez de apagado, porque e a historia
+      // que explica a forma deste caso.
+      //
+      // O QUE ERA MEDIDO quando ele reprovava, com os tres experimentos que
+      // separavam a causa:
+      //
+      //   A) filtrar SEM `Carregar mais` ->
+      //      `page=1` | `kind=vet&page=1`                      (correto)
+      //   B) `Carregar mais` e DEPOIS filtrar ->
+      //      `page=1` | `page=2` | `kind=vet&page=1` | `page=1`
+      //      **a quarta chamada saia sem o filtro**, e era ela que ficava
+      //      valendo -- `25 resultados · Mais perto` e a lista INTEIRA na tela
+      //      de quem acabou de escolher `Veterinário`
+      //   C) `Carregar mais`, abrir e FECHAR a folha sem aplicar ->
+      //      `page=1` | `page=2`                   (nenhuma chamada a mais)
+      //
+      // A quarta chamada era o recorte PADRAO, identica a primeira, e o unico
+      // lugar que produz recorte padrao e o campo `_recorte = const
+      // RecorteDoDiretorio()` de `lista_do_diretorio.dart` -- isto e, um
+      // ESTADO NOVO da lista, que ao nascer agenda a propria carga por
+      // `didChangeDependencies`. O experimento (C) ja descartava o
+      // `TickerMode`: fechar a folha, por si, nao recarregava nada.
+      //
+      // O QUE MUDOU, medido nesta arvore em 18/10 (base `3f9a57c2`), com o
+      // mesmo roteiro de (B): `page=1` | `page=2` | `kind=vet&page=1`. **Tres
+      // chamadas, e nao quatro.** O que recriava o estado era a arvore em que
+      // a lista morava: ate 18/10 `AbaPerto`, em `abas.dart`, entregava
+      // `ListaDoDiretorio` como filha direta da secao, e a mexida das acoes de
+      // criar na barra de topo reconstruia esse filho; desde
+      // `feat/minhas-indicacoes` (1b8a576b) a lista vive dentro do `TabBarView`
+      // de `perto/corpo_do_perto.dart`, que mantem o estado vivo. **O conserto
+      // foi colateral de outra frente, e nao deste arquivo** -- motivo de
+      // sobra para este caso ficar mais severo, e nao menos.
+      //
+      // POR QUE A ASSERCAO OLHA TODAS AS CHAMADAS, e nao `urls.last`. Enquanto
+      // ela olhava so a ultima, este caso estava a uma chamada de distancia de
+      // virar verde falso: bastava a carga padrao chegar ANTES da filtrada em
+      // vez de depois. E exatamente a lição que o caso irmao logo abaixo
+      // (`voltar para a aba ...`) aprendeu medindo `[page=1, page=2, page=2,
+      // page=1]`. Agora o caso afirma o conjunto: **toda** chamada disparada
+      // pelo `Aplicar` leva o filtro e pede a pagina 1.
+      //
+      // PROVA DE QUE ELA AINDA ALCANCA O DEFEITO (18/10): com a regressao
+      // reposta a mao em `_aplicarAFolha` -- um `addPostFrameCallback` que
+      // zera `_recorte` e recarrega, que e a forma exata da quarta chamada
+      // medida em (B) --, este caso REPROVOU com
+      // `kind` nulo na 4a chamada. Revertida a mutacao, voltou a passar.
+      // ---------------------------------------------------------------------
+      final depoisDeAplicar = urls.sublist(antesDeAplicar);
       expect(
-        urls.last.queryParameters['page'],
-        '1',
-        reason: 'REPROVA: o filtro foi aplicado mantendo a pagina 2. A fatia '
-            'volta vazia e a tela diz que nada casa com o filtro, com tres '
-            'entradas existindo. Este e o defeito que aparece como "a lista '
-            'ficou vazia sem motivo".',
+        depoisDeAplicar,
+        isNotEmpty,
+        reason: 'REPROVA: `Aplicar` nao chamou a rota, e o caso perdeu o que '
+            'ele existe para medir.',
       );
+      for (final (indice, url) in depoisDeAplicar.indexed) {
+        expect(
+          url.queryParameters['kind'],
+          'vet',
+          reason: 'REPROVA: a chamada ${indice + 1} de '
+              '${depoisDeAplicar.length} disparada pelo `Aplicar` saiu SEM o '
+              'filtro (`${url.query}`). A pessoa escolheu `Veterinário`, o '
+              'filtro foi para a rota, e o aplicativo desfez sozinho -- o '
+              'defeito de "filtrei e nao aconteceu nada", com o agravante de '
+              'ter acontecido e sido revertido. Chamadas: '
+              '${depoisDeAplicar.map((u) => u.query).toList()}',
+        );
+        expect(
+          url.queryParameters['page'],
+          '1',
+          reason: 'REPROVA: a chamada ${indice + 1} de '
+              '${depoisDeAplicar.length} aplicou o filtro mantendo a pagina 2. '
+              'A fatia volta vazia e a tela diz que nada casa com o filtro, '
+              'com tres entradas existindo. Este e o defeito que aparece como '
+              '"a lista ficou vazia sem motivo". Chamadas: '
+              '${depoisDeAplicar.map((u) => u.query).toList()}',
+        );
+      }
 
       // E a tela mostra as tres, e nao o vazio filtrado.
       expect(nomesNaTela(tester), hasLength(3));
@@ -1211,7 +1534,7 @@ void main() {
       final antesDeSair = urls.length;
       await tester.tap(find.widgetWithText(NavigationDestination, 'Loja'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await abrirAComunidade(tester);
       await tester.pumpAndSettle();
 
       final depoisDeVoltar = urls.sublist(antesDeSair);
@@ -1243,9 +1566,24 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // 10. A barra de topo nao foi ocupada
+  // 10. O que a barra de topo do `Perto` carrega
+  //
+  // ESTE CASO MUDOU DE AFIRMACAO DUAS VEZES, e as duas foram decisao do
+  // cliente. Ele nasceu cobrando que o slot de acao ficasse LIVRE, porque os
+  // tres controles de listagem moravam no corpo. Em 17/10 o `Filtros` subiu
+  // para a barra por pedido dele; em 18/10 a porta de INDICAR subiu tambem
+  // ("os itens de criacao ... poderia ser icones na barra superior"). O lado
+  // direito passou a ter DUAS acoes, e o 11.23.1 -- que da uma -- foi
+  // atravessado de propria vontade e esta dito em `casca_com_abas.dart`.
+  //
+  // O caso nao foi apagado: ele passou a medir o ARRANJO, que e o que pode
+  // quebrar agora. Duas coisas estragam esta barra, e nenhuma delas e "ter
+  // acao": uma terceira acao, que nao cabe com o titulo, e a BUSCA ou os
+  // controles de listagem subindo junto -- o cliente pediu a busca em largura
+  // total NO CORPO, e esta rodada nao mexeu nisso.
   // -------------------------------------------------------------------------
-  testWidgets('o slot unico de acao da `AppBar` continua LIVRE em Perto',
+  testWidgets(
+      'a `AppBar` da aba `Comunidade` tem SO o sino, e a foto no `leading`',
       (tester) async {
     await abrirPerto(
       tester,
@@ -1257,13 +1595,59 @@ void main() {
       ),
     );
 
+    // ========================================================================
+    // DUAS -> TRES -> UMA, em tres dias, e as tres mudancas sao DELE
+    // ========================================================================
+    //
+    // 18/10: a porta de INDICAR subiu para a barra. Eram DUAS acoes.
+    // 19/10, manha: a foto da conta entrou no lado direito (TRES), e logo
+    //        depois `criar` desceu para o corpo como acao flutuante
+    //        (*"O botao criar sai da barra"*) e o sino entrou -- sino + foto.
+    // 19/10, tarde: a foto foi para o slot do hamburguer (*"colocar o icone
+    //        do usuario no lugar do menu, do lado esquerdo da pagina e o icone
+    //        de notificacao vai ficar na barra principal do lado direito de
+    //        todas as paginas"*). Sobrou UMA acao: o sino.
+    //
+    // **O teto continua sendo um teto, e ele ficou MAIS folgado.** Com foto 48
+    // a esquerda e sino 48 a direita, o titulo recebe **224,00 dp** em 320 dp
+    // a 200% -- medido em `gaveta_com_submenus_test.dart`. A conta antiga
+    // (hamburguer 64 + indicar 64 + `Filtros` 64 + foto 48 = 240, sobrando
+    // 48,00 dp de titulo) nao existe mais: cada controle que voltar para a
+    // barra custa 48 ou 64 daqueles 224.
     final barra = tester.widget<AppBar>(find.byType(AppBar));
     expect(
-      barra.actions ?? const <Widget>[],
-      isEmpty,
-      reason: 'REPROVA: `Perto` ocupou o slot de acao da direita. O 11.23.1 da '
-          'UM slot de 64 x 64 ali, e sao TRES os controles de listagem: eles '
-          'moram no corpo, no topo da lista. O `Filtros` desceu junto.',
+      (barra.actions ?? const <Widget>[]).map((a) => a.runtimeType).toList(),
+      <Type>[SinoDeNotificacoes],
+      reason: 'REPROVA: o lado direito da barra nao e exatamente um '
+          '`SinoDeNotificacoes`. A porta de indicar e a acao FLUTUANTE desta '
+          'aba desde 19/10, o acesso a folha de filtro voltou para o topo do '
+          'corpo, e a foto foi para o `leading`. Cada controle que volta para '
+          'ca custa 48 ou 64 dp dos 224,00 do titulo.',
+    );
+    expect(
+      barra.leading,
+      isA<AvatarDaConta>(),
+      reason: 'REPROVA: a foto da conta nao esta no slot da ESQUERDA. Ela '
+          'assumiu o lugar do hamburguer em 19/10, e a ausencia dela a direita '
+          'nao e a entrega -- a entrega e ela do outro lado.',
+    );
+    expect(
+      barra.leadingWidth,
+      AvatarDaConta.alvo,
+      reason: 'REPROVA: a reserva do `leading` deixou de ser '
+          '${AvatarDaConta.alvo} dp. O hamburguer tinha piso de 64 (11.23.1) e '
+          'a foto tem 48 (SC 2.5.8): sao 16,00 dp que foram para o titulo.',
+    );
+
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(TextField),
+      ),
+      findsNothing,
+      reason: 'REPROVA: a busca subiu para a barra de topo. O campo mora no '
+          'corpo, na primeira linha, e desde 19/10 o gatilho de filtro esta a '
+          'DIREITA dele -- na mesma linha, no corpo.',
     );
   });
 }

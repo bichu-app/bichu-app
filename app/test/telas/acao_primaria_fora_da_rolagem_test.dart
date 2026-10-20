@@ -46,6 +46,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// O menor gabarito suportado (design system, secao 13) com o teclado aberto.
 ///
 /// 270 dp de teclado e a medida da casa, a mesma registrada em
@@ -94,9 +96,34 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
+
+    // **A NAVEGACAO acontece num gabarito folgado; a MEDICAO, no pequeno.**
+    //
+    // A porta do `Perfil` (`Entrar` / `Criar conta`) fica abaixo da dobra
+    // quando sobram 234 dp de area, e o `ListView` do `Perfil` nao constroi o
+    // que nao cabe: `find.text(rotulo)` achava ZERO e o `tap` estourava
+    // `RangeError (index): no indices are valid: 0`. Cinco casos deste
+    // arquivo caiam aqui, **antes** de chegar a tela que eles medem -- a
+    // falha era do caminho de entrada, e nao da tela sob medicao.
+    //
+    // Trocar o gabarito para entrar e devolve-lo depois **nao afrouxa nada**:
+    // a regra deste arquivo e sobre a acao primaria de C.2 e C.4 no menor
+    // gabarito COM O TECLADO ABERTO, e e exatamente nesse estado que a tela
+    // chega aos `expect` -- que seguem intactos, com `proibindoRolagem`. A
+    // porta do `Perfil` nao e o assunto daqui; quem a mede e
+    // `perfil_so_menus_nada_perdido_test.dart`.
+    final tamanhoDoCaso = tester.view.physicalSize;
+    final tecladoDoCaso = tester.view.viewInsets.bottom;
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.viewInsets = FakeViewPadding.zero;
     await tester.pumpAndSettle();
+
+    await irParaAConta(tester);
     await tester.tap(find.text(rotulo));
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = tamanhoDoCaso;
+    tester.view.viewInsets = FakeViewPadding(bottom: tecladoDoCaso);
     await tester.pumpAndSettle();
   }
 

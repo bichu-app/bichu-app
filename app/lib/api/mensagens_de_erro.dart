@@ -78,10 +78,6 @@ abstract final class MensagensDeErro {
 
   static const String credencialNaoConfere = 'E-mail ou senha não conferem.';
 
-  /// Texto de `unauthenticated` **fora** da tela de entrar (UX 12.6).
-  static const String entreParaContinuar =
-      'Entre na sua conta para continuar. O que você escreveu está salvo aqui.';
-
   /// C.2, campo vazio antes de enviar (UX 8.2.2).
   static const String digiteSeuEmail = 'Digite seu e-mail.';
 
@@ -97,6 +93,12 @@ abstract final class MensagensDeErro {
       'Precisamos de conexão para entrar. O que você escreveu está salvo aqui.';
 
   static const String tentarDeNovo = 'Tentar de novo';
+
+  /// A saida dos dois desfechos de `If-Match` (412 e 428). **Nao e
+  /// [tentarDeNovo]**, e a diferenca nao e de palavra: tentar de novo com a
+  /// MESMA versao que acabou de ser recusada falha igual, para sempre. O que
+  /// resolve e reler.
+  static const String recarregar = 'Recarregar';
 
   static const String esqueciMinhaSenha = 'Esqueci minha senha';
 
@@ -248,6 +250,8 @@ abstract final class MensagensDeErro {
           acao: 'Confirmar meu e-mail',
           proximaAcao: ProximaAcao.verificarEmail,
         ),
+      ProblemTipo.limiteDeEncontrosDaComunidade =>
+        _limiteDeEncontros(problem),
       ProblemTipo.petSemFoto => const MensagemDeErro(
           texto: 'A foto não foi enviada. Ela está salva aqui.',
           acao: tentarDeNovo,
@@ -259,6 +263,55 @@ abstract final class MensagensDeErro {
           acao: 'Registrar que achei um pet',
           proximaAcao: ProximaAcao.registrarAchadoAvulso,
         ),
+      // `conversation-closed` (410). **A area de mensagens NAO passa por aqui**:
+      // ela trata o 410 como estado da conversa -- modo leitura, sem caixa de
+      // texto -- e nao como erro, porque "nao foi possivel" numa conversa que
+      // acabou faria a pessoa tentar de novo para sempre. Ver
+      // `telas/mensagens/tela_da_conversa.dart`.
+      //
+      // O texto existe porque este catalogo e exaustivo e o compilador cobra:
+      // ele e a rede de seguranca para um 410 que chegue por um caminho que
+      // ainda nao existe, e diz o estado em vez de prometer uma saida.
+      ProblemTipo.conversaEncerrada => const MensagemDeErro(
+          texto: 'Esta conversa está encerrada e não aceita mensagem nova. '
+              'Você continua lendo o que foi escrito.',
+          acao: 'Voltar para as mensagens',
+        ),
+      // `lost-case-closed` (410). **A pagina publica do caso NAO passa por
+      // aqui**, pela mesma razao da conversa encerrada: la o 410 e ESTADO e nao
+      // erro, e a tela diz o estado com a saida que o contrato nomeia em
+      // `next_action` (`register_stray_found_report`). Ver
+      // `telas/perdido/tela_do_caso_publico.dart`.
+      //
+      // O texto existe porque este catalogo e exaustivo e o compilador cobra, e
+      // ele diz o que o contrato permite dizer: o link nao leva mais a caso
+      // aberto, sem contar qual dos cinco motivos foi.
+      ProblemTipo.casoEncerrado => const MensagemDeErro(
+          texto: 'Este link não leva mais a um caso aberto.',
+          acao: 'Registrar um achado',
+        ),
+      // Os DOIS desfechos de `If-Match` (ADR-0027), e eles existem aqui para
+      // NAO cair na faixa generica. Sem estas duas entradas o 412 e o 428
+      // chegavam como `desconhecido` e a tela dizia "algo deu errado" -- a
+      // frase que esconde justamente o que resolve.
+      //
+      // `precondition-failed` (412) e COLISAO ENTRE PESSOAS: outra pessoa
+      // salvou depois de esta ter lido. O texto diz isso em linguagem de
+      // gente, sem `ETag`, sem `If-Match` e sem numero de versao, porque
+      // nenhuma dessas palavras e da pessoa que marcou um passeio no parque.
+      ProblemTipo.precondicaoFalhou => const MensagemDeErro(
+          texto: 'Alguém mexeu neste evento enquanto você olhava. Recarregue '
+              'para ver como ele está agora.',
+          acao: recarregar,
+        ),
+      // `precondition-required` (428) e defeito de QUEM CHAMOU: o app deixou
+      // de mandar a versao que leu. O texto nao culpa quem tocou no botao nem
+      // explica precondicao: diz o movimento que resolve.
+      ProblemTipo.precondicaoNecessaria => const MensagemDeErro(
+          texto: 'Não conseguimos confirmar a versão deste evento. Recarregue '
+              'e tente de novo.',
+          acao: recarregar,
+        ),
       ProblemTipo.reautenticacaoNecessaria => const MensagemDeErro(
           texto: 'Confirme sua senha. Esta ação não pode ser desfeita, então '
               'pedimos a senha de novo.',
@@ -267,8 +320,26 @@ abstract final class MensagensDeErro {
       // Os tres 401 que agora tem tipo proprio. Textos da tabela 12.6 do UX,
       // que e o catalogo geral; a tela de entrar tem os seus, diferentes para
       // dois deles, e por isso ela usa [deEntrar] e nao este caminho.
+      // **O TEXTO SAIU, A SAIDA FICOU** (18/10/2026, literal do cliente:
+      // *"remova esse bloco de texto 'entre na sua conta para continuar. O que
+      // você escreveu esta salvo aqui.'"*).
+      //
+      // `texto: ''` e deliberado, e nao esquecimento. `acao` e `proximaAcao`
+      // continuam exatamente como estavam: a faixa deste 401 passa a ser **so
+      // a saida**, o botao `Entrar`, e `FaixaDeAviso` deixa de desenhar a
+      // linha de texto quando ela e vazia (sem a guarda, sobrava um no de
+      // texto vazio e 8 dp de respiro para nada).
+      //
+      // **O caminho de entrar nao depende desta frase.** As cinco telas que
+      // fazem acao com sessao -- `perdido/tela_alcance_do_alerta.dart`,
+      // `pet/tela_cadastrar_sinais.dart`, `perto/sugerir_profissional.dart`,
+      // `rede/criar_encontro.dart`, `achado/tela_registrar_achado.dart` --
+      // interceptam `naoAutenticado` ANTES de montar mensagem: guardam o
+      // rascunho na guarda de intencao e empurram `Rotas.entrar` sozinhas.
+      // Esta entrada do catalogo e o que sobra para quem apenas LE, e nela o
+      // botao `Entrar` e o caminho.
       ProblemTipo.naoAutenticado => const MensagemDeErro(
-          texto: entreParaContinuar,
+          texto: '',
           acao: 'Entrar',
           proximaAcao: ProximaAcao.entrar,
         ),
@@ -405,6 +476,27 @@ abstract final class MensagensDeErro {
       texto: '$abertura Se precisar de mais, fale com a gente.',
       acao: verMeusPets,
       rotaDaAcao: Rotas.perfil,
+    );
+  }
+
+  /// `community-event-limit-reached`, 409 (ADR-0025 emenda 3).
+  ///
+  /// **O numero vem da resposta, nunca escrito na frase** -- a mesma regra de
+  /// [_limiteDePets], e pela mesma razao.
+  ///
+  /// **A saida e a propria agenda, e nao o perfil.** O que destrava esta
+  /// recusa e encerrar ou cancelar um encontro que ja existe, e os encontros
+  /// da pessoa estao na `Rede`. Mandar para o perfil seria um rotulo de acao
+  /// que leva para longe do que resolve.
+  static MensagemDeErro _limiteDeEncontros(Problem problem) {
+    final limite = problem.inteiro('limit');
+    final abertura = limite == null
+        ? 'Você já tem o máximo de eventos em aberto.'
+        : 'Você já tem $limite eventos em aberto.';
+    return MensagemDeErro(
+      texto: '$abertura Cancele ou espere terminar um deles para criar outro.',
+      acao: 'Ver meus eventos',
+      rotaDaAcao: Rotas.rede,
     );
   }
 

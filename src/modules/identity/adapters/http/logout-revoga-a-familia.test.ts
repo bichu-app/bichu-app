@@ -74,7 +74,6 @@ import type {
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../../shared/time/relogio-de-teste.js';
 import type {
   Conta,
-  IdentityRepository,
   MotivoDeRevogacao,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
@@ -83,6 +82,7 @@ import type { TokenSigner } from '../../ports/token-signer.js';
 import { criarAuthService } from '../../application/auth-service.js';
 import { registrarRotasDeIdentidade, type DependenciasDasRotas } from './routes.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
+import { RepositorioQueRecusaTudo } from '../persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const OUTRA_PESSOA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
@@ -121,6 +121,9 @@ function contaAtiva(): Conta {
     email: 'tutora@exemplo.test',
     emailVerifiedAt: dataFixa(1),
     displayName: 'Tutora',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
@@ -149,7 +152,11 @@ function contaAtiva(): Conta {
  *    devolve **quantas linhas mudaram**. A segunda chamada devolve zero, e zero
  *    não é erro.
  */
-class RepositorioFalso implements IdentityRepository {
+class RepositorioFalso extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   /**
    * A isca do "sair de todos os aparelhos disfarçado". Fica como lista, e não
@@ -168,6 +175,8 @@ class RepositorioFalso implements IdentityRepository {
   private readonly linhas = new Map<TokenHash, RefreshArmazenado & { revokedAt: Date | null }>();
 
   constructor(private readonly conta: Conta | undefined) {
+    super();
+
     this.linhas.set(hashDe(REFRESH_DESTE_APARELHO), {
       id: 'refresh-1',
       userId: TUTORA,
@@ -192,11 +201,11 @@ class RepositorioFalso implements IdentityRepository {
     });
   }
 
-  buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
+  override buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
     return Promise.resolve(this.linhas.get(hash));
   }
 
-  revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
+  override revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
     let alcancadas = 0;
     for (const linha of this.linhas.values()) {
       if (linha.familyId !== familyId || linha.revokedAt !== null) continue;
@@ -207,12 +216,12 @@ class RepositorioFalso implements IdentityRepository {
     return Promise.resolve(alcancadas);
   }
 
-  invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
+  override invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, agora });
     return Promise.resolve();
   }
 
-  revogarTodasAsFamilias(
+  override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
     agora: Instant,
@@ -221,80 +230,12 @@ class RepositorioFalso implements IdentityRepository {
     return Promise.resolve(0);
   }
 
-  buscarContaPorId(): Promise<Conta | undefined> {
+  override buscarContaPorId(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
-  }
-
-  criarContaLocal(): Promise<Conta | undefined> {
-    return naoUsado('criarContaLocal');
-  }
-  atualizarPerfil(): Promise<Conta | undefined> {
-    return naoUsado('atualizarPerfil');
-  }
-  buscarContaPorEmail(): Promise<Conta | undefined> {
-    return naoUsado('buscarContaPorEmail');
-  }
-  buscarCredencialLocalPorEmail(): Promise<undefined> {
-    return naoUsado('buscarCredencialLocalPorEmail');
-  }
-  regravarCredencial(): Promise<void> {
-    return naoUsado('regravarCredencial');
-  }
-  registrarLogin(): Promise<void> {
-    return naoUsado('registrarLogin');
-  }
-  gravarRefresh(): Promise<void> {
-    return naoUsado('gravarRefresh');
-  }
-  rotacionar(): Promise<boolean> {
-    return naoUsado('rotacionar');
-  }
-  criarTokenDeVerificacao(): Promise<void> {
-    return naoUsado('criarTokenDeVerificacao');
-  }
-  consumirTokenDeVerificacao(): Promise<undefined> {
-    return naoUsado('consumirTokenDeVerificacao');
-  }
-  conferirTokenDeVerificacao(): Promise<undefined> {
-    return naoUsado('conferirTokenDeVerificacao');
-  }
-  invalidarTokensPendentes(): Promise<number> {
-    return naoUsado('invalidarTokensPendentes');
-  }
-  criarJanelaDeReautenticacao(): Promise<void> {
-    return naoUsado('criarJanelaDeReautenticacao');
-  }
-
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
-  }
-
-  marcarEmailVerificado(): Promise<void> {
-    return naoUsado('marcarEmailVerificado');
-  }
-
-  registrarPedidoDeExclusao(): Promise<undefined> {
-    return naoUsado('registrarPedidoDeExclusao');
-  }
-
-  contasAExpurgar(): Promise<readonly UserId[]> {
-    return naoUsado('contasAExpurgar');
   }
 
   expurgarConta(): Promise<boolean> {
     return naoUsado('expurgarConta');
-  }
-
-  registrarPedidoDeTrocaDeEmail(): Promise<void> {
-    return naoUsado('registrarPedidoDeTrocaDeEmail');
-  }
-
-  concluirTrocaDeEmail(): Promise<Conta | undefined> {
-    return naoUsado('concluirTrocaDeEmail');
-  }
-
-  cancelarTrocaDeEmailPendente(): Promise<void> {
-    return naoUsado('cancelarTrocaDeEmailPendente');
   }
 }
 
@@ -440,6 +381,8 @@ function montar(): Bancada {
     contrato,
     issuer: 'https://api.bichu.test',
     apiBaseUrl: 'https://api.bichu.test',
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   void app.register(
     (escopo, _opcoes, pronto) => {

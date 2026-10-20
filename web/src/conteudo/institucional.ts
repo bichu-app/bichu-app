@@ -4,7 +4,7 @@
 
 export const COMO_FUNCIONA = {
   titulo: 'Como funciona',
-  descricao: 'O Bichu é a rede dos pets do seu bairro: cadastro do pet, encontros, profissionais indicados e a rede que procura quando ele some.',
+  descricao: 'O Bichu é a rede dos pets do seu bairro: cadastro do pet, eventos, profissionais indicados e a rede que procura quando ele some.',
   hero: {
     titulo: 'Como funciona',
     lead: 'O Bichu é a rede dos pets do seu bairro. Você cadastra o seu pet, encontra quem mora perto e, se ele sumir, a rede procura com você.',
@@ -14,7 +14,7 @@ export const COMO_FUNCIONA = {
   // P.3.2: ordem da home. O numero aparece porque a ordem e informacao.
   passos: [
     { icone: 'pets', titulo: 'A identidade do seu pet', texto: 'Você cadastra o pet no app com foto, sinais e cuidados.' },
-    { icone: 'park', titulo: 'Eventos e encontros', texto: 'Encontros em praças e parques, criados pela equipe do Bichu e pela comunidade. Você faz check-in pelo app.' },
+    { icone: 'park', titulo: 'Eventos no bairro', texto: 'Eventos em praças e parques, criados pela equipe do Bichu e pela comunidade. Você faz check-in pelo app.' },
     { icone: 'verified', titulo: 'Profissionais que a comunidade indica', texto: 'Veterinários, banhistas, adestradores e passeadores entram no Bichu pela indicação de quem já foi atendido e aceitam o convite. A nota é de quem mora perto.' },
   ],
   sumiu: {

@@ -295,8 +295,7 @@ void main() {
         deposito: depositoLogado(),
         cacheDeMeusPets: cache,
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       expect(
         cache.pets('u-1'),
@@ -318,8 +317,7 @@ void main() {
         deposito: depositoLogado(),
         cacheDeMeusPets: cache,
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
       expect(cache.pets('u-1'), isNotNull);
 
       // Pelo controlador, e nao pelo botao: os QUATRO desfechos de `sair()`

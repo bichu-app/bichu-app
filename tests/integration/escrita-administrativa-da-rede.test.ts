@@ -150,9 +150,10 @@ async function novaContaDoPainel(nome: string): Promise<AdminAccountId> {
 async function novaConta(ajuste: { displayName?: string | null; verificada?: boolean } = {}): Promise<string> {
   const id = randomUUID();
   await sql`
-    insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
+    insert into users (id, email, display_name, email_verified_at, created_at, updated_at, public_ref)
     values (${id}::uuid, ${`rede-adm-${sufixo()}@exemplo.invalid`}, ${ajuste.displayName ?? null},
-            ${ajuste.verificada === false ? null : new Date()}, '2025-03-14T10:00:00Z', now())
+            ${ajuste.verificada === false ? null : new Date()}, '2025-03-14T10:00:00Z', now(),
+            translate(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), '+/=', '-_'))
   `.execute(banco.db);
   contas.push(id);
   return id;
@@ -370,9 +371,32 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
 
   void it('links e unidade (01/10) contra o banco: gravam, saem na leitura publica, e o CHECK segura o resto', async () => {
     const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    // `instagram_url` NA ENTRADA, E NAO `instagram_handle`.
+    //
+    // A entrada foi renomeada em 17/10/2026, pelo padrao do cliente ("todo
+    // campo de site/url, o usuario deve preencher completo o endereco
+    // completo, inclusive com o https"): `api/openapi.yaml`,
+    // `NetworkEventInstagramUrlInput` (linha 11783) e o corpo de criacao
+    // (linha 13153). `@usuario` e `usuario` **nao sao mais aceitos**, e nada e
+    // completado em silencio.
+    //
+    // Este caso continuou mandando `instagram_handle`, que o caso de uso
+    // simplesmente IGNORA -- `rede-administrativa.ts` le `corpo.instagram_url`
+    // (linha 449) --, entao o encontro nascia com `instagram_handle` nulo e a
+    // assercao comparava nulo com `encontro.dos_caes`. Nao era defeito de
+    // produto: era um teste velho de um dia.
+    //
+    // A LEITURA nao mudou, e e por isso que a assercao abaixo continua igual:
+    // o servidor guarda o HANDLE e devolve `instagram_handle` e
+    // `instagram_url` (`api/openapi.yaml` linha 11807, e o `required` da
+    // linha 11946). Guardar o handle e o que mantem a forma canonica --
+    // `instagram.com/x`, `www.instagram.com/x` e `m.instagram.com/x/` sao o
+    // mesmo perfil. A prova viva da mesma troca, na borda, esta em
+    // `src/modules/network/adapters/http/admin-network-routes.test.ts` linhas
+    // 554-568, que passa.
     const criado = await criar({
       ticket_url: 'https://ingressos.exemplo.br/evento/1',
-      instagram_handle: '@Encontro.Dos_Caes',
+      instagram_url: 'https://www.instagram.com/Encontro.Dos_Caes/',
       admission: { kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_two_people' } },
     });
     const slug = criado.recurso.slug;
@@ -450,9 +474,43 @@ void describe('a galeria do encontro e a conta do administrador', () => {
     const publica = criarNetworkRepository(banco.db, ids, (c) => `https://midia.exemplo.invalid/${c}`);
     assert.deepEqual((await publica.buscarEncontro(criado.recurso.slug))?.imagens, [], 'imagem em processamento saiu');
 
-    await sql`update catalog_images set status = 'ready', public_key = 'card/capa-1.webp' where id = ${galeria[0]?.image_id ?? ''}::uuid`.execute(banco.db);
+    const imagemId = galeria[0]?.image_id ?? '';
+    await sql`update catalog_images set status = 'ready', public_key = 'card/capa-1.webp' where id = ${imagemId}::uuid`.execute(banco.db);
     const pronta = await publica.buscarEncontro(criado.recurso.slug);
-    assert.deepEqual(pronta?.imagens, [{ url: 'https://midia.exemplo.invalid/card/capa-1.webp', textoAlternativo: 'Caes correndo no gramado' }]);
+    // AS TRES DERIVADAS, E AS DUAS NOVAS SAO NULAS AQUI DE PROPOSITO.
+    //
+    // `ImagemDoEncontro` tem `urlDaMiniatura` e `urlDoBanner` desde as tres
+    // derivadas (`encontro-da-rede.ts` linhas 124-132), e o contrato as publica
+    // como `thumb_url` e `cover_banner_url` (`api/openapi.yaml` linhas 11922 e
+    // 11977). Elas sao ANULAVEIS, e o `UPDATE` acima e exatamente o caso
+    // documentado: preenche so `public_key`, que e "a imagem gravada antes
+    // destas derivadas existirem". `urlDeMidia` sobre nulo montaria o endereco
+    // de um objeto que ninguem gravou.
+    //
+    // O `deepEqual` continua EXATO -- nao foi afrouxado para `deepInclude`. O
+    // que faltava eram as duas chaves: este caso e de 17/10 e a suite nao
+    // rodou.
+    assert.deepEqual(pronta?.imagens, [
+      {
+        url: 'https://midia.exemplo.invalid/card/capa-1.webp',
+        urlDaMiniatura: null,
+        urlDoBanner: null,
+        textoAlternativo: 'Caes correndo no gramado',
+      },
+    ]);
+
+    // E A METADE POSITIVA: com as chaves das derivadas gravadas, as tres URLs
+    // saem compostas. Sem ela, o nulo acima passaria tambem num servidor que
+    // nunca soubesse montar miniatura nem banner.
+    await sql`update catalog_images set thumb_key = 'card/capa-1-thumb.webp', banner_key = 'card/capa-1-banner.webp' where id = ${imagemId}::uuid`.execute(banco.db);
+    assert.deepEqual((await publica.buscarEncontro(criado.recurso.slug))?.imagens, [
+      {
+        url: 'https://midia.exemplo.invalid/card/capa-1.webp',
+        urlDaMiniatura: 'https://midia.exemplo.invalid/card/capa-1-thumb.webp',
+        urlDoBanner: 'https://midia.exemplo.invalid/card/capa-1-banner.webp',
+        textoAlternativo: 'Caes correndo no gramado',
+      },
+    ]);
   });
 
   void it('T9: envio de imagem de produto nao serve para encontro', async () => {

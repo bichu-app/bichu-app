@@ -57,17 +57,16 @@ import { gerarHashDeSenha } from '../domain/password.js';
 import type {
   Conta,
   CredencialLocal,
-  IdentityRepository,
   MotivoDeRevogacao,
   NovoRefresh,
   RefreshArmazenado,
-  TokenConsumido,
 } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { ClaimsDoAcesso, TokenSigner } from '../ports/token-signer.js';
 import type { Autenticado } from './auth-service.js';
 import { criarAuthService } from './auth-service.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const EMAIL = 'tutora@exemplo.test';
@@ -124,17 +123,34 @@ interface Linha {
   revokedReason: MotivoDeRevogacao | null;
 }
 
-class BancoDeMentira implements IdentityRepository {
+/**
+ * A recusa deste arquivo, pelo nome da porta. Mesma mensagem que cada stub
+ * carregava antes de o dublê compartilhado assumir as portas não exercitadas.
+ */
+function naoUsado(nome: string): never {
+  throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
+}
+
+class BancoDeMentira extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
   public readonly linhas: Linha[] = [];
   public conta: Conta;
   public readonly credencial: CredencialLocal;
 
   constructor(phc: string) {
+    super();
+
     this.conta = {
       id: TUTORA,
       email: EMAIL,
       emailVerifiedAt: dataFixa(0),
       displayName: 'Tutora',
+      // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+      // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+      handle: null,
       phoneE164: null,
       phoneVerifiedAt: null,
       referencePostalCode: null,
@@ -160,7 +176,7 @@ class BancoDeMentira implements IdentityRepository {
     return this.linhas.filter((l) => l.revokedAt === null);
   }
 
-  gravarRefresh(novo: NovoRefresh): Promise<void> {
+  override gravarRefresh(novo: NovoRefresh): Promise<void> {
     this.linhas.push({
       id: novo.id,
       userId: novo.userId,
@@ -177,7 +193,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve();
   }
 
-  buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
+  override buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined> {
     const l = this.linhas.find((x) => x.tokenHash === hash);
     if (l === undefined) return Promise.resolve(undefined);
     return Promise.resolve({
@@ -193,7 +209,7 @@ class BancoDeMentira implements IdentityRepository {
     });
   }
 
-  rotacionar(atualId: string, sucessor: NovoRefresh, agora: Instant): Promise<boolean> {
+  override rotacionar(atualId: string, sucessor: NovoRefresh, agora: Instant): Promise<boolean> {
     const atual = this.linhas.find((x) => x.id === atualId);
     // A mesma guarda do `UPDATE ... WHERE rotated_to_id IS NULL AND revoked_at
     // IS NULL` do repositório de verdade. Sem ela este dublê rotacionaria uma
@@ -208,7 +224,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve(true);
   }
 
-  revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
+  override revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
     const alvo = this.linhas.filter((l) => l.familyId === familyId && l.revokedAt === null);
     for (const l of alvo) {
       l.revokedAt = dataFixa(agora);
@@ -217,7 +233,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve(alvo.length);
   }
 
-  revogarTodasAsFamilias(
+  override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
     agora: Instant,
@@ -230,79 +246,37 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve(alvo.length);
   }
 
-  invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
+  override invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     if (this.conta.id === userId) {
       this.conta = { ...this.conta, sessionsInvalidBefore: agora };
     }
     return Promise.resolve();
   }
 
-  buscarContaPorId(): Promise<Conta | undefined> {
+  override buscarContaPorId(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
   }
-  buscarContaPorEmail(): Promise<Conta | undefined> {
+  override buscarContaPorEmail(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
   }
-  buscarCredencialLocalPorEmail(): Promise<CredencialLocal | undefined> {
+  override buscarCredencialLocalPorEmail(): Promise<CredencialLocal | undefined> {
     return Promise.resolve(this.credencial);
   }
-  registrarLogin(): Promise<void> {
+  override registrarLogin(): Promise<void> {
     return Promise.resolve();
   }
-  regravarCredencial(): Promise<void> {
+  override regravarCredencial(): Promise<void> {
     return Promise.resolve();
   }
-  invalidarTokensPendentes(): Promise<number> {
+  override invalidarTokensPendentes(): Promise<number> {
     return Promise.resolve(0);
-  }
-  criarContaLocal(): Promise<Conta | undefined> {
-    throw new Error('criarContaLocal: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  atualizarPerfil(): Promise<Conta | undefined> {
-    throw new Error('atualizarPerfil: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  criarTokenDeVerificacao(): Promise<void> {
-    throw new Error('criarTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  consumirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    throw new Error('consumirTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    throw new Error('conferirTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  criarJanelaDeReautenticacao(): Promise<void> {
-    throw new Error('criarJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  marcarEmailVerificado(): Promise<void> {
-    throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  registrarPedidoDeExclusao(): Promise<undefined> {
-    throw new Error('registrarPedidoDeExclusao: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  contasAExpurgar(): Promise<readonly UserId[]> {
-    throw new Error('contasAExpurgar: nenhum caso deste arquivo deveria chegar aqui');
   }
 
   expurgarConta(): Promise<boolean> {
     throw new Error('expurgarConta: nenhum caso deste arquivo deveria chegar aqui');
   }
 
-  registrarPedidoDeTrocaDeEmail(): Promise<void> {
-    throw new Error('registrarPedidoDeTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  concluirTrocaDeEmail(): Promise<Conta | undefined> {
-    throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  cancelarTrocaDeEmailPendente(): Promise<void> {
+  override cancelarTrocaDeEmailPendente(): Promise<void> {
     return Promise.resolve();
   }
 }

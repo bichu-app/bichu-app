@@ -119,3 +119,39 @@ class AchadoRegistrado {
     );
   }
 }
+
+/// `FoundReportPage`: a página de `listMyFoundReports`.
+///
+/// **Paginação por CURSOR**, e é assim que o contrato a declara: `next_cursor`
+/// nulo (ou ausente) é o fim da lista. Não há `total`, e a ausência decide o
+/// desenho da tela — não se pode escrever "1 a 20 de 87" sobre uma lista que
+/// não sabe quantos são, então a lista de achados diz quantos **estão na tela**
+/// e para de pedir quando o cursor acaba.
+///
+/// É deliberadamente diferente da listagem pública de perdidos, que é numerada
+/// com `total`. As duas seguem o contrato, e o contrato segue o uso: a pública
+/// precisa que o visitante chegue ao fim de 87 casos; a minha tem três.
+class PaginaDeAchados {
+  const PaginaDeAchados({required this.itens, this.proximoCursor});
+
+  final List<AchadoRegistrado> itens;
+
+  /// Nulo quando não há mais página. **Ausente também é nulo**: o campo é
+  /// anulável no contrato e não está em `required`.
+  final String? proximoCursor;
+
+  bool get temMais => proximoCursor != null && proximoCursor!.isNotEmpty;
+
+  factory PaginaDeAchados.doJson(Map<String, dynamic> json) {
+    final brutos = json['items'];
+    final cursor = json['next_cursor'];
+    return PaginaDeAchados(
+      itens: <AchadoRegistrado>[
+        if (brutos is List)
+          for (final item in brutos)
+            if (item is Map<String, dynamic>) AchadoRegistrado.doJson(item),
+      ],
+      proximoCursor: cursor is String && cursor.isNotEmpty ? cursor : null,
+    );
+  }
+}

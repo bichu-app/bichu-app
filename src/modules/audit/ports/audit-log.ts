@@ -104,6 +104,24 @@ export type AuditAction =
    */
   | 'lost_case.updated'
   | 'lost_case.closed'
+  /**
+   * O tutor REABRIU o caso que ele havia encerrado (`reopenLostCase`).
+   *
+   * **Separada de `lost_case.opened`**, e a separação é o que torna a métrica
+   * de reencontro auditável: um caso reaberto não é um caso novo, e contá-lo
+   * como abertura inflaria o denominador. A pergunta de investigação que só
+   * esta ação responde é "este desfecho `reunited` foi desfeito?" — e ela
+   * importa porque `closeLostCase` é um toque único, sem confirmação até agora,
+   * numa tela que a pessoa abre em pânico.
+   *
+   * O metadado carrega o desfecho DESFEITO (`undone_outcome`) e o prazo que
+   * valia (`reopen_deadline`). Nunca coordenada, como no resto do módulo.
+   *
+   * Está aqui também porque o `node-pg-migrate` DESCARTA `RAISE NOTICE` e
+   * `WARNING`: contagem e diagnóstico deste módulo vão para `audit.events`, que
+   * é o único lugar onde alguém os encontra depois.
+   */
+  | 'lost_case.reopened'
   | 'lost_case.alert_dispatched'
   /**
    * O tutor pediu o REENVIO do alerta (`POST /v1/lost-cases/{id}/alerts`).
@@ -121,6 +139,29 @@ export type AuditAction =
    */
   | 'conversation.held_for_review'
   | 'conversation.reported'
+  /**
+   * FATIA E da frente de comunidade: bloquear alguem.
+   *
+   * **O `resourceId` e o ENDERECO PUBLICO do alvo** (`users.public_ref`, 128
+   * bits opacos), e nunca o UUID interno: a trilha guarda o ATO e nao a
+   * vitima, e o endereco publico e o que um suporte consegue ligar a uma linha
+   * sem que a trilha passe a ser uma lista de quem bloqueou quem por id.
+   *
+   * **Nenhum destes eventos chega a quem foi bloqueado ou denunciado.** A
+   * trilha e de quem audita.
+   */
+  | 'user_block.created'
+  | 'user_block.removed'
+  /**
+   * FATIA E: denuncia de perfil, de foto ou de publicacao. O `resourceKind`
+   * diz qual dos tres.
+   *
+   * O metadado carrega o MOTIVO escolhido e **nunca o relato**: relato e texto
+   * que uma pessoa escreveu sobre outra, e `docs/04-seguranca.md` secao 9
+   * proibe conteudo na trilha pelo mesmo juizo. Quem precisa do relato e quem
+   * modera, e ele esta na fila.
+   */
+  | 'content_report.created'
   | 'conversation.blocked'
   | 'moderation.decided'
   /**
@@ -144,6 +185,25 @@ export type AuditAction =
   | 'network_event.submitted'
   | 'network_event.updated'
   | 'network_event.cancelled'
+  /**
+   * `suggestDirectoryEntry`. Uma conta do app SUGERIU uma entrada para o
+   * diretorio de `Perto`, e a sugestao entrou na fila de revisao.
+   *
+   * **A acao existe porque a coluna de autoria nao responde sozinha.** A coluna
+   * de `directory_suggestions` que guarda quem sugeriu leva a marca
+   * "nunca sai do servidor" -- o nome dela nao cabe neste arquivo, e e a funcao
+   * `directory_suggestions_registrar` da migracao `20261017000004` que a
+   * escreve. E esta linha que sobrevive a exclusao da conta e responde "quem
+   * sugeriu isto, e quantas vezes" numa resposta a abuso -- que e a pergunta de
+   * quem recebe uma fila de trabalho humano aberta a qualquer conta.
+   *
+   * O metadado carrega `kind`, `city`, `state` e o TIPO do contato. **Nunca o
+   * valor do contato, o nome sugerido nem o recado**: sao dado de um terceiro
+   * que nao pediu para estar aqui, e a trilha sobrevive a exclusao da conta de
+   * proposito. Nao ha par `approved`/`declined` ainda, porque as operacoes do
+   * painel que trabalham esta fila nao existem no contrato.
+   */
+  | 'directory_suggestion.submitted'
   | 'privacy.account_deletion_requested'
   /**
    * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`
@@ -205,6 +265,26 @@ export type AuditAction =
    * agendado 24 h antes, e nao a pessoa que aceitou.
    */
   | 'pet_transfer.consummated'
+  /**
+   * FATIA F (18/10/2026). A conexao entre pessoas, SIMETRICA, com aceite.
+   *
+   * **O recurso e a ARESTA (`resourceKind: 'user_connection'`, `resourceId` =
+   * `user_connections.ref`), e nunca a conta do outro lado.** A trilha e lida
+   * por gente, e trilha que nomeia o outro lado de uma recusa CONTA a recusa --
+   * que e exatamente o que o desenho nao da ("nenhum 'ela recusou voce'").
+   *
+   * Sao cinco verbos porque a investigacao pergunta cinco coisas diferentes, e
+   * `declined`/`cancelled`/`undone` respondem a mesma rota HTTP: quem encerrou
+   * uma aresta, e em que estado ela estava. `removed_by_block` tem ator
+   * `system`: quem executa e a escrita do bloqueio (fatia E), e nao a pessoa
+   * que bloqueou -- o bloqueio tem trilha propria, la.
+   */
+  | 'connection.requested'
+  | 'connection.accepted'
+  | 'connection.declined'
+  | 'connection.cancelled'
+  | 'connection.undone'
+  | 'connection.removed_by_block'
   // Backoffice (ADR-0027, apendice A.5). O padrao e `admin.<recurso>.<verbo>`
   // (D49), e cada valor e o `x-audit.action` de uma operacao do contrato, ou um
   // dos eventos que o item 8 manda gravar sem ser escrita (login recusado,
@@ -249,6 +329,99 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.network_join_request.listed',
   'admin.network_join_request.approved',
   'admin.network_join_request.declined',
+  // BICHUS-189 (17/10/2026): a escrita administrativa do diretorio de `Perto`.
+  // Entram aqui porque `acoes-administrativas.test.ts` confere nos dois
+  // sentidos: todo `x-audit.action` do contrato precisa estar nesta lista, e
+  // todo valor desta lista precisa estar no contrato.
+  'admin.directory_entry.created',
+  'admin.directory_entry.updated',
+  // 18/10/2026: a FILA DE REVISAO das indicacoes da comunidade. Aprovar grava
+  // uma entrada do diretorio, e recusar grava um motivo que o proximo revisor
+  // vai ler: as duas sao decisao de pessoa sobre o que a comunidade mandou, e
+  // sem rastro ninguem responde quem decidiu o que.
+  //
+  // **Nao ha `.listed` nem `.read`.** `x-audit` em `GET` administrativo e so da
+  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
+  // esta fila nao le pessoa nenhuma: a coluna que guarda quem indicou nunca sai
+  // do servidor, e a projecao e so da entidade indicada. Mesma ausencia, e pelo
+  // mesmo motivo, da fila da plaquinha.
+  'admin.directory_suggestion.approved',
+  'admin.directory_suggestion.declined',
+
+  // 18/10/2026: a moderacao das AVALIACOES do diretorio. `resource_kind` e
+  // `professional_review` e nao `directory_entry`: o alvo e a avaliacao, e uma
+  // investigacao que procurasse pela entrada nao acharia a remocao.
+  //
+  // Nao ha `.restored` ainda, e a ausencia e declarada: `status` aceita
+  // `'published'` de volta, entao restaurar nao exige migracao -- so a rota,
+  // que nao cabia nesta fatia.
+  'admin.directory_review.removed',
+  // A fila do pedido da plaquinha da coleira. SOLICITAR nao e EMITIR: emitir e
+  // `issuePetTag` (irreversivel, ADR-0004) e sai na trilha do app; o que entra
+  // aqui e a decisao do painel sobre o OBJETO FISICO. Nao ha `.listed`: a fila
+  // nao le pessoa, e `x-audit` em `GET` administrativo e so da leitura de
+  // pessoa, que anda junto do teto por `rows_returned` (D55/D56).
+  'admin.collar_tag_request.fulfilled',
+  'admin.collar_tag_request.declined',
+  // 18/10/2026: a ENTREGA do objeto fisico -- o passo da encomenda e o codigo
+  // de rastreio, que o cliente pediu na mesma frase ("mudar o status da
+  // entrega e inserir o codigo de rastreio"). Uma acao so, porque e uma
+  // escrita so.
+  //
+  // `before`/`after` carregam `delivery_state` e `tracking_code`, e **nenhum
+  // campo do endereco de entrega** -- a regra 4 da migracao `20261017000012`,
+  // que esta frente nao afrouxa. O rastreio ENTRA de proposito: e numero de
+  // encomenda e nao dado pessoal, e e justamente o campo cuja troca alguem vai
+  // querer auditar depois.
+  'admin.collar_tag_request.delivery_updated',
+  // 18/10/2026: a FILA DE MODERACAO do painel. Decisao do cliente, literal:
+  // "quem modera vai ser o administrador, deve ir para a pagina de backoffice".
+  //
+  // `resource_kind` e `moderation_report` nas duas, e nao `professional_review`
+  // nem `conversation`: o alvo da DECISAO e o item de fila, e a ORIGEM vai em
+  // `metadata.origin`. Uma investigacao que procurasse por `moderation_report`
+  // acha as duas acoes das duas origens numa consulta so, que e a pergunta que
+  // se faz de uma fila de moderacao.
+  //
+  // **As duas sao obrigatorias, e `dismissed` nao e menos importante.**
+  // Descartar tambem e decisao sobre o trabalho de outra pessoa -- alguem
+  // denunciou e um administrador disse que nao procedia --, e sem rastro
+  // ninguem responde quem decidiu o que. `after.reason` carrega o motivo, que
+  // e texto do ADMINISTRADOR sobre o proprio trabalho; `before`/`after`
+  // **nunca** carregam o conteudo denunciado nem o relato de quem denunciou
+  // (docs/04-seguranca.md 9, e a trilha sobrevive a exclusao da conta).
+  //
+  // Nao ha `.listed` nem `.read`: `x-audit` em `GET` administrativo e so da
+  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
+  // esta fila nao le pessoa -- nem o denunciante nem o denunciado aparecem em
+  // campo nenhum da resposta. Mesma ausencia das duas outras filas do painel.
+  //
+  // **Nao ha acao de conta aqui.** Desabilitar conta e outro poder
+  // (`admin.account.disabled`, `privacy.account_deletion_requested`) e nao
+  // entra nesta fila.
+  'admin.moderation_report.content_removed',
+  'admin.moderation_report.dismissed',
+  // 18/10/2026: o COMUNICADO -- o unico aviso do produto com alcance total.
+  //
+  // E a acao desta lista que mais precisa existir, e por um motivo que nenhuma
+  // das outras tem: o comunicado nao tem destinatario a quem perguntar depois.
+  // Uma escrita da Loja errada aparece na Loja; um comunicado errado chega a
+  // toda caixa e nao deixa rastro em nenhuma delas de QUEM o mandou. Sem esta
+  // linha, "quem disparou aquilo" nao tem resposta. Megafone sem trilha e o que
+  // vira incidente.
+  //
+  // `before`/`after`: nao ha `before` (o comunicado nasce, nao muda), e o
+  // `after` carrega `title`, `recipients_total` e o `ref`. **O CORPO NAO
+  // ENTRA**: ele e texto livre de pessoa, a trilha sobrevive a exclusao da
+  // conta de proposito, e o corpo ja vive em `notification_broadcasts`, que
+  // nao tem caminho de exclusao. A trilha responde quem e quando; a tabela
+  // responde o que.
+  //
+  // Nao ha `.deleted` nem `.updated`, e as ausencias sao a regra: comunicado
+  // disparado fica registrado, e o contrato nao declara `DELETE` nem `PATCH`.
+  // Nao ha `.previewed`: pre-visualizar nao e escrita, e uma trilha por tecla
+  // digitada afogaria a do disparo, que e a que importa.
+  'admin.broadcast.dispatched',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

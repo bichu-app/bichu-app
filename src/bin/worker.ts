@@ -5,8 +5,9 @@
  *
  * - o expurgo dos 24 meses de retenção da trilha de auditoria, por temporizador;
  * - o **consumo da fila** (`jobs`), que processa foto de pet e **dispara o
- *   alerta de 5 km** (`alert.dispatch`, BICHUS-18). Lembrete e e-mail entram
- *   com as histórias que os criam.
+ *   alerta de 5 km** (`alert.dispatch`, BICHUS-18) e **avisa o tutor de que
+ *   alguém escaneou a plaquinha do pet dele** (`tag.scan_notify`). Lembrete
+ *   entra com a história que o cria.
  *
  * Os dois são coisas diferentes e é por isso que não compartilham laço: o
  * expurgo roda a cada seis horas e não tem fila; o processamento reserva
@@ -85,6 +86,11 @@ import { TRABALHO_DE_AVISO_DE_APROVACAO } from '../modules/network/ports/aviso-d
 import { DIAS_DE_RETENCAO_DO_PEDIDO } from '../modules/network/domain/escrita-do-encontro.js';
 import { avisarPedidoAprovado } from '../modules/network/application/avisar-pedido-aprovado.js';
 import { criarAvisoDeAprovacaoPorPush } from '../modules/notifications/adapters/external/aviso-de-aprovacao-por-push.js';
+
+import { TRABALHO_DE_AVISO_AO_TUTOR } from '../modules/tags/ports/aviso-ao-tutor.js';
+import { criarLeituraDoAvisoAoTutor } from '../modules/tags/adapters/persistence/kysely-leitura-do-aviso-ao-tutor.js';
+import { avisarTutorDoAchado } from '../modules/tags/application/avisar-tutor-do-achado.js';
+import { criarAvisoAoTutorPorPush } from '../modules/notifications/adapters/external/aviso-ao-tutor-por-push.js';
 
 import type { CaseId } from '../shared/types/brands.js';
 
@@ -482,6 +488,25 @@ export async function main(): Promise<void> {
     }),
   };
 
+  // O AVISO AO TUTOR DE QUE ALGUEM ESCANEOU A PLAQUINHA, e ele e o buraco
+  // central do produto que estava aberto: a API gravava o aviso do achador e
+  // **nao enfileirava entrega nenhuma**.
+  //
+  // Mesma composicao do aviso de aprovacao da `Rede`, de proposito: a MESMA
+  // fila, o MESMO `PushSender`, a MESMA revogacao por token recusado. O
+  // `mailer` e o `contas` sao as MESMAS instancias que a transferencia usa
+  // acima — duas seriam duas conexoes e dois transportes para o mesmo dado.
+  const avisoAoTutor = {
+    avisos: criarLeituraDoAvisoAoTutor(banco.db),
+    entrega: criarAvisoAoTutorPorPush({
+      aparelhos: criarRegistroDeAparelhos(banco.db, ids),
+      push,
+      revogarPorTokenRecusado: (token) => aparelhos.revogarPorTokenRecusado(token),
+    }),
+    mailer: criarMailer(config.mail),
+    contas: criarEmailVerificadoDoChamador(banco.db),
+  };
+
   const rodarFila = async (): Promise<void> => {
     const trabalhos = await fila.claim(TRABALHOS_POR_PASSADA);
     for (const trabalho of trabalhos) {
@@ -521,6 +546,18 @@ export async function main(): Promise<void> {
           const desfecho = await avisarPedidoAprovado(avisoDeAprovacao, pedidoId);
           await fila.complete(trabalho.id);
           console.info(JSON.stringify({ evento: 'network.approval_push', ...desfecho }));
+          continue;
+        }
+
+        if (trabalho.kind === TRABALHO_DE_AVISO_AO_TUTOR) {
+          // Mesmo padrao dos de cima: o desfecho vem como VALOR. "O aviso nao
+          // existe mais" e "o pet foi excluido" nao sao falhas, e
+          // reenfileira-los gastaria a fila contra algo que nunca muda de
+          // resposta. Falha de transporte sim estoura, e ai a fila adia.
+          const { found_report_id: avisoId } = trabalho.payload as { found_report_id: string };
+          const desfecho = await avisarTutorDoAchado(avisoAoTutor, avisoId, config.webBaseUrl);
+          await fila.complete(trabalho.id);
+          console.info(JSON.stringify({ evento: 'tag.scan_notify', ...desfecho }));
           continue;
         }
 

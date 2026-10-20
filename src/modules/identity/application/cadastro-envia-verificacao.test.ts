@@ -59,19 +59,16 @@ import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import { rotaDeCadastro, rotaDePedidoDeVerificacao } from '../adapters/http/routes.js';
 import type {
   Conta,
-  CredencialLocal,
-  IdentityRepository,
   NovaConta,
   NovoRefresh,
   NovoTokenDeVerificacao,
   PropositoDoToken,
-  RefreshArmazenado,
-  TokenConsumido,
 } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
 import { criarAuthService } from './auth-service.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const CONTA_NOVA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
 const EMAIL = 'tutora@exemplo.test';
@@ -102,6 +99,9 @@ function contaRecemCriada(): Conta {
     // o que a tira desse estado é o link que precisa sair daqui.
     emailVerifiedAt: null,
     displayName: 'Tutora',
+    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
+    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
+    handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
     referencePostalCode: null,
@@ -116,107 +116,45 @@ function contaRecemCriada(): Conta {
   };
 }
 
-class RepositorioDeCadastro implements IdentityRepository {
+class RepositorioDeCadastro extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
   public readonly contasCriadas: NovaConta[] = [];
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly familiasAbertas: NovoRefresh[] = [];
 
   /** `undefined` é o que a unicidade do banco devolve quando o e-mail já tem conta. */
-  constructor(private readonly conta: Conta | undefined) {}
+  constructor(private readonly conta: Conta | undefined) {
+    super();
+}
 
-  criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
+  override criarContaLocal(nova: NovaConta): Promise<Conta | undefined> {
     this.contasCriadas.push(nova);
     return Promise.resolve(this.conta);
   }
 
-  criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+  override criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
     this.tokensGravados.push(novo);
     return Promise.resolve();
   }
 
-  gravarRefresh(novo: NovoRefresh): Promise<void> {
+  override gravarRefresh(novo: NovoRefresh): Promise<void> {
     this.familiasAbertas.push(novo);
     return Promise.resolve();
   }
 
-  buscarContaPorEmail(email: string): Promise<Conta | undefined> {
+  override buscarContaPorEmail(email: string): Promise<Conta | undefined> {
     return Promise.resolve(this.conta?.email === email ? this.conta : undefined);
   }
 
-  buscarContaPorId(): Promise<Conta | undefined> {
+  override buscarContaPorId(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
-  }
-
-  buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
-    return naoUsado('buscarRefreshPorHash');
-  }
-  revogarFamilia(): Promise<number> {
-    return naoUsado('revogarFamilia');
-  }
-  revogarTodasAsFamilias(): Promise<number> {
-    return naoUsado('revogarTodasAsFamilias');
-  }
-  rotacionar(): Promise<boolean> {
-    return naoUsado('rotacionar');
-  }
-  atualizarPerfil(): Promise<Conta | undefined> {
-    return naoUsado('atualizarPerfil');
-  }
-  buscarCredencialLocalPorEmail(): Promise<CredencialLocal | undefined> {
-    return naoUsado('buscarCredencialLocalPorEmail');
-  }
-  regravarCredencial(): Promise<void> {
-    return naoUsado('regravarCredencial');
-  }
-  registrarLogin(): Promise<void> {
-    return naoUsado('registrarLogin');
-  }
-  invalidarSessoes(): Promise<void> {
-    return naoUsado('invalidarSessoes');
-  }
-  consumirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    return naoUsado('consumirTokenDeVerificacao');
-  }
-  conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
-    return naoUsado('conferirTokenDeVerificacao');
-  }
-  invalidarTokensPendentes(): Promise<number> {
-    return naoUsado('invalidarTokensPendentes');
-  }
-  criarJanelaDeReautenticacao(): Promise<void> {
-    return naoUsado('criarJanelaDeReautenticacao');
-  }
-
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
-  }
-
-  marcarEmailVerificado(): Promise<void> {
-    return naoUsado('marcarEmailVerificado');
-  }
-
-  registrarPedidoDeExclusao(): Promise<undefined> {
-    return naoUsado('registrarPedidoDeExclusao');
-  }
-
-  contasAExpurgar(): Promise<readonly UserId[]> {
-    return naoUsado('contasAExpurgar');
   }
 
   expurgarConta(): Promise<boolean> {
     return naoUsado('expurgarConta');
-  }
-
-  registrarPedidoDeTrocaDeEmail(): Promise<void> {
-    return naoUsado('registrarPedidoDeTrocaDeEmail');
-  }
-
-  concluirTrocaDeEmail(): Promise<Conta | undefined> {
-    return naoUsado('concluirTrocaDeEmail');
-  }
-
-  cancelarTrocaDeEmailPendente(): Promise<void> {
-    return naoUsado('cancelarTrocaDeEmailPendente');
   }
 }
 
@@ -397,7 +335,10 @@ async function capturar(promessa: Promise<unknown>): Promise<AppError> {
 }
 
 function cadastroValido(): Parameters<ReturnType<typeof criarAuthService>['cadastrar']>[0] {
-  return { email: EMAIL, password: SENHA_BOA, displayName: 'Tutora' };
+  // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
+  // e bem longe do limite: esta bancada nao mede idade, e uma data colada no
+  // corte faria estes testes comecarem a falhar sozinhos com o passar do tempo.
+  return { email: EMAIL, password: SENHA_BOA, birthDate: '1990-05-12', displayName: 'Tutora' };
 }
 
 void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critérios 1, 2 e 8)', () => {
@@ -586,7 +527,10 @@ void describe('e-mail já cadastrado: 409 sem mensagem e sem token (BICHUS-147, 
   void it('senha fraca é recusada antes de qualquer envio', async () => {
     const bancada = montar({});
     const erro = await capturar(
-      bancada.servico.cadastrar({ email: EMAIL, password: '123', displayName: 'Tutora' }, CONTEXTO),
+      bancada.servico.cadastrar(
+        { email: EMAIL, password: '123', birthDate: '1990-05-12', displayName: 'Tutora' },
+        CONTEXTO,
+      ),
     );
 
     assert.equal(erro.status, 422);

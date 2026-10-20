@@ -16,7 +16,10 @@
 // `TelaDoProduto.tituloDoNaoEncontrado` acompanharia o erro de digitacao para
 // sempre.
 
+import 'dart:async';
+
 import 'package:bichu/api/modelos_loja.dart';
+import 'package:bichu/dispositivo/saida_do_app.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/loja/produto_da_loja.dart';
 import 'package:bichu/telas/loja/vitrine_da_loja.dart';
@@ -165,7 +168,66 @@ Future<void> tocarNoCartao(WidgetTester tester, String titulo) async {
   );
 }
 
+/// A porta de saida, de mentira, para o toque em `Compre agora` nao cair no
+/// `url_launcher` de verdade (canal de plataforma que nao existe em teste).
+///
+/// Mesmo duble de `loja_abre_no_navegador_test.dart`, e pelo mesmo motivo: as
+/// outras tres saidas ESTOURAM, para esta tela reprovar alto se um dia chamar
+/// o app de mapas ou o calendario.
+class _SaidaDeMentira extends SaidaDoApp {
+  final List<Uri> links = <Uri>[];
+
+  @override
+  Future<bool> abrirLink(Uri link) async {
+    links.add(link);
+    return true;
+  }
+
+  @override
+  Future<bool> abrirNoAppDeMapas({
+    required double lat,
+    required double lon,
+    required String nomeDoLugar,
+  }) async => throw StateError('a Loja nao abre o app de mapas');
+
+  @override
+  Future<bool> abrirEnderecoNoAppDeMapas({required String endereco}) async =>
+      throw StateError('a Loja nao abre o app de mapas');
+
+  @override
+  Future<bool> adicionarAoCalendario(EventoDeCalendario evento) async =>
+      throw StateError('a Loja nao escreve no calendario');
+}
+
+/// O quadro GRANDE da galeria cujo nome acessivel e [nome].
+///
+/// Pela propriedade `semanticLabel` da `Image`, e **nao** por
+/// `find.bySemanticsLabel`: em teste de widget `Image.network` nunca carrega,
+/// o `errorBuilder` da `_Galeria` troca a imagem por um `ColoredBox`
+/// (`produto_da_loja.dart`, linha 377) e o no que carregava o nome desaparece
+/// da arvore de semantica. O que esta tela ENTREGA a plataforma e a
+/// propriedade, e e ela que a isca precisa afirmar -- o `bySemanticsLabel`
+/// media o carregamento da rede, que nao e o assunto.
+///
+/// Restrito ao `PageView` de proposito: as miniaturas tem nome proprio
+/// (`Imagem N de 8`), e um `byWidgetPredicate` solto casaria com elas.
+Finder _quadroGrandeChamado(String nome) => find.descendant(
+      of: find.byType(PageView),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Image && widget.semanticLabel == nome,
+        description: 'quadro grande chamado "$nome"',
+      ),
+    );
+
 void main() {
+  late _SaidaDeMentira saida;
+
+  setUp(() {
+    saida = _SaidaDeMentira();
+    SaidaDoApp.atual = saida;
+  });
+
+  tearDown(SaidaDoApp.restaurar);
   // -------------------------------------------------------------------------
   // A GALERIA: AS OITO IMAGENS, NA ORDEM DO PAINEL
   // -------------------------------------------------------------------------
@@ -327,7 +389,7 @@ void main() {
       await tocarNoCartao(tester, 'Bola Pop');
 
       expect(
-        find.bySemanticsLabel('Bola Pop vermelha sobre a grama'),
+        _quadroGrandeChamado('Bola Pop vermelha sobre a grama'),
         findsOneWidget,
         reason: 'REPROVA: o `alt_text` do painel nao chegou ao quadro grande.',
       );
@@ -353,7 +415,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.bySemanticsLabel('Foto de Bola Pop'),
+        _quadroGrandeChamado('Foto de Bola Pop'),
         findsOneWidget,
         reason:
             'REPROVA: imagem sem `alt_text` ficou sem nome acessivel. '
@@ -390,6 +452,11 @@ void main() {
       );
       await tocarNoCartao(tester, 'Bola Pop');
 
+      // O corpo do detalhe e um `ListView` (`produto_da_loja.dart`, linha
+      // 217): a galeria enche a dobra e o que vem abaixo dela nao esta
+      // construido. `find` nao enxerga o que nao existe, entao rola primeiro
+      // -- como a pessoa faz.
+      await rolarAte(tester, find.text(longa));
       expect(
         find.text(longa),
         findsOneWidget,
@@ -422,6 +489,7 @@ void main() {
       );
       await tocarNoCartao(tester, 'Bola Pop');
 
+      await rolarAte(tester, find.text(comParagrafos));
       expect(find.text(comParagrafos), findsOneWidget);
     });
   });
@@ -432,7 +500,16 @@ void main() {
 
   group('os quatro estados da tela', () {
     testWidgets('carregando: o esqueleto e anunciado', (tester) async {
-      // A rede que nunca responde ao detalhe: a tela fica na fase de carga.
+      // A resposta do detalhe fica EM VOO ate o caso a soltar.
+      //
+      // Um `Completer` do caso, e nao `Future.delayed(30 s)`: o
+      // `ApiClient` poe um `.timeout(tempoLimite)` em cada chamada, e com a
+      // resposta presa para sempre aquele timer continua pendente depois de a
+      // arvore ser descartada -- o `flutter_test` reprova o caso por isso DE-
+      // POIS de a assercao ter passado ("A Timer is still pending even after
+      // the widget tree was disposed"). Soltando a resposta no fim, o timeout
+      // e cancelado e o caso termina limpo, sem mexer em prazo nenhum.
+      final detalheEmVoo = Completer<void>();
       await abrirLoja(
         tester,
         rede: (req) async {
@@ -441,14 +518,26 @@ void main() {
               paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
             );
           }
-          // Nao resolve: a carga do detalhe fica em voo.
-          await Future<void>.delayed(const Duration(seconds: 30));
+          await detalheEmVoo.future;
           return json200(detalheDoContrato());
         },
       );
-      final cartao = find.byType(CartaoDaLoja);
-      await tester.tap(cartao);
+      // **Pelo ENDERECO, e nao pelo toque no cartao.** O toque no cartao sai
+      // do app desde 17/10/2026 (`sairDaLoja`, chamado no `onTap` do
+      // `InkWell` em `vitrine_da_loja.dart`, linha 631) e nunca chega a este
+      // formulario -- a isca tocava no cartao e media uma tela que nao abria.
+      // `pumpAndSettle` nao serve aqui de proposito: a resposta do detalhe
+      // fica EM VOO, e e esse o estado que o caso mede.
+      final item = tester.widget<CartaoDaLoja>(find.byType(CartaoDaLoja)).item;
+      GoRouter.of(
+        tester.element(find.byType(VitrineDaLoja)),
+      ).push(Rotas.produtoDaLojaDe(item.slug));
+      // Dois `pump`: o primeiro empurra a rota, o segundo deixa a transicao
+      // do `go_router` terminar para a pagina existir e se anunciar. 350 ms
+      // passa da animacao e nao chega perto dos 30 s da resposta, que
+      // continua em voo -- `pumpAndSettle` esperaria por ela.
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
 
       expect(
         find.bySemanticsLabel('Carregando o produto'),
@@ -457,6 +546,11 @@ void main() {
             'REPROVA: a carga nao se anuncia. Sem isto, quem usa leitor de '
             'tela encontra uma pagina sem nada enquanto a chamada esta em voo.',
       );
+
+      // Solta a resposta e deixa a tela assentar: ver o comentario do
+      // `Completer`, acima.
+      detalheEmVoo.complete();
+      await tester.pumpAndSettle();
     });
 
     // ISCA -- em `produto_da_loja.dart`, troque `if (!detalhe.semImagem)` por
@@ -612,11 +706,19 @@ void main() {
       await tester.tap(botao);
       await tester.pumpAndSettle();
 
-      // O aviso de saida do app abriu...
+      // **A saida foi para o NAVEGADOR, e nao para um dialogo.** O
+      // `AlertDialog` "Você vai sair do Bichu" saiu em 17/10/2026, por pedido
+      // literal do cliente -- *"Remova a confirmacao de sair do bichu quando
+      // clica no produto"* --, e esta escrito em `sairDaLoja`
+      // (`vitrine_da_loja.dart`, linhas 765-770): "a pessoa passa a ir para o
+      // navegador sem aviso nenhum". A isca pedia o dialogo que a decisao
+      // tirou. O que ficou no lugar afirma MAIS: nao que uma frase apareceu,
+      // mas que o link do parceiro chegou a porta de saida.
       expect(
-        find.text('Você vai sair do Bichu'),
-        findsOneWidget,
-        reason: 'REPROVA: o botao de saida nao avisou antes de sair.',
+        saida.links.map((l) => l.toString()),
+        <String>['https://cobasi.com.br/bola-pop-borracha'],
+        reason: 'REPROVA: o toque em `Compre agora` nao levou o link do '
+            'parceiro para a porta de saida do app.',
       );
       // ...e o detalhe NAO foi pedido.
       expect(
@@ -644,17 +746,44 @@ void main() {
         ),
       );
 
-      final lerMais = find.text('Ler mais');
-      await tester.ensureVisible(lerMais);
-      await tester.pumpAndSettle();
-      await tester.tap(lerMais);
+      // **O CASO VIROU DO AVESSO, e nao foi apagado.** O `Ler mais` do cartao
+      // deixou de existir em 17/10/2026: o cartao da vitrine ficou com
+      // carrossel, "Preço de referência", titulo, linha do preco e `Compre
+      // agora`, por pedido do cliente (commit `13c71a3`, "cartao de vitrine
+      // so com foto, titulo e preco", e `vitrine_da_loja.dart`, linhas
+      // 663-665). O caso irmao de `loja_com_dados_test.dart` registrou a
+      // mesma remocao na linha 1000. A isca media o isolamento de gesto entre
+      // um `TextButton` e o `InkWell` do cartao, e o `TextButton` nao esta
+      // mais la -- `find.text('Ler mais')` achava zero e `ensureVisible`
+      // estourava `Bad state: No element`.
+      //
+      // O que sobrou do assunto e afirmado aqui, nos dois sentidos: o
+      // expansor NAO voltou ao cartao, e o corpo do cartao **nao abre o
+      // detalhe** -- ele sai do app. Se alguem repuser um controle no cartao
+      // sem repontar este caso, ele reprova.
+      expect(
+        find.text('Ler mais'),
+        findsNothing,
+        reason: 'REPROVA: o expansor de descricao voltou ao cartao da '
+            'vitrine, que o cliente pediu com foto, titulo e preco.',
+      );
+      expect(find.text('Ler menos'), findsNothing);
+
+      await tester.tap(find.byType(CartaoDaLoja));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ler menos'), findsOneWidget);
+      expect(
+        saida.links,
+        hasLength(1),
+        reason: 'REPROVA: tocar no corpo do cartao nao saiu do app. Desde '
+            '17/10 e isso que o toque no cartao faz.',
+      );
       expect(
         urls.map((u) => u.path),
         isNot(contains('/v1/store/items/bola-pop')),
-        reason: 'REPROVA: expandir a descricao no cartao abriu o detalhe.',
+        reason: 'REPROVA: o toque no corpo do cartao pediu o detalhe. A tela '
+            'de detalhe esta PARADA por decisao do cliente, e o gesto do '
+            'cartao leva ao site do parceiro.',
       );
     });
 
@@ -675,6 +804,11 @@ void main() {
       );
       await tocarNoCartao(tester, 'Bola Pop');
 
+      // O corpo do detalhe e um `ListView` (`produto_da_loja.dart`, linha
+      // 217): a galeria enche a dobra e o que vem abaixo dela nao esta
+      // construido. `find` nao enxerga o que nao existe, entao rola primeiro
+      // -- como a pessoa faz.
+      await rolarAte(tester, find.text('Compre agora'));
       expect(
         find.text('Compre agora'),
         findsOneWidget,
@@ -726,11 +860,33 @@ void main() {
   // O PRECO SAI DA MESMA FORMATACAO DO CARTAO
   // -------------------------------------------------------------------------
 
-  group('o preco no detalhe e o mesmo bloco do cartao', () {
-    // ISCA -- no `_Cabecalho`, troque `item.linhaDoPreco` por
-    // `item.precoFormatado`. O caso reprova: o numero apareceria sem o rotulo
-    // e sem a data, e captura de tela e como isso circula.
-    testWidgets('valor, rotulo e data saem juntos', (tester) async {
+  group('o preco NAO esta no detalhe (18/10/2026)', () {
+    // ========================================================================
+    // **O PRECO SAIU DA SECAO `Loja` INTEIRA**, e "inteira" inclui esta
+    // pagina. Pedido literal do cliente: *"Retire o preco dos produtos da loja
+    // e o texto de 'preco de referencia'"*.
+    //
+    // **Por que mexer numa pagina PARADA.** `TelaDoProduto` nao tem entrada
+    // desde 17/10 -- nada no aplicativo navega para ca, por decisao dele --, e
+    // e exatamente por isso que o preco saiu daqui tambem: deixado de pe, ele
+    // voltaria a tela no dia em que alguem reabrisse a rota, e a decisao do
+    // cliente precisaria ser aplicada uma segunda vez por quem nao a conhece.
+    //
+    // Este grupo cobrava o contrario: tres casos exigiam o valor limpo, o
+    // `semanticsLabel` com "Preço de referência" junto dele e a frase do preco
+    // vencido. Os tres viraram de lado, e a virada e dele.
+    //
+    // ISCA -- em `_Cabecalho` (`lib/telas/loja/produto_da_loja.dart`), devolva
+    // os dois ramos de preco (`if (linhaDoPreco != null)` e o
+    // `else if (item.estadoDoPreco == EstadoDoPreco.vencido)`). Esperado:
+    // reprovam `o valor nao esta na pagina` e
+    // `o preco vencido nao deixa clausula orfa`.
+    // ========================================================================
+
+    testWidgets('o valor nao esta na pagina, nem na tela nem na semantica', (
+      tester,
+    ) async {
+      final manipulador = tester.ensureSemantics();
       final urls = <Uri>[];
       await abrirLoja(
         tester,
@@ -746,13 +902,47 @@ void main() {
       );
       await tocarNoCartao(tester, 'Bola Pop');
 
+      // ANCORA: a pagina do produto carregou e esta inteira. Sem ela, os
+      // `findsNothing` abaixo passariam com a navegacao quebrada -- que e o
+      // portao cego deste repositorio.
       expect(
-        find.text('R\$ 89,90 · preço de referência, consultado em 14/10'),
-        findsOneWidget,
+        find.text('Bola Pop'),
+        findsWidgets,
+        reason:
+            'REPROVA NA ANCORA: a pagina do produto nao carregou, e as '
+            'ausencias abaixo nao significariam nada.',
       );
+
+      expect(
+        find.text('R\$ 89,90'),
+        findsNothing,
+        reason:
+            'REPROVA: a pagina do produto mostra o valor. O detalhe tem '
+            '`price_amount: 8990` e `price_status: vigente` -- o estado em que '
+            'o valor aparecia.',
+      );
+      expect(
+        find.textContaining('consultado em'),
+        findsNothing,
+        reason: 'REPROVA: a data da consulta continua na pagina.',
+      );
+      // A METADE QUE `find.text` NAO VE: a afirmacao viajava no
+      // `semanticsLabel` do no do valor, e nunca foi texto na tela. Apagar so
+      // o visivel teria deixado quem usa leitor de tela ouvindo o preco.
+      expect(
+        find.bySemanticsLabel(RegExp(r'Preço de referência')),
+        findsNothing,
+        reason:
+            'REPROVA: o leitor de tela ainda ouve "Preço de referência" '
+            'nesta pagina. A afirmacao morava em '
+            '`CartaoDaLoja.rotuloAcessivelDoPreco`, chamada daqui, e nao em '
+            'texto visivel -- um caso que so olhasse a tela aprovaria este '
+            'estado.',
+      );
+      manipulador.dispose();
     });
 
-    testWidgets('preco vencido: a frase no lugar do numero', (tester) async {
+    testWidgets('o preco vencido nao deixa clausula orfa', (tester) async {
       final urls = <Uri>[];
       await abrirLoja(
         tester,
@@ -767,12 +957,17 @@ void main() {
       await tocarNoCartao(tester, 'Bola Pop');
 
       expect(
+        find.text('Bola Pop'),
+        findsWidgets,
+        reason: 'REPROVA NA ANCORA: a pagina do produto nao carregou.',
+      );
+      expect(
         find.text('Preço não confirmado, veja no site do parceiro'),
-        findsOneWidget,
+        findsNothing,
         reason:
-            'REPROVA: o preco vencido nao diz que nao esta confirmado. '
-            '"R\$ 89,90 (desatualizado)" seria o pior dos dois mundos: a '
-            'pessoa le o numero e ignora o adjetivo.',
+            'REPROVA: a pagina ainda anuncia que o preco nao esta '
+            'confirmado. A frase ocupava o lugar de um valor, e nao ha mais '
+            'valor nenhum nesta secao -- ela ficou orfa junto com o preco.',
       );
     });
   });

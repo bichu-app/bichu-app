@@ -18,7 +18,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { AppError } from '../../../shared/http/errors.js';
+import { selarContador, TETO_DA_PREVIA } from '../domain/conversa-mediada.js';
 import { comoData } from '../../../shared/time/clock.js';
+import { decodificarCursor } from '../domain/paginacao.js';
 import { ConversationService, type Chamador } from './conversation-service.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -50,6 +52,17 @@ interface Estado {
   readonly mensagensDoParticipante?: number | undefined;
   readonly casosDistintos?: number | undefined;
   readonly conversaDoAviso?: ConversationId | undefined;
+  /** BICHUS-278: o que `contarParaOSino` devolve. */
+  readonly naoLidasNoSino?: number | undefined;
+  /**
+   * A LISTA que `listarDoChamador` devolve, quando o caso precisa de mais de
+   * uma linha (a ordem e o cursor da pagina seguinte).
+   *
+   * Sem ela o duble devolve `[conversa]`, que e o que os casos antigos pedem.
+   */
+  readonly lista?: readonly Partial<ConversaDoChamador>[] | undefined;
+  /** O que `contarDoChamador` devolve: `ConversationPage.total`. */
+  readonly totalDoRecorte?: number | undefined;
 }
 
 function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoChamador {
@@ -59,12 +72,25 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
     petDisplayName: 'Aurora',
     abertaEm: comoData(AGORA),
     papelDoChamador: 'tutor',
+    tutorDesabilitado: false,
+    achadorDesabilitado: false,
     encerradaEm: null,
     motivoDoEncerramento: null,
     bloqueadaEm: null,
     casoEncerrado: false,
     nomeDoTutor: 'Leandro Panegassi',
     nomeDoAchador: 'Ana Paula Ribeiro',
+    // BICHUS-278. O padrao e "lida e sem mensagem": o caso que fala de leitura
+    // passa o que precisa por `parcial`, e os outros nao mudam de significado.
+    naoLida: false,
+    corpoDaUltima: null,
+    ultimaMensagemEm: null,
+    // EMENDA 3 DO ADR-0010 (19/10/2026). O padrao e "nao e conexao aceita",
+    // que e o estado normal da conversa de achado: os dois chegam nulos, como
+    // a clausula `WHERE` da consulta os entrega. O caso que fala de conexao
+    // passa o que precisa por `parcial`.
+    apelidoDoOutro: null,
+    chaveDaFotoDoOutro: null,
     ...parcial,
   };
 }
@@ -76,8 +102,16 @@ function bancada(estado: Estado = {}) {
   const bloqueios: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
   const denuncias: NovaDenuncia[] = [];
   const eventos: AuditEvent[] = [];
+  const listasVistas: { chamador: UserId; agora: Instant }[] = [];
+  const conversasLidas: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
 
   const conversa = estado.conversa === undefined ? undefined : conversaAberta(estado.conversa);
+  const lista: readonly ConversaDoChamador[] =
+    estado.lista === undefined
+      ? conversa === undefined
+        ? []
+        : [conversa]
+      : estado.lista.map((parcial) => conversaAberta(parcial));
 
   const repositorio: ConversationRepository = {
     abrirPorAviso: (abertura) => {
@@ -85,7 +119,24 @@ function bancada(estado: Estado = {}) {
       return Promise.resolve();
     },
     porAviso: () => Promise.resolve(estado.conversaDoAviso ?? CONVERSA),
-    listarDoChamador: () => Promise.resolve(conversa === undefined ? [] : [conversa]),
+    // BICHUS-278. Os tres sao REGISTRADORES e nao no-ops: os casos de leitura
+    // conferem que `buscar` marca o item e que `listar` NAO marca nada.
+    contarParaOSino: () => Promise.resolve(estado.naoLidasNoSino ?? 0),
+    marcarListaVista: (chamador, agora) => {
+      listasVistas.push({ chamador, agora });
+      return Promise.resolve();
+    },
+    marcarConversaLida: (conversa_, chamador, agora) => {
+      conversasLidas.push({ conversa: conversa_, chamador, agora });
+      return Promise.resolve();
+    },
+    listarDoChamador: () => Promise.resolve(lista),
+    // O TOTAL do recorte, e um NUMERO PROPRIO e nao `lista.length`: e assim que
+    // esta bancada consegue distinguir "o servico le a contagem do repositorio"
+    // de "o servico conta a pagina". Com `lista.length` aqui, um `total:
+    // items.length` no servico ficaria verde com o defeito de pe.
+    contarDoChamador: () =>
+      Promise.resolve(estado.totalDoRecorte ?? (conversa === undefined ? 0 : 1)),
     buscarDoChamador: () => Promise.resolve(conversa),
     mensagens: () => Promise.resolve([]),
     gravarMensagem: (mensagem) => {
@@ -148,6 +199,8 @@ function bancada(estado: Estado = {}) {
     bloqueios,
     denuncias,
     eventos,
+    listasVistas,
+    conversasLidas,
   };
 }
 
@@ -166,7 +219,7 @@ function chamador(userId: UserId): Chamador {
   return { userId, correlationId: 'corr-1', ip: '203.0.113.7' };
 }
 
-const PAGINA = { limit: 20, depoisDe: undefined };
+const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
 void describe('critério 13 — a redação roda ANTES de gravar, nos dois sentidos', () => {
   void it('o telefone que o tutor digitou não chega ao banco', async () => {
@@ -265,6 +318,45 @@ void describe('critério 8 — conversa em modo leitura não recebe mensagem', (
     await assert.rejects(() => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)));
   });
 
+  /**
+   * ISCA DO ENVIO TRAVADO, lado COM CONTA (17/10).
+   *
+   * O cliente pediu "bloquear o chat para não enviar ou receber mais nenhuma
+   * nova mensagem". Aqui quem escreve é o participante que FICOU -- o outro não
+   * consegue nem entrar, porque `autenticar()` recusa `status != 'active'`. Então
+   * é este caso, e não um do lado que saiu, que implementa o "não receber".
+   *
+   * Isca a rodar (não rodada nesta branch): tirar
+   * `participanteDesabilitado: ...` de `sinaisDe` deve reprovar os dois casos
+   * abaixo; trocar o `||` por `&&` reprova os dois também.
+   */
+  void it('ISCA: tutor desabilitado trava o envio do OUTRO lado, com 410', async () => {
+    const { servico, gravadas } = bancada({ conversa: { tutorDesabilitado: true } });
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        // 410 `conversation-closed`, e NÃO 403: a conversa EXISTE para quem
+        // escreve, e o que mudou é o estado dela, não a autorização. E não 404
+        // porque o ADR-0021 manda 404 para o que não deve existir -- esta
+        // conversa deve existir, em modo leitura, para o lado que ficou.
+        //
+        // O tipo é o MESMO de encerrada e bloqueada, de propósito: um tipo
+        // próprio tipo `participant-disabled` contaria a quem escreve o que
+        // aconteceu com a conta da outra pessoa.
+        assert.equal(erro.problemType, 'conversation-closed');
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, [], 'gravou mensagem numa conversa de conta desabilitada');
+  });
+
+  void it('ISCA: achador com conta desabilitada trava o envio igual', async () => {
+    const { servico, gravadas } = bancada({ conversa: { achadorDesabilitado: true } });
+    await assert.rejects(() => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)));
+    assert.deepEqual(gravadas, []);
+  });
+
   void it('bloqueada também recusa, e com o MESMO problema', async () => {
     // Um tipo próprio para "você foi bloqueado" contaria a quem escreve que a
     // outra pessoa o bloqueou. Bloquear é a ação que alguém executa com medo.
@@ -358,6 +450,94 @@ void describe('a conversa que sai do servidor', () => {
   });
 });
 
+/**
+ * A SEGUNDA PÁGINA da lista (18/10/2026).
+ *
+ * O `ORDER BY` da consulta tem bancada própria, que lê o SQL compilado
+ * (`adapters/persistence/ordem-da-lista-e-a-ultima-mensagem.test.ts`). **Ela
+ * não alcança este lado**: o cursor é CODIFICADO aqui, e um `proximoDaLista`
+ * que escrevesse `abertaEm` enquanto a consulta ordena pela última mensagem
+ * deixaria a primeira página perfeita e a segunda errada. São dois mecanismos,
+ * e cada um precisa da sua isca.
+ */
+void describe('o cursor da lista sai da ÚLTIMA MENSAGEM, e não da abertura', () => {
+  const ABERTA_EM = comoData(1_780_000_000_000 as Instant);
+  const ULTIMA_EM = comoData(1_789_000_000_000 as Instant);
+  const OUTRA = '018f3a2b-0000-7000-8000-0000000000f1' as ConversationId;
+
+  /** Duas linhas, página cheia (`limit: 2`): só assim há próxima página. */
+  const DUAS = [
+    { id: CONVERSA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
+    { id: OUTRA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
+  ];
+  const CHEIA = { limit: 2, depoisDe: undefined, termo: undefined };
+
+  void it('ISCA -- o cursor carrega o instante da última mensagem da última linha', async () => {
+    const { servico } = bancada({ conversa: {}, lista: DUAS });
+    const pagina = await servico.listar(chamador(TUTOR), CHEIA);
+
+    assert.ok(pagina.nextCursor !== null, 'página cheia tem próxima, e ela sumiu');
+    const posicao = decodificarCursor(pagina.nextCursor);
+    assert.ok(posicao !== undefined, `cursor ilegível: ${String(pagina.nextCursor)}`);
+    assert.equal(
+      posicao.criadaEm.toISOString(),
+      ULTIMA_EM.toISOString(),
+      'o cursor carrega a ABERTURA da conversa, e a consulta ordena pela última ' +
+        'mensagem. As duas divergindo, a página seguinte continua de um lugar que ' +
+        'não é onde a ordem parou: linhas são PULADAS e outras REPETIDAS. Com a ' +
+        'rolagem infinita de 10 em 10 isso acontece a cada dez linhas, e o sintoma ' +
+        'só aparece depois de a pessoa rolar.',
+    );
+    assert.equal(posicao.id, OUTRA, 'o cursor saiu da linha errada da página');
+  });
+
+  void it('conversa sem mensagem nenhuma cai na abertura, que é o único instante que ela tem', async () => {
+    const { servico } = bancada({
+      conversa: {},
+      lista: [
+        { id: CONVERSA, abertaEm: ABERTA_EM, ultimaMensagemEm: null },
+        { id: OUTRA, abertaEm: ABERTA_EM, ultimaMensagemEm: null },
+      ],
+    });
+    const pagina = await servico.listar(chamador(TUTOR), CHEIA);
+    assert.ok(pagina.nextCursor !== null, 'página cheia tem próxima, e ela sumiu');
+    const posicao = decodificarCursor(pagina.nextCursor);
+    assert.ok(posicao !== undefined, 'cursor ausente para página cheia');
+    assert.equal(
+      posicao.criadaEm.toISOString(),
+      ABERTA_EM.toISOString(),
+      'sem mensagem, o cursor ficou com instante nulo (ou inválido). O `coalesce` ' +
+        'da ordem tem a abertura como reserva, e o cursor precisa da MESMA reserva.',
+    );
+  });
+});
+
+/**
+ * `ConversationPage.total` (18/10/2026): quantas conversas o RECORTE tem.
+ */
+void describe('o total do recorte vem do repositório, e nunca da página', () => {
+  void it('ISCA -- `total` é a contagem do repositório, e não `items.length`', async () => {
+    const { servico } = bancada({ conversa: {}, totalDoRecorte: 57 });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+
+    assert.equal(pagina.items.length, 1, 'a bancada entrega UMA linha de propósito');
+    assert.equal(
+      pagina.total,
+      57,
+      'o `total` saiu com o tamanho da PÁGINA. A linha de resumo da listagem no ' +
+        'aplicativo (`<n> conversas`) diria 10 a quem tem 57, e a pessoa leria que a ' +
+        'busca não achou o resto.',
+    );
+  });
+
+  void it('`total` e `unread_count` são números diferentes, e não se confundem', async () => {
+    const { servico } = bancada({ conversa: {}, totalDoRecorte: 12, naoLidasNoSino: 3 });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.total, 12, 'o total do recorte foi trocado pelo contador do sino');
+    assert.equal(pagina.naoLidas, 3, 'o contador do sino foi trocado pelo total do recorte');
+  });
+});
+
 void describe('a conversa nasce de um aviso, e só dele', () => {
   void it('abrir grava a mensagem de sistema do critério 2', async () => {
     const { servico, gravadas, aberturas } = bancada({ conversaDoAviso: undefined });
@@ -370,6 +550,7 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
       recado: 'achei ela, me liga 11987654321',
       achadorComConta: null,
       avisoAnteriorId: null,
+      especie: 'scan_notice',
     });
 
     assert.equal(aberturas.length, 1, 'a conversa não foi aberta');
@@ -393,6 +574,7 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
       recado: null,
       achadorComConta: null,
       avisoAnteriorId: '018f3a2b-0000-7000-8000-00000000ffff' as FoundReportId,
+      especie: 'scan_notice',
     });
     assert.deepEqual(aberturas, [], 'abriu a segunda conversa para um aviso agrupado');
     assert.equal(gravadas.length, 1, 'o aviso agrupado precisa virar mensagem na que existe');
@@ -563,5 +745,192 @@ void describe('reportConversation: a denúncia do lado com conta', () => {
     const { servico } = bancada({});
 
     assert.equal(await servico.alvoDaDenuncia(CONVERSA, chamador(TUTOR)), undefined);
+  });
+});
+
+// ===========================================================================
+// BICHUS-278 — A LEITURA: "lido" é o ITEM ABERTO, não a lista vista.
+//
+// A exceção do aviso de plaquinha vive no SQL de `contarParaOSino` (pelo
+// `system_kind`) e é exercitada contra o banco de verdade; o que estes casos
+// pegam é a outra metade, que nenhum SQL pega: que `listar` **não** marca nada
+// e que `buscar` marca.
+// ===========================================================================
+
+void describe('BICHUS-278 — abrir a lista NÃO é abrir as conversas', () => {
+  void it('ISCA: `listar` não marca conversa nenhuma como lida', async () => {
+    const { servico, conversasLidas } = bancada({
+      conversa: { papelDoChamador: 'tutor', naoLida: true },
+    });
+    await servico.listar(chamador(TUTOR), PAGINA);
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'listar marcou conversa como lida; isso apaga a única pista de QUAL conversa guarda o recado',
+    );
+  });
+
+  void it('ISCA: `listar` também não marca a LISTA como vista', async () => {
+    // Zerar o contador é uma escrita com rota própria
+    // (`markMyConversationsSeen`). Pendurá-la no GET faria um `Atualizar`, ou
+    // um pré-carregamento, apagar o sino sem a pessoa ter olhado nada.
+    const { servico, listasVistas } = bancada({ conversa: {} });
+    await servico.listar(chamador(TUTOR), PAGINA);
+    assert.deepEqual(listasVistas, [], 'o GET da lista zerou o contador');
+  });
+
+  void it('o contador da página vem do repositório, e não da contagem dos itens', async () => {
+    // 23 no sino e UMA conversa na página: é o que acontece com quem tem 57 e
+    // vê 20. Somar a página mostraria 1.
+    const { servico } = bancada({
+      conversa: { naoLida: true },
+      naoLidasNoSino: 23,
+    });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.naoLidas, 23, 'o contador não veio do repositório');
+    assert.equal(pagina.items.length, 1);
+  });
+
+  void it('ISCA: `buscar` MARCA a conversa como lida — abrir o item é o que significa "lido"', async () => {
+    const { servico, conversasLidas } = bancada({
+      conversa: { papelDoChamador: 'tutor', naoLida: true },
+    });
+    await servico.buscar(CONVERSA, chamador(TUTOR), PAGINA);
+    assert.equal(conversasLidas.length, 1, 'abrir a conversa não marcou nada como lido');
+    assert.equal(conversasLidas[0]?.conversa, CONVERSA);
+    assert.equal(conversasLidas[0]?.chamador, TUTOR, 'marcou a leitura de outra conta');
+  });
+
+  void it('ISCA: paginar para TRÁS não marca como lida', async () => {
+    // Pedir mensagens antigas é a pessoa procurando o que já leu; marcar ali
+    // zeraria o contador sem ela ter visto a mensagem NOVA, que é o topo.
+    const { servico, conversasLidas } = bancada({ conversa: {} });
+    await servico.buscar(CONVERSA, chamador(TUTOR), {
+      limit: 20,
+      depoisDe: { criadaEm: comoData(AGORA), id: 'm-1' },
+    });
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'paginar para trás marcou como lida; o contador zeraria sem a pessoa ver a mensagem nova',
+    );
+  });
+
+  void it('`marcarListaVista` do serviço zera o contador e NÃO toca em item', async () => {
+    const { servico, listasVistas, conversasLidas } = bancada({ conversa: {} });
+    await servico.marcarListaVista(chamador(TUTOR));
+    assert.equal(listasVistas.length, 1, 'não marcou a lista como vista');
+    assert.equal(listasVistas[0]?.chamador, TUTOR);
+    assert.deepEqual(
+      conversasLidas,
+      [],
+      'marcar a lista como vista marcou itens como lidos — é exatamente o defeito que a regra proíbe',
+    );
+  });
+
+  void it('conversa de TERCEIRO responde 404 e não grava leitura nenhuma', async () => {
+    // A escrita acontece depois da leitura vinculada, e por isso ela não é um
+    // oráculo: sem conversa, nada é marcado.
+    const { servico, conversasLidas } = bancada({});
+    await assert.rejects(() => servico.buscar(CONVERSA, chamador(TUTOR), PAGINA));
+    assert.deepEqual(conversasLidas, [], 'gravou leitura de uma conversa que não é do chamador');
+  });
+});
+
+void describe('BICHUS-278 — a prévia não desfaz a redação', () => {
+  void it('a prévia sai do corpo JÁ REDIGIDO, com o marcador no lugar do telefone', async () => {
+    const { servico } = bancada({
+      conversa: {
+        // É este o valor que o banco guarda: o telefone já saiu.
+        corpoDaUltima: 'me liga no [telefone removido] que eu levo',
+        ultimaMensagemEm: comoData(AGORA),
+      },
+    });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    const previa = pagina.items[0]?.previaDaUltima ?? '';
+    assert.match(previa, /\[telefone removido\]/u);
+    assert.doesNotMatch(previa, /\d{4,}/u, 'a prévia trouxe de volta uma sequência de dígitos');
+  });
+
+  void it('ISCA: a prévia é CORTADA, e o corte não devolve o corpo inteiro', async () => {
+    const longo = `${'a'.repeat(400)} FIM`;
+    const { servico } = bancada({ conversa: { corpoDaUltima: longo } });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    const previa = pagina.items[0]?.previaDaUltima ?? '';
+    assert.ok(previa.length <= TETO_DA_PREVIA, `prévia com ${previa.length} caracteres`);
+    assert.doesNotMatch(previa, /FIM/u, 'a prévia trouxe o fim de um corpo de 400 caracteres');
+  });
+
+  void it('CONTRAPESO: conversa sem mensagem devolve prévia NULA, e não string vazia', async () => {
+    // Sem este contrapeso, uma função que devolvesse sempre `''` passaria nos
+    // dois casos acima.
+    const { servico } = bancada({ conversa: { corpoDaUltima: null } });
+    const pagina = await servico.listar(chamador(TUTOR), PAGINA);
+    assert.equal(pagina.items[0]?.previaDaUltima, null);
+    assert.equal(pagina.items[0]?.ultimaMensagemEm, null);
+  });
+
+  void it('`selarContador` corta em 9+, e zero não desenha nada', () => {
+    assert.equal(selarContador(0), null, 'zero virou selo; um `0` pintado chama o olho para nada');
+    assert.equal(selarContador(-3), null);
+    assert.equal(selarContador(1), '1');
+    assert.equal(selarContador(9), '9');
+    assert.equal(selarContador(10), '9+');
+    assert.equal(selarContador(237), '9+', 'três dígitos comem o espaço do título na barra');
+  });
+});
+
+void describe('BICHUS-278 — a espécie do aviso chega ao banco', () => {
+  void it('ISCA: a mensagem de abertura é gravada COM a espécie do aviso', async () => {
+    // É esta marca que faz o aviso de plaquinha sobreviver a uma passada de
+    // olho na lista. Sem ela, o recado sai do contador e ninguém sabe por quê.
+    const { servico, gravadas } = bancada({ conversa: {} });
+    await servico.abrirPorAviso({
+      foundReportId: AVISO,
+      petId: PET,
+      nomeDoPet: 'Aurora',
+      escaneadoEm: AGORA,
+      rotuloDaArea: 'Centro',
+      recado: 'está comigo',
+      achadorComConta: null,
+      avisoAnteriorId: null,
+      especie: 'scan_notice',
+    });
+    const abertura = gravadas.at(-1) as { especie?: string } | undefined;
+    assert.equal(abertura?.especie, 'scan_notice', 'a abertura foi gravada sem espécie');
+  });
+
+  void it('ISCA: o achado confirmado grava `found_notice`, e não `scan_notice`', async () => {
+    const { servico, gravadas } = bancada({ conversa: {} });
+    await servico.abrirPorAviso({
+      foundReportId: AVISO,
+      petId: PET,
+      nomeDoPet: 'Aurora',
+      escaneadoEm: AGORA,
+      rotuloDaArea: null,
+      recado: null,
+      achadorComConta: null,
+      avisoAnteriorId: null,
+      especie: 'found_notice',
+    });
+    const abertura = gravadas.at(-1) as { especie?: string } | undefined;
+    assert.equal(abertura?.especie, 'found_notice');
+  });
+
+  void it('CONTRAPESO: o aviso de dado retirado é `redaction_warning`, e NÃO aviso', async () => {
+    // Marcá-lo como aviso deixaria o sino de quem escreveu o telefone aceso
+    // por uma frase que ele acabou de ler na própria tela.
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+    });
+    await servico.enviar(CONVERSA, 'me liga no 11 98765-4321', chamador(TUTOR));
+    const sistema = gravadas.find(
+      (m) => (m as { senderRole?: string }).senderRole === 'system',
+    ) as { especie?: string } | undefined;
+    assert.equal(
+      sistema?.especie,
+      'redaction_warning',
+      'o aviso de dado retirado foi marcado como aviso de plaquinha/achado',
+    );
   });
 });

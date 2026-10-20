@@ -166,7 +166,7 @@ async function criarTutor(rotulo: string): Promise<Tutor> {
   const email = enderecoNovo(rotulo);
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
-    corpo: { email, password: SENHA },
+    corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
   });
   assert.equal(
     cadastro.status,
@@ -330,6 +330,8 @@ before(async () => {
     contrato,
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
+    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
 

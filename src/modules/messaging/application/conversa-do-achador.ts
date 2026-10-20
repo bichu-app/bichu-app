@@ -117,6 +117,25 @@ export class ConversaDoAchadorService {
       participants: participantesVisiveis({
         nomeDoTutor: conversa.nomeDoTutor,
         nomeDoAchador: conversa.nomeDoAchador,
+        tutorDesabilitado: conversa.tutorDesabilitado,
+        achadorDesabilitado: conversa.achadorDesabilitado,
+        // O ACHADOR SEM CONTA. `papelDoChamador: 'finder'` e um fato do
+        // caminho, e nao uma escolha: esta rota e resolvida por TOKEN, e o
+        // token e sempre do lado de quem achou.
+        papelDoChamador: 'finder',
+        // **OS DOIS NULOS SAO ESTRUTURAIS, e nao um default.** A emenda 3 do
+        // ADR-0010 abre a foto so entre CONEXOES ACEITAS, e quem nao tem conta
+        // nao tem conexao com ninguem -- nao ha aresta a medir e nao ha
+        // chamador de quem medi-la. Nao existe, nesta ponta, consulta que
+        // devolva apelido ou foto: `ConversaDoAchador` nao tem esses campos, e
+        // por isso o nulo aqui nao e uma decisao que alguem possa reverter sem
+        // acrescentar coluna, consulta e campo de porta.
+        //
+        // E e por isso que `FinderConversation` tem schema PROPRIO no contrato:
+        // uma descricao dizendo "a foto nao vale para o achador" nao e
+        // contrato, e o cliente gerado nasceria com o campo.
+        apelidoDoOutro: null,
+        chaveDaFotoDoOutro: null,
       }),
       messages: mensagens.map(paraOAchador),
       // Página cheia pode ter continuação; página curta é o fim. A posição é a
@@ -158,6 +177,10 @@ export class ConversaDoAchadorService {
         conversationId: conversa.id,
         body: AVISO_DE_DADO_RETIRADO,
         redactions: [],
+        // Explicação de interface, e não AVISO: sai do contador do tutor pela
+        // regra geral (BICHUS-278). Marcá-la como aviso deixaria o sino do
+        // tutor aceso por uma frase dirigida a quem achou o pet.
+        especie: 'redaction_warning',
       });
     }
 
@@ -311,6 +334,16 @@ function estadoDe(conversa: ConversaDoAchador): EstadoDaConversa {
     encerradaEm: conversa.encerradaEm,
     bloqueadaEm: conversa.bloqueadaEm,
     casoEncerrado: conversa.caso !== null && !conversa.caso.aberto,
+    // O PONTO ÚNICO DA TRAVA, lado SEM CONTA (17/10). `enviar` e a leitura são
+    // os dois consumidores de `estadoDe`, então a trava e o `status` que a tela
+    // do achador lê saem do mesmo sinal.
+    //
+    // ESTE É O LADO QUE IMPLEMENTA O "NÃO RECEBER". Quem desabilitou a conta é
+    // o tutor, e é o achador -- que não tem login -- quem continuaria
+    // escrevendo. Sem esta linha, "bloquear o chat para não enviar ou receber
+    // mais nenhuma nova mensagem" ficaria pela metade justamente no caminho que
+    // não pede credencial.
+    participanteDesabilitado: conversa.tutorDesabilitado || conversa.achadorDesabilitado,
   });
 }
 

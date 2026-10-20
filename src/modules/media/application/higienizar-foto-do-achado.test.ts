@@ -363,7 +363,31 @@ void describe('higiene da foto do achado: as recusas são finais', () => {
       upload_intent_id: '22222222-2222-2222-2222-222222222222',
     });
     assert.equal(r.tipo, 'ignorada');
-    assert.deepEqual(eventos, [], 'o trabalho reentregue não reescreve nada');
+    // O trabalho reentregue não reescreve ESTADO. A exclusão idempotente do
+    // original que sobrou NÃO é reescrita de estado: ela é o conserto.
+    //
+    // A asserção antiga (`deepEqual(eventos, [])`) afirmava o contrário e
+    // contradizia, NESTE MESMO ARQUIVO, o caso "a readiação com `pronta`
+    // CONSERTA o original que sobrou" (no `describe` da janela de perda), que
+    // exige `delete:privado:{original}` exatamente neste cenário — `status:
+    // 'pronta'` na reentrada — e passa. As duas não podem valer juntas, e a de
+    // `[]` é a errada: com ela, o `throw` de `descartarOriginalComGps` seria só
+    // ruído, e o arquivo com a coordenada de GPS ficaria no balde para sempre,
+    // que é o vazamento que este módulo existe para fechar.
+    //
+    // Apagar aqui é seguro porque `'pronta'` PROVA que a versão limpa está
+    // gravada: CHECK `upload_intents_higiene_coerente` da migração
+    // `20261001000006_higiene-da-foto-do-achado-e-derivadas-por-layout.sql`
+    // (linha 77 — `sanitize_status = 'pronta' AND sanitized_key IS NOT NULL`).
+    //
+    // A lista continua EXATA, e não afrouxada: a exclusão do original é o único
+    // evento permitido. Nenhum `put:`, `pronta:`, `recusada:`, `ausente:`,
+    // `head:` nem `get:` — uma linha já pronta não é reprocessada.
+    assert.deepEqual(
+      eventos,
+      [`delete:privado:${String(ORIGINAL_SEM_CONTA)}`],
+      'o trabalho reentregue reescreveu estado, ou deixou de apagar o original que sobrou',
+    );
   });
 
   void it('a intenção que não existe mais é IGNORADA, e não falha', async () => {

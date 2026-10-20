@@ -274,11 +274,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
               titulo: TextosDoCadastro.tituloDaFoto(widget.rascunho.nome),
             ),
             const SizedBox(height: BichuEspaco.e6),
-            Text(
-              TextosDoCadastro.corpoDaFoto,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: BichuEspaco.e2),
             // A ORIENTACAO DE TAMANHO, uma linha, antes do envio (cliente,
             // 17/10/2026). Em `bodySmall` e `textSecondary` porque ela e
             // orientacao e nao instrucao: quem le o titulo e o corpo decide o

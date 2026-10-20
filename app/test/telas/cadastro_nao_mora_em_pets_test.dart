@@ -15,6 +15,7 @@
 
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/telas/perdido/lista_de_perdidos.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -145,6 +146,12 @@ void main() {
     testWidgets('deslogado', (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
       exigirPetsSemCadastroNemConta(tester, estado: 'deslogado');
       handle.dispose();
     });
@@ -156,6 +163,12 @@ void main() {
         rede: _semServidor,
         deposito: depositoLogado(),
       );
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
       exigirPetsSemCadastroNemConta(tester, estado: 'logado completo');
       handle.dispose();
     });
@@ -167,6 +180,12 @@ void main() {
         rede: _semServidor,
         deposito: _depositoComPendencia(),
       );
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
 
       // O estado precisa ser MESMO o do cadastro incompleto, senao este caso
       // seria o de cima com outro nome.
@@ -185,18 +204,90 @@ void main() {
       // dia em que alguem apagar a secao inteira. O criterio 3 da issue diz
       // nome por nome o que nao se discute.
       await abrirOApp(tester, rede: _semServidor);
+      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e
+      // este grupo fala de `Pets`. Os quatro casos vao ate ela, inclusive os
+      // dois que ficaram VERDES sem isto: `exigirPetsSemCadastroNemConta` afirma
+      // AUSENCIA, e afirmacao de ausencia medida na tela errada e o portao verde
+      // por vacuidade -- a armadilha que este projeto ja pagou caro.
+      await abrirAAba(tester, 'Pets');
 
-      expect(find.text('Escanear uma tag'), findsOneWidget,
-          reason: 'REPROVA: a porta primaria do leitor (UX 27.5.6) saiu de '
-              '`Pets`. Ela nao e desta mudanca.');
-      expect(find.text('Adoções'), findsOneWidget,
-          reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
+      // **A PORTA DO LEITOR SAIU DE `Pets` EM 19/10, e este caso trocou de
+      // lado junto.**
+      //
+      // Ele cobrava que a porta primaria do leitor NAO saisse de `Pets` --
+      // primeiro como texto, depois (18/10) como o icone de QR na barra de
+      // topo. O cliente reverteu: *"leve o icone de qr-code de escanear para
+      // a pagina do perfil que tem relacao com as acoes do usuario."*
+      //
+      // O caso nao foi apagado: ele passou a assever a AUSENCIA. Sem isto,
+      // repor o icone em `Pets` devolveria ao produto duas portas para o
+      // mesmo leitor -- a tela da conta JA tinha `Escanear uma tag` -- e
+      // nenhum caso acusaria. Quem prova que a porta nova funciona, logada e
+      // deslogada, e `casca_de_cinco_secoes_test.dart`.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.qr_code_2),
+        ),
+        findsNothing,
+        reason: 'REPROVA: o icone de QR voltou a barra de topo de `Pets`. Ele '
+            'foi para a tela da conta em 19/10, e ela ja tinha a porta: '
+            'repor aqui recria a segunda porta para o mesmo leitor.',
+      );
+      // **`Adoções` SAIU de `Pets` em 19/10, e este caso trocou de lado.**
+      //
+      // Nao existe rota de adocao no contrato -- confirmado por duas leituras
+      // independentes -- e a porta abria uma tela que diz estar em
+      // construcao. A rota e a tela ficam, para link profundo; a porta sai.
+      // Quem prova que nenhum controle leva mais a ela e
+      // `portas_de_adocoes_test.dart`.
+      expect(find.text('Adoções'), findsNothing,
+          reason: 'REPROVA: a porta de `Adoções` voltou a `Pets`. Ela promete '
+              'uma tela em construcao, e a rota dela nao existe no contrato.');
+      // A LISTAGEM DE PERDIDOS CONTINUA EM `Pets` (ramo da listagem, 18/10), e
+      // esta linha voltou na uniao: o ramo da navegacao nasceu antes dela e
+      // nao a conhecia. O que este caso cobra e que a listagem de perdidos
+      // **nao saiu de `Pets`**, que e a secao de aterrissagem do produto.
+      expect(
+        find.byType(ListaDePerdidos),
+        findsOneWidget,
+        reason: 'REPROVA: a listagem de perdidos saiu de `Pets`, que e a secao '
+            'de aterrissagem e o coracao do produto.',
+      );
       expect(
         find.text('A lista de pets perdidos está em construção'),
-        findsOneWidget,
-        reason: 'REPROVA: o estado vazio dos perdidos mudou. O texto nao pode '
-            'virar "nenhum pet perdido por aqui agora": o app nao chama rota '
-            'de listagem, entao ele nao sabe se ha zero ou trezentos.',
+        findsNothing,
+        reason: 'REPROVA: a casca honesta voltou. Com a rota registrada, '
+            'dizer "em construcao" e afirmar sobre dado que a tela CARREGA.',
+      );
+      // **ESTAS DUAS MEDIDAS TROCARAM DE LADO EM 19/10/2026**, por decisao do
+      // cliente: *"o campo cidade do filtro da pagina pet nao deve ser
+      // obrigatorio"*.
+      //
+      // O que elas cobravam: deslogado e sem cidade guardada, a tela mostrava
+      // a linha *"Escolha uma cidade para ver os pets perdidos por perto."* e
+      // o botao `Escolher cidade`, porque `city` era `required` e a lista nao
+      // podia carregar. Agora a lista carrega sem cidade, e as duas sairam da
+      // tela: a fase `semCidade` nao existe mais.
+      //
+      // O que este caso cobra no lugar e o MESMO valor -- que o visitante sem
+      // conta nao fica num beco --, agora pelo caminho que de fato existe: a
+      // lista chama a rota e o gatilho de filtro esta la para quem quiser
+      // recortar. Quem mede o conteudo da lista e
+      // `perdidos_e_meus_achados_test.dart`; aqui basta que a secao `Pets` nao
+      // peca nada antes de servir.
+      expect(
+        find.text('Escolha uma cidade para ver os pets perdidos por perto.'),
+        findsNothing,
+        reason: 'REPROVA: a fase `semCidade` voltou. A lista abre sem cidade '
+            'desde 19/10/2026, e pedir uma antes de listar e o beco que a '
+            'decisao do cliente desfez.',
+      );
+      expect(
+        find.text('Escolher cidade'),
+        findsNothing,
+        reason: 'REPROVA: o botao da fase `semCidade` voltou. Ele era a saida '
+            'de um estado que nao existe mais.',
       );
     });
   });
@@ -247,8 +338,7 @@ void main() {
         rede: redeDePets(const <Map<String, dynamic>>[]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       exigirAcaoDeCadastrarViva(tester, pets: 0);
 
@@ -277,8 +367,7 @@ void main() {
         ]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       // O estado precisa ser mesmo o da lista cheia: e ele que estava
       // quebrado, e um caso que medisse o vazio duas vezes nao acusaria nada.

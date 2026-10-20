@@ -30,6 +30,8 @@ import 'package:bichu/widgets/marca.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'telas/ajuda_de_tela.dart';
+
 /// Piso de alvo de toque das acoes criticas: 64 dp de altura **e** largura
 /// (design system 6.5, pesquisa de UX 15.1). Botao de voltar e de fechar nao
 /// sao excecao: quem precisa sair de uma tela em que caiu por engano esta com
@@ -141,8 +143,7 @@ void main() {
   }
 
   Future<void> irAoPerfil(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   testWidgets('Entrar tem saida, e ela devolve a aba de onde a pessoa veio',
@@ -223,6 +224,17 @@ void main() {
     // e `Confirmar`. Entao o caminho ate aqui passa por `Agora nao` primeiro.
     // O que este caso mede -- que a tela tem saida anunciavel e que ela
     // devolve a aba `Pets` -- nao mudou.
+    //
+    // **O CAMINHO ATE A FAIXA GANHOU UM PASSO EM 18/10/2026.** O app passou a
+    // abrir na `Rede` (pedido do cliente), e a faixa de cadastro incompleto
+    // mora nas POSICOES 1 e 2 da BICHUS-75: o topo de `Pets` e o topo de
+    // `Perfil`. Sem este toque o caso procurava `Agora não` na aba errada.
+    //
+    // E e `Pets` de proposito: o desfecho medido no fim deste caso e que a
+    // saida `Fechar` devolve a aba `Pets`, entao a ida tem de sair de lA.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Agora não'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirmar'));

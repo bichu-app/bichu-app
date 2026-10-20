@@ -36,6 +36,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 void main() {
   setUp(AppConfig.limparParaTeste);
 
@@ -73,8 +75,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.text(rotulo));
     await tester.pumpAndSettle();
   }
@@ -139,11 +140,22 @@ void main() {
   }
 
   Future<void> preencherCadastro(WidgetTester tester) async {
+    // O nome e OBRIGATORIO desde 18/10/2026 (queixa do cliente), e o botao do
+    // rodape fica bloqueado sem ele. Sem esta linha o cadastro nao sai e o
+    // caso deixa de medir o que ele existe para medir.
+    await tester.enterText(find.byType(TextField).at(0), 'Marina Prado');
+    // A F1.1 GANHOU DOIS CAMPOS EM 18/10/2026, e os indices andaram: a ordem
+    // e Nome(0), Apelido(1), Data de nascimento(2), E-mail(3), Senha(4).
+    // A data e OBRIGATORIA e bloqueia o botao enquanto estiver incompleta,
+    // entao ela precisa ser preenchida aqui mesmo que este caso nao seja sobre
+    // idade. Data fixa e longe do corte de 16 anos, para a suite nao comecar a
+    // falhar sozinha com o passar do tempo.
+    await tester.enterText(find.byType(TextField).at(2), '12/05/1990');
     await tester.enterText(
-      find.byType(TextField).at(1),
+      find.byType(TextField).at(3),
       'marina@exemplo.com.br',
     );
-    await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+    await tester.enterText(find.byType(TextField).at(4), 'uma frase longa');
     // A caixa do aceite mora DENTRO da rolagem, num formulario mais alto que
     // a janela do teste: e preciso traze-la antes de marca-la, que e o que
     // uma pessoa faz. Sem isto o toque cai no vazio, a caixa fica desmarcada,
