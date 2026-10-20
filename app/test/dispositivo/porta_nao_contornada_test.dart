@@ -1438,6 +1438,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// relato. Anterior: `145640db9f`.
 /// [lado do ramo, valor de ramo 66fb4850a1] SINO NA BARRA E `criar` FLUTUANTE (19/10/2026, decisao do cliente: *"O botao criar sai da barra"*): `casca_com_abas.dart` monta `SinoDeNotificacoes` no `actions`, tira a porta de criar de la e a desenha no `floatingActionButton`, com respiro de 72 dp no pe da lista; `abas.dart` passa a entregar `AcaoDeCriarFlutuante` (o arquivo do widget mudou de nome e mora em `app/lib/widgets`, fora desta arvore). **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de plataforma, nenhuma permissao, nenhum `dart:io` -- o portao estrutural de diretivas deste mesmo arquivo continua respondendo por isso. Valor REPRODUZIDO pelo procedimento do proprio portao nesta arvore (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA** -- ha outras sessoes tocando `app/lib/telas` hoje, e valor de ramo isolado nao sobrevive a uniao. (antes: 818971c53b). Antes dele: NAVEGACAO DE 18/10/2026 (icones na gaveta, `Meus dados` fora de Pets/Perto, margem da foto); antes: UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 ///
+/// [lado do ramo, valor de ramo 507413a952] O NUMERO DO SINO LIGADO
+/// (19/10/2026): `casca_com_abas.dart` passou a LER
+/// `Escopo.contadorDeAvisos` e a ouvi-lo (`ListenableBuilder` em volta do
+/// `ValueListenableBuilder` que ja existia), e a linha do `actions` virou
+/// `SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas)`;
+/// `notificacoes/caixa_de_notificacoes.dart` passou a zerar o contador no
+/// caminho de SUCESSO de `marcarListaVista`. A busca NAO mora nestes dois
+/// arquivos: ela mora em `sessao/contador_de_avisos.dart` e e disparada pelo
+/// `app.dart`, os dois FORA desta arvore -- os ramos da casca ficam montados
+/// e uma busca aqui sairia uma vez por secao visitada. **Nenhuma porta de
+/// aparelho encostada**: nenhum importe de plugin, nenhum canal de
+/// plataforma, nenhuma permissao, nenhum `dart:io`.
+///
 /// **VALOR DESTA UNIAO (19/10/2026).** Nenhum dos valores de ramo acima
 /// sobrevive a mescla: o hash e de ARVORE e cobre a pasta inteira, e cada
 /// ramo mediu a SUA arvore isolada. Este valor foi RECALCULADO sobre a
@@ -1893,7 +1906,31 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `claude/achado-detalhe-rico-535cde` sobre `feat/achado-rico-e-loja-sem-preco`
 /// em 1d4a9e1f -- e valor de ramo isolado NAO sobrevive a uniao.
 /// (antes: 6a089b729b)
-const String _arvoreDasTelas = '6d8a3af678847cbcde81258c1c596113132d7d68'; // INTERMEDIARIO da ONDA 2, com a ficha rica do achado somada. Ainda entra o sino.
+///
+///
+/// **REMEDIDO NA SEGUNDA MESCLA DA `development` NO SINO (20/10/2026).** O
+/// segundo lote e esta frente mexeram os dois em `app/lib/telas` -- o lote
+/// trocou `Perto` por `Mural` e tirou o hamburguer da barra; esta frente
+/// ligou o contador do sino. Nenhum dos dois valores de ramo sobrevive:
+/// `1413454d74` mediu a arvore do segundo lote sem o contador, e
+/// `96e2144577` mediu a arvore da primeira mescla sem o segundo lote. O
+/// valor abaixo foi RECALCULADO sobre a arvore MESCLADA pelo procedimento
+/// deste proprio portao, e nao escolhido entre os dois lados. As
+/// justificativas de TODOS os ramos continuam INTEIRAS acima.
+///
+/// [lado do ramo, valor de ramo 96e2144577] O NUMERO DO SINO LIGADO
+/// (19/10/2026): `casca_com_abas.dart` LE `Escopo.contadorDeAvisos` e o ouve
+/// (`ListenableBuilder` em volta do `ValueListenableBuilder` que ja existia),
+/// e a linha do `actions` virou
+/// `SinoDeNotificacoes(naoLidas: contadorDeAvisos.naoLidas)` -- o `const` da
+/// lista saiu porque o numero e valor de execucao, e a lista continua com UM
+/// item. `notificacoes/caixa_de_notificacoes.dart` zera o contador no caminho
+/// de SUCESSO de `marcarListaVista`. A busca NAO mora nestes dois arquivos:
+/// ela mora em `sessao/contador_de_avisos.dart` e e disparada pelo
+/// `app.dart`, os dois FORA desta arvore. **Nenhuma porta de aparelho
+/// encostada**: nenhum importe de plugin, nenhum canal de plataforma,
+/// nenhuma permissao, nenhum `dart:io`.
+const String _arvoreDasTelas = 'c08880b92cd668cc8c630ece0da43714613d0b21'; // TERCEIRO LOTE DE 20/10/2026, ONDA 2, VALOR FINAL. Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com o procedimento VALIDADO na base antes de ser usado. Substitui o valor final da onda 1 (`2f822c38...`), os dois intermediarios da onda 2 e os valores de RAMO da correcao do cabecalho, da ficha rica do achado e do sino, cujas justificativas ficam INTEIRAS acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
