@@ -3192,6 +3192,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/my-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os encontros que eu criei
+         * @description Os encontros de `origin: community` **desta conta**, para a tela
+         *     `Perfil` > `Meus eventos`, que e de onde se cancela o proprio encontro.
+         *
+         *     ## A autorizacao esta na clausula `WHERE`, e nao num filtro
+         *
+         *     A conta do chamador entra na consulta (ADR-0021), e nao ha parametro de
+         *     autoria: nao existe forma de pedir a lista de outra pessoa. Encontro do
+         *     painel (`origin: admin`) nao entra, nem quando a conta e a mesma: ele se
+         *     administra pelo painel.
+         *
+         *     Encontro `removed` nao entra. O **cancelado entra**, com `status`
+         *     `cancelled`: quem cancelou precisa ver que cancelou, e a lista e o unico
+         *     lugar do app onde o proprio encontro aparece nomeado como seu.
+         *
+         *     ## A PROJECAO E MENOR QUE A PUBLICA, e isso e deliberado
+         *
+         *     `MyNetworkEvent` tem **sete propriedades e nenhuma outra**. Ela nao
+         *     deriva de `NetworkEventPublic`: a lista do dono precisa de identificar e
+         *     decidir, e nao de descrever. O que entra alem de capa e titulo esta
+         *     justificado propriedade por propriedade no esquema.
+         *
+         *     ## Nao ha busca, filtro nem ordem escolhivel
+         *
+         *     O teto da conta e de **3 encontros ativos**
+         *     (`community-event-limit-reached`), entao esta lista e curta por
+         *     construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
+         *     proximo para o mais distante, e depois o que passou, do mais recente
+         *     para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
+         *     para o que ainda nao terminou.
+         */
+        get: operations["listMyNetworkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/my-events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Um encontro meu, com a versao dele
+         * @description Um encontro de `origin: community` **desta conta**, e **a unica leitura
+         *     da secao `Rede` que devolve `ETag`**.
+         *
+         *     ## POR QUE ELA EXISTE: sem ela, cancelar era impossivel
+         *
+         *     `updateNetworkEvent` e `cancelNetworkEvent` exigem `If-Match` com a
+         *     versao da ultima leitura. Medido contra homologacao em 19/10/2026:
+         *     `GET /v1/network/events`, `GET /v1/network/events/{eventSlug}` e o `201`
+         *     de `createNetworkEvent` respondem **sem** `ETag`; as unicas operacoes da
+         *     secao que o emitiam eram as duas escritas. Uma versao que so a escrita
+         *     entrega nao autoriza a primeira escrita, e por isso o primeiro
+         *     cancelamento nao tinha como acontecer.
+         *
+         *     **O `ETag` entrou AQUI e nao em `getNetworkEvent`**: aquela leitura esta
+         *     sendo aposentada junto da tela de detalhe, e a versao precisa sair da
+         *     leitura que a tela do dono de fato faz. A tela `Meus eventos` chama esta
+         *     operacao ao abrir a folha de confirmacao, e manda o valor recebido no
+         *     `If-Match` do cancelamento.
+         *
+         *     ## A mesma projecao da lista, e o mesmo 404
+         *
+         *     O corpo e `MyNetworkEvent`, identico ao item da lista: esta leitura
+         *     existe pela VERSAO, e nao por ter mais conteudo. Encontro inexistente,
+         *     de outra pessoa, do painel e `removed` respondem **404 nos quatro
+         *     casos**, com o mesmo corpo (ADR-0021) -- nunca 403, porque distinguir
+         *     contaria a um estranho que aquele `slug` e de alguem.
+         */
+        get: operations["getMyNetworkEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/join-requests": {
         parameters: {
             query?: never;
@@ -9990,6 +10083,152 @@ export interface components {
             };
         };
         /**
+         * @description O encontro na lista do DONO (`Perfil` > `Meus eventos`, 19/10/2026).
+         *
+         *     **Sete propriedades e nenhuma outra**, e `additionalProperties: false`
+         *     cobra isso. Ela NAO deriva de `NetworkEventPublic`: montar a projecao
+         *     publica e depois apagar campos deixa passar campo novo, e esta projecao
+         *     responde a uma pergunta diferente -- "qual dos meus encontros e este, e
+         *     da para cancelar?" --, nao "como e este encontro?".
+         *
+         *     ## O QUE ENTRA ALEM DE CAPA E TITULO, propriedade por propriedade
+         *
+         *     A decisao de 19/10 fixou o cartao da AGENDA em **foto + titulo**, mais a
+         *     palavra `Cancelado`. Esta lista nao e a vitrine publica, e cada
+         *     propriedade a mais tem de se justificar sozinha:
+         *
+         *     - `slug` -- **o endereco da acao**. E o que a tela manda em
+         *       `cancelNetworkEvent` e em `getMyNetworkEvent`. Sem ele nao ha
+         *       cancelar. Nao e UUID interno (ADR-0010): e o endereco publico que o
+         *       servidor derivou do titulo e que ja circula na agenda.
+         *     - `starts_at` + `time_zone` -- **qual dos meus**. O teto e de tres
+         *       encontros ativos por conta, e nada impede que os tres se chamem
+         *       "Encontro no parque": dois cartoes identicos com um `Cancelar` cada e
+         *       uma armadilha. A data e o que distingue, e `time_zone` e o que faz a
+         *       hora de parede sair certa -- sem ele a lista mostra a data no fuso de
+         *       quem le, que pode ser outro dia.
+         *     - `ends_at` -- **se ainda da para cancelar**. A regra do servidor e
+         *       `COALESCE(ends_at, starts_at) > agora`; sem esta propriedade a tela
+         *       nao sabe quando esconder a acao, e desenharia um `Cancelar` que o
+         *       servidor recusa com `400 event_ended` depois de a pessoa ter
+         *       confirmado.
+         *     - `status` -- **o que ja aconteceu com ele**. Carrega a palavra
+         *       `Cancelado` do cartao e e o que faz o `Cancelar` nao aparecer no que
+         *       ja esta cancelado (o servidor recusaria com `400
+         *       event_not_published`). Calculado no SERVIDOR, como em toda a secao.
+         *     - `cover` -- a foto do cartao **e o estado dela**. Este e o unico lugar
+         *       do produto onde a pessoa descobre que a capa foi RECUSADA, e por que.
+         *       Medido por outra frente em 19/10/2026: a capa sobe no mesmo `POST` de
+         *       criar o encontro, o processador pode recusa-la depois do `201`,
+         *       `NetworkEventPublic` nao tem `rejection_reason` (as 23 propriedades
+         *       foram conferidas), a pagina de detalhe do encontro foi apagada por
+         *       decisao do cliente e o cartao da agenda e foto + titulo -- entao
+         *       **nao havia lugar nenhum** que contasse a recusa a quem enviou a
+         *       imagem. A lista do dono e o lugar: estado de processamento de imagem e
+         *       assunto entre quem enviou e o servidor, e nao informacao de visitante.
+         *       E a mesma razao pela qual `PetPhoto` e `MyUserPhoto` carregam
+         *       `status` e `rejection_reason`, e a projecao publica delas nao.
+         *
+         *     **O que NAO entra, e o motivo:** `summary`, `place`, `notes`, `images`,
+         *     `admission`, `accepted_sizes`, `dog_age`, `vaccination_required`,
+         *     `fenced_off_leash_area`, `amenities`, `bring_items`, `ticket_url`,
+         *     `instagram_handle`, `instagram_url` e `visibility`. Nenhuma delas
+         *     responde "qual dos meus", "da para cancelar" nem "a minha foto entrou",
+         *     e a lista do dono nao e tela de leitura do encontro. Nao ha
+         *     `cover_banner_url`: a capa de borda a borda e do detalhe, e esta lista
+         *     nao tem detalhe.
+         */
+        MyNetworkEvent: {
+            slug: string;
+            title: string;
+            /**
+             * @description A capa e o estado dela. **Nula quando o encontro nao tem capa
+             *     nenhuma** -- e isso e diferente de `status: processing` (a imagem
+             *     existe e o worker nao terminou) e de `status: rejected` (ela existe
+             *     e nao serviu). Sem os tres estados separados, "ainda nao aparece" e
+             *     "nunca vai aparecer" viram a mesma tela, e a pessoa fica esperando.
+             */
+            cover: components["schemas"]["MyNetworkEventCover"] | null;
+            /**
+             * Format: date-time
+             * @description O instante absoluto. A hora de PAREDE sai de `time_zone`.
+             */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description O nome IANA da zona do encontro. Sem ele a data da lista sai no fuso de quem le, que pode ser outro dia.
+             * @example America/Sao_Paulo
+             */
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+        };
+        /**
+         * @description O estado de processamento da capa, os tres de `catalog_images.status`.
+         *
+         *     **Lista fechada NOMEADA, e nao um `enum` embutido na propriedade**: o
+         *     portao de conformidade do app (`verificar-conformidade-do-app.mjs`)
+         *     exige que todo `enum` de `app/lib/api/` aponte para uma lista fechada do
+         *     contrato, e um `enum` inline nao e alvo de `$ref`. Com a lista aqui, o
+         *     `EstadoDaCapa` do app espelha ESTE ponto, e um valor novo no servidor
+         *     reprova o app em vez de chegar como surpresa no aparelho.
+         *
+         *     `processing` enquanto o worker nao terminou: `url` e nula nesse
+         *     intervalo, e a lista mostra o lugar da foto em vez de um erro.
+         *     `rejected` quando os bytes reais nao sao imagem aceita -- o tipo
+         *     declarado no envio nunca e a fonte da verdade.
+         * @enum {string}
+         */
+        MyNetworkEventCoverStatus: "processing" | "ready" | "rejected";
+        /**
+         * @description A capa do encontro **na lista do dono**: a imagem e o que aconteceu com
+         *     ela. O vocabulario e o de `PetPhoto` e de `MyUserPhoto`, de proposito --
+         *     `processing`, `ready`, `rejected` sao os tres estados de
+         *     `catalog_images.status`, e o banco cobra que a recusada tenha motivo
+         *     (`catalog_images_recusada_tem_motivo`).
+         */
+        MyNetworkEventCover: {
+            status: components["schemas"]["MyNetworkEventCoverStatus"];
+            /**
+             * Format: uri
+             * @description A derivada de 1024 x 576 da imagem de posicao 0, a MESMA que
+             *     `cover_image_url` da agenda serve. Nula em `processing` e em
+             *     `rejected`.
+             */
+            url: string | null;
+            /**
+             * @description O MOTIVO da recusa, em texto pronto para a tela e em portugues,
+             *     quando `status` e `rejected`. Nulo em `processing` e em `ready`.
+             *
+             *     **Ele e gravado desde a BICHUS-87 e nao chegava a ninguem** neste
+             *     caminho: a capa do encontro subia, era recusada, e nao havia
+             *     superficie que contasse. Sem ele a tela diria "recusada" e a pessoa
+             *     nao saberia se o problema foi o formato, o tamanho, a dimensao
+             *     minima ou um arquivo truncado -- e portanto nao teria como
+             *     consertar. Exemplos reais medidos: *"A imagem precisa ter pelo menos
+             *     600 x 600 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
+             *     ter chegado incompleta."*
+             *
+             *     Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
+             *     precise ramificar por causa ramifica por `status`.
+             */
+            rejection_reason: string | null;
+        };
+        /**
+         * @description A pagina de `listMyNetworkEvents`. **Sem `applied_filters` e sem
+         *     `effective_sort`**, e nao por economia: a operacao nao aceita recorte
+         *     nenhum e a ordem e fixa, entao os dois campos so poderiam repetir uma
+         *     constante. `total` existe porque a lista escreve o fecho ("Voce criou N
+         *     encontros") e porque e ele que distingue "nao criei nenhum" de "a
+         *     pagina 2 esta vazia".
+         */
+        MyNetworkEventPage: {
+            items: components["schemas"]["MyNetworkEvent"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        /**
          * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
          *     origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
          *     de `GeoPoint` e os de `AdminMapPin`.
@@ -15909,6 +16148,70 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyNetworkEvents: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A pagina dos encontros desta conta. `total` alimenta a linha de
+             *     fecho da lista.
+             *
+             *     **Sem `ETag` aqui, e a ausencia e medida e nao esquecimento**: um
+             *     cabecalho de resposta vale para a resposta inteira, e `If-Match` de
+             *     `cancelNetworkEvent` e a versao de UM encontro. Um `ETag` de pagina
+             *     apresentado como versao de um item daria 412 em toda tentativa -- o
+             *     defeito pareceria conserto. A versao de um encontro sai em
+             *     `getMyNetworkEvent`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro, com a versao dele no `ETag`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

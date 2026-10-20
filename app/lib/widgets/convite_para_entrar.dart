@@ -230,6 +230,21 @@ enum SecaoComConta {
     ganho: 'Entre para ver quem quer se conectar com você e responder a cada '
         'pedido.',
     retomada: 'Entre de novo para ver os seus pedidos de conexão.',
+  ),
+
+  /// `GET /v1/network/my-events` — `Perfil` › `Meus eventos`.
+  ///
+  /// **O texto nao promete nada sobre a agenda**, que e navegavel sem conta: o
+  /// que exige conta e o "meu". Criar encontro exige, alem da conta, e-mail
+  /// confirmado (`409 contact-channel-unverified`), e por isso o ganho fala de
+  /// marcar e cuidar, e nao garante que a pessoa podera criar no toque
+  /// seguinte -- promessa que a faixa de cadastro incompleto do `Perfil` e que
+  /// desfaz, com o `Reenviar` ao lado.
+  meusEventos(
+    titulo: 'Os encontros que você marcou',
+    ganho: 'Entre para ver os encontros que você marcou com a comunidade e '
+        'cuidar de cada um.',
+    retomada: 'Entre de novo para ver os seus encontros.',
   );
 
   const SecaoComConta({

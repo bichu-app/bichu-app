@@ -1483,6 +1483,204 @@ class PaginaDeMeusPedidos {
   }
 }
 
+/// `#/components/schemas/MyNetworkEventCoverStatus`: o estado da capa do dono.
+///
+/// **Ela nao existe na projecao publica, e e por isso que esta classe existe.**
+/// A capa sobe no mesmo `POST` de criar o encontro, e o processador pode
+/// RECUSA-LA depois do `201`. `NetworkEventPublic` nao tem `rejection_reason`,
+/// a pagina de detalhe do encontro foi apagada por decisao do cliente e o
+/// cartao da agenda e foto + titulo -- medido por outra frente em 19/10/2026,
+/// que relatou a ausencia em vez de inventar campo. `Meus eventos` e o lugar
+/// onde a recusa chega a quem enviou a imagem.
+enum EstadoDaCapa {
+  processando('processing'),
+  pronta('ready'),
+  recusada('rejected');
+
+  const EstadoDaCapa(this.codigo);
+
+  final String codigo;
+
+  /// Nulo para codigo desconhecido: nao ha estado seguro para onde cair, e a
+  /// tela nao afirma nada sobre uma situacao que ela nao entende. Versao antiga
+  /// do app continua no bolso de alguem quando o servidor ganhar um estado
+  /// novo, e um `switch` que nao o conhece nao pode derrubar a tela.
+  static EstadoDaCapa? porCodigo(Object? codigo) {
+    for (final e in EstadoDaCapa.values) {
+      if (e.codigo == codigo) return e;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/MyNetworkEventCover`: a capa e o que aconteceu com ela.
+class CapaDoMeuEncontro {
+  const CapaDoMeuEncontro({
+    required this.estado,
+    required this.url,
+    required this.motivoDaRecusa,
+  });
+
+  /// Nulo quando o servidor manda um estado que esta versao do app nao conhece.
+  final EstadoDaCapa? estado;
+
+  /// A derivada de 1024 x 576, a MESMA que a agenda serve. Nula fora de
+  /// `pronta`.
+  final String? url;
+
+  /// O motivo da recusa, **em texto pronto do servidor**, quando recusada.
+  ///
+  /// A tela mostra ESTE texto e nunca uma frase propria: o servidor e quem sabe
+  /// se o problema foi o formato, a dimensao minima ou um arquivo truncado, e
+  /// uma frase generica deixa a pessoa sem saber o que consertar. Exemplos
+  /// medidos: *"A imagem precisa ter pelo menos 600 x 600 pixels."* e
+  /// *"Nao conseguimos ler essa imagem. Ela pode ter chegado incompleta."*
+  final String? motivoDaRecusa;
+
+  /// Verdadeiro so quando ha estado `recusada` **e** motivo para mostrar.
+  ///
+  /// As duas condicoes juntas de proposito: o contrato promete motivo em toda
+  /// recusa (o banco o cobra em `catalog_images_recusada_tem_motivo`), e se um
+  /// dia ele vier nulo a tela fica calada em vez de desenhar faixa vazia ou
+  /// inventar texto.
+  bool get recusadaComMotivo =>
+      estado == EstadoDaCapa.recusada &&
+      motivoDaRecusa != null &&
+      motivoDaRecusa!.trim().isNotEmpty;
+
+  static CapaDoMeuEncontro? doJson(Object? bruto) {
+    if (bruto is! Map<String, dynamic>) return null;
+    final url = bruto['url'];
+    final motivo = bruto['rejection_reason'];
+    return CapaDoMeuEncontro(
+      estado: EstadoDaCapa.porCodigo(bruto['status']),
+      url: url is String && url.isNotEmpty ? url : null,
+      motivoDaRecusa:
+          motivo is String && motivo.trim().isNotEmpty ? motivo : null,
+    );
+  }
+}
+
+/// `#/components/schemas/MyNetworkEvent`: um encontro na lista do DONO.
+///
+/// **Sete propriedades, e nenhuma outra** -- ver a justificativa de cada uma no
+/// esquema do contrato. Nao e um [EncontroPublico] menor: ela responde "qual
+/// dos meus encontros e este, da para cancelar, e a minha foto entrou?", e nao
+/// "como e este encontro?".
+class MeuEncontro {
+  const MeuEncontro({
+    required this.slug,
+    required this.titulo,
+    required this.capa,
+    required this.horario,
+    required this.situacao,
+  });
+
+  /// O endereco da ACAO: e o que vai em `cancelNetworkEvent` e em
+  /// `getMyNetworkEvent`. Nao e UUID interno (ADR-0010).
+  final String slug;
+
+  final String titulo;
+
+  /// Nula quando o encontro nao tem capa nenhuma -- diferente de
+  /// [EstadoDaCapa.processando], que e "tem, e o worker nao terminou".
+  final CapaDoMeuEncontro? capa;
+
+  final HorarioDoEncontro horario;
+
+  /// Nula para codigo desconhecido, como no resto da secao.
+  final SituacaoDoEncontro? situacao;
+
+  DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
+
+  /// Se a tela oferece `Cancelar`.
+  ///
+  /// **A regra e a do servidor, copiada dela**: so encontro `published` que
+  /// ainda nao terminou se cancela (`event_not_published` e `event_ended` sao
+  /// os dois 400 que a operacao declara). Desenhar o botao fora disso seria
+  /// oferecer uma acao que o servidor recusa **depois** de a pessoa confirmar,
+  /// que e a pior ordem possivel para uma folha destrutiva.
+  bool get podeCancelar =>
+      situacao == SituacaoDoEncontro.aVir ||
+      situacao == SituacaoDoEncontro.acontecendo;
+
+  static MeuEncontro doJson(Map<String, dynamic> json) {
+    final slug = json['slug'];
+    final titulo = json['title'];
+    final inicio = json['starts_at'];
+    final zona = json['time_zone'];
+    if (slug is! String || titulo is! String || inicio is! String || zona is! String) {
+      throw const FormatException(
+        'encontro do dono sem slug, title, starts_at ou time_zone',
+      );
+    }
+    final fim = json['ends_at'];
+    return MeuEncontro(
+      slug: slug,
+      titulo: titulo,
+      capa: CapaDoMeuEncontro.doJson(json['cover']),
+      horario: HorarioDoEncontro.doIso(
+        inicioEmIso: inicio,
+        fimEmIso: fim is String ? fim : null,
+        nomeIana: zona,
+      ),
+      situacao: SituacaoDoEncontro.porCodigo(json['status']),
+    );
+  }
+}
+
+/// `#/components/schemas/MyNetworkEventPage`.
+///
+/// **Sem `applied_filters` e sem `effective_sort`**: a operacao nao aceita
+/// recorte nenhum e a ordem e fixa no servidor, entao nao ha o que a resposta
+/// informasse de volta que nao fosse constante.
+class PaginaDeMeusEncontros {
+  const PaginaDeMeusEncontros({
+    required this.itens,
+    required this.pagina,
+    required this.limite,
+    required this.total,
+  });
+
+  final List<MeuEncontro> itens;
+  final int pagina;
+  final int limite;
+  final int total;
+
+  static PaginaDeMeusEncontros doJson(Map<String, dynamic> json) {
+    final itens = json['items'];
+    if (itens is! List) {
+      throw const FormatException('resposta de meus eventos sem `items`');
+    }
+    return PaginaDeMeusEncontros(
+      itens: <MeuEncontro>[
+        for (final bruto in itens)
+          if (bruto is Map<String, dynamic>) MeuEncontro.doJson(bruto),
+      ],
+      pagina: _inteiro(json['page'], 1),
+      limite: _inteiro(json['limit'], 20),
+      total: _inteiro(json['total'], 0),
+    );
+  }
+}
+
+/// Um encontro meu **com a versao dele**, como `getMyNetworkEvent` a devolve.
+///
+/// A versao e o `ETag` da resposta, e nao um campo do corpo: ela nao e dado do
+/// encontro, e o lugar dela no HTTP e o cabecalho. [etag] vai **como veio**,
+/// sem aparar o `W/` nem o sufixo que a borda acrescenta (`"1-zstd"`): quem o
+/// le de volta e o servidor, que tolera as duas formas.
+class MeuEncontroComVersao {
+  const MeuEncontroComVersao({required this.encontro, required this.etag});
+
+  final MeuEncontro encontro;
+
+  /// Nulo quando a resposta nao trouxe o cabecalho. **Sem ele nao da para
+  /// cancelar**, e a tela diz isso em vez de mandar `If-Match` vazio e colher
+  /// um 428 que parece defeito do servidor.
+  final String? etag;
+}
+
 /// O recorte pedido a agenda: o que cada aba manda.
 ///
 /// Nulo quer dizer **"nao mandei o parametro"**. A ordem nula e o caso que

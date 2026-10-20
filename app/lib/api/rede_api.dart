@@ -6,11 +6,19 @@ import 'modelos_rede.dart';
 ///
 /// **A escrita da comunidade entrou em 17/10/2026** (ADR-0025 emenda 3): a
 /// pessoa cria o proprio encontro por `createNetworkEvent`, e ele nasce
-/// `published`, sem fila de revisao. Editar e cancelar o proprio existem no
-/// contrato (`updateNetworkEvent` e `cancelNetworkEvent`) e **nao estao aqui**:
-/// os dois exigem `If-Match`, e `ApiClient.patch` nao envia cabecalho hoje.
-/// Declarar os metodos sem o cabecalho produziria 428 em toda chamada, que e
-/// pior que a ausencia -- ver o relato da entrega.
+/// `published`, sem fila de revisao.
+///
+/// **O CANCELAMENTO FECHOU EM 19/10/2026, e em tres pedacos.** [cancelar]
+/// existia desde a correcao do transporte (`ApiClient.post` passou a aceitar
+/// `ifMatch`), e **nao tinha de onde tirar o valor**: nenhuma leitura da Rede
+/// devolvia `ETag`, medido contra homologacao. Faltavam a FONTE da versao e o
+/// CAMINHO ate ela. Os dois entraram aqui: [meuEncontro] le a versao
+/// (`getMyNetworkEvent`, a unica leitura da secao que emite o cabecalho) e
+/// [meusEncontros] e a lista do dono, que e por onde a pessoa chega ao proprio
+/// encontro -- nada na agenda diz de quem o encontro e.
+///
+/// `updateNetworkEvent` continua **fora** desta classe: a tela de editar e de
+/// outro despacho, e declarar o metodo antes dela seria codigo sem chamador.
 ///
 /// O resto do que o app escreve e o pedido de participacao da propria conta, e
 /// a desistencia dele.
@@ -200,15 +208,20 @@ class RedeApi {
   /// descobrir que nao vai mais acontecer.
   ///
   /// [ifMatch] e o `ETag` da ultima leitura e e OBRIGATORIO pelo contrato.
-  /// **E aqui esta o defeito que esta entrega NAO fecha**: nenhuma leitura da
-  /// secao `Rede` devolve `ETag` -- nem `listNetworkEvents`, nem
-  /// `getNetworkEvent`, nem o `201` de `createNetworkEvent` --, e isso foi
-  /// medido contra homologacao em 19/10/2026, nao deduzido do contrato. As
-  /// unicas operacoes da secao que devolvem `ETag` sao as duas ESCRITAS
-  /// (`updateNetworkEvent` e esta), e um valor que so a escrita entrega nao
-  /// serve para autorizar a primeira escrita. Por isso este metodo RECEBE o
-  /// valor em vez de busca-lo: quando a fonte existir, ela entra em um lugar
-  /// so.
+  ///
+  /// **A FONTE DELE AGORA EXISTE, e e [meuEncontro]** (`getMyNetworkEvent`,
+  /// 19/10/2026). Era este o buraco: medido contra homologacao, nenhuma leitura
+  /// da secao `Rede` devolvia `ETag` -- nem `listNetworkEvents`, nem
+  /// `getNetworkEvent`, nem o `201` de `createNetworkEvent` --, e as unicas que
+  /// o emitiam eram as duas ESCRITAS. Um valor que so a escrita entrega nao
+  /// autoriza a PRIMEIRA escrita, e por isso o primeiro cancelamento era
+  /// impossivel por construcao.
+  ///
+  /// Este metodo continua RECEBENDO o valor em vez de busca-lo: quem le a
+  /// versao e a folha de confirmacao, no instante em que ela abre, e e aquela
+  /// leitura que a pessoa esta confirmando. Buscar aqui dentro reliria o
+  /// encontro DEPOIS de a pessoa ter decidido, e um `If-Match` sempre fresco
+  /// nunca daria 412 -- a trava de concorrencia existiria e nao travaria nada.
   ///
   /// [nota] e o motivo e vai **so para a trilha**: o app nao mostra motivo de
   /// cancelamento (`CommunityNetworkEventCancellation`, 2 a 280 caracteres).
@@ -241,6 +254,47 @@ class RedeApi {
     });
   }
 
+  /// `GET /v1/network/my-events` (`listMyNetworkEvents`), com conta.
+  ///
+  /// A lista do DONO: os encontros que esta conta criou. **A autoria mora na
+  /// clausula `WHERE` do servidor** (ADR-0021) e nao ha parametro de autoria --
+  /// nao existe forma de pedir a lista de outra pessoa. Por isso este metodo
+  /// nao recebe conta nenhuma: quem decide e o token.
+  ///
+  /// Lista vazia e estado NORMAL (quem nunca criou encontro), e nao falha. Quem
+  /// chama distingue as duas pelo tipo: `FalhaDeChamada` sobe.
+  Future<PaginaDeMeusEncontros> meusEncontros({int pagina = 1, int limite = 20}) async {
+    final json = await _api.get(
+      '/network/my-events',
+      query: <String, String>{'page': '$pagina', 'limit': '$limite'},
+    );
+    return _ler(() => PaginaDeMeusEncontros.doJson(json));
+  }
+
+  /// `GET /v1/network/my-events/{eventSlug}` (`getMyNetworkEvent`), com conta.
+  ///
+  /// **A FONTE DO `ETag` DA REDE.** Esta e a unica leitura da secao que emite o
+  /// cabecalho, e e por isso que ela existe: sem ela [cancelar] nao tinha de
+  /// onde tirar a versao que o `If-Match` exige.
+  ///
+  /// `null` no 404, que e o mesmo corpo para encontro inexistente, de outra
+  /// pessoa, do painel e removido (ADR-0021, nunca 403): a tela trata os quatro
+  /// como "este encontro nao esta mais na sua conta", que e verdade nos quatro.
+  Future<MeuEncontroComVersao?> meuEncontro(String slug) async {
+    try {
+      final resposta = await _api.getComEtag(_caminhoDoMeu(slug));
+      return _ler<MeuEncontroComVersao>(
+        () => MeuEncontroComVersao(
+          encontro: MeuEncontro.doJson(resposta.corpo),
+          etag: resposta.etag,
+        ),
+      );
+    } on FalhaDaApi catch (falha) {
+      if (falha.problem.status == 404) return null;
+      rethrow;
+    }
+  }
+
   /// `GET /v1/network/join-requests` (`listMyNetworkEventJoinRequests`).
   Future<PaginaDeMeusPedidos> meusPedidos(Map<String, String> query) async {
     final json = await _api.get('/network/join-requests', query: query);
@@ -266,4 +320,9 @@ class RedeApi {
   /// outras rotas do app.
   static String _caminho(String slug) =>
       '/network/events/${Uri.encodeComponent(slug)}';
+
+  /// O caminho da leitura do DONO. Mesmo cuidado de [_caminho]: o `slug` vem da
+  /// resposta do servidor e vai codificado.
+  static String _caminhoDoMeu(String slug) =>
+      '/network/my-events/${Uri.encodeComponent(slug)}';
 }
