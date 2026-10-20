@@ -53,7 +53,25 @@ export function criarContagemDePerdidosNovos(db: Db): ContagemDePerdidosNovos {
       // `janela: undefined` e JANELA ABERTA, que e como a aba abre desde
       // 18/10/2026. O recorte de tempo desta contagem e o MARCADOR; somar a
       // janela de 30 dias aqui esconderia do selo o caso que a lista mostra.
+      // `conjunto: 'aberto'` e PRESERVACAO de comportamento, e nao escolha
+      // nova. Este contador nasceu quando
+      // `construtorDaListagemPublicaDePerdidos` carregava
+      // `lost_cases.status = 'open'` fixo; a frente do selo de reencontro
+      // tornou o conjunto um campo OBRIGATORIO da porta, e `tsc` acusou este
+      // chamador -- nenhum portao acusaria. `'aberto'` reproduz, letra por
+      // letra, o que esta contagem media antes da uniao.
+      //
+      // **E `padrao` seria defeito visivel, nao so mudanca.** O padrao e a
+      // UNIAO (aberto + reencontrado na janela de 30 dias), e o selo desta aba
+      // diz *"entraram casos novos de pet perdido"*. Um caso reencontrado tem
+      // `last_seen_at` ANTERIOR ao fecho, entao ele passa o marcador de quem
+      // nao olha a aba ha alguns dias e entraria na contagem: o distintivo
+      // diria "3 novos" com um animal que ja esta na sala do dono dentro do
+      // numero. E o desfecho que a Emenda 4 do ADR-0010 nomeia -- *"alguem
+      // sairia de casa atras de um animal que esta na sala do dono"* -- e ele
+      // nao pode entrar por um `??` de mescla.
       let consulta = construtorDaListagemPublicaDePerdidos(db, {
+        conjunto: 'aberto',
         agora: comoData(recorte.agora),
         pagina: 1,
         limite: 1,

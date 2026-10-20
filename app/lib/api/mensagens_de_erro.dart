@@ -42,6 +42,13 @@ class MensagemDeErro {
   final String? rotaDaAcao;
 }
 
+/// Local: qual situacao de tela estava em curso quando a recusa chegou,
+/// decidida no aparelho. **Nao espelha lista fechada nenhuma do contrato**, e
+/// nao poderia: o que viaja e o `type` `contact-channel-unverified`, que e UM
+/// para as quatro rotas, e o contrato nao tem campo que diga qual delas
+/// recusou. Quem escolhe o membro e a TELA que chamou, antes de a resposta
+/// existir -- por isso ele nao tem [codigo] e nao e lido de resposta nenhuma.
+///
 /// O que a pessoa estava tentando fazer quando a recusa chegou.
 ///
 /// Existe por causa de **um `type` que serve a quatro rotas**:
