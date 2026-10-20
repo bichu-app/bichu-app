@@ -1,0 +1,321 @@
+/**
+ * As rotas do **Mural**: a publicação do usuário e a linha do tempo.
+ *
+ * São cinco, e **as quatro de `/me/publications` são do dono**. A quinta é a
+ * linha do tempo, e ela é a ÚNICA leitura deste contrato que mostra publicação
+ * de outra pessoa.
+ *
+ * ## Por que não há `GET /publications/{ref}`, e a ausência é a defesa
+ *
+ * Uma leitura avulsa por endereço existiria exatamente para ser chamada com um
+ * endereço que quem chama recebeu de outro lugar — de uma denúncia, de um
+ * compartilhamento, de uma varredura. Ela teria de repetir o recorte inteiro da
+ * linha do tempo num segundo lugar, e segundo lugar é onde uma correção falta.
+ * **A rota que a mostraria não existe, em vez de existir com um `if`:** um `if`
+ * alguém esquece de repetir, uma rota ausente ninguém chama por engano. Mesma
+ * decisão que `showcase-routes.ts` registrou para a vitrine de terceiro.
+ *
+ * ## Por que a etiqueta é `publications`
+ *
+ * Porque `conexao-nao-expoe-lista-nem-identificador.test.ts` cobra que
+ * `connections` tenha **exatamente cinco** operações, e `people` é fechada em
+ * uma. Pôr qualquer destas lá faria um portão certo reprovar o desenho certo, e
+ * a saída é etiqueta própria — não afrouxar o número. É a mesma razão pela qual
+ * `people` nasceu em 19/10.
+ *
+ * ## O que este arquivo NÃO decide
+ *
+ * **Quem pode ver o quê.** Isso é a cláusula `WHERE` de
+ * `kysely-publicacoes.ts` (ADR-0021). Não há um `if` nesta borda que escolha
+ * entre `404` e `403`, e não há caminho que produza `403`: publicação de quem
+ * não tem relação com quem chama, endereço inexistente e publicação apagada são
+ * o **mesmo 404**.
+ *
+ * **O que é moderado.** Não há conferência de conteúdo aqui, por decisão do
+ * cliente (*"deixe o texto livre na timeline"*). O ponto de acesso da moderação
+ * é `reportPublication`, que é de `safety` e já existia — esta frente a LIGOU à
+ * publicação em vez de criar uma segunda.
+ */
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
+import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
+import { problemas } from '../../../../shared/http/errors.js';
+import type { Contrato } from '../../../../shared/http/contract.js';
+import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
+import type {
+  CorpoDaIntencaoDaPublicacao,
+  Mural,
+  RecortePedido,
+} from '../../application/mural-service.js';
+import type {
+  PaginaDePublicacoes,
+  PublicacaoDoDono,
+  PublicacaoNaLinha,
+} from '../../ports/publicacoes-repository.js';
+import type { PublicacaoPedida } from '../../domain/publicacao.js';
+
+export const rotaDasMinhasPublicacoes = defineRoute({
+  operationId: 'listMyPublications',
+  method: 'get',
+  path: '/me/publications',
+  effects: [],
+});
+
+export const rotaDeLinhaDoTempo = defineRoute({
+  operationId: 'getMyTimeline',
+  method: 'get',
+  path: '/timeline',
+  effects: [],
+});
+
+export const rotaDePublicar = defineRoute({
+  operationId: 'createPublication',
+  method: 'post',
+  path: '/me/publications',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeApagarPublicacao = defineRoute({
+  operationId: 'deleteMyPublication',
+  method: 'delete',
+  path: '/me/publications/:publicationRef',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * Assinar é barato, mas cada assinatura é uma autorização de escrita que **não
+ * se desfaz dentro da validade**. Mesmo teto de 20/h da foto de pet, da capa do
+ * encontro e da vitrine, pelo mesmo motivo.
+ */
+export const rotaDeIntencaoDaFotoDaPublicacao = defineRoute({
+  operationId: 'createPublicationPhotoUploadIntent',
+  method: 'post',
+  path: '/me/publications/photo-intents',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+export interface Autenticador {
+  autenticar(token: string): Promise<{ userId: UserId }>;
+}
+
+export interface DependenciasDasRotasDoMural {
+  readonly mural: Mural;
+  readonly autenticador: Autenticador;
+  readonly contrato: Contrato;
+  /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
+  readonly baseDeMidia: AbsoluteUrl;
+}
+
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
+    );
+  }
+  return schema;
+}
+
+/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
+function donoAutenticado(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDoMural,
+): Promise<UserId> {
+  return memoDaRequisicao(request, 'publications:dono', async () => {
+    const cabecalho = request.headers.authorization;
+    if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
+      throw problemas.naoAutenticado();
+    }
+    const token = cabecalho.slice('Bearer '.length).trim();
+    if (token === '') throw problemas.naoAutenticado();
+    return (await deps.autenticador.autenticar(token)).userId;
+  });
+}
+
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDoMural,
+): Promise<string | undefined> {
+  try {
+    return await donoAutenticado(request, deps);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A URL é montada AQUI, na leitura, a partir do domínio de mídia. O banco
+ * guarda só a chave (§11.1 proibição 9): gravar URL absoluta amarraria cada
+ * linha ao provedor do dia em que ela foi escrita.
+ */
+function url(base: AbsoluteUrl, chave: string | null): string | null {
+  return chave === null ? null : `${base.replace(/\/$/, '')}/${chave}`;
+}
+
+/**
+ * Uma publicação como o DONO a vê. **Com estado**, porque motivo de recusa é
+ * assunto entre o dono e quem modera.
+ *
+ * `upload_id` sai; `catalog_images.id` e `user_publications.id` **não** — são
+ * identidade interna (ADR-0010 item 6, ADR-0024). O endereço que sai é `ref`.
+ */
+function comoMinhaPublicacao(
+  publicacao: PublicacaoDoDono,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
+  return {
+    ref: publicacao.ref,
+    body: publicacao.corpo,
+    created_at: publicacao.criadaEm.toISOString(),
+    // `image` e nao `photo`, e `url` e nao `open_url`: os dois nomes sao
+    // deliberados e o contrato diz por que -- `photo` e, nesta casa, o nome da
+    // foto de PESSOA (um portao conta os campos `photo:`), e `open_url` e o nome
+    // de uma derivada da VITRINE (outro portao os varre por nome de campo).
+    image:
+      publicacao.foto === null
+        ? null
+        : {
+            upload_id: publicacao.foto.uploadId,
+            status: publicacao.foto.status,
+            url: url(baseDeMidia, publicacao.foto.abertaKey),
+            rejection_reason: publicacao.foto.rejectionReason,
+            alt_text: publicacao.foto.altText,
+          },
+  };
+}
+
+/**
+ * Uma publicação na linha do tempo. **MENOS do que o dono vê**, e a redução é a
+ * mesma que `PersonShowcasePhoto` fez sobre `ShowcasePhoto`: sem `status`, sem
+ * `rejection_reason` e sem `upload_id`.
+ *
+ * **O autor sai com `handle` e `display_name`, e com mais nada.** Sem foto (a
+ * Emenda 3 do ADR-0010 abriu `photo_icon_url` em `Conversation.participants[]`
+ * *"e em mais nenhuma resposta deste contrato"*), sem `public_ref`, sem UUID e
+ * sem pet em forma nenhuma.
+ */
+function comoPublicacaoDaLinha(
+  publicacao: PublicacaoNaLinha,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
+  return {
+    ref: publicacao.ref,
+    body: publicacao.corpo,
+    created_at: publicacao.criadaEm.toISOString(),
+    image:
+      publicacao.foto === null
+        ? null
+        : {
+            url: url(baseDeMidia, publicacao.foto.abertaKey),
+            alt_text: publicacao.foto.altText,
+          },
+    author: { handle: publicacao.handle, display_name: publicacao.displayName },
+    mine: publicacao.minha,
+  };
+}
+
+function comoPagina<T>(
+  pagina: PaginaDePublicacoes<T>,
+  converter: (item: T) => Record<string, unknown>,
+): Record<string, unknown> {
+  return { items: pagina.itens.map(converter), next_cursor: pagina.proximoCursor };
+}
+
+/** O recorte da consulta, como a borda o lê. A conferência é do caso de uso. */
+function recorteDa(request: FastifyRequest): RecortePedido {
+  const consulta = (request.query ?? {}) as Record<string, unknown>;
+  return { cursor: consulta.cursor, limit: consulta.limit };
+}
+
+export function registrarRotasDoMural(
+  app: RegistradorDeRotas,
+  deps: DependenciasDasRotasDoMural,
+): void {
+  registrarRota(
+    app,
+    rotaDasMinhasPublicacoes,
+    // Sem `resolvedores`: a leitura não declara teto, e `registrarRota` recusa
+    // resolvedor para rota sem `rateLimit` — o que é certo, porque um resolvedor
+    // sem balde seria trabalho feito e descartado a cada leitura.
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const pagina = await deps.mural.minhasPublicacoes(dono, recorteDa(request));
+      return reply
+        .status(200)
+        .send(comoPagina(pagina, (item) => comoMinhaPublicacao(item, deps.baseDeMidia)));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeLinhaDoTempo,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const quemOlha = await donoAutenticado(request, deps);
+      const pagina = await deps.mural.linhaDoTempo(quemOlha, recorteDa(request));
+      return reply
+        .status(200)
+        .send(comoPagina(pagina, (item) => comoPublicacaoDaLinha(item, deps.baseDeMidia)));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDePublicar,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDePublicar.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autor = await donoAutenticado(request, deps);
+      const publicacao = await deps.mural.publicar(autor, request.body as PublicacaoPedida);
+      return reply.status(201).send(comoMinhaPublicacao(publicacao, deps.baseDeMidia));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeApagarPublicacao,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { publicationRef } = request.params as { publicationRef: string };
+      await deps.mural.apagar(dono, publicationRef);
+      return reply.status(204).send();
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeIntencaoDaFotoDaPublicacao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDaFotoDaPublicacao.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.mural.autorizarEnvio(
+        dono,
+        request.body as CorpoDaIntencaoDaPublicacao,
+      );
+      return reply.status(201).send({
+        upload_id: uploadId,
+        method: autorizacao.metodo,
+        url: autorizacao.url,
+        // Um dos dois, nunca os dois: `POST` leva campos de formulário, `PUT`
+        // leva cabeçalhos assinados. O cliente LÊ `method` em vez de presumir.
+        ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
+        ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
+        expires_at: autorizacao.expiraEm.toISOString(),
+        max_bytes: autorizacao.maxBytes,
+      });
+    },
+  );
+}

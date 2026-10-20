@@ -320,6 +320,46 @@ export const DERIVADAS_DA_VITRINE_DO_USUARIO: readonly EspecificacaoDaDerivada[]
 ];
 
 /**
+ * ## A derivada da FOTO DE UMA PUBLICAÇÃO DO MURAL (cliente, 20/10/2026)
+ *
+ * **UMA derivada, e a ausência de `thumb` é medida e não economia.**
+ *
+ * - `card` 1024 × 1024 (1:1), `grande` — o cartão do Mural desenha a imagem na
+ *   **largura do corpo**: 288 dp em 320, 324 em 375, 380 em 412 — ou 864 a
+ *   1140 px reais a 3×. Em 412 dp a derivada fica a **0,90× do ideal**, que é a
+ *   mesma folga que este projeto já aceitou, por escrito, para o `card` 1024 do
+ *   encontro ("~984 px... é o tamanho de hoje, e ele está certo para ESTE
+ *   uso"). `grande` porque é exatamente a imagem que a pessoa olha grande — e
+ *   `card` é obrigatória de qualquer forma: `processar-imagem-de-catalogo.ts`
+ *   falha ruidosamente sem ela, e com razão, porque é ela que sai quando não há
+ *   `thumb`.
+ *
+ * **Sem `thumb`, e o número que ela teria é conhecido.** A `thumb` 320 da
+ * vitrine existe para uma GRADE de células de 104 dp, e **não há grade no
+ * Mural**: nem na linha do tempo, nem em `GET /me/publications` — as duas
+ * desenham o mesmo cartão de largura inteira. Guardar uma derivada que nenhuma
+ * superfície pinta é peso pago em todo envio e objeto pago no balde para
+ * sempre. No dia em que existir uma grade de publicações, o `thumb` 320 entra
+ * AQUI, numa linha, e nada mais muda — que é exatamente o que este arquivo
+ * existe para tornar possível.
+ *
+ * **Quadrada, e o corte é deliberado** (`altura` presente = `fit: cover`): a
+ * linha do tempo ROLA, e cartão com proporção variável faz a rolagem saltar a
+ * cada imagem que termina de carregar. Com 1:1 o cartão reserva a altura antes
+ * de os bytes chegarem. O ORIGINAL continua inteiro no balde privado, e é dele
+ * que sai qualquer proporção futura.
+ *
+ * **A geometria é literalmente a do `card` de `DERIVADAS_DA_VITRINE_DO_USUARIO`**,
+ * e isso não é preguiça: as duas são foto que a pessoa escolheu publicar,
+ * enviada do mesmo celular, aberta em tela cheia pelo mesmo gesto. Reusar o
+ * número em vez de inventar um é o que faz as duas telas terem o mesmo peso por
+ * imagem.
+ */
+export const DERIVADAS_DA_PUBLICACAO: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'card', largura: 1024, altura: 1024, porte: 'grande' },
+];
+
+/**
  * A dimensão mínima da foto de pet, que não existia.
  *
  * 600 × 600, e o número tem dois motivos. O primeiro: é o mesmo mínimo que o

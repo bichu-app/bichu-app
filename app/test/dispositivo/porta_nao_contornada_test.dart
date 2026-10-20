@@ -1644,7 +1644,39 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
 /// copiado de ramo nem de relato.
-const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
+/// **MURAL, 20/10/2026 (BICHUS-278).** O valor anterior,
+/// `1413454d749f87001859c85e1e6e71d0449c2941`, era o do segundo lote de 19/10
+/// com as oito frentes, e a justificativa dele fica inteira logo acima.
+///
+/// O que mudou em `app/lib/telas` nesta frente, e por que cada mudanca e de
+/// OUTRA historia e legitima -- o pedido do cliente de 20/10: *"na secao do
+/// mural, nao tem a caixa de texto para o usuario escrever uma mensagem, subir
+/// uma foto e publicar o conteudo."*:
+///
+///   - `mural/publicar_no_mural.dart` (NOVO) -- a caixa de texto, a foto e o
+///     `Publicar`;
+///   - `mural/tela_do_mural.dart` -- o estado inicial honesto virou a linha do
+///     tempo, porque agora existe `GET /timeline` para desenhar;
+///   - `abas.dart` -- `AbaMural` ganhou a acao flutuante `Publicar`, que a
+///     frente de 19/10 deliberadamente NAO desenhou por nao haver destino.
+///
+/// **O criterio 10 continua valendo, e isto nao e excecao a ele.** O criterio
+/// diz que nenhuma tela muda de codigo *por causa da camera embarcada*, e que
+/// tela que fala com o aparelho tem a porta sendo contornada. `PublicarNoMural`
+/// nao fala com o aparelho: ela recebe `CameraEGaleria` por construtor, nao
+/// importa `dart:io` (a previa e `PreviaDaFoto`, que mora em `lib/widgets/`
+/// justamente por isso) e nao importa `image_picker` nem
+/// `permission_handler`. O grupo "o espirito do criterio 10" deste mesmo
+/// arquivo mede isso mecanicamente, e ele continua verde -- que e o que
+/// distingue trocar o hash por mudanca legitima de trocar o hash para calar o
+/// portao.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao, e nao copiado de
+/// ramo nem de relato: `GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
+/// -- COM as chaves, porque em zsh sem elas o shell aplica o modificador de
+/// historia `:a` e devolve caminho absurdo EM SILENCIO.
+const String _arvoreDasTelas = '33570e31b38685266636c91077f4bee814404b43'; // MURAL, 20/10/2026 (BICHUS-278): a caixa de publicar, a linha do tempo e a acao flutuante da secao. Ver o bloco acima. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

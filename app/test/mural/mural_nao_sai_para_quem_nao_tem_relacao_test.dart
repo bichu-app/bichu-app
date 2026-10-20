@@ -1,0 +1,691 @@
+// **ISCA (b), METADE DO APP: nao-conexao nao ve a timeline nem a publicacao.**
+//
+// ===========================================================================
+// POR QUE A METADE DO APP E SOBRE A AUSENCIA DE OUTRA FONTE
+// ===========================================================================
+// O recorte de quem ve o que **nao e desta camada, e nao pode ser**: ele mora
+// na clausula `WHERE` da consulta do servidor (ADR-0021), e e medido lá com
+// mutacao do predicado em
+// `src/modules/publications/adapters/persistence/autorizacao-na-clausula-where.test.ts`.
+//
+// Entao o que o app tem de garantir e outra coisa, e ela e tao importante
+// quanto: **que nao existe no aplicativo nenhuma segunda fonte de publicacao.**
+// Um filtro de tela seria o recorte migrando para o cliente -- e o cliente e
+// onde ele nao pode estar. Uma segunda leitura (por apelido, por `ref`, por um
+// cache) seria um caminho que o `WHERE` do servidor nao governa.
+//
+// Os casos abaixo medem as duas pontas disso:
+//
+//   1. a tela desenha EXATAMENTE o que `GET /timeline` devolveu -- zero itens
+//      viram zero cartoes, e tres itens viram tres;
+//   2. **nenhum arquivo de `app/lib` pede publicacao por outro caminho.** A
+//      varredura e do CODIGO-FONTE, e e ela que reprova a leitura nova que
+//      alguem acrescentar amanha;
+//   3. `mine` vem do SERVIDOR e decide `Apagar` ou `Denunciar` -- a tela nunca
+//      compara apelidos para descobrir de quem e a publicacao.
+//
+// ===========================================================================
+// TODO CASO AQUI E ISCA, E AS ISCAS ESTAO NOMEADAS
+// ===========================================================================
+// Nenhum caso mede a presenca de um literal. Cada um diz, no corpo, o que
+// desligar no codigo para ve-lo reprovar.
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/mural_api.dart';
+import 'package:bichu/config/app_config.dart';
+import 'package:bichu/telas/mural/tela_do_mural.dart';
+import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/imagem_da_rede.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import '../telas/ajuda_de_tela.dart';
+
+const String urlDaImagemDaPublicacao =
+    'https://img.exemplo/people/card/aaaa.jpeg';
+
+Map<String, dynamic> publicacao({
+  required String ref,
+  required String texto,
+  String nome = 'Marina',
+  String? apelido = 'marina-vet',
+  bool minha = false,
+  bool comFoto = false,
+  String? textoAlternativo,
+}) {
+  return <String, dynamic>{
+    'ref': ref,
+    'body': texto,
+    'created_at': '2026-10-20T12:00:00.000Z',
+    'image': comFoto
+        ? <String, dynamic>{
+            'url': urlDaImagemDaPublicacao,
+            'alt_text': textoAlternativo,
+          }
+        : null,
+    'author': <String, dynamic>{'handle': apelido, 'display_name': nome},
+    'mine': minha,
+  };
+}
+
+/// A rede do Mural: a linha do tempo e as minhas publicacoes.
+///
+/// **404 em qualquer outra rota**, e e isso que faz o caso (1) valer: se a tela
+/// buscasse publicacao por outro caminho, a requisicao levaria 404 e os
+/// `expect` por caminho diriam qual foi.
+Future<http.Response> Function(http.Request) redeDoMural({
+  required List<http.Request> capturado,
+  List<Map<String, dynamic>> linha = const <Map<String, dynamic>>[],
+  List<Map<String, dynamic>> minhas = const <Map<String, dynamic>>[],
+}) {
+  return (req) async {
+    capturado.add(req);
+    if (req.url.path == '/v1/timeline' && req.method == 'GET') {
+      return json200(<String, dynamic>{'items': linha, 'next_cursor': null});
+    }
+    if (req.url.path == '/v1/me/publications' && req.method == 'GET') {
+      return json200(<String, dynamic>{'items': minhas, 'next_cursor': null});
+    }
+    return problema('not-found', 404);
+  };
+}
+
+/// Monta o corpo do Mural com a porta de VERDADE (`MuralApi` sobre
+/// `ApiClient`), e nao com um duble de interface.
+///
+/// **E isso que faz estes casos medirem o CAMINHO pedido.** Um duble de
+/// `LeituraDoMural` responderia igual para qualquer rota, e o caso (1) -- "a
+/// tela nao busca publicacao por outro caminho" -- nao teria o que observar.
+Future<List<http.Request>> montarOMural(
+  WidgetTester tester, {
+  List<Map<String, dynamic>> linha = const <Map<String, dynamic>>[],
+  List<Map<String, dynamic>> minhas = const <Map<String, dynamic>>[],
+  void Function(PublicacaoDaLinha)? aoDenunciar,
+  Future<void> Function(PublicacaoDaLinha)? aoApagar,
+}) async {
+  AppConfig.limparParaTeste();
+  final capturado = <http.Request>[];
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
+    cliente: MockClient(redeDoMural(capturado: capturado, linha: linha, minhas: minhas)),
+    tokenDeAcesso: () async => 'token-de-medicao',
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: BichuTheme.claro,
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: CorpoDoMural(
+            leitura: MuralApi(api),
+            aoDenunciar: aoDenunciar,
+            aoApagar: aoApagar,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return capturado;
+}
+
+/// Os caminhos que o app pediu, em ordem. E por eles que os casos reprovam
+/// dizendo QUAL rota saiu, em vez de "a tela ficou vazia".
+List<String> caminhos(List<http.Request> capturado) =>
+    capturado.map((p) => '${p.method} ${p.url.path}').toList();
+
+void main() {
+  // =========================================================================
+  // (1) A TELA DESENHA O QUE A LINHA DO TEMPO DEVOLVEU, E NADA MAIS
+  // =========================================================================
+
+  testWidgets(
+      'ISCA (b) — linha do tempo VAZIA desenha ZERO cartoes, e a tela nao '
+      'inventa publicacao nenhuma', (tester) async {
+    // ISCA: em `CorpoDoMural.build`, acrescentar qualquer item que nao venha de
+    // `linha` -- um cartao de exemplo, um "talvez voce conheca", um cache. Este
+    // caso reprova pelo nome na contagem.
+    //
+    // **E o cartao de sugestao e o caso concreto que a Emenda 3 do ADR-0010
+    // proibe:** o desenho registra, como REGRA, que "no dia em que o Mural
+    // mostrar qualquer cartao de autor que NAO seja conexao aceita -- uma
+    // sugestao, uma descoberta, um 'talvez voce conheca' --, esse cartao nao
+    // pode trazer foto nem apelido". Nao ha cartao assim, de proposito.
+    final capturado = await montarOMural(tester);
+
+    expect(find.byType(ImagemDaRede), findsNothing);
+    expect(find.textContaining('Marina'), findsNothing);
+    // O estado vazio aparece, e ele e o de "sem conexao": `minhas` tambem veio
+    // vazia.
+    expect(find.text(CorpoDoMural.tituloSemConexao), findsOneWidget);
+
+    // E as DUAS leituras sairam, e so elas.
+    expect(caminhos(capturado), <String>[
+      'GET /v1/timeline',
+      'GET /v1/me/publications',
+    ]);
+  });
+
+  testWidgets(
+      'CONTRAPESO — tres publicacoes na resposta desenham TRES cartoes',
+      (tester) async {
+    // Sem este contrapeso, o caso de cima passaria num mundo em que a tela nao
+    // desenha NADA nunca -- que e a forma mais facil de um teste de omissao
+    // ficar verde sem ter medido nada.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'o Bidu no parque'),
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK2',
+          texto: 'achei um gato na rua',
+          nome: 'Joana',
+        ),
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK3',
+          texto: 'minha vez de publicar',
+          minha: true,
+          nome: 'Eu',
+        ),
+      ],
+    );
+
+    expect(find.text('o Bidu no parque'), findsOneWidget);
+    expect(find.text('achei um gato na rua'), findsOneWidget);
+    expect(find.text('minha vez de publicar'), findsOneWidget);
+    expect(find.text('Marina'), findsOneWidget);
+    expect(find.text('Joana'), findsOneWidget);
+    // E o estado vazio NAO aparece quando ha itens.
+    expect(find.text(CorpoDoMural.tituloSemConexao), findsNothing);
+    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsNothing);
+  });
+
+  testWidgets(
+      'ISCA (b) — a QUANTIDADE de cartoes e EXATAMENTE a da resposta, e o '
+      'excedente reprova', (tester) async {
+    // **Este caso existe por causa de um buraco medido no caso de cima.**
+    //
+    // "Linha vazia desenha zero cartoes" curto-circuita no estado vazio: o
+    // `if (linha.isEmpty)` devolve antes de a lista ser construida. Entao um
+    // cartao INVENTADO -- uma sugestao, um "talvez voce conheca", um cache --
+    // acrescentado ao caminho da lista **nao apareceria** naquele caso, porque
+    // naquele caso a lista nem roda. Medido: desligando o codigo e injetando um
+    // cartao de sugestao, aquele caso ficou VERDE.
+    //
+    // Este conta. Um `⋮` por cartao, com as duas acoes ligadas: tres itens na
+    // resposta sao tres menus, e o quarto e o cartao que ninguem pediu.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'um'),
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK2', texto: 'dois'),
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK3', texto: 'tres'),
+      ],
+      aoDenunciar: (_) {},
+      aoApagar: (_) async {},
+    );
+    expect(
+      find.byType(PopupMenuButton<String>),
+      findsNWidgets(3),
+      reason:
+          'o numero de cartoes nao e o numero de publicacoes que o servidor '
+          'devolveu. Um cartao a mais e conteudo que o `WHERE` do servidor nao '
+          'governou -- e o desenho do Mural registra, como REGRA, que um cartao '
+          'de autor que nao seja conexao aceita nao pode existir aqui',
+    );
+  });
+
+  // =========================================================================
+  // (2) NENHUMA SEGUNDA FONTE DE PUBLICACAO EM `app/lib`
+  // =========================================================================
+
+  /// O codigo de um arquivo Dart, **sem os comentarios**.
+  ///
+  /// Descobrir que isto era necessario valeu duas reprovacoes deste proprio
+  /// arquivo, e as duas sao a mesma forma de portao cego ao contrario -- o que
+  /// reprova o certo:
+  ///
+  ///   1. a varredura de "publicacao por apelido" casou o caminho
+  ///      `/people/{apelido}/publications` escrito na PROSA de
+  ///      `mural_api.dart`, que esta la justamente para dizer que a rota **nao
+  ///      existe**. Uma varredura de texto puro reprova exatamente a frase que
+  ///      documenta a ausencia;
+  ///   2. a varredura de leitura por `ref` casou
+  ///      `POST /publications/{ref}/reports` em `seguranca_api.dart` -- que e a
+  ///      DENUNCIA, legitima, no contrato desde 18/10, e que esta frente LIGOU
+  ///      a publicacao em vez de substituir.
+  ///
+  /// Entao: comentario fora, e o verbo HTTP dentro do criterio.
+  String codigoDe(File arquivo) => arquivo
+      .readAsStringSync()
+      .split('\n')
+      .where((l) {
+        final limpa = l.trimLeft();
+        return !limpa.startsWith('//') && !limpa.startsWith('///');
+      })
+      .join('\n');
+
+  test(
+      'ISCA (b) — `app/lib` LE publicacao em UM lugar so, e e `MuralApi`', () {
+    // **A VARREDURA E DO CODIGO-FONTE, e e ela que envelhece bem**: ela reprova
+    // a leitura que alguem acrescentar amanha, nao a que existe hoje.
+    //
+    // ISCA: acrescentar em qualquer arquivo de `app/lib` um `get` de
+    // `/timeline`, de `/me/publications` ou de `/publications/...`. Este caso
+    // reprova pelo nome, dizendo o arquivo.
+    //
+    // **O criterio e o VERBO, e nao so o caminho**, e a razao e medida: a
+    // DENUNCIA de publicacao e `POST /publications/{ref}/reports`, ela e
+    // legitima, ela existe no contrato desde 18/10 e esta frente a LIGOU a
+    // publicacao em vez de criar outra. Uma varredura por caminho a reprovaria,
+    // e o que ela tem de reprovar e LEITURA.
+    //
+    // **`grep` nao serve aqui**, e isso e medido nesta maquina: o `grep` e
+    // `ugrep` e ele ignora em silencio arquivo Dart com acento. A varredura e
+    // de Dart lendo os arquivos.
+    final raiz = Directory('lib');
+    expect(raiz.existsSync(), isTrue, reason: 'a varredura rodou fora de `app/`');
+
+    // `get('/...publications...')` ou `get('/timeline')`, em qualquer forma de
+    // chamada: `_api.get`, `_cliente.get`, `api.get`.
+    final leitura = RegExp(
+      r"""\.get\(\s*['"][^'"]*(publications|timeline)""",
+    );
+
+    final ondeAparece = <String>[];
+    for (final entrada in raiz.listSync(recursive: true)) {
+      if (entrada is! File || !entrada.path.endsWith('.dart')) continue;
+      if (leitura.hasMatch(codigoDe(entrada))) ondeAparece.add(entrada.path);
+    }
+
+    expect(
+      ondeAparece,
+      <String>['lib/api/mural_api.dart'],
+      reason:
+          'publicacao LIDA de outro arquivo: $ondeAparece. A UNICA porta e '
+          '`MuralApi`, e a unica leitura de publicacao de outra pessoa e '
+          '`GET /timeline` -- cujo recorte mora no `WHERE` do servidor. Uma '
+          'segunda fonte seria um caminho que aquele `WHERE` nao governa.',
+    );
+  });
+
+  test(
+      'CONTRAPESO — a denuncia de publicacao CONTINUA em `seguranca_api.dart`, '
+      'e ela e a que ja existia', () {
+    // Sem este contrapeso, o caso de cima passaria num mundo em que ninguem
+    // denuncia publicacao nenhuma -- e a instrucao desta fatia era LIGAR a
+    // denuncia que ja existe, nao substitui-la.
+    final seguranca = codigoDe(File('lib/api/seguranca_api.dart'));
+    expect(
+      seguranca.contains('/publications/'),
+      isTrue,
+      reason:
+          'a denuncia de publicacao desapareceu de `seguranca_api.dart`. Ela e '
+          '`POST /publications/{ref}/reports`, existe no contrato desde 18/10, '
+          'e esta frente a LIGOU a publicacao -- nao criou uma segunda',
+    );
+    expect(
+      seguranca.contains('/reports'),
+      isTrue,
+      reason: 'a denuncia deixou de ser uma denuncia',
+    );
+  });
+
+  test(
+      'ISCA (b) — a varredura REPROVA uma leitura de publicacao acrescentada '
+      'depois', () {
+    // Sem esta isca, o caso de cima passaria por nao haver arquivo intruso -- e
+    // nao por ele saber reconhecer um. E exatamente o defeito dos onze portoes
+    // cegos desta rodada.
+    const intruso = """
+      final p = await _cliente.get('/timeline');
+    """;
+    expect(
+      intruso.contains("'/timeline'"),
+      isTrue,
+      reason: 'a agulha da varredura nao casa a forma de uma chamada real',
+    );
+    const porRef = "await _cliente.get('/publications/\$ref');";
+    expect(
+      RegExp(r"'/publications/\$").hasMatch(porRef),
+      isTrue,
+      reason:
+          'a varredura nao enxerga uma leitura de publicacao por `ref`: '
+          'ela nao mede nada',
+    );
+  });
+
+  test(
+      'ISCA (b) — `app/lib` nao pede publicacao de uma PESSOA por apelido',
+      () {
+    // `/people/{apelido}/publications` seria a linha do tempo de alguem, e a
+    // Emenda 2 do ADR-0010 a recusa por nome. Ela nao existe no contrato, e
+    // este caso garante que o app nao a invente.
+    // **O CODIGO, e nao a prosa**: a documentacao de `mural_api.dart` cita
+    // `/people/{apelido}/publications` de proposito, para dizer que a rota NAO
+    // existe -- e uma varredura de texto puro reprovaria exatamente a frase
+    // que documenta a ausencia. Isto reprovou na primeira execucao deste
+    // arquivo, e e por isso que `codigoDe` existe.
+    final intrusos = <String>[];
+    for (final entrada in Directory('lib').listSync(recursive: true)) {
+      if (entrada is! File || !entrada.path.endsWith('.dart')) continue;
+      if (RegExp(r'/(people|pessoa|users)/[^\x27"]*/(publications|timeline)')
+          .hasMatch(codigoDe(entrada))) {
+        intrusos.add(entrada.path);
+      }
+    }
+    expect(intrusos, isEmpty, reason: 'nasceu a linha do tempo de outra pessoa');
+  });
+
+  // =========================================================================
+  // (3) `mine` VEM DO SERVIDOR, E E ELE QUE DECIDE A ACAO DO CARTAO
+  // =========================================================================
+
+  testWidgets(
+      'ISCA (b) — publicacao de OUTRA pessoa oferece `Denunciar` e NAO '
+      '`Apagar`', (tester) async {
+    // ISCA: em `_CartaoDaPublicacao._menu`, trocar `publicacao.minha` por
+    // `true`, ou comparar apelidos em vez de ler o campo. Este caso reprova
+    // pelo nome nos dois `expect`.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'da Marina'),
+      ],
+      aoDenunciar: (_) {},
+      aoApagar: (_) async {},
+    );
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Denunciar'), findsOneWidget);
+    expect(
+      find.text('Apagar'),
+      findsNothing,
+      reason:
+          'a tela ofereceu apagar a publicacao de outra pessoa. O servidor '
+          'responderia 404 -- mas a tela teria mentido, e e a tela que a '
+          'pessoa le',
+    );
+  });
+
+  testWidgets(
+      'ISCA (b) — a PROPRIA publicacao oferece `Apagar` e NAO `Denunciar`',
+      (tester) async {
+    // Denunciar o proprio conteudo nao tem desfecho: o caminho e apagar, que e
+    // imediato, e o servidor responde `400 own_content` a quem tentar.
+    // Oferecer as duas seria desenhar um controle cujo unico desfecho e um
+    // erro.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'minha',
+          minha: true,
+          nome: 'Eu',
+        ),
+      ],
+      aoDenunciar: (_) {},
+      aoApagar: (_) async {},
+    );
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apagar'), findsOneWidget);
+    expect(find.text('Denunciar'), findsNothing);
+  });
+
+  testWidgets(
+      'ISCA (b) — sem `aoDenunciar` e sem `aoApagar` o `⋮` NAO NASCE',
+      (tester) async {
+    // Criterio 2 da BICHUS-62: acao sem destino nao se renderiza, nem
+    // habilitada nem desabilitada. Um `⋮` que abre uma folha vazia e um toque
+    // que termina em nada.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(ref: 'AaBbCcDdEeFfGgHhIiJjK1', texto: 'da Marina'),
+      ],
+    );
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    // E o cartao continua inteiro: o texto e o autor estao la.
+    expect(find.text('da Marina'), findsOneWidget);
+  });
+
+  // =========================================================================
+  // (4) A FOTO DA PUBLICACAO, E O ROTULO DE QUEM NAO VE
+  // =========================================================================
+
+  testWidgets(
+      'a foto usa `ImagemDaRede` com a derivada de 1024 e proporcao 1:1',
+      (tester) async {
+    // `Image.network` cru nao trata `cacheWidth` nem `errorBuilder`, e e o que
+    // levou a vitrine da `Loja` a 9,8 MB numa tela. A proporcao 1:1 e o que faz
+    // o cartao reservar a altura antes de os bytes chegarem -- sem ela a
+    // rolagem salta a cada imagem que termina de carregar.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'olha ele',
+          comFoto: true,
+          textoAlternativo: 'o Bidu correndo na grama',
+        ),
+      ],
+    );
+    final imagem = tester.widget<ImagemDaRede>(find.byType(ImagemDaRede));
+    expect(imagem.url, urlDaImagemDaPublicacao);
+    expect(imagem.proporcao, 1);
+    expect(imagem.descricao, 'o Bidu correndo na grama');
+  });
+
+  testWidgets(
+      'ISCA — foto SEM descricao recebe rotulo GENERICO, e nao e escondida do '
+      'leitor de tela', (tester) async {
+    // **A decisao de `alt_text` opcional depende deste caso.** O rotulo e
+    // opcional porque `body` e obrigatorio e o leitor de tela sempre tem o que
+    // anunciar -- mas sem foto anunciada a pessoa nao saberia que ha uma
+    // imagem ali.
+    //
+    // ISCA: em `_CartaoDaPublicacao.build`, trocar o rotulo generico por
+    // `null`. `ImagemDaRede` com `descricao: null` embrulha em
+    // `ExcludeSemantics`, e a foto desaparece para quem usa leitor de tela.
+    // Este caso reprova pelo nome.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'olha ele',
+          comFoto: true,
+        ),
+      ],
+    );
+    final imagem = tester.widget<ImagemDaRede>(find.byType(ImagemDaRede));
+    expect(
+      imagem.descricao,
+      CorpoDoMural.fotoSemDescricao,
+      reason:
+          'a foto sem descricao ficou DECORATIVA: quem nao ve deixou de saber '
+          'que ha uma foto na publicacao',
+    );
+  });
+
+  // =========================================================================
+  // (5) OS DOIS ESTADOS VAZIOS SAO DIFERENTES
+  // =========================================================================
+
+  testWidgets(
+      'ISCA — sem conexao E sem publicacao propria, o texto diz COMECE PELAS '
+      'CONEXOES', (tester) async {
+    // ISCA: em `CorpoDoMural.build`, fixar `_tenhoPublicacao` em `true`. Os
+    // dois estados colapsam num e a tela passa a dizer "quando as suas conexoes
+    // publicarem" a quem nao tem conexao nenhuma -- prometendo algo de
+    // ninguem. Este caso reprova pelo nome.
+    await montarOMural(tester);
+    expect(find.text(CorpoDoMural.tituloSemConexao), findsOneWidget);
+    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsNothing);
+  });
+
+  testWidgets(
+      'ISCA — com publicacao PROPRIA e linha vazia, o texto diz que as '
+      'publicacoes APARECEM aqui', (tester) async {
+    // A distincao sai de `listMyPublications`, que NAO depende de conexao. Sem
+    // a segunda leitura os dois estados ficam indistinguiveis, e a tela escolhe
+    // a frase errada em metade dos casos.
+    final capturado = await montarOMural(
+      tester,
+      minhas: <Map<String, dynamic>>[
+        <String, dynamic>{
+          'ref': 'AaBbCcDdEeFfGgHhIiJjK9',
+          'body': 'publiquei e ninguem me segue',
+          'created_at': '2026-10-20T12:00:00.000Z',
+          'image': null,
+        },
+      ],
+    );
+    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsOneWidget);
+    expect(find.text(CorpoDoMural.tituloSemConexao), findsNothing);
+    // E a segunda leitura saiu de verdade.
+    expect(caminhos(capturado), contains('GET /v1/me/publications'));
+  });
+
+  testWidgets('o texto do estado vazio NAO promete aviso', (tester) async {
+    // O envio de push esta bloqueado em producao por falta de permissao da
+    // conta de servico, e a rota de contagem da caixa de notificacoes nem esta
+    // no contrato. O sino esta na barra; o aviso nao esta.
+    await montarOMural(tester);
+    for (final promessa in <String>['avisa', 'avisamos', 'notific', 'alerta']) {
+      expect(
+        CorpoDoMural.explicacaoSemConexao.toLowerCase().contains(promessa),
+        isFalse,
+        reason: 'o estado vazio promete aviso ("$promessa"), e nao ha aviso',
+      );
+      expect(
+        CorpoDoMural.explicacaoSemPublicacao.toLowerCase().contains(promessa),
+        isFalse,
+        reason: 'o estado vazio promete aviso ("$promessa"), e nao ha aviso',
+      );
+    }
+  });
+
+  // =========================================================================
+  // (6) O CARTAO NAO DESENHA PET, CURTIDA NEM CONTADOR
+  // =========================================================================
+
+  test(
+      'ISCA — o cartao do Mural nao tem curtida, contador nem pet no '
+      'codigo-fonte', () {
+    // Curtir e comentar sao decisao do cliente para a primeira versao e **nao
+    // foram construidos**: nao ha tabela, nao ha operacao e nao ha campo no
+    // contrato. Desenhar um coracao que nao conta nada seria uma acao sem
+    // destino.
+    //
+    // E pet: foto de pet DENTRO da foto da publicacao e permitida (cliente,
+    // 19/10); ligar a ficha dele agruparia os pets de um tutor (item 7 do
+    // ADR-0010).
+    final fonte = File('lib/telas/mural/tela_do_mural.dart').readAsStringSync();
+    // A busca e no CODIGO, e nao na prosa: os comentarios citam as ausencias de
+    // proposito, e uma varredura de texto puro reprovaria exatamente as frases
+    // que documentam que elas nao existem.
+    final codigo = fonte
+        .split('\n')
+        .where((l) => !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'))
+        .join('\n');
+    for (final agulha in <String>[
+      'favorite',
+      'thumb_up',
+      'like_count',
+      'comment_count',
+      'Icons.pets',
+      'petId',
+    ]) {
+      expect(
+        codigo.contains(agulha),
+        isFalse,
+        reason:
+            '`$agulha` entrou no cartao do Mural. Curtir e comentar nao foram '
+            'construidos (nao ha tabela, operacao nem campo), e ligar pet a '
+            'publicacao e o item 7 do ADR-0010',
+      );
+    }
+  });
+
+  test('o corpo do Mural nao conhece `photo_icon_url`', () {
+    // A Emenda 3 do ADR-0010 abriu a foto de pessoa em
+    // `Conversation.participants[]` *"e em mais nenhuma resposta deste
+    // contrato"*. `PublicationAuthor` nao tem o campo, entao nao ha o que ler
+    // -- e este caso reprova quem o ler de um contrato futuro sem passar pelo
+    // cliente.
+    for (final caminho in <String>[
+      'lib/telas/mural/tela_do_mural.dart',
+      'lib/api/mural_api.dart',
+    ]) {
+      final fonte = File(caminho).readAsStringSync();
+      final codigo = fonte
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'))
+          .join('\n');
+      expect(
+        codigo.contains('photo_icon_url'),
+        isFalse,
+        reason: '`$caminho` le a foto de pessoa, e a Emenda 3 fecha essa superficie',
+      );
+    }
+  });
+
+  // =========================================================================
+  // (7) O CORPO DA RESPOSTA, LIDO COMO O SERVIDOR O MANDA
+  // =========================================================================
+
+  test('`PublicacaoDaLinha.doJson` nao inventa `mine` quando o campo falta', () {
+    // Padrao `false`: na duvida o cartao oferece `Denunciar` e nao `Apagar`. O
+    // caminho errado aqui seria oferecer apagar a publicacao de outra pessoa.
+    final sem = PublicacaoDaLinha.doJson(
+      jsonDecode('{"ref":"AaBbCcDdEeFfGgHhIiJjKk","body":"x"}')
+          as Map<String, dynamic>,
+    );
+    expect(sem.minha, isFalse);
+    expect(sem.imagem, isNull);
+    expect(sem.autor.apelido, isNull);
+  });
+
+  test('foto em `processing` do DONO chega sem URL, e o estado diz por que', () {
+    // Antes de o worker reescrever a derivada a foto carrega o EXIF do celular
+    // (ADR-0010 item 4). O contrato diz isso no `status`, em vez de deixar o
+    // app descobrir pela ausencia da URL.
+    final minha = MinhaPublicacao.doJson(<String, dynamic>{
+      'ref': 'AaBbCcDdEeFfGgHhIiJjKk',
+      'body': 'olha ele',
+      'created_at': '2026-10-20T12:00:00.000Z',
+      'image': <String, dynamic>{
+        'upload_id': '018f7c1e-7a2b-7c3d-9e4f-000000000001',
+        'status': 'processing',
+        'url': null,
+        'rejection_reason': null,
+        'alt_text': null,
+      },
+    });
+    expect(minha.imagem?.estado, EstadoDaFotoDaPublicacao.processando);
+    expect(minha.imagem?.url, isNull);
+  });
+
+  test('estado DESCONHECIDO do servidor cai em `processando`', () {
+    // E o unico estado em que a tela nao promete imagem nenhuma, e portanto o
+    // unico seguro para o desconhecido.
+    final minha = MinhaPublicacao.doJson(<String, dynamic>{
+      'ref': 'AaBbCcDdEeFfGgHhIiJjKk',
+      'body': 'x',
+      'image': <String, dynamic>{'status': 'quarantined'},
+    });
+    expect(minha.imagem?.estado, EstadoDaFotoDaPublicacao.processando);
+  });
+}
