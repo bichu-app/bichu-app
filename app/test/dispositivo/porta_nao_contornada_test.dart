@@ -1644,7 +1644,28 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// -- COM as chaves: em zsh, sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo, e MEDI isso nesta rodada), e nao
 /// copiado de ramo nem de relato.
-const String _arvoreDasTelas = '1413454d749f87001859c85e1e6e71d0449c2941'; // SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
+/// **Destravado pelo CONSERTO DO `Usar minha localizacao` (20/10/2026)**,
+/// relatado pelo cliente: *"o botao de usar minha localizacao na secao do pets
+/// nao esta funcionando"*. UM arquivo desta arvore:
+/// `perdido/lista_de_perdidos.dart`. `_resolverEAplicar` ganhou o parametro
+/// `porToque`, e o caminho do TOQUE ganhou ramo proprio -- ele devolve a
+/// decisao ao aparelho (limpa `_pessoaMexeu` e `_cidadeDigitada`) em vez de
+/// ser engolido pela guarda que existe para o caminho AUTOMATICO. O caminho
+/// automatico ficou identico.
+///
+/// **Nenhuma porta de aparelho encostada**: a tela ja falava com
+/// `Localizacao` pelo escopo antes e depois, nenhum importe de plugin entrou,
+/// nenhum canal de plataforma, nenhuma permissao nova, nenhum `dart:io` -- o
+/// portao estrutural de diretivas deste mesmo arquivo continua respondendo por
+/// isso. O que mudou e a PRECEDENCIA de qual cidade vale, que e logica de
+/// tela.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao nesta arvore
+/// (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`, `rev-parse <arvore>:app/lib/telas`), e nao copiado de relato.
+/// Anterior: `1413454d74`.
+///
+const String _arvoreDasTelas = 'b637053d461e230522f781e458bd710c26d558c4'; // CONSERTO DO `Usar minha localizacao` (20/10/2026), sobre o segundo lote. SEGUNDO LOTE DE 19/10/2026, VALOR FINAL com as OITO frentes: recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui os OITO valores de ramo e o intermediario de sete frentes, listados acima, cujas justificativas ficam INTEIRAS.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

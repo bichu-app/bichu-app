@@ -447,7 +447,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     if (!mounted) return;
     setState(() => _permissao = permissao);
     if (permissao != PermissaoDeLocalizacao.concedida) return;
-    await _resolverEAplicar(porta);
+    await _resolverEAplicar(porta, porToque: false);
   }
 
   /// O caminho do TOQUE: pede a permissão e, concedida, resolve.
@@ -468,10 +468,35 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     if (!mounted) return;
     setState(() => _permissao = depois);
     if (depois != PermissaoDeLocalizacao.concedida) return;
-    await _resolverEAplicar(porta);
+    await _resolverEAplicar(porta, porToque: true);
   }
 
-  Future<void> _resolverEAplicar(Localizacao porta) async {
+  /// [porToque] separa os DOIS donos desta resolução, e a separação é o
+  /// conserto de 20/10/2026.
+  ///
+  /// **O defeito, medido:** a guarda `_pessoaMexeu` abaixo valia para os dois
+  /// caminhos, e por isso `Usar minha localização` **não fazia nada** no único
+  /// estado em que ele é oferecido. A conta fecha assim: o botão só aparece
+  /// quando `_cidadeDoAparelho == null` **ou** `_pessoaMexeu` (ver
+  /// [_podeOferecerLocalizacao]); quem já tem cidade do aparelho e tocou em
+  /// `Ver todas` cai no segundo caso -- e aí a resolução chegava, encontrava
+  /// `_pessoaMexeu` ligado e voltava na primeira linha. Nenhum erro, nenhuma
+  /// faixa, nada na tela: o toque era descartado em silêncio.
+  ///
+  /// A guarda está CERTA para o caminho automático, que é para o que ela foi
+  /// escrita: aquele dispara sozinho depois da primeira carga, e trocar a
+  /// lista debaixo de quem acabou de filtrar é o pior desfecho possível.
+  ///
+  /// No caminho do TOQUE ela inverte o sentido: a pessoa leu `Usar minha
+  /// localização` e tocou. Esse é o ato dela, e o que ele significa é
+  /// **devolver a decisão ao aparelho** -- por isso o toque limpa
+  /// `_pessoaMexeu` e `_cidadeDigitada` em vez de respeitá-los. Com eles
+  /// limpos, [_cidadeEmUso] volta a `_cidadeDoAparelho` e o botão deixa de ser
+  /// oferecido, que é o estado "o caminho já deu certo".
+  Future<void> _resolverEAplicar(
+    Localizacao porta, {
+    required bool porToque,
+  }) async {
     final resultado = await porta.cidadeAproximada(prazo: prazoDaResolucao);
     if (!mounted) return;
     switch (resultado) {
@@ -481,6 +506,26 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // o ADR chama de reserva.
         return;
       case CidadeResolvida(cidade: final cidade):
+        if (porToque) {
+          // **O TOQUE DEVOLVE A DECISÃO AO APARELHO**, e as três linhas são
+          // uma coisa só: sem limpar `_pessoaMexeu` a precedência de
+          // [_cidadeEmUso] continuaria lendo `_cidadeDigitada`, e sem limpar
+          // `_cidadeDigitada` a cidade digitada antes voltaria a valer no
+          // quadro seguinte.
+          //
+          // **E não há `if (cidade == _cidadeDoAparelho) return` aqui**, de
+          // propósito: no caso comum ela é IGUAL -- a abertura já resolveu a
+          // mesma cidade, e o que mudou foi a pessoa ter pedido `Ver todas` em
+          // cima dela. Voltar cedo por igualdade deixaria o toque sem efeito
+          // outra vez, pelo outro motivo.
+          setState(() {
+            _cidadeDoAparelho = cidade;
+            _pessoaMexeu = false;
+            _cidadeDigitada = null;
+          });
+          await _carregar();
+          return;
+        }
         // Quem mexeu no filtro enquanto a resolução corria MANDA: trocar a
         // lista debaixo de quem acabou de escolher é o pior desfecho possível.
         if (_pessoaMexeu) return;
