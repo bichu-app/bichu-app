@@ -51,6 +51,8 @@
 /// tela que promete offline o que nao e.
 library;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -334,6 +336,15 @@ class LocalizacaoPorGeolocator implements Localizacao {
   /// fundido acrescenta nao tem uso aqui, e o custo dela e uma dependencia de
   /// terceiro no caminho de um dado pessoal. Quando o ganho passar a importar,
   /// isto vira `false` num lugar so, com a decisao registrada.
+  ///
+  /// **Quem le este campo e [_ajustesDaMedicao], e so ele.** A observacao nao
+  /// e organizacao de codigo: entre a BICHUS-23 e 20/10/2026 este campo
+  /// existiu DECLARADO E NAO LIDO -- a captura montava um [LocationSettings]
+  /// puro, que no Android e justamente o provedor fundido do Google. A prosa
+  /// acima estava inteira, a decisao estava tomada, e no aparelho ela nao
+  /// valia. Um campo de privacidade que ninguem le nao reprova nada, e foi
+  /// por isso que `gerenciador_do_sistema_test.dart` passou a medir o valor
+  /// que chega ao canal.
   final bool forcarGerenciadorDoSistema;
 
   @override
@@ -382,10 +393,7 @@ class LocalizacaoPorGeolocator implements Localizacao {
 
     try {
       final posicao = await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: prazo,
-        ),
+        locationSettings: _ajustesDaMedicao(prazo),
       );
       return CapturaComPonto(
         PontoCapturado(
@@ -402,6 +410,42 @@ class LocalizacaoPorGeolocator implements Localizacao {
       // tres frases para uma acao unica.
       return const CapturaSemPonto(MotivoDeNaoTerPonto.semFixNoPrazo);
     }
+  }
+
+  /// Os ajustes que vao para o lado nativo -- e **o unico lugar que le
+  /// [forcarGerenciadorDoSistema]**.
+  ///
+  /// Sao duas classes e nao uma porque a escolha de provedor **nao existe no
+  /// iOS**: nele ha um `CLLocationManager` e nada mais, e
+  /// `forceLocationManager` e campo de [AndroidSettings]. Mandar a chave onde
+  /// ela nao tem significado nao e inofensivo: ela viaja no `toJson()` para o
+  /// lado nativo e passa a parecer uma garantia que a plataforma nao da.
+  ///
+  /// **O [LocationSettings] puro nao e um padrao conservador, e o contrario.**
+  /// Com ele o `geolocator` cai no `FusedLocationProviderClient` do Google
+  /// Play Services -- exatamente o terceiro que o campo existe para tirar do
+  /// caminho. Foi assim que a decisao de privacidade ficou escrita no campo e
+  /// ausente do aparelho, e e por isso que
+  /// `app/test/dispositivo/gerenciador_do_sistema_test.dart` cobra o valor
+  /// COMO ELE SAI NO CANAL, e nao a existencia do campo.
+  ///
+  /// [defaultTargetPlatform] e nao `Platform.isAndroid` porque este arquivo
+  /// nao abre `dart:io` -- e porque o portao precisa poder dizer "agora eu sou
+  /// Android" sem aparelho.
+  LocationSettings _ajustesDaMedicao(Duration prazo) {
+    // `low` e a decisao do criterio 2 da BICHUS-23, e ela vale nas duas
+    // plataformas: fica num lugar so para as duas nao divergirem.
+    const precisao = LocationAccuracy.low;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        forceLocationManager: forcarGerenciadorDoSistema,
+        accuracy: precisao,
+        timeLimit: prazo,
+      );
+    }
+
+    return LocationSettings(accuracy: precisao, timeLimit: prazo);
   }
 
   /// ## A MEMORIA DA ULTIMA RESOLUCAO, e por que ela e obrigatoria
