@@ -152,6 +152,24 @@ export const MODULES = [
   // par, e onde a LISTA de conexoes nao existe -- e com `media` so por
   // `media/ports/imagem-de-catalogo.ts`, pela forma da chave de objeto.
   'people',
+  // BICHUS-278, 20/10/2026. OS CONTADORES DAS ABAS, modulo proprio porque ele
+  // **atravessa tres dominios e nao pertence a nenhum**: a contagem de `Pets`
+  // sai de `lostfound`, a de `Eventos` de `network` e a de `Comunidade` de
+  // `professionals`. Dentro de qualquer um dos tres, os outros dois teriam de
+  // ser importados por `domain/` alheio -- que e exatamente o que esta
+  // fronteira existe para impedir.
+  //
+  // A fronteira e respeitada pelo lado certo: este modulo importa dos outros
+  // tres **so os construtores de consulta EXPORTADOS** por
+  // `adapters/persistence/`, que existem para a contagem e a pagina nao
+  // divergirem (esta escrito no cabecalho de
+  // `kysely-listagem-publica-de-perdidos.ts`). Nenhum dos tres importa nada
+  // daqui.
+  //
+  // **Uma tabela**: `section_list_views` (migracao `20261020000001`), o
+  // marcador de "ja vi" por area. Ela e deste modulo e de mais ninguem --
+  // `lostfound`, `network` e `professionals` nunca a leem.
+  'sections',
 ];
 
 /**

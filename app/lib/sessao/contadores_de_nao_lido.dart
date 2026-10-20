@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../api/contadores_api.dart';
 import '../api/conversas_api.dart';
 import '../dispositivo/distintivo_do_aplicativo.dart';
+import 'cidade_escolhida.dart';
 
 /// O OBJETO DE CONTAGEM que a barra de baixo lia e nao existia.
 ///
@@ -23,8 +25,8 @@ import '../dispositivo/distintivo_do_aplicativo.dart';
 /// | Aba | O que ele pediu | Fonte medida |
 /// |---|---|---|
 /// | `AuAu` | mensagem nova | **EXISTE**: `unread_count` de `GET /v1/conversations`, da conta inteira, e `conversation_list_views.seen_at` para zerar |
-/// | `Pets` | pet novo na regiao | **NAO EXISTE**: a tabela `pets` nao tem coluna de cidade nenhuma, e nao ha marcador de "ja vi" |
-/// | `Rede` | evento novo, profissional novo | **NAO EXISTE marcador de "ja vi"**: `network_events` e `professionals` tem `created_at` e `city`, e nenhuma das duas listagens aceita recorte por instante nem guarda o que a pessoa viu |
+/// | `Pets` | pet novo na regiao | **EXISTE desde 20/10/2026**: `lost_pets_new` de `GET /v1/me/section-counters`, no MESMO recorte de `listPublicLostPets` -- que e o corpo da aba. A tabela `pets` continua sem coluna de cidade, e e por isso que a fonte NAO e ela: ver `contadores_api.dart` |
+/// | `Rede` | evento novo, profissional novo | **EXISTEM desde 20/10/2026**: `network_events_new` e `network_directory_new` da mesma rota. O selo da aba e a SOMA das duas, e os marcadores de "ja vi" sao SEPARADOS (`section_list_views`) |
 /// | `Mural` | publicacao de quem ele segue | **NAO EXISTE NADA**: nao ha tabela de publicacao, nao ha tabela de seguir e nao ha rota de linha do tempo |
 /// | `Loja` | -- | ele nao pediu |
 ///
@@ -86,15 +88,70 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   /// A porta de conversas entra POSICIONAL, como `PetsApi(api)` e as outras
   /// camadas de API deste app; o caminho do icone do aplicativo entra nomeado
   /// porque e opcional e tem padrao.
-  ContadoresDeNaoLido(this._conversas, {DistintivoDoAplicativo? distintivo})
-      // O padrao e o INERTE, e e o valor correto de hoje. Ver
-      // `distintivo_do_aplicativo.dart`.
-      : _distintivo = distintivo ?? const DistintivoInerte();
+  ContadoresDeNaoLido(
+    this._conversas, {
+    required ContadoresApi secoes,
+    required CidadeEscolhida cidade,
+    DistintivoDoAplicativo? distintivo,
+  })  // `_secoes` e `_cidade` nao podem ser formais (`this._secoes`): parametro
+      // nomeado exige nome publico, e os dois PRECISAM ser nomeados -- a porta
+      // de conversas e a posicional, como `PetsApi(api)` e as outras camadas.
+      // ignore: prefer_initializing_formals
+      : _secoes = secoes,
+        // ignore: prefer_initializing_formals
+        _cidade = cidade,
+        // O padrao do distintivo e o INERTE, e e o valor correto de hoje. Ver
+        // `distintivo_do_aplicativo.dart`.
+        _distintivo = distintivo ?? const DistintivoInerte();
+
 
   final ConversasApi _conversas;
+
+  /// A porta das TRES contagens novas. **Exigida e nao opcional**, e a escolha
+  /// e sobre que defeito e possivel: uma porta opcional com padrao nulo faria
+  /// um esquecimento de fiacao desligar os tres contadores **em silencio** --
+  /// que e, letra por letra, o defeito que custou o contador de mensagens
+  /// inteiro em 20/10/2026 (uma chamada de `registrarRota` que faltava, e
+  /// nenhum portao olhando). Exigida, o esquecimento nao compila.
+  final ContadoresApi _secoes;
+
+  /// De onde sai a cidade do contador de `Pets`: o MESMO deposito que
+  /// `lista_de_perdidos.dart` grava a cada carga. A razao de nao ser
+  /// `Me.reference_area.city` esta em `contadores_api.dart` (3 de 47 contas a
+  /// tem).
+  final CidadeEscolhida _cidade;
+
   final DistintivoDoAplicativo _distintivo;
 
   int? _mensagens;
+  ContadoresDeSecao? _secoesContadas;
+
+  /// A ultima cidade LIDA do deposito, ou nulo enquanto ninguem leu.
+  ///
+  /// ## POR QUE ELA E GUARDADA, E POR QUE A LEITURA NUNCA E AGUARDADA
+  ///
+  /// `CidadeEscolhida` le `getApplicationDocumentsDirectory()`, que e **canal
+  /// de plataforma**. Em teste de widget, em aparelho com armazenamento
+  /// bloqueado, em perfil restrito e no primeiro arranque de um build sem o
+  /// plugin registrado, o canal **nao tem tratador -- e canal sem tratador nao
+  /// estoura: ele simplesmente nunca responde.** Um `await` dele aqui pendura o
+  /// contador para sempre, e nao com erro: em silencio.
+  ///
+  /// **Isto nao e teoria.** `lista_de_perdidos.dart` ja carrega a regra por
+  /// escrito -- a cidade guardada *"chega sem a tela esperar"*, porque
+  /// aguarda-la antes da primeira carga *"travaria a seção em que o aplicativo
+  /// ABRE"* --, e eu reaprendi medindo: a primeira versao deste arquivo dava
+  /// `await _cidade.ler()` dentro de [atualizar], e **doze casos de outras
+  /// frentes reprovaram** (cadastro, login e re-registro de aparelho), porque o
+  /// `aoEntrar` nunca voltava.
+  ///
+  /// Entao a leitura e disparada SEM espera e o pedido sai com o que ja se
+  /// sabe. **O preco, dito em voz alta:** o PRIMEIRO pedido de contagem depois
+  /// de o app abrir sai sem cidade -- geografia aberta, os casos do pais
+  /// inteiro --, e o segundo (retomada, ou a volta de uma visita a `Pets`) ja
+  /// leva a cidade. E a mesma troca que a lista faz, pela mesma razao.
+  String? _cidadeConhecida;
+  bool _pediuACidade = false;
 
   /// Quantas mensagens nao lidas a CONTA tem, ou **nulo**.
   ///
@@ -107,6 +164,33 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   /// motivo para olhar. E um `0` inventado numa falha de rede e pior ainda --
   /// ele afirma, para quem tem 12 recados, que nao ha nenhum.
   int? get mensagens => _mensagens;
+
+  /// Quantos casos de perdido NOVOS ha no recorte da aba `Pets`, ou **nulo**.
+  ///
+  /// Nulo e "ninguem contou ainda", e a aba nao pinta nada. **Nao e "pet
+  /// cadastrado novo"**, e a razao esta em `contadores_api.dart`: nao existe
+  /// superficie que liste pet cadastrado de terceiro por regiao, e um numero
+  /// sobre `pets` seria um numero sem lista.
+  int? get perdidos => _secoesContadas?.perdidosNovos;
+
+  /// O numero do selo da aba `Rede`: a SOMA das duas sub-abas, ou **nulo**.
+  ///
+  /// **Soma porque a barra tem um selo por aba**, e nao porque as duas coisas
+  /// sejam a mesma. Quem diz o que o numero junta e o rotulo acessivel, em
+  /// `DestinoDeNavegacao.nomeAcessivelCom` -- e por isso o substantivo da
+  /// `Rede` nomeia as duas parcelas.
+  ///
+  /// O marcador de "ja vi" e **separado por sub-aba**, entao este numero desce
+  /// em dois passos: ver `Eventos` derruba [eventos] e o resto fica ate
+  /// `Comunidade` ser vista.
+  int? get rede => _secoesContadas?.redeNova;
+
+  /// A parcela de eventos da `Rede`. Exposta para o portao poder cobrar que a
+  /// soma e a soma, e nao um dos dois numeros com outro nome.
+  int? get eventos => _secoesContadas?.eventosNovos;
+
+  /// A parcela do diretorio da `Rede`.
+  int? get profissionais => _secoesContadas?.profissionaisNovos;
 
   /// O ultimo numero que o caminho do icone do aplicativo recebeu, e o que
   /// aconteceu com ele. Nulo antes da primeira tentativa.
@@ -125,12 +209,103 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   /// e o que importa: o numero nao vira zero, e um numero velho continua
   /// sendo mais verdadeiro que um zero inventado.
   Future<void> atualizar() async {
+    // AS DUAS PERGUNTAS EM PARALELO, e nao uma depois da outra: sao dois
+    // pedidos independentes e serializa-los dobraria a espera do primeiro
+    // desenho da barra sem economizar pedido nenhum.
+    //
+    // **Uma falha nao derruba a outra.** Cada ramo engole a propria falha, e
+    // por isso `Future.wait` aqui nao e risco: nenhum dos dois relanca.
+    await Future.wait<void>(<Future<void>>[
+      _contarMensagens(),
+      atualizarSecoes(),
+    ]);
+  }
+
+  Future<void> _contarMensagens() async {
     try {
       final pagina = await _conversas.listar(limite: 1);
       definir(pagina.unreadCount);
     } on Object {
       // Ver o doc acima. Nao relanca, e NAO mexe em `_mensagens`.
     }
+  }
+
+  /// Pergunta as TRES contagens de secao. Falha **nao** zera.
+  ///
+  /// A cidade sai do deposito do aparelho, e a leitura dele **nunca estoura**:
+  /// `CidadeEscolhida` engole falha das duas pontas e devolve nulo (ela e canal
+  /// de plataforma, e em aparelho com armazenamento bloqueado ou em teste de
+  /// widget ela falha -- o que e normal). Nulo ali e geografia aberta, que e o
+  /// mesmo recorte com que a lista abre nessa situacao.
+  Future<void> atualizarSecoes() async {
+    try {
+      _lerACidadeSemEsperar();
+      final contagem = await _secoes.contar(cidade: _cidadeConhecida);
+      // **Nulo NAO zera**, e e o mesmo motivo de `_contarMensagens`: a falha
+      // deixa o numero velho, que e mais verdadeiro que um zero inventado.
+      if (contagem == null) return;
+      _definirSecoes(contagem);
+    } on Object {
+      // Nao relanca. `ContadoresApi` ja engole `FalhaDeChamada` e
+      // `FormatException`; este `catch` cobre o que vier do deposito.
+    }
+  }
+
+  /// A area foi VISTA: **o servidor devolve os numeros novos no mesmo pedido.**
+  ///
+  /// Uma viagem, e nao duas. O contador de mensagens paga duas (uma para
+  /// `markMyConversationsSeen` e outra para recontar) porque lá a resposta e
+  /// 204 -- e lá ela tem de ser, porque o aviso de plaquinha lida ATRAVESSA o
+  /// zero e um numero devolvido ali faria a tela acreditar no que acabou de
+  /// zerar. **Nenhuma destas tres areas tem excecao parecida** (medido), entao
+  /// a rota devolve 200 com os contadores recalculados DEPOIS da escrita, e o
+  /// app continua sem adivinhar nada: quem decide o numero e o servidor.
+  ///
+  /// **Nao e `_definirSecoes(zero)`.** Zerar local seria a adivinhacao que a
+  /// primeira versao de [marcarMensagensVistas] cometeu e que a medicao do
+  /// `WHERE` do servidor desmentiu.
+  Future<void> marcarSecaoVista(SecaoComContador secao) async {
+    try {
+      _lerACidadeSemEsperar();
+      final contagem = await _secoes.marcarVista(secao, cidade: _cidadeConhecida);
+      if (contagem == null) return;
+      _definirSecoes(contagem);
+    } on Object {
+      // Ver o doc acima. O selo fica aceso e a proxima entrada tenta de novo,
+      // que e o pior desfecho possivel -- e e aceitavel.
+    }
+  }
+
+  /// Pede a cidade ao deposito **uma vez**, e nao espera a resposta.
+  ///
+  /// Uma vez por instancia: o deposito e do aparelho e a cidade so muda quando
+  /// a lista de perdidos grava outra -- e quando ela grava, o proximo arranque
+  /// le. Reler a cada atualizacao gastaria um canal de plataforma por retomada
+  /// para um valor que quase nunca muda.
+  ///
+  /// `ler()` engole falha das duas pontas e devolve nulo, entao o `catchError`
+  /// aqui e cinto e suspensorio -- e ele existe porque um `Future` sem
+  /// tratador de erro em caminho nao aguardado derruba a zona do teste, e nao
+  /// este metodo.
+  void _lerACidadeSemEsperar() {
+    if (_pediuACidade) return;
+    _pediuACidade = true;
+    _cidade.ler().then((cidade) {
+      if (cidade == null || cidade.trim().isEmpty) return;
+      _cidadeConhecida = cidade.trim();
+    }).catchError((Object _) => null);
+  }
+
+  void _definirSecoes(ContadoresDeSecao contagem) {
+    final anterior = _secoesContadas;
+    if (anterior != null &&
+        anterior.perdidosNovos == contagem.perdidosNovos &&
+        anterior.eventosNovos == contagem.eventosNovos &&
+        anterior.profissionaisNovos == contagem.profissionaisNovos) {
+      return;
+    }
+    _secoesContadas = contagem;
+    notifyListeners();
   }
 
   /// Recebe o numero que o servidor mandou. E a porta de `aoContarNaoLidas`.
@@ -200,7 +375,16 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   /// tinha mensagem, e a aba pintaria essa afirmacao para quem nem conta tem.
   void esquecer() {
     _ultimoDistintivo = null;
-    if (_mensagens == null) return;
+    // AS TRES CONTAGENS DE SECAO SAEM JUNTO, e esquecer de limpa-las seria o
+    // defeito visivel: quem sai da conta continuaria vendo o selo de `Pets` e
+    // de `Rede` com o numero da conta anterior, numa barra que o app desenha
+    // tambem deslogado.
+    final tinhaSecoes = _secoesContadas != null;
+    _secoesContadas = null;
+    if (_mensagens == null) {
+      if (tinhaSecoes) notifyListeners();
+      return;
+    }
     _mensagens = null;
     notifyListeners();
   }

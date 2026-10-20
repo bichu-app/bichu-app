@@ -75,6 +75,51 @@ enum ConfiguracaoDeBuild {
 /// **Eram tres sinais visiveis ate 18/10/2026**, quando o cliente removeu a
 /// frase de apoio do corpo das paginas ([reforcoDaPagina], hoje vazia nas
 /// cinco). O sinal de acessibilidade NAO saiu com ela.
+/// O SUBSTANTIVO da contagem de uma aba, **no registro do destino**.
+///
+/// ## Por que ele mora aqui, e nao em `nomeAcessivelCom`
+///
+/// A frente de 20/10 que entregou o contador de `AuAu` escreveu a regra e
+/// deixou um `assert` guardando a porta: *"quando houver fonte para outra aba,
+/// o substantivo entra no registro do destino, e nao aqui"*. O motivo e
+/// concreto -- a funcao dizia `mensagens novas` em texto fixo, e chamada para
+/// `Pets` anunciaria *"Pets, 3 mensagens novas"* a quem navega por audicao.
+/// Um `switch` sobre [CampoSemantico] dentro da funcao resolveria o sintoma e
+/// poria a microcopy de cinco secoes dentro de um metodo; no registro, cada
+/// destino carrega a sua e o `assert` passa a cobrar a presenca em vez do
+/// valor.
+///
+/// ## [oQueJunta] existe por causa da `Rede`, e so dela
+///
+/// A barra tem **um** selo por aba, e a `Rede` tem duas sub-abas -- `Eventos` e
+/// `Comunidade`. O numero pintado e a SOMA, e um rotulo que dissesse so
+/// *"3 novidades"* esconderia de quem ouve a tela que o 3 junta duas coisas
+/// diferentes (e que entrar numa sub-aba derruba so uma parte dele). Com
+/// [oQueJunta], o anuncio diz o que o numero reune.
+class SubstantivoDaContagem {
+  const SubstantivoDaContagem({
+    required this.singular,
+    required this.plural,
+    this.oQueJunta,
+  });
+
+  /// Com 1. Ex.: `mensagem nova`.
+  final String singular;
+
+  /// Com 0, 2 ou mais. Ex.: `mensagens novas`.
+  final String plural;
+
+  /// O que a soma reune, quando o numero da aba soma mais de uma coisa.
+  /// **Nulo e o normal**: so a `Rede` soma.
+  final String? oQueJunta;
+
+  String comQuantidade(int n) {
+    final nucleo = '$n ${n == 1 ? singular : plural}';
+    final junta = oQueJunta;
+    return junta == null ? nucleo : '$nucleo, $junta';
+  }
+}
+
 class DestinoDeNavegacao {
   const DestinoDeNavegacao({
     required this.rotulo,
@@ -88,6 +133,7 @@ class DestinoDeNavegacao {
     this.naBarra = true,
     this.ehRamo = true,
     this.destinoProvisorio,
+    this.contagem,
   });
 
   /// Se este destino e um ramo do `IndexedStack` de `rotas.dart`.
@@ -198,6 +244,15 @@ class DestinoDeNavegacao {
   /// `test/telas/casca_de_cinco_secoes_test.dart` reprova quando declaram.
   final CampoSemantico campoSemantico;
 
+  /// O substantivo que o leitor de tela anuncia quando esta aba tem numero.
+  ///
+  /// **Nulo quando a aba nao tem fonte de contagem**, e nulo e o estado de
+  /// `Mural` e de `Loja` hoje. Nulo nao e um padrao: [nomeAcessivelCom] tem um
+  /// `assert` que estoura se alguem pedir o nome COM contagem para um destino
+  /// sem substantivo -- porque esse e o estado em que o app teria um numero e
+  /// nao teria como dizer o que ele significa.
+  final SubstantivoDaContagem? contagem;
+
   /// O nome que o VoiceOver e o TalkBack anunciam.
   ///
   /// **O rotulo visivel vem primeiro, literal.** E o SC 2.5.3 (rotulo no
@@ -224,26 +279,27 @@ class DestinoDeNavegacao {
   /// encurta em `9+` porque o circulo nao cresce; essa restricao e de quem VE,
   /// e aplica-la a quem ouve seria contar "nove mais" a quem tem 23. Com 100 e
   /// com 1000 o rotulo diz 100 e 1000, e o pintado continua `9+`.
-  /// **O substantivo e `mensagem` porque `AuAu` e a UNICA aba com fonte
-  /// medida.** As outras quatro -- pet novo na regiao, evento novo,
-  /// profissional novo, publicacao de quem a pessoa segue -- nao tem de onde
-  /// contar hoje (a tabela, o marcador de "ja vi", ou os dois), e por isso
-  /// nenhuma delas chama este metodo. O `assert` abaixo e quem impede que a
-  /// proxima pessoa o chame para `Pets` e receba "3 mensagens novas" numa aba
-  /// de pets: quando houver fonte para outra aba, o substantivo entra no
-  /// registro do destino, e nao aqui.
+  ///
+  /// **O SUBSTANTIVO VEM DO REGISTRO (20/10/2026), e nao mais daqui.** A frente
+  /// que entregou o contador de `AuAu` deixou a regra escrita -- *"quando a
+  /// segunda aba ganhar fonte, o substantivo entra no registro do destino"* --
+  /// e um `assert` guardando a porta enquanto `mensagem` era texto fixo nesta
+  /// funcao. Tres abas ganharam fonte no mesmo dia (`Pets`, e as duas sub-abas
+  /// da `Rede` somadas num selo), entao a palavra saiu daqui e virou
+  /// [contagem]. O `assert` FICA, cobrando a presenca em vez do valor: aba com
+  /// numero e sem substantivo e uma aba que anunciaria um inteiro sozinho.
   String nomeAcessivelCom(int? naoLidas) {
     final selo = DistintivoDaAba.textoDe(naoLidas);
     if (selo == null) return semanticsLabel;
+    final substantivo = contagem;
     assert(
-      campoSemantico == CampoSemantico.conversa,
-      'nomeAcessivelCom diz "mensagens novas", e esta aba e $rotulo. A unica '
-      'aba com fonte de contagem medida e AuAu; para outra aba, o substantivo '
-      'tem de entrar no registro do destino.',
+      substantivo != null,
+      'A aba $rotulo recebeu contagem e nao declara `contagem` no registro. '
+      'Sem o substantivo o leitor de tela anunciaria "$rotulo, ${naoLidas!}" -- '
+      'um numero sem assunto. O substantivo mora no registro do destino.',
     );
-    final n = naoLidas!;
-    final plural = n == 1 ? 'mensagem nova' : 'mensagens novas';
-    return '$rotulo, $n $plural';
+    if (substantivo == null) return semanticsLabel;
+    return '$rotulo, ${substantivo.comQuantidade(naoLidas!)}';
   }
 }
 
@@ -347,6 +403,22 @@ class CascaComAbas extends StatefulWidget {
       // e esta justificativa citando uma acao que nao esta mais na tela.
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.animal,
+      // O SUBSTANTIVO DO CONTADOR (20/10/2026). **Diz `perdido` e nao
+      // `cadastrado`, e a palavra foi medida:** o corpo desta aba e
+      // `ListaDePerdidos`, e nao existe superficie que liste pet cadastrado de
+      // terceiro por regiao -- a tabela `pets` nao tem coluna de cidade
+      // nenhuma. A conta inteira esta em `api/contadores_api.dart`.
+      //
+      // **NAO diz "na sua regiao", e a ausencia e honestidade e nao economia.**
+      // O recorte vem do deposito do aparelho (a ultima cidade da lista), e na
+      // primeira abertura depois de instalar ele esta vazio -- ali a contagem e
+      // do pais inteiro. Prometer regiao num rotulo que as vezes nao recorta
+      // regiao seria afirmar o que o numero nao sustenta. Quem diz a cidade e a
+      // `_LinhaDoRecorte` da propria lista, que aparece nos tres estados dela.
+      contagem: SubstantivoDaContagem(
+        singular: 'pet perdido novo',
+        plural: 'pets perdidos novos',
+      ),
     ),
     DestinoDeNavegacao(
       rotulo: 'Rede',
@@ -387,6 +459,22 @@ class CascaComAbas extends StatefulWidget {
       // instalasse. E o mesmo passo que `Perto` e `Loja` ja deram.
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.comunidade,
+      // UM SELO, DUAS CONTAGENS -- e o rotulo acessivel DIZ o que ele junta.
+      //
+      // A barra tem um selo por aba e esta secao tem duas sub-abas (`Eventos` e
+      // `Comunidade`), entao o numero pintado e a SOMA. `3` sozinho esconderia
+      // de quem ouve a tela que o numero reune duas coisas -- e esconderia
+      // tambem por que entrar em `Eventos` derruba so uma parte dele: os
+      // marcadores de "ja vi" sao separados por sub-aba (`section_list_views`).
+      //
+      // `novidade` e a palavra do nucleo porque ela e a unica que cobre as duas
+      // parcelas sem mentir sobre nenhuma; o que elas sao vem logo depois, em
+      // `oQueJunta`.
+      contagem: SubstantivoDaContagem(
+        singular: 'novidade',
+        plural: 'novidades',
+        oQueJunta: 'eventos e profissionais novos',
+      ),
     ),
     // -- A SECAO `Mural`, no slot 3 (decisao do cliente, 19/10/2026) --------
     //
@@ -545,6 +633,14 @@ class CascaComAbas extends StatefulWidget {
       rota: Rotas.mensagens,
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.conversa,
+      // O SUBSTANTIVO QUE MORAVA EM `nomeAcessivelCom`, verbatim: o anuncio
+      // continua `AuAu, 3 mensagens novas`, letra por letra. Ele so mudou de
+      // lugar -- a funcao tinha a palavra fixa no corpo, e com tres abas
+      // ganhando fonte no mesmo dia ela passou a ser do registro.
+      contagem: SubstantivoDaContagem(
+        singular: 'mensagem nova',
+        plural: 'mensagens novas',
+      ),
       // **NAO E RAMO, e e por isso que `rotas.dart` nao mudou uma linha.**
       //
       // Um ramo do `IndexedStack` precisa de uma tela, e a tela de mensagens
@@ -795,24 +891,44 @@ class _CascaComAbasState extends State<CascaComAbas> {
     );
   }
 
-  /// Quantas nao lidas ESTA aba mostra, ou **nulo**.
+  /// Quantas novidades ESTA aba mostra, ou **nulo**.
   ///
-  /// **Nulo para quatro das cinco abas, e isso e medido e nao provisorio por
-  /// descuido.** So `AuAu` tem fonte: `unread_count` de
-  /// `GET /v1/conversations`, da conta inteira, com a autorizacao no `WHERE` do
-  /// servidor. `Pets`, `Rede`, `Mural` e `Loja` devolvem nulo porque nao ha de
-  /// onde contar -- a tabela, o marcador de "ja vi", ou os dois. A conta
-  /// completa esta em `ContadoresDeNaoLido`.
+  /// **TRES das cinco tem fonte desde 20/10/2026, e DUAS continuam sem.** A
+  /// assimetria e medida e esta escrita por aba:
+  ///
+  ///   * `AuAu` -- `unread_count` de `GET /v1/conversations`, da conta inteira;
+  ///   * `Pets` -- `lost_pets_new` de `GET /v1/me/section-counters`, no MESMO
+  ///     recorte de `listPublicLostPets`, que e o corpo da aba;
+  ///   * `Rede` -- a SOMA de `network_events_new` e `network_directory_new`,
+  ///     porque a barra tem um selo por aba e a secao tem duas sub-abas. Quem
+  ///     diz o que o numero junta e o rotulo acessivel;
+  ///   * `Mural` -- **nulo**: nao ha tabela de publicacao, nao ha tabela de
+  ///     seguir e nao ha rota de linha do tempo. A contagem e de outra frente;
+  ///   * `Loja` -- **nulo**: ele nao pediu.
   ///
   /// **Nulo nao e zero.** Aba sem fonte nao mostra zero nem erro: nao mostra
   /// NADA. Um `0` pintado em `Mural` afirmaria que ninguem que a pessoa segue
   /// publicou -- e nao existe nem a tabela de publicacao para afirmar isso.
+  ///
+  /// O `switch` e sobre [CampoSemantico] e **sem `default`**, de proposito:
+  /// campo novo no enum nao compila ate alguem decidir, aqui, se a aba dele
+  /// conta algo. Com `default` ele cairia em nulo em silencio.
   static int? _naoLidasDaAba(
     DestinoDeNavegacao destino,
     ContadoresDeNaoLido contadores,
   ) {
-    if (destino.campoSemantico != CampoSemantico.conversa) return null;
-    return contadores.mensagens;
+    switch (destino.campoSemantico) {
+      case CampoSemantico.conversa:
+        return contadores.mensagens;
+      case CampoSemantico.animal:
+        return contadores.perdidos;
+      case CampoSemantico.comunidade:
+        return contadores.rede;
+      case CampoSemantico.publicacao:
+      case CampoSemantico.compra:
+      case CampoSemantico.conta:
+        return null;
+    }
   }
 
   /// A barra de baixo. Extraida do `build` so para o `ListenableBuilder` acima

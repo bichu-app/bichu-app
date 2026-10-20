@@ -32,6 +32,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/contadores_api.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/api/conversas_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/api/modelos_conversa.dart';
@@ -272,10 +274,18 @@ String rotuloAnunciadoDaAba(WidgetTester tester, String rotulo) {
 ///
 /// **Os rotulos saem do REGISTRO**, e nao de uma lista escrita a mao: trocar
 /// `Mural` por uma palavra maior tem de reprovar AQUI, na medida.
+/// Monta a barra do REGISTRO com selo, para medir rotulo.
+///
+/// **[naoLidasDe] existe desde 20/10/2026**, quando `Pets` e `Rede` ganharam
+/// contagem: com ele a bancada pode pintar os TRES selos ao mesmo tempo, que e
+/// o pior caso de largura e o unico que prova que nenhum rotulo corta com a
+/// barra inteira acesa. O padrao -- selo so na aba de conversa -- preserva o
+/// que os casos de `AuAu` mediam antes, letra por letra.
 Future<void> montarBarraComSelo(
   WidgetTester tester, {
   required double largura,
   required int? naoLidas,
+  int? Function(DestinoDeNavegacao)? naoLidasDe,
   double escala = 2,
 }) async {
   tester.view.physicalSize = Size(largura * 3, 2000);
@@ -296,9 +306,11 @@ Future<void> montarBarraComSelo(
                 NavigationDestination(
                   icon: DistintivoDaAba(
                     glifo: Icon(destino.icone),
-                    naoLidas: destino.campoSemantico == CampoSemantico.conversa
-                        ? naoLidas
-                        : null,
+                    naoLidas: naoLidasDe != null
+                        ? naoLidasDe(destino)
+                        : (destino.campoSemantico == CampoSemantico.conversa
+                            ? naoLidas
+                            : null),
                   ),
                   label: destino.rotulo,
                 ),
@@ -942,8 +954,15 @@ void main() {
     test('ISCA: falha de rede NAO zera o contador -- ela deixa como estava',
         () async {
       final rede = RedeDeTeste(naoLidas: 5);
+      final cliente = clienteDeTesteDoContador(rede);
       final contadores = ContadoresDeNaoLido(
-        ConversasApi(clienteDeTesteDoContador(rede)),
+        ConversasApi(cliente),
+        // AS PORTAS DAS TRES CONTAGENS NOVAS. Este grupo mede o contador de
+        // MENSAGENS, e a rede de teste nao responde `/me/section-counters` --
+        // `ContadoresApi` engole a falha e devolve nulo, entao as tres ficam em
+        // nulo e nao interferem no que estes casos medem.
+        secoes: ContadoresApi(cliente),
+        cidade: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
       );
       contadores.definir(5);
       expect(contadores.mensagens, 5);
@@ -961,8 +980,11 @@ void main() {
     });
 
     test('ISCA: `esquecer()` devolve o contador a NULO, e nao a zero', () {
+      final clienteParaEsquecer = clienteDeTesteDoContador(RedeDeTeste());
       final contadores = ContadoresDeNaoLido(
-        ConversasApi(clienteDeTesteDoContador(RedeDeTeste())),
+        ConversasApi(clienteParaEsquecer),
+        secoes: ContadoresApi(clienteParaEsquecer),
+        cidade: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
       );
       contadores.definir(9);
       contadores.esquecer();
@@ -1060,8 +1082,11 @@ void main() {
   group('(f) o icone do aplicativo: caminho existe, e INERTE', () {
     test('ISCA: o caminho recebe o numero -- e devolve NAO APLICADO', () {
       final espiao = DistintivoEspiao();
+      final clienteDoEspiao = clienteDeTesteDoContador(RedeDeTeste());
       final contadores = ContadoresDeNaoLido(
-        ConversasApi(clienteDeTesteDoContador(RedeDeTeste())),
+        ConversasApi(clienteDoEspiao),
+        secoes: ContadoresApi(clienteDoEspiao),
+        cidade: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
         distintivo: espiao,
       );
 

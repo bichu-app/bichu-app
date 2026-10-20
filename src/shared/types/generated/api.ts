@@ -635,6 +635,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/section-counters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os numeros das abas `Pets` e `Rede`
+         * @description **E a fonte dos selos que a barra de baixo exibe nas abas `Pets` e
+         *     `Rede`.** Operacao propria, e nao campo de outra leitura, pelo mesmo
+         *     motivo de `getNotificationCount`: a barra vive em toda tela e nao pode
+         *     pagar uma pagina de listagem para desenhar tres numeros.
+         *
+         *     Os tres numeros saem **inteiros**. O recorte em `9+` e regra da barra e
+         *     mora no aplicativo.
+         *
+         *     ## O QUE CADA NUMERO CONTA, e cada um conta o que a aba MOSTRA
+         *
+         *     Esta e a regra que decide a operacao inteira: **o selo tem de contar o
+         *     conteudo que aparece quando a pessoa toca na aba.** Selo que aponta para
+         *     lista que a aba nao abre e selo que, ao ser tocado, zera sem mostrar
+         *     nada.
+         *
+         *     * `lost_pets_new` -- casos de perdido ABERTOS e publicos no recorte de
+         *       `city`, com `last_seen_at` posterior ao marcador. **E exatamente o
+         *       recorte de `listPublicLostPets`**, que e o corpo da aba `Pets`
+         *       (`ListaDePerdidos`).
+         *
+         *       **Nao conta `pets` cadastrados, e a ausencia foi MEDIDA:** a tabela
+         *       `pets` nao tem coluna de cidade nenhuma (conferido o `CREATE TABLE`
+         *       inteiro da `20260917000006` e `ALTER TABLE pets` em todas as
+         *       migracoes: zero), e **nao existe operacao que liste pet cadastrado de
+         *       terceiro por regiao** -- as duas leituras de pet por quem nao e o
+         *       tutor sao `listPublicLostPets` e `getPublicPetBySlug`, e a segunda e
+         *       um pet por endereco. Um numero sobre `pets` seria um numero sem lista.
+         *
+         *     * `network_events_new` -- encontros `published` que ainda VAO acontecer,
+         *       com `published_at` posterior ao marcador. O "ainda vao acontecer" nao
+         *       e zelo: `listNetworkEvents` tem `when` com default `upcoming`, entao
+         *       contar encontro que ja terminou poria no selo o que a agenda nao abre.
+         *
+         *     * `network_directory_new` -- entradas do diretorio `published`, com
+         *       `published_at` posterior ao marcador.
+         *
+         *       **`published_at` e nao `created_at`, e e a decisao do cliente de
+         *       20/10/2026 que escolhe:** *"Todo profissional que passa pela moderacao
+         *       e entra no Perto conta como recomendado pela comunidade"*. O sinal e a
+         *       ENTRADA NO DIRETORIO, e `created_at` responde outra pergunta -- ele
+         *       contaria a indicacao que ainda esta na fila de moderacao, que e
+         *       precisamente o que a frase dele exclui. Esta e tambem a razao de **nao
+         *       haver coluna de destaque, ranking nem selo**: o dado ja existe.
+         *
+         *     ## `city` E DO APARELHO, e vem no pedido pelo mesmo caminho da lista
+         *
+         *     `listPublicLostPets` recorta por cidade DIGITADA, e a aba `Pets` resolve
+         *     a cidade numa cadeia que mora no aparelho (localizacao ->
+         *     `Me.reference_area.city` -> nenhuma). O contador aceita a MESMA cidade,
+         *     pelo mesmo parametro, para que o numero e a lista nunca discordem.
+         *
+         *     **Sem `city` nao ha recorte de geografia**, exatamente como na listagem
+         *     publica: o numero passa a contar os casos abertos de todas as cidades.
+         *     Nao ha valor de "qualquer cidade" a inventar, e nao ha coordenada em
+         *     lugar nenhum desta operacao -- a emenda 1 do ADR-0006 autoriza
+         *     coordenada -> nome de cidade **no aparelho**, e e so o nome que viaja.
+         *
+         *     **`reference_city` da conta NAO e usada aqui, e a medicao e o motivo:**
+         *     3 de 47 contas tem `reference_area.city` preenchida (medido pela frente
+         *     de 19/10 e registrado em `lista_de_perdidos.dart`). Um contador que
+         *     dependesse dela ficaria nulo para 94% das contas, e discordaria da lista
+         *     nas outras.
+         */
+        get: operations["getSectionCounters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sections-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Esta area foi vista -- zera o numero dela
+         * @description **Zera o contador da area e NAO marca item nenhum como lido**, como
+         *     `markMyConversationsSeen` e `markNotificationsListSeen`. "Lido" e o item
+         *     aberto; "vista" e a area.
+         *
+         *     `accept_and_deduplicate` e nao `deny_429`, pelo mesmo motivo de
+         *     `markMyConversationsSeen`: a tela chama isto a cada entrada na area, e
+         *     trocar de aba e voltar e normal. Um 429 aqui deixaria o selo ACESO para
+         *     quem acabou de olhar -- a mentira que o contador existe para evitar.
+         *
+         *     ## UMA AREA POR CHAMADA, e `Eventos` e `Comunidade` sao DUAS
+         *
+         *     As duas contagens da `Rede` caem na mesma aba da barra, que tem um selo
+         *     so, **mas o marcador e separado**. Entrar em `Eventos` nao pode zerar a
+         *     contagem de `Comunidade`: isso afirmaria que a pessoa viu um
+         *     profissional novo que nunca apareceu na tela dela. O selo da aba mostra a
+         *     SOMA e ela desce em dois passos.
+         *
+         *     ## POR QUE A RESPOSTA E 200 COM OS CONTADORES, e nao 204
+         *
+         *     `markNotificationsListSeen` responde 204 e tem a razao escrita: lá o
+         *     numero depois de "vista" **nao e necessariamente zero**, porque
+         *     `tag_scanned` e `found_reported` atravessam o zero, e devolver um numero
+         *     ali faria a tela acreditar no que ela acabou de zerar.
+         *
+         *     **Nenhuma das tres areas desta operacao tem excecao desse tipo**, e isso
+         *     foi medido: o que a aba `Pets` conta e o que `listPublicLostPets`
+         *     devolve, e as duas sub-abas da `Rede` contam o que as duas listagens
+         *     devolvem -- nao ha classe de item que o produto queira manter aceso
+         *     depois de a area ser vista.
+         *
+         *     Mesmo assim **quem decide o numero continua sendo o servidor**, e e por
+         *     isso que a resposta traz os contadores recalculados DEPOIS da escrita em
+         *     vez de 204: a alternativa seria o aplicativo escrever zero por conta
+         *     propria (adivinhacao, e ela divergiria no dia em que uma excecao
+         *     nascer) ou chamar `getSectionCounters` em seguida (uma viagem a mais por
+         *     visita, que e o que o contador de mensagens paga hoje). O corpo e o
+         *     mesmo schema da leitura.
+         */
+        post: operations["markMySectionSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications/read-all": {
         parameters: {
             query?: never;
@@ -11855,6 +11992,55 @@ export interface components {
              */
             unread_total: number;
         };
+        SectionCounters: {
+            /**
+             * @description Casos de perdido abertos e publicos no recorte de `city`, com
+             *     `last_seen_at` posterior ao marcador `pets`. Mesmo recorte de
+             *     `listPublicLostPets`, que e o corpo da aba `Pets`.
+             *
+             *     Inteiro, sem recorte: o `9+` e regra da barra. **Nao e anulavel** --
+             *     "ninguem contou ainda" e estado do APLICATIVO (chamada que nao
+             *     aconteceu ou que falhou) e nao valor do servidor, e e assim que
+             *     `unread_count` de `listConversations` tambem se comporta.
+             */
+            lost_pets_new: number;
+            /**
+             * @description Encontros `published` que ainda vao acontecer, com `published_at`
+             *     posterior ao marcador `network_events`. O "ainda vao acontecer"
+             *     espelha o `when: upcoming` que e o default de `listNetworkEvents`.
+             */
+            network_events_new: number;
+            /**
+             * @description Entradas do diretorio `published`, com `published_at` posterior ao
+             *     marcador `network_directory`. `published_at` e nao `created_at`:
+             *     o sinal de "recomendado pela comunidade" e a ENTRADA no diretorio
+             *     (decisao do cliente, 20/10/2026), e nao a indicacao que ainda esta
+             *     na fila de moderacao.
+             */
+            network_directory_new: number;
+        };
+        SectionSeenInput: {
+            /**
+             * @description A area que acabou de ser vista. `network_events` e
+             *     `network_directory` sao as duas sub-abas da `Rede`, e sao valores
+             *     SEPARADOS de proposito: entrar numa nao pode zerar a contagem da
+             *     outra.
+             *
+             *     `mural` nao esta na lista: a contagem do `Mural` e de outra frente,
+             *     e aceitar o valor sem ter o que contar seria casca.
+             * @enum {string}
+             */
+            section: "pets" | "network_events" | "network_directory";
+            /**
+             * @description Opcional, e so para o CORPO da resposta: os contadores devolvidos
+             *     depois da escrita sao recalculados neste recorte, igual ao de
+             *     `getSectionCounters`. **Nao e gravada em lugar nenhum** -- o
+             *     marcador e um instante, nao um lugar.
+             *
+             *     Ausente, `lost_pets_new` volta sem recorte de geografia.
+             */
+            city?: string;
+        };
         AdminBroadcastDraft: {
             title: string;
             /**
@@ -13549,6 +13735,71 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getSectionCounters: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opcional. A mesma cidade que a aba `Pets` manda em
+                 *     `listPublicLostPets`, para o selo e a lista nao discordarem.
+                 *     Ausente = sem recorte de geografia. `city=` vazio e 400, e nao
+                 *     geografia aberta -- mesma regra da listagem publica.
+                 *
+                 *     **Nao afeta `network_events_new` nem `network_directory_new`**: as
+                 *     duas sub-abas da `Rede` abrem SEM cidade, e recortar a contagem por
+                 *     uma cidade que a lista nao aplica faria o selo discordar da tela.
+                 */
+                city?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os tres contadores. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionCounters"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markMySectionSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionSeenInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description Marcado. O corpo traz os tres contadores JA recalculados com o
+             *     marcador novo -- o da area vista cai a zero, e os outros dois
+             *     continuam como estavam.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionCounters"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };

@@ -43,6 +43,7 @@
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/contadores_api.dart';
 import 'package:bichu/api/conversas_api.dart';
 import 'package:bichu/sessao/contadores_de_nao_lido.dart';
 import 'package:bichu/api/achados_api.dart';
@@ -151,7 +152,11 @@ Future<_Caixa> _montar(
       // entra com a porta de conversas deste mesmo `api` de teste: este caso
       // nao mede contador nenhum, e o objeto so pergunta quando alguem chama
       // `atualizar()`.
-      contadores: ContadoresDeNaoLido(ConversasApi(api)),
+      contadores: ContadoresDeNaoLido(
+        ConversasApi(api),
+        secoes: ContadoresApi(api),
+        cidade: CidadeEscolhida(deposito: DepositoDaCidadeEmMemoria()),
+      ),
       retomadaDeFotos: RetomadaDeFotos(
         envio: envioDeFoto,
         registro: FotosPendentes(deposito: DepositoDeFotosEmMemoria()),

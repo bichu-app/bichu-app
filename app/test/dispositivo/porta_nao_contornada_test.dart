@@ -1646,6 +1646,42 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// copiado de ramo nem de relato.
 /// BICHUS-278 (20/10/2026) -- O CONTADOR DE NAO LIDO DA ABA `AuAu`.
 ///
+/// BICHUS-278 (20/10/2026) -- OS CONTADORES DAS ABAS `Pets` E `Rede`.
+///
+/// Destravado por `d979a337...` -> `7f016247...`. A frente anterior entregou o
+/// contador de `AuAu` e MEDIU que as outras quatro abas nao tinham fonte; o
+/// cliente mandou construir tres delas no mesmo dia (a do `Mural` e de outra
+/// frente). TRES arquivos desta pasta mudaram:
+///
+///   * `casca_com_abas.dart` -- `SubstantivoDaContagem` NASCE e
+///     `DestinoDeNavegacao` ganha `contagem`. E a regra que a frente anterior
+///     deixou escrita, cumprida: *"quando a segunda aba ganhar fonte, o
+///     substantivo entra no registro do destino"*. `nomeAcessivelCom` perdeu a
+///     palavra `mensagem` fixa no corpo e o `assert` passou a cobrar a
+///     PRESENCA do substantivo em vez do campo semantico. `_naoLidasDaAba`
+///     virou `switch` sem `default`, para campo novo do enum nao cair em nulo
+///     em silencio;
+///   * `perdido/lista_de_perdidos.dart` -- UMA chamada nova, depois de a
+///     primeira pagina chegar na tela: `marcarSecaoVista(pets)`. E o mesmo
+///     momento e a mesma razao de `aoVerAArea` em `area_de_mensagens.dart` --
+///     marcar no toque zeraria o selo de quem abriu a aba e levou erro de rede;
+///   * `rede/secao_da_rede.dart` -- `initState` marca a sub-aba INICIAL como
+///     vista e `_trocarAba` marca a nova. As duas sub-abas tem marcadores
+///     SEPARADOS, entao o selo da aba `Rede` -- que e a soma -- desce em dois
+///     passos.
+///
+/// **Nenhuma colisao com as quatro frentes vizinhas nesta pasta**, medido por
+/// leitura: a da barra toca `AvatarDaConta` e a margem da foto, a do compositor
+/// toca `mural/`, a do aviso de login toca o detalhe do evento, e a do selo de
+/// "encontrado" toca o CARTAO da lista de perdidos. As tres mudancas acima
+/// estao em `DestinoDeNavegacao`/`_naoLidasDaAba`, no `_carregar` da lista e no
+/// estado das sub-abas da `Rede` -- nenhuma delas e o mesmo ponto.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao (`GIT_INDEX_FILE`
+/// temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves), e nao copiado de ramo
+/// nem de relato.
+///
 /// Destravado por `1413454d...` -> `d979a337...`. Duas telas mudaram, e as
 /// duas por pedido literal do cliente (*"o icone do auau vai ficar de outra
 /// cor com o +1, +2 dependendo a quantidade de mensagens nao lida"*):
@@ -1668,7 +1704,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// compositor do `Mural` -- quer dizer, nos MESMOS dois diretorios. Este valor
 /// e de RAMO e nao vale depois da uniao, exatamente como os oito de 19/10 nao
 /// valeram.
-const String _arvoreDasTelas = 'd979a3376f80c43fa42bf99f0d72b455b70e8f04'; // BICHUS-278, 20/10/2026: o contador de nao lido da aba `AuAu`. Substitui o valor do segundo lote de 19/10, cuja justificativa fica INTEIRA acima.
+const String _arvoreDasTelas = '7f0162478bcd0a34bbe882dfe04fd54c85d0bef7'; // BICHUS-278, 20/10/2026: os contadores das abas `Pets` e `Rede`. Substitui `d979a337...`, o valor do contador do `AuAu`, cuja justificativa fica INTEIRA acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

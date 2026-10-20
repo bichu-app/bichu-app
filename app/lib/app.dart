@@ -33,6 +33,7 @@ import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
 import 'api/conversas_api.dart';
 import 'dispositivo/distintivo_do_aplicativo.dart';
+import 'api/contadores_api.dart';
 import 'sessao/contadores_de_nao_lido.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
@@ -341,6 +342,17 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // dia em que o push sair.
     _contadores = ContadoresDeNaoLido(
       _conversas,
+      // AS TRES CONTAGENS NOVAS (20/10/2026). A porta e exigida e nao opcional
+      // de proposito: fiacao esquecida com padrao nulo desligaria os tres
+      // contadores em SILENCIO, que e letra por letra o defeito que custou o
+      // contador de mensagens inteiro -- uma chamada de `registrarRota` que
+      // faltava, sem portao nenhum olhando.
+      secoes: ContadoresApi(_api),
+      // A cidade do contador de `Pets` sai do MESMO deposito que
+      // `lista_de_perdidos.dart` grava a cada carga, e e isso que mantem o selo
+      // e a lista no mesmo recorte sem resolver localizacao duas vezes.
+      // `_cidadeEscolhida` e construida logo acima.
+      cidade: _cidadeEscolhida,
       distintivo: widget.distintivoDoApp,
     );
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
