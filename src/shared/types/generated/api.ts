@@ -19079,7 +19079,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Bloqueada. Resposta vazia */
+            /** @description Bloqueada. Resposta vazia, e a mesma de quem ja estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -19117,7 +19117,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Desbloqueada. Resposta vazia */
+            /** @description Desbloqueada. Resposta vazia, e a mesma de quem nao estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;

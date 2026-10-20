@@ -169,16 +169,37 @@ void describe('busca de CEP do servidor', () => {
   });
 
   void it('ISCA: o prazo e POR SERVICO, e estourar nao lanca', async () => {
-    // O cliente falso HONRA o `signal`, de proposito: e so assim que a isca
-    // mede o prazo em vez de medir o cliente falso. Remover o
-    // `AbortSignal.timeout` das duas chamadas faz `sinal` chegar `undefined`
-    // e a isca reprova em `assert.ok(sinal)` -- e nao pendura, que seria o
-    // modo de falha inaceitavel num teste de prazo.
-    let chamadas = 0;
+    // **O QUE A AFIRMACAO DAQUI CUSTOU, e por que ela mudou de lugar.**
+    //
+    // Esta isca afirmava `assert.ok(sinal)` DENTRO do cliente falso, com um
+    // comentario dizendo que arrancar o `AbortSignal.timeout` das duas
+    // chamadas a fazia reprovar. **Era falso, e foi medido em 20/10/2026:**
+    // com o prazo removido das duas chamadas de producao, o arquivo inteiro
+    // continuava passando 10/10.
+    //
+    // A razao: o `assert.ok` roda SINCRONAMENTE dentro do `fetch` falso, e
+    // `viacep-com-brasilapi.ts` envolve cada chamada num
+    // `try { ... } catch { return null }`. O `AssertionError` era engolido ali,
+    // os dois servicos devolviam `null`, e o desfecho virava `indisponivel` --
+    // exatamente o que a isca espera. Ela media o `catch` do codigo, nao o
+    // prazo.
+    //
+    // Agora os sinais sao ACUMULADOS e afirmados DEPOIS do `await`, fora do
+    // alcance daquele `catch`. E a afirmacao e mais forte do que a antiga: nao
+    // basta o sinal existir, ele tem de ter ABORTADO -- um
+    // `new AbortController().signal`, que nunca estoura, passaria no `ok` e
+    // reprova no `aborted`.
+    const sinais: (AbortSignal | undefined)[] = [];
     const fetch = ((_url: string, init?: { signal?: AbortSignal }) => {
-      chamadas += 1;
       const sinal = init?.signal;
-      assert.ok(sinal, 'cada chamada de saida tem de carregar o prazo');
+      sinais.push(sinal);
+      // **Sem prazo, recusa NA HORA.** Nao ha o que esperar, e pendurar e o
+      // modo de falha inaceitavel num teste de prazo: a isca precisa chegar as
+      // afirmacoes para poder reprovar dizendo o que faltou. Quem reprova e o
+      // `assert.ok` la embaixo, e nao este `reject`.
+      if (!sinal) {
+        return Promise.reject(new TypeError('chamada de saida sem prazo'));
+      }
       return new Promise<Response>((_resolver, recusar) => {
         // **O TIMER DE `AbortSignal.timeout` E UNREF, e sozinho ele NAO segura
         // o laco de eventos.** Medido no Node 22.23.2:
@@ -188,16 +209,15 @@ void describe('busca de CEP do servidor', () => {
         // Com o `fetch` de verdade quem segura o laco e o SOCKET, que e ref, e
         // por isso o prazo estoura em producao. Aqui nao ha socket nenhum: o
         // unico pendente era este `Promise`, que so se resolve no `abort` que
-        // nunca vem. `node:test` entao reprova com "Promise resolution is
-        // still pending but the event loop has already resolved" -- e levava o
-        // `describe` inteiro junto, como cancelado. Medido na esteira de
-        // 20/10/2026: 1 reprovado e 1 cancelado neste arquivo.
+        // nunca vinha. `node:test` entao reprovava com "Promise resolution is
+        // still pending but the event loop has already resolved" e levava o
+        // `describe` inteiro junto, como cancelado -- os "2 reprovados" da
+        // esteira de 20/10/2026 eram 1 caso e o grupo dele.
         //
-        // Este timer e ref e existe so para segurar o laco enquanto o prazo
-        // corre; ele e limpo no `abort` e nao resolve nada por conta propria.
-        // **Nao resolver nada e deliberado**: um timer que recusasse por conta
-        // propria faria a isca passar com o `AbortSignal` arrancado do codigo,
-        // que e exatamente o que ela existe para pegar.
+        // Este timer e REF e existe so para segurar o laco enquanto o prazo
+        // corre; ele e limpo no `abort` e **nao resolve nada por conta
+        // propria**, o que tambem e deliberado: um timer que recusasse sozinho
+        // devolveria a isca ao estado vazio de antes.
         const seguraOLaco = setTimeout(() => {}, 1_000);
         sinal.addEventListener('abort', () => {
           clearTimeout(seguraOLaco);
@@ -208,6 +228,13 @@ void describe('busca de CEP do servidor', () => {
 
     const r = await criarBuscaDeCep({ buscarNaRede: fetch, prazoMs: 5 }).buscar('05435000');
     assert.equal(r.desfecho, 'indisponivel');
-    assert.equal(chamadas, 2, 'o prazo vale POR SERVICO: os dois sao tentados');
+    assert.equal(sinais.length, 2, 'o prazo vale POR SERVICO: os dois sao tentados');
+    for (const [i, sinal] of sinais.entries()) {
+      assert.ok(sinal, `a chamada ${i + 1} saiu SEM prazo: o \`AbortSignal.timeout\` sumiu do codigo`);
+      assert.ok(
+        sinal.aborted,
+        `o prazo da chamada ${i + 1} nao estourou: o sinal chegou, mas nao e um que vence`,
+      );
+    }
   });
 });
