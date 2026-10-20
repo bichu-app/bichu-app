@@ -1747,7 +1747,40 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
 /// -- COM as chaves, porque em zsh sem elas o shell aplica o modificador de
 /// historia `:a` e devolve caminho absurdo EM SILENCIO.
-const String _arvoreDasTelas = '9e03a1c3542aaf9b3085d9a2ec8162c0e121b035'; // INTERMEDIARIO do terceiro lote de 20/10/2026 (frentes 3, 4 e 5): recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao. Substitui `d979a337...`, `7f016247...` e `bc0506b4...`, valores de RAMO, cujas justificativas ficam INTEIRAS acima.
+///
+///
+/// **Destravado pela VOLTA DA PAGINA DO ENCONTRO, 20/10/2026, e o destravamento
+/// e correcao de pedido do cliente.** Literal: *"eu nao pedi pra voce remover,
+/// eu pedi para remover o clique para o usuario nnao conseguir acessar a pagina
+/// de detalhes e pedi pra voce resumir a listagem com foto, titulo do
+/// evento"*. A entrega de 19/10 apagou `rede/encontro_da_rede.dart` e
+/// `rede/local_do_encontro.dart`; os dois voltaram do historico
+/// (`be057793^`), sem o evento privado.
+///
+/// **SETE arquivos de `app/lib/telas` mudam**, e nenhum deles encosta na porta
+/// `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+///
+///   - `rede/encontro_da_rede.dart` e `rede/local_do_encontro.dart`, de volta;
+///   - `rede/cartao_do_encontro.dart`, que voltou a ser tocavel -- e o toque
+///     vem de quem chama, nao dele;
+///   - `rede/agenda_da_rede.dart`, que decide o toque pela sessao;
+///   - `rede/pecas_da_rede.dart`, que recuperou `BlocoDoDia`, `SeloDoEncontro`
+///     e `seloDeValor`, e deu texto alternativo a capa;
+///   - `pet/tela_detalhe_do_pet.dart`, `achado/tela_do_achado.dart` e
+///     `pessoa/tela_perfil_de_pessoa.dart`, que trocaram a faixa de erro vazia
+///     do 401 pelo convite para entrar.
+///
+/// Nenhum deles le camera, abre galeria ou pede permissao -- e o portao de
+/// diretivas abaixo continua cobrando isso sem depender desta constante. A
+/// pagina do encontro restaurada **nao tem check-in nem galeria da
+/// comunidade**: o que saiu pela emenda da BICHUS-251 continua fora, e a
+/// restauracao veio do commit anterior a remocao, que ja era posterior aquela
+/// emenda.
+///
+/// Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de
+/// TRABALHO, e nao copiado de relato. Anterior:
+/// `1413454d749f87001859c85e1e6e71d0449c2941`.
+const String _arvoreDasTelas = '99d8503bca8c0e78a60452f9762cab9166dbf6e7'; // INTERMEDIARIO do terceiro lote de 20/10/2026 (frentes 3, 4, 5 e 2): recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao, com o procedimento VALIDADO antes na base. Substitui `d979a337...`, `7f016247...`, `bc0506b4...` e `8f3222ea...`, todos valores de RAMO, cujas justificativas ficam INTEIRAS acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

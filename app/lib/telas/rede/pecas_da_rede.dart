@@ -145,13 +145,34 @@ class _PintorDoBanner extends CustomPainter {
 /// (1280 x 720) desperdicaria 30% em cada um dos 20 cartoes para ganhar
 /// nitidez que ninguem ve, e a derivada de 480 da galeria borraria.
 ///
-/// **A imagem fica fora da arvore de acessibilidade.** O cartao mostra foto e
-/// titulo, e o titulo esta logo abaixo, em texto: um rotulo aqui faria o
-/// leitor de tela dizer o encontro duas vezes.
+/// **A imagem fica fora da arvore de acessibilidade quando [textoAlternativo]
+/// e nulo**, e e assim que o CARTAO a usa: ele mostra foto e titulo, e o
+/// titulo esta logo abaixo, em texto -- um rotulo aqui faria o leitor de tela
+/// dizer o encontro duas vezes.
+///
+/// **[textoAlternativo] voltou em 20/10/2026, com a pagina do encontro.** Ele
+/// saiu junto com a pagina em 19/10 e por falta de chamador, e nao por
+/// decisao: a capa da PAGINA tem o `alt_text` que o organizador escreveu para
+/// a imagem de posicao 0 (`images[0].alt_text`), e ela e a unica imagem
+/// grande do app cujo texto alternativo vem do contrato. Sem ele, a capa da
+/// pagina ficaria muda para quem usa leitor de tela.
+///
+/// **O `cancelado` NAO voltou**, e a ausencia e a mesma do cartao: ele pintava
+/// a capa em escala de cinza, e sinal exclusivamente por cor reprova em
+/// SC 1.4.1. Quem diz que o evento foi cancelado e a palavra -- no cartao, e o
+/// aviso em texto na pagina.
 class ImagemDoEncontroOuBanner extends StatelessWidget {
-  const ImagemDoEncontroOuBanner({required this.url, super.key});
+  const ImagemDoEncontroOuBanner({
+    required this.url,
+    super.key,
+    this.textoAlternativo,
+  });
 
   final String? url;
+
+  /// O `alt_text` da capa, quando ha um. Nulo tira a imagem da arvore de
+  /// acessibilidade.
+  final String? textoAlternativo;
 
   @override
   Widget build(BuildContext context) {
@@ -176,21 +197,23 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
           if (!largura.isFinite || largura <= 0) {
             return const BannerDaMarca();
           }
-          return ExcludeSemantics(
-            child: Image.network(
+          final imagem = Image.network(
               endereco,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
+              semanticLabel: textoAlternativo,
               // **O numero que decide o custo em memoria.** Em pixeis do
               // aparelho, pela largura que o cartao PINTA.
               cacheWidth: (largura * fatorDePixel).round(),
-              excludeFromSemantics: true,
+              excludeFromSemantics: textoAlternativo == null,
               // Foto que nao carrega vira o banner, e nao um retangulo cinza:
               // o retangulo promete algo que nao vem (24.12.2).
               errorBuilder: (_, _, _) => const BannerDaMarca(),
-            ),
           );
+          return textoAlternativo == null
+              ? ExcludeSemantics(child: imagem)
+              : imagem;
         },
       ),
     );
@@ -254,3 +277,132 @@ class DistintivoDeSituacao extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// AS TRES PECAS QUE VOLTARAM COM A PAGINA DO ENCONTRO (20/10/2026)
+//
+// [BlocoDoDia], [SeloDoEncontro] e [seloDeValor] sairam em 19/10 por FALTA DE
+// CHAMADOR, junto com a pagina que as desenhava -- e o cliente corrigiu o
+// pedido em 20/10, literal: *"eu nao pedi pra voce remover, eu pedi para
+// remover o clique para o usuario nnao conseguir acessar a pagina de detalhes
+// e pedi pra voce resumir a listagem com foto, titulo do evento"*. A pagina
+// voltou, e elas voltam **verbatim**: a redacao, as medidas e os papeis de cor
+// sao os do commit anterior a remocao (`be057793^`), e nao uma reescrita.
+//
+// **`seloPrivado` NAO voltou**, e esta e a unica das quatro que fica fora. O
+// evento privado saiu por decisao separada e explicita dele -- *"vamos deixar
+// apenas os eventos abertos por enquanto, no futuro analisamos a necessidade"*
+// --, e um selo `Privado` sem evento privado seria peca sem chamador de novo.
+// ---------------------------------------------------------------------------
+
+/// O bloco de dia: `SÁB` / `27` / `SET`.
+class BlocoDoDia extends StatelessWidget {
+  const BlocoDoDia({required this.dia, super.key, this.comFundo = true});
+
+  final DiaDoEncontro dia;
+
+  /// No cartao, sobre a imagem, o bloco tem fundo e sombra proprios; na caixa
+  /// `Quando`, ele fica sobre `surfaceAlt`, sem fundo.
+  final bool comFundo;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final escuro = Theme.of(context).brightness == Brightness.dark;
+
+    final conteudo = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          dia.diaAbreviado,
+          style: textos.labelSmall?.copyWith(color: cores.primary),
+        ),
+        Text(
+          '${dia.numero}',
+          style: textos.titleLarge?.copyWith(color: cores.textPrimary),
+        ),
+        Text(
+          dia.mesAbreviado,
+          style: textos.labelSmall?.copyWith(color: cores.textSecondary),
+        ),
+      ],
+    );
+
+    // A data por extenso esta sempre ao lado, em texto: o bloco e ornamento
+    // de leitura rapida e sai da arvore para nao ser lido duas vezes.
+    return ExcludeSemantics(
+      child: !comFundo
+          ? conteudo
+          : Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: BichuEspaco.e3,
+                vertical: BichuEspaco.e2,
+              ),
+              decoration: BoxDecoration(
+                color: cores.surface,
+                borderRadius: BorderRadius.circular(BichuRaio.md),
+                boxShadow: escuro ? null : BichuSombra.sm,
+                border: escuro
+                    ? Border.all(color: cores.outline, width: BichuBorda.hairline)
+                    : null,
+              ),
+              child: conteudo,
+            ),
+    );
+  }
+}
+
+/// Um selo neutro com icone e palavra: `Gratuito`, `R$ 15 por cão`,
+/// `Privado`.
+///
+/// Neutro de proposito: a palavra e a informacao, e nenhuma cor diz nada
+/// (24.13.1). **Nao ha selo `Público`** (UX 28.7.2): o normal nao tem selo.
+class SeloDoEncontro extends StatelessWidget {
+  const SeloDoEncontro({required this.icone, required this.texto, super.key});
+
+  final IconData icone;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: BichuEspaco.e3,
+        vertical: BichuEspaco.e1,
+      ),
+      decoration: BoxDecoration(
+        color: cores.surface,
+        borderRadius: BorderRadius.circular(BichuRaio.full),
+        border: Border.all(
+          color: cores.outlineControl,
+          width: BichuBorda.hairline,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          ExcludeSemantics(
+            child: Icon(icone, size: BichuEspaco.e5, color: cores.primary),
+          ),
+          const SizedBox(width: BichuEspaco.e1),
+          Flexible(
+            child: Text(
+              texto,
+              style: textos.labelMedium?.copyWith(color: cores.textPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// O selo de valor. Recebe a entrada ja lida do contrato.
+SeloDoEncontro seloDeValor(EntradaDoEncontro entrada) => SeloDoEncontro(
+      icone: Icons.payments_outlined,
+      texto: entrada.rotuloDoSelo,
+    );
