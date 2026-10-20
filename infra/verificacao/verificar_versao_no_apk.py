@@ -59,8 +59,20 @@ Em 19/10/2026, gerando APK e iOS, os seis `--dart-define` foram passados por uma
 VARIAVEL DE SHELL e o `--dart-define-from-file=config/mapa.json` se perdeu em
 SILENCIO: build `exit 0`, `hml.bichu.app` presente, parametro do mapa AUSENTE.
 Refeito com os parametros literais, apareceu. Por isso o portao tambem cobra o
-valor de `config/mapa.json` dentro do binario: a familia nao e "esqueci o
+valor do arquivo de from-file dentro do binario: a familia nao e "esqueci o
 APP_VERSION", e "um define se perdeu e o build nao reclamou".
+
+`--mapa` E OPCIONAL, e em 20/10/2026 deixou de ser passado. O mapa da Rede saiu
+em 19/10 (`be057793`, pedido do cliente: evento sem pagina de detalhe) e levou
+com ele o unico leitor de `MAP_TILES_URL` e `MAP_USER_AGENT`. `app/config/mapa.json`
+ficou, e o comando continuou passando o arquivo -- entao este portao passou a
+cobrar o valor de uma chave que NINGUEM LE, o que nao tem como passar: define
+que o Dart nao le nao e compilado para dentro do binario. Quem decide se ha
+arquivo de from-file e o COMANDO DE BUILD, e `verificar-apk.sh` deriva `--mapa`
+do texto dele. Sem a bandeira, este braco nao roda e o LAUDO DIZ ISSO.
+
+A mensagem de reprova deste braco tambem foi corrigida no dia: ela culpava a
+variavel de shell, que e so UMA das duas causas, e nao era a do caso medido.
 
 O MANIFESTO, E O QUE ELE FECHA
 ==============================
@@ -80,7 +92,7 @@ nossa nao esta la).
 
 Uso:
   python3 infra/verificacao/verificar_versao_no_apk.py --apk <apk> \
-      --versao <versao> --controle <cadeia> --mapa app/config/mapa.json
+      --versao <versao> --controle <cadeia> [--mapa <arquivo de from-file>]
   python3 infra/verificacao/verificar_versao_no_apk.py --autoteste
 
 Saida: 0 aprovado, 1 reprovado.
@@ -168,7 +180,11 @@ def _valores_do_mapa(caminho: str) -> dict[str, str]:
 
 
 def conferir(
-    apk: str, versao: str, controle: str, mapa: str, chaves: tuple[str, ...] = ()
+    apk: str,
+    versao: str,
+    controle: str,
+    mapa: str | None,
+    chaves: tuple[str, ...] = (),
 ) -> list[str]:
     """Mede os valores DENTRO do pacote. Devolve as linhas do laudo, ou levanta [Reprova]."""
     if not versao:
@@ -184,7 +200,11 @@ def conferir(
         )
 
     libapps, manifesto = _bytes_do_zip(apk)
-    do_mapa = _valores_do_mapa(mapa)
+    # `mapa` vazio = o comando de build NAO passa `--dart-define-from-file`.
+    # Nao e o mesmo que "o arquivo falta" (isso continua REPROVANDO, logo
+    # abaixo): e "nao existe arquivo de from-file neste build". Ver o bloco
+    # "O MAPA SAIU" em verificar-apk.sh, que explica por que ele saiu.
+    do_mapa = _valores_do_mapa(mapa) if mapa else {}
     # As chaves do arquivo de `--dart-define-from-file` entram sempre: elas sao
     # defines como as outras, e o amontoado as engole igual.
     chaves = tuple(dict.fromkeys(tuple(chaves) + tuple(sorted(do_mapa))))
@@ -194,6 +214,17 @@ def conferir(
             "zero bandeiras engolidas e ficaria verde por vazio"
         )
     laudo: list[str] = []
+    if not do_mapa:
+        # DITO EM VOZ ALTA, e no laudo e nao num comentario: portao que deixa
+        # de medir uma coisa tem de dizer que deixou, senao a proxima pessoa le
+        # "APROVA" e supoe que tudo foi medido. O numero de chaves cobradas
+        # tambem vai no laudo, pelo mesmo motivo.
+        laudo.append(
+            "  (o braco de `--dart-define-from-file` NAO rodou: o comando de "
+            "build nao passa a bandeira, entao nao ha arquivo de valores para "
+            f"cobrar. As {len(chaves)} chaves de `--dart-define` continuam "
+            "cobradas como bandeira engolida.)"
+        )
 
     alvo_versao = versao.encode("utf-8")
     alvo_controle = controle.encode("utf-8")
@@ -275,10 +306,26 @@ def conferir(
                     f"o valor de {chave} ({valor!r}), que vem de "
                     f"`--dart-define-from-file={mapa}`, nao esta em {nome}, e a "
                     f"string de controle {controle!r} esta ({quantas_controle}x). "
-                    "Build que termina em 0 com um define perdido foi MEDIDO em "
-                    "19/10/2026, passando os defines por VARIAVEL DE SHELL: o "
-                    "`--dart-define-from-file` se perdeu calado. Escreva os "
-                    "parametros LITERAIS no comando"
+                    "SAO DUAS CAUSAS POSSIVEIS, e elas pedem consertos "
+                    "opostos:\n"
+                    "  (1) o define SE PERDEU no caminho. Medido em 19/10/2026: "
+                    "os defines foram passados por VARIAVEL DE SHELL e o "
+                    "`--dart-define-from-file` desapareceu calado, com o build "
+                    "saindo 0. Conserto: escreva os parametros LITERAIS no "
+                    "comando.\n"
+                    f"  (2) NINGUEM LE {chave} no Dart. Define que o codigo nao "
+                    "le nao e compilado para dentro do binario, entao esta "
+                    "conferencia nao tem como passar -- nao por um build mal "
+                    "feito, mas por construcao. Medido em 20/10/2026 com "
+                    "`MAP_TILES_URL`: o unico leitor "
+                    "(`app/lib/telas/rede/local_do_encontro.dart`) saiu em "
+                    "`be057793`, quando o cliente pediu o evento sem pagina de "
+                    "detalhe, e o arquivo de valores ficou. Conserto: ou entra "
+                    "o consumidor da chave, ou a chave sai do arquivo -- NAO se "
+                    "inventa um leitor so para o portao ficar verde, que e o "
+                    "inverso do que ele existe para fazer.\n"
+                    f"  Para saber qual: procure `String.fromEnvironment` com "
+                    f"{chave} em `app/lib/`. Sem nenhuma ocorrencia, e (2)"
                 )
             laudo.append(f"  {nome}: {chave} {quantas}x")
 
@@ -557,6 +604,76 @@ def autoteste() -> int:
         )
         falhou = True
 
+    # --- as iscas do braco OPCIONAL de `--dart-define-from-file` -----------
+    #
+    # Desde 20/10/2026 o comando de build pode nao passar a bandeira, e o
+    # `--mapa` acompanha (ver verificar-apk.sh). Sao TRES coisas para cobrar, e
+    # as tres podem quebrar de formas diferentes.
+
+    # (1) SEM `--mapa`, um APK sem as chaves do mapa tem de PASSAR. Este e o
+    #     caso de hoje: foi ele que travou a esteira enquanto o portao cobrava
+    #     uma chave que ninguem le.
+    sem_as_chaves = _montar_apk(
+        os.path.join(tmp, "sem-chaves-de-mapa.apk"),
+        versao_no_dart=_VERSAO,
+        controle=True,
+        do_mapa=False,
+        versao_no_manifesto=_VERSAO,
+    )
+    try:
+        laudo = conferir(sem_as_chaves, _VERSAO, _CONTROLE, None, _CHAVES)
+    except Reprova as erro:
+        print(
+            "REPROVA: sem `--mapa`, a conferencia REPROVOU um APK correto "
+            f"({erro}). O braco do from-file nao esta mesmo opcional, e a "
+            "esteira continua travada pelo motivo de 20/10/2026",
+            file=sys.stderr,
+        )
+        falhou = True
+    else:
+        # (2) e o laudo tem de DIZER que aquele braco nao rodou. Portao que
+        #     deixa de medir em silencio e pior do que portao que falta: quem
+        #     le "APROVA" supoe que tudo foi medido.
+        if not any("NAO rodou" in linha for linha in laudo):
+            print(
+                "REPROVA: sem `--mapa` a conferencia aprovou e o laudo NAO diz "
+                "que o braco de `--dart-define-from-file` deixou de rodar. "
+                f"Laudo: {laudo}",
+                file=sys.stderr,
+            )
+            falhou = True
+        else:
+            print(
+                "isca aprovada como deveria, e dizendo o que nao mediu: sem "
+                "`--mapa`, APK sem as chaves do from-file passa"
+            )
+
+    # (3) `--mapa` APONTANDO PARA ARQUIVO QUE NAO EXISTE continua reprovando.
+    #     "Opcional" e "silenciosamente ignorado" sao coisas diferentes, e a
+    #     segunda transformaria um erro de digitacao no caminho em aprovacao.
+    try:
+        conferir(completo, _VERSAO, _CONTROLE, os.path.join(tmp, "nao-existe.json"), _CHAVES)
+    except Reprova as erro:
+        if "nao existe" not in str(erro):
+            print(
+                "REPROVA: a isca '`--mapa` para arquivo ausente' reprovou com o "
+                f"diagnostico ERRADO: {erro}",
+                file=sys.stderr,
+            )
+            falhou = True
+        else:
+            print(
+                "isca reprovada como deveria: `--mapa` apontando para arquivo "
+                "que nao existe (opcional nao e ignorado)"
+            )
+    else:
+        print(
+            "REPROVA: a isca '`--mapa` para arquivo ausente' PASSOU. Um erro de "
+            "digitacao no caminho passaria a aprovar em silencio",
+            file=sys.stderr,
+        )
+        falhou = True
+
     shutil.rmtree(tmp, ignore_errors=True)
     if falhou:
         return 1
@@ -584,9 +701,14 @@ def main(argv: list[str]) -> int:
     if args.autoteste:
         return autoteste()
 
+    # `--mapa` NAO esta na lista: o comando de build pode nao passar
+    # `--dart-define-from-file`, e quem decide isso e o comando, nao este
+    # portao. Quando ele vem, o arquivo tem de existir e ter valores, e as duas
+    # reprovas continuam em `_valores_do_mapa`. Quando nao vem, o laudo diz que
+    # aquele braco nao rodou.
     faltando = [
         nome
-        for nome in ("apk", "versao", "controle", "mapa")
+        for nome in ("apk", "versao", "controle")
         if not getattr(args, nome)
     ]
     if faltando:
