@@ -1098,7 +1098,14 @@ export async function main(): Promise<void> {
     registrarRotasDoDiretorio(escopo, {
       diretorio: criarDirectoryRepository(db, ids),
       autenticador: {
-        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+        // SEC-021: o `sid` atravessa esta fiacao, como ja atravessa a da
+        // localizacao de referencia. Ele e a sessao de aparelho, e e dela que
+        // sai o ponto que mede a distancia -- sem ele a subconsulta devolveria
+        // uma linha por aparelho da conta, e o Postgres responderia 500.
+        autenticar: async (token: string) => {
+          const { conta, sid } = await auth.autenticar(token);
+          return { userId: conta.id, sid };
+        },
       },
       clock: systemClock,
       // 18/10/2026: o cliente liberou a logo e a foto do profissional no
@@ -1172,7 +1179,14 @@ export async function main(): Promise<void> {
     registrarRotasDaRede(escopo, {
       rede: redeDaComunidade,
       autenticador: {
-        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+        // SEC-021: o `sid` atravessa esta fiacao, como ja atravessa a da
+        // localizacao de referencia. Ele e a sessao de aparelho, e e dela que
+        // sai o ponto que mede a distancia -- sem ele a subconsulta devolveria
+        // uma linha por aparelho da conta, e o Postgres responderia 500.
+        autenticar: async (token: string) => {
+          const { conta, sid } = await auth.autenticar(token);
+          return { userId: conta.id, sid };
+        },
       },
       clock: systemClock,
       escritas: new EncontroDaComunidade({

@@ -11,6 +11,7 @@
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
+import 'package:bichu/telas/achado/textos_do_achado.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
 import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
@@ -1556,20 +1557,53 @@ void main() {
         'afirma que ele existe', (tester) async {
       // 404 e nunca 403 (ADR-0021): um 403 confirmaria que aquele id e um
       // achado de verdade.
+      // **A LISTA SERVE, E O DETALHE 404.** Ate 19/10 este caso passava a
+      // MESMA lista para os dois caminhos de `redeDosAchados`, e aquele
+      // ajudante devolve 200 no detalhe quando o id esta na lista -- entao o
+      // 404 que da o nome ao caso nunca acontecia. Ele passava por outro
+      // motivo: media "saimos da lista" por `Em análise` ter desaparecido, e
+      // a tela do achado nao mostrava estado nenhum. Quando ela passou a
+      // mostrar o estado do servidor (`Em análise` para `open`), o proxy caiu
+      // -- e a queda revelou que o caso media navegacao, e nao autorizacao.
+      final listaSoNaListagem = redeDosAchados(<Map<String, dynamic>>[
+        achadoDoContrato(id: '018f3a2b-0000-7000-8000-00000000a001'),
+      ]);
       await abrirMeusAchados(
         tester,
-        rede: redeDosAchados(<Map<String, dynamic>>[
-          achadoDoContrato(id: '018f3a2b-0000-7000-8000-00000000a001'),
-        ]),
+        rede: (req) async {
+          if (req.url.path.startsWith('/v1/found-reports/')) {
+            return problema('not-found', 404);
+          }
+          return listaSoNaListagem(req);
+        },
       );
       expect(find.text('Você registrou 1 achado.'), findsOneWidget);
       // O cartao leva ao detalhe que JA existia.
       await tester.tap(find.text('Em análise'));
       await tester.pumpAndSettle();
       expect(
+        find.text(TextosDoAchado.naoEncontrado),
+        findsOneWidget,
+        reason:
+            'REPROVA: o toque no cartao nao abriu o detalhe, ou o detalhe nao '
+            'disse "${TextosDoAchado.naoEncontrado}" diante do 404. A mesma '
+            'frase vale para "nao existe" e para "nao e seu" (ADR-0021): duas '
+            'frases diferentes confirmariam, a quem nao e o dono, qual dos '
+            'dois identificadores existe.',
+      );
+      expect(
         find.text('Em análise'),
         findsNothing,
-        reason: 'REPROVA: o toque no cartao nao abriu o detalhe do achado.',
+        reason:
+            'REPROVA: a tela mostra o estado de um achado que o servidor '
+            'respondeu como ausente -- ou continuamos na lista.',
+      );
+      expect(
+        find.text(TextosDoAchado.tituloDeQuemFoiAvisado),
+        findsNothing,
+        reason:
+            'REPROVA: meia tela desenhada sobre uma ausencia ja conta que o '
+            'registro existe.',
       );
       expect(tester.takeException(), isNull);
     });

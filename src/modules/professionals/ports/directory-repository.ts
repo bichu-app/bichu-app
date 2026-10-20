@@ -21,6 +21,7 @@ import type {
   PontuacaoDoLocal,
 } from '../domain/avaliacao-do-local.js';
 import type { NivelDeVerificacao } from '../domain/nivel-de-verificacao.js';
+import type { FamiliaDeSessao } from '../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 export type OrdemDoDiretorio = 'distance' | 'name';
@@ -32,6 +33,29 @@ export interface RecorteDoDiretorio {
    * em URL vai para log de acesso, historico do aparelho e cabecalho `Referer`.
    */
   readonly chamador: UserId;
+  /**
+   * **De qual APARELHO de quem chama** sai esse ponto. SEC-021: a localizacao
+   * de referencia deixou de ser da pessoa e passou a ser da sessao de aparelho
+   * (decisao do cliente em 23/09/2026), entao `chamador` sozinho NAO identifica
+   * mais um ponto -- quem entrou no tablet e no celular tem dois, e "a
+   * localizacao da conta" virou uma pergunta sem resposta unica. Pedir o par e
+   * o que faz a subconsulta do adaptador voltar a ser escalar por construcao,
+   * porque o par e a chave primaria da tabela.
+   *
+   * E tambem a regra, e nao so a aritmetica: `construtorDaLeitura` de
+   * `identity` filtra por esta mesma coluna para que um aparelho nao leia o
+   * lugar que outro informou. Medir distancia a partir daquele lugar seria
+   * publicar, em metros, o que o `GET` da propria localizacao se recusa a
+   * contar.
+   *
+   * `undefined` e valor legitimo e nao descuido: o token de acesso anterior a
+   * emenda 1 do ADR-0002 nao carrega `sid`, e nao ha de onde deduzir o
+   * aparelho. Sem aparelho nao ha ponto, entao a distancia vem nula e a ordem
+   * sai por nome -- o mesmo caminho honesto de quem nunca informou onde mora.
+   * Recusar a chamada apagaria a aba inteira por causa de um campo que a
+   * renovacao repoe na requisicao seguinte.
+   */
+  readonly familia: FamiliaDeSessao | undefined;
   readonly agora: Instant;
   /**
    * **Busca parcial pelo NOME da entrada**, tolerante a acento e a caixa.
@@ -64,8 +88,9 @@ export interface PaginaDoDiretorio {
    */
   readonly total: number;
   /**
-   * `false` quando quem chama nao tem localizacao de referencia valida, ou
-   * quando pediu `sort=name`. Com `false`, toda distancia vem nula e a ordem
+   * `false` quando ESTE APARELHO de quem chama nao tem localizacao de
+   * referencia valida, ou quando pediu `sort=name`. Aparelho e nao conta
+   * (SEC-021): o que o outro aparelho informou nao conta aqui. Com `false`, toda distancia vem nula e a ordem
    * foi por nome -- e a tela diz isso. Zero silencioso e a forma mais barata de
    * mentir sobre proximidade.
    */
@@ -137,8 +162,20 @@ export interface AvaliacaoGravada {
 export interface DirectoryRepository {
   listarPublicados(recorte: RecorteDoDiretorio): Promise<PaginaDoDiretorio>;
 
-  /** `undefined` quando nao ha entrada publicada com este slug. */
-  lerLocalPublicado(slug: string, chamador: UserId, agora: Instant): Promise<LocalDoDiretorio | undefined>;
+  /**
+   * `undefined` quando nao ha entrada publicada com este slug.
+   *
+   * `familia` ao lado de `chamador` pelo mesmo motivo de `RecorteDoDiretorio`:
+   * a distancia do detalhe sai do ponto DESTE aparelho. Os dois sao UUID em
+   * texto, e o tipo marcado e a unica coisa que impede trocar um pelo outro na
+   * chamada.
+   */
+  lerLocalPublicado(
+    slug: string,
+    chamador: UserId,
+    familia: FamiliaDeSessao | undefined,
+    agora: Instant,
+  ): Promise<LocalDoDiretorio | undefined>;
 
   /** `undefined` quando o local nao existe ou nao esta publicado. */
   listarAvaliacoes(recorte: RecorteDasAvaliacoes): Promise<PaginaDeAvaliacoes | undefined>;

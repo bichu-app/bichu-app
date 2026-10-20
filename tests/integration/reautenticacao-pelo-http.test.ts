@@ -73,7 +73,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { AddressInfo } from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
@@ -673,7 +673,12 @@ void describe('BICHUS-48 — o que so o banco responde', () => {
           access_jti: randomUUID(),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           scope: 'apagar_tudo' as any,
-          token_hash: Buffer.from(randomUUID()),
+          // 32 bytes, e nao `Buffer.from(randomUUID())` (que sao 36 bytes de
+          // ASCII): desde 19/10 existe `reauth_tokens_token_hash_32_bytes`, e
+          // um hash fora do tamanho faria este caso passar pela restricao
+          // ERRADA -- a mensagem casaria `violates check constraint` sem que
+          // `reauth_tokens_escopo` tivesse sido tocada.
+          token_hash: randomBytes(32),
           issued_at: new Date(),
           expires_at: new Date(Date.now() + 300_000),
           created_ip_hmac: null,

@@ -1,0 +1,122 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO pelo portao de contrato publico
+# (`src/tools/portao-contrato-publico.ts`). Ele nao e o contrato do produto e
+# nunca deve ser mesclado nele.
+#
+# Nao corrija este arquivo. Corrigi-lo cega o portao para esta familia de
+# defeito: a partir dai ele passa a valer pela confianca do dia em que foi
+# escrito, e ninguem sabe se ele ainda enxerga.
+#
+# O DEFEITO, e por que ele nao aparece na resposta
+#
+# O portao nasceu olhando so a RESPOSTA declarada. Medido em 19/10/2026:
+# acrescentar `distance_m` ao schema `PublicLostPet` reprovava com dois
+# achados, e acrescentar `lat`, `lon` e `radius_m` como PARAMETROS de
+# `listPublicLostPets` aprovava com exit 0. O lado do pedido estava descoberto.
+#
+# Aceitar um centro escolhido por quem chama transforma a rota publica num
+# oraculo de posicao: variando o centro e lendo a ORDEM da pagina da para
+# trilaterar o ponto de cada caso sem um unico numero de coordenada aparecer no
+# corpo. O ADR-0006 proibe nominalmente para a listagem publica de perdidos
+# ("filtra por cidade e bairro digitados, jamais por latitude e longitude") e o
+# ADR-0010 itens 4 e 5 proibem coordenada e distancia em superficie alcancavel
+# sem conta.
+#
+# A forma copia a do contrato de verdade, e nao uma forma facil:
+#
+#   1. Os filtros PERMITIDOS estao aqui, lado a lado com os proibidos. Se o
+#      portao acusar `page`, `limit`, `period`, `q`, `city` ou `neighborhood`,
+#      ele nao esta distinguindo nada -- e portao que reprova tudo e retirado na
+#      primeira sexta-feira. O `.esperado` ao lado nomeia so os proibidos, e a
+#      isca interna do portao cobra o outro lado a cada execucao.
+#   2. `center_lon` e `min_lat` sao compostos, que e a forma que nome EXATO nao
+#      alcanca. Se o casamento por segmento voltar a ser por nome exato, estes
+#      dois passam e a esteira acusa.
+#   3. `max_km` e o nome que esta casa ja usa para raio
+#      (`listNearbyNetworkEvents`). Ele NAO esta na lista de campos proibidos da
+#      resposta, de proposito -- `max_km` nunca aparece numa resposta. Se alguem
+#      trocar a lista propria do pedido pela lista da resposta, este parametro
+#      passa, e com ele o buraco inteiro reabre.
+#   4. `X-Center-Point` entra pelo CABECALHO. Oraculo nao fica menos oraculo por
+#      trocar de lugar no pedido.
+#   5. O parametro de caminho `citySlug` esta declarado no ITEM DE CAMINHO e nao
+#      na operacao. Ele nao pode ser acusado, e esta aqui para provar que a
+#      juncao dos dois niveis continua acontecendo.
+#   6. A resposta nao tem defeito nenhum: ela devolve bairro, cidade e UF, que
+#      e a granularidade PERMITIDA. A reprovacao tem de vir do pedido, e so.
+#   7. `getPerto`, com `bearerAuth`, declara `lat`, `lon` e `max_km` -- e NAO
+#      pode ser acusada. E assim que o contrato de verdade declara
+#      `previewLostCaseReach` e `listNearbyNetworkEvents`, e um portao que
+#      reprovasse coordenada em rota com conta proibiria o produto.
+openapi: 3.1.0
+info:
+  title: isca de coordenada no pedido de rota publica
+  version: '0'
+
+paths:
+  /isca/perdidos/{citySlug}:
+    # Parametro do ITEM DE CAMINHO, e nao da operacao. Permitido, e esta aqui
+    # para provar que a juncao dos dois niveis nao se perdeu.
+    parameters:
+      - name: citySlug
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: iscaListaPublicaComCentro
+      summary: a listagem publica aceitando um centro escolhido por quem chama
+      security: []
+      parameters:
+        # --- Filtros PERMITIDOS pelo ADR-0006. Nenhum pode ser acusado. ---
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: period, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: neighborhood, in: query, schema: { type: string } }
+        - { name: species, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string } }
+        # --- PROIBIDOS. Todos tem de aparecer no relatorio. ---
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: lon, in: query, schema: { type: number } }
+        - { name: center_lon, in: query, schema: { type: number } }
+        - { name: min_lat, in: query, schema: { type: number } }
+        - { name: radius_m, in: query, schema: { type: integer } }
+        - { name: max_km, in: query, schema: { type: integer } }
+        - { name: X-Center-Point, in: header, schema: { type: string } }
+      responses:
+        '200':
+          description: a resposta nao tem defeito; so a granularidade permitida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  neighborhood: { type: string }
+                  city: { type: string }
+                  state: { type: string }
+
+  /isca/perto:
+    get:
+      operationId: getPerto
+      summary: o lugar certo da coordenada, e ela nao pode ser acusada
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: lon, in: query, schema: { type: number } }
+        - { name: max_km, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  distance_m: { type: integer }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
