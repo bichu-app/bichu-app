@@ -34,6 +34,7 @@ import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
+import 'package:bichu/telas/perfil/meus_eventos.dart';
 import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
 import 'package:bichu/telas/pet/tela_cadastrar_identificacao.dart';
 import 'package:bichu/telas/seguranca/tela_de_bloqueados.dart';
@@ -1362,10 +1363,24 @@ void main() {
       },
     );
 
+    // **`Meus eventos` ENTROU NESTA LISTA NA UNIAO DO LOTE (19/10/2026).**
+    //
+    // `feat/meus-eventos-e-cancelar` acrescentou o item ao menu da conta no
+    // MESMO ponto em que esta frente pos `Pedidos de conexão` e
+    // `Pessoas bloqueadas`, e o conflito textual foi resolvido mantendo os
+    // TRES. O item dela nascia sem caso de alcance: este portao e quem mede
+    // que item do menu da conta tem porta, e um item novo sem linha aqui e
+    // justamente o silencio que ele existe para impedir.
+    //
+    // **E ele e o pior dos tres caso se perdesse**: `MeusEventos` e o UNICO
+    // caminho do app ate `Cancelar` um encontro -- a resposta da agenda nao
+    // diz de quem o encontro e (item 7 do ADR-0010), entao quem criou um nao
+    // teria como voltar a ele.
     for (final (rotulo, tela) in <(String, Type)>[
       ('Meus dados', TelaDadosPessoais),
       ('Pedidos de conexão', TelaDePedidosDeConexao),
       ('Pessoas bloqueadas', TelaDeBloqueados),
+      (MeusEventos.titulo, MeusEventos),
     ]) {
       testWidgets(
         '`$rotulo` é alcançável pela FOTO da barra de topo',
