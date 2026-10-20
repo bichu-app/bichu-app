@@ -1780,7 +1780,53 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Valor RECALCULADO pelo procedimento deste proprio portao sobre a arvore de
 /// TRABALHO, e nao copiado de relato. Anterior:
 /// `1413454d749f87001859c85e1e6e71d0449c2941`.
-const String _arvoreDasTelas = '99d8503bca8c0e78a60452f9762cab9166dbf6e7'; // INTERMEDIARIO do terceiro lote de 20/10/2026 (frentes 3, 4, 5 e 2): recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao, com o procedimento VALIDADO antes na base. Substitui `d979a337...`, `7f016247...`, `bc0506b4...` e `8f3222ea...`, todos valores de RAMO, cujas justificativas ficam INTEIRAS acima.
+///
+///
+/// **BARRA FIXA E PERFIL POR TOPICOS, 20/10/2026 (ramo `4e13c694...`).**
+/// A justificativa do ramo, preservada INTEIRA (ela vinha na linha da
+/// constante, e nao em doc):
+///
+/// BICHUS -- A DELIMITACAO DE 20/10/2026, no mesmo dia dos quatro pedidos:
+/// *"vamos colocar a barra fixa apenas nas paginas de primeiro plano, as
+/// paginas internas, pode manter como esta. Exemplo: ao clicar no menu auau,
+/// mantem a barra .. ao clicar na mensagem tira a barra. Ao clicar no perfil
+/// mantem a barra, ao clicar no cadastro do pet, remove a barra. Na listagem
+/// dos eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+/// barra. E assim por diante."* **DOIS arquivos de `app/lib/telas` mudam, e
+/// nenhum deles muda CODIGO de barra:** a fiacao que encolheu de 29 rotas
+/// para 2 vive em `app/lib/roteamento/rotas.dart`, FORA desta arvore. (1)
+/// `casca_com_abas.dart`: a prosa de `CascaFixa` e de `BarraDeBaixo` passa a
+/// dizer PRIMEIRO PLANO contra PAGINA INTERNA, com o discriminador medido --
+/// **quem abre a tela, a casca ou o conteudo** --, porque "lista contra
+/// detalhe" le os tres exemplos dele e discorda de si mesma em OITO telas
+/// desta arvore (`Meus achados`, `Meus eventos`, `Pedidos de conexao`,
+/// `Pessoas bloqueadas`, `Minhas fotos`, `Minhas indicacoes`, `Adoções` e
+/// `Meus dados` sao LISTAS e sao alcancadas de DENTRO do Perfil). Nenhuma
+/// linha de codigo mudou: `CascaFixa`, `BarraDeBaixo` e o `Align` do respiro
+/// da foto ficam como estavam. (2) `abas.dart`: a prosa de `Registrar achado
+/// avulso` registra a RESPOSTA do cliente a pergunta fechada que eu levei --
+/// *"O fluxo ja existe dentro do botao escanear, digitar codigo manualmente e
+/// sinalizar o pet perdido ou no perfil do usuario, podemos deixar como
+/// esta"* --, para que ninguem "conserte" a porta sem conta que ele aceitou
+/// perder. Tambem so prosa. **O QUE NAO MUDOU, e vale dizer:** a margem da
+/// foto (216,00 dp de orcamento, alvo 48 x 48), o `more_horiz` fora de `Pets`
+/// e os quatro grupos do menu da conta continuam exatamente como entraram no
+/// valor anterior. Valor RECALCULADO pelo procedimento deste proprio portao
+/// sobre a arvore de trabalho (`GIT_INDEX_FILE` temporario, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`
+/// -- em zsh as CHAVES sao obrigatorias: sem elas o shell aplica o
+/// modificador de historia `:a` e devolve caminho absoluto em SILENCIO), e
+/// nao copiado de relato. **A QUEM MESCLAR: recalcule sobre a arvore
+/// MESCLADA.** A frente `feat/aviso-de-login-ao-tocar` (`65dfcb99`) traz
+/// `rede/encontro_da_rede.dart` e `rede/local_do_encontro.dart` NOVOS nesta
+/// arvore, e ela declara `encontros/:slug` **sob o ramo da `Rede`** -- o que
+/// da a barra a ficha do evento POR CONSTRUCAO e contraria o exemplo literal
+/// do cliente acima. O portao `toda rota empilhada esta classificada` reprova
+/// nomeando `encontros/:slug` ate alguem decidir; o conserto que segue o
+/// cliente e tira-la do `routes:` do ramo e declara-la irma da casca.
+/// Substitui 99cc2437faf7cfabad8e567e698c4a7ae372ecec, e antes dele
+/// 1413454d749f87001859c85e1e6e71d0449c2941.
+const String _arvoreDasTelas = '2f822c3823e97a304c6fee96c88977c8ae45f2b5'; // TERCEIRO LOTE DE 20/10/2026, VALOR FINAL com as CINCO frentes mescladas (contador do `AuAu`, contadores de `Pets` e `Rede`, Mural, aviso de login com a volta da ficha do evento, barra fixa). Recalculado sobre a arvore MESCLADA pelo procedimento deste proprio portao (`GIT_INDEX_FILE` temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves), com o procedimento VALIDADO antes de ser usado, reproduzindo o valor da base `1413454d...`. Substitui os CINCO valores de RAMO (`4e13c694...`, `8f3222ea...`, `d979a337...`, `7f016247...`, `bc0506b4...`) e os dois intermediarios desta mescla, cujas justificativas ficam INTEIRAS acima.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

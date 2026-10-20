@@ -253,8 +253,15 @@ Future<void> abrirMeusAchados(
   // baixo e tocava o slot que nao existe mais. `irParaAConta` e a mesma
   // porta que os outros dezesseis arquivos usam; o caso prova o mesmo.
   await irParaAConta(tester);
+  // **ROLAR ATE A PORTA, e a razao e de 20/10/2026:** o menu da conta ganhou
+  // quatro cabecalhos de grupo e um item (*"como o menu do perfil esta
+  // crescendo, vamos separar os links por topicos/categorias"*), e
+  // `Meus achados` -- o ultimo item do grupo `Bichos na rua` -- desceu abaixo
+  // da dobra. `ListView` so constroi o que cabe: `ensureVisible` sozinho
+  // estoura com `Bad state: No element`, porque nao ha elemento nenhum para
+  // tornar visivel. Rolar e o que a pessoa faz.
   final porta = find.text('Meus achados');
-  await tester.ensureVisible(porta);
+  await tester.scrollUntilVisible(porta, 200);
   await tester.pumpAndSettle();
   await tester.tap(porta);
   await tester.pumpAndSettle();

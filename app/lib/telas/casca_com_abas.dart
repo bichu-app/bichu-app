@@ -795,8 +795,6 @@ class _CascaComAbasState extends State<CascaComAbas> {
   @override
   Widget build(BuildContext context) {
     final navegacao = widget.navegacao;
-    final cores = BichuColors.of(context).cores;
-    final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
     // O indice do RAMO de cada slot da barra, ou -1 para o slot que nao e
     // ramo (a secao de mensagens, que empurra uma rota).
     //
@@ -805,24 +803,17 @@ class _CascaComAbasState extends State<CascaComAbas> {
     // build de entrega a barra ainda esconde o que e `planejada`. Sem ela,
     // tocar num slot abriria a secao de outro.
     final ramosDoRegistro = CascaComAbas.ramosDoRegistro;
-    final ramos = <int>[
-      for (final destino in visiveis)
-        destino.ehRamo ? ramosDoRegistro.indexOf(destino) : -1,
-    ];
     // **NENHUM slot fica aceso quando a pessoa esta na tela da conta.**
     //
     // `Perfil` saiu da barra e continua sendo ramo: `currentIndex` aponta para
-    // ele e nao ha slot que o represente. `ramos.indexOf` devolve -1, e o
-    // fallback antigo (`selecionado < 0 ? 0 : selecionado`) acenderia `Pets` --
-    // a barra afirmando uma secao em que a pessoa nao esta, que e pior que
-    // nenhuma acesa. Quem mostra onde ela esta e o avatar da barra de topo.
-    final selecionado = ramos.indexOf(navegacao.currentIndex);
-    // O CONTADOR DE NAO LIDO, do escopo (20/10/2026).
-    //
-    // Do escopo e nao do `State` desta casca: o numero e da CONTA, quem o
-    // atualiza na abertura e na retomada e o `app.dart`, e quem o derruba e a
-    // area de mensagens -- que e outro ramo. Uma copia aqui perderia as tres.
-    final contadores = Escopo.of(context).contadores;
+    // ele e nao ha slot que o represente. `indexOf` devolve -1, e o fallback
+    // antigo (`selecionado < 0 ? 0 : selecionado`) acenderia `Pets` -- a barra
+    // afirmando uma secao em que a pessoa nao esta, que e pior que nenhuma
+    // acesa. Quem mostra onde ela esta e o avatar da barra de topo.
+    final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+    final selecionado = visiveis.indexWhere(
+      (d) => d.ehRamo && ramosDoRegistro.indexOf(d) == navegacao.currentIndex,
+    );
     return Scaffold(
       key: _casca,
       // **A GAVETA FOI OCULTADA EM 19/10/2026, e quem decidiu foi ele.**
@@ -830,31 +821,16 @@ class _CascaComAbasState extends State<CascaComAbas> {
       // Literal: *"vamos ocultar o menu por enquanto, pois nao esta sendo
       // utilizado para nada. colocar o icone do usuario no lugar do menu"*.
       //
-      // **Isto REVERTE o pedido dele de 17/10**, que era o oposto exato
-      // (*"padronize todas as telas, tornando o menu esquerdo fixo para
-      // manter o padrao, por mais que nao exista um sub-menu ainda, mas irei
-      // evoluir e acrescentar alguns itens"*) e foi o que fez `temSubDestinos`
-      // valer `true` incondicionalmente. Reversao DELE, do dia seguinte, e
-      // nao descuido de quem apagou estas linhas.
-      //
       // **NAO HA `drawer:` NESTE `Scaffold`, e e por isso que nao ha gaveta em
       // tela nenhuma.** `Scaffold` sem `drawer` nao tem `openDrawer`, nao
       // responde a arrasto de borda e nao desenha hamburguer automatico: a
       // ausencia e estrutural e nao depende de ninguem lembrar de esconder um
-      // botao. Com ela, `drawerEnableOpenDragGesture` tambem deixou de ter o
-      // que desligar.
+      // botao.
       //
       // **A GAVETA FOI OCULTADA E NAO APAGADA**, e a distincao e dele (*"por
       // enquanto"*): `GavetaDeSecoes`, `BotaoDaGaveta`, `ControleDaGaveta` e o
       // inventario de 27.5 (`RegistroDeSubDestinos`) continuam no repositorio,
-      // intactos. Reinstalar e devolver o `drawer:` aqui e o `leading` em
-      // `TelaDeAba` -- duas linhas, e nenhum conteudo a reescrever.
-      //
-      // **OS SETE ITENS VIVOS DELA NAO FICARAM SEM CASA.** A tabela de para
-      // onde cada um foi, e o achado de que DOIS deles tinham a gaveta como
-      // unica porta, estao em `TelaDeAba`, no `leading` da barra de topo. O
-      // portao e `test/telas/gaveta_oculta_e_barra_nova_test.dart`, um caso
-      // por item.
+      // intactos.
       body: Column(
         // O AVISO QUE CHEGOU, ACIMA DO CONTEUDO.
         //
@@ -862,32 +838,186 @@ class _CascaComAbasState extends State<CascaComAbas> {
         // tinha: o push chega em qualquer momento, e a pessoa pode estar em
         // qualquer uma das cinco secoes. Um aviso preso a uma tela cobre a
         // tela, e o problema nao e da tela.
-        //
-        // **Com o app ABERTO o sistema operacional nao desenha nada**, mesmo
-        // com bloco `notification` na mensagem. Sem esta faixa, quem esta com
-        // o app na mao e a unica pessoa que nao ve o alerta -- o oposto do
-        // esperado, e o motivo de testar so com o app aberto enganar.
         children: <Widget>[
           const AvisoQueChegou(),
           Expanded(child: navegacao),
         ],
       ),
-      // **SO A BARRA RECONSTROI quando o numero muda**, e nao a casca inteira:
-      // o `body` carrega o `StatefulNavigationShell` com as cinco secoes
-      // dentro, e reconstruir aquilo por causa de um digito seria pagar a
-      // arvore toda a cada mensagem que chega.
-      bottomNavigationBar: ListenableBuilder(
-        listenable: contadores,
-        builder: (context, _) => _barraDeBaixo(
-          context,
-          cores: cores,
-          visiveis: visiveis,
-          ramos: ramos,
-          selecionado: selecionado,
-          navegacao: navegacao,
-          naoLidasDe: (destino) => _naoLidasDaAba(destino, contadores),
-        ),
+      // A BARRA, DESENHADA POR [BarraDeBaixo] -- o mesmo componente que
+      // [CascaFixa] usa nas telas empilhadas. Ver a prosa da classe: UM
+      // desenho, dois motores.
+      //
+      // O MOTOR DAQUI E `goBranch`, e ele e o unico que preserva a pilha de
+      // cada ramo: quem esta numa conversa, vai a `Loja` e volta ao `AuAu`
+      // reencontra a conversa aberta.
+      bottomNavigationBar: BarraDeBaixo(
+        slotAceso: selecionado,
+        aoTocar: (destino) {
+          // O slot que NAO e ramo empurra a rota, como a gaveta fazia com os
+          // atalhos vivos. **Desde 20/10 a rota empurrada cai em
+          // [CascaFixa]**, entao a tela de destino continua tendo esta mesma
+          // barra -- e foi exatamente isso que o cliente mandou consertar.
+          final ramo = ramosDoRegistro.indexOf(destino);
+          if (!destino.ehRamo || ramo < 0) {
+            GoRouter.of(context).push(destino.destinoDeHoje);
+            return;
+          }
+          navegacao.goBranch(
+            ramo,
+            initialLocation: ramo == navegacao.currentIndex,
+          );
+        },
       ),
+    );
+  }
+}
+
+/// A BARRA DE BAIXO, DESENHADA NUM PONTO SO.
+///
+/// ## Por que ela nasceu (20/10/2026)
+///
+/// Pedido do cliente, literal: *"quando o usuario vai para a mensagem, o menu
+/// inferior some, mantenha ele fixo em todas as paginas"*.
+///
+/// A barra pertencia ao `Scaffold` de [CascaComAbas], e toda rota IRMA da
+/// casca levava a barra embora ao cobrir essa casca. **A tela que ele notou
+/// era a AREA DE MENSAGENS** -- o destino do slot `AuAu`, que e a propria
+/// barra. **Nao da para devolver a barra no `pop`**, e isso foi medido numa
+/// rodada anterior: o `pop` aterrissava certo; o que falhava era a exigencia
+/// de produto de a barra estar VISIVEL na tela empilhada, e rota que cobre a
+/// casca nao tem como mostrar o que a casca desenha.
+///
+/// Entao a barra passou a ter DUAS cascas -- [CascaComAbas], com os ramos, e
+/// [CascaFixa], com as telas de PRIMEIRO PLANO --, e **a duplicacao do
+/// COMPONENTE era o risco da escolha**: duas barras divergem, e no dia em que
+/// divergirem ninguem sabe qual das duas e a certa. Esta classe e o que impede
+/// isso: o desenho e UM, os cinco slots saem do MESMO registro, e o que muda
+/// entre as duas cascas e so o motor do toque, que entra por [aoTocar].
+///
+/// **A segunda mensagem dele, do mesmo dia, encolheu a lista de 29 para 2** --
+/// *"a barra fixa apenas nas paginas de primeiro plano, as paginas internas,
+/// pode manter como esta"* -- e **nao mudou nada nesta classe**: duas cascas
+/// continuam existindo, e uma barra desenhada em dois lugares continuaria
+/// divergindo. Ver [CascaFixa] para o discriminador.
+///
+/// O portao e `test/telas/barra_fixa_em_toda_tela_test.dart`: ele varre
+/// `lib/` e reprova se aparecer um segundo `NavigationBar` em qualquer
+/// arquivo.
+class BarraDeBaixo extends StatelessWidget {
+  const BarraDeBaixo({
+    required this.slotAceso,
+    required this.aoTocar,
+    super.key,
+  });
+
+  /// O slot que fica ACESO, ou **-1 para nenhum**.
+  ///
+  /// -1 e o estado da caixa de avisos -- o sino e das CINCO secoes, entao ela
+  /// nao pertence a nenhuma -- e tambem da tela da conta, que saiu da barra em
+  /// 19/10 e continua sendo ramo. Acender
+  /// `Pets` nesses casos seria a barra afirmando uma secao em que a pessoa nao
+  /// esta -- pior que nenhuma acesa, porque ela mente para quem ve e, pelo
+  /// `selected` da semantica, tambem para quem usa leitor de tela.
+  final int slotAceso;
+
+  /// O que o toque num slot FAZ. Quem decide e a casca; esta classe desenha.
+  final void Function(DestinoDeNavegacao destino) aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+    // O CONTADOR DE NAO LIDO, do escopo (20/10/2026).
+    //
+    // **Ele mora AQUI, e nao na casca, e a mescla do terceiro lote de 20/10 e
+    // que decidiu isso.** A frente dos contadores leu o escopo em
+    // `_CascaComAbasState` e embrulhou so o `bottomNavigationBar`; a frente da
+    // barra fixa extraiu o desenho da barra para esta classe e passou a usa-la
+    // em DUAS cascas ([CascaComAbas] e [CascaFixa]). Ler o escopo na casca
+    // daria selo em UMA das duas, e a barra das telas de primeiro plano
+    // ficaria sem numero -- duas barras divergindo, que e exatamente o que
+    // esta classe existe para impedir.
+    //
+    // Do escopo e nao de `State`: o numero e da CONTA, quem o atualiza na
+    // abertura e na retomada e o `app.dart`, e quem o derruba e a area de
+    // mensagens -- que e outro ramo. Uma copia aqui perderia as tres.
+    final contadores = Escopo.of(context).contadores;
+
+    // **SO A BARRA RECONSTROI quando o numero muda**, e nao a casca inteira: o
+    // `body` de quem nos usa carrega o `StatefulNavigationShell` com as cinco
+    // secoes dentro, e reconstruir aquilo por causa de um digito seria pagar a
+    // arvore toda a cada mensagem que chega.
+    return ListenableBuilder(
+      listenable: contadores,
+      builder: (context, _) {
+        int? naoLidasDe(DestinoDeNavegacao destino) =>
+            _naoLidasDaAba(destino, contadores);
+
+        return DecoratedBox(
+          // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
+          // system 22.1): a barra usa `surface`, que esta a 1,04:1 do corpo da
+          // pagina, e sem o filete ela **nao existe visualmente**.
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
+            ),
+          ),
+          child: _BarraSemSelecao(
+            apagar: slotAceso < 0,
+            // A tinta do PROPRIO fundo da barra, e nao `Colors.transparent`:
+            // cor escrita a mao reprova no portao de tokens, e `surface` e o
+            // papel do sistema que a barra ja usa. Indicador na cor do fundo e
+            // indicador invisivel, pelo papel e nao por um literal.
+            corDoFundo: cores.surface,
+            child: NavigationBar(
+              // `selectedIndex` e `int` e nao `int?`: o componente nao sabe
+              // dizer "nenhum aceso". Entao o indice vai 0 e quem apaga o
+              // indicador e `_BarraSemSelecao`.
+              selectedIndex: slotAceso < 0 ? 0 : slotAceso,
+              onDestinationSelected: (indice) => aoTocar(visiveis[indice]),
+              destinations: <Widget>[
+                for (final destino in visiveis)
+                  // O NUMERO DA ABA (20/10/2026). `naoLidasDe` devolve nulo
+                  // para as abas sem fonte, e nulo nao pinta nada -- nem zero,
+                  // nem erro.
+                  //
+                  // O nome acessivel entra num `Semantics` que embrulha o
+                  // destino, e nao no `label`: o `label` e o texto **pintado**,
+                  // e ele precisa continuar sendo a palavra curta que cabe em
+                  // 64,0 dp.
+                  //
+                  // `excludeSemantics: true` nao serve aqui: ele levaria junto
+                  // o `selected` e a acao de toque que o proprio componente
+                  // emite, e o criterio 7 pede que a aba ativa seja
+                  // identificavel sem depender de cor.
+                  Semantics(
+                    label: destino.nomeAcessivelCom(naoLidasDe(destino)),
+                    child: NavigationDestination(
+                      // O icone e **decorativo** e nao entra na arvore: icone
+                      // com nome proprio ao lado de um rotulo que diz a mesma
+                      // coisa e anuncio duplo, que e ruido no VoiceOver e no
+                      // TalkBack (UX 27.7, regra 2). `Icon` sem
+                      // `semanticLabel` ja nao entra.
+                      icon: DistintivoDaAba(
+                        glifo: Icon(destino.icone),
+                        naoLidas: naoLidasDe(destino),
+                      ),
+                      selectedIcon: DistintivoDaAba(
+                        glifo: Icon(destino.iconeSelecionado),
+                        naoLidas: naoLidasDe(destino),
+                      ),
+                      label: destino.rotulo,
+                      // O tooltip continua sendo **so o rotulo visivel**: ele e
+                      // dica visual de quem pressiona e segura, e um paragrafo
+                      // ali e defeito (UX 27.7, regra 3).
+                      tooltip: destino.rotulo,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -929,97 +1059,6 @@ class _CascaComAbasState extends State<CascaComAbas> {
       case CampoSemantico.conta:
         return null;
     }
-  }
-
-  /// A barra de baixo. Extraida do `build` so para o `ListenableBuilder` acima
-  /// ter um corpo legivel; nenhuma decisao mudou de lugar com ela.
-  Widget _barraDeBaixo(
-    BuildContext context, {
-    required BichuCores cores,
-    required List<DestinoDeNavegacao> visiveis,
-    required List<int> ramos,
-    required int selecionado,
-    required StatefulNavigationShell navegacao,
-    required int? Function(DestinoDeNavegacao) naoLidasDe,
-  }) {
-    return DecoratedBox(
-        // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
-        // system 22.1): a barra usa `surface`, que esta a 1,04:1 do corpo da
-        // pagina, e sem o filete ela **nao existe visualmente**.
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
-          ),
-        ),
-        child: _BarraSemSelecao(
-          apagar: selecionado < 0,
-          // A tinta do PROPRIO fundo da barra, e nao `Colors.transparent`:
-          // cor escrita a mao reprova no portao de tokens, e `surface` e o
-          // papel do sistema que a barra ja usa. Indicador na cor do fundo e
-          // indicador invisivel, pelo papel e nao por um literal.
-          corDoFundo: cores.surface,
-          child: NavigationBar(
-          // `selectedIndex` e `int` e nao `int?`: o componente nao sabe
-          // dizer "nenhum aceso". Na tela da conta nao HA slot
-          // correspondente, e acender `Pets` seria a barra afirmando uma
-          // secao em que a pessoa nao esta -- pior que nenhuma acesa.
-          //
-          // Entao o indice vai 0 e quem apaga o indicador e
-          // `_BarraSemSelecao`, acima: visualmente nenhum slot fica aceso.
-          selectedIndex: selecionado < 0 ? 0 : selecionado,
-          onDestinationSelected: (indice) {
-            final ramo = ramos[indice];
-            // O slot que NAO e ramo empurra a rota, como a gaveta faz com os
-            // atalhos vivos: a tela cobre a casca e tem volta.
-            if (ramo < 0) {
-              GoRouter.of(context).push(visiveis[indice].destinoDeHoje);
-              return;
-            }
-            navegacao.goBranch(
-              ramo,
-              initialLocation: ramo == navegacao.currentIndex,
-            );
-          },
-          destinations: <Widget>[
-            for (final destino in visiveis)
-              // O NUMERO DA ABA (20/10/2026). `naoLidasDe` devolve nulo para
-              // as quatro abas sem fonte, e nulo nao pinta nada -- nem zero,
-              // nem erro.
-              // O nome acessivel entra num `Semantics` que embrulha o destino,
-              // e nao no `label`: o `label` e o texto **pintado**, e ele
-              // precisa continuar sendo a palavra curta que cabe em 64,0 dp.
-              //
-              // `excludeSemantics: true` nao serve aqui: ele levaria junto o
-              // `selected` e a acao de toque que o proprio componente emite, e
-              // o criterio 7 pede que a aba ativa seja identificavel sem
-              // depender de cor.
-              Semantics(
-                label: destino.nomeAcessivelCom(naoLidasDe(destino)),
-                child: NavigationDestination(
-                  // O icone e **decorativo** e nao entra na arvore: icone com
-                  // nome proprio ao lado de um rotulo que diz a mesma coisa e
-                  // anuncio duplo, que e ruido no VoiceOver e no TalkBack
-                  // (UX 27.7, regra 2). `Icon` sem `semanticLabel` ja nao
-                  // entra.
-                  icon: DistintivoDaAba(
-                    glifo: Icon(destino.icone),
-                    naoLidas: naoLidasDe(destino),
-                  ),
-                  selectedIcon: DistintivoDaAba(
-                    glifo: Icon(destino.iconeSelecionado),
-                    naoLidas: naoLidasDe(destino),
-                  ),
-                  label: destino.rotulo,
-                  // O tooltip continua sendo **so o rotulo visivel**: ele e
-                  // dica visual de quem pressiona e segura, e um paragrafo ali
-                  // e defeito (UX 27.7, regra 3).
-                  tooltip: destino.rotulo,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
   }
 }
 
@@ -1133,6 +1172,129 @@ class DistintivoDaAba extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A CASCA DAS TELAS DE PRIMEIRO PLANO: a mesma barra, sem trocar de ramo.
+///
+/// ## O pedido, em duas mensagens do mesmo dia
+///
+/// **Primeira:** *"quando o usuario vai para a mensagem, o menu inferior some,
+/// mantenha ele fixo em todas as paginas"*. A barra pertencia ao `Scaffold` de
+/// [CascaComAbas], e toda rota IRMA da casca cobria essa casca e levava a
+/// barra com ela -- as 29 rotas empilhadas desta arvore. **Nao da para
+/// devolver a barra no `pop`**, e isso foi medido numa rodada anterior: o `pop`
+/// aterrissava certo; o que falhava era a exigencia de a barra estar VISIVEL
+/// na tela empilhada, e rota que cobre a casca nao mostra o que a casca
+/// desenha.
+///
+/// **Segunda, que DELIMITOU:** *"vamos colocar a barra fixa apenas nas paginas
+/// de primeiro plano, as paginas internas, pode manter como esta. Exemplo: ao
+/// clicar no menu auau, mantem a barra .. ao clicar na mensagem tira a barra.
+/// Ao clicar no perfil mantem a barra, ao clicar no cadastro do pet, remove a
+/// barra. Na listagem dos eventos, mantem a barra, ao clicar nos detalhes do
+/// evento, remove a barra. E assim por diante."*
+///
+/// **O que ele notou era o achado desta frente:** a tela que nao devia ter
+/// perdido a barra era a AREA DE MENSAGENS -- o destino do slot `AuAu`, que e
+/// a propria barra --, e nao a conversa aberta. Entao esta classe deixou de
+/// vestir 29 rotas e passou a vestir **DUAS**: `/mensagens` e `/notificacoes`.
+/// O discriminador e **quem abre a tela** -- a casca ou o conteudo --, e a
+/// conta dos tres exemplos dele esta em `rotas.dart`, no bloco das rotas.
+///
+/// ## Por que esta classe nao foi apagada com a reversao
+///
+/// Porque as duas que sobraram sao exatamente o defeito que ele viu, e elas
+/// precisam do mesmo mecanismo que as 29 precisavam: nao da para devolver a
+/// barra no `pop`. O que encolheu foi a LISTA, e nao a necessidade.
+///
+/// ## As tres saidas, e por que (c)
+///
+/// **(a) Levar cada tela para DENTRO da casca, como ramo do `IndexedStack`.**
+/// Recusada. Ramo exige tela unica e estado permanente, e a variante util de
+/// (a) -- a SUB-ROTA de ramo, que esta arvore ja usa duas vezes (`locais/:slug`
+/// sob `Rede`, `produtos/:slug` sob `Loja`) -- nao serve as duas que ficaram:
+/// **as duas sao alcancadas das CINCO secoes**. O sino esta na barra de topo
+/// de todas elas, e o slot `AuAu` na barra de baixo de todas elas; pendurar
+/// `/notificacoes` sob um ramo faria o `Voltar` dela devolver OUTRA secao --
+/// quem abriu os avisos em `Loja` voltaria no `Perfil`.
+///
+/// **(b) Uma barra PROPRIA desenhada em cada tela.** Recusada: copia do mesmo
+/// componente, com o filete de 1px e os cinco slots repetidos a mao.
+///
+/// **(c) UMA casca que envolve as rotas de primeiro plano** -- esta classe.
+/// Nenhum endereco trocado, nenhum `Voltar` mudado de destino, e o desenho da
+/// barra vindo do MESMO [BarraDeBaixo] que a casca dos ramos usa. O risco de
+/// (b) -- duas barras que divergem -- morre no componente unico, e o portao
+/// varre `lib/` por um segundo `NavigationBar`.
+///
+/// ## COMO ela envolve: no `builder`, e nao num `ShellRoute`
+///
+/// A forma obvia de (c) e um `ShellRoute` em volta das rotas, e ela foi a
+/// primeira tentativa. **Ela deu a barra e tirou a saida de SETE telas**,
+/// medido: `ShellRoute` cria um `Navigator` proprio, a primeira tela empilhada
+/// vira a unica pagina dele, e o `AppBar` decide a seta automatica por
+/// `ModalRoute.impliesAppBarDismissal` -- que e local ao `Navigator`. **A area
+/// de mensagens era uma das sete**, e ela e justamente uma das duas que
+/// sobraram: o defeito teria ficado em pe no lugar que mais importa.
+///
+/// Entao o embrulho e no `builder` de cada rota, por `_comBarraFixa` em
+/// `rotas.dart`: a pagina continua no `Navigator` raiz, `canPop` e a seta
+/// ficam como eram, e o que muda e so o que ha por baixo da tela.
+///
+/// ## O preco de (c), dito por inteiro
+///
+/// O motor do toque aqui e `go` e nao `goBranch`, porque de fora da casca dos
+/// ramos nao ha `StatefulNavigationShell` para trocar de ramo. A diferenca e
+/// real: tocar em `Loja` de dentro da area de mensagens ABANDONA a pilha
+/// empilhada em vez de guarda-la. **E o comportamento que ja existia** -- a
+/// barra nao estava la para ser tocada --, e e o mesmo que o slot do `AuAu`
+/// fazia desde 19/10.
+///
+/// ## O slot ACESO, que a tela de primeiro plano passou a saber dizer
+///
+/// `/mensagens` esta DENTRO da secao `AuAu`, e [slotDaRota] acende o slot
+/// dela. `/notificacoes` nao pertence a secao nenhuma -- o sino e de todas --,
+/// e ali TODOS os slots ficam apagados, porque acender um seria a barra
+/// mentindo sobre onde a pessoa esta.
+class CascaFixa extends StatelessWidget {
+  const CascaFixa({required this.child, super.key});
+
+  final Widget child;
+
+  /// O slot da barra a que o endereco [rota] pertence, ou -1 para nenhum.
+  ///
+  /// **Casa por SEGMENTO e nao por `startsWith`**, e a diferenca nao e
+  /// cosmetica: `startsWith` faria `/petshop` acender `Pets`. O endereco e
+  /// quebrado em segmentos e o primeiro e comparado com o primeiro do destino.
+  ///
+  /// `Perfil` nunca acende, e isso e de graca: ele esta no registro com
+  /// `naBarra: false`, entao nao esta em `visiveisEm` e nao tem slot. As telas
+  /// de `/perfil/...` ficam com a barra inteira apagada, que e a verdade --
+  /// a secao da conta saiu da barra em 19/10.
+  static int slotDaRota(String rota) {
+    final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+    String primeiro(String endereco) {
+      final partes = Uri.parse(endereco).pathSegments;
+      return partes.isEmpty ? '' : partes.first;
+    }
+
+    final segmento = primeiro(rota);
+    if (segmento.isEmpty) return -1;
+    return visiveis.indexWhere((d) => primeiro(d.rota) == segmento);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: BarraDeBaixo(
+        slotAceso: slotDaRota(GoRouterState.of(context).uri.path),
+        // `go` e nao `goBranch`: daqui nao ha `StatefulNavigationShell` para
+        // trocar de ramo. Ver o preco, na prosa da classe.
+        aoTocar: (destino) => GoRouter.of(context).go(destino.destinoDeHoje),
+      ),
     );
   }
 }
@@ -1618,7 +1780,19 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
                     aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
                   )
                 : null,
-            leadingWidth: raizDeSecao ? AvatarDaConta.alvo : null,
+            // **A LARGURA DO SLOT E O ALVO MAIS O RESPIRO (20/10/2026).**
+            //
+            // Pedido literal do cliente: *"o icone do perfil do usuario ficou
+            // muito perto do titulo da barra, de uma margem do nome"*. Com
+            // `titleSpacing: 0` o titulo comecava exatamente onde o circulo
+            // terminava -- 48,00 dp --, e nao havia vao nenhum.
+            //
+            // O numero e `AvatarDaConta.larguraNoLeading` e nao uma soma
+            // escrita aqui: a conta do orcamento do titulo esta na constante,
+            // junto com o motivo de o alvo continuar em 48. **O orcamento caiu
+            // de 224,00 para 216,00 dp** e os quatro titulos continuam
+            // cabendo -- `Mural`, o pior, pede 172,90 e sobra 43,10.
+            leadingWidth: raizDeSecao ? AvatarDaConta.larguraNoLeading : null,
             // **O LADO DIREITO: O SINO, E SO O SINO (19/10/2026).**
             //
             // A foto saiu daqui e foi para o slot da ESQUERDA, no lugar do
@@ -1906,6 +2080,59 @@ class AvatarDaConta extends StatelessWidget {
   /// O alvo de toque, em dp.
   static const double alvo = 48;
 
+  /// O RESPIRO ENTRE O CIRCULO E O TITULO. **Pedido do cliente, 20/10/2026:**
+  /// *"o icone do perfil do usuario ficou muito perto do titulo da barra, de
+  /// uma margem do nome"*.
+  ///
+  /// **Ele NAO e de graca, e nenhuma das formas de hoje o daria de graca.** O
+  /// circulo de 32 dp ocupa 16..48 dentro de um alvo de 48: a borda direita do
+  /// desenho e a borda direita do alvo, e o titulo comeca em 48 com
+  /// `titleSpacing: 0`. **Nao ha folga nenhuma sobrando do lado direito do
+  /// alvo** -- a margem interna de 16 dp da esquerda consumiu a que havia --,
+  /// entao qualquer vao entre o circulo e o titulo tem de sair do ORCAMENTO DO
+  /// TITULO. Medido, em 320 dp a 200% de escala:
+  ///
+  ///   antes:  foto 48 | titulo | sino 48  -> 224,00 dp
+  ///   agora:  foto 56 | titulo | sino 48  -> **216,00 dp**
+  ///
+  ///   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (77,68 de folga)
+  ///   `Mural`:                172,90 dp -> CABE  (43,10 de folga)
+  ///
+  /// **Nenhum titulo passou a cortar**, e por isso a margem foi paga aqui e
+  /// nao arrancada de outro controle.
+  ///
+  /// **E 8 dp e nao 16**, e a escolha e medida e nao estetica: 16 dp sao a
+  /// `layout.margem-celular` e levariam o orcamento a 208,00 dp por um vao do
+  /// tamanho da margem da pagina -- vao de margem de pagina ENTRE dois
+  /// elementos da mesma barra le como separacao de blocos, e os dois sao a
+  /// mesma barra. `BichuEspaco.e2` e o degrau da escala que separa dois
+  /// elementos vizinhos.
+  ///
+  /// **A OPCAO BARATA FOI MEDIDA E RECUSADA:** trocar a margem interna de
+  /// `left: 16` por `left: 8, right: 8` daria o vao com custo 0,00 dp de
+  /// orcamento (8 + 32 + 8 = 48, o alvo nao muda). Ela poria o circulo a 8 dp
+  /// da borda da TELA, contra os 16 dp do corpo da pagina
+  /// (`EdgeInsets.all(e4)`) -- o desalinho que o cliente leu no aparelho em
+  /// 19/10, espelhado para dentro. A margem da esquerda FICA em 16.
+  static const double respiroDoTitulo = BichuEspaco.e2;
+
+  /// A LARGURA QUE A FOTO OCUPA NO `leading` da barra de topo: o alvo mais o
+  /// respiro.
+  ///
+  /// **O ALVO CONTINUA 48 x 48, e e por isso que o respiro mora aqui e nao no
+  /// `padding` do `IconButton`.** As duas outras formas foram medidas e as
+  /// duas falham: `Padding` por fora engorda o `leading` sem `leadingWidth`
+  /// acompanhar, e `padding: right` dentro do botao infla o ALVO para 56 dp --
+  /// o alvo passaria a invadir o vao, e o caso `o alvo da FOTO e 48 x 48 dp`
+  /// reprova.
+  ///
+  /// O `Align` do [build] e o que separa as duas medidas: o `AppBar` entrega
+  /// ao `leading` uma restricao APERTADA de [larguraNoLeading], o `Align`
+  /// assume os 56 e afrouxa para o filho, e o `IconButton` nasce com os 48
+  /// dele, encostado no inicio. Sobram [respiroDoTitulo] dp de ar ENTRE o alvo
+  /// e o titulo, onde nao ha controle nenhum para roubar o toque.
+  static const double larguraNoLeading = alvo + respiroDoTitulo;
+
   /// A chave do CIRCULO desenhado, dentro do alvo.
   ///
   /// Existe para o portao poder medir as duas coisas separadamente: o ALVO de
@@ -1917,9 +2144,49 @@ class AvatarDaConta extends StatelessWidget {
   /// ele -- foi assim que os 8,00 dp do desenho ficaram sem portao.
   static const Key chaveDoCirculo = ValueKey<String>('conta/avatar/circulo');
 
+  /// A chave do ALVO DE TOQUE, dentro do slot.
+  ///
+  /// **Ela nasceu em 20/10 com o respiro do titulo, e por um defeito de
+  /// medicao que o respiro revelou.** Antes dele, o widget inteiro ERA o alvo:
+  /// `tester.getRect(find.byType(AvatarDaConta))` media 48 x 48 e os portoes
+  /// chamavam isso de alvo, corretamente. Com o respiro, o widget passou a
+  /// ser o `Align` que ocupa o slot de 56 dp, e aquela medida passou a
+  /// devolver **56** -- o numero do slot, nao o do alvo. Um portao que
+  /// continuasse lendo o widget diria que o alvo inflou, e um que trocasse o
+  /// 48 por 56 passaria a aprovar um alvo que de fato inflasse.
+  ///
+  /// Com esta chave o portao mede o CONTROLE: `IconButton`, 48 x 48, que e o
+  /// que recebe o toque.
+  static const Key chaveDoAlvo = ValueKey<String>('conta/avatar/alvo');
+
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    // **O `Align` E O QUE SEPARA O RESPIRO DO ALVO.**
+    //
+    // O `AppBar` entrega ao `leading` uma restricao APERTADA de
+    // [larguraNoLeading] -- 56 dp, o alvo mais o respiro. Sem o `Align`, o
+    // `IconButton` assumiria os 56 inteiros e o ALVO DE TOQUE engordaria com
+    // ele: o dedo passaria a acertar a conta dentro do vao que existe para
+    // separar a foto do titulo.
+    //
+    // Com ele, o filho recebe a restricao AFROUXADA e nasce com os 48 dele,
+    // encostado no inicio; os 8 dp sobram a direita, onde nao ha controle
+    // nenhum para roubar o toque.
+    //
+    // **Ele mora DENTRO deste widget e nao no `leading` de `TelaDeAba`**, e
+    // isso foi medido: com o `Align` por fora, `barra.leading` deixava de ser
+    // um `AvatarDaConta` e **cinco casos de quatro arquivos reprovavam** --
+    // eles conferem o TIPO do `leading`, que e a forma de dizer "a foto esta
+    // no slot da esquerda". Por dentro, o tipo do `leading` nao muda; o que
+    // muda e o que `getRect` do widget devolve, e para isso existe
+    // [chaveDoAlvo].
+    //
+    // Fora do `leading` -- largura sem limite -- o `Align` encolhe sobre o
+    // filho e nao muda nada.
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: IconButton(
+      key: chaveDoAlvo,
       // `tooltip` vira o nome acessivel (11.23.3), como no gatilho da gaveta.
       tooltip: rotuloAcessivel,
       constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
@@ -1957,6 +2224,7 @@ class AvatarDaConta extends StatelessWidget {
       ),
       onPressed: aoTocar,
       icon: _MarcaNeutra(inicial: inicial),
+      ),
     );
   }
 }

@@ -100,7 +100,13 @@ abstract final class Rotas {
   /// **Nao ha mais a razao antiga desta rota**, que era a volta da guarda de
   /// acao de `Pedir para participar` depois do login: o pedido de participacao
   /// saiu com o evento privado, por decisao dele.
-  static const String encontroDaRede = 'encontros/:slug';
+  /// **IRMA da casca e SEM barra, por decisao do cliente de 20/10/2026.**
+  ///
+  /// O caminho e ABSOLUTO desde que ela saiu do `routes:` do ramo da
+  /// `Rede`: *"ao clicar nos detalhes do evento, remove a barra"*. Ver o
+  /// bloco desta rota em `_rotas`, que registra as duas frentes em conflito
+  /// e o veredito.
+  static const String encontroDaRede = '/rede/encontros/:slug';
 
   static const String parametroDoEncontro = 'slug';
 
@@ -737,6 +743,36 @@ void ligarPortaDoPerfilDoParticipante() {
   };
 }
 
+/// Uma rota de PRIMEIRO PLANO: empilhada, e com a barra de baixo por baixo.
+///
+/// **Primeiro plano e o que a CASCA abre; pagina interna e o que o CONTEUDO
+/// abre** (decisao do cliente, 20/10/2026, segunda mensagem). Hoje sao DUAS as
+/// rotas assim -- a area de mensagens, que o slot `AuAu` da barra abre, e a
+/// caixa de avisos, que o sino da barra de topo abre. A conta inteira esta no
+/// bloco de rotas que usa esta funcao.
+///
+/// **O embrulho e no `builder` e nao num `ShellRoute`, e isso foi medido.**
+/// `ShellRoute` cria um `Navigator` proprio e apaga a seta automatica do
+/// `AppBar` da primeira tela empilhada -- sete telas desta arvore dependiam
+/// dela e ficavam sem saida no topo, `/mensagens` entre elas. Aqui a pagina
+/// continua no `Navigator` raiz e nada de navegacao muda.
+///
+/// Ela e **o unico lugar** que poe [CascaFixa] em producao: uma rota nova de
+/// primeiro plano troca `GoRoute` por esta funcao e entra em
+/// `telasDePrimeiroPlano`; uma interna fica `GoRoute` e entra em
+/// `telasInternas`. As duas listas vivem no portao
+/// `test/telas/barra_fixa_em_toda_tela_test.dart`, que reprova rota sem
+/// classificacao.
+GoRoute _comBarraFixa({
+  required String path,
+  required Widget Function(BuildContext, GoRouterState) builder,
+}) {
+  return GoRoute(
+    path: path,
+    builder: (context, estado) => CascaFixa(child: builder(context, estado)),
+  );
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
   // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
   // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
@@ -838,6 +874,60 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaDoCasoPublico(shareToken: token);
         },
       ),
+      // =====================================================================
+      // PRIMEIRO PLANO E PAGINA INTERNA (20/10/2026, as DUAS mensagens dele)
+      // =====================================================================
+      //
+      // **PRIMEIRA mensagem, que pedia a barra em tudo:** *"quando o usuario
+      // vai para a mensagem, o menu inferior some, mantenha ele fixo em todas
+      // as paginas"*. As 29 rotas empilhadas desta arvore passaram a vestir
+      // [CascaFixa].
+      //
+      // **SEGUNDA mensagem, do mesmo dia, que DELIMITOU:** *"vamos colocar a
+      // barra fixa apenas nas paginas de primeiro plano, as paginas internas,
+      // pode manter como esta. Exemplo: ao clicar no menu auau, mantem a barra
+      // .. ao clicar na mensagem tira a barra. Ao clicar no perfil mantem a
+      // barra, ao clicar no cadastro do pet, remove a barra. Na listagem dos
+      // eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+      // barra. E assim por diante."*
+      //
+      // **O DISCRIMINADOR SAI DOS TRES EXEMPLOS DELE, e nao de "lista contra
+      // detalhe".** As duas leituras concordam nos tres exemplos e DISCORDAM
+      // em oito telas desta arvore -- `Meus achados` e `Pedidos de conexao`
+      // sao LISTAS e sao alcancadas de DENTRO do Perfil. O que separa os tres
+      // exemplos dele sem ambiguidade e **QUEM ABRE A TELA**:
+      //
+      //   - a CASCA abre -> primeiro plano, com barra. O slot `AuAu` da barra
+      //     de baixo abre `/mensagens`; o sino da barra de topo abre
+      //     `/notificacoes`. Os dois sao controles da propria casca, presentes
+      //     em toda tela de secao.
+      //   - o CONTEUDO abre -> pagina interna, sem barra. Tocar numa linha da
+      //     lista de mensagens, num `ItemDeMenu` do corpo do Perfil, num
+      //     cartao de pet, num botao de formulario.
+      //
+      // E isso le os tres exemplos dele na ordem: o slot `AuAu` mantem (casca),
+      // a mensagem tocada tira (conteudo); o Perfil mantem (a FOTO da casca o
+      // abre), o cadastro de pet tira (botao do corpo); a listagem de eventos
+      // mantem (e a secao `Rede`, da casca), a ficha do evento tira (cartao do
+      // corpo).
+      //
+      // **SAO DUAS AS ROTAS DE PRIMEIRO PLANO**, e so elas usam
+      // `_comBarraFixa`: `RotasDeMensagens.area` e `RotasDaCaixa.caixa`. As
+      // outras 27 voltaram a ser `GoRoute` -- *"as paginas internas, pode
+      // manter como esta"*. A classificacao das 29, uma a uma, com o motivo de
+      // cada, esta em `test/telas/barra_fixa_em_toda_tela_test.dart`
+      // (`telasDePrimeiroPlano` e `telasInternas`), e o portao de completude
+      // reprova rota nova que nasca sem classificacao.
+      //
+      // **AS OITO QUE JA ESTAVAM DE FORA CONTINUAM DE FORA**, e ele respondeu
+      // sobre elas na mesma mensagem (*"as paginas internas, pode manter como
+      // esta"*): `/` (a abertura e um desvio, nao tem conteudo), `/entrar`,
+      // `/criar-conta`, `/verifique-seu-email` e `/esqueci-minha-senha` (quem
+      // nao tem sessao nao esta em secao nenhuma), `/escanear` (**o design
+      // system 11.11 PROIBE a barra sobre a camera**, independente disto), e
+      // `/t/:codigo` e `/p/:shareToken` (as duas portas publicas: quem chega
+      // de uma plaquinha ou de um link compartilhado chega de FORA do app).
+
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem
       // pela porta das ONGs em `Perto`.
       GoRoute(
@@ -1140,7 +1230,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDeMensagens.area,
         builder: (context, estado) {
         // AS DUAS COSTURAS DO CONTADOR DA ABA `AuAu` (20/10/2026).
@@ -1172,7 +1262,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // A CAIXA DE NOTIFICACOES. Rota IRMA da casca: ela cobre a barra de
       // baixo, de proposito, e o sino chega nela por `push` -- ver a razao em
       // `SinoDeNotificacoes`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDaCaixa.caixa,
         builder: (context, estado) => const CaixaDeNotificacoes(),
       ),
@@ -1304,34 +1394,6 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
                       slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
                     ),
                   ),
-                  // **A rota `encontros/:slug` VOLTOU em 20/10/2026**, dentro
-                  // deste ramo unificado -- que e onde a frente
-                  // `feat/barra-com-mural-e-rede-unificada` a punha, antes de
-                  // a mescla de 19/10 ter de tira-la por falta de tela.
-                  //
-                  // A tela existe de novo: o cliente corrigiu o pedido
-                  // (*"eu nao pedi pra voce remover, eu pedi para remover o
-                  // clique"*), e `telas/rede/encontro_da_rede.dart` voltou do
-                  // historico. `RetomadaDoPedido` **nao** voltou -- o pedido
-                  // de participacao saiu com o evento privado --, e e por isso
-                  // que este `builder` repassa so a distancia.
-                  //
-                  // **Sob o ramo, e nao irma da casca**, como a ficha do
-                  // local acima: a pagina de um evento e LEITURA, e a barra de
-                  // baixo fica. `encontros/novo` continua IRMA, porque
-                  // preencher formulario e tarefa.
-                  GoRoute(
-                    path: Rotas.encontroDaRede,
-                    builder: (context, estado) => TelaDoEncontro(
-                      slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
-                      // A distancia vem do cartao, que a leu de
-                      // `listNearbyNetworkEvents`. Por link direto ela nao
-                      // vem, e a linha some sem aviso.
-                      distanciaEmMetros: estado.extra is int
-                          ? estado.extra! as int
-                          : null,
-                    ),
-                  ),
                 ],
               ),
             ],
@@ -1391,6 +1453,49 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             ],
           ),
         ],
+      ),
+      // A FICHA DE UM ENCONTRO: IRMA DA CASCA, E SEM BARRA (20/10/2026).
+      //
+      // **Duas frentes decidiram este endereco em sentidos opostos, no mesmo
+      // dia, sem se ver, e quem mesclou decidiu pelo cliente.**
+      //
+      // `feat/aviso-de-login-ao-tocar` devolveu a tela e a declarou SOB o ramo
+      // da `Rede`, com a justificativa de que *"a pagina de um evento e
+      // LEITURA, e a barra de baixo fica"* -- a mesma razao que mantem
+      // `locais/:slug` sob o ramo. `feat/barra-fixa-e-perfil-por-topicos`
+      // trouxe o portao que varre sub-rota de ramo e REPROVA nomeando este
+      // endereco.
+      //
+      // **O cliente decidiu o contrario da primeira, com este exemplo
+      // literal:** *"vamos colocar a barra fixa apenas nas paginas de primeiro
+      // plano, as paginas internas, pode manter como esta... Na listagem dos
+      // eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+      // barra."*
+      //
+      // Entao a ficha do evento e INTERNA: ela sai do `routes:` do ramo e vem
+      // para ca, IRMA da casca, como `/pets/:petId` -- que e o mesmo desenho
+      // (detalhe de UM item, aberto por um cartao do CORPO da secao). O
+      // discriminador que o portao mede e **quem abre a tela**: a casca abre a
+      // listagem, o conteudo abre a ficha.
+      //
+      // **Ela NAO usa `_comBarraFixa`**, e e isso que tira a barra: as duas
+      // unicas rotas de primeiro plano continuam sendo a area de mensagens e a
+      // caixa de avisos.
+      //
+      // **A ORDEM CONTINUA SEGURA.** `/rede/encontros/novo` esta declarada bem
+      // antes desta, la onde as rotas irmas de formulario vivem, e o
+      // `go_router` casa na ordem de registro: o formulario nao cai nesta
+      // ficha. E o ramo `/rede` da casca, que vem acima, nao casa
+      // `/rede/encontros/<slug>` nenhuma, porque a sub-rota saiu dele.
+      GoRoute(
+        path: Rotas.encontroDaRede,
+        builder: (context, estado) => TelaDoEncontro(
+          slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
+          // A distancia vem do cartao, que a leu de
+          // `listNearbyNetworkEvents`. Por link direto ela nao vem, e a linha
+          // some sem aviso.
+          distanciaEmMetros: estado.extra is int ? estado.extra! as int : null,
+        ),
       ),
     ],
   );
