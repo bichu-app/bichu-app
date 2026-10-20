@@ -635,6 +635,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/section-counters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os numeros das abas `Pets` e `Rede`
+         * @description **E a fonte dos selos que a barra de baixo exibe nas abas `Pets` e
+         *     `Rede`.** Operacao propria, e nao campo de outra leitura, pelo mesmo
+         *     motivo de `getNotificationCount`: a barra vive em toda tela e nao pode
+         *     pagar uma pagina de listagem para desenhar tres numeros.
+         *
+         *     Os tres numeros saem **inteiros**. O recorte em `9+` e regra da barra e
+         *     mora no aplicativo.
+         *
+         *     ## O QUE CADA NUMERO CONTA, e cada um conta o que a aba MOSTRA
+         *
+         *     Esta e a regra que decide a operacao inteira: **o selo tem de contar o
+         *     conteudo que aparece quando a pessoa toca na aba.** Selo que aponta para
+         *     lista que a aba nao abre e selo que, ao ser tocado, zera sem mostrar
+         *     nada.
+         *
+         *     * `lost_pets_new` -- casos de perdido ABERTOS e publicos no recorte de
+         *       `city`, com `last_seen_at` posterior ao marcador. **E exatamente o
+         *       recorte de `listPublicLostPets`**, que e o corpo da aba `Pets`
+         *       (`ListaDePerdidos`).
+         *
+         *       **Nao conta `pets` cadastrados, e a ausencia foi MEDIDA:** a tabela
+         *       `pets` nao tem coluna de cidade nenhuma (conferido o `CREATE TABLE`
+         *       inteiro da `20260917000006` e `ALTER TABLE pets` em todas as
+         *       migracoes: zero), e **nao existe operacao que liste pet cadastrado de
+         *       terceiro por regiao** -- as duas leituras de pet por quem nao e o
+         *       tutor sao `listPublicLostPets` e `getPublicPetBySlug`, e a segunda e
+         *       um pet por endereco. Um numero sobre `pets` seria um numero sem lista.
+         *
+         *     * `network_events_new` -- encontros `published` que ainda VAO acontecer,
+         *       com `published_at` posterior ao marcador. O "ainda vao acontecer" nao
+         *       e zelo: `listNetworkEvents` tem `when` com default `upcoming`, entao
+         *       contar encontro que ja terminou poria no selo o que a agenda nao abre.
+         *
+         *     * `network_directory_new` -- entradas do diretorio `published`, com
+         *       `published_at` posterior ao marcador.
+         *
+         *       **`published_at` e nao `created_at`, e e a decisao do cliente de
+         *       20/10/2026 que escolhe:** *"Todo profissional que passa pela moderacao
+         *       e entra no Perto conta como recomendado pela comunidade"*. O sinal e a
+         *       ENTRADA NO DIRETORIO, e `created_at` responde outra pergunta -- ele
+         *       contaria a indicacao que ainda esta na fila de moderacao, que e
+         *       precisamente o que a frase dele exclui. Esta e tambem a razao de **nao
+         *       haver coluna de destaque, ranking nem selo**: o dado ja existe.
+         *
+         *     ## `city` E DO APARELHO, e vem no pedido pelo mesmo caminho da lista
+         *
+         *     `listPublicLostPets` recorta por cidade DIGITADA, e a aba `Pets` resolve
+         *     a cidade numa cadeia que mora no aparelho (localizacao ->
+         *     `Me.reference_area.city` -> nenhuma). O contador aceita a MESMA cidade,
+         *     pelo mesmo parametro, para que o numero e a lista nunca discordem.
+         *
+         *     **Sem `city` nao ha recorte de geografia**, exatamente como na listagem
+         *     publica: o numero passa a contar os casos abertos de todas as cidades.
+         *     Nao ha valor de "qualquer cidade" a inventar, e nao ha coordenada em
+         *     lugar nenhum desta operacao -- a emenda 1 do ADR-0006 autoriza
+         *     coordenada -> nome de cidade **no aparelho**, e e so o nome que viaja.
+         *
+         *     **`reference_city` da conta NAO e usada aqui, e a medicao e o motivo:**
+         *     3 de 47 contas tem `reference_area.city` preenchida (medido pela frente
+         *     de 19/10 e registrado em `lista_de_perdidos.dart`). Um contador que
+         *     dependesse dela ficaria nulo para 94% das contas, e discordaria da lista
+         *     nas outras.
+         */
+        get: operations["getSectionCounters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sections-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Esta area foi vista -- zera o numero dela
+         * @description **Zera o contador da area e NAO marca item nenhum como lido**, como
+         *     `markMyConversationsSeen` e `markNotificationsListSeen`. "Lido" e o item
+         *     aberto; "vista" e a area.
+         *
+         *     `accept_and_deduplicate` e nao `deny_429`, pelo mesmo motivo de
+         *     `markMyConversationsSeen`: a tela chama isto a cada entrada na area, e
+         *     trocar de aba e voltar e normal. Um 429 aqui deixaria o selo ACESO para
+         *     quem acabou de olhar -- a mentira que o contador existe para evitar.
+         *
+         *     ## UMA AREA POR CHAMADA, e `Eventos` e `Comunidade` sao DUAS
+         *
+         *     As duas contagens da `Rede` caem na mesma aba da barra, que tem um selo
+         *     so, **mas o marcador e separado**. Entrar em `Eventos` nao pode zerar a
+         *     contagem de `Comunidade`: isso afirmaria que a pessoa viu um
+         *     profissional novo que nunca apareceu na tela dela. O selo da aba mostra a
+         *     SOMA e ela desce em dois passos.
+         *
+         *     ## POR QUE A RESPOSTA E 200 COM OS CONTADORES, e nao 204
+         *
+         *     `markNotificationsListSeen` responde 204 e tem a razao escrita: lá o
+         *     numero depois de "vista" **nao e necessariamente zero**, porque
+         *     `tag_scanned` e `found_reported` atravessam o zero, e devolver um numero
+         *     ali faria a tela acreditar no que ela acabou de zerar.
+         *
+         *     **Nenhuma das tres areas desta operacao tem excecao desse tipo**, e isso
+         *     foi medido: o que a aba `Pets` conta e o que `listPublicLostPets`
+         *     devolve, e as duas sub-abas da `Rede` contam o que as duas listagens
+         *     devolvem -- nao ha classe de item que o produto queira manter aceso
+         *     depois de a area ser vista.
+         *
+         *     Mesmo assim **quem decide o numero continua sendo o servidor**, e e por
+         *     isso que a resposta traz os contadores recalculados DEPOIS da escrita em
+         *     vez de 204: a alternativa seria o aplicativo escrever zero por conta
+         *     propria (adivinhacao, e ela divergiria no dia em que uma excecao
+         *     nascer) ou chamar `getSectionCounters` em seguida (uma viagem a mais por
+         *     visita, que e o que o contador de mensagens paga hoje). O corpo e o
+         *     mesmo schema da leitura.
+         */
+        post: operations["markMySectionSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications/read-all": {
         parameters: {
             query?: never;
@@ -733,6 +870,237 @@ export interface paths {
          *     objeto ficaria no balde ate o varredor passar.
          */
         post: operations["createShowcasePhotoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As minhas publicacoes
+         * @description As publicacoes da **propria conta**, mais recente primeiro. Lista vazia e
+         *     estado normal e completo, e nao ausencia de recurso.
+         *
+         *     **Esta e a unica leitura que mostra publicacao em `processing`.** A foto
+         *     recem-enviada carrega o EXIF do celular ate o worker reescrever a
+         *     derivada (ADR-0010 item 4), e por isso ela sai com `status: processing` e
+         *     `url: null` -- para o DONO, que ja esteve naquele lugar. Na linha do
+         *     tempo de outra pessoa a foto em `processing` simplesmente nao sai, e e
+         *     por isso que `Publication` nao tem campo de estado nenhum.
+         *
+         *     **Ela nao depende de conexao.** Quem nao tem conexao nenhuma ve aqui
+         *     tudo o que publicou -- e e esta operacao que distingue, na tela, "nao
+         *     tenho conexao" de "ninguem publicou".
+         */
+        get: operations["listMyPublications"];
+        put?: never;
+        /**
+         * Publica no Mural
+         * @description A caixa que o cliente pediu em 20/10/2026: *"escrever uma mensagem,
+         *     subir uma foto e publicar o conteudo"*. **Uma escrita, os dois campos.**
+         *
+         *     `body` e **obrigatorio**, livre, 1 a 280 caracteres. **Nao ha filtro de
+         *     palavra**, nem aqui nem no banco -- decisao do cliente (*"deixe o texto
+         *     livre na timeline"*, *"quem modera vai ser o administrador, deve ir para
+         *     a pagina de backoffice"*). A moderacao e `reportPublication` somada a
+         *     fila do painel. 280 nao e escolha desta operacao: e o teto que
+         *     `publication_reports.publication_body` ja cobrava antes de a tabela de
+         *     publicacoes existir, e divergir dele faria a copia congelada da denuncia
+         *     truncar o texto julgado.
+         *
+         *     `upload_id` e **opcional** e vem de `createPublicationPhotoUploadIntent`.
+         *     **E AQUI que o envio e confirmado**, na mesma transacao da escrita --
+         *     nao ha operacao de confirmacao separada, e e isso que impede o varredor
+         *     de apagar a foto dez minutos depois. `upload_id` de outra conta, de
+         *     outro proposito, ja usado, vencido ou inexistente responde `404`, e
+         *     nunca `403`: distinguir os dois revelaria que o envio existe (ADR-0021).
+         *
+         *     `alt_text` e opcional e so vale com `upload_id`; sem foto, ele e `400`.
+         *     Ele e **opcional e nao obrigatorio como na capa do encontro** porque as
+         *     duas superficies nao se parecem: lá a imagem E o conteudo e nao ha texto
+         *     ao lado dela, aqui `body` e obrigatorio e o leitor de tela sempre tem o
+         *     que anunciar. Sem `alt_text` o aplicativo anuncia um rotulo generico --
+         *     quem nao ve precisa saber que ha uma foto ali.
+         *
+         *     **NAO HA CAMPO DE PET, e a ausencia e o item 7 do ADR-0010.** Foto de pet
+         *     numa publicacao e permitida (decisao do cliente de 19/10); marcar o pet
+         *     ou ligar a ficha dele, nao -- isso agruparia os pets de um tutor. Campo
+         *     ausente ninguem preenche por engano.
+         *
+         *     **NAO HA CAMPO DE LUGAR** (ADR-0006): nao ha geocodificacao, e
+         *     "publicacoes perto de voce" seria coordenada disfarcada.
+         *
+         *     **`201` com a publicacao como ela passou a valer.** Quando ha foto, ela
+         *     volta com `status: processing` e `url: null`, pelo mesmo motivo de
+         *     `replaceMyShowcase`.
+         */
+        post: operations["createPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/publications/{publicationRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Apaga uma publicacao minha
+         * @description Sem ela a pessoa publica e nao desfaz, que e o pior desenho possivel para
+         *     um texto livre.
+         *
+         *     **So o AUTOR apaga, e o predicado esta na clausula `WHERE`** do `UPDATE`
+         *     (ADR-0021): publicacao de outra conta, endereco inexistente e publicacao
+         *     ja apagada sao o MESMO `404`, e nunca `403`.
+         *
+         *     **Exclusao LOGICA**, e o motivo e a denuncia: `publication_reports`
+         *     aponta para a publicacao com `ON DELETE SET NULL`, e um apagamento
+         *     fisico deixaria a denuncia aberta sem alvo no meio da fila do painel. O
+         *     texto denunciado continua congelado em `publication_body`, na propria
+         *     denuncia, e e o que o administrador julga.
+         *
+         *     **Apagar NAO e moderar.** Quem denunciou continua sem ver (a ocultacao
+         *     imediata e filtro de leitura e vale por artefato), e a fila continua
+         *     tendo a linha -- apagar o proprio conteudo nao resolve a denuncia de
+         *     ninguem, e nao deveria: a decisao e do administrador.
+         *
+         *     `204` sem corpo, e o mesmo `204` para "apaguei agora" e "ja estava
+         *     apagada"? **Nao**: ja apagada e `404`, como endereco inexistente -- a
+         *     publicacao nao existe mais para quem chama, e inventar um terceiro
+         *     desfecho faria a tela ter um estado que nada produz.
+         */
+        delete: operations["deleteMyPublication"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/publications/photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da foto de uma publicacao
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, no prefixo
+         *     `people/` -- o mesmo da foto unica e da vitrine, porque as tres sao
+         *     imagem da MESMA pessoa e somem juntas no expurgo da conta.
+         *
+         *     **O padrao de foto do aplicativo, decidido em 19/10/2026:** escolher
+         *     envia na hora, a previa e do arquivo local, e o `Publicar` confirma. Nao
+         *     ha botao separado de salvar foto -- foi o defeito que o cliente relatou
+         *     duas vezes. Por isso **autorizar nao cria publicacao nenhuma**: a foto
+         *     passa a existir quando `createPublication` grava o `upload_id` dentro, e
+         *     a intencao que ninguem confirma vence em dez minutos e o varredor a
+         *     recolhe.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir.
+         *
+         *     **O teto de 5 MB esta na POLITICA ASSINADA**, e nao numa conferencia
+         *     posterior. `byte_size` acima do teto e recusado aqui, **antes** de
+         *     assinar, para a tela dizer o motivo em vez de o envio falhar no
+         *     armazenamento sem explicacao.
+         *
+         *     **HEIC entra**, como na vitrine: a foto sai de um CELULAR, e foto de
+         *     iPhone e HEIC. A derivada sai sempre em JPEG -- a conversao e nossa, no
+         *     servidor. SVG nunca, e por IGUALDADE e nunca por prefixo de `image/`.
+         *
+         *     Dimensao minima 600 x 600, a mesma da vitrine, da capa do encontro e da
+         *     foto de pet, e pelo mesmo motivo: a derivada desta foto e `card` de
+         *     1024 px e o `sharp` nao amplia. `width`/`height` sao opcionais e, quando
+         *     vem abaixo dela, respondem `422 image-too-small` **antes** de assinar;
+         *     quem decide de verdade e o worker, nos bytes.
+         */
+        post: operations["createPublicationPhotoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A linha do tempo do Mural
+         * @description O que o cliente pediu em 19/10/2026: *"a secao de timeline, onde as
+         *     publicacoes dos usuarios que ele segue e sao amigos apareca"*.
+         *
+         *     **O recorte, por extenso: as publicacoes VIVAS de quem e CONEXAO ACEITA
+         *     de quem chama, mais as de quem chama.** Mais recente primeiro.
+         *
+         *     As proprias entram porque, sem elas, publicar e voltar ao Mural
+         *     entregaria o estado vazio -- a pessoa nao veria o que acabou de escrever
+         *     na tela em que escreveu.
+         *
+         *     **A quem NAO tem relacao com o autor, a publicacao NAO EXISTE.** Nao ha
+         *     ramo, `CASE` nem segunda consulta que mostre publicacao de estranho: o
+         *     predicado e um `EXISTS` sobre `user_connections` com `state = 'accepted'`
+         *     nos dois sentidos do par, somado a `conta_habilitada` das duas pontas,
+         *     `NOT bloqueio_entre` e `NOT publicacao_ocultada_para_quem_denunciou`, e
+         *     **tudo isso esta na clausula `WHERE` da consulta** (ADR-0021). Chamar a
+         *     consulta de um caminho novo devolve lista vazia, e nao a linha do tempo
+         *     de outra pessoa.
+         *
+         *     **"SEGUIR" NAO ENTRA NESTA OPERACAO.** O cliente decidiu, em 18/10,
+         *     "os dois, conexao e seguir"; seguir assimetrico e objeto novo (tabela,
+         *     operacoes e a lista "quem me segue", que o portao
+         *     `conexao-nao-expoe-lista-nem-identificador.test.ts` nomeia num caso
+         *     proprio). Esta operacao e inteiramente sobre CONEXAO ACEITA, que e o que
+         *     a Emenda 2 do ADR-0010 ja sustenta, e nenhum campo dela precisa mudar
+         *     quando seguir chegar: o recorte ganha uma perna no `WHERE`, e nada mais.
+         *
+         *     **A EMENDA 2 DO ADR-0010 NAO E CONTRARIADA.** Ela diz que timeline,
+         *     publicacao e curtida **nao saem no perfil de quem nao e conexao**
+         *     (`getPersonProfile`), e isso continua valendo literalmente: nenhum
+         *     campo desta operacao aparece la, e esta operacao nao mostra nada de
+         *     quem nao e conexao aceita.
+         *
+         *     **O AUTOR SAI SEM FOTO**, e a ausencia e deliberada. A Emenda 3 do
+         *     ADR-0010 abriu `photo_icon_url` em `Conversation.participants[]` *"e em
+         *     mais nenhuma resposta deste contrato"*, e fechou com *"nenhuma outra
+         *     superficie ganha foto de pessoa"*. Ler o Mural como superficie
+         *     autorizada seria ler o complemento da regra como a regra -- e e decisao
+         *     do cliente, nao desta frente. O que sai do autor e `handle` e
+         *     `display_name`, exatamente o que `ConnectionPerson` ja entrega a quem e
+         *     conexao. **A pergunta esta no relatorio desta fatia**, e no dia em que
+         *     ele disser sim o campo entra em `PublicationAuthor` sem mudar mais nada.
+         *
+         *     **Paginacao por cursor**, e nao numerada: e listagem interna de volume
+         *     aberto, como a area de mensagens. O cursor carrega `created_at` e o
+         *     `ref`, que sao as duas colunas da ordem -- so `created_at` empataria duas
+         *     publicacoes do mesmo milissegundo e o paginador devolveria a mesma linha
+         *     duas vezes ou nenhuma. **O desempate e o `ref` publico e nao o `id`**:
+         *     um cursor que carregasse a identidade interna poria um UUID em saida, que
+         *     o item 6 do ADR-0010 proibe mesmo embrulhado em base64.
+         */
+        get: operations["getMyTimeline"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1834,7 +2202,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Minhas conversas */
+        /**
+         * Minhas conversas
+         * @description A lista sai **da atividade mais recente para a mais antiga**: a chave de
+         *     ordem e `coalesce(last_message_at, opened_at)`, e nao `opened_at`.
+         *
+         *     A diferenca e de produto, e nao de gosto: a conversa que o tutor precisa
+         *     achar e a que acabou de receber recado, e nao a que nasceu por ultimo.
+         *     Conversa sem mensagem visivel cai na abertura dela, que e o unico
+         *     instante que ela tem -- e por isso a chave e um `coalesce` e nao uma
+         *     coluna. O `cursor` carrega essa MESMA chave, entao a pagina seguinte
+         *     continua de onde a anterior parou.
+         *
+         *     `q` recorta por **nome do pet** e pelo **nome de exibicao do outro
+         *     lado**, dentro das conversas de quem chamou. Ele nao e busca de pessoas:
+         *     a autorizacao continua no `WHERE` (ADR-0021), nenhuma conversa de
+         *     terceiro entra no recorte, e um termo que nao casa nada responde `200`
+         *     com `items: []` -- nunca `404`.
+         */
         get: operations["listConversations"];
         put?: never;
         post?: never;
@@ -3175,6 +3560,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/my-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os encontros que eu criei
+         * @description Os encontros de `origin: community` **desta conta**, para a tela
+         *     `Perfil` > `Meus eventos`, que e de onde se cancela o proprio encontro.
+         *
+         *     ## A autorizacao esta na clausula `WHERE`, e nao num filtro
+         *
+         *     A conta do chamador entra na consulta (ADR-0021), e nao ha parametro de
+         *     autoria: nao existe forma de pedir a lista de outra pessoa. Encontro do
+         *     painel (`origin: admin`) nao entra, nem quando a conta e a mesma: ele se
+         *     administra pelo painel.
+         *
+         *     Encontro `removed` nao entra. O **cancelado entra**, com `status`
+         *     `cancelled`: quem cancelou precisa ver que cancelou, e a lista e o unico
+         *     lugar do app onde o proprio encontro aparece nomeado como seu.
+         *
+         *     ## A PROJECAO E MENOR QUE A PUBLICA, e isso e deliberado
+         *
+         *     `MyNetworkEvent` tem **sete propriedades e nenhuma outra**. Ela nao
+         *     deriva de `NetworkEventPublic`: a lista do dono precisa de identificar e
+         *     decidir, e nao de descrever. O que entra alem de capa e titulo esta
+         *     justificado propriedade por propriedade no esquema.
+         *
+         *     ## Nao ha busca, filtro nem ordem escolhivel
+         *
+         *     O teto da conta e de **3 encontros ativos**
+         *     (`community-event-limit-reached`), entao esta lista e curta por
+         *     construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
+         *     proximo para o mais distante, e depois o que passou, do mais recente
+         *     para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
+         *     para o que ainda nao terminou.
+         */
+        get: operations["listMyNetworkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/my-events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Um encontro meu, com a versao dele
+         * @description Um encontro de `origin: community` **desta conta**, e **a unica leitura
+         *     da secao `Rede` que devolve `ETag`**.
+         *
+         *     ## POR QUE ELA EXISTE: sem ela, cancelar era impossivel
+         *
+         *     `updateNetworkEvent` e `cancelNetworkEvent` exigem `If-Match` com a
+         *     versao da ultima leitura. Medido contra homologacao em 19/10/2026:
+         *     `GET /v1/network/events`, `GET /v1/network/events/{eventSlug}` e o `201`
+         *     de `createNetworkEvent` respondem **sem** `ETag`; as unicas operacoes da
+         *     secao que o emitiam eram as duas escritas. Uma versao que so a escrita
+         *     entrega nao autoriza a primeira escrita, e por isso o primeiro
+         *     cancelamento nao tinha como acontecer.
+         *
+         *     **O `ETag` entrou AQUI e nao em `getNetworkEvent`**: aquela leitura esta
+         *     sendo aposentada junto da tela de detalhe, e a versao precisa sair da
+         *     leitura que a tela do dono de fato faz. A tela `Meus eventos` chama esta
+         *     operacao ao abrir a folha de confirmacao, e manda o valor recebido no
+         *     `If-Match` do cancelamento.
+         *
+         *     ## A mesma projecao da lista, e o mesmo 404
+         *
+         *     O corpo e `MyNetworkEvent`, identico ao item da lista: esta leitura
+         *     existe pela VERSAO, e nao por ter mais conteudo. Encontro inexistente,
+         *     de outra pessoa, do painel e `removed` respondem **404 nos quatro
+         *     casos**, com o mesmo corpo (ADR-0021) -- nunca 403, porque distinguir
+         *     contaria a um estranho que aquele `slug` e de alguem.
+         */
+        get: operations["getMyNetworkEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/join-requests": {
         parameters: {
             query?: never;
@@ -3384,6 +3862,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O perfil de outra pessoa, pelo apelido
+         * @description **O que uma pessoa ve do perfil de outra**, e a lista e a decisao do
+         *     cliente de 19/10/2026, literal: *"ele pode ver nome, quantidade de
+         *     pets, conexoes, mas nao as fotos publicadas e nem a timeline do
+         *     usuario"*. Esta operacao e a emenda 2 do ADR-0010.
+         *
+         *     | Campo | Quem NAO e conexao | Conexao aceita |
+         *     |---|---|---|
+         *     | `display_name` | ve | ve |
+         *     | `pets_count` | ve | ve |
+         *     | `connections_count` | ve | ve |
+         *     | `showcase` | **ausente** | ve |
+         *     | nome, miniatura, slug ou link de pet | nunca | **nunca** |
+         *     | cidade, bairro, telefone, e-mail, nascimento | nunca | nunca |
+         *     | timeline, publicacao, curtida, contador | nao existe no produto | nao existe no produto |
+         *
+         *     **`pets_count` e contagem e nao agrupamento navegavel.** O item 7 do
+         *     ADR-0010 proibia "outros pets do mesmo tutor, e qualquer coisa que
+         *     permita agrupa-los"; a emenda 2 abre a CONTAGEM e so ela, nesta
+         *     operacao, que exige conta. Nenhum atributo de pet sai aqui, nem para
+         *     quem e conexao.
+         *
+         *     **`connections_count` e o numero, nunca a lista.** Nao existe
+         *     `GET /connections` e nao existe operacao que devolva pessoas
+         *     conectadas, nem ao proprio dono (plano 4-B). Contagem nao diz QUEM, e
+         *     e essa diferenca que a torna mostravel onde a lista nao e.
+         *
+         *     **A vitrine sai SO para conexao aceita**, e a autorizacao mora na
+         *     clausula `WHERE` da consulta das fotos (ADR-0021) -- a consulta que
+         *     devolveria a vitrine de quem nao e conexao nao existe. O que sai de
+         *     cada foto e MENOS do que o dono ve: sem `status`, sem
+         *     `rejection_reason` e sem `upload_id`, que sao estado de moderacao e de
+         *     edicao da PROPRIA vitrine.
+         *
+         *     **404 e nunca 403**, e os cinco caminhos sao o mesmo 404: apelido
+         *     inexistente, apelido reservado, apelido de PET, conta desabilitada de
+         *     qualquer um dos dois lados e par bloqueado em qualquer direcao. Nao ha
+         *     `if` de borda que escolha entre os dois codigos, e nao ha ramo que
+         *     produza 403 (ADR-0021). O proprio apelido tambem responde 200: o perfil
+         *     de si mesmo nao e um caso especial desta leitura, e `connection_state`
+         *     vem `none`.
+         *
+         *     **Esta operacao nao cria caminho de descoberta.** Ela recebe um apelido
+         *     que quem chama ja tem; nao ha busca, nao ha listagem, nao ha rota de
+         *     "este apelido existe?" (plano 4-C.5) e o teto por conta esta aqui
+         *     justamente para que varrer apelidos custe.
+         */
+        get: operations["getPersonProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -3401,6 +3943,33 @@ export interface paths {
          *     Por isso o filtro geografico e por **cidade e bairro digitados**, e nao
          *     por latitude e longitude. Paginacao numerada com total, porque a tela
          *     precisa dizer "1 a 20 de 87" e permitir chegar ao fim da lista.
+         *
+         *     ## `city` DEIXOU DE SER OBRIGATORIA EM 19/10/2026
+         *
+         *     Decisao do cliente, nas palavras dele: *"o campo cidade do filtro da
+         *     pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos 20
+         *     ultimos pets cadastrados"*. Ausente, `city` NAO recorta geografia
+         *     nenhuma e `applied_filters` nao a cita -- a mesma mecanica que `period`
+         *     ganhou em 18/10, e pelo mesmo motivo: a tela precisa poder dizer que
+         *     abriu sem recorte.
+         *
+         *     **Sem `city` a pagina 1 e os 20 casos abertos mais RECENTES**, pela
+         *     ordem que esta operacao sempre teve (`lost_cases.last_seen_at DESC`,
+         *     desempatada por `share_token`). O `limit` continua com `default: 20` e
+         *     `maximum: 20`, entao "os 20 ultimos" e o recorte padrao sem nada de
+         *     novo no contrato.
+         *
+         *     **A ordem NAO passou a ser por proximidade, e a ausencia e de ADR.**
+         *     Ordenar esta lista por distancia exigiria uma das duas coisas que o
+         *     ADR-0006 proibe nominalmente para ela -- latitude e longitude no pedido
+         *     (*"a listagem publica de perdidos filtra por cidade e bairro digitados,
+         *     jamais por latitude e longitude"*) ou distancia na resposta, que o
+         *     ADR-0010 itens 4 e 5 vedam em superficie alcancavel sem conta e que
+         *     `src/tools/portao-contrato-publico.ts` reprova por nome (`distance_m`,
+         *     `distance_km`, `radius_m`). Medido em 19/10/2026: acrescentar
+         *     `distance_m` a `PublicLostPet` reprova o portao com DOIS achados, porque
+         *     `PublicLostCase` reusa o mesmo esquema. Enquanto nao houver emenda
+         *     datada desses dois ADRs, a ordem desta rota e temporal.
          */
         get: operations["listPublicLostPets"];
         put?: never;
@@ -3797,6 +4366,61 @@ export interface paths {
          *     deve rebuscar quando encontrar um `kid` desconhecido, em vez de recusar.
          */
         get: operations["jwks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app/version-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Veredito de versao para o aplicativo que esta chamando
+         * @description **O aplicativo manda a propria versao e o SERVIDOR decide.** A resposta
+         *     e um VEREDITO, nunca o numero minimo: o app nao compara nada.
+         *
+         *     POR QUE A COMPARACAO NAO PODE FICAR NO APP. Comparar versao e onde se
+         *     erra -- `1.10.0` contra `1.9.0` sai invertido em qualquer comparacao de
+         *     texto, e um app publicado com essa conta errada so se conserta com
+         *     outro app publicado. No servidor ela se conserta sem binario novo. Por
+         *     isso esta resposta **nao** tem campo `minimum_version`: um campo desses
+         *     seria o convite para o app comparar de novo, e dois comparadores sao
+         *     dois resultados que um dia divergem.
+         *
+         *     POR QUE ESTA OPERACAO NAO E `GET /health`, que tambem e publica e
+         *     tambem e chamada sem conta:
+         *
+         *     1. `/health` e a sonda do balanceador e do orquestrador, e e a UNICA
+         *        operacao publica dispensada de `x-rate-limit` exatamente por isso
+         *        (a dispensa esta escrita no proprio lint). Carregar nela um
+         *        parametro de versao obrigatorio mudaria o contrato do que o
+         *        orquestrador chama a cada 10 segundos, e um parametro obrigatorio
+         *        novo numa sonda e uma sonda que passa a responder 400.
+         *     2. `/health` existe para NAO expor nada: ela nao tem parametro nenhum
+         *        hoje, e a identidade de build que ela devolve e para comparar
+         *        destino (criterio 12 da BICHUS-13), nao para o aplicativo ler.
+         *     3. Os dois tetos sao opostos. A sonda nao pode ser limitada; esta aqui
+         *        precisa ser.
+         *
+         *     O QUE ELA NAO DEVOLVE, e isto e ADR-0010: nenhum identificador
+         *     interno, nenhuma contagem, nenhum nome de host, nenhuma versao de
+         *     dependencia. Dois campos, e os dois sao configuracao publica.
+         *
+         *     AUSENCIA NAO BLOQUEIA. A politica mora em configuracao do servidor
+         *     (tabela `app_version_policy`); quando ela nao diz nada sobre a
+         *     plataforma que pediu -- linha ausente, ou `minimum_version` nula --, o
+         *     veredito e `supported`. O bloqueio so acontece quando o servidor diz
+         *     explicitamente que aquela versao nao serve. Desligar o mecanismo e um
+         *     `UPDATE` de uma coluna, sem subir imagem nenhuma.
+         */
+        get: operations["getAppVersionStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5637,6 +6261,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quem esta conta bloqueou
+         * @description **A lista de quem EU bloqueei. Nunca de quem me bloqueou.**
+         *
+         *     A diferenca e a operacao inteira. `bloqueio_entre` e SIMETRICA, e uma
+         *     leitura que usasse aquela funcao devolveria as duas metades do par --
+         *     e a segunda metade e o oraculo *"ela te bloqueou"*, que e o que gera
+         *     retaliacao. Aqui a autorizacao e a igualdade `blocker_user_id = quem
+         *     chama` na clausula `WHERE` (ADR-0021), e e ela que faz a leitura ser
+         *     assimetrica sobre um predicado simetrico.
+         *
+         *     **Por que esta operacao existe.** O bloqueio e simetrico, entao quem
+         *     bloqueou tambem passa a receber `404` no perfil da pessoa bloqueada --
+         *     e o "Desbloquear" morava dentro do menu daquele perfil. Sem esta
+         *     lista, bloquear era **irreversivel pelo aplicativo**. Decisao do
+         *     cliente de 19/10/2026: a lista mora na gaveta do `Perfil` e o
+         *     desbloqueio acontece ali, por `unblockUser`, que ja existe e nao muda.
+         *
+         *     ## O QUE CADA LINHA MOSTRA, E POR QUE SO ISSO
+         *
+         *     Quatro chaves, e a lista e FECHADA (`additionalProperties: false`):
+         *
+         *     | Chave | Por que ela esta aqui |
+         *     |---|---|
+         *     | `public_ref` | e o endereco que `unblockUser` recebe. Sem ele a linha nao tem botao |
+         *     | `display_name` | e o que a propria pessoa que bloqueou reconhece |
+         *     | `handle` | e o identificador ESTAVEL: `display_name` muda, e dois homonimos bloqueados ficariam indistinguiveis |
+         *     | `blocked_at` | e o ato de QUEM CHAMA, e nao dado da outra pessoa. Ele da a ordem fixa da lista |
+         *
+         *     **Nenhum desses quatro e campo novo de pessoa.** `handle`,
+         *     `public_ref` e `display_name` sao exatamente os tres que a **emenda 2
+         *     do ADR-0010** (19/10/2026) ja libera a QUALQUER chamador com conta em
+         *     `getPersonProfile`. Esta lista nao abre nada que aquela emenda nao
+         *     tenha aberto, e por isso ela **nao pede emenda nova**.
+         *
+         *     ## O QUE ELA NAO MOSTRA, E CADA AUSENCIA TEM DONO
+         *
+         *     - **a foto.** A **emenda 3 do ADR-0010** (19/10/2026) liberou a foto de
+         *       perfil em UMA superficie, o participante da conversa mediada, e
+         *       **apenas entre conexoes aceitas**. Uma lista de bloqueados e o
+         *       oposto de conexao aceita: a pessoa bloqueou justamente para nao ter
+         *       vinculo. Foto aqui seria emenda nova, e nao ha decisao que a
+         *       sustente;
+         *     - **`pets_count` e `connections_count`.** Sao os sinais de CONFIANCA do
+         *       perfil, e a pergunta desta tela nao e "quem e esta pessoa" -- e "qual
+         *       das pessoas que eu bloqueei e esta". Contagem nao identifica, logo
+         *       nao serve ao unico proposito da linha;
+         *     - **`connection_state`.** O desbloqueio **nao devolve** a conexao (ver
+         *       `unblockUser`), e um estado de conexao aqui convidaria a uma
+         *       religacao que a operacao nao faz;
+         *     - **quem me bloqueou, em qualquer forma** -- nem lista, nem contagem,
+         *       nem existencia. E o oraculo, e ele nao tem representacao nesta
+         *       superficie.
+         *
+         *     ## OS DOIS FILTROS DA LEITURA, e eles nao sao os mesmos do perfil
+         *
+         *     - **`conta_habilitada`**: a linha de uma conta DESABILITADA nao vem. E
+         *       a decisao do cliente de 17/10 (*conta desabilitada "nao e mais
+         *       encontrada em nenhuma pagina ou funcionalidade"*), e aqui ela nao
+         *       deixa nada preso: conta desabilitada nao aparece em superficie
+         *       nenhuma, entao o bloqueio dela nao tem efeito a desfazer -- e a
+         *       linha **volta** com a conta, porque ela nunca foi apagada;
+         *     - **`perfil_ocultado_para_quem_denunciou` NAO entra**, e a ausencia e
+         *       deliberada. Aquela funcao existe para que quem denunciou pare de ver
+         *       as superficies DO ALVO. Esta lista nao e superficie do alvo: e o
+         *       registro dos atos de quem chama, e a linha so existe porque quem
+         *       chama a criou. Esconde-la seria esconder de alguem o proprio ato --
+         *       e devolveria exatamente o beco sem saida que esta operacao existe
+         *       para fechar.
+         *
+         *     **Sem busca, sem filtro e sem ordenacao escolhida.** A ordem e fixa,
+         *     mais recentes primeiro. Qualquer recorte por pessoa aqui seria
+         *     superficie de enumeracao, que este produto nao tem.
+         */
+        get: operations["listMyBlocks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{userRef}/reports": {
         parameters: {
             query?: never;
@@ -5743,6 +6457,232 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/publications/{publicationRef}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Curte esta publicacao
+         * @description **`PUT` e nao `POST`, e o verbo e a semantica:** curtir e IDEMPOTENTE.
+         *     Tocar duas vezes nao conta duas, e a segunda chamada responde o mesmo
+         *     `200` com a mesma contagem.
+         *
+         *     **A unicidade e do BANCO, e nao desta borda.**
+         *     `publication_likes` tem chave primaria `(publication_id, user_id)`, e a
+         *     escrita usa `ON CONFLICT DO NOTHING`. Conferir antes de inserir teria a
+         *     janela entre a leitura e a escrita -- exatamente a janela em que o toque
+         *     duplo do dedo na tela entra duas vezes. O banco nao tem essa janela.
+         *
+         *     **A resposta devolve a CONTAGEM que passou a valer**, lida das linhas na
+         *     mesma transacao -- e nao um numero incrementado em memoria. Contagem
+         *     denormalizada que divirja das linhas e o defeito classico aqui, e a
+         *     defesa e nao existir coluna de contagem.
+         *
+         *     Publicacao que quem chama nao ve, endereco inexistente e publicacao
+         *     apagada sao o MESMO `404`.
+         */
+        put: operations["likePublication"];
+        post?: never;
+        /**
+         * Descurte esta publicacao
+         * @description Tambem IDEMPOTENTE: descurtir o que nao estava curtido responde o mesmo
+         *     `200` com a mesma contagem. **`200` e nao `204`**, ao contrario de
+         *     `deleteMyPublication`: aqui ha o que devolver -- a contagem que passou a
+         *     valer --, e obrigar a tela a refazer a leitura da linha do tempo para
+         *     saber o numero seria uma ida a mais por toque.
+         *
+         *     **NAO apaga a publicacao**, e o endereco e o mesmo: o que esta rota
+         *     remove e a ARESTA entre quem chama e a publicacao, uma linha de
+         *     `publication_likes`. Quem apaga publicacao e
+         *     `DELETE /me/publications/{ref}`, que e do AUTOR e mora sob `/me/`.
+         */
+        delete: operations["unlikePublication"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{publicationRef}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Os comentarios desta publicacao
+         * @description Em ordem de escrita -- **o mais ANTIGO primeiro**, ao contrario da linha
+         *     do tempo. Comentario se le na ordem em que a conversa aconteceu.
+         *
+         *     **Quem ve os comentarios e quem ve a publicacao**, pelo MESMO recorte, na
+         *     clausula `WHERE` (ADR-0021). Publicacao que quem chama nao ve responde
+         *     `404` -- e nao uma lista vazia, que afirmaria que a publicacao existe e
+         *     nao tem comentario.
+         *
+         *     **Comentario de quem quem chama BLOQUEOU nao aparece**:
+         *     `NOT bloqueio_entre(autor_do_comentario, quem chama)` esta no `WHERE`. E
+         *     hoje essa e a unica ferramenta que a pessoa tem sobre um comentario
+         *     alheio -- ver `commentOnPublication` sobre a denuncia que falta.
+         *
+         *     **Paginacao por cursor**, como a linha do tempo, e com o mesmo desempate
+         *     por `ref` -- nunca por `id`.
+         */
+        get: operations["listPublicationComments"];
+        put?: never;
+        /**
+         * Comenta nesta publicacao
+         * @description Texto livre, 1 a 280 caracteres -- o MESMO teto da publicacao, que e o de
+         *     `publication_reports.publication_body` e o de `pets.care_notes`.
+         *
+         *     **NAO HA FILTRO DE PALAVRA**, nem aqui nem no banco, e a decisao e a
+         *     mesma que vale para a publicacao: *"deixe o texto livre na timeline"* e
+         *     *"quem modera vai ser o administrador, deve ir para a pagina de
+         *     backoffice"* (cliente, 18/10/2026).
+         *
+         *     **E AQUI ESTA O QUE FALTA, DITO EM VOZ ALTA: A DENUNCIA DE COMENTARIO
+         *     NAO EXISTE, E FICAR SEM ELA FOI DECISAO DO CLIENTE EM 20/10/2026.**
+         *
+         *     A medicao abaixo foi levada a ele com o custo na mesa, e ele escolheu
+         *     deixar para depois. **Nao e esquecimento**, e a data esta aqui para quem
+         *     ler depois saber que alguem olhou e decidiu.
+         *
+         *     Medido: os CINCO motivos de `PublicationReportInput` servem a um
+         *     comentario sem mudanca nenhuma -- um comentario pode ser ofensivo, pode
+         *     anunciar venda de animal, pode inventar um avistamento
+         *     (`false_lost_pet_info`), pode ser spam. **O que falta nao e motivo: e
+         *     ALVO.** `publication_reports` e chaveada em `publication_ref`, e apontar
+         *     a denuncia de um comentario para a publicacao faria o administrador
+         *     julgar o texto errado.
+         *
+         *     A fatia que falta, por extenso: `comment_reports`, a SEXTA perna de
+         *     `fila_de_moderacao`, o valor `comment` em `ModerationOrigin` (hoje com
+         *     cinco) e uma operacao nova em `safety` (hoje com seis).
+         *
+         *     **O que existe enquanto ela nao chega, e nao e nada:** quem comenta
+         *     apaga o proprio comentario, e **bloquear o autor some com os comentarios
+         *     dele**. O que NAO existe e o administrador agir sobre um comentario, e
+         *     isso e risco conhecido e declarado -- nao surpresa.
+         *
+         *     **SEM FOTO e SEM RESPOSTA ANINHADA.** Nao ha campo de imagem (comentario
+         *     com imagem e uma segunda esteira de midia em superficie de terceiro) nem
+         *     `parent_ref` (fio de resposta e outro objeto, com outra leitura e outra
+         *     paginacao). Nenhum dos dois foi pedido.
+         */
+        post: operations["commentOnPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{publicationRef}/comments/{commentRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+                /**
+                 * @description O endereco publico e opaco de um comentario: 22 simbolos de base64url,
+                 *     a MESMA forma de `PublicationRef` e de `UserPublicRef`, e pela mesma
+                 *     razao -- `publication_comments.public_ref` cobra
+                 *     `^[A-Za-z0-9_-]{22}$`, e o `id` interno nunca sai (ADR-0010 item 6).
+                 */
+                commentRef: components["parameters"]["CommentRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Apaga um comentario
+         * @description **DOIS caminhos de autorizacao, e os dois estao na clausula `WHERE` do
+         *     `UPDATE`** (ADR-0021):
+         *
+         *     1. o **AUTOR DO COMENTARIO** apaga o proprio -- tirar do ar o que eu
+         *        escrevi;
+         *     2. o **DONO DA PUBLICACAO** apaga comentario de terceiro na publicacao
+         *        DELE -- decisao do cliente de **20/10/2026**.
+         *
+         *     **O nome mudou de `deleteMyComment` para `deleteComment` no mesmo
+         *     commit**, e a troca nao e cosmetica: com o segundo caminho, "my" passou a
+         *     ser falso na metade dos usos, e `operationId` e o nome que o cliente
+         *     gerado carrega.
+         *
+         *     **O SEGUNDO CAMINHO NAO E MODERACAO, e a distincao nao e semantica:** ele
+         *     nao passa por fila, nao tem administrador, nao tem revisao, nao tem
+         *     motivo obrigatorio e nao gera registro para ninguem olhar depois. E dono
+         *     limpando a propria casa, com efeito imediato -- a mesma natureza de
+         *     `blockUser`, que o produto trata como *"ferramenta PESSOAL, nao
+         *     moderacao"* e que por isso nao entra na fila do painel.
+         *
+         *     **A moderacao de comentario pelo painel continua NAO EXISTINDO**, e
+         *     ficar sem ela foi decisao do cliente no mesmo dia -- ver
+         *     `commentOnPublication`. As duas coisas nao se confundem: esta rota nao e
+         *     um substituto dela.
+         *
+         *     **Quem nao esta em nenhum dos dois caminhos nao atinge linha.** Terceiro
+         *     que e conexao aceita chega ate o `UPDATE` (ele VE a publicacao) e sai com
+         *     zero linhas afetadas: comentario de terceiro em publicacao alheia,
+         *     endereco inexistente e comentario ja apagado sao o MESMO `404` --
+         *     **nunca `403`**.
+         *
+         *     Exclusao LOGICA, pelo molde da publicacao: a linha fica e para de ser
+         *     lida. Hoje nenhuma denuncia aponta para ela (a denuncia de comentario nao
+         *     existe); fica logica mesmo assim pela simetria e para que, no dia em que
+         *     `comment_reports` existir, a chave estrangeira dela encontre a linha de
+         *     pe -- sem migracao de dado.
+         *
+         *     **`200` e nao `204`**: a resposta devolve a contagem que passou a valer,
+         *     pelo mesmo motivo de `unlikePublication`.
+         */
+        delete: operations["deleteComment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publications/{publicationRef}/reports": {
         parameters: {
             query?: never;
@@ -5752,10 +6692,12 @@ export interface paths {
                  * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
                  *     mesmo formato de `UserPublicRef` e pela mesma razao.
                  *
-                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
-                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
-                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
-                 *     `20261018000032`.
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -5796,6 +6738,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Versao de aplicativo em TRES numeros (`MAIOR.MENOR.CORRECAO`), sem
+         *     sufixo e sem `v`.
+         *
+         *     O `pattern` e o mesmo que o `CHECK` da tabela `app_version_policy`
+         *     cobra na ESCRITA. Os dois existem e nao sao redundantes: este recusa o
+         *     que o aplicativo manda, aquele recusa o que a pessoa do deploy
+         *     escreve. Quem troca o numero a mao, de madrugada, erra por digitacao, e
+         *     o lugar de pegar isso e no `INSERT`/`UPDATE` -- nao na primeira
+         *     requisicao de um aparelho de verdade.
+         *
+         *     **Sem rotulo de pre-lancamento, e nao por economia:** ordenar
+         *     `1.2.0-rc.1` contra `1.2.0` e a parte da comparacao semantica que mais
+         *     se erra, e nenhum build deste produto usa sufixo. O dia em que usar,
+         *     quem muda o formato muda os dois lugares juntos.
+         * @example 1.4.2
+         */
+        AppVersion: string;
+        /**
+         * @description O veredito do servidor sobre a versao que chamou.
+         *
+         *     `verdict` e obrigatorio **e** e o unico campo que decide algo. O
+         *     aplicativo le este campo e nada mais; ele nao recalcula, nao compara e
+         *     nao deduz. Veredito que ele nao reconheca e tratado como `supported`,
+         *     porque veredito desconhecido nao e ordem de fechar o app.
+         */
+        AppVersionStatus: {
+            /**
+             * @description - `supported`: esta versao serve. **E o valor que a ausencia de
+             *       politica produz** -- linha ausente, `minimum_version` nula, ou
+             *       plataforma sobre a qual nada foi escrito.
+             *     - `update_recommended`: ha versao nova e esta ainda funciona. O
+             *       aplicativo AVISA, de forma dispensavel, e nao impede nada.
+             *     - `update_required`: esta versao nao serve mais. O aplicativo
+             *       fecha o uso. **E o unico valor que bloqueia**, e ele so sai
+             *       daqui quando a configuracao do servidor o diz explicitamente.
+             * @enum {string}
+             */
+            verdict: "supported" | "update_recommended" | "update_required";
+            /**
+             * Format: uri
+             * @description Para onde mandar a pessoa. **Nula enquanto nao houver loja**, e
+             *     hoje ela e nula: o APK vai por arquivo e o iOS por cabo (decisao de
+             *     23/09; a conta Apple nao andou).
+             *
+             *     Nula, o aplicativo **nao desenha botao**: botao que leva a lugar
+             *     nenhum e pior que nenhum botao, e a tela explica o que fazer em
+             *     palavras. Nao e campo opcional por comodidade -- e o estado de hoje
+             *     dito em voz alta.
+             *
+             *     Ela sai aqui, e nao de `--dart-define` do build, por um motivo
+             *     so: no dia da publicacao na loja o endereco e conhecido DEPOIS de
+             *     o binario existir, e um endereco de loja embutido no binario
+             *     precisaria de outro binario para ser corrigido.
+             * @example null
+             */
+            store_url?: string | null;
+        };
         /**
          * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
          *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
@@ -6175,15 +7175,26 @@ export interface components {
             /**
              * @description A foto que a PROPRIA pessoa cadastrou (cliente, 18/10/2026).
              *
-             *     **Esta e a unica resposta do contrato que a traz.** Quem a ve e o
-             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia.
-             *     Nenhuma superficie publica, nenhuma listagem, nenhuma resposta de
-             *     terceiro: o `checkin_count` da `Rede` continua sendo um inteiro sem
-             *     pessoas (ADR-0025 item 2, que proibe avatar por nome) e
-             *     `Conversation.participants` continua dizendo por extenso que nunca
-             *     traz foto de perfil. Mostrar a foto a outra pessoa e exposicao de
-             *     pessoa fisica e **depende de decisao do cliente**, nao de
-             *     implementacao.
+             *     **Esta e a resposta que a traz INTEIRA, com estado.** Quem a ve e o
+             *     dono, porque `getMe` exige `bearerAuth` sem alternativa vazia:
+             *     `status` e `rejection_reason` sao assunto entre ele e quem modera,
+             *     e nao saem em lugar nenhum alem daqui.
+             *
+             *     Nenhuma superficie publica e nenhuma listagem a carregam: o
+             *     `checkin_count` da `Rede` continua sendo um inteiro sem pessoas
+             *     (ADR-0025 item 2, que proibe avatar por nome).
+             *
+             *     **A DECISAO DO CLIENTE CHEGOU EM 19/10/2026**, e esta linha era a
+             *     pendencia dela: *"a foto aparece SO quando as duas pessoas ja
+             *     aceitaram conexao"*. Existe agora **uma** outra superficie, e so
+             *     uma, que mostra esta foto a outra pessoa:
+             *     `Conversation.participants.photo_icon_url`, numa derivada MENOR
+             *     (`thumb` de 176 px) e **sem estado nenhum** -- nem `status`, nem
+             *     `rejection_reason`. Ela sai apenas entre conexoes aceitas, com o
+             *     predicado no `WHERE` da consulta (ADR-0021). Para quem nao e
+             *     conexao aceita, inclusive o estranho que escaneou a plaquinha,
+             *     continua nao saindo -- e e por isso que a emenda protege o motivo
+             *     da regra em vez de revoga-lo (emenda 3 do ADR-0010).
              *
              *     Nula quando nao ha foto, e nulo e o estado normal: a conta funciona
              *     inteira sem foto.
@@ -7076,14 +8087,115 @@ export interface components {
             pet_display_name?: string;
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
+            /**
+             * @description Os dois lados humanos da conversa, montados campo a campo.
+             *
+             *     ## EMENDA DE 19/10/2026 (decisao do cliente): a foto entra, e SO
+             *     ## entre conexoes aceitas
+             *
+             *     **A regra nao foi revogada, foi EMENDADA com uma excecao
+             *     nomeada.** A regra continua escrita em `display_name` abaixo, com
+             *     as mesmas palavras de sempre -- participante nao traz sobrenome
+             *     completo, nem telefone, nem e-mail, nem foto de perfil. A excecao,
+             *     e e a unica, e a palavra do cliente:
+             *
+             *     > "a foto aparece SO quando as duas pessoas ja aceitaram conexao"
+             *
+             *     **Em conversa de achado com um estranho, e em qualquer conversa com
+             *     quem nao e conexao aceita, a foto NAO sai** -- fica a inicial do
+             *     nome, que e o que esta la hoje. E ai que o motivo original da regra
+             *     continua inteiro: o golpe do falso achador. Quem avisa que achou um
+             *     pet pode nao ter conta, a conversa e o canal que ATRAVESSA o
+             *     bloqueio, e rosto e insumo de engenharia social. A emenda abre a
+             *     foto exatamente onde o golpe nao mora -- entre duas pessoas que ja
+             *     se aceitaram -- e a mantem fechada onde ele mora.
+             *
+             *     Os dois campos da excecao sao `handle` e `photo_icon_url`. Os dois
+             *     sao **nulos** fora dela, e o recorte mora na clausula `WHERE` da
+             *     consulta (ADR-0021), nunca num `if` de borda: a consulta que traria
+             *     a foto de quem nao e conexao aceita **nao existe**.
+             *
+             *     **`FinderConversation.participants` NAO ganhou nenhum dos dois**, e
+             *     a ausencia e estrutural e nao esquecimento. Aquele schema serve o
+             *     achador SEM CONTA -- quem nao tem conta nao tem conexao com
+             *     ninguem, e nao ha chamador de quem medir a aresta. Schema separado
+             *     e a unica forma de a regra existir para a maquina; uma descricao
+             *     dizendo "nao vale para o achador" nao e contrato.
+             */
             participants: {
                 /** @enum {string} */
                 role: "tutor" | "finder" | "system";
                 /**
                  * @description Primeiro nome ou apelido. **Nunca** sobrenome completo,
                  *     telefone, e-mail nem foto de perfil.
+                 *
+                 *     **A excecao de 19/10/2026 nao e deste campo.** Ela sao
+                 *     `handle` e `photo_icon_url`, abaixo, e vale so para conexao
+                 *     aceita. Este campo continua sendo o primeiro nome e nada
+                 *     mais, nos quatro estados -- e continua caindo para o rotulo
+                 *     neutro (`Tutor` / `Quem achou`) no lado despersonalizado.
                  */
                 display_name: string;
+                /**
+                 * @description O apelido desta pessoa, **e so quando ela e conexao aceita de
+                 *     quem chama** (emenda de 19/10/2026).
+                 *
+                 *     Ele sai porque o toque na foto precisa de um ENDERECO: o
+                 *     perfil de outra pessoa e `getPersonProfile`, enderecado pelo
+                 *     apelido por decisao do cliente de 18/10/2026 (*"slug nao tem
+                 *     relacao com informacoes pessoais, e um id que o usuario
+                 *     escolhe"*). **Nunca `users.public_ref`, nunca UUID**
+                 *     (ADR-0010 item 6): aquele e o endereco de denunciar e
+                 *     bloquear, e viaja no CORPO das tres rotas de seguranca, nao
+                 *     no icone de uma lista.
+                 *
+                 *     **Nulo em quatro estados, e a fusao e a regra** (ADR-0021,
+                 *     um valor por motivo viraria um oraculo): nao e conexao
+                 *     aceita; e conexao e o par esta bloqueado; o outro lado nao
+                 *     tem conta (o achador da plaquinha, que e o caminho
+                 *     principal); ou e conexao e **nao escolheu apelido** --
+                 *     nenhum fluxo obriga a escolher (plano 4-C.8). Com nulo o
+                 *     icone fica DECORATIVO e nao se anuncia como botao: toque que
+                 *     nao leva a lugar nenhum e o que o criterio 2 da BICHUS-62
+                 *     proibe.
+                 */
+                handle?: string | null;
+                /**
+                 * Format: uri
+                 * @description A foto desta pessoa, **e so quando ela e conexao aceita de
+                 *     quem chama** (emenda de 19/10/2026).
+                 *
+                 *     **A derivada e a `thumb` de 176 x 176 px, e nao a `card` de
+                 *     512.** O icone da conversa pinta **40 dp**, que a 3x sao 120
+                 *     px reais: a de 176 cobre isso sem ampliar, e a de 512 seria
+                 *     4,3x mais dado do que a celula pinta -- numa lista de dez
+                 *     linhas por pagina, dez vezes. A tela desenha com
+                 *     `ImagemDaRede`, que passa `cacheWidth` pela largura PINTADA;
+                 *     a medicao que criou aquele componente foi 88 MiB numa pagina
+                 *     sem `cacheWidth` contra 2,15 MiB com ele.
+                 *
+                 *     **Um campo e nao um objeto, de proposito.** `MyPhoto`, que o
+                 *     DONO recebe, tem `status` e `rejection_reason`, e nenhum dos
+                 *     dois e assunto de terceiro: motivo de recusa de uma foto e
+                 *     entre o dono e quem modera. Foto que nao esta `ready` nao sai
+                 *     -- a consulta a recusa no `WHERE` --, entao nao ha estado a
+                 *     desenhar. E a mesma razao pela qual a foto que uma conexao ve
+                 *     no perfil de outra pessoa e menor que a que o dono ve da
+                 *     propria: terceiro recebe o que ele desenha, e nada do estado
+                 *     interno.
+                 *
+                 *     **NAO e a galeria de fotos do perfil**, que sai so em
+                 *     `getPersonProfile` e nao e referenciada daqui por `$ref`
+                 *     nenhum. Esta e a foto UNICA da pessoa
+                 *     (`users.photo_image_id`, `catalog_images.purpose =
+                 *     'user_photo'`), a mesma que o dono recebe em `getMe` --
+                 *     numa derivada menor.
+                 *
+                 *     Nulo nos mesmos quatro estados de `handle`, mais um quinto:
+                 *     a conexao aceita que nao tem foto pronta. Os cinco sao o
+                 *     mesmo nulo.
+                 */
+                photo_icon_url?: string | null;
             }[];
             messages: components["schemas"]["Message"][];
             /**
@@ -7123,6 +8235,17 @@ export interface components {
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
+            /**
+             * @description Quantas conversas o recorte atual tem **no servidor** -- isto e, com
+             *     `q` aplicado e sem `limit`. Nao e `items.length`.
+             *
+             *     Ele existe porque a linha de resumo da listagem (`<n> conversas`) e
+             *     de um componente compartilhado por toda pagina com registros, e
+             *     alimenta-lo com o tamanho da pagina faria a tela dizer `10` a quem
+             *     tem 57. **Nada a ver com `unread_count`**: este conta o recorte,
+             *     aquele conta o sino.
+             */
+            total: number;
             /**
              * @description Quantas conversas entram no **contador do sino** agora.
              *
@@ -9029,6 +10152,146 @@ export interface components {
          */
         NetworkEventNotes: string;
         /**
+         * @description O perfil de OUTRA pessoa, no recorte que quem chama pode ver (emenda 2
+         *     do ADR-0010, decisao do cliente de 19/10/2026).
+         *
+         *     **A lista de propriedades e fechada, e a ausencia de cada coisa tem
+         *     dono.** Nao ha `city`, `neighbourhood`, `email`, `phone`,
+         *     `birth_date`, `last_name`, `location`, `timeline`, `posts`,
+         *     `publications`, `followers`, `pets` nem `photo`. Nenhuma delas e
+         *     omissao a preencher depois: cidade e bairro o cliente **nao**
+         *     mencionou, telefone e e-mail sao os itens 1 e 3 do ADR-0010, e
+         *     timeline nao existe no produto -- a migracao `20261018000030` registra
+         *     que "uma timeline de quem voce segue E a lista de presenca com hora...
+         *     Encerrado, nao se reabre".
+         */
+        PersonProfile: {
+            /**
+             * @description O apelido, que e o identificador publico da pessoa. **Nao e
+             *     anulavel aqui**, ao contrario de `ConnectionPerson.handle`: quem
+             *     nao tem apelido nao tem endereco, e por isso nao tem esta pagina.
+             */
+            handle: string;
+            /**
+             * @description `users.public_ref`: o endereco opaco da pessoa, o MESMO que
+             *     `blockUser` e `reportUserProfile` ja recebem. **Nao e UUID**
+             *     (ADR-0010 item 6), e sorteado por linha e nunca derivado de nome.
+             *
+             *     Ele sai aqui porque esta tela e o unico hospedeiro de denunciar e
+             *     de bloquear: as tres operacoes de seguranca sao enderecadas por
+             *     `userRef`, e sem este campo a tela teria o apelido e nenhuma forma
+             *     de chamar as tres.
+             */
+            public_ref: string;
+            /**
+             * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
+             *     (ADR-0010 item 3) -- a coluna guarda o que a pessoa digitou no
+             *     cadastro, e o item 3 vale para a superficie publica.
+             *
+             *     **Anulavel, como `ConnectionPerson.display_name`:** `display_name`
+             *     e anulavel em `users`, e 404 por falta de nome seria sumir com uma
+             *     conta que existe. A chave vem SEMPRE na resposta; com nulo a tela
+             *     cai para `@handle`, que e a mesma regra de `nomeParaLer`.
+             */
+            display_name: string | null;
+            /**
+             * @description **Quantos pets, e nada alem do numero.** E a emenda 2 do ADR-0010:
+             *     o item 7 proibia agrupar os pets de um tutor, e a decisao do
+             *     cliente de 19/10/2026 abre a CONTAGEM, aqui e so aqui.
+             *
+             *     Conta pet nao apagado (`pets.deleted_at IS NULL`). Nenhum atributo
+             *     de pet acompanha o numero, nem para quem e conexao: nome,
+             *     miniatura, slug e link continuam proibidos, e o portao
+             *     `perfil-de-terceiro-nao-expoe-pet-nem-timeline.test.ts` reprova
+             *     quando um deles aparece.
+             */
+            pets_count: number;
+            /**
+             * @description Quantas conexoes aceitas a pessoa tem. **O numero, nunca a
+             *     lista** (plano 4-B: *"Lista de conexoes | nunca | nunca"*):
+             *     contagem nao diz QUEM, e e essa diferenca que a torna mostravel
+             *     onde a lista nao e. E o "sinal de confianca" do plano.
+             */
+            connections_count: number;
+            /**
+             * @description A relacao entre quem chama e esta pessoa, **derivada no servidor** e
+             *     nunca recebida de quem chama.
+             *
+             *     `none` cobre junto "nunca houve nada", "o pedido expirou" e "a
+             *     recusa ainda esta em descanso", e a fusao e deliberada pela mesma
+             *     razao do 204 de `endConnection`: um valor proprio para recusado
+             *     seria o *"ela recusou voce"* que o desenho nao da.
+             *
+             *     Os tres valores nao-`none` sao os de `ConnectionAppState`, com os
+             *     mesmos nomes. A lista esta escrita em linha, e nao por `$ref`,
+             *     porque `none` nao existe la: acrescenta-lo mudaria a caixa de
+             *     pedidos, onde "nenhuma relacao" nao e um estado possivel.
+             * @enum {string}
+             */
+            connection_state: "none" | "pending_sent" | "pending_received" | "connected";
+            /**
+             * @description O `ref` da **aresta**, quando ha uma viva -- e nulo quando
+             *     `connection_state` e `none`. **E da aresta e nunca da pessoa**: e
+             *     ele que `acceptConnection` e `endConnection` recebem, e e por ele
+             *     que esta tela aceita, cancela ou desfaz sem precisar de uma segunda
+             *     leitura.
+             */
+            connection_ref?: string | null;
+            /**
+             * @description As fotos da vitrine, em ordem de posicao -- a primeira e a capa.
+             *
+             *     **Presente SO quando `connection_state` e `connected`**, e ausente
+             *     (nunca `[]`) nos outros tres estados: lista vazia diria "ela nao
+             *     tem foto", que e uma afirmacao sobre a vitrine de alguem que quem
+             *     chama nao pode ver. Vitrine vazia de uma conexao **tambem** chega
+             *     como `[]`, e a tela distingue os dois pelo estado e nao pelo
+             *     tamanho da lista.
+             */
+            showcase?: components["schemas"]["PersonShowcasePhoto"][];
+        };
+        /**
+         * @description Uma foto da vitrine de OUTRA pessoa, e ela e **menor** que
+         *     `ShowcasePhoto` de proposito.
+         *
+         *     Ficam de fora `status`, `rejection_reason`, `position` e `upload_id`:
+         *     os dois primeiros sao estado de moderacao da vitrine do dono -- motivo
+         *     de recusa de uma foto e assunto entre o dono e quem modera --, e os
+         *     dois ultimos sao de edicao, que so o dono faz. Foto que nao esta
+         *     `ready` simplesmente **nao entra nesta lista**, entao nao ha estado a
+         *     desenhar: a ordem e a da resposta.
+         *
+         *     **Nao ha legenda, curtida, contador nem pessoa marcada**, pela mesma
+         *     razao de `ShowcasePhoto`, e aqui com mais peso: e agora que existe
+         *     terceiro lendo.
+         */
+        PersonShowcasePhoto: {
+            /**
+             * Format: uri
+             * @description A derivada de **320 x 320 px (1:1)**, para a grade. **E ela que a
+             *     grade pede, e nunca `open_url`**: a celula tem 104 dp (312 px reais
+             *     a 3x), a de 1024 px e 1,6x mais dado do que a celula pinta, e a
+             *     grade desenha ate NOVE de uma vez.
+             *
+             *     **Nao e anulavel aqui**, ao contrario de `ShowcasePhoto.grid_url`:
+             *     a foto em `processing` nao entra nesta lista, porque antes de o
+             *     trabalhador reescrever a derivada ela carrega o EXIF do celular --
+             *     e servi-la a um terceiro entregaria a coordenada de onde ela foi
+             *     tirada (ADR-0010 item 4).
+             */
+            grid_url: string;
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, para a foto aberta. Nao anulavel, pelo mesmo motivo.
+             */
+            open_url: string;
+            /**
+             * @description O rotulo que o leitor de tela anuncia, **e nao legenda**: ele nunca
+             *     e desenhado como texto. Opcional, e nulo faz o leitor de tela cair
+             *     no rotulo da grade.
+             */
+            alt_text: string | null;
+        };
+        /**
          * @description Uma foto da vitrine do DONO. `grid_url` e `open_url` sao compostas na
          *     leitura a partir das chaves da imagem: o banco nao guarda URL
          *     (`docs/07-devops.md` 3.6).
@@ -9554,6 +10817,152 @@ export interface components {
             applied_filters: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description O encontro na lista do DONO (`Perfil` > `Meus eventos`, 19/10/2026).
+         *
+         *     **Sete propriedades e nenhuma outra**, e `additionalProperties: false`
+         *     cobra isso. Ela NAO deriva de `NetworkEventPublic`: montar a projecao
+         *     publica e depois apagar campos deixa passar campo novo, e esta projecao
+         *     responde a uma pergunta diferente -- "qual dos meus encontros e este, e
+         *     da para cancelar?" --, nao "como e este encontro?".
+         *
+         *     ## O QUE ENTRA ALEM DE CAPA E TITULO, propriedade por propriedade
+         *
+         *     A decisao de 19/10 fixou o cartao da AGENDA em **foto + titulo**, mais a
+         *     palavra `Cancelado`. Esta lista nao e a vitrine publica, e cada
+         *     propriedade a mais tem de se justificar sozinha:
+         *
+         *     - `slug` -- **o endereco da acao**. E o que a tela manda em
+         *       `cancelNetworkEvent` e em `getMyNetworkEvent`. Sem ele nao ha
+         *       cancelar. Nao e UUID interno (ADR-0010): e o endereco publico que o
+         *       servidor derivou do titulo e que ja circula na agenda.
+         *     - `starts_at` + `time_zone` -- **qual dos meus**. O teto e de tres
+         *       encontros ativos por conta, e nada impede que os tres se chamem
+         *       "Encontro no parque": dois cartoes identicos com um `Cancelar` cada e
+         *       uma armadilha. A data e o que distingue, e `time_zone` e o que faz a
+         *       hora de parede sair certa -- sem ele a lista mostra a data no fuso de
+         *       quem le, que pode ser outro dia.
+         *     - `ends_at` -- **se ainda da para cancelar**. A regra do servidor e
+         *       `COALESCE(ends_at, starts_at) > agora`; sem esta propriedade a tela
+         *       nao sabe quando esconder a acao, e desenharia um `Cancelar` que o
+         *       servidor recusa com `400 event_ended` depois de a pessoa ter
+         *       confirmado.
+         *     - `status` -- **o que ja aconteceu com ele**. Carrega a palavra
+         *       `Cancelado` do cartao e e o que faz o `Cancelar` nao aparecer no que
+         *       ja esta cancelado (o servidor recusaria com `400
+         *       event_not_published`). Calculado no SERVIDOR, como em toda a secao.
+         *     - `cover` -- a foto do cartao **e o estado dela**. Este e o unico lugar
+         *       do produto onde a pessoa descobre que a capa foi RECUSADA, e por que.
+         *       Medido por outra frente em 19/10/2026: a capa sobe no mesmo `POST` de
+         *       criar o encontro, o processador pode recusa-la depois do `201`,
+         *       `NetworkEventPublic` nao tem `rejection_reason` (as 23 propriedades
+         *       foram conferidas), a pagina de detalhe do encontro foi apagada por
+         *       decisao do cliente e o cartao da agenda e foto + titulo -- entao
+         *       **nao havia lugar nenhum** que contasse a recusa a quem enviou a
+         *       imagem. A lista do dono e o lugar: estado de processamento de imagem e
+         *       assunto entre quem enviou e o servidor, e nao informacao de visitante.
+         *       E a mesma razao pela qual `PetPhoto` e `MyUserPhoto` carregam
+         *       `status` e `rejection_reason`, e a projecao publica delas nao.
+         *
+         *     **O que NAO entra, e o motivo:** `summary`, `place`, `notes`, `images`,
+         *     `admission`, `accepted_sizes`, `dog_age`, `vaccination_required`,
+         *     `fenced_off_leash_area`, `amenities`, `bring_items`, `ticket_url`,
+         *     `instagram_handle`, `instagram_url` e `visibility`. Nenhuma delas
+         *     responde "qual dos meus", "da para cancelar" nem "a minha foto entrou",
+         *     e a lista do dono nao e tela de leitura do encontro. Nao ha
+         *     `cover_banner_url`: a capa de borda a borda e do detalhe, e esta lista
+         *     nao tem detalhe.
+         */
+        MyNetworkEvent: {
+            slug: string;
+            title: string;
+            /**
+             * @description A capa e o estado dela. **Nula quando o encontro nao tem capa
+             *     nenhuma** -- e isso e diferente de `status: processing` (a imagem
+             *     existe e o worker nao terminou) e de `status: rejected` (ela existe
+             *     e nao serviu). Sem os tres estados separados, "ainda nao aparece" e
+             *     "nunca vai aparecer" viram a mesma tela, e a pessoa fica esperando.
+             */
+            cover: components["schemas"]["MyNetworkEventCover"] | null;
+            /**
+             * Format: date-time
+             * @description O instante absoluto. A hora de PAREDE sai de `time_zone`.
+             */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description O nome IANA da zona do encontro. Sem ele a data da lista sai no fuso de quem le, que pode ser outro dia.
+             * @example America/Sao_Paulo
+             */
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+        };
+        /**
+         * @description O estado de processamento da capa, os tres de `catalog_images.status`.
+         *
+         *     **Lista fechada NOMEADA, e nao um `enum` embutido na propriedade**: o
+         *     portao de conformidade do app (`verificar-conformidade-do-app.mjs`)
+         *     exige que todo `enum` de `app/lib/api/` aponte para uma lista fechada do
+         *     contrato, e um `enum` inline nao e alvo de `$ref`. Com a lista aqui, o
+         *     `EstadoDaCapa` do app espelha ESTE ponto, e um valor novo no servidor
+         *     reprova o app em vez de chegar como surpresa no aparelho.
+         *
+         *     `processing` enquanto o worker nao terminou: `url` e nula nesse
+         *     intervalo, e a lista mostra o lugar da foto em vez de um erro.
+         *     `rejected` quando os bytes reais nao sao imagem aceita -- o tipo
+         *     declarado no envio nunca e a fonte da verdade.
+         * @enum {string}
+         */
+        MyNetworkEventCoverStatus: "processing" | "ready" | "rejected";
+        /**
+         * @description A capa do encontro **na lista do dono**: a imagem e o que aconteceu com
+         *     ela. O vocabulario e o de `PetPhoto` e de `MyUserPhoto`, de proposito --
+         *     `processing`, `ready`, `rejected` sao os tres estados de
+         *     `catalog_images.status`, e o banco cobra que a recusada tenha motivo
+         *     (`catalog_images_recusada_tem_motivo`).
+         */
+        MyNetworkEventCover: {
+            status: components["schemas"]["MyNetworkEventCoverStatus"];
+            /**
+             * Format: uri
+             * @description A derivada de 1024 x 576 da imagem de posicao 0, a MESMA que
+             *     `cover_image_url` da agenda serve. Nula em `processing` e em
+             *     `rejected`.
+             */
+            url: string | null;
+            /**
+             * @description O MOTIVO da recusa, em texto pronto para a tela e em portugues,
+             *     quando `status` e `rejected`. Nulo em `processing` e em `ready`.
+             *
+             *     **Ele e gravado desde a BICHUS-87 e nao chegava a ninguem** neste
+             *     caminho: a capa do encontro subia, era recusada, e nao havia
+             *     superficie que contasse. Sem ele a tela diria "recusada" e a pessoa
+             *     nao saberia se o problema foi o formato, o tamanho, a dimensao
+             *     minima ou um arquivo truncado -- e portanto nao teria como
+             *     consertar. Exemplos reais medidos: *"A imagem precisa ter pelo menos
+             *     600 x 600 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
+             *     ter chegado incompleta."*
+             *
+             *     Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
+             *     precise ramificar por causa ramifica por `status`.
+             */
+            rejection_reason: string | null;
+        };
+        /**
+         * @description A pagina de `listMyNetworkEvents`. **Sem `applied_filters` e sem
+         *     `effective_sort`**, e nao por economia: a operacao nao aceita recorte
+         *     nenhum e a ordem e fixa, entao os dois campos so poderiam repetir uma
+         *     constante. `total` existe porque a lista escreve o fecho ("Voce criou N
+         *     encontros") e porque e ele que distingue "nao criei nenhum" de "a
+         *     pagina 2 esta vazia".
+         */
+        MyNetworkEventPage: {
+            items: components["schemas"]["MyNetworkEvent"][];
+            page: number;
+            limit: number;
+            total: number;
         };
         /**
          * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
@@ -10457,7 +11866,7 @@ export interface components {
             slug: string;
             label: string;
             active: boolean;
-            /** @description Itens ligados a tag */
+            /** @description Itens ligados a tag, em qualquer estado. */
             item_count: number;
             /** Format: date-time */
             created_at: string;
@@ -11042,6 +12451,55 @@ export interface components {
              */
             unread_total: number;
         };
+        SectionCounters: {
+            /**
+             * @description Casos de perdido abertos e publicos no recorte de `city`, com
+             *     `last_seen_at` posterior ao marcador `pets`. Mesmo recorte de
+             *     `listPublicLostPets`, que e o corpo da aba `Pets`.
+             *
+             *     Inteiro, sem recorte: o `9+` e regra da barra. **Nao e anulavel** --
+             *     "ninguem contou ainda" e estado do APLICATIVO (chamada que nao
+             *     aconteceu ou que falhou) e nao valor do servidor, e e assim que
+             *     `unread_count` de `listConversations` tambem se comporta.
+             */
+            lost_pets_new: number;
+            /**
+             * @description Encontros `published` que ainda vao acontecer, com `published_at`
+             *     posterior ao marcador `network_events`. O "ainda vao acontecer"
+             *     espelha o `when: upcoming` que e o default de `listNetworkEvents`.
+             */
+            network_events_new: number;
+            /**
+             * @description Entradas do diretorio `published`, com `published_at` posterior ao
+             *     marcador `network_directory`. `published_at` e nao `created_at`:
+             *     o sinal de "recomendado pela comunidade" e a ENTRADA no diretorio
+             *     (decisao do cliente, 20/10/2026), e nao a indicacao que ainda esta
+             *     na fila de moderacao.
+             */
+            network_directory_new: number;
+        };
+        SectionSeenInput: {
+            /**
+             * @description A area que acabou de ser vista. `network_events` e
+             *     `network_directory` sao as duas sub-abas da `Rede`, e sao valores
+             *     SEPARADOS de proposito: entrar numa nao pode zerar a contagem da
+             *     outra.
+             *
+             *     `mural` nao esta na lista: a contagem do `Mural` e de outra frente,
+             *     e aceitar o valor sem ter o que contar seria casca.
+             * @enum {string}
+             */
+            section: "pets" | "network_events" | "network_directory";
+            /**
+             * @description Opcional, e so para o CORPO da resposta: os contadores devolvidos
+             *     depois da escrita sao recalculados neste recorte, igual ao de
+             *     `getSectionCounters`. **Nao e gravada em lugar nenhum** -- o
+             *     marcador e um instante, nao um lugar.
+             *
+             *     Ausente, `lost_pets_new` volta sem recorte de geografia.
+             */
+            city?: string;
+        };
         AdminBroadcastDraft: {
             title: string;
             /**
@@ -11143,6 +12601,444 @@ export interface components {
             detail?: string;
         };
         /**
+         * @description O pedido de autorizacao de envio da foto de uma publicacao. **Sem
+         *     `purpose`**, como `ShowcasePhotoIntentInput` e pela mesma razao: esta
+         *     operacao existe para um proposito so (`user_publication`), e deixar o
+         *     cliente escolhe-lo seria deixa-lo pedir autorizacao de imagem de produto
+         *     por uma rota do aplicativo.
+         */
+        PublicationPhotoIntentInput: {
+            /**
+             * @description **HEIC entra**, porque a foto da publicacao sai de um CELULAR e foto
+             *     de iPhone e HEIC. A derivada sai sempre em JPEG: HEIC entra e nunca
+             *     sai. SVG nunca (D50), e por IGUALDADE, nunca por prefixo -- `image/`
+             *     aceitaria `image/svg+xml`, que e documento com script.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
+            byte_size: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            width?: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            height?: number;
+        };
+        /**
+         * @description A caixa do Mural: **uma mensagem obrigatoria e, opcionalmente, uma
+         *     foto**. Pedido do cliente de 20/10/2026.
+         *
+         *     **NAO HA CAMPO DE PET** (item 7 do ADR-0010: ligar a publicacao a ficha
+         *     de um pet agruparia os pets de um tutor), **NAO HA CAMPO DE LUGAR**
+         *     (ADR-0006: nao ha geocodificacao) e **NAO HA VISIBILIDADE A ESCOLHER**.
+         *     A ultima e decisao do cliente, literal: *"se elas forem amigas nao tem
+         *     problema, o que nao pode e ser publico, sem ter nenhum relacionamento"*
+         *     -- a visibilidade e UMA, conexao aceita, e um seletor com uma opcao nao e
+         *     uma escolha. `additionalProperties: false` e o que impede qualquer dos
+         *     tres de entrar sem ninguem decidir.
+         */
+        PublicationInput: {
+            /**
+             * @description O texto, **livre**. Nao ha filtro de palavra, nem aqui, nem em
+             *     `src/`, nem no banco: decisao do cliente (*"deixe o texto livre na
+             *     timeline"*). A moderacao e `reportPublication` somada a fila do
+             *     painel.
+             *
+             *     280 e o teto que `publication_reports.publication_body` ja cobrava
+             *     antes de a tabela de publicacoes existir, e e o mesmo de
+             *     `pets.care_notes`. Um numero diferente aqui faria a copia congelada
+             *     da denuncia truncar o texto julgado.
+             *
+             *     **Obrigatorio.** Publicacao de foto sem texto nao daria ao leitor de
+             *     tela nada para anunciar na linha do tempo, e a caixa que o cliente
+             *     pediu e "escrever uma mensagem, subir uma foto" -- nessa ordem.
+             */
+            body: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createPublicationPhotoUploadIntent`. Opcional: a
+             *     publicacao de texto puro e o caso comum.
+             *
+             *     **E AQUI que o envio e confirmado**, na mesma transacao da escrita.
+             *     Nao ha operacao de confirmacao separada -- e e isso que impede o
+             *     varredor de recolher a foto dez minutos depois, que foi o que
+             *     aconteceu com a foto do achado.
+             *
+             *     Envio de outra conta, de outro proposito, ja usado, vencido ou
+             *     inexistente: `404`, nunca `403`.
+             */
+            upload_id?: string | null;
+            /**
+             * @description Rotulo para leitor de tela, **e nao legenda**: ele nunca e desenhado
+             *     como texto. Opcional, e so vale com `upload_id` -- sem foto, e `400`.
+             *
+             *     **Opcional, e nao obrigatorio como em `NetworkEventImage`**: la a
+             *     imagem E o conteudo e nao ha texto ao lado dela; aqui `body` e
+             *     obrigatorio e o leitor de tela sempre tem o que anunciar. Nulo faz o
+             *     aplicativo anunciar um rotulo generico, e nao esconder a imagem do
+             *     leitor -- quem nao ve precisa saber que ha uma foto ali.
+             */
+            alt_text?: string | null;
+        };
+        /**
+         * @description A foto de uma publicacao **do DONO**, com estado. Ela e a unica forma
+         *     desta foto que carrega `status` e `rejection_reason`: motivo de recusa e
+         *     assunto entre o dono e quem modera.
+         *
+         *     **Nao ha `id`.** A identidade interna da imagem (`catalog_images.id`)
+         *     nunca sai em resposta.
+         *
+         *     **UMA derivada so, e a ausencia de `thumb` e medida.** A `card` de
+         *     1024 x 1024 e a unica que alguma tela pinta: o cartao do Mural desenha a
+         *     largura do corpo, 288 a 380 dp, ou 864 a 1140 px a 3x -- em 412 dp fica a
+         *     0,90x do ideal, a MESMA folga que o projeto ja aceitou para o `card` de
+         *     1024 do encontro. Uma `thumb` de 320 px so serviria a uma GRADE, e nao ha
+         *     grade no Mural: derivada guardada sem superficie que a pinte e peso sem
+         *     finalidade.
+         */
+        MyPublicationImage: {
+            /**
+             * Format: uuid
+             * @description O envio que originou a foto. **Nulo** depois que o varredor apagou a
+             *     intencao: a foto continua na publicacao. Estado raro e previsto.
+             */
+            upload_id: string | null;
+            /**
+             * @description `processing` -> `ready` ou `rejected`, e NUNCA volta. Em
+             *     `processing` a URL e nula: antes de o worker reescrever a derivada a
+             *     foto carrega o EXIF do celular, e servi-la seria entregar a
+             *     coordenada de onde ela foi tirada (ADR-0010 item 4).
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, composta na leitura a partir
+             *     da chave: o banco nao guarda URL (`docs/07-devops.md` 3.6). O
+             *     original nunca sai -- ele nao tem derivada publica.
+             *
+             *     Quadrada, e o corte e deliberado: a linha do tempo rola, e cartao com
+             *     proporcao variavel faz a rolagem saltar a cada imagem que termina de
+             *     carregar. Com 1:1 o cartao reserva a altura antes dos bytes
+             *     chegarem. O ORIGINAL continua inteiro no balde privado, e e dele que
+             *     sai qualquer proporcao futura.
+             *
+             *     Nula enquanto `status` e `processing`.
+             */
+            url: string | null;
+            /** @description O motivo da recusa do worker. **So o dono o ve.** */
+            rejection_reason: string | null;
+            /** @description O rotulo do leitor de tela. Nulo quando quem publicou nao o escreveu. */
+            alt_text: string | null;
+        };
+        /**
+         * @description Uma publicacao **da propria conta**.
+         *
+         *     **Nao ha `id`:** o endereco e `ref` (22 simbolos de base64url), a mesma
+         *     forma de `UserPublicRef` e exatamente a que
+         *     `publication_reports.publication_ref` ja cobrava. Nenhum UUID (ADR-0010
+         *     item 6).
+         *
+         *     **Nao ha autor**, e a ausencia e informacao: quem le esta lista e o
+         *     autor. Repetir o proprio nome em cada item seria uma terceira superficie
+         *     dos dados da conta sem consumidor.
+         *
+         *     **Nao ha curtida nem contador.** O cliente decidiu "curtir e comentar"
+         *     para a primeira versao, e as duas sao prioridade 4 desta frente, ainda
+         *     nao construidas -- declarar aqui um contador que nenhuma tabela produz
+         *     seria o contrato prometendo o que nada responde.
+         */
+        MyPublication: {
+            /** @description O endereco opaco da publicacao. E ele que `deleteMyPublication` e `reportPublication` recebem. */
+            ref: string;
+            body: string;
+            /** @description Nula na publicacao de texto puro, que e o caso comum. */
+            image: components["schemas"]["MyPublicationImage"] | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /**
+         * @description As publicacoes do dono, mais recente primeiro. `items: []` e estado
+         *     normal e completo.
+         */
+        MyPublicationPage: {
+            items: components["schemas"]["MyPublication"][];
+            next_cursor: string | null;
+        };
+        /**
+         * @description Quem publicou, na linha do tempo. **Tres campos, e nada mais.**
+         *
+         *     **A FOTO ENTROU EM 20/10/2026, e e a EMENDA 5 do ADR-0010 que a
+         *     autoriza.** Ela nasceu sem foto, de proposito: a Emenda 3 abriu
+         *     `photo_icon_url` em `Conversation.participants[]` *"e em mais nenhuma
+         *     resposta deste contrato"*, e satisfazer o critério dela nao e estar
+         *     nomeado -- ler o complemento de uma regra como a regra e invencao de quem
+         *     implementa. A frente parou e perguntou; a decisao do cliente foi *"tras a
+         *     foto, algo bem parecido com o instagram"*, e a emenda NOMEIA esta
+         *     superficie.
+         *
+         *     **O predicado da Emenda 3 nao foi relaxado: ele e satisfeito por
+         *     CONSTRUCAO aqui.** A clausula `WHERE` de `getMyTimeline` so devolve
+         *     publicacao cujo autor e quem chama ou e conexao `accepted` dele -- entao
+         *     todo autor que aparece ja esta dentro do conjunto que a Emenda 3
+         *     autoriza. A conversa precisou de predicado explicito porque ela PODE ter
+         *     do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
+         *     esse outro lado.
+         *
+         *     **NAO HA `public_ref`, nao ha `id`, nao ha UUID** (ADR-0010 item 6): o
+         *     que identifica a pessoa nesta resposta e o apelido, exatamente como em
+         *     `ConnectionPerson`.
+         *
+         *     **NAO HA PET**, em forma nenhuma -- nem nome, nem contagem, nem link.
+         *     A Emenda 2 liberou a contagem **so** em `getPersonProfile`, por nome.
+         *
+         *     **NAO HA contagem de seguidores, nem lista de quem curtiu.** "Parecido
+         *     com o Instagram" foi dito sobre a FOTO, e o item 7 da Emenda 5 registra
+         *     que isso nao e autorizacao de redesenho: nao existe seguir neste produto,
+         *     e a decisao de 19/10 sobre curtir e CONTAGEM -- contagem nao diz quem.
+         */
+        PublicationAuthor: {
+            /**
+             * @description O apelido, e e ele o endereco do perfil (`getPersonProfile`). **Nulo**
+             *     quando a pessoa nao tem apelido: o toque no autor nao nasce, em vez
+             *     de nascer e nao levar a lugar nenhum.
+             */
+            handle: string | null;
+            /**
+             * @description Primeiro nome ou apelido. **Nunca** sobrenome completo, telefone nem
+             *     e-mail.
+             *
+             *     **A frase deste campo e MENOR que a de `Conversation.participants`,
+             *     e a diferenca e a Emenda 5:** la ela termina em "nem foto de
+             *     perfil", porque la a foto e campo separado e condicional. Aqui a
+             *     foto sai em `photo_icon_url`, abaixo, e repetir a proibicao neste
+             *     campo seria o contrato se contradizendo em duas linhas.
+             */
+            display_name: string;
+            /**
+             * Format: uri
+             * @description A foto de quem publicou. **Emenda 5 do ADR-0010 (20/10/2026)**, e a
+             *     UNICA superficie nova que ela abre.
+             *
+             *     **A derivada e a `thumb` de 176 x 176 px, e nao a `card` de 512** --
+             *     a MESMA que a Emenda 3 nomeia, pela MESMA conta medida: o icone do
+             *     cartao pinta **40 dp**, que a 3x sao 120 px reais; a de 176 cobre
+             *     isso sem ampliar (1,47x) e a de 512 seria **4,27x mais dado do que a
+             *     celula pinta**, vinte vezes por pagina de linha do tempo. Nenhuma
+             *     derivada nova.
+             *
+             *     **Nula** em tres estados, e nenhum deles e erro: a pessoa nao tem
+             *     foto; a foto dela nao esta `ready` (em `processing` ela carrega o
+             *     EXIF do celular, ADR-0010 item 4); ou a conta esta desabilitada. Com
+             *     nulo o cartao desenha a inicial do nome, que e o que a conversa
+             *     mediada ja faz.
+             *
+             *     **Sem estado.** `MyPhoto`, que o dono recebe em `getMe`, tem `status`
+             *     e `rejection_reason`; nenhum dos dois e assunto de terceiro -- motivo
+             *     de recusa de uma foto e entre o dono e quem modera. E a mesma reducao
+             *     que a Emenda 3 fez e que `PersonShowcasePhoto` fez antes dela.
+             */
+            photo_icon_url: string | null;
+        };
+        /**
+         * @description A foto de uma publicacao na linha do tempo, e ela e **menor** que
+         *     `MyPublicationImage` de proposito -- a mesma reducao que
+         *     `PersonShowcasePhoto` fez sobre `ShowcasePhoto`.
+         *
+         *     Ficam de fora `status`, `rejection_reason` e `upload_id`: os dois
+         *     primeiros sao estado de moderacao da publicacao do dono, e o terceiro e
+         *     de edicao, que so o dono faz. **Foto que nao esta `ready` simplesmente
+         *     nao entra nesta resposta** -- em `processing` ela carrega o EXIF do
+         *     celular (ADR-0010 item 4) --, entao nao ha estado a desenhar.
+         *
+         *     **Nao ha legenda, curtida, contador nem pessoa marcada**, e nenhuma das
+         *     quatro e omissao a ser preenchida depois.
+         */
+        PublicationImage: {
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, a unica desta imagem. Ver
+             *     `MyPublicationImage.url` para a conta da medida e do corte.
+             */
+            url: string;
+            /** @description O rotulo do leitor de tela. Nulo quando quem publicou nao o escreveu. */
+            alt_text: string | null;
+        };
+        /**
+         * @description Uma publicacao na linha do tempo. **Ela so existe nesta resposta para
+         *     quem e conexao aceita do autor, ou para o proprio autor** -- o recorte
+         *     mora na clausula `WHERE` da consulta (ADR-0021), e nao num campo desta
+         *     forma.
+         */
+        Publication: {
+            /** @description O endereco opaco. E ele que `reportPublication` recebe, e e ele o `target_ref` da fila do painel. */
+            ref: string;
+            body: string;
+            /** @description Nula na publicacao de texto puro **e** na publicacao cuja foto ainda nao esta `ready`. */
+            image: components["schemas"]["PublicationImage"] | null;
+            /** Format: date-time */
+            created_at: string;
+            author: components["schemas"]["PublicationAuthor"];
+            /**
+             * @description `true` quando quem chama e o autor. **E ele que decide qual acao o
+             *     cartao desenha**: `Apagar` na propria publicacao, `Denunciar` na de
+             *     outra pessoa -- e nunca as duas, porque denunciar o proprio conteudo
+             *     nao tem desfecho (o caminho e apagar, que e imediato).
+             *
+             *     Um campo booleano, e nao o apelido comparado na tela: a tela nao tem
+             *     o apelido de quem chama em toda rolagem, e compara-lo seria a
+             *     autorizacao migrando para o cliente.
+             */
+            mine: boolean;
+            /**
+             * @description Quantas pessoas curtiram. **Lido das LINHAS de
+             *     `publication_likes`**, na mesma consulta -- nao ha coluna
+             *     denormalizada de contagem, e a ausencia dela e a defesa: contagem que
+             *     divirja das linhas e o defeito classico desta superficie.
+             *
+             *     **E a CONTAGEM, nunca a lista.** Nao existe
+             *     `GET /publications/{ref}/likes`, e a ausencia e o item 7 da Emenda 5
+             *     do ADR-0010: a decisao de 19/10 sobre curtir e contagem, e contagem
+             *     nao diz quem.
+             */
+            like_count: number;
+            /**
+             * @description Quantos comentarios VIVOS a publicacao tem, lido das linhas de
+             *     `publication_comments` com `deleted_at IS NULL`. Comentario apagado
+             *     nao conta -- e e por isso que `deleteMyComment` devolve a contagem
+             *     nova em vez de `204`.
+             */
+            comment_count: number;
+            /**
+             * @description Se quem chama curtiu esta publicacao. **Vem do SERVIDOR**, de um
+             *     `EXISTS` na mesma consulta -- a tela nao tem como saber, e deixa-la
+             *     adivinhar faria o coracao piscar errado na primeira rolagem.
+             */
+            liked_by_me: boolean;
+        };
+        /**
+         * @description A linha do tempo, mais recente primeiro. `items: []` quando quem chama
+         *     nao tem conexao nenhuma **e** nao publicou nada: os dois estados devolvem
+         *     a mesma lista, e e o aplicativo que os distingue.
+         */
+        PublicationPage: {
+            items: components["schemas"]["Publication"][];
+            /**
+             * @description Opaco. Carrega `created_at` **e o `ref` publico** da ultima linha,
+             *     que sao as duas colunas da ordem: so `created_at` empataria duas
+             *     publicacoes do mesmo milissegundo e o paginador devolveria a mesma
+             *     linha duas vezes ou nenhuma. **O desempate e o `ref` e nao o `id`**:
+             *     um cursor que carregasse a identidade interna poria um UUID em saida,
+             *     que o item 6 do ADR-0010 proibe mesmo embrulhado em base64.
+             */
+            next_cursor: string | null;
+        };
+        /**
+         * @description O desfecho de curtir ou descurtir: **a contagem que passou a valer**, e
+         *     nada mais.
+         *
+         *     **Nao ha `ref` da curtida**, e a ausencia e deliberada: a curtida nao tem
+         *     endereco publico, nao se enderecava por nada e nao sai em resposta
+         *     individual. `publication_likes` nao tem coluna `id` -- um identificador
+         *     aqui seria o comeco de uma lista de quem curtiu, que o item 7 da Emenda 5
+         *     do ADR-0010 registra como nao autorizada.
+         */
+        PublicationReaction: {
+            /**
+             * @description **Lido das LINHAS, na mesma transacao da escrita** -- e nao um numero
+             *     incrementado em memoria nem uma coluna denormalizada. Contagem que
+             *     divirja das linhas e o defeito classico desta superficie, e a defesa
+             *     e nao existir coluna de contagem para divergir.
+             */
+            like_count: number;
+            /** @description `true` depois de `likePublication`, `false` depois de `unlikePublication`. */
+            liked_by_me: boolean;
+        };
+        /** @description A contagem de comentarios que passou a valer. */
+        PublicationCommentCount: {
+            /** @description Lida das linhas, como `like_count`. */
+            comment_count: number;
+        };
+        /**
+         * @description Um comentario. **Molde de `Publication`**, com os mesmos nomes e as
+         *     mesmas ausencias.
+         *
+         *     **Nao ha `id`:** o endereco e `ref`, 22 simbolos de base64url (ADR-0010
+         *     item 6). **Nao ha imagem** e **nao ha `parent_ref`**: comentario com foto
+         *     e fio de resposta sao objetos que ninguem pediu.
+         */
+        PublicationComment: {
+            /** @description O endereco opaco do comentario. E ele que `deleteMyComment` recebe. */
+            ref: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * @description **O MESMO schema do autor da publicacao, e o reuso e deliberado**: e
+             *     a mesma pessoa, com os mesmos tres campos e a mesma derivada de foto
+             *     (Emenda 5 do ADR-0010). Um `CommentAuthor` separado seria a segunda
+             *     definicao da mesma coisa, e a segunda e onde uma correcao falta --
+             *     foi assim que `photo_icon_url` quase ganhou um hospedeiro que o
+             *     portao nao vigiava.
+             */
+            author: components["schemas"]["PublicationAuthor"];
+            /**
+             * @description `true` quando quem chama escreveu o comentario. **E ele que decide se
+             *     o `Apagar` nasce**, e vem do SERVIDOR como coluna calculada -- a tela
+             *     nao tem o apelido de quem chama em toda rolagem, e comparar ali seria
+             *     a autorizacao migrando para o cliente.
+             *
+             *     **Nao existe `mine` do dono da PUBLICACAO**, e a ausencia e a mesma
+             *     decisao de `deleteMyComment`: o autor da publicacao nao apaga
+             *     comentario de terceiro, porque ninguem decidiu que ele pode.
+             */
+            mine: boolean;
+        };
+        /**
+         * @description Os comentarios, **mais ANTIGO primeiro** -- ao contrario da linha do
+         *     tempo. Comentario se le na ordem em que a conversa aconteceu.
+         */
+        PublicationCommentPage: {
+            items: components["schemas"]["PublicationComment"][];
+            /**
+             * @description Opaco. Carrega `created_at` **e o `ref` publico** do ultimo
+             *     comentario, pela mesma razao da linha do tempo: so o instante
+             *     empataria dois comentarios do mesmo milissegundo. **Nunca o `id`** --
+             *     base64 nao e segredo, e o item 6 do ADR-0010 proibe UUID em saida.
+             */
+            next_cursor: string | null;
+            /**
+             * @description O total de comentarios VIVOS da publicacao, lido das linhas -- e nao
+             *     `items.length`, que e so o tamanho desta pagina. A tela mostra o
+             *     total no cartao e a pagina na folha, e sao numeros diferentes.
+             */
+            comment_count: number;
+        };
+        /**
+         * @description O texto do comentario, e **nada mais**.
+         *
+         *     `additionalProperties: false` e o que impede imagem, mencao de pessoa e
+         *     `parent_ref` de entrarem sem ninguem decidir -- os tres sao objetos que
+         *     o cliente nao pediu.
+         */
+        PublicationCommentInput: {
+            /**
+             * @description Texto **livre**, 1 a 280. Nao ha filtro de palavra, nem aqui, nem em
+             *     `src/`, nem no banco: decisao do cliente de 18/10/2026. A moderacao e
+             *     a denuncia mais a fila do painel -- e **a denuncia de comentario
+             *     ainda nao existe**, o que esta dito por extenso em
+             *     `commentOnPublication`.
+             */
+            body: string;
+        };
+        /**
+         * @description O comentario criado **e** a contagem que passou a valer, numa resposta
+         *     so: sem ela a tela precisaria de uma segunda ida ao servidor para
+         *     atualizar o numero no cartao.
+         */
+        PublicationCommentCreated: {
+            comment: components["schemas"]["PublicationComment"];
+            comment_count: number;
+        };
+        /**
          * @description **TERCEIRA LISTA FECHADA, DE CINCO**, e nao reuso de uma das outras
          *     duas: "nudez" e "maus-tratos" sao de imagem, e "nao e quem diz ser" e de
          *     perfil.
@@ -11160,6 +13056,86 @@ export interface components {
              */
             reason: "offensive_or_discriminatory" | "scam_or_animal_sale" | "false_lost_pet_info" | "spam_or_repetition" | "other";
             detail?: string;
+        };
+        /**
+         * @description **UMA PESSOA QUE ESTA CONTA BLOQUEOU.** Nunca uma pessoa que bloqueou
+         *     esta conta -- essa metade do par simetrico nao tem representacao em
+         *     superficie nenhuma deste contrato.
+         *
+         *     **A lista de propriedades e FECHADA, e o recorte foi decidido.** Os
+         *     tres campos de pessoa daqui sao exatamente os tres que a **emenda 2 do
+         *     ADR-0010** (19/10/2026) libera a qualquer chamador com conta em
+         *     `getPersonProfile`: `handle`, `public_ref` e `display_name`. Esta lista
+         *     **nao abre nada de novo**, e e por isso que ela nao precisou de emenda.
+         *
+         *     **A foto NAO esta aqui.** A emenda 3 do ADR-0010 abriu a foto de
+         *     perfil em uma unica superficie -- o participante da conversa mediada,
+         *     e **so entre conexoes aceitas**. Bloqueado e o oposto de conexao
+         *     aceita, e foto aqui seria emenda nova sem decisao que a sustente.
+         *
+         *     **Nada de `pets_count`, `connections_count` nem `connection_state`.**
+         *     Os dois primeiros sao sinal de confianca de um PERFIL, e esta linha nao
+         *     e um perfil: a pergunta dela e "qual das pessoas que eu bloqueei e
+         *     esta", e contagem nao responde isso. O terceiro convidaria a uma
+         *     religacao que `unblockUser` nao faz -- desbloquear devolve
+         *     visibilidade, e nao a conexao.
+         */
+        BlockedPerson: {
+            /**
+             * @description `users.public_ref`: o MESMO endereco opaco que `blockUser` e
+             *     `unblockUser` recebem. **Nao e UUID** (ADR-0010 item 6).
+             *
+             *     Ele e o que faz a linha ter botao: sem ele a tela teria um nome e
+             *     nenhuma forma de chamar o desbloqueio.
+             */
+            public_ref: string;
+            /**
+             * @description O apelido. **Anulavel aqui**, ao contrario de
+             *     `PersonProfile.handle`: o bloqueio e enderecado por `public_ref` e
+             *     nao pelo apelido, entao e possivel ter bloqueado alguem que nao
+             *     tem apelido -- e omitir a linha dessa pessoa a deixaria bloqueada
+             *     para sempre.
+             *
+             *     Ele vem porque e o identificador **ESTAVEL**: `display_name` muda
+             *     quando a pessoa quiser, e duas pessoas bloqueadas com o mesmo nome
+             *     de exibicao ficariam indistinguiveis na hora de escolher qual
+             *     desbloquear.
+             */
+            handle: string | null;
+            /**
+             * @description O nome de exibicao -- **primeiro nome ou apelido, nunca sobrenome**
+             *     (ADR-0010 item 3). Anulavel pela mesma razao de
+             *     `PersonProfile.display_name`: a coluna e anulavel em `users`, e
+             *     sumir com a linha por falta de nome deixaria o bloqueio sem volta.
+             *
+             *     Com os dois nulos a tela escreve um texto proprio dela, que nao
+             *     vem do servidor.
+             */
+            display_name: string | null;
+            /**
+             * Format: date-time
+             * @description Quando **quem chama** bloqueou. E o ato de quem le, e nao dado da
+             *     outra pessoa: `user_blocks.created_at` da linha cujo
+             *     `blocker_user_id` e o proprio chamador.
+             *
+             *     Ele existe por duas razoes e nenhuma e decorativa: ele e a ordem
+             *     fixa da lista (mais recentes primeiro) e e a unica coisa que
+             *     permite a pessoa reconhecer um bloqueio que ela nao lembra de ter
+             *     feito.
+             */
+            blocked_at: string;
+        };
+        /**
+         * @description Uma pagina de pessoas que **esta conta** bloqueou.
+         *
+         *     `total` e a contagem das linhas de quem chama, e nao de nada mais: ela
+         *     nao conta quem bloqueou quem chama, e nao existe campo que o faca.
+         */
+        MyBlockPage: {
+            items: components["schemas"]["BlockedPerson"][];
+            total: number;
+            page: number;
+            limit: number;
         };
     };
     responses: {
@@ -11594,6 +13570,11 @@ export interface components {
         /** @description Token opaco do caso, o mesmo que o link compartilhavel carrega. */
         ShareToken: string;
         Cursor: string;
+        /**
+         * @description Recorta por nome do pet e por nome de exibicao do outro lado, **dentro
+         *     das conversas de quem chamou**. Nao e busca de pessoas.
+         */
+        ConversationSearch: string;
         Limit: number;
         /**
          * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
@@ -11655,6 +13636,19 @@ export interface components {
          *     saida publica.
          */
         DirectoryEntrySlug: components["schemas"]["Slug"];
+        /**
+         * @description O APELIDO da pessoa (`users.handle`, tabela `handles`), que e o
+         *     identificador publico dela por decisao do cliente de 18/10/2026:
+         *     *"slug nao tem relacao com informacoes pessoais, e um id que o usuario
+         *     escolhe"*. **Nao e UUID** (ADR-0010 item 6) e nao e
+         *     `users.public_ref`.
+         *
+         *     A faixa e o padrao sao os MESMOS em quatro lugares, e esta casa ja
+         *     pagou por divergencia de faixa entre contrato e coluna: o `CHECK` de
+         *     `handles.handle` (migracao `20261018000021`), este parametro,
+         *     `PersonProfile.handle` e `app/lib/formato/apelido.dart`.
+         */
+        PersonHandleParam: string;
         /**
          * @description O identificador opaco da **aresta** de conexao (`Connection.ref`). **Nao
          *     e UUID** (ADR-0010 item 6) e **nao e de uma pessoa**: identificador
@@ -11730,13 +13724,22 @@ export interface components {
          */
         PhotoPublicRef: string;
         /**
+         * @description O endereco publico e opaco de um comentario: 22 simbolos de base64url,
+         *     a MESMA forma de `PublicationRef` e de `UserPublicRef`, e pela mesma
+         *     razao -- `publication_comments.public_ref` cobra
+         *     `^[A-Za-z0-9_-]{22}$`, e o `id` interno nunca sai (ADR-0010 item 6).
+         */
+        CommentRef: string;
+        /**
          * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
          *     mesmo formato de `UserPublicRef` e pela mesma razao.
          *
-         *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
-         *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
-         *     chave estrangeira, que e de uma linha. Ver o fim da migracao
-         *     `20261018000032`.
+         *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+         *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+         *     Linha orfa em `publication_reports` nao e mais possivel, e
+         *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+         *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+         *     mesmo, responde `404` -- e nunca `403`.
          */
         PublicationRef: string;
     };
@@ -12642,6 +14645,71 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    getSectionCounters: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opcional. A mesma cidade que a aba `Pets` manda em
+                 *     `listPublicLostPets`, para o selo e a lista nao discordarem.
+                 *     Ausente = sem recorte de geografia. `city=` vazio e 400, e nao
+                 *     geografia aberta -- mesma regra da listagem publica.
+                 *
+                 *     **Nao afeta `network_events_new` nem `network_directory_new`**: as
+                 *     duas sub-abas da `Rede` abrem SEM cidade, e recortar a contagem por
+                 *     uma cidade que a lista nao aplica faria o selo discordar da tela.
+                 */
+                city?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os tres contadores. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionCounters"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markMySectionSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionSeenInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description Marcado. O corpo traz os tres contadores JA recalculados com o
+             *     marcador novo -- o da area vista cai a zero, e os outros dois
+             *     continuam como estavam.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionCounters"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     markAllNotificationsRead: {
         parameters: {
             query?: never;
@@ -12718,6 +14786,153 @@ export interface operations {
             415: components["responses"]["UnsupportedMedia"];
             422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyPublications: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description As publicacoes do dono. `items: []` quando nao ha nenhuma. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPublicationPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationInput"];
+            };
+        };
+        responses: {
+            /** @description A publicacao criada, na forma que o dono a ve. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPublication"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deleteMyPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada. Sem corpo. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createPublicationPhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationPhotoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyTimeline: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A linha do tempo. `items: []` quando quem chama nao tem conexao
+             *     nenhuma **e** nao publicou nada -- os dois estados devolvem a mesma
+             *     lista vazia, e e o aplicativo que os distingue com
+             *     `getMyConnectionSummary` e `listMyPublications`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     listMyPets: {
@@ -14238,6 +16453,11 @@ export interface operations {
             query?: {
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Recorta por nome do pet e por nome de exibicao do outro lado, **dentro
+                 *     das conversas de quem chamou**. Nao e busca de pessoas.
+                 */
+                q?: components["parameters"]["ConversationSearch"];
             };
             header?: never;
             path?: never;
@@ -15375,6 +17595,70 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listMyNetworkEvents: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A pagina dos encontros desta conta. `total` alimenta a linha de
+             *     fecho da lista.
+             *
+             *     **Sem `ETag` aqui, e a ausencia e medida e nao esquecimento**: um
+             *     cabecalho de resposta vale para a resposta inteira, e `If-Match` de
+             *     `cancelNetworkEvent` e a versao de UM encontro. Um `ETag` de pagina
+             *     apresentado como versao de um item daria 412 em toda tentativa -- o
+             *     defeito pareceria conserto. A versao de um encontro sai em
+             *     `getMyNetworkEvent`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro, com a versao dele no `ETag`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listMyNetworkEventJoinRequests: {
         parameters: {
             query?: {
@@ -15548,10 +17832,69 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    getPersonProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O APELIDO da pessoa (`users.handle`, tabela `handles`), que e o
+                 *     identificador publico dela por decisao do cliente de 18/10/2026:
+                 *     *"slug nao tem relacao com informacoes pessoais, e um id que o usuario
+                 *     escolhe"*. **Nao e UUID** (ADR-0010 item 6) e nao e
+                 *     `users.public_ref`.
+                 *
+                 *     A faixa e o padrao sao os MESMOS em quatro lugares, e esta casa ja
+                 *     pagou por divergencia de faixa entre contrato e coluna: o `CHECK` de
+                 *     `handles.handle` (migracao `20261018000021`), este parametro,
+                 *     `PersonProfile.handle` e `app/lib/formato/apelido.dart`.
+                 */
+                handle: components["parameters"]["PersonHandleParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O perfil, no recorte que quem chama pode ver. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonProfile"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listPublicLostPets: {
         parameters: {
-            query: {
-                city: string;
+            query?: {
+                /**
+                 * @description **SEM `required`, e a ausencia dele e a decisao do cliente de
+                 *     19/10/2026**: *"o campo cidade do filtro da pagina pet nao deve ser
+                 *     obrigatorio"*. `city` ausente e geografia ABERTA -- o servidor nao
+                 *     recorta por cidade nenhuma, e `applied_filters` nao cita `city`.
+                 *
+                 *     Mesma forma que `period` logo abaixo, e pela mesma razao: nao ha
+                 *     valor de "qualquer cidade" a inventar, porque a ausencia ja o diz, e
+                 *     um valor desses voltaria em `applied_filters` como filtro aplicado
+                 *     numa pagina que ninguem filtrou.
+                 *
+                 *     O `minLength: 2` continua valendo para quem MANDA o parametro:
+                 *     `city=` vazio e 400, e nao geografia aberta. Quem quer todas as
+                 *     cidades omite o parametro.
+                 *
+                 *     CUSTO MEDIDO: sem cidade a consulta le os casos abertos publicos de
+                 *     TODAS as cidades, e a funcao `conta_habilitada(owner_user_id)` corre
+                 *     por linha. O indice que sustenta esse caminho e a migracao
+                 *     `20261019000008`; o cabecalho de
+                 *     `kysely-listagem-publica-de-perdidos.ts` tem os dois EXPLAIN.
+                 */
+                city?: string;
                 neighborhood?: string;
                 species?: components["schemas"]["Species"];
                 size?: components["schemas"]["PetSize"];
@@ -16034,6 +18377,51 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getAppVersionStatus: {
+        parameters: {
+            query: {
+                /**
+                 * @description A plataforma do binario que esta perguntando. Separada porque a
+                 *     politica e por plataforma: hoje so o Android e publicado (decisao
+                 *     de 23/09) e o iOS esta dormente, e uma politica unica bloquearia o
+                 *     iOS de provisionamento gratuito junto.
+                 */
+                platform: "android" | "ios";
+                /**
+                 * @description A versao do binario que esta perguntando (`versionName` do Android,
+                 *     `CFBundleShortVersionString` do iOS), em tres numeros.
+                 *
+                 *     Fora do formato responde 400, e nao bloqueio: o app trata 400 como
+                 *     "nao consegui perguntar" e libera o uso. A alternativa -- deduzir
+                 *     bloqueio de um valor que nao se entende -- trancaria a base por um
+                 *     erro de digitacao de build.
+                 */
+                version: components["schemas"]["AppVersion"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description O veredito para a versao que chamou. **Tres estados distintos, e
+             *     nao um booleano**: `update_required` fecha o app, e
+             *     `update_recommended` so avisa e pode ser dispensado pela pessoa.
+             *     Um campo booleano nao conseguiria carregar os dois.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVersionStatus"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     health: {
@@ -17995,7 +20383,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Bloqueada. Resposta vazia */
+            /** @description Bloqueada. Resposta vazia, e a mesma de quem ja estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -18033,7 +20421,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Desbloqueada. Resposta vazia */
+            /** @description Desbloqueada. Resposta vazia, e a mesma de quem nao estava bloqueada. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -18043,6 +20431,33 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyBlocks: {
+        parameters: {
+            query?: {
+                page?: number;
+                /** @description O mesmo teto de pagina da outra caixa desta casa (`listMyConnectionRequests`). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pagina de quem esta conta bloqueou. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyBlockPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -18114,6 +20529,204 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    likePublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A contagem que passou a valer, e `liked_by_me: true`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationReaction"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    unlikePublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A contagem que passou a valer, e `liked_by_me: false`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationReaction"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listPublicationComments: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os comentarios. `items: []` quando ninguem comentou. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationCommentPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    commentOnPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationCommentInput"];
+            };
+        };
+        responses: {
+            /** @description O comentario criado, e a contagem que passou a valer. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationCommentCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deleteComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
+                 *     mesmo formato de `UserPublicRef` e pela mesma razao.
+                 *
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
+                 */
+                publicationRef: components["parameters"]["PublicationRef"];
+                /**
+                 * @description O endereco publico e opaco de um comentario: 22 simbolos de base64url,
+                 *     a MESMA forma de `PublicationRef` e de `UserPublicRef`, e pela mesma
+                 *     razao -- `publication_comments.public_ref` cobra
+                 *     `^[A-Za-z0-9_-]{22}$`, e o `id` interno nunca sai (ADR-0010 item 6).
+                 */
+                commentRef: components["parameters"]["CommentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A contagem de comentarios que passou a valer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationCommentCount"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     reportPublication: {
         parameters: {
             query?: never;
@@ -18123,10 +20736,12 @@ export interface operations {
                  * @description O endereco publico e opaco da publicacao: 22 simbolos de base64url,
                  *     mesmo formato de `UserPublicRef` e pela mesma razao.
                  *
-                 *     **A tabela de publicacoes e de outra fatia e ainda nao existe.** Esta
-                 *     operacao esta declarada e a escrita dela esta pronta; o que falta e a
-                 *     chave estrangeira, que e de uma linha. Ver o fim da migracao
-                 *     `20261018000032`.
+                 *     **A tabela de publicacoes existe desde 20/10/2026** (`user_publications`,
+                 *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
+                 *     Linha orfa em `publication_reports` nao e mais possivel, e
+                 *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
+                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
+                 *     mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
