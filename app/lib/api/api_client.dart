@@ -47,6 +47,44 @@ class ApiClient {
     return _enviar('GET', caminho, query: query, exigeToken: exigeToken);
   }
 
+  /// `GET` que devolve o corpo **e o `ETag`**.
+  ///
+  /// Existe porque [_lerResposta] descarta os cabecalhos, e o `ETag` de uma
+  /// leitura e o unico caminho ate uma escrita versionada: `updateNetworkEvent`
+  /// e `cancelNetworkEvent` exigem `If-Match` com a versao da ultima leitura, e
+  /// sem este metodo o app nao tinha de onde tirar o valor. Era este o buraco
+  /// que deixava o primeiro cancelamento impossivel -- do lado do servidor
+  /// faltava a leitura emitir o cabecalho, e deste lado faltava alguem lê-lo.
+  ///
+  /// **Nulo quando a resposta nao traz o cabecalho, e nao uma cadeia vazia**:
+  /// quem chama precisa distinguir "o servidor nao mandou versao" de "a versao
+  /// e vazia". Uma cadeia vazia em `If-Match` e o caminho do 428, e ele
+  /// pareceria defeito do servidor.
+  ///
+  /// O valor sai **como veio**, sem aparar o `W/` nem o sufixo de codificacao
+  /// que a borda acrescenta (`"1-zstd"`): quem o le de volta e `lerIfMatch`, no
+  /// servidor, que tolera as duas formas por decisao de 05/10. Normalizar aqui
+  /// seria uma segunda regra de leitura de `ETag`, num lugar que nao e o dono
+  /// dela.
+  Future<({Map<String, dynamic> corpo, String? etag})> getComEtag(
+    String caminho, {
+    Map<String, String>? query,
+    bool exigeToken = true,
+  }) async {
+    final resposta = await _trocar(
+      'GET',
+      caminho,
+      query: query,
+      exigeToken: exigeToken,
+    );
+    // A LEITURA DO CORPO VEM PRIMEIRO, de proposito: ela e quem estoura
+    // `FalhaDaApi` no erro, e um `ETag` lido de uma resposta 404 nao serve para
+    // nada.
+    final corpo = _lerResposta(resposta);
+    final etag = resposta.headers['etag'];
+    return (corpo: corpo, etag: etag);
+  }
+
   /// `POST`.
   ///
   /// [idempotencyKey] e obrigatoria em toda operacao de criacao com efeito
@@ -57,6 +95,7 @@ class ApiClient {
     String caminho, {
     Object? corpo,
     String? idempotencyKey,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
     return _enviar(
@@ -64,16 +103,37 @@ class ApiClient {
       caminho,
       corpo: corpo,
       idempotencyKey: idempotencyKey,
+      ifMatch: ifMatch,
       exigeToken: exigeToken,
     );
   }
 
+  /// `PATCH`.
+  ///
+  /// [ifMatch] e o `ETag` da ULTIMA LEITURA, e nao um enfeite: e controle de
+  /// concorrencia (`#/components/parameters/IfMatch`). Treze operacoes do
+  /// contrato o exigem -- `updateNetworkEvent` e `cancelNetworkEvent` do app,
+  /// mais onze do painel --, e nenhum verbo desta classe tinha como mandar o
+  /// cabecalho antes de 19/10/2026: a lista de cabecalhos de [_enviar] e
+  /// fechada, e quem chamava so podia escolher `Idempotency-Key`. A operacao
+  /// respondia **428** (`precondition-required`) em toda tentativa, medido em
+  /// homologacao.
+  ///
+  /// Ausente quando a operacao exige: `428`. Diferente da versao atual:
+  /// `412`, e outra pessoa salvou depois de voce ter lido.
   Future<Map<String, dynamic>> patch(
     String caminho, {
     Object? corpo,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('PATCH', caminho, corpo: corpo, exigeToken: exigeToken);
+    return _enviar(
+      'PATCH',
+      caminho,
+      corpo: corpo,
+      ifMatch: ifMatch,
+      exigeToken: exigeToken,
+    );
   }
 
   /// `PUT`, **e sem `Idempotency-Key`**.
@@ -89,16 +149,24 @@ class ApiClient {
   Future<Map<String, dynamic>> put(
     String caminho, {
     Object? corpo,
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('PUT', caminho, corpo: corpo, exigeToken: exigeToken);
+    return _enviar(
+      'PUT',
+      caminho,
+      corpo: corpo,
+      ifMatch: ifMatch,
+      exigeToken: exigeToken,
+    );
   }
 
   Future<Map<String, dynamic>> delete(
     String caminho, {
+    String? ifMatch,
     bool exigeToken = true,
   }) {
-    return _enviar('DELETE', caminho, exigeToken: exigeToken);
+    return _enviar('DELETE', caminho, ifMatch: ifMatch, exigeToken: exigeToken);
   }
 
   /// Baixa o corpo binario de uma rota **autenticada desta API**.
@@ -186,6 +254,35 @@ class ApiClient {
     Object? corpo,
     Map<String, String>? query,
     String? idempotencyKey,
+    String? ifMatch,
+    bool exigeToken = true,
+  }) async {
+    return _lerResposta(
+      await _trocar(
+        metodo,
+        caminho,
+        corpo: corpo,
+        query: query,
+        idempotencyKey: idempotencyKey,
+        ifMatch: ifMatch,
+        exigeToken: exigeToken,
+      ),
+    );
+  }
+
+  /// Monta, envia e devolve a resposta INTEIRA, cabecalhos incluidos.
+  ///
+  /// Separado de [_enviar] para que [getComEtag] leia um cabecalho sem que
+  /// exista um segundo lugar que monte URL, cabecalhos e token. Quem chama
+  /// daqui e quem decide o que fazer com a resposta; a conversao de erro em
+  /// [Problem] continua inteira em [_lerResposta].
+  Future<http.Response> _trocar(
+    String metodo,
+    String caminho, {
+    Object? corpo,
+    Map<String, String>? query,
+    String? idempotencyKey,
+    String? ifMatch,
     bool exigeToken = true,
   }) async {
     final uri = _url(caminho, query);
@@ -200,6 +297,9 @@ class ApiClient {
     }
     if (idempotencyKey != null) {
       cabecalhos['Idempotency-Key'] = idempotencyKey;
+    }
+    if (ifMatch != null) {
+      cabecalhos['If-Match'] = ifMatch;
     }
     if (exigeToken) {
       final token = await tokenDeAcesso?.call();
@@ -226,7 +326,7 @@ class ApiClient {
       throw FalhaDeConexao(e);
     }
 
-    return _lerResposta(resposta);
+    return resposta;
   }
 
   /// Manda a requisicao e le o corpo INTEIRO, sob **um** prazo so.

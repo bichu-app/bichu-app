@@ -307,7 +307,7 @@ void main() {
     testWidgets('Perto → a ação FLUTUANTE abre o formulário de indicação, e '
         'ela NÃO está na barra', (tester) async {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       // A outra metade da isca (a). `Perto` é a seção que motivou a decisão:
       // é o único rótulo de CINCO letras e o único que saía cortado a 200%.
@@ -364,7 +364,7 @@ void main() {
               'evento no corpo: os 64 dp não voltaram.',
         );
 
-        await _irPara(tester, 'Perto');
+        await abrirAComunidade(tester);
         expect(
           find.widgetWithText(
             OutlinedButton,
@@ -431,7 +431,7 @@ void main() {
         (tester) async {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       // A única comparação com constante neste arquivo, e ela é o objeto do
       // caso: o rótulo do ícone tem de ser O MESMO que a tela usa para a ação,
       // de uma fonte só. Duas cópias divergem, e no dia em que divergirem
@@ -447,7 +447,7 @@ void main() {
     testWidgets('o rótulo do Perto diz INDICAR, e não cadastrar',
         (tester) async {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       expect(
         ListaDoDiretorio.rotuloDeIndicar.toLowerCase().contains('cadastr'),
         isFalse,
@@ -492,7 +492,7 @@ void main() {
       // `Escanear uma tag` herda o piso de 64 dp de `ItemDeMenu`.
       await _irPara(tester, 'Rede');
       exigirAlvo(Icons.more_time, 'criar evento, na Rede');
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       exigirAlvo(Icons.group_add, 'indicar, no Perto');
     });
   });
@@ -513,7 +513,7 @@ void main() {
     testWidgets('o respiro do pe da lista cobre a invasao MEDIDA da acao',
         (tester) async {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
 
       final fab = tester.getRect(find.byType(AcaoDeCriarFlutuante));
       final lista = find
@@ -568,7 +568,38 @@ void main() {
       );
 
       // E o respiro NAO existe onde nao ha acao flutuante: uma faixa morta de
-      // 72 dp no pe de `Pets` e de `Loja` seria um buraco pago por nada.
+      // 72 dp no pe de uma tela que nao cobre nada seria um buraco pago por
+      // nada.
+      //
+      // **A TELA MEDIDA MUDOU DE `Pets` PARA `Loja` em 19/10/2026**, e a
+      // afirmacao e a mesma. `Pets` GANHOU acao flutuante naquele dia, por
+      // pedido dele (*"so faltou na pagina de pets o botao para adicionar um
+      // novo pet perdido ou escanear a tag, gostei desse padrao"*): sao as
+      // tres acoes que a gaveta perdeu, num alvo so que abre folha. Com
+      // flutuante, `Pets` passou a PRECISAR dos 72 dp -- medir a ausencia
+      // nela seria cobrar o buraco de volta.
+      //
+      // `Loja` e a tela que sobrou sem flutuante entre as da barra, e o
+      // `Mural` tambem esta sem -- mas o `Mural` nao tem lista, entao `Loja`
+      // e a medida certa: ela tem corpo rolavel e nao tem o que cobrir.
+      await _irPara(tester, 'Loja');
+      final listaDaLoja = find
+          .descendant(
+            of: find.byType(Scaffold),
+            matching: find.byType(ListView),
+          )
+          .first;
+      expect(
+        (tester.widget<ListView>(listaDaLoja).padding as EdgeInsets).bottom,
+        BichuEspaco.e4,
+        reason:
+            'REPROVA: `Loja` nao tem acao flutuante e ganhou o respiro dela. '
+            'Sao 72 dp de faixa morta no pe de uma tela que nao cobre nada.',
+      );
+
+      // **E `Pets` TEM o respiro, porque ela passou a ter flutuante.** Sem
+      // esta metade, a mudanca de alvo acima leria como o caso desistindo de
+      // medir `Pets`.
       await _irPara(tester, 'Pets');
       final listaDePets = find
           .descendant(
@@ -578,10 +609,11 @@ void main() {
           .first;
       expect(
         (tester.widget<ListView>(listaDePets).padding as EdgeInsets).bottom,
-        BichuEspaco.e4,
+        greaterThanOrEqualTo(72.0),
         reason:
-            'REPROVA: `Pets` nao tem acao flutuante e ganhou o respiro dela. '
-            'Sao 72 dp de faixa morta no pe de uma tela que nao cobre nada.',
+            'REPROVA: `Pets` tem acao flutuante desde 19/10 e NAO reserva o '
+            'respiro dela. O ultimo cartao de pet perdido termina embaixo do '
+            'alvo de criar, em toda rolagem.',
       );
     });
   });
@@ -622,7 +654,7 @@ void main() {
             'foi esse convite vazio que o cliente mandou tirar.',
       );
 
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       expect(
         find.byType(AcaoDeCriarFlutuante),
         findsNothing,
@@ -725,7 +757,7 @@ void main() {
             'recusa.',
       );
 
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       expect(
         find.byType(AcaoDeCriarFlutuante),
         findsNothing,
@@ -751,7 +783,7 @@ void main() {
             'pode apaga a função.',
       );
 
-      await _irPara(tester, 'Perto');
+      await abrirAComunidade(tester);
       expect(
         _flutuante(Icons.group_add),
         findsOneWidget,

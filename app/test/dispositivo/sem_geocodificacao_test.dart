@@ -1,28 +1,46 @@
-// ADR-0006 — **nao ha geocodificacao no MVP**, e o criterio 8 da BICHUS-23:
-// "CEP e bairro nunca produzem coordenada: ela vem de `device_gps` ou de
-// `map_pin`, e de mais nada".
+// ADR-0006 — geocodificacao, **depois da emenda 1 de 19/10/2026**.
 //
-// A ISCA DESTE ARQUIVO: **a proibicao de geocodificar e hoje uma frase num
-// ADR, e uma frase num ADR nao reprova nada.** Ela e tambem a tentacao mais
-// natural do produto inteiro: o `area_label` sai nulo quando so ha coordenada,
-// e a correcao obvia -- converter o ponto em bairro -- resolve o sintoma em
-// tres linhas e quebra a decisao. `flutter pub add geocoding` e um comando; o
-// pacote e do MESMO publicador do `geolocator`, aparece ao lado dele na
-// primeira busca, e a linha que ele acrescenta ao `pubspec.yaml` passa
-// despercebida numa revisao de diff que esta olhando para a tela.
+// ====================================================================
+// ESTE PORTAO FOI ESTREITADO EM 19/10/2026, E NAO REMOVIDO. LEIA ISTO.
+// ====================================================================
+// O cliente autorizou UM sentido, nas palavras dele: *"autorizar o gps, e
+// trazer algum valor padrao em caso de fallback"*. A emenda 1 do ADR-0006
+// registra a decisao, o que entrou e o que o cliente aceitou em troca.
 //
-// Este portao pega os dois sentidos, porque os dois estao proibidos:
+//   coordenada -> nome de CIDADE   AUTORIZADO, e so por
+//                                  `placemarkFromCoordinates`, so pela porta
+//                                  `lib/dispositivo/localizacao.dart`
+//   endereco   -> coordenada       PROIBIDO, e continua -- e o CEP que "acha"
+//                                  o ponto de quem negou o GPS
 //
-//   coordenada -> endereco  (geocodificacao reversa: o `area_label` nulo)
-//   endereco   -> coordenada  (o CEP que "acha" o ponto de quem negou o GPS)
+// **A PROTECAO MUDOU DE FORMA, e e isso que exige cuidado de quem edita este
+// arquivo.** Ela era a AUSENCIA da dependencia: o codigo para converter nao
+// estava no binario, e nenhuma disciplina era necessaria. Agora o pacote
+// `geocoding` esta declarado, e ele traz os DOIS sentidos no mesmo arquivo
+// (`geocoding-5.0.0/lib/geocoding.dart` expoe `placemarkFromCoordinates` e
+// `locationFromAddress`) -- nao da para importar meio pacote. Entao a
+// protecao passou a ser ASSERCAO SOBRE O USO, que e mais fraca por natureza:
+// ela depende de este arquivo continuar correto.
 //
-// e pega em tres camadas, de fora para dentro:
+// Por isso o sentido proibido ganhou caso PROPRIO, e nao ficou dependendo da
+// lista geral: `camada 2: o sentido PROIBIDO nao aparece em lugar nenhum`.
 //
-//   1. o PACOTE nao esta no `pubspec.yaml` nem no `pubspec.lock`;
-//   2. nenhum FONTE do app nomeia um conversor;
+// A ISCA ORIGINAL continua valendo para o que sobrou, e vale reler por que
+// ela foi escrita: a conversao e *"a tentacao mais natural do produto
+// inteiro"* -- o `area_label` sai nulo quando so ha coordenada, e a correcao
+// obvia resolve o sintoma em tres linhas e quebra a decisao.
+//
+// As tres camadas, de fora para dentro:
+//
+//   1. o PACOTE: nenhum pacote de geocodificacao entra, **com uma excecao
+//      nomeada e datada** (`geocoding`), e a excecao e uma lista de um;
+//   2. os FONTES: ninguem nomeia um conversor, **exceto
+//      `placemarkFromCoordinates` dentro da porta do aparelho**; e o sentido
+//      proibido nao aparece em lugar nenhum;
 //   3. os TIPOS nao se convertem -- `AreaDigitada` nao tem coordenada e
-//      `PontoCapturado` nao tem bairro, e a camada 3 e a que sobrevive ao dia
-//      em que alguem escrever a conversao a mao, sem pacote nenhum.
+//      `PontoCapturado` nao tem bairro. **A camada 3 nao foi tocada pela
+//      emenda, e e a que mais importa agora**: ela sobrevive ao dia em que
+//      alguem escrever a conversao a mao, e ela nao depende de nome nenhum.
 //
 // A camada 3 existe porque as duas primeiras sao portoes de nome: elas pegam
 // quem usa a biblioteca conhecida, e nao pegam quem escreve uma tabela de CEP
@@ -61,7 +79,10 @@ Directory _raizDoRepositorio() {
 /// defesa principal: a defesa que sobrevive a um nome fora da lista e o grupo
 /// dos tipos, no fim deste arquivo.
 const Map<String, String> _pacotesQueGeocodificam = <String, String>{
-  'geocoding': 'converte coordenada em endereco e endereco em coordenada',
+  // `geocoding` SAIU DESTA LISTA em 19/10/2026 e ganhou a excecao nomeada
+  // abaixo (`_pacoteAutorizado`). Ele nao foi apagado da prosa de proposito:
+  // quem procurar por ele aqui tem de ser levado a decisao, e nao encontrar
+  // silencio.
   'geocoder': 'converte coordenada em endereco',
   'flutter_geocoder': 'converte coordenada em endereco',
   'google_maps_webservice': 'traz a API de geocodificacao do Google',
@@ -74,10 +95,58 @@ const Map<String, String> _pacotesQueGeocodificam = <String, String>{
   'brasil_api': 'expoe CEP com coordenada',
 };
 
+/// O UNICO pacote de geocodificacao autorizado, e a decisao que o autoriza.
+///
+/// **Lista de um, e nomeada**, para que acrescentar um segundo seja uma edicao
+/// visivel neste arquivo e nao uma linha no `pubspec.yaml`. O que ele pode
+/// fazer esta em [_funcaoAutorizada]; o que ele NAO pode esta em
+/// [_sentidoProibido], com caso proprio.
+const Map<String, String> _pacoteAutorizado = <String, String>{
+  'geocoding': 'ADR-0006 emenda 1, 19/10/2026: coordenada -> nome de cidade, '
+      'pelo servico de plataforma, autorizado pelo cliente. O sentido inverso '
+      'continua proibido e tem caso proprio neste arquivo.',
+};
+
+/// A unica funcao de conversao que pode ser chamada, e o unico arquivo que
+/// pode chama-la.
+///
+/// O arquivo importa: autorizar a funcao em qualquer lugar do app espalharia a
+/// chamada por telas, e cada tela teria de lembrar do teto de uso e da grade
+/// de 100 m. A porta concentra isso num lugar, e e por isso que ela existe.
+const String _funcaoAutorizada = 'placemarkFromCoordinates';
+const String _arquivoDaPorta = 'lib/dispositivo/localizacao.dart';
+
+/// O sentido que a emenda **nao** autorizou, por nome.
+///
+/// Caso proprio e nao linha numa lista geral: ele e o que sobrou da decisao
+/// original, e ele mora no MESMO pacote que o sentido autorizado -- entao o
+/// unico jeito de ele nao acontecer e alguem nunca escrever estes nomes.
+const Map<String, String> _sentidoProibido = <String, String>{
+  'locationFromAddress': 'endereco -> coordenada: o CEP que "acha" o ponto de '
+      'quem negou o GPS',
+  'placemarkFromAddress': 'endereco -> lugar',
+  'coordenadaDoBairro': 'bairro -> coordenada, escrita a mao',
+  'coordenadaDoCep': 'CEP -> coordenada, escrita a mao',
+  'pontoDoEndereco': 'endereco -> coordenada, escrita a mao',
+};
+
+/// Tira comentario de YAML antes de medir.
+///
+/// Este arquivo e o `pubspec.yaml` EXPLICAM em prosa o que o app faz e nao
+/// faz, e medir o texto cru confundiria a explicacao com a declaracao -- era
+/// assim no caso original e continua sendo.
+String _semComentariosDeYaml(String texto) => texto
+    .split('\n')
+    .map((l) {
+      final i = l.indexOf('#');
+      return i < 0 ? l : l.substring(0, i);
+    })
+    .join('\n');
+
 void main() {
   final raiz = _raizDoRepositorio().path;
 
-  group('camada 1: nenhum pacote de geocodificacao entra no app', () {
+  group('camada 1: so o pacote autorizado entra no app', () {
     final pubspec = File('$raiz/app/pubspec.yaml');
     final lock = File('$raiz/app/pubspec.lock');
 
@@ -88,18 +157,11 @@ void main() {
       expect(lock.existsSync(), isTrue, reason: 'REPROVA: ${lock.path}');
     });
 
-    test('o `pubspec.yaml` nao declara nenhum deles', () {
+    test('o `pubspec.yaml` nao declara nenhum pacote NAO autorizado', () {
       // Os comentarios saem antes da medicao: este arquivo EXPLICA em prosa
       // por que `geocoding` nao entrou, e medir o texto cru confundiria a
       // explicacao com a declaracao.
-      final texto = pubspec
-          .readAsStringSync()
-          .split('\n')
-          .map((l) {
-            final i = l.indexOf('#');
-            return i < 0 ? l : l.substring(0, i);
-          })
-          .join('\n');
+      final texto = _semComentariosDeYaml(pubspec.readAsStringSync());
 
       for (final pacote in _pacotesQueGeocodificam.entries) {
         expect(
@@ -116,7 +178,42 @@ void main() {
       }
     });
 
-    test('o `pubspec.lock` nao traz nenhum deles por transitividade', () {
+    /// E O AUTORIZADO TEM DE ESTAR LA. Sem este caso, o portao voltaria a
+    /// aprovar o app que perdeu o pacote -- e a tela cairia para a reserva
+    /// para sempre, em silencio, que e o defeito mais caro desta frente.
+    ///
+    /// **MEDIDO EM 19/10/2026, e a medicao enfraquece este caso: tirar
+    /// `geocoding` do `pubspec.yaml` reprova ANTES de ele rodar.** O arquivo
+    /// inteiro falha ao CARREGAR, porque a porta do aparelho importa o pacote
+    /// e o importe nao resolve. Na pratica isso e uma garantia mais forte --
+    /// nao da para publicar sem o pacote --, e por isso este caso NAO e o que
+    /// de fato pega essa regressao.
+    ///
+    /// Ele fica por dois motivos: se um dia a porta passar a importar o pacote
+    /// de forma condicional (ou a resolucao migrar para um pacote federado que
+    /// compile ausente), a compilacao para de acusar e este caso passa a ser o
+    /// unico que acusa; e ele mede tambem que a excecao continua sendo de UM,
+    /// que nenhuma compilacao mede.
+    test('o pacote AUTORIZADO esta declarado, e e exatamente um', () {
+      final texto = _semComentariosDeYaml(pubspec.readAsStringSync());
+      for (final pacote in _pacoteAutorizado.entries) {
+        expect(
+          RegExp('^\\s+${RegExp.escape(pacote.key)}\\s*:', multiLine: true)
+              .hasMatch(texto),
+          isTrue,
+          reason: 'REPROVA: `${pacote.key}` saiu do `pubspec.yaml`. '
+              '${pacote.value} Sem ele a cidade nunca resolve e a lista cai '
+              'para a reserva nacional em silencio.',
+        );
+      }
+      expect(
+        _pacoteAutorizado, hasLength(1),
+        reason: 'REPROVA: a excecao virou lista. Ela e de UM, e um segundo '
+            'pacote de geocodificacao e decisao nova, com ADR novo.',
+      );
+    });
+
+    test('o `pubspec.lock` nao traz nenhum NAO autorizado por transitividade', () {
       // O `pubspec.yaml` pega quem declara. O lock pega quem CHEGA -- um
       // pacote novo que puxe `geocoding` como dependencia propria entraria no
       // binario sem nenhuma linha do `pubspec.yaml` mudar, e o `geolocator` e
@@ -157,7 +254,7 @@ void main() {
       );
     });
 
-    test('nenhum importa pacote de geocodificacao', () {
+    test('nenhum importa pacote de geocodificacao NAO autorizado', () {
       for (final fonte in fontes) {
         for (final diretiva in lerDiretivas(fonte.readAsStringSync())) {
           for (final pacote in _pacotesQueGeocodificam.keys) {
@@ -172,19 +269,50 @@ void main() {
       }
     });
 
-    test('nenhum chama um conversor escrito a mao', () {
+    /// E O AUTORIZADO SO ENTRA PELA PORTA.
+    ///
+    /// Importar `package:geocoding/` numa TELA seria espalhar a chamada: cada
+    /// tela teria de lembrar do teto de uso e da grade de 100 m que a porta
+    /// concentra. O pacote esta no binario; o que este caso impede e ele ser
+    /// usado de qualquer lugar.
+    ///
+    /// DESLIGANDO: importe `package:geocoding/geocoding.dart` em
+    /// `lib/telas/perdido/lista_de_perdidos.dart`. Este caso reprova pelo
+    /// nome.
+    test('o pacote autorizado e importado SO pela porta do aparelho', () {
+      for (final fonte in fontes) {
+        for (final diretiva in lerDiretivas(fonte.readAsStringSync())) {
+          for (final pacote in _pacoteAutorizado.keys) {
+            if (!diretiva.uri.startsWith('package:$pacote/')) continue;
+            expect(
+              fonte.path.endsWith(_arquivoDaPorta),
+              isTrue,
+              reason: 'REPROVA: ${fonte.path}:${diretiva.linha} importa '
+                  '`${diretiva.uri}` fora da porta. O unico arquivo que pode '
+                  'e `$_arquivoDaPorta` -- e ele que guarda a memoria de 100 m '
+                  'e traduz os oito motivos de falha. Chame a porta.',
+            );
+          }
+        }
+      }
+    });
+
+    test('nenhum chama um conversor NAO autorizado, escrito a mao', () {
       // A rede para quem escreve a conversao sem pacote. Os nomes sao os que
       // a API do ecossistema usa, e a busca roda sobre o fonte SEM
       // COMENTARIOS, para que este projeto possa explicar em prosa o que nao
       // faz -- que e exatamente o que varios arquivos daqui fazem.
+      //
+      // `placemarkFromCoordinates` SAIU desta lista (emenda 1 do ADR-0006) e
+      // ganhou caso proprio abaixo, que limita ONDE ele pode ser chamado.
+      // `bairroDaCoordenada` e `getAddressFromLatLng` FICAM: a emenda
+      // autorizou coordenada -> CIDADE, e nao coordenada -> bairro nem
+      // coordenada -> endereco. O nivel maximo publico continua bairro+cidade
+      // (ADR-0010), e derivar BAIRRO de coordenada e mais fino que o que a
+      // pessoa escolheu entregar.
       const nomesDeConversao = <String, String>{
-        'placemarkFromCoordinates': 'coordenada -> endereco',
-        'locationFromAddress': 'endereco -> coordenada',
-        'placemarkFromAddress': 'endereco -> lugar',
         'getAddressFromLatLng': 'coordenada -> endereco',
-        'coordenadaDoBairro': 'bairro -> coordenada',
-        'coordenadaDoCep': 'CEP -> coordenada',
-        'bairroDaCoordenada': 'coordenada -> bairro',
+        'bairroDaCoordenada': 'coordenada -> bairro, que a emenda NAO autorizou',
       };
       for (final fonte in fontes) {
         final codigo = semComentarios(fonte.readAsStringSync());
@@ -193,12 +321,66 @@ void main() {
             codigo.contains(nome.key),
             isFalse,
             reason: 'REPROVA: ${fonte.path} chama `${nome.key}` '
-                '(${nome.value}). O ADR-0006 proibe os DOIS sentidos, e nao '
-                'so o do pacote de terceiro: uma conversao escrita a mao '
-                'quebra a mesma decisao e nao aparece em nenhum `pubspec`.',
+                '(${nome.value}). A emenda 1 do ADR-0006 autorizou UM sentido '
+                'e um nivel: coordenada -> nome de CIDADE. Qualquer outra '
+                'conversao segue proibida, escrita a mao inclusive.',
           );
         }
       }
+    });
+
+    /// O CASO QUE A EMENDA OBRIGOU A EXISTIR.
+    ///
+    /// O sentido proibido mora no MESMO pacote que o autorizado, e por isso
+    /// ele deixou de ser impedido pela ausencia da dependencia. Este caso e o
+    /// que sobrou no lugar daquela garantia, e e por isso que ele e separado:
+    /// uma linha numa lista geral some numa edicao distraida.
+    ///
+    /// DESLIGANDO: chame `locationFromAddress` em qualquer arquivo de
+    /// `app/lib` -- inclusive na porta. Este caso reprova pelo nome, e ele
+    /// NAO tem excecao de arquivo: nem a porta pode.
+    test('camada 2: o sentido PROIBIDO nao aparece em lugar nenhum', () {
+      for (final fonte in fontes) {
+        final codigo = semComentarios(fonte.readAsStringSync());
+        for (final nome in _sentidoProibido.entries) {
+          expect(
+            codigo.contains(nome.key),
+            isFalse,
+            reason: 'REPROVA: ${fonte.path} nomeia `${nome.key}` '
+                '(${nome.value}). A emenda 1 do ADR-0006 autorizou SO '
+                'coordenada -> cidade; endereco -> coordenada continua '
+                'proibido, e nao ha arquivo que possa faze-lo -- a porta do '
+                'aparelho inclusive. Se a decisao mudou, ela muda no ADR '
+                'primeiro, e este caso muda junto, no mesmo commit.',
+          );
+        }
+      }
+    });
+
+    /// E O AUTORIZADO SO E CHAMADO PELA PORTA.
+    test('o sentido autorizado e chamado SO pela porta do aparelho', () {
+      var achou = false;
+      for (final fonte in fontes) {
+        final codigo = semComentarios(fonte.readAsStringSync());
+        if (!codigo.contains(_funcaoAutorizada)) continue;
+        achou = true;
+        expect(
+          fonte.path.endsWith(_arquivoDaPorta),
+          isTrue,
+          reason: 'REPROVA: ${fonte.path} chama `$_funcaoAutorizada` fora da '
+              'porta. O unico arquivo que pode e `$_arquivoDaPorta`.',
+        );
+      }
+      // Nao achar o alvo e REPROVACAO, e nao aprovacao por vazio: se ninguem
+      // chama a funcao autorizada, a resolucao de cidade deixou de existir e a
+      // tela caiu para a reserva em silencio.
+      expect(
+        achou,
+        isTrue,
+        reason: 'REPROVA: ninguem chama `$_funcaoAutorizada`. A resolucao de '
+            'cidade saiu do app, e a lista caiu para a reserva nacional sem '
+            'ninguem perceber.',
+      );
     });
   });
 

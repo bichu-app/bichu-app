@@ -15,6 +15,7 @@ import 'package:bichu/telas/casca_com_abas.dart';
 import 'dart:io';
 
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
@@ -194,7 +195,21 @@ Future<void> abrirPerto(
   required Future<http.Response> Function(http.Request) rede,
 }) async {
   await abrirOApp(tester, rede: rede, deposito: depositoLogado());
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+  // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.**
+  //
+  // A secao `Perto` deixou de existir por decisao do cliente: o diretorio
+  // virou a aba `Comunidade` da `Rede`. Tocar em `Perto` na barra nao acha
+  // nada -- o slot nem existe.
+  //
+  // **Este helper e a porta de entrada de SETE arquivos de teste**, e e por
+  // isso que ele faz a navegacao inteira em vez de cada caso repetir os dois
+  // toques: sete copias divergiriam na proxima mudanca de navegacao, e foi
+  // essa concentracao que fez a mudanca de hoje custar UMA edicao aqui.
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -1519,7 +1534,7 @@ void main() {
       final antesDeSair = urls.length;
       await tester.tap(find.widgetWithText(NavigationDestination, 'Loja'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await abrirAComunidade(tester);
       await tester.pumpAndSettle();
 
       final depoisDeVoltar = urls.sublist(antesDeSair);
@@ -1567,7 +1582,8 @@ void main() {
   // controles de listagem subindo junto -- o cliente pediu a busca em largura
   // total NO CORPO, e esta rodada nao mexeu nisso.
   // -------------------------------------------------------------------------
-  testWidgets('a `AppBar` do Perto tem indicar e filtros, e nada mais',
+  testWidgets(
+      'a `AppBar` da aba `Comunidade` tem SO o sino, e a foto no `leading`',
       (tester) async {
     await abrirPerto(
       tester,
@@ -1579,34 +1595,48 @@ void main() {
       ),
     );
 
-    // DUAS -> TRES em 19/10, e a terceira e a foto da conta.
+    // ========================================================================
+    // DUAS -> TRES -> UMA, em tres dias, e as tres mudancas sao DELE
+    // ========================================================================
     //
-    // O cliente pos a foto da pessoa na barra de topo de **todas** as paginas
-    // e tirou `Perfil` da barra de baixo. A conta em 320 dp fecha porque a
-    // foto tem alvo de 48 dp, e nao 64: hamburguer 64 + indicar 64 +
-    // `Filtros` 64 + foto 48 = 240, e sobram 48,00 dp de titulo medidos --
-    // `Perto` pede 47,95. Passa por 0,05 dp, e foi `titleSpacing: 0` que
-    // devolveu os 16 dp do vao padrao para o titulo caber inteiro.
+    // 18/10: a porta de INDICAR subiu para a barra. Eram DUAS acoes.
+    // 19/10, manha: a foto da conta entrou no lado direito (TRES), e logo
+    //        depois `criar` desceu para o corpo como acao flutuante
+    //        (*"O botao criar sai da barra"*) e o sino entrou -- sino + foto.
+    // 19/10, tarde: a foto foi para o slot do hamburguer (*"colocar o icone
+    //        do usuario no lugar do menu, do lado esquerdo da pagina e o icone
+    //        de notificacao vai ficar na barra principal do lado direito de
+    //        todas as paginas"*). Sobrou UMA acao: o sino.
     //
-    // **O teto segue sendo um teto**: um QUARTO controle leva o titulo a 0,00
-    // dp (medido), e e por isso que o numero esta travado aqui.
+    // **O teto continua sendo um teto, e ele ficou MAIS folgado.** Com foto 48
+    // a esquerda e sino 48 a direita, o titulo recebe **224,00 dp** em 320 dp
+    // a 200% -- medido em `gaveta_com_submenus_test.dart`. A conta antiga
+    // (hamburguer 64 + indicar 64 + `Filtros` 64 + foto 48 = 240, sobrando
+    // 48,00 dp de titulo) nao existe mais: cada controle que voltar para a
+    // barra custa 48 ou 64 daqueles 224.
     final barra = tester.widget<AppBar>(find.byType(AppBar));
     expect(
-      barra.actions ?? const <Widget>[],
-      hasLength(2),
-      reason: 'REPROVA: o lado direito da barra do `Perto` nao tem exatamente '
-          'DUAS acoes. Sao a porta de indicar (18/10) e a foto da conta '
-          '(19/10) -- o acesso a folha de filtro saiu da barra em 19/10 e '
-          'voltou para o topo do corpo, por decisao do cliente. UMA significa '
-          'que uma sumiu; TRES significa que o filtro voltou para a barra, e '
-          'ai o titulo do `Perto` perde os 64 dp de que ele ja nao tem folga.',
+      (barra.actions ?? const <Widget>[]).map((a) => a.runtimeType).toList(),
+      <Type>[SinoDeNotificacoes],
+      reason: 'REPROVA: o lado direito da barra nao e exatamente um '
+          '`SinoDeNotificacoes`. A porta de indicar e a acao FLUTUANTE desta '
+          'aba desde 19/10, o acesso a folha de filtro voltou para o topo do '
+          'corpo, e a foto foi para o `leading`. Cada controle que volta para '
+          'ca custa 48 ou 64 dp dos 224,00 do titulo.',
     );
     expect(
-      barra.actions!.last,
+      barra.leading,
       isA<AvatarDaConta>(),
-      reason: 'REPROVA: a foto da conta nao e o ULTIMO controle do lado '
-          'direito. Ela esta em todas as telas, sempre no mesmo lugar: '
-          'controle que varia por tela nao empurra o que nao varia.',
+      reason: 'REPROVA: a foto da conta nao esta no slot da ESQUERDA. Ela '
+          'assumiu o lugar do hamburguer em 19/10, e a ausencia dela a direita '
+          'nao e a entrega -- a entrega e ela do outro lado.',
+    );
+    expect(
+      barra.leadingWidth,
+      AvatarDaConta.alvo,
+      reason: 'REPROVA: a reserva do `leading` deixou de ser '
+          '${AvatarDaConta.alvo} dp. O hamburguer tinha piso de 64 (11.23.1) e '
+          'a foto tem 48 (SC 2.5.8): sao 16,00 dp que foram para o titulo.',
     );
 
     expect(
@@ -1615,9 +1645,9 @@ void main() {
         matching: find.byType(TextField),
       ),
       findsNothing,
-      reason: 'REPROVA: a busca subiu para a barra de topo. O cliente pediu o '
-          'campo de busca em LARGURA TOTAL no corpo da tela, e a rodada de '
-          '18/10 subiu so a acao de criar.',
+      reason: 'REPROVA: a busca subiu para a barra de topo. O campo mora no '
+          'corpo, na primeira linha, e desde 19/10 o gatilho de filtro esta a '
+          'DIREITA dele -- na mesma linha, no corpo.',
     );
   });
 }

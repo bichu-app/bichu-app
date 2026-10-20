@@ -34,6 +34,7 @@ import 'dart:io';
 import 'dart:ui' show Tristate;
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_colors.dart';
@@ -83,10 +84,17 @@ const List<double> larguras = <double>[320, 360, 375, 390, 412];
 /// O caso nao foi apagado nem afrouxado: ele continua comparando a barra
 /// montada contra uma lista escrita a mao, que e o que faz um rotulo novo
 /// precisar ser medido antes de entrar.
+// **19/10/2026: `Perto` SAIU DA BARRA e `Mural` ENTROU.** `Perto` deixou de
+// ser secao por decisao do cliente -- o conteudo dela virou a aba `Comunidade`
+// da `Rede` --, e `Mural` ficou com o slot 3.
+//
+// A ordem anterior (`Pets · Perto · Rede · Loja · AuAu`) veio do pedido dele
+// de 18/10 (*"inverta a ordem no app do item rede e perto"*). Essa inversao foi
+// ABSORVIDA: sem `Perto` na barra nao ha par para inverter.
 const List<String> ordemDecidida = <String>[
   'Pets',
-  'Perto',
   'Rede',
+  'Mural',
   'Loja',
   'AuAu',
 ];
@@ -114,8 +122,8 @@ const List<String> ordemDecidida = <String>[
 // passou a dizer a ordem da uniao.
 const List<String> registroCompleto = <String>[
   'Pets',
-  'Perto',
   'Rede',
+  'Mural',
   'Loja',
   'AuAu',
   'Perfil',
@@ -143,10 +151,18 @@ const List<String> registroCompleto = <String>[
 /// As tres primeiras reprovam nas CINCO larguras suportadas, e nao so em 320.
 /// `AuAu` e a unica viavel das palavras dele. A palavra clara nao se perdeu:
 /// ela e o `reforcoAcessivel`, e o leitor de tela anuncia `AuAu, mensagens`.
+/// `Perto` (47,95 dp) SAIU da tabela porque saiu da BARRA (19/10/2026), e
+/// `Mural` entrou MEDIDO: **50,90 dp num slot de 64,00**, com 13,10 dp de
+/// folga. Ele passa em 320, 375 e 412 dp.
+///
+/// **`Comunidade` foi medida nesta mesma bancada e REPROVOU: 113,25 dp**, quase
+/// o dobro do slot. E por isso que ela e ABA da `Rede` e nao nome de secao --
+/// a mesma parede que recusou `Mensagens` (103,67 dp nesta bancada). A decisao
+/// de chamar a secao reunida de `Rede` saiu desta medida e nao de gosto.
 const Map<String, double> larguraMedidaPelaUx = <String, double>{
   'Pets': 39.20,
   'Rede': 45.08,
-  'Perto': 47.95,
+  'Mural': 50.90,
   'Loja': 37.15,
   'AuAu': 49.33,
 };
@@ -713,95 +729,145 @@ void main() {
       );
     });
 
-    testWidgets('a casca TEM a gaveta lateral, e ela abre pelo botao',
+    testWidgets(
+        'ISCA — a casca NAO tem gaveta, e nenhuma tela desenha o hamburguer',
         (tester) async {
-      // ISCA INVERTIDA — BICHUS-234, decisao do cliente de 22/09.
+      // ================================================================
+      // ISCA INVERTIDA PELA **TERCEIRA** VEZ, e as tres sao decisoes dele
+      // ================================================================
       //
-      // Em 21/09 a recomendacao medida era NAO ter gaveta, e o portao daquele
-      // dia vigiava a ausencia dela. Em 22/09 o cliente pediu a gaveta duas
-      // vezes, a segunda depois de ler o argumento contra, e a decisao dele
-      // prevalece. Este caso e o mesmo portao virado: ele reprova quem TIRAR
-      // a gaveta da casca.
+      // 21/09: a recomendacao MEDIDA era nao ter gaveta, e o portao daquele
+      //        dia vigiava a AUSENCIA dela.
+      // 22/09: o cliente pediu a gaveta, duas vezes, a segunda depois de ler
+      //        o argumento contra. O portao foi virado: passou a reprovar
+      //        quem TIRASSE a gaveta.
+      // 17/10: ele pediu o hamburguer FIXO em toda tela (*"padronize todas as
+      //        telas, tornando o menu esquerdo fixo para manter o padrao, por
+      //        mais que nao exista um sub-menu ainda, mas irei evoluir e
+      //        acrescentar alguns itens"*).
+      // 19/10: ele mandou OCULTAR o menu: *"vamos ocultar o menu por
+      //        enquanto, pois nao esta sendo utilizado para nada. colocar o
+      //        icone do usuario no lugar do menu, do lado esquerdo da pagina
+      //        e o icone de notificacao vai ficar na barra principal do lado
+      //        direito de todas as paginas"*.
       //
-      // Ele existe porque a gaveta e facil de perder sem querer. Ela nao tem
-      // controle proprio na arvore quando esta fechada, nenhuma tela quebra
-      // sem ela, e o `drawer:` do `Scaffold` da casca e uma linha que
-      // desaparece numa refatoracao sem deixar rastro na tela. Sem isca, a
-      // decisao do cliente valeria ate o proximo diff grande.
+      // **Este caso e o portao virado de volta.** Ele nao foi apagado e nao
+      // foi afrouxado: ele continua medindo a MESMA coisa -- se a casca tem
+      // gaveta e se ha caminho para abri-la --, e o que mudou e o veredicto.
+      //
+      // **Quem ler isto em tres meses: nenhuma das quatro e defeito.** A
+      // palavra dele em 19/10 e *"por enquanto"*, e e por isso que a gaveta
+      // foi OCULTADA e nao apagada -- `GavetaDeSecoes`, `BotaoDaGaveta`,
+      // `ControleDaGaveta` e o inventario de 27.5 continuam no repositorio.
+      // Reinstalar e devolver o `drawer:` a casca e o `leading` a `TelaDeAba`.
+      //
+      // **A PARTE QUE NAO PODE SER ESQUECIDA, e ela tem portao proprio:** a
+      // gaveta tinha SETE itens vivos, e ocultar o menu por cima deles
+      // perderia funcao em silencio. Dois deles -- `Pedidos de conexao` e
+      // `Pessoas bloqueadas` -- tinham a gaveta como UNICA porta em `lib/`.
+      // O grupo `os sete itens vivos continuam alcancaveis`, em
+      // `gaveta_oculta_e_barra_nova_test.dart`, mede um caso por item.
       await abrirOApp(tester, rede: _semServidor);
-      // **A ABA DE ARRANQUE E `Rede` DESDE 18/10/2026** (pedido do cliente), e a
-      // `Rede` nao tem sub-destino: sem sub-destino nao ha gaveta e nao ha
-      // gatilho (a segunda metade de `comGaveta`, neste mesmo arquivo de
-      // producao). O caso fala da gaveta da casca, entao vai a uma secao que
-      // tem uma.
       await abrirAAba(tester, 'Pets');
 
+      // (1) NENHUM `Scaffold` da arvore declara gaveta.
+      //
+      // **A medida e sobre a ARVORE INTEIRA e nao sobre a casca**, de
+      // proposito: declarar o `drawer:` numa tela de dentro traria a gaveta
+      // de volta por outro caminho, e com um defeito a mais -- a cortina
+      // modal deixaria de bloquear a barra de baixo, e os cinco destinos
+      // continuariam tocaveis pelo leitor de tela com a gaveta aberta.
       final comGaveta = tester
           .widgetList<Scaffold>(find.byType(Scaffold))
           .where((s) => s.drawer != null)
           .toList();
       expect(
         comGaveta,
-        hasLength(1),
-        reason: 'REPROVA: a casca esta sem gaveta, ou com mais de uma. O '
-            'cliente pediu a gaveta em 22/09, depois de ler a recomendacao '
-            'contra, e ela mora no MESMO `Scaffold` da barra de baixo -- e '
-            'so nele. Montada na tela de dentro, a cortina modal deixa de '
-            'bloquear a barra de baixo e os cinco destinos continuam '
-            'tocaveis pelo leitor de tela com a gaveta aberta.',
-      );
-      expect(
-        comGaveta.single.drawer,
-        isA<GavetaDeSecoes>(),
-        reason: 'REPROVA: a casca tem gaveta, e nao e a `GavetaDeSecoes`. '
-            'Uma gaveta qualquer nao carrega a divisao entre os dois menus '
-            'nem a regra de nao renderizar o que nao existe.',
+        isEmpty,
+        reason: 'REPROVA: ha ${comGaveta.length} `Scaffold` com `drawer:` na '
+            'arvore. O cliente mandou ocultar o menu em 19/10/2026, e '
+            '`Scaffold` sem `drawer` e o que torna a ausencia ESTRUTURAL: '
+            'sem ele nao ha `openDrawer`, nao ha arrasto de borda e nao ha '
+            'hamburguer automatico. Esconder um botao deixando o `drawer:` no '
+            'lugar e ausencia que depende de alguem lembrar.',
       );
 
-      // O PRECO que o cliente aceitou junto com a gaveta, parte 1: ela nao
-      // abre por arrasto de borda. No iOS a borda esquerda ja e o voltar
-      // deste app, e no Android o voltar por gesto sai das duas bordas.
-      // Religar este padrao e a forma silenciosa de a gaveta voltar a brigar
-      // com o gesto do sistema em toda tela de secao.
-      expect(
-        comGaveta.single.drawerEnableOpenDragGesture,
-        isFalse,
-        reason: 'REPROVA: a gaveta voltou a abrir por arrasto de borda. O '
-            'padrao do Flutter e `true`, entao isto regride sozinho quando '
-            'alguem reescreve o `Scaffold` da casca.',
-      );
-
-      // O PRECO, parte 2: com o arrasto desligado, o botao da barra de topo e
-      // o UNICO jeito de abrir. Declarar o `drawer:` e nao desenhar o gatilho
-      // deixaria os submenus inalcancaveis, e o caso acima, sozinho, passaria.
+      // (2) NENHUM `Drawer` montado, em nenhuma das cinco secoes.
       //
-      // O rotulo esta escrito a mao, com acento, e NAO lido de
-      // `TextosDaGaveta`: comparar o texto renderizado com a constante que o
-      // produz aprovaria qualquer troca de palavra.
-      //
-      // Ele era `Abrir os atalhos das seções` ate 22/09 e mudou em 23/09, com
-      // a gaveta: ela deixou de ser o indice das cinco secoes e passou a ser o
-      // submenu da secao atual, entao o nome acessivel do gatilho passou a
-      // dizer isso. A troca reprovou AQUI antes de ser escrita, que e o
-      // servico que este literal presta.
-      final gatilho = find.byTooltip('Abrir o submenu desta seção');
+      // Sem o `drawer:` nao deveria haver `Drawer` nenhum -- mas um `Drawer`
+      // montado como filho comum do corpo passaria pela medida (1) e
+      // apareceria na tela. Esta linha fecha isso, e ela varre as CINCO
+      // secoes: a gaveta era da secao ATUAL, e uma sobra ficaria escondida
+      // numa delas.
+      // **AS QUATRO QUE SAO RAMO, e `AuAu` FORA de proposito.** O slot de
+      // `AuAu` nao e ramo: ele EMPURRA `Rotas.mensagens`, e a tela de
+      // mensagens cobre a casca -- depois dele nao ha barra de baixo na
+      // arvore para tocar na proxima secao. A area de mensagens tambem nao e
+      // raiz de secao (ela tem `Voltar` no slot da esquerda), entao ela nunca
+      // teve hamburguer para perder.
+      final ramosNaBarra = ordemDecidida
+          .where((r) => CascaComAbas.destinos
+              .singleWhere((d) => d.rotulo == r)
+              .ehRamo)
+          .toList();
       expect(
-        gatilho,
-        findsOneWidget,
-        reason: 'REPROVA: a raiz de secao nao tem o gatilho da gaveta na '
-            'barra de topo. Sem ele a gaveta existe na arvore e nao abre por '
-            'caminho nenhum.',
+        ramosNaBarra,
+        hasLength(4),
+        reason: 'REPROVA: a barra tem ${ramosNaBarra.length} ramo(s) e nao 4. '
+            'Com outro numero, a varredura abaixo deixou de cobrir uma secao '
+            'ou passou a tocar num slot que empurra rota -- e nos dois casos '
+            'ela mede menos do que diz medir.',
       );
+      for (final secao in ramosNaBarra) {
+        await abrirAAba(tester, secao);
+        expect(
+          find.byType(Drawer),
+          findsNothing,
+          reason: 'REPROVA: a secao `$secao` tem um `Drawer` montado na '
+              'arvore.',
+        );
+        // (3) E NENHUM GATILHO para abrir uma.
+        //
+        // **Por TIPO e por TOOLTIP, e as duas medidas sao diferentes.** O
+        // tipo pega `BotaoDaGaveta` de volta; o tooltip pega um hamburguer
+        // novo, escrito a mao, que nao usasse aquela classe -- inclusive o
+        // que o `Scaffold` desenha sozinho quando ha `drawer:`.
+        expect(
+          find.byType(BotaoDaGaveta),
+          findsNothing,
+          reason: 'REPROVA: `BotaoDaGaveta` voltou a ser desenhado em '
+              '`$secao`.',
+        );
+        expect(
+          find.byTooltip('Abrir o submenu desta seção'),
+          findsNothing,
+          reason: 'REPROVA: ha um gatilho de gaveta na barra de topo de '
+              '`$secao`. O literal esta escrito A MAO, com acento, e NAO lido '
+              'de `TextosDaGaveta`: comparar o renderizado com a constante '
+              'que o produz aprovaria qualquer troca de palavra.',
+        );
+        expect(
+          find.byIcon(Icons.menu),
+          findsNothing,
+          reason: 'REPROVA: ha um glifo de hamburguer na secao `$secao`. '
+              'Este e o desenho que o `Scaffold` usa sozinho quando acha um '
+              '`drawer:`, e tambem o primeiro que alguem escreveria a mao.',
+        );
+      }
 
-      await tester.tap(gatilho);
-      await tester.pumpAndSettle();
+      // (4) E A FOTO ESTA NO LUGAR QUE ERA DO HAMBURGUER.
+      //
+      // A ausencia sozinha nao e a entrega: o cliente nao mandou esvaziar o
+      // slot da esquerda, ele mandou POR A FOTO nele. Sem esta linha, uma
+      // barra de topo com a esquerda vazia passaria nas tres medidas acima.
+      await abrirAAba(tester, 'Pets');
+      final barra = tester.widget<AppBar>(find.byType(AppBar));
       expect(
-        find.byType(Drawer),
-        findsOneWidget,
-        reason: 'REPROVA: o gatilho existe e nao abriu a gaveta. A prova '
-            'deste caso e o comportamento, e nao a declaracao: `drawer:` '
-            'preenchido com o gatilho apontando para o `Scaffold` errado '
-            'passa na leitura do widget e falha no aparelho.',
+        barra.leading,
+        isA<AvatarDaConta>(),
+        reason: 'REPROVA: o `leading` da barra de topo nao e a foto da conta. '
+            'Literal dele (19/10): "colocar o icone do usuario no lugar do '
+            'menu, do lado esquerdo da pagina".',
       );
     });
 
@@ -1656,13 +1722,22 @@ void main() {
             'contrato.',
       );
 
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      // **A SEGUNDA PORTA ERA O RODAPE DO `Perto`, e `Perto` DEIXOU DE SER
+      // SECAO em 19/10.** O diretorio virou a aba `Comunidade` da `Rede`, e e
+      // la que o rodape apareceria se voltasse -- o caso segue o conteudo e
+      // nao o nome da secao.
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo),
+      );
       await tester.pumpAndSettle();
       expect(
         find.text('Pets de ONGs para adoção'),
         findsNothing,
-        reason: 'REPROVA: a porta das ONGs voltou ao rodape do `Perto`. Ela '
-            'levava a mesma tela em construcao que a de `Pets`.',
+        reason: 'REPROVA: a porta das ONGs voltou ao rodape do diretorio, '
+            'hoje a aba `Comunidade` da `Rede`. Ela levava a mesma tela em '
+            'construcao que a de `Pets`.',
       );
     });
 

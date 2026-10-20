@@ -65,6 +65,33 @@ const Map<String, String> _quemPodeUsarAPorta = <String, String>{
   // por isso que a segunda trava deste grupo existe -- ela mede a CHAMADA, e
   // nao o import, e deixaria este arquivo passar sozinha.
   'api/modelos_localizacao.dart': 'usa os tipos de ponto, nao o aparelho',
+  // ACRESCENTADO EM 19/10/2026, e deliberadamente -- emenda 1 do ADR-0006,
+  // decisao do cliente: *"autorizar o gps, e trazer algum valor padrao em caso
+  // de fallback"*.
+  //
+  // **E A PRIMEIRA TELA DA LISTA, e o paragrafo acima diz que isso costuma
+  // estar errado**: *"uma tela que precise falar com a porta direto esta
+  // contornando a peca, e ai o tratamento dos cinco motivos de falha passa a
+  // existir em dois lugares"*. A objecao e boa e foi conferida antes de este
+  // nome entrar. Ela nao se aplica aqui, por dois motivos:
+  //
+  // 1. **`CapturaDeLocalizacao` resolve outro problema.** Ela e a peca de
+  //    FORMULARIO do "onde" de um caso ou de um achado: ela captura um PONTO,
+  //    oferece o bairro digitado como alternativa e devolve os dois para o
+  //    corpo da requisicao. A pagina de pets nao captura ponto e nao manda
+  //    ponto a lugar nenhum -- ela resolve um NOME DE CIDADE para preencher um
+  //    filtro de listagem, e a coordenada nunca sai do aparelho. Embutir a
+  //    peca aqui poria um formulario de endereco dentro de uma lista.
+  //
+  // 2. **O tratamento dos motivos NAO esta em dois lugares, e e por desenho.**
+  //    `cidadeAproximada` colapsa os OITO motivos num `CidadeNaoResolvida`, e
+  //    o que esta tela faz com ele e literalmente nada: ela ja esta pintada
+  //    com a reserva. Nao ha um `switch` de motivo nesta tela -- ha um
+  //    `case CidadeNaoResolvida(): return`. O lugar unico onde os motivos sao
+  //    distinguidos continua sendo a porta.
+  'telas/perdido/lista_de_perdidos.dart':
+      'resolve a CIDADE para preencher o filtro (ADR-0006 emenda 1); nao '
+          'captura ponto e nao distingue motivo',
 };
 
 /// Como se obtem a porta de verdade: pelo escopo, ou nomeando a implementacao.

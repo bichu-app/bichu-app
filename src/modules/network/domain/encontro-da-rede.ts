@@ -195,6 +195,44 @@ export interface TeaserDoPrivado {
   readonly status: StatusDoEncontro;
 }
 
+/**
+ * O encontro na lista do DONO (`MyNetworkEvent`, 19/10/2026): **exatamente
+ * sete propriedades**. Lista permitida, como o teaser: esta interface cobra o
+ * codigo e o `additionalProperties: false` do contrato cobra o documento.
+ *
+ * Nao estende `CamposDoEncontroProjetados`: a projecao do dono responde "qual
+ * dos meus encontros e este, e da para cancelar?", e nao "como e este
+ * encontro?". Herdar a projecao publica e apagar o que sobra deixa passar campo
+ * novo -- e o mesmo motivo pelo qual `projetarTeaser` nao deriva dela.
+ *
+ * **Nao ha campo de versao aqui.** A versao sai no `ETag`, e so la: dois
+ * lugares para o mesmo numero divergiriam, e o contrato declara esta forma sem
+ * ele.
+ */
+export interface MeuEncontroProjetado {
+  readonly slug: string;
+  readonly title: string;
+  readonly cover: CapaDoMeuEncontroProjetada | null;
+  readonly starts_at: string;
+  readonly ends_at: string | null;
+  readonly time_zone: string;
+  readonly status: StatusDoEncontro;
+}
+
+/**
+ * A capa do dono (`MyNetworkEventCover`): a imagem e o que aconteceu com ela.
+ *
+ * **Ela NAO tem equivalente na projecao publica**, e a assimetria e o motivo de
+ * a operacao de dono ser separada da agenda: `processing` e `rejected` sao
+ * estado de processamento, e estado de processamento de imagem e assunto entre
+ * quem enviou e o servidor.
+ */
+export interface CapaDoMeuEncontroProjetada {
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly url: string | null;
+  readonly rejection_reason: string | null;
+}
+
 /** O que a agenda e o detalhe devolvem: publico inteiro ou teaser. */
 export type EncontroProjetado = EncontroPublicoProjetado | TeaserDoPrivado;
 
@@ -399,6 +437,69 @@ export function projetarTeaser(encontro: EncontroDaRede, agora: Instant): Teaser
 export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): EncontroProjetado {
   if (encontro.visibilidade === 'private') return projetarTeaser(encontro, agora);
   return { ...camposProjetados(encontro, agora), visibility: 'public' };
+}
+
+/**
+ * A capa como a LEITURA do dono a entrega.
+ *
+ * Declarada aqui, no dominio, e nao importada da porta: o dominio nao depende
+ * de `ports/`, e esta forma e a fronteira entre a consulta e a projecao. A
+ * porta usa os mesmos tres campos, e o compilador liga as duas no adaptador.
+ */
+export interface CapaDaLeituraDoDono {
+  readonly estado: 'processing' | 'ready' | 'rejected';
+  readonly url: string | null;
+  readonly motivoDaRecusa: string | null;
+}
+
+/**
+ * A projecao do DONO, **construida** com as sete propriedades e nenhuma outra.
+ *
+ * Vale para o item de `listMyNetworkEvents` e para `getMyNetworkEvent`: o corpo
+ * dos dois e o mesmo, e a segunda operacao existe pela VERSAO no `ETag` e nao
+ * por ter mais conteudo.
+ *
+ * **Sem `visibility`**, e a ausencia e deliberada: todo encontro da comunidade
+ * nasce publico e o autor nao pode mudar isso. Se o painel tiver tornado um
+ * deles privado, o dono continua vendo a propria lista igual -- o teaser esconde
+ * o lugar de quem NAO foi admitido, nunca de quem criou o encontro --, e esta
+ * projecao nao carrega lugar nenhum de todo jeito.
+ *
+ * `status` vem de `statusDoEncontro`, a MESMA funcao da agenda: o rotulo do
+ * cancelado e calculado num lugar so, e por isso a lista do dono e a vitrine
+ * publica nunca discordam sobre o estado do mesmo encontro.
+ */
+export function projetarMeuEncontro(
+  encontro: EncontroDaRede,
+  capa: CapaDaLeituraDoDono | null,
+  agora: Instant,
+): MeuEncontroProjetado {
+  return {
+    slug: encontro.slug,
+    title: encontro.title,
+    // A capa e a imagem de posicao 0, na derivada de 1024 -- a mesma do cartao
+    // da agenda. Nao ha `cover_banner_url`: a capa de borda a borda e do
+    // detalhe, e a lista do dono nao tem detalhe.
+    //
+    // **O ESTADO VEM DA CONSULTA DO DONO, e nao de `encontro.imagens`.**
+    // `imagens` so carrega o que esta `ready` com chave publica -- e exatamente
+    // por isso a recusa era invisivel: ela nao chegava nem a aparecer como
+    // ausencia distinguivel de "sem capa". `null` aqui e "este encontro nao tem
+    // capa"; `processing` e "tem, e o worker nao terminou"; `rejected` e "tem, e
+    // nao serviu", e a frase do servidor diz por que.
+    cover:
+      capa === null
+        ? null
+        : {
+            status: capa.estado,
+            url: capa.url,
+            rejection_reason: capa.motivoDaRecusa,
+          },
+    starts_at: comoIso(encontro.startsAt),
+    ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
+    time_zone: encontro.timeZone,
+    status: statusDoEncontro(encontro, agora),
+  };
 }
 
 /** O conteudo oculto, para `getNetworkEventPrivateDetails`. So quem chama sabe se pode. */

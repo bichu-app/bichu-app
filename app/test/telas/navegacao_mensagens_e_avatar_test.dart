@@ -28,6 +28,8 @@
 // caso `o slot de mensagens leva a um destino que EXISTE` passa a cobrar a
 // rota de verdade, e e o unico caso deste arquivo que muda.
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/telas/notificacoes/caixa_de_notificacoes.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -383,10 +385,21 @@ void main() {
   // `TelaDeAba` (`app/lib/telas/casca_com_abas.dart`), que e como ele estava
   // ate hoje. Os casos deste grupo reprovam.
   group('(b2) o sino de notificacoes', () {
-    testWidgets('o sino esta na barra, ANTES da foto, em toda secao',
+    testWidgets('o sino esta na barra, e SOZINHO no lado direito',
         (tester) async {
-      // O lado direito e sino + foto, e a ordem importa: a foto e o controle
-      // mais estavel da barra e fecha ela.
+      // **O LADO DIREITO MUDOU EM 19/10/2026, e a decisao e dele.**
+      //
+      // Era sino + foto, e a ordem importava (a foto fechava a barra). O
+      // cliente mandou a foto para o slot do hamburguer (*"colocar o icone do
+      // usuario no lugar do menu, do lado esquerdo da pagina e o icone de
+      // notificacao vai ficar na barra principal do lado direito de todas as
+      // paginas"*), e `actions` ficou com UM item.
+      //
+      // **O caso nao foi afrouxado:** ele continua medindo o sino na barra, o
+      // GLIFO pintado, e agora tambem que ele e o UNICO ali -- que e a
+      // afirmacao mais forte do que "ele vem antes da foto". Os 48 dp que a
+      // foto devolveu estao na conta do orcamento do titulo, em
+      // `gaveta_com_submenus_test.dart`.
       await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
 
       for (var i = 0; i < 4; i++) {
@@ -415,18 +428,21 @@ void main() {
 
         final barra = tester.widget<AppBar>(find.byType(AppBar));
         final acoes = barra.actions ?? const <Widget>[];
-        final posSino = acoes.indexWhere((a) => a is SinoDeNotificacoes);
-        final posFoto = acoes.indexWhere((a) => a is AvatarDaConta);
         expect(
-          posSino,
-          isNonNegative,
-          reason: 'REPROVA: no slot $i o sino nao esta no `actions` da barra.',
+          acoes.map((a) => a.runtimeType).toList(),
+          <Type>[SinoDeNotificacoes],
+          reason: 'REPROVA: no slot $i o lado direito da barra nao e '
+              'exatamente um `SinoDeNotificacoes`. A foto saiu para o '
+              '`leading` em 19/10 e `criar` saiu da barra no mesmo dia; cada '
+              'controle que volta para ca custa 48 ou 64 dp do titulo.',
         );
+        // E A FOTO ESTA NO `leading`, no slot que era do hamburguer: a
+        // ausencia dela a direita nao e a entrega -- a entrega e ela do outro
+        // lado.
         expect(
-          posSino < posFoto,
-          isTrue,
-          reason: 'REPROVA: no slot $i o sino esta DEPOIS da foto. Ele entrou '
-              'no slot que a porta de criar deixou, que vinha antes dela.',
+          barra.leading,
+          isA<AvatarDaConta>(),
+          reason: 'REPROVA: no slot $i a foto nao esta no `leading`.',
         );
       }
     });
@@ -615,38 +631,66 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  group('(c) a gaveta e FIXA, inclusive sem submenu', () {
-    // **O caso que o cliente mandou padronizar.** `Rede` e `Loja` nao tem
-    // nenhum sub-destino construido, e antes de 19/10 elas nao montavam gaveta
-    // nem desenhavam o hamburguer. Ele reverteu isso de propria vontade.
-    for (var i = 0; i < 4; i++) {
-      testWidgets('a secao no slot $i desenha o gatilho da gaveta',
-          (tester) async {
-        await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+  group('(c) a gaveta foi OCULTADA, e o conteudo dela ficou inteiro', () {
+    // ========================================================================
+    // ESTE GRUPO FOI VIRADO EM 19/10/2026, e e a segunda vez em dois dias
+    // ========================================================================
+    //
+    // 17/10: o cliente mandou o menu esquerdo ser FIXO em todas as telas
+    //        (*"padronize todas as telas, tornando o menu esquerdo fixo para
+    //        manter o padrao, por mais que nao exista um sub-menu ainda, mas
+    //        irei evoluir e acrescentar alguns itens"*), e este grupo nasceu
+    //        cobrando isso.
+    // 19/10: ele mandou OCULTAR (*"vamos ocultar o menu por enquanto, pois nao
+    //        esta sendo utilizado para nada. colocar o icone do usuario no
+    //        lugar do menu"*).
+    //
+    // **Reversao DELE, do dia seguinte, e nao descuido de quem apagou o
+    // gatilho.** A gaveta foi OCULTADA e nao apagada -- a palavra e *"por
+    // enquanto"* --, e `GavetaDeSecoes`, `BotaoDaGaveta` e o inventario de 27.5
+    // continuam no repositorio.
+    //
+    // **O QUE SOBROU AQUI e a metade que a reinstalacao vai precisar:** que o
+    // conteudo dela esta inteiro. A AUSENCIA do gatilho e do `drawer:` nas
+    // quatro secoes e medida em `casca_de_cinco_secoes_test.dart`, e a
+    // alcancabilidade dos sete itens vivos em
+    // `gaveta_oculta_e_barra_nova_test.dart`.
+    testWidgets('nenhuma secao da barra desenha o gatilho da gaveta',
+        (tester) async {
+      // O caso virado: ele cobrava o gatilho em cada um dos quatro slots, e
+      // agora cobra a ausencia nos quatro. Mesma varredura, veredicto oposto.
+      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
+      for (var i = 0; i < 4; i++) {
         await tester.tap(find.byType(NavigationDestination).at(i));
         await tester.pumpAndSettle();
-
         expect(
           find.byType(BotaoDaGaveta),
-          findsOneWidget,
-          reason: 'REPROVA: a secao do slot $i nao desenha o gatilho da '
-              'gaveta. O cliente mandou o menu esquerdo ser FIXO em todas as '
-              'telas (19/10), "por mais que nao exista um sub-menu ainda".',
+          findsNothing,
+          reason: 'REPROVA: a secao do slot $i desenha o gatilho da gaveta. O '
+              'cliente mandou ocultar o menu em 19/10/2026, e a foto dele '
+              'assumiu esse slot.',
         );
-      });
-    }
+        expect(
+          tester.widget<AppBar>(find.byType(AppBar)).leading,
+          isA<AvatarDaConta>(),
+          reason: 'REPROVA: a secao do slot $i nao tem a foto no `leading`. A '
+              'ausencia do hamburguer nao e a entrega: a entrega e a foto no '
+              'lugar dele.',
+        );
+      }
+    });
 
-    testWidgets('ISCA: a gaveta de uma secao SEM submenu abre com conteudo',
+    testWidgets(
+        'ISCA: a gaveta de uma secao SEM submenu continua tendo CONTEUDO',
         (tester) async {
       // **A objecao honesta, provada e nao argumentada:** gaveta aberta e
-      // vazia e pior que gaveta ausente. A padronizacao so e defensavel porque
-      // o caso vazio tem conteudo -- os destinos globais. Este caso falha se
-      // alguem tirar os globais e deixar a gaveta fixa.
-      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
-
-      // A secao sem submenu proprio, achada pelo REGISTRO e nao pelo nome: se
-      // `Rede` ganhar um sub-destino amanha, o caso passa a medir a proxima
-      // secao vazia em vez de ficar verde por medir a secao errada.
+      // vazia e pior que gaveta ausente. Ela foi a razao pela qual a gaveta
+      // fixa de 17/10 so era defensavel com os destinos GLOBAIS dentro, e ela
+      // continua valendo para o dia em que o `drawer:` voltar.
+      //
+      // **A bancada mudou e a afirmacao nao:** sem gatilho na barra, o caso
+      // monta `GavetaDeSecoes` direto. Medir pela porta exigiria repor a porta
+      // que o cliente mandou esconder.
       final semSubmenu = CascaComAbas.visiveisEm(CascaComAbas.configuracao)
           .where((d) => d.ehRamo)
           .where((d) => RegistroDeSubDestinos.itensDe(d.rota).isEmpty)
@@ -656,32 +700,33 @@ void main() {
         isNotEmpty,
         reason: 'REPROVA: nao ha mais secao sem submenu proprio no registro. '
             'Este caso existe para cobrir exatamente esse estado; sem ele, '
-            'ele passaria por vacuidade. Se toda secao ganhou submenu, '
-            'troque este caso por uma secao de mentira sem sub-destino.',
+            'ele passaria por vacuidade.',
       );
 
       for (final secao in semSubmenu) {
-        final slot = find.widgetWithText(
-          NavigationDestination,
-          secao.rotulo,
+        final chave = GlobalKey<ScaffoldState>();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: BichuTheme.claro,
+            home: Scaffold(
+              key: chave,
+              drawer: GavetaDeSecoes(rotaDaSecao: secao.rota),
+              body: const SizedBox.expand(),
+            ),
+          ),
         );
-        await tester.tap(slot);
+        await tester.pumpAndSettle();
+        chave.currentState!.openDrawer();
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byType(BotaoDaGaveta));
-        await tester.pumpAndSettle();
-
-        final itens = find.byType(ItemDaGaveta);
         expect(
-          itens,
+          find.byType(ItemDaGaveta),
           findsWidgets,
           reason: 'REPROVA: a gaveta de "${secao.rotulo}" abriu VAZIA. Uma '
               'cortina que escurece a tela para nao oferecer nada e pior que '
               'gaveta nenhuma: e o que os destinos globais existem para '
-              'impedir.',
+              'impedir, e e isso que faz a REINSTALACAO dela defensavel.',
         );
-
-        // E os globais estao todos la, por rotulo.
         for (final global in RegistroDeSubDestinos.globais) {
           expect(
             find.descendant(
@@ -694,10 +739,6 @@ void main() {
                 'torna a gaveta fixa defensavel.',
           );
         }
-
-        // Fecha para a proxima volta do laco.
-        await tester.tapAt(const Offset(700, 300));
-        await tester.pumpAndSettle();
       }
     });
 
@@ -705,11 +746,25 @@ void main() {
         (tester) async {
       // A reclamacao literal do cliente em 23/09: *"que porra de menu lateral
       // e esse que parece mais uma pagina do que menu, com tanto texto, tanta
-      // explicacao?"*. Esta isca falha se alguem repuser linha de apoio -- e
-      // a tentacao de repor e grande justamente na gaveta vazia, onde uma
-      // frase "ainda nao ha submenu" parece util.
-      await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
-      await tester.tap(find.byType(BotaoDaGaveta));
+      // explicacao?"*. Esta isca falha se alguem repuser linha de apoio -- e a
+      // tentacao de repor e grande justamente na gaveta vazia, onde uma frase
+      // "ainda nao ha submenu" parece util.
+      //
+      // Ela vale MAIS com a gaveta oculta e nao menos: ninguem veria o texto
+      // de volta antes de a gaveta ser reinstalada.
+      final chave = GlobalKey<ScaffoldState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BichuTheme.claro,
+          home: Scaffold(
+            key: chave,
+            drawer: GavetaDeSecoes(rotaDaSecao: Rotas.pets),
+            body: const SizedBox.expand(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      chave.currentState!.openDrawer();
       await tester.pumpAndSettle();
 
       final linhas = tester.widgetList<ListTile>(
@@ -731,7 +786,6 @@ void main() {
     });
   });
 
-  // -------------------------------------------------------------------------
   group('(d) a barra: ordem e rotulos POR POSICAO MEDIDA', () {
     testWidgets('cada slot esta na posicao decidida, da esquerda para a '
         'direita', (tester) async {
@@ -740,12 +794,15 @@ void main() {
       // reprova e comparar a coordenada X de cada um.
       await abrirOApp(tester, rede: _semPet, deposito: depositoLogado());
 
-      // A INVERSAO DE `Rede` E `Perto` CHEGOU AQUI NA UNIAO DE 18/10/2026: a
-      // lista estava na ordem de antes do pedido literal do cliente
-      // (*"inverta a ordem no app do item rede e perto"*), porque este ramo
-      // nasceu antes dele. O caso continua conferindo a MESMA coisa contra uma
-      // lista escrita a mao; so a ordem passou a ser a da uniao.
-      const esperado = <String>['Pets', 'Perto', 'Rede', 'Loja', 'AuAu'];
+      // **A ORDEM MUDOU EM 19/10/2026: `Perto` SAIU e `Mural` ENTROU.**
+      // `Perto` deixou de ser secao -- o conteudo dela e a aba `Comunidade` da
+      // `Rede` -- e `Mural` ficou com o slot 3. A inversao de 18/10
+      // (*"inverta a ordem no app do item rede e perto"*) foi absorvida: sem
+      // `Perto` na barra nao ha par para inverter.
+      //
+      // O caso continua conferindo a MESMA coisa contra uma lista escrita A
+      // MAO; so a lista mudou.
+      const esperado = <String>['Pets', 'Rede', 'Mural', 'Loja', 'AuAu'];
       final centros = <String, double>{};
       for (final rotulo in esperado) {
         final alvo = find.widgetWithText(NavigationDestination, rotulo);

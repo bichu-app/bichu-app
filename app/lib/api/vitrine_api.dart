@@ -7,7 +7,7 @@ import 'envio_de_foto.dart';
 /// vitrine tem tres operacoes e um modelo proprio, e `me_api.dart` e a porta
 /// dos DADOS da conta (nome, telefone, endereco de referencia). Misturar os
 /// dois faria o envio de uma foto alcancar `atualizar` -- que e exatamente o
-/// que `IntencaoEGravacaoDaFotoDoUsuario` existe para impedir.
+/// que `IntencaoDeFotoDoUsuario` existe para impedir.
 ///
 /// ## Nenhuma rota de vitrine de OUTRA pessoa, e a ausencia e deliberada
 ///
@@ -23,7 +23,8 @@ import 'envio_de_foto.dart';
 /// reordenar, **trocar a capa** (a posicao 0) e remover -- e `fotos: []` tira
 /// todas. Quatro metodos separados seriam quatro lugares para o teto de nove
 /// divergir.
-class VitrineApi implements IntencaoDeFotoDaVitrine, LeituraDaVitrine {
+class VitrineApi
+    implements IntencaoDeFotoDaVitrine, LeituraDaVitrine, EscritaDaVitrine {
   const VitrineApi(this._cliente);
 
   final ApiClient _cliente;
@@ -38,6 +39,7 @@ class VitrineApi implements IntencaoDeFotoDaVitrine, LeituraDaVitrine {
   ///
   /// `PUT` e sem `Idempotency-Key`, como `ApiClient.put` explica: o verbo e
   /// idempotente por definicao e o reenvio e a propria edicao.
+  @override
   Future<Vitrine> substituir(List<FotoPedida> fotos) async {
     return Vitrine.doJson(
       await _cliente.put(
@@ -82,11 +84,39 @@ abstract class IntencaoDeFotoDaVitrine {
   });
 }
 
+/// O que a TELA precisa para ACRESCENTAR uma foto (19/10/2026).
+///
+/// ## O buraco que esta interface fecha
+///
+/// Medido antes de uma linha ser escrita: `vitrine_de_fotos.dart` era **so de
+/// leitura**, `FotoDaVitrine` e [VitrineApi.substituir] nao eram construidas
+/// nem chamadas em lugar nenhum de `app/lib` nem de `app/test`, e o estado
+/// vazio dizia *"Adicione uma foto para comecar a sua vitrine"* sem haver como
+/// adicionar. O cliente pediu a vitrine em 18/10 (*"perfil do usuario com
+/// vitrine de fotos, parecido com instagram"*) e ela foi construida ate a
+/// leitura.
+///
+/// ## Por que ela e UMA interface e nao a `VitrineApi` inteira
+///
+/// A tela precisa de dois metodos, e de dois so: pedir a autorizacao e gravar
+/// a vitrine. A `VitrineApi` inteira na mao da tela nao acrescenta nada hoje e
+/// acrescenta tudo amanha, quando a classe ganhar a terceira operacao.
+///
+/// **Ela ESTENDE [IntencaoDeFotoDaVitrine] em vez de redeclarar o metodo**: a
+/// assinatura da intencao e a que `EnvioParaConfirmarDepois` recebe como
+/// FUNCAO, e duas declaracoes dela seriam duas assinaturas identicas -- que e
+/// exatamente a forma do defeito consertado em 19/10, a vitrine chamando o
+/// registrador de capa de encontro e gravando `network_event` numa foto de
+/// pessoa. A troca COMPILAVA.
+abstract class EscritaDaVitrine implements IntencaoDeFotoDaVitrine {
+  Future<Vitrine> substituir(List<FotoPedida> fotos);
+}
+
 /// A foto da vitrine como destino de envio.
 ///
 /// **[confirmar] nao faz nada, e a ausencia e deliberada** -- como em
-/// `FotoDeAchado`, e por motivo oposto ao de `FotoDoUsuario`. A foto da vitrine
-/// passa a existir quando `PUT /me/showcase` grava a ordem nova com o
+/// `FotoDeAchado`. A foto da vitrine passa a existir quando
+/// `PUT /me/showcase` grava a ordem nova com o
 /// `upload_id` dentro; nao ha operacao de confirmacao separada no contrato, e
 /// um metodo que fingisse confirmar inventaria uma rota.
 ///
