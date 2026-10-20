@@ -58,8 +58,12 @@
 --
 -- A conversao e GUARDADA, e nao so aplicada: `octet_length = 44` e o texto
 -- casando o alfabeto base64 com o enchimento no fim. Linha que nao satisfaca as
--- duas condicoes nao e tocada -- e, se sobrar alguma, a restricao no fim desta
--- migracao reprova com o numero na mensagem em vez de deixar passar calado.
+-- duas condicoes nao e tocada -- e, se sobrar alguma, o `ALTER` no fim desta
+-- migracao REPROVA, nomeando a restricao e a tabela (`check constraint
+-- "verification_tokens_token_hash_32_bytes" of relation "verification_tokens"
+-- is violated by some row`), em vez de deixar passar calado. Medido: uma linha
+-- de 44 bytes com `0xff` dentro passa pelo bloco sem levantar e e o `ALTER` que
+-- a acusa.
 --
 -- ====================================================================
 -- AS TRES TABELAS, E POR QUE `refresh_tokens` ENTRA
