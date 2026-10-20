@@ -115,7 +115,12 @@ class PaginaDoLocal extends StatefulWidget {
       'Ele pode ter sido retirado. Veja quem está atendendo na sua região '
       'agora.';
 
-  static const String rotuloDeVoltarParaPerto = 'Ver o Perto';
+  /// **O TEXTO MUDOU EM 19/10/2026 com a secao.** Era `Ver o Perto`, e
+  /// `Perto` deixou de existir: o diretorio virou a aba `Comunidade` da
+  /// `Rede`. Um botao que oferece uma secao que o app nao tem e um caminho
+  /// que promete e nao entrega. O NOME da constante fica, para nao espalhar
+  /// a renomeacao por quem a le.
+  static const String rotuloDeVoltarParaPerto = 'Ver a Rede';
 
   /// Sem conta nao ha leitura, e a frase diz por que **sem culpar a pessoa**.
   static const String tituloDoVisitante = 'Entre para ver este local';
@@ -533,7 +538,9 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     if (context.canPop()) {
       context.pop();
     } else {
-      context.go(Rotas.perto);
+      // `Rotas.rede` e nao `Rotas.perto`: a secao `Perto` deixou de
+      // existir em 19/10 e esta pagina virou filha do ramo da `Rede`.
+      context.go(Rotas.rede);
     }
   }
 
@@ -769,7 +776,7 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
               width: double.infinity,
               height: BichuAlvoDeToque.min,
               child: OutlinedButton(
-                onPressed: () => context.go(Rotas.perto),
+                onPressed: () => context.go(Rotas.rede),
                 child: const Text(PaginaDoLocal.rotuloDeVoltarParaPerto),
               ),
             ),

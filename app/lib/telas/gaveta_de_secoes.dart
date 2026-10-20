@@ -313,17 +313,28 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.planejada,
       ),
-    ],
-    // -- 27.5.3 `Perto` ---------------------------------------------------
-    Rotas.perto: <SubDestino>[
+      // -- O QUE ERA 27.5.3 `Perto`, ABSORVIDO AQUI (19/10/2026) ------------
+      //
+      // A secao `Perto` deixou de existir: o conteudo dela virou a aba
+      // `Comunidade` desta secao. **As oito linhas do inventario dela nao
+      // foram apagadas, elas mudaram de chave** -- a 27.5 e um INVENTARIO, e
+      // apagar linha de inventario porque a secao mudou de nome faz o
+      // documento mentir sobre o que o produto tem.
+      //
+      // **A contagem total de linhas nao muda por esta mudanca** (52), e a de
+      // `destino` tambem nao (17). O que muda e a distribuicao: `Rede` passou
+      // de 6 para 14 linhas, e `Perto` saiu do mapa.
+      //
+      // Nenhuma das oito e `destino` VIVO, entao nenhuma delas precisou de
+      // glifo -- a assercao do construtor cobra glifo so em item que a gaveta
+      // PINTA. `Pets de ONGs para adoção` e `destino`, mas `planejada`.
       SubDestino(
         rotulo: 'Profissionais e estabelecimentos',
         forma: FormaDoSubDestino.conteudoDaSecao,
-        // A UX 27.5.3 escreve `planejada`, e o documento fechou em 21/09. A
-        // secao `Perto` foi construida depois disso: `PaginaDoDiretorio` lista
+        // A UX 27.5.3 escreve `planejada`, e o documento fechou em 21/09. O
+        // conteudo foi construido depois disso: `ListaDoDiretorio` lista
         // profissional e estabelecimento com nivel de verificacao, e a lista e
-        // o CORPO da secao. Vale o que o repositorio sustenta, como ja valeu
-        // para `Registrar achado avulso`.
+        // o CORPO da aba `Comunidade`. Vale o que o repositorio sustenta.
         //
         // Continua sendo `conteudoDaSecao`, e a forma e que decide: a propria
         // aba ja mostra o diretorio, entao ele nao vira item de gaveta nem
@@ -347,12 +358,11 @@ abstract final class RegistroDeSubDestinos {
         // construcao. Item de gaveta que abre uma tela em construcao e acao
         // que promete, e o cliente mandou fechar esse defeito.
         //
-        // `planejada` e o que o registro tem para dizer isto: por `viraItem`
-        // o item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO
-        // no inventario de 27.5. A rota sai desta linha porque o portao exige
-        // rota nula em item `planejada` -- rota preenchida e como ele volta a
-        // aparecer no dia em que alguem mexer na condicao --, e ela continua
-        // registrada no roteador para link profundo.
+        // `planejada` e o que o registro tem para dizer isto: por `viraItem` o
+        // item sai da gaveta sozinho, e por `pendente` ele continua NOMEADO no
+        // inventario de 27.5. A rota sai desta linha porque o portao exige
+        // rota nula em item `planejada`, e ela continua registrada no roteador
+        // para link profundo.
         estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
@@ -361,16 +371,21 @@ abstract final class RegistroDeSubDestinos {
         estado: EstadoDoSubDestino.planejada,
       ),
       SubDestino(
-        rotulo: 'Filtros',
-        // **Nao e folha inferior, e nao e mais `planejada`.** A 27.5.3
-        // herdou de 25.6 a folha inferior para filtro; a tela que foi
-        // construida poe o controle de filtro NO CORPO, logo acima da lista,
-        // junto da ordenacao, que e o padrao de listagem deste app. Onde o
-        // documento e o codigo divergem, vale o codigo.
+        rotulo: 'Filtros do diretório',
+        // **Nao e folha inferior, e nao e mais `planejada`.** A 27.5.3 herdou
+        // de 25.6 a folha inferior para filtro; a tela que foi construida poe
+        // o gatilho de filtro NO CORPO, na linha da busca -- e a DIREITA dela
+        // desde a reversao de 19/10. Onde o documento e o codigo divergem,
+        // vale o codigo.
         //
-        // `acaoNaTela` e a forma certa e ela mantem o item FORA da gaveta
-        // pelo mesmo motivo de antes: filtro nao tem endereco. A regra nao
-        // afrouxou; o que mudou foi onde o controle mora.
+        // `acaoNaTela` e a forma certa e ela mantem o item FORA da gaveta pelo
+        // mesmo motivo de antes: filtro nao tem endereco.
+        //
+        // **O ROTULO GANHOU `do diretório` em 19/10**, e nao e enfeite: com a
+        // absorcao, esta secao passou a ter DUAS linhas chamadas `Filtros` --
+        // a dos eventos, que ja era daqui, e esta, que vinha do `Perto`. Duas
+        // linhas de mesmo nome no inventario de uma secao so e um inventario
+        // que nao distingue o que inventaria.
         forma: FormaDoSubDestino.acaoNaTela,
         estado: EstadoDoSubDestino.existe,
       ),
@@ -387,6 +402,32 @@ abstract final class RegistroDeSubDestinos {
       SubDestino(
         rotulo: 'Reivindicar este perfil',
         forma: FormaDoSubDestino.acaoNaTela,
+        estado: EstadoDoSubDestino.planejada,
+      ),
+    ],
+    // -- A SECAO `Mural` (19/10/2026) -------------------------------------
+    //
+    // **UMA LINHA SO, e a contencao e deliberada.** O inventario de 27.5
+    // descreve o que o produto TEM ou o que o mapa de UX DECLARA, e o `Mural`
+    // nao esta em nenhum dos dois: ele e decisao de 19/10, posterior ao
+    // documento, e o conteudo dele e de outra frente.
+    //
+    // Escrever aqui as linhas que eu IMAGINO que o Mural vai ter -- publicar,
+    // a publicacao aberta, curtir, comentar, denunciar -- seria decidir no
+    // codigo o desenho de telas que outra pessoa esta desenhando, e o
+    // inventario passaria a ter cinco linhas que ninguem prometeu.
+    //
+    // A unica linha e a honesta: a secao tem um CORPO, ele e a linha do tempo,
+    // e ele e `planejada`. Quem construir o conteudo acrescenta as linhas
+    // dele com as telas.
+    //
+    // **Ela NAO e `destino` e portanto nao pede glifo** (a assercao do
+    // construtor cobra glifo so em item que a gaveta PINTA): `conteudoDaSecao`
+    // e a propria aba, que ja esta na barra com `dynamic_feed`.
+    Rotas.mural: <SubDestino>[
+      SubDestino(
+        rotulo: 'Publicações das conexões',
+        forma: FormaDoSubDestino.conteudoDaSecao,
         estado: EstadoDoSubDestino.planejada,
       ),
     ],

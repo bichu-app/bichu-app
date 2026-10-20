@@ -748,6 +748,48 @@ Future<void> abrirAAba(WidgetTester tester, String rotulo) async {
   await tester.pumpAndSettle();
 }
 
+/// Abre a aba `Comunidade` da secao `Rede` -- o que era a secao `Perto`.
+///
+/// ## Por que ela existe, e por que num ponto so (19/10/2026)
+///
+/// A secao `Perto` deixou de existir por decisao do cliente: o conteudo dela
+/// -- a lista do diretorio -- virou a aba `Comunidade` da `Rede`, e o nome da
+/// secao reunida e `Rede` por MEDIDA (`Comunidade` pede 113,25 dp num slot de
+/// barra de 64,00 e reprova nas tres larguras suportadas).
+///
+/// Chegar la deixou de ser UM toque na barra e passou a ser DOIS: o slot da
+/// `Rede` e a aba. **Esta funcao existe para esse par morar num lugar so** --
+/// ele aparece em cinco arquivos de teste, e cinco copias divergiriam na
+/// proxima mudanca de navegacao.
+Future<void> abrirAComunidade(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+  await tester.pumpAndSettle();
+
+  final aba = find.widgetWithText(Tab, 'Comunidade');
+  if (aba.evaluate().isEmpty) {
+    // **A `TabBar` MORA DENTRO DO CORPO ROLAVEL da secao**, e nao numa barra
+    // fixa: ela e um dos `filhos` da `TelaDeAba`, que os entrega a um
+    // `ListView`. Com a pagina rolada -- depois de um `Carregar mais`, por
+    // exemplo -- ela nao tem `Element` nenhum, e `find` nao acha o que nao foi
+    // construido. Medido: o caso da paginacao do diretorio reprovou com
+    // *"Found 0 widgets with type Tab"* depois de rolar a lista.
+    //
+    // `find.byType(Scrollable).first` e o corpo da pagina: quando a `TabBar`
+    // nao esta construida, a propria barra rolavel dela tambem nao esta, entao
+    // nao ha ambiguidade -- e `.first` seria o corpo de qualquer jeito, porque
+    // ele e o ancestral.
+    await tester.scrollUntilVisible(
+      aba,
+      -200,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 60,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(aba);
+  await tester.pumpAndSettle();
+}
+
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.
 ///
 /// Pelo roteador, e nao montando a tela solta: o `extra` e parte do contrato

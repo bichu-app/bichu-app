@@ -6,6 +6,7 @@
 import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:bichu/telas/rede/pecas_da_rede.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
@@ -59,67 +60,105 @@ RedeDeTeste redeComAgenda({
 }
 
 void main() {
-  group('abas', () {
-    // **ERAM TRES ABAS, SAO DUAS** (cliente, 19/10/2026: *"vamos deixar
-    // apenas os eventos abertos por enquanto, no futuro analisamos a
-    // necessidade de ter eventos privados tambem"*).
-    //
-    // O caso `com conta: as três abas` SAIU, e o de sem conta trocou de
-    // sentido: `Meus pedidos` nao faltava mais por falta de sessao -- ela nao
-    // existe. Os dois casos abaixo medem pela CONTAGEM de `Tab`, e nao por um
-    // `findsNothing` sobre o rotulo: `findsNothing` sozinho passaria com a
-    // `TabBar` fora da arvore, e foi assim que o repositorio colecionou dez
-    // portoes cegos numa rodada.
-    for (final logado in <bool>[false, true]) {
-      testWidgets(
-          'ISCA -- duas abas, Próximos e Encerrados, '
-          '${logado ? "com" : "sem"} conta', (tester) async {
-        // ISCA: em `agenda_da_rede.dart`, devolva a linha
-        //     if (logado) AbaDaRede.pedidos,
-        // a `_abasVisiveis` e o valor `pedidos('Meus pedidos')` ao `enum`.
-        // O caso com conta reprova na contagem (2 contra 3) E no rotulo.
-        final rede = redeComAgenda();
-        await abrirRede(tester, rede: rede, logado: logado);
+  // **AS TRES ABAS DESTE GRUPO VIRARAM FILTRO -- E A TERCEIRA SAIU DE VEZ
+  // (19/10/2026, A UNIAO DE DUAS FRENTES).**
+  //
+  // `feat/barra-com-mural-e-rede-unificada` converteu as tres abas em recorte:
+  // `Próximos` e `Encerrados` sao opcoes do grupo `Quando`, e `Meus pedidos`
+  // virou `Meu envolvimento -> Só onde eu pedi`.
+  // `feat/evento-simples-e-sem-telefone` REMOVEU a aba `Meus pedidos` no mesmo
+  // metodo, por decisao do cliente no mesmo dia: *"vamos deixar apenas os
+  // eventos abertos por enquanto, no futuro analisamos a necessidade de ter
+  // eventos privados tambem"*.
+  //
+  // **O resultado e: DOIS recortes de tempo na folha, e NENHUM recorte de
+  // envolvimento.** `Meu envolvimento` nao existe com conta nem sem ela, e o
+  // terceiro caso deste grupo mede a ausencia do CAMINHO ate
+  // `listMyNetworkEventJoinRequests` -- que e o que a decisao pediu, e nao
+  // apenas a ausencia de um rotulo.
+  //
+  // As duas abas que a secao tem agora sao `Eventos` e `Comunidade`, e elas
+  // sao da SECAO e nao desta lista: quem as mede e
+  // `telas/gaveta_oculta_e_barra_nova_test.dart`.
+  group('os recortes que eram abas', () {
+    testWidgets(
+        'sem conta: `Quando` existe e `Só onde eu pedi` NAO e oferecido',
+        (tester) async {
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, logado: false);
 
-        // (1) A `TabBar` ESTA na arvore, com DUAS abas. Esta e a assercao que
-        // nao envelhece: uma aba nova, qualquer que seja o nome dela,
-        // reprova aqui sem o caso precisar conhece-la.
-        expect(
-          find.byType(Tab),
-          findsNWidgets(2),
-          reason: 'REPROVA: a agenda nao tem exatamente duas abas. Eram tres '
-              'ate 19/10/2026; `Meus pedidos` saiu com o evento privado.',
-        );
-        expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-        expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
-        expect(
-          find.widgetWithText(Tab, 'Meus pedidos'),
-          findsNothing,
-          reason: 'REPROVA: a aba `Meus pedidos` voltou. Ela ficou sem origem '
-              'quando a pagina de detalhe do evento saiu, e o cliente deu o '
-              'veredito em 19/10/2026: so eventos abertos por enquanto.',
-        );
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final folha = textosDaFolha(tester);
+      expect(folha, contains('Quando'));
+      expect(folha, contains('Próximos'));
+      expect(folha, contains('Encerrados'));
+      // Sem conta nao existe "onde eu pedi": a rota responderia 401, e uma
+      // opcao cujo desfecho e uma recusa e controle sem desfecho. Ela nao
+      // nasce desabilitada -- nao nasce. (E com conta tambem nao nasce: ver o
+      // caso seguinte.)
+      expect(folha, isNot(contains('Meu envolvimento')));
+      expect(folha, isNot(contains('Só onde eu pedi')));
+      await tester.tap(find.text('Aplicar').first);
+      await tester.pumpAndSettle();
 
-        final lista = rede.chamadasA('GET /v1/network/events');
-        expect(lista, isNotEmpty);
-        expect(lista.last.url.queryParameters['when'], 'upcoming');
-        if (!logado) {
-          // Sem conta, nenhuma pergunta com token sai.
-          expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
-          expect(lista.last.headers['Authorization'], isNull);
-        }
-      });
-    }
+      final lista = rede.chamadasA('GET /v1/network/events');
+      expect(lista, isNotEmpty);
+      expect(lista.last.url.queryParameters['when'], 'upcoming');
+      // Sem conta, nenhuma pergunta com token sai.
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
+      expect(lista.last.headers['Authorization'], isNull);
+    });
 
     testWidgets(
-        'ISCA -- nenhuma chamada do app vai a /network/join-requests',
+        'ISCA -- com conta: os DOIS recortes de tempo estão na folha e '
+        '`Meu envolvimento` NÃO existe', (tester) async {
+      // ISCA: em `agenda_da_rede.dart`, devolva a `_controleDeFiltro` o grupo
+      //     GrupoDeFiltro(chave: 'involvement', titulo: 'Meu envolvimento', ...)
+      // (com o campo `_soOndePedi` e a constante `_codigoDeSoOndePedi`). As
+      // duas assercoes de ausencia reprovam.
+      //
+      // **Este caso media TRES recortes antes da uniao.** O terceiro era
+      // `Só onde eu pedi`, e ele nao e funcao movida nem funcao perdida: e
+      // funcao REMOVIDA por decisao do cliente, e as sete operacoes do pedido
+      // ficam declaradas e sem chamador em `api/rede_api.dart`.
+      await abrirRede(tester, rede: redeComAgenda());
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final folha = textosDaFolha(tester);
+      for (final esperado in <String>['Quando', 'Próximos', 'Encerrados']) {
+        expect(
+          folha,
+          contains(esperado),
+          reason: 'REPROVA: a folha não oferece "$esperado". As duas abas de '
+              'tempo viraram recortes DESTA folha, e uma que não aparece aqui '
+              'é função perdida -- não função movida. Pintados: $folha',
+        );
+      }
+      for (final proibido in <String>['Meu envolvimento', 'Só onde eu pedi']) {
+        expect(
+          folha,
+          isNot(contains(proibido)),
+          reason: 'REPROVA: "$proibido" voltou à folha. A aba `Meus pedidos` '
+              'saiu em 19/10/2026 por decisão do cliente, e `RecorteDaRede` '
+              'perdeu `visibilidade`, `estadoDoPedido` e `queryDePedidos` -- '
+              'um recorte de envolvimento não tem mais rota para chamar. '
+              'Pintados: $folha',
+        );
+      }
+      // E NENHUMA das três continua sendo aba.
+      expect(find.widgetWithText(Tab, 'Próximos'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Encerrados'), findsNothing);
+    });
+
+    testWidgets('ISCA -- nenhuma chamada do app vai a /network/join-requests',
         (tester) async {
-      // ISCA: em `agenda_da_rede.dart`, devolva o ramo
-      //     case AbaDaRede.pedidos:
+      // ISCA: em `agenda_da_rede.dart`, devolva o ramo de carga
+      //     if (_soOndePedi) {
       //       final p = await rede.meusPedidos(recorte.queryDePedidos);
-      // (com o valor do `enum` e `RecorteDaRede.queryDePedidos`). Este caso
-      // reprova no registro da rede assim que a aba for tocada -- e mesmo sem
-      // toque, a aba voltar ja reprova o caso acima.
+      // e o grupo `Meu envolvimento` que o liga. Este caso reprova no registro
+      // da rede assim que o recorte for aplicado.
       //
       // **A rede de teste responde 404 em rota nao declarada**, e
       // `listMyNetworkEventJoinRequests` NAO esta declarada abaixo de
@@ -134,21 +173,24 @@ void main() {
       });
       await abrirRede(tester, rede: rede);
 
-      // **PASSA POR TODA ABA QUE EXISTIR, e nao pelas duas que eu espero.**
-      // Esta e a diferenca que faz o caso valer: lido pelos rotulos que a
-      // `TabBar` de fato publica, uma aba NOVA (ou a `Meus pedidos` de volta)
-      // e visitada aqui sem o caso precisar ser editado -- e, se ela ler os
-      // pedidos, a chamada proibida aparece no registro da rede.
-      final rotulos = <String>[
-        for (final e in find.byType(Tab).evaluate())
-          ((e.widget as Tab).text ?? ''),
-      ];
-      expect(rotulos, isNotEmpty, reason: 'a `TabBar` nao esta na arvore');
-      for (final rotulo in rotulos) {
-        await tester.tap(find.widgetWithText(Tab, rotulo));
-        await tester.pumpAndSettle();
+      // Aplica os DOIS recortes de tempo, um a um: se algum deles trocasse a
+      // operacao para a rota de pedidos, a chamada proibida apareceria no
+      // registro da rede.
+      for (final recorte in <String>['Encerrados', 'Próximos']) {
+        await aplicarNaFolha(tester, <String>[recorte]);
       }
-      await tester.tap(find.widgetWithText(Tab, 'Próximos'));
+
+      // **E A FOLHA NAO OFERECE RECORTE DE ENVOLVIMENTO NENHUM** -- ele era o
+      // unico controle do app que chamava a rota proibida. Medir a ausencia do
+      // ROTULO aqui nao basta sozinho, e por isso o `isEmpty` abaixo existe: a
+      // conta que vale e o registro da rede.
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final folha = textosDaFolha(tester);
+      expect(folha, isNotEmpty, reason: 'a folha de filtro não pintou nada');
+      expect(folha, isNot(contains('Meu envolvimento')));
+      expect(folha, isNot(contains('Só onde eu pedi')));
+      await tester.tap(find.text('Aplicar').first);
       await tester.pumpAndSettle();
 
       expect(
@@ -160,13 +202,11 @@ void main() {
             'alimenta-la: nenhuma tela cria pedido de participacao.',
       );
       // E a agenda nao caiu: se a chamada proibida tivesse saido e levado 404,
-      // estas duas falhariam -- e e isso que torna o `isEmpty` acima nao
-      // vacuo.
-      expect(find.byType(CartaoDoEncontro), findsOneWidget);
+      // esta falharia -- e e isso que torna o `isEmpty` acima nao vacuo.
       expect(find.text(AgendaDaRede.textoDaFalha), findsNothing);
     });
 
-    testWidgets('Encerrados pede when=past e não tem botão de ordenar',
+    testWidgets('`Encerrados` pede when=past e não tem botão de ordenar',
         (tester) async {
       final rede = redeComAgenda(
         encerrados: <Map<String, dynamic>>[
@@ -174,8 +214,7 @@ void main() {
         ],
       );
       await abrirRede(tester, rede: rede);
-      await tester.tap(find.widgetWithText(Tab, 'Encerrados'));
-      await tester.pumpAndSettle();
+      await aplicarNaFolha(tester, <String>['Encerrados']);
 
       expect(
         rede.chamadasA('GET /v1/network/events').last.url.queryParameters['when'],
@@ -850,6 +889,13 @@ void main() {
   // deixar apenas os eventos abertos por enquanto, no futuro analisamos a
   // necessidade de ter eventos privados tambem"*.
   //
+  // **A UNIAO DO LOTE NAO OS TROUXE DE VOLTA, e isto foi uma decisao lida.**
+  // `feat/barra-com-mural-e-rede-unificada` tinha CONVERTIDO os tres para a
+  // folha de filtro (`aplicarNaFolha(tester, ['Só onde eu pedi'])` no lugar do
+  // toque na aba), porque no ramo dela a funcao ainda existia. Ela nao existe
+  // mais: `RecorteDaRede` perdeu `visibilidade`, `estadoDoPedido` e
+  // `queryDePedidos`, e os tres casos convertidos nem compilariam.
+  //
   // **O QUE O PRIMEIRO PROTEGIA NAO FOI PERDIDO.** Ele existia para provar
   // que o app nunca mostra recusa -- o servidor manda `requested` para o
   // recusado (ADR-0027 12.11), e um `EstadoDoPedido.recusado` inventado
@@ -861,7 +907,8 @@ void main() {
   //
   // O que substitui os tres aqui e
   // `ISCA -- nenhuma chamada do app vai a /network/join-requests`, no grupo
-  // `abas`: ele mede a ausencia do caminho, que e o que a decisao pediu.
+  // `os recortes que eram abas`: ele mede a ausencia do CAMINHO, que e o que a
+  // decisao pediu.
 
   group('estados da lista', () {
     testWidgets('vazio sem recorte: a barra não aparece', (tester) async {
@@ -1077,25 +1124,52 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a busca espera o toque e o campo fica ACIMA das abas',
+    testWidgets(
+        'a busca e a PRIMEIRA LINHA DO CORPO da lista, e as abas da SECAO '
+        'ficam acima dela',
         (tester) async {
       // Pedido do cliente de 17/10: *"coloque o campo de busca acima do texto
       // e das abas proximos e encerrados"*.
       //
       // **O TEXTO DO MEIO SAIU EM 18/10/2026**, por pedido do mesmo cliente
       // (*"remova os textos ... 'os eventos de quem tem pet aqui perto de
-      // você.'"*). A ordem que ele pediu em 17/10 era busca, texto, abas; com
-      // o texto fora, o que resta a provar e busca acima das abas -- e e isso
-      // que este caso mede agora, sem deixar de medir a ordem.
+      // você.'"*).
+      //
+      // **E AS ABAS DAQUELE PEDIDO DEIXARAM DE EXISTIR EM 19/10.** `Próximos`
+      // e `Encerrados` viraram FILTRO; as abas que existem agora sao
+      // `Eventos` e `Comunidade`, e elas sao da SECAO e nao desta lista.
+      //
+      // **A ORDEM INVERTEU, e a inversao e a certa.** O pedido de 17/10 era
+      // sobre abas que recortavam a MESMA lista: um campo de busca embaixo
+      // delas parecia buscar dentro do recorte. As abas de agora trocam a
+      // LISTA inteira -- `Comunidade` nem e a mesma entidade --, e um campo de
+      // busca ACIMA delas prometeria buscar nas duas. A busca pertence ao
+      // conteudo da aba, e e por isso que ela fica dentro dele.
+      //
+      // O que este caso mede agora:
+      //   1. as abas da SECAO vem acima da busca (a ordem nova);
+      //   2. a busca e a PRIMEIRA linha do corpo da lista -- acima do resumo
+      //      e dos cartoes --, que e a metade do pedido de 17/10 que continua
+      //      valendo e e o que um caso que so olhasse as abas deixaria cair.
       await abrirRede(tester, rede: redeComAgenda(), logado: false);
 
       final campo = tester.getTopLeft(find.byType(TextField).first);
       final abas = tester.getTopLeft(find.byType(TabBar));
+      final resumo = tester.getTopLeft(find.byType(BarraDeListagem));
 
       expect(
+        abas.dy,
+        lessThan(campo.dy),
+        reason: 'REPROVA: as abas da SECAO (`Eventos` e `Comunidade`) nao '
+            'estao acima do campo de busca. Elas trocam a LISTA inteira, e um '
+            'campo de busca acima delas prometeria buscar nas duas.',
+      );
+      expect(
         campo.dy,
-        lessThan(abas.dy),
-        reason: 'REPROVA: o campo de busca nao esta acima das abas.',
+        lessThan(resumo.dy),
+        reason: 'REPROVA: o campo de busca nao e a primeira linha do corpo da '
+            'lista. O cliente pediu em 17/10 que ele ficasse no alto, e ele '
+            'continua la -- no alto do conteudo da ABA, que e onde ele age.',
       );
       expect(
         find.text('Os eventos de quem tem pet aqui perto de você.'),
@@ -1105,10 +1179,20 @@ void main() {
       );
     });
 
-    testWidgets('as abas FICAM quando a barra nao e desenhada', (tester) async {
+    testWidgets(
+        'as abas DA SECAO ficam quando a barra desta lista nao e desenhada',
+        (tester) async {
       // A armadilha de ter subido a busca: se as abas tivessem ido para
       // dentro da `BarraDeListagem`, elas sumiriam no estado em que a barra
-      // nao nasce -- e quem estivesse em `Encerrados` ficaria preso.
+      // nao nasce -- e quem estivesse na outra aba ficaria preso.
+      //
+      // **AS ABAS MEDIDAS MUDARAM DE DONO em 19/10/2026, e a propriedade
+      // continua a mesma.** As tres desta lista viraram filtro; as duas que
+      // existem agora sao da SECAO (`Eventos` e `Comunidade`), desenhadas por
+      // `SecaoDaRede` ACIMA desta tela. O risco e identico e o caso continua
+      // valendo: se alguem as mover para dentro da barra de listagem, elas
+      // sumem num estado em que a lista nao desenha barra -- e quem estivesse
+      // em `Comunidade` ficaria sem como voltar para `Eventos`.
       final rede = RedeDeTeste(<String, http.Response Function(http.Request)>{
         'GET /v1/network/events': (_) =>
             json200(pagina(const <Map<String, dynamic>>[])),
@@ -1116,8 +1200,8 @@ void main() {
       await abrirRede(tester, rede: rede, logado: false);
 
       expect(find.byType(TextField), findsNothing);
-      expect(find.widgetWithText(Tab, 'Próximos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Encerrados'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Eventos'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Comunidade'), findsOneWidget);
     });
   });
 
@@ -1179,26 +1263,36 @@ void main() {
   group('sessão', () {
     testWidgets(
         'sair da conta com a agenda aberta: a agenda volta sem token e sem '
-        'distâncias, e as DUAS abas ficam', (tester) async {
-      // **ESTE CASO MUDOU DE ALVO EM 19/10/2026.** Ele media `Meus pedidos`
-      // sumindo ao sair da conta -- a terceira aba dependia da sessao. A aba
-      // saiu do app, e o que sobrou de verdade para medir e o que sempre foi
-      // o mais importante aqui: a agenda RECARREGA sem token e para de
-      // perguntar distancias.
+        'distâncias, e as duas abas da seção ficam', (tester) async {
+      // **ESTE CASO MUDOU DE ALVO DUAS VEZES EM 19/10/2026, E ESTA E A UNIAO.**
       //
-      // A assercao das duas abas entrou no lugar da que saiu, e ela nao e
-      // decorativa: a `TabBar` e refeita quando o numero de abas muda, e era
-      // a sessao que mudava esse numero. Se alguem devolver a dependencia, o
-      // controlador volta a ser recriado no logout e este caso acusa.
+      // Originalmente ele media `Meus pedidos` sumindo ao sair da conta -- a
+      // terceira aba dependia da sessao. `feat/barra-com-mural-e-rede-unificada`
+      // reescreveu o caso para medir o RECORTE `Só onde eu pedi` caindo com a
+      // sessao; `feat/evento-simples-e-sem-telefone` removeu a aba do app por
+      // decisao do cliente, e com ela o recorte.
+      //
+      // O que sobrou de verdade para medir e o que sempre foi o mais
+      // importante aqui: a agenda RECARREGA sem token e para de perguntar
+      // distancias.
+      //
+      // **As abas que ficam sao as da SECAO (`Eventos` e `Comunidade`), e nao
+      // as da lista**: `Próximos` e `Encerrados` viraram filtro. A assercao
+      // delas nao e decorativa -- a `TabBar` da secao e refeita quando o
+      // numero de abas muda, e era a sessao que mudava esse numero na
+      // composicao antiga. Se alguem devolver a dependencia, o controlador
+      // volta a ser recriado no logout e este caso acusa.
       final rede = redeComAgenda();
       rede.respostas['POST /v1/auth/logout'] = (_) => http.Response('', 204);
       await abrirRede(tester, rede: rede);
       expect(find.byType(Tab), findsNWidgets(2));
-      // **Fica em `Próximos` de proposito.** O caso antigo tocava em `Meus
+      expect(find.widgetWithText(Tab, 'Eventos'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Comunidade'), findsOneWidget);
+      // **Fica em `Eventos` de proposito.** O caso antigo tocava em `Meus
       // pedidos` antes de sair, porque era a aba que desaparecia; tocar em
-      // `Encerrados` agora mudaria o `when` da recarga para `past` e a
-      // assercao abaixo (`upcoming`) mediria outra coisa. A aba que importa
-      // aqui e a que fica aberta.
+      // `Comunidade` agora desmontaria esta lista, e a assercao de `when`
+      // abaixo mediria outra coisa.
+
       final contexto = tester.element(find.byType(TabBar));
       await Escopo.of(contexto).sessao.sair();
       await tester.pumpAndSettle();
@@ -1206,10 +1300,11 @@ void main() {
       expect(
         find.byType(Tab),
         findsNWidgets(2),
-        reason: 'REPROVA: o numero de abas mudou com a sessao. Desde '
-            '19/10/2026 sao duas, com conta e sem.',
+        reason: 'REPROVA: o numero de abas da secao mudou com a sessao. Desde '
+            '19/10/2026 sao duas, `Eventos` e `Comunidade`, com conta e sem.',
       );
       expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Próximos'), findsNothing);
       final ultima = rede.chamadasA('GET /v1/network/events').last;
       expect(ultima.url.queryParameters['when'], 'upcoming');
       expect(ultima.headers['Authorization'], isNull);
