@@ -5,7 +5,13 @@
 //  1. *"o icone do perfil do usuario ficou muito perto do titulo da barra, de
 //     uma margem do nome"*
 //  2. *"quando o usuario vai para a mensagem, o menu inferior some, mantenha
-//     ele fixo em todas as paginas"*
+//     ele fixo em todas as paginas"* -- e, no MESMO dia, a delimitacao:
+//     *"vamos colocar a barra fixa apenas nas paginas de primeiro plano, as
+//     paginas internas, pode manter como esta. Exemplo: ao clicar no menu auau,
+//     mantem a barra .. ao clicar na mensagem tira a barra. Ao clicar no perfil
+//     mantem a barra, ao clicar no cadastro do pet, remove a barra. Na listagem
+//     dos eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+//     barra. E assim por diante."*
 //  3. *"na pagina pet, remova o icone dos ..., so deixe o de escanear a tag"*
 //  4. *"como o menu do perfil esta crescendo, vamos separar os links por
 //     topicos/categorias"*
@@ -18,12 +24,14 @@
 //      leiaute entrega ao titulo --, porque medir so uma deixaria passar a
 //      margem dada roubando o titulo, ou o titulo intacto sem margem nenhuma.
 //
-//  (b) a barra de baixo aparece em TODAS as telas empilhadas, **um caso por
-//      tela**. Nao e um caso representando todas: o que falha e sempre UMA
-//      rota -- quem acrescentar uma irma da casca amanha quebra o caso dela, e
-//      so o dela. E tem o caso de COMPLETUDE, que varre o roteador de verdade
-//      e reprova quando uma rota nova nasce irma da casca sem estar na lista
-//      de excecoes declaradas.
+//  (b) cada tela empilhada esta do LADO CERTO, **um caso por tela**. Duas
+//      ficam com a barra e vinte e sete sem, por decisao do cliente na segunda
+//      mensagem de 20/10 (*"a barra fixa apenas nas paginas de primeiro
+//      plano"*), e o caso de cada tela cobra o veredito DELA -- presenca nas
+//      duas, ausencia nas vinte e sete. Mais dois casos estruturais: a
+//      CLASSIFICACAO (rota nova sem veredito reprova) e a CONCORDANCIA (o
+//      veredito escrito bate com o que o roteador faz, para que mover uma
+//      linha de lista nao "conserte" a suite sem tocar no app).
 //
 //  (c) `more_horiz` nao existe mais em `Pets`, e o alvo que ficou e o leitor.
 //
@@ -38,12 +46,13 @@
 //      anti-divergencia da escolha (c) do item 2: duas cascas usam a barra, e
 //      um segundo `NavigationBar` em `lib/` reprova.
 //
-//  (g) ninguem ficou sem saida. A propriedade `SAIDA e FOTO nunca aparecem na
-//      mesma barra` continua valendo e **mudou de razao**: ela era "o slot da
-//      esquerda e a unica saida da tela empilhada", e agora a tela empilhada
-//      tem duas. O caso dela foi reescrito em
-//      `gaveta_com_submenus_test.dart`; o que mora aqui e a prova de que as
-//      telas que NAO tem `Voltar` nenhum sao exatamente as que a barra salva.
+//  (g) ninguem ficou sem saida, e a conta de QUEM depende de QUAL saida esta
+//      travada. Sao tres as saidas aceitas -- controle no topo, barra de
+//      baixo, foto da conta --, e a reversao de 20/10 devolveu quatro telas a
+//      dependerem SO da foto (que vai para a conta, e nao volta). A
+//      propriedade `SAIDA e FOTO nunca aparecem na mesma barra` continua
+//      valendo e mudou de razao; o caso dela foi reescrito em
+//      `gaveta_com_submenus_test.dart`.
 
 import 'dart:io';
 
@@ -64,86 +73,326 @@ import 'ajuda_de_tela.dart';
 import 'casca_de_cinco_secoes_test.dart' show carregarInter;
 
 // ---------------------------------------------------------------------------
-// A LISTA DE TELAS -- a segunda fonte da verdade do item 2
+// A CLASSIFICACAO DAS 29 -- a segunda fonte da verdade do item 2
 // ---------------------------------------------------------------------------
 
-/// Uma tela empilhada que **tem de** ter a barra de baixo.
+/// Uma tela empilhada, e o veredito dela.
 ///
 /// [padrao] e o endereco como `rotas.dart` o declara (com `:parametro`), e
 /// [endereco] e um endereco concreto para o caso navegar. Os dois existem
 /// porque o caso de completude compara contra o ROTEADOR, que so conhece o
 /// padrao, e os casos de tela precisam de um endereco que resolva.
-typedef TelaEmpilhada = ({String nome, String endereco, String padrao});
+///
+/// [motivo] nao e decoracao: ele e a resposta que vai ao cliente quando ele
+/// conferir no aparelho e discordar de uma linha. Uma classificacao sem motivo
+/// e uma decisao que ninguem pode revisar.
+typedef TelaEmpilhada = ({
+  String nome,
+  String endereco,
+  String padrao,
+  String motivo,
+});
 
-/// As telas em que a barra de baixo DESAPARECIA antes de 20/10/2026.
+/// AS TELAS DE PRIMEIRO PLANO: as que a CASCA abre, e que ficam com a barra.
 ///
-/// Escrita a mao **de proposito**, como `ordemDecidida` no portao da
-/// BICHUS-164 e como `secoesComGatilhoDeFiltro` no da gaveta: e a segunda
-/// fonte da verdade, e existe para brigar com a primeira. Um portao que
-/// derivasse esta lista do roteador ficaria verde por construcao -- ele
-/// mediria exatamente as rotas que alguem pos dentro da casca, e nao as que
-/// deveriam estar la.
+/// ## O discriminador, e por que nao e "lista contra detalhe"
 ///
-/// **A primeira fonte e o roteador**, e o caso `nenhuma rota nova nasceu irma
-/// da casca` o varre contra as excecoes declaradas em [semBarraPorDecisao].
+/// Cliente, 20/10/2026, segunda mensagem do dia: *"vamos colocar a barra fixa
+/// apenas nas paginas de primeiro plano, as paginas internas, pode manter como
+/// esta. Exemplo: ao clicar no menu auau, mantem a barra .. ao clicar na
+/// mensagem tira a barra. Ao clicar no perfil mantem a barra, ao clicar no
+/// cadastro do pet, remove a barra. Na listagem dos eventos, mantem a barra, ao
+/// clicar nos detalhes do evento, remove a barra. E assim por diante."*
 ///
-/// Os enderecos com parametro vem preenchidos com um valor descartavel: o que
-/// se mede e a BARRA, e nao o conteudo, e toda tela desta lista tem estado de
-/// falha desenhado para quando a chamada nao responde.
-const List<TelaEmpilhada> telasComBarraFixa = <TelaEmpilhada>[
-  // O pedido LITERAL do cliente: a conversa.
-  (nome: 'a conversa', endereco: '/mensagens/c-1', padrao: '/mensagens/:conversaId'),
-  // E a area de mensagens, que e **o proprio slot `AuAu` da barra**: tocar no
-  // slot empurrava uma rota que cobria a casca, entao a barra desaparecia no
-  // toque de quem a estava usando.
-  (nome: 'a area de mensagens', endereco: '/mensagens', padrao: '/mensagens'),
-  // A caixa de avisos: o sino esta na barra de topo das CINCO secoes.
-  (nome: 'a caixa de avisos', endereco: '/notificacoes', padrao: '/notificacoes'),
-  (nome: 'o perfil de uma pessoa', endereco: '/pessoa/marina', padrao: '/pessoa/:apelido'),
-  (nome: 'os pedidos de conexao', endereco: '/conexoes/pedidos', padrao: '/conexoes/pedidos'),
-  (nome: 'as pessoas bloqueadas', endereco: '/perfil/bloqueados', padrao: '/perfil/bloqueados'),
-  (nome: 'meus dados', endereco: '/perfil/dados', padrao: '/perfil/dados'),
-  (nome: 'minhas fotos', endereco: '/perfil/minhas-fotos', padrao: '/perfil/minhas-fotos'),
-  (nome: 'meus achados', endereco: '/perfil/achados', padrao: '/perfil/achados'),
-  (nome: 'meus eventos', endereco: '/perfil/eventos', padrao: '/perfil/eventos'),
-  (nome: 'minhas indicacoes', endereco: '/rede/indicacoes', padrao: '/rede/indicacoes'),
-  (nome: 'sugerir profissional', endereco: '/rede/indicacoes/nova', padrao: '/rede/indicacoes/nova'),
-  (nome: 'criar encontro', endereco: '/rede/encontros/novo', padrao: '/rede/encontros/novo'),
-  (nome: 'registrar achado', endereco: '/achados/novo', padrao: '/achados/novo'),
-  (nome: 'o achado registrado', endereco: '/achados/registrado', padrao: '/achados/registrado'),
-  (nome: 'a ficha de um achado', endereco: '/achados/a-1', padrao: '/achados/:achadoId'),
-  (nome: 'adocoes', endereco: '/adocoes', padrao: '/adocoes'),
-  (nome: 'a pagina do pet', endereco: '/pets/p-1', padrao: '/pets/:petId'),
-  (nome: 'editar o pet', endereco: '/pets/p-1/editar', padrao: '/pets/:petId/editar'),
-  (nome: 'cadastrar pet: identificacao', endereco: '/pets/novo', padrao: '/pets/novo'),
-  (nome: 'cadastrar pet: foto', endereco: '/pets/novo/foto', padrao: '/pets/novo/foto'),
-  (nome: 'cadastrar pet: sinais', endereco: '/pets/novo/sinais', padrao: '/pets/novo/sinais'),
-  (nome: 'o pet cadastrado', endereco: '/pets/cadastrado', padrao: '/pets/cadastrado'),
-  (nome: 'solicitar plaquinha', endereco: '/pets/plaquinha', padrao: '/pets/plaquinha'),
-  (nome: 'acompanhar plaquinha', endereco: '/pets/plaquinha/p-1', padrao: '/pets/plaquinha/:petId'),
-  (nome: 'de quem e o caso', endereco: '/pets/perdido', padrao: '/pets/perdido'),
-  (nome: 'onde e quando', endereco: '/pets/perdido/onde-e-quando', padrao: '/pets/perdido/onde-e-quando'),
-  (nome: 'o alcance do alerta', endereco: '/pets/perdido/alcance', padrao: '/pets/perdido/alcance'),
-  (nome: 'o caso aberto', endereco: '/pets/perdido/caso', padrao: '/pets/perdido/caso'),
+/// "Listagem fica, detalhe sai" le os tres exemplos dele corretamente e
+/// **DISCORDA de si mesma em oito telas desta arvore**: `Meus achados`,
+/// `Meus eventos`, `Pedidos de conexao`, `Pessoas bloqueadas`, `Minhas fotos`,
+/// `Minhas indicacoes`, `Adoções` e `Meus dados` sao LISTAS e sao alcancadas
+/// de DENTRO do Perfil. As duas metades do principio apontam para lados
+/// opostos nelas, e decidir no escuro seria entregar oito palpites.
+///
+/// O que separa os tres exemplos dele sem ambiguidade e **QUEM ABRE A TELA**:
+///
+///   - a CASCA abre -> primeiro plano, COM barra. O slot `AuAu` da barra de
+///     baixo abre `/mensagens`; o sino da barra de topo abre `/notificacoes`.
+///     Os dois sao controles da propria casca, montados em toda tela de secao.
+///   - o CONTEUDO abre -> pagina interna, SEM barra. Tocar numa linha da lista
+///     de mensagens, num `ItemDeMenu` do corpo do Perfil, num cartao de pet,
+///     num botao de formulario.
+///
+/// E ele le os tres exemplos na ordem: o slot `AuAu` mantem (casca), a mensagem
+/// tocada tira (conteudo); o Perfil mantem (a FOTO da casca o abre), o cadastro
+/// de pet tira (botao do corpo); a listagem de eventos mantem (e a secao
+/// `Rede`, da casca), a ficha do evento tira (cartao do corpo).
+///
+/// **O ACHADO QUE A PRIMEIRA MENSAGEM DELE ESCONDIA:** a tela que nao devia ter
+/// perdido a barra era a AREA DE MENSAGENS -- primeiro plano, destino de um slot
+/// da propria barra --, e nao a conversa aberta. Ela esta aqui.
+const List<TelaEmpilhada> telasDePrimeiroPlano = <TelaEmpilhada>[
+  (
+    nome: 'a area de mensagens',
+    endereco: '/mensagens',
+    padrao: '/mensagens',
+    motivo: 'e o destino do slot `AuAu` da BARRA. Era ela que o cliente viu '
+        'perdendo a barra, e e o exemplo literal dele: *"ao clicar no menu '
+        'auau, mantem a barra"*.',
+  ),
+  (
+    nome: 'a caixa de avisos',
+    endereco: '/notificacoes',
+    padrao: '/notificacoes',
+    motivo: 'e o destino do SINO, que a barra de topo monta nas CINCO secoes. '
+        'Controle da casca, como o slot da barra -- e por isso ela nao pertence '
+        'a secao nenhuma e nao acende slot nenhum.',
+  ),
 ];
 
-/// As rotas que continuam SEM a barra, e o motivo de cada uma.
+/// AS TELAS INTERNAS: as que o CONTEUDO abre, e que ficam SEM a barra.
 ///
-/// **Elas sao a razao pela qual o caso de completude nao e tautologico.** Sem
-/// esta lista, "toda rota irma da casca tem de estar na casca fixa" seria uma
-/// regra que a propria arvore nao cumpre -- e quem a fizesse passar poria
-/// tudo dentro, inclusive a camera, que o design system PROIBE.
+/// *"as paginas internas, pode manter como esta"* -- elas voltaram a ser
+/// `GoRoute` irma da casca, que e como estavam antes de hoje.
+///
+/// **AS OITO AMBIGUAS ESTAO AQUI, e cada uma diz por que.** Sao as que a regra
+/// "lista fica" puxaria para o primeiro plano: todas sao alcancadas por um
+/// `ItemDeMenu` do CORPO do Perfil ou por um controle do corpo de uma secao, e
+/// nenhuma por um controle da casca. **Se o cliente discordar, e esta lista
+/// que ele corrige** -- oito linhas, nao vinte e sete telas.
+const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
+  // -- O exemplo literal dele -------------------------------------------
+  (
+    nome: 'a conversa',
+    endereco: '/mensagens/c-1',
+    padrao: '/mensagens/:conversaId',
+    motivo: 'exemplo literal dele: *"ao clicar na mensagem tira a barra"*. '
+        'Aberta por uma LINHA da lista de mensagens, que e conteudo.',
+  ),
+  // -- As OITO AMBIGUAS: listas, abertas pelo CORPO do Perfil ------------
+  (
+    nome: 'meus dados',
+    endereco: '/perfil/dados',
+    padrao: '/perfil/dados',
+    motivo: 'AMBIGUA. Aberta por `ItemDeMenu` no corpo do Perfil. Ele disse '
+        '*"ao clicar no perfil mantem a barra"* -- o Perfil mantem, e o que se '
+        'clica DENTRO dele nao. E ela e formulario, nao lista.',
+  ),
+  (
+    nome: 'minhas fotos',
+    endereco: '/perfil/minhas-fotos',
+    padrao: '/perfil/minhas-fotos',
+    motivo: 'AMBIGUA. Dois niveis dentro do Perfil: so `Meus dados` a abre. '
+        'Se `Meus dados` e interna, ela nao pode ser primeiro plano.',
+  ),
+  (
+    nome: 'meus achados',
+    endereco: '/perfil/achados',
+    padrao: '/perfil/achados',
+    motivo: 'AMBIGUA. E LISTA -- o que puxa para primeiro plano --, e e aberta '
+        'por `ItemDeMenu` no corpo do Perfil, que e o que decide.',
+  ),
+  (
+    nome: 'meus eventos',
+    endereco: '/perfil/eventos',
+    padrao: '/perfil/eventos',
+    motivo: 'AMBIGUA, pela mesma conta de `Meus achados`. E ela e o UNICO '
+        'caminho ate `Cancelar` um encontro: se o cliente quiser alguma das '
+        'oito no primeiro plano, esta e a candidata mais forte.',
+  ),
+  (
+    nome: 'as pessoas bloqueadas',
+    endereco: '/perfil/bloqueados',
+    padrao: '/perfil/bloqueados',
+    motivo: 'AMBIGUA, mesma conta. E ajuste de conta, e nao destino de '
+        'navegacao: ninguem vem "ver os bloqueados", vem desfazer um bloqueio.',
+  ),
+  (
+    nome: 'os pedidos de conexao',
+    endereco: '/conexoes/pedidos',
+    padrao: '/conexoes/pedidos',
+    motivo: 'AMBIGUA, mesma conta.',
+  ),
+  (
+    nome: 'minhas indicacoes',
+    endereco: '/rede/indicacoes',
+    padrao: '/rede/indicacoes',
+    motivo: 'AMBIGUA. E lista, e e aberta de dentro do corpo da `Rede` -- a '
+        'secao e que e primeiro plano, nao ela.',
+  ),
+  (
+    nome: 'adocoes',
+    endereco: '/adocoes',
+    padrao: '/adocoes',
+    motivo: 'AMBIGUA. E lista, e e aberta de dentro do corpo de `Pets`.',
+  ),
+  // -- Detalhe de UM item: o lado facil do principio dele ----------------
+  (
+    nome: 'o perfil de uma pessoa',
+    endereco: '/pessoa/marina',
+    padrao: '/pessoa/:apelido',
+    motivo: 'detalhe de UMA pessoa, aberto da conversa ou do mural.',
+  ),
+  (
+    nome: 'a ficha de um achado',
+    endereco: '/achados/a-1',
+    padrao: '/achados/:achadoId',
+    motivo: 'detalhe de UM achado, aberto de uma linha de `Meus achados`.',
+  ),
+  (
+    nome: 'a pagina do pet',
+    endereco: '/pets/p-1',
+    padrao: '/pets/:petId',
+    motivo: 'detalhe de UM pet, aberto pelo cartao no corpo do Perfil. Mesmo '
+        'desenho do exemplo dele com a ficha do evento.',
+  ),
+  (
+    nome: 'acompanhar plaquinha',
+    endereco: '/pets/plaquinha/p-1',
+    padrao: '/pets/plaquinha/:petId',
+    motivo: 'detalhe de UM pedido de plaquinha, aberto da pagina do pet.',
+  ),
+  // -- Formulario e assistente: o outro lado facil -----------------------
+  (
+    nome: 'editar o pet',
+    endereco: '/pets/p-1/editar',
+    padrao: '/pets/:petId/editar',
+    motivo: 'formulario, aberto da pagina do pet.',
+  ),
+  (
+    nome: 'cadastrar pet: identificacao',
+    endereco: '/pets/novo',
+    padrao: '/pets/novo',
+    motivo: 'exemplo literal dele: *"ao clicar no cadastro do pet, remove a '
+        'barra"*.',
+  ),
+  (
+    nome: 'cadastrar pet: foto',
+    endereco: '/pets/novo/foto',
+    padrao: '/pets/novo/foto',
+    motivo: 'passo 2 do assistente do exemplo dele.',
+  ),
+  (
+    nome: 'cadastrar pet: sinais',
+    endereco: '/pets/novo/sinais',
+    padrao: '/pets/novo/sinais',
+    motivo: 'passo 3 do assistente do exemplo dele.',
+  ),
+  (
+    nome: 'o pet cadastrado',
+    endereco: '/pets/cadastrado',
+    padrao: '/pets/cadastrado',
+    motivo: 'recibo do assistente do exemplo dele.',
+  ),
+  (
+    nome: 'solicitar plaquinha',
+    endereco: '/pets/plaquinha',
+    padrao: '/pets/plaquinha',
+    motivo: 'formulario, aberto da pagina do pet.',
+  ),
+  (
+    nome: 'de quem e o caso',
+    endereco: '/pets/perdido',
+    padrao: '/pets/perdido',
+    motivo: 'passo 1 do fluxo de marcar perdido, aberto da pagina do pet.',
+  ),
+  (
+    nome: 'onde e quando',
+    endereco: '/pets/perdido/onde-e-quando',
+    padrao: '/pets/perdido/onde-e-quando',
+    motivo: 'passo 2 do fluxo de marcar perdido.',
+  ),
+  (
+    nome: 'o alcance do alerta',
+    endereco: '/pets/perdido/alcance',
+    padrao: '/pets/perdido/alcance',
+    motivo: 'passo 3 do fluxo de marcar perdido.',
+  ),
+  (
+    nome: 'o caso aberto',
+    endereco: '/pets/perdido/caso',
+    padrao: '/pets/perdido/caso',
+    motivo: 'recibo do fluxo de marcar perdido.',
+  ),
+  (
+    nome: 'registrar achado',
+    endereco: '/achados/novo',
+    padrao: '/achados/novo',
+    motivo: 'formulario, aberto do menu do Perfil.',
+  ),
+  (
+    nome: 'o achado registrado',
+    endereco: '/achados/registrado',
+    padrao: '/achados/registrado',
+    motivo: 'recibo do formulario de achado.',
+  ),
+  (
+    nome: 'criar encontro',
+    endereco: '/rede/encontros/novo',
+    padrao: '/rede/encontros/novo',
+    motivo: 'formulario, aberto pela acao flutuante do corpo da `Rede`.',
+  ),
+  (
+    nome: 'sugerir profissional',
+    endereco: '/rede/indicacoes/nova',
+    padrao: '/rede/indicacoes/nova',
+    motivo: 'formulario, aberto pela acao flutuante do corpo da `Rede`.',
+  ),
+];
+
+/// AS SUB-ROTAS DE RAMO: as que tem a barra POR CONSTRUCAO.
+///
+/// Elas nao usam [CascaFixa] e nao poderiam: estao DENTRO do ramo, e a barra
+/// vem da casca dos ramos. **Por isso mesmo elas precisam de linha aqui** --
+/// declarar uma tela sob um ramo decide o veredito dela em silencio.
+///
+/// As duas de hoje sao LEITURA e foram postas ali de proposito, com a razao
+/// escrita em `rotas.dart`: voltar da ficha devolve a aba com a busca e o
+/// filtro de quem estava comparando tres veterinarios intactos.
+///
+/// **E A FICHA DO EVENTO ESTA CHEGANDO AQUI, E ISSO E UM CONFLITO MEDIDO.** A
+/// frente `feat/aviso-de-login-ao-tocar` (`65dfcb99`) restaurou
+/// `encontros/:slug` **sob o ramo da `Rede`**, com a justificativa escrita de
+/// que "a pagina de um evento e LEITURA, e a barra de baixo fica". Pelo exemplo
+/// LITERAL do cliente na segunda mensagem de 20/10 -- *"Na listagem dos
+/// eventos, mantem a barra, ao clicar nos detalhes do evento, remove a barra"*
+/// -- ela **nao pode** ficar com a barra. As duas frentes decidiram o mesmo
+/// endereco em sentidos opostos, no mesmo dia, sem se ver.
+///
+/// **QUEM MESCLAR DECIDE, e o portao obriga a decisao:** a rota nova nao estara
+/// nesta lista e o caso `toda rota empilhada esta classificada` reprova
+/// nomeando `encontros/:slug`. O conserto que segue o cliente e tira-la do
+/// `routes:` do ramo e declara-la IRMA da casca, em [telasInternas] -- que e
+/// onde ela ja esta escrita, esperando.
+const Map<String, String> subRotasDeRamo = <String, String>{
+  'locais/:slug': 'a ficha de um local, sob o ramo da `Rede`. LEITURA, e '
+      'voltar dela devolve a aba `Comunidade` com busca e filtro intactos.',
+  'produtos/:slug': 'a ficha de um produto, sob o ramo da `Loja`. Mesma razao.',
+};
+
+/// As 29 telas empilhadas, nos dois grupos, para os casos que percorrem todas.
+List<TelaEmpilhada> get telasEmpilhadas => <TelaEmpilhada>[
+      ...telasDePrimeiroPlano,
+      ...telasInternas,
+    ];
+
 /// A QUEM FOR MEXER AQUI DEPOIS: a FICHA DO EVENTO esta voltando.
 ///
-/// Uma frente paralela esta restaurando `rede/encontro_da_rede.dart` e a rota
-/// de detalhe do evento -- o cliente pediu para tirar o CLIQUE do cartao e
-/// resumi-lo, nao para apagar a tela. **Se ela voltar como SUB-ROTA do ramo da
-/// `Rede`** (`encontros/:slug` sob `/rede`, como `locais/:slug` ja e), ela
-/// nasce com a barra de baixo por construcao e nao precisa de linha nenhuma
-/// nestas duas listas. **Se voltar como rota EMPILHADA**, o caso `nenhuma rota
-/// nova nasceu irma da casca` reprova nomeando o endereco, e o conserto e
-/// trocar `GoRoute` por `_comBarraFixa` e acrescentar a linha em
-/// [telasComBarraFixa] -- um caso de tela e um de saida vem de graca com ela.
+/// Uma frente paralela restaurou `rede/encontro_da_rede.dart` e a rota de
+/// detalhe do evento (`feat/aviso-de-login-ao-tocar`) -- o cliente pediu para
+/// tirar o CLIQUE do cartao e resumi-lo, nao para apagar a tela.
+///
+/// **PELO PRINCIPIO DELE, ELA E INTERNA: sem barra.** E o exemplo literal da
+/// segunda mensagem -- *"Na listagem dos eventos, mantem a barra, ao clicar nos
+/// detalhes do evento, remove a barra"* --, e o cartao que a abre e conteudo do
+/// corpo da `Rede`. Entao ela entra em [telasInternas], e nao em
+/// [telasDePrimeiroPlano].
+///
+/// Dois caminhos, e os dois ja estao cobertos:
+///   - se ela voltar como SUB-ROTA do ramo da `Rede` (`encontros/:slug` sob
+///     `/rede`, como `locais/:slug` e), ela nasce COM a barra por construcao --
+///     e isso **contraria** o exemplo dele. O caso `a pagina do local ja tinha
+///     a barra` explica por que sub-rota de ramo tem barra; quem restaurar a
+///     ficha precisa declara-la IRMA da casca, nao filha do ramo.
+///   - se voltar como rota EMPILHADA, o caso `toda rota empilhada esta
+///     classificada` reprova nomeando o endereco ate alguem escrever a linha.
 const Map<String, String> semBarraPorDecisao = <String, String>{
   '/': 'a abertura e um desvio: ela nao tem conteudo e nunca fica na tela.',
   '/entrar': 'quem nao tem sessao nao esta em secao nenhuma.',
@@ -157,15 +406,21 @@ const Map<String, String> semBarraPorDecisao = <String, String>{
   '/p/:shareToken': 'porta publica: quem chega de um link chega de FORA.',
 };
 
-/// As telas que **nao tem `Voltar` nenhum** na barra de topo, e para as quais
-/// a barra de baixo e a unica saida que o grupo (g) encontra.
+/// As telas que **nao tem controle de saida na barra de topo**, e saem so pela
+/// FOTO da conta.
 ///
 /// As quatro sao as rotas de escape do fluxo de perdido: sem o rascunho no
 /// `extra`, `rotas.dart` monta `AbaPerfil()` -- que e raiz de secao e poe a
-/// FOTO no `leading`, o que apaga a seta automatica do `AppBar`. **Antes de
-/// 20/10 elas nao tinham barra de baixo tambem**, e a unica saida era tocar na
-/// foto. Esta lista existe para que a conta nao mude em silencio.
-const Set<String> saidaSoPelaBarra = <String>{
+/// FOTO no `leading`, o que apaga a seta automatica do `AppBar`.
+///
+/// **E ISTO E UM ACHADO QUE A REVERSAO DE 20/10 DEVOLVEU, e esta no relatorio
+/// como pergunta fechada.** Enquanto elas foram de primeiro plano, a barra de
+/// baixo era a segunda saida; com elas de volta a internas, a foto voltou a ser
+/// a UNICA -- e a foto nao VOLTA, ela vai para a conta. Nao e beco (ha saida),
+/// e nao e voltar (o `pop` nao existe ali). O estado e o de antes de hoje, e o
+/// cliente disse *"as paginas internas, pode manter como esta"*; mas a conta
+/// precisa estar escrita, e esta lista e onde ela esta.
+const Set<String> saidaSoPelaFoto = <String>{
   '/pets/perdido',
   '/pets/perdido/onde-e-quando',
   '/pets/perdido/alcance',
@@ -236,6 +491,32 @@ Set<String> _rotasEmpilhadas(WidgetTester tester) {
     for (final rota in raiz)
       if (rota is GoRoute) rota.path,
   };
+}
+
+/// As SUB-ROTAS DE RAMO do roteador montado: as rotas declaradas DENTRO de um
+/// ramo da casca dos ramos.
+///
+/// **Elas tem a barra POR CONSTRUCAO**, e e por isso que elas precisam de
+/// classificacao tanto quanto as empilhadas: uma sub-rota de ramo e empurrada
+/// no `Navigator` do proprio ramo, dentro do `IndexedStack`, dentro da casca --
+/// a barra nunca sai. Declarar uma tela ali **decide** o veredito dela sem
+/// ninguem escrever uma linha, e e o jeito mais silencioso de contrariar a
+/// delimitacao de 20/10.
+Set<String> _subRotasDeRamo(WidgetTester tester) {
+  final contexto = tester.element(find.byType(NavigationBar));
+  final raiz = GoRouter.of(contexto).configuration.routes;
+  final achadas = <String>{};
+  for (final rota in raiz) {
+    if (rota is! StatefulShellRoute) continue;
+    for (final ramo in rota.branches) {
+      for (final daRaizDoRamo in ramo.routes) {
+        for (final filha in daRaizDoRamo.routes) {
+          if (filha is GoRoute) achadas.add(filha.path);
+        }
+      }
+    }
+  }
+  return achadas;
 }
 
 void main() {
@@ -377,57 +658,125 @@ void main() {
   // =========================================================================
   group('(b) a barra de baixo esta em TODA tela empilhada', () {
     // =======================================================================
-    // O PEDIDO 2, UM CASO POR TELA
+    // O PEDIDO 2, UM CASO POR TELA, E AGORA COM VEREDITO
     // =======================================================================
     //
-    // Literal: *"quando o usuario vai para a mensagem, o menu inferior some,
-    // mantenha ele fixo em todas as paginas"*.
+    // **Primeira mensagem:** *"quando o usuario vai para a mensagem, o menu
+    // inferior some, mantenha ele fixo em todas as paginas"*.
+    // **Segunda, que delimitou:** *"a barra fixa apenas nas paginas de primeiro
+    // plano, as paginas internas, pode manter como esta"*.
+    //
+    // **O CASO POR TELA FICOU, E PASSOU A TER DOIS LADOS.** Ele era "a barra
+    // esta aqui" em 29 telas; agora e "a barra esta aqui" em 2 e **"a barra NAO
+    // esta aqui" em 27**. Nenhum caso saiu -- 27 trocaram de veredito --, e a
+    // troca e o que vale: um portao que so cobrasse presenca ficaria verde com
+    // a barra de volta nas 27, que e exatamente a reversao que o cliente pediu.
     //
     // **UM CASO POR TELA e nao um representando todas**, e a razao e
-    // diagnostica: as vinte e nove rotas tem builders diferentes, quatro delas
-    // caem em telas de escape quando falta o `extra`, e duas carregam
-    // parametro. Um caso so diria "alguma tela perdeu a barra"; estes dizem
-    // QUAL.
-    //
-    // DESLIGAMENTO: em `rotas.dart`, tire o `ShellRoute` e devolva as rotas a
-    // irmas da casca. **Os vinte e nove casos reprovam, cada um pelo nome da
-    // sua tela.**
-    for (final tela in telasComBarraFixa) {
-      testWidgets('${tela.nome} (${tela.endereco}) mantem a barra',
-          (tester) async {
-        await _abrirEmPets(tester);
-        await irPara(tester, tela.endereco);
+    // diagnostica: as 29 rotas tem builders diferentes, quatro caem em telas de
+    // escape quando falta o `extra`, e cinco carregam parametro. Um caso so
+    // diria "alguma tela esta do lado errado"; estes dizem QUAL.
+    for (final tela in telasDePrimeiroPlano) {
+      testWidgets(
+        'PRIMEIRO PLANO: ${tela.nome} (${tela.endereco}) MANTEM a barra',
+        (tester) async {
+          // DESLIGAMENTO: em `rotas.dart`, troque o `_comBarraFixa` desta rota
+          // por `GoRoute`. Este caso reprova nomeando a tela, e o do grupo (g)
+          // tambem se ela depender da barra para ter saida.
+          await _abrirEmPets(tester);
+          await irPara(tester, tela.endereco);
 
-        // (1) A CASCA FIXA ESTA NA ARVORE. Sem esta linha o caso poderia ficar
-        // verde com a navegacao falhando: se o `push` nao resolvesse, a tela
-        // continuaria sendo `Pets` -- que TEM barra, pela casca dos ramos.
-        expect(
-          find.byType(CascaFixa),
-          findsOneWidget,
-          reason: 'REPROVA: ${tela.endereco} nao abriu dentro de '
-              '`CascaFixa`. Ou a rota voltou a ser irma da casca -- e a barra '
-              'de baixo desapareceu com ela, que e o defeito do pedido 2 --, '
-              'ou o `push` nao resolveu e o caso esta medindo `Pets`.',
-        );
+          // (1) A CASCA FIXA ESTA NA ARVORE. Sem esta linha o caso poderia
+          // ficar verde com a navegacao falhando: se o `push` nao resolvesse, a
+          // tela continuaria sendo `Pets` -- que TEM barra, pela casca dos
+          // ramos.
+          expect(
+            find.byType(CascaFixa),
+            findsOneWidget,
+            reason: 'REPROVA: ${tela.endereco} nao abriu dentro de '
+                '`CascaFixa`. Ou a rota voltou a ser `GoRoute` crua -- e a '
+                'barra desapareceu com ela --, ou o `push` nao resolveu e o '
+                'caso esta medindo `Pets`. MOTIVO desta tela ser primeiro '
+                'plano: ${tela.motivo}',
+          );
 
-        // (2) A BARRA, com os cinco slots.
-        expect(
-          find.byType(NavigationBar),
-          findsOneWidget,
-          reason: 'REPROVA: ${tela.nome} (${tela.endereco}) nao tem barra de '
-              'baixo. O cliente foi literal: *"mantenha ele fixo em todas as '
-              'paginas"*.',
-        );
-        expect(
-          find.byType(NavigationDestination),
-          findsNWidgets(
-            CascaComAbas.visiveisEm(CascaComAbas.configuracao).length,
-          ),
-          reason: 'REPROVA: a barra de ${tela.nome} nao tem os mesmos slots '
-              'da barra das secoes. Barra pela metade e pior que barra '
-              'nenhuma: ela some com destinos sem dizer.',
-        );
-      });
+          // (2) O ENDERECO, pela mesma razao do grupo das internas: `CascaFixa`
+          // na arvore sem a rota ter resolvido seria a casca de OUTRA tela.
+          expect(
+            GoRouterState.of(
+              tester.element(find.byType(Scaffold).first),
+            ).uri.path,
+            tela.endereco,
+            reason: 'REPROVA: o roteador nao esta em "${tela.endereco}".',
+          );
+
+          // (3) A BARRA, com os cinco slots.
+          expect(
+            find.byType(NavigationBar),
+            findsOneWidget,
+            reason: 'REPROVA: ${tela.nome} nao tem barra de baixo, e ela e de '
+                'PRIMEIRO PLANO: ${tela.motivo}',
+          );
+          expect(
+            find.byType(NavigationDestination),
+            findsNWidgets(
+              CascaComAbas.visiveisEm(CascaComAbas.configuracao).length,
+            ),
+            reason: 'REPROVA: a barra de ${tela.nome} nao tem os mesmos slots '
+                'da barra das secoes. Barra pela metade e pior que barra '
+                'nenhuma: ela some com destinos sem dizer.',
+          );
+        },
+      );
+    }
+
+    for (final tela in telasInternas) {
+      testWidgets(
+        'INTERNA: ${tela.nome} (${tela.endereco}) NAO tem a barra',
+        (tester) async {
+          // DESLIGAMENTO: em `rotas.dart`, troque o `GoRoute` desta rota por
+          // `_comBarraFixa`. Este caso reprova nomeando a tela e citando o
+          // motivo da classificacao.
+          await _abrirEmPets(tester);
+          await irPara(tester, tela.endereco);
+
+          // (1) A TELA ABRIU, MEDIDA PELO ENDERECO DO ROTEADOR. Sem isto o
+          // `findsNothing` abaixo passaria por vacuidade do jeito mais facil:
+          // uma rota que nao resolve tambem nao desenha barra, e o caso ficaria
+          // verde provando nada. **O endereco e a medida certa aqui** -- medir
+          // o tipo da tela exigiria importar 27 telas, e medir "ha um Scaffold
+          // novo" nao distingue a tela certa da tela de escape.
+          final onde = GoRouterState.of(
+            tester.element(find.byType(Scaffold).first),
+          ).uri.path;
+          expect(
+            onde,
+            tela.endereco,
+            reason: 'REPROVA: o roteador esta em "$onde" e nao em '
+                '"${tela.endereco}". A rota nao resolveu, e o veredito abaixo '
+                'nao mede a tela que o caso existe para medir.',
+          );
+
+          // (2) NENHUMA barra. **E `findsNothing` e nao "uma so"**: a casca dos
+          // ramos fica EMBAIXO da rota empilhada e sai da arvore de finders
+          // (rota opaca), entao a tela interna correta nao tem barra nenhuma.
+          expect(
+            find.byType(NavigationBar),
+            findsNothing,
+            reason: 'REPROVA: ${tela.nome} (${tela.endereco}) TEM barra de '
+                'baixo, e ela e PAGINA INTERNA. O cliente delimitou em 20/10: '
+                '*"a barra fixa apenas nas paginas de primeiro plano, as '
+                'paginas internas, pode manter como esta"*. MOTIVO desta tela '
+                'ser interna: ${tela.motivo}',
+          );
+          expect(
+            find.byType(CascaFixa),
+            findsNothing,
+            reason: 'REPROVA: ${tela.nome} vestiu `CascaFixa`, que e a casca '
+                'das telas de PRIMEIRO PLANO. Ela e interna: ${tela.motivo}',
+          );
+        },
+      );
     }
 
     // =======================================================================
@@ -480,33 +829,44 @@ void main() {
     // =======================================================================
     // A COMPLETUDE -- o que impede o verde por lista curta
     // =======================================================================
-    testWidgets('nenhuma rota nova nasceu irma da casca', (tester) async {
-      // **A LISTA ACIMA E ESCRITA A MAO, e por isso ela nao basta.** Quem
-      // acrescentar uma rota irma da casca amanha nao quebra nenhum dos vinte
-      // e nove casos -- a tela nova simplesmente nao esta la --, e a barra
-      // desapareceria nela em silencio. Este caso le o ROTEADOR DE VERDADE.
+    testWidgets('toda rota empilhada esta CLASSIFICADA', (tester) async {
+      // **A PROPRIEDADE MUDOU DE FORMA COM A REVERSAO DE 20/10, e esta e a
+      // parte que vale mais do que as 29 linhas acima.**
+      //
+      // Ela era "toda rota empilhada esta na lista das que tem barra". Com a
+      // delimitacao do cliente, isso deixou de ser verdade -- 27 das 29 NAO tem
+      // barra --, e um portao dessa forma reprovaria a propria decisao dele.
+      //
+      // A propriedade agora e: **toda rota empilhada tem um VEREDITO escrito**
+      // -- primeiro plano, interna, ou dispensada com motivo. Rota nova sem
+      // classificacao reprova, e e isso que faz a proxima tela nascer com a
+      // decisao tomada em vez de herdar o silencio.
       //
       // DESLIGAMENTO: declare um `GoRoute` novo no nivel de cima de
       // `rotas.dart`. Este caso reprova nomeando o endereco.
       await _abrirEmPets(tester);
       final noRoteador = _rotasEmpilhadas(tester);
+      final primeiroPlano = telasDePrimeiroPlano.map((t) => t.padrao).toSet();
+      final internas = telasInternas.map((t) => t.padrao).toSet();
       final declaradas = <String>{
-        ...telasComBarraFixa.map((t) => t.padrao),
+        ...primeiroPlano,
+        ...internas,
         ...semBarraPorDecisao.keys,
       };
-      final semDecisao = noRoteador.difference(declaradas);
+
+      final semVeredito = noRoteador.difference(declaradas);
       expect(
-        semDecisao,
+        semVeredito,
         isEmpty,
-        reason: 'REPROVA: $semDecisao sao rotas empilhadas e nao estao '
-            'declaradas em lugar nenhum. Rota empilhada cobre a casca dos '
-            'ramos, e sem o embrulho de `_comBarraFixa` a barra de baixo '
-            'desaparece nela -- que e exatamente o defeito que o cliente '
-            'mandou consertar, e nenhum caso desta suite acusaria. Ou ela '
-            'passa a ser `_comBarraFixa` em `rotas.dart` e entra em '
-            '`telasComBarraFixa` (ganhando um caso de tela e um de saida), ou '
-            'entra em `semBarraPorDecisao` com o motivo escrito.',
+        reason: 'REPROVA: $semVeredito sao rotas empilhadas SEM veredito. O '
+            'cliente decidiu em 20/10 que a barra fica *"apenas nas paginas de '
+            'primeiro plano"*, e uma rota nova nasce de um dos dois lados -- '
+            'nunca do silencio. Escolha: `telasDePrimeiroPlano` (e troque '
+            '`GoRoute` por `_comBarraFixa` em `rotas.dart`), `telasInternas` '
+            '(e deixe `GoRoute`), ou `semBarraPorDecisao` com o motivo. '
+            'Qualquer das tres ganha um caso de tela e um de saida de graca.',
       );
+
       // E A GUARDA DO OUTRO LADO: linha orfa mantem a decisao de uma rota que
       // nao existe mais, e a proxima rota com o mesmo endereco herdaria em
       // silencio o que ninguem decidiu para ela.
@@ -514,9 +874,123 @@ void main() {
       expect(
         orfas,
         isEmpty,
-        reason: 'REPROVA: $orfas estao declaradas e nao sao rotas empilhadas '
-            'do roteador. Linha orfa e decisao esperando por uma rota futura '
-            'que ninguem vai tomar.',
+        reason: 'REPROVA: $orfas estao classificadas e nao sao rotas '
+            'empilhadas do roteador. Linha orfa e decisao esperando por uma '
+            'rota futura que ninguem vai tomar.',
+      );
+
+      // ===================================================================
+      // E AS SUB-ROTAS DE RAMO, que decidem o veredito em SILENCIO
+      // ===================================================================
+      //
+      // **Esta metade existe por um conflito medido**, nao por simetria.
+      // Declarar uma tela dentro do `routes:` de um ramo da a ela a barra POR
+      // CONSTRUCAO -- sem `_comBarraFixa`, sem linha em lista nenhuma, sem
+      // ninguem decidindo. A frente `feat/aviso-de-login-ao-tocar` restaurou a
+      // ficha do evento exatamente assim, e o exemplo literal do cliente diz o
+      // contrario (*"ao clicar nos detalhes do evento, remove a barra"*). Sem
+      // esta metade, a mescla entregaria a barra na ficha do evento e nenhum
+      // caso acusaria.
+      //
+      // DESLIGAMENTO: declare um `GoRoute` dentro do `routes:` de qualquer ramo
+      // em `rotas.dart`. Este caso reprova nomeando o caminho relativo.
+      final subRotas = _subRotasDeRamo(tester);
+      final subSemVeredito = subRotas.difference(subRotasDeRamo.keys.toSet());
+      expect(
+        subSemVeredito,
+        isEmpty,
+        reason: 'REPROVA: $subSemVeredito sao SUB-ROTAS DE RAMO sem veredito, e '
+            'sub-rota de ramo **ja tem a barra** -- ela e empurrada dentro do '
+            '`IndexedStack`, dentro da casca. Declarar uma tela ali decide que '
+            'ela e primeiro plano sem ninguem escrever isso, e e o jeito mais '
+            'silencioso de contrariar a delimitacao de 20/10. Se a tela e '
+            'LEITURA de um item de uma secao e a barra deve ficar, escreva a '
+            'linha em `subRotasDeRamo` com o motivo. Se o cliente disse que '
+            'ela nao deve ter barra -- como disse da ficha do evento --, '
+            'tire-a do `routes:` do ramo e declare-a IRMA da casca, em '
+            '`telasInternas`.',
+      );
+      final subOrfas = subRotasDeRamo.keys.toSet().difference(subRotas);
+      expect(
+        subOrfas,
+        isEmpty,
+        reason: 'REPROVA: $subOrfas estao em `subRotasDeRamo` e nao sao mais '
+            'sub-rotas de ramo do roteador.',
+      );
+
+      // E NENHUMA ROTA EM DOIS GRUPOS: veredito duplo e veredito nenhum.
+      expect(
+        primeiroPlano.intersection(internas),
+        isEmpty,
+        reason: 'REPROVA: ha rota em `telasDePrimeiroPlano` E em '
+            '`telasInternas`. Com dois vereditos, os dois casos dela rodam e um '
+            'deles reprova sempre -- ou, pior, alguem conserta o caso errado.',
+      );
+      expect(
+        declaradas.length,
+        primeiroPlano.length + internas.length + semBarraPorDecisao.length,
+        reason: 'REPROVA: ha endereco repetido entre os tres grupos de '
+            'classificacao.',
+      );
+    });
+
+    testWidgets('e o VEREDITO declarado bate com o que o roteador faz',
+        (tester) async {
+      // **O par do caso acima, e o que impede o verde por declaracao.** Aquele
+      // cobra que exista um veredito; este cobra que o veredito seja VERDADE.
+      // Sem ele, mover uma tela de grupo na lista "consertaria" a suite sem
+      // tocar no app -- e e exatamente o que alguem com pressa faria.
+      //
+      // A medida e `_comBarraFixa`, pelo unico sinal que ele deixa na arvore
+      // de ROTAS e nao na de widgets: a rota de primeiro plano constroi
+      // [CascaFixa] e a interna nao.
+      //
+      // DESLIGAMENTO: mova `/mensagens` de `telasDePrimeiroPlano` para
+      // `telasInternas` sem tocar em `rotas.dart`. Este caso reprova dizendo
+      // que a declaracao e a arvore discordam.
+      // **`go` E NAO `push`, e a diferenca importa aqui.** `push` empilharia 29
+      // paginas uma sobre a outra e `CascaFixa` passaria a ser achada pela
+      // pagina errada; e voltar a `Pets` entre as medidas nao da, porque
+      // `pumpWidget` do mesmo app reaproveita o `State` e a barra nao esta mais
+      // na tela para ser tocada (medido: `tap()` em `Pets` estoura com `Found
+      // 0 widgets`). `go` TROCA a pilha, e cada volta do laco mede uma rota
+      // isolada -- que e exatamente o que este caso quer: se a rota constroi
+      // [CascaFixa] ou nao.
+      await _abrirEmPets(tester);
+      final divergentes = <String>[];
+      for (final tela in telasEmpilhadas) {
+        GoRouter.of(
+          tester.element(find.byType(Scaffold).first),
+        ).go(tela.endereco);
+        await tester.pumpAndSettle();
+
+        final onde = GoRouterState.of(
+          tester.element(find.byType(Scaffold).first),
+        ).uri.path;
+        final temCasca = find.byType(CascaFixa).evaluate().isNotEmpty;
+        final deviaTer = telasDePrimeiroPlano.any(
+          (t) => t.padrao == tela.padrao,
+        );
+        if (onde != tela.endereco) {
+          divergentes.add(
+            '${tela.endereco}: o roteador foi para "$onde" e a medida nao vale',
+          );
+        } else if (temCasca != deviaTer) {
+          divergentes.add(
+            '${tela.endereco}: declarada '
+            '${deviaTer ? "primeiro plano" : "interna"}, e a arvore diz '
+            '${temCasca ? "primeiro plano" : "interna"}',
+          );
+        }
+      }
+      expect(
+        divergentes,
+        isEmpty,
+        reason: 'REPROVA: a classificacao escrita e o roteador discordam:\n'
+            '  ${divergentes.join('\n  ')}\n'
+            'Mover uma linha de lista NAO move a tela: quem muda o veredito '
+            'troca tambem `GoRoute` por `_comBarraFixa` (ou o contrario) em '
+            '`rotas.dart`.',
       );
     });
 
@@ -675,10 +1149,16 @@ void main() {
       );
       await tester.tap(item);
       await tester.pumpAndSettle();
+      // **O ENDERECO, e nao `CascaFixa`.** Ela era o sinal de "empilhou" at'e
+      // 20/10; com a delimitacao, `/achados/novo` e PAGINA INTERNA e nao veste
+      // casca nenhuma -- um caso que a procurasse reprovaria por ter dado
+      // certo.
       expect(
-        find.byType(CascaFixa),
-        findsOneWidget,
-        reason: 'REPROVA: tocar no item nao empilhou tela nenhuma.',
+        GoRouterState.of(
+          tester.element(find.byType(Scaffold).first),
+        ).uri.path,
+        Rotas.registrarAchado,
+        reason: 'REPROVA: tocar no item nao levou a ${Rotas.registrarAchado}.',
       );
       expect(
         find.text('Registrar achado avulso'),
@@ -747,11 +1227,15 @@ void main() {
           );
           await tester.tap(porta);
           await tester.pumpAndSettle();
+          // O ENDERECO, pela razao da nota do caso acima: o assistente de
+          // cadastro e PAGINA INTERNA desde 20/10 e nao veste `CascaFixa`.
           expect(
-            find.byType(CascaFixa),
-            findsOneWidget,
+            GoRouterState.of(
+              tester.element(find.byType(Scaffold).first),
+            ).uri.path,
+            Rotas.cadastrarPet,
             reason: 'REPROVA: com ${fase.nome}, o toque em `Cadastrar meu '
-                'pet` nao empilhou tela nenhuma.',
+                'pet` nao levou a ${Rotas.cadastrarPet}.',
           );
         },
       );
@@ -900,6 +1384,11 @@ void main() {
       // O caso de fonte acima nao veria duas barras construidas pelo mesmo
       // arquivo. Este compara o que chega a tela: os rotulos pintados na
       // casca dos ramos e na casca fixa.
+      // **A TELA MEDIDA E `/mensagens`, de PRIMEIRO PLANO.** Era a conversa, e
+      // com a delimitacao de 20/10 ela deixou de ter barra -- medir ali
+      // compararia a barra da casca com NADA e o caso reprovaria pelo motivo
+      // errado. A area de mensagens e uma das duas que vestem [CascaFixa], e e
+      // ela que da o que comparar.
       await _abrirEmPets(tester);
       List<String> rotulos() => find
           .byType(NavigationDestination)
@@ -907,13 +1396,20 @@ void main() {
           .map((e) => (e.widget as NavigationDestination).label)
           .toList();
       final naSecao = rotulos();
-      await irPara(tester, '/mensagens/c-1');
-      final naConversa = rotulos();
+      await irPara(tester, '/mensagens');
+      final naCascaFixa = rotulos();
       expect(
-        naConversa,
+        find.byType(CascaFixa),
+        findsOneWidget,
+        reason: 'REPROVA: `/mensagens` nao abriu dentro de `CascaFixa`, e sem '
+            'ela nao ha segunda barra para comparar.',
+      );
+      expect(
+        naCascaFixa,
         naSecao,
-        reason: 'REPROVA: a barra da conversa pinta $naConversa e a da secao '
-            'pinta $naSecao. As duas cascas tem de desenhar a MESMA barra.',
+        reason: 'REPROVA: a barra da area de mensagens pinta $naCascaFixa e a '
+            'da secao pinta $naSecao. As duas cascas tem de desenhar a MESMA '
+            'barra.',
       );
     });
   });
@@ -921,77 +1417,105 @@ void main() {
   // =========================================================================
   group('(g) ninguem ficou sem saida', () {
     // =======================================================================
-    // A PROPRIEDADE QUE MUDOU DE RAZAO
+    // A PROPRIEDADE QUE MUDOU DE RAZAO, E A CONTA QUE A REVERSAO DEVOLVEU
     // =======================================================================
     //
     // `SAIDA e FOTO nunca aparecem na mesma barra`, em
     // `gaveta_com_submenus_test.dart`, provava que a composicao `Saida +
-    // titulo + foto` nao existe -- e a razao escrita era *"perder a SAIDA
-    // custa a tela: ela vira um beco"*. **Com a barra de baixo em toda tela
-    // empilhada, essa razao mudou:** a tela empilhada passou a ter DUAS
-    // saidas, e a regra do slot da esquerda deixou de ser a ultima linha de
-    // defesa. O caso la foi reescrito com a razao nova; o que mora aqui e a
-    // conta de quem depende de qual saida.
+    // titulo + foto` nao existe -- e a razao escrita era *"perder a SAIDA custa
+    // a tela: ela vira um beco"*. **Com a barra de baixo, essa razao mudou**: a
+    // tela com barra passou a ter DUAS saidas. O caso la foi reescrito com a
+    // razao nova; o que mora aqui e a conta de QUEM depende de QUAL saida.
     //
-    // **QUATRO TELAS NAO TEM `Voltar` NENHUM**, e isso e anterior a 20/10: as
+    // **E a reversao de 20/10 devolveu a conta antiga em quatro telas.** As
     // rotas de escape do fluxo de perdido montam `AbaPerfil()` quando falta o
     // rascunho, e `AbaPerfil` e raiz de secao -- a FOTO no `leading` apaga a
-    // seta automatica do `AppBar`. Antes de hoje elas nao tinham barra de
-    // baixo tambem: a unica saida era tocar na foto.
+    // seta automatica do `AppBar`. Enquanto elas foram de primeiro plano, a
+    // barra era a segunda saida; de volta a internas, **a foto voltou a ser a
+    // unica** -- e a foto nao VOLTA, ela vai para a conta. Ver
+    // [saidaSoPelaFoto]: nao e beco, e nao e voltar, e esta no relatorio como
+    // pergunta fechada.
     //
-    // DESLIGAMENTO: tire o `ShellRoute` de `rotas.dart`. As quatro telas de
-    // `saidaSoPelaBarra` passam a nao ter saida nenhuma, e o primeiro caso
-    // reprova nomeando cada uma.
-    for (final tela in telasComBarraFixa) {
+    // Entao as saidas aceitas sao TRES, e o caso diz qual cada tela tem:
+    // `SaidaDaTela` ou `BackButton` no topo, a barra de baixo, ou a foto.
+    //
+    // DESLIGAMENTO: em `casca_com_abas.dart`, tire a condicao `raizDeSecao` do
+    // `leading` de `TelaDeAba` e mande a foto para toda tela. A conta travada
+    // abaixo muda em bloco e o caso reprova nomeando as telas.
+    for (final tela in telasEmpilhadas) {
       testWidgets('${tela.nome} tem saida', (tester) async {
         await _abrirEmPets(tester);
         await irPara(tester, tela.endereco);
 
-        // **A SAIDA E DETECTADA PELO CONTROLE e nao pelo `tooltip`.** Este
-        // app tem TRES formas de saida no slot da esquerda -- `SaidaDaTela`
-        // de voltar (`Voltar`), `SaidaDaTela` de fechar (`Fechar`) e o
-        // `BackButton` automatico do `AppBar`, cujo texto vem das localizacoes
-        // do Material e **nao e portugues na bancada**. Um caso que casasse
-        // `find.byTooltip('Voltar')` acusaria beco em dez telas que tem saida,
-        // e foi o que a primeira medicao deste arquivo fez.
+        // **A SAIDA E DETECTADA PELO CONTROLE e nao pelo `tooltip`.** Este app
+        // tem TRES formas de saida no slot da esquerda -- `SaidaDaTela` de
+        // voltar (`Voltar`), de fechar (`Fechar`) e o `BackButton` automatico
+        // do `AppBar`, cujo texto vem das localizacoes do Material e **nao e
+        // portugues na bancada**. Um caso que casasse `find.byTooltip('Voltar')`
+        // acusaria beco em dez telas que tem saida, e foi o que a primeira
+        // medicao deste arquivo fez.
+        final dentroDaBarra = find.byType(AppBar);
         final temSaidaNoTopo = find
-                .descendant(
-                  of: find.byType(AppBar),
-                  matching: find.byType(SaidaDaTela),
-                )
+                .descendant(of: dentroDaBarra, matching: find.byType(SaidaDaTela))
                 .evaluate()
                 .isNotEmpty ||
             find
-                .descendant(
-                  of: find.byType(AppBar),
-                  matching: find.byType(BackButton),
-                )
+                .descendant(of: dentroDaBarra, matching: find.byType(BackButton))
                 .evaluate()
                 .isNotEmpty;
-        final temBarra =
-            find.byType(NavigationBar).evaluate().isNotEmpty;
+        final temBarra = find.byType(NavigationBar).evaluate().isNotEmpty;
+        final temFoto = find
+            .descendant(of: dentroDaBarra, matching: find.byType(AvatarDaConta))
+            .evaluate()
+            .isNotEmpty;
+
         expect(
-          temSaidaNoTopo || temBarra,
+          temSaidaNoTopo || temBarra || temFoto,
           isTrue,
-          reason: 'REPROVA: ${tela.nome} (${tela.endereco}) e um BECO: nao '
-              'tem `Voltar` na barra de topo nem barra de baixo. A pessoa so '
-              'sai pelo gesto do sistema.',
+          reason: 'REPROVA: ${tela.nome} (${tela.endereco}) e um BECO: nao tem '
+              'saida no topo, nem barra de baixo, nem a foto da conta. A '
+              'pessoa so sai pelo gesto do sistema.',
         );
-        // E A CONTA DE QUEM DEPENDE DE QUAL SAIDA, travada: tela que perde o
-        // `Voltar` em silencio passa a depender da barra, e a conta muda sem
-        // ninguem decidir.
+
+        // E A CONTA DE QUEM DEPENDE DE QUAL SAIDA, travada em DUAS linhas:
+        // tela que perde o `Voltar` em silencio passa a depender da foto, e a
+        // conta muda sem ninguem decidir.
         expect(
           temSaidaNoTopo,
-          !saidaSoPelaBarra.contains(tela.endereco),
+          !saidaSoPelaFoto.contains(tela.endereco),
           reason: 'REPROVA: ${tela.endereco} '
               '${temSaidaNoTopo ? "GANHOU" : "PERDEU"} a saida da barra de '
-              'topo. A lista `saidaSoPelaBarra` diz quais telas dependem so '
-              'da barra de baixo, e ela acabou de mudar sem decisao: ou o '
-              'slot da esquerda trocou de conteudo, ou uma rota de escape '
-              'deixou de montar `AbaPerfil`.',
+              'topo. `saidaSoPelaFoto` diz quais telas saem SO pela foto -- e '
+              'a foto vai para a conta, nao volta --, e a conta acabou de '
+              'mudar sem decisao: ou o slot da esquerda trocou de conteudo, ou '
+              'uma rota de escape deixou de montar `AbaPerfil`.',
+        );
+        expect(
+          temBarra,
+          telasDePrimeiroPlano.any((t) => t.padrao == tela.padrao),
+          reason: 'REPROVA: a barra de baixo de ${tela.endereco} nao bate com '
+              'a classificacao dela. Este caso mede SAIDA e a barra e uma das '
+              'tres: se ela apareceu numa interna, o grupo (b) tambem reprova.',
         );
       });
     }
+
+    test('as quatro que saem SO pela foto sao internas, e isso e deliberado',
+        () {
+      // **A GUARDA CONTRA O VERDE POR VAZIO.** Se alguem mover as quatro para
+      // `telasDePrimeiroPlano`, elas ganham a barra, `temSaidaNoTopo` continua
+      // falso e a lista acima continua certa -- mas a razao de a lista existir
+      // (*"a foto e a unica saida"*) deixa de ser verdade, e ninguem notaria.
+      final internas = telasInternas.map((t) => t.padrao).toSet();
+      expect(
+        saidaSoPelaFoto.difference(internas),
+        isEmpty,
+        reason: 'REPROVA: ${saidaSoPelaFoto.difference(internas)} saem so pela '
+            'foto e NAO estao classificadas como internas. Se elas voltaram ao '
+            'primeiro plano, a barra passou a ser a segunda saida delas e esta '
+            'lista precisa dizer isso -- ou deixar de existir.',
+      );
+    });
   });
 }
 

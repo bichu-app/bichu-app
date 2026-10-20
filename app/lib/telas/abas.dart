@@ -859,9 +859,17 @@ class AbaPerfil extends StatelessWidget {
             // resolve -- tela que recusa dizendo e melhor que porta que nao
             // aparece. **Este menu so existe logado**, e a porta sem conta
             // continua sendo a de `Pets`... que saiu com o alvo secundario.
-            // **Esta e a perda real do item 3, e esta no relatorio como
-            // pergunta fechada para ele:** registrar achado deixou de ter porta
-            // para quem nao tem conta.
+            //
+            // **ESTA E A PERDA REAL DO ITEM 3, E O CLIENTE JA RESPONDEU SOBRE
+            // ELA -- NAO REABRA.** Eu a medi e a levei a ele como pergunta
+            // fechada; resposta literal, de 20/10/2026: *"O fluxo ja existe
+            // dentro do botao escanear, digitar codigo manualmente e sinalizar
+            // o pet perdido ou no perfil do usuario, podemos deixar como
+            // esta"*. Ou seja: quem acha um bicho na rua SEM conta entra pelo
+            // leitor de plaquinha -- que e a acao flutuante de `Pets`, nao
+            // exige conta, e aceita codigo digitado a mao --, e dali sinaliza.
+            // A perda e conhecida e aceita; devolver uma porta sem conta aqui
+            // seria desfazer uma decisao dele.
             ItemDeMenu(
               rotulo: 'Registrar achado avulso',
               aoTocar: () => context.push(Rotas.registrarAchado),

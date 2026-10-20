@@ -743,19 +743,25 @@ class _CascaComAbasState extends State<CascaComAbas> {
 /// inferior some, mantenha ele fixo em todas as paginas"*.
 ///
 /// A barra pertencia ao `Scaffold` de [CascaComAbas], e toda rota IRMA da
-/// casca -- a conversa, o perfil de uma pessoa, `Meus dados`, os pedidos de
-/// conexao, e mais vinte e tantas -- cobria essa casca e levava a barra com
-/// ela. **Nao da para devolver a barra no `pop`**, e isso foi medido numa
+/// casca levava a barra embora ao cobrir essa casca. **A tela que ele notou
+/// era a AREA DE MENSAGENS** -- o destino do slot `AuAu`, que e a propria
+/// barra. **Nao da para devolver a barra no `pop`**, e isso foi medido numa
 /// rodada anterior: o `pop` aterrissava certo; o que falhava era a exigencia
 /// de produto de a barra estar VISIVEL na tela empilhada, e rota que cobre a
 /// casca nao tem como mostrar o que a casca desenha.
 ///
 /// Entao a barra passou a ter DUAS cascas -- [CascaComAbas], com os ramos, e
-/// [CascaFixa], com as telas empilhadas --, e **a duplicacao do COMPONENTE era
-/// o risco da escolha**: duas barras divergem, e no dia em que divergirem
-/// ninguem sabe qual das duas e a certa. Esta classe e o que impede isso: o
-/// desenho e UM, os cinco slots saem do MESMO registro, e o que muda entre as
-/// duas cascas e so o motor do toque, que entra por [aoTocar].
+/// [CascaFixa], com as telas de PRIMEIRO PLANO --, e **a duplicacao do
+/// COMPONENTE era o risco da escolha**: duas barras divergem, e no dia em que
+/// divergirem ninguem sabe qual das duas e a certa. Esta classe e o que impede
+/// isso: o desenho e UM, os cinco slots saem do MESMO registro, e o que muda
+/// entre as duas cascas e so o motor do toque, que entra por [aoTocar].
+///
+/// **A segunda mensagem dele, do mesmo dia, encolheu a lista de 29 para 2** --
+/// *"a barra fixa apenas nas paginas de primeiro plano, as paginas internas,
+/// pode manter como esta"* -- e **nao mudou nada nesta classe**: duas cascas
+/// continuam existindo, e uma barra desenhada em dois lugares continuaria
+/// divergindo. Ver [CascaFixa] para o discriminador.
 ///
 /// O portao e `test/telas/barra_fixa_em_toda_tela_test.dart`: ele varre
 /// `lib/` e reprova se aparecer um segundo `NavigationBar` em qualquer
@@ -769,9 +775,9 @@ class BarraDeBaixo extends StatelessWidget {
 
   /// O slot que fica ACESO, ou **-1 para nenhum**.
   ///
-  /// -1 e o estado comum nas telas empilhadas que nao pertencem a secao
-  /// nenhuma da barra (`Meus dados`, os pedidos de conexao) e tambem na tela
-  /// da conta, que saiu da barra em 19/10 e continua sendo ramo. Acender
+  /// -1 e o estado da caixa de avisos -- o sino e das CINCO secoes, entao ela
+  /// nao pertence a nenhuma -- e tambem da tela da conta, que saiu da barra em
+  /// 19/10 e continua sendo ramo. Acender
   /// `Pets` nesses casos seria a barra afirmando uma secao em que a pessoa nao
   /// esta -- pior que nenhuma acesa, porque ela mente para quem ve e, pelo
   /// `selected` da semantica, tambem para quem usa leitor de tela.
@@ -840,49 +846,68 @@ class BarraDeBaixo extends StatelessWidget {
   }
 }
 
-/// A CASCA DAS TELAS EMPILHADAS: a mesma barra de baixo, sem trocar de ramo.
+/// A CASCA DAS TELAS DE PRIMEIRO PLANO: a mesma barra, sem trocar de ramo.
 ///
-/// ## O pedido, e por que as outras duas saidas foram recusadas
+/// ## O pedido, em duas mensagens do mesmo dia
 ///
-/// Cliente, 20/10/2026: *"quando o usuario vai para a mensagem, o menu
-/// inferior some, mantenha ele fixo em todas as paginas"*.
+/// **Primeira:** *"quando o usuario vai para a mensagem, o menu inferior some,
+/// mantenha ele fixo em todas as paginas"*. A barra pertencia ao `Scaffold` de
+/// [CascaComAbas], e toda rota IRMA da casca cobria essa casca e levava a
+/// barra com ela -- as 29 rotas empilhadas desta arvore. **Nao da para
+/// devolver a barra no `pop`**, e isso foi medido numa rodada anterior: o `pop`
+/// aterrissava certo; o que falhava era a exigencia de a barra estar VISIVEL
+/// na tela empilhada, e rota que cobre a casca nao mostra o que a casca
+/// desenha.
 ///
-/// Tres saidas estavam na mesa, e a escolha foi medida nesta arvore:
+/// **Segunda, que DELIMITOU:** *"vamos colocar a barra fixa apenas nas paginas
+/// de primeiro plano, as paginas internas, pode manter como esta. Exemplo: ao
+/// clicar no menu auau, mantem a barra .. ao clicar na mensagem tira a barra.
+/// Ao clicar no perfil mantem a barra, ao clicar no cadastro do pet, remove a
+/// barra. Na listagem dos eventos, mantem a barra, ao clicar nos detalhes do
+/// evento, remove a barra. E assim por diante."*
+///
+/// **O que ele notou era o achado desta frente:** a tela que nao devia ter
+/// perdido a barra era a AREA DE MENSAGENS -- o destino do slot `AuAu`, que e
+/// a propria barra --, e nao a conversa aberta. Entao esta classe deixou de
+/// vestir 29 rotas e passou a vestir **DUAS**: `/mensagens` e `/notificacoes`.
+/// O discriminador e **quem abre a tela** -- a casca ou o conteudo --, e a
+/// conta dos tres exemplos dele esta em `rotas.dart`, no bloco das rotas.
+///
+/// ## Por que esta classe nao foi apagada com a reversao
+///
+/// Porque as duas que sobraram sao exatamente o defeito que ele viu, e elas
+/// precisam do mesmo mecanismo que as 29 precisavam: nao da para devolver a
+/// barra no `pop`. O que encolheu foi a LISTA, e nao a necessidade.
+///
+/// ## As tres saidas, e por que (c)
 ///
 /// **(a) Levar cada tela para DENTRO da casca, como ramo do `IndexedStack`.**
-/// Recusada. Ramo exige tela unica e estado permanente, e o `IndexedStack` nao
-/// tem ramo para `/mensagens/:conversaId` nem para `/pets/:petId` -- um ramo
-/// por conversa nao existe. A variante util de (a) e a SUB-ROTA de ramo, que
-/// esta arvore ja usa duas vezes (`locais/:slug` sob `Rede`, `produtos/:slug`
-/// sob `Loja`), e ela resolve 20 das 30 telas: as outras 10 nao sao de secao
-/// nenhuma. **A caixa de avisos e a prova**: o sino esta na barra de topo das
-/// CINCO secoes, e pendurar `/notificacoes` sob um ramo faria o `Voltar` dela
-/// devolver OUTRA secao -- quem abriu os avisos em `Loja` voltaria no `Perfil`.
-/// O mesmo vale para o perfil de uma pessoa (alcancado da conversa e do mural)
-/// e para a ficha de um achado. E sub-rota exige o endereco ser filho do
-/// endereco do ramo: `/conexoes/pedidos` e `/pessoa/:apelido` teriam de trocar
-/// de endereco para caber debaixo de `/perfil`.
+/// Recusada. Ramo exige tela unica e estado permanente, e a variante util de
+/// (a) -- a SUB-ROTA de ramo, que esta arvore ja usa duas vezes (`locais/:slug`
+/// sob `Rede`, `produtos/:slug` sob `Loja`) -- nao serve as duas que ficaram:
+/// **as duas sao alcancadas das CINCO secoes**. O sino esta na barra de topo
+/// de todas elas, e o slot `AuAu` na barra de baixo de todas elas; pendurar
+/// `/notificacoes` sob um ramo faria o `Voltar` dela devolver OUTRA secao --
+/// quem abriu os avisos em `Loja` voltaria no `Perfil`.
 ///
-/// **(b) Uma barra PROPRIA desenhada em cada tela empilhada.** Recusada: trinta
-/// copias do mesmo componente, trinta lugares de onde divergir, e o filete de
-/// 1px e os cinco slots repetidos a mao em cada uma.
+/// **(b) Uma barra PROPRIA desenhada em cada tela.** Recusada: copia do mesmo
+/// componente, com o filete de 1px e os cinco slots repetidos a mao.
 ///
-/// **(c) UMA casca que envolve as rotas empilhadas** -- esta classe. Nenhum
-/// endereco trocado, nenhum `Voltar` mudado de destino, e o desenho da barra
-/// vindo do MESMO [BarraDeBaixo] que a casca dos ramos usa. O risco de (b) --
-/// duas barras que divergem -- morre no componente unico, e o portao varre
-/// `lib/` por um segundo `NavigationBar`.
+/// **(c) UMA casca que envolve as rotas de primeiro plano** -- esta classe.
+/// Nenhum endereco trocado, nenhum `Voltar` mudado de destino, e o desenho da
+/// barra vindo do MESMO [BarraDeBaixo] que a casca dos ramos usa. O risco de
+/// (b) -- duas barras que divergem -- morre no componente unico, e o portao
+/// varre `lib/` por um segundo `NavigationBar`.
 ///
 /// ## COMO ela envolve: no `builder`, e nao num `ShellRoute`
 ///
-/// A forma obvia de (c) e um `ShellRoute` em volta das rotas empilhadas, e ela
-/// foi a primeira tentativa. **Ela deu a barra e tirou a saida de SETE
-/// telas**, medido: `ShellRoute` cria um `Navigator` proprio, a primeira tela
-/// empilhada vira a unica pagina dele, e o `AppBar` decide a seta automatica
-/// por `ModalRoute.impliesAppBarDismissal` -- que e local ao `Navigator`. As
-/// sete telas que nao desenham `SaidaDaTela` a mao (a area de mensagens, o
-/// perfil de uma pessoa, os pedidos de conexao, as pessoas bloqueadas, minhas
-/// fotos, minhas indicacoes e adocoes) perdiam a seta.
+/// A forma obvia de (c) e um `ShellRoute` em volta das rotas, e ela foi a
+/// primeira tentativa. **Ela deu a barra e tirou a saida de SETE telas**,
+/// medido: `ShellRoute` cria um `Navigator` proprio, a primeira tela empilhada
+/// vira a unica pagina dele, e o `AppBar` decide a seta automatica por
+/// `ModalRoute.impliesAppBarDismissal` -- que e local ao `Navigator`. **A area
+/// de mensagens era uma das sete**, e ela e justamente uma das duas que
+/// sobraram: o defeito teria ficado em pe no lugar que mais importa.
 ///
 /// Entao o embrulho e no `builder` de cada rota, por `_comBarraFixa` em
 /// `rotas.dart`: a pagina continua no `Navigator` raiz, `canPop` e a seta
@@ -890,20 +915,19 @@ class BarraDeBaixo extends StatelessWidget {
 ///
 /// ## O preco de (c), dito por inteiro
 ///
-/// O motor do toque aqui e `go` e nao `goBranch`, porque de fora da casca
-/// dos ramos nao ha `StatefulNavigationShell` para trocar de ramo. A diferenca
-/// e real: tocar em `Loja` de dentro de uma conversa ABANDONA a pilha
+/// O motor do toque aqui e `go` e nao `goBranch`, porque de fora da casca dos
+/// ramos nao ha `StatefulNavigationShell` para trocar de ramo. A diferenca e
+/// real: tocar em `Loja` de dentro da area de mensagens ABANDONA a pilha
 /// empilhada em vez de guarda-la. **E o comportamento que ja existia** -- a
 /// barra nao estava la para ser tocada --, e e o mesmo que o slot do `AuAu`
-/// faz desde 19/10.
+/// fazia desde 19/10.
 ///
-/// ## O slot ACESO, que a tela empilhada passou a saber dizer
+/// ## O slot ACESO, que a tela de primeiro plano passou a saber dizer
 ///
-/// `/mensagens/:conversaId` esta DENTRO da secao `AuAu`, e `/pets/:petId`
-/// dentro de `Pets`. [slotDaRota] le o endereco e acende o slot da secao a que
-/// a tela pertence -- e deixa TODOS apagados quando ela nao pertence a nenhuma
-/// (`Meus dados`, os pedidos de conexao), porque acender um slot errado e a
-/// barra mentindo sobre onde a pessoa esta.
+/// `/mensagens` esta DENTRO da secao `AuAu`, e [slotDaRota] acende o slot
+/// dela. `/notificacoes` nao pertence a secao nenhuma -- o sino e de todas --,
+/// e ali TODOS os slots ficam apagados, porque acender um seria a barra
+/// mentindo sobre onde a pessoa esta.
 class CascaFixa extends StatelessWidget {
   const CascaFixa({required this.child, super.key});
 
