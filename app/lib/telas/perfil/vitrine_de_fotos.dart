@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../acessibilidade/anunciar.dart';
+import '../../api/envio_de_foto.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/vitrine_api.dart';
@@ -7,8 +9,11 @@ import '../../dispositivo/camera_e_galeria.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/convite_para_entrar.dart';
+import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/previa_da_foto.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
 ///
@@ -54,14 +59,39 @@ import '../../widgets/imagem_da_rede.dart';
 class VitrineDeFotosDoUsuario extends StatefulWidget {
   const VitrineDeFotosDoUsuario({
     required this.api,
+    required this.escrita,
+    required this.camera,
+    required this.envio,
     super.key,
     this.aoAbrirMeusPets,
   });
 
-  /// A LEITURA, e nao a `VitrineApi` inteira: esta tela desenha, e nao escreve.
-  /// Uma tela que alcancasse `substituir` poderia reordenar ou apagar a vitrine
-  /// num toque errado.
+  /// A LEITURA, e nao a `VitrineApi` inteira.
   final LeituraDaVitrine api;
+
+  /// A ESCRITA, em interface propria: `intencaoDeFotoDaVitrine` e
+  /// `substituir`, e nada mais.
+  ///
+  /// **Ate 19/10/2026 esta tela era SO DE LEITURA, e isso era o buraco.**
+  /// Medido: `FotoDaVitrine` e `VitrineApi.substituir` nao eram construidas
+  /// nem chamadas em lugar nenhum de `app/lib` nem de `app/test`, e o estado
+  /// vazio da tela dizia *"Adicione uma foto para comecar a sua vitrine"* sem
+  /// haver como adicionar. O cliente pediu a vitrine em 18/10 (*"perfil do
+  /// usuario com vitrine de fotos, parecido com instagram"*).
+  ///
+  /// Ela e um parametro proprio, e nao a `VitrineApi` inteira, pela razao que
+  /// o cabecalho de `EscritaDaVitrine` explica: a troca entre duas funcoes de
+  /// assinatura identica foi o defeito desta semana, e a interface estreita e
+  /// o que mantem a troca visivel.
+  final EscritaDaVitrine escrita;
+
+  /// A fronteira com o aparelho. Parametro, e nao `Escopo`, como as outras
+  /// portas desta tela: e o que permite medir os quatro estados de permissao
+  /// sem aparelho.
+  final CameraEGaleria camera;
+
+  /// O unico caminho de bytes do app. Parametro pelo mesmo motivo.
+  final EnvioDeFoto envio;
 
   /// Abre `Meus pets`. **Referencia, e nao inclusao**: a foto do pet nao entra
   /// na vitrine. Nulo nao desenha o atalho.
@@ -85,6 +115,45 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
 
   static const String rotuloDaCapa = 'Capa';
 
+  // -------------------------------------------------------------------------
+  // O CONTROLE DE ADICIONAR (19/10/2026)
+  // -------------------------------------------------------------------------
+
+  static const String tirarFoto = 'Tirar foto';
+
+  static const String escolherDaGaleria = 'Escolher da galeria';
+
+  /// O unico botao de salvar desta tela, e ele so existe quando ha o que
+  /// salvar. **Nao e um "salvar foto" ao lado de outro salvar**: a tela nao
+  /// tem formulario, e este e o `Salvar` dela.
+  static const String salvar = 'Salvar';
+
+  static const String aFotoEscolhida = 'A foto que você escolheu';
+
+  static const String fotoProntaParaSalvar =
+      'Foto enviada. Toque em Salvar para guardar na sua vitrine.';
+
+  static const String fotoSemSinal =
+      'A foto não subiu: sem conexão agora. Escolha a foto de novo quando '
+      'tiver internet.';
+
+  static const String fotoRecusada =
+      'A foto não foi aceita. Escolha outra foto.';
+
+  static const String fotoSalva = 'Foto salva na sua vitrine.';
+
+  static const String cameraNosAjustes =
+      'A câmera está bloqueada nos ajustes do sistema.';
+
+  static const String abrirAjustes = 'Abrir os ajustes';
+
+  /// O texto do teto. **O numero vem do SERVIDOR** (`MyShowcase.max_photos`,
+  /// `enum: [9]`, medido contra a homologacao: `{"photos":[],"max_photos":9}`),
+  /// e nunca de uma constante aqui -- duas copias do numero divergem na
+  /// primeira mudanca, e a tela e a copia que ninguem lembra de atualizar.
+  static String vitrineCheia(int teto) =>
+      'Sua vitrine está cheia, com $teto fotos. Apague uma para pôr outra.';
+
   @override
   State<VitrineDeFotosDoUsuario> createState() => _EstadoDaVitrine();
 }
@@ -97,10 +166,238 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
   bool _faltaConta = false;
 
+  // -------------------------------------------------------------------------
+  // ACRESCENTAR UMA FOTO (19/10/2026)
+  // -------------------------------------------------------------------------
+
+  /// A foto que a pessoa escolheu no aparelho. **A fonte da PREVIA, e ela vem
+  /// do ARQUIVO LOCAL.**
+  ///
+  /// Nao se espera a derivada do servidor: a foto nasce `processing` com
+  /// `grid_url: null` -- medido contra a homologacao, o `PUT /v1/me/showcase`
+  /// respondeu `200` com `status: processing` e as duas URLs nulas, e so o
+  /// `GET` seguinte trouxe `status: ready`. Uma previa que esperasse por elas
+  /// ficaria vazia segundos depois da escolha, parecendo travada.
+  FotoLocal? _escolhida;
+
+  /// O `upload_id` de uma foto cujos **bytes ja estao no armazenamento** e que
+  /// ainda **nao esta na vitrine**, ou nulo quando nao ha nenhuma.
+  ///
+  /// E este campo que o [salvar] manda em `ShowcasePhotoInput.upload_id`, e e
+  /// ele a diferenca entre "ha foto escolhida" e "ha foto para gravar".
+  String? _uploadPendente;
+
+  bool _enviando = false;
+  bool _salvando = false;
+
+  /// A faixa de recado -- recusa de tipo, envio que nao saiu, falha ao gravar.
+  MensagemDeErro? _faixa;
+
+  /// O recado de sucesso, que sai no mesmo lugar e e outra coisa.
+  String? _confirmacao;
+
+  /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
+  /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
+  EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
+
   @override
   void initState() {
     super.initState();
     _carregar();
+    _lerAPermissaoDaCamera();
+  }
+
+  Future<void> _lerAPermissaoDaCamera() async {
+    final estado = await widget.camera.estadoDaCamera();
+    if (!mounted) return;
+    setState(() => _permissaoDaCamera = estado);
+  }
+
+  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
+  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
+  Future<void> _tirarFoto() async {
+    var estado = _permissaoDaCamera;
+    if (estado == EstadoDaPermissao.negada) {
+      estado = await widget.camera.pedirCamera();
+      if (!mounted) return;
+      setState(() => _permissaoDaCamera = estado);
+    }
+    if (estado != EstadoDaPermissao.concedida) return;
+    final foto = await widget.camera.tirarFoto();
+    if (!mounted) return;
+    if (foto != null) await _escolheu(foto);
+  }
+
+  Future<void> _escolherDaGaleria() async {
+    final foto = await widget.camera.escolherDaGaleria();
+    if (!mounted) return;
+    if (foto != null) await _escolheu(foto);
+  }
+
+  Future<void> _abrirOsAjustes() => widget.camera.abrirAjustesDoSistema();
+
+  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor
+  /// dizer qualquer coisa.
+  ///
+  /// Padrao decidido pelo cliente em 19/10/2026: *"quando o usuario fizer o
+  /// upload de qualquer foto no app, voce deve fazer o upload e apresentar
+  /// como vai ficar de preview, e ao salvar o voce salva a foto"*.
+  ///
+  /// **HEIC ENTRA AQUI**, e esta e a diferenca em relacao a capa do evento:
+  /// `ShowcasePhotoIntentInput.content_type` declara
+  /// `[image/jpeg, image/png, image/heic, image/webp]`, com a razao escrita no
+  /// contrato -- *"a vitrine sai de um CELULAR, e foto de iPhone e HEIC;
+  /// recusa-lo na entrada tiraria a vitrine da mao de metade dos aparelhos"*.
+  /// Por isso a lista usada e `tiposDeFotoAceitos`, e nao
+  /// `tiposDeFotoAceitosSemHeic`.
+  ///
+  /// **Trocar de foto antes de salvar**: o `upload_id` anterior e descartado
+  /// aqui. O objeto do primeiro envio cai no expurgo de dez minutos do
+  /// servidor -- nao ha rota de cancelamento de intencao no contrato.
+  Future<void> _escolheu(FotoLocal foto) async {
+    final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
+    if (recusa != null) {
+      setState(() {
+        _escolhida = null;
+        _uploadPendente = null;
+        _confirmacao = null;
+        _faixa = MensagemDeErro(texto: recusa);
+      });
+      anunciar(context, recusa);
+      return;
+    }
+
+    setState(() {
+      _escolhida = foto;
+      _uploadPendente = null;
+      _confirmacao = null;
+      _faixa = null;
+      _enviando = true;
+    });
+
+    // `EnvioParaConfirmarDepois` com a FUNCAO DA ROTA, e nao com uma etiqueta
+    // de proposito: `ShowcasePhotoIntentInput` nao tem campo `purpose`, e e a
+    // rota (`POST /v1/me/showcase/photo-intents`) que fixa o `user_showcase`.
+    //
+    // **E A FUNCAO E A DA VITRINE, conferida aqui por escrito.** O defeito
+    // consertado em 19/10 era exatamente este: a vitrine chamando o
+    // registrador de capa de encontro e gravando `network_event` numa foto de
+    // pessoa. As duas funcoes tem assinatura identica e a troca COMPILA.
+    // Medido contra a homologacao em 19/10/2026: a intencao desta rota nasce
+    // em `people/original/jhA9w3MKgA3cK5NpPp72ag` e a derivada da grade sai em
+    // `https://img-hml.bichu.app/people/thumb/...` -- o prefixo `people/` e a
+    // cara do `user_showcase`, e o da capa e `events/`.
+    //
+    // **`FotoDaVitrine` NAO e usada aqui, e a ausencia e deliberada.** Ela
+    // tambem nao confirma nada (`confirmar` vazio), mas ela nao GUARDA o
+    // `upload_id` -- e sem ele a tela nao tem o que mandar no `PUT`.
+    final destino = EnvioParaConfirmarDepois(
+      pedir: widget.escrita.intencaoDeFotoDaVitrine,
+    );
+    final desfecho = await widget.envio.enviar(foto: foto, destino: destino);
+    if (!mounted) return;
+
+    setState(() {
+      _enviando = false;
+      switch (desfecho) {
+        case DesfechoDoEnvio.enviada:
+          _uploadPendente = destino.uploadId;
+          _confirmacao = VitrineDeFotosDoUsuario.fotoProntaParaSalvar;
+        case DesfechoDoEnvio.semSinal:
+          // **A previa SAI quando o envio falha**: o `Salvar` nao teria o que
+          // gravar, e manter um retrato na tela depois de um envio que nao
+          // aconteceu e a tela prometendo uma foto que nao existe.
+          _escolhida = null;
+          _faixa = const MensagemDeErro(
+            texto: VitrineDeFotosDoUsuario.fotoSemSinal,
+          );
+        case DesfechoDoEnvio.recusada:
+          _escolhida = null;
+          _faixa = const MensagemDeErro(
+            texto: VitrineDeFotosDoUsuario.fotoRecusada,
+          );
+      }
+    });
+    if (!mounted) return;
+    anunciar(
+      context,
+      desfecho == DesfechoDoEnvio.enviada
+          ? VitrineDeFotosDoUsuario.fotoProntaParaSalvar
+          : (_faixa?.texto ?? ''),
+    );
+  }
+
+  /// O `Salvar`: a foto pendente **entra na vitrine**.
+  ///
+  /// ## A escrita e DECLARATIVA, e e por isso que as fotos que ja estao vao
+  /// junto
+  ///
+  /// `PUT /me/showcase` manda a vitrine INTEIRA, na ordem: `photos: []` tira
+  /// todas. Mandar so a foto nova apagaria as outras oito -- e o teste que
+  /// medisse "a foto nova esta na resposta" ficaria verde nisso.
+  ///
+  /// **A foto nova vai no FIM**, e nao no comeco: a posicao 0 e a capa, e
+  /// acrescentar nao e trocar a capa. Quem quiser trocar reordena, que e a
+  /// outra funcao do mesmo `PUT` e nao e desta entrega.
+  ///
+  /// **A foto sem `upload_id` e descartada da lista**, e isso e o contrato e
+  /// nao descuido: `ShowcasePhotoLida.uploadId` fica nulo depois que o
+  /// varredor apagou a intencao, e `ShowcasePhotoInput.upload_id` e
+  /// obrigatorio. Mandar nulo e um `400` que apagaria a vitrine inteira pela
+  /// metade.
+  ///
+  /// **E a CONFIRMACAO da intencao e esta gravacao**, na mesma transacao do
+  /// servidor -- nao ha operacao de confirmacao separada no contrato. Sem ela
+  /// a varredura de vencidos apagaria a foto dez minutos depois, que foi o que
+  /// aconteceu com a foto do achado.
+  Future<void> _salvar() async {
+    final pendente = _uploadPendente;
+    if (pendente == null) return;
+
+    setState(() {
+      _salvando = true;
+      _faixa = null;
+      _confirmacao = null;
+    });
+
+    final jaEstao = (_vitrine?.fotos ?? const <FotoDaVitrineLida>[])
+        .where((f) => f.uploadId != null)
+        .map(
+          (f) => FotoPedida(
+            uploadId: f.uploadId!,
+            textoAlternativo: f.textoAlternativo,
+          ),
+        )
+        .toList();
+
+    try {
+      final vitrine = await widget.escrita.substituir(<FotoPedida>[
+        ...jaEstao,
+        FotoPedida(uploadId: pendente),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _vitrine = vitrine;
+        _escolhida = null;
+        _uploadPendente = null;
+        _salvando = false;
+        _confirmacao = VitrineDeFotosDoUsuario.fotoSalva;
+      });
+      if (!mounted) return;
+      anunciar(context, VitrineDeFotosDoUsuario.fotoSalva);
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      // **A previa e o `upload_id` FICAM**: o envio aconteceu, e tentar de
+      // novo e so o `PUT`. Limpar aqui faria a pessoa escolher e subir a foto
+      // outra vez por uma falha que nao foi dela.
+      final mensagem = MensagensDeErro.de(falha);
+      setState(() {
+        _salvando = false;
+        _faixa = mensagem;
+      });
+      if (!mounted) return;
+      anunciar(context, mensagem.texto);
+    }
   }
 
   Future<void> _carregar() async {
@@ -170,8 +467,15 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
               const ConviteParaEntrar(secao: SecaoComConta.minhasFotos)
             else if (_falha != null)
               _erro(_falha!, cores, textos)
-            else
+            else ...<Widget>[
               _grade(_vitrine, cores, textos),
+              const SizedBox(height: BichuEspaco.e4),
+              // O CONTROLE DE ADICIONAR, que a tela NAO TINHA ate 19/10/2026.
+              // Ele fica depois da grade porque e o que se faz com a grade na
+              // tela: a ordem de leitura entrega o que ja existe antes do que
+              // acrescenta.
+              _bloco(cores, textos),
+            ],
             if (widget.aoAbrirMeusPets != null) ...[
               const SizedBox(height: BichuEspaco.e4),
               _atalhoDosPets(cores, textos),
@@ -182,6 +486,109 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       ),
     );
   }
+
+  /// O bloco de acrescentar: previa, recado, os dois botoes e o `Salvar`.
+  ///
+  /// **Com a vitrine CHEIA nao ha botao nenhum**, e isso e o contrato e nao
+  /// zelo: com nove fotos `createShowcasePhotoUploadIntent` responde `400` em
+  /// vez de assinar, com a razao escrita -- *"assinar a decima seria entregar
+  /// autorizacao de escrita que a vitrine nunca vai aceitar, e o objeto
+  /// ficaria no balde ate o varredor passar"*. Um botao que leva a `400` e um
+  /// botao que promete.
+  Widget _bloco(BichuCores cores, TextTheme textos) {
+    final vitrine = _vitrine;
+    final cheia = vitrine != null && vitrine.estaCheia && _uploadPendente == null;
+    final local = _escolhida;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (_faixa != null) ...<Widget>[
+          FaixaDeAviso(texto: _faixa!.texto),
+          const SizedBox(height: BichuEspaco.e3),
+        ],
+        if (_confirmacao != null) ...<Widget>[
+          FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            texto: _confirmacao!,
+          ),
+          const SizedBox(height: BichuEspaco.e3),
+        ],
+        if (cheia)
+          FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            // O numero sai da RESPOSTA, e nao de uma constante da tela.
+            texto: VitrineDeFotosDoUsuario.vitrineCheia(vitrine.teto),
+          )
+        else ...<Widget>[
+          if (local != null || _enviando) ...<Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(BichuRaio.lg),
+              child: SizedBox(
+                height: _alturaDaPrevia,
+                width: double.infinity,
+                child: local != null
+                    // `PreviaDaFoto` porque desenhar arquivo do aparelho pede
+                    // `dart:io`, proibido dentro de `lib/telas` pelo portao de
+                    // diretivas -- e ela ja pede `cacheWidth` ao
+                    // decodificador. **Nunca `Image.file` cru.**
+                    ? PreviaDaFoto(
+                        foto: local,
+                        descricao: VitrineDeFotosDoUsuario.aFotoEscolhida,
+                        altura: _alturaDaPrevia,
+                      )
+                    : const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+            const SizedBox(height: BichuEspaco.e3),
+          ],
+          if (_permissaoDaCamera ==
+              EstadoDaPermissao.negadaPermanentemente) ...<Widget>[
+            FaixaDeAviso(
+              peso: PesoDaFaixa.informativo,
+              texto: VitrineDeFotosDoUsuario.cameraNosAjustes,
+              rotuloDaAcao: VitrineDeFotosDoUsuario.abrirAjustes,
+              aoTocarNaAcao: _abrirOsAjustes,
+            ),
+            const SizedBox(height: BichuEspaco.e3),
+          ],
+          // **Sem camera o botao SOME**: um botao que nao leva a nada e pior
+          // que a ausencia dele. A galeria continua, e ela nao tem estado de
+          // permissao proprio (ver `CameraDoAparelho`).
+          if (_permissaoDaCamera != EstadoDaPermissao.indisponivel) ...<Widget>[
+            BotaoSecundario(
+              rotulo: VitrineDeFotosDoUsuario.tirarFoto,
+              aoTocar: _enviando || _salvando ? null : _tirarFoto,
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+          ],
+          OutlinedButton(
+            onPressed: _enviando || _salvando ? null : _escolherDaGaleria,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+            ),
+            child: const Text(VitrineDeFotosDoUsuario.escolherDaGaleria),
+          ),
+          // **O `Salvar` so existe quando ha o que salvar**, e ele e o UNICO
+          // botao primario desta tela. Nao e um "salvar foto" ao lado de um
+          // outro salvar: a tela nao tem formulario, e este e o salvar dela.
+          if (_uploadPendente != null) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e3),
+            BotaoPrimario(
+              rotulo: VitrineDeFotosDoUsuario.salvar,
+              carregando: _salvando,
+              aoTocar: _salvando ? null : _salvar,
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  /// A altura da previa. Mais alta que a celula da grade de proposito: a
+  /// previa existe para a pessoa ver a foto que escolheu, e 104 dp nao mostram
+  /// uma foto -- mostram uma miniatura dela.
+  static const double _alturaDaPrevia = 220;
 
   Widget _erro(String mensagem, BichuCores cores, TextTheme textos) {
     return Column(

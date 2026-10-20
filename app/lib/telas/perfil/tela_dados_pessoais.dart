@@ -135,13 +135,28 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   bool _buscandoOCep = false;
   String _cepJaBuscado = '';
 
-  /// A foto que a pessoa acabou de escolher no aparelho, **antes de subir**.
+  /// A foto que a pessoa escolheu no aparelho. **A fonte da PREVIA, e ela vem
+  /// do ARQUIVO LOCAL.**
   ///
-  /// Existe para a PREVIA: escolher e enviar sao dois momentos, e sem este
-  /// campo a tela subiria o arquivo antes de a pessoa ver qual arquivo pegou.
-  /// Nulo depois de um envio bem-sucedido -- dali em diante quem manda e a
+  /// Nao se espera a URL do servidor para desenhar: a derivada so existe
+  /// depois de o worker rodar (`status: processing` nasce com `url: null`), e
+  /// uma previa que esperasse por ela ficaria vazia segundos depois de a
+  /// pessoa escolher a foto -- parecendo travada. `PreviaDaFoto` desenha o
+  /// arquivo com `cacheWidth`, e a diferenca e medida: 48.771.072 bytes
+  /// decodificados sem ele contra 2.904.768 com `cacheWidth: 984`, 16,8x.
+  ///
+  /// Nulo depois de o `Salvar` gravar a foto -- dali em diante quem manda e a
   /// derivada do servidor, em [DadosPessoais.fotoUrl].
   FotoLocal? _fotoEscolhida;
+
+  /// O `upload_id` de uma foto cujos **bytes ja estao no armazenamento** e que
+  /// ainda **nao foi confirmada**, ou nulo quando nao ha nenhuma.
+  ///
+  /// Este campo e a diferenca entre "ha foto escolhida" e "ha foto para
+  /// gravar", e e ele que o `Salvar` manda em `MeUpdate.photo_upload_id`.
+  /// Ele fica nulo quando o envio falhou: um identificador de bytes que nao
+  /// subiram volta `400 upload_not_usable` sem dizer por que.
+  String? _uploadDaFoto;
 
   /// Comeca em `negada` como no registro de achado: `negada` e o estado em que
   /// ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
@@ -191,99 +206,104 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await camera.tirarFoto();
     if (!mounted) return;
-    if (foto != null) _escolheu(foto);
+    if (foto != null) await _escolheu(foto);
   }
 
   Future<void> _escolherDaGaleria() async {
     final foto = await Escopo.of(context).camera.escolherDaGaleria();
     if (!mounted) return;
-    if (foto != null) _escolheu(foto);
+    if (foto != null) await _escolheu(foto);
   }
 
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
 
-  /// A foto escolhida entra na PREVIA, e **nao sobe ainda**.
+  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor
+  /// dizer qualquer coisa.
   ///
-  /// Subir no toque do seletor tiraria da pessoa a chance de ver qual arquivo
-  /// ela pegou -- que e o defeito que `PreviaDaFoto` nasceu para consertar, em
-  /// outra tela, quando ela imprimia o caminho do arquivo.
-  void _escolheu(FotoLocal foto) {
-    setState(() {
-      _fotoEscolhida = foto;
-      _faixa = null;
-      _confirmacao = null;
-    });
-  }
-
-  /// Os tres passos: intencao, bytes, e o `PATCH /v1/me` que amarra a foto a
-  /// conta.
+  /// Cliente, 19/10/2026, literal: *"remova esse botao de salvar foto, quando o
+  /// usuario fizer o upload de qualquer foto no app, voce deve fazer o upload e
+  /// apresentar como vai ficar de preview, e ao salvar o voce salva a foto"*.
   ///
-  /// **A tela nao afirma envio que nao aconteceu.** `DesfechoDoEnvio` tem tres
-  /// valores e cada um tem a sua frase: sem sinal diz para tentar de novo (nao
-  /// ha fila offline para esta foto -- a `RetomadaDeFotos` e do pet, e dizer
-  /// "ela sai sozinha" aqui seria mentira); recusada diz para tentar outra
-  /// foto; enviada diz que ela aparece quando o processamento terminar.
+  /// Os bytes saem aqui; a CONFIRMACAO sai no [_salvar]. Isso casa com o
+  /// contrato sem inventar rota: intencao, envio e confirmacao sempre foram
+  /// tres passos separados por desenho, e o pedido do cliente e mover o
+  /// terceiro para outro toque.
   ///
-  /// A foto escolhida **fica** quando o envio falha: limpar a previa faria a
-  /// pessoa escolher o arquivo de novo para tentar de novo.
-  Future<void> _enviarAFoto() async {
-    final foto = _fotoEscolhida;
-    if (foto == null || _enviandoAFoto) return;
-
-    // O NOME ANTES DA FOTO, e a conferencia e local de proposito.
-    //
-    // O terceiro passo do envio e `PATCH /v1/me` com `photo_upload_id`, e o
-    // servidor recusa esse PATCH quando a conta nao tem nome (decisao do
-    // cliente de 18/10/2026). Essa recusa chega aqui como
-    // `DesfechoDoEnvio.recusada`, que vira "tente outra foto" -- e nenhuma
-    // outra foto resolve. Medido em 18/10/2026: a conta sem nome recebia
-    // `400 {"field":"display_name","code":"required"}` depois de os bytes
-    // subirem.
-    //
-    // Conferir aqui poupa o envio inteiro e, acima disso, DIZ O QUE PREENCHER:
-    // a mensagem cai no campo do nome, como a do `Salvar`.
-    if (_nome.text.trim().isEmpty) {
+  /// **A previa e pintada ANTES do envio**, e nao depois: este `setState` corre
+  /// antes do primeiro `await`, entao o quadro com a imagem do arquivo local ja
+  /// esta na tela enquanto os bytes sobem.
+  ///
+  /// **Trocar de foto antes de salvar**: o `upload_id` anterior e descartado
+  /// aqui, no mesmo `setState`. O objeto do primeiro envio fica no
+  /// armazenamento e cai no expurgo de dez minutos do servidor -- nao ha rota
+  /// de cancelamento de intencao no contrato, e inventar uma seria inventar
+  /// rota.
+  Future<void> _escolheu(FotoLocal foto) async {
+    // A RECUSA POR TIPO, dita ANTES do envio. Ver `recusaDeTipoDaFoto`: ela
+    // existe porque a alternativa e a pessoa esperar um envio inteiro para o
+    // worker marcar `rejected` depois.
+    final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
+    if (recusa != null) {
       setState(() {
-        _erros[_CamposDosDados.nome] = _TextosDosDados.nomePrecisaDeTexto;
+        _fotoEscolhida = null;
+        _uploadDaFoto = null;
         _confirmacao = null;
-        _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoPrecisaDoNome);
+        _faixa = MensagemDeErro(texto: recusa);
       });
-      anunciar(context, _TextosDosDados.fotoPrecisaDoNome);
+      anunciar(context, recusa);
       return;
     }
 
     setState(() {
-      _enviandoAFoto = true;
+      _fotoEscolhida = foto;
+      _uploadDaFoto = null;
       _faixa = null;
       _confirmacao = null;
+      _enviandoAFoto = true;
     });
 
+    // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.
     final escopo = Escopo.of(context);
-    final destino = FotoDoUsuario(api: escopo.me);
-    final desfecho =
-        await escopo.envioDeFoto.enviar(foto: foto, destino: destino);
+    // `EnvioParaConfirmarDepois` com a FUNCAO DA ROTA, e nao com uma etiqueta
+    // de proposito: `MyPhotoIntentInput` nao tem campo `purpose`, e e a rota
+    // (`POST /v1/media/my-photo-intents`) que fixa o `user_photo`. Era uma
+    // troca de funcao de assinatura identica que gravou `network_event` numa
+    // foto de pessoa hoje, e passar a rota e o que torna a troca visivel.
+    final destino =
+        EnvioParaConfirmarDepois(pedir: escopo.me.intencaoDeFotoDoUsuario);
+    final desfecho = await escopo.envioDeFoto.enviar(
+      foto: foto,
+      destino: destino,
+    );
     if (!mounted) return;
 
     setState(() {
       _enviandoAFoto = false;
       switch (desfecho) {
         case DesfechoDoEnvio.enviada:
-          _fotoEscolhida = null;
-          _confirmacao = _TextosDosDados.fotoEnviada;
-          // O PATCH de confirmacao JA devolveu o `/me` novo: ler o corpo que
-          // ele trouxe e o que evita um `GET /v1/me` a mais logo depois do
-          // envio. Nulo nao acontece num desfecho `enviada`, mas o `case`
-          // existe porque um dia pode acontecer e `!` apagaria a tela.
-          if (destino.corpoDoMe case final Map<String, dynamic> corpo) {
-            _lido = DadosPessoais.doJson(corpo);
-          }
+          _uploadDaFoto = destino.uploadId;
+          _confirmacao = _TextosDosDados.fotoProntaParaSalvar;
         case DesfechoDoEnvio.semSinal:
+          // **A previa SAI quando o envio falha**, e isso nao e perder o
+          // trabalho da pessoa: o `Salvar` nao teria o que gravar, e manter um
+          // retrato na tela depois de um envio que nao aconteceu e a tela
+          // prometendo uma foto que nao existe. Os dois botoes logo acima sao o
+          // caminho de tentar de novo, e a frase diz isso.
+          _fotoEscolhida = null;
           _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoSemSinal);
         case DesfechoDoEnvio.recusada:
+          _fotoEscolhida = null;
           _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoRecusada);
       }
     });
+    if (!mounted) return;
+    anunciar(
+      context,
+      desfecho == DesfechoDoEnvio.enviada
+          ? _TextosDosDados.fotoProntaParaSalvar
+          : (_faixa?.texto ?? ''),
+    );
   }
 
   @override
@@ -520,6 +540,19 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final lido = _lido;
     if (lido == null) return;
 
+    // A FOTO AINDA SUBINDO. Dizer isso e melhor que gravar sem ela em
+    // silencio: o `upload_id` so existe depois de os bytes chegarem, e um
+    // `Salvar` que passasse por aqui gravaria o resto do cadastro e deixaria a
+    // foto de fora sem ninguem saber.
+    if (_enviandoAFoto) {
+      setState(() {
+        _confirmacao = null;
+        _faixa = const MensagemDeErro(texto: _TextosDosDados.fotoAindaSubindo);
+      });
+      anunciar(context, _TextosDosDados.fotoAindaSubindo);
+      return;
+    }
+
     final telefoneDigitado = _telefone.text.trim();
     final novoTelefone = telefoneDigitado.isEmpty
         ? null
@@ -546,13 +579,20 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final cidade = _seMudou(_cidade.text.trim(), lido.cidade);
     final uf = _uf == null ? null : _seMudou(_uf!, lido.uf);
 
+    // A FOTO ENVIADA E AINDA NAO CONFIRMADA. **Ela conta como mudanca**, e e
+    // esta linha que conserta o defeito que o cliente relatou em 19/10/2026:
+    // antes dela, escolher a foto e tocar em `Salvar` respondia "Nada mudou
+    // desde a ultima vez" e nao gravava foto nenhuma -- medido.
+    final fotoParaGravar = _uploadDaFoto;
+
     if (nome == null &&
         apelido == null &&
         telefone == null &&
         cep == null &&
         bairro == null &&
         cidade == null &&
-        uf == null) {
+        uf == null &&
+        fotoParaGravar == null) {
       // Nada mudou. Dizer isso e melhor que um `Salvar` que pisca e nao faz
       // nada -- e melhor que uma escrita vazia contra o teto da conta.
       setState(() {
@@ -579,6 +619,11 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             bairro: bairro,
             cidade: cidade,
             uf: uf,
+            // **O MESMO PATCH do nome.** O servidor recusa o cadastro sem
+            // nome, e enquanto a foto vinha num PATCH proprio a recusa do nome
+            // e a gravacao da foto eram dois atos em transacoes diferentes. O
+            // nome ja foi cobrado por `_conferir`, antes da rede.
+            fotoUpload: fotoParaGravar,
           );
       if (!mounted) return;
       // A sessao recebe o usuario novo: o `Perfil` mostra o e-mail e as
@@ -590,6 +635,14 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         _lido = dados;
         _confirmacao = _TextosDosDados.salvo;
         _cepJaBuscado = _soDigitos(dados.cep ?? '');
+        if (fotoParaGravar != null) {
+          // A previa do arquivo local SAI, e o retrato passa a ser o do
+          // servidor: o corpo que o PATCH devolveu ja traz `photo.status`
+          // (`processing` no instante da gravacao), e desenhar os dois seria
+          // duas respostas para a mesma pergunta.
+          _fotoEscolhida = null;
+          _uploadDaFoto = null;
+        }
       });
       // **So depois de o servidor responder.** Dizer antes seria afirmar que
       // aconteceu o que pode nao ter acontecido.
@@ -702,13 +755,14 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           _BlocoDaFoto(
             fotoDoServidor: lido.fotoUrl,
             processando: lido.fotoProcessando,
+            recusada: lido.fotoRecusada,
+            motivoDaRecusa: lido.motivoDaRecusaDaFoto,
             escolhida: _fotoEscolhida,
             validado: lido.usuario.emailVerificado,
             permissao: _permissaoDaCamera,
             enviando: _enviandoAFoto,
             aoTirar: _tirarAFoto,
             aoEscolher: _escolherDaGaleria,
-            aoEnviar: _enviarAFoto,
             aoAbrirAjustes: _abrirOsAjustes,
           ),
           const SizedBox(height: BichuEspaco.e6),
@@ -950,27 +1004,41 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
 ///   `CircularProgressIndicator` nunca assenta, e um quadro que nunca assenta
 ///   estoura `pumpAndSettle` em todo caso de teste desta tela -- medido. Quem
 ///   nao ve a tela recebe o rotulo.
-/// - **Recusada nos bytes**: `url` nula tambem, e a tela trata igual a sem
-///   foto. Quem recusou foi o worker, sobre os bytes reais, e o motivo vive em
-///   `Me.photo.rejection_reason` -- que esta tela **nao** desenha, pelo mesmo
-///   motivo do texto de apoio. Tentar outra foto e o caminho, e os dois botoes
-///   logo abaixo ja o oferecem.
+/// - **Recusada nos bytes** (`status: rejected`): `url` nula tambem, e o
+///   quadrado volta ao simbolo de pessoa -- mas **o motivo do servidor aparece
+///   embaixo dos botoes**, desde 19/10/2026. Quem recusou foi o worker, sobre
+///   os bytes reais, e `Me.photo.rejection_reason` chega pronto e em portugues
+///   (medido: *"Nao conseguimos ler essa imagem. Ela pode ter chegado
+///   incompleta."*). Ate aqui a tela tratava recusada IGUAL a sem foto, e a
+///   pessoa via a previa bonita e depois um quadrado vazio sem uma palavra --
+///   o estado que mais parece defeito do app estando o app correto.
+///
+/// Os QUATRO estados sao esses: nulo, `processing`, `ready` e `rejected`.
+/// Nenhum deles e erro de rede, e nenhum deles e tratado como erro.
 class _BlocoDaFoto extends StatelessWidget {
   const _BlocoDaFoto({
     required this.fotoDoServidor,
     required this.processando,
+    required this.recusada,
+    required this.motivoDaRecusa,
     required this.escolhida,
     required this.validado,
     required this.permissao,
     required this.enviando,
     required this.aoTirar,
     required this.aoEscolher,
-    required this.aoEnviar,
     required this.aoAbrirAjustes,
   });
 
   final String? fotoDoServidor;
   final bool processando;
+
+  /// `Me.photo.status == 'rejected'`. Ver o quarto item da prosa desta classe.
+  final bool recusada;
+
+  /// `Me.photo.rejection_reason`, **o texto do servidor**.
+  final String? motivoDaRecusa;
+
   final FotoLocal? escolhida;
 
   /// `Me.email_verified`. **O selo e isto, e nada mais**: nao vem da imagem,
@@ -978,10 +1046,12 @@ class _BlocoDaFoto extends StatelessWidget {
   final bool validado;
 
   final EstadoDaPermissao permissao;
+
+  /// Os bytes da foto escolhida estao subindo **agora**, no toque do seletor.
   final bool enviando;
+
   final VoidCallback aoTirar;
   final VoidCallback aoEscolher;
-  final VoidCallback aoEnviar;
   final VoidCallback aoAbrirAjustes;
 
   /// O lado do quadrado. Ver a prosa desta classe.
@@ -1056,16 +1126,23 @@ class _BlocoDaFoto extends StatelessWidget {
           ),
           child: const Text(_TextosDosDados.escolherDaGaleria),
         ),
-        // `Salvar a foto` **so existe quando ha foto escolhida**: sem arquivo
-        // nao ha o que enviar, e um botao desabilitado aqui seria um controle
-        // pedindo um toque que nao faz nada.
-        if (local != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e2),
-          BotaoPrimario(
-            rotulo: _TextosDosDados.salvarAFoto,
-            carregando: enviando,
-            aoTocar: aoEnviar,
-          ),
+        // **NAO HA `Salvar a foto` AQUI, E A AUSENCIA E O PEDIDO DO CLIENTE**
+        // (19/10/2026). Ele existia e era o segundo botao de salvar desta
+        // tela: a pessoa escolhia a foto, tocava no `Salvar` da barra -- o que
+        // ela chama de salvar o perfil -- e a tela respondia "Nada mudou desde
+        // a ultima vez" sem subir byte nenhum. Medido antes da mudanca: zero
+        // intencoes, zero requisicoes ao armazenamento, zero `PATCH /v1/me`.
+        //
+        // Agora o envio sai na ESCOLHA e a confirmacao sai no `Salvar` da
+        // barra, que e o unico botao de salvar da tela.
+        if (recusada && (motivoDaRecusa ?? '').isNotEmpty) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e3),
+          // **O MOTIVO DO SERVIDOR, e nao um texto nosso.**
+          // `Me.photo.rejection_reason` chega em portugues e explicado --
+          // medido contra a homologacao: "Nao conseguimos ler essa imagem. Ela
+          // pode ter chegado incompleta.". Um generico aqui jogaria fora a
+          // unica frase que diz a pessoa o que aconteceu com o arquivo dela.
+          FaixaDeAviso(texto: motivoDaRecusa!),
         ],
       ],
     );
@@ -1323,7 +1400,6 @@ abstract final class _TextosDosDados {
 
   static const String tirarFoto = 'Tirar foto';
   static const String escolherDaGaleria = 'Escolher da galeria';
-  static const String salvarAFoto = 'Salvar a foto';
 
   /// O rotulo do retrato que ja esta na conta, para quem nao ve a imagem.
   static const String aSuaFoto = 'A sua foto';
@@ -1344,27 +1420,45 @@ abstract final class _TextosDosDados {
       'sistema.';
   static const String abrirAjustes = 'Abrir os ajustes';
 
-  static const String fotoEnviada =
-      'Foto enviada. Ela aparece aqui quando o processamento terminar.';
+  /// O desfecho da escolha: os bytes JA subiram, e falta o `Salvar`.
+  ///
+  /// **Diz o passo que falta**, e nao "foto enviada" seco: o envio dos bytes e
+  /// invisivel para quem esta usando o app, e uma frase que anunciasse o fim
+  /// faria a pessoa sair da tela achando que gravou -- a intencao nao
+  /// confirmada vence em dez minutos.
+  static const String fotoProntaParaSalvar =
+      'Foto enviada. Toque em Salvar para guardá-la no seu cadastro.';
+
+  /// O `Salvar` chegou antes de os bytes terminarem.
+  ///
+  /// **Nao grava sem a foto em silencio**: o `upload_id` so existe depois de o
+  /// envio terminar, e um PATCH que saisse agora gravaria o resto do cadastro
+  /// e deixaria a foto de fora sem ninguem saber.
+  static const String fotoAindaSubindo =
+      'A foto ainda está subindo. Toque em Salvar de novo em instantes.';
 
   /// **Sem promessa de fila.** A `RetomadaDeFotos` e do pet; esta foto nao
   /// entra em fila nenhuma, e dizer "ela sai sozinha quando o sinal voltar"
   /// seria afirmar um envio que ninguem vai tentar.
   static const String fotoSemSinal =
-      'Sem conexão para enviar a foto. Tente de novo quando o sinal voltar.';
+      'Sem conexão para enviar a foto. Escolha a foto de novo quando o sinal '
+      'voltar.';
 
-  static const String fotoRecusada = 'O envio foi recusado. Tente outra foto.';
+  static const String fotoRecusada =
+      'O envio da foto foi recusado. Escolha outra foto.';
 
-  /// A FOTO TAMBEM E CADASTRO, e a conta sem nome nao atualiza cadastro.
-  ///
-  /// Cliente, 18/10/2026: *"nao permitir atualizar o cadastro, se nao tiver
-  /// algum nome cadastrado"*. O terceiro passo do envio e `PATCH /v1/me` com
-  /// `photo_upload_id`, entao a trava do servidor vale para ele -- e sem esta
-  /// frase a pessoa recebia `fotoRecusada` ("tente outra foto") para um
-  /// problema que nenhuma outra foto resolve. O que falta e o NOME, e a
-  /// mensagem diz isso e o campo fica marcado.
-  static const String fotoPrecisaDoNome =
-      'Preencha o nome e salve antes de enviar a foto.';
+  // A FOTO TAMBEM E CADASTRO, e a conta sem nome nao atualiza cadastro.
+  //
+  // Cliente, 18/10/2026: *"nao permitir atualizar o cadastro, se nao tiver
+  // algum nome cadastrado"*. `fotoPrecisaDoNome` morava aqui e dizia
+  // "Preencha o nome e salve antes de enviar a foto" -- ela existia porque o
+  // envio tinha um botao proprio, que confirmava a foto num `PATCH /v1/me`
+  // separado e levava a recusa do nome como "tente outra foto".
+  //
+  // Com a confirmacao dentro do PATCH do formulario (19/10/2026) a frase deixou
+  // de ter chamador, e a trava do nome volta a ser a de `_conferir` --
+  // `nomePrecisaDeTexto`, no campo do nome, antes de a rede ser usada. Um
+  // segundo texto para a mesma regra e o que divergiria na primeira edicao.
 
   static const String email = 'E-mail';
   static const String emailConfirmado = 'E-mail confirmado';

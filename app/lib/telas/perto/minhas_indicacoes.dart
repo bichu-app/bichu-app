@@ -26,29 +26,37 @@ import '../../widgets/rodape_da_paginacao.dart';
 /// não havia, no contrato inteiro, operação que lesse a fila do lado de quem
 /// indicou. A fila do PAINEL existe desde 17/10; o lado da pessoa é esta tela.
 ///
-/// ## ONDE ELA FICA: segunda aba do `Perto`
+/// ## ONDE ELA FICA: TELA PRÓPRIA, empilhada (19/10/2026)
 ///
-/// Ele falou "aba", e confirmou pelo nome em 18/10. O padrão da casa para isso
-/// é o de `Meus pedidos` na `Rede`: uma aba DENTRO do corpo da seção, e não um
-/// sexto item na barra de baixo. Quem desenha as abas é [CorpoDoPerto], com a
-/// mecânica de `agenda_da_rede.dart` reusada; **esta classe é o CORPO da
-/// segunda aba**, e não uma tela com `Scaffold` próprio.
+/// **Ela foi aba e deixou de ser, e a decisão é de MEDIDA.** Ele falou "aba"
+/// em 18/10 e ela nasceu como a segunda aba de `Perto`, no padrão de
+/// `Meus pedidos` na `Rede`. Em 19/10 `Perto` deixou de ser seção -- o
+/// diretório virou a aba `Comunidade` da `Rede` --, e as CINCO abas antigas
+/// tiveram de caber em DUAS mais filtro.
 ///
-/// **Ela não tem rota, e isso é decisão.** Teve uma (`/perto/indicacoes`,
-/// alcançada pela gaveta) enquanto era destino próprio; a rota e o item da
-/// gaveta saíram quando ela virou aba, porque aba dentro da seção é a seção --
-/// e item de gaveta que navega para a seção é exatamente o que o portão de
-/// `gaveta_com_submenus_test.dart` proíbe. Duas portas para a mesma lista
-/// também seria a segunda definição de onde ela mora.
+/// Três couberam no filtro porque a entidade não muda. **Esta não cabe:** uma
+/// indicação **em análise** ainda não é um local do diretório -- não tem
+/// ficha, não está na lista, e quem a lê é outra operação
+/// (`listMyDirectorySuggestions`, contra `listDirectoryEntries`). Filtrar a
+/// lista de locais por "as que eu indiquei" devolveria **zero** justamente no
+/// caso que interessa: a que ainda espera revisão. Filtro que mente sobre o
+/// alcance é o que `barra_de_listagem.dart` existe para impedir.
 ///
-/// **Por isso ela não monta `Scaffold`, `AppBar` nem slot de barra.** Quem os
-/// monta é a casca (`casca_com_abas.dart`), e o ícone de filtrar que esta tela
-/// publica vai para o slot dela, como o da lista do diretório.
+/// Então ela virou **porta**, no pé da aba `Comunidade`, e ganhou rota de
+/// volta: `Rotas.minhasIndicacoes` (`/rede/indicacoes`). A conta completa está
+/// lá e em `rede/secao_da_rede.dart`.
 ///
-/// **O que falta para ser aba, e é uma linha:** um `AbaDoPerto` ao lado da
-/// lista do diretório, como `AbaDaRede` faz. Quem puder mexer naqueles dois
-/// arquivos liga esta tela como segunda aba sem tocar em nada daqui — ela já é
-/// um corpo de lista, e não depende do `Scaffold` que a envolve hoje.
+/// **ESTA CLASSE NÃO MUDOU UMA LINHA, e foi por isso que a mudança foi
+/// possível:** ela já era um CORPO de lista e não uma tela -- não monta
+/// `Scaffold`, não monta `AppBar`, e desenha o próprio gatilho de filtro no
+/// corpo. Quem monta a casca agora é [TelaDeMinhasIndicacoes]
+/// (`perto/tela_de_minhas_indicacoes.dart`), que lhe dá o `Scaffold`, o
+/// `Voltar` e o ponto do gesto de atualizar.
+///
+/// **A pasta continua sendo `perto/`, e isso é deliberado:** três frentes
+/// editam arquivos dela nesta mesma rodada, e mover a pasta trocaria uma
+/// mudança de composição por um conflito textual em cada arquivo. O nome da
+/// pasta não aparece em tela nenhuma.
 ///
 /// ## Os TRÊS estados, e o que cada um promete
 ///

@@ -28,7 +28,9 @@
 
 import 'dart:convert';
 
+import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/criar_encontro.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/botao_primario.dart';
@@ -87,11 +89,17 @@ Future<void> abrirAgenda(
   required Future<http.Response> Function(http.Request) rede,
   bool emailVerificado = true,
   bool logado = true,
+  // A CAMERA, desde 19/10/2026: o formulario de criar evento passou a
+  // perguntar a CAPA, e a capa sai da mesma porta de aparelho das outras
+  // fotos. O padrao continua nulo -- `abrirOApp` monta `CameraNaoEmbarcada`
+  // --, entao nenhum caso deste arquivo ganha uma camera de surpresa.
+  CameraEGaleria? camera,
 }) async {
   await abrirOApp(
     tester,
     rede: rede,
     deposito: logado ? depositoLogado(emailVerificado: emailVerificado) : null,
+    camera: camera,
   );
   await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
   await tester.pumpAndSettle();
@@ -115,6 +123,17 @@ Future<void> abrirAgenda(
 /// pode aparecer em outro lugar da árvore amanhã, e um `find.byIcon` solto
 /// acharia o outro e ficaria verde com a porta ausente -- **ou acharia um
 /// ícone de volta NA BARRA**, que é exatamente o que o cliente mandou tirar.
+/// A lista rolavel DO FORMULARIO de criar evento.
+///
+/// Existe porque `find.byType(Scrollable).first` nao serve numa tela
+/// empilhada: ver a nota em `rolarAte`.
+Finder get corpoDoFormulario => find
+    .descendant(
+      of: find.byType(TelaCriarEncontro),
+      matching: find.byType(Scrollable),
+    )
+    .first;
+
 Future<void> abrirAPorta(WidgetTester tester) async {
   await tocar(
     tester,
@@ -485,6 +504,71 @@ void main() {
       },
     );
 
+    testWidgets(
+        'ISCA — criar evento CONTINUA funcionando, e o desfecho é a agenda',
+        (tester) async {
+      // ISCA (duas metades, e cada uma reprova numa assercao diferente):
+      //   1. em `rotas.dart`, apague a rota `Rotas.criarEncontroDaRede`. A
+      //      porta nao abre e `find.byType(TelaCriarEncontro)` reprova.
+      //   2. em `criar_encontro.dart`, troque `context.go(Rotas.rede)` por
+      //      `context.go(Rotas.encontroDaRedeDe(...))` -- um endereco que nao
+      //      existe mais. O `GoRouter` cai na pagina de erro e a assercao do
+      //      destino reprova.
+      //
+      // **ESTE CASO EXISTE PORQUE A ENTREGA DE 19/10 REMOVEU A TELA DE
+      // DETALHE DO EVENTO**, e o desfecho de criar era ela: a linha era
+      // `context.pushReplacement(Rotas.encontroDaRedeDe(encontro.slug))`.
+      // Criar evento e a acao flutuante da secao e o cliente nao pediu para
+      // tira-la -- este caso e quem prova que ela sobreviveu a remocao.
+      final enviados = <Map<String, dynamic>>[];
+      // A agenda devolve o evento criado DEPOIS do POST: e assim que a pessoa
+      // ve o resultado agora que nao ha pagina dele.
+      var criou = false;
+      await abrirAgenda(
+        tester,
+        rede: (req) async {
+          if (req.url.path == '/v1/network/events' && req.method == 'GET') {
+            return json200(
+              pagina(<Map<String, dynamic>>[
+                if (criou) encontroPublico(title: 'Mutirão de banho'),
+              ]),
+            );
+          }
+          if (req.url.path == '/v1/network/events' && req.method == 'POST') {
+            enviados.add(jsonDecode(req.body) as Map<String, dynamic>);
+            criou = true;
+            return json200(encontroPublico(), status: 201);
+          }
+          return problema('not-found', 404);
+        },
+      );
+
+      // (1) A PORTA ABRE a tela de criar.
+      await abrirAPorta(tester);
+      expect(
+        find.byType(TelaCriarEncontro),
+        findsOneWidget,
+        reason: 'REPROVA: a porta de criar evento nao abre mais a tela. O '
+            'cliente removeu a pagina de DETALHE do evento em 19/10/2026, e '
+            'nao a de criar.',
+      );
+
+      // (2) O POST SAI.
+      await preencherEMarcar(tester);
+      expect(enviados, hasLength(1), reason: 'REPROVA: nada foi enviado.');
+
+      // (3) E O DESFECHO E A AGENDA, com a tela de criar fechada e nenhuma
+      // pagina de erro de rota no caminho.
+      expect(
+        find.byType(AgendaDaRede),
+        findsOneWidget,
+        reason: 'REPROVA: criar evento nao termina na agenda. Era a pagina do '
+            'proprio evento, e ela saiu: o lugar onde a comunidade ve o '
+            'evento passou a ser o cartao da agenda.',
+      );
+      expect(find.byType(TelaCriarEncontro), findsNothing);
+    });
+
     testWidgets('campo opcional vazio NÃO entra como `null`', (tester) async {
       final enviados = <Map<String, dynamic>>[];
       await abrirAgenda(tester, rede: redeDaCriacao(enviados: enviados));
@@ -685,7 +769,14 @@ void main() {
 ///    `dataNoPassado` de pé `_marcar` sai na primeira linha e nada é enviado.
 Future<void> preencherOMinimo(WidgetTester tester) async {
   Future<void> digitar(String rotulo, String valor) async {
-    await rolarAte(tester, campoDoRotulo(rotulo));
+    // **A lista DO FORMULARIO, e nao `find.byType(Scrollable).first`.** A tela
+    // e empilhada sobre a casca de abas e a arvore tem tres `Scrollable`
+    // montados; `.first` pode ser o da casca, e o arrasto acerta a lista
+    // errada -- `Bad state: No element`, apontando para o lugar errado. O
+    // defeito ficou invisivel enquanto todos os campos nasciam dentro da
+    // dobra, e apareceu em 19/10/2026, quando o bloco da CAPA entrou acima
+    // deles.
+    await rolarAte(tester, campoDoRotulo(rotulo), scrollable: corpoDoFormulario);
     await tester.enterText(campoDoRotulo(rotulo), valor);
     await tester.pumpAndSettle();
   }
@@ -706,6 +797,7 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
 /// monta `const TelaCriarEncontro()` (`rotas.dart`, linha 565) e o `agora` do
 /// app não chega até ela, então a escolha é no calendário.
 Future<void> escolherComecoAmanha(WidgetTester tester) async {
+  await rolarAte(tester, find.text('Começa'), scrollable: corpoDoFormulario);
   await tocar(tester, find.text('Começa'));
   final hoje = DateTime.now();
   final amanha = hoje.add(const Duration(days: 1));

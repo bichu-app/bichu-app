@@ -93,6 +93,43 @@
  * acima, e por grep em `src/` não tem leitor nenhum hoje. A `20261019000003`
  * explica por que ele não foi derrubado junto.
  *
+ * ## SEM CIDADE A CONSULTA LÊ O PAÍS INTEIRO, E O ÍNDICE SÓ COBRE A PÁGINA
+ *
+ * `city` perdeu o `required: true` no contrato em 19/10/2026 (pedido do
+ * cliente: *"o campo cidade do filtro da página pet não deve ser obrigatório,
+ * mas devemos filtrar pelos 20 últimos pets cadastrados"*), então a ausência de
+ * cidade é geografia aberta e o predicado de `last_seen_city` deixa de existir.
+ *
+ * Medido, e não estimado — mesma imagem pinada do `compose.yaml`, as 76
+ * migrações aplicadas por `node-pg-migrate`, **20 000 casos abertos públicos em
+ * 40 cidades** (500 em `Sao Paulo`) por 720 dias, `ANALYZE` feito,
+ * `EXPLAIN (ANALYZE, BUFFERS)` do SQL que ESTE construtor compila (impresso
+ * pelo próprio construtor, não reescrito à mão):
+ *
+ * ```
+ * ANTES da 20261019000008
+ *   página 1, sem cidade   Seq Scan    20 000 linhas  60 800 buffers  61,933 ms
+ *   contagem, sem cidade   Seq Scan    20 000 linhas  60 751 buffers  54,372 ms
+ * DEPOIS da 20261019000008
+ *   página 1, sem cidade   Index Scan      20 linhas     169 buffers   2,391 ms
+ *   contagem, sem cidade   Seq Scan    20 000 linhas  60 751 buffers  54,372 ms
+ * com cidade (inalterado, pela 20261019000003)
+ *   página 1, Sao Paulo    Index Scan      20 linhas     145 buffers   0,232 ms
+ * ```
+ *
+ * **Leia as duas linhas de contagem: elas são idênticas.** O índice
+ * `lost_cases_publicos_por_visto` resolve a PÁGINA e não a CONTAGEM, e isso não
+ * é escolha ruim de colunas — `count(*)` sobre geografia aberta visita toda
+ * linha que qualifica, e `conta_habilitada` (STABLE, e por isso inelegível para
+ * `WHERE` de índice) corre uma vez por linha. Com cidade ela corria 500 vezes;
+ * sem cidade, 20 000. O `total` não é opcional: `PublicLostPetPage` o declara
+ * `required` porque a tela diz "Mostrando 1 a 20 de 87".
+ *
+ * **E em homologação nada disso aparece**: `lost_cases` tem 1 linha lá (medido
+ * em 19/10/2026), o plano é `Seq Scan` com 104 buffers e 0,619 ms, e `Seq Scan`
+ * é a escolha CERTA com uma linha. Quem medir só em homologação concluirá que o
+ * índice é inerte, e concluirá errado.
+ *
  * **CUSTO MEDIDO E NÃO ESCONDIDO:** não existe índice trigrama sobre
  * `texto_para_busca(pets.name)`. Com `q` preenchido, o predicado é uma
  * varredura dos casos abertos da cidade — que é um conjunto pequeno, porque os
@@ -167,10 +204,22 @@ export function construtorDaListagemPublicaDePerdidos(
     .where(sql<SqlBool>`conta_habilitada(lost_cases.owner_user_id)`)
     // 4. O pet existe e não está falecido nem arquivado.
     .where('pets.deleted_at', 'is', null)
-    .where('pets.status', 'not in', STATUS_DE_PET_SEM_CASO_PUBLICO)
-    .where(
+    .where('pets.status', 'not in', STATUS_DE_PET_SEM_CASO_PUBLICO);
+
+  // A CIDADE É CONDICIONAL DESDE 19/10/2026, e a condição é o pedido do
+  // cliente: *"o campo cidade do filtro da página pet não deve ser
+  // obrigatório"*. Cidade indefinida é geografia ABERTA, e geografia aberta é a
+  // AUSÊNCIA deste predicado — não um `LIKE '%'` nem um `IS NOT NULL`, que
+  // pareceriam o mesmo e continuariam carregando uma comparação por linha.
+  //
+  // É a mesma forma da janela logo abaixo, e a simetria não é estética: os dois
+  // predicados opcionais desta consulta aparecem e desaparecem pelo mesmo
+  // teste (`!== undefined`), então quem lê um entende o outro.
+  if (recorte.cidade !== undefined) {
+    consulta = consulta.where(
       sql<SqlBool>`texto_para_busca(lost_cases.last_seen_city) = texto_para_busca(${recorte.cidade})`,
     );
+  }
 
   // A JANELA É CONDICIONAL, e a condição é o pedido do cliente de 18/10/2026:
   // *"a página de pets não deve trazer nenhum item do filtro por padrão, como

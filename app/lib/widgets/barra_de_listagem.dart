@@ -660,6 +660,7 @@ class GrupoDeFiltro {
     required this.selecionado,
     this.nota,
     this.dependeDe,
+    this.codigoPadrao,
   });
 
   /// O identificador que volta em [ControleDeFiltro.aoAplicar].
@@ -670,6 +671,41 @@ class GrupoDeFiltro {
 
   /// O codigo **aplicado**, ou nulo para "qualquer um".
   final String? selecionado;
+
+  /// O codigo que E a ausencia de recorte, quando o grupo tem um.
+  ///
+  /// ## Por que ele existe (19/10/2026)
+  ///
+  /// Quase todo grupo desta folha expressa "nenhum recorte" por
+  /// `selecionado: null`, e nada mais e preciso. **O grupo `Quando` da `Rede`
+  /// nao consegue:** a lista esta SEMPRE numa janela de tempo -- ela e a
+  /// agenda do que vem, ou a dos encerrados --, e `null` significaria "janela
+  /// nenhuma", que nao e um estado que a rota tenha.
+  ///
+  /// Quando as tres abas da agenda viraram filtro, `Próximos` passou a ser uma
+  /// opcao do grupo, e marca-la por padrao -- que e a verdade da lista --
+  /// fazia [ControleDeFiltro.ativos] contar **1**. As consequencias foram
+  /// MEDIDAS numa agenda vazia e sem recorte nenhum:
+  ///
+  ///   - o distintivo da barra nascia com `1` sobre uma lista que ninguem
+  ///     filtrou;
+  ///   - `_recorteAtivo` virava verdadeiro, a barra passava a ser desenhada
+  ///     sobre a lista vazia, e o estado vazio trocava de frase: em vez de
+  ///     *"A Rede ainda nao tem eventos"* a tela dizia *"Nenhum evento com
+  ///     esses filtros"* e oferecia `Limpar filtro` -- um botao que nao tinha
+  ///     o que limpar.
+  ///
+  /// Com [codigoPadrao], a pastilha da verdade da lista fica MARCADA e **nao
+  /// conta como recorte**. Quem desmarca volta ao mesmo lugar, e o distintivo
+  /// so acende quando ha recorte de verdade.
+  ///
+  /// **Nulo nos outros grupos, e eles nao mudam uma linha:** sem padrao
+  /// declarado, `selecionado != null` continua sendo a conta inteira.
+  final String? codigoPadrao;
+
+  /// Se a escolha atual deste grupo e um recorte DE VERDADE.
+  bool get recortaDeFato =>
+      selecionado != null && selecionado != codigoPadrao;
 
   /// Uma linha de explicacao sob o titulo. `Perto` usa para dizer que o nivel
   /// de verificacao e **piso e nao igualdade**, que e a regra do contrato que
@@ -785,7 +821,7 @@ class ControleDeFiltro {
   /// escolheu: contado, o distintivo da barra nasceria com `1` numa lista que
   /// ninguem filtrou.
   int get ativos =>
-      grupos.where((g) => g.selecionado != null).length +
+      grupos.where((g) => g.recortaDeFato).length +
       campos
           .where((c) =>
               !c.obrigatorio && (c.valor?.trim().isNotEmpty ?? false))
@@ -1161,14 +1197,32 @@ class LinhaDeBuscaDaListagem extends StatelessWidget {
       // e `center` e o que mantem o glifo na linha do texto da busca.
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        if (acao != null) ...<Widget>[
-          GatilhoDeRecorteNoCorpo(acao: acao),
-          const SizedBox(width: BichuEspaco.e2),
-        ],
-        // `Expanded` e nao largura total: o campo divide a linha com UM alvo
-        // de 48 dp mais 8 dp de respiro, e sobra o resto -- medido em 320 dp,
-        // que e a tela mais estreita que o produto desenha.
+        // **A BUSCA VEM PRIMEIRO, E O GATILHO FICA A DIREITA (19/10/2026).**
+        //
+        // **Isto REVERTE o pedido dele de 18/10**, que era o contrario
+        // (*"colocar na frente do campo de busca e nao embaixo"*), e a
+        // reversao e DELE, do dia seguinte. Nao e defeito, nao e descuido e
+        // nao e volta ao arranjo de 17/10: o gatilho continua **so icone**,
+        // continua **na mesma linha** da busca e continua sendo um alvo de
+        // 48 dp -- o que mudou foi so de que lado da linha ele fica.
+        //
+        // **A INVERSAO MORA NESTA UNICA `Row`, e isso foi conferido.** As
+        // cinco telas que usam o padrao de listagem chegam todas aqui: tres
+        // pelo ramo `comCampo` de [BarraDeListagem] (`lista_do_diretorio`,
+        // `minhas_indicacoes`, `vitrine_da_loja`) e duas desenhando esta
+        // linha direto, por `buscaAcima` (`lista_de_perdidos`,
+        // `agenda_da_rede`). Nenhuma delas tem copia desta ordem, e por isso
+        // nenhuma mudou de linha para esta reversao.
+        //
+        // `Expanded` ANTES do gatilho: a largura que o campo recebe e a mesma
+        // de antes -- a linha continua dividida entre um alvo de 48 dp, 8 dp
+        // de respiro e o resto --, e o portao de larguras mede isso nas cinco
+        // larguras suportadas.
         Expanded(child: CampoDeBuscaDaListagem(busca: busca)),
+        if (acao != null) ...<Widget>[
+          const SizedBox(width: BichuEspaco.e2),
+          GatilhoDeRecorteNoCorpo(acao: acao),
+        ],
       ],
     );
   }

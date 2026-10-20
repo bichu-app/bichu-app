@@ -93,13 +93,27 @@ export function registrarRotaDaListagemDePerdidos(
       void reply.header('Cache-Control', 'no-store');
 
       const query = (request.query ?? {}) as QueryDePerdidos;
-      // `city` é `required` no contrato e o esquema de querystring recusa a
-      // ausência com 400 antes de o manipulador rodar. O `?? ''` existe para o
-      // tipo, e não para o caminho: um `city` vazio aqui seria um esquema que
-      // deixou de ser instalado, e a listagem vazia que ele produz é mais
-      // segura que um `!` que estoura.
+      // `city` DEIXOU DE SER `required` NO CONTRATO em 19/10/2026 (decisão do
+      // cliente), e o `?? ''` que morava aqui saiu junto. Ele existia "para o
+      // tipo" enquanto a ausência era impossível; com a ausência possível ele
+      // viraria o defeito que o comentário anterior descrevia como seguro:
+      // `''` é uma cidade vazia, e cidade vazia compara contra
+      // `texto_para_busca('')` e não casa com nada — a lista aberta
+      // responderia uma página vazia.
+      //
+      // Passa `undefined` adiante, que é o que a camada de aplicação entende
+      // como "ninguém pediu cidade". Continua não havendo validação aqui: o
+      // `minLength: 2` é do contrato e quem responde o 400 de `city=` vazio é
+      // o esquema de querystring, como antes.
+      //
+      // **Esta linha NÃO é a guarda contra a cidade vazia, e não se deve
+      // confiar nela como tal.** MEDIDO em 19/10/2026: repondo o `?? ''` aqui,
+      // a suíte continua VERDE, porque `aparado(pedido.city)` na camada de
+      // aplicação transforma `''` em `undefined` logo depois. Quem sustenta a
+      // isca é o `aparado`, e é lá que está a nota de desligamento. O `?? ''`
+      // saiu por não ter mais razão de existir, não por ser o mecanismo.
       const corpo = await deps.listagem.pagina({
-        city: query.city ?? '',
+        city: query.city,
         neighborhood: query.neighborhood,
         species: query.species,
         size: query.size,

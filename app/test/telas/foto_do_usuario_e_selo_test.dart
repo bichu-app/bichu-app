@@ -438,7 +438,13 @@ void main() {
   // -------------------------------------------------------------------------
   group('o envio da propria foto', () {
     // -----------------------------------------------------------------------
-    testWidgets('escolher mostra a PREVIA e nao sobe nada ainda',
+    // ATENCAO: este caso DIZIA o contrario ate 19/10/2026 -- "escolher mostra
+    // a previa e nao sobe nada ainda". O cliente mandou trocar o desenho:
+    // *"quando o usuario fizer o upload de qualquer foto no app, voce deve
+    // fazer o upload e apresentar como vai ficar de preview, e ao salvar o voce
+    // salva a foto"*. O envio passou para a ESCOLHA; o que NAO sai na escolha e
+    // a CONFIRMACAO, e e ela que este caso agora mede.
+    testWidgets('escolher mostra a PREVIA e sobe os bytes, sem confirmar',
         (tester) async {
       final camera = CameraDeTeste(
         EstadoDaPermissao.concedida,
@@ -462,17 +468,20 @@ void main() {
             'ela escrevia o CAMINHO do arquivo no lugar da imagem.',
       );
 
-      // **Nada subiu.** Escolher e enviar sao dois momentos: subir no toque
-      // do seletor tiraria da pessoa a chance de ver o arquivo que pegou.
+      // OS BYTES SUBIRAM, no toque do seletor.
+      expect(camera.vezesQueLeuOsBytes, 1);
+      expect(capturado.doCaminho('/media/my-photo-intents'), hasLength(1));
+      expect(capturado.aoArmazenamento(), hasLength(1));
+
+      // E A CONFIRMACAO NAO SAIU: ela e do `Salvar`.
       expect(
-        camera.vezesQueLeuOsBytes,
-        0,
-        reason: 'REPROVA: a tela leu os bytes do arquivo sem ninguem pedir o '
-            'envio. Este contador e o unico que separa "a tela mostrou a '
-            'previa" de "a tela subiu a foto".',
+        capturado.pedidos
+            .where((p) => p.url.path == '/v1/me' && p.method == 'PATCH'),
+        isEmpty,
+        reason: 'REPROVA: a escolha confirmou a foto. A confirmacao e '
+            '`MeUpdate.photo_upload_id` e ela sai no `Salvar` do formulario, '
+            'no mesmo PATCH do nome.',
       );
-      expect(capturado.doCaminho('/media/my-photo-intents'), isEmpty);
-      expect(capturado.aoArmazenamento(), isEmpty);
     });
 
     testWidgets(
@@ -495,7 +504,9 @@ void main() {
 
       await tester.tap(find.text('Escolher da galeria'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Salvar a foto'));
+      // O `Salvar` DA BARRA -- o unico botao de salvar desta tela desde
+      // 19/10/2026.
+      await tester.tap(find.text('Salvar'));
       await tester.pumpAndSettle();
 
       // (1) A INTENCAO, uma vez, com o tipo e o tamanho do arquivo.
@@ -557,10 +568,11 @@ void main() {
       expect(
         corpoDoPatch.keys,
         <String>['photo_upload_id'],
-        reason: 'REPROVA: o PATCH da foto levou mais campos que '
-            '`photo_upload_id`. `MeUpdate` nao tem campo obrigatorio: um '
-            'corpo com os outros campos sobrescreveria com vazio o telefone e '
-            'o endereco de referencia de quem so queria trocar a foto.',
+        reason: 'REPROVA: o PATCH levou campo que a pessoa nao mudou. '
+            '`MeUpdate` nao tem campo obrigatorio: um corpo com os outros '
+            'campos sobrescreveria com vazio o telefone e o endereco de '
+            'referencia de quem so trocou a foto. `_seMudou` e quem decide '
+            'campo por campo, e a foto entra pelo mesmo corpo.',
       );
 
       // (4) E A TELA TROCA A PREVIA PELA DERIVADA, sem uma segunda leitura de
@@ -580,9 +592,10 @@ void main() {
             .where((p) => p.url.path == '/v1/me' && p.method == 'GET')
             .length,
         1,
-        reason: 'REPROVA: a tela leu `/me` mais de uma vez. O PATCH de '
-            'confirmacao JA devolve o `/me` novo, e `FotoDoUsuario.corpoDoMe` '
-            'existe para poupar essa ida e volta.',
+        reason: 'REPROVA: a tela leu `/me` mais de uma vez. O PATCH do '
+            '`Salvar` JA devolve o `/me` novo, e `MeApi.atualizar` o traduz em '
+            '`DadosPessoais` -- uma segunda leitura so para descobrir a URL da '
+            'derivada e uma ida e volta a mais na rede de quem esta na rua.',
       );
     });
 
@@ -605,9 +618,8 @@ void main() {
         camera: camera,
       );
 
+      // Sem toque em botao de salvar nenhum: o envio sai na ESCOLHA.
       await tester.tap(find.text('Escolher da galeria'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Salvar a foto'));
       await tester.pumpAndSettle();
 
       expect(
@@ -632,14 +644,26 @@ void main() {
             'um envio que ninguem vai tentar.',
       );
 
-      // A FOTO ESCOLHIDA FICA: limpar a previa faria a pessoa pegar o arquivo
-      // de novo para tentar de novo.
+      // A PREVIA SAI, e desde 19/10/2026 isso e a decisao e nao um descuido.
+      //
+      // Com o envio na escolha, uma previa que ficasse seria um retrato na
+      // tela de uma foto que o `Salvar` NAO tem como gravar -- nao ha
+      // `upload_id`. A tela estaria prometendo uma foto que nao existe, que e
+      // a classe de defeito que esta casa mais paga. Os dois botoes logo acima
+      // sao o caminho de tentar de novo, e a frase manda escolher de novo.
       expect(
         find.byType(PreviaDaFoto),
-        findsOneWidget,
-        reason: 'REPROVA: a previa foi limpa por um envio que falhou.',
+        findsNothing,
+        reason: 'REPROVA: a previa ficou na tela depois de um envio que '
+            'falhou. Sem `upload_id` o `Salvar` nao grava foto nenhuma, e o '
+            'retrato seria a tela afirmando o que nao aconteceu.',
       );
-      expect(find.text('Salvar a foto'), findsOneWidget);
+      expect(
+        find.textContaining('Escolha a foto de novo'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela nao disse o que fazer. Sem a instrucao, a '
+            'pessoa fica olhando um quadrado vazio.',
+      );
     });
 
     testWidgets('a orientacao de 5 MB esta na tela, em UMA linha',
@@ -676,7 +700,11 @@ void main() {
       expect(find.text('Escolher da galeria'), findsOneWidget);
     });
 
-    testWidgets('`Salvar a foto` so existe quando ha foto escolhida',
+    // O CASO QUE ERA "`Salvar a foto` so existe quando ha foto escolhida" VIROU
+    // ESTE: o botao nao existe em estado nenhum. A isca ancorada no WIDGET
+    // (e nao num `findsNothing` sobre o literal) esta em
+    // `foto_sobe_na_escolha_test.dart`, caso (f).
+    testWidgets('a tela tem UM botao de salvar, e e o da barra',
         (tester) async {
       await abrirOsDados(
         tester,
@@ -687,41 +715,52 @@ void main() {
       expect(
         find.text('Salvar a foto'),
         findsNothing,
-        reason: 'REPROVA: ha `Salvar a foto` sem arquivo escolhido. Nao ha o '
-            'que enviar, e um botao desabilitado aqui seria um controle '
-            'pedindo um toque que nao faz nada.',
+        reason: 'REPROVA: o segundo botao de salvar voltou. O cliente mandou '
+            'remove-lo em 19/10/2026, e ele era o defeito: a pessoa tocava no '
+            '`Salvar` da barra e a tela respondia "Nada mudou desde a ultima '
+            'vez" sem subir byte nenhum.',
       );
+      expect(find.text('Salvar'), findsOneWidget);
     });
   });
 
   // -------------------------------------------------------------------------
-  group('o envio da propria foto sem nome na conta', () {
+  group('a propria foto numa conta SEM nome', () {
     // -----------------------------------------------------------------------
     // O DEFEITO, MEDIDO E NAO SUPOSTO.
     //
     // Relato do cliente em 18/10/2026, contra homologacao: *"no perfil do
-    // usuario, para subir a foto esta dando erro"*. Medido contra a pilha
-    // efemera de integracao, no commit `f8c74714` -- o MESMO que
-    // `https://hml.bichu.app/v1/health` reportava --, com uma conta de
+    // usuario, para subir a foto esta dando erro"*. Medido com uma conta de
     // `display_name` nulo, que e o estado de 2 das 7 contas de homologacao:
     //
     //     PATCH /v1/me  {"photo_upload_id":"01a151f1-5e6a-70da-935c-3d6998208ec1"}
     //     400 {"errors":[{"field":"display_name","code":"required",
     //          "message":"Diga como voce quer ser chamado para continuar."}]}
     //
-    // O terceiro passo do envio e esse PATCH, e a decisao do cliente do mesmo
-    // dia -- *"nao permitir atualizar o cadastro, se nao tiver algum nome
-    // cadastrado"* -- vale para ele: a foto e cadastro. Do lado de ca o 400
-    // chegava como `DesfechoDoEnvio.recusada`, que vira **"O envio foi
-    // recusado. Tente outra foto."** -- e nenhuma outra foto resolve. A
-    // pessoa trocava de arquivo a esmo sem nunca descobrir que faltava o
-    // NOME.
+    // A decisao do cliente do mesmo dia -- *"nao permitir atualizar o cadastro,
+    // se nao tiver algum nome cadastrado"* -- vale para a foto: a foto e
+    // cadastro. Do lado de ca o 400 chegava como `DesfechoDoEnvio.recusada`,
+    // que virava "O envio foi recusado. Tente outra foto." -- e nenhuma outra
+    // foto resolve.
     //
-    // O conserto nao afrouxa a trava: ele conta o que falta, antes de gastar
-    // a leitura do arquivo e dois pedidos de rede.
+    // ## O QUE MUDOU EM 19/10/2026, E POR QUE A TRAVA NAO AFROUXOU
+    //
+    // A confirmacao deixou de ser um PATCH proprio e passou a ser um campo do
+    // PATCH do formulario. Entao a trava do nome volta a ser **a do
+    // formulario**: `_conferir` cobra o nome antes de a rede ser usada, marca
+    // o campo e nao manda PATCH nenhum. Nao ha mais duas redacoes da mesma
+    // regra -- havia `fotoPrecisaDoNome` e `nomePrecisaDeTexto`, e ficou a
+    // segunda, no campo.
+    //
+    // **Os bytes SOBEM mesmo assim, e isso e deliberado.** Eles sobem na
+    // escolha, antes de o `Salvar` acontecer, e nao ha o que esperar: a pessoa
+    // preenche o nome e salva, e o mesmo `upload_id` serve -- a intencao vale
+    // dez minutos (medido: `expires_at` 599 s). Barrar a escolha de quem nao
+    // tem nome preenchido seria barrar um caminho que a pessoa conclui em
+    // segundos.
     testWidgets(
-        'ISCA — conta SEM nome: nada sobe e a tela diz que falta o NOME, '
-        'nao "tente outra foto"', (tester) async {
+        'ISCA — conta SEM nome: o `Salvar` nao confirma a foto e diz qual '
+        'campo falta', (tester) async {
       final camera = CameraDeTeste(
         EstadoDaPermissao.concedida,
         foto: fotoEscolhidaDeTeste,
@@ -735,51 +774,42 @@ void main() {
 
       await tester.tap(find.text('Escolher da galeria'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Salvar a foto'));
+      await tester.tap(find.text('Salvar'));
       await tester.pumpAndSettle();
 
+      // O CAMPO FICA MARCADO: a pessoa precisa saber ONDE mexer.
       expect(
-        find.textContaining('Preencha o nome'),
+        find.textContaining('Digite o nome que você quer usar'),
         findsOneWidget,
         reason: 'REPROVA: a tela nao disse o que preencher. Era este o '
-            'defeito: a recusa do servidor chegava como '
-            '`DesfechoDoEnvio.recusada` e virava "tente outra foto", para um '
+            'defeito: a recusa do servidor virava "tente outra foto", para um '
             'problema que nenhuma outra foto resolve.',
       );
       expect(
-        find.textContaining('O envio foi recusado'),
+        find.textContaining('Escolha outra foto'),
         findsNothing,
         reason: 'REPROVA: a tela mandou tentar outra foto. O arquivo nao e o '
             'problema.',
       );
-      // O CAMPO FICA MARCADO, como no `Salvar`: a faixa diz o que aconteceu e
-      // o campo diz ONDE mexer.
-      expect(
-        find.textContaining('Digite o nome que você quer usar'),
-        findsOneWidget,
-        reason: 'REPROVA: a mensagem do campo do nome nao apareceu. Uma faixa '
-            'sozinha faz a pessoa procurar qual campo o servidor recusou.',
-      );
 
-      // E NADA SAIU DO APARELHO: nem a leitura do arquivo, nem a intencao,
-      // nem os bytes. Sem estes tres, o caso passaria com o envio inteiro
-      // acontecendo e a faixa aparecendo depois.
+      // E O PATCH NAO SAIU. **Esta e a linha que impede o defeito de voltar
+      // pela porta de tras**: o servidor recusa o nome e grava a foto em
+      // transacoes diferentes, e um PATCH que saisse daqui dependeria dessa
+      // ordem para nao gravar foto numa conta que ele acabou de recusar.
       expect(
-        camera.vezesQueLeuOsBytes,
-        0,
-        reason: 'REPROVA: os bytes foram lidos para um envio que a tela ja '
-            'sabia que o servidor ia recusar.',
+        capturado.pedidos
+            .where((p) => p.url.path == '/v1/me' && p.method == 'PATCH'),
+        isEmpty,
+        reason: 'REPROVA: o `Salvar` mandou o PATCH de uma conta sem nome. A '
+            'conferencia local existe para a recusa chegar ao lado do campo, '
+            'e nao da rede.',
       );
-      expect(capturado.doCaminho('/media/my-photo-intents'), isEmpty);
-      expect(capturado.aoArmazenamento(), isEmpty);
-      expect(capturado.doCaminho('/v1/me').where((p) => p.method == 'PATCH'),
-          isEmpty);
     });
 
     // CONTRAPESO, e ele e obrigatorio: sem este caso, "consertar" o anterior
-    // parando TODO envio deixaria a suite verde com a foto quebrada para
-    // todo mundo.
-    testWidgets('a conta COM nome continua subindo a foto normalmente',
+    // parando TODO envio deixaria a suite verde com a foto quebrada para todo
+    // mundo.
+    testWidgets('a conta COM nome continua gravando a foto normalmente',
         (tester) async {
       final camera = CameraDeTeste(
         EstadoDaPermissao.concedida,
@@ -788,25 +818,35 @@ void main() {
       final capturado = Capturado();
       await abrirOsDados(
         tester,
-        rede: servidor(meInicial: me(), capturado: capturado),
+        rede: servidor(
+          meInicial: me(),
+          meDepoisDoPatch: me(urlDaFoto: fotoDerivada),
+          capturado: capturado,
+        ),
         camera: camera,
       );
 
       await tester.tap(find.text('Escolher da galeria'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Salvar a foto'));
+      await tester.tap(find.text('Salvar'));
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Preencha o nome'),
+        find.textContaining('Digite o nome'),
         findsNothing,
         reason: 'REPROVA: a tela cobrou o nome de quem tem nome.',
       );
       expect(
         capturado.doCaminho('/media/my-photo-intents'),
         isNotEmpty,
-        reason: 'REPROVA: o envio nao saiu para uma conta com nome. A '
-            'conferencia local passou a barrar o caminho normal.',
+        reason: 'REPROVA: o envio nao saiu para uma conta com nome.',
+      );
+      expect(
+        capturado.pedidos
+            .where((p) => p.url.path == '/v1/me' && p.method == 'PATCH'),
+        hasLength(1),
+        reason: 'REPROVA: o `Salvar` nao confirmou a foto de uma conta com '
+            'nome. A conferencia local passou a barrar o caminho normal.',
       );
     });
   });

@@ -3192,6 +3192,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/my-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Os encontros que eu criei
+         * @description Os encontros de `origin: community` **desta conta**, para a tela
+         *     `Perfil` > `Meus eventos`, que e de onde se cancela o proprio encontro.
+         *
+         *     ## A autorizacao esta na clausula `WHERE`, e nao num filtro
+         *
+         *     A conta do chamador entra na consulta (ADR-0021), e nao ha parametro de
+         *     autoria: nao existe forma de pedir a lista de outra pessoa. Encontro do
+         *     painel (`origin: admin`) nao entra, nem quando a conta e a mesma: ele se
+         *     administra pelo painel.
+         *
+         *     Encontro `removed` nao entra. O **cancelado entra**, com `status`
+         *     `cancelled`: quem cancelou precisa ver que cancelou, e a lista e o unico
+         *     lugar do app onde o proprio encontro aparece nomeado como seu.
+         *
+         *     ## A PROJECAO E MENOR QUE A PUBLICA, e isso e deliberado
+         *
+         *     `MyNetworkEvent` tem **sete propriedades e nenhuma outra**. Ela nao
+         *     deriva de `NetworkEventPublic`: a lista do dono precisa de identificar e
+         *     decidir, e nao de descrever. O que entra alem de capa e titulo esta
+         *     justificado propriedade por propriedade no esquema.
+         *
+         *     ## Nao ha busca, filtro nem ordem escolhivel
+         *
+         *     O teto da conta e de **3 encontros ativos**
+         *     (`community-event-limit-reached`), entao esta lista e curta por
+         *     construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
+         *     proximo para o mais distante, e depois o que passou, do mais recente
+         *     para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
+         *     para o que ainda nao terminou.
+         */
+        get: operations["listMyNetworkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/my-events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Um encontro meu, com a versao dele
+         * @description Um encontro de `origin: community` **desta conta**, e **a unica leitura
+         *     da secao `Rede` que devolve `ETag`**.
+         *
+         *     ## POR QUE ELA EXISTE: sem ela, cancelar era impossivel
+         *
+         *     `updateNetworkEvent` e `cancelNetworkEvent` exigem `If-Match` com a
+         *     versao da ultima leitura. Medido contra homologacao em 19/10/2026:
+         *     `GET /v1/network/events`, `GET /v1/network/events/{eventSlug}` e o `201`
+         *     de `createNetworkEvent` respondem **sem** `ETag`; as unicas operacoes da
+         *     secao que o emitiam eram as duas escritas. Uma versao que so a escrita
+         *     entrega nao autoriza a primeira escrita, e por isso o primeiro
+         *     cancelamento nao tinha como acontecer.
+         *
+         *     **O `ETag` entrou AQUI e nao em `getNetworkEvent`**: aquela leitura esta
+         *     sendo aposentada junto da tela de detalhe, e a versao precisa sair da
+         *     leitura que a tela do dono de fato faz. A tela `Meus eventos` chama esta
+         *     operacao ao abrir a folha de confirmacao, e manda o valor recebido no
+         *     `If-Match` do cancelamento.
+         *
+         *     ## A mesma projecao da lista, e o mesmo 404
+         *
+         *     O corpo e `MyNetworkEvent`, identico ao item da lista: esta leitura
+         *     existe pela VERSAO, e nao por ter mais conteudo. Encontro inexistente,
+         *     de outra pessoa, do painel e `removed` respondem **404 nos quatro
+         *     casos**, com o mesmo corpo (ADR-0021) -- nunca 403, porque distinguir
+         *     contaria a um estranho que aquele `slug` e de alguem.
+         */
+        get: operations["getMyNetworkEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/join-requests": {
         parameters: {
             query?: never;
@@ -3482,6 +3575,33 @@ export interface paths {
          *     Por isso o filtro geografico e por **cidade e bairro digitados**, e nao
          *     por latitude e longitude. Paginacao numerada com total, porque a tela
          *     precisa dizer "1 a 20 de 87" e permitir chegar ao fim da lista.
+         *
+         *     ## `city` DEIXOU DE SER OBRIGATORIA EM 19/10/2026
+         *
+         *     Decisao do cliente, nas palavras dele: *"o campo cidade do filtro da
+         *     pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos 20
+         *     ultimos pets cadastrados"*. Ausente, `city` NAO recorta geografia
+         *     nenhuma e `applied_filters` nao a cita -- a mesma mecanica que `period`
+         *     ganhou em 18/10, e pelo mesmo motivo: a tela precisa poder dizer que
+         *     abriu sem recorte.
+         *
+         *     **Sem `city` a pagina 1 e os 20 casos abertos mais RECENTES**, pela
+         *     ordem que esta operacao sempre teve (`lost_cases.last_seen_at DESC`,
+         *     desempatada por `share_token`). O `limit` continua com `default: 20` e
+         *     `maximum: 20`, entao "os 20 ultimos" e o recorte padrao sem nada de
+         *     novo no contrato.
+         *
+         *     **A ordem NAO passou a ser por proximidade, e a ausencia e de ADR.**
+         *     Ordenar esta lista por distancia exigiria uma das duas coisas que o
+         *     ADR-0006 proibe nominalmente para ela -- latitude e longitude no pedido
+         *     (*"a listagem publica de perdidos filtra por cidade e bairro digitados,
+         *     jamais por latitude e longitude"*) ou distancia na resposta, que o
+         *     ADR-0010 itens 4 e 5 vedam em superficie alcancavel sem conta e que
+         *     `src/tools/portao-contrato-publico.ts` reprova por nome (`distance_m`,
+         *     `distance_km`, `radius_m`). Medido em 19/10/2026: acrescentar
+         *     `distance_m` a `PublicLostPet` reprova o portao com DOIS achados, porque
+         *     `PublicLostCase` reusa o mesmo esquema. Enquanto nao houver emenda
+         *     datada desses dois ADRs, a ordem desta rota e temporal.
          */
         get: operations["listPublicLostPets"];
         put?: never;
@@ -3878,6 +3998,61 @@ export interface paths {
          *     deve rebuscar quando encontrar um `kid` desconhecido, em vez de recusar.
          */
         get: operations["jwks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app/version-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Veredito de versao para o aplicativo que esta chamando
+         * @description **O aplicativo manda a propria versao e o SERVIDOR decide.** A resposta
+         *     e um VEREDITO, nunca o numero minimo: o app nao compara nada.
+         *
+         *     POR QUE A COMPARACAO NAO PODE FICAR NO APP. Comparar versao e onde se
+         *     erra -- `1.10.0` contra `1.9.0` sai invertido em qualquer comparacao de
+         *     texto, e um app publicado com essa conta errada so se conserta com
+         *     outro app publicado. No servidor ela se conserta sem binario novo. Por
+         *     isso esta resposta **nao** tem campo `minimum_version`: um campo desses
+         *     seria o convite para o app comparar de novo, e dois comparadores sao
+         *     dois resultados que um dia divergem.
+         *
+         *     POR QUE ESTA OPERACAO NAO E `GET /health`, que tambem e publica e
+         *     tambem e chamada sem conta:
+         *
+         *     1. `/health` e a sonda do balanceador e do orquestrador, e e a UNICA
+         *        operacao publica dispensada de `x-rate-limit` exatamente por isso
+         *        (a dispensa esta escrita no proprio lint). Carregar nela um
+         *        parametro de versao obrigatorio mudaria o contrato do que o
+         *        orquestrador chama a cada 10 segundos, e um parametro obrigatorio
+         *        novo numa sonda e uma sonda que passa a responder 400.
+         *     2. `/health` existe para NAO expor nada: ela nao tem parametro nenhum
+         *        hoje, e a identidade de build que ela devolve e para comparar
+         *        destino (criterio 12 da BICHUS-13), nao para o aplicativo ler.
+         *     3. Os dois tetos sao opostos. A sonda nao pode ser limitada; esta aqui
+         *        precisa ser.
+         *
+         *     O QUE ELA NAO DEVOLVE, e isto e ADR-0010: nenhum identificador
+         *     interno, nenhuma contagem, nenhum nome de host, nenhuma versao de
+         *     dependencia. Dois campos, e os dois sao configuracao publica.
+         *
+         *     AUSENCIA NAO BLOQUEIA. A politica mora em configuracao do servidor
+         *     (tabela `app_version_policy`); quando ela nao diz nada sobre a
+         *     plataforma que pediu -- linha ausente, ou `minimum_version` nula --, o
+         *     veredito e `supported`. O bloqueio so acontece quando o servidor diz
+         *     explicitamente que aquela versao nao serve. Desligar o mecanismo e um
+         *     `UPDATE` de uma coluna, sem subir imagem nenhuma.
+         */
+        get: operations["getAppVersionStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5967,6 +6142,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Versao de aplicativo em TRES numeros (`MAIOR.MENOR.CORRECAO`), sem
+         *     sufixo e sem `v`.
+         *
+         *     O `pattern` e o mesmo que o `CHECK` da tabela `app_version_policy`
+         *     cobra na ESCRITA. Os dois existem e nao sao redundantes: este recusa o
+         *     que o aplicativo manda, aquele recusa o que a pessoa do deploy
+         *     escreve. Quem troca o numero a mao, de madrugada, erra por digitacao, e
+         *     o lugar de pegar isso e no `INSERT`/`UPDATE` -- nao na primeira
+         *     requisicao de um aparelho de verdade.
+         *
+         *     **Sem rotulo de pre-lancamento, e nao por economia:** ordenar
+         *     `1.2.0-rc.1` contra `1.2.0` e a parte da comparacao semantica que mais
+         *     se erra, e nenhum build deste produto usa sufixo. O dia em que usar,
+         *     quem muda o formato muda os dois lugares juntos.
+         * @example 1.4.2
+         */
+        AppVersion: string;
+        /**
+         * @description O veredito do servidor sobre a versao que chamou.
+         *
+         *     `verdict` e obrigatorio **e** e o unico campo que decide algo. O
+         *     aplicativo le este campo e nada mais; ele nao recalcula, nao compara e
+         *     nao deduz. Veredito que ele nao reconheca e tratado como `supported`,
+         *     porque veredito desconhecido nao e ordem de fechar o app.
+         */
+        AppVersionStatus: {
+            /**
+             * @description - `supported`: esta versao serve. **E o valor que a ausencia de
+             *       politica produz** -- linha ausente, `minimum_version` nula, ou
+             *       plataforma sobre a qual nada foi escrito.
+             *     - `update_recommended`: ha versao nova e esta ainda funciona. O
+             *       aplicativo AVISA, de forma dispensavel, e nao impede nada.
+             *     - `update_required`: esta versao nao serve mais. O aplicativo
+             *       fecha o uso. **E o unico valor que bloqueia**, e ele so sai
+             *       daqui quando a configuracao do servidor o diz explicitamente.
+             * @enum {string}
+             */
+            verdict: "supported" | "update_recommended" | "update_required";
+            /**
+             * Format: uri
+             * @description Para onde mandar a pessoa. **Nula enquanto nao houver loja**, e
+             *     hoje ela e nula: o APK vai por arquivo e o iOS por cabo (decisao de
+             *     23/09; a conta Apple nao andou).
+             *
+             *     Nula, o aplicativo **nao desenha botao**: botao que leva a lugar
+             *     nenhum e pior que nenhum botao, e a tela explica o que fazer em
+             *     palavras. Nao e campo opcional por comodidade -- e o estado de hoje
+             *     dito em voz alta.
+             *
+             *     Ela sai aqui, e nao de `--dart-define` do build, por um motivo
+             *     so: no dia da publicacao na loja o endereco e conhecido DEPOIS de
+             *     o binario existir, e um endereco de loja embutido no binario
+             *     precisaria de outro binario para ser corrigido.
+             * @example null
+             */
+            store_url?: string | null;
+        };
         /**
          * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
          *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
@@ -9988,6 +10221,152 @@ export interface components {
             applied_filters: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description O encontro na lista do DONO (`Perfil` > `Meus eventos`, 19/10/2026).
+         *
+         *     **Sete propriedades e nenhuma outra**, e `additionalProperties: false`
+         *     cobra isso. Ela NAO deriva de `NetworkEventPublic`: montar a projecao
+         *     publica e depois apagar campos deixa passar campo novo, e esta projecao
+         *     responde a uma pergunta diferente -- "qual dos meus encontros e este, e
+         *     da para cancelar?" --, nao "como e este encontro?".
+         *
+         *     ## O QUE ENTRA ALEM DE CAPA E TITULO, propriedade por propriedade
+         *
+         *     A decisao de 19/10 fixou o cartao da AGENDA em **foto + titulo**, mais a
+         *     palavra `Cancelado`. Esta lista nao e a vitrine publica, e cada
+         *     propriedade a mais tem de se justificar sozinha:
+         *
+         *     - `slug` -- **o endereco da acao**. E o que a tela manda em
+         *       `cancelNetworkEvent` e em `getMyNetworkEvent`. Sem ele nao ha
+         *       cancelar. Nao e UUID interno (ADR-0010): e o endereco publico que o
+         *       servidor derivou do titulo e que ja circula na agenda.
+         *     - `starts_at` + `time_zone` -- **qual dos meus**. O teto e de tres
+         *       encontros ativos por conta, e nada impede que os tres se chamem
+         *       "Encontro no parque": dois cartoes identicos com um `Cancelar` cada e
+         *       uma armadilha. A data e o que distingue, e `time_zone` e o que faz a
+         *       hora de parede sair certa -- sem ele a lista mostra a data no fuso de
+         *       quem le, que pode ser outro dia.
+         *     - `ends_at` -- **se ainda da para cancelar**. A regra do servidor e
+         *       `COALESCE(ends_at, starts_at) > agora`; sem esta propriedade a tela
+         *       nao sabe quando esconder a acao, e desenharia um `Cancelar` que o
+         *       servidor recusa com `400 event_ended` depois de a pessoa ter
+         *       confirmado.
+         *     - `status` -- **o que ja aconteceu com ele**. Carrega a palavra
+         *       `Cancelado` do cartao e e o que faz o `Cancelar` nao aparecer no que
+         *       ja esta cancelado (o servidor recusaria com `400
+         *       event_not_published`). Calculado no SERVIDOR, como em toda a secao.
+         *     - `cover` -- a foto do cartao **e o estado dela**. Este e o unico lugar
+         *       do produto onde a pessoa descobre que a capa foi RECUSADA, e por que.
+         *       Medido por outra frente em 19/10/2026: a capa sobe no mesmo `POST` de
+         *       criar o encontro, o processador pode recusa-la depois do `201`,
+         *       `NetworkEventPublic` nao tem `rejection_reason` (as 23 propriedades
+         *       foram conferidas), a pagina de detalhe do encontro foi apagada por
+         *       decisao do cliente e o cartao da agenda e foto + titulo -- entao
+         *       **nao havia lugar nenhum** que contasse a recusa a quem enviou a
+         *       imagem. A lista do dono e o lugar: estado de processamento de imagem e
+         *       assunto entre quem enviou e o servidor, e nao informacao de visitante.
+         *       E a mesma razao pela qual `PetPhoto` e `MyUserPhoto` carregam
+         *       `status` e `rejection_reason`, e a projecao publica delas nao.
+         *
+         *     **O que NAO entra, e o motivo:** `summary`, `place`, `notes`, `images`,
+         *     `admission`, `accepted_sizes`, `dog_age`, `vaccination_required`,
+         *     `fenced_off_leash_area`, `amenities`, `bring_items`, `ticket_url`,
+         *     `instagram_handle`, `instagram_url` e `visibility`. Nenhuma delas
+         *     responde "qual dos meus", "da para cancelar" nem "a minha foto entrou",
+         *     e a lista do dono nao e tela de leitura do encontro. Nao ha
+         *     `cover_banner_url`: a capa de borda a borda e do detalhe, e esta lista
+         *     nao tem detalhe.
+         */
+        MyNetworkEvent: {
+            slug: string;
+            title: string;
+            /**
+             * @description A capa e o estado dela. **Nula quando o encontro nao tem capa
+             *     nenhuma** -- e isso e diferente de `status: processing` (a imagem
+             *     existe e o worker nao terminou) e de `status: rejected` (ela existe
+             *     e nao serviu). Sem os tres estados separados, "ainda nao aparece" e
+             *     "nunca vai aparecer" viram a mesma tela, e a pessoa fica esperando.
+             */
+            cover: components["schemas"]["MyNetworkEventCover"] | null;
+            /**
+             * Format: date-time
+             * @description O instante absoluto. A hora de PAREDE sai de `time_zone`.
+             */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description O nome IANA da zona do encontro. Sem ele a data da lista sai no fuso de quem le, que pode ser outro dia.
+             * @example America/Sao_Paulo
+             */
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+        };
+        /**
+         * @description O estado de processamento da capa, os tres de `catalog_images.status`.
+         *
+         *     **Lista fechada NOMEADA, e nao um `enum` embutido na propriedade**: o
+         *     portao de conformidade do app (`verificar-conformidade-do-app.mjs`)
+         *     exige que todo `enum` de `app/lib/api/` aponte para uma lista fechada do
+         *     contrato, e um `enum` inline nao e alvo de `$ref`. Com a lista aqui, o
+         *     `EstadoDaCapa` do app espelha ESTE ponto, e um valor novo no servidor
+         *     reprova o app em vez de chegar como surpresa no aparelho.
+         *
+         *     `processing` enquanto o worker nao terminou: `url` e nula nesse
+         *     intervalo, e a lista mostra o lugar da foto em vez de um erro.
+         *     `rejected` quando os bytes reais nao sao imagem aceita -- o tipo
+         *     declarado no envio nunca e a fonte da verdade.
+         * @enum {string}
+         */
+        MyNetworkEventCoverStatus: "processing" | "ready" | "rejected";
+        /**
+         * @description A capa do encontro **na lista do dono**: a imagem e o que aconteceu com
+         *     ela. O vocabulario e o de `PetPhoto` e de `MyUserPhoto`, de proposito --
+         *     `processing`, `ready`, `rejected` sao os tres estados de
+         *     `catalog_images.status`, e o banco cobra que a recusada tenha motivo
+         *     (`catalog_images_recusada_tem_motivo`).
+         */
+        MyNetworkEventCover: {
+            status: components["schemas"]["MyNetworkEventCoverStatus"];
+            /**
+             * Format: uri
+             * @description A derivada de 1024 x 576 da imagem de posicao 0, a MESMA que
+             *     `cover_image_url` da agenda serve. Nula em `processing` e em
+             *     `rejected`.
+             */
+            url: string | null;
+            /**
+             * @description O MOTIVO da recusa, em texto pronto para a tela e em portugues,
+             *     quando `status` e `rejected`. Nulo em `processing` e em `ready`.
+             *
+             *     **Ele e gravado desde a BICHUS-87 e nao chegava a ninguem** neste
+             *     caminho: a capa do encontro subia, era recusada, e nao havia
+             *     superficie que contasse. Sem ele a tela diria "recusada" e a pessoa
+             *     nao saberia se o problema foi o formato, o tamanho, a dimensao
+             *     minima ou um arquivo truncado -- e portanto nao teria como
+             *     consertar. Exemplos reais medidos: *"A imagem precisa ter pelo menos
+             *     600 x 600 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
+             *     ter chegado incompleta."*
+             *
+             *     Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
+             *     precise ramificar por causa ramifica por `status`.
+             */
+            rejection_reason: string | null;
+        };
+        /**
+         * @description A pagina de `listMyNetworkEvents`. **Sem `applied_filters` e sem
+         *     `effective_sort`**, e nao por economia: a operacao nao aceita recorte
+         *     nenhum e a ordem e fixa, entao os dois campos so poderiam repetir uma
+         *     constante. `total` existe porque a lista escreve o fecho ("Voce criou N
+         *     encontros") e porque e ele que distingue "nao criei nenhum" de "a
+         *     pagina 2 esta vazia".
+         */
+        MyNetworkEventPage: {
+            items: components["schemas"]["MyNetworkEvent"][];
+            page: number;
+            limit: number;
+            total: number;
         };
         /**
          * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
@@ -15912,6 +16291,70 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listMyNetworkEvents: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A pagina dos encontros desta conta. `total` alimenta a linha de
+             *     fecho da lista.
+             *
+             *     **Sem `ETag` aqui, e a ausencia e medida e nao esquecimento**: um
+             *     cabecalho de resposta vale para a resposta inteira, e `If-Match` de
+             *     `cancelNetworkEvent` e a versao de UM encontro. Um `ETag` de pagina
+             *     apresentado como versao de um item daria 412 em toda tentativa -- o
+             *     defeito pareceria conserto. A versao de um encontro sai em
+             *     `getMyNetworkEvent`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro, com a versao dele no `ETag`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listMyNetworkEventJoinRequests: {
         parameters: {
             query?: {
@@ -16125,8 +16568,29 @@ export interface operations {
     };
     listPublicLostPets: {
         parameters: {
-            query: {
-                city: string;
+            query?: {
+                /**
+                 * @description **SEM `required`, e a ausencia dele e a decisao do cliente de
+                 *     19/10/2026**: *"o campo cidade do filtro da pagina pet nao deve ser
+                 *     obrigatorio"*. `city` ausente e geografia ABERTA -- o servidor nao
+                 *     recorta por cidade nenhuma, e `applied_filters` nao cita `city`.
+                 *
+                 *     Mesma forma que `period` logo abaixo, e pela mesma razao: nao ha
+                 *     valor de "qualquer cidade" a inventar, porque a ausencia ja o diz, e
+                 *     um valor desses voltaria em `applied_filters` como filtro aplicado
+                 *     numa pagina que ninguem filtrou.
+                 *
+                 *     O `minLength: 2` continua valendo para quem MANDA o parametro:
+                 *     `city=` vazio e 400, e nao geografia aberta. Quem quer todas as
+                 *     cidades omite o parametro.
+                 *
+                 *     CUSTO MEDIDO: sem cidade a consulta le os casos abertos publicos de
+                 *     TODAS as cidades, e a funcao `conta_habilitada(owner_user_id)` corre
+                 *     por linha. O indice que sustenta esse caminho e a migracao
+                 *     `20261019000008`; o cabecalho de
+                 *     `kysely-listagem-publica-de-perdidos.ts` tem os dois EXPLAIN.
+                 */
+                city?: string;
                 neighborhood?: string;
                 species?: components["schemas"]["Species"];
                 size?: components["schemas"]["PetSize"];
@@ -16609,6 +17073,51 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getAppVersionStatus: {
+        parameters: {
+            query: {
+                /**
+                 * @description A plataforma do binario que esta perguntando. Separada porque a
+                 *     politica e por plataforma: hoje so o Android e publicado (decisao
+                 *     de 23/09) e o iOS esta dormente, e uma politica unica bloquearia o
+                 *     iOS de provisionamento gratuito junto.
+                 */
+                platform: "android" | "ios";
+                /**
+                 * @description A versao do binario que esta perguntando (`versionName` do Android,
+                 *     `CFBundleShortVersionString` do iOS), em tres numeros.
+                 *
+                 *     Fora do formato responde 400, e nao bloqueio: o app trata 400 como
+                 *     "nao consegui perguntar" e libera o uso. A alternativa -- deduzir
+                 *     bloqueio de um valor que nao se entende -- trancaria a base por um
+                 *     erro de digitacao de build.
+                 */
+                version: components["schemas"]["AppVersion"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description O veredito para a versao que chamou. **Tres estados distintos, e
+             *     nao um booleano**: `update_required` fecha o app, e
+             *     `update_recommended` so avisa e pode ser dispensado pela pessoa.
+             *     Um campo booleano nao conseguiria carregar os dois.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVersionStatus"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     health: {
