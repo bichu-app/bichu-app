@@ -32,6 +32,7 @@ import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
 import 'escopo.dart';
+import 'intencao/leitura_como_intencao.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
 import 'intencao/achado_como_intencao.dart';
 import 'intencao/caso_de_perdido_como_intencao.dart';
@@ -400,6 +401,15 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
         // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
+        // **A QUARTA, e a unica que nao escreve nada** (20/10/2026).
+        //
+        // `ver_conteudo` existe porque o convite de deslogado das paginas de
+        // conteudo mandava a pessoa para `/pets` depois do login, e nao para a
+        // pagina que ela tinha pedido -- medido. A prosa inteira, inclusive
+        // por que uma LEITURA entra num mecanismo feito para acoes e por que
+        // o `executar` dela nao chama o servidor, esta em
+        // `intencao/leitura_como_intencao.dart`.
+        AcaoDeIntencao.verConteudo: leituraExecutavel(),
         // **`pedir_para_participar` NAO esta mais aqui.** O executavel dela
         // mandava o pedido depois do login e devolvia a pessoa ao detalhe do
         // evento; a tela de detalhe saiu em 19/10/2026 por decisao do
