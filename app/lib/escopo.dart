@@ -27,6 +27,7 @@ import 'dispositivo/localizacao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'sessao/contador_de_avisos.dart';
+import 'sessao/contadores_de_nao_lido.dart';
 import 'sessao/controlador_de_sessao.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
@@ -66,6 +67,7 @@ class Escopo extends InheritedWidget {
     required this.cofreDoQr,
     required this.avisoDeCadastro,
     required this.contadorDeAvisos,
+    required this.contadores,
     required super.child,
     super.key,
   });
@@ -253,6 +255,17 @@ class Escopo extends InheritedWidget {
   /// em [AvisoDeCadastro]: o que ele guarda e da CONTA.
   final AvisoDeCadastro avisoDeCadastro;
 
+  // **OS DOIS CONTADORES SAO COISAS DIFERENTES, e a distincao e do cliente**
+  // (19/10/2026): *"nao sao a mesma coisa, mensagens e conversa, notificacao
+  // sao eventos que estao acontecendo"*.
+  //
+  // [contadorDeAvisos] e o SINO da barra de topo, de
+  // `GET /v1/me/notifications/count`. [contadores] e o distintivo da aba
+  // `AuAu` na barra de BAIXO, das conversas. Os nomes sao parecidos e as
+  // arquiteturas sao iguais -- as duas entraram no escopo, em `limpezasAoSair`
+  // e em `aoEntrar` --, e e exatamente por isso que esta nota esta aqui: quem
+  // for mexer em um nao pode achar que mexeu nos dois.
+
   /// O NUMERO DO SINO da barra de topo (19/10/2026).
   ///
   /// Fica no escopo, e nao dentro do sino, e o motivo e o arranjo da casca: os
@@ -269,6 +282,19 @@ class Escopo extends InheritedWidget {
   /// CONTA. A politica de atualizacao inteira esta escrita em
   /// [ContadorDeAvisos].
   final ContadorDeAvisos contadorDeAvisos;
+
+  /// O CONTADOR DE NAO LIDO que a barra de baixo pinta (20/10/2026).
+  ///
+  /// Fica no escopo, e nao dentro da casca, por tres razoes que sao a mesma:
+  /// o numero e da CONTA e nao da tela; quem o atualiza na abertura e na
+  /// retomada e o `app.dart`, que e outro lugar; e quem o derruba e a area de
+  /// mensagens, que e um ramo diferente da aba que o pinta. Duas instancias
+  /// perderiam uma da outra, e a aba continuaria acesa depois de a pessoa ler.
+  ///
+  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`: o que ele guarda e
+  /// da conta, e nao do aparelho.
+  final ContadoresDeNaoLido contadores;
+
 
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
@@ -308,5 +334,6 @@ class Escopo extends InheritedWidget {
       cidadeEscolhida != anterior.cidadeEscolhida ||
       cofreDoQr != anterior.cofreDoQr ||
       avisoDeCadastro != anterior.avisoDeCadastro ||
-      contadorDeAvisos != anterior.contadorDeAvisos;
+      contadorDeAvisos != anterior.contadorDeAvisos ||
+      contadores != anterior.contadores;
 }

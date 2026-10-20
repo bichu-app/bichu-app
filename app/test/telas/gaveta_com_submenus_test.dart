@@ -42,7 +42,6 @@ import 'dart:io';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
-import 'package:bichu/widgets/acoes_de_criar_flutuantes.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
@@ -421,29 +420,26 @@ void main() {
       tester,
     ) async {
       // O que este caso sempre provou: o voltar do sistema devolve a casca
-      // quando ha tela empilhada sobre ela. **O VEICULO MUDOU** -- era um item
-      // da gaveta, e agora e a opcao da acao flutuante de `Pets` --, e o que
-      // ele prova nao mudou uma letra.
+      // quando ha tela empilhada sobre ela. **O VEICULO MUDOU DUAS VEZES** --
+      // era um item da gaveta, virou a opcao da folha da acao flutuante de
+      // `Pets`, e em 20/10 o cliente mandou o alvo da folha sair (*"na pagina
+      // pet, remova o icone dos ..., so deixe o de escanear a tag"*). A casa
+      // nova de `Registrar achado avulso` e o menu da conta, no grupo `Bichos
+      // na rua`. **O que o caso prova nao mudou uma letra.**
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
       await irParaASecao(tester, 'Pets');
 
-      // **PELO ALVO SECUNDARIO, e nao pelo flutuante inteiro.** Desde
-      // 19/10/2026 `Pets` tem DOIS alvos na mesma linha: o principal e
-      // `Escanear uma tag` (um toque, decisao do cliente: *"botao para
-      // escanear o pet"*) e o secundario abre a folha com as outras duas.
-      // `find.byType(AcoesDeCriarFlutuantes)` acharia a `Row` inteira e o
-      // toque cairia no meio dela.
-      await tester.tap(
-        find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario),
-      );
+      await tester.tap(find.byType(AvatarDaConta));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Registrar achado avulso'));
+      final item = find.text('Registrar achado avulso');
+      await tester.scrollUntilVisible(item, 200);
+      await tester.tap(item);
       await tester.pumpAndSettle();
       expect(
         find.byType(TelaRegistrarAchado),
         findsOneWidget,
-        reason: 'REPROVA: a opcao da folha nao abriu a tela empilhada. Sem '
-            'ela nao ha de onde voltar, e o caso mediria o nada.',
+        reason: 'REPROVA: o item do menu da conta nao abriu a tela empilhada. '
+            'Sem ela nao ha de onde voltar, e o caso mediria o nada.',
       );
 
       final voltou = await tester.binding.handlePopRoute();
@@ -458,10 +454,17 @@ void main() {
         findsNothing,
         reason: 'REPROVA: o voltar do sistema nao saiu da tela empilhada.',
       );
+      // **DESDE 20/10 A BARRA JA ESTAVA LA ANTES DO POP**, e por isso esta
+      // linha deixou de provar que o pop devolveu a casca -- ela prova que o
+      // pop nao levou a barra embora. A tela da conta e o destino: ela e ramo
+      // da casca, e `irParaASecao` + a foto deixam o `IndexedStack` nela.
       expect(
         find.byType(NavigationBar),
         findsOneWidget,
-        reason: 'REPROVA: o voltar nao devolveu a casca com a barra de baixo.',
+        reason: 'REPROVA: depois do voltar nao ha UMA barra de baixo na '
+            'arvore. Com a casca fixa de 20/10, a tela empilhada tambem tem '
+            'barra: duas na arvore ao mesmo tempo significa que a tela de '
+            'cima nao saiu, e nenhuma significa que o pop levou a casca.',
       );
     });
   });
@@ -497,14 +500,24 @@ void main() {
               'foto da conta. Literal dele (19/10): "colocar o icone do '
               'usuario no lugar do menu, do lado esquerdo da pagina".',
         );
+        // **A RESERVA DO SLOT E 56 DESDE 20/10/2026, e o ALVO continua 48.**
+        //
+        // O cliente pediu a margem (*"o icone do perfil do usuario ficou muito
+        // perto do titulo da barra, de uma margem do nome"*) e ela nao tinha
+        // de onde sair: o circulo terminava em 48, o alvo terminava em 48 e
+        // `titleSpacing: 0` fazia o titulo comecar em 48 -- vao de 0,00 dp. O
+        // slot passou a 56 e o alvo ficou em 48, com os 8 dp de respiro a
+        // direita dele. Ver `AvatarDaConta.larguraNoLeading`, e o grupo 10,
+        // que mede as duas medidas separadamente.
         expect(
           barra.leadingWidth,
-          AvatarDaConta.alvo,
+          AvatarDaConta.larguraNoLeading,
           reason: 'REPROVA: a reserva do `leading` de "${destino.rotulo}" e '
-              '${barra.leadingWidth} dp e nao ${AvatarDaConta.alvo}. O '
-              'hamburguer tinha piso de 64 dp (11.23.1, controle de canto de '
-              'barra) e a foto tem 48 (SC 2.5.8, com a excecao explicada no '
-              'cabecalho dela): foram 16,00 dp devolvidos ao titulo, e eles '
+              '${barra.leadingWidth} dp e nao '
+              '${AvatarDaConta.larguraNoLeading}. O hamburguer tinha piso de '
+              '64 dp (11.23.1, controle de canto de barra), a foto tem 48 '
+              '(SC 2.5.8, com a excecao explicada no cabecalho dela) e desde '
+              '20/10 ela carrega 8 dp de respiro ate o titulo. Os numeros '
               'estao na conta do grupo 3.',
         );
       }
@@ -547,13 +560,21 @@ void main() {
       //
       // O caso trava os 48: abaixo disso ela fura o SC 2.5.8; acima, o
       // orcamento do titulo encolhe e a conta do grupo 3 desaba.
+      //
+      // **A MEDIDA DESCEU DO WIDGET PARA O CONTROLE EM 20/10/2026**, e nao e
+      // afrouxamento: com o respiro do titulo (`AvatarDaConta.
+      // respiroDoTitulo`), o widget passou a ser o `Align` que ocupa o SLOT de
+      // 56 dp, e o alvo continua sendo o `IconButton` de 48 dentro dele.
+      // `find.byType(AvatarDaConta)` passaria a medir o slot -- e diria 56
+      // para um alvo que nao mudou. `AvatarDaConta.chaveDoAlvo` esta no
+      // proprio `IconButton`, que e o que recebe o toque.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
       await irParaASecao(tester, 'Pets');
 
       final alvo = tester.getSize(
         find.descendant(
           of: find.byType(AppBar),
-          matching: find.byType(AvatarDaConta),
+          matching: find.byKey(AvatarDaConta.chaveDoAlvo),
         ),
       );
       expect(
@@ -581,10 +602,39 @@ void main() {
       // slot, mesmo risco, mesmo mecanismo: `raizDeSecao` e a unica condicao
       // que monta o `leading`, e raiz de secao nao tem saida.
       //
-      // **E o risco e MAIOR com a foto do que era com o hamburguer**, e vale
-      // dizer por que: perder a gaveta numa tela empilhada custava um atalho;
-      // perder a SAIDA custa a tela -- ela vira um beco, e a pessoa so sai
-      // pelo gesto do sistema.
+      // =====================================================================
+      // **A RAZAO MUDOU EM 20/10/2026, E A PROPRIEDADE FICOU. LEIA ISTO.**
+      // =====================================================================
+      //
+      // A razao escrita aqui era: *"perder a gaveta numa tela empilhada
+      // custava um atalho; perder a SAIDA custa a tela -- ela vira um beco, e
+      // a pessoa so sai pelo gesto do sistema"*. **Essa frase deixou de ser
+      // verdade no dia em que o cliente mandou fixar a barra de baixo**
+      // (*"quando o usuario vai para a mensagem, o menu inferior some,
+      // mantenha ele fixo em todas as paginas"*): a tela empilhada passou a
+      // ter DUAS saidas -- o slot da esquerda e a barra --, e o slot deixou de
+      // ser a ultima linha de defesa contra o beco.
+      //
+      // **E O CASO NAO FOI APAGADO, porque a propriedade nao era so sobre o
+      // beco.** Ela e sobre o slot da esquerda dizer UMA coisa: naquele lugar,
+      // ou ha a saida da tela, ou ha a porta da conta, e nunca as duas. Com as
+      // duas, o `AppBar` monta so o que lhe dao -- a FOTO apaga a seta
+      // automatica -- e a tela empilhada perde a seta **sem perder a
+      // aparencia de ter uma**: o slot continua ocupado por um controle
+      // redondo de 48 dp, no mesmo lugar, que leva para OUTRO lado. Quem
+      // conhece o app por habito toca ali para voltar e vai para a conta.
+      // Isso continua sendo defeito com a barra de baixo no lugar, e e por
+      // isso que a regra fica.
+      //
+      // **A segunda metade da prova mudou de casa:** que ninguem fica sem
+      // saida agora e medido TELA POR TELA no grupo `(g) ninguem ficou sem
+      // saida` de `barra_fixa_em_toda_tela_test.dart`, que percorre as 29
+      // telas empilhadas e trava QUAIS delas dependem so da barra.
+      //
+      // DESLIGAMENTO: em `casca_com_abas.dart`, tire a condicao `raizDeSecao`
+      // do `leading` de `TelaDeAba`. A foto nasce na tela empilhada, a seta
+      // automatica desaparece debaixo dela, e a segunda metade deste caso
+      // reprova.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
       await irParaASecao(tester, 'Pets');
 
@@ -608,15 +658,23 @@ void main() {
 
       // Numa tela empilhada que usa a MESMA `TelaDeAba`: saida, sem foto.
       //
-      // **O VEICULO E `Registrar achado avulso`**, alcancada pelo alvo
-      // SECUNDARIO da acao flutuante de `Pets` (19/10) -- era item de gaveta,
-      // e desde que ele pediu *"botao para escanear o pet"* o alvo principal
-      // e o leitor e as outras duas ficaram atras do secundario. O caso
-      // precisa de um destino que abra tela empilhada sobre a casca usando a
-      // mesma `TelaDeAba`, e ela continua sendo exatamente isso.
-      await tester.tap(find.byKey(AcoesDeCriarFlutuantes.chaveDoSecundario));
+      // **O VEICULO CONTINUA SENDO `Registrar achado avulso`, e O CAMINHO ATE
+      // ELA MUDOU EM 20/10.** Ela era alcancada pelo alvo SECUNDARIO da acao
+      // flutuante de `Pets`, e o cliente mandou o alvo sair (*"na pagina pet,
+      // remova o icone dos ..., so deixe o de escanear a tag"*). A casa nova
+      // dela e o menu da conta, no grupo `Bichos na rua`, e o caminho passa
+      // pela FOTO -- que e tambem o controle cuja ausencia a segunda metade
+      // deste caso cobra. O caminho exercita a propriedade nos dois sentidos:
+      // a foto EXISTE na raiz, e NAO existe na tela que ela abre duas telas
+      // adiante.
+      //
+      // A tela tem de usar a mesma `TelaDeAba` das raizes, e
+      // `TelaRegistrarAchado` continua sendo exatamente isso.
+      await tester.tap(find.byType(AvatarDaConta));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Registrar achado avulso'));
+      final porta = find.text('Registrar achado avulso');
+      await tester.scrollUntilVisible(porta, 200);
+      await tester.tap(porta);
       await tester.pumpAndSettle();
 
       expect(
@@ -638,13 +696,15 @@ void main() {
         findsNothing,
         reason:
             'REPROVA: a tela empilhada ganhou a foto por cima da saida. A '
-            'composicao `Saida + titulo + foto` apaga a unica saida da tela, '
-            'e ela nao pode existir.',
+            'composicao `Saida + titulo + foto` poe no slot da esquerda um '
+            'controle que PARECE a saida e leva para a conta, e a seta '
+            'automatica desaparece debaixo dela. A barra de baixo fixa, de '
+            '20/10, tirou o risco do BECO e nao tirou este.',
       );
     });
   });
 
-  group('3. os CINCO titulos CABEM, e o orcamento foi a 224,00 dp', () {
+  group('3. os CINCO titulos CABEM, e o orcamento foi a 216,00 dp', () {
     for (final destino in secoesDaBarra) {
       testWidgets(
         'o titulo "${destino.rotulo}" em 320 dp a 200%: CABE, com folga medida',
@@ -695,18 +755,27 @@ void main() {
           );
 
           // ==================================================================
-          // O ORCAMENTO NOVO: 224,00 dp, e NENHUM TITULO CORTA MAIS
+          // O ORCAMENTO: 216,00 dp desde 20/10, e NENHUM TITULO CORTA
           // ==================================================================
           //
           // Medido no app de verdade, LOGADO, em 320 dp a 200% de escala:
           //
-          //   titulo comeca em:        48,00 dp (depois da foto, com
-          //                            `titleSpacing: 0`)
+          //   titulo comeca em:        56,00 dp (a foto de 48 mais o respiro
+          //                            de 8, com `titleSpacing: 0`)
           //   reserva do lado direito: 48,00 dp (so o sino)
-          //   ORCAMENTO DO TITULO:    224,00 dp
+          //   ORCAMENTO DO TITULO:    216,00 dp
           //
-          //   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (85,68 de folga)
-          //   `Mural`:                172,90 dp -> CABE (51,10 de folga)
+          //   `Pets`, `Rede`, `Loja`: 138,32 dp -> cabem (77,68 de folga)
+          //   `Mural`:                172,90 dp -> CABE (43,10 de folga)
+          //
+          // **OS 8,00 dp QUE FALTAM PARA OS 224,00 SAO A MARGEM DO PEDIDO 1
+          // (20/10/2026)**, e ela nao tinha de onde sair senao daqui. Literal
+          // do cliente: *"o icone do perfil do usuario ficou muito perto do
+          // titulo da barra, de uma margem do nome"*. O circulo de 32 dp
+          // terminava em 48, o alvo terminava em 48 e `titleSpacing: 0` fazia
+          // o titulo comecar em 48: o vao era **0,00 dp**, e nao havia folga
+          // nenhuma dentro do alvo para ceder. Ver `AvatarDaConta.
+          // respiroDoTitulo`, que carrega a conta e a opcao recusada.
           //
           // **A EXCECAO DE CORTE DE CINCO LETRAS ACABOU, e isto e o achado.**
           // Ela era de `Perto` (172,90 pedidos contra 160,00 de orcamento,
@@ -725,19 +794,19 @@ void main() {
           // que `Perto` pedia. Com 224,00 ele cabe inteiro.
           //
           // DESLIGAMENTO: devolva `AvatarDaConta` ao `actions` de `TelaDeAba`
-          // (o orcamento cai para 176,00 e `Mural` ainda cabe), ou devolva
-          // tambem `widget.acaoDeCriar` ao `actions` (cai para 112,00 e os
-          // CINCO cortam). A asercao de 224,00 abaixo reprova nos dois.
+          // (o orcamento cai para 168,00 e `Mural` ainda cabe), ou devolva
+          // tambem `widget.acaoDeCriar` ao `actions` (cai para 104,00 e os
+          // CINCO cortam). A asercao de 216,00 abaixo reprova nos dois.
           expect(
             paragrafo.constraints.maxWidth,
-            224.0,
+            216.0,
             reason: 'REPROVA: o titulo de "${destino.rotulo}" recebeu '
                 '${paragrafo.constraints.maxWidth.toStringAsFixed(2)} dp de '
-                'orcamento em 320 dp a 200%, e o arranjo de 19/10 mede '
-                '224,00 -- foto 48 a esquerda, sino 48 a direita, '
+                'orcamento em 320 dp a 200%, e o arranjo de 20/10 mede '
+                '216,00 -- foto 48 + respiro 8 a esquerda, sino 48 a direita, '
                 '`titleSpacing: 0`. Menos que isso significa que um controle '
-                'voltou para a barra; mais, que um saiu dela. Os dois mudam '
-                'quais titulos cabem.',
+                'voltou para a barra; mais, que um saiu dela, ou que a margem '
+                'do pedido 1 desapareceu. Os tres mudam quais titulos cabem.',
           );
 
           final pedida = paragrafo.getMaxIntrinsicWidth(double.infinity);
@@ -2161,11 +2230,11 @@ void main() {
   // Um caso que medisse so a margem aprovaria a versao que corta `Rede`; um
   // que medisse so o titulo aprovaria a volta da margem de 8,00. Os dois
   // numeros ficam no mesmo caso para que a troca entre eles nao passe calada.
-  group('10. a foto tem margem, e ela nao foi tirada do titulo', () {
+  group('10. a foto tem as DUAS margens, e so uma custou titulo', () {
     for (final destino in secoesDaBarra) {
       testWidgets(
-        'em "${destino.rotulo}": 16,00 dp de margem na foto e o orcamento do '
-        'titulo intacto',
+        'em "${destino.rotulo}": 16,00 dp a esquerda do circulo, e o '
+        'orcamento do titulo em 216,00',
         (tester) async {
           tester.view.physicalSize = const Size(960, 2000);
           tester.view.devicePixelRatio = 3;
@@ -2182,7 +2251,11 @@ void main() {
           await irParaASecao(tester, destino.rotulo);
 
           final barra = tester.getRect(find.byType(AppBar));
-          final alvoDaFoto = tester.getRect(find.byType(AvatarDaConta));
+          // O ALVO e o `IconButton`, e nao o widget: desde 20/10 o widget e
+          // o `Align` do slot de 56 dp. Ver `AvatarDaConta.chaveDoAlvo`.
+          final alvoDaFoto = tester.getRect(
+            find.byKey(AvatarDaConta.chaveDoAlvo),
+          );
           final circulo = tester.getRect(
             find.byKey(AvatarDaConta.chaveDoCirculo),
           );
@@ -2262,27 +2335,39 @@ void main() {
               )
               .constraints
               .maxWidth;
-          // **UM NUMERO SO PARA AS QUATRO SECOES, e ele foi a 224,00 dp.**
+          // **UM NUMERO SO PARA AS QUATRO SECOES, e ele foi a 216,00 dp.**
           //
           // O lado direito deixou de variar de secao para secao em 19/10 pela
-          // manha (`criar` desceu para o corpo e o sino entrou), e a tarde a
-          // FOTO saiu de `actions` para o `leading`:
+          // manha (`criar` desceu para o corpo e o sino entrou), a tarde a
+          // FOTO saiu de `actions` para o `leading`, e em 20/10 o cliente
+          // pediu a margem entre a foto e o titulo:
           //
           //   hamburguer 64 | titulo | sino 48 + foto 48  -> 160,00
           //   foto 48       | titulo | sino 48            -> 224,00
+          //   foto 48 + 8   | titulo | sino 48            -> 216,00
           //
-          // Saldo: +16,00 do piso do hamburguer (64) para o da foto (48), e
-          // +48,00 da foto que saiu do lado direito.
+          // Saldo: +16,00 do piso do hamburguer (64) para o da foto (48),
+          // +48,00 da foto que saiu do lado direito, e **-8,00 da margem do
+          // pedido 1**.
+          //
+          // **A MARGEM DA ESQUERDA CONTINUA CUSTANDO 0,00 dp**, e as duas
+          // margens sao coisas diferentes: a da esquerda e INTERNA ao alvo (o
+          // circulo em 16..48 dentro de um alvo de 0..48) e a de 20/10 e
+          // EXTERNA a ele (o alvo em 0..48 dentro de um slot de 0..56). A
+          // primeira cabia na folga que o alvo tinha sobre o desenho; a
+          // segunda nao tinha folga nenhuma para caber, e por isso ela e a
+          // unica das duas que aparece nesta linha.
           expect(
             orcamento,
-            224.0,
+            216.0,
             reason:
                 'REPROVA: o titulo de "${destino.rotulo}" recebe '
                 '${orcamento.toStringAsFixed(2)} dp em 320 dp a 200%, e o '
-                'medido em 19/10/2026 e 224,00 (foto 48 a esquerda, sino 48 a '
-                'direita, `titleSpacing: 0`). A margem da foto NAO podia mexer '
-                'neste numero: fechar os 16 dp de margem com o orcamento do '
-                'titulo e desfazer o `titleSpacing: 0` pelo outro lado.',
+                'medido em 20/10/2026 e 216,00 (foto 48 + respiro 8 a '
+                'esquerda, sino 48 a direita, `titleSpacing: 0`). A margem '
+                'INTERNA da foto continua custando 0,00 dp daqui; o que custa '
+                '8,00 e o respiro EXTERNO que o cliente pediu em 20/10, e '
+                'nenhuma das duas pode crescer sobre a outra.',
           );
 
           // (4) E o titulo continua inteiro onde ja estava inteiro.

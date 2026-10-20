@@ -64,11 +64,13 @@ import * as sugestaoDoDiretorio from '../../modules/professionals/adapters/http/
 import * as diretorioAdministrativo from '../../modules/professionals/adapters/http/admin-directory-routes.js';
 import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
 import * as vitrineDeFotos from '../../modules/showcase/adapters/http/showcase-routes.js';
+import * as mural from '../../modules/publications/adapters/http/publicacao-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 // 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
+import * as contadoresDeSecao from '../../modules/sections/adapters/http/section-counter-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
 // 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
@@ -136,6 +138,13 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
   // suite desta fatia.
   pessoas,
+  // O MURAL (20/10). A publicacao do usuario e a linha do tempo. Modulo novo
+  // entra AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta
+  // linha um deles reprova contando `defineRoute` no disco (181 contra 186) e o
+  // outro reprova listando as CINCO operacoes do Mural como operacao do
+  // contrato sem rota -- os dois reprovaram, exatamente assim, na primeira
+  // execucao da suite desta fatia.
+  mural,
   // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
   // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
   // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
@@ -154,6 +163,11 @@ const MODULOS: readonly Record<string, unknown>[] = [
   saude,
   // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
   caixaDeNotificacoes,
+  // 20/10/2026. Os contadores das abas `Pets` e `Rede` (2 rotas). Modulo novo
+  // entra AQUI: sem esta linha o ultimo caso deste arquivo reprova contando
+  // `defineRoute` no disco, e o primeiro reprova por operacao do contrato sem
+  // rota -- os dois acusaram a ausencia na primeira execucao da suite.
+  contadoresDeSecao,
   comunicadosAdministrativos,
   // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
   // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele

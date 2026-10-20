@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/falhas.dart';
 import '../api/problem.dart';
 import '../escopo.dart';
+import '../intencao/leitura_como_intencao.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_colors.dart';
@@ -65,11 +68,97 @@ import 'botao_primario.dart';
 /// que o servidor concede: medido, `/v1/me` devolve
 /// `pending_profile_fields: ["email_verification","phone","reference_area"]`
 /// numa conta nova e as rotas de LEITURA respondem 200 para ela.
+///
+/// ## DUAS FORMAS, e a segunda entrou em 20/10/2026
+///
+/// A forma original e a de TELA CHEIA: o corpo inteiro da secao e o conteudo
+/// que nao pode ser lido, e o convite ocupa o lugar dele. E assim nas doze
+/// telas que o usam como corpo.
+///
+/// A forma nova e a FOLHA CURTA, por [mostrarConviteParaEntrar], e ela existe
+/// por um pedido diferente do cliente, de 20/10/2026: *"quando o usuario
+/// estiver deslogado e tentar clicar para ver detalhes de algum conteudo, como
+/// por exemplo os eventos, que ele precisa estar logado para ver mais
+/// informacoes"*. Aqui a lista **continua publica e visivel**, e o que exige
+/// conta e o DETALHE de um item dela. Trocar a agenda inteira por um convite
+/// esconderia o conteudo que o servidor entrega sem conta -- medido,
+/// `GET /v1/network/events` responde 200 --, e seria o oposto do produto.
+///
+/// As duas convivem sem ambiguidade, e a regra e de onde esta o muro:
+///
+/// | o muro esta em | a forma |
+/// |---|---|
+/// | a LISTA inteira (401 na listagem) | tela cheia, no lugar do corpo |
+/// | um ITEM de uma lista publica | folha curta, no toque do item |
+///
+/// A aba `Comunidade` e o exemplo do primeiro caso e a aba `Eventos` do
+/// segundo, e as duas estao na MESMA secao: o diretorio responde 401 e desenha
+/// o convite no corpo; a agenda responde 200, mostra os eventos e so o toque
+/// abre a folha.
 class ConviteParaEntrar extends StatelessWidget {
-  const ConviteParaEntrar({required this.secao, super.key});
+  const ConviteParaEntrar({
+    required this.secao,
+    super.key,
+    this.rotaDeVolta,
+    this.emFolha = false,
+  });
 
   /// Qual secao esta sendo explicada. Ver [SecaoComConta].
   final SecaoComConta secao;
+
+  /// O endereco para onde a pessoa volta **depois** de entrar.
+  ///
+  /// Nulo mantem o comportamento historico: depois do login a pessoa cai na
+  /// secao de aterrissagem. **Medido em 20/10/2026**, antes desta frente: na
+  /// pagina de um pet alcancada por link sem conta, tocar em `Entrar` e
+  /// entrar levava a `/pets` -- a pagina pedida saia da pilha, porque
+  /// `irParaODestinoDoLogin` navega com `go`.
+  ///
+  /// Com endereco, o convite guarda uma intencao de LEITURA antes de abrir a
+  /// tela de entrar, e a guarda de acao devolve a pessoa exatamente aqui. Ver
+  /// `intencao/leitura_como_intencao.dart`.
+  final String? rotaDeVolta;
+
+  /// Este convite esta dentro de uma folha, e nao no corpo de uma tela.
+  ///
+  /// Muda duas coisas, e nenhuma delas e cosmetica:
+  ///
+  /// 1. **A moldura sai.** A folha ja e uma superficie com borda e cantos; o
+  ///    fundo rebaixado por dentro dela desenharia caixa dentro de caixa.
+  /// 2. **O toque FECHA a folha antes de navegar.** Sem isto a tela de entrar
+  ///    nasceria atras da folha, que continuaria no ar por cima dela -- e sair
+  ///    da folha deixaria a pessoa numa tela de login que ela nao ve.
+  ///
+  /// **Nao e `Navigator.canPop()`**, e a diferenca importa: `canPop` tambem e
+  /// verdadeiro quando o convite esta no corpo de uma tela EMPILHADA -- a
+  /// pagina de um pet, por exemplo --, e la o `pop` fecharia a pagina em vez
+  /// da folha que nao existe.
+  final bool emFolha;
+
+  /// Guarda a volta, fecha a folha se houver uma, e abre [rota].
+  ///
+  /// A ordem e a unica que funciona: guardar depois de navegar correria com a
+  /// montagem da tela de entrar, e fechar a folha antes de guardar perderia o
+  /// `context` de onde o `Escopo` e lido.
+  Future<void> _abrir(BuildContext context, String rota) async {
+    final volta = rotaDeVolta;
+    final roteador = GoRouter.of(context);
+    final navegador = Navigator.of(context);
+    if (volta != null) {
+      final guarda = Escopo.of(context).guarda;
+      // **NAO SOBRESCREVE UM RASCUNHO.** A regra 1 de 8.3 diz que a intencao
+      // nova substitui a anterior, e para duas ESCRITAS isso esta certo. Aqui
+      // nao: quem tem um `Marcar como perdido` meio preenchido guardado e toca
+      // num link de evento perderia o que digitou para ganhar uma volta de
+      // leitura. Perder uma volta e barato; perder o rascunho e o defeito que
+      // o envelope existe para evitar.
+      if (await guarda.pendente() == null) {
+        await guarda.guardar(intencaoDeVerConteudo(volta));
+      }
+    }
+    if (emFolha) navegador.pop();
+    roteador.push(rota);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +173,16 @@ class ConviteParaEntrar extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(BichuEspaco.e6),
-      decoration: BoxDecoration(
-        color: cores.surfaceSunken,
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
+      decoration: emFolha
+          ? null
+          : BoxDecoration(
+              color: cores.surfaceSunken,
+              borderRadius: BorderRadius.circular(BichuRaio.lg),
+              border: Border.all(
+                color: cores.outline,
+                width: BichuBorda.hairline,
+              ),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -101,14 +195,18 @@ class ConviteParaEntrar extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e6),
           BotaoPrimario(
             rotulo: rotuloDeEntrar,
-            aoTocar: () => context.push(Rotas.entrar),
+            aoTocar: () => unawaited(_abrir(context, Rotas.entrar)),
           ),
           // A SEGUNDA PORTA SO PARA QUEM NAO TEM CONTA. Ver a prosa da classe.
           if (!caiu) ...<Widget>[
             const SizedBox(height: BichuEspaco.e4),
             BotaoSecundario(
               rotulo: rotuloDeCriarConta,
-              aoTocar: () => context.push(Rotas.criarConta),
+              // **A VOLTA VALE PELAS DUAS PORTAS.** `tela_criar_conta` termina
+              // em `irParaODestinoDoLogin` tanto quanto `tela_entrar`
+              // (`intencao/ir_para_o_destino.dart` nomeia os dois pontos),
+              // entao quem cria a conta tambem volta para o conteudo.
+              aoTocar: () => unawaited(_abrir(context, Rotas.criarConta)),
             ),
           ],
         ],
@@ -136,11 +234,19 @@ class ConviteParaEntrar extends StatelessWidget {
 /// que varia e so o que a secao e. Cada tela nomeia a sua e nao escreve mais
 /// nada.
 ///
-/// **Toda entrada daqui foi medida contra a homologacao em 19/10/2026**, sem
-/// token: as sete respondem `401 unauthenticated` com `next_action: sign_in`.
-/// Nenhuma secao publica tem entrada aqui -- `/v1/network/events` (a agenda da
-/// `Rede`), `/v1/store/items` (a `Loja`) e a listagem publica de perdidos
-/// respondem 200 sem conta, e um convite nelas inventaria um muro.
+/// **Toda entrada daqui foi medida contra a homologacao**, sem token: as treze
+/// respondem `401 unauthenticated` com `next_action: sign_in` -- as dez
+/// primeiras em 19/10/2026, e [paginaDoPet], [paginaDoAchado] e
+/// [paginaDaPessoa] em 20/10/2026.
+///
+/// **Nenhuma secao publica tem entrada aqui**, e a lista do que foi deixado em
+/// paz vale tanto quanto a do que entrou. Medido em 20/10/2026, sem conta:
+/// `GET /v1/public/lost-pets` **200** e `GET /v1/public/lost-cases/{token}`
+/// **200** (e por elas que a vizinhanca acha o pet), `GET /v1/network/events`
+/// **200** -- com `total` e os **mesmos 23 campos** com e sem conta --,
+/// `GET /v1/network/events/{slug}` **200**, `GET /v1/store/items` **200** e
+/// `GET /v1/store/items/{slug}` **200**. Um convite em qualquer uma delas
+/// inventaria um muro que o servidor nao tem.
 enum SecaoComConta {
   /// `GET /v1/directory/entries` — a aba `Profissionais` de `Perto`.
   ///
@@ -232,6 +338,95 @@ enum SecaoComConta {
     retomada: 'Entre de novo para ver os seus pedidos de conexão.',
   ),
 
+  /// A pagina de um encontro da `Rede` — `/rede/encontros/<slug>`.
+  ///
+  /// **ESTA ENTRADA E A UNICA DO CATALOGO CUJA ROTA DE SERVIDOR RESPONDE
+  /// 200 SEM CONTA**, e e por isso que ela e a unica que aparece em FOLHA e
+  /// nunca no corpo de uma tela. Medido em 20/10/2026:
+  /// `GET /v1/network/events/{slug}` **200 sem token**, e a listagem
+  /// `GET /v1/network/events` devolve `total` igual e os **mesmos 23 campos**
+  /// com e sem conta.
+  ///
+  /// Entao o muro **nao e do servidor, e o texto nao pode dizer que e.** Ele e
+  /// do produto, por pedido do cliente de 20/10/2026: *"quando o usuario
+  /// estiver deslogado e tentar clicar para ver detalhes de algum conteudo,
+  /// como por exemplo os eventos, que ele precisa estar logado para ver mais
+  /// informacoes"*.
+  ///
+  /// **A UNICA coisa do evento que o servidor de fato guarda atras de conta e
+  /// o LUGAR EXATO**, e e ela que o `ganho` promete, porque e a unica promessa
+  /// verdadeira: `GET /v1/network/events/{slug}/location` responde **401
+  /// unauthenticated** sem token e 200 com token, e e dela que saem o ponto do
+  /// mapa e o endereco por extenso. O resto da pagina -- `Quando`, `Sobre o
+  /// evento`, cuidados, o que levar -- o servidor entrega sem conta, e o texto
+  /// nao finge o contrario.
+  encontroDaRede(
+    titulo: 'Entre para ver este evento',
+    ganho: 'Entre para ver o endereço no mapa, o horário, o que levar e os '
+        'cuidados combinados para o encontro.',
+    retomada: 'Entre de novo para ver este evento.',
+  ),
+
+  /// `GET /v1/pets/{petId}` — a pagina de um pet (`T.1`).
+  ///
+  /// **Alcancavel SEM passar pela lista**, que e o que a traz para este
+  /// catalogo: a rota existe por endereco e vem de link compartilhado e de
+  /// link profundo. Medido na homologacao em 20/10/2026, sem token:
+  /// `401 unauthenticated` com `next_action: sign_in`.
+  ///
+  /// **O que a tela mostrava no lugar deste convite era o defeito de 19/10 em
+  /// pessoa, e ele nao tinha sido corrigido aqui:** o catalogo devolve
+  /// `texto: ''` para `unauthenticated`, e `_ehForaDaConta` so reconhece 404 --
+  /// entao o 401 caia no ramo de falha e desenhava uma [FaixaDeAviso] de ERRO
+  /// com NENHUMA frase e um `Atualizar` ao lado. Atualizar nao resolve um 401.
+  ///
+  /// **O texto nao promete o pet de ninguem**, e a razao e a mesma da
+  /// [umaConversa]: pet de outra conta responde 404 e nunca 403 (ADR-0021), e
+  /// um convite que dissesse "veja o seu pet" afirmaria pelo texto o que o
+  /// status se recusa a confirmar.
+  paginaDoPet(
+    titulo: 'Esta página é de um pet',
+    ganho: 'Entre para ver a ficha do pet, com as fotos e os sinais dele, e '
+        'cuidar dos seus pets num lugar só.',
+    retomada: 'Entre de novo para ver esta página.',
+  ),
+
+  /// `GET /v1/found-reports/{id}` — a pagina de um achado (`/achados/:id`).
+  ///
+  /// Mesma razao de [paginaDoPet]: endereco proprio, alcancavel por link, e o
+  /// 401 caia no ramo de erro com frase vazia e `Tentar de novo`. Medido em
+  /// 20/10/2026: `401 unauthenticated`, `next_action: sign_in`.
+  ///
+  /// **O ganho fala de ACOMPANHAR e nao de registrar**, e a distincao e de
+  /// produto: registrar um achado **nao** exige conta (`createFoundReport`
+  /// declara `security: [bearerAuth, {}]`), e prometer conta para isso
+  /// afastaria exatamente quem esta com o animal no colo. O que exige conta e
+  /// voltar depois para ver o que deu no registro.
+  paginaDoAchado(
+    titulo: 'Esta página é de um achado',
+    ganho: 'Entre para acompanhar o animal que você encontrou e falar com '
+        'quem está procurando por ele.',
+    retomada: 'Entre de novo para ver este achado.',
+  ),
+
+  /// `GET /v1/people/{handle}` — o perfil de uma pessoa.
+  ///
+  /// **Alcancavel por link compartilhado**, e dentro do app so a partir da
+  /// foto de um participante da conversa -- que ja exige conta. Medido em
+  /// 20/10/2026, sem token: `401 unauthenticated`, `next_action: sign_in`.
+  ///
+  /// **O texto nao diz o nome nem o apelido de quem a pagina e**, e a ausencia
+  /// e deliberada: perfil oculto, bloqueado, denunciado ou inexistente
+  /// responde o MESMO 404 de proposito (`TelaDePerfilDePessoa.naoEncontramos`),
+  /// e um convite que repetisse o apelido confirmaria a existencia da pessoa a
+  /// quem ainda nao tem permissao para saber disso.
+  paginaDaPessoa(
+    titulo: 'Esta página é de uma pessoa da comunidade',
+    ganho: 'Entre para ver quem é, os pets dela e as conexões que vocês têm '
+        'em comum, e pedir conexão.',
+    retomada: 'Entre de novo para ver esta página.',
+  ),
+
   /// `GET /v1/network/my-events` — `Perfil` › `Meus eventos`.
   ///
   /// **O texto nao promete nada sobre a agenda**, que e navegavel sem conta: o
@@ -281,4 +476,61 @@ enum SecaoComConta {
 bool faltaConta(Object falha) {
   if (falha is! FalhaDaApi) return false;
   return falha.problem.proximaAcao == ProximaAcao.entrar;
+}
+
+
+/// O convite NUMA FOLHA CURTA, no momento do toque.
+///
+/// ## Por que folha, e nao texto no cartao nem tela cheia
+///
+/// Pedido do cliente de 20/10/2026, e as tres formas foram medidas contra ele:
+///
+/// - **Texto no proprio cartao**: reprovado por ele mesmo. O cartao da agenda
+///   e `foto + titulo` por decisao dele de 19/10 (*"apenas a foto e o titulo
+///   do evento"*), e uma linha de "entre para ver mais" em cada cartao e
+///   informacao nova em VINTE cartoes -- exatamente o que ele acabou de mandar
+///   tirar. Ha isca contando os `Text` do cartao.
+/// - **Convite de tela cheia**: esconderia a agenda. A listagem responde 200
+///   sem conta (medido), e trocar o conteudo publico por um muro seria o
+///   contrario do produto. Esta forma fica para a aba `Comunidade`, onde o
+///   muro e da LISTA.
+/// - **Folha curta**: a agenda fica atras, visivel, e a informacao aparece no
+///   lugar do toque. E esta.
+///
+/// ## O que ela NAO faz
+///
+/// **Nao decide o texto.** Quem decide e [ConviteParaEntrar], a partir do
+/// [MotivoSemConta] lido do controlador: quem nunca entrou ve as duas portas,
+/// quem caiu ve `Sua sessão expirou` e so `Entrar`. Nenhuma frase nova foi
+/// escrita para a folha -- ela mostra o MESMO convite das outras doze telas.
+///
+/// **Nao e `isScrollControlled` por capricho**: com escala de texto em 200% o
+/// convite passa da metade da tela, e sem isso a folha corta o botao
+/// `Criar conta` -- que e a unica saida de quem nao tem conta.
+Future<void> mostrarConviteParaEntrar(
+  BuildContext context, {
+  required SecaoComConta secao,
+  String? rotaDeVolta,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (contexto) => SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          BichuEspaco.e4,
+          0,
+          BichuEspaco.e4,
+          BichuEspaco.e4,
+        ),
+        child: ConviteParaEntrar(
+          secao: secao,
+          rotaDeVolta: rotaDeVolta,
+          emFolha: true,
+        ),
+      ),
+    ),
+  );
 }

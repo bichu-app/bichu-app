@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../api/mural_api.dart';
 import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../intencao/caso_de_perdido_como_intencao.dart';
+import '../intencao/leitura_como_intencao.dart';
 import '../achado/rascunho_do_achado.dart';
 import '../perdido/rascunho_do_caso.dart';
 import '../sessao/controlador_de_sessao.dart';
@@ -32,6 +34,7 @@ import '../telas/seguranca/tela_de_bloqueados.dart';
 import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
 import '../telas/pessoa/tela_perfil_de_pessoa.dart';
+import '../telas/mural/publicar_no_mural.dart';
 import '../telas/perfil/vitrine_de_fotos.dart';
 import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
@@ -55,6 +58,7 @@ import '../telas/perto/pagina_do_local.dart';
 import '../telas/perto/sugerir_profissional.dart';
 import '../telas/perto/tela_de_minhas_indicacoes.dart';
 import '../telas/rede/criar_encontro.dart';
+import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -77,22 +81,37 @@ abstract final class Rotas {
   static const String pets = '/pets';
   static const String rede = '/rede';
 
-  // **NAO HA MAIS ENDERECO DE DETALHE DE EVENTO**, e isso e decisao do
-  // cliente de 19/10/2026: *"sem informações adicionais ou pagina de detalhes
-  // do evento"*. O que morava aqui era `encontros/:slug`, sob o ramo da
-  // secao, com `parametroDoEncontro` e `encontroDaRedeDe`.
-  //
-  // **A rota saiu junto com a tela, e nao antes dela.** Rota apontando para
-  // tela que nao existe e o pior dos dois mundos: o `go_router` casa o
-  // caminho, nao acha o `builder` e a pessoa cai numa pagina de erro no lugar
-  // de nao ter chegado ali.
-  //
-  // Com o endereco saiu tambem a guarda de acao de `Pedir para participar`,
-  // que voltava para ca depois do login -- o pedido de participacao nascia na
-  // tela de detalhe e nao nasce em lugar nenhum agora.
-  //
-  // `criarEncontroDaRede`, abaixo, FICA: criar evento continua sendo a acao
-  // flutuante da secao, e o desfecho dela virou a propria agenda.
+  /// O encontro da `Rede`, sob o ramo da secao: a barra de abas continua, e
+  /// voltar devolve a agenda.
+  ///
+  /// **ELA VOLTOU EM 20/10/2026, e a volta e correcao de pedido.** Esta rota
+  /// foi apagada em 19/10 junto com a tela, e o cliente corrigiu no dia
+  /// seguinte: *"eu nao pedi pra voce remover, eu pedi para remover o clique
+  /// para o usuario nnao conseguir acessar a pagina de detalhes"*. O que ele
+  /// pediu era o CLIQUE, e o clique agora depende da sessao -- quem decide e
+  /// `rede/agenda_da_rede.dart`, e nao esta rota.
+  ///
+  /// **Ela nao tem guarda de rota, como nenhuma rota deste app tem.** Chegar
+  /// aqui por link profundo sem conta e legitimo e abre a pagina: medido em
+  /// 20/10/2026, `GET /v1/network/events/{slug}` responde **200 sem conta**, e
+  /// so o mapa (`/location`, 401 sem token) fica de fora. O aviso de que falta
+  /// entrar e do TOQUE no cartao, que e onde o cliente o pediu.
+  ///
+  /// **Nao ha mais a razao antiga desta rota**, que era a volta da guarda de
+  /// acao de `Pedir para participar` depois do login: o pedido de participacao
+  /// saiu com o evento privado, por decisao dele.
+  /// **IRMA da casca e SEM barra, por decisao do cliente de 20/10/2026.**
+  ///
+  /// O caminho e ABSOLUTO desde que ela saiu do `routes:` do ramo da
+  /// `Rede`: *"ao clicar nos detalhes do evento, remove a barra"*. Ver o
+  /// bloco desta rota em `_rotas`, que registra as duas frentes em conflito
+  /// e o veredito.
+  static const String encontroDaRede = '/rede/encontros/:slug';
+
+  static const String parametroDoEncontro = 'slug';
+
+  static String encontroDaRedeDe(String slug) =>
+      '/rede/encontros/${Uri.encodeComponent(slug)}';
 
   /// **Marcar um encontro da `Rede`: IRMA da casca, e nao sob o ramo.**
   ///
@@ -103,9 +122,9 @@ abstract final class Rotas {
   ///
   /// **Declarada ANTES do ramo da casca**, como `/pets/novo` em relacao a
   /// `/pets`: o `go_router` casa na ordem de registro, e o
-  /// `/rede` do ramo da casca engoliria o segmento se a ordem se invertesse.
-  /// A regra fica escrita aqui porque ela sobreviveu a saida de
-  /// `encontros/:slug`: a ordem de registro e o que a sustenta.
+  /// [encontroDaRede] do ramo engoliria qualquer segmento -- o formulario
+  /// abriria o detalhe de um encontro chamado "novo". A regra voltou a ter o
+  /// motivo original em 20/10/2026, com `encontros/:slug` de volta.
   static const String criarEncontroDaRede = '/rede/encontros/novo';
 
   /// **`Rotas.perto` NAO EXISTE MAIS, e a ausencia e o contrato (19/10/2026).**
@@ -145,6 +164,18 @@ abstract final class Rotas {
   /// `/pets`. As rotas filhas dela (a publicacao aberta, por exemplo) nascem
   /// SOB este caminho, como `encontros/:slug` nasceu sob `/rede`.
   static const String mural = '/mural';
+
+  /// **Publicar no Mural: IRMA da casca, e nao sob o ramo** (20/10/2026).
+  ///
+  /// Mesma razao de [criarEncontroDaRede] e do assistente de cadastro de pet:
+  /// escrever uma publicacao e TAREFA, e a barra de abas abaixo dela ofereceria
+  /// quatro saidas para o meio do preenchimento -- com uma foto ja enviada e
+  /// nenhum lugar para dizer que ela vai se perder.
+  ///
+  /// **Declarada ANTES do ramo da casca**, como `/rede/encontros/novo` em
+  /// relacao a `/rede`: o `go_router` casa na ordem de registro, e o `/mural`
+  /// do ramo engoliria o segmento se a ordem se invertesse.
+  static const String publicarNoMural = '/mural/publicar';
 
   /// **Indicar um profissional: irma da casca**, pela mesma razao de
   /// [criarEncontroDaRede].
@@ -201,8 +232,8 @@ abstract final class Rotas {
   /// Esta e a porta.
   ///
   /// **Sob o ramo, e nao irma da casca**, pela mesma escolha de
-  /// [produtoDaLoja] e pelo mesmo motivo: a pagina de um local e LEITURA, nao
-  /// tarefa. A barra de abas continua, e voltar devolve a
+  /// [produtoDaLoja] e [encontroDaRede] e pelo mesmo motivo: a pagina de um
+  /// local e LEITURA, nao tarefa. A barra de abas continua, e voltar devolve a
   /// lista com a busca e o filtro de quem estava procurando intactos -- quem
   /// esta comparando tres veterinarios quer continuar comparando, e esconder
   /// as outras quatro secoes para mostrar uma ficha tiraria o app de quem so
@@ -234,8 +265,8 @@ abstract final class Rotas {
   /// cadastro: o detalhe de um produto e leitura, nao tarefa. Quem esta
   /// comparando produtos quer continuar comparando, e esconder a barra de abas
   /// para mostrar uma ficha de produto tiraria as outras quatro secoes de
-  /// quem so foi ver uma foto maior. E a mesma escolha de [localDoPerto],
-  /// pelo mesmo motivo.
+  /// quem so foi ver uma foto maior. E a mesma escolha de [localDoPerto] e
+  /// [encontroDaRede], pelo mesmo motivo.
   static const String produtoDaLoja = 'produtos/:slug';
 
   static const String parametroDoProduto = 'slug';
@@ -630,6 +661,19 @@ abstract final class Rotas {
       // e a agenda, onde a pessoa reabre o encontro (o `slug` esta no `alvo`
       // do envelope, e nao no ID da tela).
       'REDE.ENCONTRO' => rede,
+      // **A LEITURA (20/10/2026) nao e uma tela da pesquisa, e por isso ela
+      // aponta para a secao de aterrissagem.**
+      //
+      // O endereco de verdade do conteudo esta no `alvo` do envelope, e quem o
+      // devolve e `AcaoExecutavel.rotaDeRetorno` de `leituraExecutavel()` --
+      // que vence este `switch` sempre que o alvo existe. Esta linha e
+      // alcancada num caso so: envelope de leitura com `alvo` vazio ou
+      // corrompido, que a guarda relata na observabilidade antes de navegar.
+      //
+      // **Ela nao pode devolver nulo**, e e por isso que existe: nulo faz a
+      // guarda DESCARTAR o envelope em silencio, e a pessoa voltaria para
+      // `/pets` -- exatamente o defeito que a leitura como intencao conserta.
+      telaDeUxDaLeitura => pets,
       _ => null,
     };
   }
@@ -697,6 +741,36 @@ void ligarPortaDoPerfilDoParticipante() {
     if (apelido == null || apelido.isEmpty) return null;
     return Rotas.perfilDe(apelido);
   };
+}
+
+/// Uma rota de PRIMEIRO PLANO: empilhada, e com a barra de baixo por baixo.
+///
+/// **Primeiro plano e o que a CASCA abre; pagina interna e o que o CONTEUDO
+/// abre** (decisao do cliente, 20/10/2026, segunda mensagem). Hoje sao DUAS as
+/// rotas assim -- a area de mensagens, que o slot `AuAu` da barra abre, e a
+/// caixa de avisos, que o sino da barra de topo abre. A conta inteira esta no
+/// bloco de rotas que usa esta funcao.
+///
+/// **O embrulho e no `builder` e nao num `ShellRoute`, e isso foi medido.**
+/// `ShellRoute` cria um `Navigator` proprio e apaga a seta automatica do
+/// `AppBar` da primeira tela empilhada -- sete telas desta arvore dependiam
+/// dela e ficavam sem saida no topo, `/mensagens` entre elas. Aqui a pagina
+/// continua no `Navigator` raiz e nada de navegacao muda.
+///
+/// Ela e **o unico lugar** que poe [CascaFixa] em producao: uma rota nova de
+/// primeiro plano troca `GoRoute` por esta funcao e entra em
+/// `telasDePrimeiroPlano`; uma interna fica `GoRoute` e entra em
+/// `telasInternas`. As duas listas vivem no portao
+/// `test/telas/barra_fixa_em_toda_tela_test.dart`, que reprova rota sem
+/// classificacao.
+GoRoute _comBarraFixa({
+  required String path,
+  required Widget Function(BuildContext, GoRouterState) builder,
+}) {
+  return GoRoute(
+    path: path,
+    builder: (context, estado) => CascaFixa(child: builder(context, estado)),
+  );
 }
 
 GoRouter criarRoteador(ControladorDeSessao sessao) {
@@ -800,6 +874,60 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaDoCasoPublico(shareToken: token);
         },
       ),
+      // =====================================================================
+      // PRIMEIRO PLANO E PAGINA INTERNA (20/10/2026, as DUAS mensagens dele)
+      // =====================================================================
+      //
+      // **PRIMEIRA mensagem, que pedia a barra em tudo:** *"quando o usuario
+      // vai para a mensagem, o menu inferior some, mantenha ele fixo em todas
+      // as paginas"*. As 29 rotas empilhadas desta arvore passaram a vestir
+      // [CascaFixa].
+      //
+      // **SEGUNDA mensagem, do mesmo dia, que DELIMITOU:** *"vamos colocar a
+      // barra fixa apenas nas paginas de primeiro plano, as paginas internas,
+      // pode manter como esta. Exemplo: ao clicar no menu auau, mantem a barra
+      // .. ao clicar na mensagem tira a barra. Ao clicar no perfil mantem a
+      // barra, ao clicar no cadastro do pet, remove a barra. Na listagem dos
+      // eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+      // barra. E assim por diante."*
+      //
+      // **O DISCRIMINADOR SAI DOS TRES EXEMPLOS DELE, e nao de "lista contra
+      // detalhe".** As duas leituras concordam nos tres exemplos e DISCORDAM
+      // em oito telas desta arvore -- `Meus achados` e `Pedidos de conexao`
+      // sao LISTAS e sao alcancadas de DENTRO do Perfil. O que separa os tres
+      // exemplos dele sem ambiguidade e **QUEM ABRE A TELA**:
+      //
+      //   - a CASCA abre -> primeiro plano, com barra. O slot `AuAu` da barra
+      //     de baixo abre `/mensagens`; o sino da barra de topo abre
+      //     `/notificacoes`. Os dois sao controles da propria casca, presentes
+      //     em toda tela de secao.
+      //   - o CONTEUDO abre -> pagina interna, sem barra. Tocar numa linha da
+      //     lista de mensagens, num `ItemDeMenu` do corpo do Perfil, num
+      //     cartao de pet, num botao de formulario.
+      //
+      // E isso le os tres exemplos dele na ordem: o slot `AuAu` mantem (casca),
+      // a mensagem tocada tira (conteudo); o Perfil mantem (a FOTO da casca o
+      // abre), o cadastro de pet tira (botao do corpo); a listagem de eventos
+      // mantem (e a secao `Rede`, da casca), a ficha do evento tira (cartao do
+      // corpo).
+      //
+      // **SAO DUAS AS ROTAS DE PRIMEIRO PLANO**, e so elas usam
+      // `_comBarraFixa`: `RotasDeMensagens.area` e `RotasDaCaixa.caixa`. As
+      // outras 27 voltaram a ser `GoRoute` -- *"as paginas internas, pode
+      // manter como esta"*. A classificacao das 29, uma a uma, com o motivo de
+      // cada, esta em `test/telas/barra_fixa_em_toda_tela_test.dart`
+      // (`telasDePrimeiroPlano` e `telasInternas`), e o portao de completude
+      // reprova rota nova que nasca sem classificacao.
+      //
+      // **AS OITO QUE JA ESTAVAM DE FORA CONTINUAM DE FORA**, e ele respondeu
+      // sobre elas na mesma mensagem (*"as paginas internas, pode manter como
+      // esta"*): `/` (a abertura e um desvio, nao tem conteudo), `/entrar`,
+      // `/criar-conta`, `/verifique-seu-email` e `/esqueci-minha-senha` (quem
+      // nao tem sessao nao esta em secao nenhuma), `/escanear` (**o design
+      // system 11.11 PROIBE a barra sobre a camera**, independente disto), e
+      // `/t/:codigo` e `/p/:shareToken` (as duas portas publicas: quem chega
+      // de uma plaquinha ou de um link compartilhado chega de FORA do app).
+
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem
       // pela porta das ONGs em `Perto`.
       GoRoute(
@@ -900,10 +1028,28 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
       // detalhe de um achado chamado "novo".
       // As duas ESCRITAS da comunidade, irmas da casca porque sao tarefa.
-      // Declaradas antes do ramo da casca. O motivo original era
-      // `encontros/:slug`, que engolia `encontros/novo` e abria um detalhe
-      // inexistente; a rota de detalhe saiu em 19/10/2026 e a ordem ficou,
-      // porque ela e de graca e o ramo `/rede` continua acima.
+      // Declaradas antes do ramo da casca: `encontros/:slug` engoliria
+      // `encontros/novo` e o formulario abriria um detalhe inexistente.
+      GoRoute(
+        path: Rotas.publicarNoMural,
+        builder: (context, estado) {
+          final escopo = Escopo.of(context);
+          // A porta e construida AQUI a partir do `ApiClient` do `Escopo`, como
+          // a da vitrine, a dos bloqueados e as do perfil de pessoa.
+          // Acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de
+          // teste que o constroi, e o `Escopo` esta sendo mexido por outras
+          // frentes nesta mesma rodada.
+          //
+          // **A camera e o envio saem do `Escopo`**: o envio carrega um cliente
+          // HTTP proprio, sem o token da sessao, e um construido aqui seria o
+          // segundo.
+          return PublicarNoMural(
+            escrita: MuralApi(escopo.api),
+            camera: escopo.camera,
+            envio: escopo.envioDeFoto,
+          );
+        },
+      ),
       GoRoute(
         path: Rotas.criarEncontroDaRede,
         builder: (context, estado) => const TelaCriarEncontro(),
@@ -1084,9 +1230,24 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDeMensagens.area,
-        builder: (context, estado) => const AreaDeMensagens(),
+        builder: (context, estado) {
+        // AS DUAS COSTURAS DO CONTADOR DA ABA `AuAu` (20/10/2026).
+        //
+        // Elas sao ligadas AQUI, e nao dentro da tela, porque o contador mora
+        // no `Escopo` e a tela nao conhece a barra -- que e exatamente a razao
+        // pela qual `AreaDeMensagens` publica por callback em vez de ler um
+        // estado global.
+        //
+        // `aoContarNaoLidas` nao custa requisicao nenhuma: o numero vem na
+        // resposta que a lista ja pediu.
+        final contadores = Escopo.of(context).contadores;
+        return AreaDeMensagens(
+          aoContarNaoLidas: contadores.definir,
+          aoVerAArea: contadores.marcarMensagensVistas,
+        );
+      },
       ),
       // A CONVERSA, pelo id. **E este o destino do toque na notificacao do
       // aviso ao tutor**, e por isso ela nao pode faltar: sem esta rota o
@@ -1101,7 +1262,7 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // A CAIXA DE NOTIFICACOES. Rota IRMA da casca: ela cobre a barra de
       // baixo, de proposito, e o sino chega nela por `push` -- ver a razao em
       // `SinoDeNotificacoes`.
-      GoRoute(
+      _comBarraFixa(
         path: RotasDaCaixa.caixa,
         builder: (context, estado) => const CaixaDeNotificacoes(),
       ),
@@ -1233,18 +1394,6 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
                       slug: estado.pathParameters[Rotas.parametroDoLocal] ?? '',
                     ),
                   ),
-                  // **A rota `encontros/:slug` NAO VOLTA (uniao do lote de
-                  // 19/10/2026).** A frente `feat/barra-com-mural-e-rede-unificada`
-                  // a trazia para DENTRO deste ramo unificado, porque no ramo dela
-                  // a tela de detalhe do evento ainda existia. Ela nao existe mais:
-                  // `feat/evento-simples-e-sem-telefone` APAGOU
-                  // `telas/rede/encontro_da_rede.dart` por decisao do cliente
-                  // (*"sem informações adicionais ou pagina de detalhes do
-                  // evento"*), e com ela sairam `TelaDoEncontro` e
-                  // `RetomadaDoPedido` -- declarar a rota aqui nao compilaria.
-                  //
-                  // `encontros/novo` continua, mas IRMA da casca e nao filha:
-                  // preencher formulario e tarefa, e tarefa esconde a barra.
                 ],
               ),
             ],
@@ -1304,6 +1453,49 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             ],
           ),
         ],
+      ),
+      // A FICHA DE UM ENCONTRO: IRMA DA CASCA, E SEM BARRA (20/10/2026).
+      //
+      // **Duas frentes decidiram este endereco em sentidos opostos, no mesmo
+      // dia, sem se ver, e quem mesclou decidiu pelo cliente.**
+      //
+      // `feat/aviso-de-login-ao-tocar` devolveu a tela e a declarou SOB o ramo
+      // da `Rede`, com a justificativa de que *"a pagina de um evento e
+      // LEITURA, e a barra de baixo fica"* -- a mesma razao que mantem
+      // `locais/:slug` sob o ramo. `feat/barra-fixa-e-perfil-por-topicos`
+      // trouxe o portao que varre sub-rota de ramo e REPROVA nomeando este
+      // endereco.
+      //
+      // **O cliente decidiu o contrario da primeira, com este exemplo
+      // literal:** *"vamos colocar a barra fixa apenas nas paginas de primeiro
+      // plano, as paginas internas, pode manter como esta... Na listagem dos
+      // eventos, mantem a barra, ao clicar nos detalhes do evento, remove a
+      // barra."*
+      //
+      // Entao a ficha do evento e INTERNA: ela sai do `routes:` do ramo e vem
+      // para ca, IRMA da casca, como `/pets/:petId` -- que e o mesmo desenho
+      // (detalhe de UM item, aberto por um cartao do CORPO da secao). O
+      // discriminador que o portao mede e **quem abre a tela**: a casca abre a
+      // listagem, o conteudo abre a ficha.
+      //
+      // **Ela NAO usa `_comBarraFixa`**, e e isso que tira a barra: as duas
+      // unicas rotas de primeiro plano continuam sendo a area de mensagens e a
+      // caixa de avisos.
+      //
+      // **A ORDEM CONTINUA SEGURA.** `/rede/encontros/novo` esta declarada bem
+      // antes desta, la onde as rotas irmas de formulario vivem, e o
+      // `go_router` casa na ordem de registro: o formulario nao cai nesta
+      // ficha. E o ramo `/rede` da casca, que vem acima, nao casa
+      // `/rede/encontros/<slug>` nenhuma, porque a sub-rota saiu dele.
+      GoRoute(
+        path: Rotas.encontroDaRede,
+        builder: (context, estado) => TelaDoEncontro(
+          slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
+          // A distancia vem do cartao, que a leu de
+          // `listNearbyNetworkEvents`. Por link direto ela nao vem, e a linha
+          // some sem aviso.
+          distanciaEmMetros: estado.extra is int ? estado.extra! as int : null,
+        ),
       ),
     ],
   );

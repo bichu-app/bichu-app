@@ -439,6 +439,44 @@ export function registrarRotasDeConversas(
     },
   );
 
+  /**
+   * `POST /v1/me/conversations-seen` — 204. **A rota estava DECLARADA e NÃO
+   * REGISTRADA, e isso foi medido em homologação em 20/10/2026.**
+   *
+   * `rotaDeListaVista` existe desde que o contador do sino existe, o serviço
+   * (`marcarListaVista`) existe, o repositório existe e o aplicativo CHAMA
+   * (`app/lib/api/conversas_api.dart`, de `area_de_mensagens.dart`). Só a
+   * chamada de `registrarRota` faltava, e o efeito era inteiro: medido contra
+   * `https://hml.bichu.app` em `fb3a0fba`,
+   * `POST /v1/me/conversations-seen` respondia **404** com
+   * `"type": ".../problems/not-found"`. Ou seja: **o contador de mensagens não
+   * zerava por nenhum caminho** — o app engole a falha de propósito (está
+   * escrito em `marcarListaVista`, no cliente Dart), então ninguém via erro e
+   * o número ficava aceso para quem acabou de ler.
+   *
+   * **Por que nenhum portão pegou:**
+   * `rotas-registradas-contra-o-contrato.test.ts` compara os `defineRoute`
+   * **exportados** com o contrato, e não as chamadas de `registrarRota` — a
+   * rota exportada bastava para ele ficar verde. E `markMyConversationsSeen`
+   * não estava em `OPERACOES_AINDA_SEM_ROTA`, que é a lista onde uma ausência
+   * DELIBERADA tem de estar declarada com motivo. A operação não estava nem
+   * registrada nem declarada como ausente: estava no vão entre as duas.
+   *
+   * Isto **não é mudança de contrato**: a operação, o `x-effects`, o teto de
+   * 240/h por conta e o 204 já estavam escritos em `api/openapi.yaml`. O que
+   * entra aqui é o handler que faltava para a operação declarada ser real.
+   */
+  registrarRota(
+    app,
+    rotaDeListaVista,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      await deps.conversas.marcarListaVista(chamador);
+      return reply.status(204).send();
+    },
+  );
+
   registrarRota(
     app,
     rotaDeDetalheDaConversa,

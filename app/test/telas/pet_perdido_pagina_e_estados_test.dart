@@ -591,6 +591,23 @@ void main() {
               'encerra-lo. O segundo toque bateria num caso que nao esta mais '
               'aberto.',
         );
+        // **ROLAR ANTES, e a razao e de 20/10/2026:** a pagina do pet passou
+        // a ter a barra de baixo (*"mantenha ele fixo em todas as paginas"*),
+        // e com ela o corpo perdeu 72 dp de altura visivel no gabarito de
+        // 800 x 600 do `flutter test`. `Marcar como perdido` fica no PE da
+        // pagina e saiu do viewport.
+        //
+        // **`ensureVisible` sobre o finder que NAO pula o offstage**, e nao
+        // `scrollUntilVisible`: o `ListView` constroi a linha dentro do
+        // `cacheExtent` sem a por no viewport, e `find` trata isso como
+        // offstage -- um finder comum enxerga ZERO, entao as 50 tentativas de
+        // `scrollUntilVisible` terminam em `Bad state: No element`. O
+        // elemento EXISTE; `ensureVisible` rola o que existe para dentro da
+        // tela.
+        await tester.ensureVisible(
+          find.text('Marcar como perdido', skipOffstage: false),
+        );
+        await tester.pumpAndSettle();
         expect(
           find.text('Marcar como perdido'),
           findsOneWidget,

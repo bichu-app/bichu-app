@@ -7,6 +7,7 @@ import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'textos_do_achado.dart';
@@ -45,6 +46,13 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
   AchadoRegistrado? _achado;
   MensagemDeErro? _erro;
   String? _ausente;
+
+  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  ///
+  /// Campo separado de [_erro] porque os dois desenham coisas diferentes: sem
+  /// conta a tela convida a entrar, e um 500 continua desenhando a faixa de
+  /// erro com `Tentar de novo`.
+  bool _faltaConta = false;
   bool _carregando = true;
   bool _iniciou = false;
 
@@ -61,6 +69,7 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
       _carregando = true;
       _erro = null;
       _ausente = null;
+      _faltaConta = false;
     });
     try {
       final achado = await Escopo.of(context).achados.buscar(widget.achadoId);
@@ -79,6 +88,11 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
         // botao ensinaria a pessoa a insistir.
         if (falha.tipo == ProblemTipo.naoEncontrado) {
           _ausente = TextosDoAchado.naoEncontrado;
+        } else if (faltaConta(falha)) {
+          // **SEM CONTA NAO E ERRO.** Decidido pelo `next_action` do corpo, e
+          // nao pelo status: os dois 401 que chegam aqui trazem
+          // `next_action: sign_in`. Ver `widgets/convite_para_entrar.dart`.
+          _faltaConta = true;
         } else {
           _erro = MensagensDeErro.de(falha);
         }
@@ -88,7 +102,11 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
       setState(() {
         _achado = null;
         _carregando = false;
-        _erro = MensagensDeErro.de(falha);
+        // `faltaConta` tambem aqui, e nao so no ramo de `FalhaDaApi`: o tipo
+        // mais especifico e capturado antes, mas quem ler este ramo isolado
+        // nao deve concluir que ele trata outra classe de falha.
+        _faltaConta = faltaConta(falha);
+        if (!_faltaConta) _erro = MensagensDeErro.de(falha);
       });
     }
   }
@@ -121,6 +139,10 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
                 liveRegion: true,
                 child: Text(_ausente!, style: textos.bodyLarge),
               )
+            // SEM CONTA VEM ANTES DO ERRO, e nao ha `Tentar de novo`:
+            // perguntar de novo sai igualmente sem conta e volta o mesmo 401.
+            else if (_faltaConta)
+              const ConviteParaEntrar(secao: SecaoComConta.paginaDoAchado)
             else if (_erro != null)
               FaixaDeAviso(
                 texto: _erro!.texto,

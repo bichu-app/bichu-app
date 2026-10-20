@@ -284,6 +284,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
       'user_showcase',
+      // O SETIMO, `20261020000002` (20/10/2026): a foto de UMA publicacao do
+      // Mural, pelo pedido do cliente do dia (*"subir uma foto e publicar o
+      // conteudo"*). Entrou na MESMA esteira pela razao de sempre (ADR-0007, e
+      // a nota dos tres de 18/10 acima): uma segunda tabela de imagem daria
+      // duas versoes de derivada, de higiene de EXIF, de teto de bytes e de
+      // varredura de vencidos.
+      //
+      // A migracao REESCREVE o `CHECK` em vez de acrescentar um segundo: a
+      // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
+      // valores ao reescrever, e e por isso que estes sete estao declarados
+      // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
+      // `catalog_images`.
+      'user_publication',
     ],
   },
   'public.pet_tags.pet_tags_revocation_reason_check': {
@@ -583,6 +596,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
       'user_showcase',
+      // O SETIMO, `20261020000002` (20/10/2026): a foto de UMA publicacao do
+      // Mural, pelo pedido do cliente do dia (*"subir uma foto e publicar o
+      // conteudo"*). Entrou na MESMA esteira pela razao de sempre (ADR-0007, e
+      // a nota dos tres de 18/10 acima): uma segunda tabela de imagem daria
+      // duas versoes de derivada, de higiene de EXIF, de teto de bytes e de
+      // varredura de vencidos.
+      //
+      // A migracao REESCREVE o `CHECK` em vez de acrescentar um segundo: a
+      // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
+      // valores ao reescrever, e e por isso que estes sete estao declarados
+      // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
+      // `catalog_images`.
+      'user_publication',
     ],
   },
   'public.user_devices.user_devices_permissao': {
@@ -1424,6 +1450,26 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // lado para fora (ADR-0010 item 6).
   // ---------------------------------------------------------------------
   'public.users.users_public_ref_forma':
+    "CHECK ((public_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+
+  // ------------------------------------------------------------------
+  // O MURAL (migracoes 20261020000002 e 20261020000006, 20/10/2026).
+  //
+  // O endereco publico opaco das duas tabelas, 22 caracteres base64url. NAO e
+  // o `slug` legivel de `network_events` nem de `pets`: publicacao e
+  // comentario nao tem titulo para derivar endereco, e o opaco e o que impede
+  // adivinhar o vizinho contando. A forma e a MESMA nas duas, de proposito.
+  //
+  // Os outros CHECKs do Mural nao entram aqui, e a ausencia e a regra do
+  // cabecalho e nao esquecimento: `user_publications_corpo_tamanho`,
+  // `user_publications_texto_alternativo_tamanho` e
+  // `user_publications_texto_alternativo_pede_imagem` sao faixa numerica e
+  // comparacao entre colunas, sem literal de texto, e declara-los faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  // ------------------------------------------------------------------
+  'public.user_publications.user_publications_ref_forma':
+    "CHECK ((public_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
+  'public.publication_comments.publication_comments_ref_forma':
     "CHECK ((public_ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
 };
 

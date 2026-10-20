@@ -133,11 +133,17 @@ export interface SafetyRepository {
   /**
    * Denuncia uma PUBLICAÇÃO.
    *
-   * **A tabela de publicações não existe nesta base** (é de outra fatia), então
-   * esta escrita grava a denúncia com o endereço público recebido e **não
-   * confere o alvo**. A conferência é uma linha quando a tabela pousar, e o que
-   * falta ligar está no fim da migração `20261018000032`. Enquanto isso, a
-   * escrita é real, os tetos valem e a ocultação imediata funciona.
+   * **O ALVO É CONFERIDO DESDE 20/10/2026**, e a conferência tem o MESMO recorte
+   * da linha do tempo: publicação inexistente, apagada, ou de quem não é conexão
+   * aceita de quem chama são o mesmo `ausente` — e a borda os transforma no
+   * mesmo `404`. Sem esse recorte a denúncia seria um oráculo de existência de
+   * endereço (ADR-0021).
+   *
+   * `eu_mesmo` quando a publicação é de quem chama, e **este desfecho é
+   * alcançável**: a consulta do alvo tem a perna do próprio autor justamente
+   * para isso. A borda responde `400` com `code: own_publication` e a saída na
+   * mensagem (*"Para tirá-la do ar, apague-a"*) — e não um `404`, que esconderia
+   * de alguém a publicação que ela mesma escreveu. É a mesma regra da foto.
    */
   denunciarPublicacao(
     chamador: UserId,
