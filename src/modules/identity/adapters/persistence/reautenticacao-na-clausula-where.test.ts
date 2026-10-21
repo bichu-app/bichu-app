@@ -142,6 +142,49 @@ function compilar(construtor: { compile(): Compilada }): Compilada {
   return construtor.compile();
 }
 
+/**
+ * A clausula `WHERE` do SQL compilado, do primeiro ` where ` em diante.
+ *
+ * **REPROVA se nao achar o marcador** (21/10/2026). Antes o corte era
+ * `sql.slice(sql.toLowerCase().indexOf(' where '))` sem guarda nenhuma: com
+ * `indexOf` em -1, `slice(-1)` devolve o ULTIMO CARACTERE do enunciado. A
+ * contagem de `and` passaria a ser feita sobre um caractere -- o `assert.equal`
+ * de predicados acabaria acusando, mas por acidente e com a mensagem errada --
+ * e o `doesNotMatch(/\sor\s/)` passaria limpo sobre esse caractere solto.
+ *
+ * Licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: todo corte
+ * por marcador reprova quando nao acha o marcador.
+ */
+function clausulaDoWhere(sql: string): string {
+  const posicao = sql.toLowerCase().indexOf(' where ');
+  assert.ok(
+    posicao >= 0,
+    'a consulta ficou SEM clausula WHERE: ela atinge a tabela inteira, e o ' +
+      `recorte nao teria onde contar predicado. SQL: ${sql}`,
+  );
+  return sql.slice(posicao);
+}
+
+// AS DUAS DIRECOES DO RECORTE.
+void describe('o recorte da clausula WHERE', () => {
+  void it('REPROVA um SQL sem `WHERE`, em vez de devolver um caractere solto', () => {
+    assert.throws(
+      () => clausulaDoWhere('update "x" set "a" = $1'),
+      /SEM clausula WHERE/,
+      'o recorte aceitou um SQL sem `WHERE`. `slice(-1)` devolve um caractere, e ' +
+        'a contagem de `and` e o `doesNotMatch` de `or` passariam a medir isso.',
+    );
+  });
+
+  void it('com `WHERE`, o recorte comeca nele e conta os `and` DELE', () => {
+    const clausula = clausulaDoWhere(
+      'update "x" set "a" = $1 where "b" = $2 and "c" = $3',
+    );
+    assert.ok(!clausula.includes(' set '), 'o `SET` entrou no recorte');
+    assert.equal((clausula.match(/\sand\s/gi) ?? []).length, 1);
+  });
+});
+
 void describe('o consumo da janela carrega as sete amarras no WHERE', () => {
   for (const { amarra, regex, oQueImpede } of PREDICADOS) {
     void it(`tem \`${amarra}\` com o operador certo — ${oQueImpede}`, () => {
@@ -188,7 +231,12 @@ void describe('o consumo da janela carrega as sete amarras no WHERE', () => {
     // is not null` grudado no fim manteria os sete e alargaria o alcance para
     // tudo. Contar o `and` do `where` compilado pega isso.
     const { sql } = compilar(construtorDoConsumoDaJanela(semBanco, consumo));
-    const clausula = sql.slice(sql.toLowerCase().indexOf(' where '));
+    // O corte REPROVA se nao achar o marcador: com `indexOf` em -1, `slice(-1)`
+    // devolve o ULTIMO caractere do SQL, e a contagem de `and` passa a ser
+    // feita sobre um caractere. Aqui o `assert.equal` de baixo acabaria
+    // acusando, mas por acidente e com a mensagem errada -- e o
+    // `doesNotMatch(/\sor\s/)` passaria limpo sobre o caractere solto.
+    const clausula = clausulaDoWhere(sql);
     const conjuncoes = clausula.match(/\sand\s/gi)?.length ?? 0;
     assert.equal(
       conjuncoes,

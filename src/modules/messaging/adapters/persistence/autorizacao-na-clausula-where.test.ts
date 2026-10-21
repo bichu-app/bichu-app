@@ -110,8 +110,40 @@ interface Compilada {
  */
 function clausulaWhere(sql: string): string {
   const corte = sql.indexOf(' where ');
-  return corte < 0 ? '' : sql.slice(corte);
+  // 21/10/2026: antes devolvia `''`. Num SQL sem `WHERE` -- que e a forma mais
+  // completa de perder a autorizacao -- o recorte vazio nao tem predicado
+  // nenhum a achar, e isso tem a mesma cor de "conferi e esta no lugar".
+  // Corte que nao encontra o ponto de corte reprova; e a licao do conserto de
+  // `busca-nao-e-oraculo.test.ts`, do mesmo dia.
+  assert.ok(
+    corte >= 0,
+    'a consulta ficou SEM clausula WHERE: ela atinge a tabela inteira, e o ' +
+      `recorte nao teria onde procurar a autorizacao. SQL: ${sql}`,
+  );
+  return sql.slice(corte);
 }
+
+// AS DUAS DIRECOES DO RECORTE. A que reprova e a que decide: sem ela, voltar
+// para `return ''` deixa o arquivo verde com a autorizacao fora do `WHERE`.
+void describe('o recorte da clausula WHERE', () => {
+  void it('REPROVA um SQL sem `WHERE`, em vez de devolver vazio', () => {
+    assert.throws(
+      () => clausulaWhere('select "c"."id" from "conversations" as "c"'),
+      /SEM clausula WHERE/,
+    );
+  });
+
+  void it('com `WHERE`, o recorte deixa a lista de selecao FORA', () => {
+    // O motivo historico esta no cabecalho: o `CASE` da lista de selecao fazia
+    // a conferencia achar a ocorrencia de outro lugar e APROVAR.
+    const recorte = clausulaWhere(
+      'select case when "m"."sender" = $1 then 1 else 0 end as "meu" ' +
+        'from "messages" as "m" where "m"."conversation" = $2',
+    );
+    assert.ok(!recorte.includes('case when'), 'o `CASE` da selecao entrou no recorte');
+    assert.ok(recorte.includes('"m"."conversation"'), 'o predicado saiu do recorte');
+  });
+});
 
 /**
  * TODOS os valores ligados às posições que aquele predicado ocupa NO `WHERE`.
