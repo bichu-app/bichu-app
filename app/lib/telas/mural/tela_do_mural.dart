@@ -13,6 +13,8 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../roteamento/rotas.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
 import 'comentarios_da_publicacao.dart';
 import '../casca_com_abas.dart';
@@ -108,6 +110,20 @@ class CorpoDoMural extends StatefulWidget {
   static const String explicacaoSemConexao =
       'O Mural mostra o que as suas conexões publicam. Você ainda não tem '
       'nenhuma — e também pode publicar, que aparece aqui para elas.';
+
+  /// A SAIDA do vazio sem conexao, e **a unica acao que este estado tem**.
+  ///
+  /// Ela entrou em 21/10/2026, com a aba `Usuarios`. Antes dela este vazio era
+  /// verdadeiro e **sem porta**: ele dizia que o Mural mostra o que as conexoes
+  /// publicam, dizia que a pessoa nao tem nenhuma, e nao dizia o que fazer. Foi
+  /// por isso que o cliente descobriu que conexao nao funcionava -- o produto
+  /// nao oferecia caminho nenhum para a primeira.
+  ///
+  /// **E por que ela e aqui, e nao so a aba.** A aba `Usuarios` e a terceira de
+  /// uma barra rolavel: em 320 dp ela nasce 40% visivel, e a 200% de escala
+  /// nasce fora da tela. Este vazio e o lugar por onde todo mundo passa no
+  /// primeiro dia. Os dois caminhos existem; este e o que de fato se usa.
+  static const String buscarPessoas = 'Buscar pessoas';
 
   static const String tituloSemPublicacao = 'As publicações ficam aqui';
   static const String explicacaoSemPublicacao =
@@ -521,11 +537,26 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     }
 
     if (linha.isEmpty) {
-      // OS DOIS ESTADOS VAZIOS. **Sem acao**, nos dois: a porta de publicar e a
-      // acao flutuante da secao, que esta sempre no canto — um segundo botao
-      // aqui seria a mesma porta em dois lugares, e o `EstadoVazio` com acao
-      // repetida e o criterio 2 sendo quebrado dentro do componente que existe
-      // para nao quebra-lo.
+      // OS DOIS ESTADOS VAZIOS, E AGORA ELES TEM ACOES DIFERENTES.
+      //
+      // **`Publicar` continua fora dos dois**, e a razao nao mudou: a porta de
+      // publicar e a acao flutuante da secao, que esta sempre no canto -- um
+      // segundo botao aqui seria a mesma porta em dois lugares, e o
+      // `EstadoVazio` com acao repetida e o criterio 2 sendo quebrado dentro do
+      // componente que existe para nao quebra-lo.
+      //
+      // **O que entrou e `Buscar pessoas`, e so no vazio SEM CONEXAO.** Ela nao
+      // e a mesma porta duas vezes: nao ha nenhuma outra nesta tela, e a aba de
+      // destino nasce 40% visivel em 320 dp. Ver `CorpoDoMural.buscarPessoas`.
+      //
+      // **No vazio COM conexao ela nao aparece**, e a distincao e o ponto: quem
+      // ja tem conexao e esta esperando a primeira publicacao nao precisa
+      // buscar mais ninguem, e um botao de buscar ali sugeriria que o Mural
+      // vazio e culpa de ter poucas conexoes.
+      //
+      // `go` e nao `push`: o destino e uma SECAO, e trocar de secao e trocar de
+      // ramo da casca. `push` deixaria o Mural embaixo e a barra de baixo
+      // continuaria acesa no slot errado.
       return EstadoVazio(
         titulo: _tenhoPublicacao
             ? CorpoDoMural.tituloSemPublicacao
@@ -533,7 +564,13 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
         explicacao: _tenhoPublicacao
             ? CorpoDoMural.explicacaoSemPublicacao
             : CorpoDoMural.explicacaoSemConexao,
-        acao: null,
+        acao: _tenhoPublicacao
+            ? null
+            : BotaoPrimario(
+                rotulo: CorpoDoMural.buscarPessoas,
+                icone: Icons.person_search_outlined,
+                aoTocar: () => context.go(Rotas.redeNaBuscaDePessoas),
+              ),
       );
     }
 

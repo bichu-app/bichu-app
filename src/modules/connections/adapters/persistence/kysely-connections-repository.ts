@@ -177,6 +177,60 @@ function comoNumero(valor: string | number): number {
   return typeof valor === 'number' ? valor : Number.parseInt(valor, 10);
 }
 
+/**
+ * **Quantos tutores entraram pelo convite desta conta e viraram conexão
+ * aceita** (cliente, 21/10/2026).
+ *
+ * ## A REGRA SÃO DOIS SINAIS, E OS DOIS ESTÃO NESTE `WHERE`
+ *
+ * 1. **`state = 'accepted'` com esta conta no DESTINO e `origin = 'invite_link'`.**
+ *    Por que o destino, e não qualquer lado: quem usa um convite é quem PEDE, e
+ *    o único convite que leva ao perfil desta conta é o DELA — resolver um
+ *    token devolve o perfil de quem o emitiu, e pedir por token pede conexão
+ *    **com o emissor**. Então origem de convite com esta conta como
+ *    destinatária quer dizer, sem ambiguidade, *entrou pelo meu convite*.
+ *
+ *    **E é por isso que não há FK de convite em `user_connections`**: ela não
+ *    faria falta aqui, e guardar qual convite gerou qual aresta seria guardar a
+ *    lista de quem usou o link de alguém — o que o contrato recusa.
+ *
+ * 2. **Ao menos um pet com foto `ready`.** É o freio anti-abuso: uma conta
+ *    criada à toa para inflar o contador de alguém não tem pet com foto
+ *    aprovada. E é o MESMO sinal que a vitrine já usa, o que evita uma segunda
+ *    definição de "conta de verdade".
+ *
+ * `conta_habilitada` nos dois lados, como em todas as contagens desta casa:
+ * conta desabilitada sai do número e a linha **não** é apagada — reabilitar
+ * devolve a contagem.
+ *
+ * **`EXISTS` e não `JOIN`**, e a diferença não é de estilo: uma junção com
+ * `pet_photos` multiplicaria a aresta por foto pronta, e quem tem três fotos
+ * contaria três vezes. `EXISTS` responde sim/não e para na primeira.
+ */
+export function construtorDaContagemDeConvidados(
+  db: Kysely<Database>,
+  pessoa: UserId,
+): CompiledQuery<{ readonly convidados: string | number }> {
+  return sql<{ readonly convidados: string | number }>`
+    SELECT count(*) AS convidados
+    FROM user_connections c
+    WHERE c.state = 'accepted'
+      AND c.addressee_user_id = ${pessoa}::uuid
+      AND c.origin = 'invite_link'
+      AND conta_habilitada(c.requester_user_id)
+      AND conta_habilitada(c.addressee_user_id)
+      AND EXISTS (
+        SELECT 1
+        FROM pets p
+        JOIN pet_photos f ON f.pet_id = p.id
+        WHERE p.owner_user_id = c.requester_user_id
+          AND p.deleted_at IS NULL
+          AND f.status = 'ready'
+          AND f.deleted_at IS NULL
+      )
+  `.compile(db);
+}
+
 export function construtorDaContagemDeConexoes(
   db: Kysely<Database>,
   pessoa: UserId,
@@ -509,6 +563,12 @@ export function criarConnectionsRepository(db: Kysely<Database>): ConnectionsRep
       const { rows } = await db.executeQuery(construtorDaContagemDeConexoes(db, pessoa));
       const linha = rows[0];
       return linha === undefined ? 0 : comoNumero(linha.conexoes);
+    },
+
+    async contarConvidadosQueEntraram(pessoa: UserId): Promise<number> {
+      const { rows } = await db.executeQuery(construtorDaContagemDeConvidados(db, pessoa));
+      const linha = rows[0];
+      return linha === undefined ? 0 : comoNumero(linha.convidados);
     },
 
     arestaDoPar: (quemChama: UserId, outroLado: UserId) =>

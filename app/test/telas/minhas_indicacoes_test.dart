@@ -252,11 +252,13 @@ void main() {
         <String>[
           AbaDaSecaoRede.eventos.rotulo,
           AbaDaSecaoRede.comunidade.rotulo,
+          AbaDaSecaoRede.usuarios.rotulo,
         ],
-        reason: 'REPROVA: as abas da `Rede` não são `Eventos` e `Comunidade`, '
+        reason: 'REPROVA: as abas da `Rede` não são as três de 21/10/2026, '
             'nesta ordem. As TRÊS abas antigas da agenda (`Próximos`, `Meus '
-            'pedidos`, `Encerrados`) viraram FILTRO, e as duas que sobraram '
-            'são as duas seções que foram reunidas.',
+            'pedidos`, `Encerrados`) viraram FILTRO, as duas que sobraram são '
+            'as duas seções que foram reunidas, e `Usuários` entrou com a '
+            'busca de pessoas.',
       );
     });
 

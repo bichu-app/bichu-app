@@ -64,25 +64,29 @@ import '../seguranca/menu_do_perfil.dart';
 /// denúncia —, e o motivo é decisão do cliente: o modelo é mínimo e **quem
 /// modera é o administrador, no backoffice**.
 ///
-/// ## A PORTA DE PEDIR CONEXÃO, e por que ela não aparece sozinha
+/// ## A PORTA DE PEDIR CONEXÃO, e o que mudou em 20/10/2026
 ///
-/// `POST /connections` recebe **um token de convite**, nunca um apelido: a porta
-/// de `ConexoesApi.pedir` fixa essa forma, e a decisão por trás está escrita em
-/// `connections/ports/convite-de-conexao.ts` — pedir por apelido *"seria busca
-/// de pessoas pela porta de trás, e um oráculo de existência de apelido"*.
+/// **O parágrafo que estava aqui dizia o contrário do que o código faz hoje, e
+/// foi corrigido em vez de deixado contradizendo o método ao lado.** Ele dizia
+/// que `POST /connections` recebe *"um token de convite, nunca um apelido"*, e
+/// que por isso o botão só existia com um convite na mão. As duas frases
+/// deixaram de valer: o cliente reverteu aquela recusa junto com a busca de
+/// pessoas, e `ConnectionInvite` passou a ser um `oneOf` de **uma** das duas
+/// credenciais.
 ///
-/// Então o botão **existe e é condicional a um convite na mão** ([tokenDoConvite]):
+/// Hoje o botão **aparece sempre que a permissão da comunidade permite**, e o
+/// que varia é a credencial que ele manda:
 ///
-/// - **com** convite, ele aparece e chama `pedir` — e esta é a primeira tela do
-///   app a chamar aquela porta;
-/// - **sem** convite, ele não é desenhado. Um botão de "conectar" solto aqui
-///   desenharia um caminho que o servidor recusa com 404, porque nenhum emissor
-///   de convite existe em produção ainda (as duas fatias que os emitem — caso
-///   devolvido ou encontro em comum, e código presencial de 5 minutos — não
-///   desceram).
+/// - **com** [tokenDoConvite] — quem chegou pelo QR de convite de alguém —, ele
+///   manda o token, e o servidor grava procedência `invite_link`;
+/// - **sem** token — quem chegou pela aba `Usuários` ou por um link interno —,
+///   ele manda o **apelido**, e a procedência é `people_search`.
 ///
-/// **Quem emite o convite liga aqui, e só aqui**: é um parâmetro, não um
-/// segundo caminho.
+/// **O que a reversão não comprou**, e é o que impede isto de virar um oráculo:
+/// apelido inexistente, apelido de pet, apelido reservado, conta desabilitada,
+/// quem bloqueou quem pede e perfil que quem pede denunciou respondem o **mesmo
+/// 404**, fundidos na cláusula `WHERE`. Esta tela não distingue qual dos seis
+/// foi, e não tem como.
 ///
 /// A porta respeita a **mesma** regra das outras ações de comunidade
 /// ([podeAgirNaComunidade]): sessão **e** e-mail verificado, como em
@@ -463,23 +467,46 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         ];
 
       case null:
-        // SEM RELAÇÃO. A porta de pedir só é desenhada com um convite na mão **e**
-        // com a mesma permissão das outras ações da comunidade. Ver o cabeçalho.
+        // SEM RELAÇÃO. **A porta de pedir deixou de depender de um convite na
+        // mão em 20/10/2026**, e o parágrafo do cabeçalho que a condicionava ao
+        // token foi corrigido junto, e não deixado aqui contradizendo o código.
+        // Ela continua condicionada à mesma permissão das outras ações da
+        // comunidade.
+        if (!widget.podeAgirNaComunidade) return const <Widget>[];
         final convite = widget.tokenDoConvite;
-        if (convite == null || !widget.podeAgirNaComunidade) return const <Widget>[];
         return <Widget>[
           BotaoPrimario(
             rotulo: TelaDePerfilDePessoa.pedirConexao,
             carregando: _agindo,
             aoTocar: () => unawaited(
               _agir(() async {
+                // **A CREDENCIAL É UMA DAS DUAS, e a tela sabe qual tem.** O
+                // `oneOf` do contrato recusa corpo com as duas e corpo com
+                // nenhuma, e é por isso que há dois métodos em `ConexoesApi` e
+                // não um com dois parâmetros anuláveis.
+                //
+                // **O token GANHA quando existe**, e a escolha não é
+                // indiferente: é ele que o servidor grava como procedência
+                // (`invite_link` contra `people_search`). Mandar o apelido de
+                // quem chegou por um convite registraria uma busca que não
+                // houve.
+                //
                 // `idempotencyKey` é obrigatória: um reenvio da mesma tentativa
                 // não pode virar um segundo pedido na caixa da outra pessoa. A
-                // chave sai do CONVITE e não de um sorteio por toque — dois
-                // toques no mesmo botão são a mesma tentativa.
-                await widget.conexoes.pedir(
-                  tokenDoConvite: convite,
-                  idempotencyKey: 'conexao-$convite',
+                // chave sai da CREDENCIAL e não de um sorteio por toque — dois
+                // toques no mesmo botão são a mesma tentativa. E ela é
+                // prefixada pela credencial para a mesma pessoa alcançada pelos
+                // dois caminhos não dividir uma chave só.
+                if (convite != null) {
+                  await widget.conexoes.pedir(
+                    tokenDoConvite: convite,
+                    idempotencyKey: 'conexao-convite-$convite',
+                  );
+                  return;
+                }
+                await widget.conexoes.pedirPorApelido(
+                  apelido: widget.apelido,
+                  idempotencyKey: 'conexao-apelido-${widget.apelido}',
                 );
               }),
             ),

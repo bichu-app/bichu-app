@@ -130,6 +130,16 @@ Future<http.Response> redeDasCincoListagens(http.Request req) async {
   return problema('not-found', 404);
 }
 
+/// O que `Usuários` pede a 200% de escala, em 320 dp, com a `Inter` real.
+///
+/// **MEDIDO nesta bancada em 21/10/2026**, e não copiado do protótipo: a
+/// bancada é a autoridade, e foi ela que travou 139,62 e 221,24 para os outros
+/// dois. O protótipo havia estimado 154,62 pelo mesmo método, e a bancada
+/// **confirmou o número na casa dos centésimos** -- o que vale dito porque é a
+/// medição do protótipo que sustenta a conta dos 353,74 dp somados e dos 40%
+/// de rótulo visível em 320 dp.
+const double abaUsuariosA200 = 154.62;
+
 /// Os rótulos das abas que a tela da frente pinta, na ordem desenhada.
 List<String> abasNaTela(WidgetTester tester) => tester
     .widgetList<Tab>(find.byType(Tab))
@@ -394,12 +404,18 @@ void main() {
   // =========================================================================
   // ISCA (c) — AS DUAS ABAS DA `Rede`, E A ROLÁVEL QUE NÃO CORTA
   // =========================================================================
-  group('(c) as duas abas da `Rede`, e a rolável que não corta', () {
+  group('(c) as TRES abas da `Rede`, e a rolável que não corta', () {
+    // ERAM DUAS ATE 21/10/2026, e a terceira entrou com a busca de pessoas:
+    // `Usuários`, que o cliente pediu nas palavras *"na aba rede, temos que
+    // ter uma aba de usuarios, e o campo buscar para encontrar e adicionar as
+    // pessoas"*. A medição da rolável não mudou de forma -- mudou de número,
+    // e o número novo está no caso de baixo.
+    //
     // DESLIGAMENTO: em `rede/secao_da_rede.dart`, troque
     // `isScrollable: true` por `false`. O caso da escala de 200% reprova com
     // `Comunidade` cortando por 77,24 dp.
-    testWidgets('`Eventos` e `Comunidade`, nesta ordem, com e sem conta',
-        (tester) async {
+    testWidgets('`Eventos`, `Comunidade` e `Usuários`, nesta ordem, com e sem '
+        'conta', (tester) async {
       // **COM E SEM CONTA, e isso é diferente das abas antigas.** `Meus
       // pedidos` e `Minhas indicações` sumiam sem sessão porque eram listas do
       // que a pessoa fez. Estas duas não são: `Eventos` é a agenda pública e
@@ -415,16 +431,23 @@ void main() {
 
         expect(
           abasNaTela(tester),
-          <String>['Eventos', 'Comunidade'],
-          reason: 'REPROVA: com logado=$logado as abas da `Rede` não são '
-              '`Eventos` e `Comunidade`, nesta ordem. `Eventos` é a primeira '
-              'porque é o conteúdo histórico da seção e é onde o arranque do '
-              'app abre.',
+          <String>['Eventos', 'Comunidade', 'Usuários'],
+          reason: 'REPROVA: com logado=$logado as abas da `Rede` não são as '
+              'três de 21/10/2026, nesta ordem. `Eventos` é a primeira porque '
+              'é o conteúdo histórico da seção e é onde o arranque do app '
+              'abre. `Usuários` é a TERCEIRA e não a segunda: trocar com '
+              '`Comunidade` poria a aba inteira na tela, mas empurraria o '
+              'diretório -- conteúdo público, alcançável sem conta -- para '
+              'trás de uma aba que exige conta. E `Usuários` existe SEM CONTA '
+              'por uma razão diferente das outras duas: a rota dela exige '
+              'conta, e é o CORPO dela que desenha o convite para entrar. '
+              'Esconder a aba faria a seção ter duas abas para quem não '
+              'entrou e três para quem entrou.',
         );
       }
     });
 
-    testWidgets('a `TabBar` é ROLÁVEL, e nenhuma das duas abas corta a 200%',
+    testWidgets('a `TabBar` é ROLÁVEL, e nenhuma das TRÊS abas corta a 200%',
         (tester) async {
       // ======================================================================
       // A MEDIÇÃO QUE DECIDIU O DESENHO
@@ -466,7 +489,7 @@ void main() {
       final barra = tester.getRect(find.byType(TabBar));
       final larguras = <String, double>{};
       final transbordos = <String>[];
-      for (final rotulo in <String>['Eventos', 'Comunidade']) {
+      for (final rotulo in <String>['Eventos', 'Comunidade', 'Usuários']) {
         final alvo = find.descendant(
           of: find.byType(TabBar),
           matching: find.text(rotulo),
@@ -526,6 +549,22 @@ void main() {
             'cortaria por 77,24 dp, e é esse corte que a `TabBar` rolável '
             'evita sem abreviar o nome que o cliente escolheu.',
       );
+      // `Usuários` entrou em 21/10/2026. Ele é o SEGUNDO MENOR dos três
+      // rótulos e pede 33,31 dp menos que `Comunidade` a 100% -- então ele
+      // cabe, e a 200% continua sem reticência.
+      //
+      // **O que ele não tem é visibilidade inicial**, e é por isso que o botão
+      // do Mural vazio não é enfeite: os três slots somam 353,74 dp, e em
+      // 320 dp a terceira aba nasce 40% visível. A 200% ela nasce INTEIRA fora
+      // da tela. O caso que mede a saída do Mural é
+      // `caminhos_de_conexao_test.dart`.
+      expect(
+        larguras['Usuários'],
+        closeTo(abaUsuariosA200, 0.5),
+        reason: 'REPROVA: `Usuários` pede ${larguras["Usuários"]} dp a 200% e '
+            'a bancada mediu ${abaUsuariosA200.toStringAsFixed(2)}. Ou o tema mudou de '
+            'tipografia, ou o rótulo mudou de palavra.',
+      );
 
       // E a prova de que ela é ROLÁVEL: a soma das duas abas transborda a
       // largura da tela. Numa `TabBar` não rolável isso é impossível por
@@ -577,10 +616,11 @@ void main() {
       // palavra e continuassem sendo abas.
       expect(
         abasNaTela(tester),
-        <String>['Eventos', 'Comunidade'],
-        reason: 'REPROVA: a seção `Rede` pinta abas que não são as duas da '
+        <String>['Eventos', 'Comunidade', 'Usuários'],
+        reason: 'REPROVA: a seção `Rede` pinta abas que não são as três da '
             'decisão. As três abas da agenda (`Próximos`, `Meus pedidos`, '
-            '`Encerrados`) viraram FILTRO em 19/10/2026.',
+            '`Encerrados`) viraram FILTRO em 19/10/2026, e `Usuários` entrou '
+            'em 21/10/2026 com a busca de pessoas.',
       );
     });
 

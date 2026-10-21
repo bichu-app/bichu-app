@@ -213,13 +213,24 @@ import { registrarRotasDaRede } from '../modules/network/adapters/http/network-r
 import { registrarRotasDeConexao } from '../modules/connections/adapters/http/connection-routes.js';
 import { ConexaoEntrePessoas } from '../modules/connections/application/conexao-entre-pessoas.js';
 import { criarConnectionsRepository } from '../modules/connections/adapters/persistence/kysely-connections-repository.js';
-import { nenhumConviteExiste } from '../modules/connections/ports/convite-de-conexao.js';
 import { semBloqueioConhecido } from '../modules/connections/ports/leitor-de-bloqueio.js';
 import { criarLeitorDeConexao } from '../modules/connections/application/leitor-de-conexao.js';
+// 20/10/2026. OS TRES CAMINHOS DE CONEXAO: busca, QR e link de convite.
+import {
+  criarEmissorDeConvite,
+  criarResolvedorDeApelido,
+  criarResolvedorDeConvite,
+} from '../modules/connections/adapters/persistence/kysely-convites.js';
+import { ConviteDoPerfil } from '../modules/connections/application/convite-do-perfil.js';
+import { registrarRotasDeConvite } from '../modules/connections/adapters/http/invite-routes.js';
 // FATIA G (19/10/2026). O perfil de OUTRA pessoa, pelo apelido.
 import { registrarRotasDePessoa } from '../modules/people/adapters/http/person-profile-routes.js';
 import { PerfilDePessoa } from '../modules/people/application/perfil-de-pessoa.js';
 import { criarPerfilDePessoaRepository } from '../modules/people/adapters/persistence/kysely-perfil-de-pessoa.js';
+// 20/10/2026. A BUSCA DE PESSOAS, com os freios do cliente.
+import { registrarRotasDeBuscaDePessoas } from '../modules/people/adapters/http/people-search-routes.js';
+import { BuscaDePessoas } from '../modules/people/application/busca-de-pessoas.js';
+import { criarBuscaDePessoasRepository } from '../modules/people/adapters/persistence/kysely-busca-de-pessoas.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
@@ -1238,28 +1249,50 @@ export async function main(): Promise<void> {
       }),
       contrato,
     });
-    // FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com aceite.
+    // FATIA F (18/10/2026) + OS TRES CAMINHOS (20/10/2026). A conexao entre
+    // pessoas: SIMETRICA, com aceite.
     //
-    // **DUAS PORTAS ENTRAM DESLIGADAS, e as duas sao declaracoes e nao esbocos.**
+    // **`nenhumConviteExiste` SAIU EM 20/10/2026, e nao foi substituida por um
+    // esboco.** Ela era a afirmacao executavel de que nenhuma conta alcancava
+    // nenhuma outra, e dizia de si mesma que *"troca-la e o trabalho de H' e
+    // H'', e e uma linha na fiacao"*. A divida foi paga por um terceiro
+    // caminho, que o cliente pediu -- o convite emitido pelo proprio dono
+    // (link e QR) -- e nao por H' nem H'': as duas continuam sem existir, e os
+    // valores `anchored_case`, `anchored_event` e `presence_code` continuam
+    // sem emissor.
     //
-    // `nenhumConviteExiste` e a afirmacao executavel de que NENHUMA CONTA
-    // ALCANCA NENHUMA OUTRA nesta fatia: o unico caminho que cria aresta e
-    // `requestConnection`, ele exige um convite, e nao existe emissor de convite
-    // em producao. Toda chamada responde 404, qualquer que seja o token. Os dois
-    // emissores sao as fatias H' (conexao ancorada em caso devolvido ou encontro
-    // em comum) e H'' (codigo presencial, token rotativo de 5 min), e ligar cada
-    // uma e trocar esta linha -- o dominio, o repositorio e as rotas nao mudam.
+    // Agora entram DOIS resolvedores de producao, e os dois leem o banco:
+    // `criarResolvedorDeConvite` (token -> conta + apelido) e
+    // `criarResolvedorDeApelido` (apelido -> conta), cada um com os seus
+    // predicados na clausula `WHERE`.
     //
-    // `semBloqueioConhecido` esta aqui porque `user_blocks` NAO EXISTE em
-    // `origin/development` (medido em 18/10/2026: nenhuma ref tem a migracao). A
-    // fatia E a cria, e quando ela descer esta linha recebe o leitor dela. Hoje
-    // isso nao custa nada: sem convite nao ha aresta, e sem aresta nao ha par
-    // para bloquear.
+    // **`semBloqueioConhecido` CONTINUA AQUI, E AGORA ISSO CUSTA -- leia antes
+    // de confiar nela.** O comentario que ela carrega diz que `user_blocks`
+    // "NAO EXISTE em origin/development (medido em 18/10/2026)", e isso
+    // **deixou de ser verdade**: a migracao `20261018000031` cria a tabela e a
+    // funcao `bloqueio_entre`, e a `20261018000032` cria
+    // `perfil_ocultado_para_quem_denunciou`. As duas estao em
+    // `origin/development` (`70f4aa34`, conferido em 20/10/2026).
+    //
+    // Ela responde `false` para todo par, entao o `if` de bloqueio de
+    // `ConexaoEntrePessoas.criarPedido` **nao barra ninguem hoje**. O que de
+    // fato barra -- e o que faz a indistinguibilidade valer -- sao os
+    // predicados SQL `bloqueio_entre` nas duas resolucoes acima: um apelido de
+    // quem bloqueou quem pede nao resolve, e um convite de quem bloqueou quem
+    // chama nao resolve. A porta desligada e uma segunda defesa que hoje nao
+    // defende, e nao a primeira.
+    //
+    // **Ligar a implementacao real dela e trabalho da fatia E e esta no
+    // relatorio da entrega como pendencia**: ela nao foi ligada aqui porque o
+    // leitor de producao de `user_blocks` e do modulo `safety`, e importa-lo
+    // daqui sem a porta correspondente atravessaria a fronteira que
+    // `src/architecture.rules.mjs` impoe.
     const conexoesDaComunidade = criarConnectionsRepository(db);
     registrarRotasDeConexao(escopo, {
       conexoes: new ConexaoEntrePessoas({
         conexoes: conexoesDaComunidade,
-        convites: nenhumConviteExiste,
+        convites: criarResolvedorDeConvite(db, systemClock),
+        apelidos: criarResolvedorDeApelido(db),
         bloqueios: semBloqueioConhecido,
         trilha,
         ids,
@@ -1269,6 +1302,44 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       contrato,
+    });
+    // 20/10/2026. O CONVITE DO PROPRIO PERFIL: emitir e revogar. O que alimenta
+    // o link do WhatsApp e o QR -- que sao o MESMO token em dois transportes.
+    //
+    // Etiqueta `connection-invites` e nao `connections`, porque aquela e fechada
+    // em cinco operacoes e o portao cobra o numero exato.
+    registrarRotasDeConvite(escopo, {
+      convites: new ConviteDoPerfil({
+        convites: criarEmissorDeConvite(db, ids),
+        trilha,
+        clock: systemClock,
+      }),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+    });
+    // 20/10/2026. A BUSCA DE PESSOAS, com os freios do cliente: piso de 3
+    // caracteres, campo vazio nao lista ninguem, teto `[account, q]` por conta,
+    // e resposta limitada a nome, apelido, duas contagens **e a foto**.
+    //
+    // **A FOTO ENTROU EM 21/10/2026**, e este comentario dizia "sem foto
+    // (emenda 5 item 2)". O cliente emendou a propria decisao: *"o resultado
+    // tras foto sim, para identificar usuarios com nomes parecidos."* Os tres
+    // freios acima sao o que separa isso de um catalogo de rostos, e e por isso
+    // que eles continuam listados aqui.
+    //
+    // **Nenhuma porta entra desligada**: `handles`, `users`, `pets`,
+    // `user_connections`, `bloqueio_entre` e
+    // `perfil_ocultado_para_quem_denunciou` estao todas em `origin/development`,
+    // e os indices trigrama vem da `20261020000012`.
+    registrarRotasDeBuscaDePessoas(escopo, {
+      busca: new BuscaDePessoas({ busca: criarBuscaDePessoasRepository(db) }),
+      // A FOTO NO RESULTADO (cliente, 21/10/2026): a derivada `thumb`, com a
+      // URL montada na borda a partir da chave de objeto.
+      baseDeMidia: config.mediaPublicBaseUrl,
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
     });
     // FATIA G (19/10/2026). O PERFIL DE OUTRA PESSOA, pelo apelido.
     //
@@ -1296,12 +1367,20 @@ export async function main(): Promise<void> {
       perfis: new PerfilDePessoa({
         perfis: criarPerfilDePessoaRepository(db),
         conexoes: criarLeitorDeConexao(conexoesDaComunidade),
+        // 20/10/2026. A tela de destino do link e do QR
+        // (`resolveConnectionInvite`) resolve o token e reusa `porApelido`:
+        // o link leva a MESMA `PersonProfile` de `getPersonProfile`, pela
+        // mesma projecao. Entra por `connections/ports/`, que e o caminho que
+        // a regra de fronteira oferece -- `people` continua sem tabela e sem
+        // escrita.
+        convites: criarResolvedorDeConvite(db, systemClock),
         clock: systemClock,
       }),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       baseDeMidia: config.mediaPublicBaseUrl,
+      contrato,
     });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.

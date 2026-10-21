@@ -50,6 +50,7 @@ import { problemas } from '../../../shared/http/errors.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { LeitorDeConexao } from '../../connections/ports/conexao.js';
+import type { ResolvedorDeConvite } from '../../connections/ports/convite-de-conexao.js';
 import type {
   FotoDoPerfilDeOutraPessoa,
   PerfilDePessoaRepository,
@@ -91,6 +92,16 @@ export interface PerfilDePessoaProjetado {
 export interface DependenciasDoPerfilDePessoa {
   readonly perfis: PerfilDePessoaRepository;
   readonly conexoes: LeitorDeConexao;
+  /**
+   * O resolvedor de convite, **para a tela de destino do link e do QR**
+   * (decisão do cliente de 20/10/2026).
+   *
+   * Importado de `connections/ports/`, que é o caminho que a regra de fronteira
+   * oferece — o mesmo por onde `LeitorDeConexao` já entra. `people` continua sem
+   * tabela e sem escrita: ele **lê** o convite por esta porta e não conhece
+   * `connection_invites`.
+   */
+  readonly convites: ResolvedorDeConvite;
   readonly clock: Clock;
 }
 
@@ -146,5 +157,46 @@ export class PerfilDePessoa {
       connectionRef: aresta?.ref ?? null,
       vitrine,
     };
+  }
+
+  /**
+   * **A tela de destino do link de convite e do QR**: o perfil de quem emitiu.
+   *
+   * > *"ao clicar vai para a página do perfil do usuário com o botão de
+   * > adicionar"*
+   *
+   * ## É o MESMO perfil, e isso é o ponto
+   *
+   * Este método resolve o token para um apelido e chama `porApelido`. Ele **não
+   * projeta uma segunda versão do perfil**, e a razão é a que o cliente acabou
+   * de descrever sem saber: ele pediu que o link levasse *"para a página do
+   * perfil do usuário"* — a página, não uma parecida. Uma projeção própria aqui
+   * divergiria da outra no primeiro campo que alguém acrescentasse a uma só, e o
+   * recorte da emenda 2 do ADR-0010 passaria a ter duas implementações.
+   *
+   * De graça, por reusar: o `connection_state` certo (então a tela sabe se o
+   * botão é "adicionar", "pedido enviado" ou "conectado"), a regra da vitrine, e
+   * os seis predicados da cláusula `WHERE`.
+   *
+   * ## Os dois 404, e por que eles são o mesmo
+   *
+   * 1. **o convite não resolve** — inexistente, vencido, revogado, de dono sem
+   *    apelido, ou de quem bloqueou quem chama. `ResolvedorDeConvite` já funde
+   *    os cinco num `undefined` só;
+   * 2. **o perfil não resolve** — os seis predicados de `perfilPorApelido`, que
+   *    incluem o perfil que quem chama denunciou.
+   *
+   * Os dois levantam `problemas.naoEncontrado()`, e quem chama não tem como
+   * saber qual dos dois aconteceu. **Isso importa**: distinguir "o convite
+   * morreu" de "a pessoa não está disponível para você" diria a quem foi
+   * bloqueado que o link que ele guardou um dia foi válido — e esse é o aviso de
+   * bloqueio que o desenho não dá.
+   */
+  async porConvite(quemOlha: UserId, token: string): Promise<PerfilDePessoaProjetado> {
+    const convite = await this.deps.convites.resolver(token, quemOlha);
+    if (convite === undefined) throw problemas.naoEncontrado();
+    // O apelido vem do convite, e dali ele e um apelido como qualquer outro: o
+    // caminho seguinte e exatamente o de quem digitou o apelido na busca.
+    return this.porApelido(quemOlha, convite.apelido);
   }
 }

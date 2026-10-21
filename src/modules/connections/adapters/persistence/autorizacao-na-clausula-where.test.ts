@@ -40,6 +40,7 @@ import {
   construtorDaArestaDoPar,
   construtorDaArestaPorRef,
   construtorDaContagemDeConexoes,
+  construtorDaContagemDeConvidados,
   construtorDasContagens,
   construtorDoAceite,
   construtorDoDesfazerPorBloqueio,
@@ -68,6 +69,7 @@ const semBanco = new Kysely<Database>({
 const TODAS = {
   contagens: () => construtorDasContagens(semBanco, CHAMADOR, AGORA),
   contagemDeConexoes: () => construtorDaContagemDeConexoes(semBanco, CHAMADOR),
+  contagemDeConvidados: () => construtorDaContagemDeConvidados(semBanco, CHAMADOR),
   arestaPorRef: () => construtorDaArestaPorRef(semBanco, REF, CHAMADOR),
   arestaDoPar: () => construtorDaArestaDoPar(semBanco, CHAMADOR, OUTRO),
   pedido: () =>
@@ -328,6 +330,12 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     'conexoes',
     'pendentes',
     'do_dia',
+    // O contador de convidados (21/10/2026). **Numero, e nao coluna de conta**:
+    // ele e um `count(*)`, do mesmo tipo de `conexoes` e `pendentes`, e passa
+    // por esta lista pelo mesmo motivo que eles -- campo novo em resposta e
+    // decisao de privacidade, e a decisao esta no `$description` de
+    // `invited_joined_count` no contrato: contagem nao diz QUEM.
+    'convidados',
     'conectados',
     'id',
   ]);
@@ -443,5 +451,68 @@ void describe('a caixa de pedidos não devolve conexão aceita', () => {
         `\`${nome}\` lê \`users\` sem passar por \`user_connections\`: seria enumeração de pessoas`,
       );
     }
+  });
+});
+
+void describe('ISCA: o contador de convidados tem os DOIS sinais no WHERE', () => {
+  // A regra é decisão do cliente de 21/10/2026: conta quem entrou pelo convite
+  // DESTA conta **e** tem pet com foto `ready`. Ela mora no banco, e numa fonte
+  // só -- se morasse no aplicativo, dois clientes contariam diferente e o número
+  // que a pessoa vê dependeria de qual deles ela abriu.
+  //
+  // PARA DESLIGAR E VER REPROVAR: em `construtorDaContagemDeConvidados`, tire o
+  // `EXISTS` de `pet_photos`. O segundo caso reprova, e é ele que trava o freio
+  // anti-abuso.
+  const sql = TODAS.contagemDeConvidados().sql.toLowerCase();
+
+  void it('conta aceita, com ESTA conta no destino e origem de convite', () => {
+    assert.match(sql, /c\.state = 'accepted'/);
+    // O DESTINO e não qualquer lado: quem usa um convite é quem PEDE, e o único
+    // convite que leva ao perfil desta conta é o dela. Contar os dois lados
+    // somaria quem ELA convidou com quem a convidou.
+    assert.match(sql, /c\.addressee_user_id = \$\d+::uuid/);
+    assert.match(sql, /c\.origin = 'invite_link'/);
+    assert.doesNotMatch(
+      sql,
+      /c\.requester_user_id = \$\d+::uuid/,
+      'REPROVA: a contagem de convidados filtra por quem PEDIU. Isso conta quem ' +
+        'convidou esta conta, e não quem ela trouxe.',
+    );
+  });
+
+  void it('exige pet com foto `ready`, e por EXISTS e nao por JOIN', () => {
+    assert.match(sql, /exists \(/);
+    assert.match(sql, /from pets p/);
+    assert.match(sql, /pet_photos f on f\.pet_id = p\.id/);
+    assert.match(sql, /f\.status = 'ready'/);
+    assert.match(sql, /p\.deleted_at is null/);
+    assert.match(
+      sql,
+      /f\.deleted_at is null/,
+      'REPROVA: foto apagada conta. O freio anti-abuso precisa do sinal VIVO.',
+    );
+    // `EXISTS` e não junção direta: uma junção multiplicaria a aresta por foto
+    // pronta, e quem tem três fotos contaria três vezes.
+    assert.doesNotMatch(
+      sql,
+      /from user_connections c\s+join pet_photos/,
+      'REPROVA: a contagem junta `pet_photos` na aresta. Quem tem três fotos ' +
+        'prontas contaria três vezes.',
+    );
+  });
+
+  void it('o pet e de QUEM PEDIU, e nao de quem conta', () => {
+    assert.match(
+      sql,
+      /p\.owner_user_id = c\.requester_user_id/,
+      'REPROVA: o `EXISTS` olha o pet da conta errada. O sinal é da pessoa que ' +
+        'entrou pelo convite, não de quem convidou -- esta é a inversão que ' +
+        'faria o contador subir por cada pet de quem convida.',
+    );
+  });
+
+  void it('conta_habilitada nos dois lados, como nas outras contagens', () => {
+    assert.match(sql, /conta_habilitada\(c\.requester_user_id\)/);
+    assert.match(sql, /conta_habilitada\(c\.addressee_user_id\)/);
   });
 });

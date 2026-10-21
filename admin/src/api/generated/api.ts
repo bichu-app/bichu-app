@@ -3961,6 +3961,245 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Busca de pessoas por nome ou apelido
+         * @description **A busca de pessoas**, decisao do cliente de 20/10/2026: *"vamos
+         *     implementar a busca pelo usuario"*.
+         *
+         *     Casa por SUBSTRING tolerante a acento e a caixa, em **nome de exibicao e
+         *     apelido**: `antonia` acha `Maria Antonia`. A normalizacao e
+         *     `texto_para_busca`, a mesma funcao do banco que o diretorio usa -- duas
+         *     definicoes da mesma normalizacao divergiriam em silencio, ficando so
+         *     lentas (migracao `20260928000006`).
+         *
+         *     ## OS FREIOS, e cada um tem motivo
+         *
+         *     **Minimo de 3 caracteres, e consulta mais curta devolve LISTA VAZIA e
+         *     nao erro.** O numero nao e gosto: o indice e GIN trigrama, e um padrao
+         *     com menos de tres caracteres **nao produz trigrama nenhum** -- a
+         *     consulta volta a varrer a tabela de contas inteira. E uma consulta de um
+         *     ou dois caracteres casa quase todo mundo, o que a torna uma listagem de
+         *     pessoas com outro nome.
+         *
+         *     Lista vazia e nao 400 porque a tela chama a busca a cada tecla: um erro
+         *     vermelho no meio de alguem escrevendo `maria` seria o produto discutindo
+         *     com quem digita. Dois caracteres sao **incompletos**, nao malformados.
+         *
+         *     **`q` ausente ou vazio devolve LISTA VAZIA. Nao existe "listar
+         *     todos".** Sem consulta, sem resultado -- e isto e estrutural e nao um
+         *     `if`: a porta de persistencia exige `termo: string`, entao a chamada que
+         *     listaria todos **nao e exprimivel**.
+         *
+         *     **Teto de consultas por conta** (`[account, q]`, 60/h), que e o freio de
+         *     varredura do catalogo. `q` marca PRESENCA de busca e **nunca o termo**:
+         *     com o termo no balde, cada termo novo abriria um balde novo com um uso, e
+         *     quem enumera varia o termo a cada chamada **por definicao** -- nunca
+         *     encostaria no teto.
+         *
+         *     ## O QUE CADA RESULTADO DEVOLVE E LIMITE, NAO ESCOLHA DE TELA
+         *
+         *     | Sai | Por que |
+         *     |---|---|
+         *     | `display_name` | emenda 2 do ADR-0010: *"ele pode ver nome"* |
+         *     | `pets_count` | emenda 2, que abriu a CONTAGEM do item 7 |
+         *     | `connections_count` | emenda 2, o "sinal de confianca" do plano 4-B |
+         *     | `handle` | e a referencia publica da pessoa, e o endereco do perfil |
+         *
+         *     | NAO sai | Por que |
+         *     |---|---|
+         *     | **foto** | **emenda 5 item 2**: a foto nao sai para quem NAO e conexao aceita, e resultado de busca e por construcao lista de nao-conexoes |
+         *     | `public_ref` | ele existe em `PersonProfile` porque AQUELA tela hospeda denunciar e bloquear; a busca nao hospeda nenhuma das tres, e referencia publica sem uso e superficie de graca |
+         *     | qualquer UUID | ADR-0010 item 6 |
+         *     | `connection_state` | o estado e por PAR, e vinte estados por requisicao e o material de que uma lista de conexoes se faz do lado de fora |
+         *     | cidade, bairro, telefone, e-mail, nascimento | o cliente nao mencionou nenhum, e os itens 1, 3 e 4 do ADR-0010 |
+         *
+         *     ## 404 E NUNCA 403 -- aqui, LISTA VAZIA e nunca 403
+         *
+         *     Quem nao existe para quem busca simplesmente **nao entra na lista**:
+         *     conta desabilitada (decisao de 17/10: *"nao e mais encontrada em nenhuma
+         *     pagina ou funcionalidade"*, e busca e literalmente ser encontrada), par
+         *     bloqueado em qualquer direcao, perfil que quem busca denunciou, apelido
+         *     de PET e apelido RESERVADO. Os cinco estao na clausula `WHERE`
+         *     (ADR-0021), nao num filtro de borda.
+         *
+         *     **A lista vazia funde** "o termo nao casou ninguem" com "o termo so
+         *     casaria gente que nao existe para voce". Distinguir os dois seria dizer
+         *     *"existe alguem assim, mas nao para voce"* -- o oraculo que a busca nao
+         *     pode ser.
+         *
+         *     **Quem busca nao aparece na propria busca**: o unico botao de um
+         *     resultado e "adicionar", e a conta nao se conecta consigo mesma.
+         */
+        get: operations["searchPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connection-invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emitir o convite do proprio perfil (alimenta o link e o QR)
+         * @description **Emite o convite que alimenta o link e o QR**, decisao do cliente de
+         *     20/10/2026: *"o qr-code no perfil do usuario para que o convidado possa
+         *     escanear"* e *"o link de convite, para o usuario compartilhar no
+         *     whatsapp"*.
+         *
+         *     **O servidor emite um TOKEN e mais nada.** Ele nao gera imagem, nao
+         *     monta URL e nao sabe o que e um QR: o QR e o link codificado em imagem,
+         *     e quem desenha os dois e a tela. Devolver URL absoluta amarraria o
+         *     convite ao dominio do dia (§11.1 proibicao 9, a mesma razao pela qual o
+         *     banco guarda chave de objeto e nao URL de midia).
+         *
+         *     ## VALIDADE, REUSO E REVOGACAO -- a decisao, com o motivo
+         *
+         *     O cliente nao especificou nenhum dos tres, e eles sao decididos na
+         *     migracao `20261020000012` porque um convite sem prazo, sem regra de
+         *     reuso e sem revogacao **nao e um convite**: e um endereco publico
+         *     permanente, que e o que o plano 4-B.1 matou com *"um endereco estavel e
+         *     compartilhavel vira endereco publico no primeiro grupo em que alguem o
+         *     cola"*.
+         *
+         *     - **REUSAVEL por varias pessoas.** *"Compartilhar no whatsapp"* e, na
+         *       pratica, mandar para um grupo, e um QR no perfil e mostrado a quem
+         *       passar. Uso unico funcionaria para a primeira pessoa e falharia
+         *       **calado** para todas as outras -- e quem compartilhou nao teria como
+         *       saber, porque a falha acontece na tela de outra pessoa. O freio do
+         *       volume nao e o uso unico: sao os tetos de 150 conexoes, 20 pendentes e
+         *       10 pedidos por dia, cobrados em CADA pedido que o convite gera. **Um
+         *       link reusado nao compra conexao nenhuma**, porque o aceite continua
+         *       obrigatorio;
+         *     - **30 DIAS**, o mesmo prazo do pedido pendente. Dois prazos para
+         *       "quanto tempo uma intencao de conexao sobrevive" obrigariam a defender
+         *       os dois. O prazo e o que impede o link colado num grupo de virar
+         *       endereco permanente: ele para de resolver sozinho;
+         *     - **REVOGAVEL, e emitir de novo REVOGA o anterior.** Uma vez que um link
+         *       vaza para onde nao devia, o unico remedio e mata-lo -- e e por isso que
+         *       o convite e uma LINHA e nao um token assinado sem estado: assinado sai
+         *       mais barato e **nao se revoga**.
+         *
+         *     **UM convite ativo por conta**, garantido pelo indice parcial unico
+         *     `connection_invites_um_ativo_por_conta`. Varios simultaneos tornariam
+         *     *"quantos links meus estao soltos por ai?"* uma pergunta sem resposta
+         *     para o dono -- que e a pergunta que ele faz justamente quando algo deu
+         *     errado.
+         *
+         *     **Emitir devolve um token NOVO, nunca o anterior.** Quem aperta "gerar
+         *     novo link" depois de desconfiar que o antigo vazou receberia o vazado de
+         *     volta -- e e exatamente nessa hora que ele nao pode.
+         *
+         *     **O token em claro existe NESTA RESPOSTA e em lugar nenhum mais.** O
+         *     banco guarda os 32 bytes do SHA-256 (`connection_invites.token_hash`),
+         *     entao nem esta casa nem um despejo do banco o recuperam depois: quem
+         *     perde o link emite outro. Ele **nao** vai para a trilha (ADR-0022).
+         */
+        post: operations["issueConnectionInvite"];
+        /**
+         * Revogar o convite do proprio perfil
+         * @description **Mata o link e o QR que estavam valendo.** `irreversible_write` porque
+         *     revogar nao se desfaz: o link ja compartilhado para de valer e nao
+         *     volta.
+         *
+         *     **204 e IDEMPOTENTE**: sem convite ativo tambem e 204. Um 404 para "nao
+         *     havia convite" diria a tela que o estado dela estava velho, o que nao e
+         *     informacao util num botao cujo efeito desejado -- *nao existe link meu
+         *     valendo* -- ja foi alcancado.
+         *
+         *     **Revogar nao desfaz conexao nenhuma.** Quem ja pediu por aquele link
+         *     continua na caixa de pedidos, e quem ja foi aceito continua conexao:
+         *     revogar fecha a porta, nao expulsa quem entrou. Para desfazer uma aresta
+         *     existe `endConnection`.
+         */
+        delete: operations["revokeConnectionInvite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connection-invites/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver um token de convite no perfil de quem o emitiu
+         * @description **A tela de destino do link e do QR**, decisao do cliente de
+         *     20/10/2026: *"ao clicar vai para a pagina do perfil do usuario com o
+         *     botao de adicionar"*.
+         *
+         *     A resposta e **`PersonProfile`** -- a MESMA de `getPersonProfile`, pela
+         *     mesma projecao. O cliente pediu *"a pagina do perfil do usuario"*: a
+         *     pagina, nao uma parecida. Uma projecao propria aqui divergiria da outra
+         *     no primeiro campo que alguem acrescentasse a uma so, e o recorte da
+         *     emenda 2 do ADR-0010 passaria a ter duas implementacoes -- uma das quais
+         *     ninguem estaria olhando.
+         *
+         *     De graca, por reusar: o `connection_state` certo (entao a tela sabe se o
+         *     botao e "adicionar", "pedido enviado" ou "conectado"), a regra da
+         *     vitrine, e os seis predicados da clausula `WHERE`.
+         *
+         *     ## POR QUE `POST` COM O TOKEN NO CORPO, e nao `GET .../{token}`
+         *
+         *     **Token em caminho de URL vai para o log de acesso**, para o historico
+         *     do aparelho, para o cabecalho `Referer` da proxima navegacao e para
+         *     qualquer intermediario que registre a linha de requisicao. O convite e
+         *     um segredo ao portador -- quem o tem alcanca o perfil de quem o emitiu
+         *     --, e um segredo em URL e um segredo publicado em cinco lugares que
+         *     ninguem lembra de limpar.
+         *
+         *     E a mesma razao pela qual `listDirectoryEntries` **nao** recebe
+         *     coordenada na requisicao.
+         *
+         *     **`POST` que nao escreve**, e por isso `x-effects` e vazio e a resposta
+         *     e 200: o metodo e `POST` pelo corpo, nao pela semantica. Resolver nao
+         *     cria aresta, nao dispensa aceite e nao da acesso a vitrine.
+         *
+         *     ## 404 E NUNCA 403, e ele funde SETE motivos
+         *
+         *     Convite inexistente, **vencido**, **revogado**, de dono sem apelido, de
+         *     quem bloqueou quem chama, de conta desabilitada, e perfil que quem chama
+         *     denunciou -- **todos o mesmo 404**, mesmo corpo.
+         *
+         *     **Vencido, revogado e inexistente nao se distinguem**, e isto e decisao
+         *     de seguranca e nao economia: *"este token ja existiu"* e a informacao
+         *     que diz a alguem que vale a pena continuar tentando. E distinguir "o
+         *     convite morreu" de "a pessoa nao esta disponivel para voce" diria a quem
+         *     foi bloqueado que o link que ele guardou um dia foi valido -- que e o
+         *     aviso de bloqueio que o desenho nao da.
+         *
+         *     **Etiqueta `people` e nao `connection-invites`**: a resposta e um perfil,
+         *     e perfil e daquele modulo. `people` importa `connections/ports/` pela
+         *     porta, que e o caminho que a regra de fronteira oferece; o contrario
+         *     faria `connections` importar `people/adapters/`, que ela proibe.
+         */
+        post: operations["resolveConnectionInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/people/{handle}": {
         parameters: {
             query?: never;
@@ -6896,21 +7135,71 @@ export interface components {
             store_url?: string | null;
         };
         /**
-         * @description O convite que autoriza um pedido de conexao. **Um campo so, e e um
-         *     token** -- nao ha, e nao pode haver, apelido, identificador de pessoa
-         *     nem qualquer forma de endereca-la: a regra do cliente de 18/10/2026 e
-         *     *"o que nao pode e ser publico, sem ter nenhum relacionamento"*, e um
-         *     campo que aceitasse pessoa reabriria o caminho que a decisao fechou.
+         * @description A credencial que autoriza um pedido de conexao. **EXATAMENTE UMA das
+         *     duas**, e o `oneOf` abaixo recusa corpo com as duas e corpo com
+         *     nenhuma.
          *
-         *     Quem emite o token sao as duas formas de convite (conexao ancorada no
-         *     contexto e codigo presencial de 5 minutos), **nenhuma delas
-         *     implementada**. O token nao e enumeravel e nao e identificador estavel
-         *     de ninguem.
+         *     ## A DECISAO MUDOU EM 20/10/2026
+         *
+         *     Ate 20/10/2026 este schema tinha **um** campo, e a descricao dizia que
+         *     "nao ha, e nao pode haver, apelido". O cliente reverteu a decisao,
+         *     literal: *"vamos implementar a busca pelo usuario (...) e vamos
+         *     implementar o link de convite"*. A frase antiga **deixou de valer**, e
+         *     ela foi corrigida em vez de deixada aqui contradizendo o campo ao lado.
+         *
+         *     **O que a reversao NAO comprou:** o pedido por apelido nao e, e nao
+         *     pode ser, um oraculo de existencia de apelido. Apelido inexistente,
+         *     apelido de pet, apelido reservado, conta desabilitada, quem bloqueou
+         *     quem pede e perfil que quem pede denunciou respondem **o mesmo 404**
+         *     (ADR-0021, nunca 403) -- os seis fundidos na clausula `WHERE`, e nao
+         *     num `if` de borda.
+         *
+         *     ## As duas credenciais, e por que `origin` NAO sai na resposta
+         *
+         *     | Campo | Vem de | `origin` gravado |
+         *     |---|---|---|
+         *     | `invite_token` | o link do WhatsApp, ou o QR do perfil | `invite_link` |
+         *     | `handle` | a busca (`GET /v1/people`) | `people_search` |
+         *
+         *     O QR e o link sao o **mesmo** token: o QR e o link codificado em
+         *     imagem, e e por isso que ha um valor de `origin` para os dois e nao
+         *     dois -- um valor por transporte registraria como a pessoa leu a tela,
+         *     que o servidor nao tem como conferir.
+         *
+         *     `origin` **nao aparece em `Connection`**, e isso e deliberado: contar a
+         *     quem recebeu o pedido que a outra pessoa o achou numa busca e
+         *     informacao sobre como alguem chegou ate ela, que ninguem pediu para
+         *     dar.
          */
         ConnectionInvite: {
-            /** @description O token do convite. Opaco, de uso unico e de vida curta. */
-            invite_token: string;
-        };
+            /**
+             * @description O token do convite, emitido por `issueConnectionInvite`. Opaco, 256
+             *     bits de CSPRNG, **reusavel por varias pessoas** e valido por 30
+             *     dias ou ate ser revogado.
+             *
+             *     **Reusavel, e nao de uso unico** (migracao `20261020000012`):
+             *     *"compartilhar no whatsapp"* e mandar para um grupo, e uso unico
+             *     falharia calado para todos menos o primeiro -- sem que quem
+             *     compartilhou soubesse. O freio do volume sao os tetos de 150
+             *     conexoes, 20 pendentes e 10 pedidos por dia, cobrados em CADA
+             *     pedido que o convite gera: um link reusado nao compra conexao
+             *     nenhuma, porque o aceite continua obrigatorio.
+             */
+            invite_token?: string;
+            /**
+             * @description O apelido de quem vai receber o pedido -- o caminho que a busca
+             *     abriu em 20/10/2026.
+             *
+             *     **Apelido e nao `public_ref`, e nao UUID** (ADR-0010 item 6): o
+             *     apelido e a referencia publica da pessoa e o endereco do perfil
+             *     (`getPersonProfile`), e e o que a busca devolve.
+             *
+             *     **A resposta para um apelido que nao existe e a resposta para um
+             *     apelido de quem bloqueou quem pede sao IDENTICAS** -- mesmo 404,
+             *     mesmo corpo. Ver a descricao deste schema.
+             */
+            handle?: string;
+        } & (unknown | unknown);
         /**
          * @description O estado da aresta no vocabulario do aplicativo.
          *
@@ -10371,6 +10660,147 @@ export interface components {
              *     tamanho da lista.
              */
             showcase?: components["schemas"]["PersonShowcasePhoto"][];
+        };
+        /**
+         * @description Uma pessoa como a BUSCA a entrega: **quatro campos, e nada mais**
+         *     (decisao do cliente de 20/10/2026).
+         *
+         *     **O recorte e LIMITE e nao escolha de tela**, e cada ausencia tem dono.
+         *     Compare com `PersonProfile`, que tem sete campos: as tres diferencas
+         *     sao deliberadas.
+         *
+         *     | Falta aqui | Esta em `PersonProfile` porque |
+         *     |---|---|
+         *     | `public_ref` | AQUELA tela hospeda denunciar e bloquear, e as tres operacoes sao enderecadas por `userRef`. A busca nao hospeda nenhuma das tres, e referencia publica sem uso e superficie de graca |
+         *     | `connection_state` | o perfil e de UMA pessoa. Numa lista, vinte estados por requisicao sao o material de que uma lista de conexoes se faz do lado de fora |
+         *     | `connection_ref` | idem: `ref` de aresta existe quando ha aresta, e resultado de busca e lista de quem ainda nao e conexao |
+         *
+         *     **E NAO HA FOTO EM NENHUM DOS DOIS** para quem nao e conexao: e a
+         *     **emenda 5 item 2 do ADR-0010**, e resultado de busca e por construcao
+         *     lista de nao-conexoes -- se quem busca conhecesse a pessoa, nao
+         *     precisaria buscar. Nao ha aqui um campo de foto nulo a preencher
+         *     depois: um campo nulo seria pior que a ausencia, porque convidaria
+         *     alguem a preenche-lo.
+         *
+         *     **Nenhum UUID** (ADR-0010 item 6).
+         */
+        PersonSearchResult: {
+            /**
+             * @description O apelido. **Nao e anulavel aqui**, como em `PersonProfile`: a
+             *     busca le `handles`, entao quem aparece tem apelido por
+             *     construcao -- e e ele o endereco do perfil e a credencial de
+             *     `requestConnection`.
+             */
+            handle: string;
+            /**
+             * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
+             *     (ADR-0010 item 3).
+             *
+             *     **Anulavel**, e a consequencia vale dita: a coluna e anulavel em
+             *     `users`, e omitir a pessoa da busca por falta de nome a faria
+             *     desaparecer por um campo que ela nao preencheu. Quem nao tem nome e
+             *     achavel **pelo apelido**, e a tela cai para `@handle`.
+             */
+            display_name: string | null;
+            /**
+             * @description **Quantos pets, e nada alem do numero** (emenda 2 do ADR-0010).
+             *     Conta pet nao apagado. Nenhum atributo de pet acompanha o numero:
+             *     nome, miniatura, slug e link continuam proibidos pelo item 7.
+             */
+            pets_count: number;
+            /**
+             * @description Quantas conexoes aceitas. **O numero, nunca a lista** (plano 4-B:
+             *     *"Lista de conexoes | nunca | nunca"*). E o "sinal de confianca".
+             */
+            connections_count: number;
+        };
+        /**
+         * @description A pagina da busca de pessoas. Numerada com total, como as outras
+         *     listagens desta casa.
+         *
+         *     **`items` vazio e `total: 0` sao a resposta para TRES situacoes
+         *     diferentes**, e a fusao e deliberada:
+         *
+         *     1. `q` ausente ou vazio -- **nao existe "listar todos"**;
+         *     2. `q` com menos de tres caracteres -- o piso do indice trigrama;
+         *     3. `q` valido que nao casa ninguem **ou** que so casaria gente que nao
+         *        existe para quem busca (conta desabilitada, par bloqueado, perfil
+         *        denunciado por quem busca).
+         *
+         *     A terceira e a que importa para seguranca: distinguir "nao casou
+         *     ninguem" de "casou alguem que voce nao pode ver" seria dizer *"existe
+         *     alguem assim, mas nao para voce"* -- o oraculo que a busca nao pode ser.
+         */
+        PersonSearchPage: {
+            items: components["schemas"]["PersonSearchResult"][];
+            /**
+             * @description Quantas pessoas casam o termo **para quem busca**. Conta o mesmo
+             *     conjunto que `items` pagina -- os dois saem da MESMA consulta, com
+             *     os mesmos predicados, porque duas consultas seriam duas chances de
+             *     a pagina e o total discordarem sem nada acusar.
+             */
+            total: number;
+            page: number;
+            limit: number;
+        };
+        /**
+         * @description O convite recem-emitido. **O token em claro existe NESTA RESPOSTA e em
+         *     lugar nenhum mais**: o banco guarda os 32 bytes do SHA-256
+         *     (`connection_invites.token_hash`), entao nem o servidor nem um despejo
+         *     do banco o recuperam depois.
+         *
+         *     **Nao ha URL nem imagem aqui, e e de proposito.** O QR e o link sao o
+         *     mesmo token em dois transportes, e quem os monta e a tela: devolver URL
+         *     absoluta amarraria o convite ao dominio do dia (§11.1 proibicao 9, a
+         *     mesma razao pela qual o banco guarda chave de objeto e nao URL de
+         *     midia).
+         *
+         *     **Nao ha `id`** (UUID interno, ADR-0010 item 6) e nao ha contagem de
+         *     quantas pessoas usaram o convite -- seria a lista de quem viu o perfil
+         *     de alguem, reduzida a um numero.
+         */
+        ConnectionInviteIssued: {
+            /**
+             * @description O token, 256 bits de CSPRNG. **Reusavel por varias pessoas** e
+             *     valido por 30 dias ou ate ser revogado. E ele que vai no link e no
+             *     QR, e e ele que `resolveConnectionInvite` e `requestConnection`
+             *     recebem.
+             */
+            invite_token: string;
+            /**
+             * Format: date-time
+             * @description Quando o convite para de resolver. **30 dias** apos a emissao, o
+             *     mesmo prazo do pedido pendente -- dois prazos para "quanto tempo
+             *     uma intencao de conexao sobrevive" obrigariam a defender os dois.
+             *
+             *     Depois desta data o token responde o **mesmo 404** de um token
+             *     inexistente, e a tela nao tem como distinguir os dois.
+             */
+            expires_at: string;
+        };
+        /**
+         * @description O corpo de `resolveConnectionInvite`: **um campo so, e e o token**.
+         *
+         *     **O token vai no CORPO e nao no caminho da URL**, e isso e decisao de
+         *     seguranca: token em caminho de URL vai para o log de acesso, para o
+         *     historico do aparelho, para o cabecalho `Referer` da proxima navegacao
+         *     e para qualquer intermediario que registre a linha de requisicao. Um
+         *     segredo ao portador em URL e um segredo publicado em cinco lugares que
+         *     ninguem lembra de limpar.
+         *
+         *     **Nao aceita `handle`**, e a ausencia nao e um descuido: pedir perfil
+         *     por apelido e `getPersonProfile`, que tem outro teto e outro endereco.
+         *     Um corpo que aceitasse os dois faria duas operacoes morarem numa.
+         */
+        ConnectionInviteResolution: {
+            /**
+             * @description O token do convite, como ele chegou pelo link ou pelo QR.
+             *
+             *     **Inexistente, vencido e revogado respondem o MESMO 404**, com o
+             *     mesmo corpo: *"este token ja existiu"* e justamente a informacao
+             *     que diz a alguem que vale a pena continuar tentando.
+             */
+            invite_token: string;
         };
         /**
          * @description Uma foto da vitrine de OUTRA pessoa, e ela e **menor** que
@@ -18097,6 +18527,129 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    searchPeople: {
+        parameters: {
+            query?: {
+                /**
+                 * @description **O termo, casado contra NOME DE EXIBICAO e APELIDO.**
+                 *
+                 *     `minLength: 3` **nao e recusado com 400 quando menor**: o vigia de
+                 *     parametros desta casa recusaria, entao o piso e cobrado no caso de
+                 *     uso e a resposta e lista vazia. O `minLength` aqui documenta o piso
+                 *     do indice trigrama para quem le o contrato -- e e por isso que ele
+                 *     e `3` e nao um numero escolhido.
+                 *
+                 *     Ausente ou vazio: **lista vazia**. Nao existe listagem de pessoas.
+                 */
+                q?: string;
+                page?: number;
+                /**
+                 * @description O teto de 20 e o mesmo das outras paginas desta frente, de
+                 *     proposito: uma pagina maior de RESULTADO DE BUSCA e mais gente
+                 *     entregue por requisicao, que e o numero que a varredura quer
+                 *     maximizar.
+                 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A pagina de resultados. **Vazia** quando `q` esta ausente, vazio ou
+             *     abaixo de tres caracteres, e vazia quando ninguem casa.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonSearchPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    issueConnectionInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O convite emitido. O anterior, se havia, foi revogado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionInviteIssued"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    revokeConnectionInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description O convite foi revogado, **ou nao havia convite ativo**. Os dois sao
+             *     204: ver a descricao desta operacao.
+             */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resolveConnectionInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionInviteResolution"];
+            };
+        };
+        responses: {
+            /**
+             * @description O perfil de quem emitiu o convite, no recorte que quem chama pode
+             *     ver. **O mesmo schema de `getPersonProfile`.**
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonProfile"];
+                };
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];

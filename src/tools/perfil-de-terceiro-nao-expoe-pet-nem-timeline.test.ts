@@ -110,16 +110,52 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
   // A OPERAÇÃO: UMA, COM CONTA, E SEM COLEÇÃO
   // ------------------------------------------------------------------
 
-  void it('a etiqueta `people` tem UMA operacao, e ela e a leitura de UM perfil', () => {
+  /**
+   * **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.**
+   *
+   * Ele cobrava que `people` tivesse **uma** operação, e a mensagem de reprovação
+   * dizia: *"uma segunda operação em `people` é busca, listagem ou descoberta por
+   * outro nome: nenhuma das três foi decidida"*. Duas delas **foram decididas**:
+   *
+   * > *"vamos implementar a busca pelo usuário (...) e vamos implementar o link
+   * > de convite, (...) ao clicar vai para a página do perfil do usuário"*
+   *
+   * O caso não foi afrouxado para "qualquer número": ele passou a cobrar a lista
+   * **exata** de três, e uma quarta continua reprovando. É esse número que faz
+   * uma operação nova nesta etiqueta ser vista por alguém.
+   */
+  void it('a etiqueta `people` tem TRES operacoes, e a lista e exata', () => {
     assert.deepEqual(
-      operacoesDePessoa().map(({ metodo, caminho }) => `${metodo} ${caminho}`),
-      [`get ${CAMINHO}`],
-      'uma segunda operação em `people` é busca, listagem ou descoberta por outro nome: nenhuma das três foi decidida',
+      operacoesDePessoa()
+        .map(({ metodo, caminho }) => `${metodo} ${caminho}`)
+        .sort(),
+      ['get /people', `get ${CAMINHO}`, 'post /connection-invites/resolution'],
+      'uma QUARTA operação em `people` é listagem ou descoberta por outro nome. As três ' +
+        'que existem são: a busca (com piso de 3 caracteres, teto por conta e campo ' +
+        'vazio que não lista ninguém), a leitura de um perfil pelo apelido, e a mesma ' +
+        'leitura endereçada pelo token do convite.',
     );
     assert.ok(
       spec.tags.some((etiqueta) => etiqueta.name === 'people'),
       'a etiqueta tem de estar declarada na raiz: etiqueta sem declaração é operação sem dono',
     );
+  });
+
+  /**
+   * As três operações de `people` exigem conta, **sem alternativa vazia**. A
+   * coluna "sem conta" da tabela 4-B é vazia inteira, e a busca não a abriu: uma
+   * busca de pessoas alcançável sem conta não teria nem teto por conta possível.
+   */
+  void it('as TRES operacoes de `people` exigem conta, sem alternativa vazia', () => {
+    for (const { metodo, caminho, op } of operacoesDePessoa()) {
+      const seguranca = op.security ?? [];
+      assert.ok(seguranca.length > 0, `${metodo} ${caminho} sem \`security\` nasceria pública`);
+      assert.deepEqual(
+        seguranca.flatMap((esquema) => Object.keys(esquema)),
+        ['bearerAuth'],
+        `${metodo} ${caminho} não exige exatamente conta`,
+      );
+    }
   });
 
   void it('`getPersonProfile` EXIGE conta, sem alternativa vazia', () => {
@@ -138,12 +174,55 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  void it('nao existe colecao de pessoas: nenhum caminho `/people` sem apelido', () => {
-    const caminhos = Object.keys(spec.paths).filter((caminho) => caminho.startsWith('/people'));
+  /**
+   * **ESTE CASO MUDOU EM 20/10/2026.** Ele cobrava que não existisse caminho
+   * `/people` sem apelido, porque *"coleção de pessoas é enumeração, e não existe
+   * busca de pessoas neste produto"*. O cliente pediu a busca, e a coleção passou
+   * a existir — **com freios**.
+   *
+   * O caso passou a cobrar os dois caminhos exatos. O que ele defende agora é que
+   * não apareça um **terceiro**: `/people/{handle}/pets`,
+   * `/people/{handle}/showcase`, `/people/available` ou `/people/suggestions`
+   * seriam cada um uma superfície nova, e nenhuma delas foi decidida.
+   */
+  void it('os caminhos `/people` sao EXATAMENTE dois: a colecao e o apelido', () => {
+    const caminhos = Object.keys(spec.paths)
+      .filter((caminho) => caminho.startsWith('/people'))
+      .sort();
     assert.deepEqual(
       caminhos,
-      [CAMINHO],
-      'coleção de pessoas é enumeração, e não existe busca de pessoas neste produto',
+      ['/people', CAMINHO],
+      'um TERCEIRO caminho `/people` é superfície nova. `/people` é a busca, com os ' +
+        'freios do cliente; `/people/{handle}` é a leitura de um perfil. Não existe ' +
+        '`/people/{handle}/pets`, `/people/{handle}/showcase`, `/people/available` ' +
+        '(disponibilidade de apelido, plano 4-C.5) nem `/people/suggestions`.',
+    );
+  });
+
+  /**
+   * **A busca existe, e os freios dela são parte da decisão.** Sem este caso, a
+   * mudança acima teria aberto a coleção sem nada cobrar o que o cliente pediu
+   * junto com ela.
+   */
+  void it('a colecao `/people` SO existe com busca: sem `q` ela nao lista ninguem', () => {
+    const busca = spec.paths['/people']?.get as
+      | { parameters?: readonly { name?: string; required?: boolean; schema?: { minLength?: number } }[] }
+      | undefined;
+    assert.ok(busca !== undefined, 'a coleção `/people` tem de ser uma leitura');
+    const q = (busca.parameters ?? []).find((p) => p.name === 'q');
+    assert.ok(q !== undefined, '`/people` sem parâmetro `q` seria uma listagem de pessoas');
+    assert.notEqual(
+      q?.required,
+      true,
+      '`q` obrigatório daria 400 para campo vazio, e a decisão do cliente é LISTA VAZIA: ' +
+        'a tela chama a busca a cada tecla, e um erro no meio de alguém escrevendo seria ' +
+        'o produto discutindo com quem digita.',
+    );
+    assert.equal(
+      q?.schema?.minLength,
+      3,
+      'o piso de três caracteres é o do índice trigrama: abaixo dele não há trigrama ' +
+        'nenhum e a consulta vira varredura da tabela de contas inteira.',
     );
   });
 

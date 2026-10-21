@@ -1061,6 +1061,33 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'desenho da outra ponta, e mesma travessia.',
   },
 
+  // --- o convite que alimenta o link e o QR (20261020000012) ---------------
+  // CASCADE, e esta e a UNICA FK desta migracao.
+  //
+  // **Ela NAO atravessa pessoas**, e e por isso que nao entra na lista
+  // `ATRAVESSA_PESSOAS` abaixo -- diferente das duas de `user_connections`, que
+  // estao la justamente porque uma linha de conexao e das DUAS pessoas. O
+  // convite e de UMA: ele resolve para o perfil de quem o emitiu, e nao guarda
+  // nenhuma referencia a quem o usou (de proposito -- isso seria a lista de quem
+  // viu o perfil de alguem, que ninguem pediu). Apagar a conta leva o proprio
+  // convite dela, e o unico efeito sobre terceiros e o link deixar de resolver
+  // -- que e o mesmo efeito de a conta ter sido apagada, e nao um dado perdido.
+  //
+  // **Por que nao `SET NULL`:** `owner_user_id` e `NOT NULL`, e precisa ser --
+  // um convite sem dono nao resolve para perfil nenhum e so ocuparia a vaga do
+  // indice parcial unico. Guardar o resumo do token de uma conta que nao existe
+  // mais nao serve a investigacao nenhuma: a trilha (`audit.events`) ja registra
+  // a emissao e a revogacao, e ela sobrevive por conta propria.
+  'public.connection_invites.connection_invites_owner_user_id_fkey': {
+    colunas: ['owner_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o convite que a propria pessoa emitiu. O link e o QR dela param de ' +
+      'resolver, e nenhuma linha de OUTRA pessoa sai -- o convite nao guarda ' +
+      'quem o usou.',
+  },
+
   // --- as tres filas de denuncia (20261018000032) --------------------------
   // O PADRAO E O MESMO NAS TRES, e ele e deliberado:
   //

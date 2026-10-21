@@ -169,6 +169,16 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
         'caixa, porque `broadcast` e o unico tipo de aviso sem destino '
         'natural -- os outros levam a uma tela que ja existia.',
   ),
+  // -- `AuAu` > `Convide tutores` (21/10/2026) ---------------------------
+  (
+    nome: 'convide tutores',
+    endereco: '/mensagens/convide-tutores',
+    padrao: '/mensagens/convide-tutores',
+    motivo: 'Aberta por um item do CORPO do AuAu, e nao pela barra -- mesma '
+        'conta das oito ambiguas do Perfil. E ela mostra um QR de 200 dp, que '
+        'e o conteudo da tela: uma barra fixa por cima disputaria espaco com o '
+        'unico elemento que precisa ser fotografado por outro aparelho.',
+  ),
   // -- O exemplo literal dele -------------------------------------------
   (
     nome: 'a conversa',

@@ -228,6 +228,37 @@ dependencies:
   # portao.
   geocoding: ^5.0.0
 
+  # ---------------------------------------------------------------------------
+  # DESENHAR UM QR -- e por que este e o PRIMEIRO QR que o app desenha.
+  # ---------------------------------------------------------------------------
+  #
+  # O app ja mostrava um QR antes deste pacote: o da plaquinha. Ele **nao e
+  # desenhado aqui** -- chega como PNG pronto de
+  # `GET /v1/pets/{petId}/tags/{tagId}/qr.png`, e o cabecalho de
+  # `lib/widgets/qr_da_plaquinha.dart` pede, com todas as letras, que a proxima
+  # pessoa NAO troque aquilo por um gerador local. Aquele pedido continua
+  # valendo e este pacote nao o contraria: a plaquinha continua vindo do
+  # servidor.
+  #
+  # O QR DO CONVITE E OUTRO CASO, e a diferenca esta no contrato:
+  # `ConnectionInviteIssued` recusa devolver imagem e recusa devolver URL, com
+  # o motivo escrito -- *"devolver URL absoluta amarraria o convite ao dominio
+  # do dia"* -- e termina dizendo *"quem os monta e a tela"*. Nao ha PNG para
+  # baixar, e nao vai haver: pedir um ao servidor seria pedir que ele monte o
+  # endereco que ele acabou de recusar montar.
+  #
+  # O QUE ELE MANDA PARA FORA: **nada.** `qr_flutter` e pintura, e so. Ele
+  # depende de `qr` (codificador puro em Dart) e desenha num `CustomPainter`.
+  # Nao ha plugin, nao ha canal de plataforma, nao ha codigo nativo, nao ha
+  # cliente HTTP e nao ha arquivo: o token nao sai do processo, e e por isso que
+  # ele **nao** e pacote de aparelho e **nao** entra em `_importesProibidos` de
+  # `app/test/dispositivo/porta_nao_contornada_test.dart` -- aquela lista e de
+  # portas de aparelho, e este nao abre nenhuma.
+  #
+  # `^4.1.0` e nao `qr: ^4`: `qr_flutter 4.1.0` resolve com `qr 3.0.2`, e
+  # declarar `qr` direto criaria a segunda fonte da versao do codificador.
+  qr_flutter: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

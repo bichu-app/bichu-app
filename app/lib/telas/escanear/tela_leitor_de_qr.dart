@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
+import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../dispositivo/leitor_de_qr.dart';
 import '../../escopo.dart';
@@ -23,6 +24,7 @@ import '../../widgets/moldura.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../pet/textos_do_cadastro.dart';
 import 'codigo_lido_do_qr.dart';
+import 'convite_lido_do_qr.dart';
 import 'mascara_do_codigo_da_tag.dart';
 
 /// O que a saida sobreposta ocupa, contada do topo da area segura.
@@ -196,6 +198,28 @@ class TelaLeitorDeQr extends StatefulWidget {
 
   /// Criterio 6, regiao viva: o leitor achou.
   static const String codigoEncontrado = 'Código encontrado';
+
+  /// Regiao viva do **outro** QR que este leitor le: o convite de conexao.
+  ///
+  /// Frase propria e nao a mesma de [codigoEncontrado], porque o desfecho e
+  /// outro: ali abre a pagina de um pet, aqui abre o perfil de uma pessoa. Quem
+  /// ouve a tela precisa saber qual dos dois vem.
+  static const String conviteEncontrado = 'Convite encontrado';
+
+  /// O convite nao resolve: **vencido, revogado e inexistente sao o mesmo
+  /// 404**, e esta frase nao distingue os tres.
+  ///
+  /// A fusao e do servidor e e deliberada: *"este token ja existiu"* e
+  /// justamente a informacao que diz a alguem que vale a pena continuar
+  /// tentando. E o 404 funde outros quatro motivos -- dono sem apelido, quem
+  /// bloqueou quem le, conta desabilitada e perfil denunciado por quem le --,
+  /// que a tela tambem nao pode separar sem avisar alguem de que foi
+  /// bloqueado.
+  ///
+  /// **Ela nao manda tentar de novo com o mesmo QR**, porque nao resolveria: o
+  /// que resolve e a outra pessoa gerar um convite novo.
+  static const String conviteNaoVale =
+      'Este convite não vale mais. Peça um novo para a pessoa.';
 
   /// DEDUZIDO, e e a pergunta fechada desta entrega.
   ///
@@ -394,6 +418,26 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     );
 
     if (codigo == null) {
+      // ESTE LEITOR LE DOIS QR, E O DA PLAQUINHA CONTINUA SENDO O PRIMEIRO.
+      //
+      // **Um leitor so, e nao dois** (cliente, 21/10/2026): um segundo leitor
+      // seria uma segunda camera, uma segunda permissao, um segundo estado de
+      // `semLeitor` e uma segunda tela sem barra -- e quem escaneia nao sabe de
+      // antemao se o quadrado na frente dele e uma plaquinha ou um convite.
+      //
+      // **A ORDEM NAO IMPORTA, e isso e o que torna o reuso seguro.** As duas
+      // formas sao mutuamente exclusivas por construcao: a da plaquinha e uma
+      // URL com hospedeiro e caminho `/t/`, e a do convite e uma palavra so, no
+      // alfabeto base64url, que nao tem `.` nem `/` nem `:`. Nenhum conteudo
+      // casa as duas, e nenhum conteudo que casava a primeira deixou de casar.
+      // A ordem esta assim porque o caminho do achador e o que nao pode piorar:
+      // ele e medido pelo contrapeso em `test/telas/`.
+      final convite = tokenDeConviteDoQr(leitura.conteudo);
+      if (convite != null) {
+        anunciar(context, TelaLeitorDeQr.conviteEncontrado);
+        unawaited(_resolverConvite(convite));
+        return;
+      }
       _mostrarAvisoEfemero(TelaLeitorDeQr.naoEDoBichu);
       return;
     }
@@ -404,6 +448,66 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     // entrasse seria o dia de bifurcar o texto do 404, sob pena de a tela
     // acusar a plaquinha de quem nem encostou no teclado. E hoje.
     _resolver(codigo, digitado: false);
+  }
+
+  /// Resolve um token de convite e abre o perfil de quem o emitiu.
+  ///
+  /// ## O destino e a tela que ja existe, e o token vai junto
+  ///
+  /// `resolveConnectionInvite` devolve `PersonProfile` -- a MESMA projecao de
+  /// `getPersonProfile` --, entao o apelido vem na resposta e o destino e
+  /// `Rotas.perfilDe`. O token viaja no `extra` porque a tela de perfil o usa
+  /// como **credencial do pedido**: com ele o servidor grava procedencia
+  /// `invite_link`, e sem ele gravaria `people_search` -- uma busca que nao
+  /// houve.
+  ///
+  /// **A resolucao acontece aqui e nao la**, e a diferenca e de desenho: o
+  /// endereco do perfil carrega APELIDO, e o leitor nao tem apelido antes de
+  /// resolver. Empurrar o token para a tela de perfil a faria ter dois modos de
+  /// carregar.
+  ///
+  /// ## Os tres desfechos, e o 404 nao e falha
+  ///
+  /// O 404 e um DESFECHO: o convite nao vale, e a frase diz isso sobre o visor,
+  /// sem sair da camera -- quem mostrou o QR esta do lado, e o conserto e ela
+  /// gerar outro. Falha de rede entra no estado de `semConexao`, que ja tem
+  /// nova tentativa automatica. Qualquer outra falha vira a faixa.
+  Future<void> _resolverConvite(String token) async {
+    setState(() {
+      _resolvendo = true;
+      _faixa = null;
+      _avisoEfemero = null;
+    });
+    try {
+      final perfil = await Escopo.of(context).convites.resolver(token);
+      if (!mounted) return;
+      setState(() {
+        _resolvendo = false;
+        _tentativa = 0;
+        _rotaSobreposta = true;
+      });
+      await _abrirSobreposta(Rotas.perfilDe(perfil.handle), extra: token);
+    } on FalhaDeConexao {
+      if (!mounted) return;
+      setState(() {
+        _resolvendo = false;
+        _estado = EstadoDoLeitor.semConexao;
+      });
+    } on FalhaDaApi catch (falha) {
+      if (!mounted) return;
+      setState(() => _resolvendo = false);
+      if (falha.tipo == ProblemTipo.naoEncontrado) {
+        _mostrarAvisoEfemero(TelaLeitorDeQr.conviteNaoVale);
+        return;
+      }
+      setState(() => _faixa = MensagensDeErro.de(falha));
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _resolvendo = false;
+        _faixa = MensagensDeErro.de(falha);
+      });
+    }
   }
 
   /// O aviso do criterio 3: aparece **sobre** o visor e some sozinho.

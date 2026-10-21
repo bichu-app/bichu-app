@@ -16,7 +16,12 @@
  * lados, uma linha por par canônico, e os tetos contados em linha.
  */
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
-import { arestaMorta, type ArestaGuardada, type EstadoGuardado } from '../../domain/conexao.js';
+import {
+  arestaMorta,
+  type ArestaGuardada,
+  type EstadoGuardado,
+  type OrigemDoPedido,
+} from '../../domain/conexao.js';
 import type { ContagensDaConta } from '../../domain/teto-de-conexoes.js';
 import {
   TETO_DE_CONEXOES,
@@ -38,6 +43,17 @@ interface LinhaEmMemoria {
   pedinte: UserId;
   destinatario: UserId;
   estado: EstadoGuardado;
+  /**
+   * De onde o pedido NASCEU, como a coluna `origin` guarda.
+   *
+   * **Ele não estava aqui até 20/10/2026**, e a ausência era um buraco de
+   * medição e não uma simplificação: o repositório de verdade escreve `origin`
+   * em toda linha — a coluna é `NOT NULL` com `CHECK` de lista fechada — e este
+   * dublê descartava o valor em silêncio. Nenhum teste podia afirmar a
+   * procedência de uma aresta, que é justamente aquilo em que os dois caminhos
+   * novos (convite e apelido) se distinguem.
+   */
+  origem: OrigemDoPedido;
   pedidoEm: number;
   expiraEm: number;
   descansoAte: number | null;
@@ -49,6 +65,16 @@ export interface PessoaDeTeste {
   readonly nomeDeExibicao: string | null;
   /** `false` reproduz `conta_habilitada(uuid) = false`. */
   readonly habilitada: boolean;
+  /**
+   * Reproduz o `EXISTS` de `pets` com `pet_photos.status = 'ready'` — o segundo
+   * sinal do contador de convidados (21/10/2026).
+   *
+   * **Opcional, e o padrão é `false`**, e isso não é conveniência: o padrão
+   * reproduz a conta recém-criada, que é justamente quem o freio anti-abuso
+   * precisa NÃO contar. Um padrão `true` faria o caso do abuso passar sem
+   * ninguém escrevê-lo.
+   */
+  readonly petComFotoPronta?: boolean;
 }
 
 export interface BancadaDeConexoes {
@@ -113,6 +139,23 @@ export function conexoesEmMemoria(
 
     contarConexoes: (pessoa: UserId) => Promise.resolve(contarConexoesDe(pessoa)),
 
+    /**
+     * Os DOIS sinais do contador de convidados, no mesmo recorte da consulta
+     * de verdade: aresta aceita com esta conta no DESTINO e origem de convite,
+     * **e** quem pediu com pet de foto pronta.
+     */
+    contarConvidadosQueEntraram: (pessoa: UserId) =>
+      Promise.resolve(
+        linhas.filter(
+          (l) =>
+            l.estado === 'accepted' &&
+            l.destinatario === pessoa &&
+            l.origem === 'invite_link' &&
+            viva(l) &&
+            estado.get(l.pedinte)?.petComFotoPronta === true,
+        ).length,
+      ),
+
     arestaDoPar: (quemChama: UserId, outro: UserId) => {
       const achada = linhas.find(
         (l) => par(l.pedinte, l.destinatario) === par(quemChama, outro) && viva(l),
@@ -153,6 +196,7 @@ export function conexoesEmMemoria(
         pedinte: pedido.quemPede,
         destinatario: pedido.alvo,
         estado: 'pending',
+        origem: pedido.origem,
         pedidoEm: agora,
         expiraEm: agora + 30 * DIA,
         descansoAte: null,
@@ -254,6 +298,9 @@ export function conexoesEmMemoria(
       linhas.push({
         ref,
         estado: 'pending',
+        // O padrão é `invite_link`, que é o caminho que de fato existe em
+        // produção desde 20/10/2026. Quem semeia pode sobrescrever.
+        origem: 'invite_link',
         pedidoEm: agora - DIA,
         expiraEm: agora + 29 * DIA,
         descansoAte: null,

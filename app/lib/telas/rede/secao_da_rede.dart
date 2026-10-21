@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/contadores_api.dart';
+import '../../api/pessoas_api.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../sessao/controlador_de_sessao.dart';
@@ -14,8 +15,9 @@ import '../abas.dart';
 import '../casca_com_abas.dart';
 import '../perto/lista_do_diretorio.dart';
 import 'agenda_da_rede.dart';
+import 'busca_de_pessoas.dart';
 
-/// As DUAS abas da secao `Rede` reunida (decisao do cliente, 19/10/2026).
+/// As TRES abas da secao `Rede` reunida (cliente, 19/10 e 21/10/2026).
 ///
 /// `Eventos` primeiro porque e o conteudo historico da secao e o que o
 /// arranque do app abre (`Rotas.destinoDoArranque`). `Comunidade` e o que era
@@ -28,7 +30,40 @@ import 'agenda_da_rede.dart';
 /// largura do proprio texto (ver `isScrollable` em [SecaoDaRede]).
 enum AbaDaSecaoRede {
   eventos('Eventos'),
-  comunidade('Comunidade');
+  comunidade('Comunidade'),
+
+  /// A ABA QUE ENTROU EM 21/10/2026, e o pedido dele e literal: *"na aba rede,
+  /// temos que ter uma aba de usuarios, e o campo buscar para encontrar e
+  /// adicionar as pessoas"*.
+  ///
+  /// **O ROTULO CABE, E A ABA NASCE CORTADA -- as duas coisas sao verdade, e a
+  /// segunda e que decide o desenho.** Medido com a `Inter SemiBold` em 18 dp,
+  /// que e o estilo real do rotulo de aba desta tela:
+  ///
+  ///   `Eventos`      69,81 dp de texto -> 101,81 dp de slot
+  ///   `Comunidade`  110,62 dp de texto -> 142,62 dp de slot
+  ///   `Usuarios`     77,31 dp de texto -> 109,31 dp de slot
+  ///
+  /// `Usuarios` pede **33,31 dp menos** que `Comunidade` e a 200% de escala
+  /// continua sem reticencia -- entao ele cabe, e a barra rolavel desta secao
+  /// nao corta nenhum dos tres.
+  ///
+  /// O que ele **nao** tem e visibilidade inicial. Os tres slots somam
+  /// **353,74 dp**. Em 320 dp o corpo tem 288 dp de area util e a terceira aba
+  /// comeca em 244,43: aparecem **43,57 dos 109,31 dp**, cerca de 40% do
+  /// rotulo. A 200% de escala ela comeca em 424,86 dp de um viewport de 288 --
+  /// **inteira fora da tela**.
+  ///
+  /// **E e por isso que o botao do Mural vazio nao e enfeite: ele e o caminho
+  /// real.** A aba que destrava o produto nao pode depender de a pessoa
+  /// descobrir que a barra rola. Os dois caminhos existem, e o do Mural e o que
+  /// todo mundo atravessa no primeiro dia.
+  ///
+  /// **Terceira e nao segunda**, e a ordem foi escolhida: trocar com
+  /// `Comunidade` poria `Usuarios` inteira na tela, mas empurraria o diretorio
+  /// -- que e conteudo publico, alcancavel sem conta -- para tras de uma aba
+  /// que exige conta.
+  usuarios('Usuários');
 
   const AbaDaSecaoRede(this.rotulo);
 
@@ -105,7 +140,14 @@ enum AbaDaSecaoRede {
 /// muda, que e o que `agenda_da_rede.dart` e `corpo_do_perto.dart` tinham de
 /// fazer.
 class SecaoDaRede extends StatefulWidget {
-  const SecaoDaRede({super.key});
+  const SecaoDaRede({super.key, this.abaInicial});
+
+  /// A aba em que a secao abre, quando o endereco pede uma.
+  ///
+  /// Nulo e o normal, e abre em `Eventos`. Quem manda valor e o estado vazio do
+  /// Mural, por `Rotas.redeNaBuscaDePessoas` -- ver a conta dos 40% de rotulo
+  /// visivel em [AbaDaSecaoRede.usuarios].
+  final AbaDaSecaoRede? abaInicial;
 
   /// O rotulo da porta de `Minhas indicações`, no pe da aba `Comunidade`.
   ///
@@ -120,12 +162,23 @@ class SecaoDaRede extends StatefulWidget {
 
 class _SecaoDaRedeState extends State<SecaoDaRede>
     with SingleTickerProviderStateMixin {
-  AbaDaSecaoRede _aba = AbaDaSecaoRede.eventos;
+  late AbaDaSecaoRede _aba = widget.abaInicial ?? AbaDaSecaoRede.eventos;
 
-  /// Comprimento FIXO 2: as duas abas existem em todo estado de sessao. Ver a
+  /// Comprimento FIXO 3: as tres abas existem em todo estado de sessao. Ver a
   /// prosa de [SecaoDaRede] -- e por isso que nao ha aqui o
   /// `_controladorDasAbas` que a agenda e o corpo do `Perto` precisavam.
-  late final TabController _abas = TabController(length: 2, vsync: this);
+  ///
+  /// **`Usuarios` tambem nao vai e vem com a sessao**, e a razao e diferente
+  /// das outras duas: a rota dela **exige** conta, mas a aba desenha
+  /// `ConviteParaEntrar` no proprio corpo quando nao ha sessao. Esconder a aba
+  /// faria a secao ter duas abas para quem nao entrou e tres para quem entrou,
+  /// e o `TabController` voltaria a precisar de refazimento a cada troca de
+  /// sessao -- que e exatamente o que a unificacao de 19/10 tirou daqui.
+  late final TabController _abas = TabController(
+    length: 3,
+    initialIndex: _aba.index,
+    vsync: this,
+  );
 
   @override
   void initState() {
@@ -142,6 +195,25 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _marcarVista(_aba);
     });
+  }
+
+  /// O endereco pediu outra aba **com a secao ja montada**.
+  ///
+  /// Acontece quando alguem toca em `Buscar pessoas` no Mural vazio: o ramo da
+  /// `Rede` ja esta na arvore, e o `go` troca o endereco sem remontar o estado.
+  /// Sem isto a secao abriria em `Eventos` e o botao do Mural levaria a pessoa
+  /// para a aba errada -- que e o defeito que o botao existe para consertar.
+  ///
+  /// **Nulo nao volta para `Eventos`.** Quem sai da `Rede` e volta pela barra
+  /// de baixo chega sem `?aba=`, e jogar a pessoa de volta na primeira aba
+  /// apagaria a navegacao que ela acabou de fazer.
+  @override
+  void didUpdateWidget(SecaoDaRede anterior) {
+    super.didUpdateWidget(anterior);
+    final pedida = widget.abaInicial;
+    if (pedida == null || pedida == _aba) return;
+    _abas.index = pedida.index;
+    _trocarAba(pedida);
   }
 
   @override
@@ -168,10 +240,22 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
   /// dentro de `marcarSecaoVista`**, pelo mesmo motivo da lista de perdidos:
   /// isto nao e dado que a pessoa pediu.
   void _marcarVista(AbaDaSecaoRede aba) {
+    // **`Usuarios` NAO TEM CONTADOR, e a ausencia e do contrato.**
+    // `SectionCounters` declara tres numeros -- perdidos, eventos e diretorio
+    // --, e nenhum deles e "pessoas novas". Inventar um codigo de fio aqui
+    // mandaria ao servidor um valor que o contrato nao declara, e o portao de
+    // conformidade reprova.
+    //
+    // **E nao e lacuna a preencher depois**: "quantas pessoas novas entraram no
+    // Bichu" e uma contagem da base inteira, que e justamente o que a reversao
+    // da busca nao autorizou -- um selo com esse numero seria a listagem de
+    // pessoas reduzida a um inteiro.
     final secao = switch (aba) {
       AbaDaSecaoRede.eventos => SecaoComContador.eventosDaRede,
       AbaDaSecaoRede.comunidade => SecaoComContador.comunidadeDaRede,
+      AbaDaSecaoRede.usuarios => null,
     };
+    if (secao == null) return;
     unawaited(Escopo.of(context).contadores.marcarSecaoVista(secao));
   }
 
@@ -312,6 +396,20 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
           rotulo: ListaDoDiretorio.rotuloDeIndicar,
           aoTocar: () => context.push(Rotas.sugerirProfissional),
         );
+      case AbaDaSecaoRede.usuarios:
+        // **NAO HA ACAO FLUTUANTE EM `Usuarios`, e a ausencia e desenho.**
+        //
+        // A acao desta aba e o proprio campo de busca, que fica no topo do
+        // corpo e ocupa a largura toda. Um alvo de 56 dp no canto teria de
+        // levar a alguma coisa, e as duas candidatas nao servem: "buscar" ja
+        // esta na tela e seria a mesma porta em dois lugares, e "convidar
+        // alguem" mora no AuAu, numa tela empilhada -- acao flutuante que
+        // saltasse para outra secao e o que a regra 4 do portao da gaveta
+        // proibe.
+        //
+        // E o slot vazio nao custa nada: `TelaDeAba.acaoDeCriar` e anulavel, e
+        // `Pets` ja passou por aqui quando o leitor de QR saiu da barra dela.
+        return null;
     }
   }
 
@@ -360,6 +458,22 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
               aoTocar: () => context.push(Rotas.minhasIndicacoes),
             ),
           ],
+        ];
+      case AbaDaSecaoRede.usuarios:
+        // **A ABA DESENHA O MESMO CORPO LOGADO E DESLOGADO**, e quem trata a
+        // ausencia de sessao e a propria `BuscaDePessoas`: a rota responde 401,
+        // a falha chega com `next_action: sign_in`, e o corpo troca para
+        // `ConviteParaEntrar`. Ramificar por `logado` aqui criaria a segunda
+        // regra de "quem pode buscar", e a segunda divergiria da resposta do
+        // servidor no dia em que a sessao expirasse com a aba aberta.
+        final escopo = Escopo.of(context);
+        return <Widget>[
+          BuscaDePessoas(
+            // `PessoasApi` nao mora no `Escopo` -- ela e construida de
+            // `escopo.api`, como `rotas.dart` ja faz para o perfil de pessoa.
+            pessoas: PessoasApi(escopo.api),
+            conexoes: escopo.conexoes,
+          ),
         ];
     }
   }

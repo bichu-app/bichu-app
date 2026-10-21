@@ -357,30 +357,135 @@ void main() {
   // depois de o pacote entrar, e o momento de reprovar e o do `pub add`, nao o
   // da tela. E uma porta, e portas se cobram na porta.
   // -------------------------------------------------------------------------
-  group('nenhum gerador de QR declarado no aplicativo', () {
-    test('o pubspec nao traz pacote que desenhe QR no aparelho', () {
+  // A ISCA DESTE GRUPO FOI **ESTREITADA** EM 21/10/2026, E NAO REMOVIDA.
+  //
+  // O QUE ELA DIZIA: *"nenhum gerador de QR declarado no aplicativo"*, e
+  // reprovava `qr_flutter` no `pubspec.yaml`. O motivo escrito era que *"um
+  // gerador de QR aqui so tem o que codificar se alguem lhe der um
+  // identificador do aparelho -- e os que existem aqui sao internos (`pet.id`)
+  // ou nao sao publicos"*.
+  //
+  // **O INVARIANTE CONTINUA O MESMO; o que mudou foi que passou a existir um
+  // dado que satisfaz a premissa.** O convite de conexao e um segredo ao
+  // portador de 256 bits, criado pelo servidor **para ser mostrado**: nao e
+  // identificador de nada, nao e UUID, nao e derivavel de ninguem e nao viola
+  // o item 6 do ADR-0010 -- ele existe exatamente para viajar.
+  //
+  // E o contrato nao da alternativa: `ConnectionInviteIssued` recusa devolver
+  // imagem **e** recusa devolver URL, com o motivo escrito -- *"devolver URL
+  // absoluta amarraria o convite ao dominio do dia"* -- e termina dizendo
+  // *"quem os monta e a tela"*. Pedir um PNG ao servidor seria pedir que ele
+  // monte o endereco que acabou de recusar montar.
+  //
+  // ENTAO A ISCA FICOU COM TRES CASOS NO LUGAR DE UM, e os tres juntos cobram
+  // mais do que o unico cobrava:
+  //
+  //   1. os OUTROS geradores continuam proibidos -- um pacote por tela e como
+  //      a lista de dependencias cresce sem ninguem decidir;
+  //   2. o gerador aparece em UM arquivo so de `app/lib/`, e e o do convite;
+  //   3. o QR DA PLAQUINHA continua vindo do servidor. Este e o caso que
+  //      importa: ele e o contrapeso, e e ele que impede alguem de
+  //      "simplificar" o PNG do servidor para um gerador local agora que o
+  //      gerador existe no binario.
+  group('o gerador de QR existe para UM dado, e so para ele', () {
+    test('o pubspec nao traz NENHUM outro gerador de QR', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
-      // Os geradores conhecidos do ecossistema. A lista nao precisa ser
-      // exaustiva para a isca servir: ela cobre o que um `pub add qr` acha.
+      // `qr_flutter` saiu desta lista em 21/10/2026, com o motivo no cabecalho
+      // do grupo. `qr:` tambem: ele e a dependencia transitiva de
+      // `qr_flutter`, e declara-la direto criaria a segunda fonte da versao do
+      // codificador.
       const geradores = <String>[
-        'qr_flutter',
         'pretty_qr_code',
         'qr_code_vision',
         'barcode_widget',
-        'qr:',
+        'barcode:',
+        'zxing',
       ];
       for (final pacote in geradores) {
         expect(
           pubspec.contains(pacote),
           isFalse,
-          reason: 'REPROVA: `$pacote` entrou no aplicativo. Um gerador de QR '
-              'aqui so tem o que codificar se alguem lhe der um identificador '
-              'do aparelho -- e os que existem aqui sao internos (`pet.id`) ou '
-              'nao sao publicos. O QR do Bichu carrega `{base}/t/{codigo}` e e '
-              'desenhado pelo servidor, que e quem tem o codigo. ADR-0010, '
-              'item 6, e ADR-0004.',
+          reason: 'REPROVA: `$pacote` entrou no aplicativo. Ja existe um '
+              'gerador de QR aqui (`qr_flutter`, pelo convite de conexao), e '
+              'um segundo nao tem o que codificar: os identificadores deste '
+              'produto sao internos (`pet.id`) ou vem desenhados do servidor.',
         );
       }
+    });
+
+    test('o gerador e usado em UM arquivo so, e e o do convite', () {
+      // PARA DESLIGAR E VER REPROVAR: use `QrImageView` em qualquer outra tela.
+      final usos = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .where((f) => f.readAsStringSync().contains('QrImageView'))
+          .map((f) => f.path)
+          .toList()
+        ..sort();
+
+      expect(
+        usos,
+        <String>['lib/widgets/qr_do_convite.dart'],
+        reason: 'REPROVA: o gerador de QR e usado fora do widget do convite. '
+            'Ele desenha UM dado -- o token do convite --, e qualquer outro '
+            'quadrado deste produto ou vem do servidor ou nao existe.',
+      );
+    });
+
+    test('o QR do convite codifica o TOKEN, e nada mais', () {
+      // Varredura de FONTE e nao de comportamento, pelo mesmo motivo do caso
+      // do `pubspec`: o dado errado chegaria ao quadrado por uma linha nova de
+      // quem escrevesse a proxima tela, e o momento de reprovar e o da linha.
+      final tela = File(
+        'lib/telas/conexoes/convide_tutores.dart',
+      ).readAsStringSync();
+
+      expect(
+        tela.contains('QrDoConvite(token: convite.inviteToken)'),
+        isTrue,
+        reason: 'REPROVA: o que alimenta o QR do convite deixou de ser o '
+            'token da emissao. Se virar um endereco montado na tela, o QR '
+            'passa a apontar para uma pagina que nao existe no site; se virar '
+            'um identificador, e o item 6 do ADR-0010.',
+      );
+      for (final proibido in <String>['petId', 'publicRef', 'userId', '.id}']) {
+        expect(
+          tela.contains(proibido),
+          isFalse,
+          reason: 'REPROVA: a tela do convite menciona `$proibido`. Nenhum '
+              'identificador interno entra num quadrado que outra pessoa '
+              'fotografa (ADR-0010, item 6).',
+        );
+      }
+    });
+
+    test('CONTRAPESO: o QR da plaquinha continua vindo do servidor', () {
+      // **Este caso e o que mais importa do grupo.** Agora que ha um gerador
+      // no binario, a tentacao de trocar o PNG do servidor por ele passou a
+      // existir -- e o cabecalho de `qr_da_plaquinha.dart` pede, com todas as
+      // letras, que ninguem faca isso, por duas medicoes que sao dela: o
+      // leitor do proprio app exige a forma da URL, e a camera comum do
+      // celular abre a pagina de quem achou o pet.
+      final widget = File(
+        'lib/widgets/qr_da_plaquinha.dart',
+      ).readAsStringSync();
+
+      expect(
+        widget.contains('QrImageView'),
+        isFalse,
+        reason: 'REPROVA: o QR da plaquinha passou a ser desenhado no '
+            'aparelho. Ele e `GET /v1/pets/{petId}/tags/{tagId}/qr.png`, e o '
+            'servidor emite a imagem e a linha legivel da MESMA funcao -- de '
+            'proposito, para as duas nunca apontarem para lugares diferentes '
+            'depois da prensa.',
+      );
+      expect(
+        widget.contains('ImageProvider'),
+        isTrue,
+        reason: 'REPROVA: o widget da plaquinha deixou de receber imagem '
+            'pronta.',
+      );
     });
   });
 }

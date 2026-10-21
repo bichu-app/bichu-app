@@ -59,6 +59,24 @@ const List<String> arquivosDaHistoria = <String>[
   // peca em que um hex ou um 12 solto entram sem ninguem notar.
   'lib/widgets/item_de_menu.dart',
   'lib/telas/perfil/tela_dados_pessoais.dart',
+  // OS TRES CAMINHOS DE CONEXAO (21/10/2026). O cartao de resultado da busca e
+  // a tela do convite sao pecas novas com circulo colorido, fundo proprio,
+  // selo de marco alcancado e trilha de progresso -- exatamente onde um hex ou
+  // um 12 solto entram sem ninguem notar.
+  'lib/telas/rede/busca_de_pessoas.dart',
+  'lib/telas/rede/cartao_de_pessoa_encontrada.dart',
+  'lib/telas/conexoes/convide_tutores.dart',
+  // **`qr_do_convite.dart` NAO entra nesta lista, e a ausencia e deliberada.**
+  // Ele e o unico widget novo que escreve cor a mao, e as duas cores dele sao
+  // LEGITIMAS: preto e branco puros, cor por funcao optica do paragrafo 19.5.1
+  // -- quem le o quadrado e uma camera de outro aparelho. Por o arquivo aqui
+  // faria este portao reprovar o que o outro portao
+  // (`test/a11y/prosa_dos_tokens_test.dart`) declara e cobra pelo numero: a
+  // prosa de `design/tokens.json` diz QUATRO pontos de Dart, e dois deles sao
+  // os dele.
+  //
+  // O precedente e o mesmo: `lib/telas/pet/tela_pet_cadastrado.dart`, que tem
+  // os outros dois pontos, tambem nao esta aqui.
 ];
 
 /// Um achado do portao: o arquivo, a linha e o motivo.

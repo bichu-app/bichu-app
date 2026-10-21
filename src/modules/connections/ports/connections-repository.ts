@@ -62,6 +62,22 @@ export interface ConnectionsRepository {
   /** Quantas conexões aceitas tem esta conta. Para o teto do OUTRO lado. */
   contarConexoes(pessoa: UserId): Promise<number>;
 
+  /**
+   * **Quantos tutores entraram pelo convite desta conta e viraram conexão
+   * aceita** — o número da seção `Convide tutores` (cliente, 21/10/2026).
+   *
+   * A regra são **dois sinais**, e os dois moram na cláusula `WHERE` da
+   * consulta: conexão `accepted` com esta conta no destino e `origin` de
+   * convite, **e** a outra pessoa com ao menos um pet de foto `ready`.
+   *
+   * **Método próprio e não um campo a mais em [contagens]**, e a razão é de
+   * custo: aquela consulta alimenta os TETOS, que são lidos em cada pedido de
+   * conexão, e este número precisa de uma junção com `pets` e `pet_photos` que
+   * nenhum teto usa. Pendurá-lo lá faria toda escrita pagar por um número que
+   * só uma tela lê.
+   */
+  contarConvidadosQueEntraram(pessoa: UserId): Promise<number>;
+
   /** A aresta do par, em qualquer direção, na perspectiva de `quemChama`. */
   arestaDoPar(quemChama: UserId, outro: UserId, agora: Instant): Promise<ArestaGuardada | undefined>;
 

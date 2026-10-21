@@ -52,8 +52,25 @@ export type EstadoGuardado = 'pending' | 'accepted' | 'declined';
  */
 export type EstadoNoApp = 'pending_sent' | 'pending_received' | 'connected';
 
-/** De onde o pedido nasceu. Lista fechada; ver a migração. */
-export type OrigemDoPedido = 'anchored_case' | 'anchored_event' | 'presence_code';
+/**
+ * De onde o pedido nasceu. Lista fechada em **cinco**; ver a migração
+ * `20261020000012`, que é onde a decisão do cliente está escrita.
+ *
+ * Os três primeiros são de 18/10/2026 e **nenhum deles foi construído**
+ * (fatias H′ e H″). Os dois últimos entraram em 20/10/2026 e **são os que
+ * existem**: `invite_link` (o convite emitido pelo dono, que alimenta o link
+ * **e** o QR — os dois carregam o mesmo token) e `people_search` (a busca por
+ * nome ou apelido).
+ *
+ * Cada valor corresponde a qual **credencial** a requisição carregou, e é só por
+ * isso que ele é verificável pelo servidor em vez de palpite.
+ */
+export type OrigemDoPedido =
+  | 'anchored_case'
+  | 'anchored_event'
+  | 'presence_code'
+  | 'invite_link'
+  | 'people_search';
 
 /**
  * Como a outra pessoa é NOMEADA numa aresta.

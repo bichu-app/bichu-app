@@ -6,6 +6,7 @@ import 'api/auth_api.dart';
 import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/conexoes_api.dart';
+import 'api/convites_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
@@ -43,6 +44,7 @@ class Escopo extends InheritedWidget {
     required this.pets,
     required this.casos,
     required this.conexoes,
+    required this.convites,
     required this.me,
     required this.diretorio,
     required this.loja,
@@ -87,6 +89,16 @@ class Escopo extends InheritedWidget {
   /// os ramos unidos, ela mora onde as outras moram -- uma porta por rota, e
   /// nao uma por tela.
   final ConexoesApi conexoes;
+
+  /// As rotas `tags: [connection-invites]` do contrato: emitir, revogar e
+  /// resolver o convite do proprio perfil.
+  ///
+  /// Fica no escopo pela mesma razao das outras camadas de API, e por uma a
+  /// mais que e desta porta: **quem a consome sao DUAS telas distantes** -- a
+  /// de convidar, que emite, e o LEITOR DE QR, que resolve. Construir uma
+  /// instancia dentro de cada uma seria duas portas para a mesma rota, e o
+  /// teste de widget perderia o ponto de injecao.
+  final ConvitesApi convites;
 
   /// As rotas `tags: [me]` do contrato: os dados pessoais do tutor.
   ///
