@@ -473,6 +473,52 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
   });
 
   /**
+   * FATO 6, A MEDIÇÃO QUE ENXERGA A ORDEM.
+   *
+   * O caso acima (conversa bloqueada + foto `pronta`) **não** mede a ordem, e
+   * isso foi medido: movendo a resolução da foto para ANTES do guarda de estado,
+   * a suíte ficou 3688 passando e 0 reprovando. O motivo é simples quando se vê
+   * — com a foto `pronta`, resolver antes ou depois dá o mesmo desfecho, porque
+   * a resolução não levanta.
+   *
+   * A ordem só é observável quando a foto levantaria um erro DIFERENTE do do
+   * estado. Então: conversa bloqueada **e** higiene `pendente`.
+   *
+   *   - ordem certa  -> `conversation-closed` (410): a pessoa soube que foi
+   *     bloqueada;
+   *   - ordem errada -> `photo-not-ready` (409): a pessoa é mandada a tentar de
+   *     novo um envio que **nunca** vai ser aceito, e nunca descobre o motivo
+   *     verdadeiro.
+   *
+   * O segundo é pior do que parece: ele transforma um bloqueio — que é uma
+   * decisão de alguém que está com medo — num erro técnico transitório, e
+   * convida o aplicativo a repetir a chamada em laço.
+   */
+  void it('conversa BLOQUEADA com foto PENDENTE responde pelo BLOQUEIO, e não pela foto', async () => {
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor', bloqueadaEm: comoData(AGORA) },
+      foto: { situacao: 'pendente' },
+    });
+
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(
+          erro.problemType,
+          'conversation-closed',
+          'a resolução da foto correu ANTES do guarda de estado: a conversa ' +
+            'bloqueada respondeu `' +
+            erro.problemType +
+            '`, mandando a pessoa tentar de novo um envio que nunca será aceito',
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, []);
+  });
+
+  /**
    * CONTROLE POSITIVO: o envio SEM foto continua funcionando, em todos os
    * estados de higiene. A redacao do texto nao foi tocada.
    *
