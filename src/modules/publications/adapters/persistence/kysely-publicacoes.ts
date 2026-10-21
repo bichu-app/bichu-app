@@ -67,6 +67,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import type { Database } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
@@ -121,11 +122,14 @@ const PROPOSITO_DA_FOTO_DE_PESSOA: PropositoDaImagem = 'user_photo';
  * **O SELO DE VALIDADO do autor**, derivado no SQL a partir do alias `a`
  * (`users`), que as tres leituras de autor deste arquivo já têm.
  *
- * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`: a **MESMA**
- * condição de `kysely-canal-verificado-do-chamador.ts` e de
- * `estadoParaCriarEncontro`, e a cópia é deliberada — duas definições de
- * "validado" são duas réguas, e a mesma conta sairia validada numa tela e não na
- * outra. Na prática isso é e-mail: nada em `src/` grava `phone_verified_at`.
+ * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` vem da
+ * **FONTE ÚNICA** (`canalDeContatoConfirmadoNoSql`, em
+ * `shared/db/canal-de-contato-confirmado.ts`). Este cabeçalho dizia antes que a
+ * condição era *cópia* da de `kysely-canal-verificado-do-chamador.ts` e que a
+ * cópia era deliberada; o motivo que ele dava — duas definições de "validado"
+ * são duas réguas — era exatamente o motivo para a cópia **não** existir, e em
+ * 21/10/2026 o cliente mandou unificar. Na prática isso é e-mail: nada em
+ * `src/` grava `phone_verified_at`.
  *
  * **Escrito UMA vez e usado nas três leituras** (linha do tempo, lista de
  * comentários e o autor do comentário recém-criado). Três cópias da expressão
@@ -133,11 +137,10 @@ const PROPOSITO_DA_FOTO_DE_PESSOA: PropositoDaImagem = 'user_photo';
  * apareceria diferente dos outros da mesma lista — que é a razão escrita no
  * cabeçalho de `autorDoComentario`.
  *
- * **`COALESCE` não é necessário e por isso não está aqui**: `a` vem de
- * `INNER JOIN users`, então a linha existe, e `x IS NOT NULL OR y IS NOT NULL`
- * é `boolean` e nunca `NULL`.
+ * **`COALESCE` não é necessário**, e o motivo está escrito na fonte única: `a`
+ * vem de `INNER JOIN users`, então a linha existe.
  */
-const CANAL_VERIFICADO_DO_AUTOR = sql<boolean>`(a.email_verified_at IS NOT NULL OR a.phone_verified_at IS NOT NULL)`;
+const CANAL_VERIFICADO_DO_AUTOR = canalDeContatoConfirmadoNoSql('a');
 
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

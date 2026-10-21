@@ -55,31 +55,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'palavras_proibidas_no_rotulo.dart';
+
 const String _urlBase = 'http://localhost:3000';
 const String _refDaPublicacao = 'AaBbCcDdEeFfGgHhIiJjK1';
 const String _refDoComentario = 'CcDdEeFfGgHhIiJjKkLlM1';
-
-/// As palavras que o rotulo acessivel do selo **nao pode conter**, em nenhuma
-/// forma.
-///
-/// Nao e zelo de redacao: quem usa leitor de tela recebe SO o rotulo, e o
-/// booleano prova um canal de contato confirmado — nada sobre documento, nada
-/// sobre identidade, nada sobre conferencia humana. `confirmado` **nao** esta
-/// nesta lista de proposito, porque e exatamente o que o dado prova; o que esta
-/// e "confirmado pela equipe", que afirma um revisor que nao existe.
-const List<String> _palavrasProibidasNoRotulo = <String>[
-  'verificad', // verificado, verificada, verificação
-  'confiáve', // confiável
-  'confiave',
-  'confiança',
-  'confianca',
-  'autentic', // autenticado
-  'identidade',
-  'documento',
-  'pela equipe',
-  'pela nossa equipe',
-  'oficial',
-];
 
 /// Um contador de montagem, para que cada `pumpWidget` receba uma chave NOVA.
 /// Ver o comentario dentro de `_montarOMural`.
@@ -427,18 +407,12 @@ void main() {
       // glifo e o que ele pediu; o ROTULO diz o que o dado prova, porque quem usa
       // leitor de tela recebe so o rotulo e nao tem o glifo para interpretar.
       await _montarOMural(tester, publicacao: _publicacao(validado: true));
-      final String rotulo = _rotuloDoSelo(tester).toLowerCase();
-      for (final String proibida in _palavrasProibidasNoRotulo) {
-        expect(
-          rotulo.contains(proibida),
-          isFalse,
-          reason:
-              'o rotulo acessivel do selo contem "$proibida". O booleano prova um canal '
-              'de contato confirmado (hoje, e-mail) e NADA sobre documento, identidade '
-              'ou conferencia humana — e um rotulo que afirme isso faz o produto '
-              'assinar por uma conferencia que ninguem faz.',
-        );
-      }
+      // **A VARREDURA MORA EM `palavras_proibidas_no_rotulo.dart`** desde
+      // 21/10/2026, e nao e arrumacao: a tela de `Meus dados` tambem tem
+      // rotulo de selo (era "Conta validada", que prometia demais) e ela
+      // chama ESTA varredura. Duas listas seriam duas definicoes de "rotulo
+      // honesto".
+      conferirRotuloDoSelo(_rotuloDoSelo(tester), onde: 'o Mural');
     });
 
     test('ISCA DA ISCA: a varredura de palavras REPROVA um rotulo mentiroso', () {
@@ -451,18 +425,21 @@ void main() {
         'Identidade confirmada',
         'Confirmado pela equipe',
         'Perfil oficial',
+        // **O rotulo que a tela de `Meus dados` usava ate 21/10/2026.** Ele
+        // entra aqui porque foi o cliente que o reprovou pelo nome, e sem
+        // esta linha a palavra "validada" poderia voltar a qualquer uma das
+        // duas telas sem nada acusar.
+        'Conta validada',
       ]) {
-        final String baixo = mentiroso.toLowerCase();
         expect(
-          _palavrasProibidasNoRotulo.any(baixo.contains),
+          rotuloPrometeDemais(mentiroso),
           isTrue,
           reason: 'a varredura nao enxerga "$mentiroso": ela nao mede nada',
         );
       }
       // E o rotulo VERDADEIRO passa pela mesma varredura. Sem esta metade a
       // lista poderia proibir "confirmado" e reprovar o rotulo certo.
-      final String verdadeiro = SeloDeValidado.rotulo.toLowerCase();
-      expect(_palavrasProibidasNoRotulo.any(verdadeiro.contains), isFalse);
+      expect(rotuloPrometeDemais(SeloDeValidado.rotulo), isFalse);
     });
 
     testWidgets('o selo e uma parada de foco SEPARADA do nome', (tester) async {

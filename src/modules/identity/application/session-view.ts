@@ -9,6 +9,7 @@
  */
 import type { Instant } from '../../../shared/types/brands.js';
 import type { Conta } from '../ports/identity-repository.js';
+import { canalDeContatoConfirmado } from '../../../shared/db/canal-de-contato-confirmado.js';
 
 export type CampoPendente = 'email_verification' | 'phone' | 'display_name' | 'reference_area';
 
@@ -29,6 +30,7 @@ export interface MeView {
   } | null;
   pending_profile_fields: CampoPendente[];
   can_open_lost_case: boolean;
+  contact_channel_verified: boolean;
   created_at: string;
 }
 
@@ -76,7 +78,15 @@ export function projetarConta(conta: Conta): MeView {
     pending_profile_fields: pendentes,
     // Falso quando nenhum canal de contato está verificado: os tutores por perto
     // vão receber a foto, e é pelo e-mail do tutor que alguém consegue avisá-lo.
-    can_open_lost_case: conta.emailVerifiedAt !== null || conta.phoneVerifiedAt !== null,
+    //
+    // **A condição saiu daqui em 21/10/2026**: era uma segunda escrita da régua,
+    // e a fonte é `canalDeContatoConfirmado`.
+    can_open_lost_case: canalDeContatoConfirmado(conta),
+    // **O SELO DE VALIDADO, pela MESMA régua que os outros veem.** Ver o
+    // cabeçalho de `contact_channel_verified` em `resposta-do-perfil.ts`: este
+    // campo existe para que o dono e o terceiro nunca discordem sobre a mesma
+    // conta, e `email_verified` fica onde estava, dizendo o que o nome dele diz.
+    contact_channel_verified: canalDeContatoConfirmado(conta),
     created_at: conta.createdAt.toISOString(),
   };
 }

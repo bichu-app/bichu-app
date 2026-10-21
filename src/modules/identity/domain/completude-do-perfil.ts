@@ -29,6 +29,8 @@
  * a mediação funcionar.
  */
 
+import { canalDeContatoConfirmado } from '../../../shared/db/canal-de-contato-confirmado.js';
+
 export type CampoPendente = 'email_verification' | 'phone' | 'display_name' | 'reference_area';
 
 export interface PerfilParaConferir {
@@ -66,7 +68,15 @@ export function camposPendentesDoPerfil(perfil: PerfilParaConferir): CampoPenden
  * Telefone preenchido e não verificado não conta. Contato não verificado é
  * contato que não sabemos se alcança alguém, e é justamente o caso em que o
  * alerta cai no vazio.
+ *
+ * **A condição não está escrita aqui**, e desde 21/10/2026 não pode estar:
+ * `canalDeContatoConfirmado` (`shared/db/canal-de-contato-confirmado.ts`) é a
+ * fonte única da régua, e este bloqueio é um dos seus consumidores. Esta função
+ * continua existindo porque o NOME é o que a rota de perdido cobra — "pode
+ * abrir caso" é a pergunta de produto, e "tem canal confirmado" é a régua que a
+ * responde hoje. Se um dia o bloqueio passar a exigir telefone, é esta função
+ * que muda, e o selo não muda com ela.
  */
 export function podeAbrirCasoDePerdido(perfil: PerfilParaConferir): boolean {
-  return perfil.emailVerifiedAt !== null || perfil.phoneVerifiedAt !== null;
+  return canalDeContatoConfirmado(perfil);
 }

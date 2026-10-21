@@ -46,6 +46,7 @@
 import { randomBytes } from 'node:crypto';
 import { sql, type Expression, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import type { EstruturaDoLocal, IdadeDosCaes, ItemParaLevar } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { EncontroDaRede, PublicacaoVisivel } from '../../domain/encontro-da-rede.js';
@@ -788,11 +789,13 @@ export class KyselyNetworkRepository implements NetworkRepository {
   /**
    * O estado da conta para criar encontro, numa consulta so.
    *
-   * **A regua do canal verificado e COPIADA de `estadoParaAbertura`** de
-   * `kysely-lost-case-repository.ts`, o mesmo `EXISTS` com o mesmo `OR`:
-   * e-mail OU telefone verificado, e preenchido-e-nao-verificado nao conta. Na
-   * pratica isso e e-mail, porque nada em `src/` grava `phone_verified_at` --
-   * a coluna existe e so e zerada.
+   * **A regua do canal verificado vem da FONTE UNICA**
+   * (`canalDeContatoConfirmadoNoSql`, em
+   * `shared/db/canal-de-contato-confirmado.ts`), e nao mais copiada de
+   * `estadoParaAbertura`: e-mail OU telefone verificado, e
+   * preenchido-e-nao-verificado nao conta. Na pratica isso e e-mail, porque
+   * nada em `src/` grava `phone_verified_at` -- a coluna existe e so e
+   * zerada.
    *
    * A contagem do teto esta na mesma consulta e nao num `SELECT` depois: as
    * duas respostas decidem a mesma requisicao, e a pessoa esta esperando na
@@ -807,7 +810,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
         EXISTS (
           SELECT 1 FROM users u
            WHERE u.id = ${chamador}::uuid
-             AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
+             AND ${canalDeContatoConfirmadoNoSql('u')}
         ) AS tem_canal,
         network_events_ativos_do_autor(${chamador}::uuid, ${quando}::timestamptz) AS ativos
     `.execute(this.db);

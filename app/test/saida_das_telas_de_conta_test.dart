@@ -75,6 +75,7 @@ void main() {
           id: 'usuario-de-teste',
           email: 'marina@exemplo.com.br',
           emailVerificado: false,
+          canalConfirmado: false,
           pendencias: <PendenciaDeCadastro>[
             PendenciaDeCadastro.verificacaoDeEmail,
           ],

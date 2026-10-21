@@ -7138,7 +7138,51 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
+            /**
+             * @description **O e-mail DESTA conta foi confirmado.** E so sobre o e-mail: ele e
+             *     `users.email_verified_at IS NOT NULL`, e nada mais.
+             *
+             *     **NAO e o selo de validado** -- isso e
+             *     `contact_channel_verified`, logo abaixo. Ate 21/10/2026 este campo
+             *     fazia os dois papeis, e era por ele que o selo do DONO acendia; a
+             *     regua do selo do DONO era entao e-mail, e a do selo que os OUTROS
+             *     veem era e-mail OU telefone. Elas coincidiam porque nada grava
+             *     `phone_verified_at` -- no dia em que telefone confirmar, a mesma
+             *     conta apareceria validada para os outros e nao para si.
+             *
+             *     O cliente decidiu unificar em 21/10/2026, e o campo que o selo le
+             *     passou a ser `contact_channel_verified`. **Este campo nao foi
+             *     renomeado nem redefinido**: campo com nome que fala de e-mail tem de
+             *     responder sobre e-mail. Quem o consome e a linha "E-mail confirmado
+             *     / E-mail nao confirmado" ao lado do endereco, na tela de dados
+             *     pessoais, e a pendencia `email_verification`.
+             */
             email_verified: boolean;
+            /**
+             * @description **O SELO DE VALIDADO DO DONO**, e a MESMA definicao de
+             *     `PublicationAuthor.contact_channel_verified`:
+             *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
+             *
+             *     **ENTROU EM 21/10/2026 por decisao do cliente**, literal:
+             *     *"Unificar agora, nas duas -- a mesma regua (e-mail OU telefone) nos
+             *     dois lugares, antes de telefone existir."* Antes dele o dono lia
+             *     `email_verified`, que e so e-mail, e os outros liam
+             *     `contact_channel_verified`, que e e-mail OU telefone: duas reguas
+             *     para o mesmo selo, invisiveis so porque `phone_verified_at` nunca e
+             *     gravado.
+             *
+             *     **O mesmo NOME dos tres schemas de terceiro**
+             *     (`PublicationAuthor`, `PersonProfile` e `ConnectionPerson`) e nao
+             *     um nome novo: dois nomes para a mesma regua sao o caminho de volta
+             *     para duas reguas. A derivacao tem UMA fonte no servidor
+             *     (`shared/db/canal-de-contato-confirmado.ts`).
+             *
+             *     **Nao anulavel, so o booleano, e `false` nao desenha nada.** O que
+             *     ele prova esta escrito por extenso em `PublicationAuthor`, e nao se
+             *     repete aqui para que exista UM lugar onde isso muda. Em particular:
+             *     **nao prova documento, identidade nem conferencia humana**.
+             */
+            contact_channel_verified: boolean;
             /**
              * Format: email
              * @description Endereco novo aguardando confirmacao, quando existe troca em curso.

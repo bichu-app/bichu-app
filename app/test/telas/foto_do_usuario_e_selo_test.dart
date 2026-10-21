@@ -10,14 +10,28 @@
 // ---------------------------------------------------------------------------
 // POR QUE O CASO DO SELO TEM CONTRAPESO, E POR QUE ELE E OBRIGATORIO
 // ---------------------------------------------------------------------------
-// O selo e `Me.email_verified`. Um caso que so afirmasse "com a conta
-// validada o selo aparece" ficaria **verde com o selo desenhado SEMPRE** --
-// um `if (true)` passaria, e um selo constante e exatamente o defeito que o
+// O selo e `Me.contact_channel_verified`. Um caso que so afirmasse "com a
+// conta validada o selo aparece" ficaria **verde com o selo desenhado SEMPRE**
+// -- um `if (true)` passaria, e um selo constante e exatamente o defeito que o
 // cliente notaria depois (ele pediu o selo *"se ele estiver validado"*).
 //
 // Entao o par e: a MESMA foto, a MESMA tela, em duas contas que diferem em UM
-// campo. Com `email_verified: true` o selo esta la; com `false` ele nao esta.
-// Nenhum valor fixo passa nos dois.
+// campo. Com `contact_channel_verified: true` o selo esta la; com `false` ele
+// nao esta. Nenhum valor fixo passa nos dois.
+//
+// ---------------------------------------------------------------------------
+// A REGUA E A MESMA DOS OUTROS, E O CASO QUE PROVA ISSO FINGE O FUTURO
+// ---------------------------------------------------------------------------
+// **Era `Me.email_verified` ate 21/10/2026**, e aquilo era uma regua so de
+// e-mail, enquanto `contact_channel_verified` -- o selo que os OUTROS veem --
+// e e-mail OU telefone. As duas coincidiam porque nada no servidor grava
+// `phone_verified_at`.
+//
+// O cliente mandou unificar: *"Unificar agora, nas duas -- a mesma regua
+// (e-mail OU telefone) nos dois lugares, antes de telefone existir."* O caso
+// `REGUAS QUE NAO DIVERGEM` deste arquivo e o que prende a decisao: ele monta
+// a conta que HOJE nao existe (telefone confirmado, e-mail nao) e exige que o
+// dono veja o selo. Com o campo antigo ele reprova.
 //
 // ---------------------------------------------------------------------------
 // NADA AQUI FOI VISTO EM APARELHO
@@ -36,11 +50,13 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:bichu/widgets/previa_da_foto.dart';
+import 'package:bichu/widgets/selo_de_validado.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'ajuda_de_tela.dart';
+import '../widgets/palavras_proibidas_no_rotulo.dart';
 import 'imagem_do_profissional_test.dart'
     show cacheWidthDe, imagensDeRedeEm, urlDoOriginal, urlPedidaPor;
 
@@ -66,6 +82,8 @@ const String uploadId = 'up-foto-do-usuario-1';
 /// recusado" -- ver o grupo `o envio da propria foto sem nome na conta`.
 Map<String, dynamic> me({
   bool validado = true,
+  bool? emailConfirmado,
+  bool telefoneConfirmado = false,
   String? urlDaFoto,
   String? statusDaFoto,
   bool semCampoDeFoto = false,
@@ -75,10 +93,17 @@ Map<String, dynamic> me({
   return <String, dynamic>{
     'id': 'u-1',
     'email': 'marina@exemplo.com.br',
-    'email_verified': validado,
+    // **AS DUAS REGUAS, e elas sao campos DIFERENTES do contrato.**
+    //
+    // `email_verified` fala do e-mail e so dele; `contact_channel_verified` e
+    // o SELO, e e e-mail OU telefone. [validado] move o selo, que e o que
+    // quase todo caso deste arquivo mede; [emailConfirmado] e
+    // [telefoneConfirmado] existem para o caso que separa os dois.
+    'email_verified': emailConfirmado ?? validado,
+    'contact_channel_verified': validado,
     'display_name': semNome ? null : 'Marina',
-    'phone_e164': null,
-    'phone_verified': false,
+    'phone_e164': telefoneConfirmado ? '+5511999998888' : null,
+    'phone_verified': telefoneConfirmado,
     'pending_profile_fields': <String>[],
     'can_open_lost_case': true,
     if (!semCampoDeFoto)
@@ -176,8 +201,40 @@ Future<void> abrirOsDados(
 /// Lido pelo ROTULO do leitor de tela, e nao pelo icone: o icone e desenho e
 /// pode mudar; o rotulo e o que diz a informacao a quem nao ve a tela, e e ele
 /// que carrega a validacao.
-bool temSelo(WidgetTester tester) =>
-    find.bySemanticsLabel('Conta validada').evaluate().isNotEmpty;
+/// O selo, pelo GLIFO -- e o glifo aqui nao e escolha de estilo do teste.
+///
+/// **Ele era lido pelo ROTULO ate 21/10/2026**, e o rotulo era "Conta
+/// validada". Com o rotulo unificado em `SeloDeValidado.rotulo`
+/// ("E-mail confirmado") ele deixou de IDENTIFICAR o selo nesta tela: a linha
+/// de situacao do e-mail, ao lado do endereco, mostra exatamente a mesma frase
+/// -- ela fala do e-mail e o selo fala do canal, e hoje a frase e a mesma.
+///
+/// Entao a identificacao passou para o glifo (`Icons.verified`, o unico desta
+/// tela) e **o rotulo continua sendo medido** -- em [rotuloDoSeloDaTela], que o
+/// le do no de semantica que embrulha o glifo, e no caso de palavras
+/// proibidas. Ler pelo rotulo aqui daria `true` com o selo ausente, o que e
+/// pior do que nao medir.
+///
+/// **A colisao de frase e um achado, nao um detalhe**: quem usa leitor de tela
+/// ouve "E-mail confirmado" duas vezes nesta tela. Qual frase o selo do dono
+/// deve dizer e decisao do cliente, e esta registrada no relatorio da tarefa.
+final Finder _seloDoDono = find.byIcon(Icons.verified);
+
+bool temSelo(WidgetTester tester) => _seloDoDono.evaluate().isNotEmpty;
+
+/// O rotulo acessivel do selo DESTA tela, lido da arvore.
+///
+/// Lido e nao afirmado: e ele que o portao de rotulo compartilhado varre, e um
+/// rotulo escrito a mao aqui mediria a constante do teste e nao a da tela.
+String rotuloDoSeloDaTela(WidgetTester tester) {
+  expect(
+    _seloDoDono,
+    findsOneWidget,
+    reason: 'REPROVA: nao ha selo na arvore para ler o rotulo. Sem ele, a '
+        'varredura de palavras proibidas rodaria sobre nada.',
+  );
+  return tester.getSemantics(_seloDoDono).label;
+}
 
 void main() {
   // -------------------------------------------------------------------------
@@ -198,10 +255,11 @@ void main() {
       expect(
         temSelo(tester),
         isTrue,
-        reason: 'REPROVA: a conta tem `email_verified: true` e a foto esta na '
-            'tela, e o selo nao apareceu. O cliente pediu o selo na foto '
-            '"se ele estiver validado", e a fonte e `Me.email_verified` -- '
-            'nao a imagem, nao um campo novo, nao uma escolha do app.',
+        reason: 'REPROVA: a conta tem `contact_channel_verified: true` e a '
+            'foto esta na tela, e o selo nao apareceu. O cliente pediu o selo '
+            'na foto "se ele estiver validado", e a fonte e '
+            '`Me.contact_channel_verified` -- nao a imagem, nao um campo novo, '
+            'nao uma escolha do app.',
       );
 
       // (2) O CONTRAPESO: a MESMA foto, numa conta que difere em UM campo.
@@ -237,7 +295,7 @@ void main() {
         temSelo(tester),
         isFalse,
         reason: 'REPROVA: o selo apareceu numa conta com '
-            '`email_verified: false`. ISCA: trocar `if (validado && '
+            '`contact_channel_verified: false`. ISCA: trocar `if (validado && '
             'temImagem)` por `if (temImagem)` em `_BlocoDaFoto` '
             '(`app/lib/telas/perfil/tela_dados_pessoais.dart`) compila, enche '
             'a tela de selo e passaria no bloco (1) deste mesmo caso.',
@@ -263,6 +321,90 @@ void main() {
       );
       // E a tela continua inteira: o formulario esta todo la.
       expect(find.text('Salvar'), findsWidgets);
+    });
+
+    // -----------------------------------------------------------------------
+    testWidgets(
+        'ISCA REGUAS QUE NAO DIVERGEM: telefone confirmado e e-mail NAO, e o '
+        'dono ve o selo', (tester) async {
+      // **ESTE E O CASO QUE DEFINE A TAREFA DE 21/10/2026**, e ele finge o
+      // futuro de propósito.
+      //
+      // `contact_channel_verified` e e-mail OU telefone; `email_verified` e so
+      // e-mail. Hoje as duas respostas coincidem em TODA conta, porque nada no
+      // servidor grava `phone_verified_at` -- e e por isso que o defeito era
+      // invisivel. No dia em que telefone confirmar, uma conta assim existe:
+      // os OUTROS a veriam validada e ela nao se veria.
+      //
+      // ISCA: voltar `validado: lido.usuario.canalConfirmado` para
+      // `lido.usuario.emailVerificado` em `tela_dados_pessoais.dart` compila,
+      // passa em TODOS os outros casos deste arquivo, e reprova aqui.
+      await abrirOsDados(
+        tester,
+        rede: servidor(
+          meInicial: me(
+            validado: true,
+            emailConfirmado: false,
+            telefoneConfirmado: true,
+            urlDaFoto: fotoDerivada,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        temSelo(tester),
+        isTrue,
+        reason: 'REPROVA: a conta tem `contact_channel_verified: true` por '
+            'telefone (`email_verified: false`) e o dono NAO ve o selo. Os '
+            'outros veem -- os tres schemas de terceiro leem o mesmo campo. '
+            'Duas reguas para o mesmo selo e o defeito que o cliente mandou '
+            'unificar em 21/10/2026.',
+      );
+
+      // E a linha do E-MAIL continua dizendo a verdade sobre o e-mail: ela le
+      // `email_verified`, que NAO foi redefinido. Sem esta metade, "unificar"
+      // viraria licenca para o campo mentir.
+      expect(
+        find.text('E-mail ainda não confirmado'),
+        findsOneWidget,
+        reason: 'REPROVA: o e-mail desta conta nao foi confirmado e a tela diz '
+            'que foi. `email_verified` fala do e-mail; o selo e outro campo.',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    testWidgets('ISCA: o rotulo do selo desta tela nao promete demais',
+        (tester) async {
+      // **O rotulo era "Conta validada"**, e o cliente o reprovou em
+      // 21/10/2026: *"promete mais do que entrega"*, pelo mesmo motivo que
+      // travou o rotulo do selo de terceiro -- *"nao estamos validando
+      // documentos de faco, apenas e-mail por enquanto"*.
+      //
+      // A varredura e a **mesma** de `app/test/widgets/selo_de_validado_test`,
+      // em `palavras_proibidas_no_rotulo.dart`: um portao estendido, e nao um
+      // segundo portao. "validad" esta na lista dele, entao reverter o rotulo
+      // desta tela reprova aqui -- e a isca da isca (naquele arquivo) prova
+      // que a varredura enxerga "Conta validada".
+      await abrirOsDados(
+        tester,
+        rede: servidor(meInicial: me(validado: true, urlDaFoto: fotoDerivada)),
+      );
+      await tester.pumpAndSettle();
+
+      final String rotulo = rotuloDoSeloDaTela(tester);
+      conferirRotuloDoSelo(rotulo, onde: 'a tela de `Meus dados`');
+
+      // E ele e a MESMA constante do selo de terceiro, e nao uma redacao
+      // propria que passe por acaso na varredura. Era uma constante local
+      // ("Conta validada") e a segunda redacao era o segundo lugar onde o
+      // rotulo podia divergir.
+      expect(
+        rotulo,
+        SeloDeValidado.rotulo,
+        reason: 'REPROVA: o selo desta tela voltou a ter rotulo proprio. Ele e '
+            '`SeloDeValidado.rotulo`, um lugar so para as duas telas.',
+      );
     });
   });
 

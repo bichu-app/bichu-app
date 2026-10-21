@@ -9,14 +9,16 @@
  * duas são de OMISSÃO — o tipo de regra que um teste de rota mede mal:
  *
  * - **a foto do usuário sai nesta resposta e em nenhuma outra**;
- * - **o selo de validado é `email_verified`**, derivado de
- *   `users.email_verified_at`, e não um campo que quem envia a foto escolhe.
+ * - **o selo de validado é `contact_channel_verified`**, derivado de
+ *   `users.email_verified_at` **ou** `users.phone_verified_at` pela fonte única
+ *   da régua, e não um campo que quem envia a foto escolhe.
  *
  * A função não ganhou nenhum comportamento ao sair: ela recebe a conta, a foto
  * e a montagem de URL, e devolve o objeto. Quem continua decidindo QUEM pode
  * chamá-la é a rota, que exige `bearerAuth`.
  */
 import type { Conta, FotoDoPerfil } from '../ports/identity-repository.js';
+import { canalDeContatoConfirmado } from '../../../shared/db/canal-de-contato-confirmado.js';
 import { camposPendentesDoPerfil, podeAbrirCasoDePerdido } from './completude-do-perfil.js';
 
 /** `MyPhoto` do contrato. */
@@ -60,12 +62,33 @@ export function projetarFotoDoPerfil(
  * de um objeto com quatro nulos: a tela distingue "não informou" de "informou
  * parcialmente", e quatro nulos dentro de um objeto parecem a segunda coisa.
  *
- * **`email_verified` É O SELO DE VALIDADO** que o cliente pediu em 18/10/2026
- * ("um selo na foto dele, se ele estiver validado"). Ele é derivado de
- * `emailVerifiedAt` aqui, na leitura, como sempre foi — não existe campo de selo
- * no corpo de escrita, não existe coluna de selo, e quem envia a foto não o
- * escolhe. É a moldura do cliente que desenha o selo quando este booleano é
- * verdadeiro.
+ * ## O SELO DO DONO É `contact_channel_verified`, E NÃO MAIS `email_verified`
+ *
+ * **Isto mudou em 21/10/2026, por decisão do cliente**: *"Unificar agora, nas
+ * duas — a mesma régua (e-mail OU telefone) nos dois lugares, antes de telefone
+ * existir."*
+ *
+ * O selo que o DONO vê de si era `email_verified`, que é só e-mail. O selo que
+ * os OUTROS veem dele é `contact_channel_verified`, que é e-mail **OU**
+ * telefone. As duas coincidiam porque nada em `src/` grava `phone_verified_at`
+ * — e no dia em que telefone confirmar, a mesma conta apareceria validada para
+ * os outros e não para si, com a causa enterrada aqui.
+ *
+ * Então o selo do dono passa a ser **`contact_channel_verified`**, o MESMO nome
+ * e a MESMA régua (`canalDeContatoConfirmado`) dos três schemas de terceiro
+ * (`PublicationAuthor`, `PersonProfile`, `ConnectionPerson`).
+ *
+ * **`email_verified` NÃO foi renomeado nem redefinido**, e isto é a parte que
+ * importa: ele continua sendo `emailVerifiedAt !== null`, porque é o que o nome
+ * dele diz e porque a tela usa esse booleano para outra coisa — a linha "E-mail
+ * confirmado / não confirmado" ao lado do endereço, que fala do e-mail e não do
+ * selo. Campo de contrato com nome que mente é a classe de defeito que este
+ * projeto mais paga; um `email_verified` que respondesse `true` por causa de um
+ * telefone seria exatamente isso.
+ *
+ * Nenhum dos dois é campo de escrita: não existe campo de selo no corpo de
+ * escrita, não existe coluna de selo, e quem envia a foto não o escolhe. É a
+ * moldura do cliente que desenha o selo quando o booleano é verdadeiro.
  */
 export function projetarMeuPerfil(
   conta: Conta,
@@ -125,6 +148,8 @@ export function projetarMeuPerfil(
       : null,
     pending_profile_fields: camposPendentesDoPerfil(conta),
     can_open_lost_case: podeAbrirCasoDePerdido(conta),
+    // **O SELO DE VALIDADO DO DONO, pela MESMA régua que os outros veem.**
+    contact_channel_verified: canalDeContatoConfirmado(conta),
     created_at: conta.createdAt.toISOString(),
   };
 }

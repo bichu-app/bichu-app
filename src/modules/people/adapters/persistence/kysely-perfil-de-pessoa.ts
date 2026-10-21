@@ -44,6 +44,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import {
   comoObjectKey,
@@ -149,11 +150,14 @@ export function construtorDoPerfilPorApelido(
     // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026)
     // ------------------------------------------------------------------
     // `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, e a
-    // condição é **cópia literal** da de `kysely-canal-verificado-do-chamador.ts`
-    // e da de `estadoParaCriarEncontro`. A cópia é deliberada: duas definições
-    // de "validado" são duas réguas, e a mesma conta sairia validada numa tela e
-    // não na outra. Na prática isso é e-mail — nada em `src/` grava
-    // `phone_verified_at`, a coluna existe e só é zerada.
+    // expressão vem da **FONTE ÚNICA** (`canalDeContatoConfirmadoNoSql`, em
+    // `shared/db/canal-de-contato-confirmado.ts`) — a mesma que o selo do DONO
+    // usa desde 21/10/2026, por decisão do cliente. Antes aqui havia uma
+    // **cópia literal** com um comentário explicando que a cópia era
+    // deliberada, e o motivo que ele dava (duas definições de "validado" são
+    // duas réguas) era o motivo para ela não existir. Na prática isso é e-mail
+    // — nada em `src/` grava `phone_verified_at`, a coluna existe e só é
+    // zerada.
     //
     // **As DUAS colunas de data ficam dentro da expressão e nunca no `SELECT`**:
     // o que sai é o booleano, e "o e-mail dela foi confirmado em março" não é
@@ -164,9 +168,7 @@ export function construtorDoPerfilPorApelido(
     // admitiram esta linha, e uma segunda cópia seria o lugar onde uma correção
     // pode faltar — a mesma razão escrita no `JOIN` da foto do autor do Mural.
     .select(
-      sql<boolean>`(u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)`.as(
-        'canal_verificado',
-      ),
+      canalDeContatoConfirmadoNoSql('u').as('canal_verificado'),
     )
     .where('h.handle', '=', apelido)
     .where('h.kind', '=', 'pessoa')

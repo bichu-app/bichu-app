@@ -40,6 +40,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import type { ArestaGuardada, EstadoGuardado } from '../../domain/conexao.js';
@@ -75,12 +76,14 @@ const instanteComoData = comoData;
  * **O SELO DE VALIDADO da outra ponta**, derivado no SQL a partir do alias
  * `outro` (`users`), que as três projeções de aresta deste arquivo já têm.
  *
- * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`: a **MESMA**
- * condição de `kysely-canal-verificado-do-chamador.ts`, de
- * `estadoParaCriarEncontro` e do `SELECT` do perfil de pessoa. A cópia da
- * condição é deliberada — duas definições de "validado" são duas réguas, e a
- * mesma conta sairia validada numa tela e não na outra. Na prática isso é
- * e-mail: nada em `src/` grava `phone_verified_at`.
+ * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` vem da
+ * **FONTE ÚNICA** (`canalDeContatoConfirmadoNoSql`, em
+ * `shared/db/canal-de-contato-confirmado.ts`), a mesma que o `SELECT` do perfil
+ * de pessoa, o do Mural e os quatro 409 `contact-channel-unverified` usam. Este
+ * cabeçalho dizia antes que a cópia da condição era deliberada; o motivo que
+ * ele dava — duas definições de "validado" são duas réguas — era o motivo para
+ * a cópia **não** existir. Na prática isso é e-mail: nada em `src/` grava
+ * `phone_verified_at`.
  *
  * **As duas colunas de data ficam dentro da expressão e nunca na lista de
  * saída**: o que sai é o booleano, e a data de confirmação não é assunto de
@@ -93,7 +96,7 @@ const instanteComoData = comoData;
  * aresta recém-criada sairia diferente da mesma aresta relida na página
  * seguinte.
  */
-const CANAL_VERIFICADO_DO_OUTRO = sql`(outro.email_verified_at IS NOT NULL OR outro.phone_verified_at IS NOT NULL)`;
+const CANAL_VERIFICADO_DO_OUTRO = canalDeContatoConfirmadoNoSql('outro');
 
 /**
  * As colunas que uma aresta projeta, **e só elas**.
