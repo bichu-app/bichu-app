@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../widgets/palavras_proibidas_no_rotulo.dart';
+
 const String _urlBase = 'https://api.exemplo.test';
 const String _apelido = 'marina-vet';
 
@@ -601,10 +603,12 @@ void main() {
     }
   });
 
-  testWidgets('SELO: o rotulo acessivel diz "E-mail confirmado", e nada alem', (tester) async {
-    // O booleano prova um canal de contato confirmado — hoje, e-mail. Ele nao
-    // prova documento, identidade nem conferencia humana, e o rotulo nao pode
-    // dizer que prova: quem usa leitor de tela recebe SO o rotulo.
+  testWidgets('SELO: o rotulo acessivel e `SeloDeValidado.rotulo`, e nada alem', (tester) async {
+    // O booleano prova que a pessoa tem um canal de contato confirmado. Ele nao
+    // prova documento, identidade nem conferencia humana, e **nao diz qual
+    // canal** -- decisao do cliente de 21/10/2026, posterior a aprovacao de
+    // "E-mail confirmado" do mesmo dia: *"tem que dizer que o usuario esta
+    // confirmado, independente do meio"*.
     await _montar(tester, perfil: _perfil(estado: 'none', validado: true));
     // **`contains` e nao igualdade**: o selo pode cair dentro de um no de
     // semantica da tela, e ai o leitor anuncia o nome e a frase do selo numa
@@ -612,10 +616,16 @@ void main() {
     // palavra proibida; a igualdade exata do rotulo do widget e medida em
     // `test/widgets/selo_de_validado_test.dart`.
     final String rotulo = tester.getSemantics(find.byType(SeloDeValidado)).label;
-    expect(rotulo, contains('E-mail confirmado'));
-    for (final String proibida in <String>['verificad', 'confiáve', 'pela equipe', 'oficial']) {
-      expect(rotulo.toLowerCase().contains(proibida), isFalse, reason: proibida);
-    }
+    // **A CONSTANTE, e nunca o literal.** O rotulo e UM para as quatro
+    // superficies de terceiro e para a tela do dono; um literal aqui seria a
+    // quarta redacao a divergir na primeira edicao.
+    expect(rotulo, contains(SeloDeValidado.rotulo));
+    // **A VARREDURA COMPARTILHADA**, e nao a lista curta que morava aqui: esta
+    // tela tinha a sua propria copia de quatro palavras, e a de
+    // `pedidos_de_conexao_test.dart` tinha a mesma copia. Duas listas curtas
+    // sao duas definicoes de "rotulo honesto", e nenhuma das duas proibia
+    // nomear canal.
+    conferirRotuloDoSelo(rotulo, onde: 'o perfil de pessoa');
   });
 
   testWidgets('SELO: a conta SEM nome de exibicao tambem pode ter selo', (tester) async {

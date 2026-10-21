@@ -204,20 +204,18 @@ Future<void> abrirOsDados(
 /// O selo, pelo GLIFO -- e o glifo aqui nao e escolha de estilo do teste.
 ///
 /// **Ele era lido pelo ROTULO ate 21/10/2026**, e o rotulo era "Conta
-/// validada". Com o rotulo unificado em `SeloDeValidado.rotulo`
-/// ("E-mail confirmado") ele deixou de IDENTIFICAR o selo nesta tela: a linha
-/// de situacao do e-mail, ao lado do endereco, mostra exatamente a mesma frase
-/// -- ela fala do e-mail e o selo fala do canal, e hoje a frase e a mesma.
+/// validada". Durante algumas horas daquele dia o rotulo foi "E-mail
+/// confirmado", e ai ele deixou de IDENTIFICAR coisa alguma nesta tela: a
+/// linha de situacao do e-mail, ao lado do endereco, mostra exatamente essa
+/// frase. `find.bySemanticsLabel` casava com a LINHA e dava `true` com o selo
+/// ausente -- o caso `sem foto nao ha selo` foi o que acusou.
 ///
-/// Entao a identificacao passou para o glifo (`Icons.verified`, o unico desta
-/// tela) e **o rotulo continua sendo medido** -- em [rotuloDoSeloDaTela], que o
-/// le do no de semantica que embrulha o glifo, e no caso de palavras
-/// proibidas. Ler pelo rotulo aqui daria `true` com o selo ausente, o que e
-/// pior do que nao medir.
-///
-/// **A colisao de frase e um achado, nao um detalhe**: quem usa leitor de tela
-/// ouve "E-mail confirmado" duas vezes nesta tela. Qual frase o selo do dono
-/// deve dizer e decisao do cliente, e esta registrada no relatorio da tarefa.
+/// Com a decisao seguinte do cliente ("Contato confirmado", sem nomear o meio)
+/// a colisao desapareceu, **e a identificacao continua no glifo de proposito**:
+/// o glifo nao depende de redacao, e foi a redacao que mudou duas vezes num
+/// dia. O rotulo continua sendo MEDIDO -- em [rotuloDoSeloDaTela], nas duas
+/// varreduras compartilhadas, e no caso que exige que ele seja diferente da
+/// linha do e-mail.
 final Finder _seloDoDono = find.byIcon(Icons.verified);
 
 bool temSelo(WidgetTester tester) => _seloDoDono.evaluate().isNotEmpty;
@@ -403,7 +401,49 @@ void main() {
         rotulo,
         SeloDeValidado.rotulo,
         reason: 'REPROVA: o selo desta tela voltou a ter rotulo proprio. Ele e '
-            '`SeloDeValidado.rotulo`, um lugar so para as duas telas.',
+            '`SeloDeValidado.rotulo`, um lugar so para as quatro superficies de '
+            'terceiro e para esta tela.',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    testWidgets(
+        'ISCA: o rotulo do selo NAO e a frase da linha do e-mail, e as duas '
+        'estao na tela', (tester) async {
+      // **ESTA COLISAO ACONTECEU DE VERDADE**, em 21/10/2026: com o rotulo em
+      // "E-mail confirmado", o selo e a linha de situacao do e-mail diziam a
+      // MESMA frase na MESMA tela. Quem usa leitor de tela ouvia duas vezes, e
+      // nenhum `find.bySemanticsLabel` distinguia as duas -- o que fazia
+      // `temSelo` responder `true` sem selo nenhum.
+      //
+      // A decisao do cliente de nao nomear o meio resolveu a causa. Este caso
+      // e o que impede a colisao de voltar por outro caminho: qualquer redacao
+      // futura do selo que coincida com a frase do e-mail reprova aqui.
+      //
+      // ISCA: trocar `SeloDeValidado.rotulo` para 'E-mail confirmado' reprova
+      // este caso E o `ISCA: o rotulo NAO NOMEIA O CANAL` do arquivo de widget.
+      await abrirOsDados(
+        tester,
+        rede: servidor(meInicial: me(validado: true, urlDaFoto: fotoDerivada)),
+      );
+      await tester.pumpAndSettle();
+
+      const String frescaDoEmail = 'E-mail confirmado';
+      // As duas estao na tela: sem esta metade o caso passaria numa tela que
+      // perdeu a linha do e-mail, e nao e disso que ele trata.
+      expect(
+        find.text(frescaDoEmail),
+        findsOneWidget,
+        reason: 'REPROVA: a linha de situacao do e-mail saiu da tela. Ela fala '
+            'do e-mail e CONTINUA nomeando o canal, porque e o conteudo dela.',
+      );
+      expect(
+        rotuloDoSeloDaTela(tester),
+        isNot(frescaDoEmail),
+        reason: 'REPROVA: o rotulo do selo e a frase da linha do e-mail. As '
+            'duas convivem nesta tela: o leitor de tela anunciaria a mesma '
+            'frase duas vezes, e nenhum `find` por rotulo distinguiria o selo '
+            'da linha.',
       );
     });
   });

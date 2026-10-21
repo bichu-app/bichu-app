@@ -26,19 +26,45 @@ import '../theme/bichu_tokens.g.dart';
 /// alcance disso: *"nao estamos validando documentos de faco, apenas e-mail por
 /// enquanto e futuramente telefone"*.
 ///
-/// Entao [rotulo] e **"E-mail confirmado"**, e **nunca** "verificado",
-/// "confiavel" nem "confirmado pela equipe". A diferenca nao e estilo: quem usa
-/// leitor de tela recebe SO o rotulo, e um rotulo que dissesse "usuario
-/// verificado" faria o produto assinar por uma conferencia de identidade que
-/// nao existe. O caso
-/// `app/test/widgets/selo_de_validado_test.dart` reprova as tres palavras pelo
-/// nome.
+/// Entao [rotulo] e **"Contato confirmado"**, e **nunca** "verificado",
+/// "confiavel", "confirmado pela equipe" nem "validado". A diferenca nao e
+/// estilo: quem usa leitor de tela recebe SO o rotulo, e um rotulo que dissesse
+/// "usuario verificado" faria o produto assinar por uma conferencia de
+/// identidade que nao existe. O caso
+/// `app/test/widgets/selo_de_validado_test.dart` reprova as palavras pelo nome.
 ///
-/// **Por que "e-mail" e nao "canal de contato"**, se a regra e um `OR` de dois:
-/// porque na pratica e e-mail. Nada no servidor grava
-/// `phone_verified_at` — a coluna existe e so e zerada. O dia em que telefone
-/// confirmar de verdade e o dia de voltar aqui com a frase que cobre os dois;
-/// escrever hoje "canal confirmado" seria vago sem ser mais verdadeiro.
+/// ## O ROTULO NAO NOMEIA O MEIO, E ISSO E DECISAO DELE
+///
+/// **Duas decisoes do cliente no MESMO dia (21/10/2026), e a SEGUNDA vence.**
+/// Esta ordem esta escrita aqui de proposito: sem ela, alguem daqui a um mes
+/// "consertaria" o rotulo de volta para a aprovacao anterior, achando que
+/// estava corrigindo uma regressao.
+///
+/// 1. **Primeira**, ao fechar o alcance do selo: *"nao estamos validando
+///    documentos de faco, apenas e-mail por enquanto e futuramente telefone"*.
+///    O rotulo que saiu dali foi **"E-mail confirmado"**, porque na pratica so
+///    e-mail era confirmado.
+/// 2. **Segunda**, ao unificar a regua do selo do dono com a de terceiro:
+///    *"tem que dizer que o usuario esta confirmado, independente do meio"*.
+///
+/// A segunda e posterior e e sobre a MESMA pergunta, entao ela manda:
+/// **nenhum rotulo de selo nomeia o canal** — nem "E-mail confirmado", nem
+/// "Telefone confirmado", nem a variante com os dois. O caso
+/// `ISCA: o rotulo NAO NOMEIA O CANAL` reprova `e-mail`, `email` e `telefone`
+/// dentro do rotulo do selo, para que a decisao tenha portao e nao so prosa.
+///
+/// **Por que "Contato confirmado" e nao "Canal de contato confirmado"**: e o
+/// mesmo fato em menos palavras, e o rotulo divide 24 dp de largura com o nome
+/// — mas o que decide e a honestidade, nao o tamanho. "Contato confirmado" e
+/// literalmente o que o booleano prova (um canal de contato foi confirmado), e
+/// casa com o nome do campo do contrato (`contact_channel_verified`), de modo
+/// que contrato, codigo e tela dizem a mesma coisa.
+///
+/// **E ele resolve uma repeticao medida**: na tela de `Meus dados` a linha de
+/// situacao ao lado do endereco diz "E-mail confirmado" — aquela fala do
+/// e-mail e CONTINUA nomeando o canal, porque e sobre o canal. Com o selo
+/// dizendo a mesma frase, quem usa leitor de tela ouvia a frase duas vezes na
+/// mesma tela e nenhum `find` distinguia as duas.
 ///
 /// ## O QUE ACONTECE COM `false`
 ///
@@ -56,11 +82,18 @@ import '../theme/bichu_tokens.g.dart';
 class SeloDeValidado extends StatelessWidget {
   const SeloDeValidado({super.key});
 
-  /// O nome acessivel. **"E-mail confirmado", e nunca mais do que isso.**
+  /// O nome acessivel. **"Contato confirmado", e nunca mais do que isso.**
   ///
-  /// Ver o cabecalho desta classe: o rotulo nao pode prometer mais do que o dado
-  /// prova, e o dado prova um canal de contato — hoje, e-mail.
-  static const String rotulo = 'E-mail confirmado';
+  /// **UM rotulo para as QUATRO superficies** — publicacao, comentario, perfil
+  /// de pessoa e pedido de conexao — **e para a tela do DONO**, que o le daqui
+  /// em vez de ter constante propria. Dois rotulos para a mesma regua sao o
+  /// caminho de volta para duas promessas, do mesmo jeito que dois nomes de
+  /// campo eram o caminho de volta para duas reguas.
+  ///
+  /// Ver o cabecalho desta classe para as duas decisoes do cliente de
+  /// 21/10/2026 e por que a segunda vence: o rotulo nao pode prometer mais do
+  /// que o dado prova **e nao pode nomear o meio**.
+  static const String rotulo = 'Contato confirmado';
 
   /// 20 dp: `icon.size.inline` do `design/tokens.json`, *"dentro de texto e
   /// chip"*, que e exatamente o que este selo e.
@@ -126,9 +159,9 @@ class SeloDeValidado extends StatelessWidget {
 /// ## O SELO NAO ENTRA NO `Semantics` DO NOME
 ///
 /// Os dois sao paradas de foco separadas de proposito: o leitor de tela anuncia
-/// o nome e depois "E-mail confirmado". Costura-los numa frase so
-/// (`"Maria, e-mail confirmado"`) faria o rotulo do selo depender de quem monta,
-/// e e justamente o rotulo que nao pode variar.
+/// o nome e depois "Contato confirmado". Costura-los numa frase so
+/// (`"Maria, contato confirmado"`) faria o rotulo do selo depender de quem
+/// monta, e e justamente o rotulo que nao pode variar.
 ///
 /// ## MENSAGENS NAO USA ESTE WIDGET, E A AUSENCIA E A REGRA
 ///

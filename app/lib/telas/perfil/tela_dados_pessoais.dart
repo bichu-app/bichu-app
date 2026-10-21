@@ -1257,6 +1257,19 @@ class _QuadradoSemFoto extends StatelessWidget {
 /// cobra esta constante, e desde hoje cobra o rotulo DESTA tela pelo mesmo
 /// caminho -- ver `app/test/widgets/palavras_proibidas_no_rotulo.dart`.
 ///
+/// **A frase e "Contato confirmado", e ela NAO NOMEIA O MEIO.** Decisao do
+/// cliente no mesmo 21/10/2026, e **posterior** a aprovacao de "E-mail
+/// confirmado" daquele dia: *"tem que dizer que o usuario esta confirmado,
+/// independente do meio"*. A ordem das duas esta escrita no cabecalho de
+/// [SeloDeValidado], porque sem ela alguem reverte achando que conserta.
+///
+/// **E e por isso que o rotulo do selo nao colide com a linha do e-mail desta
+/// tela.** [_EmailDeLeitura] diz "E-mail confirmado" e tem de continuar
+/// dizendo: ela fala do e-mail, e nomear o canal ali e o conteudo dela. Com o
+/// selo dizendo a mesma frase -- e ele disse, por algumas horas --, o leitor de
+/// tela anunciava duas vezes e nenhum `find` por rotulo distinguia as duas. O
+/// caso `ISCA: o rotulo do selo NAO e a frase da linha do e-mail` prende isso.
+///
 /// **O desenho continua diferente de [SeloDeValidado]** (anel, 24 dp, sobre a
 /// foto), e a diferenca esta escrita no cabecalho daquela classe: aqui o selo
 /// pousa sobre uma imagem, la ao lado de um nome.

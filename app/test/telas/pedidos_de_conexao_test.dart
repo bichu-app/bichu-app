@@ -26,6 +26,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../widgets/palavras_proibidas_no_rotulo.dart';
+
 const String _urlBase = 'https://api.exemplo.test';
 
 http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
@@ -368,20 +370,21 @@ void main() {
     expect(find.byType(SeloDeValidado), findsOneWidget);
   });
 
-  testWidgets('SELO: o rotulo acessivel diz "E-mail confirmado", e nada alem', (tester) async {
+  testWidgets('SELO: o rotulo acessivel e `SeloDeValidado.rotulo`, e nada alem', (tester) async {
     await _montar(tester, recebidos: <Map<String, dynamic>>[
       _pedido(ref: 'r1', estado: 'pending_received', apelido: 'ana-do-bairro', validado: true),
     ]);
     // **`contains` e nao igualdade, e a diferenca e do CARTAO e nao do selo**:
     // a linha do pedido e um no de semantica unico, entao o leitor de tela
-    // anuncia "@ana-do-bairro, E-mail confirmado" numa parada so. O que este
+    // anuncia "@ana-do-bairro, Contato confirmado" numa parada so. O que este
     // caso cobra e que a frase do selo chegue INTEIRA e que nenhuma palavra
     // proibida apareca — a igualdade exata do rotulo do widget e medida em
     // `test/widgets/selo_de_validado_test.dart`, onde nao ha no de fora.
     final String rotulo = tester.getSemantics(find.byType(SeloDeValidado)).label;
-    expect(rotulo, contains('E-mail confirmado'));
-    for (final String proibida in <String>['verificad', 'confiáve', 'pela equipe', 'oficial']) {
-      expect(rotulo.toLowerCase().contains(proibida), isFalse, reason: proibida);
-    }
+    // A CONSTANTE, e nunca o literal: um rotulo so para as quatro superficies.
+    expect(rotulo, contains(SeloDeValidado.rotulo));
+    // A VARREDURA COMPARTILHADA, no lugar da lista curta de quatro palavras
+    // que morava aqui e que nao proibia nomear canal.
+    conferirRotuloDoSelo(rotulo, onde: 'o pedido de conexao');
   });
 }

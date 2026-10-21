@@ -17,7 +17,8 @@
 // 2. **O ROTULO NAO PROMETE MAIS DO QUE O DADO PROVA.** Isto e a regra que vale
 //    sobre todas as outras, e por isso ela tem caso proprio com as palavras
 //    proibidas escritas pelo nome. O glifo e a roseta por decisao dele; o nome
-//    acessivel e "E-mail confirmado", porque e so isso que o booleano prova.
+//    acessivel e "Contato confirmado": o booleano prova que a pessoa tem um
+//    canal de contato confirmado, e **nada mais** -- nem qual canal.
 //    Um rotulo dizendo "verificado" faria o produto assinar por uma conferencia
 //    de identidade que ninguem faz.
 //
@@ -393,9 +394,9 @@ void main() {
 
   // =========================================================================
   group('O ROTULO NAO PROMETE MAIS DO QUE O DADO PROVA', () {
-    testWidgets('o rotulo acessivel diz "E-mail confirmado"', (tester) async {
+    testWidgets('o rotulo acessivel diz "Contato confirmado"', (tester) async {
       await _montarOMural(tester, publicacao: _publicacao(validado: true));
-      expect(_rotuloDoSelo(tester), 'E-mail confirmado');
+      expect(_rotuloDoSelo(tester), 'Contato confirmado');
     });
 
     testWidgets('ISCA: o rotulo NAO diz "verificado", "confiavel" nem "pela equipe"', (
@@ -413,6 +414,51 @@ void main() {
       // chama ESTA varredura. Duas listas seriam duas definicoes de "rotulo
       // honesto".
       conferirRotuloDoSelo(_rotuloDoSelo(tester), onde: 'o Mural');
+    });
+
+    testWidgets('ISCA: o rotulo NAO NOMEIA O CANAL', (tester) async {
+      // **DECISAO DO CLIENTE, 21/10/2026, E ELA E A SEGUNDA DO DIA**, literal:
+      // *"tem que dizer que o usuario esta confirmado, independente do meio"*.
+      //
+      // Ela SUBSTITUI a aprovacao anterior do mesmo dia, que era "E-mail
+      // confirmado" e saiu de *"nao estamos validando documentos de faco,
+      // apenas e-mail por enquanto e futuramente telefone"*. As duas sao sobre
+      // a mesma pergunta e a segunda e posterior.
+      //
+      // **Sem este caso a decisao nao tem portao**: "E-mail confirmado" passa
+      // inteiro na varredura de palavras proibidas -- ela proibe o que MENTE, e
+      // "E-mail confirmado" nao mentia. Reverter o rotulo ficaria verde, e e
+      // exatamente o que alguem faria achando que corrige uma regressao.
+      //
+      // ISCA: trocar `SeloDeValidado.rotulo` de volta para "E-mail confirmado"
+      // compila, passa em toda a varredura de palavras proibidas, e reprova
+      // aqui.
+      await _montarOMural(tester, publicacao: _publicacao(validado: true));
+      conferirRotuloNaoNomeiaCanal(_rotuloDoSelo(tester), onde: 'o Mural');
+    });
+
+    test('ISCA DA ISCA: a varredura de CANAL enxerga as tres redacoes recusadas', () {
+      // As tres que ele descartou ao dizer "independente do meio", e a de
+      // "canal" que eu quase escrevi. Sem este caso o de cima ficaria verde se
+      // a lista de canais parasse de casar.
+      for (final String comCanal in <String>[
+        'E-mail confirmado',
+        'Telefone confirmado',
+        'E-mail e telefone confirmados',
+        'Celular confirmado',
+        'Confirmado por WhatsApp',
+        'SMS confirmado',
+      ]) {
+        expect(
+          rotuloNomeiaCanal(comCanal),
+          isTrue,
+          reason: 'a varredura de canal nao enxerga "$comCanal": ela nao mede nada',
+        );
+      }
+      // E o rotulo VERDADEIRO passa pelas DUAS varreduras. Sem esta metade a
+      // lista de canais poderia proibir "contato" e reprovar o rotulo certo.
+      expect(rotuloNomeiaCanal(SeloDeValidado.rotulo), isFalse);
+      expect(rotuloPrometeDemais(SeloDeValidado.rotulo), isFalse);
     });
 
     test('ISCA DA ISCA: a varredura de palavras REPROVA um rotulo mentiroso', () {
@@ -443,7 +489,7 @@ void main() {
     });
 
     testWidgets('o selo e uma parada de foco SEPARADA do nome', (tester) async {
-      // O leitor de tela anuncia o nome e depois "E-mail confirmado". Costurar os
+      // O leitor de tela anuncia o nome e depois "Contato confirmado". Costurar os
       // dois numa frase so (`"Marina, e-mail confirmado"`) faria o rotulo do selo
       // depender de quem monta — e e justamente ele que nao pode variar.
       await _montarOMural(tester, publicacao: _publicacao(validado: true, nome: 'Marina'));
