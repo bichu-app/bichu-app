@@ -13,9 +13,12 @@
  * Mais o **contrato com a fatia E**: `desfazerPorBloqueio` apaga o pendente das
  * duas direções e desfaz a conexão, em silêncio e de forma idempotente.
  *
- * **E a prova que vem primeiro:** com a fiação de produção (`nenhumConviteExiste`),
- * nenhuma conta alcança nenhuma outra — toda tentativa de pedir responde 404,
- * qualquer que seja o token, e não há segundo caminho no código que crie aresta.
+ * **E a prova que vem primeiro, com o escopo que ela passou a ter em
+ * 20/10/2026:** sem uma credencial que resolva, nenhuma aresta nasce — e o 404 é
+ * o mesmo para token inexistente, token que não resolve e alvo bloqueado. Até
+ * essa data a afirmação era mais forte (*"nenhuma conta alcança nenhuma
+ * outra"*), porque não existia emissor de convite; o cliente pediu o link, o QR
+ * e a busca, e `nenhumConviteExiste` saiu da fiação e deste arquivo.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -33,8 +36,34 @@ import {
 import { habilitaDadoDeConectado } from '../domain/conexao.js';
 import { TETO_DE_CONEXOES } from '../domain/teto-de-conexoes.js';
 import type { LeitorDeBloqueio } from '../ports/leitor-de-bloqueio.js';
-import { nenhumConviteExiste, type ResolvedorDeConvite } from '../ports/convite-de-conexao.js';
+import type {
+  ResolvedorDeApelido,
+  ResolvedorDeConvite,
+} from '../ports/convite-de-conexao.js';
 import { ConexaoEntrePessoas, type ContextoDoChamador } from './conexao-entre-pessoas.js';
+
+/**
+ * **Um resolvedor que não resolve nada**, e ele é um dublê de teste — não a
+ * fiação de produção.
+ *
+ * Até 20/10/2026 este arquivo usava `nenhumConviteExiste`, que era a fiação de
+ * produção e a afirmação executável de que nenhuma conta alcançava nenhuma
+ * outra. **Ela saiu**: o cliente pediu o link, o QR e a busca, e a produção
+ * agora liga `criarResolvedorDeConvite` e `criarResolvedorDeApelido`, que leem o
+ * banco.
+ *
+ * O dublê fica porque o que ele mede **continua valendo**: um token que não
+ * resolve responde 404, e esse é o caminho de um token inexistente, vencido ou
+ * revogado. O que mudou é o escopo da afirmação — ela já não é "nenhuma conta
+ * alcança nenhuma outra", e sim "sem uma credencial que resolva, não nasce
+ * aresta".
+ */
+const nadaResolve: ResolvedorDeConvite = { resolver: () => Promise.resolve(undefined) };
+
+/** O mesmo, para o caminho por apelido. */
+const nenhumApelidoResolve: ResolvedorDeApelido = {
+  resolver: () => Promise.resolve(undefined),
+};
 
 const AGORA = 1_800_000_000_000 as Instant;
 const DIA = 86_400_000;
@@ -61,6 +90,8 @@ interface Montagem {
 
 function montar(opcoes: {
   convitePara?: UserId;
+  /** O alvo que o APELIDO resolve, para o caminho aberto em 20/10/2026. */
+  apelidoPara?: UserId;
   bloqueado?: boolean;
   agora?: Instant;
 } = {}): Montagem {
@@ -70,11 +101,20 @@ function montar(opcoes: {
 
   const convites: ResolvedorDeConvite =
     opcoes.convitePara === undefined
-      ? nenhumConviteExiste
+      ? nadaResolve
       : {
           resolver: () =>
-            Promise.resolve({ alvo: opcoes.convitePara as UserId, origem: 'anchored_case' }),
+            Promise.resolve({
+              alvo: opcoes.convitePara as UserId,
+              origem: 'invite_link',
+              apelido: 'ana-do-bairro',
+            }),
         };
+
+  const apelidos: ResolvedorDeApelido =
+    opcoes.apelidoPara === undefined
+      ? nenhumApelidoResolve
+      : { resolver: () => Promise.resolve(opcoes.apelidoPara as UserId) };
 
   const bloqueios: LeitorDeBloqueio = {
     existeBloqueioEntre: () => Promise.resolve(opcoes.bloqueado === true),
@@ -111,6 +151,7 @@ function montar(opcoes: {
     servico: new ConexaoEntrePessoas({
       conexoes: bancada.repositorio,
       convites,
+      apelidos,
       bloqueios,
       trilha: log,
       ids,
@@ -131,12 +172,33 @@ async function erroDe(acao: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a ação não falhou, e era o que o teste media');
 }
 
-void describe('NENHUMA conta arbitrária alcança outra: a fiação de produção', () => {
-  void it('com `nenhumConviteExiste`, pedir responde 404 para qualquer token', async () => {
+/**
+ * **O ESCOPO DESTE BLOCO MUDOU EM 20/10/2026.**
+ *
+ * Ele se chamava *"NENHUMA conta arbitrária alcança outra: a fiação de
+ * produção"*, e media `nenhumConviteExiste`. Aquela afirmação **deixou de ser o
+ * desenho**: o cliente pediu a busca, o QR e o link, e agora duas credenciais
+ * alcançam uma conta.
+ *
+ * O que estes casos medem continua valendo, e é mais estreito e mais exato:
+ * **sem uma credencial que resolva, não nasce aresta** — e o 404 é o mesmo
+ * qualquer que seja o motivo pelo qual ela não resolveu.
+ */
+void describe('sem credencial que resolva, não nasce aresta — e o 404 é um só', () => {
+  void it('token que não resolve responde 404, qualquer que seja o token', async () => {
     const { servico, bancada } = montar();
     for (const token of ['', 'token-inventado', 'ana-do-bairro', ANA, 'A'.repeat(64)]) {
       const erro = await erroDe(() => servico.pedir(contexto(BIA), token));
       assert.equal(erro.problemType, 'not-found', `o token ${token} não respondeu 404`);
+    }
+    assert.equal(bancada.linhas.length, 0, 'nenhuma aresta pode ter nascido');
+  });
+
+  void it('apelido que não resolve responde 404, e também não cria aresta', async () => {
+    const { servico, bancada } = montar();
+    for (const apelido of ['', 'nao-existe', 'ana-do-bairro', 'bidu-o-cachorro']) {
+      const erro = await erroDe(() => servico.pedirPorApelido(contexto(BIA), apelido));
+      assert.equal(erro.problemType, 'not-found', `o apelido ${apelido} não respondeu 404`);
     }
     assert.equal(bancada.linhas.length, 0, 'nenhuma aresta pode ter nascido');
   });
@@ -148,6 +210,32 @@ void describe('NENHUMA conta arbitrária alcança outra: a fiação de produçã
     const b = await erroDe(() => comBloqueio.servico.pedir(contexto(BIA), 'qualquer'));
     assert.equal(a.problemType, b.problemType);
     assert.equal(a.problemType, 'not-found');
+  });
+
+  /**
+   * **O caminho por apelido cria aresta, e grava `people_search`.**
+   *
+   * Sem este caso, todos os de cima passariam num mundo em que
+   * `pedirPorApelido` sempre falhasse — e eles não distinguiriam "recusa
+   * correta" de "operação quebrada".
+   */
+  void it('apelido que resolve CRIA a aresta, com `origin: people_search`', async () => {
+    const { servico, bancada, trilha } = montar({ apelidoPara: ANA });
+    const conexao = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
+    assert.equal(conexao.state, 'pending_sent');
+    assert.equal(bancada.linhas.length, 1);
+    assert.equal(bancada.linhas[0]?.origem, 'people_search');
+    const registrada = trilha.find((e) => e.action === 'connection.requested');
+    assert.equal(registrada?.metadata?.origin, 'people_search');
+  });
+
+  /** O mesmo pelo convite, para os dois caminhos ficarem medidos lado a lado. */
+  void it('token que resolve CRIA a aresta, com `origin: invite_link`', async () => {
+    const { servico, bancada } = montar({ convitePara: ANA });
+    const conexao = await servico.pedir(contexto(BIA), 'um-token-que-resolve');
+    assert.equal(conexao.state, 'pending_sent');
+    assert.equal(bancada.linhas.length, 1);
+    assert.equal(bancada.linhas[0]?.origem, 'invite_link');
   });
 
   void it('CONTRAPESO: com um convite resolvido, o pedido nasce', async () => {

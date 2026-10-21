@@ -16,7 +16,12 @@
  * lados, uma linha por par canônico, e os tetos contados em linha.
  */
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
-import { arestaMorta, type ArestaGuardada, type EstadoGuardado } from '../../domain/conexao.js';
+import {
+  arestaMorta,
+  type ArestaGuardada,
+  type EstadoGuardado,
+  type OrigemDoPedido,
+} from '../../domain/conexao.js';
 import type { ContagensDaConta } from '../../domain/teto-de-conexoes.js';
 import {
   TETO_DE_CONEXOES,
@@ -38,6 +43,17 @@ interface LinhaEmMemoria {
   pedinte: UserId;
   destinatario: UserId;
   estado: EstadoGuardado;
+  /**
+   * De onde o pedido NASCEU, como a coluna `origin` guarda.
+   *
+   * **Ele não estava aqui até 20/10/2026**, e a ausência era um buraco de
+   * medição e não uma simplificação: o repositório de verdade escreve `origin`
+   * em toda linha — a coluna é `NOT NULL` com `CHECK` de lista fechada — e este
+   * dublê descartava o valor em silêncio. Nenhum teste podia afirmar a
+   * procedência de uma aresta, que é justamente aquilo em que os dois caminhos
+   * novos (convite e apelido) se distinguem.
+   */
+  origem: OrigemDoPedido;
   pedidoEm: number;
   expiraEm: number;
   descansoAte: number | null;
@@ -153,6 +169,7 @@ export function conexoesEmMemoria(
         pedinte: pedido.quemPede,
         destinatario: pedido.alvo,
         estado: 'pending',
+        origem: pedido.origem,
         pedidoEm: agora,
         expiraEm: agora + 30 * DIA,
         descansoAte: null,
@@ -254,6 +271,9 @@ export function conexoesEmMemoria(
       linhas.push({
         ref,
         estado: 'pending',
+        // O padrão é `invite_link`, que é o caminho que de fato existe em
+        // produção desde 20/10/2026. Quem semeia pode sobrescrever.
+        origem: 'invite_link',
         pedidoEm: agora - DIA,
         expiraEm: agora + 29 * DIA,
         descansoAte: null,

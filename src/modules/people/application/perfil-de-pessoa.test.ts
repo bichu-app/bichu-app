@@ -136,7 +136,16 @@ function bancada(
   };
 
   return {
-    servico: new PerfilDePessoa({ perfis, conexoes, clock: { now: () => AGORA } }),
+    servico: new PerfilDePessoa({
+      perfis,
+      conexoes,
+      // Este arquivo mede `porApelido`, que nao toca o convite. O dublê que
+      // nao resolve nada e o certo aqui: um que resolvesse faria estes casos
+      // dependerem de um caminho que eles nao exercitam. `porConvite` tem iscas
+      // proprias em `convite-resolve-no-mesmo-perfil.test.ts`.
+      convites: { resolver: () => Promise.resolve(undefined) },
+      clock: { now: () => AGORA },
+    }),
     pedidosDeVitrine,
     perguntasDeAresta,
   };

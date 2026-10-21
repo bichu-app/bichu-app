@@ -561,13 +561,31 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
     return total;
   }
 
-  void it('`connections` continua com CINCO, `people` com UMA e `safety` com SEIS', () => {
+  void it('`connections` continua com CINCO, `people` tem TRES e `safety` SEIS', () => {
     // As tres sao fechadas por portao ou por desenho, e o Mural tem etiqueta
     // propria justamente para nao encostar nelas. Este caso e o aviso de que
     // alguem encostou.
+    //
+    // **`people` passou de UMA para TRES em 20/10/2026**, por decisao do
+    // cliente: entraram `searchPeople` (a busca, com piso de 3 caracteres, teto
+    // por conta e campo vazio que nao lista ninguem) e
+    // `resolveConnectionInvite` (a mesma leitura de perfil, enderecada pelo
+    // token do convite). O numero continua FECHADO -- uma quarta reprova aqui.
+    //
+    // **`connections` continua com CINCO, e isso nao e coincidencia**: o
+    // caminho por apelido entrou como campo no CORPO de `requestConnection`, e
+    // as duas operacoes do convite ficaram na etiqueta `connection-invites`
+    // justamente para nao encostar neste numero.
     assert.equal(contarEtiqueta('connections'), 5, 'a etiqueta `connections` mudou de tamanho');
-    assert.equal(contarEtiqueta('people'), 1, 'a etiqueta `people` mudou de tamanho');
+    assert.equal(contarEtiqueta('people'), 3, 'a etiqueta `people` mudou de tamanho');
     assert.equal(contarEtiqueta('safety'), 6, 'a etiqueta `safety` mudou de tamanho');
+    assert.equal(
+      contarEtiqueta('connection-invites'),
+      2,
+      'a etiqueta `connection-invites` e fechada em DUAS (emitir e revogar). A terceira ' +
+        'operacao do convite -- resolver -- mora em `people`, porque a resposta dela e um ' +
+        'perfil.',
+    );
   });
 
   void it('`publications` tem DEZ operacoes, e sao estas', () => {

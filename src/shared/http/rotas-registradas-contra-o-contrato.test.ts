@@ -56,7 +56,9 @@ import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-sto
 import * as rede from '../../modules/network/adapters/http/network-routes.js';
 import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as conexoes from '../../modules/connections/adapters/http/connection-routes.js';
+import * as convites from '../../modules/connections/adapters/http/invite-routes.js';
 import * as pessoas from '../../modules/people/adapters/http/person-profile-routes.js';
+import * as buscaDePessoas from '../../modules/people/adapters/http/people-search-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
@@ -138,6 +140,20 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
   // suite desta fatia.
   pessoas,
+  // OS TRES CAMINHOS DE CONEXAO (20/10). O CONVITE do proprio perfil -- emitir e
+  // revogar --, que alimenta o link do WhatsApp e o QR. Arquivo novo entra AQUI,
+  // e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha um
+  // deles reprova contando `defineRoute` no disco e o outro reprova listando
+  // `issueConnectionInvite` e `revokeConnectionInvite` como operacao do
+  // contrato sem rota.
+  convites,
+  // OS TRES CAMINHOS DE CONEXAO (20/10). A BUSCA DE PESSOAS, com os freios do
+  // cliente. Arquivo novo entra AQUI, pela mesma razao das linhas acima --
+  // `searchPeople` reprovaria como operacao do contrato sem rota.
+  //
+  // `resolveConnectionInvite` NAO precisa de linha propria: ela e declarada em
+  // `person-profile-routes.ts`, que ja esta em `pessoas`.
+  buscaDePessoas,
   // O MURAL (20/10). A publicacao do usuario e a linha do tempo. Modulo novo
   // entra AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta
   // linha um deles reprova contando `defineRoute` no disco (181 contra 186) e o

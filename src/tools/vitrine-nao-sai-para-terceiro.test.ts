@@ -90,6 +90,26 @@ const ESQUEMAS_DE_LEITURA = ['MyShowcase', 'ShowcasePhoto', 'PersonShowcasePhoto
 const OPERACOES_COM_VITRINE = [
   'get /me/showcase',
   'get /people/{handle}',
+  /**
+   * **20/10/2026, decisão do cliente: a tela de destino do link e do QR.**
+   *
+   * Ela carrega vitrine porque devolve **`PersonProfile`** — a MESMA resposta e a
+   * MESMA projeção de `get /people/{handle}`. O cliente pediu que o link levasse
+   * *"para a página do perfil do usuário com o botão de adicionar"*: a página, não
+   * uma parecida.
+   *
+   * **Isto NÃO abre a vitrine a mais ninguém**, e a razão é que não há segunda
+   * consulta: a vitrine sai pelo `WHERE` de `construtorDaVitrineDeConexao`, que
+   * exige **conexão aceita** nos dois sentidos do par. Resolver um convite não
+   * cria conexão e não dispensa aceite — então, para quem acabou de clicar num
+   * link, `connection_state` é `none` e `showcase` vem **ausente**. Quem já era
+   * conexão aceita e abre o link vê a vitrine que já veria pelo apelido.
+   *
+   * A alternativa — projetar um perfil "sem vitrine" só para esta rota — seria
+   * uma segunda implementação do recorte da emenda 2 do ADR-0010, e é ela que
+   * divergiria no primeiro campo novo.
+   */
+  'post /connection-invites/resolution',
   'put /me/showcase',
   // **`post /me/showcase/photo-intents` NÃO está aqui, e descobrir por quê
   // valeu o caso.** A primeira versão desta varredura procurava
@@ -200,7 +220,7 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
     );
   });
 
-  void it('ISCA (a) -- a vitrine sai em TRES operacoes nomeadas, e nenhuma quarta', () => {
+  void it('ISCA (a) -- a vitrine sai em QUATRO operacoes nomeadas, e nenhuma quinta', () => {
     // A varredura é sobre os três esquemas de leitura E sobre as duas derivadas
     // por NOME DE CAMPO: um schema novo chamado de outra coisa, com `grid_url`
     // dentro, cai aqui mesmo sem estar na lista de esquemas.
@@ -222,7 +242,10 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
     assert.deepEqual(
       comVitrine,
       [...OPERACOES_COM_VITRINE],
-      'uma quarta operação com vitrine é uma superfície a mais, e a de 19/10/2026 já é a única que o cliente decidiu',
+      'uma QUINTA operação com vitrine é uma superfície a mais, e precisa de decisão do ' +
+        'cliente. As quatro são: as duas de `/me/showcase` (do dono), o perfil pelo ' +
+        'apelido (19/10) e o perfil pelo token do convite (20/10) — e esta última é a ' +
+        'MESMA projeção da anterior, não uma superfície nova.',
     );
   });
 

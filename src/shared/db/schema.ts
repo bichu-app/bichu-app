@@ -2098,11 +2098,76 @@ export interface UserConnectionsTable {
 export type EstadoDaConexao = 'pending' | 'accepted' | 'declined';
 
 /**
- * O `CHECK` `user_connections_origem_fechada`. Os tres caminhos que o desenho
- * reconhece como relacao, e **nao ha quarto**: a descoberta por link morreu na
- * decisao do cliente de 18/10/2026.
+ * O `CHECK` `user_connections_origem_fechada`. **CINCO valores**, e a lista
+ * continua FECHADA -- um valor novo exige mexer na migracao, que e onde a
+ * decisao do cliente esta escrita.
+ *
+ * Os tres primeiros sao de 18/10/2026 (`20261018000030`). Os dois ultimos
+ * entraram em 20/10/2026 (`20261020000012`), quando o cliente pediu busca, QR e
+ * link de convite -- e a frase daquela migracao que dizia *"nao existe quarto
+ * valor, e nao existe caminho por apelido, por busca nem por link"* **deixou de
+ * valer nessa data**.
+ *
+ * - `anchored_case` / `anchored_event` -- fatia H', nunca construida;
+ * - `presence_code` -- fatia H'', nunca construida: token ROTATIVO de 5 min
+ *   para codigo lido cara a cara. **O QR do perfil NAO e este valor**: o QR
+ *   mora no perfil e dura 30 dias, e declarar um link duravel como codigo
+ *   rotativo faria quem consulta `origin` ler o contrario do que aconteceu;
+ * - `invite_link` -- convite emitido pelo dono, resolvido por `invite_token`.
+ *   Cobre o QR **e** o link, porque os dois carregam o mesmo token;
+ * - `people_search` -- a busca por nome ou apelido, resolvida por `handle`.
+ *
+ * Cada valor corresponde a qual **credencial** a requisicao carregou, e e so
+ * por isso que ele e verificavel pelo servidor em vez de palpite: quem resolve
+ * um token nao sabe, e nao pode saber, se ele chegou por camera ou por WhatsApp.
  */
-export type OrigemDoPedidoDeConexao = 'anchored_case' | 'anchored_event' | 'presence_code';
+export type OrigemDoPedidoDeConexao =
+  | 'anchored_case'
+  | 'anchored_event'
+  | 'presence_code'
+  | 'invite_link'
+  | 'people_search';
+
+/**
+ * `connection_invites` -- O CONVITE QUE ALIMENTA O LINK E O QR
+ * (`20261020000012`, decisao do cliente de 20/10/2026).
+ *
+ * **Uma linha por convite, UM ATIVO POR CONTA**
+ * (`connection_invites_um_ativo_por_conta`, indice parcial em
+ * `revoked_at IS NULL`).
+ *
+ * As tres decisoes, com o motivo na migracao:
+ *
+ * - **REUSAVEL** por varias pessoas: *"compartilhar no whatsapp"* e mandar para
+ *   um grupo, e uso unico falharia calado para todos menos o primeiro -- sem
+ *   que quem compartilhou soubesse. O freio do volume sao os tetos de
+ *   150/20/10, cobrados em CADA pedido que o convite gera;
+ * - **30 dias**, o mesmo prazo do pendente: dois prazos para "quanto tempo uma
+ *   intencao de conexao sobrevive" obrigariam a defender os dois;
+ * - **REVOGAVEL**, e e por isso que o convite e uma LINHA e nao um token
+ *   assinado sem estado -- assinado sai mais barato e nao se revoga.
+ *
+ * O convite **nao** cria conexao e **nao** dispensa aceite: ele resolve para um
+ * PERFIL, e o botao de adicionar cria `pending`.
+ */
+export interface ConnectionInvitesTable {
+  /** UUIDv7 da aplicacao. Nunca sai em resposta (ADR-0010 item 6). */
+  id: string;
+  /** Quem emitiu, e para quem o convite resolve. **Nao sai em resposta.** */
+  owner_user_id: string;
+  /**
+   * Os **32 bytes** do SHA-256 do token, nunca o token cru e nunca o texto
+   * base64 do resumo. `CHECK (octet_length(token_hash) = 32)` desde o
+   * nascimento -- a licao da `20261020000008`, onde as colunas que nasceram com
+   * a restricao nunca divergiram.
+   */
+  token_hash: Buffer;
+  created_at: Generated<Date>;
+  /** 30 dias. A expiracao e PREGUICOSA: toda leitura compara com o agora. */
+  expires_at: Date;
+  /** Nulo e o convite ATIVO. E o nulo que o indice parcial unico conta. */
+  revoked_at: Date | null;
+}
 
 /**
  * `user_blocks` -- o BLOQUEIO, ferramenta pessoal e nao moderacao
@@ -2432,6 +2497,7 @@ export interface SitePageAvailabilityTable {
 export interface Database {
   handles: HandlesTable;
   user_connections: UserConnectionsTable;
+  connection_invites: ConnectionInvitesTable;
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;

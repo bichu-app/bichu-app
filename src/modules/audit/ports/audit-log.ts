@@ -285,6 +285,29 @@ export type AuditAction =
   | 'connection.cancelled'
   | 'connection.undone'
   | 'connection.removed_by_block'
+  /**
+   * 20/10/2026, decisao do cliente: O CONVITE DO PROPRIO PERFIL, que alimenta o
+   * LINK e o QR.
+   *
+   * **O recurso e a CONTA (`resourceKind: 'user'`, `resourceId` = a propria
+   * conta), e nao a linha de `connection_invites`.** Duas razoes, e as duas
+   * valem: ha **um** convite ativo por conta (indice
+   * `connection_invites_um_ativo_por_conta`), entao a conta ja identifica o
+   * convite sem ambiguidade; e `connection_invites.id` e UUID interno, que nao
+   * sai (ADR-0010 item 6).
+   *
+   * **O TOKEN NUNCA ENTRA NA TRILHA**, nem em `resourceId` nem em `metadata`.
+   * A trilha e lida por gente, viaja em despejo de diagnostico e sobrevive a
+   * desabilitacao da conta: o token em claro ali abriria o perfil de alguem a
+   * quem leia o registro, que e o que o ADR-0022 proibe. O que se registra e
+   * que houve emissao ou revogacao, e quando.
+   *
+   * Nao existe `connection.invite.resolved`: registrar cada resolucao seria
+   * gravar quem olhou o perfil de quem, que e a lista de quem viu alguem --
+   * informacao que ninguem pediu e que o plano 4-B nao reconhece.
+   */
+  | 'connection.invite.issued'
+  | 'connection.invite.revoked'
   // Backoffice (ADR-0027, apendice A.5). O padrao e `admin.<recurso>.<verbo>`
   // (D49), e cada valor e o `x-audit.action` de uma operacao do contrato, ou um
   // dos eventos que o item 8 manda gravar sem ser escrita (login recusado,

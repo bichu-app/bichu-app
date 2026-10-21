@@ -1,14 +1,36 @@
 /**
- * A rota do **perfil de outra pessoa** (fatia G): `GET /people/{handle}`.
+ * As rotas do **perfil de outra pessoa**: `GET /people/{handle}` (fatia G,
+ * 19/10/2026) e `POST /connection-invites/resolution` (20/10/2026).
  *
- * ## Uma operação, e a ausência das outras é o desenho
+ * ## O perfil tem DOIS endereços desde 20/10/2026, e um destino só
  *
- * Não existe `GET /people`, não existe `/people/search`, não existe
- * `/people/{handle}/pets`, não existe `/people/{handle}/showcase` e não existe
- * rota de "este apelido está livre?" (plano 4-C.5). **A única coisa que esta
- * etiqueta sabe fazer é ler UM perfil, por um apelido que quem chama já tem na
- * mão.** Coleção de pessoas é enumeração, e é o dano que o desenho desta frente
- * recusa por escrito.
+ * O cliente pediu três caminhos de conexão com **um destino**: *"a página do
+ * perfil do usuário com o botão de adicionar"*. Duas rotas chegam a ela, e as
+ * duas devolvem a **mesma** `PersonProfile`, pela **mesma** projeção
+ * (`comoResposta`):
+ *
+ * | Rota | Endereço | Vem de |
+ * |---|---|---|
+ * | `GET /people/{handle}` | o apelido | a busca, ou um apelido que alguém tinha na mão |
+ * | `POST /connection-invites/resolution` | o token do convite | o link do WhatsApp, ou o QR |
+ *
+ * **Uma projeção só é o ponto, e não uma economia.** Duas versões do perfil
+ * divergiriam no primeiro campo que alguém acrescentasse a uma delas, e o
+ * recorte da emenda 2 do ADR-0010 passaria a ter duas implementações — uma das
+ * quais ninguém estaria olhando.
+ *
+ * ## O que esta etiqueta NÃO tem, e o que ela PASSOU a ter
+ *
+ * **Passou a ter busca**: `GET /people` existe desde 20/10/2026, por decisão do
+ * cliente, e mora em `people-search-routes.ts` com os freios dele (piso de três
+ * caracteres, teto por conta, campo vazio não lista ninguém). Até essa data este
+ * cabeçalho afirmava que ela não existia, e a frase foi corrigida em vez de
+ * deixada contradizendo o código ao lado.
+ *
+ * **Continua sem**: `/people/{handle}/pets`, `/people/{handle}/showcase` e rota
+ * de "este apelido está livre?" (plano 4-C.5) — esta última porque
+ * disponibilidade de apelido é superfície de enumeração **sem** nenhum dos
+ * freios da busca, e o cliente não a pediu.
  *
  * ## Por que a etiqueta é `people` e não `connections`
  *
@@ -38,6 +60,8 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
+import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
+import type { Contrato } from '../../../../shared/http/contract.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { PerfilDePessoa, PerfilDePessoaProjetado } from '../../application/perfil-de-pessoa.js';
 import type { FotoDoPerfilDeOutraPessoa } from '../../ports/perfil-de-pessoa-repository.js';
@@ -58,6 +82,64 @@ export const rotaDoPerfilDePessoa = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * **A tela de destino do link de convite e do QR**: o perfil de quem emitiu,
+ * endereçado pelo **token** em vez do apelido.
+ *
+ * > *"ao clicar vai para a página do perfil do usuário com o botão de
+ * > adicionar"*
+ *
+ * ## `POST` com o token no corpo, e NÃO `GET /connection-invites/{token}`
+ *
+ * O reflexo é um `GET` com o token no caminho, e ele está errado por uma razão
+ * medida e não estética: **token em caminho de URL vai para o log de acesso**,
+ * para o histórico do aparelho, para o cabeçalho `Referer` da próxima navegação
+ * e para qualquer intermediário que registre a linha de requisição. O convite é
+ * um segredo ao portador — quem o tem alcança o perfil de quem o emitiu —, e um
+ * segredo em URL é um segredo publicado em cinco lugares que ninguém lembra de
+ * limpar.
+ *
+ * É a mesma razão pela qual `listDirectoryEntries` **não** recebe coordenada na
+ * requisição (*"coordenada em URL vai para log de acesso, para o histórico do
+ * aparelho e para o cabeçalho `Referer`"*).
+ *
+ * **`POST` que não escreve, e isso é correto:** resolver é leitura, responde
+ * **200** e `effects` é vazio. O método é `POST` pelo corpo, não pela semântica.
+ *
+ * ## Por que ela mora em `people` e não em `connections`
+ *
+ * A resposta é `PersonProfile`, e perfil é deste módulo. `people` já importa
+ * `connections/ports/` pela porta — o caminho que a regra de fronteira oferece —,
+ * enquanto o contrário faria `connections` importar `people/adapters/`, que a
+ * regra proíbe. O efeito prático é o que importa: a tela do link recebe a
+ * **mesma** `PersonProfile` de `getPersonProfile`, pela mesma projeção, em vez
+ * de uma segunda versão dela que divergiria no primeiro campo novo.
+ *
+ * ## Os tetos, e por que o segundo conta só o inválido
+ *
+ * **`appliesTo: 'invalid_attempts'`** no segundo: o token tem 256 bits e não é
+ * adivinhável, mas um teto que contasse toda resolução puniria quem abre o mesmo
+ * link duas vezes. Contar só a tentativa **inválida** encarece tentar tokens ao
+ * acaso sem atrapalhar quem tem um válido — e o critério 8 da BICHUS-178 existe
+ * para impedir que a tentativa válida consuma esse contador.
+ */
+export const rotaDaResolucaoDeConvite = defineRoute({
+  operationId: 'resolveConnectionInvite',
+  method: 'post',
+  path: '/connection-invites/resolution',
+  effects: [],
+  rateLimit: [
+    { dimension: ['account'], limit: 120, window: '1h', onExceed: 'deny_429' },
+    {
+      dimension: ['account'],
+      appliesTo: 'invalid_attempts',
+      limit: 20,
+      window: '1h',
+      onExceed: 'deny_429',
+    },
+  ],
+});
+
 /** Perfil é dado de duas pessoas (a relação entra nele): nada em cache compartilhado. */
 const SEM_CACHE = 'private, no-store';
 
@@ -70,6 +152,8 @@ export interface DependenciasDasRotasDePessoa {
   readonly autenticador: Autenticador;
   /** O domínio das derivadas públicas. A URL é montada aqui, nunca gravada. */
   readonly baseDeMidia: AbsoluteUrl;
+  /** O contrato, para o esquema do corpo de `resolveConnectionInvite`. */
+  readonly contrato: Contrato;
 }
 
 interface CaminhoDoPerfil {
@@ -182,4 +266,56 @@ export function registrarRotasDePessoa(
         .send(comoResposta(perfil, deps.baseDeMidia));
     },
   );
+
+  /**
+   * **A tela de destino do link e do QR.** Resolve o token no perfil de quem
+   * emitiu, e a resposta é a **mesma** `PersonProfile` da rota acima.
+   *
+   * O guarda de corpo fechado não é opcional: o Fastify monta o Ajv com
+   * `removeAdditional: true`, então `additionalProperties: false` no contrato
+   * **apaga** o campo desconhecido em silêncio em vez de recusar. Aqui isso
+   * seria caro: quem mandasse `{ handle: "maria" }` receberia uma recusa
+   * genérica e concluiria que resolver convite aceita apelido — que é outra
+   * operação, com outro teto e outra procedência (`origin`).
+   *
+   * **Um 404 só**, e ele funde o convite que não resolve (inexistente, vencido,
+   * revogado, de dono sem apelido, de quem bloqueou quem chama) com o perfil que
+   * não resolve (os seis predicados de `perfilPorApelido`). Distinguir "o
+   * convite morreu" de "a pessoa não está disponível para você" diria a quem foi
+   * bloqueado que o link que ele guardou um dia foi válido — que é o aviso de
+   * bloqueio que o desenho não dá.
+   */
+  const corpoDaResolucao = corpoDe(deps.contrato, rotaDaResolucaoDeConvite.operationId);
+  registrarRota(
+    app,
+    rotaDaResolucaoDeConvite,
+    {
+      schema: { body: corpoDaResolucao },
+      resolvedores: {
+        account: async (request: FastifyRequest) => chamador(request, deps),
+      },
+      preValidation: [
+        recusarCampoDesconhecido(corpoDaResolucao, rotaDaResolucaoDeConvite.operationId),
+      ],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { invite_token: token } = request.body as { readonly invite_token: string };
+      const perfil = await deps.perfis.porConvite(await chamador(request, deps), token);
+      return reply
+        .status(200)
+        .header('Cache-Control', SEM_CACHE)
+        .send(comoResposta(perfil, deps.baseDeMidia));
+    },
+  );
+}
+
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
+    );
+  }
+  return schema;
 }

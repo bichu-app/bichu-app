@@ -5,20 +5,38 @@
  *
  * | | |
  * |---|---|
- * | `POST /connections` | pedir, **a partir de um convite** |
+ * | `POST /connections` | pedir, **por convite ou por apelido** |
  * | `GET /connections/requests` | as duas caixas de pedidos |
  * | `GET /connections/summary` | os **números** da própria conta |
  * | `POST /connections/{ref}/acceptance` | aceitar |
  * | `DELETE /connections/{ref}` | recusar, cancelar ou desfazer |
  *
+ * **Continuam sendo CINCO**, e isso não é coincidência: a decisão do cliente de
+ * 20/10/2026 acrescentou um **caminho** a `requestConnection`, não uma operação.
+ * `conexao-nao-expoe-lista-nem-identificador.test.ts` cobra o número exato, e as
+ * operações do convite ficaram na etiqueta `connection-invites` justamente para
+ * não afrouxá-lo.
+ *
  * **Não existe `GET /connections`.** A lista de conexões não aparece a ninguém,
  * nem a quem é conectado (plano 4-B: *"Lista de conexões | nunca | nunca"*), e a
- * ausência é vigiada por `sem-lista-de-conexoes.test.ts` — que lê o contrato e
- * reprova qualquer operação nova que devolva pessoas conectadas.
+ * ausência é vigiada por `conexao-nao-expoe-lista-nem-identificador.test.ts` —
+ * que lê o contrato e reprova qualquer operação nova com esta etiqueta.
  *
- * **Não existe busca de pessoas, nem "seguir", nem descoberta por link.** As
- * três foram recusadas por decisão escrita, e nenhuma delas tem rota, parâmetro
- * ou campo neste arquivo.
+ * **O nome do portão estava errado neste cabeçalho até 20/10/2026**: ele citava
+ * um `sem-lista-de-conexoes.test.ts` que **nunca existiu** em nenhuma ref deste
+ * repositório (conferido em 20/10/2026 contra `70f4aa34`). O portão existe e
+ * funciona, com outro nome; a citação errada é pior que nenhuma, porque mandava
+ * quem fosse conferir procurar um arquivo ausente e concluir que não havia
+ * portão. A emenda 2 do ADR-0010 repete o nome errado, e ela precisa da mesma
+ * correção — está no relatório da entrega.
+ *
+ * **Não existe "seguir"**, e isso não mudou: timeline de quem se segue é a lista
+ * de presença com hora, e o ADR-0025 já a recusou (`20261018000030`:
+ * *"Encerrado, não se reabre"*).
+ *
+ * **A busca de pessoas PASSOU A EXISTIR** em 20/10/2026, por decisão do cliente,
+ * e ela **não** está aqui: é `GET /v1/people`, da etiqueta `people`. Este
+ * arquivo recebe um apelido já escolhido — ele não lista e não casa texto.
  *
  * ## Todas exigem conta, e o 401 vem antes de qualquer consulta
  *
@@ -160,16 +178,27 @@ export function registrarRotasDeConexao(
   };
 
   /**
-   * Pedir. **O corpo é um convite, e o guarda de corpo fechado não é opcional.**
+   * Pedir. **O corpo carrega UMA das duas credenciais**, e o guarda de corpo
+   * fechado continua não sendo opcional.
    *
    * O Fastify monta o Ajv com `removeAdditional: true`, então
    * `additionalProperties: false` no contrato **apaga** o campo desconhecido em
-   * silêncio em vez de recusar. Aqui isso seria o pior caso possível: quem
-   * mandasse `{ handle: "maria" }` receberia uma recusa genérica — ou, pior, um
-   * dia receberia 201 se alguém acrescentasse um segundo campo — e acreditaria
-   * que endereçar pessoa por apelido é uma coisa que este produto faz. O guarda
-   * recusa o campo desconhecido com nome, e é ele que mantém "não existe caminho
-   * por apelido" legível de fora.
+   * silêncio em vez de recusar. O guarda recusa o campo desconhecido com nome, e
+   * desde 20/10/2026 ele serve a um propósito diferente do de antes: antes ele
+   * mantinha *"não existe caminho por apelido"* legível de fora; agora ele
+   * mantém legível que existem **exatamente dois** caminhos e não um terceiro.
+   *
+   * **`oneOf` no contrato, e a escolha aqui é pelo campo presente.** Corpo com
+   * os dois, ou com nenhum, é recusado pelo esquema antes de chegar ao
+   * manipulador — então este `if` não tem um `else` de erro: ele não pode ser
+   * alcançado com os dois ausentes.
+   *
+   * **Nenhum dos dois caminhos diz, na resposta, qual deles foi usado.** A
+   * resposta é `Connection`, igual nos dois, e `origin` **não** sai nela: ele é
+   * coluna de trilha e de procedência, não de resposta. Um corpo que dissesse
+   * `origin: people_search` contaria a quem recebeu o pedido que a outra pessoa
+   * o achou numa busca — e isso é informação sobre como alguém chegou até ela,
+   * que ninguém pediu para dar.
    */
   const corpoDoPedido = corpoDe(deps.contrato, rotaDoPedidoDeConexao.operationId);
   registrarRota(
@@ -181,8 +210,20 @@ export function registrarRotasDeConexao(
       preValidation: [recusarCampoDesconhecido(corpoDoPedido, rotaDoPedidoDeConexao.operationId)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { invite_token: token } = request.body as { readonly invite_token: string };
-      const conexao = await deps.conexoes.pedir(await contexto(request, deps), token);
+      const corpo = request.body as {
+        readonly invite_token?: string;
+        readonly handle?: string;
+      };
+      const quem = await contexto(request, deps);
+      const conexao =
+        corpo.invite_token === undefined
+          ? // O `oneOf` do contrato garante que, sem `invite_token`, `handle`
+            // existe -- entao nao ha terceiro ramo a escrever aqui. O `?? ''`
+            // nao e um valor de reserva com significado: ele existe porque o
+            // tipo e opcional, e um apelido vazio nao casa nenhuma linha no
+            // `WHERE` -- o mesmo 404 de inexistente.
+            await deps.conexoes.pedirPorApelido(quem, corpo.handle ?? '')
+          : await deps.conexoes.pedir(quem, corpo.invite_token);
       return reply.status(201).header('Cache-Control', SEM_CACHE).send(conexao);
     },
   );

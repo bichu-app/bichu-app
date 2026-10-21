@@ -250,6 +250,26 @@ void describe('nenhuma superfície de conexão é alcançável sem conta', () =>
     }
   });
 
+  /**
+   * **A busca de pessoas existe desde 20/10/2026, e este caso continua certo.**
+   *
+   * Ele não cobra que a busca não exista — ela existe, é `GET /v1/people`, da
+   * etiqueta `people`, com os freios que o cliente listou. Ele cobra que **ela
+   * não more nesta etiqueta**, e a diferença não é burocrática:
+   *
+   * - a etiqueta `connections` é fechada em cinco operações, e é esse número que
+   *   faz uma sexta ser vista;
+   * - a busca tem freios próprios (piso de três caracteres, teto `[account, q]`,
+   *   recorte de resposta sem foto). Um `q` numa operação de conexão seria uma
+   *   **segunda** busca, sem nenhum deles, chegando como parâmetro de uma rota
+   *   que já existia — exatamente a forma pela qual uma superfície de enumeração
+   *   entra sem ninguém decidir.
+   *
+   * `handle` continua na lista de proibidos **como PARÂMETRO**, e isso não
+   * contradiz `requestConnection` aceitá-lo: lá ele é campo de **corpo**, numa
+   * operação `POST`, coberto pelo caso do `oneOf` acima. Em query string ele
+   * seria endereço de pessoa em URL — log de acesso, histórico e `Referer`.
+   */
   void it('nenhuma operação de conexão aceita parâmetro de busca de pessoa', () => {
     const PROIBIDOS = ['q', 'handle', 'nickname', 'name', 'display_name', 'user', 'email', 'phone'];
     for (const { caminho, metodo, operacao } of operacoesDaConexao()) {
@@ -258,25 +278,83 @@ void describe('nenhuma superfície de conexão é alcançável sem conta', () =>
         if (nome === undefined) continue;
         assert.ok(
           !PROIBIDOS.includes(nome),
-          `${metodo.toUpperCase()} ${caminho} aceita \`${nome}\`: seria busca de pessoas, ` +
-            'que o desenho recusa porque o dano mora na enumeração.',
+          `${metodo.toUpperCase()} ${caminho} aceita \`${nome}\`: seria uma SEGUNDA busca de ` +
+            'pessoas, sem os freios da primeira (`GET /v1/people`), entrando como parâmetro ' +
+            'de uma rota que já existia.',
         );
       }
     }
   });
 
-  void it('o corpo do pedido aceita UM campo, e é um token — nunca uma pessoa', () => {
+  /**
+   * **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.**
+   *
+   * Até essa data ele cobrava que o corpo do pedido tivesse **um** campo e que
+   * ele fosse um token — e cobrava com razão, porque a decisão de 18/10 era que
+   * não existia caminho por apelido. O cliente reverteu:
+   *
+   * > *"vamos implementar a busca pelo usuário (...) e vamos implementar o link
+   * > de convite"*
+   *
+   * O caso **não foi apagado nem afrouxado para "aceita qualquer coisa"**. Ele
+   * passou a cobrar a forma nova com a mesma precisão: **exatamente duas**
+   * credenciais, **exatamente uma por requisição** (`oneOf`), e corpo fechado.
+   * O que ele defende agora é que não entre uma **terceira** — `public_ref`,
+   * `user_id`, `email` ou `phone` — sem alguém decidir.
+   */
+  void it('o corpo do pedido aceita DUAS credenciais, e exatamente uma por vez', () => {
     const convite = spec.components.schemas.ConnectionInvite as {
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
       required?: readonly string[];
+      oneOf?: readonly { required?: readonly string[] }[];
     };
-    assert.deepEqual(Object.keys(convite.properties ?? {}), ['invite_token']);
-    assert.deepEqual([...(convite.required ?? [])], ['invite_token']);
+    assert.deepEqual(
+      Object.keys(convite.properties ?? {}).sort(),
+      ['handle', 'invite_token'],
+      'as credenciais são o token do convite (link e QR) e o apelido (busca). ' +
+        'Uma terceira forma de endereçar pessoa é decisão do cliente, não detalhe de rota.',
+    );
+    // **`oneOf` e NAO `required`**: com `required: [invite_token, handle]` os
+    // dois seriam obrigatorios, e sem `required` nenhum seria -- corpo vazio
+    // viraria um pedido sem alvo. `oneOf` e a unica forma que recusa as duas
+    // coisas erradas (os dois juntos, e nenhum dos dois).
+    assert.deepEqual(
+      (convite.oneOf ?? []).map((ramo) => [...(ramo.required ?? [])]).sort(),
+      [['handle'], ['invite_token']],
+      'sem `oneOf`, um corpo com as duas credenciais escolheria o caminho pela ' +
+        'ordem do `if` da borda — e a procedência gravada em `origin` passaria a ' +
+        'depender de qual ramo alguém escreveu primeiro.',
+    );
+    assert.equal(
+      convite.required,
+      undefined,
+      '`required` no topo, junto com `oneOf`, tornaria a credencial listada ' +
+        'obrigatória nos DOIS ramos — e o outro caminho deixaria de existir.',
+    );
     assert.equal(
       convite.additionalProperties,
       false,
-      'corpo aberto deixaria um campo de pessoa entrar sem ninguém decidir',
+      'corpo aberto deixaria uma terceira forma de endereçar pessoa entrar sem ninguém decidir',
+    );
+  });
+
+  /**
+   * **ISCA do caso de cima**: sem ela, aquele caso passaria por o contrato ter
+   * a forma certa hoje — e não por ele saber reconhecer a forma errada.
+   */
+  void it('ISCA: a conferência REPROVA uma terceira credencial no corpo do pedido', () => {
+    const comVazamento = {
+      ...spec.components.schemas.ConnectionInvite,
+      properties: {
+        ...(spec.components.schemas.ConnectionInvite?.properties as Record<string, unknown>),
+        public_ref: { type: 'string' },
+      },
+    };
+    assert.notDeepEqual(
+      Object.keys(comVazamento.properties).sort(),
+      ['handle', 'invite_token'],
+      'a isca passou: a conferência não enxerga uma credencial nova no corpo do pedido.',
     );
   });
 
