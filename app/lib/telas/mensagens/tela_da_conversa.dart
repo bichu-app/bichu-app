@@ -337,11 +337,24 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
 
   /// A foto nao impede o envio da mensagem.
   ///
-  /// Sem foto, nao impede nada (o caminho de antes desta historia). Com foto,
-  /// so a fase [FaseDaFotoEscolhida.pronta] libera -- e e isso que faz o toque
-  /// em Enviar **nao mandar nada** enquanto os bytes estao subindo.
+  /// Sem foto, nao impede nada (o caminho de antes desta historia). Com foto, o
+  /// que libera e **haver `upload_id`** -- e nao a fase da tela.
+  ///
+  /// ## Por que o `upload_id` e nao a fase
+  ///
+  /// Porque e ele o fato. `EnvioParaConfirmarDepois.uploadId` continua nulo
+  /// quando o envio nao terminou bem, e e exatamente essa nulidade que o doc
+  /// daquela classe diz existir para distinguir *"ha foto para mandar"* de
+  /// *"ha foto escolhida"*.
+  ///
+  /// Escrito sobre `== pronta`, este getter **travava a propria nova
+  /// tentativa**: a recusa por higiene em curso poe a tela em
+  /// [FaseDaFotoEscolhida.preparando], e a tentativa seguinte voltava daqui
+  /// sem mandar nada -- a tela ficava em "preparando" para sempre com uma
+  /// tentativa so no servidor. Medido pela isca do grupo (7), que contou 1
+  /// tentativa onde o desenho pede 2.
   bool get _fotoPermiteEnviar =>
-      _foto == null || _faseDaFoto == FaseDaFotoEscolhida.pronta;
+      _foto == null || _destinoDaFoto?.uploadId != null;
 
   /// Abre a folha com as duas origens e sobe o que vier.
   Future<void> _anexarFoto() async {
