@@ -30,6 +30,7 @@
 
 
 import 'package:bichu/dispositivo/saida_do_app.dart';
+import 'package:bichu/dispositivo/textos_do_app_de_mapas.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/rede/encontro_da_rede.dart';
 import 'package:bichu/telas/rede/local_do_encontro.dart';
@@ -319,10 +320,10 @@ void main() {
       );
       await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
 
-      await rolarAte(tester, find.text(LocalDoEncontro.rotuloDoMapa));
+      await rolarAte(tester, find.text(TextosDoAppDeMapas.rotuloDoEndereco));
       expect(find.text(endereco), findsOneWidget);
 
-      await tester.tap(find.text(LocalDoEncontro.rotuloDoMapa));
+      await tester.tap(find.text(TextosDoAppDeMapas.rotuloDoEndereco));
       await tester.pumpAndSettle();
       // O TEXTO vai para o app de mapas: nenhuma coordenada, porque nao
       // geocodificamos (ADR-0006).
@@ -342,9 +343,9 @@ void main() {
       );
       await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
 
-      await rolarAte(tester, find.text(LocalDoEncontro.rotuloDoMapa));
-      expect(find.text(LocalDoEncontro.rotuloDoMapa), findsOneWidget);
-      expect(find.text(LocalDoEncontro.rotuloDoBotao), findsNothing);
+      await rolarAte(tester, find.text(TextosDoAppDeMapas.rotuloDoEndereco));
+      expect(find.text(TextosDoAppDeMapas.rotuloDoEndereco), findsOneWidget);
+      expect(find.text(TextosDoAppDeMapas.rotuloDoPonto), findsNothing);
     });
 
     testWidgets('ISCA -- sem conta não há endereço nem Abrir no mapa',
@@ -365,7 +366,7 @@ void main() {
       );
 
       // Nao prometemos o que nao vai aparecer: nem o endereco, nem o botao.
-      expect(find.text(LocalDoEncontro.rotuloDoMapa), findsNothing);
+      expect(find.text(TextosDoAppDeMapas.rotuloDoEndereco), findsNothing);
       expect(textoDaTela(tester), isNot(contains('Teodoro Sampaio')));
     });
 

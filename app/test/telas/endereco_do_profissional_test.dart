@@ -36,6 +36,7 @@
 
 import 'package:bichu/api/modelos_diretorio.dart';
 import 'package:bichu/dispositivo/saida_do_app.dart';
+import 'package:bichu/dispositivo/textos_do_app_de_mapas.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -160,7 +161,7 @@ void main() {
       expect(
         semanticaDaTela(tester),
         contains(
-          '${PaginaDoLocal.rotuloDoMapa}: '
+          '${TextosDoAppDeMapas.rotuloDoEndereco}: '
           'Rua Teodoro Sampaio, 1020 - Sala 3 · CEP 05422-030',
         ),
       );
@@ -200,7 +201,7 @@ void main() {
       final controles = find.byWidgetPredicate(
         (w) =>
             w is Semantics &&
-            (w.properties.label ?? '').startsWith(PaginaDoLocal.rotuloDoMapa),
+            (w.properties.label ?? '').startsWith(TextosDoAppDeMapas.rotuloDoEndereco),
       );
 
       // DEFESA DE VAZIO: `findsOneWidget` sobre zero controles reprovaria, mas
@@ -277,7 +278,7 @@ void main() {
       );
       await tester.tap(find.text('Rua Teodoro Sampaio, 1020 - Sala 3 · CEP 05422-030'));
       await tester.pumpAndSettle();
-      expect(find.text(PaginaDoLocal.falhaAoAbrirMapa), findsOneWidget);
+      expect(find.text(TextosDoAppDeMapas.falhaAoAbrir), findsOneWidget);
     });
 
     testWidgets('rua SEM número é caso legítimo: nenhuma vírgula órfã', (
@@ -335,7 +336,7 @@ void main() {
       // valendo, e e o que impede a tela de ESCREVER "Abrir no mapa" como se
       // fosse um botao de texto.
       expect(
-        find.textContaining(PaginaDoLocal.rotuloDoMapa),
+        find.textContaining(TextosDoAppDeMapas.rotuloDoEndereco),
         findsNothing,
         reason: 'REPROVA: o rótulo do mapa virou texto visível. Ele é nome '
             'acessível de uma linha que já mostra o lugar.',
@@ -343,7 +344,7 @@ void main() {
       // E O CONTROLE EXISTE, na linha de LUGAR -- um, e so um.
       expect(
         semanticaDaTela(tester),
-        contains('${PaginaDoLocal.rotuloDoMapa}: Pinheiros · São Paulo · SP'),
+        contains('${TextosDoAppDeMapas.rotuloDoEndereco}: Pinheiros · São Paulo · SP'),
         reason: 'REPROVA: sem logradouro a tela deixou de oferecer o mapa. A '
             'decisão de 21/10/2026 é que aí o controle é a LINHA DE LUGAR: '
             'bairro, cidade e UF já estão na tela e abrem o centro do bairro, '
@@ -372,7 +373,7 @@ void main() {
       expect(texto, contains('Clínica Santa Bárbara'));
       expect(texto, isNot(contains('05422-030')));
       expect(texto, isNot(contains('Sala 3')));
-      expect(find.textContaining(PaginaDoLocal.rotuloDoMapa), findsNothing);
+      expect(find.textContaining(TextosDoAppDeMapas.rotuloDoEndereco), findsNothing);
     });
   });
 
@@ -392,7 +393,7 @@ void main() {
       );
       await abrirOLocal(tester, rede: redeDoLocal(detalhe: detalhe));
       expect(find.byType(PaginaDoLocal), findsOneWidget);
-      expect(find.textContaining(PaginaDoLocal.rotuloDoMapa), findsNothing);
+      expect(find.textContaining(TextosDoAppDeMapas.rotuloDoEndereco), findsNothing);
       expect(saida.enderecos, isEmpty);
     });
 
@@ -412,7 +413,7 @@ void main() {
         ),
       );
       expect(find.byType(PaginaDoLocal), findsOneWidget);
-      expect(find.textContaining(PaginaDoLocal.rotuloDoMapa), findsNothing);
+      expect(find.textContaining(TextosDoAppDeMapas.rotuloDoEndereco), findsNothing);
       expect(textoVisivel(tester), isNot(contains('42')));
     });
   });
@@ -459,7 +460,7 @@ void main() {
         tester,
         rede: redeDoLocal(detalhe: detalheComEndereco(logradouro: null)),
       );
-      expect(find.textContaining(PaginaDoLocal.rotuloDoMapa), findsNothing);
+      expect(find.textContaining(TextosDoAppDeMapas.rotuloDoEndereco), findsNothing);
       expect(saida.enderecos, isEmpty);
       expect(
         const EnderecoComercialDaEntrada(

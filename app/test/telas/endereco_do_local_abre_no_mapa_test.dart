@@ -38,10 +38,12 @@
 // chamadores.
 
 import 'package:bichu/dispositivo/saida_do_app.dart';
+import 'package:bichu/dispositivo/textos_do_app_de_mapas.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
-import 'package:bichu/telas/rede/local_do_encontro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../dispositivo/literais_de_abrir_mapa.dart';
 
 import 'telefone_fora_da_tela_test.dart'
     show abrirOLocal, detalheComTudo, redeDoLocal, semanticaDaTela;
@@ -93,7 +95,7 @@ class SaidaQueAnota extends SaidaDoApp {
 Finder oSemanticoDoEndereco(String lugar) => find.byWidgetPredicate(
       (w) =>
           w is Semantics &&
-          w.properties.label == '${PaginaDoLocal.rotuloDoMapa}: $lugar',
+          w.properties.label == '${TextosDoAppDeMapas.rotuloDoEndereco}: $lugar',
     );
 
 Finder oToqueDoEndereco(String lugar) => find.descendant(
@@ -160,7 +162,7 @@ void main() {
 
       expect(
         semanticaDaTela(tester),
-        contains('${PaginaDoLocal.rotuloDoMapa}: $lugarDoCaso'),
+        contains('${TextosDoAppDeMapas.rotuloDoEndereco}: $lugarDoCaso'),
         reason: 'REPROVA: a árvore semântica não diz que o endereço abre o '
             'mapa. Endereço pelado é anunciado como texto, e quem usa leitor '
             'de tela não descobre que ele é tocável -- o mesmo defeito que a '
@@ -180,7 +182,7 @@ void main() {
       await tester.tap(oToqueDoEndereco(lugarDoCaso));
       await tester.pumpAndSettle();
 
-      expect(find.text(PaginaDoLocal.falhaAoAbrirMapa), findsOneWidget);
+      expect(find.text(TextosDoAppDeMapas.falhaAoAbrir), findsOneWidget);
       expect(find.byType(PaginaDoLocal), findsOneWidget);
     });
   });
@@ -258,52 +260,179 @@ void main() {
       );
     });
   });
+
   // -------------------------------------------------------------------------
-  // ISCA — a redacao desta tela E a do encontro, e nao "parecida com"
+  // PORTAO — a fonte e UMA, e nenhuma tela escreve o texto a mao
   // -------------------------------------------------------------------------
   //
-  // POR QUE ELA EXISTE, e o custo que ela cobra de volta. Em 21/10/2026 duas
-  // frentes chegaram a esta tela com o toque que abre o mapa. As duas
-  // escreveram na propria prosa "a MESMA frase do encontro da Rede". **Nenhuma
-  // das duas copiou:** uma pos `Abrir <lugar> no mapa`, a outra `Abrir no app
-  // de mapas`, e o encontro diz `Abrir no mapa`. Eram tres redacoes para uma
-  // acao, duas delas se declarando copia fiel de uma quarta -- e ninguem
-  // percebeu porque NADA media.
+  // O QUE ELE SUBSTITUI. Ate a onda 4 este arquivo tinha um grupo chamado
+  // *"ISCA — a redacao e a do encontro"*, com dois casos comparando
+  // `PaginaDoLocal.rotuloDoMapa` com `LocalDoEncontro.rotuloDoMapa` e
+  // `PaginaDoLocal.falhaAoAbrirMapa` com `LocalDoEncontro.falhaAoAbrir`. Aquele
+  // grupo media COPIA, porque era copia o que havia: a prosa dele dizia, por
+  // escrito, que fonte unica era trabalho de frente e que mescla nao era o
+  // lugar. Agora as quatro constantes nao existem mais -- as tres superficies
+  // leem `TextosDoAppDeMapas` --, e comparar a fonte com ela mesma seria um
+  // caso que nao pode reprovar.
   //
-  // Decisao de 21/10: converge no encontro, que e a superficie mais antiga e a
-  // que as duas elegeram como fonte. Esta isca e o que mantem a convergencia
-  // depois da mescla: sem ela, a quarta redacao volta na primeira edicao.
+  // O QUE ELE MEDE NO LUGAR. Duas metades que apontam para lados opostos:
   //
-  // **Ela NAO exige constante compartilhada.** Unificar as tres superficies
-  // numa fonte so e trabalho de frente, com isca propria. Aqui: mesmo texto,
-  // medido.
-  group('ISCA — a redação é a do encontro, medida e não declarada', () {
-    test('o rótulo do toque é o texto EXATO de LocalDoEncontro.rotuloDoMapa',
+  //   1. NEGATIVA: nenhum `.dart` de `app/lib`, fora da fonte, escreve um
+  //      literal de abrir mapa. Isto e o que a quarta redacao precisaria fazer
+  //      para nascer, e e a varredura que a onda 4 nao tinha.
+  //   2. POSITIVA: as tres superficies IMPORTAM a fonte e LEEM a constante.
+  //      Sem esta metade, apagar os tres toques da tela deixaria a varredura
+  //      verde -- o portao diria "ninguem escreve o texto a mao" sobre um app
+  //      que nao abre mapa nenhum.
+  //
+  // A varredura mora em `test/dispositivo/literais_de_abrir_mapa.dart`, ao lado
+  // do espelho da fonte, e nao aqui: a quarta superficie que aparecer a chama
+  // sem copiar, que e a licao de 21/10 aplicada ao proprio portao. Mesma forma
+  // de `test/widgets/palavras_proibidas_no_rotulo.dart`.
+  group('PORTÃO — uma fonte para o texto do app de mapas', () {
+    test('nenhum arquivo de `app/lib` escreve um literal de abrir mapa à mão',
         () {
+      conferirQueNinguemEscreveAbrirMapaAMao();
+    });
+
+    test('CONTRAPESO — a FONTE contém os três textos, e a varredura os vê', () {
+      // Sem este caso, a varredura poderia estar lendo arquivo vazio, ou as
+      // agulhas poderiam nao casar com nada: as duas formas de ficar verde sem
+      // conferir. Aqui ela e apontada para o unico arquivo que DEVE reprovar,
+      // e exige reprova.
+      final String fonte = lerDoPacoteDoApp(caminhoDaFonteDeAbrirMapa);
+      final List<String> achados = literaisDeAbrirMapaEm(fonte);
+      for (final String texto in textosDaFonteDeAbrirMapa) {
+        expect(
+          achados,
+          contains(texto),
+          reason: 'a varredura NAO viu "$texto" dentro da própria fonte '
+              '($caminhoDaFonteDeAbrirMapa). A agulha está morta: ela nunca '
+              'reprovaria nada, e o portão está verde por não conferir.',
+        );
+      }
+      // `mencoesProibidasAoAppDeMapas` NAO entra nesta conferencia, e a
+      // primeira versao deste caso a exigia aqui -- e reprovou com razao.
+      // "aplicativo de mapas" so aparece na PROSA da fonte (o cabecalho conta
+      // a historia das redacoes recusadas), e a varredura apaga prosa de
+      // proposito. Exigir que a fonte contenha em CODIGO uma redacao que ela
+      // existe para proibir era exigir o contrario do desenho. A liveness
+      // daquelas agulhas e provada pela isca de literal plantado, abaixo, que
+      // e onde ela pode ser provada sem contradicao.
       expect(
-        PaginaDoLocal.rotuloDoMapa,
-        LocalDoEncontro.rotuloDoMapa,
-        reason: 'REPROVA: a página do local e o encontro divergiram no rótulo '
-            'do toque que abre o mapa. É a MESMA ação pela MESMA porta '
-            '(`SaidaDoApp.abrirEnderecoNoAppDeMapas`), e duas palavras para a '
-            'mesma ação ensinam que são ações diferentes. Já aconteceu: em '
-            '21/10/2026 havia TRÊS redações, duas delas se dizendo cópia desta '
-            'constante. Se a mudança é deliberada, mude as duas e diga por quê '
-            'aqui.',
+        achados,
+        contains('app de mapas'),
+        reason: 'nem a menção larga "app de mapas" casou com a fonte, que a '
+            'contém duas vezes em código: a varredura está cega.',
       );
     });
 
-    test('a frase de falha é o texto EXATO de LocalDoEncontro.falhaAoAbrir',
+    test('as TRÊS superfícies importam a fonte e leem a constante', () {
+      // A conferencia e sobre a FONTE e nao sobre a arvore montada, e e de
+      // proposito: a pagina do local tem dois toques (lugar e logradouro) em
+      // ramos que nao aparecem na mesma montagem, e um caso de widget mediria
+      // um deles.
+      for (final (String caminho, List<String> esperados) in <
+          (String, List<String>)>[
+        (
+          'lib/telas/rede/local_do_encontro.dart',
+          <String>[
+            'TextosDoAppDeMapas.rotuloDoEndereco',
+            'TextosDoAppDeMapas.rotuloDoPonto',
+            'TextosDoAppDeMapas.falhaAoAbrir',
+          ],
+        ),
+        (
+          'lib/telas/perto/pagina_do_local.dart',
+          <String>[
+            'TextosDoAppDeMapas.rotuloDoEndereco',
+            'TextosDoAppDeMapas.falhaAoAbrir',
+          ],
+        ),
+      ]) {
+        final String codigo = semProsaDeDart(lerDoPacoteDoApp(caminho));
+        expect(
+          codigo.contains('dispositivo/textos_do_app_de_mapas.dart'),
+          isTrue,
+          reason: '$caminho deixou de IMPORTAR a fonte do texto do app de '
+              'mapas. Se o toque que abre o mapa saiu da tela, este caso é o '
+              'lugar de dizer por quê; se ele ficou e o texto virou literal, o '
+              'caso acima reprova também.',
+        );
+        for (final String esperado in esperados) {
+          expect(
+            codigo.contains(esperado),
+            isTrue,
+            reason: '$caminho não lê mais `$esperado`. A varredura de literais '
+                'fica VERDE numa tela que não abre mapa nenhum, e é esta '
+                'metade que impede o portão de medir o vazio.',
+          );
+        }
+      }
+    });
+
+    test('ISCA DA ISCA: a varredura ENXERGA cada redação recusada da onda 4',
         () {
+      // Sem este caso, as agulhas das redacoes recusadas seriam promessa:
+      // nenhuma delas casa com `app/lib` hoje (e bom que nao case), entao a
+      // metade negativa do portao nunca as exercita. Aqui cada uma e plantada
+      // em codigo de verdade e a varredura tem de ve-la.
+      for (final (String rotulo, String amostra) in <(String, String)>[
+        (
+          'a frase que atribui causa',
+          "const String f = 'Não encontramos um app de mapas neste aparelho.';",
+        ),
+        (
+          '"aplicativo" no lugar de "app"',
+          "const String f = 'Não conseguimos abrir o aplicativo de mapas.';",
+        ),
+        (
+          'o rótulo interpolado com o nome do lugar',
+          "final String r = 'Abrir \$lugar no mapa';",
+        ),
+        (
+          'o rótulo interpolado com chaves',
+          "final String r = 'Abrir \${widget.lugar} no mapa';",
+        ),
+        (
+          'o rótulo do ponto, copiado',
+          "const String r = 'Abrir no app de mapas';",
+        ),
+        ('o rótulo do endereço, copiado', "const String r = 'Abrir no mapa';"),
+      ]) {
+        expect(
+          literaisDeAbrirMapaEm(amostra),
+          isNotEmpty,
+          reason: 'a varredura NÃO viu $rotulo em código: `$amostra`. '
+              'Esta é exatamente a edição que o portão existe para reprovar.',
+        );
+      }
+    });
+
+    test('ISCA DA ISCA: `semProsaDeDart` apaga o comentário e PRESERVA o código',
+        () {
+      // Sem este caso, um apagador de prosa quebrado (que apagasse a linha
+      // inteira, por exemplo) faria a metade negativa passar no vazio -- e um
+      // que nao apagasse nada reprovaria o arquivo que DOCUMENTA a regra.
+      const String amostra = '''
+const String r = 'Abrir no mapa';
+// este comentario fala de 'Abrir no app de mapas' e de aplicativo de mapas
+/// [ Abrir no app de mapas  ↗ ]
+final String url = 'http://exemplo/nao-e-comentario';
+''';
+      final String limpo = semProsaDeDart(amostra);
+      // O CODIGO fica.
+      expect(limpo, contains("const String r = 'Abrir no mapa';"));
+      // As duas linhas de PROSA somem, com tudo que elas citavam.
+      expect('\n$limpo'.contains('\n// este comentario'), isFalse);
+      expect(limpo.contains('aplicativo de mapas'), isFalse);
+      expect(limpo.contains('↗'), isFalse);
+      // E `//` dentro de cadeia NAO e tratado como comentario.
+      expect(limpo, contains("'http://exemplo/nao-e-comentario'"));
+      // E a varredura, sobre o limpo, ve so o literal de CODIGO.
       expect(
-        PaginaDoLocal.falhaAoAbrirMapa,
-        LocalDoEncontro.falhaAoAbrir,
-        reason: 'REPROVA: a frase de falha divergiu da do encontro. E se a '
-            'divergência for voltar a ATRIBUIR CAUSA ("não encontramos um app '
-            'de mapas neste aparelho"), ela é pior que divergência: '
-            '`abrirEnderecoNoAppDeMapas` devolve `false` tanto para "não há '
-            'app" quanto para "tentamos e falhou", e afirmar o primeiro manda '
-            'a pessoa instalar um app que ela já tem.',
+        literaisDeAbrirMapaEm(amostra),
+        <String>[TextosDoAppDeMapas.rotuloDoEndereco],
       );
     });
   });

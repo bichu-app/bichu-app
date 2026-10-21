@@ -8,6 +8,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/saida_do_app.dart';
+import '../../dispositivo/textos_do_app_de_mapas.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../roteamento/saida_da_mensagem.dart';
@@ -153,37 +154,18 @@ class PaginaDoLocal extends StatefulWidget {
   /// palavra.
   static const String rotuloDeLigar = 'Ligar';
 
-  /// O rotulo do toque que abre o endereco no aplicativo de mapas.
-  ///
-  /// **E O TEXTO EXATO DE `LocalDoEncontro.rotuloDoMapa`, e isso e medido.**
-  /// Duas frentes chegaram aqui em 21/10/2026, as duas escreveram "a MESMA
-  /// frase do encontro" na propria prosa, e **nenhuma das duas copiou**: uma
-  /// pos `Abrir <lugar> no mapa`, a outra `Abrir no app de mapas`, e o encontro
-  /// diz `Abrir no mapa`. Eram tres redacoes para uma acao, duas delas se
-  /// declarando copia fiel de uma quarta.
-  ///
-  /// O encontro e a regua porque e a superficie mais antiga **e** a que as duas
-  /// frentes elegeram como fonte: convergir nele nao contraria autor nenhum,
-  /// contraria so o erro deles. `endereco_do_local_abre_no_mapa_test.dart`
-  /// **reprova se este texto divergir do de la** -- sem essa isca a quarta
-  /// redacao volta na primeira edicao, que e exatamente como chegamos a tres.
-  ///
-  /// **Nao e constante compartilhada, e isso e de proposito.** Unificar as tres
-  /// superficies numa fonte so e trabalho de frente, com isca propria; mescla
-  /// nao e o lugar. Aqui: mesmo texto, medido. Fonte unica depois.
-  static const String rotuloDoMapa = 'Abrir no mapa';
-
-  /// Quando o aplicativo de mapas nao abre.
-  ///
-  /// **Texto exato de `LocalDoEncontro.falhaAoAbrir`**, pela mesma regua do
-  /// rotulo acima, e com uma razao que decide pelo CONTEUDO e nao pela
-  /// antiguidade: a outra redacao desta onda era *"Nao encontramos um app de
-  /// mapas neste aparelho"*, e ela **afirma uma causa que o codigo nao sabe**.
-  /// `abrirEnderecoNoAppDeMapas` devolve `false` tanto para "nao ha app" quanto
-  /// para "tentamos e falhou". Dizer o primeiro quando pode ser o segundo e
-  /// mandar a pessoa instalar um app de mapas que ela ja tem. Esta forma nao
-  /// atribui causa.
-  static const String falhaAoAbrirMapa = 'Não conseguimos abrir o app de mapas.';
+  // O ROTULO DO MAPA E A FRASE DE FALHA NAO MORAM MAIS AQUI.
+  //
+  // Sao `TextosDoAppDeMapas.rotuloDoEndereco` e
+  // `TextosDoAppDeMapas.falhaAoAbrir`, em
+  // `lib/dispositivo/textos_do_app_de_mapas.dart`. As duas linhas desta pagina
+  // que abrem mapa (a de lugar e a de logradouro) e o encontro da Rede leem a
+  // MESMA constante -- nao uma copia medida contra a outra, como a onda 4
+  // deixou. Um portao de fonte reprova qualquer arquivo de `app/lib/` que
+  // escreva o literal a mao, e e ele que impede a quarta redacao de voltar.
+  //
+  // A historia das tres redacoes e a razao de a frase de falha NAO atribuir
+  // causa estao no cabecalho daquele arquivo, e e la que se discute mudanca.
 
   static const String rotuloDaNota = 'Sua nota';
   static const String ajudaDaNota = 'Toque nas estrelas para dar de 1 a 5.';
@@ -635,13 +617,13 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   /// **A uniao da onda 4 definiu este metodo DUAS VEZES nesta classe**, sem
   /// conflito de texto: as duas frentes escreveram o mesmo mecanismo com a
   /// mesma porta, diferindo so na frase de falha. Ficou um, e a frase e a do
-  /// encontro (ver `PaginaDoLocal.falhaAoAbrirMapa`).
+  /// encontro (ver `TextosDoAppDeMapas.falhaAoAbrir`).
   Future<void> _abrirNoMapa(String endereco) async {
     final abriu =
         await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
     if (!abriu && mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text(PaginaDoLocal.falhaAoAbrirMapa)),
+        const SnackBar(content: Text(TextosDoAppDeMapas.falhaAoAbrir)),
       );
     }
   }
@@ -1404,8 +1386,9 @@ class _Informacoes extends StatelessWidget {
         // leva ao centro do bairro. Pôr o toque na linha MENOS precisa tendo a
         // mais precisa na tela seria o pior dos dois.
         // CASO 1: ha endereco de rua. A linha e o controle, e o rotulo
-        // ANUNCIADO diz a acao antes do endereco -- `Abrir no app de mapas:
-        // Rua Teodoro Sampaio, 1020` --, porque um leitor de tela que anuncia
+        // ANUNCIADO diz a acao antes do endereco --
+        // `<TextosDoAppDeMapas.rotuloDoEndereco>: Rua Teodoro Sampaio, 1020`
+        // --, porque um leitor de tela que anuncia
         // o endereco primeiro faz a pessoa ouvir a linha inteira para descobrir
         // que ela e tocavel. Mesma forma do botao do encontro.
         //
@@ -1416,7 +1399,7 @@ class _Informacoes extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e4),
           Semantics(
             button: true,
-            label: '${PaginaDoLocal.rotuloDoMapa}: $endereco',
+            label: '${TextosDoAppDeMapas.rotuloDoEndereco}: $endereco',
             onTap: () => aoAbrirNoMapa(busca),
             excludeSemantics: true,
             child: InkWell(
@@ -1447,7 +1430,7 @@ class _Informacoes extends StatelessWidget {
             // juntos, e os dois saem pela mesma condicao.
             aoTocar: endereco == null ? () => aoAbrirNoMapa(lugar) : null,
             rotuloAcessivel: endereco == null
-                ? '${PaginaDoLocal.rotuloDoMapa}: $lugar'
+                ? '${TextosDoAppDeMapas.rotuloDoEndereco}: $lugar'
                 : null,
           ),
         ],
