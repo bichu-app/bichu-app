@@ -39,6 +39,8 @@ import {
   errosDaUf,
   errosDeTexto,
   errosDoCep,
+  atividadesDoCorpo,
+  errosDoSiteDaEntrada,
   errosDoTelefone,
   MAXIMO_DA_CIDADE,
   MAXIMO_DO_BAIRRO,
@@ -188,6 +190,7 @@ function errosDaForma(campos: {
   street_number?: string | null | undefined;
   complement?: string | null | undefined;
   phone_e164?: string | null | undefined;
+  site_url?: string | null | undefined;
 }): ProblemFieldError[] {
   const erros: ProblemFieldError[] = [];
   if (campos.display_name !== undefined) {
@@ -226,6 +229,12 @@ function errosDaForma(campos: {
   }
   if (campos.phone_e164 !== undefined && campos.phone_e164 !== null) {
     erros.push(...errosDoTelefone('phone_e164', campos.phone_e164));
+  }
+  // O SITE (cliente, 21/10/2026). `null` apaga e nao tem forma a conferir, como
+  // os demais. Quem decide o formato e `errosDoSiteDaEntrada`, que delega ao
+  // validador de `shared/url` -- nao ha regra de URL escrita neste arquivo.
+  if (campos.site_url !== undefined && campos.site_url !== null) {
+    erros.push(...errosDoSiteDaEntrada('site_url', campos.site_url));
   }
   return erros;
 }
@@ -304,6 +313,21 @@ export class DiretorioAdministrativo {
     const erros = errosDaForma(corpo);
     if (erros.length > 0) throw problemas.validacao(erros);
 
+    // AS ATIVIDADES, de `kinds` ou de `kind`. Na CRIACAO a ausencia dos dois e
+    // `required`: a atividade e o que a entrada E, e o contrato tirou `kind` de
+    // `required` justamente porque quem decide agora e esta linha, e nao o
+    // schema -- o schema nao consegue dizer "um destes dois".
+    const atividades = atividadesDoCorpo('kinds', corpo);
+    if ('erros' in atividades) throw problemas.validacao(atividades.erros);
+    if (atividades.ok === undefined) {
+      throw problemas.validacao([
+        { field: 'kinds', code: 'required', message: 'Escolha ao menos uma atividade.' },
+      ]);
+    }
+    // Amarrado num `const` porque o estreitamento acima nao sobrevive a entrada
+    // no fecho de `emTransacao`.
+    const kinds = atividades.ok;
+
     return this.deps.repositorio.emTransacao(async (tx) => {
       // A logo e a foto sao confirmadas ANTES do `INSERT`, na mesma transacao:
       // `imagemDoEnvio` recusa com `400` o envio que nao serve, e recusar antes
@@ -314,7 +338,7 @@ export class DiretorioAdministrativo {
         tx.inserirEntrada({
           id: this.deps.ids.uuidv7(),
           slug: corpo.slug,
-          kind: corpo.kind,
+          kinds,
           entityKind: corpo.entity_kind,
           displayName: corpo.display_name.trim(),
           about: aparado(corpo.about) ?? null,
@@ -329,6 +353,10 @@ export class DiretorioAdministrativo {
           streetNumber: aparado(corpo.street_number) ?? null,
           complement: aparado(corpo.complement) ?? null,
           phoneE164: aparado(corpo.phone_e164) ?? null,
+          // O site e APARADO e nada mais: aparar espaco das pontas nao muda o
+          // endereco, e o validador recusa espaco no meio. Nenhuma outra
+          // normalizacao -- nao se acrescenta esquema nem se tira `www`.
+          siteUrl: aparado(corpo.site_url) ?? null,
           logoImageId,
           photoImageId,
           status: STATUS_INICIAL,
@@ -359,6 +387,15 @@ export class DiretorioAdministrativo {
     const erros = errosDaForma(patch);
     if (erros.length > 0) throw problemas.validacao(erros);
 
+    // AS ATIVIDADES na EDICAO. A mesma funcao da criacao, e a diferenca e so
+    // esta: aqui a ausencia dos dois campos quer dizer **nao mexer**, e nao
+    // `required`. `kinds` (ou `kind`, que vale `[kind]`) SUBSTITUI a lista
+    // inteira -- nao ha "acrescentar uma atividade", pelo mesmo idioma de
+    // `images` da `Rede`: a lista que vem e a lista que fica.
+    const atividades = atividadesDoCorpo('kinds', patch);
+    if ('erros' in atividades) throw problemas.validacao(atividades.erros);
+    const kinds = atividades.ok;
+
     return this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.entradaPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
@@ -385,6 +422,7 @@ export class DiretorioAdministrativo {
           ? {}
           : { complement: aparado(patch.complement) ?? null }),
         ...(patch.phone_e164 === undefined ? {} : { phone_e164: aparado(patch.phone_e164) ?? null }),
+        ...(patch.site_url === undefined ? {} : { site_url: aparado(patch.site_url) ?? null }),
       };
 
       const decidido = planejarEdicao(atual, normalizado);
@@ -397,7 +435,7 @@ export class DiretorioAdministrativo {
 
       const mudanca: MudancaDaEntrada = {
         ...(normalizado.slug === undefined ? {} : { slug: normalizado.slug }),
-        ...(normalizado.kind === undefined ? {} : { kind: normalizado.kind }),
+        ...(kinds === undefined ? {} : { kinds }),
         ...(normalizado.entity_kind === undefined
           ? {}
           : { entityKind: normalizado.entity_kind }),
@@ -417,6 +455,7 @@ export class DiretorioAdministrativo {
           : { streetNumber: normalizado.street_number }),
         ...(normalizado.complement === undefined ? {} : { complement: normalizado.complement }),
         ...(normalizado.phone_e164 === undefined ? {} : { phoneE164: normalizado.phone_e164 }),
+        ...(normalizado.site_url === undefined ? {} : { siteUrl: normalizado.site_url }),
         // A logo e a foto: ausente nao mexe, `null` TIRA, `upload_id` novo
         // TROCA. A confirmacao acontece aqui dentro, na transacao da escrita.
         ...(patch.logo_upload_id === undefined

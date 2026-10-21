@@ -115,7 +115,7 @@ const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
 interface LinhaDaEntrada {
   entity_kind: TipoDeEntidade;
   slug: string | null;
-  kind: TipoDeProfissional;
+  kinds: TipoDeProfissional[];
   display_name: string;
   about: string | null;
   city: string | null;
@@ -126,6 +126,7 @@ interface LinhaDaEntrada {
   street_number: string | null;
   complement: string | null;
   phone_e164: string | null;
+  site_url: string | null;
   status: StatusDaEntrada;
   source: OrigemDaEntrada;
   claim_status: TitularidadeDaEntrada;
@@ -170,7 +171,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     // `slug` nao-nulo no tipo faria `missing_to_publish` nao ter como acusar a
     // falta. A string vazia e o que a projecao le como "sem endereco".
     slug: l.slug ?? '',
-    kind: l.kind,
+    kinds: l.kinds,
     entityKind: l.entity_kind,
     displayName: l.display_name,
     about: l.about,
@@ -182,6 +183,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     streetNumber: l.street_number,
     complement: l.complement,
     phoneE164: l.phone_e164,
+    siteUrl: l.site_url,
     logo: comoImagem(l.logo_status, l.logo_public_key, l.logo_rejection_reason),
     photo: comoImagem(l.photo_status, l.photo_public_key, l.photo_rejection_reason),
     status: l.status,
@@ -200,7 +202,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
 
 const COLUNAS = [
   'professionals.slug as slug',
-  'professionals.kind as kind',
+  'professionals.kinds as kinds',
   'professionals.entity_kind as entity_kind',
   'professionals.display_name as display_name',
   'professionals.about as about',
@@ -215,6 +217,7 @@ const COLUNAS = [
   'professionals.street_number as street_number',
   'professionals.complement as complement',
   'professionals.phone_e164 as phone_e164',
+  'professionals.site_url as site_url',
   'professionals.status as status',
   'professionals.source as source',
   'professionals.claim_status as claim_status',
@@ -273,7 +276,15 @@ function comRecorte<T extends { where: unknown }>(consulta: T, recorte: RecorteD
       sql<boolean>`texto_para_busca(professionals.display_name) LIKE padrao_de_busca(${busca})`,
     );
   }
-  if (recorte.kind !== undefined) c = c.where('professionals.kind', '=', recorte.kind);
+  // PERTINENCIA, nunca desdobramento -- a mesma regra, a mesma forma e o mesmo
+  // motivo do filtro da listagem do app (ver `construtorDaListagem` em
+  // `kysely-directory-repository.ts`, que tem o raciocinio por extenso):
+  // `unnest` com `SELECT` direto faria a entrada de tres atividades sair tres
+  // vezes nesta pagina e a contagem contar tres, e `@>` em vez de `= ANY` e o
+  // que deixa o GIN ser usado.
+  if (recorte.kind !== undefined) {
+    c = c.where(sql<boolean>`professionals.kinds @> ARRAY[${recorte.kind}]::text[]`);
+  }
   if (recorte.status !== undefined) c = c.where('professionals.status', '=', recorte.status);
   const cidade = recorte.city?.trim();
   if (cidade !== undefined && cidade !== '') {
@@ -336,7 +347,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
           .values({
             id: nova.id,
             slug: nova.slug,
-            kind: nova.kind,
+            kinds: [...nova.kinds],
             // Ausente vale `professional`, o mesmo `DEFAULT` da coluna. Escrito
             // aqui, e nao deixado para o banco, para que o aceite da indicacao
             // da comunidade -- que nao coleta tipo de entidade -- grave o mesmo
@@ -352,6 +363,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             street_number: nova.streetNumber,
             complement: nova.complement,
             phone_e164: nova.phoneE164,
+            site_url: nova.siteUrl,
             logo_image_id: nova.logoImageId,
             photo_image_id: nova.photoImageId,
             status: nova.status,
@@ -379,7 +391,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
           .updateTable('professionals')
           .set((eb) => ({
             ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
-            ...(mudanca.kind === undefined ? {} : { kind: mudanca.kind }),
+            ...(mudanca.kinds === undefined ? {} : { kinds: [...mudanca.kinds] }),
             ...(mudanca.entityKind === undefined ? {} : { entity_kind: mudanca.entityKind }),
             ...(mudanca.displayName === undefined ? {} : { display_name: mudanca.displayName }),
             ...(mudanca.about === undefined ? {} : { about: mudanca.about }),
@@ -391,6 +403,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             ...(mudanca.streetNumber === undefined ? {} : { street_number: mudanca.streetNumber }),
             ...(mudanca.complement === undefined ? {} : { complement: mudanca.complement }),
             ...(mudanca.phoneE164 === undefined ? {} : { phone_e164: mudanca.phoneE164 }),
+            ...(mudanca.siteUrl === undefined ? {} : { site_url: mudanca.siteUrl }),
             // `null` TIRA o ponteiro da imagem e nao apaga objeto no balde.
             ...(mudanca.logoImageId === undefined ? {} : { logo_image_id: mudanca.logoImageId }),
             ...(mudanca.photoImageId === undefined ? {} : { photo_image_id: mudanca.photoImageId }),

@@ -399,12 +399,15 @@ describe('3 · Loja: capa, ordem, descrição e rascunho (17/10/2026)', () => {
 });
 
 describe('galeria: a descrição é opcional só onde se pede', () => {
-  it('por padrão (a Rede) o rótulo continua obrigatório', () => {
+  // O PADRAO `true` NAO E MAIS "a Rede": ela desligou a obrigacao em 21/10/2026,
+  // como a `Loja` em 17/10. Hoje nenhum dos dois formularios usa o padrao -- ele
+  // sobrevive para quem vier depois, e e isto que este caso fixa.
+  it('por padrão (nenhum formulário de hoje) o rótulo continua obrigatório', () => {
     render(<GaleriaDeTeste inicial={[pronta(1)]} enviar={vi.fn()} />);
     expect(screen.getByLabelText('Descrição da imagem *')).toBeInTheDocument();
   });
 
-  it('com `descricaoObrigatoria={false}` (a Loja) o campo vazio não vira erro, e uma letra vira', () => {
+  it('com `descricaoObrigatoria={false}` (a Loja e a Rede) o campo vazio não vira erro, e uma letra vira', () => {
     render(<GaleriaDeTeste inicial={[{ ...pronta(1), alt: '' }]} enviar={vi.fn()} obrigatoria={false} />);
     expect(screen.getByLabelText('Descrição da imagem (opcional)')).toBeInTheDocument();
     expect(screen.queryByText('Descreva a imagem.')).toBeNull();

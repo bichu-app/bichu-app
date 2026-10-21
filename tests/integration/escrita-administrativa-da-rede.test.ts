@@ -49,6 +49,7 @@ import {
   expurgarPedidosVencidos,
 } from '../../src/modules/network/adapters/persistence/kysely-rede-administrativa.js';
 import { criarNetworkRepository } from '../../src/modules/network/adapters/persistence/kysely-network-repository.js';
+import { projetarEncontro } from '../../src/modules/network/domain/encontro-da-rede.js';
 import { RedeAdministrativa, type Autor } from '../../src/modules/network/application/rede-administrativa.js';
 import { criarAvisoAosAdministradores } from '../../src/modules/network/adapters/external/aviso-aos-administradores-por-email.js';
 
@@ -511,6 +512,52 @@ void describe('a galeria do encontro e a conta do administrador', () => {
         textoAlternativo: 'Caes correndo no gramado',
       },
     ]);
+  });
+
+  // =========================================================================
+  // TEXTO ALTERNATIVO OPCIONAL (21/10/2026, decisao do cliente)
+  // =========================================================================
+  // O espelho exato do caso da `Loja`
+  // (`catalogo-administrativo.test.ts`, "TEXTO ALTERNATIVO OPCIONAL"), agora que
+  // a `Rede` recebeu o mesmo afrouxamento.
+  //
+  // AS TRES COISAS QUE ESTE CASO FIXA, e as duas ultimas sao iscas:
+  //  1. ausente grava NULO na coluna (que perdeu o `NOT NULL` na
+  //     `20261020000013`) e sai NULO na leitura DO PAINEL;
+  //  2. presente e CURTO continua `400` -- opcional nao quer dizer que
+  //     qualquer coisa serve, e o `CHECK` de tamanho ficou de pe;
+  //  3. **a leitura DO APP nao devolve nulo**: ela cai no titulo do encontro.
+  //     Sem esta terceira assercao o `alt_text: null` chegaria ao APK em campo,
+  //     onde `ImagemDoEncontro.doJson` (`app/lib/api/modelos_rede.dart`) exige
+  //     `alt is String` e DESCARTA a imagem inteira -- a capa sumiria da agenda
+  //     em vez de so perder o nome acessivel.
+  void it('TEXTO ALTERNATIVO OPCIONAL: ausente grava nulo e o painel le nulo; o app cai no titulo; uma letra e 400', async () => {
+    const upload = await envio('network_event', autor.adminAccountId);
+    const criado = await criar({ images: [{ upload_id: upload }] });
+    const id = await idDoEncontro(criado.recurso.slug);
+
+    const galeria = await banco.db.selectFrom('network_event_images').selectAll().where('event_id', '=', id).execute();
+    assert.equal(galeria[0]?.alt_text, null, 'ausente grava NULO na coluna, que perdeu o NOT NULL');
+    assert.equal(criado.recurso.images[0]?.alt_text, null, 'o PAINEL le o nulo cru, para o formulario reabrir com o campo vazio');
+
+    // A leitura do app, com a imagem pronta: o titulo do encontro no lugar do
+    // nulo. `criar()` usa o titulo do `corpo()` do arquivo.
+    const imagemId = galeria[0]?.image_id ?? '';
+    await sql`update catalog_images set status = 'ready', public_key = 'card/sem-alt.webp' where id = ${imagemId}::uuid`.execute(banco.db);
+    const publica = criarNetworkRepository(banco.db, ids, (c) => `https://midia.exemplo.invalid/${c}`);
+    const doApp = await publica.buscarEncontro(criado.recurso.slug);
+    assert.equal(doApp?.imagens[0]?.textoAlternativo, null, 'o DOMINIO carrega o nulo');
+    assert.equal(
+      (projetarEncontro(doApp as never, relogio.now()) as unknown as { images: { alt_text: string | null }[] }).images[0]
+        ?.alt_text,
+      doApp?.title,
+      'a PROJECAO do app cai no titulo: nulo aqui faria a imagem desaparecer no APK em campo',
+    );
+
+    // A ISCA DA MEIA-DESCRICAO: uma letra continua reprovando.
+    const outro = await envio('network_event', autor.adminAccountId);
+    const erro = await r.criarEncontro(autor, corpo({ images: [{ upload_id: outro, alt_text: 'a' }] }) as never).catch((e: unknown) => e);
+    assert.equal(codigo(erro), 'length', 'presente e curto continua erro de campo');
   });
 
   void it('T9: envio de imagem de produto nao serve para encontro', async () => {

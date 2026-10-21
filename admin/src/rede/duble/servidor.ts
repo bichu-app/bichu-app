@@ -170,7 +170,11 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       rejection_reason: null,
       upload_id: img.upload_id,
       position,
-      alt_text: img.alt_text,
+      // O corpo OMITE `alt_text` quando a descricao esta vazia (opcional desde
+      // 21/10/2026); a LEITURA o devolve como `null`, nunca `undefined`. O
+      // duble precisa fazer a mesma traducao que o servidor faz, senao a tela
+      // reabriria com `undefined` onde o servidor manda `null`.
+      alt_text: img.alt_text ?? null,
     }));
   }
 

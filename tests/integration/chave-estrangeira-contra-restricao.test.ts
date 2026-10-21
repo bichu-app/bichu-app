@@ -2228,8 +2228,8 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
       );
       await cliente.query(
         `insert into professionals
-           (id, kind, display_name, source, claim_status, claimed_by_user_id, claimed_at)
-         values ($1, 'vet', 'Clinica do Efeito', 'self', 'claimed', $2, now())`,
+           (id, kinds, display_name, source, claim_status, claimed_by_user_id, claimed_at)
+         values ($1, ARRAY['vet'], 'Clinica do Efeito', 'self', 'claimed', $2, now())`,
         [PROFISSIONAL, CONTA_TERCEIRA],
       );
       // O par que torna a exclusão de conta dependente de ORDEM:

@@ -92,7 +92,13 @@ export interface MudancaDeEncontro {
 export interface ImagemNaPosicao {
   readonly imageId: string;
   readonly position: number;
-  readonly altText: string;
+  /**
+   * **Anulavel desde 21/10/2026** (decisao do cliente): `alt_text` saiu do
+   * `required` de `CatalogImageInput`. Nulo quer dizer que o painel nao
+   * escreveu descricao; quando vem, de 2 a 150 caracteres aparados. A COLUNA
+   * aceita nulo desde a migracao `20261020000013`.
+   */
+  readonly altText: string | null;
 }
 
 export interface RecorteDoPainel {

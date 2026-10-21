@@ -2704,12 +2704,25 @@ export interface paths {
          *     chega por link de um perfil que saiu do ar le "nao encontramos",
          *     que e a verdade que ele tem direito de saber.
          *
-         *     **Nenhum campo novo de cadastro apareceu aqui.** Site, e-mail,
-         *     WhatsApp, redes sociais, horario de funcionamento e foto **nao
-         *     existem** em `professionals` -- nao ha coluna e nao ha painel que as
-         *     preencha. Esta operacao devolve o que ha. Declarar campo que ninguem
-         *     pode preencher produziria uma tela com seis linhas vazias permanentes,
-         *     que e pior do que uma tela curta.
+         *     **O ENDERECO COMERCIAL SAI AQUI desde 21/10/2026**, em `postal_code`,
+         *     `street`, `street_number` e `complement`. As quatro colunas existiam em
+         *     `professionals` desde `20261018000001` e nao eram projetadas por uma
+         *     razao escrita na propria migracao -- *"exibir endereco completo e
+         *     decisao do cliente, e ela nao foi tomada"*. **Ela foi tomada**, pelo
+         *     cliente, em 21/10/2026: *"o endereco completo do profissional"*, para a
+         *     pessoa poder tocar nele e abrir o aplicativo de mapas.
+         *
+         *     **ISTO NAO E EMENDA AO TETO DE BAIRRO E CIDADE DO ADR-0010**, e a razao
+         *     e a secao 4 do ADR-0011: *"a pagina do tutor e uma pessoa que nao pediu
+         *     para ser achada; o perfil do profissional e uma entidade que aceitou
+         *     aparecer para ser contratada"*. O endereco de uma PESSOA continua
+         *     proibido em toda superficie, e `PersonProfile` segue sem nenhum dos
+         *     quatro. O `phone_e164` comercial ja saia por esta mesma rota e pela
+         *     mesma razao.
+         *
+         *     **E-mail, WhatsApp, redes sociais e horario continuam fora**: nao ha
+         *     coluna e nao ha painel que as preencha, e declarar campo que ninguem
+         *     pode preencher produziria uma tela com linhas vazias permanentes.
          *
          *     ## A distancia, e por que ela e NULA aqui com mais frequencia
          *
@@ -5270,8 +5283,12 @@ export interface paths {
          *     Recusas de regra, todas `400 validation-failed` com o campo: fim antes
          *     do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
          *     nao existe; ponto fora dos limites do Brasil; encontro pago sem valor
-         *     (`code: admission_incomplete`); imagem sem texto alternativo.
+         *     (`code: admission_incomplete`).
          *     **Nao ha limite de vagas** (decisao do cliente).
+         *
+         *     **Imagem sem texto alternativo DEIXOU DE SER RECUSA** em 21/10/2026
+         *     (decisao do cliente): `alt_text` saiu do `required` de
+         *     `CatalogImageInput`. Texto presente e vazio continua `400`.
          *
          *     `visibility: private` faz o encontro aparecer no app **so com titulo
          *     e data** ate a conta ter o pedido aprovado na fila
@@ -8833,10 +8850,17 @@ export interface components {
             poster_url?: string;
         };
         /**
-         * @description A atividade: o que a entrada FAZ, o que se contrata dela. Espelha
-         *     `professionals.kind` e a entrada
-         *     `public.professionals.professionals_kind_check` do teste de conjunto
-         *     exato.
+         * @description UMA atividade: o que a entrada FAZ, o que se contrata dela. Espelha os
+         *     valores de `professionals.kinds` e a entrada
+         *     `public.professionals.professionals_atividades_conhecidas` do teste de
+         *     conjunto exato.
+         *
+         *     **Desde 21/10/2026 a entrada tem VARIAS atividades** (decisao do
+         *     cliente): a coluna e uma lista, e quem quer todas le
+         *     `ProfessionalKinds`. Este schema continua descrevendo UM valor, e e
+         *     usado em tres papeis: cada item da lista, o filtro por chip (que filtra
+         *     por uma atividade de cada vez), e o campo `kind` de compatibilidade das
+         *     respostas.
          *
          *     **Continua sem valor para ONG, e agora a ausencia e desenho concluido
          *     e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -8858,6 +8882,31 @@ export interface components {
          * @enum {string}
          */
         ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic";
+        /**
+         * @description As ATIVIDADES da entrada, de 1 a 6 (decisao do cliente de 21/10/2026:
+         *     uma clinica que tambem faz banho e tosa nao precisa escolher). Espelha
+         *     `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
+         *     separador.
+         *
+         *     **A ORDEM IMPORTA, e so por uma razao:** o primeiro item e o que as
+         *     respostas publicam no campo `kind`, que existe para o APK em campo
+         *     continuar funcionando. Fora disso a lista nao tem hierarquia -- nao ha
+         *     "atividade secundaria" com regra propria, e o filtro por chip trata os
+         *     itens como iguais.
+         *
+         *     **TETO 6 = o tamanho da lista fechada.** Teto maior seria ficticio: nao
+         *     ha setimo valor para um setimo item carregar.
+         *
+         *     `uniqueItems` recusa `[vet, vet]` ja no schema; o servidor recusa o
+         *     mesmo com `400` (`code: duplicate_kind`), porque o `CHECK` do banco nao
+         *     alcanca unicidade de item (`CHECK` nao aceita subconsulta).
+         *
+         *     **FILTRAR por uma destas atividades devolve a entrada UMA VEZ**, e nao
+         *     uma vez por atividade: o filtro testa PERTINENCIA em vez de desdobrar a
+         *     linha. O estabelecimento com tres atividades aparece nos tres chips, uma
+         *     vez em cada, e o `total` da pagina nao o conta tres vezes.
+         */
+        ProfessionalKinds: components["schemas"]["ProfessionalKind"][];
         /**
          * @description O QUE a entrada e, e nao o que ela faz -- eixo SEPARADO de
          *     `ProfessionalKind` de proposito. Ver a prosa daquele campo para por que
@@ -8921,7 +8970,16 @@ export interface components {
          */
         DirectoryEntrySummary: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
@@ -8939,6 +8997,27 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * Format: uri
+             * @description O **site do estabelecimento** (decisao do cliente de 21/10/2026),
+             *     a URL inteira e pronta para abrir -- nunca so o host. Nulo quando a
+             *     entidade nao informou, e nulo e o estado normal da maioria das
+             *     entradas.
+             *
+             *     Sai ao lado de `phone_e164` e pela mesma razao: e um canal de
+             *     contato que a entidade publicou DE PROPOSITO para ser procurada
+             *     (ADR-0011 secao 4), e nao um dado pessoal que escapou. Como ele,
+             *     **so pode existir porque a operacao exige conta**.
+             *
+             *     **OPCIONAL no schema, e isso e deliberado**: o APK publicado le esta
+             *     resposta e nao conhece este campo. Campo novo em resposta e aditivo;
+             *     exigi-lo nao seria.
+             *
+             *     O formato e garantido na escrita (`DirectoryEntrySiteUrl`): sempre
+             *     `https://`, nunca normalizado. Quem desenha pode abrir o valor como
+             *     esta.
+             */
+            site_url?: string | null;
             /**
              * @description A pontuacao agregada, **para o cartao da lista mostrar a media e a
              *     quantidade** -- o cliente pediu os dois "na lista e na pagina"
@@ -9644,15 +9723,57 @@ export interface components {
          */
         DirectoryEntryClaimStatus: "unclaimed" | "claim_pending" | "claimed" | "disputed";
         /**
+         * Format: uri
+         * @description O **site do estabelecimento**, a URL inteira (decisao do cliente de
+         *     21/10/2026). Opcional em toda superficie; nulo quer dizer "nao
+         *     informou".
+         *
+         *     **FORMATO, e ele NAO E NORMALIZADO:** `https://` obrigatorio e esquema
+         *     AUSENTE e **recusado** -- `cobasi.com.br` nao e aceito nem completado,
+         *     e a recusa vem com a frase que ensina (`400 validation-failed`,
+         *     `code: site_url_not_https`, "Escreva o endereco completo, comecando com
+         *     https://."). `http://` recusa com "Troque http:// por https://.".
+         *     Tambem recusam: espaco (`site_url_invalid`), controle bidirecional
+         *     (`bidi_control`), `usuario:senha` (`site_url_has_credentials`), literal
+         *     de IP (`site_url_ip_literal`) e host local ou sem ponto
+         *     (`site_url_local_host`); fora da faixa, `site_url_length`.
+         *
+         *     O que a pessoa conferiu na tela e o que fica gravado: o servidor **nao
+         *     acrescenta esquema, nao tira `www` e nao corta caminho nem query**. O
+         *     padrao e o mesmo de `AdminStorePartnerInput.site_url` e a autoridade e
+         *     uma so (`src/shared/url/endereco-completo.ts`), espelhada no painel.
+         *
+         *     **Guarda a URL inteira, e nao o host** -- a diferenca deliberada em
+         *     relacao a `AdminStorePartner`, que devolve `host`: lá o destino e
+         *     montado a partir de `target_path`, e aqui a tela ABRE este endereco como
+         *     esta. Cortar o caminho levaria quem toca para a raiz do dominio em vez
+         *     da pagina que o estabelecimento indicou.
+         *
+         *     `261` e `length('https://') + 253`.
+         */
+        DirectoryEntrySiteUrl: string;
+        /**
          * @description Um campo que falta para a entrada poder ir ao ar. `slug` esta na lista
          *     porque `DirectoryEntrySummary.slug` e `required` na listagem do
          *     aplicativo: uma entrada publicada sem endereco publico nao teria como
          *     ser serializada, e o defeito apareceria como erro de serializacao em
          *     producao, longe de quem o causou.
          *
-         *     `phone_e164` e hoje o **unico** canal de contato que a tabela tem: nao
-         *     existe coluna para site, e-mail, WhatsApp nem rede social. Quando
-         *     existirem, "ao menos um canal" passa a ser uma disjuncao.
+         *     `phone_e164` e o **unico canal que a publicacao COBRA**, e desde
+         *     21/10/2026 isso nao e mais a mesma coisa que "o unico canal que a tabela
+         *     tem": `site_url` passou a existir (`20261020000014`, decisao do
+         *     cliente).
+         *
+         *     **`site_url` NAO entra nesta lista, e a ausencia e deliberada.** A frase
+         *     anterior aqui prometia que, quando houvesse coluna, "ao menos um canal"
+         *     passaria a ser uma disjuncao. A coluna existe e a disjuncao **nao foi
+         *     feita**: transformar a regua de publicacao em "site OU telefone" e
+         *     decisao de produto que ninguem tomou, e cumpri-la por conta propria
+         *     mudaria, sem pedido, quais entradas podem ir ao ar. Fica registrado
+         *     aqui como pendente, e nao como resolvido.
+         *
+         *     Consequencia pratica, dita em voz alta: entrada com site e sem telefone
+         *     continua NAO publicavel.
          * @enum {string}
          */
         AdminDirectoryEntryMissingField: "slug" | "city" | "state" | "phone_e164";
@@ -9677,7 +9798,12 @@ export interface components {
              *     para o momento de publicar.
              */
             slug: components["schemas"]["Slug"];
-            kind: components["schemas"]["ProfessionalKind"];
+            kinds?: components["schemas"]["ProfessionalKinds"];
+            /**
+             * @description **Equivale a `kinds: [kind]`.** Aceito para o painel antigo; o
+             *     formulario de hoje manda `kinds`.
+             */
+            kind?: components["schemas"]["ProfessionalKind"];
             /**
              * @description O tipo de entidade. **Opcional, e ausente vale `professional`** --
              *     o mesmo `DEFAULT` da coluna. Exigi-lo aqui tornaria obrigatorio um
@@ -9732,6 +9858,7 @@ export interface components {
              *     manda E.164.
              */
             phone_e164?: string;
+            site_url?: components["schemas"]["DirectoryEntrySiteUrl"];
         };
         /**
          * @description A edicao. `null` **apaga** o campo e ausente **nao mexe** -- a
@@ -9742,6 +9869,8 @@ export interface components {
         AdminDirectoryEntryPatch: {
             /** @description Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver. */
             slug?: components["schemas"]["Slug"];
+            kinds?: components["schemas"]["ProfessionalKinds"];
+            /** @description **Equivale a `kinds: [kind]`**, e portanto SUBSTITUI a lista inteira. Aceito para o painel antigo. */
             kind?: components["schemas"]["ProfessionalKind"];
             /**
              * @description Corrigir o tipo de entidade e permitido. **Nao aceita `null`**,
@@ -9766,6 +9895,12 @@ export interface components {
             /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
             phone_e164?: string | null;
             /**
+             * @description `null` **apaga** o site e ausente **nao mexe**, como os demais.
+             *     Apagar o site nunca despublica a entrada: ele nao e canal cobrado
+             *     pela publicacao.
+             */
+            site_url?: components["schemas"]["DirectoryEntrySiteUrl"] | null;
+            /**
              * @description **Sem este campo o estado nao muda.** E assim que "editar nao
              *     despublica" deixa de ser uma frase: nao existe caminho que mexa em
              *     `status` sem o corpo ter pedido.
@@ -9786,7 +9921,16 @@ export interface components {
          */
         AdminDirectoryEntry: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             about?: string | null;
@@ -9798,6 +9942,7 @@ export interface components {
             street_number?: string | null;
             complement?: string | null;
             phone_e164?: string | null;
+            site_url?: string | null;
             /**
              * @description A logo da entidade, quadrada. `status: processing` enquanto o worker
              *     nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
@@ -9901,8 +10046,14 @@ export interface components {
             };
         };
         /**
-         * @description A pagina do local. **Os mesmos campos de `DirectoryEntrySummary`**,
-         *     mais `rating` e `my_review_ref`.
+         * @description A pagina do local. **Os campos de `DirectoryEntrySummary`**, mais
+         *     `rating`, `my_review_ref`, a `photo_url` em faixa e o **endereco
+         *     comercial** (`postal_code`, `street`, `street_number`, `complement`).
+         *
+         *     **Os tres grupos que o resumo nao tem estao aqui pelo mesmo criterio**:
+         *     o cartao responde "existe e fica perto"; a pagina responde "e ali, e eu
+         *     vou". Endereco de porta e foto em faixa em ate vinte cartoes alargam a
+         *     superficie e o peso sem nenhuma tela pedindo.
          *
          *     Ela repete os campos em vez de usar `allOf` com o resumo porque o
          *     gerador de tipos de `src/`, `admin/` e `web/` produz uniao de
@@ -9913,10 +10064,15 @@ export interface components {
          *     anterior, que dizia que "foto nao e coluna de `professionals`". Era
          *     verdade e deixou de ser: a migracao `20261018000008` criou
          *     `logo_image_id` e `photo_image_id`, e o cliente liberou as duas para o
-         *     aplicativo em 18/10/2026. Site, e-mail, WhatsApp, redes sociais e
-         *     horario continuam sem coluna e continuam fora -- declarar campo que
-         *     ninguem pode preencher produziria uma tela com linhas vazias
-         *     permanentes.
+         *     aplicativo em 18/10/2026.
+         *
+         *     **O SITE TAMBEM PASSOU A EXISTIR**, em 21/10/2026
+         *     (`20261020000014`, decisao do cliente), e por isso `site_url` esta aqui
+         *     -- a frase anterior o listava junto com os que "continuam sem coluna".
+         *     **E-mail, WhatsApp, redes sociais e horario continuam sem coluna e
+         *     continuam fora**, pela razao que valia para o site e deixou de valer:
+         *     declarar campo que ninguem pode preencher produz uma tela com linhas
+         *     vazias permanentes.
          *
          *     **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
          *     quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
@@ -9924,7 +10080,16 @@ export interface components {
          */
         DirectoryEntryDetail: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
@@ -9939,6 +10104,61 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * Format: uri
+             * @description O **site do estabelecimento** (decisao do cliente de 21/10/2026),
+             *     a URL inteira e pronta para abrir -- nunca so o host. Nulo quando a
+             *     entidade nao informou, e nulo e o estado normal da maioria das
+             *     entradas.
+             *
+             *     Sai ao lado de `phone_e164` e pela mesma razao: e um canal de
+             *     contato que a entidade publicou DE PROPOSITO para ser procurada
+             *     (ADR-0011 secao 4), e nao um dado pessoal que escapou. Como ele,
+             *     **so pode existir porque a operacao exige conta**.
+             *
+             *     **OPCIONAL no schema, e isso e deliberado**: o APK publicado le esta
+             *     resposta e nao conhece este campo. Campo novo em resposta e aditivo;
+             *     exigi-lo nao seria.
+             *
+             *     O formato e garantido na escrita (`DirectoryEntrySiteUrl`): sempre
+             *     `https://`, nunca normalizado. Quem desenha pode abrir o valor como
+             *     esta.
+             */
+            site_url?: string | null;
+            /**
+             * @description O CEP comercial, **oito digitos sem mascara e sem hifen** -- a forma
+             *     gravada, que e a de `CollarTagShippingAddress.postal_code`. A
+             *     mascara vive na tela, como no painel: dois formatos para o mesmo CEP
+             *     e o defeito que a duplicacao produz.
+             */
+            postal_code?: string | null;
+            /**
+             * @description O logradouro, como o painel o gravou. **Nao e normalizado** e nao e
+             *     conferido contra o CEP: `GET /v1/admin/postal-codes/{postalCode}`
+             *     poupa digitacao e o resultado e editavel, entao o que esta aqui e o
+             *     que o operador conferiu na tela.
+             */
+            street?: string | null;
+            /**
+             * @description O numero da porta, **texto e nao inteiro**: `s/n`, `120A` e `KM 32`
+             *     sao numeros de porta reais. Mesma decisao de
+             *     `CollarTagShippingAddress.street_number`.
+             *
+             *     **Nulo com `street` preenchido e caso legitimo** (estrada, rodovia,
+             *     quadra) -- a migracao recusou de proposito um `CHECK` que exigisse
+             *     os dois juntos, e quem desenha a linha nao pode supor o par.
+             */
+            street_number?: string | null;
+            /**
+             * @description Sala, loja, andar ou bloco. Entra porque o cliente pediu o endereco
+             *     **completo** e porque e o que faz alguem achar a porta certa depois
+             *     de chegar no numero.
+             *
+             *     **Fica fora do texto que vai para o aplicativo de mapas**: nenhum
+             *     mapa procura por `sala 302`, e inclui-lo na busca piora o resultado.
+             *     Ele e linha de leitura, nao termo de busca.
+             */
+            complement?: string | null;
             /**
              * Format: uri
              * @description A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma
@@ -11315,9 +11535,18 @@ export interface components {
         };
         /**
          * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
-         *     `alt_text` e **obrigatorio** em toda posicao, igual a galeria do painel:
-         *     a imagem sem texto alternativo e a imagem que nao existe para quem usa
-         *     leitor de tela.
+         *     `alt_text` e **obrigatorio** aqui.
+         *
+         *     **ATENCAO, isto DEIXOU de ser igual a galeria do painel em 21/10/2026**:
+         *     lá `alt_text` virou opcional por decisao do cliente
+         *     (`CatalogImagesInput`), e aqui ele NAO foi afrouxado. A decisao do
+         *     cliente e as medicoes que a embasaram foram sobre os formularios do
+         *     PAINEL; esta e a superficie do APP, onde quem cria o encontro e o
+         *     proprio autor, e afrouxa-la de carona repetiria exatamente o erro que a
+         *     `20261017000002` evitou quando deixou a `Rede` de fora do pedido da
+         *     `Loja`. A coluna `network_event_images.alt_text` aceita nulo desde
+         *     21/10, entao esta obrigacao e desta superficie e nao do banco: ela cai
+         *     no dia em que alguem pedir, e nao antes.
          */
         CommunityNetworkEventCoverInput: {
             /** Format: uuid */
@@ -12315,19 +12544,27 @@ export interface components {
         /**
          * @description Ate 8 imagens, **na ordem em que o app as mostra**. A primeira e a
          *     principal (a da lista da `Loja`; a capa do encontro). Cada uma e um
-         *     envio de `createAdminCatalogImageIntent` com o `purpose` do recurso, e
-         *     **cada uma tem texto alternativo obrigatorio, ate 150 caracteres**, em
-         *     toda posicao: a obrigacao da principal acompanha a imagem que vira
-         *     principal numa reordenacao, sem regra a parte. A lista substitui a
-         *     anterior inteira: reordenar e mandar a ordem nova, remover e omitir,
-         *     `[]` tira todas. `upload_id` repetido e recusado com `400`
-         *     (ADR-0027 itens 16 e 17).
+         *     envio de `createAdminCatalogImageIntent` com o `purpose` do recurso. A
+         *     lista substitui a anterior inteira: reordenar e mandar a ordem nova,
+         *     remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
+         *     `400` (ADR-0027 itens 16 e 17).
+         *
+         *     **`alt_text` e OPCIONAL desde 21/10/2026** (decisao do cliente, dita
+         *     duas vezes: *"pode remover a descricao da imagem"*). Era obrigatorio em
+         *     toda posicao, e a `20261017000002` o manteve obrigatorio aqui DE
+         *     PROPOSITO ao afrouxa-lo na `Loja`; em 21/10 o cliente pediu que saisse
+         *     tambem da `Rede`, ciente -- informado duas vezes -- de que o campo
+         *     alimenta o leitor de tela e de que **a capa do encontro perde o nome
+         *     acessivel**. Quando vem, vale de 2 a 150 caracteres; quando nao vem, a
+         *     imagem fica sem texto alternativo e o app cai no titulo do encontro.
+         *     **Campo presente e vazio e recusado**: o painel OMITE o campo em vez de
+         *     mandar `""`.
          */
         CatalogImagesInput: components["schemas"]["CatalogImageInput"][];
         CatalogImageInput: {
             /** Format: uuid */
             upload_id: string;
-            alt_text: components["schemas"]["ImageAltText"];
+            alt_text?: components["schemas"]["ImageAltText"];
         };
         /**
          * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
@@ -12338,12 +12575,17 @@ export interface components {
          *     remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
          *     `400` (ADR-0027 itens 16 e 17).
          *
-         *     **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026), e e a
-         *     unica diferenca em relacao a `CatalogImagesInput`, que a `Rede`
-         *     continua usando com o texto obrigatorio. Quando vem, vale de 2 a 150
-         *     caracteres; quando nao vem, a imagem fica sem texto alternativo e o app
-         *     cai no nome do produto. **Campo presente e vazio e recusado**: o painel
-         *     OMITE o campo em vez de mandar `""`.
+         *     **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026).
+         *     Quando vem, vale de 2 a 150 caracteres; quando nao vem, a imagem fica
+         *     sem texto alternativo e o app cai no nome do produto. **Campo presente
+         *     e vazio e recusado**: o painel OMITE o campo em vez de mandar `""`.
+         *
+         *     Em 17/10 isto era a unica diferenca em relacao a `CatalogImagesInput`,
+         *     que a `Rede` usava com o texto obrigatorio. **Deixou de ser**: em
+         *     21/10/2026 o cliente pediu o mesmo afrouxamento para a `Rede`, e os dois
+         *     esquemas passaram a ter a mesma forma. Eles continuam separados porque
+         *     descrevem recursos diferentes -- a reserva de um e o nome do produto, a
+         *     do outro e o titulo do encontro --, e nao porque a obrigacao divirja.
          */
         StoreCatalogImagesInput: components["schemas"]["StoreCatalogImageInput"][];
         StoreCatalogImageInput: {
@@ -12368,8 +12610,12 @@ export interface components {
             /**
              * @description **Nulo** quando a imagem foi gravada sem texto alternativo, o
              *     que a `Loja` passou a permitir em 17/10/2026
-             *     (`StoreCatalogImagesInput`). Na `Rede` o texto continua
-             *     obrigatorio na escrita, e por isso nunca e nulo ali.
+             *     (`StoreCatalogImagesInput`) e a `Rede` em 21/10/2026
+             *     (`CatalogImagesInput`, decisao do cliente). Nos dois recursos a
+             *     escrita aceita a ausencia, entao a leitura pode trazer nulo em
+             *     qualquer posicao -- **inclusive na capa do encontro**, que e o
+             *     custo que o cliente aceitou por escrito. Quem desenha cai no
+             *     nome do produto ou no titulo do encontro.
              */
             alt_text: string | null;
         };
@@ -17361,7 +17607,16 @@ export interface operations {
                 /** @description UF, duas letras. */
                 state?: string;
                 neighborhood?: string;
-                /** @description Filtra por atividade. */
+                /**
+                 * @description Filtra por atividade, UMA por vez (e o chip da tela).
+                 *
+                 *     Desde 21/10/2026 a entrada tem VARIAS atividades, e este filtro
+                 *     passou a ser um teste de PERTINENCIA: a entrada entra no resultado
+                 *     quando a atividade pedida esta entre as dela. **A entrada com tres
+                 *     atividades aparece nos tres chips e UMA VEZ em cada** -- a consulta
+                 *     testa a lista em vez de desdobrar a linha, e por isso `total` nao
+                 *     conta a mesma entrada duas vezes.
+                 */
                 kind?: components["schemas"]["ProfessionalKind"];
                 /**
                  * @description Piso, nao igualdade: `contact_verified` traz tambem
@@ -20482,7 +20737,13 @@ export interface operations {
             query?: {
                 /** @description Busca por nome, no servidor. Sem acento e sem caixa, pelo indice trigrama de `professionals`. */
                 q?: string;
-                /** @description Filtra pela atividade. Sem o parametro, vem todas. */
+                /**
+                 * @description Filtra pela atividade, UMA por vez. Sem o parametro, vem todas.
+                 *
+                 *     Desde 21/10/2026 e teste de PERTINENCIA sobre `kinds`: a entrada
+                 *     entra quando a atividade pedida esta entre as dela, e sai UMA VEZ
+                 *     por mais atividades que tenha.
+                 */
                 kind?: components["schemas"]["ProfessionalKind"];
                 /** @description Filtra pela situacao. Sem o parametro, vem todas, inclusive as removidas. */
                 status?: components["schemas"]["DirectoryEntryStatus"];

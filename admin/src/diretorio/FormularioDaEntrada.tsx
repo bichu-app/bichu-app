@@ -9,6 +9,12 @@ import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { cepDosOitoDigitos, cepEmOitoDigitos } from '../formato/cep.ts';
+import {
+  LIMITE_DO_SITE,
+  MENSAGEM_DO_SITE,
+  mensagemDoSite,
+  type CodigoDoSite,
+} from '../endereco/enderecos.ts';
 import { telefoneDoE164, telefoneEmE164 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
@@ -33,7 +39,15 @@ interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
-  atividade: TipoDaEntrada | '';
+  /**
+   * AS ATIVIDADES, de 1 a 6 (cliente, 21/10/2026): uma clinica que tambem faz
+   * banho e tosa deixou de ter de escolher.
+   *
+   * Lista VAZIA e o estado "nao escolheu" -- o que `''` representava quando era
+   * um valor so. Nao ha `| ''` aqui porque a lista vazia ja diz isso, e um
+   * terceiro estado inventaria algo que o contrato nao tem.
+   */
+  atividades: TipoDaEntrada[];
   /**
    * O QUE a entrada e -- eixo SEPARADO de [atividade], que e o que ela faz.
    *
@@ -54,6 +68,16 @@ interface Valores {
   complemento: string;
   /** Com mascara brasileira. O E.164 sai de `telefoneEmE164`, no `salvar`. */
   telefone: string;
+  /**
+   * O SITE do estabelecimento (cliente, 21/10/2026), **cru e nao normalizado**:
+   * o endereco completo com `https://`, como a pessoa conferiu na tela.
+   *
+   * Sem mascara e sem reparo, ao contrario de [telefone] e [cep]: o padrao de
+   * URL do produto RECUSA esquema ausente em vez de completa-lo, e acrescentar
+   * `https://` aqui seria gravar uma coisa diferente da que foi digitada. Quem
+   * decide a recusa e `mensagemDoSite`, que espelha o servidor.
+   */
+  site: string;
   /**
    * A logo e a foto guardam **o que a pessoa fez**, e nao a imagem gravada:
    *
@@ -86,6 +110,7 @@ type Campo =
   | 'e-numero'
   | 'e-complemento'
   | 'e-telefone'
+  | 'e-site'
   | 'e-logo'
   | 'e-foto';
 
@@ -103,6 +128,7 @@ const ROTULOS: Record<Campo, string> = {
   'e-numero': 'Número',
   'e-complemento': 'Complemento',
   'e-telefone': 'Telefone comercial',
+  'e-site': 'Site',
   'e-logo': 'Logo',
   'e-foto': 'Foto do local',
 };
@@ -121,6 +147,7 @@ const ORDEM: Campo[] = [
   'e-complemento',
   'e-bairro',
   'e-telefone',
+  'e-site',
   'e-logo',
   'e-foto',
 ];
@@ -129,7 +156,7 @@ const VAZIO: Valores = {
   nome: '',
   slug: '',
   slugEditado: false,
-  atividade: '',
+  atividades: [],
   tipoDeEntidade: 'professional',
   sobre: '',
   cidade: '',
@@ -140,6 +167,7 @@ const VAZIO: Valores = {
   numero: '',
   complemento: '',
   telefone: '',
+  site: '',
   logoUploadId: undefined,
   fotoUploadId: undefined,
   situacao: 'draft',
@@ -164,6 +192,24 @@ const VAZIO: Valores = {
  * exigir a casa dele. Nenhum dos quatro entra em `missing_to_publish`, e a
  * regua do servidor concorda: no contrato eles sao opcionais nos dois corpos.
  */
+/**
+ * As atividades mudaram?
+ *
+ * Compara CONJUNTO, por lista ordenada: a escolha do operador nao tem ordem, e
+ * `['vet','clinic']` e `['clinic','vet']` sao a mesma coisa. Sem isto, abrir a
+ * tela e salvar sem tocar em nada mandaria `kinds` no `PATCH` -- e, com
+ * `minProperties: 1`, "nada mudou" deixaria de ser detectavel.
+ */
+export function atividadesMudaram(
+  daTela: readonly TipoDaEntrada[],
+  doServidor: readonly TipoDaEntrada[],
+): boolean {
+  if (daTela.length !== doServidor.length) return true;
+  const a = [...daTela].sort();
+  const b = [...doServidor].sort();
+  return a.some((x, i) => x !== b[i]);
+}
+
 export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   const e: Partial<Record<Campo, string>> = {};
   const nome = v.nome.trim();
@@ -171,7 +217,14 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     e['e-nome'] = 'Informe o nome, de 2 a 120 caracteres.';
   }
   if (!PADRAO_DO_SLUG.test(v.slug)) e['e-slug'] = MENSAGEM_DO_SLUG;
-  if (v.atividade === '') e['e-atividade'] = 'Escolha a atividade.';
+  // DE 1 A 6 (cliente, 21/10/2026). O teto 6 e o tamanho da lista fechada, e a
+  // tela nem tem como passar dele -- sao seis caixas. A conferencia existe
+  // porque o rascunho retomado (`retomarRascunho`) vem de fora da tela.
+  if (v.atividades.length === 0) e['e-atividade'] = 'Escolha ao menos uma atividade.';
+  else if (v.atividades.length > 6) e['e-atividade'] = 'Até 6 atividades.';
+  else if (new Set(v.atividades).size !== v.atividades.length) {
+    e['e-atividade'] = 'A mesma atividade apareceu duas vezes.';
+  }
   const sobre = v.sobre.trim();
   if (sobre !== '' && (sobre.length < 2 || sobre.length > 2000)) {
     e['e-sobre'] = 'Entre 2 e 2000 caracteres.';
@@ -200,6 +253,16 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
     e['e-telefone'] = 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
   }
+  // O SITE (cliente, 21/10/2026). Vazio nao erra; o que foi digitado passa pelo
+  // espelho do servidor, que devolve a frase JA PRONTA -- inclusive a que
+  // distingue "falta o https://" de "troque http:// por https://". Nao ha mapa
+  // de `code` aqui de proposito: `mensagemDoSite` e quem sabe desambiguar, e
+  // reescrever as frases neste arquivo seria a segunda definicao que o pedido
+  // do cliente proibiu. Mesmo idioma de `FormularioDeParceiro`.
+  if (v.site.trim() !== '') {
+    const recusa = mensagemDoSite(v.site);
+    if (recusa !== null) e['e-site'] = recusa;
+  }
   return e;
 }
 
@@ -226,7 +289,9 @@ function valoresDa(entrada: Entrada): Valores {
     nome: entrada.display_name,
     slug: entrada.slug,
     slugEditado: true,
-    atividade: entrada.kind,
+    // `kinds` e a verdade; `kind` e a PRIMEIRA dela e existe no contrato so
+    // para o APK em campo. O painel le a lista.
+    atividades: [...entrada.kinds],
     tipoDeEntidade: entrada.entity_kind,
     sobre: entrada.about ?? '',
     cidade: entrada.city ?? '',
@@ -243,6 +308,9 @@ function valoresDa(entrada: Entrada): Valores {
     // NAO e completar em silencio o que a pessoa digitou -- e exibir o que a
     // escrita ja validou, como o formulario do parceiro faz com `https://`.
     telefone: telefoneDoE164(entrada.phone_e164),
+    // O SITE sai e volta CRU: nao ha gramatica de exibicao a montar, porque o
+    // que esta gravado ja e o endereco completo que a pessoa aprovou.
+    site: entrada.site_url ?? '',
     // A logo e a foto GRAVADAS sao lidas de `entrada.logo` / `entrada.photo` e
     // vao direto para a previa do campo (`salva`); aqui elas nascem
     // `undefined`, que quer dizer "a pessoa nao tocou nestes campos". Guardar o
@@ -297,12 +365,26 @@ function valoresDa(entrada: Entrada): Valores {
  * **Os quatro campos sao opcionais, e isso e o ponto.** Um profissional
  * autonomo tem como "endereco" a propria casa; um campo obrigatorio o tornaria
  * incadastravel ou o obrigaria a publicar onde mora.
- * - **Nenhum site, e-mail, WhatsApp, rede social, horario de funcionamento nem
- *   foto.** Nenhuma dessas colunas existe em `professionals`. O padrao de site
- *   do produto (endereco completo com `https://`) nao tem onde ser aplicado
- *   aqui enquanto nao houver coluna.
- * - **ONG.** Nao ha valor para organizacao em `professionals.kind`. Decisao 9.1
- *   pendente, e o seletor de atividade diz isso em voz alta.
+ * - **O SITE PASSOU A SER PEDIDO**, em 21/10/2026 (decisao do cliente), e esta
+ *   frase substitui a anterior, que o listava entre os que "nao tem coluna". A
+ *   `20261020000014` criou `professionals.site_url` e o padrao de site do
+ *   produto (endereco completo com `https://`, esquema ausente RECUSADO) passou
+ *   a ter onde ser aplicado -- pelo espelho de `endereco/enderecos.ts`, sem
+ *   segunda definicao.
+ *
+ *   **Ele NAO substitui o telefone para publicar.** `missing_to_publish`
+ *   continua cobrando `phone_e164`, e entrada com site e sem telefone segue nao
+ *   publicavel: virar a regua em "site OU telefone" e decisao de produto que
+ *   ninguem tomou.
+ * - **Nenhum e-mail, WhatsApp, rede social, horario de funcionamento nem
+ *   foto de perfil de rede.** Nenhuma dessas colunas existe em `professionals`.
+ * - **ONG ja cabe, e esta frase estava desatualizada em DOIS pontos.** Ela
+ *   dizia que "nao ha valor para organizacao em `professionals.kind`" e que a
+ *   decisao 9.1 estava pendente. A decisao saiu: ONG e EIXO PROPRIO
+ *   (`entity_kind`, migracao `20261018000012`), o campo Tipo esta na tela, e a
+ *   coluna citada nem existe mais com esse nome -- virou `professionals.kinds`
+ *   na `20261020000015`. O que continua de fora e ADOCAO: pet em adocao nao e
+ *   campo de cadastro de estabelecimento.
  */
 export default function FormularioDaEntrada() {
   const { entrySlug } = useParams();
@@ -468,7 +550,10 @@ export default function FormularioDaEntrada() {
         const { data, error } = await api.POST('/admin/directory/entries', {
           body: {
             slug: valores.slug,
-            kind: valores.atividade as TipoDaEntrada,
+            // `kinds` e nao `kind`: o contrato aceita os dois (um deles), e
+            // mandar os dois juntos e `400` (`kind_conflict`). O painel novo
+            // manda a lista.
+            kinds: valores.atividades,
             entity_kind: valores.tipoDeEntidade,
             display_name: nome,
             ...(ou(valores.sobre) === null ? {} : { about: ou(valores.sobre) as string }),
@@ -482,6 +567,7 @@ export default function FormularioDaEntrada() {
               ? {}
               : { complement: ou(valores.complemento) as string }),
             ...(telefone === null ? {} : { phone_e164: telefone }),
+            ...(ou(valores.site) === null ? {} : { site_url: ou(valores.site) as string }),
             // No cadastro so existe envio NOVO: nao ha imagem gravada para
             // remover, e `null` nao e valor aceito no corpo de criacao.
             ...(typeof valores.logoUploadId === 'string'
@@ -505,7 +591,14 @@ export default function FormularioDaEntrada() {
       const fotoNoPatch = imagemParaOPatch(valores.fotoUploadId, entrada.photo);
       const patch: Esquemas['AdminDirectoryEntryPatch'] = {
         ...(valores.slug !== entrada.slug ? { slug: valores.slug } : {}),
-        ...(valores.atividade !== entrada.kind ? { kind: valores.atividade as TipoDaEntrada } : {}),
+        // COMPARA CONJUNTO, e nao referencia: duas listas com os mesmos itens
+        // em ordens diferentes sao a mesma escolha, e mandar `kinds` por causa
+        // de ordem faria toda edicao parecer suja. A ordem do painel e sempre a
+        // de `ORDEM_DAS_ATIVIDADES`, entao a comparacao ordenada basta e nao
+        // depende de a tela ter preservado a ordem do servidor.
+        ...(atividadesMudaram(valores.atividades, entrada.kinds)
+          ? { kinds: valores.atividades }
+          : {}),
         ...(valores.tipoDeEntidade !== entrada.entity_kind
           ? { entity_kind: valores.tipoDeEntidade }
           : {}),
@@ -531,6 +624,10 @@ export default function FormularioDaEntrada() {
         // Compara o E.164, que e o que o servidor guarda: trocar `(11) 3061-2200`
         // por `11 3061 2200` nao e mudanca de telefone.
         ...(telefone !== (entrada.phone_e164 ?? null) ? { phone_e164: telefone } : {}),
+        // O SITE compara TEXTO contra TEXTO, e nao host contra host como faz o
+        // formulario do parceiro: aqui a coluna guarda a URL inteira, entao
+        // trocar o caminho E mudanca de site. `null` apaga.
+        ...(ou(valores.site) !== (entrada.site_url ?? null) ? { site_url: ou(valores.site) } : {}),
         // Imagem: a chave so entra quando a pessoa MEXEU no campo. Envio novo
         // vai como `upload_id`; remover manda `null`, e apagar o que nunca
         // existiu nao e mudanca -- por isso `null` so vai quando havia imagem
@@ -608,8 +705,15 @@ export default function FormularioDaEntrada() {
         else if (erro.field === 'phone_e164') {
           e['e-telefone'] =
             erro.code === 'required'
-              ? 'Uma entrada no ar precisa de um telefone: hoje ele é o único canal de contato do cadastro.'
+              ? 'Uma entrada no ar precisa de um telefone: hoje ele é o único canal de contato que a publicação cobra.'
               : 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
+        } else if (erro.field === 'site_url') {
+          // AQUI o mapa de `code` e o certo, e nao `mensagemDoSite`: a recusa
+          // veio do SERVIDOR, com o motivo ja decidido, e reconferir o texto
+          // localmente poderia discordar dele. `MENSAGEM_DO_SITE` e o mesmo mapa
+          // que o formulario do parceiro usa.
+          e['e-site'] =
+            MENSAGEM_DO_SITE[erro.code as CodigoDoSite] ?? MENSAGEM_DO_SITE.site_url_invalid;
         }
       }
       if (Object.keys(e).length) return mostrar(e);
@@ -745,37 +849,58 @@ export default function FormularioDaEntrada() {
           </span>
         </div>
 
-        <div className={erros['e-atividade'] ? 'field err' : 'field'}>
-          <label htmlFor="e-atividade">Atividade *</label>
-          <div className="ordem sel campo-sel">
-            <select
-              id="e-atividade"
-              data-cy="entrada-atividade"
-              value={valores.atividade}
-              onChange={(e) => mudar({ atividade: e.target.value as TipoDaEntrada | '' })}
-              aria-invalid={erros['e-atividade'] ? true : undefined}
-              aria-describedby="e-atividade-ajuda"
-            >
-              <option value="">Escolha a atividade</option>
-              {ORDEM_DAS_ATIVIDADES.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {ATIVIDADES[tipo]}
-                </option>
-              ))}
-            </select>
-            <Icone nome="expand" tamanho="s20" />
+        {/* AS ATIVIDADES, de uma para VARIAS em 21/10/2026 (decisao do
+            cliente): uma clinica que tambem faz banho e tosa deixou de ter de
+            escolher.
+
+            CAIXAS e nao `<select multiple>`: a selecao multipla nativa esconde
+            que da para marcar mais de uma (precisa de ctrl/cmd), perde a
+            escolha com um clique errado e e ruim no teclado. Sao seis opcoes
+            fixas -- cabem todas na tela, e o mesmo molde de caixas que o campo
+            Situacao ja usa logo abaixo.
+
+            `fieldset`/`legend` e nao `label`: um rotulo nao pode apontar para
+            seis campos, e sem o grupo o leitor de tela anunciaria seis caixas
+            soltas sem dizer do que sao. */}
+        <fieldset
+          className={erros['e-atividade'] ? 'field err' : 'field'}
+          aria-describedby="e-atividade-ajuda"
+          aria-invalid={erros['e-atividade'] ? true : undefined}
+        >
+          <legend className="lab">Atividades *</legend>
+          <div className="checks">
+            {ORDEM_DAS_ATIVIDADES.map((tipo) => (
+              <label className="check" key={tipo}>
+                <input
+                  type="checkbox"
+                  data-cy={`entrada-atividade-${tipo}`}
+                  checked={valores.atividades.includes(tipo)}
+                  onChange={(e) =>
+                    mudar({
+                      // A ordem guardada e sempre a de `ORDEM_DAS_ATIVIDADES`, e
+                      // nao a de clique: `filter` sobre a ordem canonica em vez
+                      // de `push`. Assim a primeira atividade -- que e a que o
+                      // contrato publica em `kind` -- nao depende de em que
+                      // caixa o operador clicou primeiro.
+                      atividades: e.target.checked
+                        ? ORDEM_DAS_ATIVIDADES.filter(
+                            (x) => x === tipo || valores.atividades.includes(x),
+                          )
+                        : valores.atividades.filter((x) => x !== tipo),
+                    })
+                  }
+                />
+                <span>{ATIVIDADES[tipo]}</span>
+              </label>
+            ))}
           </div>
-          {/* ATUALIZADA na uniao de 18/10/2026. Ela dizia "ainda não há opção
-              para ONG: o cadastro de ONG depende de uma decisão de modelo que
-              está em aberto" -- e a decisão saiu: ONG é EIXO PRÓPRIO
-              (`entity_kind`), e não um valor de `professionals.kind`. O campo
-              está logo acima. Deixar a frase antiga mandaria o operador
-              desistir de um cadastro que o painel agora faz. */}
           <span className="help" id="e-atividade-ajuda">
-            O que a entrada faz. Uma ONG também escolhe aqui — o que ela é fica no campo Tipo, acima.
+            O que a entrada faz. Marque todas as que valem — uma clínica que também faz banho e tosa
+            aparece nos dois filtros da seção Perto. Uma ONG também escolhe aqui: o que ela é fica no
+            campo Tipo, acima.
           </span>
           {erros['e-atividade'] && <ErroDoCampo id="e-atividade-erro">{erros['e-atividade']}</ErroDoCampo>}
-        </div>
+        </fieldset>
 
         <CampoDeTexto
           id="e-sobre"
@@ -900,7 +1025,18 @@ export default function FormularioDaEntrada() {
           erro={erros['e-telefone']}
           erroDeForma={erroDoTelefone}
           aoMudarErroDeForma={setErroDoTelefone}
-          ajuda="Com DDD. É o único canal de contato do cadastro hoje, e precisa estar preenchido para a entrada aparecer em Perto."
+          ajuda="Com DDD. É o canal que a publicação cobra: precisa estar preenchido para a entrada aparecer em Perto."
+        />
+
+        <CampoDeTexto
+          id="e-site"
+          dataCy="entrada-site"
+          rotulo="Site"
+          valor={valores.site}
+          aoMudar={(v) => mudar({ site: v })}
+          maximo={LIMITE_DO_SITE}
+          erro={erros['e-site']}
+          ajuda="Opcional. O endereço completo, começando com https:// — por exemplo https://clinicasantabarbara.com.br/contato. Aparece no app ao lado do telefone. Não substitui o telefone para publicar."
         />
 
         {/* Duas imagens, e DOIS campos: a logo e quadrada e pequena, a foto e

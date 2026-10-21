@@ -130,7 +130,12 @@ export interface ImagemDoEncontro {
   readonly url: string;
   readonly urlDaMiniatura: string | null;
   readonly urlDoBanner: string | null;
-  readonly textoAlternativo: string;
+  /**
+   * **Anulavel desde 21/10/2026**: a coluna perdeu o `NOT NULL`
+   * (`20261020000013`, decisao do cliente). O DOMINIO carrega o nulo; a
+   * PROJECAO para o app nao o deixa sair. Ver `camposProjetados`.
+   */
+  readonly textoAlternativo: string | null;
 }
 
 /** Os campos do item 17, na forma do fio. Comuns ao publico e ao privado aprovado. */
@@ -361,10 +366,36 @@ export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): Stat
 
 /** Os campos comuns, campo a campo. Nunca `{ ...encontro }`. */
 function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEncontroProjetados {
+  // ========================================================================
+  // A RESERVA DO TEXTO ALTERNATIVO MORA AQUI, NO SERVIDOR, E NAO NO APP.
+  // ========================================================================
+  // Desde 21/10/2026 a coluna `network_event_images.alt_text` aceita nulo
+  // (decisao do cliente, migracao `20261020000013`). `NetworkEventImage`
+  // continua declarando `alt_text` como `string` EXIGIDO, e nao e desatencao:
+  //
+  // MEDIDO em `app/lib/api/modelos_rede.dart`, em `ImagemDoEncontro.doJson`:
+  //
+  //     if (url is! String || alt is! String) return null;
+  //
+  // e `daLista` DESCARTA o item nulo. Ou seja: `alt_text: null` no corpo nao
+  // deixaria a imagem sem nome acessivel -- ela DESAPARECERIA da lista, e a
+  // capa do encontro sumiria da agenda e do detalhe no APK que esta em
+  // aparelho hoje. Isso e pior do que o custo que o cliente aceitou, e ele nao
+  // aceitou isso.
+  //
+  // Entao a reserva e aplicada antes de o campo sair: o TITULO do encontro, que
+  // e a mesma reserva que o `down` da migracao usa, a mesma que o comentario da
+  // coluna anuncia e a mesma forma que a `Loja` usa para a imagem externa
+  // (`item-da-vitrine.ts`, `?? item.title`). `title` e de 2 a 120 caracteres no
+  // contrato, entao a reserva sempre cabe na faixa de 2 a 150 de `alt_text`.
+  //
+  // O PAINEL NAO PASSA POR AQUI e continua vendo o nulo cru
+  // (`ImagemProjetada.alt_text`): se o formulario reabrisse com o titulo no
+  // campo, quem edita nao distinguiria "descrevi" de "nao descrevi".
   const imagens = encontro.imagens.map((imagem) => ({
     url: imagem.url,
     thumb_url: imagem.urlDaMiniatura,
-    alt_text: imagem.textoAlternativo,
+    alt_text: imagem.textoAlternativo ?? encontro.title,
   }));
   // A capa e a imagem de posicao 0, nas duas derivadas: a de 1024 para o
   // cartao da agenda e a de 1280 para a capa de borda a borda do detalhe.

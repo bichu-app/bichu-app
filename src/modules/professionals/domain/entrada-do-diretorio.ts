@@ -67,7 +67,14 @@ export const GRADE_EM_METROS = 100;
 /** A entrada como o repositorio a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaDoDiretorio {
   readonly slug: string;
-  readonly kind: TipoDeProfissional;
+  /**
+   * AS ATIVIDADES, de 1 a 6 (cliente, 21/10/2026). Nunca vazia: o banco cobra
+   * o minimo 1 (`professionals_atividades_tamanho`) e o caso de uso tambem.
+   *
+   * A ordem so importa para uma coisa: `kinds[0]` e o que a projecao publica em
+   * `kind`, o campo de compatibilidade que o APK em campo le.
+   */
+  readonly kinds: readonly TipoDeProfissional[];
   readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
   readonly about: string | null;
@@ -75,6 +82,13 @@ export interface EntradaDoDiretorio {
   readonly state: string | null;
   readonly neighborhood: string | null;
   readonly phoneE164: string | null;
+  /**
+   * O SITE (cliente, 21/10/2026). A URL inteira, como gravada -- nunca so o
+   * host e nunca normalizada. Sai ao lado de `phoneE164` e pela mesma razao:
+   * canal que a entidade publicou de proposito para ser procurada (ADR-0011
+   * secao 4).
+   */
+  readonly siteUrl: string | null;
   readonly verificacoes: readonly VerificacaoDaEntidade[];
   /**
    * Metros cruas, como o banco as calculou. **Nulo** quando a entrada nao tem
@@ -103,7 +117,14 @@ export interface VerificacaoPublica {
 /** `DirectoryEntrySummary` do contrato. */
 export interface EntradaPublica {
   readonly slug: string;
+  /**
+   * A PRIMEIRA atividade, **e ela existe para compatibilidade**. O APK
+   * publicado le `kind` como string; trocar o tipo dele por lista seria
+   * `response-property-type-changed` e quebraria a tela de quem ja tem o
+   * aplicativo instalado. Quem desenha a entrada nova le `kinds`.
+   */
   readonly kind: TipoDeProfissional;
+  readonly kinds: readonly TipoDeProfissional[];
   readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly city: string | null;
@@ -111,6 +132,7 @@ export interface EntradaPublica {
   readonly neighborhood: string | null;
   readonly about: string | null;
   readonly phone_e164: string | null;
+  readonly site_url: string | null;
   readonly verification: VerificacaoPublica;
   readonly distance_m: number | null;
   readonly logo_url: string | null;
@@ -154,13 +176,99 @@ export function urlDaDerivada(
   return urlDeMidia(chave);
 }
 
+/**
+ * A ATIVIDADE PRINCIPAL: o primeiro item de `kinds`.
+ *
+ * **Uma funcao, e nao `kinds[0]` espalhado pelas projecoes.** Duas copias de
+ * "qual e a principal" divergiriam no dia em que a regra deixasse de ser "a
+ * primeira" -- e ela e so "a primeira" porque nada ainda pediu outra coisa.
+ *
+ * O `??` NUNCA dispara em dado vindo do banco: `professionals_atividades_tamanho`
+ * cobra minimo 1 e o caso de uso tambem. Ele existe porque o TIPO de um array
+ * nao carrega "nao vazio", e devolver `undefined` daqui poria `kind: undefined`
+ * numa resposta que o contrato declara `required` -- `'vet'` e errado de um jeito
+ * visivel, `undefined` desaparece.
+ */
+export function atividadePrincipal(kinds: readonly TipoDeProfissional[]): TipoDeProfissional {
+  return kinds[0] ?? 'vet';
+}
+
+/**
+ * O ENDERECO COMERCIAL da entrada, como as quatro colunas o guardam.
+ *
+ * ## Por que ele e um tipo SEPARADO, e nao mais quatro campos de
+ * `EntradaDoDiretorio`
+ *
+ * `EntradaDoDiretorio` e o que a LISTAGEM projeta, e `projetarEntrada` e o
+ * caminho dos dois (a listagem e o detalhe). Endereco de porta em ate vinte
+ * cartoes de `Perto` nao foi pedido por nenhuma tela e alarga a superficie de
+ * graca -- entao ele segue o caminho da FOTO EM FAIXA, que e campo proprio de
+ * `LocalDoDiretorio` e por isso **nao tem como escorregar para a lista** no dia
+ * em que alguem acrescentar um campo a projecao comum.
+ *
+ * O arranjo nao e zelo: a diferenca entre "esta aqui" e "esta no outro tipo" e
+ * a unica coisa que, em TypeScript, impede a listagem de devolver isto.
+ *
+ * ## O que ele NAO e
+ *
+ * Nao e endereco de PESSOA. A secao 4 do ADR-0011 separa os dois casos: *"a
+ * pagina do tutor e uma pessoa que nao pediu para ser achada; o perfil do
+ * profissional e uma entidade que aceitou aparecer para ser contratada"*. O
+ * endereco de residencia de um usuario nao sai em superficie nenhuma, e nada
+ * aqui o alcanca -- estas colunas sao de `professionals`.
+ *
+ * Nao e coordenada e nao vira uma. ADR-0006: e TEXTO. Quem abre o mapa e o
+ * aplicativo de mapas do aparelho, a partir do texto.
+ */
+export interface EnderecoComercial {
+  readonly postalCode: string | null;
+  readonly street: string | null;
+  readonly streetNumber: string | null;
+  readonly complement: string | null;
+}
+
+/** Os quatro campos de endereco de `DirectoryEntryDetail`. */
+export interface EnderecoComercialPublico {
+  readonly postal_code: string | null;
+  readonly street: string | null;
+  readonly street_number: string | null;
+  readonly complement: string | null;
+}
+
+/**
+ * As quatro colunas viram os quatro campos do detalhe, **sem compor e sem
+ * normalizar**.
+ *
+ * O servidor nao monta uma linha unica: o que ele gravou foi o que o operador
+ * conferiu na tela do painel, e juntar os pedacos aqui seria inventar um
+ * formato que ninguem decidiu, num lugar onde o painel nao poderia mais
+ * corrigi-lo. Quem desenha a linha e quem monta o texto da busca de mapa e a
+ * tela.
+ *
+ * Nulo atravessa como nulo nos quatro, e nulo e o estado normal: profissional
+ * autonomo nao tem endereco comercial, e a migracao `20261018000001` deixou as
+ * quatro anulaveis exatamente por isso.
+ */
+export function projetarEnderecoComercial(
+  endereco: EnderecoComercial,
+): EnderecoComercialPublico {
+  return {
+    postal_code: endereco.postalCode,
+    street: endereco.street,
+    street_number: endereco.streetNumber,
+    complement: endereco.complement,
+  };
+}
+
 export function projetarEntrada(
   entrada: EntradaDoDiretorio,
   urlDeMidia: (chave: string) => string,
 ): EntradaPublica {
   return {
     slug: entrada.slug,
-    kind: entrada.kind,
+    // `kind` e a PRIMEIRA de `kinds`, para o APK em campo. Ver `EntradaPublica`.
+    kind: atividadePrincipal(entrada.kinds),
+    kinds: [...entrada.kinds],
     entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     city: entrada.city,
@@ -168,6 +276,7 @@ export function projetarEntrada(
     neighborhood: entrada.neighborhood,
     about: entrada.about,
     phone_e164: entrada.phoneE164,
+    site_url: entrada.siteUrl,
     verification: {
       level: nivelDerivado(entrada.verificacoes),
       evidence_kinds: evidenciasAprovadas(entrada.verificacoes),

@@ -43,8 +43,9 @@ export function novaChave(): string {
  * ainda esta subindo nao mostram o campo.
  *
  * Aceitar nao e o mesmo que EXIGIR. Quem exige e `descricaoObrigatoria` da
- * galeria, que a `Rede` deixa ligada e a `Loja` desligou em 17/10/2026 a
- * pedido do cliente.
+ * galeria. A `Loja` a desligou em 17/10/2026 e a `Rede` em 21/10/2026, as duas
+ * a pedido do cliente -- hoje NENHUM dos dois formularios a liga, e o padrao
+ * `true` sobrevive so para quem vier depois.
  */
 export function precisaDeDescricao(imagem: ImagemDaGaleria): boolean {
   return imagem.estado !== 'erro' && imagem.estado !== 'rejected' && imagem.estado !== 'enviando';
@@ -79,12 +80,27 @@ export interface PropsDaGaleria {
   principal?: string;
   ajuda?: string;
   /**
-   * A descricao de cada imagem e obrigatoria? Padrao `true`, que e o que a
-   * `Rede` continua pedindo. A `Loja` passa `false` desde 17/10/2026 (pedido
-   * do cliente): o administrador salva a imagem sem escrever nada, e o app cai
-   * no nome do produto.
+   * A descricao de cada imagem e obrigatoria? Padrao `true`.
+   *
+   * **Os dois formularios que usam esta galeria passam `false`**: a `Loja`
+   * desde 17/10/2026 e a `Rede` desde 21/10/2026, as duas por pedido do
+   * cliente. O administrador salva a imagem sem escrever nada, e quem desenha
+   * cai no nome do produto ou no titulo do encontro.
+   *
+   * O padrao segue `true` de proposito: a galeria nao sabe em que recurso esta,
+   * e a forma segura de um campo de acessibilidade e exigir e deixar que a tela
+   * dispense por escrito.
    */
   descricaoObrigatoria?: boolean;
+  /**
+   * O que o app LE quando a descricao nao vem. Entra na frase de ajuda, e so
+   * importa quando `descricaoObrigatoria` e `false`.
+   *
+   * Existe porque a reserva e do RECURSO e nao da galeria: na `Loja` e o nome
+   * do produto, na `Rede` e o titulo do encontro. Antes de 21/10/2026 a frase
+   * dizia "o nome do produto" para os dois, e so a `Loja` a via.
+   */
+  reservaDaDescricao?: string;
   /** Marca curta numa imagem (ex.: a foto sem envio da Rede, UX 30.7), tambem lida no nome acessivel do item. */
   marca?: (imagem: ImagemDaGaleria) => string | undefined;
 }
@@ -108,6 +124,7 @@ export function Galeria({
   // que o contrato pode mudar.
   ajuda = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.store_item.largura)} × ${String(DIMENSAO_MINIMA.store_item.altura)} pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.`,
   descricaoObrigatoria = true,
+  reservaDaDescricao = 'o nome do produto',
   marca,
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
@@ -425,7 +442,7 @@ export function Galeria({
       <span className="help" id={`${id}-ajuda-alt`}>
         {descricaoObrigatoria
           ? 'Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela.'
-          : 'Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela. Sem ela, o app lê o nome do produto.'}
+          : `Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela. Sem ela, o app lê ${reservaDaDescricao}.`}
       </span>
       {erro && (
         <span className="help err" id={idDoErro}>

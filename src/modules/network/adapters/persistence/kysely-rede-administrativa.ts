@@ -103,7 +103,7 @@ interface LinhaDaImagem {
   upload_id: string | null;
   image_id: string;
   position: number;
-  alt_text: string;
+  alt_text: string | null;
   status: EstadoDaImagem;
   public_key: string | null;
   rejection_reason: string | null;

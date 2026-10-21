@@ -134,7 +134,7 @@ interface LinhaDoEncontro {
    * imagem por encontro, e `thumb_url` repetido oito vezes por cartao e peso
    * de rede pago pelo tutor para transportar nome de campo.
    */
-  images: { k: string; t: string | null; b: string | null; a: string }[] | null;
+  images: { k: string; t: string | null; b: string | null; a: string | null }[] | null;
 }
 
 /**
@@ -180,7 +180,7 @@ function colunasDoEncontro() {
       SELECT b.item FROM network_event_bring_items b
        WHERE b.event_id = e.id
        ORDER BY array_position(${sql.val(ORDEM_DO_QUE_LEVAR)}::text[], b.item))`.as('bring_items'),
-    sql<{ k: string; t: string | null; b: string | null; a: string }[] | null>`(
+    sql<{ k: string; t: string | null; b: string | null; a: string | null }[] | null>`(
       SELECT json_agg(json_build_object(
                'k', c.public_key, 't', c.thumb_key, 'b', c.banner_key, 'a', i.alt_text)
              ORDER BY i.position)

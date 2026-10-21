@@ -126,12 +126,10 @@ export function erroSeJaDecidida(i: IndicacaoNaFila): ProblemFieldError | null {
 }
 
 /**
- * O que a entrada do diretorio recebe da indicacao.
+ * O que a entrada do diretorio recebe da indicacao: o TELEFONE.
  *
- * `phone_e164` sai daqui **so quando o contato publico indicado e telefone**:
- * `professionals` nao tem coluna para site nem para perfil de rede social, e o
- * canal de contato da entrada e `phone_e164` e mais nenhum. Copiar um site para
- * a coluna do telefone poria `https://...` onde a tela do aplicativo liga.
+ * Sai daqui **so quando o contato publico indicado e telefone**. Copiar um site
+ * para a coluna do telefone poria `https://...` onde a tela do aplicativo liga.
  *
  * **`note` nao e copiado.** Ele e recado para quem revisa; publica-lo faria o
  * diretorio carregar avaliacao da comunidade, que e outro modelo e nao existe
@@ -139,4 +137,34 @@ export function erroSeJaDecidida(i: IndicacaoNaFila): ProblemFieldError | null {
  */
 export function telefoneDaIndicacao(i: IndicacaoNaFila): string | null {
   return i.contatoKind === 'phone' ? i.contatoValue : null;
+}
+
+/**
+ * O SITE que a entrada recebe da indicacao -- **o conserto de um dado que se
+ * perdia**.
+ *
+ * Esta funcao e a razao de existir da coluna `professionals.site_url`
+ * (`20261020000014`). Antes dela, `directory_suggestions` ACEITAVA
+ * `contact_kind = 'website'` desde 17/10/2026, VALIDAVA o endereco com o mesmo
+ * `errosDoEnderecoCompleto` da escrita do painel, e a aprovacao **nao tinha onde
+ * copiar o valor**: a entrada nascia sem canal nenhum e o site que alguem
+ * digitou morria na fila. Nao era recurso que faltava -- era dado descartado.
+ *
+ * Simetrica a `telefoneDaIndicacao`, e pela mesma razao de forma: o valor so sai
+ * quando o `contact_kind` DECLARADO e `website`. A fila guarda um `contact_value`
+ * para qualquer um dos tres tipos, e adivinhar pelo formato aceitaria telefone no
+ * campo de site e vice-versa -- a migracao `20261017000004` diz isso por extenso
+ * no comentario de `contact_kind`.
+ *
+ * **O valor nao e reconferido aqui, e nao e esquecimento:** `contact_value` com
+ * `contact_kind = 'website'` so entrou na fila depois de passar por
+ * `errosDoEnderecoCompleto`, e o teto da fila (120) e menor que o da coluna
+ * (261), entao o que esta gravado cabe. Reconferir seria uma segunda definicao
+ * do mesmo padrao.
+ *
+ * `instagram` continua sem destino, e de proposito: nao ha coluna de rede social
+ * e inventa-la nao foi pedido.
+ */
+export function siteDaIndicacao(i: IndicacaoNaFila): string | null {
+  return i.contatoKind === 'website' ? i.contatoValue : null;
 }

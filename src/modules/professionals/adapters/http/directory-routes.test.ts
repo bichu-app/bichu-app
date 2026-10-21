@@ -60,7 +60,7 @@ const AGORA = 1_800_000_000_000;
 
 const ENTRADA: EntradaDoDiretorio = {
   slug: 'clinica-veterinaria-santa-barbara',
-  kind: 'clinic',
+  kinds: ['clinic'],
   entityKind: 'professional',
   displayName: 'Clínica Veterinária Santa Bárbara',
   about: 'Pronto atendimento 24 horas.',
@@ -68,6 +68,7 @@ const ENTRADA: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Pinheiros',
   phoneE164: '+551130612200',
+  siteUrl: null,
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,

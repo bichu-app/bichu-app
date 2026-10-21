@@ -138,8 +138,8 @@ void describe('uma avaliação por pessoa, e a faixa da nota, no banco', () => {
         // `'claimed'`, e o CHECK `professionals_titularidade_tem_marco` exige
         // `claimed_at` quando ha titular. O local desta isca nao tem dono --
         // e um registro importado, como a maioria do diretorio.
-        `INSERT INTO professionals (id, kind, display_name, source, city, state, claim_status)
-         VALUES ($1, 'clinic', $2, 'import', 'Cidade da Isca', 'SP', 'unclaimed')`,
+        `INSERT INTO professionals (id, kinds, display_name, source, city, state, claim_status)
+         VALUES ($1, ARRAY['clinic'], $2, 'import', 'Cidade da Isca', 'SP', 'unclaimed')`,
         [id, `${PREFIXO}${nome}`],
       );
     }
@@ -225,8 +225,8 @@ void describe('uma avaliação por pessoa, e a faixa da nota, no banco', () => {
     for (const fora of [0, 6, -1, 100]) {
       const terceiro = randomUUID();
       await cliente.query(
-        `INSERT INTO professionals (id, kind, display_name, source, claim_status)
-         VALUES ($1, 'vet', $2, 'import', 'unclaimed')`,
+        `INSERT INTO professionals (id, kinds, display_name, source, claim_status)
+         VALUES ($1, ARRAY['vet'], $2, 'import', 'unclaimed')`,
         [terceiro, `${PREFIXO}faixa-${String(fora)}`],
       );
       try {
@@ -252,8 +252,8 @@ void describe('uma avaliação por pessoa, e a faixa da nota, no banco', () => {
     for (const nota of [1, 2, 3, 4, 5]) {
       const local = randomUUID();
       await cliente.query(
-        `INSERT INTO professionals (id, kind, display_name, source, claim_status)
-         VALUES ($1, 'vet', $2, 'import', 'unclaimed')`,
+        `INSERT INTO professionals (id, kinds, display_name, source, claim_status)
+         VALUES ($1, ARRAY['vet'], $2, 'import', 'unclaimed')`,
         [local, `${PREFIXO}nota-${String(nota)}`],
       );
       try {
@@ -278,8 +278,8 @@ void describe('uma avaliação por pessoa, e a faixa da nota, no banco', () => {
   void it('dois `ref` iguais são RECUSADOS', async () => {
     const local = randomUUID();
     await cliente.query(
-      `INSERT INTO professionals (id, kind, display_name, source, claim_status)
-       VALUES ($1, 'vet', $2, 'import', 'unclaimed')`,
+      `INSERT INTO professionals (id, kinds, display_name, source, claim_status)
+       VALUES ($1, ARRAY['vet'], $2, 'import', 'unclaimed')`,
       [local, `${PREFIXO}ref-repetido`],
     );
     try {

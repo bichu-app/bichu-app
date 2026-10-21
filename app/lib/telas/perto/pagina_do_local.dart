@@ -153,18 +153,37 @@ class PaginaDoLocal extends StatefulWidget {
   /// palavra.
   static const String rotuloDeLigar = 'Ligar';
 
-  /// O nome ACESSIVEL do toque no endereco, e nao o texto visivel.
+  /// O rotulo do toque que abre o endereco no aplicativo de mapas.
   ///
-  /// O visivel continua sendo o endereco. Um leitor de tela sobre o endereco
-  /// pelado anunciaria `Pinheiros, São Paulo - SP` e nao diria que aquilo e
-  /// tocavel, que e o defeito que `BICHUS-205` ja consertou no botao primario.
-  static String rotuloDeAbrirNoMapa(String lugar) => 'Abrir $lugar no mapa';
+  /// **E O TEXTO EXATO DE `LocalDoEncontro.rotuloDoMapa`, e isso e medido.**
+  /// Duas frentes chegaram aqui em 21/10/2026, as duas escreveram "a MESMA
+  /// frase do encontro" na propria prosa, e **nenhuma das duas copiou**: uma
+  /// pos `Abrir <lugar> no mapa`, a outra `Abrir no app de mapas`, e o encontro
+  /// diz `Abrir no mapa`. Eram tres redacoes para uma acao, duas delas se
+  /// declarando copia fiel de uma quarta.
+  ///
+  /// O encontro e a regua porque e a superficie mais antiga **e** a que as duas
+  /// frentes elegeram como fonte: convergir nele nao contraria autor nenhum,
+  /// contraria so o erro deles. `endereco_do_local_abre_no_mapa_test.dart`
+  /// **reprova se este texto divergir do de la** -- sem essa isca a quarta
+  /// redacao volta na primeira edicao, que e exatamente como chegamos a tres.
+  ///
+  /// **Nao e constante compartilhada, e isso e de proposito.** Unificar as tres
+  /// superficies numa fonte so e trabalho de frente, com isca propria; mescla
+  /// nao e o lugar. Aqui: mesmo texto, medido. Fonte unica depois.
+  static const String rotuloDoMapa = 'Abrir no mapa';
 
-  /// A mesma frase do encontro da `Rede` (`LocalDoEncontro.falhaAoAbrir`), e
-  /// **repetida de proposito**: importar a constante da outra tela acoplaria
-  /// a pagina do diretorio a pagina do encontro por causa de uma string.
-  static const String falhaAoAbrirOMapa =
-      'Não conseguimos abrir o aplicativo de mapas.';
+  /// Quando o aplicativo de mapas nao abre.
+  ///
+  /// **Texto exato de `LocalDoEncontro.falhaAoAbrir`**, pela mesma regua do
+  /// rotulo acima, e com uma razao que decide pelo CONTEUDO e nao pela
+  /// antiguidade: a outra redacao desta onda era *"Nao encontramos um app de
+  /// mapas neste aparelho"*, e ela **afirma uma causa que o codigo nao sabe**.
+  /// `abrirEnderecoNoAppDeMapas` devolve `false` tanto para "nao ha app" quanto
+  /// para "tentamos e falhou". Dizer o primeiro quando pode ser o segundo e
+  /// mandar a pessoa instalar um app de mapas que ela ja tem. Esta forma nao
+  /// atribui causa.
+  static const String falhaAoAbrirMapa = 'Não conseguimos abrir o app de mapas.';
 
   static const String rotuloDaNota = 'Sua nota';
   static const String ajudaDaNota = 'Toque nas estrelas para dar de 1 a 5.';
@@ -595,22 +614,36 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   /// funcao (`SaidaDoApp.abrirEnderecoNoAppDeMapas`), dois chamadores
   /// (`local_do_encontro.dart` e esta tela). O encontro tem logradouro de
   /// verdade e e la que o mecanismo se prova; aqui ele chega pronto.
-  Future<void> _abrirNoMapa(String lugar) async {
-    final abriu = await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(
-      endereco: lugar,
-    );
-    if (!abriu && mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text(PaginaDoLocal.falhaAoAbrirOMapa)),
-      );
-    }
-  }
-
   Future<void> _ligar(String telefoneE164) async {
     // `tel:` vai para o discador do sistema, que **mostra o numero e espera a
     // pessoa confirmar**: o app nao disca sozinho. Mesmo caminho do cartao da
     // listagem.
     await launchUrl(Uri(scheme: 'tel', path: telefoneE164));
+  }
+
+  /// Abre o endereco comercial no aplicativo de mapas do aparelho.
+  ///
+  /// **`SaidaDoApp.abrirEnderecoNoAppDeMapas`, e nao um caminho novo.** E a
+  /// MESMA porta que o encontro da Rede usa (`local_do_encontro.dart`):
+  /// intencao `geo:0,0?q=<texto>`, uma implementacao, um lugar. Escrever um
+  /// segundo jeito de abrir mapa aqui seria duplicar o que ja existe.
+  ///
+  /// O texto vem de `textoParaBuscaNoMapa`, que **nao e a linha exibida**: o
+  /// complemento sai e o bairro, a cidade e a UF entram. Nulo nao chega aqui --
+  /// quem desenha o toque e quem ja decidiu que ha endereco.
+  ///
+  /// **A uniao da onda 4 definiu este metodo DUAS VEZES nesta classe**, sem
+  /// conflito de texto: as duas frentes escreveram o mesmo mecanismo com a
+  /// mesma porta, diferindo so na frase de falha. Ficou um, e a frase e a do
+  /// encontro (ver `PaginaDoLocal.falhaAoAbrirMapa`).
+  Future<void> _abrirNoMapa(String endereco) async {
+    final abriu =
+        await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
+    if (!abriu && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text(PaginaDoLocal.falhaAoAbrirMapa)),
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1302,18 +1335,39 @@ class _Cabecalho extends StatelessWidget {
 /// e nao desta pagina -- e e o discador que mostra o numero e espera a
 /// confirmacao, que e a razao de o app nunca discar sozinho.
 ///
-/// **E so isso que existe.** O protótipo marca onde caberiam site, e-mail,
-/// WhatsApp, redes, horario, foto e endereco, e diz na mesma linha que nada
-/// disso existe hoje. Nenhum deles e desenhado aqui.
+/// ## O ENDERECO COMERCIAL entrou em 21/10/2026
+///
+/// Decisao do cliente, nestas palavras: *"o endereco completo do
+/// profissional"*, para a pessoa tocar nele e abrir o aplicativo de mapas. A
+/// prosa anterior dizia que o protótipo "marca onde caberia o endereco e diz na
+/// mesma linha que nada disso existe hoje"; o endereco existe, e os outros
+/// continuam valendo a frase.
+///
+/// **TRES CASOS, os mesmos tres do `local_do_encontro.dart` da Rede**, porque
+/// sao as tres formas que o dado chega:
+///
+/// 1. **com endereco de rua** -- a linha do endereco e TOCAVEL e abre o mapa,
+///    e a linha de lugar continua embaixo dela;
+/// 2. **sem endereco de rua, com bairro/cidade/UF** -- so a linha de lugar, sem
+///    toque. E o caso do autonomo, e e a maioria;
+/// 3. **sem nada** -- nenhuma linha. **Endereco ausente nao vira toque que abre
+///    o mapa no nada**, e e por isso que a condicao e `temEnderecoDeRua` e nao
+///    "algum dos quatro campos veio".
+///
+/// **E so isso que existe.** E-mail, WhatsApp, redes e horario continuam sem
+/// coluna, e nenhum deles e desenhado aqui: espaco reservado ensinaria quem le
+/// que o dado vem.
 class _Informacoes extends StatelessWidget {
   const _Informacoes({required this.detalhe, required this.aoAbrirNoMapa});
 
   final DetalheDoLocal detalhe;
 
-  /// Leva o endereco ao aplicativo de mapas. Ver `_PaginaDoLocalState.
-  /// _abrirNoMapa`, que explica por que o dado que o alimenta ainda e so
-  /// bairro e cidade.
-  final Future<void> Function(String lugar) aoAbrirNoMapa;
+  /// Recebe o TEXTO da busca, ja montado, e repassa a
+  /// `SaidaDoApp.abrirEnderecoNoAppDeMapas` -- a mesma porta do encontro.
+  ///
+  /// Sem logradouro quem chega aqui e a linha de lugar, que e o controle nesse
+  /// caso. Ver a prosa de `build`.
+  final Future<void> Function(String endereco) aoAbrirNoMapa;
 
   static const String semSobre =
       'Este local ainda não escreveu uma apresentação.';
@@ -1322,6 +1376,12 @@ class _Informacoes extends StatelessWidget {
   Widget build(BuildContext context) {
     final sobre = detalhe.sobre;
     final lugar = detalhe.linhaDeLugar;
+    final endereco = detalhe.endereco.porExtenso;
+    final busca = detalhe.endereco.textoParaBuscaNoMapa(
+      bairro: detalhe.bairro,
+      cidade: detalhe.cidade,
+      estado: detalhe.estado,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1333,26 +1393,62 @@ class _Informacoes extends StatelessWidget {
           _Corpo(texto: sobre)
         else
           const _Corpo(texto: semSobre),
-        // **O endereco e TOCAVEL aqui, e so aqui.**
+        // **UM BOTAO, NUNCA DOIS** -- a regra e de `local_do_encontro.dart`, e
+        // foi a outra frente desta onda que a trouxe para esta tela. A uniao
+        // das duas a violava: as duas punham toque, uma no logradouro e outra
+        // na linha de lugar, dois alvos para a MESMA acao na mesma rolagem.
         //
-        // O cabecalho tambem escreve `linhaDeLugar`, e deixa-la tocavel nos
-        // dois lugares daria DOIS alvos para a mesma acao na mesma rolagem --
-        // o que `local_do_encontro.dart` ja decidiu contra, com a frase "um
-        // botao, nunca dois". `Informações` e a secao do endereco; o
-        // cabecalho e resumo.
+        // Das tres composicoes possiveis so uma respeita a regra sem derruba-la,
+        // e e esta. O produto confirma: havendo logradouro e ELE que a pessoa
+        // quer abrir -- `Rua X, 52` leva ao lugar certo e `Bairro, Cidade - UF`
+        // leva ao centro do bairro. Pôr o toque na linha MENOS precisa tendo a
+        // mais precisa na tela seria o pior dos dois.
+        // CASO 1: ha endereco de rua. A linha e o controle, e o rotulo
+        // ANUNCIADO diz a acao antes do endereco -- `Abrir no app de mapas:
+        // Rua Teodoro Sampaio, 1020` --, porque um leitor de tela que anuncia
+        // o endereco primeiro faz a pessoa ouvir a linha inteira para descobrir
+        // que ela e tocavel. Mesma forma do botao do encontro.
         //
-        // **`lugar` nunca vem em branco**: `linhaDeLugarDe` devolve NULO
-        // quando os tres campos faltam, em vez de cadeia vazia, e e por isso
-        // que o `if` acima basta. A porta recusa branco de novo, do lado dela,
-        // e as duas conferencias nao sao redundancia: esta decide se existe
-        // ALVO DE TOQUE, e a de la decide se existe CHAMADA AO SISTEMA.
+        // As duas condicoes sao a MESMA (`temEnderecoDeRua`), e as duas estao
+        // escritas porque o tipo nao as liga: sem a segunda, o `!` abaixo seria
+        // uma aposta.
+        if (endereco != null && busca != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          Semantics(
+            button: true,
+            label: '${PaginaDoLocal.rotuloDoMapa}: $endereco',
+            onTap: () => aoAbrirNoMapa(busca),
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => aoAbrirNoMapa(busca),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: BichuAlvoDeToque.critico,
+                ),
+                child: _LinhaComIcone(
+                  icone: Icons.map_outlined,
+                  texto: endereco,
+                ),
+              ),
+            ),
+          ),
+        ],
+        // CASO 2: a linha de lugar, com ou sem endereco acima dela. CASO 3 e a
+        // ausencia das duas, e ele nao precisa de codigo: nao ha `else`.
         if (lugar != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e4),
           _LinhaComIcone(
             icone: Icons.place_outlined,
             texto: lugar,
-            aoTocar: () => aoAbrirNoMapa(lugar),
-            rotuloAcessivel: PaginaDoLocal.rotuloDeAbrirNoMapa(lugar),
+            // CASO 2: ela e o controle **so quando nao ha logradouro**. Com
+            // logradouro na tela, o toque mora lá e aqui nao ha nenhum: e o
+            // `um botao, nunca dois` da prosa acima, escrito em uma condicao.
+            // O `assert` de `_LinhaComIcone` cobra que toque e nome andem
+            // juntos, e os dois saem pela mesma condicao.
+            aoTocar: endereco == null ? () => aoAbrirNoMapa(lugar) : null,
+            rotuloAcessivel: endereco == null
+                ? '${PaginaDoLocal.rotuloDoMapa}: $lugar'
+                : null,
           ),
         ],
       ],

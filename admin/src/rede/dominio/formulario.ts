@@ -201,10 +201,11 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
         ...(img.upload_id ? { uploadId: img.upload_id } : {}),
         previa: img.url ?? null,
         motivo: img.rejection_reason ?? null,
-        // `alt_text` virou anulavel no schema de leitura quando a `Loja` passou
-        // a aceitar imagem sem descricao (17/10/2026). **Na `Rede` ele continua
-        // obrigatorio na escrita**, entao aqui o nulo nao acontece -- o `?? ''`
-        // e do tipo, nao do caso.
+        // `alt_text` e anulavel no schema de leitura, e desde 21/10/2026 o nulo
+        // ACONTECE tambem na `Rede` (decisao do cliente): a escrita deixou de
+        // exigir a descricao. `''` e como a tela guarda "sem descricao", e a
+        // montagem omite o campo nesse caso -- as duas pontas combinam em
+        // `planoDeEdicao`.
         alt: img.alt_text ?? '',
       })),
     visibilidade: e.visibility,
@@ -281,9 +282,20 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   } else if (f.fotos.some((x) => x.estado === 'erro' || x.estado === 'rejected')) {
     e('fotos', 'Fotos', 'Remova ou envie de novo a foto que não foi aceita.');
   }
+  // A DESCRICAO DA IMAGEM E OPCIONAL DESDE 21/10/2026 (decisao do cliente,
+  // dita duas vezes: "pode remover a descricao da imagem").
+  //
+  // VAZIO PASSA, UMA LETRA NAO, e a distincao nao e capricho: o contrato recusa
+  // `alt_text` de um caractere (`minLength: 2`), e deixar `"a"` passar aqui
+  // trocaria um erro de campo por um `400` sem endereco na tela. Vazio quer
+  // dizer "nao escrevi" e o campo e OMITIDO do corpo (ver `imagens()`); `"a"`
+  // quer dizer "escrevi errado".
+  //
+  // E a mesma regra que a `Loja` aplica desde 17/10 via
+  // `descricaoAceitavel(alt, false)`.
   f.fotos.forEach((foto, i) => {
-    if (FOTO_QUE_VAI.has(foto.estado) && !entre(foto.alt, 2, 150)) {
-      e(`alt-${i}`, 'Descrição da imagem', 'Descreva a imagem.');
+    if (FOTO_QUE_VAI.has(foto.estado) && foto.alt.trim() !== '' && !entre(foto.alt, 2, 150)) {
+      e(`alt-${i}`, 'Descrição da imagem', 'Escreva pelo menos duas letras, ou deixe o campo vazio.');
     }
   });
 
@@ -335,7 +347,14 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
 function imagens(f: EstadoDoFormulario): ImagemInput[] {
   return f.fotos
     .filter((x): x is FotoDoFormulario & { uploadId: string } => !!x.uploadId && FOTO_QUE_VAI.has(x.estado))
-    .map((x) => ({ upload_id: x.uploadId, alt_text: x.alt.trim() }));
+    .map((x) => {
+      // `alt_text` e OMITIDO quando vazio, e nao mandado como `""`: o contrato
+      // pede de 2 a 150 caracteres QUANDO o campo vem, e ausente e o unico
+      // jeito de dizer "nao escrevi". Mesmo molde de
+      // `loja/formulario-do-produto.ts`.
+      const alt = x.alt.trim();
+      return { upload_id: x.uploadId, ...(alt === '' ? {} : { alt_text: alt }) };
+    });
 }
 
 function lugar(f: EstadoDoFormulario): LugarInput {
@@ -414,7 +433,11 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
     f.fotos.length === antigas.length &&
     f.fotos.every((x, i) => {
       const a = antigas[i];
-      return !!a && x.chave === chaveDaImagem(a) && x.alt.trim() === a.alt_text;
+      // `a.alt_text` e nulo na imagem gravada sem descricao, e a tela guarda
+      // `''` para o mesmo estado (ver a leitura, `alt: img.alt_text ?? ''`).
+      // Sem o `?? ''` aqui, `'' === null` daria falso e o patch mandaria
+      // `images` em TODO salvamento, mesmo sem a galeria ter mudado.
+      return !!a && x.chave === chaveDaImagem(a) && x.alt.trim() === (a.alt_text ?? '');
     });
   if (!fotosIguais) patch.images = imagens(f);
   if (!mesmoConjunto(f.levar, original.bring_items)) patch.bring_items = [...f.levar];

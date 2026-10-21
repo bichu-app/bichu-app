@@ -39,6 +39,7 @@
 
 import 'package:bichu/dispositivo/saida_do_app.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
+import 'package:bichu/telas/rede/local_do_encontro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -92,7 +93,7 @@ class SaidaQueAnota extends SaidaDoApp {
 Finder oSemanticoDoEndereco(String lugar) => find.byWidgetPredicate(
       (w) =>
           w is Semantics &&
-          w.properties.label == PaginaDoLocal.rotuloDeAbrirNoMapa(lugar),
+          w.properties.label == '${PaginaDoLocal.rotuloDoMapa}: $lugar',
     );
 
 Finder oToqueDoEndereco(String lugar) => find.descendant(
@@ -159,7 +160,7 @@ void main() {
 
       expect(
         semanticaDaTela(tester),
-        contains(PaginaDoLocal.rotuloDeAbrirNoMapa(lugarDoCaso)),
+        contains('${PaginaDoLocal.rotuloDoMapa}: $lugarDoCaso'),
         reason: 'REPROVA: a árvore semântica não diz que o endereço abre o '
             'mapa. Endereço pelado é anunciado como texto, e quem usa leitor '
             'de tela não descobre que ele é tocável -- o mesmo defeito que a '
@@ -179,7 +180,7 @@ void main() {
       await tester.tap(oToqueDoEndereco(lugarDoCaso));
       await tester.pumpAndSettle();
 
-      expect(find.text(PaginaDoLocal.falhaAoAbrirOMapa), findsOneWidget);
+      expect(find.text(PaginaDoLocal.falhaAoAbrirMapa), findsOneWidget);
       expect(find.byType(PaginaDoLocal), findsOneWidget);
     });
   });
@@ -254,6 +255,55 @@ void main() {
             'é a notícia: troque o esperado deste caso pela rua e pelo '
             'número, e cite a decisão do cliente na linha. O MECANISMO não '
             'muda, e é por isso que só este caso reprova.',
+      );
+    });
+  });
+  // -------------------------------------------------------------------------
+  // ISCA — a redacao desta tela E a do encontro, e nao "parecida com"
+  // -------------------------------------------------------------------------
+  //
+  // POR QUE ELA EXISTE, e o custo que ela cobra de volta. Em 21/10/2026 duas
+  // frentes chegaram a esta tela com o toque que abre o mapa. As duas
+  // escreveram na propria prosa "a MESMA frase do encontro da Rede". **Nenhuma
+  // das duas copiou:** uma pos `Abrir <lugar> no mapa`, a outra `Abrir no app
+  // de mapas`, e o encontro diz `Abrir no mapa`. Eram tres redacoes para uma
+  // acao, duas delas se declarando copia fiel de uma quarta -- e ninguem
+  // percebeu porque NADA media.
+  //
+  // Decisao de 21/10: converge no encontro, que e a superficie mais antiga e a
+  // que as duas elegeram como fonte. Esta isca e o que mantem a convergencia
+  // depois da mescla: sem ela, a quarta redacao volta na primeira edicao.
+  //
+  // **Ela NAO exige constante compartilhada.** Unificar as tres superficies
+  // numa fonte so e trabalho de frente, com isca propria. Aqui: mesmo texto,
+  // medido.
+  group('ISCA — a redação é a do encontro, medida e não declarada', () {
+    test('o rótulo do toque é o texto EXATO de LocalDoEncontro.rotuloDoMapa',
+        () {
+      expect(
+        PaginaDoLocal.rotuloDoMapa,
+        LocalDoEncontro.rotuloDoMapa,
+        reason: 'REPROVA: a página do local e o encontro divergiram no rótulo '
+            'do toque que abre o mapa. É a MESMA ação pela MESMA porta '
+            '(`SaidaDoApp.abrirEnderecoNoAppDeMapas`), e duas palavras para a '
+            'mesma ação ensinam que são ações diferentes. Já aconteceu: em '
+            '21/10/2026 havia TRÊS redações, duas delas se dizendo cópia desta '
+            'constante. Se a mudança é deliberada, mude as duas e diga por quê '
+            'aqui.',
+      );
+    });
+
+    test('a frase de falha é o texto EXATO de LocalDoEncontro.falhaAoAbrir',
+        () {
+      expect(
+        PaginaDoLocal.falhaAoAbrirMapa,
+        LocalDoEncontro.falhaAoAbrir,
+        reason: 'REPROVA: a frase de falha divergiu da do encontro. E se a '
+            'divergência for voltar a ATRIBUIR CAUSA ("não encontramos um app '
+            'de mapas neste aparelho"), ela é pior que divergência: '
+            '`abrirEnderecoNoAppDeMapas` devolve `false` tanto para "não há '
+            'app" quanto para "tentamos e falhou", e afirmar o primeiro manda '
+            'a pessoa instalar um app que ela já tem.',
       );
     });
   });

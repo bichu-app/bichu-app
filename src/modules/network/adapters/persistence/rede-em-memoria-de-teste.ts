@@ -47,7 +47,7 @@ interface ContaGuardada {
 
 export interface EstadoDaRede {
   encontros: Map<string, EncontroGuardado>;
-  galeria: Map<string, { imageId: string; position: number; altText: string }[]>;
+  galeria: Map<string, { imageId: string; position: number; altText: string | null }[]>;
   imagens: Map<string, { uploadId: string; status: 'processing' | 'ready' | 'rejected'; publicKey: string | null }>;
   envios: Map<string, { kind: string; purpose: 'store_item' | 'network_event' | null; expiresAt: Date; imagemId: string | null }>;
   pedidos: Map<string, PedidoGuardado>;

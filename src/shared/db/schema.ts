@@ -1384,7 +1384,26 @@ export interface FilaDeModeracaoView {
 export interface ProfessionalsTable {
   /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
   id: string;
-  kind: TipoDeProfissional;
+  /**
+   * AS ATIVIDADES, de 1 a 6 (`20261020000015`, decisao do cliente de
+   * 21/10/2026). Substituiu `kind`, que era um valor so.
+   *
+   * **Lista de verdade, e nao texto grudado com separador.** O motivo e o
+   * filtro: com texto grudado o chip procuraria PEDACO (`LIKE`) e `'vet'`
+   * casaria dentro de `'vet_especialista'` ou de uma frase, trazendo o registro
+   * errado **sem reprovar nada**. Lista deixa comparar ITEM INTEIRO
+   * (`kinds @> ARRAY[valor]`) e usar o indice GIN -- `@>` e nao `= ANY`, porque
+   * `array_ops` nao indexa `= ANY`.
+   *
+   * **O filtro e pertinencia, nunca desdobramento:** `unnest` em `FROM` com
+   * `SELECT` direto faria a entrada de tres atividades sair tres vezes na mesma
+   * listagem, e `total` contaria tres.
+   *
+   * A unicidade dos itens e conferida na APLICACAO (`CHECK` nao aceita
+   * subconsulta). O contrato publica `kinds[0]` no campo `kind` das respostas,
+   * para o APK em campo continuar lendo.
+   */
+  kinds: TipoDeProfissional[];
   /**
    * O QUE a entrada e, eixo SEPARADO de `kind` (que e a ATIVIDADE). ONG e
    * `organization`. `Generated` porque a `20261018000012` a criou com
@@ -1397,6 +1416,25 @@ export interface ProfessionalsTable {
   city: string | null;
   state: string | null;
   neighborhood: string | null;
+  /**
+   * O SITE do estabelecimento, acrescentado pela migracao `20261020000014`
+   * (decisao do cliente de 21/10/2026).
+   *
+   * **A URL INTEIRA, e nao o host** -- a diferenca deliberada em relacao a
+   * `store_partners.host`: a tela ABRE este endereco como esta, e cortar o
+   * caminho levaria quem toca para a raiz do dominio.
+   *
+   * **NAO E NORMALIZADA.** O `CHECK` da coluna
+   * (`professionals_site_tamanho`) e so de TAMANHO; esquema, host e credencial
+   * sao conferidos na aplicacao por `errosDoEnderecoCompleto`
+   * (`src/shared/url/endereco-completo.ts`), que e a autoridade unica.
+   *
+   * Sai em `DirectoryEntrySummary` e `DirectoryEntryDetail`, ao lado de
+   * `phone_e164` e pela mesma razao: canal publicado de proposito pela
+   * entidade. **Nao entra em `faltasParaPublicar`**: a publicacao continua
+   * cobrando o telefone.
+   */
+  site_url: string | null;
   /**
    * O ENDERECO DE RUA, acrescentado pela migracao `20261018000001`.
    *
@@ -1804,7 +1842,9 @@ export interface StoreItemImagesTable {
    * Quando vem, de 2 a 150 caracteres; nulo quer dizer que o painel nao
    * escreveu, e quem desenha cai no titulo do item.
    *
-   * Em `network_event_images` ele continua `NOT NULL`.
+   * Em `network_event_images` ele era `NOT NULL` e **deixou de ser em
+   * 21/10/2026** (`20261020000013`, decisao do cliente): as duas colunas estao
+   * na mesma forma agora.
    */
   alt_text: string | null;
 }
@@ -1949,7 +1989,18 @@ export interface NetworkEventImagesTable {
   event_id: string;
   image_id: string;
   position: number;
-  alt_text: string;
+  /**
+   * **Opcional desde a `20261020000013`** (decisao do cliente de 21/10/2026,
+   * dita duas vezes: "pode remover a descricao da imagem"). Quando vem, de 2 a
+   * 150 caracteres; nulo quer dizer que o painel nao escreveu.
+   *
+   * A `20261017000002` afrouxou so `store_item_images` e manteve esta coluna
+   * `NOT NULL` DE PROPOSITO, porque "afrouxar a Rede de carona deixaria a capa
+   * do encontro sem nome acessivel sem ninguem ter pedido". Em 21/10 o cliente
+   * pediu, ciente do custo. O `CHECK` de tamanho continua valendo quando o
+   * texto vem: `CHECK` que resulta NULL conta como satisfeito.
+   */
+  alt_text: string | null;
 }
 
 export interface NetworkEventAmenitiesTable {

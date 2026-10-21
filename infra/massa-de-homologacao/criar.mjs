@@ -481,12 +481,12 @@ async function principal() {
       const id = randomUUID();
       await cliente.query(
         `insert into professionals (
-           id, kind, entity_kind, display_name, about, city, state, neighborhood,
+           id, kinds, entity_kind, display_name, about, city, state, neighborhood,
            geo, source, claim_status, claimed_by_user_id, claimed_at,
            verification_level, phone_e164, slug, status, published_at,
            created_at, updated_at
          ) values (
-           $1, $2, $3, $4, $5, $6, $7, $8,
+           $1, ARRAY[$2], $3, $4, $5, $6, $7, $8,
            case when $9::float8 is null then null
                 else ST_SetSRID(ST_MakePoint($9::float8, $10::float8), 4326)::geography end,
            'import', 'unclaimed', null, null,

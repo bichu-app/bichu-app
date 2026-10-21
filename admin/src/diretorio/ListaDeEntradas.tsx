@@ -180,6 +180,10 @@ export default function ListaDeEntradas() {
         seletores={[
           {
             id: 'filtro-atividade',
+            // UMA atividade por vez, e e de proposito: o filtro do contrato
+            // (`?kind=`) e singular, e a entrada com varias aparece em CADA um
+            // dos filtros dela -- uma vez em cada, porque o servidor testa
+            // pertinencia em vez de desdobrar a linha.
             rotuloAcessivel: 'Filtrar por atividade',
             valor: p.atividade,
             opcoes: ATIVIDADE_TODAS,
@@ -247,7 +251,15 @@ export default function ListaDeEntradas() {
                           {entrada.display_name}
                         </Link>
                         <br />
-                        <span className="t-caption c-sec">{ATIVIDADES[entrada.kind]}</span>
+                        {/* TODAS as atividades, e nao so a primeira (cliente,
+                            21/10/2026). `entrada.kind` continua no contrato,
+                            mas e `kinds[0]` e existe para o APK em campo --
+                            usa-lo aqui faria o painel esconder que a entrada
+                            tem outras, e e justamente isso que o operador
+                            precisa ver antes de editar. */}
+                        <span className="t-caption c-sec">
+                          {entrada.kinds.map((k) => ATIVIDADES[k]).join(' · ')}
+                        </span>
                       </td>
                       <td className="w-preco t-body-sm">{lugarDa(entrada)}</td>
                       {/* O E.164 gravado, de volta na gramatica de quem le. */}

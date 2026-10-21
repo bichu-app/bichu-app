@@ -111,7 +111,7 @@ function clausulaWhere(sql: string): string {
 /** Uma entrada publicada em `Jardim América`, com o acento e a maiuscula. */
 const ENTRADA_DO_JARDIM_AMERICA: EntradaDoDiretorio = {
   slug: 'hospital-mais-pet',
-  kind: 'clinic',
+  kinds: ['clinic'],
   entityKind: 'professional',
   displayName: 'Hospital Mais Pet',
   about: null,
@@ -119,6 +119,7 @@ const ENTRADA_DO_JARDIM_AMERICA: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Jardim América',
   phoneE164: '+5511910981784',
+  siteUrl: null,
   verificacoes: [],
   distanciaEmMetros: null,
   logoPublicKey: null,

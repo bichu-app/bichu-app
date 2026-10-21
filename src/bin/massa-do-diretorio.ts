@@ -23,7 +23,7 @@
  *   `geo` porque nao ha painel. Ela aparece por ultimo, com distancia nula;
  * - os tres niveis de verificacao, `none` inclusive, porque `none` e estado
  *   legitimo e publicavel (passeador e tosa nao tem conselho);
- * - as seis atividades que `professionals.kind` admite;
+ * - as seis atividades que `professionals.kinds` admite, uma por entrada;
  * - um `draft` e um `hidden`, que **nunca** podem aparecer. Eles nao sao enfeite:
  *   sao o que da o que medir a isca do filtro.
  *

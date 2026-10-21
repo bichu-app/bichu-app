@@ -43,7 +43,10 @@ import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
-import type { EntradaDoDiretorio } from '../../domain/entrada-do-diretorio.js';
+import type {
+  EnderecoComercial,
+  EntradaDoDiretorio,
+} from '../../domain/entrada-do-diretorio.js';
 import {
   validarEntradaDaAvaliacao,
   type AvaliacaoDoLocal,
@@ -70,7 +73,7 @@ const SLUG = 'clinica-veterinaria-santa-barbara';
 
 const ENTRADA: EntradaDoDiretorio = {
   slug: SLUG,
-  kind: 'clinic',
+  kinds: ['clinic'],
   entityKind: 'professional',
   displayName: 'Clínica Veterinária Santa Bárbara',
   about: 'Pronto atendimento 24 horas.',
@@ -78,6 +81,7 @@ const ENTRADA: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Pinheiros',
   phoneE164: '+551130612200',
+  siteUrl: null,
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,
@@ -103,7 +107,20 @@ interface Cenario {
   readonly avaliacoes?: ReadonlyMap<UserId, AvaliacaoDoLocal>;
   /** Autores cuja conta esta DESABILITADA: o repositorio nao os lista. */
   readonly contasDesabilitadas?: readonly UserId[];
+  /**
+   * O ENDERECO COMERCIAL da entrada (cliente, 21/10/2026). Ausente aqui quer
+   * dizer os quatro nulos, que e o estado normal: profissional autonomo nao tem
+   * endereco comercial.
+   */
+  readonly enderecoComercial?: EnderecoComercial;
 }
+
+const SEM_ENDERECO: EnderecoComercial = {
+  postalCode: null,
+  street: null,
+  streetNumber: null,
+  complement: null,
+};
 
 interface Espiao {
   readonly gravacoes: { autor: UserId; entrada: EntradaDaAvaliacao; criada: boolean }[];
@@ -146,6 +163,7 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: temCanal(chamador),
         fotoPublicKey: null,
+        enderecoComercial: cenario.enderecoComercial ?? SEM_ENDERECO,
       });
     },
 
@@ -370,6 +388,59 @@ void describe('a avaliacao de um local do diretorio', () => {
       // E a tela SABE que nao pode escrever, antes de montar o campo.
       assert.equal(r.corpo['can_review'], false);
       assert.equal(r.corpo['review_blocked_reason'], 'unverified_channel');
+    } finally {
+      await app.close();
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // O ENDERECO COMERCIAL (cliente, 21/10/2026):
+  // *"o endereco completo do profissional"*, para tocar e abrir o mapa.
+  // ------------------------------------------------------------------
+
+  void it('o ENDERECO COMERCIAL sai no detalhe, nos quatro campos e como gravado', async () => {
+    const espiao: Espiao = { gravacoes: [] };
+    const app = servidor(
+      {
+        enderecoComercial: {
+          postalCode: '05422030',
+          street: 'Rua Teodoro Sampaio',
+          streetNumber: '1020',
+          complement: 'Sala 3',
+        },
+      },
+      espiao,
+    );
+    try {
+      const r = await pedir(app, { method: 'GET', url: `/directory/entries/${SLUG}` });
+      assert.equal(r.status, 200);
+      // O CEP sai na forma GRAVADA -- oito digitos, sem mascara. A mascara
+      // vive na tela, como no painel: duas formas do mesmo CEP no mesmo
+      // produto e o defeito que a duplicacao produz.
+      assert.equal(r.corpo['postal_code'], '05422030');
+      assert.equal(r.corpo['street'], 'Rua Teodoro Sampaio');
+      assert.equal(r.corpo['street_number'], '1020');
+      assert.equal(r.corpo['complement'], 'Sala 3');
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: entrada SEM endereco devolve os quatro NULOS, e nao campo ausente', async () => {
+    // Autonomo -- adestrador, passeador, veterinario que atende em casa -- nao
+    // tem endereco comercial, e a entrada dele continua publicavel. Nulo
+    // declarado e o que faz a tela saber que NAO desenha a linha nem o botao
+    // de mapa; campo ausente e `undefined` em Dart, que e o mesmo acidente por
+    // um caminho mais escuro.
+    const espiao: Espiao = { gravacoes: [] };
+    const app = servidor({}, espiao);
+    try {
+      const r = await pedir(app, { method: 'GET', url: `/directory/entries/${SLUG}` });
+      assert.equal(r.status, 200);
+      for (const campo of ['postal_code', 'street', 'street_number', 'complement']) {
+        assert.ok(campo in r.corpo, `\`${campo}\` precisa EXISTIR na resposta, ainda que nulo`);
+        assert.equal(r.corpo[campo], null);
+      }
     } finally {
       await app.close();
     }

@@ -138,7 +138,10 @@ interface EntradaDeTeste {
   readonly titular: UserId;
   readonly slug: string;
   readonly nome?: string;
+  /** UMA atividade, como a maioria dos casos quer. Vira `[kind]`. */
   readonly kind?: string;
+  /** AS atividades, para o caso que precisa de mais de uma. Tem precedencia. */
+  readonly kinds?: readonly string[];
   readonly status?: string;
   readonly cidade?: string | null;
   readonly uf?: string | null;
@@ -154,7 +157,7 @@ async function criarEntrada(dados: EntradaDeTeste): Promise<string> {
   const ponto = dados.ponto ?? null;
   await cliente.query(
     `INSERT INTO professionals (
-       id, kind, display_name, city, state, neighborhood, geo,
+       id, kinds, display_name, city, state, neighborhood, geo,
        source, claim_status, claimed_at, verification_level,
        phone_e164, slug, status, published_at
      ) VALUES (
@@ -166,7 +169,7 @@ async function criarEntrada(dados: EntradaDeTeste): Promise<string> {
      )`,
     [
       id,
-      dados.kind ?? 'vet',
+      dados.kinds ?? [dados.kind ?? 'vet'],
       dados.nome ?? `Entrada ${dados.slug}`,
       dados.cidade === undefined ? 'São Paulo' : dados.cidade,
       dados.uf === undefined ? 'SP' : dados.uf,
@@ -630,6 +633,116 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     assert.equal(achou.total, 1);
   });
 
+  // =========================================================================
+  // ATIVIDADES MULTIPLAS (21/10/2026, decisao do cliente)
+  // =========================================================================
+  //
+  // Nada disto existe fora do Postgres: a coluna e `text[]`, o filtro e
+  // `= ANY(kinds)` e o indice e GIN. Um dobre em memoria aprovaria qualquer
+  // implementacao, inclusive a de texto grudado que estas iscas existem para
+  // proibir.
+
+  void it('a entrada com tres atividades aparece nos TRES filtros, e UMA VEZ em cada', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    const slug = `multi-${randomUUID().slice(0, 8)}`;
+    entradasCriadas.push(
+      await criarEntrada({
+        titular,
+        slug,
+        kinds: ['clinic', 'groomer', 'vet'],
+        bairro,
+        nome: 'Clinica Que Tambem Faz Banho',
+      }),
+    );
+
+    // Uma vizinha de UMA atividade, para o filtro ter o que NAO trazer.
+    const soVet = `so-vet-${randomUUID().slice(0, 8)}`;
+    entradasCriadas.push(await criarEntrada({ titular, slug: soVet, kind: 'vet', bairro }));
+
+    const chamador = await criarConta();
+
+    for (const atividade of ['clinic', 'groomer', 'vet']) {
+      const achou = await repo.listarPublicados(recorte(chamador, { neighborhood: bairro, kind: atividade }));
+      const slugs = achou.itens.map((uma) => uma.slug);
+
+      // A ISCA DA DUPLICATA, que e o defeito classico desta forma: com `unnest`
+      // em `FROM` e `SELECT` direto, a entrada de tres atividades sairia TRES
+      // vezes em cada pagina e `total` contaria tres. `kinds @> ARRAY[...]`
+      // testa a linha em vez de desdobra-la -- e `@>` e nao `= ANY` porque so
+      // `@>` usa o indice GIN.
+      assert.equal(
+        slugs.filter((uma) => uma === slug).length,
+        1,
+        `com kind=${atividade} a entrada de tres atividades saiu mais de uma vez: ` +
+          'o filtro desdobrou a linha em vez de testar a lista.',
+      );
+      assert.ok(slugs.includes(slug), `com kind=${atividade} a entrada de tres atividades nao apareceu`);
+
+      // E o `total` tem de concordar com a pagina: ele usa o MESMO construtor, e
+      // e por ele que a tela escreve "N profissionais".
+      //
+      // A comparacao so vale porque o recorte de BAIRRO deixa o resultado menor
+      // que a pagina. A primeira versao deste caso passava `bairro:` em vez de
+      // `neighborhood:` -- chave que `recorte` IGNORA em silencio --, o filtro
+      // saia sem recorte nenhum e o caso comparava `total` da tabela inteira
+      // (26) com o teto da pagina (20). Chave errada em objeto de recorte nao
+      // reprova: ela so mede outra coisa.
+      assert.equal(achou.total, achou.itens.length, `total divergiu da pagina com kind=${atividade}`);
+
+      if (atividade === 'vet') {
+        assert.ok(slugs.includes(soVet), 'a vizinha de uma atividade sumiu do proprio filtro');
+      } else {
+        assert.equal(
+          slugs.includes(soVet),
+          false,
+          `a vizinha de atividade unica apareceu em kind=${atividade}`,
+        );
+      }
+    }
+  });
+
+  void it('ISCA: o filtro compara ITEM INTEIRO, e nao pedaco -- `vet` nao casa com `vet_especialista`', async () => {
+    // ESTE CASO E A RAZAO DE A COLUNA SER LISTA E NAO TEXTO GRUDADO.
+    //
+    // Com `'clinic,groomer'` numa coluna de texto, o filtro por chip viraria
+    // `LIKE '%...%'` e passaria a casar PEDACO. A isca mede a propriedade pela
+    // raiz: o Postgres recusa valor fora da lista fechada
+    // (`professionals_atividades_conhecidas`), entao `vet_especialista` nem
+    // entra -- e a comparacao de item inteiro e o que torna isso possivel. Num
+    // esquema de texto grudado nao haveria lista fechada nenhuma a violar.
+    const titular = await criarConta();
+    const erro = await criarEntrada({
+      titular,
+      slug: `inventada-${randomUUID().slice(0, 8)}`,
+      kinds: ['vet_especialista'],
+    }).catch((e: unknown) => e);
+    assert.ok(erro instanceof Error, 'atividade fora da lista fechada precisa ser recusada pelo banco');
+    assert.match(
+      String((erro as { message?: string }).message ?? ''),
+      /professionals_atividades_conhecidas/,
+      'a recusa precisa vir do CHECK da lista fechada, e nao de outro lugar',
+    );
+  });
+
+  void it('ISCA: a lista vazia e recusada pelo banco, e nao gravada', async () => {
+    // Minimo 1: a atividade e o que a entrada E. `<@` sozinho aceitaria a vazia
+    // (toda lista vazia esta contida em qualquer uma), e quem a proibe e
+    // `professionals_atividades_tamanho` -- por isso sao DOIS `CHECK` e nao um.
+    const titular = await criarConta();
+    const erro = await criarEntrada({
+      titular,
+      slug: `vazia-${randomUUID().slice(0, 8)}`,
+      kinds: [],
+    }).catch((e: unknown) => e);
+    assert.ok(erro instanceof Error, 'entrada sem atividade nenhuma precisa ser recusada');
+    assert.match(
+      String((erro as { message?: string }).message ?? ''),
+      /professionals_atividades_tamanho/,
+      'a vazia e recusada pelo CHECK de TAMANHO, e nao pelo da lista fechada',
+    );
+  });
+
   void it('a MASSA DE QA grava e a secao aparece ocupada: dez entradas publicadas', async () => {
     // Este caso e o unico que roda `semear` de verdade. Massa que ninguem
     // executa e massa que se descobre quebrada no dia da demonstracao, contra
@@ -671,6 +784,43 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       ['contact_verified', 'document_verified', 'none'],
       'os tres niveis precisam chegar a tela: e o selo que o cliente vai julgar.',
     );
+  });
+
+  void it('A CONVERSAO PRESERVOU O DADO: cada entrada da massa tem exatamente a atividade que tinha', async () => {
+    // A ISCA DA MIGRACAO `20261020000015`, e ela mede o que o cabecalho daquele
+    // arquivo promete: `kinds := ARRAY[kind]`, e **nenhum registro perde nem
+    // ganha atividade**.
+    //
+    // A massa de QA e a referencia certa para isso porque ela e FIXA e declara a
+    // atividade de cada entrada em `massa-do-diretorio.ts` -- o mesmo valor que
+    // era gravado em `kind` antes da migracao. Se a conversao tivesse errado o
+    // mapeamento, trocado a ordem das colunas ou posto um `DEFAULT` no lugar do
+    // valor, as doze comparacoes abaixo acusariam.
+    await semear(db);
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      entradasCriadas.push(entrada.id);
+      contasCriadas.push(entrada.titularId as UserId);
+    }
+
+    const { rows } = await cliente.query<{ slug: string; kinds: string[] }>(
+      `SELECT slug, kinds FROM professionals WHERE id = ANY($1::uuid[]) ORDER BY slug`,
+      [MASSA_DO_DIRETORIO.map((uma) => uma.id)],
+    );
+    assert.equal(rows.length, MASSA_DO_DIRETORIO.length, 'a massa inteira precisa estar gravada');
+
+    const esperado = [...MASSA_DO_DIRETORIO]
+      .map((uma) => ({ slug: uma.slug, kinds: [uma.kind] }))
+      .sort((a, b) => a.slug.localeCompare(b.slug));
+    assert.deepEqual(
+      rows.map((l) => ({ slug: l.slug, kinds: l.kinds })),
+      esperado,
+      'cada entrada tem de acabar com EXATAMENTE a atividade que declarou, como lista de um',
+    );
+
+    // E a soma, dita de outro jeito: ninguem ganhou um segundo item.
+    for (const l of rows) {
+      assert.equal(l.kinds.length, 1, `${l.slug} ganhou atividade que a massa nao declarou`);
+    }
   });
 
   void it('semear duas vezes deixa o mesmo estado: a massa e fixa', async () => {
@@ -861,9 +1011,9 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       // que esta massa precisa: mil perfis com mil contas seria semear a tabela
       // de usuarios para medir um plano de consulta.
       await cliente.query(
-        `INSERT INTO professionals (id, kind, display_name, city, state, neighborhood,
+        `INSERT INTO professionals (id, kinds, display_name, city, state, neighborhood,
                                     source, claim_status, verification_level, slug, status, published_at)
-         SELECT gen_random_uuid(), 'vet', 'Clinica Massa ' || n, 'São Paulo', 'SP', 'Centro',
+         SELECT gen_random_uuid(), ARRAY['vet'], 'Clinica Massa ' || n, 'São Paulo', 'SP', 'Centro',
                 'import', 'unclaimed', 'none', 'massa-' || n, 'published', now()
            FROM generate_series(1, 1000) AS n`,
       );

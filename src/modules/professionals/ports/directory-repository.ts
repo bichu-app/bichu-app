@@ -12,7 +12,11 @@
  * pontuacao e fazer recomendacoes em texto, onde ficara disponivel para outros
  * usuarios, como acontece na playstore".
  */
-import type { EntradaDoDiretorio, TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
+import type {
+  EnderecoComercial,
+  EntradaDoDiretorio,
+  TipoDeProfissional,
+} from '../domain/entrada-do-diretorio.js';
 import type {
   AvaliacaoDoLocal,
   EntradaDaAvaliacao,
@@ -130,6 +134,18 @@ export interface LocalDoDiretorio {
    * `null` quando nao ha foto, quando ela ainda processa e quando foi recusada.
    */
   readonly fotoPublicKey: string | null;
+  /**
+   * O ENDERECO COMERCIAL da entrada (cliente, 21/10/2026).
+   *
+   * **Mora aqui e nao em `EntradaDoDiretorio`, pelo mesmo motivo de
+   * `fotoPublicKey`**: a listagem projeta `EntradaDoDiretorio`, e endereco de
+   * porta em ate vinte cartoes de `Perto` nao foi pedido por tela nenhuma. Quem
+   * toca no cartao chega ao detalhe, e e no detalhe que o endereco existe.
+   *
+   * Os quatro campos sao nulaveis e nulo e o estado normal: profissional
+   * autonomo nao tem endereco comercial.
+   */
+  readonly enderecoComercial: EnderecoComercial;
 }
 
 export interface RecorteDasAvaliacoes {
