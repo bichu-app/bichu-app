@@ -1,10 +1,17 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/mural_api.dart';
+import '../../roteamento/rotas.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import 'comentarios_da_publicacao.dart';
@@ -114,11 +121,36 @@ class CorpoDoMural extends StatefulWidget {
   /// apagaria metade da publicacao para essa pessoa.
   static const String fotoSemDescricao = 'Foto da publicação';
 
+  /// O INTERVALO MINIMO entre duas recargas pedidas pelo TOQUE NA BARRA.
+  ///
+  /// Publico porque a isca o LE em vez de repetir o numero: um caso que
+  /// escrevesse `31` a mao continuaria verde no dia em que o valor mudasse.
+  /// A escolha, as quatro razoes dela e a pendencia do sino estao na prosa
+  /// de `_CorpoDoMuralState.intervaloMinimoEntreRecargas`.
+  static const Duration intervaloMinimoEntreRecargas = Duration(seconds: 30);
+
   @override
   State<CorpoDoMural> createState() => _CorpoDoMuralState();
 }
 
-class _CorpoDoMuralState extends State<CorpoDoMural> {
+class _CorpoDoMuralState extends State<CorpoDoMural>
+    with PublicaAAtualizacao {
+  /// A BUSCA QUE O ARRASTO REFAZ (cliente, 20/10/2026: *"a pagina do mural nao
+  /// esta funcionando a funcionalidade de atualizar a pagina puxando pra
+  /// baixo"*).
+  ///
+  /// **A mesma funcao de [recarregar] e da carga inicial**, e nao uma copia:
+  /// duas buscas com dois nomes divergem na primeira correcao. Quem desenha a
+  /// roda e a casca da secao, por `SlotDeAtualizacao` — ver
+  /// `widgets/arrastar_para_atualizar.dart`. Um `RefreshIndicator` cru aqui
+  /// reintroduziria o defeito da fisica sem pai que aquele arquivo registra.
+  ///
+  /// O Mural era a **unica** tela de listagem do app sem o gesto: as outras
+  /// dezessete ja o tinham, e esta metade nunca foi ligada embora a outra
+  /// ([_carregar]) existisse desde o nascimento da tela.
+  @override
+  Future<void> aoArrastarParaAtualizar() => _carregar();
+
   List<PublicacaoDaLinha>? _linha;
 
   /// Se a propria pessoa tem alguma publicacao. **E ele que escolhe qual estado
@@ -128,10 +160,233 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
   bool _carregando = true;
   MensagemDeErro? _faixa;
 
+  /// ---------------------------------------------------------------------
+  /// A FOTO QUE AINDA ESTA SENDO PROCESSADA, E A RELEITURA QUE A ALCANCA
+  /// ---------------------------------------------------------------------
+  ///
+  /// **O defeito que isto fecha, com relato e medicao.** O cliente disse, em
+  /// 20/10/2026: *"os posts no mural, nao esta publicando a foto, apenas o
+  /// texto"*. A foto **era** gravada e **era** servida — medido em homologacao
+  /// de ponta a ponta (intencao `201`, envio ao armazenamento `204`,
+  /// `POST /me/publications` `201`, a linha com `image_id`, a derivada em
+  /// `people/card/` e a URL `200` pela borda) e pintada pelo APK **release**
+  /// no emulador Android. O que falhava era o RELOGIO:
+  ///
+  /// ```text
+  ///   t=+  24 ms  POST /me/publications    201   image.status=processing, url=null
+  ///   t=+ 320 ms  GET  /timeline           200   image=null
+  ///   t=+ 721 ms  GET  /timeline           200   image=null
+  ///   t=+1018 ms  GET  /timeline           200   image=null
+  ///   t=+1521 ms  GET  /timeline           200   image={url: .../people/card/...}
+  /// ```
+  ///
+  /// `AbaMural` troca a `Key` desta tela assim que a tela de publicar fecha, o
+  /// corpo remonta e [_carregar] sai **dentro** dessa janela. A linha do tempo
+  /// devolve `image: null` — o predicado `status = ready` esta no `JOIN` do
+  /// servidor —, e `PublicacaoDaLinha` **nao tem estado** para distinguir "sem
+  /// foto" de "foto a caminho". O cartao desenhava so o texto, e nao havia
+  /// segunda leitura nenhuma: sem o gesto de arrastar (o outro defeito desta
+  /// branch) e com o `IndexedStack` mantendo a aba montada, a foto so aparecia
+  /// quando a pessoa **matava o aplicativo e voltava**. Foi assim que o iPhone
+  /// dele mostrou e o Android nao: nao e plataforma, e o instante da leitura.
+  ///
+  /// **A resposta ja esta em maos, e por isso isto nao custa uma chamada a
+  /// mais.** [_carregar] ja le `minhasPublicacoes`, e `MyPublicationImage` TEM
+  /// `status` (`EstadoDaFotoDaPublicacao`). Se alguma publicacao minha esta em
+  /// `processando`, a tela relê sozinha — ate [_releiturasMaximas] vezes, a
+  /// cada [_intervaloDaReleitura]. O teto existe para a foto `rejected` que
+  /// nunca sai de `processing` por falha do worker nao virar laco eterno.
+  static const Duration _intervaloDaReleitura = Duration(seconds: 2);
+  static const int _releiturasMaximas = 5;
+
+  Timer? _releitura;
+  int _releiturasRestantes = _releiturasMaximas;
+
+  /// ---------------------------------------------------------------------
+  /// O TOQUE NO ICONE DA BARRA RECARREGA (cliente, 20/10/2026)
+  /// ---------------------------------------------------------------------
+  ///
+  /// Literal: *"toda vez que eu clicar no icone, ele deve fazer uma nova
+  /// requisicao para garantir que o conteudo esta atualizado e o usuario nao
+  /// precisar forcar a atualizacao, por mais que esse recurso deva acontecer,
+  /// caso o usuario queira"*. A segunda metade da frase e explicita: o
+  /// arrastar-para-atualizar **continua**, e este gesto e ADICIONAL.
+  ///
+  /// ## NADA EM `casca_com_abas.dart` MUDOU, e isso foi deliberado
+  ///
+  /// A barra e o avatar moram naquele arquivo e outra frente esta nele agora.
+  /// Os dois sinais de que esta tela precisa **ja sao emitidos** pela casca e
+  /// pelo roteador, e e so escuta-los daqui:
+  ///
+  /// - **entrar na aba vindo de outra** -> `StatefulShellRoute.indexedStack`
+  ///   embrulha cada ramo em `TickerMode(enabled: ramo == atual)`
+  ///   (`go_router` 17.5, `route.dart:1634`). `TickerMode.of(context)` vira
+  ///   `true` no quadro em que a secao aparece, e `didChangeDependencies` e
+  ///   chamado por causa disso;
+  /// - **tocar o icone ja estando na aba** -> a casca chama
+  ///   `goBranch(ramo, initialLocation: true)`, que cai em `GoRouter.go` para
+  ///   o MESMO endereco. `_setValue` compara caminho, consulta, fragmento **e
+  ///   `state`** (`information_provider.dart:242`), e `RouteInformationState`
+  ///   nao define `==` — entao o objeto novo nunca e igual ao anterior e o
+  ///   provedor **notifica mesmo com a URL identica**. E por isso que este
+  ///   caso existe sem um canal novo na barra.
+  ///
+  /// A distincao entre os dois sai de graca pela ORDEM: o ouvinte do roteador
+  /// roda dentro de `notifyListeners`, antes do quadro em que o `TickerMode`
+  /// vira — entao, vindo de outra aba, [_visivel] ainda e `false` quando
+  /// [_aoNavegar] roda, e so o caminho de "entrar" dispara.
+  ///
+  /// ## O INTERVALO MINIMO E ESCOLHA DE ENGENHARIA, E O NUMERO E ESTE
+  ///
+  /// **30 segundos**, e as razoes sao quatro:
+  ///
+  /// 1. `GET /v1/timeline` **nao tem teto de chamadas** no contrato
+  ///    (`publicacao-routes.ts`: `effects: []`, sem `rateLimit`). Nao ha
+  ///    numero do servidor a que ancorar: o teto esta sendo posto aqui, de
+  ///    proposito, e ele segura a aba em **no maximo 2 chamadas por minuto**
+  ///    por mais rapido que o dedo seja;
+  /// 2. o Mural e um feed ESCRITO A MAO por uma comunidade de bairro, e nao
+  ///    um fluxo ao vivo. Abaixo de 30 s nao ha o que encontrar de novo;
+  /// 3. o toque **nunca parece inerte**, mesmo quando pula a requisicao: ele
+  ///    leva a lista ao topo de qualquer jeito (ver [_aoNavegar]), que e o que
+  ///    a pessoa espera de tocar o icone da aba em que ja esta;
+  /// 4. a releitura da foto em `processing` **nao passa por aqui** — ela tem
+  ///    o proprio contador e os proprios 2 s, porque mede outra coisa. O
+  ///    arrastar-para-atualizar tambem nao: ele e a forca bruta que o cliente
+  ///    manteve de proposito, e estrangula-la seria desfazer o pedido dele.
+  ///
+  /// **ISTO E ESCOLHA MINHA, E NAO DECISAO DELE.** A pergunta do *"intervalo
+  /// minimo entre retomadas"* do sino esta aberta em
+  /// `.jarvis/DECISOES-PARA-19-10.md`; quando ele responder, os dois numeros
+  /// viram um so e este valor muda junto.
+  static const Duration intervaloMinimoEntreRecargas =
+      CorpoDoMural.intervaloMinimoEntreRecargas;
+
+  /// A JANELA DE SILENCIO, e por que ela e um `Timer` e nao um carimbo de
+  /// `DateTime.now()`.
+  ///
+  /// `DateTime.now()` le o relogio de parede, e **nenhum teste consegue
+  /// adianta-lo**: a janela de 30 s so seria exercitavel esperando 30 s de
+  /// verdade, e a isca do "toque dentro do intervalo NAO recarrega" seria o
+  /// unico caso do arquivo que nao distingue o mecanismo ligado do desligado.
+  /// `Timer` anda com o relogio do `flutter_test`, entao a isca mede os dois
+  /// lados com um `pump`.
+  ///
+  /// Ele e armado em [_carregar], o funil UNICO: arrasto, carga inicial e
+  /// releitura da foto tambem renovam a janela, porque todos sao leitura — um
+  /// toque logo depois de qualquer um deles nao tem o que buscar.
+  Timer? _janelaDeSilencio;
+
+  bool get _emSilencio => _janelaDeSilencio?.isActive ?? false;
+
+  /// Se a secao esta visivel. Ver a prosa de [intervaloMinimoEntreRecargas].
+  bool _visivel = false;
+
+  /// A carga EM VOO, e a razao de ela existir.
+  ///
+  /// Dois toques rapidos nao podem virar duas requisicoes concorrentes: a
+  /// resposta da primeira pode chegar **depois** da segunda e pintar conteudo
+  /// velho em cima do novo. Quem chega no meio **espera a que ja esta no ar**,
+  /// em vez de abrir outra.
+  Future<void>? _emVoo;
+
+  ValueListenable<RouteInformation>? _enderecos;
+
+
   @override
   void initState() {
     super.initState();
     unawaitedCarregar();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // `maybeOf` e nao `of`: [CorpoDoMural] e montado fora de roteador em
+    // teste de widget, e um `of` que lanca ali trocaria "o Mural desenha o
+    // cartao" por "o Mural precisa de um `GoRouter` para existir". Sem
+    // roteador simplesmente nao ha o sinal do toque na barra -- ele e da
+    // casca, e sem casca nao ha barra.
+    final enderecos = GoRouter.maybeOf(context)?.routeInformationProvider;
+    if (!identical(enderecos, _enderecos)) {
+      _enderecos?.removeListener(_aoNavegar);
+      _enderecos = enderecos?..addListener(_aoNavegar);
+    }
+
+    // `valuesOf` e nao `of`: `of` esta depreciado desde 3.35, e o portao de
+    // analise e zero.
+    final visivel = TickerMode.valuesOf(context).enabled;
+    final entrou = visivel && !_visivel;
+    _visivel = visivel;
+    // ENTRAR NA ABA. Sem rolagem ao topo: voltar a uma aba devolve a pessoa
+    // onde ela estava, e e o toque na aba em que ela JA esta que significa
+    // "me leva para o topo".
+    if (entrou) _recargaPedidaPelaCasca(aoTopo: false);
+  }
+
+  @override
+  void dispose() {
+    // O temporizador morre com a tela: sem isto, uma secao que saiu da arvore
+    // continuaria chamando `_carregar` e o `setState` reprovaria por limpeza.
+    _releitura?.cancel();
+    _releitura = null;
+    _janelaDeSilencio?.cancel();
+    _janelaDeSilencio = null;
+    _enderecos?.removeListener(_aoNavegar);
+    _enderecos = null;
+    super.dispose();
+  }
+
+  /// O roteador navegou. Ver a prosa de [intervaloMinimoEntreRecargas].
+  void _aoNavegar() {
+    if (!mounted || !_visivel) return;
+    // So o endereco do Mural, e nao qualquer navegacao do aplicativo: tocar
+    // outro slot da barra tambem cai aqui, e nao e o gesto que o cliente
+    // descreveu.
+    if (_enderecos?.value.uri.path != Rotas.mural) return;
+    _recargaPedidaPelaCasca(aoTopo: true);
+  }
+
+  // NAO HA GUARDA DE "ISTO E VOLTA E NAO TOQUE" AQUI, e a ausencia e MEDIDA.
+  //
+  // Uma versao desta tela guardava o endereco anterior para distinguir o toque
+  // no icone de uma volta (`/mural/publicar` -> `/mural`). Desligar essa
+  // guarda nao reprovava caso nenhum -- ela nao guardava nada. O motivo e que
+  // as quatro telas irmas da casca (`publicar`, `entrar`, ...) sao rotas de
+  // RAIZ, declaradas antes do ramo: empilhar uma tira o ramo do `TickerMode`,
+  // e voltar o devolve. Para esta tela isso e *entrar na aba*, e quem responde
+  // por ele e [didChangeDependencies] com `aoTopo: false` -- e por isso que a
+  // volta recarrega e NAO move a lista. A isca disso e
+  // `ISCA (volta) — VOLTAR para o Mural de outra tela NAO pula para o topo`.
+  //
+  // Mecanismo que nenhuma isca derruba e portao cego, e esta casa nao os
+  // guarda.
+
+  /// A recarga que a BARRA pede, com o intervalo minimo e a rolagem ao topo.
+  void _recargaPedidaPelaCasca({required bool aoTopo}) {
+    // A ROLAGEM VEM ANTES DO ESTRANGULAMENTO, e de proposito: e ela que faz o
+    // toque ter efeito visivel mesmo quando a requisicao e pulada.
+    //
+    // `Scrollable.maybeOf` alcanca o `ListView` da CASCA — quem rola a secao e
+    // `TelaDeAba`, e nao este corpo. E por isso que o topo tambem se resolve
+    // daqui, sem tocar em `casca_com_abas.dart`.
+    if (aoTopo) {
+      final rolagem = Scrollable.maybeOf(context);
+      final posicao = rolagem?.position;
+      if (posicao != null && posicao.hasPixels && posicao.pixels > 0) {
+        unawaited(
+          posicao.animateTo(
+            0,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          ),
+        );
+      }
+    }
+
+    if (_emSilencio) return;
+    unawaited(_carregar(silenciosa: true));
   }
 
   /// Sem `unawaited` de `dart:async` para nao acrescentar import por uma linha;
@@ -140,15 +395,49 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
     _carregar();
   }
 
-  Future<void> _carregar() async {
-    setState(() {
-      _carregando = true;
-      _faixa = null;
+  /// O FUNIL UNICO de toda leitura desta tela, e o que ele garante.
+  ///
+  /// **UMA DE CADA VEZ.** Ver [_emVoo]: quem pede no meio recebe a carga que
+  /// ja esta no ar, em vez de abrir uma segunda. O `RefreshIndicator` do
+  /// arrasto continua correto com isso -- ele gira enquanto o `Future` que
+  /// recebe nao completa, e o `Future` que recebe e o da carga de verdade.
+  ///
+  /// **A JANELA DE SILENCIO abre aqui**, e por isso vale para todas as
+  /// entradas: carga inicial, arrasto, releitura da foto e toque na barra.
+  /// Quem a CONSULTA e so [_recargaPedidaPelaCasca] -- as outras tres nao
+  /// passam por ela, de proposito.
+  Future<void> _carregar({bool silenciosa = false}) {
+    final emVoo = _emVoo;
+    if (emVoo != null) return emVoo;
+    // A janela abre no COMECO da carga e nao no fim: uma resposta lenta nao
+    // pode esticar o silencio depois dela.
+    _janelaDeSilencio?.cancel();
+    _janelaDeSilencio = Timer(intervaloMinimoEntreRecargas, () {});
+    final nova = _carregarAgora(silenciosa: silenciosa);
+    _emVoo = nova.whenComplete(() {
+      _emVoo = null;
     });
+    return _emVoo!;
+  }
+
+  /// [silenciosa] nao troca a lista pela roda.
+  ///
+  /// A releitura da foto em `processing` e a recarga do toque na barra
+  /// acontecem com a lista ja na tela: pôr `_carregando = true` ali faria o
+  /// Mural piscar a cada leitura. A carga inicial, o `Tentar de novo` e o
+  /// arrasto continuam ruidosos, porque ali a roda e a resposta certa.
+  Future<void> _carregarAgora({bool silenciosa = false}) async {
+    if (!silenciosa) {
+      setState(() {
+        _carregando = true;
+        _faixa = null;
+      });
+    }
     try {
       // AS DUAS LEITURAS. A segunda nao e luxo: sem ela os dois estados vazios
       // ficam indistinguiveis, e a tela escolheria a frase errada em metade dos
-      // casos. Ver o cabecalho.
+      // casos. Ver o cabecalho. **E e dela que sai o `status` da foto**, que a
+      // linha do tempo nao carrega.
       final linha = await widget.leitura.linhaDoTempo();
       final minhas = await widget.leitura.minhasPublicacoes();
       if (!mounted) return;
@@ -157,6 +446,7 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
         _tenhoPublicacao = minhas.itens.isNotEmpty;
         _carregando = false;
       });
+      _agendarReleituraSeAFotoAindaProcessa(minhas.itens);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -164,6 +454,28 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
         _faixa = MensagensDeErro.de(falha);
       });
     }
+  }
+
+  /// Arma UMA releitura quando alguma foto minha ainda esta em `processing`.
+  ///
+  /// Nada em `processando` **zera o contador**: a proxima publicacao recomeca
+  /// com as cinco tentativas, em vez de herdar o que a anterior gastou.
+  void _agendarReleituraSeAFotoAindaProcessa(List<MinhaPublicacao> minhas) {
+    _releitura?.cancel();
+    _releitura = null;
+
+    final aindaProcessa = minhas.any(
+      (p) => p.imagem?.estado == EstadoDaFotoDaPublicacao.processando,
+    );
+    if (!aindaProcessa) {
+      _releiturasRestantes = _releiturasMaximas;
+      return;
+    }
+    if (_releiturasRestantes <= 0) return;
+    _releiturasRestantes -= 1;
+    _releitura = Timer(_intervaloDaReleitura, () {
+      if (mounted) unawaited(_carregar(silenciosa: true));
+    });
   }
 
   /// Recarrega, para quem publicou agora. Publico porque a acao flutuante vive
@@ -178,7 +490,26 @@ class _CorpoDoMuralState extends State<CorpoDoMural> {
     if (faixa != null) {
       return Padding(
         padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-        child: FaixaDeAviso(texto: faixa.texto),
+        // **A SAIDA SAI DA MENSAGEM, e nao desta tela.** Guardar so o `.texto`
+        // descartava `acao` e `proximaAcao`, que sao por onde a faixa sabe que
+        // saida oferecer — a mesma forma de `perto/pagina_do_local.dart`.
+        //
+        // O caso que isto fecha e o 401 `unauthenticated`: o cliente mandou
+        // remover o TEXTO dele em 18/10/2026 e **a saida ficou** (ver
+        // `api/mensagens_de_erro.dart` e `widgets/faixa_de_aviso.dart`). Sem o
+        // rotulo e sem o toque, o Mural deslogado abria com uma faixa vermelha
+        // com o icone e **mais nada** — sem frase e sem botao, que e o que
+        // `faixa_de_aviso.dart` chama, com estas palavras, de *falha calada*.
+        // Reproduzido no emulador com o APK release.
+        //
+        // Rotulo de OPERACAO (`Tentar de novo`, `Recarregar`) nao tem endereco
+        // e `saidaDaMensagem` devolve `null` para ele: a faixa so desenha o
+        // botao com rotulo **e** callback, entao nao nasce botao morto.
+        child: FaixaDeAviso(
+          texto: faixa.texto,
+          rotuloDaAcao: faixa.acao,
+          aoTocarNaAcao: saidaDaMensagem(context, faixa),
+        ),
       );
     }
 

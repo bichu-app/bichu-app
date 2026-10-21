@@ -415,13 +415,13 @@ void main() {
       );
     });
 
-    test('as doze superficies de conteudo de rede TEM o gesto', () {
+    test('as treze superficies de conteudo de rede TEM o gesto', () {
       // A LISTA E ESCRITA A MAO, de proposito. Derivar "toda tela que chama
       // `_carregar`" deixaria o portao concordar com qualquer recorte futuro;
       // esta lista e a DECISAO de 18/10, e mexer nela e um ato deliberado que
       // aparece no diff.
       //
-      // As seis primeiras publicam pelo slot (a rolagem e da casca); as cinco
+      // As sete primeiras publicam pelo slot (a rolagem e da casca); as seis
       // ultimas embrulham o proprio corpo.
       const porSlot = <String>[
         'lib/telas/perdido/lista_de_perdidos.dart',
@@ -430,6 +430,12 @@ void main() {
         'lib/telas/perto/minhas_indicacoes.dart',
         'lib/telas/loja/vitrine_da_loja.dart',
         'lib/telas/perfil/meus_pets.dart',
+        // A DECIMA TERCEIRA, e ela entrou por RELATO do cliente em 20/10/2026:
+        // *"a pagina do mural nao esta funcionando a funcionalidade de
+        // atualizar a pagina puxando pra baixo"*. O Mural nasceu depois do
+        // lote de 18/10 e ficou sendo a UNICA tela de listagem do app sem o
+        // gesto -- com `_carregar` ja pronto e so a metade que escuta faltando.
+        'lib/telas/mural/tela_do_mural.dart',
       ];
       const proprias = <String>[
         'lib/telas/mensagens/area_de_mensagens.dart',
@@ -476,7 +482,7 @@ void main() {
         isEmpty,
         reason:
             'REPROVA: ${semGesto.join('; ')}. O cliente pediu o gesto "no '
-            'aplicativo", e nao numa tela: estas doze sao as superficies com '
+            'aplicativo", e nao numa tela: estas treze sao as superficies com '
             'conteudo de rede que vale reler. Quem tirar uma daqui esta '
             'desfazendo a decisao de 18/10, e isso e um ato com nome no diff.',
       );
