@@ -141,9 +141,14 @@ const resumo = [
   '',
 ];
 if (porCaso.size === 0) {
+  // A confianca sai do numero de execucoes que de fato aconteceram, e nao de 20
+  // escrito a mao: com `--vezes 1` a frase sobre 20 seria uma mentira educada.
+  const deixaPassar = (p) => (Math.pow(1 - p, vezes) * 100).toFixed(1);
   resumo.push(
-    'Nenhum caso reprovou. Com 20 execucoes isto descarta uma taxa de 12,9% com ~94% de ' +
-      'confianca, e NAO descarta uma de 1,2% (20 execucoes deixam passar 78,5% delas).',
+    `Nenhum caso reprovou. Com ${String(vezes)} execucoes, uma intermitencia de 12,9% (a taxa ` +
+      `medida em 22/09) passaria batido em ${deixaPassar(0.129)}% das vezes, e uma de 1,2% (a do ` +
+      `caso unitario) em ${deixaPassar(0.012)}%. O silencio aqui vale para a primeira classe, e ` +
+      'nao para a segunda.',
     '',
   );
 } else {
