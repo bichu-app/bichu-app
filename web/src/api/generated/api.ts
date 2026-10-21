@@ -11742,6 +11742,33 @@ export interface components {
              * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
+            /**
+             * @description A ORIGEM, declarada aqui em 21/10/2026 por decisao do cliente, na
+             *     mesma posicao e na mesma forma de `NetworkEventPublic`.
+             *
+             *     **Puramente aditivo, e nao opcional por descuido:** fora de
+             *     `required`, exatamente como no publico, e sem tocar o `enum` de
+             *     `NetworkEventOrigin`. Nao e a classe de quebra que a regra de
+             *     contrato pega.
+             *
+             *     **Por que ele faltava, e por que a falta era o defeito.** O app le
+             *     `json['origin']` no publico E no privado -- a ficha do encontro
+             *     escreve "Cadastrado" e nao "Organizado", que foi pedido dele --, e
+             *     o schema do privado nao o declarava. `verificar-conformidade-do-app`
+             *     acusou, e com razao: campo renomeado ou removido na spec so
+             *     quebraria no aparelho da pessoa.
+             *
+             *     **E nao ha nada a esconder aqui.** `origin` e um de dois valores
+             *     fixos (`admin`/`community`), nao identifica pessoa, e o PUBLICO ja
+             *     o declara -- o privado e mais revelador que o publico por
+             *     construcao e esta atras de conta. `created_by_user_id` e
+             *     `created_by_admin_id` continuam fora, e e `NetworkEventOrigin` quem
+             *     explica por que este campo nao os contorna.
+             *
+             *     `NetworkEventPrivateTeaser` **nao** muda: a lista fechada de cinco
+             *     propriedades dele e outra decisao e continua valendo.
+             */
+            origin?: components["schemas"]["NetworkEventOrigin"];
         };
         /**
          * @description O estado do pedido **que o tutor ve**. **Nao ha `declined`** (decisao do
