@@ -898,6 +898,30 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             apoio: _TextosDosDados.apoioDaVitrine,
             aoTocar: () => GoRouter.of(context).push(Rotas.minhaVitrine),
           ),
+          // `Endereco de entrega` (cliente, 21/10/2026: *"um endereco de
+          // entrega salvo na conta, reusado em todo pedido e editavel num
+          // lugar so"*). Irmao do item acima e pela mesma razao: e TELA, com
+          // barra e acao fixa, e nao um bloco desta.
+          //
+          // **AQUI e nao num segundo grupo desta tela**, e nao no `Perfil`: a
+          // lista de itens de `Perfil` e a ordem que o cliente determinou, e
+          // acrescentar linha la e decisao dele. `Meus dados` e a tela dos
+          // dados da PESSOA, e para onde a encomenda dela vai e dado dela.
+          //
+          // Um BLOCO aqui dentro nao serviria: o `Salvar` desta tela e um ato
+          // unico sobre `PATCH /v1/me`, com UMA faixa de erro e UMA de
+          // confirmacao, e o endereco guardado e outra rota
+          // (`PUT /v1/me/delivery-address`). Um botao que dispara duas
+          // chamadas tem quatro desfechos, e esta tela nao tem onde contar os
+          // dois do meio. Pior: `_cep`, `_bairro`, `_cidade` e `_uf` aqui sao
+          // da REGIAO DE REFERENCIA, e o mapa `_erros` e chaveado por
+          // `postal_code`/`city`/`state` -- as mesmas chaves do endereco de
+          // entrega. Dois CEPs no mesmo mapa de erro se sobrescrevem calado.
+          ItemDeMenu(
+            rotulo: _TextosDosDados.enderecoDeEntrega,
+            apoio: _TextosDosDados.apoioDoEndereco,
+            aoTocar: () => GoRouter.of(context).push(Rotas.enderecoDeEntrega),
+          ),
         ],
       ),
     );
@@ -1367,6 +1391,14 @@ abstract final class _TextosDosDados {
   /// O apoio da porta da vitrine. Diz o que ha do outro lado e para QUEM ela
   /// e visivel -- "so voce" e a unica coisa que a pessoa precisa saber antes
   /// de tocar, e e verdade medida: nao existe rota de vitrine de terceiro.
+  static const String enderecoDeEntrega = 'Endereço de entrega';
+
+  /// **Diz para que serve, sem prometer prazo.** "Para a plaquinha" e o unico
+  /// uso que existe hoje; prometer entrega ou prazo aqui seria afirmar decisao
+  /// de produto que ninguem tomou.
+  static const String apoioDoEndereco =
+      'Para onde mandar a plaquinha da coleira';
+
   static const String apoioDaVitrine = 'As fotos que só você vê';
 
   static const String apelido = 'Apelido';

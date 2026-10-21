@@ -100,6 +100,31 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   String? _petEscolhido;
   String? _uf;
 
+  /// Os campos que AINDA carregam o valor que veio do endereço guardado da
+  /// conta, sem a pessoa ter mexido.
+  ///
+  /// ## POR QUE ESTE CONJUNTO EXISTE, e ele reconcilia duas decisões do cliente
+  ///
+  /// A de **17/10** diz que a busca de CEP *"só preenche campo vazio: o que a
+  /// pessoa já escreveu vence o que a base devolve"*. A de **21/10** diz que o
+  /// formulário *"nasce preenchido"* com o endereço guardado.
+  ///
+  /// Juntas e sem este conjunto, a segunda MATA a primeira: com tudo
+  /// pré-preenchido, nada está vazio, e a busca de CEP não preenche mais nada
+  /// nunca. Quem mudou de casa digitaria o CEP novo e ficaria com a rua
+  /// antiga na tela — sem nada ter dado erro, e com a plaquinha indo para o
+  /// endereço de antes.
+  ///
+  /// O conjunto separa as duas coisas que `isNotEmpty` confundia: **o que a
+  /// PESSOA escreveu** (vence a base, como ele decidiu) e **o que a CONTA
+  /// trouxe** (é conveniência, e a base pode substituir). Um campo sai daqui no
+  /// primeiro toque da pessoa nele, e daí em diante vale a regra de 17/10.
+  ///
+  /// **Isto é escolha de engenharia e está relatada como tal.** Ele decidiu as
+  /// duas pontas; a reconciliação entre elas não estava escrita em nenhum
+  /// lugar.
+  final Set<String> _aindaComOValorGuardado = <String>{};
+
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`. Uma so estrutura para a validacao local e para a do
   /// servidor: duas listas de erro divergiriam na mensagem.
@@ -133,6 +158,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (_iniciou) return;
     _iniciou = true;
     _carregarPets();
+    _carregarOEnderecoGuardado();
   }
 
   @override
@@ -184,6 +210,95 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
   }
 
+  /// Abre o formulário PREENCHIDO com o endereço guardado na conta, se houver.
+  ///
+  /// **Decisão do cliente, 21/10/2026:** *"um endereço de entrega salvo na
+  /// conta, reusado em todo pedido e editável num lugar só."* O motivo é que a
+  /// pessoa não redigite nove campos a cada pedido.
+  ///
+  /// Quatro coisas que esta função **não** faz, e cada uma é deliberada:
+  ///
+  /// 1. **não bloqueia o formulário.** Ela roda em paralelo com a listagem de
+  ///    pets e não toca `_carregando`: quem já sabe o endereço de cor não
+  ///    espera uma segunda ida ao servidor para começar a digitar;
+  /// 2. **não vira faixa de erro quando falha.** Um 500 nesta leitura não pode
+  ///    impedir ninguém de pedir a plaquinha — o endereço guardado é
+  ///    conveniência, e sem ele o formulário abre vazio, que é exatamente como
+  ///    ele se comportava antes desta leitura existir;
+  /// 3. **não sobrescreve o que a pessoa já digitou.** Se a leitura voltar
+  ///    depois de ela ter começado a escrever, o campo escrito fica — por isso
+  ///    `_preencherSeVazio` e não atribuição direta;
+  /// 4. **não escreve nada de volta.** Esta tela nunca chama
+  ///    `salvarEnderecoGuardado`. Editar o endereço aqui muda ESTE pedido e não
+  ///    mexe no que está guardado; o lugar de editar o guardado é
+  ///    `TelaEnderecoDeEntrega`, e a decisão dele foi *"ou pergunta, ou não
+  ///    mexe"* — esta frente ficou com **não mexe**.
+  Future<void> _carregarOEnderecoGuardado() async {
+    final EnderecoDeEntrega? guardado;
+    try {
+      guardado = await Escopo.of(context).me.lerEnderecoGuardado();
+    } on FalhaDeChamada {
+      // Ver a razão 2 acima: silencioso de propósito. O formulário abre vazio.
+      return;
+    } on Object catch (erro, pilha) {
+      registrarFalhaInesperada(erro, pilha, onde: 'ao ler o endereço guardado para a plaquinha');
+      return;
+    }
+    if (!mounted || guardado == null) return;
+
+    setState(() {
+      // O CEP entra MASCARADO: quem lê é uma pessoa, e `01311000` num campo de
+      // CEP parece defeito. `cepParaOContrato` tira o hífen no envio.
+      _preencherDoGuardado(_cep, mascaraDeCep(guardado!.cep), _CamposDoPedido.cep);
+      _preencherDoGuardado(
+        _destinatario,
+        guardado.destinatario,
+        _CamposDoPedido.destinatario,
+      );
+      _preencherDoGuardado(_logradouro, guardado.logradouro, _CamposDoPedido.logradouro);
+      _preencherDoGuardado(_numero, guardado.numero, _CamposDoPedido.numero);
+      _preencherDoGuardado(
+        _complemento,
+        guardado.complemento ?? '',
+        _CamposDoPedido.complemento,
+      );
+      _preencherDoGuardado(_bairro, guardado.bairro, _CamposDoPedido.bairro);
+      _preencherDoGuardado(_cidade, guardado.cidade, _CamposDoPedido.cidade);
+      // **`telefoneDoE164` e nao `mascaraDeTelefone`**, e a diferenca foi
+      // medida: o guardado vem em E.164 (`+5511912345678`), e
+      // `mascaraDeTelefone` trata os digitos do `+55` como parte do numero --
+      // o campo abria com `(55) 11912-3456`. `telefoneDoE164` tira a discagem
+      // antes de mascarar, e devolve o valor CRU quando a forma nao e a
+      // brasileira, em vez de mentir numa mascara.
+      _preencherDoGuardado(
+        _telefone,
+        telefoneDoE164(guardado.telefone),
+        _CamposDoPedido.telefone,
+      );
+      if (_uf == null && guardado.uf.length == 2) {
+        _uf = guardado.uf;
+        _aindaComOValorGuardado.add(_CamposDoPedido.uf);
+        _erros.remove(_CamposDoPedido.uf);
+      }
+      // O CEP que veio da conta conta como já buscado: abrir a tela não deve
+      // disparar uma chamada a serviço de terceiro para confirmar um endereço
+      // que a própria pessoa guardou.
+      if (_cepJaBuscado.isEmpty) _cepJaBuscado = guardado.cep;
+    });
+  }
+
+  /// Põe o valor do endereço guardado num campo **vazio**, e anota que aquele
+  /// campo ainda não foi tocado pela pessoa.
+  ///
+  /// Campo já escrito fica: a leitura pode voltar depois de ela começar a
+  /// digitar, e sobrescrever ali seria apagar o que ela acabou de escrever.
+  void _preencherDoGuardado(TextEditingController campo, String valor, String chave) {
+    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    campo.text = valor;
+    _aindaComOValorGuardado.add(chave);
+    _erros.remove(chave);
+  }
+
   /// Busca o endereco do CEP e preenche o que estiver VAZIO.
   ///
   /// Tres decisoes, e as tres sao do pedido do cliente:
@@ -221,16 +336,47 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       _preencherSeVazio(_logradouro, endereco.logradouro, _CamposDoPedido.logradouro);
       _preencherSeVazio(_bairro, endereco.bairro, _CamposDoPedido.bairro);
       _preencherSeVazio(_cidade, endereco.cidade, _CamposDoPedido.cidade);
-      if (_uf == null && endereco.uf.length == 2) {
+      // A MESMA regra de `_preencherSeVazio`, escrita a parte porque `_uf` nao
+      // e um `TextEditingController`. **A isca "CEP novo SUBSTITUI o que veio
+      // da conta" reprovou aqui primeiro**: a UF ficava em `SP` com a rua, o
+      // bairro e a cidade ja trocados para o Rio -- um endereco misturado de
+      // duas cidades, que e o pior desfecho possivel deste formulario.
+      final ufAindaDaConta = _aindaComOValorGuardado.contains(_CamposDoPedido.uf);
+      if ((_uf == null || ufAindaDaConta) && endereco.uf.length == 2) {
         _uf = endereco.uf;
+        _aindaComOValorGuardado.remove(_CamposDoPedido.uf);
         _erros.remove(_CamposDoPedido.uf);
       }
     });
   }
 
+  /// Preenche o campo quando ele está vazio **ou quando ainda carrega o valor
+  /// que veio do endereço guardado**, sem a pessoa ter tocado nele.
+  ///
+  /// ## A SEGUNDA CONDIÇÃO É NOVA (21/10/2026), e sem ela a busca de CEP morria
+  ///
+  /// A regra de 17/10 é *"só preenche campo vazio: o que a pessoa já escreveu
+  /// vence o que a base devolve"*, e ela protege o que a PESSOA escreveu. Com o
+  /// formulário nascendo preenchido pela conta, nada fica vazio — e a regra,
+  /// lida como `isEmpty`, passaria a proteger também o que a CONTA trouxe,
+  /// desligando a busca de CEP por completo.
+  ///
+  /// O efeito seria o pior possível: quem mudou de casa digita o CEP novo, a
+  /// busca devolve a rua nova, e a tela mantém a rua antiga em silêncio.
+  ///
+  /// Então são duas coisas e não uma: valor da pessoa **vence** a base (17/10,
+  /// intacta), valor da conta **cede** à base. `_aindaComOValorGuardado` é
+  /// quem as distingue, e um campo sai de lá no primeiro toque.
   void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    if (valor.isEmpty) return;
+    final vazio = campo.text.trim().isEmpty;
+    final aindaDaConta = _aindaComOValorGuardado.contains(chave);
+    if (!vazio && !aindaDaConta) return;
     campo.text = valor;
+    // Substituído pela base: deixa de ser "o valor da conta". Se a pessoa
+    // digitar o CEP antigo de novo, o que está na tela agora é o da base, e
+    // sobrescrevê-lo seria a tela discutindo consigo mesma.
+    _aindaComOValorGuardado.remove(chave);
     _erros.remove(chave);
   }
 
@@ -422,7 +568,11 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
         // Digitar e a correcao: o erro sai do campo no primeiro toque, e nao
         // so quando a pessoa tenta enviar de novo.
         aoMudar: (valor) {
-          if (_erros.containsKey(chave)) {
+          // O TOQUE DA PESSOA SOLTA O CAMPO do endereço guardado: daí em diante
+          // o que está ali é dela, e a busca de CEP não o substitui mais --
+          // que é a regra de 17/10, intacta. Ver `_preencherSeVazio`.
+          final soltou = _aindaComOValorGuardado.remove(chave);
+          if (_erros.containsKey(chave) || soltou) {
             setState(() => _erros.remove(chave));
           }
           aoMudarTambem?.call(valor);
@@ -615,6 +765,9 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         habilitado: !_enviando,
                         aoSelecionar: (escolhido) => setState(() {
                           _uf = escolhido;
+                          // Escolher a UF a mão solta o campo do endereço
+                          // guardado, como o toque num campo de texto.
+                          _aindaComOValorGuardado.remove(_CamposDoPedido.uf);
                           _erros.remove(_CamposDoPedido.uf);
                         }),
                       ),

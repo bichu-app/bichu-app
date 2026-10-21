@@ -49,6 +49,11 @@ import 'modelos.dart';
 // `Image.network`, e `Image.network('')` lanca. Uma segunda copia aqui
 // divergiria da primeira na primeira edicao.
 import 'modelos_diretorio.dart' show urlDeImagem;
+// `EnderecoDeEntrega` mora com os modelos do pet porque nasceu no PEDIDO da
+// plaquinha. O endereco guardado na conta e o MESMO endereco (os nove campos
+// sao os mesmos, e o contrato usa um `DeliveryAddress` so), entao esta classe
+// o importa de la em vez de declarar a segunda redacao dele.
+import 'modelos_pet.dart' show EnderecoDeEntrega;
 
 /// O recorte de `#/components/schemas/Me` que o formulario de dados pessoais
 /// edita, mais o que ele mostra de leitura.
@@ -238,6 +243,68 @@ class MeApi implements IntencaoDeFotoDoUsuario {
       },
     );
     return DadosPessoais.doJson(json);
+  }
+
+  /// `GET /v1/me/delivery-address` (`getMyDeliveryAddress`), ou `null`.
+  ///
+  /// **O endereco de entrega GUARDADO NA CONTA**, autorizado pelo cliente em
+  /// 21/10/2026: *"um endereco de entrega salvo na conta, reusado em todo
+  /// pedido e editavel num lugar so"*. E dele que o formulario da plaquinha
+  /// nasce preenchido.
+  ///
+  /// **`null` nao e erro e nao e falha de rede.** E o estado normal de quem
+  /// nunca guardou endereco, e e o estado de toda conta antes de alguem abrir a
+  /// tela de `Endereco de entrega`. Quem chama trata `null` como "o formulario
+  /// abre vazio, como antes".
+  ///
+  /// ## A COSTURA DO CORPO `null`, que nao e obvia
+  ///
+  /// O contrato declara a resposta como `MyDeliveryAddress`, que e
+  /// `DeliveryAddress` **ou `null`** -- e `null` no corpo e um `null` cru, e nao
+  /// um objeto vazio. `ApiClient._lerResposta` devolve `Map<String, dynamic>`
+  /// sempre, e o que ele faz com um JSON que nao e objeto e embrulhar:
+  /// `jsonDecode('null')` vira `{'data': null}`.
+  ///
+  /// Entao os dois desfechos chegam aqui com formas diferentes, e e esta funcao
+  /// que os separa. Ler `json['recipient_name']` direto daria uma cadeia vazia
+  /// no caso `null`, e o formulario abriria com nove campos preenchidos de nada
+  /// -- pior que abrir vazio, porque a pessoa teria de limpar antes de digitar.
+  Future<EnderecoDeEntrega?> lerEnderecoGuardado() async {
+    final json = await _api.get('/me/delivery-address');
+    // 204 ou corpo vazio: nao acontece nesta rota, mas o mesmo tratamento do
+    // `null` serve, e um `if` a mais e mais barato que um campo vazio na tela.
+    if (json.isEmpty) return null;
+    // O corpo era `null` cru. Ver a secao acima.
+    if (json.length == 1 && json.containsKey('data') && json['data'] == null) {
+      return null;
+    }
+    return EnderecoDeEntrega.doJson(json);
+  }
+
+  /// `PUT /v1/me/delivery-address` (`putMyDeliveryAddress`).
+  ///
+  /// **O UNICO caminho do app que escreve o endereco guardado.** O pedido da
+  /// plaquinha (`PetsApi.solicitarPlaquinha`) **nao** escreve aqui: editar o
+  /// endereco dentro do pedido muda aquele pedido e nao mexe no que esta
+  /// guardado. Mudar o guardado em silencio, a partir de um formulario de
+  /// pedido, e a classe de defeito que so aparece meses depois -- quando a
+  /// plaquinha chega no endereco de antes.
+  ///
+  /// **O endereco inteiro vai junto**, e nao campo a campo: o contrato declara
+  /// `PUT` com `DeliveryAddress` obrigatorio. Trocar de casa troca os nove
+  /// campos de uma vez, e uma escrita parcial deixaria a conta numa mistura de
+  /// duas casas -- rua nova com bairro antigo chega no lugar errado sem nada ter
+  /// dado erro.
+  ///
+  /// Devolve o endereco **como ficou guardado**, ja normalizado pelo servidor
+  /// (CEP sem mascara, UF em maiuscula, bordas sem espaco), e nao o que foi
+  /// enviado: a tela mostra o que esta no banco.
+  Future<EnderecoDeEntrega> salvarEnderecoGuardado(EnderecoDeEntrega endereco) async {
+    final json = await _api.put('/me/delivery-address', corpo: endereco.paraJson());
+    // `doJson` nunca devolve nulo aqui: o `PUT` sempre responde o endereco. O
+    // `!` e sobre o tipo e nao sobre uma suposicao de rede -- corpo que nao
+    // seja objeto ja teria estourado em `_lerResposta`.
+    return EnderecoDeEntrega.doJson(json)!;
   }
 
   /// `POST /v1/media/my-photo-intents` (`createMyPhotoUploadIntent`).

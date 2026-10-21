@@ -816,6 +816,41 @@ class EnderecoDeEntrega {
   /// transportadora costuma precisar dele para entregar.
   final String telefone;
 
+  /// O endereco que o SERVIDOR devolveu, ou `null` quando nao ha nenhum.
+  ///
+  /// **Para o endereco GUARDADO NA CONTA** (`getMyDeliveryAddress`,
+  /// `putMyDeliveryAddress`, autorizados pelo cliente em 21/10/2026). Nasceu
+  /// porque o formulario da plaquinha passou a abrir preenchido com ele, e um
+  /// segundo modelo de endereco no app seria a segunda redacao do mesmo
+  /// endereco -- os nove campos sao os MESMOS, e [paraJson] e a volta exata
+  /// desta funcao.
+  ///
+  /// **`null` nao e erro.** `getMyDeliveryAddress` devolve corpo `null` quando
+  /// a conta nunca guardou endereco, que e o estado normal de quem nunca abriu
+  /// a tela -- e nele o formulario se comporta como antes desta leitura
+  /// existir. Mesma forma de `getMyLocation`.
+  ///
+  /// `complement` ausente e `complement` nulo viram a MESMA coisa (nulo): o
+  /// contrato o declara opcional, e distinguir "campo que sumiu" de "sem
+  /// complemento" nao serviria a nenhuma tela.
+  static EnderecoDeEntrega? doJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final complemento = json['complement'] as String?;
+    return EnderecoDeEntrega(
+      destinatario: json['recipient_name'] as String? ?? '',
+      // Sem mascara, como o contrato o declara. A mascara e da tela, e
+      // `MascaraDeCep` a aplica quando o valor entra no campo.
+      cep: json['postal_code'] as String? ?? '',
+      logradouro: json['street'] as String? ?? '',
+      numero: json['street_number'] as String? ?? '',
+      complemento: complemento == null || complemento.isEmpty ? null : complemento,
+      bairro: json['neighborhood'] as String? ?? '',
+      cidade: json['city'] as String? ?? '',
+      uf: json['state'] as String? ?? '',
+      telefone: json['recipient_phone'] as String? ?? '',
+    );
+  }
+
   Map<String, dynamic> paraJson() {
     return <String, dynamic>{
       'recipient_name': destinatario,
