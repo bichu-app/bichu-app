@@ -1724,16 +1724,41 @@ class RecorteDaRede {
   final int pagina;
   final int limite;
 
-  /// A mesma consulta em outra pagina, ou sem o termo de busca.
+  /// A mesma consulta em outra pagina, sem o termo de busca, ou com outra
+  /// cidade.
   ///
   /// `semTermo` serve as distancias: elas dependem de quais encontros
   /// publicos existem no recorte, e nao do que a pessoa digitou, entao nao
   /// ha motivo para pergunta-las de novo a cada tecla.
-  RecorteDaRede copiar({int? pagina, bool semTermo = false}) => RecorteDaRede(
+  ///
+  /// ## `cidade` e `semCidade`: a cidade DERIVADA entra aqui, e nao no recorte
+  ///
+  /// A cidade que o aparelho resolve (20/10/2026, *"utilizar a mesma
+  /// inteligencia do pets"*) **nao e gravada em [RecorteDaRede.cidade]**, e a
+  /// distincao tem duas consequencias medidas:
+  ///
+  /// 1. [quantidadeDeFiltros] nao a conta, e o distintivo da barra nao nasce
+  ///    com `1` numa agenda que ninguem recortou -- o mesmo defeito que
+  ///    `GrupoDeFiltro.codigoPadrao` fechou para `Próximos`;
+  /// 2. limpar a cidade na folha continua significando "limpar": se a derivada
+  ///    morasse no recorte, ela voltaria no proximo `copiar` e desfaria a acao
+  ///    de quem acabou de apagar o filtro.
+  ///
+  /// A tela compoe as duas (`cidade em uso`) e passa o resultado AQUI, no
+  /// caminho da chamada. **Nulo nao limpa** -- `null` e indistinguivel de "nao
+  /// passei" num parametro opcional, e foi por confundir esses dois que o botao
+  /// de localizacao dos pets ficou sem efeito. Para limpar, `semCidade: true`.
+  RecorteDaRede copiar({
+    int? pagina,
+    bool semTermo = false,
+    String? cidade,
+    bool semCidade = false,
+  }) =>
+      RecorteDaRede(
         termo: semTermo ? null : termo,
         quando: quando,
         entrada: entrada,
-        cidade: cidade,
+        cidade: semCidade ? null : (cidade ?? this.cidade),
         porte: porte,
         distanciaMaxima: distanciaMaxima,
         ordem: ordem,

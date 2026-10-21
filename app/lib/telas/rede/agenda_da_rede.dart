@@ -13,6 +13,7 @@ import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/cidade_por_localizacao.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
@@ -119,6 +120,22 @@ class AgendaDaRede extends StatefulWidget {
   /// "Carregar mais" (ATENCAO: a especificacao nao desenhou a paginacao da
   /// agenda; texto no padrao de 28.2, `Tentar de novo` refaz uma coisa so).
   static const String rotuloDeCarregarMais = 'Carregar mais eventos';
+  /// O que a lista esta mostrando **enquanto nao ha cidade**.
+  ///
+  /// A aba abre SEM cidade de proposito, e isso e o recorte e nao um estado de
+  /// espera: sao os eventos mais recentes, de qualquer cidade. O molde e a
+  /// decisao do cliente de 19/10/2026 para os pets -- *"o campo cidade do
+  /// filtro da pagina pet nao deve ser obrigatorio, mas devemos filtrar pelos
+  /// 20 ultimos pets cadastrados e ordenar pela cidade da localizacao dele"* --
+  /// e ele vale aqui pela decisao de 20/10 (*"utilizar a mesma inteligencia do
+  /// pets"*).
+  ///
+  /// **Dizer isto importa:** uma lista do pais inteiro sem a frase parece uma
+  /// lista que nao conseguiu recortar, e e a mesma reclamacao que tirou a cidade
+  /// obrigatoria dos pets -- lista vazia com cara de defeito.
+  static const String explicacaoSemCidade =
+      'Mostrando os eventos mais recentes de todas as cidades.';
+
   static const String falhaAoCarregarMais =
       'Não conseguimos carregar mais eventos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
@@ -242,6 +259,36 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
   final TextEditingController _buscaControlador = TextEditingController();
 
+  /// A CIDADE DO APARELHO, pela mesma peca que `Pets` usa.
+  ///
+  /// Decisao do cliente, 20/10/2026: *"nos eventos e na comunidade, voce
+  /// tambem deve trazer os mais proximos da localizacao, utilizar a mesma
+  /// inteligencia do pets"*. A `inteligencia do pets` resolve a **cidade** a
+  /// partir da coordenada e recorta por cidade -- ela nao manda coordenada
+  /// para rota nenhuma (ADR-0006 e emenda 1). Ver
+  /// `widgets/cidade_por_localizacao.dart`.
+  ///
+  /// **Isto NAO substitui a ordem por distancia desta aba**, que ja existia e
+  /// continua: aquela sai do ponto de referencia que o SERVIDOR guarda por
+  /// aparelho (`listNearbyNetworkEvents`, `ST_Distance`), e nunca passou pelo
+  /// GPS. As duas se somam -- a cidade recorta quais eventos entram, a
+  /// distancia ordena os que entraram.
+  ///
+  /// Nulo ate `didChangeDependencies`: a porta vem do [Escopo], que precisa de
+  /// contexto.
+  CidadeDoAparelho? _cidadeDoAparelho;
+
+  /// A FOLHA decidiu a cidade, e por isso a derivada nao manda mais.
+  ///
+  /// **Nao e `a pessoa mexeu em algo`**, e a diferenca e o defeito de
+  /// 20/10/2026 nos pets: um sinal generico de interacao descartava o
+  /// resultado do botao de localizacao. Este sinal e **so sobre a cidade**:
+  /// ele liga quando a folha de filtro traz a chave `city` -- inclusive
+  /// trazendo-a VAZIA, que e alguem limpando o recorte de proposito -- e
+  /// desliga no toque de `Usar minha localização`, porque ai a escolha mais
+  /// nova e a localizacao.
+  bool _folhaDecidiuACidade = false;
+
   bool _visivel = false;
   bool _cargaAgendada = false;
 
@@ -251,6 +298,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   @override
   void dispose() {
     _buscaControlador.dispose();
+    _cidadeDoAparelho?.dispose();
     super.dispose();
   }
 
@@ -263,7 +311,74 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     }
     if (_visivel) return;
     _visivel = true;
+    _criarAResolucaoDaCidade();
     _agendarCarga();
+  }
+
+  /// Cria o resolvedor de cidade e **dispara a resolucao de abertura**.
+  ///
+  /// Uma vez por tela, e nao por quadro: `didChangeDependencies` corre de novo
+  /// a cada troca de dependencia herdada, e recriar o resolvedor gastaria uma
+  /// resolucao -- e um pedaco do teto de uso da plataforma -- a cada vez.
+  ///
+  /// **A lista NAO espera por isto.** `_agendarCarga` corre em seguida e pinta
+  /// os eventos mais recentes; quando a cidade chega, `_trocarRecorte`
+  /// recarrega. Esperar deixaria a aba em branco por doze segundos para quem
+  /// nao concedeu a permissao.
+  void _criarAResolucaoDaCidade() {
+    if (_cidadeDoAparelho != null) return;
+    // `doEscopo` e nao `Escopo.of(context).localizacao`: a porta fica atras da
+    // peca, e esta tela nao a nomeia. Ver `CidadeDoAparelho.doEscopo` e a lista
+    // de `localizacao_no_ponto_de_uso_test.dart`.
+    final resolvedor = CidadeDoAparelho.doEscopo(context)
+      ..addListener(_aResolucaoAndou);
+    _cidadeDoAparelho = resolvedor;
+    unawaited(
+      resolvedor.resolverNaAbertura().then((trocou) {
+        if (!mounted || !trocou) return;
+        // A derivada chegou depois da primeira pintura. Quem mexeu na cidade na
+        // folha enquanto ela corria MANDA: trocar a lista debaixo de quem
+        // acabou de escolher e o pior desfecho possivel.
+        if (_folhaDecidiuACidade) return;
+        _carregar();
+      }),
+    );
+  }
+
+  /// A caixa e a frase dela dependem do resolvedor; `setState` vazio basta.
+  void _aResolucaoAndou() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// A CIDADE QUE VALE AGORA, e e ela que vai para `city` na rota.
+  ///
+  /// **A folha ganha da derivada, inclusive quando a folha diz `nenhuma`** --
+  /// e o que faz `Limpar filtro` significar limpar. Ver [_folhaDecidiuACidade]
+  /// para por que este criterio e so sobre a cidade.
+  String? get _cidadeEmUso =>
+      _folhaDecidiuACidade ? _recorte.cidade : _cidadeDoAparelho?.cidade;
+
+  /// O TOQUE em `Usar minha localização`.
+  ///
+  /// Ele **devolve a palavra a localizacao**: [_folhaDecidiuACidade] desliga,
+  /// porque a pessoa acabou de escolher a localizacao e essa e a escolha mais
+  /// nova. Sem desligar, a precedencia de [_cidadeEmUso] devolveria a cidade da
+  /// folha e a resolucao ficaria sem efeito -- o defeito de 20/10/2026 nos
+  /// pets, inteiro.
+  Future<void> _usarMinhaLocalizacao() async {
+    final resolvedor = _cidadeDoAparelho;
+    if (resolvedor == null) return;
+    final trocou = await resolvedor.resolverPorToque();
+    if (!mounted) return;
+    if (resolvedor.cidade == null) return;
+    setState(() {
+      _folhaDecidiuACidade = false;
+      // A cidade da folha sai do recorte junto: deixa-la gravada faria a folha
+      // abrir marcando uma cidade que a lista nao esta usando.
+      if (_recorte.cidade != null) _recorte = _recorte.copiar(semCidade: true);
+    });
+    if (trocou || _cidadeEmUso != null) await _carregar();
   }
 
   void _agendarCarga() {
@@ -331,7 +446,16 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       geracao = ++_geracao;
       setState(() => _fase = _Fase.carregando);
     }
-    final recorte = _recorte.copiar(pagina: maisUma ? _pagina + 1 : 1);
+    // **A cidade em uso entra AQUI, no caminho da chamada, e nao no recorte.**
+    // A resolucao pode ter chegado depois da primeira carga; gravar a derivada
+    // em `_recorte` acenderia o distintivo da barra numa agenda que ninguem
+    // filtrou e faria `Limpar filtro` nao limpar. Ver `RecorteDaRede.copiar`.
+    final cidade = _cidadeEmUso;
+    final recorte = _recorte.copiar(
+      pagina: maisUma ? _pagina + 1 : 1,
+      cidade: cidade,
+      semCidade: cidade == null,
+    );
     final rede = RedeApi(escopo.api);
     // O ultimo termo era `recorte.visibilidade != VisibilidadeDoEncontro.privado`:
     // `listNearbyNetworkEvents` nao devolve privado, e medir distancia com o
@@ -673,6 +797,34 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // `BarraDeListagem`: esta tela desaparece em alguns estados
             // (carregando, falha) e as abas tem de ficar -- quem filtrou ate o
             // vazio precisa de como voltar.
+            // **A CAIXA DA LOCALIZACAO, e ela sai de cena quando a cidade
+            // chega** (cliente, 20/10/2026 -- pedido em `Pets` e valendo para
+            // as tres secoes). Quem decide aparecer e sair e a propria caixa,
+            // pelo criterio `ha cidade em uso`: a regra mora num lugar so,
+            // porque tres copias divergem na proxima correcao.
+            //
+            // **No CORPO da tela e nao na barra**, como busca, filtro e ordem
+            // (padrao de listagem do cliente), e ACIMA da barra: ela explica o
+            // recorte que a barra resume.
+            if (_fase != _Fase.carregando) ...<Widget>[
+              CaixaDeLocalizacao(
+                cidadeEmUso: _cidadeEmUso,
+                explicacao: AgendaDaRede.explicacaoSemCidade,
+                podeOferecer: _cidadeDoAparelho?.podeOferecer ?? false,
+                aviso: _cidadeDoAparelho?.aviso,
+                // Desabilitado enquanto procura: dois toques pediriam a
+                // permissao duas vezes e gastariam o teto de uso do geocoder
+                // duas vezes.
+                aoUsarLocalizacao: (_cidadeDoAparelho?.procurando ?? true)
+                    ? null
+                    : _usarMinhaLocalizacao,
+              ),
+              // O respiro acompanha a caixa: sem ela, 16 dp de buraco entre a
+              // busca e a barra.
+              if (_cidadeEmUso == null &&
+                  (_cidadeDoAparelho?.podeOferecer ?? false))
+                const SizedBox(height: BichuEspaco.e4),
+            ],
             if (_fase != _Fase.carregando)
               BarraDeListagem(
                 total: _total,
@@ -832,11 +984,18 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       );
       final cidades = SplayTreeSet<String>.from(_cidadesConhecidas);
       if (r.cidade != null) cidades.add(r.cidade!);
+      // **A CIDADE DERIVADA APARECE NA FOLHA, marcada e editavel.** E a outra
+      // metade do pedido de 20/10/2026: resolvida, a caixa sai e fica *"so a
+      // cidade dentro do filtro"*. Ela entra nas OPCOES tambem porque a
+      // resolucao pode chegar antes da primeira resposta da rota -- sem esta
+      // linha o grupo abriria com um valor selecionado que nao existe na lista.
+      final emUso = _cidadeEmUso;
+      if (emUso != null) cidades.add(emUso);
       grupos.add(
         GrupoDeFiltro(
           chave: 'city',
           titulo: 'Cidade',
-          selecionado: r.cidade,
+          selecionado: emUso,
           opcoes: <OpcaoDeRecorte>[
             for (final c in cidades) OpcaoDeRecorte(codigo: c, rotulo: c),
           ],
@@ -889,6 +1048,34 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     final filtros = escolha.filtros;
     Object? v(String chave, Object? Function(String?) de) =>
         filtros.containsKey(chave) ? de(filtros[chave]) : const _Nada();
+    // **QUANDO A FOLHA PASSA A MANDAR NA CIDADE -- e nao e a cada `Aplicar`.**
+    //
+    // `EscolhaDaFolha.filtros` traz **todas** as chaves que os grupos daquela
+    // composicao declararam, com o valor marcado de cada um; `containsKey` diz
+    // que o grupo EXISTE, e nao que alguem mexeu nele. Como o grupo `Cidade`
+    // abre pre-marcado com a cidade em uso, um `containsKey` cru faria qualquer
+    // `Aplicar` -- trocar `Quando`, por exemplo -- gravar a cidade DERIVADA no
+    // recorte. Duas consequencias, as duas indesejadas: o distintivo da barra
+    // subiria em cima de uma cidade que ninguem escolheu, e a derivada pararia
+    // de acompanhar o aparelho.
+    //
+    // **A comparacao e com a cidade derivada, e e ela que separa os casos:**
+    // valor igual significa que a folha so devolveu o que ja estava valendo, e
+    // ninguem decidiu nada sobre a cidade; valor diferente e uma decisao --
+    // inclusive `nenhuma`, que e alguem limpando o recorte de proposito, e e
+    // justamente o caso que a derivada nao pode desfazer no proximo `copiar`.
+    Object? cidadeDaFolha = const _Nada();
+    if (filtros.containsKey('city')) {
+      final escolhida = filtros['city'];
+      if (escolhida == _cidadeDoAparelho?.cidade) {
+        // So a derivada, de volta. Ela NAO e gravada no recorte: continua
+        // entrando pelo caminho da chamada, onde nao conta como filtro.
+        cidadeDaFolha = null;
+      } else {
+        cidadeDaFolha = escolhida;
+        _folhaDecidiuACidade = true;
+      }
+    }
     final ordem = escolha.ordem;
     // `state` e `visibility` nao chegam mais nesta folha: os dois grupos
     // sairam em 19/10/2026 (ver `_controleDeFiltro`). `involvement` tambem
@@ -910,7 +1097,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               : QuandoDaRede.porCodigo(c),
         ),
         entrada: v('admission', TipoDeEntrada.porCodigo),
-        cidade: v('city', (c) => c),
+        cidade: cidadeDaFolha,
         porte: v('size', Porte.de),
         distanciaMaxima: v('max_km', DistanciaMaxima.porCodigo),
         ordem: ordem ?? const _Nada(),

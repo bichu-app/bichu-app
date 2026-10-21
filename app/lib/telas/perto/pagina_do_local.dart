@@ -7,6 +7,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../api/problem.dart';
+import '../../dispositivo/saida_do_app.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../roteamento/saida_da_mensagem.dart';
@@ -151,6 +152,19 @@ class PaginaDoLocal extends StatefulWidget {
   /// repeti-lo dentro dele era a terceira vez que a mesma tela dizia a mesma
   /// palavra.
   static const String rotuloDeLigar = 'Ligar';
+
+  /// O nome ACESSIVEL do toque no endereco, e nao o texto visivel.
+  ///
+  /// O visivel continua sendo o endereco. Um leitor de tela sobre o endereco
+  /// pelado anunciaria `Pinheiros, São Paulo - SP` e nao diria que aquilo e
+  /// tocavel, que e o defeito que `BICHUS-205` ja consertou no botao primario.
+  static String rotuloDeAbrirNoMapa(String lugar) => 'Abrir $lugar no mapa';
+
+  /// A mesma frase do encontro da `Rede` (`LocalDoEncontro.falhaAoAbrir`), e
+  /// **repetida de proposito**: importar a constante da outra tela acoplaria
+  /// a pagina do diretorio a pagina do encontro por causa de uma string.
+  static const String falhaAoAbrirOMapa =
+      'Não conseguimos abrir o aplicativo de mapas.';
 
   static const String rotuloDaNota = 'Sua nota';
   static const String ajudaDaNota = 'Toque nas estrelas para dar de 1 a 5.';
@@ -554,6 +568,44 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
+  /// Abre o endereco no aplicativo de mapas do aparelho.
+  ///
+  /// ## O dado que alimenta isto AINDA NAO EXISTE por inteiro, e isso nao e
+  /// defeito
+  ///
+  /// O cliente pediu em 20/10/2026 *"o endereco do profissional tambem deve
+  /// ser clicavel e abrir as ferramentas de maps, como google maps ou waze, de
+  /// acordo com a ferramenta de padrao do usuario"*. O mecanismo e este, e ele
+  /// esta completo -- mas `DirectoryEntryDetail` **nao tem logradouro**:
+  /// `linhaDeLugar` e bairro, cidade e UF, e e so isso que o contrato devolve.
+  ///
+  /// **Ou seja: hoje isto abre um BAIRRO no mapa, e nao uma porta.** As colunas
+  /// `street`, `street_number`, `postal_code` e `complement` existem em
+  /// `professionals` desde a migracao `20261018000001`, e aquela migracao diz,
+  /// na prosa dela, que **nenhuma saida ganhou campo novo** porque exibir
+  /// endereco completo e decisao do cliente e ela nao foi tomada.
+  ///
+  /// No dia em que ela for, a entrada ganha o campo no contrato,
+  /// `linhaDeLugar` (ou um irmao dela) passa a trazer o logradouro, e **esta
+  /// funcao nao muda uma linha**: o que vai para o sistema e TEXTO, e quem o
+  /// resolve em lugar e o aplicativo de mapas do aparelho (ADR-0006, e o
+  /// ADR-0027 item 21 ja consagrou o desenho em `network_events`).
+  ///
+  /// **A porta e a MESMA do encontro da `Rede`**, e isso e requisito: uma
+  /// funcao (`SaidaDoApp.abrirEnderecoNoAppDeMapas`), dois chamadores
+  /// (`local_do_encontro.dart` e esta tela). O encontro tem logradouro de
+  /// verdade e e la que o mecanismo se prova; aqui ele chega pronto.
+  Future<void> _abrirNoMapa(String lugar) async {
+    final abriu = await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(
+      endereco: lugar,
+    );
+    if (!abriu && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text(PaginaDoLocal.falhaAoAbrirOMapa)),
+      );
+    }
+  }
+
   Future<void> _ligar(String telefoneE164) async {
     // `tel:` vai para o discador do sistema, que **mostra o numero e espera a
     // pessoa confirmar**: o app nao disca sozinho. Mesmo caminho do cartao da
@@ -878,7 +930,7 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       _Secao(
         icone: Icons.notes_outlined,
         titulo: PaginaDoLocal.tituloDasInformacoes,
-        child: _Informacoes(detalhe: detalhe),
+        child: _Informacoes(detalhe: detalhe, aoAbrirNoMapa: _abrirNoMapa),
       ),
       const _Divisor(),
       _Secao(
@@ -1254,9 +1306,14 @@ class _Cabecalho extends StatelessWidget {
 /// WhatsApp, redes, horario, foto e endereco, e diz na mesma linha que nada
 /// disso existe hoje. Nenhum deles e desenhado aqui.
 class _Informacoes extends StatelessWidget {
-  const _Informacoes({required this.detalhe});
+  const _Informacoes({required this.detalhe, required this.aoAbrirNoMapa});
 
   final DetalheDoLocal detalhe;
+
+  /// Leva o endereco ao aplicativo de mapas. Ver `_PaginaDoLocalState.
+  /// _abrirNoMapa`, que explica por que o dado que o alimenta ainda e so
+  /// bairro e cidade.
+  final Future<void> Function(String lugar) aoAbrirNoMapa;
 
   static const String semSobre =
       'Este local ainda não escreveu uma apresentação.';
@@ -1276,9 +1333,27 @@ class _Informacoes extends StatelessWidget {
           _Corpo(texto: sobre)
         else
           const _Corpo(texto: semSobre),
+        // **O endereco e TOCAVEL aqui, e so aqui.**
+        //
+        // O cabecalho tambem escreve `linhaDeLugar`, e deixa-la tocavel nos
+        // dois lugares daria DOIS alvos para a mesma acao na mesma rolagem --
+        // o que `local_do_encontro.dart` ja decidiu contra, com a frase "um
+        // botao, nunca dois". `Informações` e a secao do endereco; o
+        // cabecalho e resumo.
+        //
+        // **`lugar` nunca vem em branco**: `linhaDeLugarDe` devolve NULO
+        // quando os tres campos faltam, em vez de cadeia vazia, e e por isso
+        // que o `if` acima basta. A porta recusa branco de novo, do lado dela,
+        // e as duas conferencias nao sao redundancia: esta decide se existe
+        // ALVO DE TOQUE, e a de la decide se existe CHAMADA AO SISTEMA.
         if (lugar != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e4),
-          _LinhaComIcone(icone: Icons.place_outlined, texto: lugar),
+          _LinhaComIcone(
+            icone: Icons.place_outlined,
+            texto: lugar,
+            aoTocar: () => aoAbrirNoMapa(lugar),
+            rotuloAcessivel: PaginaDoLocal.rotuloDeAbrirNoMapa(lugar),
+          ),
         ],
       ],
     );
@@ -2230,18 +2305,39 @@ class _Selo extends StatelessWidget {
   }
 }
 
+/// Uma linha de meta: icone e texto. **Tocavel so quando [aoTocar] vem.**
+///
+/// A distancia e a atividade usam a forma sem toque, e continuam exatamente
+/// como eram -- o parametro e opcional de proposito, para a linha do endereco
+/// nao exigir um widget novo nem um `if` em cada chamador.
 class _LinhaComIcone extends StatelessWidget {
-  const _LinhaComIcone({required this.icone, required this.texto});
+  const _LinhaComIcone({
+    required this.icone,
+    required this.texto,
+    this.aoTocar,
+    this.rotuloAcessivel,
+  }) : assert(
+          aoTocar == null || rotuloAcessivel != null,
+          'Linha tocavel sem nome acessivel: o leitor de tela anunciaria o '
+          'endereco e nao diria que ele leva a algum lugar.',
+        );
 
   final IconData icone;
   final String texto;
+
+  /// Nulo: a linha e texto, como sempre foi.
+  final VoidCallback? aoTocar;
+
+  /// O que o leitor de tela anuncia no lugar do texto visivel. Obrigatorio
+  /// junto com [aoTocar], pelo `assert` do construtor.
+  final String? rotuloAcessivel;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    return Row(
+    final linha = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         ExcludeSemantics(
@@ -2255,6 +2351,28 @@ class _LinhaComIcone extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    final toque = aoTocar;
+    if (toque == null) return linha;
+
+    return Semantics(
+      button: true,
+      label: rotuloAcessivel,
+      // **`excludeSemantics`, e nao um `Semantics` por fora.** Sem ele o
+      // leitor de tela anuncia o rotulo E o texto visivel em seguida --
+      // "Abrir Pinheiros, Sao Paulo - SP no mapa, Pinheiros, Sao Paulo - SP".
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: toque,
+        // O alvo minimo do design system. A linha tem a altura de uma linha de
+        // `bodyMedium`, que fica abaixo do minimo: sem isto o alvo e menor do
+        // que o dedo, e isso nao aparece em teste de widget nenhum.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: BichuAlvoDeToque.min),
+          child: Align(alignment: Alignment.centerLeft, child: linha),
+        ),
+      ),
     );
   }
 }

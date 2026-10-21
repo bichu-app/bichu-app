@@ -1390,12 +1390,35 @@ void main() {
           ]),
         ),
       );
+      // **DUAS, E NAO UMA, DESDE 20/10/2026 -- e o numero e do APP e nao desta
+      // tela.** Decisao do cliente: *"nos eventos e na comunidade, voce tambem
+      // deve trazer os mais proximos da localizacao, utilizar a mesma
+      // inteligencia do pets"*. `Rotas.destinoDoArranque` sempre devolve
+      // `rede`, entao a aba `Eventos` monta ANTES desta tela em toda abertura e
+      // resolve a cidade dela; esta tela resolve a sua em seguida. O contador
+      // do duble e por PORTA, e nao por tela, e por isso ele soma as duas.
+      //
+      // **NAO "CONSERTE" ESTE NUMERO DE VOLTA PARA 1.** O teto de uso do
+      // geocoder continua protegido, e isso foi conferido na porta e nao
+      // presumido: `LocalizacaoPorGeolocator._cidadeGuardadaPara` devolve a
+      // cidade guardada quando o aparelho nao saiu da celula de ~100 m, entao a
+      // segunda chamada NAO vai ao servico de plataforma -- **o que dobrou foi
+      // a MEDICAO DO PONTO, e nao a geocodificacao**. Trocar 2 por 1 aqui nao
+      // economiza nada: so reprova um app que esta correto.
+      //
+      // **O numero volta a 1 quando esta tela adotar a peca compartilhada**
+      // (`widgets/cidade_por_localizacao.dart`), que e a mesma que `Eventos`
+      // usa: ai a resolucao passa a ser uma por abertura do APP, e nao uma por
+      // secao. Isso toca `lista_de_perdidos.dart` e ficou FORA desta frente, de
+      // propósito -- outro agente esta no arquivo.
       expect(
         porta.vezesQueResolveu,
-        1,
-        reason: 'REPROVA: a tela resolveu ${porta.vezesQueResolveu} vezes numa '
-            'abertura. O servico de plataforma tem teto de uso, e a recarga '
-            'que a cidade dispara NAO pode disparar outra resolucao.',
+        2,
+        reason: 'REPROVA: a porta resolveu ${porta.vezesQueResolveu} vezes numa '
+            'abertura, e o esperado sao DUAS (a aba `Eventos` do arranque e '
+            'esta tela) -- ver a nota acima. O que este caso continua cobrando '
+            'e que a RECARGA que a cidade dispara nao dispare outra resolucao: '
+            'tres ou mais significa que ela voltou a disparar.',
       );
     });
   });
