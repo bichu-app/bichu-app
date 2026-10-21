@@ -13,6 +13,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/marca.dart';
+import '../../widgets/visualizador_de_imagem.dart';
 import 'local_do_encontro.dart';
 import 'pecas_da_rede.dart';
 
@@ -54,7 +55,7 @@ import 'pecas_da_rede.dart';
 ///
 /// ## Ordem, de cima para baixo (24.15, com as trocas de 24.17)
 ///
-/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, `Organizado pela
+/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, `Cadastrado pela
 /// equipe do Bichu`, selo de valor); aviso de cancelado; `Quando`; `Local`
 /// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cães`; `O que
 /// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
@@ -90,7 +91,17 @@ class TelaDoEncontro extends StatefulWidget {
 
   static const String tituloDaTela = 'Evento';
   static const String rotuloDeAtualizar = 'Atualizar';
-  static const String organizadoPor = 'Organizado pela equipe do Bichu';
+  static const String cadastradoPor = 'Cadastrado pela equipe do Bichu';
+
+  /// O nome acessivel da capa quando o contrato nao traz `alt_text`.
+  ///
+  /// A capa tocavel precisa de nome: alvo de toque anunciado so como "botao"
+  /// reprova em SC 4.1.2. Quando ha `alt_text`, ele VENCE este texto -- quem
+  /// cadastrou o evento descreveu a foto melhor do que uma reserva generica.
+  static const String nomeDaCapaSemTexto = 'Foto do evento';
+
+  /// O que o toque na capa faz. Vai em `hint`, e nao no nome.
+  static const String dicaDeAmpliarACapa = 'Ampliar';
   static const String avisoDeCancelado =
       'A equipe do Bichu cancelou este evento. Ele não vai acontecer.';
   static const String rotuloDoCalendario = 'Adicionar ao calendário';
@@ -100,7 +111,7 @@ class TelaDoEncontro extends StatefulWidget {
   /// As quatro frases de `Cuidados no evento` (UX 28.7.1). A segunda varia
   /// por `fenced_off_leash_area`.
   static List<String> cuidados({required bool areaCercada}) => <String>[
-        'Recolha o cocô e leve o saquinho embora.',
+        'Recolha o cocô e descarte em local adequado.',
         areaCercada
             ? 'Na área cercada, o cão pode ficar solto. Fora dela, na guia.'
             : 'Mantenha o cão na guia o tempo todo.',
@@ -436,14 +447,58 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     // (1080 a 1290 px a 3x), e borrava de leve com a derivada de 1024 px que o
     // cartao da agenda usa. Com a capa como reserva, o encontro gravado antes
     // desta derivada existir continua desenhando.
+    // A URL da capa, num lugar so: ela decide o que DESENHA e tambem se existe
+    // alvo de toque. Duas expressoes separadas e o jeito de a ficha oferecer
+    // toque numa capa que nao tem foto.
+    final urlDaCapa = conteudo?.urlDoBannerDaCapa ?? conteudo?.urlDaCapa;
+    final textoAlternativoDaCapa =
+        conteudo?.urlDaCapa == null ? null : conteudo?.textoAlternativoDaCapa;
+
     final capa = Stack(
       children: <Widget>[
-        ImagemDoEncontroOuBanner(
-          url: conteudo?.urlDoBannerDaCapa ?? conteudo?.urlDaCapa,
-          textoAlternativo: conteudo?.urlDaCapa == null
-              ? null
-              : conteudo?.textoAlternativoDaCapa,
-        ),
+        // **A FOTO PRINCIPAL AMPLIA AO TOQUE** (pedido do cliente de
+        // 20/10/2026: *"na pagina de detalhes do evento, a foto principal deve
+        // ser clicada e ampliada"*). O visualizador e
+        // `widgets/visualizador_de_imagem.dart`, compartilhado, porque esta e
+        // a primeira das sete superficies de foto a pedir o gesto e nao sera a
+        // ultima.
+        //
+        // **SEM FOTO NAO HA ALVO DE TOQUE**, e e por isso que o `if` esta aqui
+        // e nao dentro do `onTap`. `ImagemDoEncontroOuBanner` desenha o banner
+        // da marca quando `url` e nulo; envolve-lo num `InkWell` sempre faria a
+        // ficha sem foto pintar respingo e se anunciar como botao para o leitor
+        // de tela, prometendo uma tela que nao abre. `VisualizadorDeImagem.abrir`
+        // tambem recusa URL nula -- aquilo e o cinto; este `if` e o freio.
+        if (urlDaCapa == null)
+          ImagemDoEncontroOuBanner(
+            url: urlDaCapa,
+            textoAlternativo: textoAlternativoDaCapa,
+          )
+        else
+          // **UM no semantico, e nao dois.** `ImagemDoEncontroOuBanner` ja poe
+          // o `alt_text` na imagem; um `Semantics` em volta dela SEM
+          // `excludeSemantics` faria o leitor de tela anunciar o nome da foto e
+          // depois o botao, como se fossem duas coisas. Aqui o no e um: o nome
+          // e o `alt_text` quando o organizador escreveu um, a funcao e
+          // `button`, e o que o toque faz vai em `hint` -- que e onde o leitor
+          // de tela espera a ACAO, e nao no nome.
+          Semantics(
+            button: true,
+            label: textoAlternativoDaCapa ?? TelaDoEncontro.nomeDaCapaSemTexto,
+            hint: TelaDoEncontro.dicaDeAmpliarACapa,
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => VisualizadorDeImagem.abrir(
+                context,
+                url: urlDaCapa,
+                textoAlternativo: textoAlternativoDaCapa,
+              ),
+              child: ImagemDoEncontroOuBanner(
+                url: urlDaCapa,
+                textoAlternativo: textoAlternativoDaCapa,
+              ),
+            ),
+          ),
         if (cancelado)
           const Positioned.fill(
             child: Center(
@@ -483,7 +538,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
               const SizedBox(width: BichuEspaco.e2),
               Expanded(
                 child: Text(
-                  TelaDoEncontro.organizadoPor,
+                  TelaDoEncontro.cadastradoPor,
                   style: textos.bodySmall?.copyWith(color: cores.textSecondary),
                 ),
               ),

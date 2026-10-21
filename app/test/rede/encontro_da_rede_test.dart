@@ -32,6 +32,8 @@
 import 'package:bichu/dispositivo/saida_do_app.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/rede/local_do_encontro.dart';
+import 'package:bichu/telas/rede/pecas_da_rede.dart';
+import 'package:bichu/widgets/visualizador_de_imagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -201,7 +203,7 @@ void main() {
       );
 
       expect(find.text(tituloPublico), findsOneWidget);
-      expect(find.text('Organizado pela equipe do Bichu'), findsOneWidget);
+      expect(find.text('Cadastrado pela equipe do Bichu'), findsOneWidget);
       expect(find.text('Gratuito'), findsOneWidget);
       expect(find.text('Sábado, 3 de outubro'), findsOneWidget);
       expect(find.text('Das 9h às 11h · 2 horas'), findsOneWidget);
@@ -218,7 +220,7 @@ void main() {
         'Água',
         'Saquinhos para cocô',
         'Cuidados no evento',
-        'Recolha o cocô e leve o saquinho embora.',
+        'Recolha o cocô e descarte em local adequado.',
         'Na área cercada, o cão pode ficar solto. Fora dela, na guia.',
         'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por '
             'um tempo.',
@@ -514,6 +516,111 @@ void main() {
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
       expect(tela, isNot(contains('Cuidados no evento')));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A FOTO PRINCIPAL AMPLIA AO TOQUE (cliente, 20/10/2026)
+  // -------------------------------------------------------------------------
+  // Literal: *"na pagina de detalhes do evento, a foto principal deve ser
+  // clicada e ampliada."*
+  //
+  // Os dois casos medem coisas DIFERENTES de proposito, e nenhum deles vale
+  // pelo outro:
+  //
+  //   1. com foto, o toque ABRE e o `Fechar` FECHA -- as duas metades, porque
+  //      abrir sem saida e o defeito que prende a pessoa na imagem;
+  //   2. SEM foto, nao existe alvo de toque -- a ficha do evento sem imagem
+  //      desenha o banner da marca, e banner que se anuncia como botao promete
+  //      uma tela que nao abre.
+  //
+  // O que estes casos NAO medem: os pixeis da ampliacao. `Image.network` nao
+  // busca nada em teste de widget (o cliente HTTP do `flutter_test` responde
+  // 400 a tudo), entao a imagem cai no `errorBuilder` e o que se mede aqui e a
+  // TELA que abriu e o caminho de volta -- que e justamente o que o pedido diz.
+  group('a capa amplia', () {
+    /// A capa com foto. `cover_banner_url` e a derivada de 1280 px do detalhe,
+    /// e e ela que a capa prefere; `images` da o `alt_text`.
+    Map<String, dynamic> comCapa() => encontroPublico(
+          images: <Map<String, dynamic>>[
+            imagem('https://midia.exemplo.invalid/capa.jpeg', 'Cães na praça'),
+          ],
+          coverBannerUrl: 'https://midia.exemplo.invalid/capa-1280.jpeg',
+        );
+
+    testWidgets('a foto principal abre ampliada e fecha', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: comCapa()),
+      );
+
+      // Antes do toque nao ha visualizador: sem isto o caso ficaria verde com
+      // uma tela que sempre esteve aberta.
+      expect(find.byType(VisualizadorDeImagem), findsNothing);
+
+      await tester.tap(find.byType(ImagemDoEncontroOuBanner));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(VisualizadorDeImagem),
+        findsOneWidget,
+        reason: 'REPROVA: o toque na foto principal não abriu a imagem ampliada.',
+      );
+
+      // A SAIDA, e ela e o que impede a pessoa de ficar presa. O botao tem
+      // NOME (`tooltip`), porque alvo anunciado so como "botao" reprova em
+      // SC 4.1.2.
+      final fechar = find.byTooltip(VisualizadorDeImagem.rotuloDeFechar);
+      expect(
+        fechar,
+        findsOneWidget,
+        reason: 'REPROVA: a imagem ampliada abriu sem botão de fechar com nome.',
+      );
+      await tester.tap(fechar);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(VisualizadorDeImagem),
+        findsNothing,
+        reason: 'REPROVA: o Fechar não devolveu a pessoa para a ficha.',
+      );
+      // E ela voltou para a FICHA, e nao para uma tela em branco.
+      expect(find.text(tituloPublico), findsOneWidget);
+    });
+
+    testWidgets('ficha sem foto não oferece toque', (tester) async {
+      // `images` vazia e `coverBannerUrl` nulo sao o padrao da fixture, e sao
+      // o estado NORMAL de um encontro sem imagem -- nao um caso de borda.
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico()),
+      );
+
+      // A capa DESENHA (o banner da marca), e e isso que torna o caso
+      // interessante: ha o que tocar na tela, e nada pode responder.
+      final capa = find.byType(ImagemDoEncontroOuBanner);
+      expect(capa, findsOneWidget);
+
+      // 1. Estrutural: nao ha `InkWell` em volta da capa. Um `InkWell` com
+      //    `onTap` nulo ainda se anuncia; aqui nao ha `InkWell` nenhum.
+      expect(
+        find.ancestor(of: capa, matching: find.byType(InkWell)),
+        findsNothing,
+        reason: 'REPROVA: a capa sem foto está envolvida por um alvo de toque.',
+      );
+
+      // 2. De comportamento: tocar nela nao abre tela nenhuma.
+      await tester.tap(capa);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(VisualizadorDeImagem),
+        findsNothing,
+        reason: 'REPROVA: a ficha sem foto abriu a imagem ampliada.',
+      );
     });
   });
 }
