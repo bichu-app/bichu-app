@@ -171,14 +171,83 @@ void describe('o endereco do profissional NAO escorrega para outra superficie', 
     }
   });
 
-  void it('ISCA DE VAZAMENTO -- `DeliveryAddress` e referenciado em DOIS lugares, e os dois sao o dono ou quem despacha', () => {
+  void it('ISCA DE VAZAMENTO -- toda referencia a `DeliveryAddress` e do DONO ou de quem despacha', () => {
+    // ESTA ISCA MUDOU DE FORMA NA ONDA 4, e nao de rigor.
+    //
+    // Ela contava `2` e passou a achar `5`. As tres novas sao da operacao
+    // `/me/delivery-address`, que a frente do endereco guardado trouxe:
+    // `putMyDeliveryAddress` (o corpo e a resposta `200`) e o `oneOf` de
+    // `MyDeliveryAddress`, que e a resposta de `getMyDeliveryAddress`. As tres
+    // tem `security: [bearerAuth]` sem alternativa vazia, e o `WHERE` compara
+    // `user_id` com o portador do token: **sao o DONO lendo e escrevendo o
+    // proprio endereco.** Nenhuma superficie de terceiro apareceu.
+    //
+    // **Subir o numero de 2 para 5 teria afrouxado a isca**: o que ela guarda
+    // nao e a contagem, e que nenhuma superficie NOVA alcance a residencia de
+    // um tutor. Numero e procuracao de invariante, e procuracao vence pelo
+    // lado errado quando o numero muda. Entao ela passou a ancorar no CONJUNTO
+    // NOMEADO, como a isca irma de `esquemasComEndereco` ja fazia: superficie
+    // nova continua reprovando, e reprovando COM NOME.
     const referencias = contrato.match(/#\/components\/schemas\/DeliveryAddress\b/g) ?? [];
+
+    // 1 e 2 -- o tutor escrevendo o pedido, e quem despacha a encomenda lendo.
+    assert.ok(
+      propriedadesDe('CollarTagRequestInput').includes('delivery_address'),
+      '`CollarTagRequestInput` perdeu `delivery_address`: o tutor deixou de escrever o proprio endereco',
+    );
+    assert.ok(
+      propriedadesDe('AdminCollarTagRequest').includes('delivery_address'),
+      '`AdminCollarTagRequest` perdeu `delivery_address`: quem despacha deixou de ver para onde enviar',
+    );
+
+    // 3 -- `MyDeliveryAddress`, o alias ANULAVEL do proprio dono.
+    //
+    // Autorizado pelo cliente em 21/10/2026: alias anulavel de
+    // `DeliveryAddress`, SEM campo proprio. Ele existe porque o `GET` devolve
+    // `null` quando a conta nunca guardou endereco, e prosa nao gera tipo.
+    // **E por ter `properties` vazias que a isca do CONJUNTO FECHADO acima nao
+    // o acusa** -- e ela esta certa em nao acusar: ele nao acrescenta campo de
+    // endereco a superficie nenhuma, so embrulha o schema que ja existia.
+    const meu = spec.components.schemas.MyDeliveryAddress;
+    assert.ok(meu, '`MyDeliveryAddress` desapareceu do contrato');
+    assert.deepEqual(
+      Object.keys(meu.properties ?? {}),
+      [],
+      '`MyDeliveryAddress` ganhou campo PROPRIO. Ele foi autorizado como alias ' +
+        'anulavel de `DeliveryAddress` e nada mais: campo proprio aqui e uma ' +
+        'segunda definicao da residencia de um tutor, e a isca do conjunto ' +
+        'fechado nao o pega justamente porque as `properties` eram vazias.',
+    );
+
+    // 4 e 5 -- `putMyDeliveryAddress`: corpo e resposta, as duas do dono.
+    //
+    // A conferencia que importa aqui nao e a contagem: e que as operacoes de
+    // `/me/delivery-address` EXIJAM conta. `security` vazio ou ausente faria o
+    // endereco de casa de um tutor virar superficie publica.
+    const rota = spec.paths['/me/delivery-address'];
+    assert.ok(rota, '`/me/delivery-address` desapareceu do contrato');
+    for (const verbo of ['get', 'put'] as const) {
+      const operacao: { operationId?: string; security?: unknown[] } | undefined =
+        rota[verbo];
+      assert.ok(operacao, `\`/me/delivery-address\` perdeu o \`${verbo}\``);
+      assert.deepEqual(
+        operacao.security,
+        [{ bearerAuth: [] }],
+        `\`${operacao.operationId ?? verbo}\` deixou de exigir conta. O endereco de ` +
+          'casa de um tutor nao tem superficie publica, e uma alternativa vazia ' +
+          'em `security` e exatamente como ela nasceria.',
+      );
+    }
+
+    // E O FECHO: cinco, e as cinco nomeadas acima. Uma sexta e superficie nova.
     assert.equal(
       referencias.length,
-      2,
-      'uma terceira referencia e uma terceira superficie para a residencia de um tutor',
+      5,
+      'apareceu uma referencia a `DeliveryAddress` que nao e nenhuma das cinco ' +
+        'nomeadas neste caso (duas do pedido de plaquinha, uma do alias ' +
+        '`MyDeliveryAddress`, duas de `putMyDeliveryAddress`). Toda nova ' +
+        'superficie para a residencia de um tutor e decisao do cliente: ' +
+        'nomeie-a aqui, com o motivo, ou tire-a do contrato.',
     );
-    assert.ok(propriedadesDe('CollarTagRequestInput').includes('delivery_address'));
-    assert.ok(propriedadesDe('AdminCollarTagRequest').includes('delivery_address'));
   });
 });

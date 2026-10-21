@@ -11,8 +11,10 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/marca.dart';
+import '../../widgets/visualizador_de_imagem.dart';
 import 'local_do_encontro.dart';
 import 'pecas_da_rede.dart';
 
@@ -54,8 +56,9 @@ import 'pecas_da_rede.dart';
 ///
 /// ## Ordem, de cima para baixo (24.15, com as trocas de 24.17)
 ///
-/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, `Organizado pela
-/// equipe do Bichu`, selo de valor); aviso de cancelado; `Quando`; `Local`
+/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, a linha de origem --
+/// `Cadastrado pela equipe do Bichu` ou `Cadastrado pela comunidade`, e
+/// NENHUMA quando o servidor nao disse --, selo de valor); aviso de cancelado; `Quando`; `Local`
 /// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cães`; `O que
 /// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
 /// `Observações`. **Sem `Quem organiza` e sem `Compartilhar`** (24.17.1 e
@@ -90,17 +93,158 @@ class TelaDoEncontro extends StatefulWidget {
 
   static const String tituloDaTela = 'Evento';
   static const String rotuloDeAtualizar = 'Atualizar';
-  static const String organizadoPor = 'Organizado pela equipe do Bichu';
+  /// Cadastrado pela EQUIPE (`origin: admin`).
+  static const String cadastradoPelaEquipe = 'Cadastrado pela equipe do Bichu';
+
+  /// Cadastrado por uma conta do app (`origin: community`).
+  ///
+  /// **"pela comunidade", e nunca o nome de quem cadastrou**: o autor nao sai
+  /// do servidor (ADR-0025 secao 3, ADR-0027 apendice A.4) e esta tela nao tem
+  /// como saber quem e -- nem deve.
+  static const String cadastradoPelaComunidade = 'Cadastrado pela comunidade';
+
+  /// O rotulo da origem, ou **nulo quando o servidor nao disse**.
+  ///
+  /// ## Por que o nulo nao cai na equipe
+  ///
+  /// Ate 20/10/2026 esta tela escrevia *"Cadastrado pela equipe do Bichu"*
+  /// **incondicionalmente**, inclusive em encontro proposto pela comunidade --
+  /// porque `NetworkEventPublic` nao trazia a origem e o literal era um so.
+  /// Era rotulo afirmando autoria que o dado nao provava, a mesma classe do
+  /// "Organizado" que o cliente mandou trocar no mesmo dia, e com o agravante
+  /// de a afirmacao estar ERRADA.
+  ///
+  /// Fazer o nulo cair em "equipe" seria repor o defeito com outra roupa: o
+  /// campo e opcional no contrato, e encontro gravado antes dele existir chega
+  /// sem origem. Entao o nulo **nao desenha linha nenhuma** -- a tela cala em
+  /// vez de afirmar. Uma linha a menos nao engana ninguem; a linha errada sim.
+  static String? rotuloDaOrigem(OrigemDoEncontro? origem) {
+    return switch (origem) {
+      OrigemDoEncontro.equipe => cadastradoPelaEquipe,
+      OrigemDoEncontro.comunidade => cadastradoPelaComunidade,
+      null => null,
+    };
+  }
+
+  /// O nome acessivel da capa quando o contrato nao traz `alt_text`.
+  ///
+  /// A capa tocavel precisa de nome: alvo de toque anunciado so como "botao"
+  /// reprova em SC 4.1.2. Quando ha `alt_text`, ele VENCE este texto -- quem
+  /// cadastrou o evento descreveu a foto melhor do que uma reserva generica.
+  static const String nomeDaCapaSemTexto = 'Foto do evento';
+
+  /// O que o toque na capa faz. Vai em `hint`, e nao no nome.
+  static const String dicaDeAmpliarACapa = 'Ampliar';
   static const String avisoDeCancelado =
       'A equipe do Bichu cancelou este evento. Ele não vai acontecer.';
   static const String rotuloDoCalendario = 'Adicionar ao calendário';
   static const String falhaDoCalendario =
       'Não conseguimos abrir o calendário.';
 
+  // -- Compartilhar o encontro (cliente, 21/10/2026) ------------------------
+  //
+  // O cliente pediu, literal: *"vamos implementar o recurso de compartilhar o
+  // evento tambem, inserir um botao na pagina de detalhes do evento para
+  // convidar outros usuarios no whatsapp e outras ferramentas"*.
+  //
+  // **O MESMO caminho do pet perdido, e nao um segundo.** A acao sai por
+  // `SaidaDoApp.compartilharTexto`, que e a folha do sistema (`ACTION_SEND`),
+  // a mesma porta que `telas/pet/tela_detalhe_do_pet.dart` usa desde
+  // 20/10/2026. Nenhum pacote novo entrou e `share_plus` continua em
+  // `^12.0.2` -- a versao 13 quebra o Android, e o motivo esta medido no
+  // comentario de `app/pubspec.yaml`.
+
+  /// O rotulo da acao. **`Compartilhar`, a mesma palavra da ficha do pet**, e
+  /// nao `Convidar no WhatsApp`: quem decide o que a folha lista e o sistema,
+  /// e duas palavras para o mesmo gesto fariam o app parecer ter dois
+  /// recursos.
+  static const String rotuloDeCompartilhar = 'Compartilhar';
+
+  /// O nome acessivel: diz DE QUE evento e a acao, porque numa lista de acoes
+  /// o leitor de tela le os rotulos fora de contexto.
+  static String compartilharAcessivel(String titulo) =>
+      'Compartilhar o evento $titulo';
+
+  /// Quando a folha do sistema nao abriu. **Nao diz "WhatsApp"** e nao manda
+  /// instalar nada: a unica coisa que o app sabe aqui e que ela nao abriu.
+  static const String falhaDoCompartilhar =
+      'Não conseguimos abrir as opções de compartilhamento agora. '
+      'Tente de novo.';
+
+  /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
+  ///
+  /// ## O LINK ENTROU EM 21/10/2026, e ele vem do SERVIDOR
+  ///
+  /// Quando esta funcao nasceu, no mesmo dia, nao havia link: medido de fora
+  /// nos dois ambientes, com controle positivo (`/comunidade` -> 200),
+  /// `bichu.app/encontro/<slug>` respondia 404, e `NetworkEventPublic` nao
+  /// tinha `share_url`. O comentario daquela versao previu o caminho e e
+  /// exatamente este o que foi feito: *"o endereco entra como entrou no caso do
+  /// pet: campo do servidor, aceso por `site_page_availability`, e nao literal
+  /// montado no aparelho -- assim ele acende sem APK novo. Esta funcao ganha um
+  /// parametro e mais uma linha."*
+  ///
+  /// Entao [link] e `share_url`, lido de `EncontroPublico.linkDaPagina`, e
+  /// **nulo e o estado normal**:
+  ///
+  /// - nulo enquanto `site_page_availability` disser que a pagina do encontro
+  ///   nao esta publicada (migracao `20261020000017`);
+  /// - nulo no encontro cancelado e no encerrado;
+  /// - nulo no privado, que nao tem pagina publica.
+  ///
+  /// Com nulo, a mensagem sai **identica a de antes** -- e e por isso que
+  /// acender a pagina nao exige APK novo. **O app nao monta o endereco**: nao
+  /// existe `'/encontro/' + slug` em lugar nenhum dele, porque um literal aqui
+  /// viraria link morto no dia em que o site mudasse, e o binario instalado nao
+  /// se corrige.
+  ///
+  /// ## O QUE ESTA AUSENTE DE PROPOSITO
+  ///
+  /// **O endereco por extenso (`street_address`) NAO entra.** Ele sai so de
+  /// `getNetworkEventLocation`, com `bearerAuth` (emenda 1 do ADR-0010), e o
+  /// ADR-0027 item 21.2 diz que ele **nunca** sai na agenda, no detalhe
+  /// publico, no teaser nem nos detalhes do privado. Esta mensagem e lida
+  /// FORA do app, por quem nao tem conta: por o endereco nela seria publicar o
+  /// que o contrato guarda atras de conta. [lugar] e `LugarDoEncontro`
+  /// inteiro -- nome do lugar, bairro, cidade e UF --, que e publico no
+  /// contrato (`NetworkEventPlace`, quatro rotulos e nenhuma coordenada), e e
+  /// a MESMA linha que ja vai para o calendario do aparelho.
+  ///
+  /// Tambem nao entram: coordenada (nao existe em `NetworkEventPlace`),
+  /// qualquer identificador interno, e o nome de quem cadastrou (ele nao sai
+  /// do servidor, ADR-0025 secao 3).
+  ///
+  /// A isca `o texto compartilhado nao carrega endereco de rua` cobra isto
+  /// contra o texto REAL montado, e nao contra um literal de tela, e a isca
+  /// `o link do texto e o do servidor` cobra que o endereco nao seja montado
+  /// aqui.
+  static String mensagemDeCompartilhar({
+    required String titulo,
+    required String dia,
+    required String horario,
+    required String lugar,
+    Uri? link,
+  }) {
+    return '$titulo\n'
+        '$dia · $horario\n'
+        '$lugar\n'
+        'Encontrei no Bichu. Vamos juntos?'
+        // A UMA LINHA que o autor da versao sem link previu. Vem por ultimo
+        // porque e o que a pre-visualizacao do WhatsApp usa para montar o
+        // cartao, e porque quem le no celular ve o convite antes do endereco.
+        '${link == null ? '' : '\n$link'}';
+  }
+
+  /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
+  /// quando o destino escolhido na folha e um aplicativo de e-mail. Nos
+  /// destinos que nao tem assunto -- WhatsApp, Telegram, copiar -- o sistema o
+  /// ignora, e ele nao aparece duplicado no corpo.
+  static String assuntoDeCompartilhar(String titulo) => 'Vamos juntos? $titulo';
+
   /// As quatro frases de `Cuidados no evento` (UX 28.7.1). A segunda varia
   /// por `fenced_off_leash_area`.
   static List<String> cuidados({required bool areaCercada}) => <String>[
-        'Recolha o cocô e leve o saquinho embora.',
+        'Recolha o cocô e descarte em local adequado.',
         areaCercada
             ? 'Na área cercada, o cão pode ficar solto. Fora dela, na guia.'
             : 'Mantenha o cão na guia o tempo todo.',
@@ -281,6 +425,57 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     if (!abriu && mounted) _avisar(TelaDoEncontro.falhaDoCalendario);
   }
 
+  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do encontro.
+  ///
+  /// ## A guarda, e por que ela e cinto e nao o desenho
+  ///
+  /// O desenho e o `if` que monta o bloco em [_corpo]: a acao **nao e
+  /// desenhada** sem `ConteudoDoEncontro` (o teaser do privado nao tem lugar
+  /// nem horario para o texto) e nem no cancelado ou encerrado (convidar
+  /// alguem para um encontro que nao vai acontecer manda gente a um lugar
+  /// vazio). Esta linha existe para o caso de alguem chamar isto de outro
+  /// lugar depois.
+  ///
+  /// ## O que acontece quando a folha nao abre
+  ///
+  /// [SaidaDoApp.compartilharTexto] devolve `false` quando nao ha atividade
+  /// que responda a `ACTION_SEND` ou o plugin nao esta no binario. A tela
+  /// **diz**, em vez de ficar calada: um toque que nao faz nada e
+  /// indistinguivel de um toque que nao chegou, e a pessoa toca de novo.
+  ///
+  /// **Em aviso de rodape, e nao em faixa**, que e onde esta tela diverge da
+  /// ficha do pet -- de proposito. A acao vizinha desta pagina
+  /// ([_adicionarAoCalendario]) ja recusa assim, e as duas sao a mesma coisa
+  /// para quem olha: uma saida do aparelho que nao abriu. Dois desenhos de
+  /// recusa na mesma tela fariam a pessoa procurar a diferenca que nao existe.
+  ///
+  /// **Nao ha tratamento de "WhatsApp nao instalado"**, e a ausencia e
+  /// deliberada: quem decide o que a folha lista e o sistema, e perguntar o
+  /// que esta instalado exigiria `QUERY_ALL_PACKAGES` no Android 11+.
+  Future<void> _compartilharOEncontro(
+    EncontroDaRede encontro,
+    ConteudoDoEncontro c,
+  ) async {
+    final abriu = await SaidaDoApp.atual.compartilharTexto(
+      texto: TelaDoEncontro.mensagemDeCompartilhar(
+        titulo: encontro.titulo,
+        dia: encontro.dia.dataLonga(anoCorrente: DateTime.now().year),
+        horario: c.horario.faixa,
+        // `linhaCompleta` e `LugarDoEncontro`: nome do lugar, bairro, cidade e
+        // UF, os quatro rotulos publicos de `NetworkEventPlace`. **Nao e
+        // `_endereco`**, que e o `street_address` de `getNetworkEventLocation`
+        // e so existe com conta.
+        lugar: c.lugar.linhaCompleta,
+        // `share_url`, do servidor. Nulo com o interruptor apagado, no
+        // cancelado, no encerrado e no privado -- e com nulo o texto sai como
+        // saia antes desta linha existir.
+        link: c.linkDaPagina,
+      ),
+      assunto: TelaDoEncontro.assuntoDeCompartilhar(encontro.titulo),
+    );
+    if (!abriu && mounted) _avisar(TelaDoEncontro.falhaDoCompartilhar);
+  }
+
   void _voltar() {
     if (context.canPop()) {
       context.pop();
@@ -436,14 +631,58 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     // (1080 a 1290 px a 3x), e borrava de leve com a derivada de 1024 px que o
     // cartao da agenda usa. Com a capa como reserva, o encontro gravado antes
     // desta derivada existir continua desenhando.
+    // A URL da capa, num lugar so: ela decide o que DESENHA e tambem se existe
+    // alvo de toque. Duas expressoes separadas e o jeito de a ficha oferecer
+    // toque numa capa que nao tem foto.
+    final urlDaCapa = conteudo?.urlDoBannerDaCapa ?? conteudo?.urlDaCapa;
+    final textoAlternativoDaCapa =
+        conteudo?.urlDaCapa == null ? null : conteudo?.textoAlternativoDaCapa;
+
     final capa = Stack(
       children: <Widget>[
-        ImagemDoEncontroOuBanner(
-          url: conteudo?.urlDoBannerDaCapa ?? conteudo?.urlDaCapa,
-          textoAlternativo: conteudo?.urlDaCapa == null
-              ? null
-              : conteudo?.textoAlternativoDaCapa,
-        ),
+        // **A FOTO PRINCIPAL AMPLIA AO TOQUE** (pedido do cliente de
+        // 20/10/2026: *"na pagina de detalhes do evento, a foto principal deve
+        // ser clicada e ampliada"*). O visualizador e
+        // `widgets/visualizador_de_imagem.dart`, compartilhado, porque esta e
+        // a primeira das sete superficies de foto a pedir o gesto e nao sera a
+        // ultima.
+        //
+        // **SEM FOTO NAO HA ALVO DE TOQUE**, e e por isso que o `if` esta aqui
+        // e nao dentro do `onTap`. `ImagemDoEncontroOuBanner` desenha o banner
+        // da marca quando `url` e nulo; envolve-lo num `InkWell` sempre faria a
+        // ficha sem foto pintar respingo e se anunciar como botao para o leitor
+        // de tela, prometendo uma tela que nao abre. `VisualizadorDeImagem.abrir`
+        // tambem recusa URL nula -- aquilo e o cinto; este `if` e o freio.
+        if (urlDaCapa == null)
+          ImagemDoEncontroOuBanner(
+            url: urlDaCapa,
+            textoAlternativo: textoAlternativoDaCapa,
+          )
+        else
+          // **UM no semantico, e nao dois.** `ImagemDoEncontroOuBanner` ja poe
+          // o `alt_text` na imagem; um `Semantics` em volta dela SEM
+          // `excludeSemantics` faria o leitor de tela anunciar o nome da foto e
+          // depois o botao, como se fossem duas coisas. Aqui o no e um: o nome
+          // e o `alt_text` quando o organizador escreveu um, a funcao e
+          // `button`, e o que o toque faz vai em `hint` -- que e onde o leitor
+          // de tela espera a ACAO, e nao no nome.
+          Semantics(
+            button: true,
+            label: textoAlternativoDaCapa ?? TelaDoEncontro.nomeDaCapaSemTexto,
+            hint: TelaDoEncontro.dicaDeAmpliarACapa,
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => VisualizadorDeImagem.abrir(
+                context,
+                url: urlDaCapa,
+                textoAlternativo: textoAlternativoDaCapa,
+              ),
+              child: ImagemDoEncontroOuBanner(
+                url: urlDaCapa,
+                textoAlternativo: textoAlternativoDaCapa,
+              ),
+            ),
+          ),
         if (cancelado)
           const Positioned.fill(
             child: Center(
@@ -462,6 +701,8 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       ],
     );
 
+    final rotuloDaOrigem = TelaDoEncontro.rotuloDaOrigem(conteudo?.origem);
+
     final cabecalho = Padding(
       padding: const EdgeInsets.fromLTRB(
         BichuEspaco.e4,
@@ -476,19 +717,24 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
             header: true,
             child: Text(encontro.titulo, style: textos.headlineSmall),
           ),
-          const SizedBox(height: BichuEspaco.e2),
-          Row(
-            children: <Widget>[
-              const ExcludeSemantics(child: MarcaSimbolo(altura: BichuEspaco.e6)),
-              const SizedBox(width: BichuEspaco.e2),
-              Expanded(
-                child: Text(
-                  TelaDoEncontro.organizadoPor,
-                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+          // A LINHA DA ORIGEM, e ela SOME quando o servidor nao disse qual e.
+          // Ver [TelaDoEncontro.rotuloDaOrigem]: calar e melhor que afirmar a
+          // origem errada, que e o que esta tela fazia ate 20/10/2026.
+          if (rotuloDaOrigem != null) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e2),
+            Row(
+              children: <Widget>[
+                const ExcludeSemantics(child: MarcaSimbolo(altura: BichuEspaco.e6)),
+                const SizedBox(width: BichuEspaco.e2),
+                Expanded(
+                  child: Text(
+                    rotuloDaOrigem,
+                    style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: BichuEspaco.e3),
           Wrap(
             spacing: BichuEspaco.e2,
@@ -504,6 +750,44 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         ],
       ),
     );
+
+    // `COMPARTILHAR`, logo abaixo do cabecalho (cliente, 21/10/2026:
+    // *"inserir um botao na pagina de detalhes do evento para convidar outros
+    // usuarios no whatsapp e outras ferramentas"*).
+    //
+    // ## AS DUAS TRAVAS DO DESENHO
+    //
+    // 1. **`conteudo != null`**: o teaser do privado nao carrega lugar nem
+    //    horario, e um convite com titulo e mais nada nao convida ninguem.
+    // 2. **`vivo`**: no cancelado e no encerrado a acao **nao existe**. E a
+    //    mesma trava que ja esconde o calendario, pelo motivo mais forte:
+    //    convidar para um encontro cancelado manda gente a um lugar vazio, e a
+    //    mensagem ja saiu do nosso dominio quando isso aparecer.
+    //
+    // ## POR QUE AQUI, E NAO NA BARRA DE TOPO
+    //
+    // A barra desta pagina so aparece depois que a capa rola (24.17.1, item
+    // 7), e uma acao que some quando a pessoa esta no topo e uma acao que ela
+    // nao acha. Aqui ela fica na PRIMEIRA DOBRA, logo depois do titulo -- que e
+    // o momento em que a pessoa decide se chama alguem --, e nenhuma secao
+    // mudou de lugar para ela caber.
+    //
+    // `BotaoSecundario` e nao primario: a pagina e de leitura, nao ha acao
+    // principal competindo, e um botao cheio aqui pesaria mais que o titulo.
+    final convidar = conteudo != null && vivo
+        ? _Margem(
+            child: Padding(
+              padding: const EdgeInsets.only(top: BichuEspaco.e4),
+              child: BotaoSecundario(
+                rotulo: TelaDoEncontro.rotuloDeCompartilhar,
+                nomeAcessivel: TelaDoEncontro.compartilharAcessivel(
+                  encontro.titulo,
+                ),
+                aoTocar: () => _compartilharOEncontro(encontro, conteudo),
+              ),
+            ),
+          )
+        : null;
 
     final secoes = <Widget>[];
     void secao(IconData icone, String titulo, Widget filho) {
@@ -618,7 +902,12 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       }
     }
 
-    return <Widget>[capa, cabecalho, ...secoes];
+    return <Widget>[
+      capa,
+      cabecalho,
+      ?convidar,
+      ...secoes,
+    ];
   }
 
 }

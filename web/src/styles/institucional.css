@@ -448,3 +448,18 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   background: var(--cor-action-fill);
   mask: url("../assets/formas/patinha.svg") center / contain no-repeat;
 }
+
+/* ---------- /encontro/{slug}: a pagina publica do encontro ---------- */
+/* Emenda 4 do ADR-0017. Reusa `.hero--pagina`, `.secao`, `.cartao-evento__linha`,
+   `.grade-posts` e `.recorte--encontro` do institucional; o que entra aqui e so
+   o que nao existia. Tudo em token: `verify:valores-soltos` reprova literal. */
+.encontro__resumo { display: grid; gap: var(--space-3); margin-block: var(--space-6); padding: 0; list-style: none; }
+.encontro__resumo .cartao-evento__linha { align-items: flex-start; }
+.encontro__resumo .icone { flex: none; color: var(--cor-primary); }
+.encontro__acoes { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.lista-marcada { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); padding: 0; list-style: none; }
+.lista-marcada li { display: flex; gap: var(--space-2); align-items: flex-start; color: var(--cor-text-secondary); }
+.lista-marcada .icone { flex: none; color: var(--cor-primary); }
+/* A capa vem da midia publica e tem proporcao 16:9 (derivada de 1280 x 720).
+   `object-fit: cover` porque a derivada ja foi cortada no servidor. */
+.encontro .recorte--encontro { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }

@@ -32,6 +32,7 @@ import {
   projetarDetalhesPrivados,
   projetarEncontro,
   projetarLocalizacao,
+  linkPublicoDoEncontro,
   enderecoNaLeituraAberta,
   REGRA_DO_ENDERECO,
   fimDoDiaLocal,
@@ -39,7 +40,7 @@ import {
   type EncontroDaRede,
   type EncontroPublicoProjetado,
 } from './encontro-da-rede.js';
-import type { Instant } from '../../../shared/types/brands.js';
+import type { AbsoluteUrl, Instant } from '../../../shared/types/brands.js';
 
 /**
  * Um instante fixo. Nada aqui depende do relogio de quem roda.
@@ -59,6 +60,7 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     neighborhood: 'Pinheiros',
     city: 'São Paulo',
     state: 'SP',
+    origem: 'admin',
     startsAt: (AGORA + UMA_HORA) as Instant,
     endsAt: (AGORA + 3 * UMA_HORA) as Instant,
     timeZone: 'America/Sao_Paulo',
@@ -269,6 +271,12 @@ void describe('a projecao do encontro', () => {
       'instagram_handle',
       'instagram_url',
       'notes',
+      // A ORIGEM (`admin` | `community`), de 20/10/2026. Ela entra nesta
+      // lista porque esta lista E a isca: campo a mais sem alarme e como a
+      // resposta se afasta do documento. **Nao e campo com pessoa** -- o caso
+      // `NAO devolve UUID nem campo com pessoas`, logo abaixo, continua verde,
+      // e `created_by_user_id` segue fora da projecao e fora do SELECT.
+      'origin',
       'place',
       'slug',
       'starts_at',
@@ -519,5 +527,141 @@ void describe('a distancia da agenda por distancia', () => {
     assert.equal(distanciaArredondada(1249), 1200);
     assert.equal(distanciaArredondada(1250), 1300);
     assert.equal(distanciaArredondada(null), null);
+  });
+});
+
+/**
+ * `WEB_BASE_URL` do teste, **com barra no fim de proposito**: o montador tem de
+ * apara-la, e uma base limpa nunca mostraria `//encontro/`.
+ */
+const BASE_DA_WEB = 'https://site.exemplo.invalid/' as AbsoluteUrl;
+const PAGINA_ACESA = { baseDaWeb: BASE_DA_WEB, publicada: true };
+const PAGINA_APAGADA = { baseDaWeb: BASE_DA_WEB, publicada: false };
+const ENDERECO_ESPERADO = 'https://site.exemplo.invalid/encontro/encontro-de-domingo-na-benedito';
+
+void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () => {
+  // -------------------------------------------------------------------------
+  // CONTROLE POSITIVO: sem este caso, todos os `null` abaixo passariam mesmo
+  // com a funcao devolvendo `null` sempre.
+  // -------------------------------------------------------------------------
+  void it('CONTROLE POSITIVO -- com a pagina acesa, o encontro publico futuro TEM link', () => {
+    assert.equal(linkPublicoDoEncontro(encontro(), AGORA, PAGINA_ACESA), ENDERECO_ESPERADO);
+  });
+
+  void it('a barra do fim da base e aparada, e nao duplicada', () => {
+    const link = linkPublicoDoEncontro(encontro(), AGORA, PAGINA_ACESA);
+    assert.ok(
+      link !== null && !link.includes('//encontro/'),
+      `REPROVA: duas barras no endereco (${String(link)}). \`WEB_BASE_URL\` com barra no ` +
+        'fim e configuracao legitima, e o link quebrado so apareceria em producao.',
+    );
+  });
+
+  void it('`happening` TEM link: convidar para o que esta acontecendo agora e o melhor momento', () => {
+    const agora = encontro({
+      startsAt: (AGORA - UMA_HORA) as Instant,
+      endsAt: (AGORA + UMA_HORA) as Instant,
+    });
+    assert.equal(statusDoEncontro(agora, AGORA), 'happening');
+    assert.equal(linkPublicoDoEncontro(agora, AGORA, PAGINA_ACESA), ENDERECO_ESPERADO);
+  });
+
+  // -------------------------------------------------------------------------
+  // ISCA -- O INTERRUPTOR
+  // -------------------------------------------------------------------------
+  void it('ISCA -- interruptor APAGADO nao da link', () => {
+    assert.equal(
+      linkPublicoDoEncontro(encontro(), AGORA, PAGINA_APAGADA),
+      null,
+      'REPROVA: o endereco saiu com `site_page_availability` dizendo que a pagina nao ' +
+        'esta publicada. O produto acabou de por um link morto num grupo de bairro, e ' +
+        'aquela mensagem nao se desfaz com um `UPDATE`.',
+    );
+  });
+
+  void it('ISCA -- pagina NAO PASSADA nao da link (e o caso da agenda)', () => {
+    assert.equal(
+      linkPublicoDoEncontro(encontro(), AGORA, undefined),
+      null,
+      'REPROVA: `share_url` passou a sair onde ninguem pediu a pagina. A agenda e a ' +
+        'busca por distancia chamam a projecao sem ela de proposito.',
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // ISCA (c) -- PRIVADO, CANCELADO E ENCERRADO
+  // -------------------------------------------------------------------------
+  void it('ISCA DE VAZAMENTO -- encontro PRIVADO nao ganha pagina publica, nem com a pagina acesa', () => {
+    assert.equal(
+      linkPublicoDoEncontro(encontro({ visibilidade: 'private' }), AGORA, PAGINA_ACESA),
+      null,
+      'REPROVA: um encontro PRIVADO ganhou endereco publico. Ele sai como teaser para ' +
+        'qualquer chamador (ADR-0027 12.10) e nao tem pagina: um link para ele ' +
+        'entregaria a estranhos o encontro que o produto esconde deles.',
+    );
+  });
+
+  void it('ISCA -- encontro CANCELADO nao ganha link', () => {
+    assert.equal(
+      linkPublicoDoEncontro(encontro({ publicacao: 'cancelled' }), AGORA, PAGINA_ACESA),
+      null,
+      'REPROVA: o link convidou gente para um encontro CANCELADO. Quem abre nao tem ' +
+        'conta, nao tem a agenda e nao tem como descobrir sozinho que aquilo nao vai ' +
+        'acontecer -- ele vai ao lugar na hora marcada e nao encontra ninguem.',
+    );
+  });
+
+  void it('ISCA -- encontro ENCERRADO nao ganha link', () => {
+    const acabou = encontro({
+      startsAt: (AGORA - 5 * UMA_HORA) as Instant,
+      endsAt: (AGORA - 2 * UMA_HORA) as Instant,
+    });
+    assert.equal(statusDoEncontro(acabou, AGORA), 'ended');
+    assert.equal(
+      linkPublicoDoEncontro(acabou, AGORA, PAGINA_ACESA),
+      null,
+      'REPROVA: o link de um encontro que JA TERMINOU continua ativo.',
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // A PROJECAO, que e quem leva o campo para a resposta
+  // -------------------------------------------------------------------------
+  void it('a projecao publica leva `share_url` com a pagina acesa', () => {
+    const projetado = projetarEncontro(encontro(), AGORA, PAGINA_ACESA) as EncontroPublicoProjetado;
+    assert.equal(projetado.share_url, ENDERECO_ESPERADO);
+  });
+
+  void it('ISCA -- a projecao OMITE a chave (e nao manda `undefined`) com a pagina apagada', () => {
+    const projetado = projetarEncontro(encontro(), AGORA, PAGINA_APAGADA);
+    assert.ok(
+      !Object.keys(projetado).includes('share_url'),
+      'REPROVA: a chave `share_url` foi para o objeto com valor `undefined`. ' +
+        '`JSON.stringify` a omitiria, mas o teste de lista permitida varre ' +
+        '`Object.keys`, e uma chave fantasma ali e um achado falso eterno.',
+    );
+  });
+
+  void it('ISCA -- o teaser do privado nao ganha a chave em hipotese nenhuma', () => {
+    const projetado = projetarEncontro(encontro({ visibilidade: 'private' }), AGORA, PAGINA_ACESA);
+    assert.deepEqual(
+      Object.keys(projetado).sort(),
+      ['local_date', 'slug', 'status', 'title', 'visibility'],
+      'REPROVA: o teaser do privado mudou de forma ao receber a pagina. Ele e ' +
+        'construido com cinco propriedades e nao deriva da projecao publica ' +
+        'justamente para que campo novo nao chegue nele.',
+    );
+  });
+
+  void it('ISCA -- o link NAO carrega logradouro nem coordenada, nem com endereco gravado', () => {
+    // O encontro TEM endereco na mao aqui: sem isso nao haveria o que vazar, e
+    // a isca nao seria isca.
+    const comEndereco = encontro({ endereco: 'R. Teodoro Sampaio, 1020' });
+    const link = linkPublicoDoEncontro(comEndereco, AGORA, PAGINA_ACESA);
+    assert.equal(link, ENDERECO_ESPERADO);
+    assert.ok(
+      link !== null && !link.includes('Teodoro') && !link.includes('1020'),
+      'REPROVA: o endereco por extenso entrou no ENDERECO da pagina publica.',
+    );
   });
 });

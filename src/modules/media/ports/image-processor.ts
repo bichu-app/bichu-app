@@ -83,6 +83,56 @@ export interface PedidoDeDerivada {
   readonly escada: readonly number[];
   /** O teto de bytes. O adaptador desce a escada até caber. */
   readonly tetoDeBytes: number;
+  /**
+   * A região que a PESSOA enquadrou, quando ela enquadrou alguma.
+   *
+   * Presente: o adaptador recorta exatamente esta região e reduz para a
+   * geometria pedida, **sem heurística nenhuma**. Ausente: o corte continua
+   * sendo o automático (`sharp.strategy.attention`), que é o comportamento de
+   * sempre — nada do que já está gravado muda de resultado.
+   *
+   * Ignorada quando [altura] está ausente: sem proporção pedida não há corte,
+   * e recortar assim mesmo mudaria em silêncio a imagem de produto da Loja,
+   * que é a única derivada sem corte.
+   */
+  readonly recorte?: RegiaoDoRecorte;
+}
+
+/**
+ * A região escolhida, em FRAÇÕES de 0 a 1 do original **já rotacionado**.
+ *
+ * ## As frações, e por que não pixels
+ *
+ * Quem escolhe a região é uma pessoa arrastando uma moldura sobre uma PRÉVIA
+ * reduzida — 400 dp de tela sobre uma foto de 4000 px. Mandar pixels obrigaria
+ * o cliente a converter, e a conversão é onde nasce o erro de um que ninguém
+ * percebe: a derivada sai um pixel torta e nada acusa. Em fração, o cliente
+ * manda o que mediu e quem converte é quem tem os bytes.
+ *
+ * ## JÁ ROTACIONADO, e esta é a armadilha
+ *
+ * O servidor chama `.rotate()` **antes** de cortar, para aplicar o
+ * `Orientation` do EXIF nos pixels — sem isso uma foto tirada em pé seria
+ * cortada deitada. Então a região precisa ser medida no **mesmo** sistema de
+ * coordenadas: o da imagem depois da rotação, que é a que a pessoa viu na
+ * tela.
+ *
+ * Um cliente que medisse sobre a imagem ANTES da rotação mandaria uma região
+ * com os eixos trocados, e o resultado seria um recorte plausível da parte
+ * errada da foto — **sem erro, sem log, sem nada**. É o defeito mais provável
+ * de toda esta mudança, e é por isso que ele tem caso próprio em
+ * `sharp-image-processor.test.ts`, com uma foto em retrato e EXIF de
+ * rotação de verdade.
+ */
+export interface RegiaoDoRecorte {
+  /** Borda esquerda, 0 a 1. */
+  readonly x: number;
+  /** Borda de cima, 0 a 1. */
+  readonly y: number;
+  /** Largura, maior que 0 e até 1. */
+  readonly w: number;
+  /** Altura, maior que 0 e até 1. */
+  readonly h: number;
 }
 
 export interface Derivada {

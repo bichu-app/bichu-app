@@ -100,6 +100,13 @@ function camposDoSchema(schema) {
   const s = resolver(schema) ?? {};
   const campos = new Map(Object.entries(s.properties ?? {}));
   for (const parte of s.allOf ?? []) for (const [k, v] of camposDoSchema(parte)) campos.set(k, v);
+  // `oneOf`/`anyOf`: a PRIMEIRA variante, exatamente a que `sintetizar` monta.
+  // Nao a UNIAO de todas, de proposito -- unir deixaria um cenario escrever um
+  // campo do ramo errado (`local_date`, do teaser do privado, num corpo
+  // publico) e o mock serviria um corpo que o contrato nao sustenta, que e o
+  // unico erro que esta funcao existe para impedir.
+  const variantes = s.oneOf ?? s.anyOf;
+  if (variantes?.length) for (const [k, v] of camposDoSchema(variantes[0])) campos.set(k, v);
   return campos;
 }
 
@@ -236,7 +243,7 @@ const servidor = createServer(async (req, res) => {
   }
 
   const porChave = CENARIOS[rota.op.operationId] ?? {};
-  const chave = params.code ?? params.token ?? corpo?.token ?? '';
+  const chave = params.code ?? params.token ?? params.eventSlug ?? corpo?.token ?? '';
   const cenario = porChave[`${chave}|${corpo?.new_password ?? ''}`] ?? porChave[chave] ?? porChave['*'];
   if (!cenario) {
     registro.erro = 'sem cenario';

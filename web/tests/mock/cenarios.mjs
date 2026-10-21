@@ -31,6 +31,23 @@ export const TOKENS = {
   senhaLento: 'token-senha-lento-00000000000',
 };
 
+/**
+ * Os `slug` de encontro que o mock conhece (`eventSlug`: 3 a 30 no contrato).
+ *
+ * Um por ESTADO RENDERIZADO de `/encontro/{slug}`, e nao um por situacao: as
+ * seis situacoes em que a pagina nao mostra encontro desenham **a mesma tela**
+ * (emenda 4 do ADR-0017), e medir a mesma tela seis vezes nao mede nada a mais.
+ */
+export const ENCONTROS = {
+  publicado: 'passeio-na-benedito-calixto',
+  // Cai na tela unica, como o privado, o cancelado e o encerrado.
+  indisponivel: 'encontro-que-nao-existe',
+  muitasTentativas: 'encontro-no-limite',
+  foraDoAr: 'encontro-fora-do-ar',
+  lento: 'encontro-lento',
+  tipoInesperado: 'encontro-tipo-inesperado',
+};
+
 export const SENHAS = {
   vazada: 'senha-que-vazou-1234',
   parecida: 'nome-do-tutor-12345',
@@ -75,6 +92,26 @@ export const CENARIOS = {
     [TOKENS.senhaValido]: { status: 200 },
     [TOKENS.senhaVencido]: { slug: 'verification-token-expired' },
     [TOKENS.senhaLento]: { status: 200, atrasoMs: LENTO },
+  },
+  getNetworkEvent: {
+    [ENCONTROS.publicado]: {
+      status: 200,
+      sobrescrever: {
+        title: 'Passeio matinal na Benedito Calixto',
+        summary: 'Volta tranquila pela praça, com parada na sombra.',
+        place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP' },
+        status: 'upcoming',
+        amenities: ['shade', 'benches', 'dog_water_fountain'],
+        bring_items: ['water', 'water_bowl', 'leash', 'poop_bags'],
+      },
+    },
+    // `not-found` e o que o contrato responde para `slug` inexistente,
+    // `pending_review` e `removed` -- os tres com o mesmo corpo.
+    [ENCONTROS.indisponivel]: { slug: 'not-found' },
+    [ENCONTROS.muitasTentativas]: { slug: 'rate-limited', cabecalhos: { 'Retry-After': '600' } },
+    [ENCONTROS.foraDoAr]: { slug: 'internal' },
+    [ENCONTROS.lento]: { status: 200, atrasoMs: LENTO },
+    [ENCONTROS.tipoInesperado]: { slug: 'forbidden', foraDaOperacao: true },
   },
   confirmPasswordReset: {
     [`${TOKENS.senhaValido}|${SENHAS.vazada}`]: { slug: 'weak-password', sobrescrever: { errors: [{ field: 'new_password', code: 'breached' }] } },

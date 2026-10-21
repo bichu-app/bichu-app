@@ -11571,7 +11571,72 @@ export interface components {
              * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
+            origin?: components["schemas"]["NetworkEventOrigin"];
+            /**
+             * Format: uri
+             * @description O endereco da **pagina publica do encontro** no site
+             *     (`{WEB_BASE_URL}/encontro/{slug}`), para o botao de compartilhar
+             *     levar um link que abre para quem **ainda nao tem o app** (decisao do
+             *     cliente de 21/10/2026). E a NONA rota publica do ADR-0017, pela
+             *     emenda 4 daquele documento.
+             *
+             *     **A AUSENCIA DO CAMPO E O INTERRUPTOR, e isso e deliberado.** O
+             *     campo sai **somente** quando `site_page_availability` tem
+             *     `is_published = true` na linha `network_event` (migracao
+             *     `20261020000017`), e por isso a pagina acende **sem APK novo e sem
+             *     deploy da API** -- so um `UPDATE`. A mesma forma de
+             *     `LostCase.share_url`, e pela mesma razao registrada la: um booleano
+             *     ao lado do endereco poderia DISCORDAR do endereco, e ai alguem
+             *     teria de decidir qual dos dois manda. O endereco nao discorda de si
+             *     mesmo, e o aplicativo nao remonta este literal.
+             *
+             *     **Nao sai no encontro privado** -- ele responde
+             *     `NetworkEventPrivateTeaser`, lista fechada de cinco propriedades, e
+             *     nao ha onde o campo caber --, **nem no cancelado, nem no
+             *     encerrado**: convidar um estranho para um encontro que nao vai
+             *     acontecer o manda a um lugar vazio.
+             *
+             *     **Nao sai na agenda nem na busca por distancia**, so no detalhe
+             *     (`getNetworkEvent`): a acao de compartilhar vive na pagina do
+             *     encontro, e vinte enderecos por pagina de lista nao servem a tela
+             *     nenhuma. E por isso que ele NAO esta em `required` -- omitir e
+             *     resposta legitima, e nao contrato quebrado.
+             *
+             *     **O que este endereco NAO carrega:** nenhum identificador interno
+             *     (o `slug` e o endereco publico declarado do encontro, e nao UUID --
+             *     ADR-0010 item 6) e **nenhum logradouro**. `street_address` sai so em
+             *     `getNetworkEventLocation`, com `bearerAuth`, e **nunca** no detalhe
+             *     publico (ADR-0027 item 21.2).
+             */
+            share_url?: string;
         };
+        /**
+         * @description Quem CADASTROU o encontro: `admin` (a equipe, pelo painel) ou
+         *     `community` (uma conta do app, ADR-0025 emenda 3).
+         *
+         *     ## Nao e o autor, e a diferenca e o motivo de este campo existir
+         *
+         *     `created_by_user_id` e `created_by_admin_id` **nunca saem do
+         *     servidor** (ADR-0025 secao 3, ADR-0027 apendice A.4), e
+         *     `portao-colunas-que-nao-saem.ts` varre `src/` pelo nome literal
+         *     delas. Este campo nao os contorna: ele diz a ORIGEM, que e um de dois
+         *     valores fixos, e nao identifica pessoa nenhuma -- nem por nome, nem por
+         *     id, nem por contagem.
+         *
+         *     ## Por que ele passou a sair na leitura publica (20/10/2026)
+         *
+         *     Ate aqui ele existia so em `AdminNetworkEvent`, e o app, sem ter como
+         *     saber a origem, escrevia **"Cadastrado pela equipe do Bichu"
+         *     incondicionalmente** -- inclusive em encontro proposto pela
+         *     comunidade. Era rotulo afirmando autoria que o dado nao provava, a
+         *     mesma classe de defeito que trocou "Organizado" por "Cadastrado" no
+         *     mesmo dia, com o agravante de a afirmacao estar ERRADA.
+         *
+         *     **Opcional, e a ausencia e o comportamento de antes**: cliente que nao
+         *     o entenda continua lendo o encontro como lia.
+         * @enum {string}
+         */
+        NetworkEventOrigin: "admin" | "community";
         /**
          * @description O encontro **privado**, para quem nao tem pedido aprovado: **so titulo e
          *     data** (decisao do cliente, ADR-0027 12.10). **Lista permitida**: estas
@@ -11842,6 +11907,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text: string;
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
@@ -12761,16 +12827,7 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /**
-             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
-             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
-             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
-             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
-             *     e o que faz a fila de moderacao distinguir o que ela esta
-             *     revisando.
-             * @enum {string}
-             */
-            origin: "admin" | "community";
+            origin: components["schemas"]["NetworkEventOrigin"];
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
@@ -12855,6 +12912,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text?: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
@@ -12882,9 +12940,88 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text?: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
         ImageAltText: string;
+        /**
+         * @description A regiao que a PESSOA enquadrou, para o servidor cortar nela em vez de
+         *     escolher sozinho.
+         *
+         *     **Opcional em toda escrita de imagem, e a ausencia e o comportamento de
+         *     sempre**: sem ela, o corte continua saindo de
+         *     `sharp.strategy.attention`, que procura a regiao de maior detalhe.
+         *     Nada do que ja esta gravado muda de resultado.
+         *
+         *     Pedido do cliente em 20/10/2026: *"devemos implementar um recurso de
+         *     ajustar a imagem antes de fazer o crop, pois a maioria esta cortando
+         *     informacao relevante"*. A heuristica persegue ENERGIA (variacao local
+         *     de pixel) e nao significado: num retrato de celular ela desce para a
+         *     folhagem e corta a cabeca do animal.
+         *
+         *     ## Fracoes de 0 a 1, e nunca pixeis
+         *
+         *     Quem escolhe a regiao e uma pessoa arrastando uma moldura sobre uma
+         *     previa reduzida -- 400 dp de tela sobre uma foto de 4000 px. Pedir
+         *     pixeis obrigaria cada cliente (Android, iOS, navegador) a converter, e
+         *     a conversao e onde nasce o erro de um que ninguem percebe: a derivada
+         *     sai um pixel torta e nada acusa.
+         *
+         *     ## ====================================================================
+         *     ## ATENCAO: AS COORDENADAS SAO DA IMAGEM **JA ROTACIONADA**
+         *     ## ====================================================================
+         *
+         *     O servidor chama `.rotate()` **antes** de cortar, para aplicar o
+         *     `Orientation` do EXIF nos pixeis -- sem isso, uma foto tirada em pe
+         *     seria cortada deitada. **Entao a regiao tem de ser medida no mesmo
+         *     sistema de coordenadas: o da imagem DEPOIS da rotacao, que e a que a
+         *     pessoa viu na tela.**
+         *
+         *     Um cliente que medisse sobre a imagem ARMAZENADA mandaria a regiao com
+         *     os eixos trocados, e o resultado seria um recorte plausivel da parte
+         *     errada da foto -- **sem erro, sem log e sem nada**. Nenhum tipo pega
+         *     este engano, e por isso ele tem caso proprio no servidor
+         *     (`sharp-image-processor.test.ts`, "ARMADILHA"), com uma foto em
+         *     retrato e `Orientation: 6` de verdade.
+         *
+         *     Na pratica, para quem escreve cliente: use as dimensoes que a sua
+         *     camada de imagem reporta DEPOIS de aplicar a orientacao (que e o que
+         *     toda biblioteca de UI ja faz ao desenhar), e nunca as do cabecalho do
+         *     arquivo.
+         *
+         *     ## Uma regiao so, para proporcoes diferentes
+         *
+         *     Varias derivadas saem da mesma imagem, e nem todas tem a mesma
+         *     proporcao. A pessoa ajusta **uma vez**, na proporcao principal da
+         *     superficie; as outras saem desta regiao por uma regra fixa (alargar ate
+         *     a proporcao alvo em volta do proprio centro, presa nas bordas), e nunca
+         *     chamando a heuristica de novo.
+         *
+         *     Medido em 20/10/2026: **sete das oito superficies de imagem tem uma
+         *     proporcao so** em todas as derivadas. A capa do encontro e a unica com
+         *     duas (16:9 no banner e no card, 4:3 na miniatura da galeria).
+         *
+         *     ## O que ela NAO faz
+         *
+         *     Nao recorta o original. O arquivo guardado continua inteiro no balde
+         *     privado, e e dele que sai qualquer proporcao futura -- a regiao e
+         *     aplicada na DERIVADA, a cada derivacao.
+         *
+         *     Regiao que estoura a borda e **presa** dentro da imagem, e nao
+         *     recusada: a pessoa enquadrou alguma coisa, e entregar o recorte
+         *     possivel mais proximo e melhor do que recusar a foto por um milesimo de
+         *     arredondamento.
+         */
+        ImageCrop: {
+            /** @description A borda ESQUERDA, em fracao da largura da imagem ja rotacionada. */
+            x: number;
+            /** @description A borda de CIMA, em fracao da altura da imagem ja rotacionada. */
+            y: number;
+            /** @description A LARGURA da regiao, em fracao da largura da imagem ja rotacionada. */
+            w: number;
+            /** @description A ALTURA da regiao, em fracao da altura da imagem ja rotacionada. */
+            h: number;
+        };
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
             /**
              * Format: uuid
@@ -14029,6 +14166,15 @@ export interface components {
          *     do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
          *     esse outro lado.
          *
+         *     **O "por CONSTRUCAO" vale no MURAL, e nao onde este schema for
+         *     reusado.** Em `PublicationComment.author` a pessoa e o autor do
+         *     COMENTARIO, que nao e o autor da publicacao e portanto nao passou pelo
+         *     `WHERE` de `getMyTimeline`: ali o predicado e EXPLICITO, na clausula do
+         *     `JOIN` que le a derivada. Medido em 20/10/2026 -- sem ele, dois
+         *     conhecidos do mesmo amigo recebiam o rosto um do outro, contra o item 2
+         *     da Emenda 5. Reusar este schema numa superficie nova obriga a refazer
+         *     esta pergunta, e nao a repetir esta frase.
+         *
          *     **NAO HA `public_ref`, nao ha `id`, nao ha UUID** (ADR-0010 item 6): o
          *     que identifica a pessoa nesta resposta e o apelido, exatamente como em
          *     `ConnectionPerson`.
@@ -14248,6 +14394,16 @@ export interface components {
              *     definicao da mesma coisa, e a segunda e onde uma correcao falta --
              *     foi assim que `photo_icon_url` quase ganhou um hospedeiro que o
              *     portao nao vigiava.
+             *
+             *     **O PREDICADO DA FOTO AQUI E PROPRIO, e isto nao e detalhe de
+             *     implementacao:** o autor do comentario pode NAO ser conexao de quem
+             *     le -- basta que os dois sejam conexoes do dono da publicacao. O
+             *     `photo_icon_url` deste autor sai **nulo** nesse caso, pelo item 2 da
+             *     Emenda 5 do ADR-0010 (*"a foto nao sai para quem nao e conexao
+             *     aceita"*), e o recorte mora na clausula do `JOIN` que le a derivada
+             *     (ADR-0021). `handle` e `display_name` CONTINUAM saindo: a Emenda 2
+             *     da o nome de outra pessoa a quem nao e conexao dela, e e o apelido
+             *     que endereca o perfil.
              */
             author: components["schemas"]["PublicationAuthor"];
             /**

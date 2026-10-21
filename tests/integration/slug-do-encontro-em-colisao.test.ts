@@ -60,6 +60,7 @@ import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { EncontroDaComunidade } from '../../src/modules/network/application/encontro-da-comunidade.js';
 import { criarNetworkRepository } from '../../src/modules/network/adapters/persistence/kysely-network-repository.js';
 import { registrarRotasDaRede } from '../../src/modules/network/adapters/http/network-routes.js';
+import { paginaNenhumaPublicada } from '../../src/modules/lostfound/ports/disponibilidade-da-pagina.js';
 import { systemClock } from '../../src/shared/time/clock.js';
 import type { AbsoluteUrl, UserId } from '../../src/shared/types/brands.js';
 
@@ -182,6 +183,12 @@ before(async () => {
           ids: criarIdGenerator(() => Date.now()),
           clock: systemClock,
         }),
+        // A pagina publica do encontro nao esta publicada nestes testes: eles
+        // nao falam de compartilhamento, e `paginaNenhumaPublicada` e o dobre
+        // que NUNCA acende -- entao nenhuma expectativa daqui muda por causa de
+        // `share_url` (migracao `20261020000017`).
+        baseDaWeb: 'https://site.exemplo.invalid' as AbsoluteUrl,
+        paginas: paginaNenhumaPublicada,
         contrato,
       });
       pronto();

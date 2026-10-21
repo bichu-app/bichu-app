@@ -34,6 +34,8 @@ export const TIPOS_DE_PROBLEMA = {
   "unsupported-media-type": 415,
   "verification-token-expired": 410,
   "upload-not-received": 409,
+  "photo-not-ready": 409,
+  "photo-rejected": 409,
   "precondition-failed": 412,
   "captcha-rejected": 403,
   "method-not-allowed": 405,

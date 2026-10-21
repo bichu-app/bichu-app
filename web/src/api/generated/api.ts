@@ -8641,6 +8641,58 @@ export interface components {
         Conversation: {
             /** Format: uuid */
             id?: string;
+            /**
+             * Format: uuid
+             * @description O AVISO que abriu esta conversa (`conversations.found_report_id`,
+             *     `NOT NULL UNIQUE` -- um aviso, uma conversa).
+             *
+             *     **Existe para que o TUTOR consiga anexar foto.** O corpo de
+             *     `createFoundReportPhotoUploadIntent` EXIGE `found_report_id`, e o
+             *     tutor nao e o relator do aviso: o aviso nao aparece em
+             *     `listFoundReports` (que e do relator) e `case_id` e o caso de
+             *     perdido, nao o aviso. Sem este campo o tutor tem a autorizacao e
+             *     **nao tem de onde tirar o argumento** -- a simetria da conversa
+             *     mediada ficaria correta no servidor e morta na tela.
+             *
+             *     **`FinderConversation` NAO tem este campo, e nao pode ganhar.** O
+             *     token do achador JA endereca o aviso, e e por isso que
+             *     `createFinderPhotoUploadIntent` nao pede id nenhum. Por-lo la
+             *     entregaria um UUIDv7 -- com o instante de criacao dentro -- a quem
+             *     nao tem conta, que e exatamente o que o SEC-001 proibe.
+             */
+            found_report_id?: string;
+            /**
+             * @description **Uma foto que ESTE chamador enviar chega a ser lida pelo outro
+             *     lado?** Informacao de EXPECTATIVA, nao de permissao: o envio e
+             *     aceito, a mensagem e gravada e o proprio remetente ve a foto.
+             *     O que este campo diz e o ALCANCE.
+             *
+             *     `false` hoje em um caso so: o outro lado e o achador **sem
+             *     conta**. A URL assinada de leitura leva a chave do objeto no
+             *     caminho, e a chave da foto pedida por quem TEM conta leva o
+             *     `found_report_id` dentro -- servi-la entregaria um UUIDv7 a quem
+             *     nao tem conta, que e o que o SEC-001 proibe. Entao a superficie
+             *     do achador sem conta responde `photo_url: null` para a foto do
+             *     tutor.
+             *
+             *     Sem este campo isso e defeito de EXPECTATIVA: o tutor manda a
+             *     foto do pet, nao recebe reacao nenhuma e fica esperando resposta
+             *     de quem nao viu nada. O servidor e o unico que sabe, porque a
+             *     tela nao tem como deduzir.
+             *
+             *     **O sentido contrario FUNCIONA**: a foto do achador sem conta
+             *     chega ao tutor (a chave dela e `found-reports/sem-conta/...`, sem
+             *     identificador), e e o sentido que o aplicativo ja promete em
+             *     texto entregue.
+             *
+             *     `true` quando o achador tem conta, e `true` sempre no dia em que
+             *     a leitura do achador sem conta ganhar um caminho opaco. O campo
+             *     **continua declarado** nesse dia: tira-lo quebraria quem ja o le.
+             *
+             *     **`FinderConversation` nao tem este campo**, pela mesma razao de
+             *     `found_report_id`: aquele lado nao decide nada com ele.
+             */
+            photo_reaches_other_side: boolean;
             /** Format: uuid */
             case_id?: string | null;
             pet_display_name?: string;
@@ -11519,7 +11571,72 @@ export interface components {
              * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
+            origin?: components["schemas"]["NetworkEventOrigin"];
+            /**
+             * Format: uri
+             * @description O endereco da **pagina publica do encontro** no site
+             *     (`{WEB_BASE_URL}/encontro/{slug}`), para o botao de compartilhar
+             *     levar um link que abre para quem **ainda nao tem o app** (decisao do
+             *     cliente de 21/10/2026). E a NONA rota publica do ADR-0017, pela
+             *     emenda 4 daquele documento.
+             *
+             *     **A AUSENCIA DO CAMPO E O INTERRUPTOR, e isso e deliberado.** O
+             *     campo sai **somente** quando `site_page_availability` tem
+             *     `is_published = true` na linha `network_event` (migracao
+             *     `20261020000017`), e por isso a pagina acende **sem APK novo e sem
+             *     deploy da API** -- so um `UPDATE`. A mesma forma de
+             *     `LostCase.share_url`, e pela mesma razao registrada la: um booleano
+             *     ao lado do endereco poderia DISCORDAR do endereco, e ai alguem
+             *     teria de decidir qual dos dois manda. O endereco nao discorda de si
+             *     mesmo, e o aplicativo nao remonta este literal.
+             *
+             *     **Nao sai no encontro privado** -- ele responde
+             *     `NetworkEventPrivateTeaser`, lista fechada de cinco propriedades, e
+             *     nao ha onde o campo caber --, **nem no cancelado, nem no
+             *     encerrado**: convidar um estranho para um encontro que nao vai
+             *     acontecer o manda a um lugar vazio.
+             *
+             *     **Nao sai na agenda nem na busca por distancia**, so no detalhe
+             *     (`getNetworkEvent`): a acao de compartilhar vive na pagina do
+             *     encontro, e vinte enderecos por pagina de lista nao servem a tela
+             *     nenhuma. E por isso que ele NAO esta em `required` -- omitir e
+             *     resposta legitima, e nao contrato quebrado.
+             *
+             *     **O que este endereco NAO carrega:** nenhum identificador interno
+             *     (o `slug` e o endereco publico declarado do encontro, e nao UUID --
+             *     ADR-0010 item 6) e **nenhum logradouro**. `street_address` sai so em
+             *     `getNetworkEventLocation`, com `bearerAuth`, e **nunca** no detalhe
+             *     publico (ADR-0027 item 21.2).
+             */
+            share_url?: string;
         };
+        /**
+         * @description Quem CADASTROU o encontro: `admin` (a equipe, pelo painel) ou
+         *     `community` (uma conta do app, ADR-0025 emenda 3).
+         *
+         *     ## Nao e o autor, e a diferenca e o motivo de este campo existir
+         *
+         *     `created_by_user_id` e `created_by_admin_id` **nunca saem do
+         *     servidor** (ADR-0025 secao 3, ADR-0027 apendice A.4), e
+         *     `portao-colunas-que-nao-saem.ts` varre `src/` pelo nome literal
+         *     delas. Este campo nao os contorna: ele diz a ORIGEM, que e um de dois
+         *     valores fixos, e nao identifica pessoa nenhuma -- nem por nome, nem por
+         *     id, nem por contagem.
+         *
+         *     ## Por que ele passou a sair na leitura publica (20/10/2026)
+         *
+         *     Ate aqui ele existia so em `AdminNetworkEvent`, e o app, sem ter como
+         *     saber a origem, escrevia **"Cadastrado pela equipe do Bichu"
+         *     incondicionalmente** -- inclusive em encontro proposto pela
+         *     comunidade. Era rotulo afirmando autoria que o dado nao provava, a
+         *     mesma classe de defeito que trocou "Organizado" por "Cadastrado" no
+         *     mesmo dia, com o agravante de a afirmacao estar ERRADA.
+         *
+         *     **Opcional, e a ausencia e o comportamento de antes**: cliente que nao
+         *     o entenda continua lendo o encontro como lia.
+         * @enum {string}
+         */
+        NetworkEventOrigin: "admin" | "community";
         /**
          * @description O encontro **privado**, para quem nao tem pedido aprovado: **so titulo e
          *     data** (decisao do cliente, ADR-0027 12.10). **Lista permitida**: estas
@@ -11790,6 +11907,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text: string;
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
@@ -12709,16 +12827,7 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /**
-             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
-             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
-             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
-             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
-             *     e o que faz a fila de moderacao distinguir o que ela esta
-             *     revisando.
-             * @enum {string}
-             */
-            origin: "admin" | "community";
+            origin: components["schemas"]["NetworkEventOrigin"];
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
@@ -12803,6 +12912,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text?: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
@@ -12830,9 +12940,88 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text?: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
         ImageAltText: string;
+        /**
+         * @description A regiao que a PESSOA enquadrou, para o servidor cortar nela em vez de
+         *     escolher sozinho.
+         *
+         *     **Opcional em toda escrita de imagem, e a ausencia e o comportamento de
+         *     sempre**: sem ela, o corte continua saindo de
+         *     `sharp.strategy.attention`, que procura a regiao de maior detalhe.
+         *     Nada do que ja esta gravado muda de resultado.
+         *
+         *     Pedido do cliente em 20/10/2026: *"devemos implementar um recurso de
+         *     ajustar a imagem antes de fazer o crop, pois a maioria esta cortando
+         *     informacao relevante"*. A heuristica persegue ENERGIA (variacao local
+         *     de pixel) e nao significado: num retrato de celular ela desce para a
+         *     folhagem e corta a cabeca do animal.
+         *
+         *     ## Fracoes de 0 a 1, e nunca pixeis
+         *
+         *     Quem escolhe a regiao e uma pessoa arrastando uma moldura sobre uma
+         *     previa reduzida -- 400 dp de tela sobre uma foto de 4000 px. Pedir
+         *     pixeis obrigaria cada cliente (Android, iOS, navegador) a converter, e
+         *     a conversao e onde nasce o erro de um que ninguem percebe: a derivada
+         *     sai um pixel torta e nada acusa.
+         *
+         *     ## ====================================================================
+         *     ## ATENCAO: AS COORDENADAS SAO DA IMAGEM **JA ROTACIONADA**
+         *     ## ====================================================================
+         *
+         *     O servidor chama `.rotate()` **antes** de cortar, para aplicar o
+         *     `Orientation` do EXIF nos pixeis -- sem isso, uma foto tirada em pe
+         *     seria cortada deitada. **Entao a regiao tem de ser medida no mesmo
+         *     sistema de coordenadas: o da imagem DEPOIS da rotacao, que e a que a
+         *     pessoa viu na tela.**
+         *
+         *     Um cliente que medisse sobre a imagem ARMAZENADA mandaria a regiao com
+         *     os eixos trocados, e o resultado seria um recorte plausivel da parte
+         *     errada da foto -- **sem erro, sem log e sem nada**. Nenhum tipo pega
+         *     este engano, e por isso ele tem caso proprio no servidor
+         *     (`sharp-image-processor.test.ts`, "ARMADILHA"), com uma foto em
+         *     retrato e `Orientation: 6` de verdade.
+         *
+         *     Na pratica, para quem escreve cliente: use as dimensoes que a sua
+         *     camada de imagem reporta DEPOIS de aplicar a orientacao (que e o que
+         *     toda biblioteca de UI ja faz ao desenhar), e nunca as do cabecalho do
+         *     arquivo.
+         *
+         *     ## Uma regiao so, para proporcoes diferentes
+         *
+         *     Varias derivadas saem da mesma imagem, e nem todas tem a mesma
+         *     proporcao. A pessoa ajusta **uma vez**, na proporcao principal da
+         *     superficie; as outras saem desta regiao por uma regra fixa (alargar ate
+         *     a proporcao alvo em volta do proprio centro, presa nas bordas), e nunca
+         *     chamando a heuristica de novo.
+         *
+         *     Medido em 20/10/2026: **sete das oito superficies de imagem tem uma
+         *     proporcao so** em todas as derivadas. A capa do encontro e a unica com
+         *     duas (16:9 no banner e no card, 4:3 na miniatura da galeria).
+         *
+         *     ## O que ela NAO faz
+         *
+         *     Nao recorta o original. O arquivo guardado continua inteiro no balde
+         *     privado, e e dele que sai qualquer proporcao futura -- a regiao e
+         *     aplicada na DERIVADA, a cada derivacao.
+         *
+         *     Regiao que estoura a borda e **presa** dentro da imagem, e nao
+         *     recusada: a pessoa enquadrou alguma coisa, e entregar o recorte
+         *     possivel mais proximo e melhor do que recusar a foto por um milesimo de
+         *     arredondamento.
+         */
+        ImageCrop: {
+            /** @description A borda ESQUERDA, em fracao da largura da imagem ja rotacionada. */
+            x: number;
+            /** @description A borda de CIMA, em fracao da altura da imagem ja rotacionada. */
+            y: number;
+            /** @description A LARGURA da regiao, em fracao da largura da imagem ja rotacionada. */
+            w: number;
+            /** @description A ALTURA da regiao, em fracao da altura da imagem ja rotacionada. */
+            h: number;
+        };
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
             /**
              * Format: uuid
@@ -13977,6 +14166,15 @@ export interface components {
          *     do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
          *     esse outro lado.
          *
+         *     **O "por CONSTRUCAO" vale no MURAL, e nao onde este schema for
+         *     reusado.** Em `PublicationComment.author` a pessoa e o autor do
+         *     COMENTARIO, que nao e o autor da publicacao e portanto nao passou pelo
+         *     `WHERE` de `getMyTimeline`: ali o predicado e EXPLICITO, na clausula do
+         *     `JOIN` que le a derivada. Medido em 20/10/2026 -- sem ele, dois
+         *     conhecidos do mesmo amigo recebiam o rosto um do outro, contra o item 2
+         *     da Emenda 5. Reusar este schema numa superficie nova obriga a refazer
+         *     esta pergunta, e nao a repetir esta frase.
+         *
          *     **NAO HA `public_ref`, nao ha `id`, nao ha UUID** (ADR-0010 item 6): o
          *     que identifica a pessoa nesta resposta e o apelido, exatamente como em
          *     `ConnectionPerson`.
@@ -14196,6 +14394,16 @@ export interface components {
              *     definicao da mesma coisa, e a segunda e onde uma correcao falta --
              *     foi assim que `photo_icon_url` quase ganhou um hospedeiro que o
              *     portao nao vigiava.
+             *
+             *     **O PREDICADO DA FOTO AQUI E PROPRIO, e isto nao e detalhe de
+             *     implementacao:** o autor do comentario pode NAO ser conexao de quem
+             *     le -- basta que os dois sejam conexoes do dono da publicacao. O
+             *     `photo_icon_url` deste autor sai **nulo** nesse caso, pelo item 2 da
+             *     Emenda 5 do ADR-0010 (*"a foto nao sai para quem nao e conexao
+             *     aceita"*), e o recorte mora na clausula do `JOIN` que le a derivada
+             *     (ADR-0021). `handle` e `display_name` CONTINUAM saindo: a Emenda 2
+             *     da o nome de outra pessoa a quem nao e conexao dela, e e o apelido
+             *     que endereca o perfil.
              */
             author: components["schemas"]["PublicationAuthor"];
             /**
@@ -17414,6 +17622,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * @description A FOTO, opcional, pelo `upload_ref` que
+                     *     `createFinderPhotoUploadIntent` devolveu.
+                     *
+                     *     **Opaco, e nao o `upload_id` do outro lado.** Quem chama
+                     *     aqui nao tem conta, e o `id` da intencao e UUIDv7:
+                     *     carrega o instante de criacao e nao sai para quem nao tem
+                     *     conta (SEC-001). Mesma referencia que
+                     *     `PATCH /v1/finder/found-report` aceita.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava. O trabalhador reescreve a
+                     *     imagem do zero, sem metadado nenhum, grava a derivada em
+                     *     balde privado e **substitui o original**, que e a copia
+                     *     que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A referencia tem de ser do **mesmo aviso** deste token. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma referencia que nao existe.
+                     */
+                    photo_upload_ref?: string;
                 };
             };
         };
@@ -17429,6 +17667,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
              *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
@@ -17864,6 +18117,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * Format: uuid
+                     * @description A FOTO, opcional, pelo `upload_id` que
+                     *     `createFoundReportPhotoUploadIntent` devolveu.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava -- e quem acha costuma achar
+                     *     perto de onde mora. O trabalhador confere os BYTES,
+                     *     reescreve a imagem do zero sem metadado nenhum, grava a
+                     *     derivada em balde privado e **substitui o original**, que
+                     *     e a copia que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A intencao tem de ser do **mesmo aviso** desta conversa. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma intencao que nao existe.
+                     *
+                     *     O teto de tres fotos por aviso (SEC-009, `lifetime`) e
+                     *     **compartilhado** entre o tutor e o achador: ele conta
+                     *     intencoes do AVISO, nao de cada pessoa.
+                     */
+                    photo_upload_id?: string;
                 };
             };
         };
@@ -17879,6 +18162,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Conversa encerrada ou bloqueada. */
             410: {
                 headers: {

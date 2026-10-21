@@ -88,6 +88,11 @@ const CAMPOS_PROIBIDOS = new Set([
   'street_number',
   'house_number',
   // ---------------------------------------------------------------------
+  // AS DUAS ADICOES DE 21/10/2026 SOBREVIVEM A UNIAO, e isto foi conferido
+  // nome por nome. Duas frentes acrescentaram campo a esta lista no MESMO dia e
+  // pelo MESMO motivo de fundo -- a comparacao e por nome EXATO, e um nome
+  // vizinho nao cobre o outro. Perder uma das duas na mescla reabriria o buraco
+  // que ela fechou, em silencio e com o portao verde.
   // `complement` entrou em 21/10/2026, junto com a decisao do cliente que
   // abriu `postal_code`, `street`, `street_number` e `complement` em
   // `DirectoryEntryDetail` -- operacao COM conta, que este portao nao
@@ -105,6 +110,31 @@ const CAMPOS_PROIBIDOS = new Set([
   // olhando so operacao alcancavel sem conta, e nenhuma operacao de hoje
   // declara `complement` sem conta. A isca de granularidade cobra as quatro.
   'complement',
+  // `street_address` ENTROU EM 21/10/2026, e a ausencia dele era um buraco
+  // MEDIDO, nao teorico.
+  //
+  // A comparacao desta lista e **por nome exato** (ver o cabecalho do
+  // `CAMPOS_PROIBIDOS`), de proposito. Mas `network_events.street_address` se
+  // chama exatamente isso, e nao `street` nem `address`: ele atravessava as
+  // duas entradas vizinhas sem um achado. Entao, antes desta linha, o portao
+  // APROVAVA um `street_address` acrescentado a `NetworkEventPublic` -- que e
+  // resposta de `getNetworkEvent`, operacao de autenticacao OPCIONAL e
+  // portanto publica para este portao.
+  //
+  // O ADR-0027 item 21.2 e literal: o endereco por extenso do encontro sai
+  // **so** em `getNetworkEventLocation`, com `bearerAuth`, e "nunca na agenda,
+  // no detalhe publico, no teaser nem nos detalhes do privado". Trocar essa
+  // regra para publica exige, no mesmo commit, o campo em `NetworkEventPublic`
+  // e `NetworkEventPrivateDetails` e uma emenda naquele ADR -- e, agora,
+  // tirar o nome daqui, que e o terceiro lugar onde a decisao aparece.
+  //
+  // A pagina publica do encontro (`/encontro/{slug}`, emenda 4 do ADR-0017) e
+  // o motivo de isto virar urgente: ela e lida por quem nao tem conta, e o
+  // `street_address` indo para ela e o endereco do encontro indo para um grupo
+  // de WhatsApp.
+  'street_address',
+  'address_line',
+  'address_line1',
 ]);
 
 const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);

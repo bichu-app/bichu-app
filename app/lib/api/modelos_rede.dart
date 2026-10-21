@@ -61,6 +61,35 @@ enum SituacaoDoEncontro {
   }
 }
 
+/// `#/components/schemas/NetworkEventOrigin` do contrato.
+///
+/// Quem CADASTROU o encontro: a equipe do Bichu ou uma conta do app.
+///
+/// **Nao e o autor, e nao ha como ele ser.** `created_by_user_id` nunca sai
+/// do servidor (ADR-0025 secao 3, ADR-0027 apendice A.4), e este campo nao o
+/// contorna: sao dois valores fixos, e nenhum deles identifica pessoa.
+///
+/// [porCodigo] devolve **nulo** para codigo desconhecido, como
+/// [SituacaoDoEncontro], e a tela trata o nulo como "nao sei": ela deixa de
+/// afirmar a origem em vez de chutar uma. Encontro gravado antes de o campo
+/// existir chega sem ele, e e exatamente esse o caso.
+enum OrigemDoEncontro {
+  equipe('admin'),
+  comunidade('community');
+
+  const OrigemDoEncontro(this.codigo);
+
+  /// O codigo de fio, e a UNICA copia dele.
+  final String codigo;
+
+  static OrigemDoEncontro? porCodigo(Object? codigo) {
+    for (final o in OrigemDoEncontro.values) {
+      if (o.codigo == codigo) return o;
+    }
+    return null;
+  }
+}
+
 /// `#/components/schemas/NetworkEventWhen` do contrato, sem `all`.
 ///
 /// `all` nao e usado por aba nenhuma: a agenda nunca mistura passado e futuro
@@ -817,6 +846,13 @@ abstract class ConteudoDoEncontro {
   List<ItemParaLevar> get oQueLevar;
   String? get observacoes;
 
+  /// Quem cadastrou o encontro, ou **nulo** quando o servidor nao disse.
+  ///
+  /// Nulo e estado previsto e nao erro: o campo entrou em 20/10/2026 e e
+  /// opcional no contrato. Quem o le decide o que fazer com a ausencia -- a
+  /// ficha deixa de afirmar a origem, em vez de afirmar a errada.
+  OrigemDoEncontro? get origem;
+
   /// `ticket_url`: onde se compra o convite. Publico (ADR-0027 item 22). Nulo
   /// quando nao ha, e a tela entao nao desenha a moldura.
   Uri? get urlDoConvite;
@@ -825,6 +861,22 @@ abstract class ConteudoDoEncontro {
   /// handle. Nula sem handle **ou sem base configurada no ambiente**
   /// (`INSTAGRAM_PROFILE_BASE_URL`): nos dois casos a tela nao desenha nada.
   Uri? get urlDoInstagram;
+
+  /// `share_url`: o endereco da **pagina publica do encontro** no site, para o
+  /// compartilhamento levar um link que abre para quem **ainda nao tem o app**
+  /// (decisao do cliente de 21/10/2026, emenda 4 do ADR-0017).
+  ///
+  /// **Nulo e o estado normal, e o nulo e o INTERRUPTOR.** O servidor omite o
+  /// campo enquanto `site_page_availability` disser que a pagina nao esta
+  /// publicada (migracao `20261020000017`), e tambem no encontro cancelado e no
+  /// encerrado. Por isso a pagina acende **sem APK novo**: nada aqui precisa
+  /// mudar no dia em que ela subir.
+  ///
+  /// **O aplicativo NUNCA monta este endereco.** Nao ha `'/encontro/' + slug`
+  /// em lugar nenhum do app, de proposito: um literal montado aqui viraria link
+  /// morto no dia em que o site mudasse de forma, e o binario instalado nao se
+  /// corrige. Quem decide o endereco e quem serve a pagina.
+  Uri? get linkDaPagina;
 
   DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
 
@@ -919,8 +971,10 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
     required this.estrutura,
     required this.oQueLevar,
     required this.observacoes,
+    required this.origem,
     required this.urlDoConvite,
     required this.urlDoInstagram,
+    required this.linkDaPagina,
   });
 
   @override
@@ -957,6 +1011,11 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
   final List<ItemParaLevar> oQueLevar;
   @override
   final String? observacoes;
+  @override
+  final Uri? linkDaPagina;
+  @override
+  @override
+  final OrigemDoEncontro? origem;
   @override
   final Uri? urlDoConvite;
   @override
@@ -1013,8 +1072,17 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
+      // Ausente no encontro gravado antes de 20/10/2026, e `porCodigo`
+      // devolve nulo tambem para valor desconhecido: a tela nao afirma origem
+      // que nao entende.
+      origem: OrigemDoEncontro.porCodigo(json['origin']),
       urlDoConvite: _link(json['ticket_url']),
       urlDoInstagram: _link(json['instagram_url']),
+      // AUSENTE enquanto a pagina do encontro nao estiver publicada, e ausente
+      // tambem no cancelado e no encerrado: e o servidor que decide, e o
+      // aplicativo so le. `_link` devolve nulo para ausente e para o que nao e
+      // URI, que e o mesmo tratamento de `ticket_url`.
+      linkDaPagina: _link(json['share_url']),
     );
   }
 }
@@ -1087,6 +1155,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
     required this.estrutura,
     required this.oQueLevar,
     required this.observacoes,
+    required this.origem,
     required this.urlDoConvite,
     required this.urlDoInstagram,
   });
@@ -1125,6 +1194,23 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   final List<ItemParaLevar> oQueLevar;
   @override
   final String? observacoes;
+
+  /// **Sempre nulo, e cravado em vez de lido.** Encontro privado **nao tem
+  /// pagina publica** (ADR-0027 12.10): quem nao foi aprovado ve so o teaser, e
+  /// publicar uma pagina aberta de um encontro privado entregaria a estranhos o
+  /// lugar e a hora que o produto esconde deles. Ler o campo do corpo aqui
+  /// faria a tela depender de o servidor nunca mandar o campo; cravar `null`
+  /// faz o vazamento impossivel neste caminho, mesmo que um dia ele venha.
+  ///
+  /// (O nome do campo nao aparece como leitura nesta classe de proposito: o
+  /// portao de conformidade do app anda pelo corpo da classe procurando
+  /// leituras, e ele conta uma mencao em comentario como leitura -- com razao,
+  /// porque e assim que ele pega a leitura que alguem comentou e esqueceu.)
+  @override
+  Uri? get linkDaPagina => null;
+  @override
+  @override
+  final OrigemDoEncontro? origem;
   @override
   final Uri? urlDoConvite;
   @override
@@ -1178,6 +1264,10 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
+      // Ausente no encontro gravado antes de 20/10/2026, e `porCodigo`
+      // devolve nulo tambem para valor desconhecido: a tela nao afirma origem
+      // que nao entende.
+      origem: OrigemDoEncontro.porCodigo(json['origin']),
       urlDoConvite: _link(json['ticket_url']),
       urlDoInstagram: _link(json['instagram_url']),
     );

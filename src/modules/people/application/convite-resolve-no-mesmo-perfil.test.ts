@@ -57,6 +57,15 @@ const ANA_VISIVEL: PessoaVisivel = {
   publicRef: 'refAnaBairro0000000001',
   displayName: 'Ana',
   petsCount: 2,
+  // CODIGO DE FIO DA ONDA 4: `canalVerificado` nasceu OBRIGATORIO em
+  // `PessoaVisivel` na frente do selo, e esta bancada veio da frente do
+  // convite -- intersecao de linhas vazia, mescla limpa, `tsc` reprovando.
+  //
+  // `false` e nao `true`, pela regra que a propria frente do selo escreveu
+  // para as bancadas dela: conta que o caso nunca mencionou nao e conta
+  // validada, e um padrao `true` faria as iscas de "sem canal confirmado o
+  // selo nao aparece" ficarem verdes sem medir. Este caso nao fala de selo.
+  canalVerificado: false,
 };
 
 /**

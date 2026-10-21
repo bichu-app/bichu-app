@@ -35,6 +35,13 @@ Map<String, dynamic> encontroPublico({
   String? endsAt = '2026-10-03T14:00:00Z',
   String timeZone = 'America/Sao_Paulo',
   String status = 'upcoming',
+
+  /// `origin`: quem CADASTROU, `admin` ou `community`. Nunca o autor.
+  ///
+  /// O padrao e `admin` porque e o `DEFAULT` da coluna e o caso comum. Passe
+  /// a string vazia para montar um encontro **sem o campo**, que e o encontro
+  /// gravado antes de 20/10/2026.
+  String origin = 'admin',
   List<Map<String, dynamic>> images = const <Map<String, dynamic>>[],
   /// `cover_banner_url`: a derivada de 1280 px da capa, do detalhe de borda a
   /// borda. Separada de `images` porque ela nao e campo de
@@ -53,6 +60,15 @@ Map<String, dynamic> encontroPublico({
   String? ticketUrl,
   String? instagramHandle,
   String? instagramUrl,
+
+  /// `share_url`: o endereco da pagina publica do encontro no site.
+  ///
+  /// **Nulo por padrao, e o nulo e o INTERRUPTOR.** O servidor OMITE o campo
+  /// enquanto `site_page_availability` disser que a pagina nao esta publicada
+  /// (migracao `20261020000017`), e tambem no cancelado e no encerrado. O
+  /// padrao do fixture e o estado medido em 21/10/2026: apagado -- entao nenhum
+  /// caso que nao fale de compartilhamento ve link por descuido.
+  String? shareUrl,
 }) {
   return <String, dynamic>{
     'slug': slug,
@@ -69,6 +85,9 @@ Map<String, dynamic> encontroPublico({
     'time_zone': timeZone,
     'status': status,
     'visibility': 'public',
+    // Ausente de proposito quando vazio: o campo e OPCIONAL no contrato, e o
+    // encontro gravado antes dele chega sem ele.
+    if (origin.isNotEmpty) 'origin': origin,
     'cover_image_url': images.isEmpty ? null : images.first['url'],
     // `cover_banner_url`: a derivada de 1280 px da capa, para o detalhe de
     // borda a borda. Nula sem imagem, como no servidor.
@@ -87,6 +106,10 @@ Map<String, dynamic> encontroPublico({
     // O servidor monta a URL com a base da configuracao; o teste a recebe
     // pronta, como o app a recebe.
     'instagram_url': instagramUrl,
+    // AUSENTE quando nulo, e nao `null`: o servidor nao manda a chave com o
+    // interruptor apagado, e um fixture que mandasse `'share_url': null`
+    // testaria uma resposta que o servidor nunca produz.
+    'share_url': ?shareUrl,
   };
 }
 

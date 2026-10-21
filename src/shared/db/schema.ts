@@ -2619,8 +2619,17 @@ export interface AppVersionPolicyTable {
  * desfaz com um `UPDATE`.
  */
 export interface SitePageAvailabilityTable {
-  /** A pagina, dominio fechado pelo `CHECK`: a mao humana escreve aqui. */
-  page: 'lost_case' | 'poster';
+  /**
+   * A pagina, dominio fechado pelo `CHECK`: a mao humana escreve aqui.
+   *
+   * `network_event` entrou pela migracao `20261020000017` (a pagina publica do
+   * encontro, emenda 4 do ADR-0017). Esta uniao tem que casar com o `CHECK` da
+   * coluna **e** com `PaginaPublica` em
+   * `lostfound/ports/disponibilidade-da-pagina.ts`: as tres sao a mesma lista,
+   * e divergencia aqui aparece como leitura que nunca acha linha -- ou seja,
+   * pagina escondida para sempre, calada.
+   */
+  page: 'lost_case' | 'poster' | 'network_event';
   /**
    * A pagina serve 200 com as marcas de Open Graph? **Somente `true` explicito
    * acende a acao de compartilhar.**
