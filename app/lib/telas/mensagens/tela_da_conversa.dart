@@ -89,6 +89,7 @@ import '../../widgets/saida_da_tela.dart';
 import 'area_de_mensagens.dart';
 import 'foto_na_barra_de_escrever.dart';
 import 'textos_da_foto_na_conversa.dart';
+import 'titulo_da_conversa.dart';
 
 class TelaDaConversa extends StatefulWidget {
   const TelaDaConversa({
@@ -668,18 +669,35 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   Widget build(BuildContext context) {
     final conversa = _conversa;
     final outro = conversa?.outroLadoVistoPor(PapelNaConversa.tutor);
-    // O TITULO E NOME + PET, e nunca o id.
-    final titulo = conversa == null
+    // O TITULO E NOME + PET, e nunca o id. **Em DUAS linhas desde 20/10/2026**:
+    // a composicao de uma linha so (`'$nome · $pet'`, em `headlineSmall`) pedia
+    // **442,16 dp** contra **287,00 dp** de vao real em 375 dp -- cortava por
+    // 155,16 dp, **hoje e sem nenhum selo na barra**, e cortava tambem em 320 e
+    // em 412. Quem cede e o pet, e o motivo esta no cabecalho de
+    // `titulo_da_conversa.dart`; os numeros, no de
+    // `app/test/mensagens/titulo_da_conversa_test.dart`, que os mede.
+    final nomeDoOutro = conversa == null ? null : outro?.displayName.trim();
+    final nomeNoTitulo = nomeDoOutro == null || nomeDoOutro.isEmpty
         ? TextosDasMensagens.titulo
-        : '${outro?.displayName ?? ''} · ${conversa.petDisplayName}';
+        : nomeDoOutro;
+    // O pet so vai para o titulo quando ha conversa carregada: antes dela a
+    // barra mostra o rotulo da secao, e um pet sem pessoa nao e contexto.
+    final petNoTitulo = conversa?.petDisplayName;
 
     return Scaffold(
       appBar: AppBar(
+        // A ALTURA SAI DA MEDICAO do texto real, e nao de um numero fixo: com
+        // `toolbarHeight` de padrao a segunda linha transborda a 200% de escala.
+        toolbarHeight: TituloDaConversa.alturaDaBarra(
+          context,
+          nome: nomeNoTitulo,
+          pet: petNoTitulo,
+        ),
         leading: const SaidaDaTela(
           tipo: TipoDeSaida.voltar,
           escape: RotasDeMensagens.area,
         ),
-        title: Text(titulo),
+        title: TituloDaConversa(nome: nomeNoTitulo, pet: petNoTitulo),
       ),
       body: SafeArea(
         child: Column(

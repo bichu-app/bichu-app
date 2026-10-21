@@ -689,6 +689,116 @@ void describe('CURTIR E COMENTAR -- o recorte e UM, e a contagem sai das LINHAS'
     );
   });
 
+  void it('EMENDA 5 item 2 -- a foto do autor DO COMENTARIO exige CONEXAO ACEITA no JOIN', () => {
+    // **ESTE CASO NASCEU DE UM CORPO MEDIDO, em 20/10/2026.** A consulta lia a
+    // foto do autor do comentario pelo mesmo `JOIN` nu da linha do tempo, com o
+    // comentario de que o predicado estava "no `WHERE`, pela mesma razao do
+    // irmao". A razao nao atravessa: na linha do tempo o `WHERE` fala do autor
+    // DA PUBLICACAO; aqui ele resolve a PUBLICACAO, e o autor do COMENTARIO e
+    // outra pessoa.
+    //
+    // O que saia: A conexao de B, C conexao de B, A e C nao conexoes, C comenta
+    // -- e A recebia `photo_icon_url` de C. Emenda 5 item 2: *"a foto nao sai
+    // para quem nao e conexao aceita"*.
+    //
+    // `tests/integration/foto-do-comentario-so-para-conexao.test.ts` e o irmao
+    // de integracao: ele le o CORPO. Este le onde o predicado mora.
+    const conferir = (texto: string): void => {
+      assert.match(texto, /uc\.state = 'accepted'/, 'o predicado de ACEITE saiu do JOIN da foto');
+      assert.match(
+        texto,
+        /uc\.requester_user_id = k\.author_user_id AND uc\.addressee_user_id = \$\d+::uuid/,
+        'um sentido do par saiu do predicado da foto do autor do comentario',
+      );
+      assert.match(
+        texto,
+        /uc\.requester_user_id = \$\d+::uuid AND uc\.addressee_user_id = k\.author_user_id/,
+        'o OUTRO sentido do par saiu: a conexao e simetrica, e quem pediu nao decide quem ve',
+      );
+      assert.match(
+        texto,
+        /conta_habilitada\(uc\.requester_user_id\)[\s\S]*conta_habilitada\(uc\.addressee_user_id\)/,
+        'as duas pontas da aresta precisam estar habilitadas',
+      );
+      assert.match(
+        texto,
+        /k\.author_user_id = \$\d+::uuid\s*\n?\s*OR EXISTS/,
+        'o ramo do PROPRIO autor saiu: quem comenta veria o proprio cartao sem rosto',
+      );
+    };
+    conferir(sqlDo('comentarios'));
+    // AS TRES MUTACOES, e cada uma e um jeito de o predicado parecer estar la.
+    aMutacaoTemDeReprovar(
+      conferir,
+      sqlDo('comentarios').replace("uc.state = 'accepted'", "uc.state = 'pending'"),
+      'a conferencia nao enxerga `pending` no lugar de `accepted`',
+    );
+    aMutacaoTemDeReprovar(
+      conferir,
+      sqlDo('comentarios').replace(
+        /OR \(uc\.requester_user_id = \$\d+::uuid AND uc\.addressee_user_id = k\.author_user_id\)/,
+        '',
+      ),
+      'a conferencia nao enxerga UM sentido do par removido',
+    );
+    aMutacaoTemDeReprovar(
+      conferir,
+      sqlDo('comentarios').replace('AND conta_habilitada(uc.addressee_user_id)', ''),
+      'a conferencia nao enxerga `conta_habilitada` de UMA ponta removida',
+    );
+  });
+
+  void it('EMENDA 5 item 2 -- o predicado mora no JOIN DA FOTO, e nao no WHERE da lista', () => {
+    // **A DISTINCAO E O PRODUTO, e nao estilo.** Com o predicado no `WHERE`, o
+    // comentario de quem nao e conexao de quem le DESAPARECERIA -- a conversa na
+    // publicacao de um amigo comum ficaria pela metade e `comment_count`
+    // divergiria da lista. Nada decidiu isso. O que a Emenda 5 item 2 fecha e a
+    // FOTO, e e no `JOIN` dela que o recorte entra.
+    const sql = sqlDo('comentarios');
+    const inicio = sql.indexOf('left join "catalog_images" as "fa"');
+    assert.ok(
+      inicio >= 0,
+      'o JOIN da foto do autor do comentario nao foi achado: o alias `fa` mudou e este caso ficou cego',
+    );
+    const fim = sql.indexOf(' where ');
+    assert.ok(fim > inicio, 'o SQL nao tem `where` depois do JOIN da foto: o corte ficaria cego');
+    const joinDaFoto = sql.slice(inicio, fim);
+    assert.ok(
+      joinDaFoto.includes('photo_image_id'),
+      'o recorte nao pegou o JOIN da foto: este caso ficaria cego',
+    );
+    assert.ok(
+      joinDaFoto.includes('user_connections'),
+      'o predicado de conexao saiu do JOIN da foto: dois conhecidos do mesmo amigo voltam a se ver',
+    );
+    // E a CLAUSULA da lista continua SEM ele: o comentario de nao-conexao fica.
+    const clausula = sql.slice(fim);
+    assert.ok(
+      !clausula.includes('user_connections'),
+      'o predicado de conexao entrou no WHERE: o comentario de quem nao e conexao DESAPARECERIA ' +
+        'da publicacao do amigo comum, e `comment_count` divergiria da lista',
+    );
+  });
+
+  void it('CONTRAPESO -- a leitura de comentario NAO esconde o NOME de quem nao e conexao', () => {
+    // **Campo a menos reprova tanto quanto campo a mais.** Um conserto que
+    // escondesse o autor junto com a foto deixaria o comentario anonimo numa
+    // conversa entre conhecidos -- e a Emenda 2 da o NOME de outra pessoa a quem
+    // nao e conexao dela. O apelido vai junto porque e ele que endereca o perfil
+    // (ADR-0010 item 6, nao emendado nesse ponto).
+    const sql = sqlDo('comentarios');
+    assert.match(sql, /"?a"?\."?display_name"? as "?display_name"?/);
+    assert.match(sql, /"?h"?\."?handle"? as "?handle"?/);
+    const joinDoApelido = sql.slice(
+      sql.indexOf('left join "handles" as "h"'),
+      sql.indexOf('left join "catalog_images" as "fa"'),
+    );
+    assert.ok(
+      !joinDoApelido.includes('user_connections'),
+      'o apelido ganhou predicado de conexao: a Emenda 2 nao o fecha, e o perfil e enderecado por ele',
+    );
+  });
+
   void it('ISCA -- apagar comentario tem os DOIS caminhos na clausula, e nenhum acima dela', () => {
     // **ESTE CASO MUDOU DE AFIRMACAO EM 20/10/2026.** Ele dizia que SO o autor
     // do comentario apagava, e que o dono da publicacao nao -- e aquilo era o

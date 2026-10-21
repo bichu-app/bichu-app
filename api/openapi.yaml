@@ -19911,6 +19911,15 @@ components:
         do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
         esse outro lado.
 
+        **O "por CONSTRUCAO" vale no MURAL, e nao onde este schema for
+        reusado.** Em `PublicationComment.author` a pessoa e o autor do
+        COMENTARIO, que nao e o autor da publicacao e portanto nao passou pelo
+        `WHERE` de `getMyTimeline`: ali o predicado e EXPLICITO, na clausula do
+        `JOIN` que le a derivada. Medido em 20/10/2026 -- sem ele, dois
+        conhecidos do mesmo amigo recebiam o rosto um do outro, contra o item 2
+        da Emenda 5. Reusar este schema numa superficie nova obriga a refazer
+        esta pergunta, e nao a repetir esta frase.
+
         **NAO HA `public_ref`, nao ha `id`, nao ha UUID** (ADR-0010 item 6): o
         que identifica a pessoa nesta resposta e o apelido, exatamente como em
         `ConnectionPerson`.
@@ -20149,6 +20158,16 @@ components:
             definicao da mesma coisa, e a segunda e onde uma correcao falta --
             foi assim que `photo_icon_url` quase ganhou um hospedeiro que o
             portao nao vigiava.
+
+            **O PREDICADO DA FOTO AQUI E PROPRIO, e isto nao e detalhe de
+            implementacao:** o autor do comentario pode NAO ser conexao de quem
+            le -- basta que os dois sejam conexoes do dono da publicacao. O
+            `photo_icon_url` deste autor sai **nulo** nesse caso, pelo item 2 da
+            Emenda 5 do ADR-0010 (*"a foto nao sai para quem nao e conexao
+            aceita"*), e o recorte mora na clausula do `JOIN` que le a derivada
+            (ADR-0021). `handle` e `display_name` CONTINUAM saindo: a Emenda 2
+            da o nome de outra pessoa a quem nao e conexao dela, e e o apelido
+            que endereca o perfil.
         mine:
           type: boolean
           description: |

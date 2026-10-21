@@ -63,6 +63,12 @@
  * **`construtorDasMinhasPublicacoes` continua sem ler foto de pessoa**, e a
  * omissão é o item 8 da Emenda 5: quem lê aquela lista é o autor, e repetir a
  * própria foto ali seria uma terceira superfície dela sem consumidor.
+ *
+ * **E "por construção" VALE SÓ AQUI.** Em `construtorDosComentarios` o autor da
+ * foto é o autor do COMENTÁRIO, que não é o autor da publicação e portanto nunca
+ * passou pelo `WHERE` desta consulta — lá o predicado é explícito, e o
+ * cabeçalho daquela função registra o corpo medido em 20/10/2026 que fez a
+ * diferença aparecer. Transpor esta frase para lá foi o defeito.
  */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
@@ -432,6 +438,53 @@ export function construtorDaPublicacaoVisivel(
  *
  * **O recorte da PUBLICACAO nao se repete aqui**: quem chama esta consulta ja
  * resolveu o alvo por `construtorDaPublicacaoVisivel`, e recebe o `id` interno.
+ *
+ * ## A FOTO DO AUTOR DO COMENTARIO TEM PREDICADO PROPRIO, e aqui ele NAO e
+ * ## satisfeito por construcao
+ *
+ * **Medido em 20/10/2026, contra o Postgres, e consertado no mesmo dia.** Esta
+ * consulta lia a foto do autor do comentario pelo mesmo `LEFT JOIN` nu da linha
+ * do tempo, com o comentario de que o predicado de conexao estava "no `WHERE`,
+ * pela mesma razao do irmao". **A razao nao atravessa.** Na linha do tempo o
+ * `WHERE` fala do autor DA PUBLICACAO, que e o mesmo de quem a foto sai; aqui o
+ * `WHERE` resolve a PUBLICACAO, e o autor do COMENTARIO e outra pessoa, que
+ * nunca passou por aquele recorte.
+ *
+ * O estado que isso abria -- corpo medido, nao hipotese:
+ *
+ *   A e conexao de B. C e conexao de B. **A e C nao sao conexoes.**
+ *   C comenta na publicacao de B. A abria a lista e recebia
+ *   `photo_icon_url` de C.
+ *
+ * E **Emenda 5 item 2 do ADR-0010**: *"a foto nao sai para quem nao e conexao
+ * aceita"*. O argumento de que o Mural satisfaz a Emenda 3 *"por construcao"*
+ * cobre `getMyTimeline`, e a propria Emenda 5 existe porque *"satisfazer o
+ * criterio nao e estar nomeado"*.
+ *
+ * **Entao o predicado entra no `JOIN`, e esta copia nao e a segunda de nada**: a
+ * forma e a de `CONEXAO_ACEITA_ENTRE` em
+ * `messaging/adapters/persistence/kysely-conversation-repository.ts`, que existe
+ * porque a conversa mediada tem a mesma propriedade -- o outro lado PODE nao ser
+ * conexao. Ele fica no `JOIN` e nao num `if` da projecao (ADR-0021): a coluna
+ * chega nula, e a consulta que traria a foto de quem nao devia **nao existe**.
+ *
+ * **`NOT bloqueio_entre` NAO se repete dentro deste `JOIN`**, e a ausencia e
+ * conta: a linha inteira do comentario de um par bloqueado ja cai no `WHERE`
+ * abaixo, entao nao ha o que decorar. Repeti-lo aqui seria a segunda copia de um
+ * predicado que a consulta ja aplica uma vez.
+ *
+ * ## O QUE NAO FOI RESTRINGIDO, e por que
+ *
+ * **`handle` e `display_name` continuam saindo para nao-conexao.** A Emenda 2 da
+ * a quem NAO e conexao o nome de outra pessoa (`getPersonProfile`), e o perfil e
+ * enderecado pelo apelido -- o item 6 do ADR-0010 nao foi emendado nesse ponto.
+ * Esconder o nome deixaria um comentario anonimo numa conversa entre conhecidos,
+ * que ninguem decidiu. O que a Emenda 5 item 2 fecha e a FOTO, e e ela que fecha
+ * aqui.
+ *
+ * **O comentario em si continua visivel.** Sumir com o comentario de quem nao e
+ * conexao de quem le quebraria a conversa na publicacao de um amigo comum e
+ * faria `comment_count` divergir da lista -- e nenhuma emenda pede isso.
  */
 export function construtorDosComentarios(
   db: Kysely<Database>,
@@ -446,14 +499,35 @@ export function construtorDosComentarios(
       junta.onRef('h.user_id', '=', 'a.id').on('h.kind', '=', 'pessoa'),
     )
     // A foto do autor do COMENTARIO, pela Emenda 5: e a mesma pessoa, o mesmo
-    // schema (`PublicationAuthor`) e a mesma derivada. Sem predicado de conexao
-    // no `JOIN`, pela mesma razao do irmao da linha do tempo.
+    // schema (`PublicationAuthor`) e a mesma derivada.
+    //
+    // **COM predicado de conexao no `JOIN`, e ler o cabecalho antes de tira-lo:**
+    // o `WHERE` desta consulta resolve a PUBLICACAO, e o autor do comentario e
+    // outra pessoa. Sem esta clausula, dois conhecidos do mesmo amigo recebiam o
+    // rosto um do outro -- medido em 20/10/2026 contra o Postgres, e e a Emenda 5
+    // item 2 do ADR-0010 que isso contraria.
     .leftJoin('catalog_images as fa', (junta) =>
       junta
         .onRef('fa.id', '=', 'a.photo_image_id')
         .on('fa.purpose', '=', PROPOSITO_DA_FOTO_DE_PESSOA)
         .on('fa.status', '=', FOTO_PRONTA)
-        .on(sql<boolean>`fa.thumb_key IS NOT NULL`),
+        .on(sql<boolean>`fa.thumb_key IS NOT NULL`)
+        // O MESMO recorte da linha do tempo, sobre o autor do COMENTARIO: ou e
+        // quem chama, ou e conexao `accepted` dele -- nos DOIS sentidos do par,
+        // com `conta_habilitada` nas duas pontas. `pending` nao e aceite, e conta
+        // desabilitada perde a foto sem nenhum `if` no dominio.
+        .on(
+          sql<boolean>`(
+        k.author_user_id = ${quemOlha}::uuid
+        OR EXISTS (
+          SELECT 1 FROM user_connections uc
+           WHERE uc.state = 'accepted'
+             AND ((uc.requester_user_id = k.author_user_id AND uc.addressee_user_id = ${quemOlha}::uuid)
+               OR (uc.requester_user_id = ${quemOlha}::uuid AND uc.addressee_user_id = k.author_user_id))
+             AND conta_habilitada(uc.requester_user_id)
+             AND conta_habilitada(uc.addressee_user_id))
+      )`,
+        ),
     )
     .select([
       'k.public_ref as ref',
@@ -801,6 +875,16 @@ async function contarComentarios(executor: DbExecutor, publicacaoId: string): Pr
  * mesmos tres predicados na imagem (proposito, `ready`, `thumb_key` nao nula).
  * Uma projecao diferente aqui faria o cartao recem-criado parecer diferente dos
  * outros na mesma lista, e a diferenca apareceria so em producao.
+ *
+ * **SEM PREDICADO DE CONEXAO, e aqui a ausencia e que esta certa**: `quem` e
+ * sempre QUEM CHAMA -- esta funcao e chamada de um lugar so, logo depois do
+ * `INSERT` de `comentar`, com o mesmo `autor` que assinou a linha. E o ramo
+ * `k.author_user_id = quemOlha` do recorte de `construtorDosComentarios`: foto
+ * propria, para a propria pessoa.
+ *
+ * **Quem passar outra conta por aqui esta fora do contrato desta funcao**, e nao
+ * ganhando uma excecao: a foto de terceiro passa pelo predicado de
+ * `construtorDosComentarios`, e nao por esta leitura.
  */
 async function autorDoComentario(
   executor: DbExecutor,
