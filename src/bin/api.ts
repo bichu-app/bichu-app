@@ -78,7 +78,12 @@ import { registrarRotaDoPerfilPublico } from '../modules/pets/adapters/http/perf
 import { criarLeituraDoPerfilPublico } from '../modules/pets/adapters/persistence/kysely-perfil-publico.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
 import type { FotoResumida } from '../modules/pets/ports/fotos-do-pet.js';
-import type { PetId } from '../shared/types/brands.js';
+import type { AbsoluteUrl, PetId } from '../shared/types/brands.js';
+// `comoObjectKey` e de `media/domain/`, e a raiz de composicao pode importa-lo:
+// a fronteira de modulo vigia `src/modules/*`, e `bin/leitor-de-midia.ts` ja faz
+// o mesmo. Ele VALIDA a chave, e a forma `found-reports/{dono}/sanitized/{...}`
+// ja e aceita por ele desde a BICHUS-35.
+import { comoObjectKey } from '../modules/media/domain/chave-de-objeto.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
@@ -119,6 +124,8 @@ import {
 import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
+import { criarFotoDaConversa } from '../modules/messaging/adapters/persistence/kysely-foto-da-conversa.js';
+import { VALIDADE_DA_URL_DA_FOTO_EM_SEGUNDOS } from '../modules/messaging/domain/leitura-da-foto.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
 import { ConversaDoAchadorService } from '../modules/messaging/application/conversa-do-achador.js';
@@ -569,6 +576,11 @@ export async function main(): Promise<void> {
   // e obrigatoria por tipo -- um `criarTagService` sem ela nao compila.
   const conversas = new ConversationService({
     repositorio: criarConversationRepository(db),
+    // BICHUS-35. A resolucao da foto anexada para a chave HIGIENIZADA
+    // (upload_intents.sanitized_key), nunca a do original. Porta propria e
+    // nao um metodo do repositorio: ver ports/foto-da-conversa.ts, que e onde
+    // a invariante inteira esta escrita.
+    fotos: criarFotoDaConversa(db),
     ids,
     clock: systemClock,
     trilha,
@@ -578,10 +590,29 @@ export async function main(): Promise<void> {
   // do aviso e o endereco, e as rotas nao tem id no caminho (SEC-001).
   const conversaDoAchador = new ConversaDoAchadorService({
     repositorio: criarConversationRepository(db),
+    fotos: criarFotoDaConversa(db),
     ids,
     clock: systemClock,
     trilha,
   });
+
+  /**
+   * A URL ASSINADA da foto da conversa (BICHUS-35), para os DOIS lados.
+   *
+   * A classe do balde e a validade sao decididas AQUI e nao por quem chama: a
+   * borda recebe uma funcao de um argumento (`messaging/ports/assinador-de-foto.ts`)
+   * e nao consegue pedir outra classe nem outro prazo. O numero e o motivo dele
+   * moram em `messaging/domain/leitura-da-foto.ts`.
+   *
+   * `privado` e a classe, e nao `publico`: o criterio 9 da BICHUS-35 diz que a
+   * foto do achado e vista pelo tutor dentro da conversa mediada, e so.
+   */
+  const assinarFotoDaConversa = (chave: string): Promise<AbsoluteUrl> =>
+    criarObjectStorage(config.objectStorage).getSignedReadUrl(
+      'privado',
+      comoObjectKey(chave),
+      VALIDADE_DA_URL_DA_FOTO_EM_SEGUNDOS,
+    );
 
   const tags = criarTagService({
     repositorio: criarTagRepository(db),
@@ -1340,12 +1371,16 @@ export async function main(): Promise<void> {
       // A foto do participante que e conexao aceita (emenda 3 do ADR-0010,
       // 19/10/2026). Mesma base das outras derivadas publicas.
       baseDeMidia: config.mediaPublicBaseUrl,
+      // A foto da MENSAGEM (BICHUS-35). Outra coisa, e por isso outra
+      // dependencia: esta vive em balde PRIVADO e sai assinada, curta.
+      assinarFoto: assinarFotoDaConversa,
     });
     registrarRotasDoAchador(escopo, {
       conversas: conversaDoAchador,
       contrato,
       idempotencia: criarIdempotencia(db),
       clock: systemClock,
+      assinarFoto: assinarFotoDaConversa,
     });
     registrarRotasDoAvisoDoAchador(escopo, { avisos: avisoDoAchador, contrato });
     // ADR-0027. O prefixo `/v1/admin`, com a guarda instalada UMA vez no

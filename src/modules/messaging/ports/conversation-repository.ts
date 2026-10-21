@@ -45,6 +45,27 @@ export interface AberturaPorAviso {
  */
 export interface ConversaDoChamador {
   readonly id: ConversationId;
+  /**
+   * O AVISO que abriu esta conversa.
+   *
+   * `conversations.found_report_id` e `NOT NULL UNIQUE` -- um aviso, uma
+   * conversa --, entao nao ha caso nulo a desenhar.
+   *
+   * Ele sai na vista do chamador AUTENTICADO porque sem ele a foto do tutor
+   * e inalcancavel: `createFoundReportPhotoUploadIntent` EXIGE
+   * `found_report_id` no corpo, e o tutor nao e o relator do aviso -- ele nao
+   * aparece em `listFoundReports`, e `case_id` e o caso de perdido, nao o
+   * aviso. Sem este campo, a ampliacao da autorizacao da BICHUS-35 fica
+   * correta e **inalcancavel**: o tutor tem permissao para pedir a intencao e
+   * nao tem de onde tirar o argumento.
+   *
+   * **Nao sai para quem nao tem conta.** `ConversaDoAchador` nao tem este
+   * campo e nao pode ganhar: o token do achador JA endereca o aviso (e por
+   * isso que `createFinderPhotoUploadIntent` nao pede id nenhum), e entregar
+   * um UUIDv7 -- com o instante de criacao dentro -- a quem nao tem conta e o
+   * que o SEC-001 proibe.
+   */
+  readonly foundReportId: FoundReportId;
   readonly caseId: CaseId | null;
   readonly petDisplayName: string;
   /**
@@ -154,6 +175,31 @@ export interface NovaMensagem {
   /** Já redigido pelo serviço. A porta não redige, e não é lugar de redigir. */
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
+  /**
+   * A CHAVE HIGIENIZADA da foto do achado, ou `null`.
+   *
+   * ## A INVARIANTE: aqui entra `sanitized_key`, NUNCA `object_key`
+   *
+   * Quem resolve a referência de upload nesta chave é
+   * [FotoDaConversa](./foto-da-conversa.ts), e a porta dela **não tem um caso
+   * que devolva a chave do original** — o caminho errado não está
+   * representado. Leia aquele cabeçalho antes de mexer neste campo: ele é o que
+   * fecha o vazamento de coordenada de GPS do EXIF, e é por causa dele que a
+   * LEITURA não precisa consultar estado nenhum para saber se pode servir a
+   * chave.
+   *
+   * `string` e não `ObjectKey`, pela mesma razão de
+   * [MensagemGravada.photoObjectKey]: a marca só é emitida por `comoObjectKey`,
+   * que mora no domínio de `media`, e um módulo não enxerga o domínio de outro
+   * (§6). Um `as` aqui prometeria ao compilador que alguém validou quando
+   * ninguém validou.
+   *
+   * Opcional e não obrigatório-anulável: a mensagem de sistema e os caminhos que
+   * não tratam foto não têm o que dizer sobre ela, e obrigá-los a escrever
+   * `photoObjectKey: null` espalharia a decisão por chamadores que não a
+   * tomam.
+   */
+  readonly photoObjectKey?: string | null;
 }
 
 /**

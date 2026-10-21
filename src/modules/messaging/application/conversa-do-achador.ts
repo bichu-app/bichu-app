@@ -54,6 +54,8 @@ import {
 } from '../domain/acesso-do-achador.js';
 import { retencaoDestaMensagem } from '../domain/retencao-para-revisao.js';
 import { AVISO_DE_DADO_RETIRADO } from '../domain/primeira-mensagem.js';
+import { chaveHigienizadaOuRecusa } from '../domain/foto-anexada.js';
+import type { FotoDaConversa } from '../ports/foto-da-conversa.js';
 
 const VINTE_E_QUATRO_HORAS_EM_MS = 24 * 60 * 60 * 1000;
 
@@ -80,6 +82,11 @@ export interface MensagemParaOAchador {
   readonly senderRole: MensagemGravada['senderRole'];
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
+  /**
+   * A chave HIGIENIZADA da foto, ou `null`. **Chave e não URL**: a URL
+   * assinada é montada na borda, a partir da base vigente (§11.1 proibição 9).
+   */
+  readonly photoObjectKey: string | null;
   readonly createdAt: Date;
 }
 
@@ -91,6 +98,7 @@ export type AcessoDoAchador =
 
 export interface DependenciasDaConversaDoAchador {
   readonly repositorio: ConversationRepository;
+  readonly fotos: FotoDaConversa;
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly trilha: AuditLog;
@@ -155,9 +163,30 @@ export class ConversaDoAchadorService {
    * para a retenção. A mensagem que estoura as 200 em 24 h é gravada e a
    * conversa é marcada em silêncio (`hold_for_review` não é recusa).
    */
-  async enviar(token: string, texto: string, origem: OrigemDoPedido): Promise<MensagemParaOAchador> {
-    const { conversa } = await this.resolverValida(token);
+  async enviar(
+    token: string,
+    texto: string,
+    origem: OrigemDoPedido,
+    /** O `photo_upload_ref` OPACO do corpo, quando o achador anexou foto. */
+    fotoUploadRef?: string,
+  ): Promise<MensagemParaOAchador> {
+    const { conversa, resumo } = await this.resolverValida(token);
     if (!aceitaMensagem(estadoDe(conversa))) throw problemas.conversaEncerrada();
+
+    // Depois do guarda de estado, pela mesma razão do lado com conta: é a ordem
+    // que faz o bloqueio impedir envio COM foto sem uma linha nova, e que evita
+    // responder "tente de novo" a quem foi bloqueado.
+    //
+    // O RESUMO DO TOKEN é o predicado, e não o id da conversa: quem não tem
+    // conta é nomeado pelo resumo (SEC-001), e é a forma que
+    // `intencaoDeFotoDoAchadorPelaReferencia` já usa.
+    const chaveDaFoto =
+      fotoUploadRef === undefined
+        ? null
+        : chaveHigienizadaOuRecusa(
+            await this.deps.fotos.pelaReferenciaDoAchador(resumo, fotoUploadRef),
+            'photo_upload_ref',
+          );
 
     const redigido = redigirCanalMediado(texto);
     const gravada = await this.deps.repositorio.gravarMensagem({
@@ -169,6 +198,8 @@ export class ConversaDoAchadorService {
       senderUserId: null,
       body: redigido.texto,
       redactions: redigido.retirados,
+      // A chave HIGIENIZADA. Ver `ports/foto-da-conversa.ts`.
+      photoObjectKey: chaveDaFoto,
     });
 
     if (redigido.retirados.length > 0) {
@@ -353,6 +384,9 @@ function paraOAchador(mensagem: MensagemGravada): MensagemParaOAchador {
     senderRole: mensagem.senderRole,
     body: mensagem.body,
     redactions: mensagem.redactions,
+    // A CHAVE, que a borda assina. Ela era descartada aqui até a BICHUS-35, e
+    // com isso o achador não via nem a foto que ele mesmo mandou.
+    photoObjectKey: mensagem.photoObjectKey,
     createdAt: mensagem.createdAt,
   };
 }

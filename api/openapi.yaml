@@ -13991,6 +13991,26 @@ components:
         primeira refatoracao.
       properties:
         id: { type: string, format: uuid }
+        found_report_id:
+          type: string
+          format: uuid
+          description: |
+            O AVISO que abriu esta conversa (`conversations.found_report_id`,
+            `NOT NULL UNIQUE` -- um aviso, uma conversa).
+
+            **Existe para que o TUTOR consiga anexar foto.** O corpo de
+            `createFoundReportPhotoUploadIntent` EXIGE `found_report_id`, e o
+            tutor nao e o relator do aviso: o aviso nao aparece em
+            `listFoundReports` (que e do relator) e `case_id` e o caso de
+            perdido, nao o aviso. Sem este campo o tutor tem a autorizacao e
+            **nao tem de onde tirar o argumento** -- a simetria da conversa
+            mediada ficaria correta no servidor e morta na tela.
+
+            **`FinderConversation` NAO tem este campo, e nao pode ganhar.** O
+            token do achador JA endereca o aviso, e e por isso que
+            `createFinderPhotoUploadIntent` nao pede id nenhum. Por-lo la
+            entregaria um UUIDv7 -- com o instante de criacao dentro -- a quem
+            nao tem conta, que e exatamente o que o SEC-001 proibe.
         case_id: { type: string, format: uuid, nullable: true }
         pet_display_name: { type: string }
         status: { type: string, enum: [open, blocked, closed] }

@@ -142,6 +142,11 @@ function bancada(): Bancada {
     // Emenda 3 do ADR-0010 (19/10/2026). Este arquivo mede a idempotencia do
     // ENVIO, que nao projeta participante nenhum, e por isso a base e um valor
     // de teste reconhecivel em vez do dominio real.
+    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+    // deixaria a isca da invariante verde com a chave do original gravada.
+    assinarFoto: (chave: string) =>
+      Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],
   });
 
@@ -236,6 +241,11 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
       contrato,
       idempotencia: idempotenciaEmMemoria(),
       clock,
+      // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+      // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+      // deixaria a isca da invariante verde com a chave do original gravada.
+      assinarFoto: (chave: string) =>
+        Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
       baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],
     });
     await app.ready();

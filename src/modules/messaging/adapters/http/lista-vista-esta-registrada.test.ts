@@ -89,6 +89,11 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
     } as unknown as DependenciasDasRotasDeConversa['contrato'],
     idempotencia: undefined as unknown as DependenciasDasRotasDeConversa['idempotencia'],
     clock: { now: () => new Date('2026-10-20T12:00:00.000Z') } as unknown as DependenciasDasRotasDeConversa['clock'],
+    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+    // deixaria a isca da invariante verde com a chave do original gravada.
+    assinarFoto: (chave: string) =>
+      Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: 'https://img.bichu.test' as AbsoluteUrl,
   };
 }

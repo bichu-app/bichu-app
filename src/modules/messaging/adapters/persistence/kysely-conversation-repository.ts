@@ -50,6 +50,7 @@ import type {
 
 interface LinhaDaConversa {
   id: string;
+  found_report_id: string;
   case_id: string | null;
   pet_display_name: string;
   opened_at: Date;
@@ -81,6 +82,7 @@ interface LinhaDaMensagem {
 function comoConversa(linha: LinhaDaConversa): ConversaDoChamador {
   return {
     id: linha.id as ConversationId,
+    foundReportId: linha.found_report_id as FoundReportId,
     caseId: linha.case_id === null ? null : (linha.case_id as CaseId),
     petDisplayName: linha.pet_display_name,
     abertaEm: linha.opened_at,
@@ -324,6 +326,9 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
     )
     .select((eb) => [
       'conversations.id',
+      // O AVISO. Sem ele o tutor nao consegue pedir intencao de foto -- ver
+      // `ConversaDoChamador.foundReportId`. `NOT NULL UNIQUE` na coluna.
+      'conversations.found_report_id',
       'conversations.case_id',
       'pets.name as pet_display_name',
       'conversations.opened_at',
@@ -1083,12 +1088,25 @@ export function criarConversationRepository(db: Db): ConversationRepository {
  * e deixar o campo disponível para `gravarMensagem` convidaria ao erro que o
  * banco então rejeitaria em produção.
  */
-async function inserir(
+/**
+ * O INSERT como CONSULTA AINDA NAO EXECUTADA, para a bancada que le o SQL.
+ *
+ * Exportado por uma razao medida, e nao por simetria: a bancada do servico
+ * (`application/conversation-service.test.ts`) confere o `NovaMensagem` que o
+ * servico PASSA, e nao a linha que o banco recebe. Com `photo_object_key: null`
+ * cravado aqui, aquela bancada fica VERDE inteira -- medido em 21/10/2026: a
+ * desativacao da gravacao da chave deixou 3678 casos passando e 0 reprovando.
+ *
+ * Quem enxerga a diferenca e `a-mensagem-grava-a-foto.test.ts`, que compila esta
+ * consulta e confere que `photo_object_key` esta LIGADO ao valor recebido, em vez
+ * de ser um literal.
+ */
+export function construtorDaInsercaoDeMensagem(
   db: Db,
   mensagem: NovaMensagem,
   especie: EspecieDoSistema | null = null,
-): Promise<MensagemGravada> {
-  const linha = await db
+) {
+  return db
     .insertInto('conversation_messages')
     .values({
       id: mensagem.id,
@@ -1097,7 +1115,16 @@ async function inserir(
       sender_user_id: mensagem.senderUserId,
       body: mensagem.body,
       redactions: JSON.stringify(mensagem.redactions),
-      photo_object_key: null,
+      // A CHAVE HIGIENIZADA, quando houver. Era `null` cravado até a
+      // BICHUS-35, e o `null` era honesto enquanto nada resolvia a foto.
+      //
+      // **O que chega aqui é `upload_intents.sanitized_key` e nunca
+      // `object_key`** -- a invariante está em
+      // `messaging/ports/foto-da-conversa.ts`, e o tipo de lá não consegue
+      // expressar o original. Gravar o original serviria o EXIF, com a
+      // coordenada de GPS de quem achou o animal, exatamente à pessoa de quem
+      // essa localização está sendo protegida.
+      photo_object_key: mensagem.photoObjectKey ?? null,
       system_kind: especie,
     })
     .returning([
@@ -1107,7 +1134,18 @@ async function inserir(
       'redactions',
       'photo_object_key',
       'created_at',
-    ])
-    .executeTakeFirstOrThrow();
+    ]);
+}
+
+async function inserir(
+  db: Db,
+  mensagem: NovaMensagem,
+  especie: EspecieDoSistema | null = null,
+): Promise<MensagemGravada> {
+  const linha = await construtorDaInsercaoDeMensagem(
+    db,
+    mensagem,
+    especie,
+  ).executeTakeFirstOrThrow();
   return comoMensagem(linha);
 }

@@ -53,6 +53,8 @@ import type {
 import type { MotivoDaDenuncia } from '../../ports/conversation-repository.js';
 import { decodificarCursorDoAchador } from '../../domain/acesso-do-achador.js';
 import { limiteEfetivo } from '../../domain/paginacao.js';
+import type { AssinadorDeFoto } from '../../ports/assinador-de-foto.js';
+import { podeSairParaQuemNaoTemConta } from '../../domain/leitura-da-foto.js';
 
 export const rotaDaConversaDoAchador = defineRoute({
   operationId: 'getFinderConversation',
@@ -105,6 +107,13 @@ export interface DependenciasDasRotasDoAchador {
   readonly contrato: Contrato;
   readonly idempotencia: Idempotencia;
   readonly clock: Clock;
+  /**
+   * O assinador da foto da mensagem (BICHUS-35). Estas rotas nao tinham
+   * nenhuma dependencia de midia: o achador sem conta nao ve foto de perfil de
+   * ninguem (`FinderConversation.participants` so tem papel e nome), e esta e a
+   * primeira imagem que esta superficie serve.
+   */
+  readonly assinarFoto: AssinadorDeFoto;
 }
 
 function origemDe(request: FastifyRequest): OrigemDoPedido {
@@ -123,26 +132,49 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
 }
 
 /** `FinderConversation`, campo a campo. Sem `id`, sem `case_id`. */
-export function comoConversaDoAchador(conversa: ConversaParaOAchador): Record<string, unknown> {
+export async function comoConversaDoAchador(
+  conversa: ConversaParaOAchador,
+  assinar: AssinadorDeFoto,
+): Promise<Record<string, unknown>> {
   return {
     pet_display_name: conversa.petDisplayName,
     status: conversa.status,
     participants: conversa.participants.map((p) => ({ role: p.role, display_name: p.displayName })),
-    messages: conversa.messages.map(comoMensagemDoAchador),
+    messages: await Promise.all(
+      conversa.messages.map((m) => comoMensagemDoAchador(m, assinar)),
+    ),
     next_cursor: conversa.nextCursor,
   };
 }
 
-/** `FinderMessage`, campo a campo. Sem `id`. */
-export function comoMensagemDoAchador(mensagem: MensagemParaOAchador): Record<string, unknown> {
+/**
+ * `FinderMessage`, campo a campo. Sem `id`.
+ *
+ * `photo_url` e URL ASSINADA de balde privado, e nao derivada publica: o
+ * criterio 9 vale para os dois lados da conversa. **Sem consulta de estado
+ * aqui** -- o que esta em `photoObjectKey` ja e a derivada higienizada, pela
+ * invariante da escrita (`ports/foto-da-conversa.ts`).
+ *
+ * **E SEM CHAVE QUE CARREGUE IDENTIFICADOR** (SEC-001): a URL assinada leva a
+ * chave no caminho, e a chave da foto pedida por quem TEM conta leva o
+ * `found_report_id` dentro. `podeSairParaQuemNaoTemConta` recusa essas, e o
+ * campo sai `null`. O porque, o que isso custa hoje e as tres saidas possiveis
+ * estao em `domain/leitura-da-foto.ts` -- leia antes de "consertar" isto
+ * tirando o guarda.
+ */
+export async function comoMensagemDoAchador(
+  mensagem: MensagemParaOAchador,
+  assinar: AssinadorDeFoto,
+): Promise<Record<string, unknown>> {
   return {
     sender_role: mensagem.senderRole,
     body: mensagem.body,
     redactions: mensagem.redactions.map((r) => ({ kind: r.kind, hint: r.hint })),
-    // A foto do achador ainda não tem derivada nem leitura assinada no caminho
-    // da conversa. Nulo é o valor verdadeiro; uma URL inventada seria promessa
-    // que a tela descobre quebrada.
-    photo_url: null,
+    photo_url:
+      mensagem.photoObjectKey === null ||
+      !podeSairParaQuemNaoTemConta(mensagem.photoObjectKey)
+        ? null
+        : await assinar(mensagem.photoObjectKey),
     created_at: mensagem.createdAt.toISOString(),
   };
 }
@@ -165,7 +197,7 @@ export function registrarRotasDoAchador(
         limit: limiteEfetivo(limit === undefined ? undefined : Number(limit)),
         deslocamento: decodificarCursorDoAchador(cursor) ?? 0,
       });
-      return reply.status(200).send(comoConversaDoAchador(conversa));
+      return reply.status(200).send(await comoConversaDoAchador(conversa, deps.assinarFoto));
     },
   );
 
@@ -179,7 +211,9 @@ export function registrarRotasDoAchador(
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const token = tokenDoAchador(request);
-      const corpo = request.body as { body: string };
+      // `photo_upload_ref` e OPCIONAL no contrato. Ver a nota do lado com
+      // conta: campo fora do schema e apagado em silencio pelo Ajv do Fastify.
+      const corpo = request.body as { body: string; photo_upload_ref?: string };
       const resposta = await executarComIdempotencia(
         deps.idempotencia,
         {
@@ -197,7 +231,15 @@ export function registrarRotasDoAchador(
         },
         async () => ({
           status: 201,
-          body: comoMensagemDoAchador(await deps.conversas.enviar(token, corpo.body, origemDe(request))),
+          body: await comoMensagemDoAchador(
+            await deps.conversas.enviar(
+              token,
+              corpo.body,
+              origemDe(request),
+              corpo.photo_upload_ref,
+            ),
+            deps.assinarFoto,
+          ),
         }),
       );
       return reply.status(resposta.status).send(resposta.body);

@@ -31,6 +31,7 @@ import type {
   NovaDenuncia,
   NovaMensagem,
 } from '../ports/conversation-repository.js';
+import type { FotoDaConversa, FotoParaAMensagem } from '../ports/foto-da-conversa.js';
 import type {
   ConversationId,
   FoundReportId,
@@ -47,8 +48,30 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const PET = '018f3a2b-0000-7000-8000-0000000000dd' as PetId;
 const AVISO = '018f3a2b-0000-7000-8000-0000000000ee' as FoundReportId;
 
+/** O `photo_upload_id` que a pessoa anexa. */
+const UPLOAD = '018f3a2b-0000-7000-8000-00000000f001';
+/** Uma intencao que existe, mas e de OUTRO aviso. O duble a trata como ausente. */
+const UPLOAD_DE_OUTRO_AVISO = '018f3a2b-0000-7000-8000-00000000f002';
+/** A chave do ORIGINAL, com o EXIF e a coordenada de GPS dentro. */
+const CHAVE_DO_ORIGINAL = 'found-reports/aviso/original/abc.jpg';
+/** A derivada que o trabalhador reescreveu do zero, sem metadado nenhum. */
+const CHAVE_HIGIENIZADA = 'found-reports/aviso/sanitized/def.webp';
+
 interface Estado {
   readonly conversa?: Partial<ConversaDoChamador> | undefined;
+  /**
+   * O desfecho que [FotoDaConversa] devolve para `UPLOAD`. Omitido, a foto
+   * esta `pronta` com `CHAVE_HIGIENIZADA`.
+   */
+  readonly foto?: FotoParaAMensagem | undefined;
+  /**
+   * **A ISCA DA INVARIANTE.** Com `true`, o duble devolve a chave do ORIGINAL
+   * no lugar da higienizada -- e o equivalente exato de o adaptador selecionar
+   * `object_key` em vez de `sanitized_key`. E um erro de uma palavra, e ele
+   * serviria o EXIF inteiro, com a coordenada de GPS de quem achou o animal,
+   * exatamente a pessoa de quem essa localizacao esta sendo protegida.
+   */
+  readonly invarianteDesligada?: boolean | undefined;
   readonly mensagensDoParticipante?: number | undefined;
   readonly casosDistintos?: number | undefined;
   readonly conversaDoAviso?: ConversationId | undefined;
@@ -68,6 +91,7 @@ interface Estado {
 function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoChamador {
   return {
     id: CONVERSA,
+    foundReportId: AVISO,
     caseId: null,
     petDisplayName: 'Aurora',
     abertaEm: comoData(AGORA),
@@ -191,8 +215,37 @@ function bancada(estado: Estado = {}) {
     },
   };
 
+  /**
+   * O duble da resolucao da foto. Ele imita DUAS coisas do adaptador, e as
+   * duas importam:
+   *
+   * 1. **so `UPLOAD` resolve.** Qualquer outra referencia e
+   *    `nao-encontrada`, que e o que o recorte por aviso do `WHERE` produz:
+   *    a intencao de outro aviso nao e "proibida", ela simplesmente nao e
+   *    alcancada pela consulta;
+   * 2. **o que ele devolve em `pronta` e a chave HIGIENIZADA.** Com
+   *    `invarianteDesligada` ele devolve a do original, e e esse estado que
+   *    a isca da invariante mede.
+   */
+  const fotos: FotoDaConversa = {
+    porUploadId: (_conversa, _chamador, uploadId): Promise<FotoParaAMensagem> =>
+      Promise.resolve(
+        uploadId !== UPLOAD
+          ? { situacao: 'nao-encontrada' }
+          : (estado.foto ?? {
+              situacao: 'pronta',
+              chaveHigienizada:
+                estado.invarianteDesligada === true
+                  ? CHAVE_DO_ORIGINAL
+                  : CHAVE_HIGIENIZADA,
+            }),
+      ),
+    // O lado sem conta tem bancada propria (`conversa-do-achador.test.ts`).
+    pelaReferenciaDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+  };
+
   return {
-    servico: new ConversationService({ repositorio, ids, clock, trilha }),
+    servico: new ConversationService({ repositorio, fotos, ids, clock, trilha }),
     gravadas,
     aberturas,
     retencoes,
@@ -220,6 +273,252 @@ function chamador(userId: UserId): Chamador {
 }
 
 const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
+
+/**
+ * BICHUS-35: A FOTO NA CONVERSA MEDIADA, do lado com conta.
+ *
+ * Cada caso aqui esta nomeado pelo FATO que protege, e cada mecanismo tem o seu
+ * interruptor no `Estado` da bancada. As contagens nos dois estados estao no
+ * relatorio da entrega.
+ *
+ * **O que esta bancada NAO prova**: que o `WHERE` recorta a intencao pelo aviso.
+ * Aqui quem recusa e o duble, e um adaptador que ignorasse o aviso continuaria
+ * passando neste arquivo inteiro. Quem prova aquilo e
+ * `adapters/persistence/a-foto-na-clausula-where.test.ts`, que le o SQL
+ * compilado -- e e por isso que ele existe, e nao por simetria.
+ */
+void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
+  /**
+   * FATO 1: a imagem CHEGA na mensagem gravada.
+   *
+   * O caso mais basico, e ele precisa existir separado dos outros: sem ele, uma
+   * implementacao que recusasse TODA foto deixaria os casos 3, 4 e 6 verdes --
+   * os tres sao sobre o que NAO deve entrar.
+   */
+  void it('a chave da foto CHEGA na mensagem gravada', async () => {
+    const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
+    await servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD);
+
+    const doTutor = gravadas.find((m) => m.senderRole === 'tutor');
+    assert.ok(doTutor !== undefined, 'a mensagem do tutor nao foi gravada');
+    assert.equal(
+      doTutor.photoObjectKey,
+      CHAVE_HIGIENIZADA,
+      'a mensagem foi gravada sem a chave da foto',
+    );
+  });
+
+  /**
+   * FATO 2: A INVARIANTE. A mensagem recebe a chave HIGIENIZADA, e NUNCA a do
+   * original -- que e a copia que carrega a coordenada de GPS no EXIF.
+   *
+   * As duas asercoes sao necessarias e nenhuma basta: a primeira sozinha
+   * passaria se a chave gravada fosse qualquer coisa que nao o original
+   * (inclusive nula), e a segunda sozinha passaria se nada fosse gravado.
+   */
+  void it('a chave gravada e a HIGIENIZADA, e nunca a do ORIGINAL', async () => {
+    const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
+    await servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD);
+
+    const doTutor = gravadas.find((m) => m.senderRole === 'tutor');
+    assert.equal(doTutor?.photoObjectKey, CHAVE_HIGIENIZADA);
+    assert.notEqual(
+      doTutor?.photoObjectKey,
+      CHAVE_DO_ORIGINAL,
+      'a chave do ORIGINAL foi gravada: o EXIF com a coordenada de GPS de quem ' +
+        'achou o animal seria servido a outra parte da conversa',
+    );
+  });
+
+  /**
+   * ISCA DO FATO 2. Com `invarianteDesligada`, o duble devolve a chave do
+   * original -- o equivalente exato de o adaptador selecionar `object_key` em
+   * vez de `sanitized_key`. O caso acima tem de REPROVAR, e e so isso que prova
+   * que ele mede a invariante e nao a existencia de uma chave qualquer.
+   */
+  void it('ISCA: com a invariante desligada, a chave gravada e a do ORIGINAL', async () => {
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+      invarianteDesligada: true,
+    });
+    await servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD);
+
+    const doTutor = gravadas.find((m) => m.senderRole === 'tutor');
+    // Este caso descreve o MUNDO QUEBRADO de proposito: ele passa quando o
+    // defeito esta presente. E a medicao de que o caso de cima consegue ve-lo.
+    assert.equal(doTutor?.photoObjectKey, CHAVE_DO_ORIGINAL);
+  });
+
+  /**
+   * FATO 3: higiene `pendente` NAO grava mensagem com foto -- e nao grava
+   * mensagem nenhuma.
+   *
+   * A segunda metade e a que importa mais. Gravar o texto sem a foto e a pior
+   * falha possivel desta tela: a pessoa acredita ter mandado a prova de que
+   * esta com o animal, e o outro lado nunca a ve.
+   */
+  void it('higiene `pendente`: recusa com `photo-not-ready` e NADA e gravado', async () => {
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+      foto: { situacao: 'pendente' },
+    });
+
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(erro.problemType, 'photo-not-ready');
+        assert.equal(erro.status, 409);
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, [], 'gravou a mensagem apesar de a foto nao ter entrado');
+  });
+
+  void it('higiene `recusada`: devolve o motivo JA GRAVADO, e nada e gravado', async () => {
+    // O texto vem de `sanitize_rejection_reason`, escrito pelo trabalhador.
+    // Esta bancada o passa adiante para provar que a borda nao o reescreve.
+    const MOTIVO = 'Essa foto e uma animacao. Envie uma imagem parada.';
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+      foto: { situacao: 'recusada', motivo: MOTIVO },
+    });
+
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(erro.problemType, 'photo-rejected');
+        assert.equal(erro.detail, MOTIVO);
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, []);
+  });
+
+  void it('higiene `ausente`: `upload-not-received`, o tipo que ja existia', async () => {
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor' },
+      foto: { situacao: 'ausente' },
+    });
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Oi', chamador(TUTOR), UPLOAD),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(erro.problemType, 'upload-not-received');
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, []);
+  });
+
+  /**
+   * FATO 4: a intencao de OUTRO aviso nao entra nesta conversa.
+   *
+   * O duble devolve `nao-encontrada` para qualquer referencia que nao seja
+   * `UPLOAD`, que e o que o recorte por aviso do `WHERE` produz: a intencao de
+   * outro aviso nao e "proibida", ela simplesmente nao e alcancada pela
+   * consulta.
+   *
+   * `validation-failed` apontando o CAMPO, e nao 404: a conversa do caminho
+   * existe e e do chamador -- o que nao serve e um valor do corpo. Um 404 aqui
+   * diria que a conversa nao existe, que e falso, e mandaria a tela para a
+   * lista.
+   */
+  void it('a intencao de OUTRO aviso nao entra nesta conversa, e nada e gravado', async () => {
+    const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
+
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Oi', chamador(TUTOR), UPLOAD_DE_OUTRO_AVISO),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(erro.problemType, 'validation-failed');
+        assert.equal(erro.status, 400);
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, []);
+  });
+
+  /**
+   * FATO 6: BLOQUEAR impede novo envio COM foto.
+   *
+   * O que este caso mede de verdade e a ORDEM: a foto e resolvida DEPOIS do
+   * guarda de estado. Se ela fosse resolvida antes, a conversa bloqueada
+   * responderia sobre a foto -- no pior caso `photo-not-ready`, mandando a
+   * pessoa tentar de novo um envio que nunca vai ser aceito.
+   *
+   * A asercao do TIPO e o que pega isso: `conversation-closed`, e nao um
+   * problema de foto.
+   */
+  void it('conversa BLOQUEADA recusa envio COM foto, com o 410 da conversa', async () => {
+    const { servico, gravadas } = bancada({
+      conversa: { papelDoChamador: 'tutor', bloqueadaEm: comoData(AGORA) },
+    });
+
+    await assert.rejects(
+      () => servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(
+          erro.problemType,
+          'conversation-closed',
+          'a conversa bloqueada respondeu sobre a FOTO: a resolucao da foto ' +
+            'correu antes do guarda de estado',
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(gravadas, [], 'gravou mensagem com foto numa conversa bloqueada');
+  });
+
+  /**
+   * CONTROLE POSITIVO: o envio SEM foto continua funcionando, em todos os
+   * estados de higiene. A redacao do texto nao foi tocada.
+   *
+   * Sem ele, uma implementacao que recusasse todo envio deixaria os casos de
+   * recusa acima verdes, e eles pareceriam medir a foto quando mediriam a rota
+   * quebrada.
+   */
+  void it('CONTROLE POSITIVO: envio SEM foto passa em qualquer estado de higiene', async () => {
+    for (const foto of [
+      { situacao: 'pendente' } as const,
+      { situacao: 'ausente' } as const,
+      { situacao: 'nao-encontrada' } as const,
+    ]) {
+      const { servico, gravadas } = bancada({
+        conversa: { papelDoChamador: 'tutor' },
+        foto,
+      });
+      await servico.enviar(CONVERSA, 'So texto', chamador(TUTOR), undefined);
+      const doTutor = gravadas.find((m) => m.senderRole === 'tutor');
+      assert.ok(doTutor !== undefined, `o envio sem foto reprovou em ${foto.situacao}`);
+      assert.equal(doTutor.photoObjectKey ?? null, null);
+    }
+  });
+
+  /**
+   * CONTROLE NEGATIVO: a conversa ENCERRADA recusa, com foto e sem foto, e com
+   * o mesmo tipo. Ele passa nos dois estados de todo interruptor desta bancada:
+   * nenhuma das iscas acima pode abrir um caminho de envio em conversa fechada.
+   */
+  void it('CONTROLE NEGATIVO: conversa ENCERRADA recusa com e sem foto', async () => {
+    for (const anexo of [undefined, UPLOAD]) {
+      const { servico, gravadas } = bancada({
+        conversa: { papelDoChamador: 'tutor', encerradaEm: comoData(AGORA) },
+      });
+      await assert.rejects(
+        () => servico.enviar(CONVERSA, 'Oi', chamador(TUTOR), anexo),
+        (erro: unknown) => {
+          assert.ok(erro instanceof AppError);
+          assert.equal(erro.problemType, 'conversation-closed');
+          return true;
+        },
+      );
+      assert.deepEqual(gravadas, []);
+    }
+  });
+});
 
 void describe('critério 13 — a redação roda ANTES de gravar, nos dois sentidos', () => {
   void it('o telefone que o tutor digitou não chega ao banco', async () => {

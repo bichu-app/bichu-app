@@ -47,6 +47,8 @@ import {
   type SinaisDeEstado,
 } from '../domain/conversa-mediada.js';
 import { retencaoDestaMensagem } from '../domain/retencao-para-revisao.js';
+import { chaveHigienizadaOuRecusa } from '../domain/foto-anexada.js';
+import type { FotoDaConversa } from '../ports/foto-da-conversa.js';
 import { codificarCursor } from '../domain/paginacao.js';
 import {
   primeiraMensagemDoSistema,
@@ -72,6 +74,8 @@ export interface Chamador {
 /** A conversa como as rotas autenticadas a devolvem. Montada campo a campo. */
 export interface ConversaVisivel {
   readonly id: ConversationId;
+  /** O aviso que abriu a conversa. Ver `ConversaDoChamador.foundReportId`. */
+  readonly foundReportId: string;
   readonly caseId: string | null;
   readonly petDisplayName: string;
   readonly status: EstadoDaConversa;
@@ -155,6 +159,13 @@ export type EspecieDoAviso = Extract<EspecieDoSistema, 'scan_notice' | 'found_no
 
 export interface DependenciasDaConversa {
   readonly repositorio: ConversationRepository;
+  /**
+   * A resolução da foto anexada. Porta SEPARADA do repositório, e não um método
+   * nele: ela lê `upload_intents`, que é a tabela da esteira de mídia, e o
+   * repositório da conversa não tem nada a dizer sobre o estado de uma higiene.
+   * Ver `ports/foto-da-conversa.ts`.
+   */
+  readonly fotos: FotoDaConversa;
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly trilha: AuditLog;
@@ -285,11 +296,32 @@ export class ConversationService {
     conversa: ConversationId,
     texto: string,
     chamador: Chamador,
+    /**
+     * O `photo_upload_id` do corpo, quando a pessoa anexou foto.
+     *
+     * Opcional, e o envio sem foto continua idêntico ao que era: a redação do
+     * texto (`redigirCanalMediado`) não muda uma linha.
+     */
+    fotoUploadId?: string,
   ): Promise<MensagemGravada> {
     const encontrada = await this.exigirDoChamador(conversa, chamador);
     if (!aceitaMensagem(estadoDaConversa(sinaisDe(encontrada)))) {
       throw problemas.conversaEncerrada();
     }
+
+    // A FOTO É RESOLVIDA DEPOIS DO GUARDA DE ESTADO, e a ordem é o que faz
+    // BLOQUEAR impedir envio COM foto sem uma linha nova: `aceitaMensagem`
+    // acima já recusa conversa bloqueada, encerrada ou removida, e nada abaixo
+    // dele roda. Resolver a foto antes faria a conversa bloqueada consumir uma
+    // consulta e, pior, devolver `photo-not-ready` em vez do 410 verdadeiro --
+    // dizendo à pessoa para tentar de novo um envio que nunca vai ser aceito.
+    const chaveDaFoto =
+      fotoUploadId === undefined
+        ? null
+        : chaveHigienizadaOuRecusa(
+            await this.deps.fotos.porUploadId(conversa, chamador.userId, fotoUploadId),
+            'photo_upload_id',
+          );
 
     const redigido = redigirCanalMediado(texto);
     const gravada = await this.deps.repositorio.gravarMensagem({
@@ -299,6 +331,8 @@ export class ConversationService {
       senderUserId: chamador.userId,
       body: redigido.texto,
       redactions: redigido.retirados,
+      // A chave HIGIENIZADA. Ver `ports/foto-da-conversa.ts`.
+      photoObjectKey: chaveDaFoto,
     });
 
     if (redigido.retirados.length > 0) {
@@ -524,6 +558,7 @@ export class ConversationService {
   ): ConversaVisivel {
     return {
       id: conversa.id,
+      foundReportId: conversa.foundReportId,
       caseId: conversa.caseId,
       petDisplayName: conversa.petDisplayName,
       status: estadoDaConversa(sinaisDe(conversa)),
