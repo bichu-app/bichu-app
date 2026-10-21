@@ -896,9 +896,21 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // 710 por este caso, e nao por carga: a carga da `did not complete` e
   // `timeout` de pool, nao uma lista com nome e sobrenome.
   // ------------------------------------------------------------------
+  //
+  // ONDA 4, 21/10/2026: `network_event` ENTROU, e a isca pegou -- que e
+  // exatamente para isso que ela existe. A migracao
+  // `20261020000017_pagina-publica-do-encontro-existe.sql` derruba e recria o
+  // `CHECK` com os TRES valores, e insere a linha `network_event` DESLIGADA
+  // (`is_published = false`). Ampliar o dominio do banco e nao declarar aqui e
+  // como a lista fechada deixa de medir: o valor novo entra em silencio e, a
+  // partir dai, qualquer OUTRO valor tambem passaria sem alarme.
+  //
+  // **Acrescentado pelo NOME e com o motivo, e a isca NAO foi desligada.**
+  // A assimetria da tabela continua: linha ausente, `false` ou tabela
+  // inalcancavel ESCONDEM o endereco publico.
   'public.site_page_availability.site_page_availability_page_check': {
     coluna: 'page',
-    valores: ['lost_case', 'poster'],
+    valores: ['lost_case', 'network_event', 'poster'],
   },
 };
 

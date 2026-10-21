@@ -550,10 +550,23 @@ void describe('o corpo real de `listPublicationComments`: a foto do autor do com
         ['author', 'body', 'created_at', 'mine', 'ref'],
         'o comentario ganhou ou perdeu campo em relacao ao contrato',
       );
+      // ONDA 4, 21/10/2026: `contact_channel_verified` ENTROU, e a lista pegou --
+      // que e exatamente para isso que ela existe. O selo de validado chegou a
+      // quatro superficies por emenda do ADR-0010, decisao do cliente, e o
+      // comentario do Mural e uma delas.
+      //
+      // **Acrescentado pelo NOME e com o motivo, e a lista NAO foi aberta.**
+      // O campo e um BOOLEANO sobre a conta -- `contact_channel_verified`,
+      // obrigatorio e nao anulavel no contrato --, e nao um dado de pessoa: nao
+      // e o endereco do canal, nem a data, nem QUAL dos dois canais. E por isso
+      // que ele nao afrouxa o que este contrapeso guarda, que e identificador
+      // interno e contagem escorrendo junto com o autor (ADR-0010 item 6 e
+      // item 7, Emenda 5 itens 5 e 6). As iscas de UUID e de contagem abaixo
+      // continuam de pe e intactas.
       assert.deepEqual(
         Object.keys(visto.author).sort(),
-        ['display_name', 'handle', 'photo_icon_url'],
-        'o autor do comentario ganhou ou perdeu campo: `PublicationAuthor` tem TRES',
+        ['contact_channel_verified', 'display_name', 'handle', 'photo_icon_url'],
+        'o autor do comentario ganhou ou perdeu campo: `PublicationAuthor` tem QUATRO',
       );
       // NENHUM IDENTIFICADOR INTERNO em lugar nenhum do corpo (ADR-0010 item 6).
       const texto = JSON.stringify(r.corpo);
