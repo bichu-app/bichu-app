@@ -732,14 +732,37 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     valores: ['pending', 'accepted', 'declined'],
   },
 
-  // Mesma migracao. As TRES origens por onde um convite pode nascer, e a lista
-  // e fechada de proposito: pedir conexao exige ter estado junto em ALGO (um
-  // caso ancorado, um encontro ancorado, ou o codigo de presenca lido na hora).
-  // Sem a lista fechada, `origin` aceitaria texto livre e a ancora deixaria de
-  // ser auditavel.
+  // As CINCO origens por onde um pedido de conexao pode nascer, e a lista
+  // continua fechada de proposito: sem ela, `origin` aceitaria texto livre e a
+  // procedencia deixaria de ser auditavel.
+  //
+  // **Eram TRES ate 20/10/2026** (`20261018000030`), e aquela migracao escrevia
+  // ao lado da coluna: *"Nao existe quarto valor, e nao existe caminho por
+  // apelido, por busca nem por link"*. O cliente pediu **os tres**, e a
+  // `20261020000012` acrescentou dois valores:
+  //
+  //   * `invite_link`   -- o convite emitido pelo dono, resolvido por
+  //                        `invite_token`. Cobre o QR **e** o link do WhatsApp,
+  //                        porque os dois carregam o MESMO token;
+  //   * `people_search` -- a busca por nome ou apelido, resolvida por `handle`.
+  //
+  // `presence_code` NAO foi reaproveitado para o QR: ele e a fatia H'' (token
+  // ROTATIVO de 5 min, cara a cara) e o QR do perfil dura 30 dias -- declarar um
+  // link duravel como codigo rotativo faria quem consulta `origin` para medir
+  // risco ler o contrario do que aconteceu.
+  //
+  // A lista fechada fez exatamente o trabalho dela: obrigou a decisao a passar
+  // por uma migracao, e e por isso que este portao reprovou antes de alguem
+  // acrescentar os valores aqui.
   'public.user_connections.user_connections_origem_fechada': {
     coluna: 'origin',
-    valores: ['anchored_case', 'anchored_event', 'presence_code'],
+    valores: [
+      'anchored_case',
+      'anchored_event',
+      'presence_code',
+      'invite_link',
+      'people_search',
+    ],
   },
 
   // ---------------------------------------------------------------------
