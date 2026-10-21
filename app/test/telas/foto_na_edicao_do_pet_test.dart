@@ -91,6 +91,9 @@ Future<_Rede> _abrirAEdicao(
   CameraDeTeste? camera,
   /// O que `DELETE /pets/{id}/photos/{fotoId}` responde.
   Future<http.Response> Function()? aoRemover,
+  /// O que o ARMAZENAMENTO responde aos bytes. `204` quando nao se diz nada;
+  /// um `4xx` aqui e a recusa definitiva, que vira [DesfechoDoEnvio.recusada].
+  Future<http.Response> Function()? aoArmazenar,
 }) async {
   final rede = _Rede();
   await abrirOApp(
@@ -107,7 +110,7 @@ Future<_Rede> _abrirAEdicao(
       final caminho = requisicao.url.path;
 
       if (requisicao.url.toString().startsWith(_armazenamento)) {
-        return http.Response('', 204);
+        return (aoArmazenar ?? () async => http.Response('', 204))();
       }
       if (caminho.endsWith('/reference-data')) {
         return json200(referenciaDeTeste());
@@ -316,6 +319,117 @@ void main() {
             'que o servidor nomeou no corpo de uma resposta.',
       );
     });
+
+    // -----------------------------------------------------------------------
+    // ISCA — A PREVIA MOSTRA A FOTO RECEM-ESCOLHIDA
+    //
+    // O defeito relatado pelo cliente em 20/10/2026, nas palavras dele: *"a
+    // edicao da foto do pet, ao selecionar ele pisca, mas ele nao atualiza o
+    // preview para o usuario antes de salvar o cadastro"* -- e, antes disso,
+    // *"a foto do cadastro do pet nao fez o upload"*. **Eram o mesmo defeito.**
+    //
+    // O envio SEMPRE funcionou: os tres casos acima contam intencao, bytes e
+    // confirmacao, e medi o armazenamento de homologacao respondendo. O que
+    // nao funcionava era o retorno: `_MolduraDaEdicao` so sabia desenhar
+    // `fotoDeCapa`, `confirmPetPhoto` responde 202 com a foto em `processing`,
+    // e `fotoDeCapa` nao devolve foto nao exibivel. Sem polling no app, a
+    // moldura caia de volta na foto ANTIGA e ficava nela. Um envio que deu
+    // certo ficava indistinguivel de um que falhou.
+    //
+    // **O caso mede a IMAGEM, e nao o estado.** Que o widget de moldura existe,
+    // que `setState` rodou, que o passo virou `subindo` -- nada disso prova que
+    // a pessoa viu a foto dela. O que prova e o `FileImage` apontando para o
+    // arquivo escolhido. Com o mecanismo desligado este caso reprova aqui, e
+    // nao numa assercao vizinha.
+    testWidgets(
+      'a moldura mostra a foto RECEM-ESCOLHIDA, e nao a antiga',
+      (tester) async {
+        final camera = CameraDeTeste(
+          EstadoDaPermissao.concedida,
+          foto: fotoEscolhidaDeTeste,
+        );
+        await _abrirAEdicao(tester, pet: _petComFoto(), camera: camera);
+
+        await tocar(tester, find.text(TextosDoDetalhe.trocarAFoto));
+        await tocar(tester, find.text(TextosDoDetalhe.escolherDaGaleria));
+
+        final imagens = tester
+            .widgetList<Image>(_imagemDaMoldura())
+            .toList(growable: false);
+        expect(
+          imagens,
+          isNotEmpty,
+          reason:
+              'REPROVA: a moldura nao desenha imagem nenhuma depois da escolha '
+              '-- e o esqueleto no lugar da foto, que foi o "pisca" relatado.',
+        );
+        final doArquivo = imagens
+            .where((i) => i.image is FileImage)
+            .map((i) => (i.image as FileImage).file.path)
+            .toList(growable: false);
+        expect(
+          doArquivo,
+          contains(fotoEscolhidaDeTeste.caminho),
+          reason:
+              'REPROVA: a moldura nao mostra o arquivo que a pessoa acabou de '
+              'escolher. Sem esta imagem nao existe retorno nenhum na tela, e '
+              'um envio que funciona fica indistinguivel de um que falha -- que '
+              'e exatamente o que o cliente relatou como "nao fez o upload".',
+        );
+        expect(
+          imagens.where((i) => i.image is NetworkImage),
+          isEmpty,
+          reason:
+              'REPROVA: a foto ANTIGA continua na moldura depois de a pessoa '
+              'escolher outra. A derivada da nova ainda esta em `processing`, '
+              'entao mostrar a antiga aqui afirma que nada mudou.',
+        );
+      },
+    );
+
+    // CONTRAPESO. Sem ele a isca acima passaria com uma moldura que mostra
+    // qualquer arquivo o tempo todo.
+    testWidgets(
+      'escolher e ser RECUSADO volta para a foto anterior',
+      (tester) async {
+        final camera = CameraDeTeste(
+          EstadoDaPermissao.concedida,
+          foto: fotoEscolhidaDeTeste,
+        );
+        await _abrirAEdicao(
+          tester,
+          pet: _petComFoto(),
+          camera: camera,
+          // Recusa definitiva do armazenamento: tipo fora da politica, acima
+          // do teto, autorizacao vencida. Nenhuma melhora com insistencia.
+          aoArmazenar: () async => http.Response('', 403),
+        );
+
+        await tocar(tester, find.text(TextosDoDetalhe.trocarAFoto));
+        await tocar(tester, find.text(TextosDoDetalhe.escolherDaGaleria));
+
+        final imagens = tester
+            .widgetList<Image>(_imagemDaMoldura())
+            .toList(growable: false);
+        expect(
+          imagens.where((i) => i.image is FileImage),
+          isEmpty,
+          reason:
+              'REPROVA: a foto recusada ficou na moldura. A tela estaria '
+              'exibindo como salva uma imagem que nao existe em lugar nenhum '
+              '-- a mentira inversa da que esta correcao fecha.',
+        );
+        expect(
+          imagens
+              .where((i) => i.image is NetworkImage)
+              .map((i) => (i.image as NetworkImage).url),
+          contains(_card),
+          reason:
+              'REPROVA: a foto ANTERIOR nao voltou. Recusar o envio nao apaga '
+              'a foto que o pet ja tinha.',
+        );
+      },
+    );
 
     testWidgets('cancelar o seletor NAO envia nada', (tester) async {
       // `foto` nula e a pessoa desistindo no seletor do sistema. E o que

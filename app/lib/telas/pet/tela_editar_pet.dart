@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -138,6 +140,24 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
   bool _fotoMudou = false;
 
   _PassoDaFoto _passoDaFoto = _PassoDaFoto.parada;
+
+  /// A foto que a pessoa ACABOU de escolher, enquanto a derivada nao existe.
+  ///
+  /// **Sem ela nao ha retorno nenhum nesta tela, e foi o defeito relatado pelo
+  /// cliente** em 20/10/2026: *"ao selecionar ele pisca, mas nao atualiza o
+  /// preview"*. O "pisca" era a moldura trocando a foto antiga pelo esqueleto;
+  /// o preview nunca chegava porque o unico caminho de imagem aqui era
+  /// `fotoDeCapa`, e `confirmPetPhoto` responde 202 com a foto em `processing`
+  /// -- que `fotoDeCapa` nao devolve, por nao ser exibivel. Sem polling no app,
+  /// a moldura voltava para a foto ANTIGA e ficava nela. Um envio que funciona
+  /// ficava indistinguivel de um que falha, e o cliente concluiu, com razao
+  /// pelo que via, que o upload nao tinha acontecido.
+  ///
+  /// As outras cinco telas de foto ja mostram a escolhida antes do primeiro
+  /// `await` (`PreviaDaFoto`), e por isso o girador delas nunca aparece. Esta
+  /// fazia o inverso: mostrava o esqueleto e nunca a foto. E a MESMA decisao de
+  /// ordem, com o sinal trocado.
+  FotoLocal? _fotoEscolhida;
 
   /// O recado do bloco da foto: informativo quase sempre.
   String? _recadoDaFoto;
@@ -315,6 +335,10 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     final retomada = Escopo.of(context).retomadaDeFotos;
 
     setState(() {
+      // A ESCOLHIDA ENTRA NA ARVORE ANTES DO PRIMEIRO `await`, que e o que as
+      // outras telas de foto ja faziam. E ela que a pessoa ve enquanto os bytes
+      // sobem, no lugar do esqueleto que apagava a foto antiga.
+      _fotoEscolhida = foto;
       _passoDaFoto = _PassoDaFoto.subindo;
       _recadoDaFoto = TextosDoDetalhe.fotoSubindo;
       _recadoEhErro = false;
@@ -334,6 +358,13 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
       // abertura com rede. Recusada e, porque tentar de novo com o mesmo
       // arquivo devolve a mesma recusa.
       _recadoEhErro = desfecho == DesfechoDoEnvio.recusada;
+      // RECUSADA VOLTA A FOTO ANTERIOR. Deixar na moldura um arquivo que o
+      // servidor recusou seria a mentira inversa da que este conserto fecha:
+      // a tela mostrando como salva uma foto que nao existe em lugar nenhum.
+      // `semSinal` MANTEM a escolhida, e isso nao e descuido -- o arquivo ficou
+      // no disco do aparelho e sobe na proxima abertura com rede, entao a
+      // moldura esta dizendo a verdade sobre o que vai acontecer.
+      if (desfecho == DesfechoDoEnvio.recusada) _fotoEscolhida = null;
     });
 
     if (desfecho == DesfechoDoEnvio.enviada) await _recarregarOPet();
@@ -403,6 +434,9 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     setState(() {
       _recadoDaFoto = null;
       _recadoEhErro = false;
+      // Remover apaga TAMBEM a escolhida: sem isto, apagar a foto deixaria na
+      // moldura a imagem local que a pessoa acabou de mandar remover.
+      _fotoEscolhida = null;
     });
     await _recarregarOPet();
   }
@@ -583,6 +617,7 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
               // escrita propria, e por isso tem bloco proprio.
               _BlocoDaFoto(
                 pet: _pet,
+                escolhida: _fotoEscolhida,
                 passo: _passoDaFoto,
                 recado: _recadoDaFoto,
                 recadoEhErro: _recadoEhErro,
@@ -626,6 +661,7 @@ enum _Origem { camera, galeria }
 class _BlocoDaFoto extends StatelessWidget {
   const _BlocoDaFoto({
     required this.pet,
+    required this.escolhida,
     required this.passo,
     required this.recado,
     required this.recadoEhErro,
@@ -636,6 +672,9 @@ class _BlocoDaFoto extends StatelessWidget {
   });
 
   final Pet pet;
+
+  /// A foto recem-escolhida, enquanto a derivada do servidor nao existe.
+  final FotoLocal? escolhida;
   final _PassoDaFoto passo;
   final String? recado;
   final bool recadoEhErro;
@@ -661,7 +700,12 @@ class _BlocoDaFoto extends StatelessWidget {
         // tela mudaria a proporcao que o token fixa.
         Align(
           alignment: Alignment.centerLeft,
-          child: _MolduraDaEdicao(pet: pet, capa: capa, subindo: passo == _PassoDaFoto.subindo),
+          child: _MolduraDaEdicao(
+            pet: pet,
+            capa: capa,
+            escolhida: escolhida,
+            subindo: passo == _PassoDaFoto.subindo,
+          ),
         ),
         const SizedBox(height: BichuEspaco.e4),
         BotaoSecundario(
@@ -683,7 +727,10 @@ class _BlocoDaFoto extends StatelessWidget {
             aoTocar: ocupado ? null : aoRemover,
           ),
         ],
-        if (capa == null && !pet.temFotoEmProcessamento) ...<Widget>[
+        // `escolhida == null` entra na condicao: com a foto recem-escolhida na
+        // moldura, convidar a pessoa a adicionar uma foto seria negar o que
+        // ela esta vendo.
+        if (capa == null && escolhida == null && !pet.temFotoEmProcessamento) ...<Widget>[
           const SizedBox(height: BichuEspaco.e2),
           // Convite, em `bodySmall` e `textSecondary`: e orientacao, e nao
           // erro. Faixa aqui transformaria "ainda nao tem foto" em pendencia
@@ -748,15 +795,55 @@ class _MolduraDaEdicao extends StatelessWidget {
   const _MolduraDaEdicao({
     required this.pet,
     required this.capa,
+    required this.escolhida,
     required this.subindo,
   });
 
   final Pet pet;
   final FotoDoPet? capa;
+
+  /// A foto recem-escolhida. Tem precedencia sobre [capa], e e o conserto.
+  final FotoLocal? escolhida;
   final bool subindo;
 
   @override
   Widget build(BuildContext context) {
+    // A ESCOLHIDA VEM PRIMEIRO, E INCLUSIVE DURANTE O ENVIO.
+    //
+    // Ela e a coisa mais recente que a pessoa decidiu, e e a unica imagem que
+    // existe entre a escolha e a derivada ficar pronta -- janela que, sem
+    // polling no app, nao fecha enquanto esta tela estiver aberta. Mostrar o
+    // esqueleto aqui era apagar a foto antiga sem pintar a nova, que e o
+    // "pisca" relatado; e cair de volta em `capa` depois do envio era exibir a
+    // foto ANTIGA como se o envio nao tivesse acontecido.
+    final local = escolhida;
+    if (local != null) {
+      return Semantics(
+        image: true,
+        label: TextosDoDetalhe.fotoAtualDe(pet.nome),
+        child: Moldura(
+          largura: BichuMoldura.larguraFotoLg,
+          estado: EstadoDaMoldura.repouso,
+          filho: Image.file(
+            File(local.caminho),
+            fit: BoxFit.cover,
+            // O mesmo ponto focal da derivada: o terco superior, onde esta a
+            // cabeca do animal na foto tipica de tutor. Numeros diferentes
+            // fariam a foto SALTAR quando a derivada chegasse.
+            alignment: const Alignment(0, -1 / 3),
+            // `Image.file` ja aplica a orientacao do EXIF ao decodificar, que e
+            // o mesmo `.rotate()` que o servidor faz antes de cortar.
+            errorBuilder: (context, erro, pilha) => Moldura(
+              largura: BichuMoldura.larguraFotoLg,
+              estado: subindo
+                  ? EstadoDaMoldura.carregando
+                  : EstadoDaMoldura.vazio,
+            ),
+          ),
+        ),
+      );
+    }
+
     final atual = capa;
     if (atual != null && !subindo) {
       return Semantics(
