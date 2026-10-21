@@ -7068,6 +7068,20 @@ paths:
             e `3` e nao um numero escolhido.
 
             Ausente ou vazio: **lista vazia**. Nao existe listagem de pessoas.
+
+            **A isencao abaixo e o que faz o codigo obedecer a este paragrafo.**
+            Ate 21/10/2026 ele era so prosa: o vigia instalava o `minLength` no
+            validador da borda e `q=ma` respondia `400 validation-failed` com
+            `{"field":"q","code":"minLength"}`, medido em homologacao pelo corpo
+            da resposta. `minLength` e a UNICA palavra isenta: `maxLength`
+            continua recusando com 400, porque termo de 41 caracteres e pedido
+            malformado e nao pedido incompleto.
+          # Tira `minLength` do esquema que o Fastify instala, e SO dele: o piso
+          # segue cobrado em `termoDeBusca`, que devolve lista vazia **sem
+          # consultar o banco**. Nenhum dos tres freios do cliente muda -- a
+          # busca exige conta, abaixo de tres caracteres nao ha consulta, e
+          # campo vazio nao lista ninguem. O que muda e a FORMA da recusa.
+          x-nao-recusado-na-borda: [minLength]
           schema:
             type: string
             minLength: 3

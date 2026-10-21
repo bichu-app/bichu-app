@@ -736,6 +736,109 @@ components:
   });
 });
 
+/**
+ * `x-nao-recusado-na-borda`: a palavra isenta sai do esquema de borda, e a
+ * isenção que **não casa nada** levanta.
+ *
+ * A segunda metade é a que importa. Uma isenção escrita errada (`minlength`) ou
+ * sobrevivente de um `schema` que mudou seria um no-op silencioso: a borda
+ * voltaria a recusar e a descrição do contrato continuaria prometendo que não —
+ * exatamente o defeito que esta chave existe para consertar, uma volta depois.
+ */
+function specComParametro(parametroYaml: string): string {
+  return `${CABECALHO}paths:
+  /coisas:
+    get:
+      operationId: listarCoisas
+      security: []
+      parameters:
+${parametroYaml
+  .split('\n')
+  .map((linha) => (linha === '' ? linha : `        ${linha}`))
+  .join('\n')}
+      responses:
+        "200": { description: ok }
+`;
+}
+
+void describe('isenção de palavra no esquema de borda', () => {
+  void it('a palavra isenta SAI, e as outras ficam', () => {
+    const contrato = carregarTexto(
+      specComParametro(
+        `- name: q
+  in: query
+  x-nao-recusado-na-borda: [minLength]
+  schema: { type: string, minLength: 3, maxLength: 40 }`,
+      ),
+    );
+    const propriedades = comoObjeto(
+      contrato.parameterSchemas('listarCoisas').querystring?.['properties'],
+    );
+    assert.deepEqual(propriedades['q'], { type: 'string', maxLength: 40 });
+  });
+
+  void it('sem a chave, nada sai: o esquema é o do contrato', () => {
+    const contrato = carregarTexto(
+      specComParametro(
+        `- name: q
+  in: query
+  schema: { type: string, minLength: 3, maxLength: 40 }`,
+      ),
+    );
+    const propriedades = comoObjeto(
+      contrato.parameterSchemas('listarCoisas').querystring?.['properties'],
+    );
+    assert.deepEqual(propriedades['q'], { type: 'string', minLength: 3, maxLength: 40 });
+  });
+
+  void it('ISCA: isentar palavra que o `schema` NÃO declara levanta', () => {
+    const contrato = carregarTexto(
+      specComParametro(
+        `- name: q
+  in: query
+  x-nao-recusado-na-borda: [minlength]
+  schema: { type: string, minLength: 3 }`,
+      ),
+    );
+    assert.throws(
+      () => contrato.parameterSchemas('listarCoisas'),
+      /isenta `minlength`, que o `schema` do parâmetro não declara/,
+      'uma isenção escrita errada passou calada, e é justamente o no-op silencioso ' +
+        'que esta chave existe para não ter',
+    );
+  });
+
+  void it('ISCA: lista vazia levanta, porque isentaria nada', () => {
+    const contrato = carregarTexto(
+      specComParametro(
+        `- name: q
+  in: query
+  x-nao-recusado-na-borda: []
+  schema: { type: string, minLength: 3 }`,
+      ),
+    );
+    assert.throws(
+      () => contrato.parameterSchemas('listarCoisas'),
+      /precisa ser uma lista NÃO VAZIA/,
+    );
+  });
+
+  void it('ISCA: valor que não é lista de texto levanta', () => {
+    const contrato = carregarTexto(
+      specComParametro(
+        `- name: q
+  in: query
+  x-nao-recusado-na-borda: minLength
+  schema: { type: string, minLength: 3 }`,
+      ),
+    );
+    assert.throws(
+      () => contrato.parameterSchemas('listarCoisas'),
+      /precisa ser uma lista NÃO VAZIA/,
+    );
+  });
+});
+
 void describe('o contrato de verdade continua carregando', () => {
   // Um caso só, e de propósito: os documentos montados acima provam as regras;
   // este prova que `api/openapi.yaml` ainda passa por todas elas. Se este cair

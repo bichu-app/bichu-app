@@ -19502,6 +19502,14 @@ export interface operations {
                  *     e `3` e nao um numero escolhido.
                  *
                  *     Ausente ou vazio: **lista vazia**. Nao existe listagem de pessoas.
+                 *
+                 *     **A isencao abaixo e o que faz o codigo obedecer a este paragrafo.**
+                 *     Ate 21/10/2026 ele era so prosa: o vigia instalava o `minLength` no
+                 *     validador da borda e `q=ma` respondia `400 validation-failed` com
+                 *     `{"field":"q","code":"minLength"}`, medido em homologacao pelo corpo
+                 *     da resposta. `minLength` e a UNICA palavra isenta: `maxLength`
+                 *     continua recusando com 400, porque termo de 41 caracteres e pedido
+                 *     malformado e nao pedido incompleto.
                  */
                 q?: string;
                 page?: number;

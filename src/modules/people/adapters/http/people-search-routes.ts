@@ -25,6 +25,32 @@
  *
  * ## Os freios, e onde cada um mora
  *
+ * ## O piso NÃO é cobrado nesta borda, e isso é o contrato falando
+ *
+ * `api/openapi.yaml` declara `minLength: 3` em `q` dizendo, por escrito, que
+ * ele **não é recusado com 400 quando menor** — a resposta é lista vazia,
+ * porque a tela chama a busca a cada tecla e um erro vermelho no meio de
+ * alguém escrevendo `maria` seria o produto discutindo com quem digita. O
+ * `minLength` ali documenta o piso do índice trigrama para quem lê a
+ * especificação, e nada mais.
+ *
+ * Até 21/10/2026 o código discordava do contrato: `vigiarParametrosDasRotas`
+ * instalava aquele `minLength` no validador do Fastify e `q=ma` respondia
+ * `400 validation-failed` com `{"field":"q","code":"minLength"}`, medido em
+ * homologação pelo corpo da resposta. O contrato venceu — ele é a fonte única
+ * que manda em quatro aplicações, e um cliente escrito contra ele espera 200.
+ * O conserto é a chave `x-nao-recusado-na-borda: [minLength]` no parâmetro, que
+ * `contract.ts` honra tirando a palavra do esquema de borda, e **só** dela.
+ *
+ * **Nenhum dos três freios do cliente afrouxou**: a busca continua exigindo
+ * conta, abaixo de três caracteres continua não havendo consulta ao banco
+ * (`termoDeBusca` devolve `undefined` e a porta nem é chamada), e campo vazio
+ * continua não listando ninguém. Mudou a FORMA da recusa, e nenhuma pessoa a
+ * mais sai por causa disso — medido em
+ * `o-piso-da-busca-nao-recusa-na-borda.test.ts`. O `maxLength: 40` continua
+ * recusando com 400: termo de 41 caracteres é pedido malformado, não
+ * incompleto.
+ *
  * | Freio | Onde |
  * |---|---|
  * | 3 caracteres, campo vazio não lista | `termoDeBusca` + `BuscaDePessoas` |
