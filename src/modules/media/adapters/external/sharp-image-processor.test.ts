@@ -29,8 +29,13 @@ import {
   ESCADA_ENXUTA,
   FORMATO_DAS_DERIVADAS,
   TETO_DE_BYTES_DA_DERIVADA,
+  regiaoNaProporcao,
 } from '../../domain/derivadas.js';
-import type { Derivada, PedidoDeDerivada } from '../../ports/image-processor.js';
+import type {
+  Derivada,
+  PedidoDeDerivada,
+  RegiaoDoRecorte,
+} from '../../ports/image-processor.js';
 
 const processador = criarImageProcessor();
 
@@ -399,5 +404,292 @@ void describe('HEIC: o cabeçalho abre e o pixel não (medido nesta instalação
     ]);
     const r = await processador.derivar(falso, semCorte(1024));
     assert.equal(typeof r, 'string', 'precisa devolver motivo, nunca lançar');
+  });
+});
+
+// ===========================================================================
+// O RECORTE ESCOLHIDO PELA PESSOA (cliente, 20/10/2026)
+// ===========================================================================
+// *"devemos implementar um recurso de ajustar a imagem antes de fazer o crop,
+// pois a maioria esta cortando informacao relevante"*.
+//
+// O que estes casos provam, e cada um prova UMA coisa:
+//
+//   1. com regiao, o recorte e EXATAMENTE o retangulo pedido -- e nao o que a
+//      heuristica acharia;
+//   2. sem regiao, nada muda: `attention` continua decidindo, e o que ja esta
+//      gravado continua saindo igual;
+//   3. **a regiao e medida DEPOIS da rotacao do EXIF** -- a armadilha;
+//   4. regiao impossivel e presa na borda, e nao vira excecao no worker;
+//   5. a proporcao secundaria sai da regra, e nao de um segundo ajuste.
+
+/**
+ * Uma foto em RETRATO com uma marca no alto, e nada mais.
+ *
+ * A marca e um retangulo de cor chapada nos 25% de cima. Cor chapada de
+ * proposito: o que cada caso mede e ONDE o recorte caiu, e para isso basta
+ * perguntar a cor do pixel do meio -- que e uma pergunta sem ambiguidade,
+ * diferente de "a imagem parece certa".
+ */
+async function retratoComMarcaNoAlto(): Promise<Buffer> {
+  return sharp({
+    create: { width: 600, height: 1000, channels: 3, background: { r: 20, g: 20, b: 200 } },
+  })
+    .composite([
+      {
+        input: {
+          create: { width: 600, height: 250, channels: 3, background: { r: 230, g: 30, b: 30 } },
+        },
+        top: 0,
+        left: 0,
+      },
+    ])
+    .jpeg({ quality: 95 })
+    .toBuffer();
+}
+
+/** A cor do pixel do meio de uma imagem. */
+async function corDoMeio(bytes: Buffer): Promise<{ r: number; g: number; b: number }> {
+  const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+  const x = Math.floor(info.width / 2);
+  const y = Math.floor(info.height / 2);
+  const i = (y * info.width + x) * info.channels;
+  return { r: data[i] ?? 0, g: data[i + 1] ?? 0, b: data[i + 2] ?? 0 };
+}
+
+const ehVermelho = (c: { r: number; g: number; b: number }): boolean => c.r > 150 && c.b < 100;
+const ehAzul = (c: { r: number; g: number; b: number }): boolean => c.b > 150 && c.r < 100;
+
+function comRecorte(
+  largura: number,
+  altura: number,
+  recorte: RegiaoDoRecorte | undefined,
+): PedidoDeDerivada {
+  return {
+    largura,
+    altura,
+    escada: ESCADA_DA_FAIXA,
+    tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    ...(recorte === undefined ? {} : { recorte }),
+  };
+}
+
+void describe('o recorte escolhido pela pessoa', () => {
+  void it('CONTROLE POSITIVO: a fixture tem mesmo a marca no alto e o fundo embaixo', async () => {
+    // Sem isto, todos os casos abaixo poderiam estar medindo uma imagem
+    // chapada e concordando por acidente.
+    const bytes = await retratoComMarcaNoAlto();
+    const meta = await sharp(bytes).metadata();
+    assert.equal(meta.width, 600);
+    assert.equal(meta.height, 1000);
+    const alto = await sharp(bytes)
+      .extract({ left: 0, top: 0, width: 600, height: 200 })
+      .jpeg()
+      .toBuffer();
+    const baixo = await sharp(bytes)
+      .extract({ left: 0, top: 700, width: 600, height: 200 })
+      .jpeg()
+      .toBuffer();
+    assert.ok(ehVermelho(await corDoMeio(alto)), 'o alto da fixture devia ser a marca');
+    assert.ok(ehAzul(await corDoMeio(baixo)), 'o baixo da fixture devia ser o fundo');
+  });
+
+  void it('com regiao no ALTO, a derivada sai da marca', async () => {
+    const bytes = await retratoComMarcaNoAlto();
+    // Os 20% de cima: dentro da marca.
+    const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0, w: 1, h: 0.2 }));
+    assert.ok(
+      ehVermelho(await corDoMeio(d.bytes)),
+      'REPROVA: a regiao pedia o alto e a derivada nao veio da marca.',
+    );
+  });
+
+  void it('com regiao EMBAIXO, a mesma foto da a outra faixa', async () => {
+    // A ISCA NEGATIVA do caso acima: sem ela, um adaptador que ignorasse a
+    // regiao e sempre cortasse o alto passaria nos dois.
+    const bytes = await retratoComMarcaNoAlto();
+    const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0.7, w: 1, h: 0.2 }));
+    assert.ok(
+      ehAzul(await corDoMeio(d.bytes)),
+      'REPROVA: a regiao pedia o pe da foto e a derivada nao veio dele.',
+    );
+  });
+
+  void it('SEM regiao, nada muda: o corte automatico continua decidindo', async () => {
+    const bytes = await retratoComMarcaNoAlto();
+    const d = await derivada(bytes, comRecorte(400, 225, undefined));
+    assert.equal(d.largura, 400);
+    assert.equal(d.altura, 225);
+  });
+
+  // =========================================================================
+  // A ARMADILHA: a regiao e medida DEPOIS da rotacao do EXIF
+  // =========================================================================
+  // O servidor chama `.rotate()` antes de cortar. Uma regiao medida sobre a
+  // imagem ARMAZENADA, e nao sobre a imagem VISTA, sai com os eixos trocados --
+  // e o resultado e um recorte plausivel da parte errada da foto, **sem erro,
+  // sem log e sem nada**.
+  //
+  // Este caso existe porque e o defeito mais provavel de toda a mudanca, e o
+  // unico que nenhum tipo pega.
+  void it('ARMADILHA -- a regiao vale sobre a imagem VISTA, e nao sobre a armazenada', async () => {
+    // A MESMA foto de cima, girada: os pixels ficam DEITADOS (1000 x 600) e o
+    // EXIF Orientation 6 manda girar 90 graus ao mostrar. Quem olha ve de novo
+    // um retrato 600 x 1000 com a marca no alto.
+    const bytes = await sharp(await retratoComMarcaNoAlto())
+      .rotate(270)
+      // `withMetadata({ orientation })`, e NAO `withExif`. Medido nesta
+      // instalacao (sharp 0.35.4 / libvips 8.18.6): `withExif({ IFD0:
+      // { Orientation: '6' } })` grava o bloco e o leitor devolve
+      // `orientation: 1` -- a fixture sairia sem armadilha nenhuma e o caso
+      // passaria por nao ter alvo. A asercao logo abaixo existe exatamente
+      // para esse engano nao passar calado.
+      .withMetadata({ orientation: 6 })
+      .jpeg({ quality: 95 })
+      .toBuffer();
+
+    const meta = await sharp(bytes).metadata();
+    assert.equal(meta.width, 1000, 'os pixels precisam estar deitados');
+    assert.equal(meta.height, 600, 'os pixels precisam estar deitados');
+    assert.equal(
+      meta.orientation,
+      6,
+      'sem o EXIF a armadilha nao existe e o caso nao prova nada',
+    );
+
+    // A pessoa viu um RETRATO e enquadrou o alto dele.
+    const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0, w: 1, h: 0.2 }));
+
+    assert.ok(
+      ehVermelho(await corDoMeio(d.bytes)),
+      'REPROVA: a regiao foi aplicada sobre a imagem ARMAZENADA, e nao sobre a ' +
+        'imagem VISTA. O recorte saiu de um lugar plausivel e errado -- que e ' +
+        'exatamente o defeito que nao acusa sozinho.',
+    );
+  });
+
+  void it('regiao que estoura a borda e PRESA, e nao vira excecao na fila', async () => {
+    // Regiao mal medida pelo cliente nao pode virar excecao: a fila entenderia
+    // "culpa nossa" e tentaria cinco vezes.
+    //
+    // A regiao pedida comeca em 90% e tem 50% de lado: ela sai pela direita e
+    // por baixo. Presa, ela vira 60 x 100 px -- o que resta ate a borda.
+    //
+    // **E a derivada sai MENOR que os 200 x 200 pedidos, de proposito**:
+    // `withoutEnlargement` nao amplia, e ampliar 60 px para 200 nao
+    // acrescentaria informacao nenhuma. Cobrar 200 aqui seria cobrar a
+    // ampliacao que o resto deste arquivo existe para impedir.
+    const bytes = await retratoComMarcaNoAlto();
+    const d = await derivada(bytes, comRecorte(200, 200, { x: 0.9, y: 0.9, w: 0.5, h: 0.5 }));
+    assert.ok(d.largura > 0 && d.altura > 0, 'a derivada precisa existir');
+    assert.ok(d.largura <= 200 && d.altura <= 200, 'nao pode ter ampliado');
+    // O canto de baixo e fundo, e nao a marca: a janela foi presa no lugar
+    // certo, e nao reposicionada para dentro.
+    assert.ok(
+      ehAzul(await corDoMeio(d.bytes)),
+      'REPROVA: a janela presa veio do lugar errado da foto.',
+    );
+  });
+
+  void it('regiao de area zero nao derruba o worker', async () => {
+    const bytes = await retratoComMarcaNoAlto();
+    const r = await processador.derivar(bytes, comRecorte(200, 200, { x: 0, y: 0, w: 0, h: 0 }));
+    assert.notEqual(typeof r, 'string', 'devia sair derivada, e nao motivo de recusa');
+  });
+
+  // =========================================================================
+  // DENTRO do recorte da pessoa, a heuristica NAO decide de novo
+  // =========================================================================
+  // A regiao escolhida quase nunca tem exactamente a proporcao da derivada --
+  // ela tem a proporcao PRINCIPAL, e as outras saem dela. Entao, depois do
+  // `extract`, ainda sobra um corte pequeno para fechar a geometria.
+  //
+  // **Quem faz esse corte importa.** Com `attention`, o libvips procura de
+  // novo a regiao de maior energia e desliza para FORA do que a pessoa
+  // centralizou -- o mesmo defeito, agora escondido dentro do recorte dela e
+  // menor, que e justamente o tipo que ninguem nota. Com `centre`, o que
+  // sobra sai igual dos dois lados.
+  //
+  // Este caso existe porque a mutacao provou que faltava: trocar `centre` por
+  // `attention` aqui passava verde nos outros casos, porque as fixtures deles
+  // sao chapadas e as duas estrategias davam a mesma cor.
+  void it('o corte que FECHA a geometria e centrado, e nao por energia', async () => {
+    // Uma faixa com tres tercos: ruido de alto contraste a esquerda (o ima da
+    // heuristica), verde no meio, azul a direita.
+    const ruido = Buffer.alloc(200 * 200 * 3);
+    for (let i = 0; i < ruido.length; i += 3) {
+      const claro = (i / 3) % 2 === 0;
+      ruido[i] = claro ? 250 : 5;
+      ruido[i + 1] = claro ? 250 : 5;
+      ruido[i + 2] = claro ? 250 : 5;
+    }
+    const faixa = await sharp({
+      create: { width: 600, height: 200, channels: 3, background: { r: 20, g: 200, b: 20 } },
+    })
+      .composite([
+        { input: ruido, raw: { width: 200, height: 200, channels: 3 }, top: 0, left: 0 },
+        {
+          input: {
+            create: { width: 200, height: 200, channels: 3, background: { r: 20, g: 20, b: 220 } },
+          },
+          top: 0,
+          left: 400,
+        },
+      ])
+      .jpeg({ quality: 95 })
+      .toBuffer();
+
+    // A faixa colada no meio de um retrato 600 x 1000.
+    const bytes = await sharp({
+      create: { width: 600, height: 1000, channels: 3, background: { r: 90, g: 90, b: 90 } },
+    })
+      .composite([{ input: faixa, top: 400, left: 0 }])
+      .jpeg({ quality: 95 })
+      .toBuffer();
+
+    // A pessoa enquadrou a FAIXA INTEIRA (600 x 200, ou 3:1). A derivada e
+    // 100 x 200 (1:2), bem mais estreita: sobra muito corte horizontal para
+    // fechar -- e e nele que a heuristica decidiria de novo.
+    const d = await derivada(bytes, comRecorte(100, 200, { x: 0, y: 0.4, w: 1, h: 0.2 }));
+
+    const c = await corDoMeio(d.bytes);
+    const ehVerde = c.g > 150 && c.r < 100 && c.b < 100;
+    assert.ok(
+      ehVerde,
+      'REPROVA: o corte que fecha a geometria nao foi centrado. A heuristica ' +
+        'escolheu de novo DENTRO do recorte da pessoa e deslizou para o ruido ' +
+        `de alto contraste. Cor do meio: ${JSON.stringify(c)}`,
+    );
+  });
+});
+
+
+void describe('a proporcao secundaria sai da regiao, sem segundo ajuste', () => {
+  // O original do exemplo e 600 x 1000.
+  const proporcaoDoOriginal = 600 / 1000;
+
+  void it('o centro da regiao NAO anda', () => {
+    const escolhida: RegiaoDoRecorte = { x: 0, y: 0.3, w: 1, h: 0.3375 };
+    const alvo = regiaoNaProporcao(escolhida, 4 / 3, proporcaoDoOriginal);
+    const centroY = (r: RegiaoDoRecorte): number => r.y + r.h / 2;
+    assert.ok(
+      Math.abs(centroY(alvo) - centroY(escolhida)) < 1e-9,
+      'o centro da regiao derivada andou',
+    );
+  });
+
+  void it('ALARGA, e nunca encolhe o lado que ja estava certo', () => {
+    const escolhida: RegiaoDoRecorte = { x: 0.1, y: 0.4, w: 0.8, h: 0.27 };
+    const alvo = regiaoNaProporcao(escolhida, 1, proporcaoDoOriginal);
+    assert.ok(alvo.w >= escolhida.w - 1e-9, 'a largura encolheu');
+    assert.ok(alvo.h >= escolhida.h - 1e-9, 'a altura encolheu');
+  });
+
+  void it('regiao que nao cabe e PRESA dentro do original, e a proporcao fecha', () => {
+    const escolhida: RegiaoDoRecorte = { x: 0, y: 0, w: 1, h: 1 };
+    const alvo = regiaoNaProporcao(escolhida, 16 / 9, proporcaoDoOriginal);
+    assert.ok(alvo.x >= -1e-9 && alvo.y >= -1e-9, 'saiu da borda');
+    assert.ok(alvo.x + alvo.w <= 1 + 1e-9, 'passou da direita');
+    assert.ok(alvo.y + alvo.h <= 1 + 1e-9, 'passou de baixo');
   });
 });

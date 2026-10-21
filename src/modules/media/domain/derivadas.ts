@@ -57,6 +57,8 @@
  * com a forma de derivada, e nenhuma forma de original casa com ela.
  */
 
+import type { RegiaoDoRecorte } from '../ports/image-processor.js';
+
 /** 5 MB (5 MiB, 5 242 880 bytes). O MESMO número nos cinco caminhos de envio. */
 export const TETO_DE_BYTES_DO_ENVIO = 5 * 1024 * 1024;
 
@@ -395,6 +397,73 @@ export const DERIVADA_DA_FOTO_DO_ACHADO: EspecificacaoDaDerivada = {
   altura: 1126,
   porte: 'grande',
 };
+
+/**
+ * A região escolhida, adaptada à proporção de uma derivada SECUNDÁRIA.
+ *
+ * ## O problema, e ele existe em UM lugar só
+ *
+ * Uma região escolhida não satisfaz duas proporções ao mesmo tempo. Medido em
+ * 20/10/2026, superfície por superfície: **sete das oito têm uma proporção só**
+ * em todas as suas derivadas (o pet é 1 : 1,1 nas duas; logo, foto do usuário,
+ * vitrine e publicação são 1:1; a foto do lugar é 16:9 nas duas; a Loja não
+ * corta). A capa do encontro é a **única** com duas — `banner` e `card` em
+ * 16:9, `thumb` em 4:3 — e é justamente a que o cliente reclamou.
+ *
+ * Então a pessoa ajusta **uma vez**, na proporção principal, e a secundária sai
+ * daqui. Pedir dois enquadramentos por uma miniatura de 144 dp seria cobrar da
+ * pessoa o preço de uma decisão nossa.
+ *
+ * ## A regra: ALARGA em volta do próprio centro, e prende nas bordas
+ *
+ * Alargar acrescenta um pouco de contexto em volta do que a pessoa enquadrou.
+ * Encolher tiraria algo que ela escolheu de propósito — e numa miniatura o
+ * primeiro erro é invisível, enquanto o segundo corta o focinho.
+ *
+ * Quando alargar esbarra na borda do original, o que falta sai do outro eixo:
+ * é o único jeito de fechar a proporção sem inventar pixel que não existe.
+ *
+ * **E nunca se chama `attention` neste caminho.** É o ponto inteiro: a
+ * heurística decide bem quando ninguém decidiu, e decide CONTRA a pessoa quando
+ * alguém já decidiu.
+ *
+ * @param regiao A região escolhida, em frações do original já rotacionado.
+ * @param proporcaoAlvo Largura dividida por altura da derivada secundária.
+ * @param proporcaoDoOriginal Largura dividida por altura do original já
+ *   rotacionado. Sem ela a conta sairia errada em toda foto que não fosse
+ *   quadrada: as frações não são quadradas, e `w / h` em fração só vira
+ *   proporção de verdade multiplicado por este número.
+ */
+export function regiaoNaProporcao(
+  regiao: RegiaoDoRecorte,
+  proporcaoAlvo: number,
+  proporcaoDoOriginal: number,
+): RegiaoDoRecorte {
+  const alvoEmFracao = proporcaoAlvo / proporcaoDoOriginal;
+  let w = regiao.w;
+  let h = regiao.h;
+  if (regiao.w / regiao.h > alvoEmFracao) h = regiao.w / alvoEmFracao;
+  else w = regiao.h * alvoEmFracao;
+
+  // Não cabe inteira: o lado que estourou vai ao máximo e o outro acompanha,
+  // para a proporção continuar fechando.
+  if (w > 1) {
+    w = 1;
+    h = w / alvoEmFracao;
+  }
+  if (h > 1) {
+    h = 1;
+    w = h * alvoEmFracao;
+  }
+
+  const centro = (c: number, lado: number) => Math.min(Math.max(c - lado / 2, 0), 1 - lado);
+  return {
+    x: centro(regiao.x + regiao.w / 2, w),
+    y: centro(regiao.y + regiao.h / 2, h),
+    w,
+    h,
+  };
+}
 
 /** A escada que o porte pede. Uma função para não haver um `if` em cada chamador. */
 export function escadaDo(porte: EspecificacaoDaDerivada['porte']): readonly number[] {

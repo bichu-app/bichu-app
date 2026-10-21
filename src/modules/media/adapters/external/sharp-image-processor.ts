@@ -61,6 +61,7 @@ import type {
   ImageProcessor,
   MotivoDeRecusa,
   PedidoDeDerivada,
+  RegiaoDoRecorte,
 } from '../../ports/image-processor.js';
 import { formatoRealDe } from '../../domain/numeros-magicos.js';
 import { FORMATO_DAS_DERIVADAS } from '../../domain/derivadas.js';
@@ -129,6 +130,50 @@ async function codificar(
   }
 }
 
+/**
+ * As dimensões da imagem **como ela é vista**, aplicando o `Orientation`.
+ *
+ * O EXIF 5, 6, 7 e 8 giram 90 graus, e aí a largura do arquivo é a altura da
+ * foto. É esta troca que faz a diferença entre recortar o rosto do cachorro e
+ * recortar o chão ao lado dele — e nada no caminho acusaria o engano, porque
+ * os dois são recortes válidos.
+ */
+export function dimensoesVistas(meta: {
+  width?: number | undefined;
+  height?: number | undefined;
+  orientation?: number | undefined;
+}): { largura: number; altura: number } {
+  const largura = meta.width ?? 0;
+  const altura = meta.height ?? 0;
+  const girado = (meta.orientation ?? 1) >= 5;
+  return girado ? { largura: altura, altura: largura } : { largura, altura };
+}
+
+/**
+ * A região em frações vira a janela em pixels, **presa dentro da imagem**.
+ *
+ * Arredonda, prende nas bordas e garante ao menos 1 pixel em cada eixo: uma
+ * janela de largura zero, ou que começa fora, faz o `extract` do libvips
+ * lançar — e o que era uma região mal medida pelo cliente viraria exceção no
+ * worker, a fila entenderia "culpa nossa" e tentaria cinco vezes.
+ *
+ * Prender em vez de recusar é deliberado: a pessoa enquadrou alguma coisa, e
+ * entregar o recorte possível mais próximo do que ela pediu é melhor do que
+ * recusar a foto dela por um milésimo de arredondamento.
+ */
+export function janelaEmPixels(
+  regiao: RegiaoDoRecorte,
+  largura: number,
+  altura: number,
+): { left: number; top: number; width: number; height: number } {
+  const presoEm = (valor: number, teto: number) => Math.min(Math.max(valor, 0), teto);
+  const left = presoEm(Math.round(regiao.x * largura), Math.max(largura - 1, 0));
+  const top = presoEm(Math.round(regiao.y * altura), Math.max(altura - 1, 0));
+  const width = presoEm(Math.max(Math.round(regiao.w * largura), 1), largura - left);
+  const height = presoEm(Math.max(Math.round(regiao.h * altura), 1), altura - top);
+  return { left, top, width, height };
+}
+
 export function criarImageProcessor(): ImageProcessor {
   return {
     async inspecionar(bytes: Buffer): Promise<DimensoesDaImagem | MotivoDeRecusa> {
@@ -195,16 +240,53 @@ export function criarImageProcessor(): ImageProcessor {
       // E é sequencial: um `await` por degrau, dentro de um laço. Não há
       // `Promise.all` em nenhum lugar deste arquivo, e a ausência é a regra —
       // decodificar em paralelo é o caminho pelo qual o worker morreu antes.
+      // ## A REGIÃO ESCOLHIDA PELA PESSOA, quando há uma
+      //
+      // Ela só vale com proporção pedida: sem `altura` não há corte nenhum
+      // (é a imagem de produto da Loja), e recortar assim mesmo mudaria aquela
+      // tela em silêncio.
+      //
+      // As dimensões saem do CABEÇALHO, com o `Orientation` aplicado por
+      // `dimensoesVistas` — ler o cabeçalho não decodifica nada, e é o que
+      // permite converter a fração em pixel sem um segundo decode. O outro
+      // caminho seria `.rotate().toBuffer()` antes de medir, e ele pagaria uma
+      // decodificação inteira do arquivo hostil só para saber duas dimensões.
+      let janela: { left: number; top: number; width: number; height: number } | null = null;
+      if (pedido.recorte !== undefined && pedido.altura !== undefined) {
+        try {
+          const meta = await sharp(bytes, { failOn: 'error' }).metadata();
+          const vistas = dimensoesVistas(meta);
+          if (vistas.largura > 0 && vistas.altura > 0) {
+            janela = janelaEmPixels(pedido.recorte, vistas.largura, vistas.altura);
+          }
+        } catch {
+          // Cabeçalho que não abre aqui vai falhar logo abaixo, no caminho que
+          // já sabe dizer o motivo. Seguir sem janela é cair no corte
+          // automático, que é o comportamento de sempre.
+          janela = null;
+        }
+      }
+
       let cru: { data: Buffer; info: OutputInfo };
       try {
-        const pipeline = sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
+        const girada = sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
           // A ORIENTAÇÃO PRIMEIRO, e antes do corte: `.rotate()` sem argumento
           // aplica o EXIF `Orientation` nos PIXELS. Sem ele, uma foto de
           // celular tirada na vertical seria cortada deitada — o corte pegaria
           // a faixa errada da imagem — e o metadado que diz "gire" é jogado
           // fora uma linha abaixo. Vale para TODA entrada, HEIC de iPhone
           // incluído: é a mesma chamada para os quatro formatos.
-          .rotate()
+          //
+          // **E é por isso que a região da pessoa é medida DEPOIS da rotação**:
+          // `janela` saiu de `dimensoesVistas`, que aplica o mesmo
+          // `Orientation` nas contas. As duas pontas no mesmo sistema de
+          // coordenadas, ou o recorte sai de um lugar plausível e errado.
+          .rotate();
+
+        // O recorte da pessoa entra ENTRE a rotação e a redução. Quando ele
+        // existe, o `resize` abaixo não escolhe mais nada: ele só reduz a
+        // janela já recortada para a geometria pedida.
+        const pipeline = (janela === null ? girada : girada.extract(janela))
           .resize(
             pedido.altura === undefined
               ? // Sem proporção pedida: reduz para caber na largura e preserva
@@ -223,7 +305,16 @@ export function criarImageProcessor(): ImageProcessor {
                   // o centro geométrico costuma ser o corpo, e um corte
                   // centrado em retrato decapita o animal — que é exatamente o
                   // erro que não tem volta.
-                  position: sharp.strategy.attention,
+                  //
+                  // **E ele só decide quando ninguém decidiu antes.** Com
+                  // `janela`, a imagem que chega aqui JÁ é o retângulo que a
+                  // pessoa enquadrou, e `centre` sobre ele é identidade: a
+                  // proporção já bate, então não há o que cortar. Deixar
+                  // `attention` aqui faria a heurística cortar de novo
+                  // dentro do recorte dela, por causa do arredondamento de um
+                  // pixel — e seria exatamente o defeito que esta mudança
+                  // existe para tirar.
+                  position: janela === null ? sharp.strategy.attention : 'centre',
                   // Uma foto de 400 px não vira `card` de 1024 esticado:
                   // ampliar não acrescenta informação e triplica o arquivo. O
                   // `sharp` reduz o alvo preservando a proporção pedida.

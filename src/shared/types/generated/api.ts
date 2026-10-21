@@ -10822,6 +10822,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text: string;
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
@@ -11818,6 +11819,7 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /**
          * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
@@ -11840,9 +11842,88 @@ export interface components {
             /** Format: uuid */
             upload_id: string;
             alt_text?: components["schemas"]["ImageAltText"];
+            crop?: components["schemas"]["ImageCrop"];
         };
         /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
         ImageAltText: string;
+        /**
+         * @description A regiao que a PESSOA enquadrou, para o servidor cortar nela em vez de
+         *     escolher sozinho.
+         *
+         *     **Opcional em toda escrita de imagem, e a ausencia e o comportamento de
+         *     sempre**: sem ela, o corte continua saindo de
+         *     `sharp.strategy.attention`, que procura a regiao de maior detalhe.
+         *     Nada do que ja esta gravado muda de resultado.
+         *
+         *     Pedido do cliente em 20/10/2026: *"devemos implementar um recurso de
+         *     ajustar a imagem antes de fazer o crop, pois a maioria esta cortando
+         *     informacao relevante"*. A heuristica persegue ENERGIA (variacao local
+         *     de pixel) e nao significado: num retrato de celular ela desce para a
+         *     folhagem e corta a cabeca do animal.
+         *
+         *     ## Fracoes de 0 a 1, e nunca pixeis
+         *
+         *     Quem escolhe a regiao e uma pessoa arrastando uma moldura sobre uma
+         *     previa reduzida -- 400 dp de tela sobre uma foto de 4000 px. Pedir
+         *     pixeis obrigaria cada cliente (Android, iOS, navegador) a converter, e
+         *     a conversao e onde nasce o erro de um que ninguem percebe: a derivada
+         *     sai um pixel torta e nada acusa.
+         *
+         *     ## ====================================================================
+         *     ## ATENCAO: AS COORDENADAS SAO DA IMAGEM **JA ROTACIONADA**
+         *     ## ====================================================================
+         *
+         *     O servidor chama `.rotate()` **antes** de cortar, para aplicar o
+         *     `Orientation` do EXIF nos pixeis -- sem isso, uma foto tirada em pe
+         *     seria cortada deitada. **Entao a regiao tem de ser medida no mesmo
+         *     sistema de coordenadas: o da imagem DEPOIS da rotacao, que e a que a
+         *     pessoa viu na tela.**
+         *
+         *     Um cliente que medisse sobre a imagem ARMAZENADA mandaria a regiao com
+         *     os eixos trocados, e o resultado seria um recorte plausivel da parte
+         *     errada da foto -- **sem erro, sem log e sem nada**. Nenhum tipo pega
+         *     este engano, e por isso ele tem caso proprio no servidor
+         *     (`sharp-image-processor.test.ts`, "ARMADILHA"), com uma foto em
+         *     retrato e `Orientation: 6` de verdade.
+         *
+         *     Na pratica, para quem escreve cliente: use as dimensoes que a sua
+         *     camada de imagem reporta DEPOIS de aplicar a orientacao (que e o que
+         *     toda biblioteca de UI ja faz ao desenhar), e nunca as do cabecalho do
+         *     arquivo.
+         *
+         *     ## Uma regiao so, para proporcoes diferentes
+         *
+         *     Varias derivadas saem da mesma imagem, e nem todas tem a mesma
+         *     proporcao. A pessoa ajusta **uma vez**, na proporcao principal da
+         *     superficie; as outras saem desta regiao por uma regra fixa (alargar ate
+         *     a proporcao alvo em volta do proprio centro, presa nas bordas), e nunca
+         *     chamando a heuristica de novo.
+         *
+         *     Medido em 20/10/2026: **sete das oito superficies de imagem tem uma
+         *     proporcao so** em todas as derivadas. A capa do encontro e a unica com
+         *     duas (16:9 no banner e no card, 4:3 na miniatura da galeria).
+         *
+         *     ## O que ela NAO faz
+         *
+         *     Nao recorta o original. O arquivo guardado continua inteiro no balde
+         *     privado, e e dele que sai qualquer proporcao futura -- a regiao e
+         *     aplicada na DERIVADA, a cada derivacao.
+         *
+         *     Regiao que estoura a borda e **presa** dentro da imagem, e nao
+         *     recusada: a pessoa enquadrou alguma coisa, e entregar o recorte
+         *     possivel mais proximo e melhor do que recusar a foto por um milesimo de
+         *     arredondamento.
+         */
+        ImageCrop: {
+            /** @description A borda ESQUERDA, em fracao da largura da imagem ja rotacionada. */
+            x: number;
+            /** @description A borda de CIMA, em fracao da altura da imagem ja rotacionada. */
+            y: number;
+            /** @description A LARGURA da regiao, em fracao da largura da imagem ja rotacionada. */
+            w: number;
+            /** @description A ALTURA da regiao, em fracao da altura da imagem ja rotacionada. */
+            h: number;
+        };
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
             /**
              * Format: uuid
