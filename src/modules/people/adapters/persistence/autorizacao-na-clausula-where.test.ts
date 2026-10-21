@@ -165,8 +165,27 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     assert.ok(!/group by/i.test(sql), '`GROUP BY` aqui significa que a contagem virou agregacao da junção');
   });
 
+  /**
+   * O SQL com as DUAS colunas do selo de validado apagadas.
+   *
+   * **A excecao e estreita, e esta aqui porque tem de ser lida junto com a
+   * varredura logo abaixo.** A emenda do ADR-0010 de 21/10/2026 fez o perfil
+   * derivar o selo de
+   * `u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL`, e
+   * `email_verified_at` CONTEM `email` -- a varredura e por substring, e sem
+   * esta subtracao ela reprovaria a consulta correta.
+   *
+   * **O que sai da varredura sao os dois NOMES COMPLETOS, nunca o prefixo**:
+   * `email` cru continua reprovando, e e o caso de MUTACAO abaixo que prova que
+   * a varredura nao ficou cega. Apagar `email` da lista em vez de subtrair estas
+   * duas colunas era o conserto facil, e teria aberto a porta para o endereco
+   * entrar sem ninguem ver.
+   */
+  const semAsColunasDoSelo = (sql: string): string =>
+    sql.replaceAll('email_verified_at', 'selo_de_validado').replaceAll('phone_verified_at', 'selo_de_validado');
+
   void it('ISCA (c) -- a leitura do perfil nao seleciona endereco, telefone, e-mail nem nascimento', () => {
-    const sql = sqlDo('perfil');
+    const sql = semAsColunasDoSelo(sqlDo('perfil'));
     for (const coluna of [
       'phone_e164',
       'email',
@@ -181,6 +200,60 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     ]) {
       assert.ok(!sql.includes(coluna), `\`${coluna}\` entrou na leitura do perfil de outra pessoa`);
     }
+  });
+
+  void it('ISCA (c) -- a MUTACAO reprova: `u.email` cru na lista de selecao', () => {
+    // **Sem este caso, a subtracao de `semAsColunasDoSelo` seria um buraco.**
+    // Ela existe para que `u.email_verified_at` passe; se ela tambem deixasse
+    // passar o endereco, o caso de cima ficaria verde com o e-mail de outra
+    // pessoa saindo no perfil -- e e essa a familia de defeito que o item 1 do
+    // ADR-0010 fecha.
+    const comOEndereco = sqlDo('perfil').replace(
+      '"u"."display_name" as "display_name"',
+      '"u"."email" as "display_name"',
+    );
+    assert.notEqual(
+      comOEndereco,
+      sqlDo('perfil'),
+      'a mutacao nao foi aplicada: o alias de `display_name` mudou e este caso ficou cego',
+    );
+    assert.ok(
+      semAsColunasDoSelo(comOEndereco).includes('"u"."email"'),
+      'a subtracao das colunas do selo passou a engolir `u.email` cru: a varredura de ' +
+        'endereco ficou cega, e o e-mail de outra pessoa sairia no perfil',
+    );
+  });
+
+  void it('EMENDA 21/10 -- o SELO DE VALIDADO e DERIVADO no SQL, e sai so como booleano', () => {
+    // A emenda do ADR-0010 de 21/10/2026, decisao do cliente. **A condicao e a
+    // MESMA regua dos quatro `409 contact-channel-unverified`**
+    // (`kysely-canal-verificado-do-chamador.ts` e `estadoParaCriarEncontro`):
+    // duas definicoes de "validado" seriam duas reguas, e a mesma conta sairia
+    // validada numa tela e nao na outra. Este caso reprova quem trocar o `OR`
+    // por `AND` -- com `AND` ninguem teria selo, porque nada em `src/` grava
+    // `phone_verified_at`.
+    const sql = sqlDo('perfil');
+    assert.match(
+      sql,
+      /\(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\) as "canal_verificado"/i,
+      'o selo de validado nao e a regua unica, ou deixou de ser derivado no SQL',
+    );
+    // **O que sai e o booleano, e nunca a data.** "O e-mail dela foi confirmado
+    // em marco" nao e assunto de terceiro.
+    assert.ok(
+      !/"?u"?\."?email_verified_at"? as /i.test(sql),
+      'a DATA de confirmacao de e-mail entrou na lista de selecao do perfil',
+    );
+    assert.ok(
+      !/"?u"?\."?phone_verified_at"? as /i.test(sql),
+      'a DATA de confirmacao de telefone entrou na lista de selecao do perfil',
+    );
+    // A VITRINE continua sem o selo: ela e consulta de FOTO, e o selo e da
+    // conta. Uma copia da condicao ali seria a segunda regua.
+    assert.ok(
+      !sqlDo('vitrine').includes('email_verified_at'),
+      'a consulta da vitrine passou a derivar o selo: ele sai do perfil, uma vez',
+    );
   });
 
   // ------------------------------------------------------------------
@@ -278,13 +351,15 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
 
   void it('CONTRAPESO -- a consulta do perfil SELECIONA o que o cliente liberou, e nada mais', () => {
     const { sql } = TODAS.perfil();
-    // As quatro colunas e a contagem. A lista é FECHADA: coluna nova aqui
-    // significa campo novo na resposta, e este caso é onde alguém vê.
+    // As quatro colunas, a contagem e o selo de validado (emenda de 21/10/2026,
+    // CALCULADO). A lista é FECHADA: coluna nova aqui significa campo novo na
+    // resposta, e este caso é onde alguém vê.
     assert.match(sql, /"?u"?\."?id"? as "?user_id"?/);
     assert.match(sql, /"?h"?\."?handle"? as "?handle"?/);
     assert.match(sql, /"?u"?\."?public_ref"? as "?public_ref"?/);
     assert.match(sql, /"?u"?\."?display_name"? as "?display_name"?/);
     assert.match(sql, /as "?pets_count"?/);
+    assert.match(sql, /as "?canal_verificado"?/);
     // O corte e em ` from "handles"` e nao no primeiro ` from `: o primeiro
     // esta DENTRO da subconsulta de contagem (`FROM pets p`), e cortar ali
     // deixava `pets_count` de fora -- a primeira versao deste caso contava
@@ -292,8 +367,8 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     const listaDeSelecao = sql.slice(0, sql.indexOf(' from "handles"'));
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,
-      5,
-      'a lista de selecao do perfil saiu de CINCO colunas: uma a mais e um campo a mais na resposta',
+      6,
+      'a lista de selecao do perfil saiu de SEIS colunas: uma a mais e um campo a mais na resposta',
     );
   });
 });

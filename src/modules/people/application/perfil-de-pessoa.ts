@@ -75,6 +75,24 @@ export interface PerfilDePessoaProjetado {
   readonly displayName: string | null;
   readonly petsCount: number;
   readonly connectionsCount: number;
+  /**
+   * **O SELO DE VALIDADO** (emenda do ADR-0010, 21/10/2026, decisão do
+   * cliente): a conta tem um canal de contato confirmado.
+   *
+   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a **MESMA**
+   * régua dos quatro `409 contact-channel-unverified`. Duas definições de
+   * "validado" seriam duas réguas, e a mesma conta sairia validada numa tela e
+   * não na outra. **Na prática é e-mail**: nada em `src/` grava
+   * `phone_verified_at`.
+   *
+   * **Não anulável** — a conta ou confirmou um canal ou não confirmou, e um
+   * terceiro estado faria a tela escolher um lado. **Só o booleano**: nem o
+   * endereço, nem a data, nem qual dos dois canais.
+   *
+   * **Sai nos quatro estados de conexão**, ao contrário da vitrine: o selo é
+   * atributo da conta e não conteúdo que a pessoa publicou para quem aceitou.
+   */
+  readonly canalVerificado: boolean;
   readonly connectionState: EstadoDaConexaoNoPerfil;
   /** O `ref` da **aresta**, nulo quando o estado é `none`. Nunca de uma pessoa. */
   readonly connectionRef: string | null;
@@ -142,6 +160,11 @@ export class PerfilDePessoa {
       // copiar além deste, e isso é o item 7 do ADR-0010 escrito no tipo.
       petsCount: pessoa.petsCount,
       connectionsCount,
+      // O SELO DE VALIDADO, lido da MESMA consulta do perfil. **Não é uma
+      // segunda leitura e não é um `if` daqui**: a condição mora no `SELECT` de
+      // `construtorDoPerfilPorApelido`, e é por isso que ela não pode divergir
+      // do recorte de seis predicados que já admitiu a pessoa.
+      canalVerificado: pessoa.canalVerificado,
       connectionState,
       connectionRef: aresta?.ref ?? null,
       vitrine,

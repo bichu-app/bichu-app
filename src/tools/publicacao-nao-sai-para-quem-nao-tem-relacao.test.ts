@@ -340,15 +340,36 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     additionalProperties?: boolean;
   };
 
-  void it('`PublicationAuthor` tem TRES campos, e a lista e fechada', () => {
-    // Eram DOIS ate 20/10/2026. A Emenda 5 do ADR-0010 acrescentou o terceiro,
-    // e a lista continua FECHADA -- um quarto campo e uma decisao a tomar, nao
-    // um detalhe a acrescentar.
+  void it('`PublicationAuthor` tem QUATRO campos, e a lista e fechada', () => {
+    // Eram DOIS ate 20/10/2026. A Emenda 5 do ADR-0010 acrescentou o terceiro
+    // (`photo_icon_url`), e a emenda de 21/10/2026 o quarto
+    // (`contact_channel_verified`, o selo de validado) -- as DUAS por decisao do
+    // cliente, e as duas NOMEANDO esta superficie. A lista continua FECHADA: um
+    // quinto campo e uma decisao a tomar, nao um detalhe a acrescentar.
     assert.deepEqual(Object.keys(autor.properties ?? {}), [
       'handle',
       'display_name',
       'photo_icon_url',
+      'contact_channel_verified',
     ]);
+    // **O selo e um BOOLEANO PURO, e o tipo e parte da decisao.**
+    // `type: string` aqui seria o endereco de e-mail cabendo no campo do selo;
+    // `nullable` seria o terceiro estado que esta pergunta nao tem; `enum`
+    // diria QUAL canal, que entregaria que a pessoa tem telefone cadastrado.
+    const selo = (autor.properties ?? {})['contact_channel_verified'] as Record<string, unknown>;
+    assert.equal(selo['type'], 'boolean', 'o selo de validado nao e um booleano');
+    assert.ok(!('nullable' in selo), 'o selo ganhou um terceiro estado: nulo nao e resposta aqui');
+    assert.ok(!('enum' in selo), 'o selo passou a dizer QUAL canal foi confirmado');
+    assert.deepEqual(
+      Object.keys(selo).sort(),
+      ['description', 'type'],
+      'o campo do selo ganhou chave de schema alem de `type` e `description`',
+    );
+    assert.ok(
+      autor.required?.includes('contact_channel_verified'),
+      'o selo saiu de `required`: chave ausente faria o app ler `undefined` e ' +
+        'desenhar o selo de um lado e nao do outro',
+    );
     assert.equal(
       autor.additionalProperties,
       false,

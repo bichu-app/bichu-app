@@ -387,8 +387,31 @@ void describe('o que o Mural NAO seleciona, e cada ausencia e uma regra', () => 
     }
   });
 
+  /**
+   * O SQL com as DUAS colunas do selo de validado apagadas.
+   *
+   * **A excecao e estreita, e esta escrita aqui porque ela tem de ser lida junto
+   * com a varredura que vem logo abaixo.** A emenda do ADR-0010 de 21/10/2026
+   * fez a linha do tempo derivar o selo de
+   * `a.email_verified_at IS NOT NULL OR a.phone_verified_at IS NOT NULL`, e
+   * `a.email_verified_at` CONTEM `a.email` -- a varredura e por substring, e sem
+   * esta subtracao ela reprovaria a consulta correta.
+   *
+   * **O que sai da varredura sao os dois NOMES COMPLETOS**, e nunca o prefixo:
+   * `a.email` cru continua reprovando, e e o caso de MUTACAO logo abaixo que
+   * prova que a varredura nao ficou cega. Apagar `email` da lista em vez de
+   * subtrair estas duas colunas era o conserto facil, e teria aberto a porta
+   * para o endereco de e-mail entrar sem ninguem ver.
+   *
+   * **Nenhuma DATA sai em resposta**: o que a consulta projeta e o booleano
+   * `canal_verificado`, e o caso da lista FECHADA de colunas e onde isso se
+   * confere.
+   */
+  const semAsColunasDoSelo = (sql: string): string =>
+    sql.replaceAll('email_verified_at', 'selo_de_validado').replaceAll('phone_verified_at', 'selo_de_validado');
+
   void it('a linha do tempo NAO le endereco, telefone, e-mail nem nascimento', () => {
-    const sql = sqlDo('linha');
+    const sql = semAsColunasDoSelo(sqlDo('linha'));
     for (const coluna of [
       'phone_e164',
       'email',
@@ -408,6 +431,73 @@ void describe('o que o Mural NAO seleciona, e cada ausencia e uma regra', () => 
         `\`users.${coluna}\` entrou na linha do tempo`,
       );
     }
+  });
+
+  void it('ISCA -- a MUTACAO reprova: `a.email` cru na lista de selecao', () => {
+    // **Sem este caso, a subtracao de `semAsColunasDoSelo` seria um buraco.**
+    // Ela existe para que `a.email_verified_at` passe; se ela tambem deixasse
+    // passar o endereco, o caso de cima ficaria verde com o e-mail de outra
+    // pessoa saindo na linha do tempo -- e e exatamente essa a familia de
+    // defeito que o ADR-0010 item 1 fecha.
+    const comOEndereco = sqlDo('linha').replace(
+      '"a"."display_name" as "display_name"',
+      '"a"."email" as "display_name"',
+    );
+    assert.notEqual(
+      comOEndereco,
+      sqlDo('linha'),
+      'a mutacao nao foi aplicada: o alias de `display_name` mudou e este caso ficou cego',
+    );
+    assert.ok(
+      semAsColunasDoSelo(comOEndereco).includes('"a"."email"'),
+      'a subtracao das colunas do selo passou a engolir `a.email` cru: a varredura de ' +
+        'endereco ficou cega, e o e-mail de outra pessoa sairia na linha do tempo',
+    );
+  });
+
+  void it('EMENDA 21/10 -- o SELO DE VALIDADO e DERIVADO no SQL, e sai so como booleano', () => {
+    // A emenda do ADR-0010 de 21/10/2026, decisao do cliente: *"os usuarios que
+    // validados deve ter um simbolo em frente de seu nome nos posts,
+    // comentarios"*.
+    //
+    // **A condicao e a MESMA regua dos quatro `409 contact-channel-unverified`**
+    // (`kysely-canal-verificado-do-chamador.ts` e `estadoParaCriarEncontro`):
+    // duas definicoes de "validado" seriam duas reguas, e a mesma conta sairia
+    // validada numa tela e nao na outra. Este caso reprova quem trocar o `OR`
+    // por um `AND` -- com `AND` ninguem teria selo, porque nada em `src/` grava
+    // `phone_verified_at`.
+    for (const nome of ['linha', 'comentarios'] as const) {
+      const sql = sqlDo(nome);
+      assert.match(
+        sql,
+        /\(a\.email_verified_at IS NOT NULL OR a\.phone_verified_at IS NOT NULL\) as "canal_verificado"/i,
+        `${nome}: o selo de validado nao e a regua unica, ou deixou de ser derivado no SQL`,
+      );
+      // **O que sai e o booleano, e nunca a data.** "O e-mail dela foi
+      // confirmado em marco" nao e assunto de terceiro, e dizer QUAL dos dois
+      // canais entregaria que a pessoa tem telefone cadastrado.
+      assert.ok(
+        !/"?a"?\."?email_verified_at"? as /i.test(sql),
+        `${nome}: a DATA de confirmacao entrou na lista de selecao`,
+      );
+      assert.ok(
+        !/"?a"?\."?phone_verified_at"? as /i.test(sql),
+        `${nome}: a DATA de confirmacao de telefone entrou na lista de selecao`,
+      );
+    }
+  });
+
+  void it('EMENDA 21/10 -- `minhas` continua SEM o selo: quem le e o proprio autor', () => {
+    // A mesma razao do item 8 da Emenda 5, que manteve a foto fora desta
+    // consulta: `GET /me/publications` e lido pelo AUTOR, e um selo sobre a
+    // propria conta ali seria uma terceira superficie dele sem consumidor -- o
+    // dono ja o recebe em `Me.email_verified`.
+    const sql = sqlDo('minhas');
+    assert.ok(
+      !sql.includes('email_verified_at'),
+      '`GET /me/publications` passou a derivar o selo de validado: o dono o recebe em `Me.email_verified`',
+    );
+    assert.ok(!sql.includes('canal_verificado'), '`minhas` passou a projetar o selo');
   });
 
   void it('`minha` e coluna CALCULADA no banco, e nao comparacao na tela', () => {
@@ -511,14 +601,19 @@ void describe('CONTRAPESOS -- sem eles as iscas de omissao passariam no vazio', 
     assert.ok(parameters.includes('pessoa'));
   });
 
-  void it('CONTRAPESO -- a lista de selecao da linha do tempo tem DOZE colunas, e a lista e FECHADA', () => {
-    // As doze, na ordem em que entraram:
+  void it('CONTRAPESO -- a lista de selecao da linha do tempo tem TREZE colunas, e a lista e FECHADA', () => {
+    // As treze, na ordem em que entraram:
     //
     //   OITO no nascimento -- `ref`, `body`, `created_at`, `alt_text`,
     //     `public_key`, `handle`, `display_name` e a calculada `minha`;
     //   a NONA pela Emenda 5 do ADR-0010 (20/10) -- `autor_thumb_key`;
     //   as TRES de curtir e comentar (20/10) -- `like_count`, `comment_count`
-    //     e `liked_by_me`, as tres CALCULADAS por subconsulta.
+    //     e `liked_by_me`, as tres CALCULADAS por subconsulta;
+    //   a DECIMA TERCEIRA pela emenda do ADR-0010 de 21/10 -- o selo de
+    //     validado `canal_verificado`, CALCULADO a partir das duas colunas de
+    //     verificacao da conta do autor. **E o booleano que entra na lista, e
+    //     nunca as datas**: a lista de selecao e exatamente o que vira campo de
+    //     resposta.
     //
     // Coluna nova aqui significa campo novo na resposta, e este caso e onde
     // alguem ve antes de ela chegar ao aplicativo.
@@ -532,8 +627,8 @@ void describe('CONTRAPESOS -- sem eles as iscas de omissao passariam no vazio', 
     const listaDeSelecao = sql.slice(0, sql.toLowerCase().indexOf(' from "user_publications"'));
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,
-      12,
-      'a lista de selecao da linha do tempo saiu de DOZE colunas: uma a mais e um campo a mais na resposta',
+      13,
+      'a lista de selecao da linha do tempo saiu de TREZE colunas: uma a mais e um campo a mais na resposta',
     );
   });
 

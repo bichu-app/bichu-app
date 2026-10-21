@@ -246,10 +246,17 @@ function comoMinhaPublicacao(
  * mesma que `PersonShowcasePhoto` fez sobre `ShowcasePhoto`: sem `status`, sem
  * `rejection_reason` e sem `upload_id`.
  *
- * **O autor sai com `handle`, `display_name` e `photo_icon_url`** — a foto pela
- * **Emenda 5 do ADR-0010** (20/10/2026), que nomeou esta superfície depois de a
- * frente parar e perguntar. Sem `public_ref`, sem UUID e sem pet em forma
- * nenhuma, e sem estado na foto.
+ * **O autor sai com `handle`, `display_name`, `photo_icon_url` e
+ * `contact_channel_verified`** — a foto pela **Emenda 5 do ADR-0010**
+ * (20/10/2026) e o selo de validado pela emenda de **21/10/2026**, e as duas
+ * NOMEIAM esta superfície: atributo novo sobre pessoa em superfície de terceiro
+ * não se acrescenta por analogia, e as duas frentes pararam e perguntaram. Sem
+ * `public_ref`, sem UUID e sem pet em forma nenhuma, e sem estado na foto.
+ *
+ * **O selo é um BOOLEANO e nada mais**: nem o endereço, nem a data, nem qual
+ * dos dois canais. O que ele prova é canal de contato confirmado — na prática
+ * e-mail —, e é por isso que o rótulo que o app desenha diz "e-mail
+ * confirmado" e nunca "verificado" nem "confiável".
  */
 function comoPublicacaoDaLinha(
   publicacao: PublicacaoNaLinha,
@@ -276,6 +283,12 @@ function comoPublicacaoDaLinha(
       // reais a 3x), e a de 512 seria 4,27x mais dado do que a celula pinta --
       // vinte vezes por pagina. A conta e da propria Emenda 5.
       photo_icon_url: url(baseDeMidia, publicacao.autorThumbKey),
+      // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026). **Lido do
+      // servidor e nunca comparado nesta camada**: o que ele afirma e
+      // `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` na
+      // conta DO AUTOR, e a borda nao tem a conta do autor -- so o que a
+      // consulta trouxe.
+      contact_channel_verified: publicacao.canalVerificado,
     },
     mine: publicacao.minha,
   };
@@ -302,6 +315,7 @@ function comoComentario(
       handle: comentario.handle,
       display_name: comentario.displayName,
       photo_icon_url: url(baseDeMidia, comentario.autorThumbKey),
+      contact_channel_verified: comentario.canalVerificado,
     },
     mine: comentario.meu,
   };

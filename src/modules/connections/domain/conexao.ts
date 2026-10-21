@@ -69,6 +69,26 @@ export type OrigemDoPedido = 'anchored_case' | 'anchored_event' | 'presence_code
 export interface PessoaDaAresta {
   readonly apelido: string | null;
   readonly nomeDeExibicao: string | null;
+  /**
+   * **O SELO DE VALIDADO** (emenda do ADR-0010, 21/10/2026, decisão do
+   * cliente): a outra ponta tem um canal de contato confirmado.
+   *
+   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, derivado
+   * no SQL — a **MESMA** régua dos quatro `409 contact-channel-unverified`.
+   * Duas definições de "validado" seriam duas réguas, e a mesma conta sairia
+   * validada numa tela e não na outra. **Na prática é e-mail**: nada em `src/`
+   * grava `phone_verified_at`.
+   *
+   * **Não anulável, e só o booleano**: nem o endereço, nem a data, nem qual dos
+   * dois canais. **Sai igual no pedido recebido e na conexão aceita**, como
+   * `nomeDeExibicao` já sai — o que o aceite muda é o que as OUTRAS superfícies
+   * mostram, não isto.
+   *
+   * **O que ele prova é o canal, e não a pessoa.** Documento não é conferido
+   * por ninguém, então o rótulo que a tela desenha diz "e-mail confirmado" e
+   * nunca "verificado" nem "confiável".
+   */
+  readonly canalVerificado: boolean;
 }
 
 /** A aresta como o repositório a devolve, já recortada por conta habilitada. */
@@ -95,7 +115,12 @@ export interface ConexaoProjetada {
   readonly ref: string;
   readonly state: EstadoNoApp;
   readonly requested_at: string;
-  readonly person: { readonly handle: string | null; readonly display_name: string | null };
+  readonly person: {
+    readonly handle: string | null;
+    readonly display_name: string | null;
+    /** O selo de validado. Ver [PessoaDaAresta.canalVerificado]. */
+    readonly contact_channel_verified: boolean;
+  };
 }
 
 /**
@@ -179,6 +204,12 @@ export function nomeParaLer(pessoa: PessoaDaAresta): string | null {
  * dos três caminhos que o próprio desenho reconhece como relação (plano 4-B).
  * O que `person` **não** carrega é qualquer coisa de conectado — nem bairro, nem
  * pets, nem contagem, nem foto.
+ *
+ * **`contact_channel_verified` não é exceção a isso, e é por isso que ele pode
+ * entrar**: o selo não é algo que só conexão poderia ver, e sai igual nos dois
+ * estados. É a emenda do ADR-0010 de 21/10/2026, e ela NOMEIA `ConnectionPerson`
+ * — atributo novo sobre pessoa em superfície de terceiro não se acrescenta por
+ * analogia.
  */
 export function projetarConexao(
   aresta: ArestaGuardada,
@@ -194,6 +225,10 @@ export function projetarConexao(
     person: {
       handle: aresta.outraPessoa.apelido,
       display_name: aresta.outraPessoa.nomeDeExibicao,
+      // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026). **Lido da aresta e
+      // nunca comparado aqui**: a condição mora no `SELECT` da consulta, e esta
+      // função pura não tem a conta da outra pessoa para perguntar nada.
+      contact_channel_verified: aresta.outraPessoa.canalVerificado,
     },
   };
 }

@@ -60,6 +60,24 @@ export interface PessoaVisivel {
    * cliente de 19/10/2026). Conta pet não apagado.
    */
   readonly petsCount: number;
+  /**
+   * **O SELO DE VALIDADO** (emenda do ADR-0010, 21/10/2026, decisão do
+   * cliente): a conta tem um canal de contato confirmado.
+   *
+   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a **MESMA**
+   * régua dos quatro `409 contact-channel-unverified`. Duas definições de
+   * "validado" seriam duas réguas, e a mesma conta sairia validada numa tela e
+   * não na outra. **Na prática é e-mail**: nada em `src/` grava
+   * `phone_verified_at`.
+   *
+   * **Não anulável** — a conta ou confirmou um canal ou não confirmou, e um
+   * terceiro estado faria a tela escolher um lado. **Só o booleano**: nem o
+   * endereço, nem a data, nem qual dos dois canais.
+   *
+   * **Sai nos quatro estados de conexão**, ao contrário da vitrine: o selo é
+   * atributo da conta e não conteúdo que a pessoa publicou para quem aceitou.
+   */
+  readonly canalVerificado: boolean;
 }
 
 /**

@@ -31,7 +31,7 @@ const ISO = (i: Instant) => comoIso(i);
 function aresta(
   estado: EstadoGuardado,
   souQuemPediu: boolean,
-  opcoes: { expiraEm?: number; descansoAte?: number | null } = {},
+  opcoes: { expiraEm?: number; descansoAte?: number | null; canalVerificado?: boolean } = {},
 ): ArestaGuardada {
   return {
     ref: 'Zm9vYmFyMTIzNDU2Nzg5MA',
@@ -47,7 +47,14 @@ function aresta(
         : opcoes.descansoAte === null
           ? null
           : (opcoes.descansoAte as Instant),
-    outraPessoa: { apelido: 'maria-silva', nomeDeExibicao: 'Maria' },
+    // `canalVerificado: false` por padrao nesta bancada, e a escolha e a mesma
+    // do dublê em memoria: conta que o caso nunca mencionou NAO e conta
+    // validada. Os casos do selo passam `true` por cima.
+    outraPessoa: {
+      apelido: 'maria-silva',
+      nomeDeExibicao: 'Maria',
+      canalVerificado: opcoes.canalVerificado ?? false,
+    },
   };
 }
 
@@ -135,28 +142,36 @@ void describe('a aresta morta é reaproveitada, e só ela', () => {
 
 void describe('o apelido é a chave de leitura, e nada quebra com ele nulo', () => {
   void it('com apelido, lê-se `@apelido`', () => {
-    assert.equal(nomeParaLer({ apelido: 'maria-silva', nomeDeExibicao: 'Maria' }), '@maria-silva');
+    assert.equal(nomeParaLer({ apelido: 'maria-silva', nomeDeExibicao: 'Maria', canalVerificado: false }), '@maria-silva');
   });
 
   void it('sem apelido, cai para o nome de exibição', () => {
-    assert.equal(nomeParaLer({ apelido: null, nomeDeExibicao: 'Maria' }), 'Maria');
+    assert.equal(nomeParaLer({ apelido: null, nomeDeExibicao: 'Maria', canalVerificado: false }), 'Maria');
   });
 
   void it('apelido vazio é tratado como ausente, e não vira `@`', () => {
-    assert.equal(nomeParaLer({ apelido: '', nomeDeExibicao: 'Maria' }), 'Maria');
+    assert.equal(nomeParaLer({ apelido: '', nomeDeExibicao: 'Maria', canalVerificado: false }), 'Maria');
   });
 
   void it('sem os dois, devolve nulo — o servidor não escreve na tela', () => {
-    assert.equal(nomeParaLer({ apelido: null, nomeDeExibicao: null }), null);
+    assert.equal(nomeParaLer({ apelido: null, nomeDeExibicao: null, canalVerificado: false }), null);
   });
 
   void it('a projeção sobrevive aos dois nulos, que é o estado de hoje', () => {
     const semNada: ArestaGuardada = {
       ...aresta('pending', false),
-      outraPessoa: { apelido: null, nomeDeExibicao: null },
+      outraPessoa: { apelido: null, nomeDeExibicao: null, canalVerificado: false },
     };
     const projetada = projetarConexao(semNada, AGORA, ISO);
-    assert.deepEqual(projetada?.person, { handle: null, display_name: null });
+    assert.deepEqual(projetada?.person, {
+      handle: null,
+      display_name: null,
+      // **O selo sai `false` e nao ausente**, mesmo com os dois nomes nulos:
+      // `contact_channel_verified` e OBRIGATORIO no contrato, e chave ausente
+      // faria o app ler `undefined` e desenhar o selo de um lado e nao do
+      // outro conforme a conta tivesse nome.
+      contact_channel_verified: false,
+    });
   });
 });
 
@@ -193,6 +208,9 @@ void describe('ISCA (f): nenhum identificador interno na projeção', () => {
   });
 
   void it('a forma projetada tem exatamente quatro chaves, e nenhuma é de pessoa', () => {
+    // "Nenhuma de pessoa" continua literal depois da emenda de 21/10/2026: o
+    // que entrou em `person` e um BOOLEANO sobre a conta, e nao uma coluna que
+    // identifique ou localize alguem.
     const projetada = projetarConexao(aresta('accepted', true), AGORA, ISO);
     assert.deepEqual(Object.keys(projetada ?? {}).sort(), [
       'person',
@@ -200,6 +218,14 @@ void describe('ISCA (f): nenhum identificador interno na projeção', () => {
       'requested_at',
       'state',
     ]);
-    assert.deepEqual(Object.keys(projetada?.person ?? {}).sort(), ['display_name', 'handle']);
+    // TRES chaves em `person` desde a emenda do ADR-0010 de 21/10/2026, e a
+    // lista e FECHADA: `contact_channel_verified` entrou por decisao do
+    // cliente, e nada mais entra por analogia. **Nem a data de confirmacao, nem
+    // qual dos dois canais** -- so o booleano.
+    assert.deepEqual(Object.keys(projetada?.person ?? {}).sort(), [
+      'contact_channel_verified',
+      'display_name',
+      'handle',
+    ]);
   });
 });

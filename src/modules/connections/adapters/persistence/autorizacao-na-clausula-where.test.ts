@@ -290,7 +290,19 @@ void describe('todo instante entra no SQL com molde explícito', () => {
 });
 
 void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
-  const PROIBIDAS_NA_SAIDA = ['requester_user_id', 'addressee_user_id', 'pair_low', 'pair_high'];
+  const PROIBIDAS_NA_SAIDA = [
+    'requester_user_id',
+    'addressee_user_id',
+    'pair_low',
+    'pair_high',
+    // As DUAS colunas de verificacao da conta, pela emenda do ADR-0010 de
+    // 21/10/2026: o selo sai como booleano `canal_verificado`, e a DATA de
+    // confirmacao nunca sai. Elas entram nesta lista e nao na de apelidos
+    // permitidos, e e essa a diferenca entre "derivei um booleano" e "projetei
+    // a data".
+    'email_verified_at',
+    'phone_verified_at',
+  ];
 
   for (const [nome, construtor] of Object.entries(TODAS)) {
     void it(`\`${nome}\` não seleciona coluna de conta na lista de saída`, () => {
@@ -323,6 +335,13 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     'rest_until',
     'display_name',
     'handle',
+    // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026). **O apelido de saida
+    // e o BOOLEANO `canal_verificado`, e nunca `email_verified_at` nem
+    // `phone_verified_at`**: as duas colunas de data ficam DENTRO da expressao,
+    // porque "o e-mail dela foi confirmado em marco" nao e assunto de terceiro.
+    // Esta lista e fechada, e as duas datas nao estao nela -- e o caso abaixo e
+    // onde isso se cobra.
+    'canal_verificado',
     'total',
     'feito',
     'conexoes',

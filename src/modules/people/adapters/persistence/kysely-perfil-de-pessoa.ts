@@ -34,7 +34,12 @@
  *   sai são as chaves das derivadas;
  * - **`users.id` sai, e não atravessa a borda.** Ele é o que o caso de uso usa
  *   para perguntar a conexão ao módulo vizinho; a borda projeta apelido e
- *   `public_ref`.
+ *   `public_ref`;
+ * - **nenhuma data de verificação.** O selo de validado sai como **booleano
+ *   derivado no `SELECT`** (emenda do ADR-0010 de 21/10/2026);
+ *   `email_verified_at` e `phone_verified_at` ficam dentro da expressão e nunca
+ *   na lista de seleção, porque a data de confirmação não é assunto de
+ *   terceiro.
  */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
@@ -70,6 +75,8 @@ interface LinhaDoPerfil {
   readonly public_ref: string;
   readonly display_name: string | null;
   readonly pets_count: string | number;
+  /** O selo de validado. Ver o comentário do `SELECT` no construtor. */
+  readonly canal_verificado: boolean;
 }
 
 interface LinhaDaFotoDoPerfil {
@@ -137,6 +144,29 @@ export function construtorDoPerfilPorApelido(
     .select(
       sql<number>`(SELECT count(*) FROM pets p
          WHERE p.owner_user_id = u.id AND p.deleted_at IS NULL)`.as('pets_count'),
+    )
+    // ------------------------------------------------------------------
+    // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026)
+    // ------------------------------------------------------------------
+    // `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, e a
+    // condição é **cópia literal** da de `kysely-canal-verificado-do-chamador.ts`
+    // e da de `estadoParaCriarEncontro`. A cópia é deliberada: duas definições
+    // de "validado" são duas réguas, e a mesma conta sairia validada numa tela e
+    // não na outra. Na prática isso é e-mail — nada em `src/` grava
+    // `phone_verified_at`, a coluna existe e só é zerada.
+    //
+    // **As DUAS colunas de data ficam dentro da expressão e nunca no `SELECT`**:
+    // o que sai é o booleano, e "o e-mail dela foi confirmado em março" não é
+    // assunto de terceiro. É a mesma redução que a subconsulta de `pets_count`
+    // faz com as colunas de `pets`.
+    //
+    // **Sem `conta_habilitada` aqui**: os seis predicados do `WHERE` já
+    // admitiram esta linha, e uma segunda cópia seria o lugar onde uma correção
+    // pode faltar — a mesma razão escrita no `JOIN` da foto do autor do Mural.
+    .select(
+      sql<boolean>`(u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)`.as(
+        'canal_verificado',
+      ),
     )
     .where('h.handle', '=', apelido)
     .where('h.kind', '=', 'pessoa')
@@ -224,6 +254,7 @@ function comoPessoa(linha: LinhaDoPerfil): PessoaVisivel {
     // contrato declara `integer` e que nenhum portão deste repositório pega,
     // porque nenhum confere o CORPO da resposta.
     petsCount: Number(linha.pets_count),
+    canalVerificado: linha.canal_verificado,
   };
 }
 

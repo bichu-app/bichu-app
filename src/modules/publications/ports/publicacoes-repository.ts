@@ -26,7 +26,8 @@
  * ## Nenhum método devolve um conjunto de pessoas
  *
  * `linhaDoTempo` devolve publicações, e cada uma carrega `handle`,
- * `displayName` e a `thumb` da foto do autor (Emenda 5 do ADR-0010) — o que
+ * `displayName`, a `thumb` da foto do autor (Emenda 5 do ADR-0010) e
+ * `canalVerificado`, o selo de validado (emenda de 21/10/2026) — o que
  * `ConnectionPerson` já entrega a quem é conexão, mais a foto que a emenda
  * nomeou para esta superfície. **Não existe método que liste as conexões de alguém**, e o conjunto
  * de autores de uma página não é a lista de conexões: ele é o recorte das
@@ -95,6 +96,21 @@ export interface PublicacaoNaLinha {
    */
   readonly autorThumbKey: ObjectKey | null;
   /**
+   * **O SELO DE VALIDADO do autor**: a conta dele tem um canal de contato
+   * confirmado (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT
+   * NULL`), que e a MESMA regua dos quatro `409 contact-channel-unverified`.
+   *
+   * **Nao e anulavel**, e nao ha terceiro estado: a conta ou confirmou um canal
+   * ou nao confirmou. Na pratica isso e e-mail, porque nada em `src/` grava
+   * `phone_verified_at`.
+   *
+   * **O que ele prova e o canal, e nao a pessoa.** Documento nao e conferido
+   * por ninguem, entao o rotulo que a tela desenha diz "e-mail confirmado" e
+   * nunca "verificado" nem "confiavel" -- ver
+   * `PublicationAuthor.contact_channel_verified` no contrato.
+   */
+  readonly canalVerificado: boolean;
+  /**
    * Quantas pessoas curtiram. **Lida das LINHAS**, e nao de coluna
    * denormalizada -- a ausencia dessa coluna e a defesa contra o defeito
    * classico desta superficie, que e a contagem divergir do que existe.
@@ -142,6 +158,21 @@ export interface ComentarioVisivel {
   readonly handle: string | null;
   readonly displayName: string;
   readonly autorThumbKey: ObjectKey | null;
+  /**
+   * **O SELO DE VALIDADO do autor**: a conta dele tem um canal de contato
+   * confirmado (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT
+   * NULL`), que e a MESMA regua dos quatro `409 contact-channel-unverified`.
+   *
+   * **Nao e anulavel**, e nao ha terceiro estado: a conta ou confirmou um canal
+   * ou nao confirmou. Na pratica isso e e-mail, porque nada em `src/` grava
+   * `phone_verified_at`.
+   *
+   * **O que ele prova e o canal, e nao a pessoa.** Documento nao e conferido
+   * por ninguem, entao o rotulo que a tela desenha diz "e-mail confirmado" e
+   * nunca "verificado" nem "confiavel" -- ver
+   * `PublicationAuthor.contact_channel_verified` no contrato.
+   */
+  readonly canalVerificado: boolean;
   /** `true` quando quem chama escreveu o comentario. Decide se o `Apagar` nasce. */
   readonly meu: boolean;
 }

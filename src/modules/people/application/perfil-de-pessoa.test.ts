@@ -61,6 +61,7 @@ const MARINA_VISIVEL: PessoaVisivel = {
   publicRef: 'AbCdEfGhIjKlMnOpQrStUv',
   displayName: 'Marina',
   petsCount: 3,
+  canalVerificado: true,
 };
 
 /**
@@ -326,11 +327,68 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
       'connection_ref',
       'connection_state',
       'connections_count',
+      // O SELO DE VALIDADO, pela emenda do ADR-0010 de 21/10/2026. **Fora do
+      // bloco condicional da vitrine**: ele sai nos QUATRO estados de conexao,
+      // e por isso aparece nesta lista -- que e a do estado `none`.
+      'contact_channel_verified',
       'display_name',
       'handle',
       'pets_count',
       'public_ref',
     ]);
+  });
+
+  void it('EMENDA 21/10 -- o SELO DE VALIDADO sai nos QUATRO estados de conexao', async () => {
+    // **O selo nao e condicionado ao aceite, e a vitrine e** -- a diferenca tem
+    // razao: a vitrine e conteudo que a pessoa publicou para quem ela aceitou, e
+    // o selo e atributo da conta que vale igual para quem chega pelo apelido.
+    // Condiciona-lo faria a mesma conta aparecer validada numa tela e nao na
+    // outra, que e a divergencia que a regua unica existe para impedir.
+    for (const aresta of [
+      undefined,
+      { estado: 'pending_sent' as const, ref: 'ref-da-aresta-0001' },
+      { estado: 'pending_received' as const, ref: 'ref-da-aresta-0001' },
+      { estado: 'connected' as const, ref: 'ref-da-aresta-0001' },
+    ]) {
+      const corpo = await corpoDe(bancada(MARINA_VISIVEL, aresta));
+      assert.equal(
+        corpo['contact_channel_verified'],
+        true,
+        `o selo sumiu no estado ${String(aresta?.estado ?? 'none')}`,
+      );
+    }
+  });
+
+  void it('EMENDA 21/10 -- conta SEM canal confirmado sai com o selo `false`, e nao ausente', async () => {
+    // **`false` e nao chave ausente**: `contact_channel_verified` e OBRIGATORIO
+    // no contrato, e `undefined` no aplicativo nao e "nao validado" -- e "nao
+    // sei", que e o estado que esta pergunta nao tem.
+    //
+    // E `false` NAO desenha um selo apagado na tela: um selo cinza ao lado do
+    // nome diria "esta conta foi reprovada", e o que `false` significa e que
+    // ninguem conferiu nada.
+    const corpo = await corpoDe(bancada({ ...MARINA_VISIVEL, canalVerificado: false }));
+    assert.ok(Object.hasOwn(corpo, 'contact_channel_verified'));
+    assert.equal(corpo['contact_channel_verified'], false);
+  });
+
+  void it('EMENDA 21/10 -- o corpo traz o BOOLEANO, e nunca a data nem o endereco', async () => {
+    const corpo = await corpoDe(bancada());
+    assert.equal(typeof corpo['contact_channel_verified'], 'boolean');
+    for (const proibido of [
+      'email_verified_at',
+      'phone_verified_at',
+      'email_verified',
+      'phone_verified',
+      'verified_at',
+      'verified_channel',
+    ]) {
+      assert.ok(
+        !Object.hasOwn(corpo, proibido),
+        `\`${proibido}\` apareceu no perfil: o que sai e o booleano, e a data de ` +
+          'confirmacao nao e assunto de terceiro',
+      );
+    }
   });
 
   void it('ISCA (c) -- nem cidade nem bairro: ele NAO mencionou nenhum dos dois', async () => {
