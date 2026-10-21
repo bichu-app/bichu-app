@@ -1,0 +1,89 @@
+{
+  "lote": "medicao-mural-2026-10-21",
+  "criado_em": "2026-10-21T01:20:49.288Z",
+  "base_url": "https://hml.bichu.app",
+  "marcas": {
+    "visivel": "[teste] (prefixo no `display_name` e no corpo das publicacoes)",
+    "estrutural_email": "@exemplo-de-teste.invalid",
+    "estrutural_handle": "massateste",
+    "audit_event_id": null,
+    "por_que_existe": "Duas contas criadas A MAO em 21/10/2026 para MEDIR os quatro relatos do Mural (a foto que chega `processing`, a faixa muda do 401, o arrastar-para-atualizar e o toque no icone). Nao sao do lote de 19/10 e por isso nao entram naquele manifesto -- mas massa que ninguem sabe apagar e exatamente o que a remocao dirigida por manifesto existe para evitar.",
+    "o_que_foi_medido": "POST /v1/me/publications/photo-intents 201, POST no armazenamento 204, POST /v1/me/publications 201 (status=processing, url=null), GET /v1/timeline com image=null em +320/+721/+1018 ms e com a URL em +1521 ms, e GET da derivada pela borda 200 image/jpeg.",
+    "audit_event_id_ausente_porque": "as contas nasceram por `POST /v1/auth/register` e nao por `criar.mjs`, entao nao ha linha de lote em `audit.events`. A identificacao e pelo e-mail `.invalid`, pelo apelido `massateste` e por ESTE arquivo.",
+    "procedencia_dos_ids": "O `id` da conta 92 veio de `GET /v1/me`. O da 91 veio do `sub` do token devolvido pelo `POST /v1/auth/register` dela -- a senha era aleatoria e nao foi guardada, entao nao da para relogar e reconferir pela rota. Quem for remover rode `remover.mjs --conferir` ANTES: ele so mede e relata, e e la que um id errado aparece sem custo.",
+    "nao_executado": "Este manifesto foi ESCRITO e revisado, e NAO foi executado: o banco de homologacao esta na VM e eu nao tenho `DATABASE_URL` daqui."
+  },
+  "users": [
+    {
+      "indice": 91,
+      "id": "01a15c0b-f05f-70a0-8ce6-6b0d95d7773c",
+      "email": "massateste91@exemplo-de-teste.invalid"
+    },
+    {
+      "indice": 92,
+      "id": "01a15c10-9fb5-70a9-85bc-b0fdfa78e238",
+      "email": "massateste92@exemplo-de-teste.invalid"
+    }
+  ],
+  "handles": [
+    "massateste91",
+    "massateste92"
+  ],
+  "user_publications": [
+    {
+      "conta": 91,
+      "ref": "lv81vQwUMuawhqP-RDTyVQ",
+      "upload": "01a15c0b-f0a4-709b-bc63-73df21e6f525"
+    },
+    {
+      "conta": 92,
+      "ref": "n19biBlPVeMng8mTK3hyBw",
+      "upload": "01a15c10-9fe5-70a5-a87a-2e8a8b30bdab"
+    },
+    {
+      "conta": 92,
+      "ref": "mAAa38EpjyQmQZNRZlXP0A",
+      "upload": "01a15c14-d24a-703f-97e3-16feb8500f56"
+    }
+  ],
+  "upload_intents": [],
+  "objetos": [
+    {
+      "classe": "privado",
+      "chave": "people/original/UU0qxzlKYmPdVEwO8mGycg"
+    },
+    {
+      "classe": "privado",
+      "chave": "people/original/7eNun9fMSekhvcypssI-0g"
+    },
+    {
+      "classe": "privado",
+      "chave": "people/original/KyWLIH43OVqGVrVzHaNv5A"
+    },
+    {
+      "classe": "publico",
+      "chave": "people/card/adop7anP0Vo5REDMonUHGA.jpeg"
+    },
+    {
+      "classe": "publico",
+      "chave": "people/card/1HXnv0IsuWkrDaFgC3LXXw.jpeg"
+    },
+    {
+      "classe": "publico",
+      "chave": "people/card/tf1Tz9pW1qZ13tqqW73V3Q.jpeg"
+    }
+  ],
+  "conversations": [],
+  "conversation_messages_por_conversa": [],
+  "found_reports": [],
+  "tag_scans_por_tag": [],
+  "pet_tags": [],
+  "pets": [],
+  "pet_photos": [],
+  "lost_cases": [],
+  "network_events": [],
+  "store_items": [],
+  "store_partners": [],
+  "professionals": [],
+  "user_reference_locations_por_usuario": []
+}

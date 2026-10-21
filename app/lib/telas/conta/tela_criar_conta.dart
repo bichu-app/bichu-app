@@ -14,6 +14,7 @@ import '../../formato/apelido.dart';
 import '../../formato/data.dart';
 import '../../formato/email.dart';
 import '../../roteamento/rotas.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../validacao/nome_de_exibicao.dart';
@@ -724,7 +725,11 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
               RequisitosDaSenha(senha: _senha, email: _email, nome: _nome),
               if (_faixa != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e6),
-                FaixaDeAviso(texto: _faixa!.texto),
+                FaixaDeAviso(
+                  texto: _faixa!.texto,
+                  rotuloDaAcao: _faixa!.acao,
+                  aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                ),
               ],
               const SizedBox(height: BichuEspaco.e6),
               // O ACEITE, **acima** do botao: uma regra que se aceita ao apertar

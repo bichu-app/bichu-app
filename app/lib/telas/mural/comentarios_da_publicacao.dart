@@ -4,6 +4,7 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/mural_api.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
@@ -238,7 +239,11 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
                         padding: const EdgeInsets.all(BichuEspaco.e4),
                         children: <Widget>[
                           if (faixa != null) ...<Widget>[
-                            FaixaDeAviso(texto: faixa.texto),
+                            FaixaDeAviso(
+                              texto: faixa.texto,
+                              rotuloDaAcao: faixa.acao,
+                              aoTocarNaAcao: saidaDaMensagem(context, faixa),
+                            ),
                             const SizedBox(height: BichuEspaco.e4),
                           ],
                           if (itens.isEmpty)

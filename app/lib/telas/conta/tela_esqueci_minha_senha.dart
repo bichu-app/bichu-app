@@ -7,6 +7,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
 import '../../formato/email.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -250,7 +251,12 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
                 ),
                 if (_faixa != null) ...<Widget>[
                   const SizedBox(height: BichuEspaco.e6),
-                  FaixaDeAviso(key: _alvoDaFaixa, texto: _faixa!.texto),
+                  FaixaDeAviso(
+                    key: _alvoDaFaixa,
+                    texto: _faixa!.texto,
+                    rotuloDaAcao: _faixa!.acao,
+                    aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                  ),
                 ],
               ] else ...<Widget>[
                 Focus(
@@ -284,7 +290,12 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
                 ),
                 if (_faixa != null) ...<Widget>[
                   const SizedBox(height: BichuEspaco.e6),
-                  FaixaDeAviso(key: _alvoDaFaixa, texto: _faixa!.texto),
+                  FaixaDeAviso(
+                    key: _alvoDaFaixa,
+                    texto: _faixa!.texto,
+                    rotuloDaAcao: _faixa!.acao,
+                    aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                  ),
                 ],
               ],
             ],

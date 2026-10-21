@@ -8,6 +8,7 @@ import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -596,7 +597,11 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
               CamposDeSinais(key: _sinais, rascunho: _rascunho),
               if (_faixa != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e6),
-                FaixaDeAviso(texto: _faixa!.texto),
+                FaixaDeAviso(
+                  texto: _faixa!.texto,
+                  rotuloDaAcao: _faixa!.acao,
+                  aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                ),
               ],
             ],
           ),

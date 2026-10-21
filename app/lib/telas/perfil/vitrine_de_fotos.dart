@@ -6,6 +6,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/vitrine_api.dart';
 import '../../dispositivo/camera_e_galeria.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
@@ -504,7 +505,11 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (_faixa != null) ...<Widget>[
-          FaixaDeAviso(texto: _faixa!.texto),
+          FaixaDeAviso(
+            texto: _faixa!.texto,
+            rotuloDaAcao: _faixa!.acao,
+            aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+          ),
           const SizedBox(height: BichuEspaco.e3),
         ],
         if (_confirmacao != null) ...<Widget>[

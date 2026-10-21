@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_seguranca.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
@@ -156,7 +157,11 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
             ),
             if (_erro != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e4),
-              FaixaDeAviso(texto: _erro!.texto),
+              FaixaDeAviso(
+                texto: _erro!.texto,
+                rotuloDaAcao: _erro!.acao,
+                aoTocarNaAcao: saidaDaMensagem(context, _erro!),
+              ),
             ],
             const SizedBox(height: BichuEspaco.e5),
             BotaoPrimario(

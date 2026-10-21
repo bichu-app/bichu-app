@@ -12,6 +12,7 @@ import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/acompanhamento_do_pedido.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -644,7 +645,11 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                     ],
                     if (_faixa != null) ...<Widget>[
                       const SizedBox(height: BichuEspaco.e6),
-                      FaixaDeAviso(texto: _faixa!.texto),
+                      FaixaDeAviso(
+                        texto: _faixa!.texto,
+                        rotuloDaAcao: _faixa!.acao,
+                        aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                      ),
                     ],
                   ],
                 ),
