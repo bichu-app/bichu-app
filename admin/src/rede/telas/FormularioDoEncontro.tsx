@@ -404,6 +404,12 @@ export default function FormularioDoEncontro() {
         aoMudar={(atualizar) => setF((atual) => ({ ...atual, fotos: atualizar(atual.fotos) }))}
         enviar={(arquivo, aoProgredir) => enviarImagem(cliente, arquivo, 'network_event', aoProgredir)}
         mostrarErrosDeDescricao={tentou}
+        // A descricao da imagem e OPCIONAL desde 21/10/2026 (decisao do
+        // cliente, dita duas vezes: "pode remover a descricao da imagem"). O
+        // padrao da galeria e `true`; a `Loja` desligou em 17/10 e a `Rede`
+        // agora. Quem salva sem descricao faz o app cair no titulo do evento.
+        descricaoObrigatoria={false}
+        reservaDaDescricao="o título do evento"
         erro={erroDe('fotos')}
         marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />

@@ -1792,7 +1792,9 @@ export interface StoreItemImagesTable {
    * Quando vem, de 2 a 150 caracteres; nulo quer dizer que o painel nao
    * escreveu, e quem desenha cai no titulo do item.
    *
-   * Em `network_event_images` ele continua `NOT NULL`.
+   * Em `network_event_images` ele era `NOT NULL` e **deixou de ser em
+   * 21/10/2026** (`20261020000013`, decisao do cliente): as duas colunas estao
+   * na mesma forma agora.
    */
   alt_text: string | null;
 }
@@ -1937,7 +1939,18 @@ export interface NetworkEventImagesTable {
   event_id: string;
   image_id: string;
   position: number;
-  alt_text: string;
+  /**
+   * **Opcional desde a `20261020000013`** (decisao do cliente de 21/10/2026,
+   * dita duas vezes: "pode remover a descricao da imagem"). Quando vem, de 2 a
+   * 150 caracteres; nulo quer dizer que o painel nao escreveu.
+   *
+   * A `20261017000002` afrouxou so `store_item_images` e manteve esta coluna
+   * `NOT NULL` DE PROPOSITO, porque "afrouxar a Rede de carona deixaria a capa
+   * do encontro sem nome acessivel sem ninguem ter pedido". Em 21/10 o cliente
+   * pediu, ciente do custo. O `CHECK` de tamanho continua valendo quando o
+   * texto vem: `CHECK` que resulta NULL conta como satisfeito.
+   */
+  alt_text: string | null;
 }
 
 export interface NetworkEventAmenitiesTable {

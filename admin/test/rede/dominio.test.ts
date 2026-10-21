@@ -172,13 +172,25 @@ describe('validação do formulário', () => {
     const erros = validar({ ...preenchido(), pago: true, valor: 'quinze', observacoes: 'Liga 11987654321' }, 'novo', AGORA);
     expect(erros.map((e) => e.campo)).toEqual(['valor', 'observacoes']);
   });
-  it('foto pronta sem descrição reprova; foto enviando segura o envio', () => {
+  // A DESCRICAO DA IMAGEM VIROU OPCIONAL EM 21/10/2026 (decisao do cliente).
+  // Antes desta data este caso esperava `['fotos', 'alt-0']`: a foto pronta sem
+  // descricao reprovava. Agora ela passa, e o que sobra e o erro de `fotos`, que
+  // e do ENVIO em curso e nao da descricao.
+  it('foto pronta SEM descrição não reprova mais; foto enviando ainda segura o envio', () => {
     const f = preenchido();
     f.fotos = [
       { chave: 'a', estado: 'ready', uploadId: '11111111-1111-4111-8111-111111111111', alt: '' },
       { chave: 'b', estado: 'enviando', alt: '' },
     ];
-    expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['fotos', 'alt-0']);
+    expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['fotos']);
+  });
+  // A ISCA DA MEIA-DESCRICAO: opcional nao quer dizer "qualquer coisa serve".
+  // Uma letra reprova NA TELA, porque o contrato recusa `alt_text` de um
+  // caractere (`minLength: 2`) e um `400` sem endereco seria pior.
+  it('ISCA: uma letra na descrição da foto reprova, mesmo com o campo opcional', () => {
+    const f = preenchido();
+    f.fotos = [{ chave: 'a', estado: 'ready', uploadId: '11111111-1111-4111-8111-111111111111', alt: 'a' }];
+    expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['alt-0']);
   });
 });
 

@@ -660,8 +660,8 @@ export default function FormularioDeProduto() {
         proposito="store_item"
         mostrarErrosDeDescricao={!!tentouSalvar}
         erro={erro('imagens')}
-        // OPCIONAL desde 17/10/2026 (pedido do cliente). A `Rede` nao passa
-        // isto e continua com o padrao `true`.
+        // OPCIONAL desde 17/10/2026 (pedido do cliente). A `Rede` passou a
+        // desligar tambem, em 21/10/2026, pela mesma razao.
         descricaoObrigatoria={false}
         marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />

@@ -70,7 +70,12 @@ export interface ImagemDoEncontroAdministrativa {
   /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
   readonly imageId: string;
   readonly position: number;
-  readonly altText: string;
+  /**
+   * **Anulavel desde 21/10/2026** (decisao do cliente, migracao
+   * `20261020000013`): nulo quer dizer que o painel gravou a imagem sem
+   * descricao. O painel LE o nulo como nulo -- ver `ImagemProjetada.alt_text`.
+   */
+  readonly altText: string | null;
   readonly status: EstadoDaImagem;
   readonly publicKey: string | null;
   readonly rejectionReason: string | null;
@@ -719,7 +724,16 @@ export function encontroAbertoParaDecisao(
 export interface ImagemProjetada {
   readonly upload_id: string | null;
   readonly position: number;
-  readonly alt_text: string;
+  /**
+   * **Anulavel**, e o painel precisa do nulo CRU: se a leitura caisse no titulo
+   * do encontro, o formulario reabriria com o campo preenchido e quem edita nao
+   * teria como distinguir "descrevi com o titulo" de "nao descrevi". O contrato
+   * ja declarava `[string, 'null']` em `AdminCatalogGalleryImage.alt_text`.
+   *
+   * A leitura DO APP e o contrario: lá a reserva e aplicada no servidor. Ver
+   * `camposProjetados` em `encontro-da-rede.ts`.
+   */
+  readonly alt_text: string | null;
   readonly source: 'uploaded';
   readonly status: EstadoDaImagem;
   readonly url: string | null;

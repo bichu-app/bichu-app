@@ -8695,8 +8695,12 @@ paths:
         Recusas de regra, todas `400 validation-failed` com o campo: fim antes
         do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
         nao existe; ponto fora dos limites do Brasil; encontro pago sem valor
-        (`code: admission_incomplete`); imagem sem texto alternativo.
+        (`code: admission_incomplete`).
         **Nao ha limite de vagas** (decisao do cliente).
+
+        **Imagem sem texto alternativo DEIXOU DE SER RECUSA** em 21/10/2026
+        (decisao do cliente): `alt_text` saiu do `required` de
+        `CatalogImageInput`. Texto presente e vazio continua `400`.
 
         `visibility: private` faz o encontro aparecer no app **so com titulo
         e data** ate a conta ter o pedido aprovado na fila
@@ -17150,9 +17154,18 @@ components:
       additionalProperties: false
       description: |
         A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
-        `alt_text` e **obrigatorio** em toda posicao, igual a galeria do painel:
-        a imagem sem texto alternativo e a imagem que nao existe para quem usa
-        leitor de tela.
+        `alt_text` e **obrigatorio** aqui.
+
+        **ATENCAO, isto DEIXOU de ser igual a galeria do painel em 21/10/2026**:
+        lá `alt_text` virou opcional por decisao do cliente
+        (`CatalogImagesInput`), e aqui ele NAO foi afrouxado. A decisao do
+        cliente e as medicoes que a embasaram foram sobre os formularios do
+        PAINEL; esta e a superficie do APP, onde quem cria o encontro e o
+        proprio autor, e afrouxa-la de carona repetiria exatamente o erro que a
+        `20261017000002` evitou quando deixou a `Rede` de fora do pedido da
+        `Loja`. A coluna `network_event_images.alt_text` aceita nulo desde
+        21/10, entao esta obrigacao e desta superficie e nao do banco: ela cai
+        no dia em que alguem pedir, e nao antes.
       properties:
         upload_id: { type: string, format: uuid }
         alt_text: { type: string, minLength: 2, maxLength: 150 }
@@ -18418,18 +18431,26 @@ components:
       description: |
         Ate 8 imagens, **na ordem em que o app as mostra**. A primeira e a
         principal (a da lista da `Loja`; a capa do encontro). Cada uma e um
-        envio de `createAdminCatalogImageIntent` com o `purpose` do recurso, e
-        **cada uma tem texto alternativo obrigatorio, ate 150 caracteres**, em
-        toda posicao: a obrigacao da principal acompanha a imagem que vira
-        principal numa reordenacao, sem regra a parte. A lista substitui a
-        anterior inteira: reordenar e mandar a ordem nova, remover e omitir,
-        `[]` tira todas. `upload_id` repetido e recusado com `400`
-        (ADR-0027 itens 16 e 17).
+        envio de `createAdminCatalogImageIntent` com o `purpose` do recurso. A
+        lista substitui a anterior inteira: reordenar e mandar a ordem nova,
+        remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
+        `400` (ADR-0027 itens 16 e 17).
+
+        **`alt_text` e OPCIONAL desde 21/10/2026** (decisao do cliente, dita
+        duas vezes: *"pode remover a descricao da imagem"*). Era obrigatorio em
+        toda posicao, e a `20261017000002` o manteve obrigatorio aqui DE
+        PROPOSITO ao afrouxa-lo na `Loja`; em 21/10 o cliente pediu que saisse
+        tambem da `Rede`, ciente -- informado duas vezes -- de que o campo
+        alimenta o leitor de tela e de que **a capa do encontro perde o nome
+        acessivel**. Quando vem, vale de 2 a 150 caracteres; quando nao vem, a
+        imagem fica sem texto alternativo e o app cai no titulo do encontro.
+        **Campo presente e vazio e recusado**: o painel OMITE o campo em vez de
+        mandar `""`.
       items: { $ref: '#/components/schemas/CatalogImageInput' }
 
     CatalogImageInput:
       type: object
-      required: [upload_id, alt_text]
+      required: [upload_id]
       additionalProperties: false
       properties:
         upload_id: { type: string, format: uuid }
@@ -18447,12 +18468,17 @@ components:
         remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
         `400` (ADR-0027 itens 16 e 17).
 
-        **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026), e e a
-        unica diferenca em relacao a `CatalogImagesInput`, que a `Rede`
-        continua usando com o texto obrigatorio. Quando vem, vale de 2 a 150
-        caracteres; quando nao vem, a imagem fica sem texto alternativo e o app
-        cai no nome do produto. **Campo presente e vazio e recusado**: o painel
-        OMITE o campo em vez de mandar `""`.
+        **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026).
+        Quando vem, vale de 2 a 150 caracteres; quando nao vem, a imagem fica
+        sem texto alternativo e o app cai no nome do produto. **Campo presente
+        e vazio e recusado**: o painel OMITE o campo em vez de mandar `""`.
+
+        Em 17/10 isto era a unica diferenca em relacao a `CatalogImagesInput`,
+        que a `Rede` usava com o texto obrigatorio. **Deixou de ser**: em
+        21/10/2026 o cliente pediu o mesmo afrouxamento para a `Rede`, e os dois
+        esquemas passaram a ter a mesma forma. Eles continuam separados porque
+        descrevem recursos diferentes -- a reserva de um e o nome do produto, a
+        do outro e o titulo do encontro --, e nao porque a obrigacao divirja.
       items: { $ref: '#/components/schemas/StoreCatalogImageInput' }
 
     StoreCatalogImageInput:
@@ -18491,8 +18517,12 @@ components:
               description: |
                 **Nulo** quando a imagem foi gravada sem texto alternativo, o
                 que a `Loja` passou a permitir em 17/10/2026
-                (`StoreCatalogImagesInput`). Na `Rede` o texto continua
-                obrigatorio na escrita, e por isso nunca e nulo ali.
+                (`StoreCatalogImagesInput`) e a `Rede` em 21/10/2026
+                (`CatalogImagesInput`, decisao do cliente). Nos dois recursos a
+                escrita aceita a ausencia, entao a leitura pode trazer nulo em
+                qualquer posicao -- **inclusive na capa do encontro**, que e o
+                custo que o cliente aceitou por escrito. Quem desenha cai no
+                nome do produto ou no titulo do encontro.
 
     AdminStoreTagRef:
       type: object

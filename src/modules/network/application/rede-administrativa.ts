@@ -111,7 +111,16 @@ export interface LugarDoCorpo {
 
 export interface ImagemDoCorpo {
   readonly upload_id: string;
-  readonly alt_text: string;
+  /**
+   * **OPCIONAL desde 21/10/2026** (decisao do cliente, dita duas vezes: "pode
+   * remover a descricao da imagem"). `alt_text` saiu do `required` de
+   * `CatalogImageInput`, que a `Rede` e a UNICA a usar.
+   *
+   * AUSENTE e diferente de VAZIO, e a distincao e a mesma da `Loja`
+   * (`catalogo-administrativo.ts`): ausente grava nulo; presente e vazio e
+   * `400` (`minLength: 2`), e o painel OMITE o campo em vez de mandar `""`.
+   */
+  readonly alt_text?: string;
 }
 
 export interface CorpoDeEncontro {
@@ -268,7 +277,12 @@ function errosDaGaleria(imagens: readonly ImagemDoCorpo[] | undefined): ProblemF
   if (new Set(imagens.map((i) => i.upload_id.toLowerCase())).size !== imagens.length) {
     erros.push({ field: 'images', code: 'duplicate_upload', message: 'A mesma imagem apareceu duas vezes.' });
   }
-  imagens.forEach((imagem, n) => erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150)));
+  imagens.forEach((imagem, n) => {
+    // Ausente e estado legitimo desde 21/10/2026; vazio continua `400`. Sem
+    // este desvio `errosDeTexto` cobraria o campo que o cliente mandou tirar.
+    if (imagem.alt_text === undefined) return;
+    erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
+  });
   return erros;
 }
 
@@ -832,7 +846,7 @@ export class RedeAdministrativa {
     const galeria: ImagemNaPosicao[] = [];
     for (const [position, imagem] of imagens.entries()) {
       const imageId = await this.imagemDoEnvio(tx, eventoId, imagem.upload_id, agora);
-      galeria.push({ imageId, position, altText: imagem.alt_text.trim() });
+      galeria.push({ imageId, position, altText: imagem.alt_text?.trim() ?? null });
     }
     await tx.substituirImagens(eventoId, galeria);
   }
