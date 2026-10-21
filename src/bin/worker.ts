@@ -583,6 +583,65 @@ export async function main(): Promise<void> {
           continue;
         }
 
+        if (trabalho.kind === 'match.recompute') {
+          // O CRUZAMENTO DE PARES NAO EXISTE AINDA, E ESTE RAMO E ISSO POR
+          // ESCRITO. Ele conclui o trabalho e **nao cruza nada**.
+          //
+          // ## O que estava acontecendo, medido
+          //
+          // `found-report-service.ts:139` enfileira `match.recompute` a cada
+          // achado registrado SEM caso vinculado. A cadeia de despacho daqui
+          // nao tinha ramo para o tipo, e ele caia no pega-tudo logo abaixo,
+          // que chama `fila.fail`. E `fail` nao e uma falha por achado: ele
+          // devolve a linha a `pending` com espera e so declara `failed` quando
+          // `attempts >= max_attempts` (`kysely-job-queue.ts`), que e **5** por
+          // omissao. Entao cada achado registrado custava cinco reservas de
+          // worker e terminava em `failed` garantido -- em producao, sem parar.
+          //
+          // ## Por que CONCLUIR, e nao deixar de enfileirar
+          //
+          // A outra saida era tirar o `enqueue` do servico. Ela perde duas
+          // coisas medidas:
+          //
+          // 1. **Ha portao exigindo o enfileiramento.**
+          //    `found-report-routes.test.ts:610` afirma
+          //    `enfileirados[0]?.kind === 'match.recompute'`. Parar de
+          //    enfileirar obrigaria a apagar esse portao, isto e, a remover uma
+          //    exigencia medida do produto para consertar o sintoma dela.
+          // 2. **O motor de dominio JA EXISTE.**
+          //    `FoundReportService.cruzarAchado` (`found-report-service.ts:146`)
+          //    le `paresParaCruzar`, aplica `cruzar` e grava sugestoes -- e o
+          //    cabecalho dela diz que o consumidor e "dez linhas de reserva e
+          //    confirmacao". O que falta e ligar, e ligar e decisao de produto
+          //    (o cruzamento sugere correspondencia a tutor de pet perdido),
+          //    nao conserto de hemorragia de fila. O gancho fica aqui, pronto,
+          //    no lugar exato.
+          //
+          // ## O que este ramo NAO pode fazer, e nao faz
+          //
+          // **Nao pode ser silencioso.** Um `complete` mudo e a forma de a fila
+          // ficar limpa mentindo: ninguem descobre que N achados nunca foram
+          // cruzados. Entao ele registra, com nivel de AVISO, e o evento e
+          // contavel -- e esse numero e a evidencia com que se pede o motor.
+          //
+          // No dia em que o cruzamento for ligado, este bloco vira
+          // `await servicoDeAchados.cruzarAchado(achado)` e o log passa a dizer
+          // quantas sugestoes sairam. Nada mais muda.
+          const { foundReportId: achado } = trabalho.payload as { foundReportId: string };
+          await fila.complete(trabalho.id);
+          console.warn(
+            JSON.stringify({
+              evento: 'match.recompute_sem_motor',
+              achado,
+              detalhe:
+                'achado concluido SEM cruzamento: o consumidor de match.recompute ' +
+                'ainda nao foi ligado (FoundReportService.cruzarAchado existe e ' +
+                'nao tem chamador). Conte este evento para dimensionar o pedido.',
+            }),
+          );
+          continue;
+        }
+
         if (trabalho.kind !== 'media.process_upload') {
           // Trabalho de um tipo que este worker ainda não sabe fazer. Falhar
           // com o motivo é melhor que ignorar em silêncio: ignorado, ele fica
