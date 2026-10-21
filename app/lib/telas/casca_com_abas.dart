@@ -10,6 +10,7 @@ import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/barra_de_listagem.dart';
+import '../widgets/imagem_da_rede.dart';
 import '../widgets/marca.dart';
 
 /// O estado de uma secao no registro (UX 27.5).
@@ -1790,6 +1791,10 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
               leading: raizDeSecao
                   ? AvatarDaConta(
                       inicial: _inicialDaSessao(context),
+                      // A FOTO, lida da MESMA sessao que a inicial. Degrau 1
+                      // da cadeia; nula cai na inicial, que e o que esta barra
+                      // sempre desenhou.
+                      fotoUrl: _fotoDaSessao(context),
                       // `go`, e nao `push`: a tela da conta continua sendo RAMO
                       // da casca -- ela so perdeu o slot da barra de baixo.
                       // Trocar de ramo e o que mantem a barra de baixo visivel
@@ -2067,6 +2072,22 @@ String? _inicialDaSessao(BuildContext context) {
   return nome.characters.first.toUpperCase();
 }
 
+/// A URL DA FOTO de quem esta logado, ou nulo.
+///
+/// Irma de [_inicialDaSessao], e lida do MESMO lugar: `Usuario.fotoUrl`, que e
+/// `Me.photo.url` -- a foto viaja em `SessionResponse.user`, entao ela esta na
+/// sessao desde o login e nao precisa de uma segunda chamada a `GET /me`.
+///
+/// **Deslogado devolve nulo sem olhar o usuario**, pelo mesmo motivo da
+/// inicial: a sessao pode ter um usuario antigo em memoria enquanto o estado
+/// nao e `logado`, e desenhar a foto de quem saiu seria mostrar a foto da
+/// pessoa errada na barra.
+String? _fotoDaSessao(BuildContext context) {
+  final sessao = Escopo.of(context).sessao;
+  if (sessao.estado != EstadoDaSessao.logado) return null;
+  return sessao.usuario?.fotoUrl;
+}
+
 /// A FOTO DA PESSOA NA BARRA DE TOPO, e a porta da tela da conta.
 ///
 /// Pedido do cliente, literal (19/10): *"acrescente uma foto pequena do
@@ -2074,17 +2095,47 @@ String? _inicialDaSessao(BuildContext context) {
 /// menu atual da tela de perfil"*. Ela e a porta que substituiu o slot de
 /// `Perfil` na barra de baixo.
 ///
-/// ## A foto ainda nao existe, e o espaco ja existe
+/// ## A FOTO ENTROU EM 20/10/2026, e a cadeia de reserva tem TRES degraus
 ///
-/// `users.photo_image_id` **nao esta nesta arvore**: ela vive na branch
-/// `feat/imagem-do-profissional-e-foto-do-usuario`, ainda nao mesclada. O que
-/// esta construido aqui e o ESPACO, o alvo de toque, o nome acessivel e a
-/// marca neutra -- a inicial do nome, ou o glifo de pessoa quando nao ha nome.
+/// Este cabecalho dizia *"a foto ainda nao existe, e o espaco ja existe"*, e
+/// era verdade: o que estava construido era o espaco, o alvo, o nome acessivel
+/// e a marca neutra. O circulo com a inicial aparecia **tambem para quem tem
+/// foto cadastrada**, e foi isso que o cliente mediu: *"o icone do perfil em
+/// todas as paginas nao esta sendo substituido pela foto do perfil do usuario
+/// quando o usuario cadastra, esta aparecendo sempre o icone padrao"*.
 ///
-/// **O QUE FALTA LIGAR, numa linha:** quando aquela branch descer, trocar o
-/// conteudo de [_MarcaNeutra] por um `CircleAvatar` com a imagem de
-/// `photo_image_id` e manter a inicial como fallback de carregamento e de
-/// conta sem foto. A fiacao -- sessao, usuario, toque, rotulo -- nao muda.
+/// **Nao era defeito de rede e nao era carregamento**: o componente nao tinha
+/// parametro de imagem. `const AvatarDaConta({required aoTocar, this.inicial})`
+/// -- so o nome.
+///
+/// Os tres degraus, nesta ordem, e **nenhum deles substitui o outro**:
+///
+///   1. [fotoUrl] nao-nula: a foto, por `ImagemDaRede` (que paga `cacheWidth`
+///      pela largura PINTADA -- 32 dp, e nao os 512 px do arquivo);
+///   2. foto nula ou que FALHOU ao carregar, e [inicial] nao-nula: a letra;
+///   3. as duas nulas: o glifo de pessoa.
+///
+/// O degrau 2 cobre dois estados diferentes de proposito. "Sem foto" e
+/// "a foto nao chegou" desenham o mesmo, porque a barra de topo nao tem o que
+/// oferecer em nenhum dos dois -- quem tem o que consertar e `Meus dados`, que
+/// mostra `status` e `rejection_reason`. **A falha nao pode ficar muda**: um
+/// circulo vazio ou um glifo de imagem quebrada no lugar da inicial mostraria
+/// um defeito a quem tem nome cadastrado, e e por isso que
+/// `ImagemDaRede.reservaDeFalha` existe.
+///
+/// **A GEOMETRIA NAO MUDA.** O alvo continua 48 x 48, o circulo continua 32 dp,
+/// [respiroDoTitulo] continua 8 dp e [larguraNoLeading] continua alvo + respiro.
+/// A foto entra DENTRO do circulo de 32, recortada por ele.
+///
+/// **A derivada e a `card` (512 x 512), e nao a `thumb`** -- porque
+/// `MyPhoto` nao tem `thumb_url`. A `thumb` de 176 px existe no contrato so em
+/// `Conversation.participants[].photo_icon_url`, a foto de OUTRA pessoa entre
+/// conexoes aceitas; para a propria foto o contrato promete uma URL so. Montar
+/// a chave da `thumb` a partir da `card` seria o cliente derivando caminho de
+/// armazenamento, que nao esta prometido em lugar nenhum. O que o peso da
+/// `card` custa em MEMORIA ja esta pago pelo `cacheWidth`; o que ele custa em
+/// REDE so cai quando o contrato devolver a derivada menor.
+///
 /// Mostrar a PROPRIA foto para si mesmo e o caso permitido: a imagem e visivel
 /// so ao dono, e o dono e exatamente quem esta olhando esta barra.
 ///
@@ -2106,13 +2157,33 @@ String? _inicialDaSessao(BuildContext context) {
 /// outros 48,00. O orcamento foi de 160,00 para **224,00 dp** em 320 dp a
 /// 200%, e com ele nenhum dos cinco titulos corta mais.
 class AvatarDaConta extends StatelessWidget {
-  const AvatarDaConta({required this.aoTocar, super.key, this.inicial});
+  const AvatarDaConta({
+    required this.aoTocar,
+    super.key,
+    this.inicial,
+    this.fotoUrl,
+  });
 
   /// O que o toque faz. Quem decide e a casca; este widget so desenha.
   final VoidCallback aoTocar;
 
   /// A primeira letra do nome de exibicao, quando ha nome.
   final String? inicial;
+
+  /// A URL da foto da propria pessoa (`Me.photo.url`), ou nulo.
+  ///
+  /// **Opcional, e e por isso que nenhuma das chamadas antigas quebrou.** Nula
+  /// cai no degrau 2 da cadeia, que e o desenho que este widget sempre teve.
+  final String? fotoUrl;
+
+  /// O LADO DO CIRCULO DESENHADO, em dp.
+  ///
+  /// Era um `32` literal dentro de [_MarcaNeutra], e virou constante com nome
+  /// porque agora DUAS coisas dependem dele: o circulo e a largura que a foto
+  /// pede ao decodificador. Dois literais iguais em lugares diferentes e como a
+  /// medida se perde -- e esta esta paga (o alvo de 48, o circulo de 32 em
+  /// 16..48, e o respiro de 8 que sobra a direita).
+  static const double ladoDoCirculo = 32;
 
   /// O nome acessivel.
   ///
@@ -2267,34 +2338,59 @@ class AvatarDaConta extends StatelessWidget {
         bottom: BichuEspaco.e2,
       ),
       onPressed: aoTocar,
-      icon: _MarcaNeutra(inicial: inicial),
+      icon: _MarcaNeutra(inicial: inicial, fotoUrl: fotoUrl),
       ),
     );
   }
 }
 
-/// A marca neutra do avatar: a inicial, ou o glifo de pessoa.
+/// O desenho do avatar: a FOTO, a inicial, ou o glifo de pessoa.
 ///
 /// **Decorativa, e por isso `ExcludeSemantics`.** O nome acessivel do controle
-/// ja esta no `tooltip` do [AvatarDaConta]; uma letra anunciada ao lado dele
-/// seria ruido. E pelo mesmo motivo a inicial nao e "conteudo": ela nao diz
-/// nada que `Sua conta` nao diga.
+/// ja esta no `tooltip` do [AvatarDaConta]; uma letra -- ou uma imagem --
+/// anunciada ao lado dele seria ruido. E pelo mesmo motivo a inicial nao e
+/// "conteudo": ela nao diz nada que `Sua conta` nao diga. A foto entra com
+/// `descricao: null` pela mesma razao.
+///
+/// **O nome continua `_MarcaNeutra` de proposito**: ele e o segundo degrau da
+/// cadeia e e tambem o que sobra quando a foto falha, e renomear a classe
+/// mexeria em arquivos que outras frentes estao editando hoje.
 class _MarcaNeutra extends StatelessWidget {
-  const _MarcaNeutra({this.inicial});
+  const _MarcaNeutra({this.inicial, this.fotoUrl});
 
   final String? inicial;
+
+  /// A URL da foto da propria pessoa, ou nulo.
+  final String? fotoUrl;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final letra = inicial;
+    const lado = AvatarDaConta.ladoDoCirculo;
+
+    // OS DEGRAUS 2 E 3, que tambem sao a reserva da falha do degrau 1.
+    //
+    // Montado ANTES do ramo da foto, e numa variavel so, porque ele e usado em
+    // dois lugares: como desenho (sem foto) e como `reservaDeFalha` (com foto
+    // que nao carregou). Duas copias divergiriam no dia em que a letra mudasse
+    // de estilo, e a divergencia apareceria so no estado de erro -- que e o
+    // estado que ninguem olha.
+    final Widget marca = letra == null
+        ? Icon(Icons.person_outline, size: 20, color: cores.textSecondary)
+        : Text(
+            letra,
+            style: textos.labelLarge?.copyWith(color: cores.textSecondary),
+          );
+
+    final foto = fotoUrl;
 
     return ExcludeSemantics(
       child: Container(
         key: AvatarDaConta.chaveDoCirculo,
-        width: 32,
-        height: 32,
+        width: lado,
+        height: lado,
         decoration: BoxDecoration(
           color: cores.surfaceSunken,
           shape: BoxShape.circle,
@@ -2304,11 +2400,31 @@ class _MarcaNeutra extends StatelessWidget {
           border: Border.all(color: cores.outline, width: BichuBorda.hairline),
         ),
         alignment: Alignment.center,
-        child: letra == null
-            ? Icon(Icons.person_outline, size: 20, color: cores.textSecondary)
-            : Text(
-                letra,
-                style: textos.labelLarge?.copyWith(color: cores.textSecondary),
+        // `clipBehavior` SO no ramo da foto: o `Container` com `shape: circle`
+        // e borda nao recorta o filho por conta propria, e sem isto a imagem
+        // quadrada cobriria o filete e os cantos do circulo. No ramo da marca
+        // nao ha o que recortar, e recortar de graca custa uma camada.
+        clipBehavior: foto == null ? Clip.none : Clip.antiAlias,
+        child: foto == null
+            ? marca
+            : ImagemDaRede(
+                url: foto,
+                // Decorativa: o `tooltip` do botao ja e o nome acessivel.
+                descricao: null,
+                // 32 dp, e `ImagemDaRede` multiplica pelo fator de pixel do
+                // aparelho. E este numero que vira `cacheWidth` -- e e ele que
+                // faz a derivada `card` de 512 px custar a memoria de um
+                // circulo de 32 dp, e nao a de 512.
+                largura: lado,
+                proporcao: 1,
+                // Circulo, como a marca que ela substitui.
+                raio: lado / 2,
+                // **A FALHA CAI NA INICIAL, e nao num glifo de erro.** Quem
+                // tem nome cadastrado continua vendo a letra dele quando a
+                // rede cai, o leitor de midia esta fora ou a derivada ainda
+                // nao existe; quem nao tem nome continua vendo o glifo de
+                // pessoa. Nenhum dos dois ve circulo vazio.
+                reservaDeFalha: Center(child: marca),
               ),
       ),
     );

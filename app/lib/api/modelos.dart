@@ -5,6 +5,12 @@
 /// que nao esta la nao aparece aqui.
 library;
 
+// **So `urlDeImagem`, e nao o modulo.** A funcao e a definicao UNICA de
+// "URL de imagem que veio do contrato, ou nulo" neste app: campo ausente,
+// nulo, de outro tipo e string vazia caem todos no mesmo nulo, e
+// `Image.network('')` lanca. `me_api.dart` a importa do mesmo jeito.
+import 'modelos_diretorio.dart' show urlDeImagem;
+
 /// `#/components/schemas/Me/properties/pending_profile_fields/items` do contrato.
 ///
 /// O que o contrato chama de `pending_profile_fields`: o que alimenta o aviso
@@ -77,6 +83,7 @@ class Usuario {
     this.emailPendente,
     this.emailEntregavel = true,
     this.regiaoDeReferencia,
+    this.fotoUrl,
   });
 
   final String id;
@@ -101,6 +108,44 @@ class Usuario {
   /// em F3.1 sem geocodificar nada (criterio 2 da BICHUS-21).
   final RegiaoDeReferencia? regiaoDeReferencia;
 
+  /// `Me.photo.url`: a foto que a PROPRIA pessoa cadastrou, ou nulo.
+  ///
+  /// ## Por que ela passou a ser lida AQUI, e nao so em `Meus dados`
+  ///
+  /// `DadosPessoais` (em `me_api.dart`) ja lia este campo, e so a tela de
+  /// `Meus dados` o desenhava. Mas `SessionResponse.user` aponta para o MESMO
+  /// schema `Me` -- entao a foto **sempre viajou** em `registerUser`, `login`,
+  /// `refreshSession` e `confirmEmailVerification`, e este modelo a descartava.
+  /// O avatar da barra de topo e desenhado em toda tela de secao, por quem le
+  /// a SESSAO e nao `GET /me`: sem este campo, ele nao tinha de onde tirar a
+  /// foto e mostrava o circulo com a inicial para quem tem foto cadastrada --
+  /// que e o defeito que o cliente mediu em 20/10/2026.
+  ///
+  /// **Nao e campo novo de contrato.** Ele esta declarado em `Me.photo` desde
+  /// 18/10, e o que faltava era o app lê-lo.
+  ///
+  /// ## E a derivada `card` (512 x 512), porque e a UNICA que o contrato da
+  ///
+  /// `MyPhoto` tem tres propriedades -- `status`, `url` e `rejection_reason` --
+  /// e `url` e descrita por extenso como *"a derivada `card` (512 x 512,
+  /// JPEG)"*. **Nao existe `thumb_url` em `MyPhoto`**: a `thumb` de 176 px
+  /// aparece no contrato so em `Conversation.participants[].photo_icon_url`, a
+  /// foto de OUTRA pessoa entre conexoes aceitas. Montar a URL da `thumb` aqui
+  /// a partir da `card` seria o cliente derivando chave de armazenamento, e
+  /// isso nao esta prometido em lugar nenhum.
+  ///
+  /// Quem pinta paga `cacheWidth` pela largura PINTADA (`ImagemDaRede`), entao
+  /// o custo em MEMORIA e o do circulo de 32 dp e nao o dos 512 px.
+  ///
+  /// ## Nulo e o estado normal, em quatro casos
+  ///
+  /// Conta sem foto, `processing` (o worker nao terminou), `rejected` (recusada
+  /// nos bytes) e campo ausente -- o APK publicado le esta resposta e nao
+  /// conhece `photo`. **Os quatro desenham a marca neutra**, e a barra de topo
+  /// nao distingue entre eles: `status` e `rejection_reason` sao assunto de
+  /// `Meus dados`, que e a tela que tem o que consertar.
+  final String? fotoUrl;
+
   bool get cadastroIncompleto => pendencias.isNotEmpty;
 
   factory Usuario.doJson(Map<String, dynamic> json) {
@@ -120,6 +165,16 @@ class Usuario {
       podeAbrirCaso: json['can_open_lost_case'] as bool? ?? false,
       regiaoDeReferencia: RegiaoDeReferencia.doJson(
         json['reference_area'] as Map<String, dynamic>?,
+      ),
+      // `photo` e `oneOf: [MyPhoto, null]`, e um `as Map?` cru sobre outro
+      // tipo estoura em tempo de execucao -- aqui isso derrubaria o LOGIN, que
+      // e por onde este corpo passa. O recorte por `is` trata ausente, nulo e
+      // tipo errado do mesmo jeito: sem foto. `urlDeImagem` trata o resto
+      // (vazio, nao-string).
+      fotoUrl: urlDeImagem(
+        json['photo'] is Map<String, dynamic>
+            ? (json['photo'] as Map<String, dynamic>)['url']
+            : null,
       ),
     );
   }

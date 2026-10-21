@@ -2,10 +2,12 @@ import '../../widgets/arrastar_para_atualizar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/conexoes_api.dart';
 import '../../api/falhas.dart';
 import '../../api/modelos_conexao.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/convite_para_entrar.dart';
@@ -75,6 +77,15 @@ class TelaDePedidosDeConexao extends StatefulWidget {
   static const String vazioEnviados = 'Você não tem pedidos esperando resposta';
   static const String falhaAoCarregar = 'Não conseguimos carregar seus pedidos agora.';
   static const String falhaAoAgir = 'Não conseguimos registrar isso agora.';
+
+  /// O rótulo acessível da PORTA DO PERFIL, no nome de quem pediu.
+  ///
+  /// Diz o que o toque **abre**, e não o que o controle é: sem ele, quem usa
+  /// leitor de tela ouviria só o apelido e não teria como saber que ali há um
+  /// destino. É a mesma frase de `rotuloDaPortaDoPerfil` na área de mensagens,
+  /// e repeti-la é deliberado — as duas telas são de módulos diferentes, e um
+  /// texto compartilhado acoplaria esta fatia ao de mensagens por uma string.
+  static String rotuloDoPerfilDe(String quem) => 'Abrir o perfil de $quem';
 
   @override
   State<TelaDePedidosDeConexao> createState() => _EstadoDosPedidos();
@@ -264,6 +275,77 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     );
   }
 
+  /// O NOME DE QUEM PEDIU, e a porta do perfil dele quando há apelido.
+  ///
+  /// ## O defeito que isto desfaz
+  ///
+  /// `telas/pessoa/tela_perfil_de_pessoa.dart` existe, tem rota
+  /// ([Rotas.perfilDePessoa]) e desenha os quatro estados de conexão — mas até
+  /// 19/10/2026 o único jeito de chegar lá era a foto da conversa, em
+  /// `telas/mensagens/area_de_mensagens.dart`. A tela de pedidos é o OUTRO
+  /// lugar onde o app já nomeia uma pessoa de verdade: quem decide aceitar
+  /// precisa poder olhar quem está pedindo ANTES de aceitar, e sem isto a
+  /// decisão é tomada sobre um apelido solto.
+  ///
+  /// ## Por que o nome, e não o cartão inteiro
+  ///
+  /// O cartão tem `Aceitar`/`Recusar` dentro dele. Um `InkWell` em volta do
+  /// cartão poria um destino por baixo de dois controles destrutivos — o
+  /// gesto que erra o botão viraria navegação, e a navegação por acidente num
+  /// cartão de decisão é pior que não ter porta. **Não há foto aqui**, e isso
+  /// é o contrato e não um esquecimento: a emenda 3 do ADR-0010 libera a foto
+  /// de perfil **entre conexões aceitas**, e um pedido pendente é exatamente o
+  /// estado em que as duas pessoas ainda não aceitaram. `PessoaDaConexao` tem
+  /// só `handle` e `display_name`.
+  ///
+  /// ## Apelido ausente: texto, e não controle
+  ///
+  /// A rota é por **apelido** (ADR-0010 proíbe identificador interno em
+  /// superfície pública, e o `ref` que viaja nos botões é da ARESTA e não da
+  /// pessoa). `handle` é anulável no contrato, e com ele nulo a tela já cai
+  /// para o nome de exibição ou para [TelaDePedidosDeConexao.semNome]. Nesses
+  /// dois estados o nome **volta a ser texto puro**: um destino montado com
+  /// nulo abriria `/pessoa/null`, e um rótulo de botão sem desfecho é o toque
+  /// que não leva a lugar nenhum.
+  Widget _nomeDeQuemPediu(
+    BichuCores cores,
+    TextTheme textos,
+    Conexao pedido,
+  ) {
+    final nome = pedido.person.nomeParaLer ?? TelaDePedidosDeConexao.semNome;
+    final estilo = textos.titleMedium?.copyWith(color: cores.textPrimary);
+    final apelido = pedido.person.handle;
+    // Vazio tratado como ausente, pelo mesmo motivo de
+    // `ligarPortaDoPerfilDoParticipante`: `Rotas.perfilDe('')` devolveria
+    // `/pessoa/`, que e a rota de outra coisa.
+    if (apelido == null || apelido.isEmpty) {
+      return Text(nome, style: estilo);
+    }
+
+    return Semantics(
+      button: true,
+      label: TelaDePedidosDeConexao.rotuloDoPerfilDe(nome),
+      // O texto de dentro nao diz nada que o rotulo acima nao diga, e
+      // anunciado ao lado dele e ruido na mesma parada de foco.
+      excludeSemantics: true,
+      child: InkWell(
+        // `push` e nao `go`: o perfil COBRE esta tela, e voltar dele tem de
+        // devolver a caixa que a pessoa estava olhando -- `go` trocaria de
+        // ramo e a lista voltaria em `Recebidos` do zero.
+        onTap: () => context.push(Rotas.perfilDe(apelido)),
+        child: Container(
+          // 48 e nao 64, pelo mesmo motivo de `MarcaNeutraDoParticipante`: o
+          // piso de 64 dp vale para superficie critica (o achador, a marcacao
+          // de perdido), e o nome num cartao de pedido nao e uma delas. 48 dp
+          // esta acima do piso do M3 e do SC 2.5.8.
+          constraints: const BoxConstraints(minHeight: 48),
+          alignment: Alignment.centerLeft,
+          child: Text(nome, style: estilo),
+        ),
+      ),
+    );
+  }
+
   Widget _cartao(BichuCores cores, TextTheme textos, Conexao pedido) {
     final recebido = pedido.state == EstadoDaConexao.pedidoRecebido;
     final ocupado = _emCurso.contains(pedido.ref);
@@ -278,10 +360,7 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            pedido.person.nomeParaLer ?? TelaDePedidosDeConexao.semNome,
-            style: textos.titleMedium?.copyWith(color: cores.textPrimary),
-          ),
+          _nomeDeQuemPediu(cores, textos, pedido),
           const SizedBox(height: BichuEspaco.e2),
           // `Expanded` nos dois, e nao `MainAxisAlignment.end`: o tema desta
           // casa da aos botoes uma largura minima infinita (botao de largura

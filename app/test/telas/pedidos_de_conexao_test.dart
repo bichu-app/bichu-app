@@ -18,10 +18,12 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/conexoes_api.dart';
 import 'package:bichu/api/modelos_conexao.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -311,4 +313,284 @@ void main() {
     expect(find.text('Não conseguimos carregar seus pedidos agora.'), findsOneWidget);
     expect(find.text('Nenhum pedido esperando você'), findsNothing);
   });
+
+  // =========================================================================
+  // O TOQUE NO NOME DE QUEM PEDIU LEVA AO PERFIL DELE
+  // =========================================================================
+  //
+  // O DEFEITO MEDIDO: `telas/pessoa/tela_perfil_de_pessoa.dart` existe, tem
+  // rota e desenha os quatro estados de conexao -- e a unica porta para ela no
+  // app era a foto da conversa. Quem recebe um pedido decide aceitar ou recusar
+  // sobre um apelido solto, sem poder olhar a pessoa.
+  //
+  // O QUE ESTES CASOS MEDEM, e o que um caso de existencia NAO mediria: que o
+  // toque chega em `/pessoa/<apelido>` **com o apelido daquela pessoa**. Um
+  // destino constante, ou o apelido do item errado da lista, passariam por
+  // "abriu um perfil" e reprovam aqui.
+  //
+  // A rota de perfil desta bancada e um DUBLE com o caminho de verdade
+  // (`Rotas.perfilDePessoa`), que escreve o apelido recebido. Montar
+  // `TelaDePerfilDePessoa` exigiria `Escopo`, `PessoasApi`, `SegurancaApi` e
+  // sessao -- uma segunda bancada inteira, para medir o que nao e desta tela.
+  group('o toque no nome de quem pediu abre o perfil DAQUELA pessoa', () {
+    testWidgets(
+      'ISCA: o toque abre `/pessoa/<apelido>`, e com o apelido de quem pediu',
+      (tester) async {
+        await _montarComRoteador(tester, recebidos: <Map<String, dynamic>>[
+          _pedido(
+            ref: 'r1',
+            estado: 'pending_received',
+            apelido: 'ana-do-bairro',
+            nome: 'Ana',
+          ),
+        ]);
+
+        expect(
+          _semanticaDaTela(tester),
+          contains('Abrir o perfil de @ana-do-bairro'),
+          reason:
+              'REPROVA: o nome de quem pediu continuou texto puro. O rotulo diz '
+              'o que o toque ABRE, e sem ele quem usa leitor de tela nao tem '
+              'como saber que ha destino ali.',
+        );
+
+        await tester.tap(find.text('@ana-do-bairro'));
+        await tester.pumpAndSettle();
+
+        expect(
+          _textoDaTela(tester),
+          contains('perfil aberto: ana-do-bairro'),
+          reason:
+              'REPROVA: o toque no nome nao abriu o perfil daquela pessoa. O '
+              'apelido no caminho e o que distingue "abriu um perfil" de '
+              '"abriu O perfil certo".',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: com DOIS pedidos, cada nome abre o perfil do SEU pedido',
+      (tester) async {
+        // O defeito que este caso pega: o cartao fecha sobre o apelido do
+        // primeiro item (ou do ultimo) em vez do seu. Com um pedido so na
+        // lista, esse defeito ficaria verde.
+        await _montarComRoteador(tester, recebidos: <Map<String, dynamic>>[
+          _pedido(
+            ref: 'r1',
+            estado: 'pending_received',
+            apelido: 'ana-do-bairro',
+            nome: 'Ana',
+          ),
+          _pedido(
+            ref: 'r2',
+            estado: 'pending_received',
+            apelido: 'bruno-do-parque',
+            nome: 'Bruno',
+          ),
+        ]);
+
+        await tester.tap(find.text('@bruno-do-parque'));
+        await tester.pumpAndSettle();
+
+        expect(
+          _textoDaTela(tester),
+          contains('perfil aberto: bruno-do-parque'),
+          reason:
+              'REPROVA: o toque no SEGUNDO nome abriu outro perfil. Cada cartao '
+              'responde pelo seu pedido, e nao pelo primeiro da pagina.',
+        );
+        expect(
+          _textoDaTela(tester),
+          isNot(contains('ana-do-bairro')),
+          reason: 'o perfil aberto e o de quem foi tocado, e so ele',
+        );
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: SEM APELIDO o nome nao e porta, e o toque nao quebra',
+      (tester) async {
+        // Estado real do contrato: `handle` e anulavel, e nenhum fluxo obriga a
+        // escolher apelido. Com ele nulo a tela cai para o nome de exibicao --
+        // e um destino montado com nulo abriria `/pessoa/null`, que e o que o
+        // comentario de `rotas.dart` proibe por extenso.
+        await _montarComRoteador(tester, recebidos: <Map<String, dynamic>>[
+          _pedido(ref: 'r1', estado: 'pending_received', nome: 'Ana'),
+        ]);
+
+        expect(
+          _semanticaDaTela(tester),
+          isNot(contains('Abrir o perfil de')),
+          reason:
+              'REPROVA: o nome se anuncia como porta do perfil sem apelido. O '
+              'destino seria `/pessoa/` ou `/pessoa/null`.',
+        );
+
+        await tester.tap(find.text('Ana'));
+        await tester.pumpAndSettle();
+
+        expect(
+          _textoDaTela(tester),
+          isNot(contains('perfil aberto')),
+          reason:
+              'REPROVA: o toque navegou sem apelido. Sem apelido nao ha '
+              'endereco, e o nome volta a ser texto.',
+        );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'REPROVA: o toque sem apelido levantou excecao',
+        );
+        expect(find.text('Ana'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: com os dois nulos, o texto da tela nao e porta nenhuma',
+      (tester) async {
+        await _montarComRoteador(tester, recebidos: <Map<String, dynamic>>[
+          _pedido(ref: 'r1', estado: 'pending_received'),
+        ]);
+
+        expect(find.text('Pessoa sem nome'), findsOneWidget);
+        expect(
+          _semanticaDaTela(tester),
+          isNot(contains('Abrir o perfil de')),
+          reason:
+              'REPROVA: a tela ofereceu o perfil de uma pessoa que ela nao '
+              'conseguiu nomear.',
+        );
+
+        await tester.tap(find.text('Pessoa sem nome'));
+        await tester.pumpAndSettle();
+
+        expect(_textoDaTela(tester), isNot(contains('perfil aberto')));
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'ISCA: em `Enviados` o nome TAMBEM abre o perfil de quem foi convidado',
+      (tester) async {
+        // A caixa de enviados nomeia a pessoa do mesmo jeito, e o perfil dela e
+        // igualmente legitimo -- e de la que sai o `Cancelar pedido`.
+        await _montarComRoteador(
+          tester,
+          recebidos: const <Map<String, dynamic>>[],
+          enviados: <Map<String, dynamic>>[
+            _pedido(
+              ref: 'r9',
+              estado: 'pending_sent',
+              apelido: 'carla-da-praca',
+              nome: 'Carla',
+            ),
+          ],
+        );
+
+        await tester.tap(find.text('Enviados'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('@carla-da-praca'));
+        await tester.pumpAndSettle();
+
+        expect(
+          _textoDaTela(tester),
+          contains('perfil aberto: carla-da-praca'),
+          reason:
+              'REPROVA: a caixa de enviados nomeia a pessoa e nao oferece o '
+              'perfil dela.',
+        );
+      },
+    );
+  });
+}
+
+/// Todo texto desenhado pela tela, junto.
+String _textoDaTela(WidgetTester tester) {
+  final partes = <String>[];
+  for (final e in find.byType(Text).evaluate()) {
+    final t = e.widget as Text;
+    partes.add(t.data ?? t.textSpan?.toPlainText() ?? '');
+  }
+  for (final e in find.byType(RichText).evaluate()) {
+    partes.add((e.widget as RichText).text.toPlainText());
+  }
+  return partes.join('\n');
+}
+
+/// Todo rotulo de semantica que a tela escreve.
+///
+/// Le os `Semantics` da arvore de WIDGETS, e nao a arvore compilada: e nos
+/// `Semantics` que esta tela poe o rotulo da porta do perfil.
+String _semanticaDaTela(WidgetTester tester) {
+  final partes = <String>[];
+  for (final e in find.byType(Semantics).evaluate()) {
+    final p = (e.widget as Semantics).properties;
+    partes.addAll(<String>[p.label ?? '', p.value ?? '', p.hint ?? '']);
+  }
+  return partes.join('\n');
+}
+
+/// A rota de perfil DESTA BANCADA: o caminho de producao, o desenho dublado.
+///
+/// O caminho e `Rotas.perfilDePessoa`, o de verdade -- e e por ele que um
+/// destino montado a mao (`'/pessoa/' + apelido`, ou `/perfil/...`) reprova.
+/// Ela escreve o apelido que chegou no parametro, que e a metade que distingue
+/// "abriu um perfil" de "abriu O perfil certo".
+GoRoute _rotaDoPerfilDublada() => GoRoute(
+  path: Rotas.perfilDePessoa,
+  builder: (context, estado) => Scaffold(
+    body: Text(
+      'perfil aberto: ${estado.pathParameters[Rotas.parametroDoApelido]}',
+    ),
+  ),
+);
+
+/// A MESMA bancada de `_montar`, com roteador de verdade em volta.
+///
+/// `_montar` usa `MaterialApp(home:)`, e `context.push` precisa de um
+/// `GoRouter` na arvore -- sem ele o toque levantaria excecao e o caso
+/// reprovaria pelo motivo errado. Os dubles de servidor sao os mesmos.
+Future<void> _montarComRoteador(
+  WidgetTester tester, {
+  required List<Map<String, dynamic>> recebidos,
+  List<Map<String, dynamic>> enviados = const <Map<String, dynamic>>[],
+}) async {
+  chamadas.clear();
+  AppConfig.limparParaTeste();
+  final cliente = MockClient((http.Request pedido) async {
+    chamadas.add('${pedido.method} ${pedido.url.path}?${pedido.url.query}');
+    final caminho = pedido.url.path;
+    if (caminho.endsWith('/connections/requests')) {
+      final direcao = pedido.url.queryParameters['direction'];
+      return _json(_pagina(direcao == 'sent' ? enviados : recebidos));
+    }
+    if (caminho.endsWith('/connections/summary')) return _json(_resumo());
+    if (pedido.method == 'DELETE') return http.Response('', 204);
+    return _json(<String, dynamic>{}, status: 404);
+  });
+
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
+    cliente: cliente,
+    tokenDeAcesso: () async => 'token-de-teste',
+  );
+
+  await tester.pumpWidget(
+    MaterialApp.router(
+      theme: BichuTheme.claro,
+      routerConfig: GoRouter(
+        initialLocation: '/pedidos-nesta-bancada',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/pedidos-nesta-bancada',
+            builder: (context, estado) =>
+                TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+          ),
+          _rotaDoPerfilDublada(),
+        ],
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }

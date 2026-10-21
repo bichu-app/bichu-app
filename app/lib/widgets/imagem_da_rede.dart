@@ -48,6 +48,7 @@ class ImagemDaRede extends StatelessWidget {
     this.simboloDeFalha = Icons.image_not_supported_outlined,
     this.aoTocarNaFalha,
     this.textoDaFalha,
+    this.reservaDeFalha,
   });
 
   /// A URL da **derivada**. Nao anulavel e nao vazia: ver o item 3 acima.
@@ -68,6 +69,8 @@ class ImagemDaRede extends StatelessWidget {
 
   /// O simbolo do estado de falha. Trocavel porque o retrato de uma pessoa
   /// falhando pede outro desenho que uma fachada falhando.
+  ///
+  /// **Ignorado quando ha [reservaDeFalha].**
   final IconData simboloDeFalha;
 
   /// O que fazer quando a imagem **nao carregou e vale tentar de novo**.
@@ -94,6 +97,22 @@ class ImagemDaRede extends StatelessWidget {
   /// pratica junto de [aoTocarNaFalha]: um botao de icone sem nome e um
   /// controle mudo para quem usa leitor de tela.
   final String? textoDaFalha;
+
+  /// O DESENHO INTEIRO DO ESTADO DE FALHA, quando um glifo nao serve.
+  ///
+  /// Nulo mantem o comportamento de sempre: [simboloDeFalha] centralizado. Ele
+  /// existe para o avatar da barra de topo, onde a reserva da falha **nao e um
+  /// glifo de erro e sim a inicial do nome** -- a cadeia de reserva de la tem
+  /// tres degraus (foto, inicial, glifo de pessoa), e um icone de "imagem
+  /// quebrada" no lugar do segundo degrau mostraria um defeito a quem tem nome
+  /// cadastrado.
+  ///
+  /// **Opcional e no fim da lista de proposito**: nenhuma das nove chamadas que
+  /// ja existem muda de desenho, e a politica que importa -- `cacheWidth` pela
+  /// largura pintada, `errorBuilder` SEMPRE -- continua morando aqui, num lugar
+  /// so. Quem precisa de outra reserva passa um widget em vez de reescrever
+  /// `Image.network` na tela.
+  final Widget? reservaDeFalha;
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +156,11 @@ class ImagemDaRede extends StatelessWidget {
             // **O numero que decide o custo em memoria.** Em pixeis do
             // aparelho, pela largura que a tela pinta.
             cacheWidth: (larguraPintada * fatorDePixel).round(),
-            errorBuilder: (context, erro, pilha) => _falha(cores),
+            // Uniao das duas frentes: a reserva desenhada pela tela vence, e
+            // sem ela vale `_falha`, que sem `aoTocarNaFalha` devolve
+            // exatamente o glifo centralizado de antes.
+            errorBuilder: (context, erro, pilha) =>
+                reservaDeFalha ?? _falha(cores),
           ),
         );
 
