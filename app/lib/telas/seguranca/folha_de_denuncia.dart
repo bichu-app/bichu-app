@@ -152,6 +152,18 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
                       // de retorno insere linha, e esta folha e modal -- o
                       // teclado aberto cobria o `Enviar` dela sem ter como
                       // descer.
+                      //
+                      // **E ela nao leva a faixa de `Concluir`, por DECISAO
+                      // medida (20/10/2026).** A faixa de
+                      // `widgets/barra_do_teclado.dart` se encosta em
+                      // `bottom: viewInsets.bottom`, e o conteudo desta folha
+                      // e empurrado para cima do teclado pelo mesmo numero:
+                      // ela cairia sobre o rodape da propria folha -- onde
+                      // mora o `Enviar` --, trocando um controle escondido por
+                      // outro. A saida daqui e o toque fora, e a excecao e
+                      // geometrica: vale tambem para
+                      // `mensagens/tela_da_conversa.dart`, e nao deve ser
+                      // "completada" depois.
                       onTapOutside: (PointerDownEvent _) =>
                           FocusManager.instance.primaryFocus?.unfocus(),
                       decoration: const InputDecoration(

@@ -320,6 +320,66 @@ void main() {
       );
     });
 
+    // ISCA (D) — as DICAS DE PREENCHIMENTO chegam a plataforma, e o GRUPO
+    // tambem.
+    //
+    // **O que esta isca corrige de entendimento.** `tipoDeTeclado:
+    // TextInputType.name` NAO liga a sugestao do sistema: ele escolhe qual
+    // teclado abre. Quem liga a sugestao e `autofillHints`, e foi medido no
+    // canal -- `TextInput.setClient` leva `autofill.hints`.
+    //
+    // **E o grupo nao e decoracao**, tambem medido: sem `AutofillGroup`, o
+    // argumento sai com as dicas do campo focado e `fields: null` -- o sistema
+    // sabe o que aquele campo e e nao sabe que os outros existem. E `fields`
+    // que deixa UMA sugestao preencher nome, bairro e cidade de uma vez.
+    //
+    // **O QUE ESTA ISCA NAO PROVA, e esta dito de proposito:** que o iPhone
+    // mostre a sugestao. Isso depende de haver endereco salvo nos Ajustes do
+    // aparelho da pessoa, e teste de widget nao tem sistema operacional. O que
+    // se mede aqui e que o app DECLAROU -- a metade que e nossa.
+    testWidgets('o campo de nome declara a DICA de preenchimento no canal', (
+      tester,
+    ) async {
+      await abrirOsDados(tester);
+
+      final nome = campoDe('Nome');
+      await tester.ensureVisible(nome);
+      await tester.pumpAndSettle();
+      await tester.tap(nome);
+      await tester.pumpAndSettle();
+
+      final args = tester.testTextInput.setClientArgs;
+      expect(
+        args,
+        isNotNull,
+        reason:
+            'REPROVA ANTES DA MEDICAO: o campo nao abriu conexao de entrada de '
+            'texto, entao nao ha o que medir no canal.',
+      );
+
+      final autofill = args!['autofill'] as Map<String, dynamic>?;
+      expect(
+        autofill?['hints'],
+        contains(AutofillHints.name),
+        reason:
+            'REPROVA: o campo de nome nao declarou `AutofillHints.name` para a '
+            'plataforma. Sem a dica o iOS nao tem como oferecer o nome salvo, '
+            'e o tipo de teclado NAO substitui isso -- ele so escolhe qual '
+            'teclado abre.',
+      );
+
+      expect(
+        args['fields'],
+        isNotNull,
+        reason:
+            'REPROVA: o campo foi declarado SOZINHO, sem o grupo. `fields` sai '
+            'nulo quando nao ha `AutofillGroup` em volta do formulario, e sem '
+            'ele o sistema nao sabe que os outros campos existem: a sugestao '
+            'preenche um campo por toque em vez de nome, CEP, bairro e cidade '
+            'de uma vez. Medido no canal.',
+      );
+    });
+
     testWidgets('os CINCO primeiros AVANCAM, e de nome o foco vai ao apelido', (
       tester,
     ) async {

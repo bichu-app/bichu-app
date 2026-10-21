@@ -743,7 +743,16 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final cores = BichuColors.of(context).cores;
     final lido = _lido!;
 
-    return SingleChildScrollView(
+    // O GRUPO DE PREENCHIMENTO AUTOMATICO, e ele nao e decoracao.
+    //
+    // **Medido no canal em 20/10/2026**: com as dicas e SEM este grupo, o
+    // `TextInput.setClient` sai com `autofill.hints` do campo focado e com
+    // `fields: null` -- o sistema sabe o que aquele campo e, e nao sabe que os
+    // outros existem. Com o grupo, `fields` sai preenchido, que e o que deixa
+    // uma sugestao preencher endereco, bairro e cidade de uma vez em vez de um
+    // campo por toque.
+    return AutofillGroup(
+      child: SingleChildScrollView(
       padding: const EdgeInsets.all(BichuEspaco.e4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -768,6 +777,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           const SizedBox(height: BichuEspaco.e6),
           _campo(
             chave: _CamposDosDados.nome,
+            autofill: const <String>[AutofillHints.name],
             acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.nome,
             controlador: _nome,
@@ -805,6 +815,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           const SizedBox(height: BichuEspaco.e4),
           _campo(
             chave: _CamposDosDados.telefone,
+            autofill: const <String>[AutofillHints.telephoneNumber],
             acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.telefone,
             controlador: _telefone,
@@ -824,6 +835,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           _grupo(_TextosDosDados.suaRegiao, textos),
           _campo(
             chave: _CamposDosDados.cep,
+            autofill: const <String>[AutofillHints.postalCode],
             acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.cep,
             controlador: _cep,
@@ -850,6 +862,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           ],
           _campo(
             chave: _CamposDosDados.bairro,
+            autofill: const <String>[AutofillHints.sublocality],
             acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.bairro,
             controlador: _bairro,
@@ -866,6 +879,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           // tela, com o `Salvar` ja visivel.
           _campo(
             chave: _CamposDosDados.cidade,
+            autofill: const <String>[AutofillHints.addressCity],
             acaoDeTeclado: TextInputAction.done,
             rotulo: _TextosDosDados.cidade,
             controlador: _cidade,
@@ -918,6 +932,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -953,6 +968,16 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     required TextEditingController controlador,
     required int limite,
     required TextInputAction acaoDeTeclado,
+    /// As dicas de preenchimento do SISTEMA (iOS e Android).
+    ///
+    /// **E `autofillHints` que liga a sugestao, e NAO `tipoDeTeclado`.** O
+    /// tipo escolhe qual teclado abre; a sugestao de dado salvo vem daqui.
+    /// Medido no canal (`TextInput.setClient`): com as dicas, o argumento
+    /// `autofill.hints` sai preenchido; sem elas, nao sai.
+    ///
+    /// Mesmo padrao de `conta/tela_entrar.dart` e `conta/tela_criar_conta.
+    /// dart`, que ja declaravam e-mail, senha, nome e data.
+    List<String> autofill = const <String>[],
     String? ajuda,
     String? exemplo,
     TextInputType? tipoDeTeclado,
@@ -965,6 +990,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       child: BichuField(
         rotulo: rotulo,
         controlador: controlador,
+        autofill: autofill,
         limite: limite,
         ajuda: ajuda,
         erro: _erros[chave],

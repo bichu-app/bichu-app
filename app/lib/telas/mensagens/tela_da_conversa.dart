@@ -373,11 +373,26 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
                 keyboardType: TextInputType.multiline,
                 // TOCAR FORA FECHA O TECLADO. Este campo e `TextField` cru, e
                 // nao `BichuField`, entao ele nao herda o `onTapOutside` que
-                // vale para os outros 62 campos do app -- ver a prosa em
+                // vale para os outros campos do app -- ver a prosa em
                 // `widgets/bichu_field.dart`. Com `maxLines: 4` a tecla de
                 // retorno insere linha e nao conclui: sem esta linha, uma vez
                 // aberto o teclado so desce pelo botao voltar do Android, e o
                 // iOS nao tem equivalente.
+                //
+                // **E ELE NAO LEVA A FAIXA DE `Concluir`, POR DECISAO MEDIDA
+                // (20/10/2026), e nao por falta de tempo.** A faixa de
+                // `widgets/barra_do_teclado.dart` se posiciona em
+                // `bottom: viewInsets.bottom`, encostada no topo do teclado --
+                // que e exatamente onde ESTE compositor fica, ancorado no
+                // rodape. Poria a faixa sobre o proprio campo que a pessoa
+                // esta usando, trocando "o botao esta escondido" por "o campo
+                // esta escondido", que e pior.
+                //
+                // A saida daqui existe sem faixa, e sao duas: o toque fora
+                // (esta linha) e o proprio botao de enviar, que fica AO LADO
+                // do campo e nunca esteve atras do teclado. **Nao "complete" a
+                // cobertura com a faixa aqui** -- a excecao e geometrica, e
+                // vale tambem para `seguranca/folha_de_denuncia.dart`.
                 onTapOutside: (PointerDownEvent _) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: const InputDecoration(

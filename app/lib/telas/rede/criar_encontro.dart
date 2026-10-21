@@ -256,6 +256,49 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// uma faixa. As chaves sao os `field` do contrato.
   Map<String, String> _errosDeCampo = const <String, String>{};
 
+  /// A ORDEM DE TELA dos campos que o servidor pode recusar, pelas chaves do
+  /// contrato.
+  ///
+  /// Ela existe escrita porque a recusa chega num mapa, e mapa nao tem ordem:
+  /// sem esta lista, "o primeiro campo recusado" seria o primeiro que o
+  /// servidor tivesse resolvido mandar.
+  static const List<String> _ordemDosCampos = <String>[
+    'cover_image.alt_text',
+    'title',
+    'summary',
+    'place.place_name',
+    'place.neighborhood',
+    'place.city',
+    'place.state',
+    'starts_at',
+    'ends_at',
+    'notes',
+  ];
+
+  /// Onde cada campo esta na lista, para rolar ate ele.
+  final Map<String, GlobalKey> _ancoras = <String, GlobalKey>{
+    for (final String chave in _ordemDosCampos) chave: GlobalKey(),
+  };
+
+  /// O foco de cada campo de DIGITACAO.
+  ///
+  /// `starts_at`, `ends_at` e `cover_image.alt_text` ficam de fora: os dois
+  /// primeiros abrem seletor de data e nao recebem teclado, e o texto da capa
+  /// vive dentro de [_BlocoDaCapa] -- para ele a ancora leva ao bloco, que e o
+  /// que poe o campo na tela.
+  final Map<String, FocusNode> _focos = <String, FocusNode>{
+    for (final String chave in <String>[
+      'title',
+      'summary',
+      'place.place_name',
+      'place.neighborhood',
+      'place.city',
+      'place.state',
+      'notes',
+    ])
+      chave: FocusNode(),
+  };
+
   /// **Nasce uma vez e sobrevive a retentativa.** Duas tentativas da mesma
   /// pessoa com o mesmo texto nao podem virar dois encontros na agenda.
   String? _chave;
@@ -288,6 +331,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     _uf.dispose();
     _observacoes.dispose();
     _textoDaCapa.dispose();
+    for (final FocusNode foco in _focos.values) {
+      foco.dispose();
+    }
     super.dispose();
   }
 
@@ -563,6 +609,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
         );
         _errosDeCampo = _camposRecusados(falha);
       });
+      // Depois do `setState`: a ancora do campo recusado so existe na arvore
+      // do quadro que a recusa produz.
+      _levarAoPrimeiroRecusado();
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -592,6 +641,52 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// `place.place_name` com `address_in_place_name` e `title`/`summary`/`notes`
   /// com `contact_or_payment_detected` chegam assim. **A tela nao reescreve a
   /// frase**: o servidor e quem sabe o que recusou e por que.
+  /// Rola ate o PRIMEIRO campo recusado e pede o foco dele.
+  ///
+  /// **O defeito que isto fecha, medido em 20/10/2026.** O servidor recusa um
+  /// campo, a tela MARCA o campo -- e nao levava a pessoa ate a marca. Como o
+  /// `ListView` so constroi o que cabe na tela, quem preenche os sete campos
+  /// termina com a lista embaixo: a recusa de `Nome do lugar`, que e o
+  /// terceiro, ficava num widget que nao estava nem construido. A pessoa toca
+  /// `Criar evento`, nada visivel acontece, e a leitura dela e que o botao
+  /// nao funciona.
+  ///
+  /// **Por que isto nao aparecia antes.** A mecanica de foco do `EditableText`
+  /// mantinha, por acidente da geometria, o trecho de cima da lista visivel
+  /// depois do envio -- o campo seguia focado porque tocar fora nao fechava o
+  /// teclado. Quando `BichuField` passou a fechar o teclado no toque fora (o
+  /// conserto dos becos de teclado, 20/10), o acidente acabou e o defeito
+  /// apareceu. Ele e mais velho que o conserto.
+  ///
+  /// Mesmo mecanismo de `conta/tela_criar_conta.dart` e `conta/tela_entrar.
+  /// dart`: `Scrollable.ensureVisible` num `addPostFrameCallback` -- o quadro
+  /// da recusa ainda nao foi desenhado quando isto e chamado, e a ancora de um
+  /// campo que acabou de virar visivel so tem `currentContext` depois dele --
+  /// mais `requestFocus` no campo, que e o que poe o cursor onde a correcao
+  /// precisa acontecer.
+  void _levarAoPrimeiroRecusado() {
+    final String? primeiro = _ordemDosCampos
+        .where(_errosDeCampo.containsKey)
+        .firstOrNull;
+    if (primeiro == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final contexto = _ancoras[primeiro]?.currentContext;
+      if (contexto != null) {
+        Scrollable.ensureVisible(
+          contexto,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+      // Depois de rolar, e so para campo de digitacao. Pedir foco a um campo
+      // fora da tela faria o `EditableText` rolar por conta dele e disputar
+      // com o `ensureVisible` acima.
+      _focos[primeiro]?.requestFocus();
+    });
+  }
+
   static Map<String, String> _camposRecusados(FalhaDaApi falha) {
     final mapa = <String, String>{};
     for (final campo in falha.problem.campos) {
@@ -671,6 +766,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ],
                 const SizedBox(height: BichuEspaco.e6),
                 _BlocoDaCapa(
+                  key: _ancoras['cover_image.alt_text'],
                   escolhida: _capaEscolhida,
                   enviando: _enviandoACapa,
                   permissao: _permissaoDaCamera,
@@ -683,6 +779,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 BichuField(
+                  key: _ancoras['title'],
+                  foco: _focos['title'],
                   rotulo: 'Nome do evento',
                   controlador: _titulo,
                   aoMudar: _aoDigitar,
@@ -694,6 +792,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
+                  key: _ancoras['summary'],
+                  foco: _focos['summary'],
                   rotulo: 'O que vai acontecer',
                   controlador: _resumo,
                   aoMudar: _aoDigitar,
@@ -710,6 +810,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e3),
                 BichuField(
+                  key: _ancoras['place.place_name'],
+                  foco: _focos['place.place_name'],
                   rotulo: 'Nome do lugar',
                   controlador: _lugar,
                   aoMudar: _aoDigitar,
@@ -725,6 +827,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
+                  key: _ancoras['place.neighborhood'],
+                  foco: _focos['place.neighborhood'],
                   rotulo: 'Bairro',
                   controlador: _bairro,
                   aoMudar: _aoDigitar,
@@ -739,6 +843,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   children: <Widget>[
                     Expanded(
                       child: BichuField(
+                        key: _ancoras['place.city'],
+                        foco: _focos['place.city'],
                         rotulo: 'Cidade',
                         controlador: _cidade,
                         aoMudar: _aoDigitar,
@@ -752,6 +858,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                     SizedBox(
                       width: 96,
                       child: BichuField(
+                        key: _ancoras['place.state'],
+                        foco: _focos['place.state'],
                         rotulo: 'UF',
                         controlador: _uf,
                         aoMudar: _aoDigitar,
@@ -771,6 +879,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e3),
                 _Quando(
+                  key: _ancoras['starts_at'],
                   rotulo: 'Começa',
                   valor: _comeca,
                   aoTocar: enviando ? null : _escolherComeco,
@@ -778,6 +887,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e3),
                 _Quando(
+                  key: _ancoras['ends_at'],
                   rotulo: 'Termina',
                   valor: _termina,
                   opcional: true,
@@ -786,6 +896,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 BichuField(
+                  key: _ancoras['notes'],
+                  foco: _focos['notes'],
                   rotulo: 'Observações',
                   controlador: _observacoes,
                   aoMudar: _aoDigitar,
@@ -888,6 +1000,9 @@ class _BlocoDaCapa extends StatelessWidget {
     required this.aoTirar,
     required this.aoEscolher,
     required this.aoAbrirAjustes,
+    // A ancora que `_levarAoPrimeiroRecusado` usa para rolar ate o texto da
+    // capa, que vive dentro deste bloco.
+    super.key,
   });
 
   final FotoLocal? escolhida;
@@ -1054,6 +1169,8 @@ class _Quando extends StatelessWidget {
     required this.aoTocar,
     this.opcional = false,
     this.erro,
+    // A ancora de `starts_at` / `ends_at`, para rolar ate a recusa de data.
+    super.key,
   });
 
   final String rotulo;

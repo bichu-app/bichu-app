@@ -743,40 +743,26 @@ void main() {
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
-      // **ROLA ATÉ O CAMPO ANTES DE MEDIR, desde 20/10/2026.** O `ListView`
-      // só constrói o que cabe na tela, e depois de preencher os sete campos a
-      // lista está embaixo: `Nome do lugar` é o primeiro deles e não está na
-      // árvore, então `find.text` achava zero mesmo com a marca no campo —
-      // medido (a árvore tinha `Cidade`, `UF` e `Observações`).
+      // **NÃO HÁ ROLAGEM MANUAL AQUI, E ISSO É O CONSERTO DE 20/10/2026.**
       //
-      // **Por que isto mudou agora, e o que ele revela.** `BichuField` ganhou
-      // `onTapOutside` (tocar fora fecha o teclado, nos 65 campos do app, que
-      // era o conserto dos 7 becos de teclado sem saída). Com o campo perdendo
-      // o foco no toque em `Criar evento`, a posição da rolagem ao fim do envio
-      // deixou de ser a de antes — antes a mecânica de foco do `EditableText`
-      // mantinha, por acidente da geometria deste caso, o trecho de cima
-      // visível.
+      // Este caso chegou a reprovar: o `ListView` só constrói o que cabe na
+      // tela, e depois de preencher os sete campos a lista está embaixo —
+      // `Nome do lugar` é o terceiro deles, não estava na árvore, e
+      // `find.text` achava zero mesmo com a marca no campo (medido: a árvore
+      // tinha `Cidade`, `UF` e `Observações`).
       //
-      // **A INVARIANTE DO CASO NÃO MUDOU**: o que ele cobra é que a recusa
-      // marque O CAMPO, e não que saia como faixa genérica. Rolar primeiro é o
-      // que a pessoa faria, e é o que o próprio `rolarAte` existe para fazer.
+      // A causa não era a marca e nem este caso: **a tela não rolava até o
+      // campo recusado**. Quem enviava com a lista embaixo não via recusa
+      // nenhuma e concluía que o botão não funcionava. Ficava invisível porque
+      // a mecânica de foco do `EditableText` mantinha, por acidente da
+      // geometria, o trecho de cima visível — o campo seguia focado porque
+      // tocar fora não fechava o teclado. Quando `BichuField` passou a fechar
+      // o teclado no toque fora, o acidente acabou e o defeito apareceu.
       //
-      // **E ele deixou um defeito de produto à vista, que não é desta isca:**
-      // esta tela não rola até o primeiro campo recusado. Quem envia com a
-      // lista embaixo recebe a marca num campo fora da tela e não vê recusa
-      // nenhuma. Está apontado na entrega de quem mexeu em `BichuField`.
-      // `passo: -120` porque o alvo esta ACIMA da dobra, e
-      // `scrollable: corpoDoFormulario` porque esta tela e EMPILHADA sobre a
-      // casca de abas -- as duas razoes estao escritas em `rolarAte` e no
-      // proprio `corpoDoFormulario`, e sao as mesmas dos outros tres usos
-      // deste arquivo.
-      await rolarAte(
-        tester,
-        find.widgetWithText(BichuField, 'Nome do lugar'),
-        passo: -120,
-        scrollable: corpoDoFormulario,
-      );
-
+      // `_levarAoPrimeiroRecusado` conserta isso na TELA, e por isso este caso
+      // volta a medir só o que ele sempre mediu: que a recusa marca O CAMPO, e
+      // não que sai como faixa genérica. O caso irmão
+      // `rola até o primeiro campo recusado` é quem cobra a rolagem.
       expect(
         find.text('Escreva só o nome do lugar, sem endereço.'),
         findsOneWidget,
@@ -784,6 +770,97 @@ void main() {
             'sem marca. A pessoa precisa saber QUAL dos sete campos recusou, '
             'e a frase é a do servidor: a tela não reimplementa o detector '
             'de endereço, e duas redações dele divergiriam.',
+      );
+    });
+
+    // ISCA (D) — a tela ROLA até o primeiro campo recusado.
+    //
+    // O defeito que ela desliga, medido em 20/10/2026: a tela marcava o campo
+    // e não levava a pessoa até a marca. Com os sete campos preenchidos a
+    // lista está embaixo, e `Nome do lugar` é o terceiro — a recusa chegava a
+    // um widget que o `ListView` nem construía. Quem envia toca `Criar
+    // evento`, nada visível acontece, e a leitura é que o botão não funciona.
+    //
+    // **Ela mede DUAS coisas, e nenhuma é "o widget existe":** o campo está
+    // dentro da janela visível (retângulo, não presença — presença ficaria
+    // verde com o campo construído dez mil pixels abaixo da dobra), e ele
+    // recebeu o FOCO, que é onde a correção vai acontecer. Com
+    // `_levarAoPrimeiroRecusado` desligado, as duas reprovam.
+    testWidgets('rola até o primeiro campo recusado, e põe o foco nele', (
+      tester,
+    ) async {
+      await abrirAgenda(
+        tester,
+        rede: redeDaCriacao(
+          enviados: <Map<String, dynamic>>[],
+          respostaDaCriacao: () => problema(
+            'validation-failed',
+            400,
+            extra: <String, dynamic>{
+              'errors': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'field': 'place.place_name',
+                  'code': 'address_in_place_name',
+                  'message': 'Escreva só o nome do lugar, sem endereço.',
+                },
+              ],
+            },
+          ),
+        ),
+      );
+      await abrirAPorta(tester);
+      await preencherOMinimo(tester);
+
+      final campo = campoDoRotulo('Nome do lugar');
+      // DEFESA DE VAZIO: se o campo já estivesse na janela antes do envio, o
+      // caso ficaria verde sem a tela ter rolado nada.
+      expect(
+        campo.evaluate().isEmpty,
+        isTrue,
+        reason:
+            'REPROVA POR VAZIO: `Nome do lugar` já estava construído antes do '
+            'envio, então "a tela rolou até ele" não mede rolagem nenhuma. O '
+            'caso depende de a lista terminar embaixo, com o campo fora da '
+            'dobra — se o formulário encurtou, este caso perdeu o cenário.',
+      );
+
+      await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
+
+      expect(
+        campo,
+        findsOneWidget,
+        reason:
+            'REPROVA: depois da recusa, `Nome do lugar` continua fora da '
+            'árvore. A tela marcou um campo que a pessoa não tem como ver, e '
+            'quem envia com a lista embaixo não vê recusa nenhuma — conclui '
+            'que o botão não funciona. Quem conserta é '
+            '`_levarAoPrimeiroRecusado`, com `Scrollable.ensureVisible` num '
+            '`addPostFrameCallback`.',
+      );
+
+      final janela = tester.getRect(find.byType(TelaCriarEncontro));
+      final caixa = tester.getRect(campo);
+      expect(
+        caixa.top >= janela.top && caixa.bottom <= janela.bottom,
+        isTrue,
+        reason:
+            'REPROVA: `Nome do lugar` ($caixa) está construído mas FORA da '
+            'janela visível ($janela). Presença na árvore não é visibilidade: '
+            'o `ListView` constrói uma margem além da dobra, e um caso que '
+            'medisse só `findsOneWidget` ficaria verde com o campo logo abaixo '
+            'dela.',
+      );
+
+      expect(
+        tester.widget<EditableText>(
+          find.descendant(of: campo, matching: find.byType(EditableText)),
+        ).focusNode.hasFocus,
+        isTrue,
+        reason:
+            'REPROVA: a tela rolou até o campo recusado e não pôs o foco nele. '
+            'É o mesmo mecanismo de `tela_criar_conta` e `tela_entrar` — '
+            '`requestFocus` no campo que o servidor recusou --, e é ele que '
+            'deixa a correção a um toque de distância em vez de dois.',
       );
     });
   });
