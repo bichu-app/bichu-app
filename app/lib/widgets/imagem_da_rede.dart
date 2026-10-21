@@ -46,6 +46,8 @@ class ImagemDaRede extends StatelessWidget {
     this.proporcao = 1,
     this.raio = BichuRaio.md,
     this.simboloDeFalha = Icons.image_not_supported_outlined,
+    this.aoTocarNaFalha,
+    this.textoDaFalha,
   });
 
   /// A URL da **derivada**. Nao anulavel e nao vazia: ver o item 3 acima.
@@ -67,6 +69,31 @@ class ImagemDaRede extends StatelessWidget {
   /// O simbolo do estado de falha. Trocavel porque o retrato de uma pessoa
   /// falhando pede outro desenho que uma fachada falhando.
   final IconData simboloDeFalha;
+
+  /// O que fazer quando a imagem **nao carregou e vale tentar de novo**.
+  ///
+  /// ## Por que isto existe, e por que nao vale para toda imagem
+  ///
+  /// As tres primeiras imagens de servidor deste app (a logo do profissional,
+  /// a faixa do local, a foto em `Meus dados`) vem de URL **estavel**: se ela
+  /// falhou, ela vai falhar igual no toque seguinte, e um botao ali seria o
+  /// toque sem desfecho.
+  ///
+  /// A foto dentro da conversa e o caso oposto: ela vem numa **URL assinada de
+  /// validade curta**, e a causa mais comum da falha e justamente o
+  /// vencimento. Ali "buscar de novo" nao e insistir na mesma URL -- e pedir a
+  /// conversa outra vez e receber uma assinatura nova. Sem este caminho, quem
+  /// reabre a conversa depois de um tempo ve um quadro quebrado e nao tem o que
+  /// fazer.
+  ///
+  /// Nulo mantem o estado de falha **decorativo**, que e o comportamento de
+  /// todas as chamadas que existiam antes.
+  final VoidCallback? aoTocarNaFalha;
+
+  /// O texto do estado de falha quando ele e um controle. Obrigatorio na
+  /// pratica junto de [aoTocarNaFalha]: um botao de icone sem nome e um
+  /// controle mudo para quem usa leitor de tela.
+  final String? textoDaFalha;
 
   @override
   Widget build(BuildContext context) {
@@ -110,22 +137,79 @@ class ImagemDaRede extends StatelessWidget {
             // **O numero que decide o custo em memoria.** Em pixeis do
             // aparelho, pela largura que a tela pinta.
             cacheWidth: (larguraPintada * fatorDePixel).round(),
-            errorBuilder: (context, erro, pilha) => Center(
-              child: Icon(
-                simboloDeFalha,
-                size: BichuEspaco.e6,
-                color: cores.textMuted,
-              ),
-            ),
+            errorBuilder: (context, erro, pilha) => _falha(cores),
           ),
         );
 
-        // Decorativa: nenhuma parada de foco, nenhum anuncio. Com rotulo: uma
-        // parada, anunciada como imagem.
-        return descricao == null
+        // Com rotulo: uma parada, anunciada como imagem. **O rotulo vale
+        // TAMBEM quando ha [aoTocarNaFalha]**, e a primeira versao disto
+        // errava aqui: ela devolvia o conteudo cru sempre que havia toque de
+        // falha, e a foto da conversa -- que passa `descricao` -- ficava sem
+        // nome acessivel no caminho em que ela CARREGA. O `Semantics` nao
+        // bloqueia descendentes (so `excludeSemantics: true` bloqueia), entao
+        // o botao do estado de falha continua alcancavel dentro dele.
+        if (descricao != null) {
+          return Semantics(image: true, label: descricao, child: conteudo);
+        }
+        // Decorativa: nenhuma parada de foco, nenhum anuncio.
+        //
+        // **`ExcludeSemantics` so entra sem [aoTocarNaFalha]**: um botao
+        // dentro dele desaparece para o leitor de tela, e quem nao ve a tela
+        // perderia o unico caminho de buscar a foto de novo.
+        return aoTocarNaFalha == null
             ? ExcludeSemantics(child: conteudo)
-            : Semantics(image: true, label: descricao, child: conteudo);
+            : conteudo;
       },
+    );
+  }
+
+  /// O lugar da imagem que nao carregou.
+  ///
+  /// Sem [aoTocarNaFalha] e um simbolo, como sempre foi. Com ele e um botao
+  /// com nome, e o nome e o texto que a tela escreveu -- esta peca nao tem
+  /// microcopy propria, porque "buscar de novo" significa coisas diferentes em
+  /// cada superficie.
+  Widget _falha(BichuCores cores) {
+    final simbolo = Icon(
+      simboloDeFalha,
+      size: BichuEspaco.e6,
+      color: cores.textMuted,
+    );
+    final aoTocar = aoTocarNaFalha;
+    if (aoTocar == null) return Center(child: simbolo);
+    return Semantics(
+      button: true,
+      label: textoDaFalha ?? '',
+      child: InkWell(
+        onTap: aoTocar,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(BichuEspaco.e3),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                simbolo,
+                if (textoDaFalha != null) ...<Widget>[
+                  const SizedBox(height: BichuEspaco.e2),
+                  // `ExcludeSemantics`: o texto ja e o nome do botao acima, e
+                  // sem isso o leitor de tela o diria duas vezes na mesma
+                  // parada de foco.
+                  ExcludeSemantics(
+                    child: Text(
+                      textoDaFalha!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: cores.textSecondary,
+                        fontSize: BichuEscalaDeTipo.bodySm.tamanho,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

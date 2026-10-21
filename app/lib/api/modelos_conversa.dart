@@ -342,7 +342,9 @@ class Conversa {
     required this.participants,
     required this.messages,
     required this.unread,
+    this.fotoAlcancaOOutroLado = true,
     this.caseId,
+    this.foundReportId,
     this.nextCursor,
     this.lastMessagePreview,
     this.lastMessageAt,
@@ -359,6 +361,34 @@ class Conversa {
   /// ele esta aqui porque o contrato o declara e ler menos que o contrato
   /// esconde a decisao de nao usar.
   final String? caseId;
+
+  /// `found_report_id`: o aviso de achado de que esta conversa nasceu.
+  ///
+  /// ## ESTE CAMPO NAO ESTA NO CONTRATO HOJE, e a leitura e deliberada
+  ///
+  /// Medido em 20/10/2026 contra `api/openapi.yaml` no commit `70f4aa34`:
+  /// `#/components/schemas/Conversation` declara `id`, `case_id`,
+  /// `pet_display_name`, `status`, `participants`, `messages`, `unread`,
+  /// `last_message_preview`, `last_message_at` e `next_cursor`. **Nao declara
+  /// `found_report_id`.**
+  ///
+  /// E ele que falta para a foto poder subir. A unica rota de intencao de
+  /// upload cujo destino e a conversa mediada e
+  /// `createFoundReportPhotoUploadIntent`, e ela **exige `found_report_id` no
+  /// corpo** (`POST /v1/media/found-report-photo-intents`). Sem este campo na
+  /// resposta da conversa **nao existe valor valido para pedir a
+  /// autorizacao**: nao e limitacao de implementacao do app, e um buraco de
+  /// contrato, e o lado servidor desta historia esta sendo escrito em paralelo.
+  ///
+  /// Ler o campo agora e o que faz o caminho ficar PRONTO em vez de meio
+  /// pronto: no dia em que a resposta o traga, o botao de anexar aparece sem
+  /// uma linha de app mudar. Enquanto ele vem nulo, `TelaDaConversa` **nao
+  /// desenha o botao** -- um controle que sempre falha e o toque sem desfecho
+  /// que o criterio 2 da BICHUS-62 proibe por escrito.
+  ///
+  /// `case_id` NAO serve no lugar dele: aquele e o caso de pet perdido, e a
+  /// rota de intencao confere o aviso do achador.
+  final String? foundReportId;
 
   final String petDisplayName;
 
@@ -399,6 +429,46 @@ class Conversa {
   /// `last_message_at`: quando foi a ultima mensagem. Nulo junto com a previa.
   final DateTime? lastMessageAt;
 
+  /// `photo_reaches_other_side`: uma foto que EU mandar vai ser legivel pelo
+  /// outro lado.
+  ///
+  /// ## A LEITURA DA FOTO E ASSIMETRICA, e isso foi ACEITO e nao e defeito
+  ///
+  /// O achador **sem conta** ve a foto que ele mesmo mandou e **nao ve a do
+  /// tutor**. A causa e de seguranca e mora no servidor: a chave do objeto do
+  /// lado com conta embute o identificador do aviso de achado, que e UUID
+  /// interno e nao pode sair para quem nao tem conta (SEC-001), e o guarda do
+  /// leitor de midia so deixa passar a chave do lado sem conta.
+  ///
+  /// **Essa assimetria nao vai ser consertada, e o que falta e DIZER.** Hoje o
+  /// tutor manda a foto, ela aparece inteira no fio dele, e ele espera reacao
+  /// de alguem que nao viu nada. O campo existe para a tela avisar **antes do
+  /// envio** -- a pessoa decide com a informacao na mao, e nao descobre depois.
+  ///
+  /// Falso **nao bloqueia o envio**, e isso e deliberado: a foto e gravada,
+  /// vale para o proprio tutor e valeria para um achador COM conta. Bloquear
+  /// tiraria um recurso por um motivo que a pessoa pode nao ter.
+  ///
+  /// ## ESTE CAMPO NAO ESTA NO CONTRATO HOJE
+  ///
+  /// Medido em 21/10/2026 contra `api/openapi.yaml` nesta arvore e contra
+  /// `feat/foto-na-conversa-servidor` (`3400b04a`): nenhum dos dois declara
+  /// `photo_reaches_other_side`. O lado servidor esta escrevendo com este nome
+  /// exato, e ler o campo agora e o que faz a tela ligar sozinha quando a
+  /// resposta o trouxer -- o mesmo tratamento de [foundReportId].
+  ///
+  /// **O padrao e `true`, isto e, NAO AVISA.** Ausente significa que esta
+  /// resposta nao disse nada sobre o alcance, e avisar sobre o que nao se sabe
+  /// seria afirmar a quem manda a foto que o outro lado nao a ve -- sem o
+  /// servidor ter dito isso. O preco do padrao e o defeito de hoje continuar
+  /// mais um pouco contra servidor antigo; o preco do contrario seria a tela
+  /// mentir em TODA conversa, inclusive nas em que a foto chega.
+  ///
+  /// `FinderConversation` nao tem o campo e nao deve ter: aquele schema serve
+  /// o achador sem conta, e a foto DELE alcanca o tutor -- nao ha aviso a dar
+  /// daquele lado.
+  final bool fotoAlcancaOOutroLado;
+
   /// O outro lado, para o titulo da conversa e para a marca neutra.
   ///
   /// Recebe o papel do proprio chamador, que a lista nao sabe: `participants`
@@ -423,6 +493,7 @@ class Conversa {
     if (id is! String || id.isEmpty) return null;
     final nomeDoPet = bruto['pet_display_name'];
     final caso = bruto['case_id'];
+    final aviso = bruto['found_report_id'];
     final cursor = bruto['next_cursor'];
     final participantes = bruto['participants'];
     final mensagens = bruto['messages'];
@@ -431,6 +502,11 @@ class Conversa {
     return Conversa(
       id: id,
       caseId: caso is String ? caso : null,
+      // Vazio cai no mesmo nulo que ausente: os dois querem a mesma tela (sem
+      // botao de anexar), e uma string vazia viajaria no corpo da intencao
+      // como `found_report_id: ""`, que o servidor recusa com 400 dizendo
+      // `format` -- um erro sobre um campo que a pessoa nunca viu.
+      foundReportId: aviso is String && aviso.isNotEmpty ? aviso : null,
       petDisplayName: nomeDoPet is String ? nomeDoPet : '',
       status: estado,
       nextCursor: cursor is String ? cursor : null,
@@ -438,6 +514,10 @@ class Conversa {
       // `false`: pintar a marca sem o servidor ter dito que ha algo nao lido
       // seria a mentira que o contador existe para evitar, so na outra direcao.
       unread: bruto['unread'] == true,
+      // `== false` e nao `!= true`: so o `false` EXPLICITO liga o aviso.
+      // Ausente, nulo ou de tipo inesperado caem no padrao que nao afirma
+      // nada. Ver [Conversa.fotoAlcancaOOutroLado].
+      fotoAlcancaOOutroLado: bruto['photo_reaches_other_side'] != false,
       lastMessagePreview: previa is String ? previa : null,
       lastMessageAt: quando is String ? DateTime.tryParse(quando) : null,
       participants: participantes is! List
