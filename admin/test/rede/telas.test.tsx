@@ -231,8 +231,16 @@ describe('Rede: formulário novo', () => {
     await usuario.selectOptions(cobrado, 'por dupla (1 humano + 1 pet)');
     // A previa diz a quem o preco se refere.
     expect(screen.getByText('R$ 15,50 por dupla (1 humano + 1 pet)')).toBeInTheDocument();
+    // Agua, guia e saquinho nascem MARCADOS (decisao do cliente, 20/10), e a
+    // carteira de vacinacao nao. O clique na "Guia" aqui DESMARCA, e e de
+    // proposito: ele prova, no mesmo caso que confere o corpo da criacao, que o
+    // padrao nao impede o organizador de tirar um item.
+    expect(screen.getByRole('checkbox', { name: 'Água' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Guia' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Saquinhos para cocô' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Carteira de vacinação' })).not.toBeChecked();
     await usuario.click(screen.getByRole('checkbox', { name: 'Guia' }));
-    expect(screen.getByRole('checkbox', { name: 'Saquinhos para cocô' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Guia' })).not.toBeChecked();
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
@@ -255,7 +263,7 @@ describe('Rede: formulário novo', () => {
       amenities: ['shade'],
       visibility: 'private',
       admission: { kind: 'paid', price: { amount: 1550, currency: 'BRL', unit: 'per_pair' } },
-      bring_items: ['leash'],
+      bring_items: ['water', 'poop_bags'],
       notes: 'Ponto ao lado do coreto.',
     });
   });

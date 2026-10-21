@@ -209,6 +209,41 @@ describe('montagem da criação', () => {
   });
 });
 
+describe('itens marcados por padrão no cadastro (decisão do cliente, 20/10)', () => {
+  it('formulário NOVO nasce com água, guia e saquinho marcados', () => {
+    expect([...formularioVazio().levar].sort()).toEqual(['leash', 'poop_bags', 'water']);
+  });
+
+  it('formulário NOVO nasce com a carteira de vacinação DESMARCADA', () => {
+    expect(formularioVazio().levar).not.toContain('vaccination_card');
+  });
+
+  it('os quatro itens que o cliente não citou continuam desmarcados', () => {
+    const levar = formularioVazio().levar;
+    for (const item of ['water_bowl', 'treats', 'towel', 'toy'] as const) expect(levar).not.toContain(item);
+  });
+
+  it('o padrão não impede desmarcar: o que a tela tira sai do corpo da criação', () => {
+    const corpo = montarCriacao({ ...preenchido(), levar: [] });
+    expect(corpo.bring_items).toEqual([]);
+  });
+
+  it('REPROVA se o padrão vazar para a EDIÇÃO: o formulário reflete o que está salvo', () => {
+    // `encontroDeExemplo` salvou `vaccination_card` e NAO salvou `leash`. Se o
+    // padrao de criacao alcancasse a edicao, reabrir remarcaria `leash` e o
+    // organizador perderia a escolha dele no primeiro salvamento.
+    const salvo = encontroDeExemplo();
+    const comVacina = { ...salvo, bring_items: ['water', 'vaccination_card'] as typeof salvo.bring_items };
+    expect(formularioDoEncontro(comVacina).levar).toEqual(['water', 'vaccination_card']);
+  });
+
+  it('REPROVA se a edição de um encontro SEM itens herdar o padrão', () => {
+    const salvo = encontroDeExemplo();
+    const semItens = { ...salvo, bring_items: [] as typeof salvo.bring_items };
+    expect(formularioDoEncontro(semItens).levar).toEqual([]);
+  });
+});
+
 describe('plano de edição (as três operações)', () => {
   const original = encontroDeExemplo();
 
