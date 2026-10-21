@@ -487,6 +487,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/delivery-address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O endereco de entrega guardado na conta
+         * @description O endereco que o formulario da plaquinha usa para nascer preenchido.
+         *
+         *     **`null` quando nao ha endereco guardado, e nao 404** -- a mesma forma
+         *     de `getMyLocation`, e pelo mesmo motivo: "nunca guardei" e um estado
+         *     normal da conta, nao recurso ausente. Com `null` o formulario se
+         *     comporta como antes desta operacao existir.
+         *
+         *     **Leitura do proprio dono, e so dele.** `bearerAuth` sem alternativa
+         *     vazia, e o `WHERE` compara `user_id` com o portador do token.
+         */
+        get: operations["getMyDeliveryAddress"];
+        /**
+         * Guarda ou troca o endereco de entrega da conta
+         * @description **`PUT` e nao `PATCH`, e o endereco inteiro vem junto.** Endereco e uma
+         *     coisa so: trocar de casa troca os nove campos de uma vez, e um `PATCH`
+         *     por campo deixaria a conta parar numa mistura de duas casas -- rua nova
+         *     com bairro antigo chega no lugar errado sem nada ter dado erro.
+         *
+         *     **Uma linha por conta**, e nao um historico de enderecos: o cliente
+         *     pediu *"um endereco de entrega salvo na conta"*, no singular. Guardar de
+         *     novo sobrescreve.
+         *
+         *     **Este e o UNICO lugar que escreve o endereco guardado.** O pedido da
+         *     plaquinha (`requestCollarTag`) **nao** o escreve: editar o endereco
+         *     dentro do pedido muda aquele pedido e nao mexe no que esta guardado.
+         *     Mudar o guardado em silencio, a partir de um formulario de pedido, e
+         *     a classe de defeito que so aparece meses depois -- quando a plaquinha
+         *     chega no endereco de antes.
+         *
+         *     Cobranca, valor e pagamento continuam fora de escopo por decisao do
+         *     cliente, e nada aqui os introduz.
+         */
+        put: operations["putMyDeliveryAddress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications": {
         parameters: {
             query?: never;
@@ -12089,7 +12138,27 @@ export interface components {
         };
         /**
          * @description O endereco para onde a plaquinha e enviada. **Dado pessoal**, e o
-         *     tratamento vai junto da definicao:
+         *     tratamento vai junto da definicao.
+         *
+         *     **UM SCHEMA, DUAS SUPERFICIES, desde 21/10/2026.** Ele e o corpo do
+         *     pedido (`CollarTagRequestInput.delivery_address`), a projecao da fila do
+         *     painel (`AdminCollarTagRequest.delivery_address`) **e** o endereco
+         *     guardado na conta (`getMyDeliveryAddress`, `putMyDeliveryAddress`).
+         *     Escrever um segundo schema para o endereco guardado criaria a segunda
+         *     redacao do mesmo endereco, e as duas divergiriam no primeiro limite que
+         *     mudasse -- com o efeito concreto de o endereco guardado nascer capaz de
+         *     produzir um pedido que o banco recusa. As travas do banco sao as mesmas
+         *     nas duas tabelas pelo mesmo motivo.
+         *
+         *     **O endereco guardado e a RESIDENCIA do usuario, e a postura dele e a
+         *     mais estreita das tres deste produto:** so o dono le, nunca sai em
+         *     projecao publica, nunca aparece em lista e nunca alimenta calculo de
+         *     distancia. Nao confundir com o endereco do PROFISSIONAL (comercial e
+         *     publico, ADR-0011 secao 4) nem com o do ENCONTRO (lugar publico, mas o
+         *     logradouro fica atras de conta -- ADR-0027 item 21.2, so em
+         *     `getNetworkEventLocation`).
+         *
+         *     O tratamento, campo a campo:
          *
          *     - **nao sai em superficie publica**. Ele aparece para quem pediu e para
          *       a administracao, e mais ninguem. Nenhuma resposta sem conta o
@@ -12138,6 +12207,24 @@ export interface components {
             city: string;
             state: string;
         };
+        /**
+         * @description O endereco de entrega guardado na conta, **ou `null` quando a conta nao
+         *     tem nenhum**.
+         *
+         *     **Alias anulavel de `DeliveryAddress`, e nao um segundo endereco.** O
+         *     `null` precisa estar no schema, e nao so na prosa: um gerador de tipo
+         *     nao le descricao, e sem ele o cliente gerado nasceria com um endereco
+         *     nao-anulavel e quebraria na primeira conta sem endereco guardado -- que
+         *     e o estado de TODA conta no dia em que esta operacao entrar no ar.
+         *     `DeliveryAddress` em si **nao** pode ser anulavel: ele e corpo
+         *     obrigatorio de `requestCollarTag` e de `putMyDeliveryAddress`.
+         *
+         *     `null` nao e erro e nao e recurso ausente: e o estado normal de quem
+         *     ainda nao guardou endereco, e nele o formulario da plaquinha se comporta
+         *     exatamente como antes desta operacao existir. Mesma forma e mesmo motivo
+         *     de `UserLocation` em `getMyLocation`.
+         */
+        MyDeliveryAddress: components["schemas"]["DeliveryAddress"] | null;
         /**
          * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
          *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
@@ -14550,6 +14637,56 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMyDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco guardado, ou `null` quando a conta nao tem nenhum. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyDeliveryAddress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putMyDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryAddress"];
+            };
+        };
+        responses: {
+            /**
+             * @description O endereco como ficou guardado (ja normalizado: CEP sem mascara, UF
+             *     em maiuscula, bordas sem espaco).
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
         };
     };
