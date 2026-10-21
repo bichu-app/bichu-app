@@ -974,6 +974,30 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'public.collar_tag_requests.collar_tag_requests_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
   // ------------------------------------------------------------------
+  // O ENDERECO DE ENTREGA GUARDADO NA CONTA (`20261020000016`), autorizado
+  // pelo cliente em 21/10/2026: *"um endereco de entrega salvo na conta,
+  // reusado em todo pedido e editavel num lugar so"*.
+  // ------------------------------------------------------------------
+  //
+  // As definicoes sao, caractere por caractere, as de `collar_tag_requests`
+  // acima -- e a identidade e deliberada, nao copia por preguica: o endereco
+  // guardado tem de poder PREENCHER o pedido sem o banco recusar. Se esta
+  // tabela aceitasse um CEP de outra forma, o endereco guardado nasceria capaz
+  // de produzir um pedido que o `CHECK` da outra tabela rejeita, e a pessoa
+  // descobriria isso no botao de pedir.
+  //
+  // **SO DOIS dos nove `CHECK` desta tabela entram aqui**, e a razao e a regra
+  // deste registro (`MENCIONA_LITERAL`): os outros sete sao
+  // `char_length(col) BETWEEN a AND b` (e `char_length(state) = 2`), que o
+  // catalogo escreve sem nenhum `'...'::text`. A descoberta nao os traz, e
+  // declara-los faria o caso "restricao declarada que o banco nao tem mais"
+  // reprovar -- foi exatamente o que aconteceu com os de `professionals` em
+  // 18/10, e o comentario deles, acima, registra o episodio.
+  'public.user_delivery_addresses.user_delivery_addresses_cep_formato':
+    "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
+  'public.user_delivery_addresses.user_delivery_addresses_telefone_formato':
+    "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
+  // ------------------------------------------------------------------
   // A INDICACAO DO DIRETORIO (`20261017000004`), O CEP DELA
   // (`20261017000015`) E A FILA (`20261017000016`).
   // ------------------------------------------------------------------
