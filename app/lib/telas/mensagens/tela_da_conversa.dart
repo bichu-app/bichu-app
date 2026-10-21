@@ -35,6 +35,35 @@
 /// nunca automatico -- repetir sozinho uma mensagem que talvez tenha chegado e
 /// como o tutor recebe a mesma frase duas vezes.
 ///
+/// ---------------------------------------------------------------------------
+/// ## A FOTO: OS BYTES SOBEM NA ESCOLHA, A MENSAGEM SAI NO TOQUE
+///
+/// Sao dois momentos, e nao um. Pedido do cliente de 19/10/2026, literal:
+/// *"quando o usuario fizer o upload de qualquer foto no app, voce deve fazer o
+/// upload e apresentar como vai ficar de preview, e ao salvar o voce salva a
+/// foto"*. Aqui o "salvar" e o toque em Enviar.
+///
+/// O mecanismo reusado e `EnvioDeFoto` + `EnvioParaConfirmarDepois`
+/// (`api/envio_de_foto.dart`), que e o **unico caminho de bytes do app** e ja
+/// existia exatamente com esta forma: ele sobe os bytes e GUARDA o `upload_id`
+/// em vez de confirmar, e quem confirma e o toque seguinte. Escrever um segundo
+/// caminho de envio aqui criaria a copia que diverge na troca de provedor de
+/// armazenamento.
+///
+/// **NADA vai para a conversa antes da confirmacao.** Foto mandada por engano
+/// nao se desfaz como rascunho: ela chega no aparelho da outra pessoa. E por
+/// isso que a previa e o estado central desta tela, e nao um detalhe.
+///
+/// **NAO EXISTE MENSAGEM SO-FOTO.** `body` e `minLength: 1` no contrato e o
+/// `CHECK` de `mediated_messages.body` exige texto nao vazio: a foto vai com
+/// legenda. A tela diz isso na previa, antes de a pessoa tocar num botao que
+/// nao responderia.
+///
+/// **O botao de anexar nao aparece sem `found_report_id`.** Ver
+/// `Conversa.foundReportId`: o campo nao esta no contrato hoje, e sem ele nao
+/// ha valor valido para pedir a autorizacao de upload. Desenhar o botao de todo
+/// jeito seria o toque sem desfecho que o criterio 2 da BICHUS-62 proibe.
+///
 /// ## Paginacao por CURSOR, e para TRAS
 ///
 /// `getConversation` pagina as mensagens por `cursor`, e nunca por
@@ -47,7 +76,9 @@ import 'package:flutter/material.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/conversas_api.dart';
+import '../../api/envio_de_foto.dart';
 import '../../api/modelos_conversa.dart';
+import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -56,12 +87,40 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'area_de_mensagens.dart';
+import 'foto_na_barra_de_escrever.dart';
+import 'textos_da_foto_na_conversa.dart';
 
 class TelaDaConversa extends StatefulWidget {
-  const TelaDaConversa({required this.conversaId, super.key, this.conversas});
+  const TelaDaConversa({
+    required this.conversaId,
+    super.key,
+    this.conversas,
+    this.camera,
+    this.envioDeFoto,
+    this.intencaoDeFoto,
+  });
 
   /// O cliente de conversa. Nulo usa o do [Escopo]. Ver [AreaDeMensagens].
   final ConversasApi? conversas;
+
+  /// A porta da camera e da galeria. Nulo usa a do [Escopo].
+  ///
+  /// Injetavel pelo mesmo motivo de [conversas]: e o que permite a isca
+  /// exercitar escolha, previa, progresso e descarte **sem aparelho**, pelo
+  /// caminho de producao -- em vez de um dublê de tela que devolve "escolhida"
+  /// por conta propria.
+  final CameraEGaleria? camera;
+
+  /// O unico caminho de bytes do app. Nulo usa o do [Escopo].
+  final EnvioDeFoto? envioDeFoto;
+
+  /// Quem emite a autorizacao de upload da foto desta conversa. Nulo usa
+  /// `Escopo.achados`, que e `AchadosApi`.
+  ///
+  /// **Interface estreita e nao a classe**, pela mesma razao de
+  /// `IntencaoEConfirmacaoDePet`: esta tela nao deve alcancar `registrar` nem
+  /// `listarMeus` de achados.
+  final IntencaoDeFotoDeAchado? intencaoDeFoto;
 
   /// O id vem do caminho. **Nao e pintado em lugar nenhum** (ADR-0010).
   final String conversaId;
@@ -76,6 +135,61 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
 
   ConversasApi get _api =>
       widget.conversas ?? ConversasApi(Escopo.of(context).api);
+
+  CameraEGaleria get _camera => widget.camera ?? Escopo.of(context).camera;
+
+  EnvioDeFoto get _envio => widget.envioDeFoto ?? Escopo.of(context).envioDeFoto;
+
+  IntencaoDeFotoDeAchado get _intencaoDeFoto =>
+      widget.intencaoDeFoto ?? Escopo.of(context).achados;
+
+  // -------------------------------------------------------------------------
+  // A FOTO ESCOLHIDA
+  // -------------------------------------------------------------------------
+
+  /// A foto que a pessoa escolheu e **ainda nao mandou**. Nula sem previa.
+  FotoLocal? _foto;
+
+  FaseDaFotoEscolhida _faseDaFoto = FaseDaFotoEscolhida.subindo;
+
+  /// Bytes do arquivo ja aceitos pelo socket, e o total. Ver
+  /// `ProgressoDeEnvio` em `api/envio_de_foto.dart`: o numero mede
+  /// contrapressao, e nao tempo decorrido.
+  int _bytesEnviados = 0;
+  int _bytesTotais = 0;
+
+  /// O texto da recusa, **do servidor quando ele mandou um**.
+  String? _motivoDaRecusaDaFoto;
+
+  /// O destino que guarda o `upload_id` depois de os bytes chegarem.
+  ///
+  /// `uploadId` dele continua nulo quando o envio nao terminou bem, e e esse
+  /// nulo que distingue "ha foto para mandar" de "ha foto escolhida".
+  EnvioParaConfirmarDepois? _destinoDaFoto;
+
+  /// Quantas vezes a mensagem foi recusada por **higiene da foto em curso**.
+  ///
+  /// Zerado a cada escolha nova. Ver [_esperasDoPreparo].
+  int _tentativasDePreparo = 0;
+
+  /// A espera entre as tentativas quando o servidor diz que a foto nao esta
+  /// pronta: **crescente, e com fim**.
+  ///
+  /// Crescente porque a higiene e assincrona e insistir em rajada so gasta a
+  /// rede da pessoa. Com fim porque um laco sem teto deixaria a tela em
+  /// "preparando" para sempre numa falha que nao e temporaria -- e ai a saida
+  /// honesta e dizer que nao foi, preservando a previa.
+  ///
+  /// Soma: 6,4 s. E a janela em que a derivada sem metadado de uma foto de
+  /// celular fica pronta, e os bytes ja subiram na ESCOLHA -- entao na pratica
+  /// a primeira tentativa quase sempre passa, e esta lista cobre a corrida e
+  /// nao o caminho comum.
+  static const List<Duration> _esperasDoPreparo = <Duration>[
+    Duration(milliseconds: 400),
+    Duration(milliseconds: 800),
+    Duration(milliseconds: 1600),
+    Duration(milliseconds: 3600),
+  ];
 
   Conversa? _conversa;
   String? _cursor;
@@ -203,10 +317,217 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // A FOTO: escolher, subir, descartar
+  // -------------------------------------------------------------------------
+
+  /// O aviso de achado desta conversa, ou nulo.
+  ///
+  /// **Nulo esconde o botao de anexar.** Ver `Conversa.foundReportId`: sem ele
+  /// nao ha corpo valido para `createFoundReportPhotoUploadIntent`, e um botao
+  /// que sempre falha e pior que nenhum botao.
+  String? get _avisoDoAchado => _conversa?.foundReportId;
+
+  /// Ha botao de anexar nesta tela.
+  bool get _podeAnexarFoto =>
+      !_emLeitura && !_faltaConta && _avisoDoAchado != null;
+
+  /// A legenda esta vazia. Ver [TextosDaFotoNaConversa.aFotoPrecisaDeLegenda].
+  bool get _faltaLegenda => _controlador.text.trim().isEmpty;
+
+  /// A foto nao impede o envio da mensagem.
+  ///
+  /// Sem foto, nao impede nada (o caminho de antes desta historia). Com foto,
+  /// so a fase [FaseDaFotoEscolhida.pronta] libera -- e e isso que faz o toque
+  /// em Enviar **nao mandar nada** enquanto os bytes estao subindo.
+  bool get _fotoPermiteEnviar =>
+      _foto == null || _faseDaFoto == FaseDaFotoEscolhida.pronta;
+
+  /// Abre a folha com as duas origens e sobe o que vier.
+  Future<void> _anexarFoto() async {
+    // Uma foto por mensagem. Com uma previa na tela, o anexar nao e desenhado;
+    // esta guarda cobre o toque que chegou antes da repintura.
+    if (_foto != null || !_podeAnexarFoto) return;
+
+    final cores = BichuColors.of(context).cores;
+    final origem = await showModalBottomSheet<_OrigemDaFoto>(
+      context: context,
+      backgroundColor: cores.surface,
+      barrierColor: cores.scrim,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(BichuRaio.xl)),
+      ),
+      builder: (contexto) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(BichuEspaco.e4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              BotaoPrimario(
+                rotulo: _TextosDaFolhaDeFoto.tirarFoto,
+                aoTocar: () =>
+                    Navigator.of(contexto).pop(_OrigemDaFoto.camera),
+              ),
+              const SizedBox(height: BichuEspaco.e2),
+              BotaoSecundario(
+                rotulo: _TextosDaFolhaDeFoto.escolherDaGaleria,
+                aoTocar: () =>
+                    Navigator.of(contexto).pop(_OrigemDaFoto.galeria),
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              // A LINHA DA LOCALIZACAO APARECE AQUI TAMBEM, e nao so na
+              // previa: aqui e antes de a pessoa abrir a galeria, que e o
+              // momento em que ela ainda pode escolher outra foto por causa
+              // disso.
+              Text(
+                TextosDaFotoNaConversa.aLocalizacaoSai,
+                style: Theme.of(contexto)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: cores.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (origem == null || !mounted) return;
+
+    final camera = _camera;
+    final FotoLocal? escolhida;
+    if (origem == _OrigemDaFoto.camera) {
+      // A permissao e pedida **no toque**, e nao na abertura da conversa: uma
+      // conversa que pede camera ao abrir pede acesso para uma coisa que a
+      // pessoa nao pediu.
+      var estado = await camera.estadoDaCamera();
+      if (estado == EstadoDaPermissao.negada) estado = await camera.pedirCamera();
+      if (!mounted) return;
+      if (estado != EstadoDaPermissao.concedida) return;
+      escolhida = await camera.tirarFoto();
+    } else {
+      escolhida = await camera.escolherDaGaleria();
+    }
+    if (!mounted || escolhida == null) return;
+
+    // AS DUAS RECUSAS LOCAIS, antes de qualquer byte sair.
+    //
+    // Nao e defensividade: a politica assinada carrega o teto, e deixar a
+    // pessoa esperar um upload inteiro para o armazenamento recusar e gastar a
+    // rede dela para chegar ao mesmo lugar. `tiposDeFotoAceitos` e a lista do
+    // contrato (`UploadIntentInput.content_type`), que **inclui HEIC** --
+    // recusa-lo aqui tiraria o produto da mao de metade dos aparelhos.
+    final recusaDeTipo =
+        recusaDeTipoDaFoto(escolhida.tipoDeConteudo, tiposDeFotoAceitos);
+    final recusa = recusaDeTipo ??
+        (escolhida.tamanhoEmBytes > tetoDeBytesDaFoto
+            ? orientacaoDeTamanhoDaImagem
+            : null);
+
+    setState(() {
+      _foto = escolhida;
+      _bytesEnviados = 0;
+      _bytesTotais = escolhida!.tamanhoEmBytes;
+      _tentativasDePreparo = 0;
+      _destinoDaFoto = null;
+      _motivoDaRecusaDaFoto = recusa;
+      _faseDaFoto = recusa == null
+          ? FaseDaFotoEscolhida.subindo
+          : FaseDaFotoEscolhida.recusada;
+    });
+    // **A PREVIA APARECE MESMO NA RECUSA.** A pessoa precisa ver QUAL foto foi
+    // recusada para escolher outra; um aviso sem a imagem a manda de volta
+    // para a galeria sem saber o que evitar.
+    if (recusa != null) return;
+    await _subirAFoto();
+  }
+
+  /// Sobe os bytes e guarda o `upload_id`. Reusa o unico caminho de bytes do
+  /// app, e nao escreve um segundo.
+  Future<void> _subirAFoto() async {
+    final foto = _foto;
+    final aviso = _avisoDoAchado;
+    if (foto == null || aviso == null) return;
+
+    setState(() {
+      _faseDaFoto = FaseDaFotoEscolhida.subindo;
+      _bytesEnviados = 0;
+      _bytesTotais = foto.tamanhoEmBytes;
+      _motivoDaRecusaDaFoto = null;
+      _destinoDaFoto = null;
+      _tentativasDePreparo = 0;
+    });
+
+    final porta = _intencaoDeFoto;
+    final destino = EnvioParaConfirmarDepois(
+      pedir: ({required String tipoDeConteudo, required int tamanhoEmBytes}) =>
+          porta.intencaoDeFotoDoAchado(
+        foundReportId: aviso,
+        tipoDeConteudo: tipoDeConteudo,
+        tamanhoEmBytes: tamanhoEmBytes,
+      ),
+    );
+
+    final desfecho = await _envio.enviar(
+      foto: foto,
+      destino: destino,
+      aoProgredir: (int enviados, int total) {
+        if (!mounted) return;
+        // A foto pode ter sido descartada no meio do envio. Sem esta guarda, o
+        // progresso de um envio abandonado reacenderia a previa.
+        if (_foto != foto) return;
+        setState(() {
+          _bytesEnviados = enviados;
+          _bytesTotais = total;
+        });
+      },
+    );
+    if (!mounted || _foto != foto) return;
+
+    setState(() {
+      switch (desfecho) {
+        case DesfechoDoEnvio.enviada:
+          _destinoDaFoto = destino;
+          _faseDaFoto = FaseDaFotoEscolhida.pronta;
+        case DesfechoDoEnvio.semSinal:
+          _faseDaFoto = FaseDaFotoEscolhida.semSinal;
+        case DesfechoDoEnvio.recusada:
+          _faseDaFoto = FaseDaFotoEscolhida.recusada;
+      }
+    });
+  }
+
+  /// Descarta a previa. **Nao manda nada e nao fala com a rede.**
+  ///
+  /// A intencao de upload nao confirmada vence sozinha no servidor e o varredor
+  /// a recolhe; nao existe rota de cancelamento no contrato. O texto da pessoa
+  /// **fica no campo**: ela pode ter escrito a legenda e querer manda-la sem a
+  /// foto.
+  void _descartarAFoto() {
+    setState(() {
+      _foto = null;
+      _destinoDaFoto = null;
+      _motivoDaRecusaDaFoto = null;
+      _bytesEnviados = 0;
+      _bytesTotais = 0;
+      _tentativasDePreparo = 0;
+      _faseDaFoto = FaseDaFotoEscolhida.subindo;
+    });
+  }
+
   /// Envia, e **nao limpa o campo antes da confirmacao**.
   Future<void> _enviar() async {
     final texto = _controlador.text.trim();
     if (texto.isEmpty || _enviando || _emLeitura) return;
+    // **A FOTO QUE AINDA ESTA SUBINDO NAO DEIXA A MENSAGEM SAIR.** Sem isto, o
+    // toque em Enviar durante o envio postaria a mensagem sem
+    // `photo_upload_id` -- a legenda chegaria sozinha e a foto ficaria orfa no
+    // armazenamento ate o varredor recolhe-la.
+    if (!_fotoPermiteEnviar) return;
+
+    // O identificador lido ANTES do `await`: a previa pode ser descartada
+    // enquanto a chamada esta na rua, e `_destinoDaFoto` seria nulo na volta.
+    final fotoUploadId = _destinoDaFoto?.uploadId;
 
     setState(() {
       _enviando = true;
@@ -214,19 +535,59 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     });
 
     try {
-      final mensagem = await _api.enviar(widget.conversaId, texto);
+      final mensagem = await _api.enviar(
+        widget.conversaId,
+        texto,
+        fotoUploadId: fotoUploadId,
+      );
       if (!mounted) return;
       setState(() {
         _mensagens.add(mensagem);
         _enviando = false;
+        // A PREVIA SAI AQUI, e so aqui: a foto deixou de ser "escolhida" e
+        // passou a ser mensagem na linha. Qualquer caminho de falha abaixo a
+        // mantem, porque refazer a escolha na galeria e o custo que a pessoa
+        // nao deveria pagar por um 429.
+        _foto = null;
+        _destinoDaFoto = null;
+        _bytesEnviados = 0;
+        _bytesTotais = 0;
+        _tentativasDePreparo = 0;
+        _faseDaFoto = FaseDaFotoEscolhida.subindo;
       });
       // O CAMPO E LIMPO AQUI, E SO AQUI: depois do `201`. Qualquer caminho de
       // falha acima saiu por `catch` sem tocar no controlador.
       _controlador.clear();
     } on FalhaDaApi catch (falha) {
       if (!mounted) return;
+      // A HIGIENE DA FOTO NAO TERMINOU. Nao e defeito e nao e definitivo: o
+      // servidor reescreve a imagem sem metadado de forma assincrona, e esta
+      // mensagem chegou no meio. A tela diz "preparando a foto" e tenta de
+      // novo com espera crescente, SEM travar e SEM perder a previa.
+      if (fotoUploadId != null &&
+          _foto != null &&
+          fotoAindaNaoEstaPronta(falha.problem) &&
+          _tentativasDePreparo < _esperasDoPreparo.length) {
+        final espera = _esperasDoPreparo[_tentativasDePreparo];
+        setState(() {
+          _enviando = false;
+          _tentativasDePreparo += 1;
+          _faseDaFoto = FaseDaFotoEscolhida.preparando;
+          _falhaDeEnvio = null;
+        });
+        await Future<void>.delayed(espera);
+        if (!mounted || _foto == null) return;
+        await _enviar();
+        return;
+      }
       setState(() {
         _enviando = false;
+        // A ESPERA ACABOU E A FOTO CONTINUA NAO PRONTA: volta para `pronta`
+        // (o `upload_id` segue valido) e acende a faixa de falha de envio, que
+        // tem `Tentar de novo`. A previa fica.
+        if (_faseDaFoto == FaseDaFotoEscolhida.preparando) {
+          _faseDaFoto = FaseDaFotoEscolhida.pronta;
+        }
         if (conversaNaoAceitaMais(falha.problem)) {
           // A CONVERSA FECHOU ENTRE A ABERTURA E O TOQUE. Nao e defeito: a
           // tela passa a modo leitura, a caixa de texto SAI, e o texto da
@@ -243,12 +604,18 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
+        if (_faseDaFoto == FaseDaFotoEscolhida.preparando) {
+          _faseDaFoto = FaseDaFotoEscolhida.pronta;
+        }
         _falhaDeEnvio = TextosDasMensagens.naoFoiEnviada;
       });
     } on FormatException {
       if (!mounted) return;
       setState(() {
         _enviando = false;
+        if (_faseDaFoto == FaseDaFotoEscolhida.preparando) {
+          _faseDaFoto = FaseDaFotoEscolhida.pronta;
+        }
         _falhaDeEnvio = TextosDasMensagens.naoFoiEnviada;
       });
     }
@@ -281,7 +648,25 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
             // A CAIXA TAMBEM NAO EXISTE SEM CONTA: ela e um controle sem
             // desfecho, e o envio responderia o mesmo 401.
             if (!_carregando && _falhaDeCarga == null && !_faltaConta)
-              if (_emLeitura) const _AvisoDeConversaEncerrada() else _caixa(),
+              if (_emLeitura)
+                const _AvisoDeConversaEncerrada()
+              else ...<Widget>[
+                // A PREVIA FICA ENTRE A CONVERSA E A BARRA DE ESCREVER, e e
+                // assim que ela e lida como "o que vai sair no proximo toque"
+                // e nao como "uma mensagem que ja saiu".
+                if (_foto case final FotoLocal escolhida)
+                  PreviaDaFotoDaConversa(
+                    foto: escolhida,
+                    fase: _faseDaFoto,
+                    enviados: _bytesEnviados,
+                    total: _bytesTotais,
+                    faltaLegenda: _faltaLegenda,
+                    motivoDaRecusa: _motivoDaRecusaDaFoto,
+                    aoDescartar: _descartarAFoto,
+                    aoTentarDeNovo: _subirAFoto,
+                  ),
+                _caixa(),
+              ],
           ],
         ),
       ),
@@ -336,7 +721,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
           Padding(
             key: ValueKey<String>('mensagem-${mensagem.id}'),
             padding: const EdgeInsets.only(bottom: BichuEspaco.e3),
-            child: _Bolha(mensagem: mensagem),
+            child: _Bolha(mensagem: mensagem, aoBuscarDeNovo: _carregar),
           ),
         if (falhaDeEnvio != null)
           FaixaDeAviso(
@@ -350,20 +735,64 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
 
   Widget _caixa() {
     final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: cores.outline)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(BichuEspaco.e3),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // A LINHA DA LOCALIZACAO, PERTO DO ANEXAR.
+            //
+            // Ela fica na barra e nao numa tela de ajuda porque e aqui que a
+            // decisao acontece. Ela so existe quando o anexar existe: uma
+            // promessa sobre foto numa conversa sem foto e ruido.
+            if (_podeAnexarFoto)
+              Padding(
+                padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+                child: Text(
+                  TextosDaFotoNaConversa.aLocalizacaoSai,
+                  style: textos.bodySmall?.copyWith(color: cores.textMuted),
+                ),
+              ),
+            Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: <Widget>[
+            // O ANEXAR, AO LADO DO CAMPO.
+            //
+            // Ele sai quando ja ha previa (uma foto por mensagem) e quando a
+            // conversa nao tem `found_report_id` -- ver [_podeAnexarFoto].
+            if (_podeAnexarFoto && _foto == null) ...<Widget>[
+              IconButton(
+                onPressed: _anexarFoto,
+                tooltip: TextosDaFotoNaConversa.anexarFoto,
+                // O ALVO E O MINIMO DO GRUPO `target` dos tokens, declarado e
+                // nao herdado: o padrao do `IconButton` do Material e 48 dp,
+                // e um tema que o aperte levaria este botao com ele.
+                constraints: const BoxConstraints(
+                  minWidth: BichuAlvoDeToque.min,
+                  minHeight: BichuAlvoDeToque.min,
+                ),
+                icon: const Icon(Icons.add_a_photo_outlined),
+              ),
+              const SizedBox(width: BichuEspaco.e1),
+            ],
             Expanded(
               child: TextField(
                 controller: _controlador,
                 minLines: 1,
                 maxLines: 4,
+                // O CAMPO SE RENOMEIA COM A FOTO NA TELA: ele deixou de ser
+                // opcional. Ver `TextosDaFotoNaConversa.campoDeLegenda`.
+                onChanged: (_) {
+                  // Repinta so quando a resposta da tela muda de verdade: a
+                  // previa diz "falta legenda", e o estado disso virou na
+                  // primeira letra e na ultima apagada.
+                  if (_foto != null) setState(() {});
+                },
                 // O teto do contrato (`body`, `maxLength: 1000`). O campo nao
                 // conta caractere na tela: quem escreve recado nao esta
                 // contando, e o servidor recusa com `validation-failed` se
@@ -371,15 +800,19 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
                 maxLength: 1000,
                 textCapitalization: TextCapitalization.sentences,
                 keyboardType: TextInputType.multiline,
-                decoration: const InputDecoration(
-                  labelText: TextosDasMensagens.campoDeMensagem,
+                decoration: InputDecoration(
+                  labelText: _foto == null
+                      ? TextosDasMensagens.campoDeMensagem
+                      : TextosDaFotoNaConversa.campoDeLegenda,
                   counterText: '',
                 ),
               ),
             ),
             const SizedBox(width: BichuEspaco.e2),
             IconButton.filled(
-              onPressed: _enviando ? null : _enviar,
+              // **O ENVIO E DESABILITADO ENQUANTO A FOTO SOBE.** Nao e
+              // decoracao: com ele vivo, o toque postaria a legenda sem a foto.
+              onPressed: (_enviando || !_fotoPermiteEnviar) ? null : _enviar,
               // Rotulo acessivel em tudo: um botao de icone sem ele e um
               // controle mudo para quem usa leitor de tela.
               tooltip: TextosDasMensagens.enviar,
@@ -391,11 +824,28 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
                     )
                   : const Icon(Icons.arrow_upward),
             ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// De onde a foto vem. Local: e escolha de aparelho, e nao campo de contrato.
+enum _OrigemDaFoto { camera, galeria }
+
+/// Os dois rotulos da folha de origem.
+///
+/// Repetem, de proposito, os textos que `TextosDoDetalhe` ja usa no pet: sao os
+/// MESMOS dois rotulos em todo o app, e e a pessoa que precisa ler a mesma
+/// coisa em toda tela com foto. Eles ficam aqui e nao sao importados dali
+/// porque aquele arquivo e de uma frente que esta sendo mexida nesta data; a
+/// uniao dos dois e um movimento de texto.
+abstract final class _TextosDaFolhaDeFoto {
+  static const String tirarFoto = 'Tirar foto';
+  static const String escolherDaGaleria = 'Escolher da galeria';
 }
 
 /// O rodape do modo leitura. **No lugar da caixa de texto, e nunca junto.**
@@ -442,9 +892,17 @@ class _AvisoDeConversaEncerrada extends StatelessWidget {
 /// ninguem**: ela atravessa a largura, porque atribui-la a um lado faria
 /// parecer que uma das duas pessoas escreveu aquilo.
 class _Bolha extends StatelessWidget {
-  const _Bolha({required this.mensagem});
+  const _Bolha({required this.mensagem, required this.aoBuscarDeNovo});
 
   final MensagemDaConversa mensagem;
+
+  /// Rele a conversa, para as URLs assinadas virem com assinatura nova.
+  ///
+  /// `Message.photo_url` tem **validade curta**: reabrir a conversa depois de
+  /// um tempo cai no estado de falha de verdade, e insistir na mesma URL nao
+  /// resolve -- o que resolve e pedir a conversa outra vez. Ver
+  /// [FotoDaMensagem].
+  final VoidCallback aoBuscarDeNovo;
 
   @override
   Widget build(BuildContext context) {
@@ -459,9 +917,28 @@ class _Bolha extends StatelessWidget {
           borderRadius: BorderRadius.circular(BichuRaio.md),
         ),
         padding: const EdgeInsets.all(BichuEspaco.e3),
-        child: Text(
-          mensagem.body,
-          style: textos.bodySmall?.copyWith(color: cores.textPrimary),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              mensagem.body,
+              style: textos.bodySmall?.copyWith(color: cores.textPrimary),
+            ),
+            // A foto numa mensagem do sistema nao e de nenhum dos dois lados, e
+            // a legenda dela e neutra. Desenha-la quando ela vem e melhor que
+            // esconde-la: o contrato declara `photo_url` em `Message` sem
+            // restringir o `sender_role`, e omitir aqui seria a tela decidindo
+            // nao mostrar o que o servidor mandou.
+            if (mensagem.photoUrl case final String url when url.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: BichuEspaco.e2),
+                child: FotoDaMensagem(
+                  url: url,
+                  papel: PapelNaConversa.sistema,
+                  aoBuscarDeNovo: aoBuscarDeNovo,
+                ),
+              ),
+          ],
         ),
       );
     }
@@ -487,9 +964,31 @@ class _Bolha extends StatelessWidget {
                 borderRadius: BorderRadius.circular(BichuRaio.md),
               ),
               padding: const EdgeInsets.all(BichuEspaco.e3),
-              child: Text(
-                mensagem.body,
-                style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // A FOTO VEM ANTES DO TEXTO, e o texto e a legenda dela.
+                  //
+                  // `body` e obrigatorio no contrato e nao existe mensagem
+                  // so-foto, entao o par imagem + texto e sempre completo. A
+                  // imagem em cima e o que faz o texto ser lido COMO legenda.
+                  if (mensagem.photoUrl case final String url
+                      when url.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+                      child: FotoDaMensagem(
+                        url: url,
+                        papel: mensagem.senderRole,
+                        aoBuscarDeNovo: aoBuscarDeNovo,
+                      ),
+                    ),
+                  Text(
+                    mensagem.body,
+                    style: textos.bodyMedium?.copyWith(
+                      color: cores.textPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
             // O QUE FOI RETIRADO, explicado.
