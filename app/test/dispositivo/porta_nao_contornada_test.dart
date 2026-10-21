@@ -2043,7 +2043,44 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// (`frase-do-409-de-canal-nao-verificado-por-rota`) esta aberta sobre
 /// `070bfee6` com o valor de ramo `29e9404b6d`, e valor de ramo isolado nao
 /// sobrevive a uniao.
-const String _arvoreDasTelas = '47b59a64a22f3e7daee47ace3cc806b82df92480'; // LOCALIZACAO NAS DUAS ABAS DA `Rede` (20/10/2026): `agenda_da_rede.dart` passou a consumir `CidadeDoAparelho` e a montar `CaixaDeLocalizacao`. Recalculado pelo procedimento deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as chaves). LINHA DE BASE CONFERIDA ANTES DE USAR: `70f4aa34:app/lib/telas` reproduziu 48a10d7bafd21a60a089d2f944bd556b59587b55, que e a constante da propria base, e so depois o valor novo foi medido. CONTROLE POSITIVO do modificador do zsh, rodado nesta medicao: sem as chaves, `"$T:app/lib/telas"` comeu o `a` de `app` e devolveu `<cwd>/d188f5eapp/lib/telas` (medicao intermediaria) com `fatal: ambiguous argument` -- dentro de `$(...)` numa comparacao isso teria aprovado hash errado EM SILENCIO. SUBSTITUI 48a10d7bafd21a60a089d2f944bd556b59587b55 (base). A peca compartilhada mora em `lib/widgets/cidade_por_localizacao.dart`, FORA de `lib/telas`, e por isso ela nao entra nesta arvore: quem mexer nela nao e avisado por este portao, e os casos que a cobrem estao em `test/rede/localizacao_nas_abas_da_rede_test.dart`.
+/// **Destravado por DUAS frentes de 20/10/2026, mescladas aqui.** As duas
+/// mexeram em `app/lib/telas`, e por isso este valor e medido sobre a arvore
+/// MESCLADA -- nao sobre nenhuma das duas pontas.
+///
+/// 1. **As TRES ACOES EXTERNAS** (defeitos medidos pelo cliente no aparelho):
+///    o endereco do local de `Perto` passou a ser TOCAVEL e a abrir o
+///    aplicativo de mapas pela porta `SaidaDoApp` --
+///    `perto/pagina_do_local.dart` e o unico arquivo de `app/lib/telas` que
+///    ela tocou. O calendario do iOS e as duas pernas de mapas do iOS vivem
+///    fora de `telas/` (`lib/dispositivo/saida_do_app.dart` e
+///    `ios/Runner/AppDelegate.swift`) e nao movem esta constante.
+///    Valor da ponta dela, substituido por este: 0b0f4ce901b18cea572a2b30d1e2ed77277b8246.
+///
+/// 2. **A LOCALIZACAO NAS DUAS ABAS DA `Rede`** (decisao do cliente: *"nos
+///    eventos e na comunidade, voce tambem deve trazer os mais proximos da
+///    localizacao, utilizar a mesma inteligencia do pets"*):
+///    `rede/agenda_da_rede.dart` e `perto/lista_do_diretorio.dart` passaram a
+///    consumir `CidadeDoAparelho` e a montar `CaixaDeLocalizacao`. A peca
+///    compartilhada mora em `lib/widgets/cidade_por_localizacao.dart`, FORA de
+///    `lib/telas`, e por isso ela nao entra nesta arvore: quem mexer nela nao
+///    e avisado por este portao, e os casos que a cobrem estao em
+///    `test/rede/localizacao_nas_abas_da_rede_test.dart`.
+///    Valores intermediarios desta frente, os dois substituidos por este:
+///    fa8f73c78c321a405bfbe331f9e1d5eab2cdfeee e
+///    47b59a64a22f3e7daee47ace3cc806b82df92480.
+///
+/// LINHA DE BASE CONFERIDA ANTES DE USAR: `70f4aa34:app/lib/telas` reproduziu
+/// 48a10d7bafd21a60a089d2f944bd556b59587b55, que e a constante da propria
+/// base -- e so entao o valor novo foi medido, pelo procedimento deste
+/// portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`,
+/// `add -A -- app/lib/telas`, `write-tree`,
+/// `rev-parse "${T}:app/lib/telas"` -- COM as chaves).
+///
+/// CONTROLE POSITIVO do modificador do zsh, rodado nesta medicao: sem as
+/// chaves, `"$T:app/lib/telas"` comeu o `a` de `app` e devolveu
+/// `<cwd>/<sha>pp/lib/telas` com `fatal: ambiguous argument` -- dentro de
+/// `$(...)` numa comparacao isso teria aprovado hash errado EM SILENCIO.
+const String _arvoreDasTelas = 'b6b05b97baf582cf971fd42a9233655ca08e2773';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

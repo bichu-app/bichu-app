@@ -569,11 +569,13 @@ void main() {
       // resolve a cidade dela; esta tela resolve a sua em seguida. O contador
       // do duble e por PORTA, e nao por tela, e por isso ele soma as duas.
       //
-      // **O teto de uso do geocoder continua protegido**, e isso foi conferido
-      // na porta e nao presumido: `LocalizacaoPorGeolocator._cidadeGuardadaPara`
-      // devolve a cidade da ultima resolucao quando o aparelho nao saiu da
-      // celula de ~100 m, entao a segunda chamada nao vai ao servico de
-      // plataforma -- o que dobra e a MEDICAO do ponto, nao a geocodificacao.
+      // **NAO "CONSERTE" ESTE NUMERO DE VOLTA PARA 1.** O teto de uso do
+      // geocoder continua protegido, e isso foi conferido na porta e nao
+      // presumido: `LocalizacaoPorGeolocator._cidadeGuardadaPara` devolve a
+      // cidade guardada quando o aparelho nao saiu da celula de ~100 m, entao a
+      // segunda chamada NAO vai ao servico de plataforma -- **o que dobrou foi
+      // a MEDICAO DO PONTO, e nao a geocodificacao**. Trocar 2 por 1 aqui nao
+      // economiza nada: so reprova um app que esta correto.
       //
       // **O numero volta a 1 quando esta tela adotar a peca compartilhada**
       // (`widgets/cidade_por_localizacao.dart`), que e a mesma que `Eventos`

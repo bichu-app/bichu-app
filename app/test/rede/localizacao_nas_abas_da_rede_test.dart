@@ -178,6 +178,48 @@ Future<void> escolherNaFolhaDaAgenda(WidgetTester tester, String opcao) async {
   await tester.pumpAndSettle();
 }
 
+/// Uma entrada do diretorio, como `DirectoryEntrySummary` a declara.
+///
+/// **Local, e nao importada de `perto_com_dados_test.dart`:** aquelas fabricas
+/// moram num arquivo de CASOS, e importar um `_test.dart` de outro amarra duas
+/// suites que nao tem relacao. Aqui so o que estes casos precisam -- `slug`,
+/// nome e cidade --, no formato do contrato.
+Map<String, dynamic> entradaDoDiretorio({
+  required String slug,
+  required String nome,
+  required String cidade,
+}) =>
+    <String, dynamic>{
+      'slug': slug,
+      'kind': 'clinic',
+      'display_name': nome,
+      'city': cidade,
+      'state': 'SP',
+      'neighborhood': 'Centro',
+      'about': null,
+      'phone_e164': null,
+      'verification': <String, dynamic>{
+        'level': 'none',
+        'evidence_kinds': <String>[],
+      },
+      // **Nula, e de proposito.** `distance_available: false` -- estes casos
+      // medem o recorte por CIDADE, e por uma conta diferente: a distancia vem
+      // do ponto que o SERVIDOR guarda, e nao do GPS, entao ela nao e afetada
+      // pelo que estes casos mexem.
+      'distance_m': null,
+    };
+
+/// A resposta de `DirectoryEntryPage`.
+Map<String, dynamic> paginaDoDiretorio(List<Map<String, dynamic>> itens) =>
+    <String, dynamic>{
+      'items': itens,
+      'page': 1,
+      'limit': 20,
+      'total': itens.length,
+      'distance_available': false,
+      'applied_filters': <String, String>{'scope': 'all'},
+    };
+
 /// Todas as cidades que sairam em `city` na agenda, na ordem das chamadas.
 ///
 /// **A chave de `chamadasA` e METODO e caminho**, e nao o caminho sozinho: sem
@@ -549,6 +591,213 @@ void main() {
         expect(find.text(texto!), findsOneWidget);
       }
     });
+  });
+
+  group('Comunidade: a cidade do aparelho recorta o diretorio', () {
+    /// O diretorio com DUAS cidades, e 404 em qualquer outra rota.
+    ///
+    /// 404 no resto e deliberado (o mesmo de `perto_com_dados_test.dart`): a
+    /// aba `Eventos` monta antes desta e pede `/network/events`; deixar aquela
+    /// chamada em 200 vazio esconderia um caso que dependesse dela.
+    Future<http.Response> Function(http.Request) redeDoDiretorioComDuasCidades(
+      List<Uri> urls,
+    ) {
+      return (req) async {
+        if (req.url.path != '/v1/directory/entries' || req.method != 'GET') {
+          return problema('not-found', 404);
+        }
+        urls.add(req.url);
+        final cidade = req.url.queryParameters['city'];
+        final todas = <Map<String, dynamic>>[
+          entradaDoDiretorio(
+            slug: 'clinica-sp',
+            nome: 'Clínica Paulista',
+            cidade: 'Sao Paulo',
+          ),
+          entradaDoDiretorio(
+            slug: 'clinica-campinas',
+            nome: 'Clínica Campineira',
+            cidade: 'Campinas',
+          ),
+        ];
+        return json200(
+          paginaDoDiretorio(
+            cidade == null
+                ? todas
+                : <Map<String, dynamic>>[
+                    for (final e in todas)
+                      if (e['city'] == cidade) e,
+                  ],
+          ),
+        );
+      };
+    }
+
+    Future<void> abrirComunidade(
+      WidgetTester tester, {
+      required Future<http.Response> Function(http.Request) rede,
+      required Localizacao localizacao,
+    }) async {
+      await abrirOApp(
+        tester,
+        rede: rede,
+        localizacao: localizacao,
+        deposito: depositoLogado(),
+      );
+      await abrirAComunidade(tester);
+    }
+
+    List<String?> cidadesDoDiretorio(List<Uri> urls) =>
+        urls.map((u) => u.queryParameters['city']).toList();
+
+    testWidgets(
+      'a cidade do aparelho RECORTA o diretorio: city sai na consulta',
+      (tester) async {
+        final urls = <Uri>[];
+        await abrirComunidade(
+          tester,
+          rede: redeDoDiretorioComDuasCidades(urls),
+          localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida),
+        );
+
+        expect(
+          cidadesDoDiretorio(urls),
+          contains('Sao Paulo'),
+          reason:
+              'REPROVA: o diretorio nunca pediu `city`. A cidade que o aparelho '
+              'resolveu nao chegou a consulta, e a aba `Comunidade` continua a '
+              'lista do pais inteiro.',
+        );
+        expect(find.text('Clínica Paulista'), findsOneWidget);
+        expect(
+          find.text('Clínica Campineira'),
+          findsNothing,
+          reason:
+              'REPROVA: o diretorio pediu `city` e continuou mostrando a outra '
+              'cidade. O parametro saiu e a lista nao acompanhou.',
+        );
+      },
+    );
+
+    testWidgets(
+      'sem cidade, o diretorio ainda traz profissionais',
+      (tester) async {
+        final urls = <Uri>[];
+        await abrirComunidade(
+          tester,
+          rede: redeDoDiretorioComDuasCidades(urls),
+          localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        );
+        expect(
+          cidadesDoDiretorio(urls),
+          everyElement(isNull),
+          reason:
+              'REPROVA: o diretorio mandou `city` sem cidade resolvida -- a '
+              '"cidade errada derivada em silencio".',
+        );
+        expect(
+          find.text('Clínica Paulista'),
+          findsOneWidget,
+          reason:
+              'REPROVA: sem cidade a `Comunidade` ficou sem conteudo. A cidade '
+              'NAO e obrigatoria: sem ela a lista traz todas as cidades.',
+        );
+        expect(find.text('Clínica Campineira'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a caixa APARECE na Comunidade enquanto nao ha cidade',
+      (tester) async {
+        final urls = <Uri>[];
+        await abrirComunidade(
+          tester,
+          rede: redeDoDiretorioComDuasCidades(urls),
+          localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.negada),
+        );
+        expect(
+          find.text(CaixaDeLocalizacao.rotuloDeUsarLocalizacao),
+          findsOneWidget,
+          reason:
+              'REPROVA: sem cidade a `Comunidade` nao oferece a localizacao.',
+        );
+        // Por extenso, e nao pela constante que a produz: comparar com
+        // `ListaDoDiretorio.explicacaoSemCidade` trocaria os dois lados junto.
+        expect(
+          find.text('Mostrando profissionais de todas as cidades.'),
+          findsOneWidget,
+          reason:
+              'REPROVA: a lista do pais inteiro nao diz que e do pais inteiro. '
+              'Sem a frase ela parece uma lista que nao conseguiu recortar.',
+        );
+      },
+    );
+
+    testWidgets(
+      'a caixa DESAPARECE na Comunidade com a cidade resolvida',
+      (tester) async {
+        // **O requisito das TRES secoes, medido na SEGUNDA aba.** As duas abas
+        // da `Rede` montam a MESMA `CaixaDeLocalizacao`, e e por isso que a
+        // regra esta num lugar so -- mas "num lugar so" e afirmacao, e esta e a
+        // medicao dela do lado de `Comunidade`.
+        //
+        // **`findsNothing` vale para a TELA INTEIRA, e isso e deliberado:** as
+        // duas abas da `Rede` vivem no mesmo `TabBarView` e as duas montam esta
+        // caixa. Com a cidade resolvida, NENHUMA das duas pode estar oferecendo
+        // a localizacao -- se `Eventos` continuasse com a caixa aberta atras da
+        // aba, a pessoa que trocasse de aba veria a divergencia que esta frente
+        // existe para nao ter.
+        final urls = <Uri>[];
+        await abrirComunidade(
+          tester,
+          rede: redeDoDiretorioComDuasCidades(urls),
+          localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida),
+        );
+        expect(
+          find.text(CaixaDeLocalizacao.rotuloDeUsarLocalizacao),
+          findsNothing,
+          reason:
+              'REPROVA: a caixa ficou na tela com a cidade ja resolvida. '
+              'Decisao do cliente de 20/10/2026: resolvida, fica **so a cidade '
+              'dentro do filtro** -- e isso vale nas DUAS abas, porque e a '
+              'mesma pessoa no mesmo app.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA -- a consulta do diretorio nao carrega lat nem lon',
+      (tester) async {
+        final urls = <Uri>[];
+        await abrirComunidade(
+          tester,
+          rede: redeDoDiretorioComDuasCidades(urls),
+          localizacao: LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida),
+        );
+        expect(urls, isNotEmpty, reason: 'REPROVA: nada a conferir.');
+        for (final u in urls) {
+          for (final proibido in <String>[
+            'lat',
+            'lon',
+            'lng',
+            'latitude',
+            'longitude',
+            'point',
+            'coords',
+          ]) {
+            expect(
+              u.queryParameters.keys,
+              isNot(contains(proibido)),
+              reason:
+                  'REPROVA: `${u.path}` recebeu `$proibido`. A ordem por '
+                  'distancia desta aba sai do ponto que o SERVIDOR guarda por '
+                  'aparelho e so volta em metros; por coordenada na consulta e '
+                  'o que o ADR-0006 proibe, e mudar isso e emenda de ADR.',
+            );
+          }
+        }
+      },
+    );
   });
 
   group('Comunidade: o recorte do diretorio leva a cidade', () {

@@ -1,4 +1,7 @@
 
+import 'dart:async';
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -10,6 +13,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/barra_de_listagem.dart';
+import '../../widgets/cidade_por_localizacao.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/icone_do_inscrito.dart';
@@ -57,16 +61,44 @@ import 'pagina_do_local.dart';
 /// mostra `Nome` como ordem efetiva e diz por que. Ela **nunca** mostra a
 /// lista como se fosse "os mais perto".
 ///
-/// **E ela nao oferece "ligar a localizacao", de proposito.** O que falta e a
-/// localizacao de REFERENCIA que o servidor guarda (BICHUS-92), e nao a
-/// permissao do aparelho: ligar o GPS aqui nao mudaria a resposta, e nenhuma
-/// tela deste app escreve `reference_area` hoje. Um botao com esse rotulo
-/// seria acao sem destino, que e o defeito que o criterio 2 da BICHUS-62
-/// proibe -- e seria pior que os outros dois que este app ja teve, porque
-/// pareceria ter funcionado. Enquanto o caminho nao existir, a tela explica e
-/// nao promete. Pergunta fechada na pauta de refinamento de 22/09.
+/// **Ela nao oferecia "ligar a localizacao", e passou a oferecer em
+/// 20/10/2026 -- mas NAO para a ordem.** A distincao e o ponto, e o paragrafo
+/// antigo continua valendo na metade dele:
+///
+/// - **Para a DISTANCIA, continua verdade que ligar o GPS aqui nao mudaria a
+///   resposta.** O que a ordem por distancia usa e a localizacao de REFERENCIA
+///   que o servidor guarda (BICHUS-92, `user_reference_locations`, chaveada por
+///   `(user_id, session_family_id)`), e nenhuma tela deste app escreve
+///   `reference_area` hoje. Um botao que prometesse mudar a ORDEM seria acao
+///   sem destino -- o defeito que o criterio 2 da BICHUS-62 proibe, e pior que
+///   os outros porque pareceria ter funcionado.
+/// - **Para a CIDADE, deixou de ser verdade.** Decisao do cliente: *"nos
+///   eventos e na comunidade, voce tambem deve trazer os mais proximos da
+///   localizacao, utilizar a mesma inteligencia do pets"*. `city` sempre
+///   existiu em `listDirectoryEntries` e o servidor sempre o aplicou
+///   (`texto_para_busca(professionals.city)`): o que faltava era o app mandar.
+///   A cidade que o aparelho resolve RECORTA a lista de verdade, e o botao tem
+///   destino.
+///
+/// Entao a caixa oferece a localizacao para a **cidade**, e o rotulo da ordem
+/// continua dizendo a verdade do servidor por `distance_available`. A cidade
+/// recorta quais entradas entram; a distancia ordena as que entraram.
 class ListaDoDiretorio extends StatefulWidget {
   const ListaDoDiretorio({super.key});
+
+  /// O que a lista esta mostrando **enquanto nao ha cidade**.
+  ///
+  /// A aba abre SEM cidade de proposito, e isso e o recorte e nao um estado de
+  /// espera. O molde e a decisao do cliente de 19/10/2026 para os pets -- *"o
+  /// campo cidade do filtro da pagina pet nao deve ser obrigatorio, mas devemos
+  /// filtrar pelos 20 ultimos pets cadastrados e ordenar pela cidade da
+  /// localizacao dele"* -- e ele vale aqui pela decisao de 20/10.
+  ///
+  /// **Dizer isto importa:** uma lista do pais inteiro sem a frase parece uma
+  /// lista que nao conseguiu recortar, e e a mesma reclamacao que tirou a
+  /// cidade obrigatoria dos pets -- lista vazia com cara de defeito.
+  static const String explicacaoSemCidade =
+      'Mostrando profissionais de todas as cidades.';
 
   /// O titulo do vazio sem nenhum filtro: a secao ainda nao tem entrada na
   /// regiao de quem esta olhando.
@@ -157,6 +189,45 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   /// O campo de busca por nome (`q`, desde 30/09).
   final TextEditingController _busca = TextEditingController();
 
+  /// As cidades que esta lista JA VIU, para o grupo `Cidade` da folha.
+  ///
+  /// Sai das entradas que chegaram, e nao de uma lista fixa: o diretorio nao
+  /// tem rota de cidades, e inventar uma lista do Brasil ofereceria recorte que
+  /// devolve zero em quase toda opcao. `SplayTreeSet` para a folha abrir em
+  /// ordem alfabetica -- o mesmo arranjo de `agenda_da_rede.dart`.
+  final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
+
+  /// A CIDADE DO APARELHO, pela mesma peca que `Pets` e `Eventos` usam.
+  ///
+  /// Decisao do cliente, 20/10/2026: *"nos eventos e na comunidade, voce
+  /// tambem deve trazer os mais proximos da localizacao, utilizar a mesma
+  /// inteligencia do pets"*.
+  ///
+  /// **ISTO NAO SUBSTITUI A ORDEM POR DISTANCIA DESTA ABA, e nao e a mesma
+  /// coisa que ela.** A ordem por distancia ja existia e continua: ela sai de
+  /// `ST_Distance(professionals.geo, <reference_point>)`, contra o ponto que o
+  /// SERVIDOR guarda por aparelho, e so atravessa a borda em metros
+  /// (`distance_m`). As duas se somam -- **a cidade recorta quais entradas
+  /// entram, a distancia ordena as que entraram**.
+  ///
+  /// **O paragrafo do cabecalho desta classe que dizia que a tela nao oferece
+  /// `ligar a localizacao` foi reescrito**, e a razao dele caiu: ele dizia que
+  /// *"ligar o GPS aqui nao mudaria a resposta"* porque o que faltava era a
+  /// `reference_area` que ninguem escrevia. Isso continua verdade **para a
+  /// DISTANCIA** e deixou de ser verdade para a CIDADE: `city` sempre existiu
+  /// em `listDirectoryEntries` e o servidor sempre o aplicou, e a cidade que o
+  /// aparelho resolve recorta a lista de verdade. O botao tem destino.
+  CidadeDoAparelho? _cidadeDoAparelho;
+
+  /// A FOLHA decidiu a cidade, e por isso a derivada nao manda mais.
+  ///
+  /// **Nao e `a pessoa mexeu em algo`.** Ver `agenda_da_rede.dart`: um sinal
+  /// generico de interacao foi a causa do defeito do botao de localizacao dos
+  /// pets em 20/10, e `containsKey` na folha e da MESMA familia -- ele diz que
+  /// o grupo existe, e nao que alguem mexeu nele. Este sinal e so sobre a
+  /// cidade, e so liga quando a escolha da folha DIFERE da derivada.
+  bool _folhaDecidiuACidade = false;
+
   /// Recarrega quando a tela volta a aparecer, pelo mesmo mecanismo de
   /// `Perfil` > `Meus pets`: `TickerMode` responde as duas maneiras de esta
   /// tela sumir da vista (trocar de aba, e ser coberta por uma rota opaca do
@@ -170,7 +241,86 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     }
     if (_visivel) return;
     _visivel = true;
+    _criarAResolucaoDaCidade();
     _agendarCarga();
+  }
+
+  /// Cria o resolvedor de cidade e **dispara a resolucao de abertura**.
+  ///
+  /// Uma vez por tela: `didChangeDependencies` corre de novo a cada troca de
+  /// dependencia herdada -- e aqui ela corre TAMBEM a cada volta para a aba --,
+  /// e recriar o resolvedor gastaria uma medicao de ponto por vez.
+  ///
+  /// **A lista NAO espera por isto.** `_agendarCarga` corre em seguida e pinta
+  /// as entradas; quando a cidade chega, a lista recarrega com o recorte.
+  void _criarAResolucaoDaCidade() {
+    if (_cidadeDoAparelho != null) return;
+    // `doEscopo` e nao `Escopo.of(context).localizacao`: a porta fica atras da
+    // peca, e esta tela nao a nomeia. Ver a lista de
+    // `localizacao_no_ponto_de_uso_test.dart`.
+    final resolvedor = CidadeDoAparelho.doEscopo(context)
+      ..addListener(_aResolucaoAndou);
+    _cidadeDoAparelho = resolvedor;
+    unawaited(
+      resolvedor.resolverNaAbertura().then((trocou) {
+        if (!mounted || !trocou) return;
+        // Quem mexeu na cidade na folha enquanto a resolucao corria MANDA.
+        if (_folhaDecidiuACidade) return;
+        _carregar();
+      }),
+    );
+  }
+
+  /// A caixa e a frase dela dependem do resolvedor; `setState` vazio basta.
+  void _aResolucaoAndou() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// A CIDADE QUE VALE AGORA, e e ela que vai para `city` na rota.
+  ///
+  /// **A folha ganha da derivada, inclusive quando a folha diz `nenhuma`** --
+  /// e o que faz limpar o filtro significar limpar.
+  String? get _cidadeEmUso =>
+      _folhaDecidiuACidade ? _recorte.cidade : _cidadeDoAparelho?.cidade;
+
+  /// O recorte como ele vai para a ROTA: com a cidade em uso aplicada.
+  ///
+  /// **A cidade derivada entra aqui e nao em `_recorte`**, e num lugar so
+  /// porque sao DOIS chamadores (a primeira pagina e o `Carregar mais`) -- e um
+  /// deles esquecendo faria a pagina 2 vir de outro recorte que a 1, o que
+  /// aparece como entrada repetida e entrada faltando no fim da lista.
+  ///
+  /// Guardar a derivada no recorte teria duas consequencias indesejadas: ela
+  /// contaria em `quantidadeDeFiltros` e acenderia o distintivo da barra numa
+  /// lista que ninguem recortou, e ela voltaria por cima de quem acabou de
+  /// limpar o filtro de cidade.
+  RecorteDoDiretorio _paraAChamada(RecorteDoDiretorio base) {
+    final cidade = _cidadeEmUso;
+    return base.com(cidade: cidade, limparCidade: cidade == null);
+  }
+
+  /// O TOQUE em `Usar minha localização`.
+  ///
+  /// Ele **devolve a palavra a localizacao**: [_folhaDecidiuACidade] desliga,
+  /// porque a pessoa acabou de escolher a localizacao e essa e a escolha mais
+  /// nova. Sem desligar, a precedencia de [_cidadeEmUso] devolveria a cidade da
+  /// folha e a resolucao ficaria sem efeito -- o defeito de 20/10 nos pets.
+  Future<void> _usarMinhaLocalizacao() async {
+    final resolvedor = _cidadeDoAparelho;
+    if (resolvedor == null) return;
+    await resolvedor.resolverPorToque();
+    if (!mounted) return;
+    if (resolvedor.cidade == null) return;
+    setState(() {
+      _folhaDecidiuACidade = false;
+      // A cidade da folha sai do recorte junto: deixa-la gravada faria a folha
+      // abrir marcando uma cidade que a lista nao esta usando.
+      if (_recorte.cidade != null) {
+        _recorte = _recorte.com(limparCidade: true);
+      }
+    });
+    await _carregar();
   }
 
   void _agendarCarga() {
@@ -207,13 +357,14 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     });
 
     try {
-      final pagina = await escopo.diretorio.listar(recorte);
+      final pagina = await escopo.diretorio.listar(_paraAChamada(recorte));
       if (!mounted) return;
       setState(() {
         _pagina = pagina;
         _itens
           ..clear()
           ..addAll(pagina.itens);
+        _guardarAsCidades(pagina.itens);
         _fase = _Fase.lista;
       });
     } on FalhaDeChamada catch (falha) {
@@ -249,7 +400,16 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   @override
   void dispose() {
     _busca.dispose();
+    _cidadeDoAparelho?.dispose();
     super.dispose();
+  }
+
+  /// Recolhe as cidades das entradas que chegaram, para o grupo `Cidade`.
+  void _guardarAsCidades(List<EntradaDoDiretorio> entradas) {
+    for (final e in entradas) {
+      final c = e.cidade?.trim();
+      if (c != null && c.isNotEmpty) _cidadesConhecidas.add(c);
+    }
   }
 
   void _trocarRecorte(RecorteDoDiretorio novo) {
@@ -276,12 +436,13 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     });
 
     try {
-      final pagina = await escopo.diretorio.listar(proximo);
+      final pagina = await escopo.diretorio.listar(_paraAChamada(proximo));
       if (!mounted) return;
       setState(() {
         _recorte = proximo;
         _pagina = pagina;
         _itens.addAll(pagina.itens);
+        _guardarAsCidades(pagina.itens);
         _carregandoMais = false;
       });
     } on FalhaDeChamada catch (falha) {
@@ -344,6 +505,31 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         // A barra so aparece quando ha pagina: antes dela a tela nao sabe
         // quantos itens existem nem em que ordem eles vieram, e um controle
         // de ordenacao sobre nada ainda medido seria o controle que afirma.
+        // **A CAIXA DA LOCALIZACAO, e ela sai de cena quando a cidade chega**
+        // (cliente, 20/10/2026 -- pedido em `Pets` e valendo para as tres
+        // secoes). Quem decide aparecer e sair e a propria caixa, pelo criterio
+        // `ha cidade em uso`: a regra mora num lugar so, porque tres copias
+        // divergem na proxima correcao.
+        //
+        // **No CORPO da tela e nao na barra**, como busca, filtro e ordem
+        // (padrao de listagem do cliente), e ACIMA da barra: ela explica o
+        // recorte que a barra resume.
+        if (_fase != _Fase.carregando) ...<Widget>[
+          CaixaDeLocalizacao(
+            cidadeEmUso: _cidadeEmUso,
+            explicacao: ListaDoDiretorio.explicacaoSemCidade,
+            podeOferecer: _cidadeDoAparelho?.podeOferecer ?? false,
+            aviso: _cidadeDoAparelho?.aviso,
+            // Desabilitado enquanto procura: dois toques pediriam a permissao
+            // duas vezes e gastariam o teto de uso do geocoder duas vezes.
+            aoUsarLocalizacao: (_cidadeDoAparelho?.procurando ?? true)
+                ? null
+                : _usarMinhaLocalizacao,
+          ),
+          if (_cidadeEmUso == null &&
+              (_cidadeDoAparelho?.podeOferecer ?? false))
+            const SizedBox(height: BichuEspaco.e4),
+        ],
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
@@ -390,8 +576,25 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   /// O filtro: atividade e nivel de verificacao, que sao os dois recortes que
   /// a rota aceita. Nada mais entra aqui sem entrar antes no contrato.
   ControleDeFiltro _controleDeFiltro() {
+    // **A CIDADE DERIVADA APARECE NA FOLHA, marcada e editavel.** E a outra
+    // metade do pedido de 20/10/2026: resolvida, a caixa sai e fica *"so a
+    // cidade dentro do filtro"*. Ela entra nas OPCOES tambem porque a
+    // resolucao pode chegar antes da primeira resposta da rota -- sem esta
+    // linha o grupo abriria com um valor selecionado que nao existe na lista.
+    final cidades = SplayTreeSet<String>.from(_cidadesConhecidas);
+    final emUso = _cidadeEmUso;
+    if (emUso != null) cidades.add(emUso);
     return ControleDeFiltro(
       grupos: <GrupoDeFiltro>[
+        if (cidades.isNotEmpty)
+          GrupoDeFiltro(
+            chave: 'city',
+            titulo: 'Cidade',
+            selecionado: emUso,
+            opcoes: <OpcaoDeRecorte>[
+              for (final c in cidades) OpcaoDeRecorte(codigo: c, rotulo: c),
+            ],
+          ),
         GrupoDeFiltro(
           chave: 'kind',
           titulo: 'Atividade',
@@ -432,12 +635,47 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   void _aplicarAFolha(EscolhaDaFolha escolha) {
     final atividade = escolha.filtros['kind'];
     final nivel = escolha.filtros['verification_level'];
+
+    // **QUANDO A FOLHA PASSA A MANDAR NA CIDADE -- e nao e a cada `Aplicar`.**
+    //
+    // `EscolhaDaFolha.filtros` traz TODAS as chaves que os grupos declararam,
+    // com o valor marcado de cada um; `containsKey` diz que o grupo EXISTE, e
+    // nao que alguem mexeu nele. **E a mesma familia do `_pessoaMexeu`** que
+    // causou o defeito do botao de localizacao dos pets em 20/10: um sinal de
+    // "a pessoa interagiu" usado como se fosse "a pessoa decidiu ISTO".
+    //
+    // Sem a comparacao, qualquer `Aplicar` -- trocar `Atividade`, por exemplo
+    // -- gravaria a cidade DERIVADA no recorte: o distintivo da barra subiria
+    // em cima de uma cidade que ninguem escolheu, e a derivada pararia de
+    // acompanhar o aparelho.
+    //
+    // Valor igual a derivada significa que a folha so devolveu o que ja estava
+    // valendo; valor diferente e uma decisao -- inclusive `nenhuma`, que e
+    // alguem limpando o recorte de proposito.
+    var cidade = _recorte.cidade;
+    var limparCidade = false;
+    if (escolha.filtros.containsKey('city')) {
+      final escolhida = escolha.filtros['city'];
+      if (escolhida == _cidadeDoAparelho?.cidade) {
+        // So a derivada, de volta: ela continua entrando por `_paraAChamada`,
+        // onde nao conta como filtro.
+        cidade = null;
+        limparCidade = true;
+      } else {
+        cidade = escolhida;
+        limparCidade = escolhida == null;
+        _folhaDecidiuACidade = true;
+      }
+    }
+
     _trocarRecorte(
       _recorte.com(
         atividade: AtividadeDoDiretorio.porCodigo(atividade),
         limparAtividade: atividade == null,
         nivelMinimo: nivel == null ? null : NivelDeVerificacao.porCodigo(nivel),
         limparNivel: nivel == null,
+        cidade: cidade,
+        limparCidade: limparCidade,
         ordem: OrdemDoDiretorio.porCodigo(escolha.ordem),
         pagina: 1,
       ),

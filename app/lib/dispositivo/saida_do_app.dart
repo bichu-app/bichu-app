@@ -31,14 +31,23 @@ class EventoDeCalendario {
 ///
 /// **Cinco saidas, e nenhuma pede permissao.**
 ///
-/// - [abrirNoAppDeMapas]: a intencao `geo:` (Android) com o ponto e o nome do
-///   lugar como rotulo, sem rota (UX 28.3, decisao 1); sem app que responda, o
-///   mesmo ponto no navegador. So recebe o ponto de um ENCONTRO: a porta nao
-///   tem metodo que aceite coordenada solta de outra coisa (UX 28.4).
-/// - [abrirEnderecoNoAppDeMapas]: a mesma intencao `geo:`, com o TEXTO do
-///   endereco em `q=` e sem coordenada. **Quem resolve o texto em lugar e o
-///   aplicativo de mapas do aparelho; o Bichu nao geocodifica** (ADR-0006, que
-///   fica como esta por decisao do cliente de 01/10).
+/// - [abrirNoAppDeMapas]: o ponto e o nome do lugar como rotulo, sem rota
+///   (UX 28.3, decisao 1) -- a intencao `geo:` no Android, `maps.apple.com` no
+///   iOS; sem app que responda, o mesmo ponto no navegador. So recebe o ponto
+///   de um ENCONTRO: a porta nao tem metodo que aceite coordenada solta de
+///   outra coisa (UX 28.4).
+/// - [abrirEnderecoNoAppDeMapas]: o mesmo caminho, com o TEXTO do endereco em
+///   `q=` e sem coordenada. **Quem resolve o texto em lugar e o aplicativo de
+///   mapas do aparelho; o Bichu nao geocodifica** (ADR-0006, que fica como
+///   esta por decisao do cliente de 01/10, e que o ADR-0027 item 21 consagrou
+///   ao por `network_events.street_address` no produto como TEXTO).
+///
+///   **UMA funcao, DOIS chamadores**, e isso e requisito e nao arrumacao: o
+///   encontro da `Rede` (`local_do_encontro.dart`, com logradouro de verdade)
+///   e a pagina do local de `Perto` (`pagina_do_local.dart`, que hoje so tem
+///   bairro e cidade) entram pela MESMA porta. No dia em que o diretorio
+///   ganhar coluna de logradouro, o profissional herda o mecanismo sem uma
+///   linha nova -- e se houvesse duas copias, uma delas nao herdaria.
 /// - [abrirLink]: um link publico do encontro (convite, Instagram) no
 ///   navegador do aparelho. Nao recebe `String`: quem chama ja tem a `Uri` do
 ///   modelo, que so existe quando o servidor mandou URL absoluta.
@@ -59,9 +68,37 @@ class EventoDeCalendario {
 /// Mora em `lib/dispositivo/` porque abre canal de plataforma, que o portao de
 /// `porta_nao_contornada_test.dart` proibe em tela.
 ///
-/// **iOS:** o canal do calendario nao existe no Runner (o iOS esta dormente
-/// por decisao de 23/09). [adicionarAoCalendario] devolve `false` e a tela diz
-/// que nao conseguiu, em vez de fingir.
+/// ## iOS: as tres saidas que nao existiam, e o que cada uma passou a usar
+///
+/// Esta prosa SUBSTITUI a anterior, que dizia que "o canal do calendario nao
+/// existe no Runner (o iOS esta dormente por decisao de 23/09)". Era verdade e
+/// era a CAUSA de dois defeitos que o cliente mediu no aparelho em 20/10/2026:
+/// *"o botao de adicionar o evento ao calendario no ios nao esta funcionando"*
+/// e o endereco que nao abria no aplicativo de mapas.
+///
+/// **O modo de falha era o mesmo nos dois, e e o pior que existe: silencio.**
+/// `adicionarAoCalendario` pegava `MissingPluginException` e devolvia `false`;
+/// `abrirNoAppDeMapas` e `abrirEnderecoNoAppDeMapas` montavam `geo:`, que
+/// NENHUM aplicativo do iOS responde, e caiam no navegador com o
+/// OpenStreetMap. Nenhum erro, nenhum log, suite inteira verde -- o Android
+/// ia para o app de mapas e o iOS ia para uma pagina da web, e so quem tinha
+/// os dois aparelhos na mao enxergava a diferenca.
+///
+/// **Nenhuma das tres precisou de chave nova no `Info.plist`, e essa e a parte
+/// contra-intuitiva.** A hipotese natural -- `NSCalendarsUsageDescription`
+/// ausente -- descreve o caminho do EventKit, que LE e GRAVA o calendario. O
+/// Android nunca fez isso (`ACTION_INSERT` so abre a tela de novo evento) e o
+/// iOS passa a nao fazer tambem: o `.ics` e um arquivo, e abri-lo pede ao
+/// Calendario que mostre `Adicionar evento` -- quem salva continua sendo a
+/// pessoa, no app dela. Pela mesma razao nao ha `LSApplicationQueriesSchemes`:
+/// `maps.apple.com` e `https`, e `https` nao e esquema consultavel. Declarar
+/// `comgooglemaps:` e `waze:` exigiria uma FOLHA DE ESCOLHA -- tela nova, que
+/// o cliente aprova antes do codigo --, e sem ela as duas declaracoes seriam
+/// permissao de consulta que o produto nao usa.
+///
+/// **A invariante de cima continua inteira: cinco saidas, e nenhuma pede
+/// permissao.** Ela foi o critério de escolha de cada mecanismo, e nao uma
+/// coincidência.
 abstract class SaidaDoApp {
   const SaidaDoApp();
 
@@ -108,6 +145,40 @@ class SaidaDoAparelho extends SaidaDoApp {
 
   static const MethodChannel _calendario = MethodChannel('app.bichu/calendario');
 
+  /// O sistema em uso, por [defaultTargetPlatform] e **nao** por
+  /// `Platform.isIOS`.
+  ///
+  /// A diferenca e de MEDIBILIDADE, e ela decidiu: `flutter_test` troca
+  /// `defaultTargetPlatform` (`debugDefaultTargetPlatformOverride`) e nao
+  /// troca `Platform.isIOS`. Com `dart:io` a perna do iOS desta porta seria
+  /// codigo que nenhum teste desta maquina alcanca -- exatamente o estado em
+  /// que os dois defeitos de 20/10 viveram, verdes, por semanas.
+  static bool get _ehIOS => defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Tenta os destinos **em ordem**, e para no primeiro que abrir.
+  ///
+  /// Existe para as duas saidas de mapas nao repetirem o `try`/`on
+  /// PlatformException`/proximo: eram dois blocos iguais, e passaram a ser
+  /// quatro quando o iOS entrou. Quatro copias da mesma escada e onde a
+  /// quinta sai diferente sem ninguem notar.
+  static Future<bool> _abrirOPrimeiroQueResponder(List<Uri> destinos) async {
+    for (final destino in destinos) {
+      try {
+        if (await launchUrl(destino, mode: LaunchMode.externalApplication)) {
+          return true;
+        }
+      } on PlatformException {
+        // Este nao respondeu. O proximo da lista e a resposta, e a lista
+        // termina sempre num `https`, que todo aparelho sabe abrir.
+      } on MissingPluginException {
+        // `url_launcher` nao registrado neste binario. Nenhum destino vai
+        // responder, e insistir nos outros so repete a excecao.
+        return false;
+      }
+    }
+    return false;
+  }
+
   @override
   Future<bool> abrirNoAppDeMapas({
     required double lat,
@@ -115,50 +186,70 @@ class SaidaDoAparelho extends SaidaDoApp {
     required String nomeDoLugar,
   }) async {
     final coordenada = '${lat.toStringAsFixed(6)},${lon.toStringAsFixed(6)}';
-    final geo = Uri.parse(
-      'geo:$coordenada?q=$coordenada(${Uri.encodeComponent(nomeDoLugar)})',
-    );
-    try {
-      if (await launchUrl(geo, mode: LaunchMode.externalApplication)) {
-        return true;
-      }
-    } on PlatformException {
-      // Sem app que responda a `geo:`: cai no navegador, abaixo.
-    }
-    final navegador = Uri.https('www.openstreetmap.org', '/', <String, String>{
-      'mlat': lat.toStringAsFixed(6),
-      'mlon': lon.toStringAsFixed(6),
-    }).replace(fragment: 'map=17/${lat.toStringAsFixed(6)}/${lon.toStringAsFixed(6)}');
-    try {
-      return await launchUrl(navegador, mode: LaunchMode.externalApplication);
-    } on PlatformException {
-      return false;
-    }
+    return _abrirOPrimeiroQueResponder(<Uri>[
+      // **iOS primeiro, e so no iOS.** `maps.apple.com` e `https`, e o
+      // Mapas o reivindica como LINK UNIVERSAL: no iPhone ele abre no app, e
+      // em qualquer outro sistema abriria uma pagina da web -- que e por isso
+      // que ele nao entra na lista do Android.
+      //
+      // Ser `https` e o que dispensa `LSApplicationQueriesSchemes`: a lista
+      // declara esquemas CONSULTAVEIS, e `https` nao e um deles.
+      if (_ehIOS)
+        Uri.https('maps.apple.com', '/', <String, String>{
+          'll': coordenada,
+          'q': nomeDoLugar,
+        })
+      else
+        Uri.parse(
+          'geo:$coordenada?q=$coordenada(${Uri.encodeComponent(nomeDoLugar)})',
+        ),
+      // O ultimo recurso dos dois sistemas: o ponto numa pagina da web. Sem
+      // app de mapas instalado -- caso real em aparelho recem-formatado --
+      // ela e o que sobra, e e melhor que um botao que nao faz nada.
+      Uri.https('www.openstreetmap.org', '/', <String, String>{
+        'mlat': lat.toStringAsFixed(6),
+        'mlon': lon.toStringAsFixed(6),
+      }).replace(
+        fragment:
+            'map=17/${lat.toStringAsFixed(6)}/${lon.toStringAsFixed(6)}',
+      ),
+    ]);
   }
 
   @override
   Future<bool> abrirEnderecoNoAppDeMapas({required String endereco}) async {
-    // `geo:0,0?q=<texto>` e a forma documentada de pedir ao app de mapas que
-    // ele resolva um texto. O `0,0` nao e um lugar: e o exigido pelo esquema
-    // antes do `q`, e o proprio Android o ignora quando `q` e texto.
-    final geo = Uri.parse('geo:0,0?q=${Uri.encodeComponent(endereco)}');
-    try {
-      if (await launchUrl(geo, mode: LaunchMode.externalApplication)) {
-        return true;
-      }
-    } on PlatformException {
-      // Sem app que responda a `geo:`: cai na busca do navegador, abaixo.
-    }
-    final navegador = Uri.https(
-      'www.openstreetmap.org',
-      '/search',
-      <String, String>{'query': endereco},
-    );
-    try {
-      return await launchUrl(navegador, mode: LaunchMode.externalApplication);
-    } on PlatformException {
-      return false;
-    }
+    // **Endereco em branco nao sai, e devolve `false` sem chamar o sistema.**
+    //
+    // Ele e conteudo de TERCEIRO: `network_events.street_address` e anulavel
+    // (ADR-0027 item 21) e quem o digita e o painel. `geo:0,0?q=` com `q`
+    // vazio abre o app de mapas no NADA -- no `0,0`, que fica no Atlantico ao
+    // sul de Gana --, e `maps.apple.com/?q=` sem valor abre o mapa na ultima
+    // posicao. Os dois desfechos sao piores que nao abrir: a pessoa viu o app
+    // de mapas responder e vai acreditar no que ele mostrou.
+    final limpo = endereco.trim();
+    if (limpo.isEmpty) return false;
+
+    return _abrirOPrimeiroQueResponder(<Uri>[
+      if (_ehIOS)
+        // O MESMO texto, para o MESMO lugar, por um esquema diferente. Sem
+        // `ll`: nao ha coordenada para mandar, e o ADR-0006 proibe que o
+        // Bichu a produza -- quem resolve o texto em lugar e o aplicativo de
+        // mapas do aparelho, e isso continua valendo no iOS.
+        Uri.https('maps.apple.com', '/', <String, String>{'q': limpo})
+      else
+        // `geo:0,0?q=<texto>` e a forma documentada de pedir ao app de mapas
+        // que ele resolva um texto. O `0,0` nao e um lugar: e o exigido pelo
+        // esquema antes do `q`, e o proprio Android o ignora quando `q` e
+        // texto. **E e ele que dispara o seletor do sistema**, com Google
+        // Maps, Waze e o que mais estiver instalado -- o "app padrao do
+        // usuario" que o cliente pediu, resolvido pelo Android e nao por nos.
+        Uri.parse('geo:0,0?q=${Uri.encodeComponent(limpo)}'),
+      Uri.https(
+        'www.openstreetmap.org',
+        '/search',
+        <String, String>{'query': limpo},
+      ),
+    ]);
   }
 
   @override
