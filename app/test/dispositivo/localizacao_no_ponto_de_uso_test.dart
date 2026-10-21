@@ -92,6 +92,31 @@ const Map<String, String> _quemPodeUsarAPorta = <String, String>{
   'telas/perdido/lista_de_perdidos.dart':
       'resolve a CIDADE para preencher o filtro (ADR-0006 emenda 1); nao '
           'captura ponto e nao distingue motivo',
+  // ACRESCENTADO EM 20/10/2026, e deliberadamente -- decisao do cliente:
+  // *"nos eventos e na comunidade, voce tambem deve trazer os mais proximos da
+  // localizacao, utilizar a mesma inteligencia do pets"*. A emenda 1 do
+  // ADR-0006 e a mesma que autoriza a linha acima, e o sentido e o mesmo:
+  // coordenada -> nome de cidade, e so ele.
+  //
+  // **E UMA PECA, E NAO UMA TELA, e e por isso que ela entra sozinha.** O
+  // paragrafo no alto desta lista diz que tela falando com a porta direto esta
+  // contornando a peca; aqui a peca E esta, e as secoes que usam a cidade do
+  // aparelho (`Eventos`, `Comunidade`, e `Pets` quando adotar a peca)
+  // constroem `CidadeDoAparelho.doEscopo(context)` e leem `cidade` -- nenhuma
+  // delas nomeia a porta. Sem esta fabrica a lista cresceria **um nome por
+  // secao**, que e o contrario do que ela quer dizer.
+  //
+  // **Ela nao embute `CapturaDeLocalizacao`, pelo MESMO motivo da pagina de
+  // pets:** aquela peca e o formulario do "onde" de um caso ou de um achado --
+  // captura um PONTO e o manda no corpo da requisicao. Esta resolve um NOME DE
+  // CIDADE para preencher um filtro de listagem, e a coordenada nunca sai do
+  // aparelho. E ela nao distingue motivo: `cidadeAproximada` colapsa os oito
+  // num `CidadeNaoResolvida`, e o agrupamento em QUATRO frases aqui e sobre as
+  // duas saidas que a caixa oferece (tentar de novo, ou escolher no filtro) --
+  // nao sobre a causa, que continua sendo assunto da porta.
+  'widgets/cidade_por_localizacao.dart':
+      'e a peca que resolve a CIDADE para o filtro das listagens (ADR-0006 '
+          'emenda 1); as secoes nao nomeiam a porta, elas constroem a peca',
 };
 
 /// Como se obtem a porta de verdade: pelo escopo, ou nomeando a implementacao.

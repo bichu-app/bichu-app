@@ -561,9 +561,28 @@ void main() {
       );
       await abrir(tester, localizacao: porta, pedidos: pedidos);
 
+      // **DUAS, E NAO UMA, DESDE 20/10/2026 -- e o numero e do APP e nao desta
+      // tela.** Decisao do cliente: *"nos eventos e na comunidade, voce tambem
+      // deve trazer os mais proximos da localizacao, utilizar a mesma
+      // inteligencia do pets"*. `Rotas.destinoDoArranque` sempre devolve
+      // `rede`, entao a aba `Eventos` monta ANTES desta tela em toda abertura e
+      // resolve a cidade dela; esta tela resolve a sua em seguida. O contador
+      // do duble e por PORTA, e nao por tela, e por isso ele soma as duas.
+      //
+      // **O teto de uso do geocoder continua protegido**, e isso foi conferido
+      // na porta e nao presumido: `LocalizacaoPorGeolocator._cidadeGuardadaPara`
+      // devolve a cidade da ultima resolucao quando o aparelho nao saiu da
+      // celula de ~100 m, entao a segunda chamada nao vai ao servico de
+      // plataforma -- o que dobra e a MEDICAO do ponto, nao a geocodificacao.
+      //
+      // **O numero volta a 1 quando esta tela adotar a peca compartilhada**
+      // (`widgets/cidade_por_localizacao.dart`), que e a mesma que `Eventos`
+      // usa: ai a resolucao passa a ser uma por abertura do APP, e nao uma por
+      // secao. Isso toca `lista_de_perdidos.dart` e ficou FORA desta frente, de
+      // propósito -- outro agente esta no arquivo.
       expect(
         porta.vezesQueResolveu,
-        1,
+        2,
         reason: 'REPROVA: a abertura não tentou resolver, então não há '
             'silêncio a medir -- o mecanismo desta prova está desligado.',
       );

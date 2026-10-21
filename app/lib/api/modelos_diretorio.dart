@@ -480,6 +480,7 @@ class RecorteDoDiretorio {
     this.termo,
     this.atividade,
     this.nivelMinimo,
+    this.cidade,
     this.ordem = OrdemDoDiretorio.distancia,
     this.pagina = 1,
     this.limite = 20,
@@ -507,6 +508,38 @@ class RecorteDoDiretorio {
   /// **Piso, nao igualdade.** `contato` traz tambem `documento`.
   final NivelDeVerificacao? nivelMinimo;
 
+  /// A CIDADE do recorte, ou nulo. **Nome de cidade, nunca coordenada.**
+  ///
+  /// `city` sempre existiu em `listDirectoryEntries` (`minLength: 2`,
+  /// `maxLength: 80`) e o servidor sempre o aplicou -- a comparacao passa por
+  /// `texto_para_busca`, que absorve acento e caixa. **O que nao existia era o
+  /// app MANDAR**, e e isso que entra em 20/10/2026 por decisao do cliente
+  /// (*"nos eventos e na comunidade ... utilizar a mesma inteligencia do
+  /// pets"*): a cidade que o aparelho resolve passa a recortar a lista.
+  ///
+  /// **Nenhum contrato mudou por causa disto, e nenhum podia mudar:** por o
+  /// PONTO na consulta e exatamente o que o ADR-0006 proibe. O que vai e o
+  /// nome; a coordenada nasce e morre dentro de `Localizacao.cidadeAproximada`.
+  ///
+  /// **Nao e a mesma coisa que a ordem por distancia desta aba.** Aquela sai de
+  /// `ST_Distance` contra o ponto de referencia que o SERVIDOR guarda por
+  /// aparelho, e so atravessa a borda em metros (`distance_m`). As duas se
+  /// somam: a cidade recorta quais entradas entram, a distancia ordena as que
+  /// entraram.
+  final String? cidade;
+
+  /// A cidade como ela vai para a rota, ou nulo quando ela nao vai.
+  ///
+  /// **O piso de dois caracteres e do contrato** (`minLength: 2` em `city`):
+  /// mandar um caractere so voltaria 400, e engolir o 400 desenharia "nada
+  /// encontrado" para quem tem uma cidade legitima. Mesma regra, e mesma razao,
+  /// de [termoQueVai].
+  String? get cidadeQueVai {
+    final limpo = cidade?.trim();
+    if (limpo == null || limpo.length < 2) return null;
+    return limpo;
+  }
+
   final OrdemDoDiretorio ordem;
   final int pagina;
 
@@ -524,16 +557,22 @@ class RecorteDoDiretorio {
     String? termo,
     AtividadeDoDiretorio? atividade,
     NivelDeVerificacao? nivelMinimo,
+    String? cidade,
     OrdemDoDiretorio? ordem,
     int? pagina,
     bool limparAtividade = false,
     bool limparNivel = false,
     bool limparTermo = false,
+    bool limparCidade = false,
   }) {
     return RecorteDoDiretorio(
       termo: limparTermo ? null : (termo ?? this.termo),
       atividade: limparAtividade ? null : (atividade ?? this.atividade),
       nivelMinimo: limparNivel ? null : (nivelMinimo ?? this.nivelMinimo),
+      // `limparCidade` existe pela mesma razao de `limparTermo`: `null` num
+      // parametro opcional e indistinguivel de "nao passei", e confundir esses
+      // dois foi o que deixou o botao de localizacao dos pets sem efeito.
+      cidade: limparCidade ? null : (cidade ?? this.cidade),
       ordem: ordem ?? this.ordem,
       pagina: pagina ?? this.pagina,
       limite: limite,
@@ -544,6 +583,10 @@ class RecorteDoDiretorio {
         // `q` primeiro, na mesma ordem do contrato. Sai pelo `termoQueVai`, e
         // nao pelo `termo`: o piso de tres caracteres mora num lugar so.
         'q': ?termoQueVai,
+        // A cidade vai como NOME, pelo `cidadeQueVai` -- o piso de dois
+        // caracteres mora num lugar so. **Nao ha, e nao pode haver, `lat` nem
+        // `lon` nesta consulta**: ver [cidade] e o ADR-0006.
+        'city': ?cidadeQueVai,
         if (atividade != null) 'kind': atividade!.codigo,
         if (nivelMinimo != null && nivelMinimo != NivelDeVerificacao.nenhum)
           'verification_level': nivelMinimo!.codigo,
