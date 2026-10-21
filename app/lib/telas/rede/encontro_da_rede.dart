@@ -11,6 +11,7 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/marca.dart';
 import '../../widgets/visualizador_de_imagem.dart';
@@ -139,6 +140,97 @@ class TelaDoEncontro extends StatefulWidget {
   static const String rotuloDoCalendario = 'Adicionar ao calendário';
   static const String falhaDoCalendario =
       'Não conseguimos abrir o calendário.';
+
+  // -- Compartilhar o encontro (cliente, 21/10/2026) ------------------------
+  //
+  // O cliente pediu, literal: *"vamos implementar o recurso de compartilhar o
+  // evento tambem, inserir um botao na pagina de detalhes do evento para
+  // convidar outros usuarios no whatsapp e outras ferramentas"*.
+  //
+  // **O MESMO caminho do pet perdido, e nao um segundo.** A acao sai por
+  // `SaidaDoApp.compartilharTexto`, que e a folha do sistema (`ACTION_SEND`),
+  // a mesma porta que `telas/pet/tela_detalhe_do_pet.dart` usa desde
+  // 20/10/2026. Nenhum pacote novo entrou e `share_plus` continua em
+  // `^12.0.2` -- a versao 13 quebra o Android, e o motivo esta medido no
+  // comentario de `app/pubspec.yaml`.
+
+  /// O rotulo da acao. **`Compartilhar`, a mesma palavra da ficha do pet**, e
+  /// nao `Convidar no WhatsApp`: quem decide o que a folha lista e o sistema,
+  /// e duas palavras para o mesmo gesto fariam o app parecer ter dois
+  /// recursos.
+  static const String rotuloDeCompartilhar = 'Compartilhar';
+
+  /// O nome acessivel: diz DE QUE evento e a acao, porque numa lista de acoes
+  /// o leitor de tela le os rotulos fora de contexto.
+  static String compartilharAcessivel(String titulo) =>
+      'Compartilhar o evento $titulo';
+
+  /// Quando a folha do sistema nao abriu. **Nao diz "WhatsApp"** e nao manda
+  /// instalar nada: a unica coisa que o app sabe aqui e que ela nao abriu.
+  static const String falhaDoCompartilhar =
+      'Não conseguimos abrir as opções de compartilhamento agora. '
+      'Tente de novo.';
+
+  /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
+  ///
+  /// ## NAO HA LINK, e a ausencia e MEDIDA e nao esquecimento
+  ///
+  /// Medido em 21/10/2026, de fora, nos dois ambientes, com controle positivo
+  /// (`/comunidade` responde 200 nos dois):
+  ///
+  ///   GET `https://bichu.app/encontro/<slug>`      -> 404
+  ///   GET `https://hml.bichu.app/encontro/<slug>`  -> 404
+  ///   (e o mesmo para `/e/`, `/evento/` e `/eventos/`)
+  ///
+  /// E o contrato nao tem de onde tirar endereco: `NetworkEventPublic` **nao
+  /// tem `share_url` nem `share_token`** -- ao contrario de `LostCase`, que
+  /// tem os dois --, nao ha rota `/public/network-events/...` em
+  /// `api/openapi.yaml`, `web/src/pages/` nao tem pasta de encontro, e o
+  /// quadro das oito rotas publicas do ADR-0017 **nao lista nenhuma pagina de
+  /// encontro**. Montar um endereco aqui a partir do `slug` seria inventar: o
+  /// que chegaria no grupo de bairro e o cartao de pre-visualizacao do 404,
+  /// que diz com estas letras `og:title: Pagina nao encontrada - Bichu`.
+  ///
+  /// O dia em que a pagina existir, o endereco entra como entrou no caso do
+  /// pet: **campo do servidor**, aceso por `site_page_availability` (migracao
+  /// `20261020000010`), e nao literal montado no aparelho -- assim ele acende
+  /// sem APK novo. Esta funcao ganha um parametro e mais uma linha.
+  ///
+  /// ## O QUE ESTA AUSENTE DE PROPOSITO
+  ///
+  /// **O endereco por extenso (`street_address`) NAO entra.** Ele sai so de
+  /// `getNetworkEventLocation`, com `bearerAuth` (emenda 1 do ADR-0010), e o
+  /// ADR-0027 item 21.2 diz que ele **nunca** sai na agenda, no detalhe
+  /// publico, no teaser nem nos detalhes do privado. Esta mensagem e lida
+  /// FORA do app, por quem nao tem conta: por o endereco nela seria publicar o
+  /// que o contrato guarda atras de conta. [lugar] e `LugarDoEncontro`
+  /// inteiro -- nome do lugar, bairro, cidade e UF --, que e publico no
+  /// contrato (`NetworkEventPlace`, quatro rotulos e nenhuma coordenada), e e
+  /// a MESMA linha que ja vai para o calendario do aparelho.
+  ///
+  /// Tambem nao entram: coordenada (nao existe em `NetworkEventPlace`),
+  /// qualquer identificador interno, e o nome de quem cadastrou (ele nao sai
+  /// do servidor, ADR-0025 secao 3).
+  ///
+  /// A isca `o texto compartilhado nao carrega endereco de rua nem link` cobra
+  /// isto contra o texto REAL montado, e nao contra um literal de tela.
+  static String mensagemDeCompartilhar({
+    required String titulo,
+    required String dia,
+    required String horario,
+    required String lugar,
+  }) {
+    return '$titulo\n'
+        '$dia · $horario\n'
+        '$lugar\n'
+        'Encontrei no Bichu. Vamos juntos?';
+  }
+
+  /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
+  /// quando o destino escolhido na folha e um aplicativo de e-mail. Nos
+  /// destinos que nao tem assunto -- WhatsApp, Telegram, copiar -- o sistema o
+  /// ignora, e ele nao aparece duplicado no corpo.
+  static String assuntoDeCompartilhar(String titulo) => 'Vamos juntos? $titulo';
 
   /// As quatro frases de `Cuidados no evento` (UX 28.7.1). A segunda varia
   /// por `fenced_off_leash_area`.
@@ -322,6 +414,53 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       ),
     );
     if (!abriu && mounted) _avisar(TelaDoEncontro.falhaDoCalendario);
+  }
+
+  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do encontro.
+  ///
+  /// ## A guarda, e por que ela e cinto e nao o desenho
+  ///
+  /// O desenho e o `if` que monta o bloco em [_corpo]: a acao **nao e
+  /// desenhada** sem `ConteudoDoEncontro` (o teaser do privado nao tem lugar
+  /// nem horario para o texto) e nem no cancelado ou encerrado (convidar
+  /// alguem para um encontro que nao vai acontecer manda gente a um lugar
+  /// vazio). Esta linha existe para o caso de alguem chamar isto de outro
+  /// lugar depois.
+  ///
+  /// ## O que acontece quando a folha nao abre
+  ///
+  /// [SaidaDoApp.compartilharTexto] devolve `false` quando nao ha atividade
+  /// que responda a `ACTION_SEND` ou o plugin nao esta no binario. A tela
+  /// **diz**, em vez de ficar calada: um toque que nao faz nada e
+  /// indistinguivel de um toque que nao chegou, e a pessoa toca de novo.
+  ///
+  /// **Em aviso de rodape, e nao em faixa**, que e onde esta tela diverge da
+  /// ficha do pet -- de proposito. A acao vizinha desta pagina
+  /// ([_adicionarAoCalendario]) ja recusa assim, e as duas sao a mesma coisa
+  /// para quem olha: uma saida do aparelho que nao abriu. Dois desenhos de
+  /// recusa na mesma tela fariam a pessoa procurar a diferenca que nao existe.
+  ///
+  /// **Nao ha tratamento de "WhatsApp nao instalado"**, e a ausencia e
+  /// deliberada: quem decide o que a folha lista e o sistema, e perguntar o
+  /// que esta instalado exigiria `QUERY_ALL_PACKAGES` no Android 11+.
+  Future<void> _compartilharOEncontro(
+    EncontroDaRede encontro,
+    ConteudoDoEncontro c,
+  ) async {
+    final abriu = await SaidaDoApp.atual.compartilharTexto(
+      texto: TelaDoEncontro.mensagemDeCompartilhar(
+        titulo: encontro.titulo,
+        dia: encontro.dia.dataLonga(anoCorrente: DateTime.now().year),
+        horario: c.horario.faixa,
+        // `linhaCompleta` e `LugarDoEncontro`: nome do lugar, bairro, cidade e
+        // UF, os quatro rotulos publicos de `NetworkEventPlace`. **Nao e
+        // `_endereco`**, que e o `street_address` de `getNetworkEventLocation`
+        // e so existe com conta.
+        lugar: c.lugar.linhaCompleta,
+      ),
+      assunto: TelaDoEncontro.assuntoDeCompartilhar(encontro.titulo),
+    );
+    if (!abriu && mounted) _avisar(TelaDoEncontro.falhaDoCompartilhar);
   }
 
   void _voltar() {
@@ -599,6 +738,44 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       ),
     );
 
+    // `COMPARTILHAR`, logo abaixo do cabecalho (cliente, 21/10/2026:
+    // *"inserir um botao na pagina de detalhes do evento para convidar outros
+    // usuarios no whatsapp e outras ferramentas"*).
+    //
+    // ## AS DUAS TRAVAS DO DESENHO
+    //
+    // 1. **`conteudo != null`**: o teaser do privado nao carrega lugar nem
+    //    horario, e um convite com titulo e mais nada nao convida ninguem.
+    // 2. **`vivo`**: no cancelado e no encerrado a acao **nao existe**. E a
+    //    mesma trava que ja esconde o calendario, pelo motivo mais forte:
+    //    convidar para um encontro cancelado manda gente a um lugar vazio, e a
+    //    mensagem ja saiu do nosso dominio quando isso aparecer.
+    //
+    // ## POR QUE AQUI, E NAO NA BARRA DE TOPO
+    //
+    // A barra desta pagina so aparece depois que a capa rola (24.17.1, item
+    // 7), e uma acao que some quando a pessoa esta no topo e uma acao que ela
+    // nao acha. Aqui ela fica na PRIMEIRA DOBRA, logo depois do titulo -- que e
+    // o momento em que a pessoa decide se chama alguem --, e nenhuma secao
+    // mudou de lugar para ela caber.
+    //
+    // `BotaoSecundario` e nao primario: a pagina e de leitura, nao ha acao
+    // principal competindo, e um botao cheio aqui pesaria mais que o titulo.
+    final convidar = conteudo != null && vivo
+        ? _Margem(
+            child: Padding(
+              padding: const EdgeInsets.only(top: BichuEspaco.e4),
+              child: BotaoSecundario(
+                rotulo: TelaDoEncontro.rotuloDeCompartilhar,
+                nomeAcessivel: TelaDoEncontro.compartilharAcessivel(
+                  encontro.titulo,
+                ),
+                aoTocar: () => _compartilharOEncontro(encontro, conteudo),
+              ),
+            ),
+          )
+        : null;
+
     final secoes = <Widget>[];
     void secao(IconData icone, String titulo, Widget filho) {
       secoes
@@ -712,7 +889,12 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       }
     }
 
-    return <Widget>[capa, cabecalho, ...secoes];
+    return <Widget>[
+      capa,
+      cabecalho,
+      ?convidar,
+      ...secoes,
+    ];
   }
 
 }

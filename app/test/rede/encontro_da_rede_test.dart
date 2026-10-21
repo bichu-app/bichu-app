@@ -82,16 +82,25 @@ class SaidaDeTeste extends SaidaDoApp {
     return abre;
   }
 
-  /// A QUINTA saida da porta, que chegou com a folha de compartilhamento em
-  /// 20/10/2026. Este arquivo nao exercita compartilhamento: devolver `false`
-  /// e o lado ESCONDIDO, entao o dia em que alguem compartilhar daqui o teste
-  /// nao vai afirmar que a folha abriu.
+  /// O que foi para a FOLHA DO SISTEMA: texto e assunto, na ordem em que
+  /// sairam.
+  ///
+  /// Ate 21/10/2026 este metodo devolvia `false` fixo e nao registrava nada --
+  /// o arquivo nao exercitava compartilhamento. O cliente pediu a acao na
+  /// pagina do encontro naquele dia, e o grupo `compartilhar o encontro`
+  /// precisa LER o texto que saiu: medir o que a pessoa manda para um grupo de
+  /// bairro e a unica forma de a isca de privacidade ser isca.
+  final List<({String texto, String assunto})> compartilhados =
+      <({String texto, String assunto})>[];
+
   @override
   Future<bool> compartilharTexto({
     required String texto,
     required String assunto,
-  }) async =>
-      false;
+  }) async {
+    compartilhados.add((texto: texto, assunto: assunto));
+    return abre;
+  }
 }
 
 /// A rede de um encontro: a agenda com ele, o detalhe, e o que o caso pedir.
@@ -235,10 +244,17 @@ void main() {
         expect(find.text(t), findsOneWidget, reason: 'falta "$t"');
       }
       // O que saiu na revisão da UX (24.17.1).
+      //
+      // **`Compartilhar` SAIU desta lista em 21/10/2026**, e a saída é pedido
+      // do cliente e não descuido: *"vamos implementar o recurso de
+      // compartilhar o evento tambem, inserir um botao na pagina de detalhes
+      // do evento para convidar outros usuarios no whatsapp e outras
+      // ferramentas"*. A 24.17.1 tinha tirado a ação; ele a pediu de volta.
+      // O grupo `compartilhar o encontro`, no fim deste arquivo, é quem a
+      // mede agora -- a linha não ficou sem dono.
       final tela = textoDaTela(tester);
       for (final t in <String>[
         'Quem organiza',
-        'Compartilhar',
         'Regras de convivência',
         'Sempre na guia',
       ]) {
@@ -685,6 +701,225 @@ void main() {
         reason: 'REPROVA: sem origem no contrato, a ficha chutou a equipe do Bichu.',
       );
       expect(find.text(TelaDoEncontro.cadastradoPelaComunidade), findsNothing);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // COMPARTILHAR O ENCONTRO (cliente, 21/10/2026)
+  // -------------------------------------------------------------------------
+  //
+  // *"vamos implementar o recurso de compartilhar o evento tambem, inserir um
+  // botao na pagina de detalhes do evento para convidar outros usuarios no
+  // whatsapp e outras ferramentas"*.
+  //
+  // As iscas deste grupo, e o que cada uma derruba se o mecanismo sumir:
+  //   1. o botao EXISTE e abre a FOLHA, e nao o navegador;
+  //   2. o texto carrega titulo, dia, horario e lugar;
+  //   3. o texto NAO carrega endereco de rua nem link -- a privacidade;
+  //   4. cancelado e encerrado nao oferecem a acao;
+  //   5. folha que nao abre vira aviso, e nao silencio;
+  //   6. o botao e ALCANCAVEL numa tela de celular de verdade.
+  group('compartilhar o encontro', () {
+    testWidgets('o botão abre a FOLHA do sistema com o texto do encontro',
+        (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico()),
+      );
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      expect(
+        saida.compartilhados,
+        hasLength(1),
+        reason: 'REPROVA: o toque em Compartilhar não abriu a folha do sistema.',
+      );
+      // A folha, e NAO o navegador: `abrirLink` leva o convite e o Instagram, e
+      // trocar uma pela outra mandaria o link para o aparelho de quem
+      // compartilha em vez de para o grupo.
+      expect(saida.links, isEmpty);
+    });
+
+    testWidgets('o texto leva título, dia, horário e lugar', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico()),
+      );
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      final enviado = saida.compartilhados.single;
+      expect(
+        enviado.texto,
+        'Passeio matinal na Benedito Calixto\n'
+        'Sábado, 3 de outubro · Das 9h às 11h\n'
+        'Praça Benedito Calixto, Pinheiros, São Paulo - SP\n'
+        'Encontrei no Bichu. Vamos juntos?',
+      );
+      expect(enviado.assunto, 'Vamos juntos? Passeio matinal na Benedito Calixto');
+    });
+
+    testWidgets(
+        'ISCA -- o texto compartilhado não carrega endereço de rua nem link',
+        (tester) async {
+      // ESTE CASO E O FREIO DE PRIVACIDADE. `street_address` so sai de
+      // `getNetworkEventLocation`, com `bearerAuth` (emenda 1 do ADR-0010), e o
+      // ADR-0027 item 21.2 diz que ele **nunca** sai na agenda nem no detalhe
+      // publico. A tela TEM o endereco na mao (`_endereco`, desenhado no bloco
+      // `Local`) -- e e por isso que o caso monta a sessao LOGADA, com endereco
+      // de verdade na resposta: sem conta nao haveria o que vazar, e a isca
+      // nao seria isca.
+      //
+      // Trocar `c.lugar.linhaCompleta` por `_endereco` em
+      // `_compartilharOEncontro` derruba este caso, e so este.
+      const endereco = 'R. Teodoro Sampaio, 1020 - Pinheiros, São Paulo - SP';
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location':
+              sempre(localizacao(lat: null, endereco: endereco)),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+
+      // O endereco ESTA na tela: o caso prova que ele chegou antes de provar
+      // que ele nao sai.
+      await rolarAte(tester, find.text(endereco));
+      expect(find.text(endereco), findsOneWidget);
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      final texto = saida.compartilhados.single.texto;
+      expect(
+        texto,
+        isNot(contains('Teodoro Sampaio')),
+        reason: 'REPROVA: o endereço de rua, que só sai com conta, foi para '
+            'um grupo de WhatsApp.',
+      );
+      expect(texto, isNot(contains('1020')));
+      // E NENHUM LINK. Medido em 21/10/2026, com controle positivo
+      // (`/comunidade` -> 200): `bichu.app/encontro/<slug>`, `/e/`, `/evento/`
+      // e `/eventos/` respondem 404 nos dois ambientes, e `NetworkEventPublic`
+      // nao tem `share_url`. Um link montado aqui seria link morto.
+      expect(
+        texto,
+        isNot(contains('http')),
+        reason: 'REPROVA: um endereço entrou no texto. Não existe página '
+            'pública de encontro — ver `mensagemDeCompartilhar`.',
+      );
+      expect(texto, isNot(contains('bichu.app')));
+    });
+
+    testWidgets('ISCA -- encontro cancelado não oferece compartilhar',
+        (tester) async {
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(status: 'cancelled'),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location': sempre(localizacao()),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+
+      await rolarAte(tester, find.text('Sobre o evento'));
+      expect(
+        textoDaTela(tester),
+        isNot(contains(TelaDoEncontro.rotuloDeCompartilhar)),
+        reason: 'REPROVA: a tela convidou gente para um encontro cancelado.',
+      );
+    });
+
+    testWidgets('ISCA -- encontro encerrado não oferece compartilhar',
+        (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(status: 'ended')),
+      );
+      await rolarAte(tester, find.text('Sobre o evento'));
+      expect(
+        textoDaTela(tester),
+        isNot(contains(TelaDoEncontro.rotuloDeCompartilhar)),
+        reason: 'REPROVA: a tela convidou gente para um encontro encerrado.',
+      );
+    });
+
+    testWidgets('ISCA -- a folha que não abre vira aviso, e não silêncio',
+        (tester) async {
+      saida.abre = false;
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico()),
+      );
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(TelaDoEncontro.falhaDoCompartilhar),
+        findsOneWidget,
+        reason: 'REPROVA: a folha não abriu e a tela ficou calada. Um toque '
+            'que não faz nada é indistinguível de um toque que não chegou.',
+      );
+    });
+
+    testWidgets('ISCA -- o botão é ALCANÇÁVEL numa tela de celular de verdade',
+        (tester) async {
+      // `telaAlta` monta 400 x 4000: a página inteira cabe de uma vez, e um
+      // botão empurrado para fora da área útil passaria despercebido. Aqui a
+      // tela é 390 x 844 (um iPhone 14), que é tela de gente.
+      //
+      // O caso mede DUAS coisas que um `tap` sozinho não mede:
+      //   - o retângulo do botão está INTEIRO dentro da área visível **sem
+      //     rolagem nenhuma** -- é na primeira dobra que o cliente o pediu;
+      //   - o toque LANDA, e sem `warnIfMissed: false`. `tocarSemRolar` usa
+      //     `warnIfMissed: false` em outros arquivos, e com ele um botão atrás
+      //     de outra coisa passa verde: aqui o aviso é fatal de propósito.
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+
+      await abrirRede(
+        tester,
+        rede: redeDoEncontro(encontro: encontroPublico()),
+        logado: false,
+      );
+      await irPara(tester, Rotas.encontroDaRedeDe(slugPublico));
+
+      final botao = find.text(TelaDoEncontro.rotuloDeCompartilhar);
+      expect(botao, findsOneWidget);
+
+      final r = tester.getRect(botao);
+      expect(
+        r.top >= 0 && r.bottom <= 844,
+        isTrue,
+        reason: 'REPROVA: sem rolar, o botão está em $r, fora da tela de '
+            '390 x 844. O cliente pediu o botão NA página, e botão que exige '
+            'procurar é botão que ninguém acha.',
+      );
+
+      await tester.tap(botao);
+      await tester.pumpAndSettle();
+
+      expect(
+        saida.compartilhados,
+        hasLength(1),
+        reason: 'REPROVA: o botão existe na árvore mas não recebe toque numa '
+            'tela de 390 x 844 -- alguma coisa está por cima dele.',
+      );
     });
   });
 }
