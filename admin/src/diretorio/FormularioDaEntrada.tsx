@@ -39,7 +39,15 @@ interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
-  atividade: TipoDaEntrada | '';
+  /**
+   * AS ATIVIDADES, de 1 a 6 (cliente, 21/10/2026): uma clinica que tambem faz
+   * banho e tosa deixou de ter de escolher.
+   *
+   * Lista VAZIA e o estado "nao escolheu" -- o que `''` representava quando era
+   * um valor so. Nao ha `| ''` aqui porque a lista vazia ja diz isso, e um
+   * terceiro estado inventaria algo que o contrato nao tem.
+   */
+  atividades: TipoDaEntrada[];
   /**
    * O QUE a entrada e -- eixo SEPARADO de [atividade], que e o que ela faz.
    *
@@ -148,7 +156,7 @@ const VAZIO: Valores = {
   nome: '',
   slug: '',
   slugEditado: false,
-  atividade: '',
+  atividades: [],
   tipoDeEntidade: 'professional',
   sobre: '',
   cidade: '',
@@ -184,6 +192,24 @@ const VAZIO: Valores = {
  * exigir a casa dele. Nenhum dos quatro entra em `missing_to_publish`, e a
  * regua do servidor concorda: no contrato eles sao opcionais nos dois corpos.
  */
+/**
+ * As atividades mudaram?
+ *
+ * Compara CONJUNTO, por lista ordenada: a escolha do operador nao tem ordem, e
+ * `['vet','clinic']` e `['clinic','vet']` sao a mesma coisa. Sem isto, abrir a
+ * tela e salvar sem tocar em nada mandaria `kinds` no `PATCH` -- e, com
+ * `minProperties: 1`, "nada mudou" deixaria de ser detectavel.
+ */
+export function atividadesMudaram(
+  daTela: readonly TipoDaEntrada[],
+  doServidor: readonly TipoDaEntrada[],
+): boolean {
+  if (daTela.length !== doServidor.length) return true;
+  const a = [...daTela].sort();
+  const b = [...doServidor].sort();
+  return a.some((x, i) => x !== b[i]);
+}
+
 export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   const e: Partial<Record<Campo, string>> = {};
   const nome = v.nome.trim();
@@ -191,7 +217,14 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     e['e-nome'] = 'Informe o nome, de 2 a 120 caracteres.';
   }
   if (!PADRAO_DO_SLUG.test(v.slug)) e['e-slug'] = MENSAGEM_DO_SLUG;
-  if (v.atividade === '') e['e-atividade'] = 'Escolha a atividade.';
+  // DE 1 A 6 (cliente, 21/10/2026). O teto 6 e o tamanho da lista fechada, e a
+  // tela nem tem como passar dele -- sao seis caixas. A conferencia existe
+  // porque o rascunho retomado (`retomarRascunho`) vem de fora da tela.
+  if (v.atividades.length === 0) e['e-atividade'] = 'Escolha ao menos uma atividade.';
+  else if (v.atividades.length > 6) e['e-atividade'] = 'Até 6 atividades.';
+  else if (new Set(v.atividades).size !== v.atividades.length) {
+    e['e-atividade'] = 'A mesma atividade apareceu duas vezes.';
+  }
   const sobre = v.sobre.trim();
   if (sobre !== '' && (sobre.length < 2 || sobre.length > 2000)) {
     e['e-sobre'] = 'Entre 2 e 2000 caracteres.';
@@ -256,7 +289,9 @@ function valoresDa(entrada: Entrada): Valores {
     nome: entrada.display_name,
     slug: entrada.slug,
     slugEditado: true,
-    atividade: entrada.kind,
+    // `kinds` e a verdade; `kind` e a PRIMEIRA dela e existe no contrato so
+    // para o APK em campo. O painel le a lista.
+    atividades: [...entrada.kinds],
     tipoDeEntidade: entrada.entity_kind,
     sobre: entrada.about ?? '',
     cidade: entrada.city ?? '',
@@ -343,8 +378,13 @@ function valoresDa(entrada: Entrada): Valores {
  *   ninguem tomou.
  * - **Nenhum e-mail, WhatsApp, rede social, horario de funcionamento nem
  *   foto de perfil de rede.** Nenhuma dessas colunas existe em `professionals`.
- * - **ONG.** Nao ha valor para organizacao em `professionals.kind`. Decisao 9.1
- *   pendente, e o seletor de atividade diz isso em voz alta.
+ * - **ONG ja cabe, e esta frase estava desatualizada em DOIS pontos.** Ela
+ *   dizia que "nao ha valor para organizacao em `professionals.kind`" e que a
+ *   decisao 9.1 estava pendente. A decisao saiu: ONG e EIXO PROPRIO
+ *   (`entity_kind`, migracao `20261018000012`), o campo Tipo esta na tela, e a
+ *   coluna citada nem existe mais com esse nome -- virou `professionals.kinds`
+ *   na `20261020000015`. O que continua de fora e ADOCAO: pet em adocao nao e
+ *   campo de cadastro de estabelecimento.
  */
 export default function FormularioDaEntrada() {
   const { entrySlug } = useParams();
@@ -510,7 +550,10 @@ export default function FormularioDaEntrada() {
         const { data, error } = await api.POST('/admin/directory/entries', {
           body: {
             slug: valores.slug,
-            kind: valores.atividade as TipoDaEntrada,
+            // `kinds` e nao `kind`: o contrato aceita os dois (um deles), e
+            // mandar os dois juntos e `400` (`kind_conflict`). O painel novo
+            // manda a lista.
+            kinds: valores.atividades,
             entity_kind: valores.tipoDeEntidade,
             display_name: nome,
             ...(ou(valores.sobre) === null ? {} : { about: ou(valores.sobre) as string }),
@@ -548,7 +591,14 @@ export default function FormularioDaEntrada() {
       const fotoNoPatch = imagemParaOPatch(valores.fotoUploadId, entrada.photo);
       const patch: Esquemas['AdminDirectoryEntryPatch'] = {
         ...(valores.slug !== entrada.slug ? { slug: valores.slug } : {}),
-        ...(valores.atividade !== entrada.kind ? { kind: valores.atividade as TipoDaEntrada } : {}),
+        // COMPARA CONJUNTO, e nao referencia: duas listas com os mesmos itens
+        // em ordens diferentes sao a mesma escolha, e mandar `kinds` por causa
+        // de ordem faria toda edicao parecer suja. A ordem do painel e sempre a
+        // de `ORDEM_DAS_ATIVIDADES`, entao a comparacao ordenada basta e nao
+        // depende de a tela ter preservado a ordem do servidor.
+        ...(atividadesMudaram(valores.atividades, entrada.kinds)
+          ? { kinds: valores.atividades }
+          : {}),
         ...(valores.tipoDeEntidade !== entrada.entity_kind
           ? { entity_kind: valores.tipoDeEntidade }
           : {}),
@@ -799,37 +849,58 @@ export default function FormularioDaEntrada() {
           </span>
         </div>
 
-        <div className={erros['e-atividade'] ? 'field err' : 'field'}>
-          <label htmlFor="e-atividade">Atividade *</label>
-          <div className="ordem sel campo-sel">
-            <select
-              id="e-atividade"
-              data-cy="entrada-atividade"
-              value={valores.atividade}
-              onChange={(e) => mudar({ atividade: e.target.value as TipoDaEntrada | '' })}
-              aria-invalid={erros['e-atividade'] ? true : undefined}
-              aria-describedby="e-atividade-ajuda"
-            >
-              <option value="">Escolha a atividade</option>
-              {ORDEM_DAS_ATIVIDADES.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {ATIVIDADES[tipo]}
-                </option>
-              ))}
-            </select>
-            <Icone nome="expand" tamanho="s20" />
+        {/* AS ATIVIDADES, de uma para VARIAS em 21/10/2026 (decisao do
+            cliente): uma clinica que tambem faz banho e tosa deixou de ter de
+            escolher.
+
+            CAIXAS e nao `<select multiple>`: a selecao multipla nativa esconde
+            que da para marcar mais de uma (precisa de ctrl/cmd), perde a
+            escolha com um clique errado e e ruim no teclado. Sao seis opcoes
+            fixas -- cabem todas na tela, e o mesmo molde de caixas que o campo
+            Situacao ja usa logo abaixo.
+
+            `fieldset`/`legend` e nao `label`: um rotulo nao pode apontar para
+            seis campos, e sem o grupo o leitor de tela anunciaria seis caixas
+            soltas sem dizer do que sao. */}
+        <fieldset
+          className={erros['e-atividade'] ? 'field err' : 'field'}
+          aria-describedby="e-atividade-ajuda"
+          aria-invalid={erros['e-atividade'] ? true : undefined}
+        >
+          <legend className="lab">Atividades *</legend>
+          <div className="checks">
+            {ORDEM_DAS_ATIVIDADES.map((tipo) => (
+              <label className="check" key={tipo}>
+                <input
+                  type="checkbox"
+                  data-cy={`entrada-atividade-${tipo}`}
+                  checked={valores.atividades.includes(tipo)}
+                  onChange={(e) =>
+                    mudar({
+                      // A ordem guardada e sempre a de `ORDEM_DAS_ATIVIDADES`, e
+                      // nao a de clique: `filter` sobre a ordem canonica em vez
+                      // de `push`. Assim a primeira atividade -- que e a que o
+                      // contrato publica em `kind` -- nao depende de em que
+                      // caixa o operador clicou primeiro.
+                      atividades: e.target.checked
+                        ? ORDEM_DAS_ATIVIDADES.filter(
+                            (x) => x === tipo || valores.atividades.includes(x),
+                          )
+                        : valores.atividades.filter((x) => x !== tipo),
+                    })
+                  }
+                />
+                <span>{ATIVIDADES[tipo]}</span>
+              </label>
+            ))}
           </div>
-          {/* ATUALIZADA na uniao de 18/10/2026. Ela dizia "ainda não há opção
-              para ONG: o cadastro de ONG depende de uma decisão de modelo que
-              está em aberto" -- e a decisão saiu: ONG é EIXO PRÓPRIO
-              (`entity_kind`), e não um valor de `professionals.kind`. O campo
-              está logo acima. Deixar a frase antiga mandaria o operador
-              desistir de um cadastro que o painel agora faz. */}
           <span className="help" id="e-atividade-ajuda">
-            O que a entrada faz. Uma ONG também escolhe aqui — o que ela é fica no campo Tipo, acima.
+            O que a entrada faz. Marque todas as que valem — uma clínica que também faz banho e tosa
+            aparece nos dois filtros da seção Perto. Uma ONG também escolhe aqui: o que ela é fica no
+            campo Tipo, acima.
           </span>
           {erros['e-atividade'] && <ErroDoCampo id="e-atividade-erro">{erros['e-atividade']}</ErroDoCampo>}
-        </div>
+        </fieldset>
 
         <CampoDeTexto
           id="e-sobre"

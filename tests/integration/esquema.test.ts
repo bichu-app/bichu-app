@@ -684,8 +684,8 @@ void describe('ADR-0011 emenda 1 — o diretorio de profissionais, conferido no 
       await assert.rejects(
         () =>
           cliente.query(
-            `insert into professionals (id, kind, display_name, source, claim_status)
-             values (gen_random_uuid(), 'vet', 'Isca sem aceite', 'invited', 'unclaimed')`,
+            `insert into professionals (id, kinds, display_name, source, claim_status)
+             values (gen_random_uuid(), ARRAY['vet'], 'Isca sem aceite', 'invited', 'unclaimed')`,
           ),
         (erro: unknown) => {
           assert.equal(
@@ -703,8 +703,8 @@ void describe('ADR-0011 emenda 1 — o diretorio de profissionais, conferido no 
       // tudo tambem "nunca deixa passar o errado", e nao vale nada.
       await cliente.query('SAVEPOINT aceite');
       await cliente.query(
-        `insert into professionals (id, kind, display_name, source, claim_status, claimed_at)
-         values (gen_random_uuid(), 'vet', 'Isca com aceite', 'invited', 'claimed', now())`,
+        `insert into professionals (id, kinds, display_name, source, claim_status, claimed_at)
+         values (gen_random_uuid(), ARRAY['vet'], 'Isca com aceite', 'invited', 'claimed', now())`,
       );
       await cliente.query('ROLLBACK TO SAVEPOINT aceite');
     } finally {

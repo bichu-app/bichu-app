@@ -316,7 +316,10 @@ export class FilaDeIndicacoes {
     const criada = await tx.inserirEntrada({
       id,
       slug,
-      kind: indicacao.kind,
+      // A indicacao da comunidade declara UMA atividade (o formulario de quem
+      // indica pede uma), e ela entra como lista de um. Alargar a FILA para
+      // varias nao foi pedido, e `directory_suggestions.kind` continua singular.
+      kinds: [indicacao.kind],
       displayName: indicacao.displayName,
       // `about` nulo: o recado de quem indicou e para quem revisa, e nao para o
       // diretorio (ADR-0011 secao 5.4). Copia-lo aqui publicaria avaliacao da

@@ -8449,10 +8449,17 @@ export interface components {
             poster_url?: string;
         };
         /**
-         * @description A atividade: o que a entrada FAZ, o que se contrata dela. Espelha
-         *     `professionals.kind` e a entrada
-         *     `public.professionals.professionals_kind_check` do teste de conjunto
-         *     exato.
+         * @description UMA atividade: o que a entrada FAZ, o que se contrata dela. Espelha os
+         *     valores de `professionals.kinds` e a entrada
+         *     `public.professionals.professionals_atividades_conhecidas` do teste de
+         *     conjunto exato.
+         *
+         *     **Desde 21/10/2026 a entrada tem VARIAS atividades** (decisao do
+         *     cliente): a coluna e uma lista, e quem quer todas le
+         *     `ProfessionalKinds`. Este schema continua descrevendo UM valor, e e
+         *     usado em tres papeis: cada item da lista, o filtro por chip (que filtra
+         *     por uma atividade de cada vez), e o campo `kind` de compatibilidade das
+         *     respostas.
          *
          *     **Continua sem valor para ONG, e agora a ausencia e desenho concluido
          *     e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -8474,6 +8481,31 @@ export interface components {
          * @enum {string}
          */
         ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic";
+        /**
+         * @description As ATIVIDADES da entrada, de 1 a 6 (decisao do cliente de 21/10/2026:
+         *     uma clinica que tambem faz banho e tosa nao precisa escolher). Espelha
+         *     `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
+         *     separador.
+         *
+         *     **A ORDEM IMPORTA, e so por uma razao:** o primeiro item e o que as
+         *     respostas publicam no campo `kind`, que existe para o APK em campo
+         *     continuar funcionando. Fora disso a lista nao tem hierarquia -- nao ha
+         *     "atividade secundaria" com regra propria, e o filtro por chip trata os
+         *     itens como iguais.
+         *
+         *     **TETO 6 = o tamanho da lista fechada.** Teto maior seria ficticio: nao
+         *     ha setimo valor para um setimo item carregar.
+         *
+         *     `uniqueItems` recusa `[vet, vet]` ja no schema; o servidor recusa o
+         *     mesmo com `400` (`code: duplicate_kind`), porque o `CHECK` do banco nao
+         *     alcanca unicidade de item (`CHECK` nao aceita subconsulta).
+         *
+         *     **FILTRAR por uma destas atividades devolve a entrada UMA VEZ**, e nao
+         *     uma vez por atividade: o filtro testa PERTINENCIA em vez de desdobrar a
+         *     linha. O estabelecimento com tres atividades aparece nos tres chips, uma
+         *     vez em cada, e o `total` da pagina nao o conta tres vezes.
+         */
+        ProfessionalKinds: components["schemas"]["ProfessionalKind"][];
         /**
          * @description O QUE a entrada e, e nao o que ela faz -- eixo SEPARADO de
          *     `ProfessionalKind` de proposito. Ver a prosa daquele campo para por que
@@ -8537,7 +8569,16 @@ export interface components {
          */
         DirectoryEntrySummary: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
@@ -9356,7 +9397,12 @@ export interface components {
              *     para o momento de publicar.
              */
             slug: components["schemas"]["Slug"];
-            kind: components["schemas"]["ProfessionalKind"];
+            kinds?: components["schemas"]["ProfessionalKinds"];
+            /**
+             * @description **Equivale a `kinds: [kind]`.** Aceito para o painel antigo; o
+             *     formulario de hoje manda `kinds`.
+             */
+            kind?: components["schemas"]["ProfessionalKind"];
             /**
              * @description O tipo de entidade. **Opcional, e ausente vale `professional`** --
              *     o mesmo `DEFAULT` da coluna. Exigi-lo aqui tornaria obrigatorio um
@@ -9422,6 +9468,8 @@ export interface components {
         AdminDirectoryEntryPatch: {
             /** @description Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver. */
             slug?: components["schemas"]["Slug"];
+            kinds?: components["schemas"]["ProfessionalKinds"];
+            /** @description **Equivale a `kinds: [kind]`**, e portanto SUBSTITUI a lista inteira. Aceito para o painel antigo. */
             kind?: components["schemas"]["ProfessionalKind"];
             /**
              * @description Corrigir o tipo de entidade e permitido. **Nao aceita `null`**,
@@ -9472,7 +9520,16 @@ export interface components {
          */
         AdminDirectoryEntry: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             about?: string | null;
@@ -9616,7 +9673,16 @@ export interface components {
          */
         DirectoryEntryDetail: {
             slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+             *     Desde 21/10/2026 a entrada tem varias atividades (decisao do
+             *     cliente); este campo continua aqui, e continua `required`, porque o
+             *     APK publicado o le e trocar o tipo dele seria
+             *     `response-property-type-changed` -- quebra para quem ja esta em
+             *     aparelho. Quem desenha a entrada nova usa `kinds`.
+             */
             kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
             entity_kind: components["schemas"]["EntityKind"];
             display_name: string;
             city?: string | null;
@@ -16810,7 +16876,16 @@ export interface operations {
                 /** @description UF, duas letras. */
                 state?: string;
                 neighborhood?: string;
-                /** @description Filtra por atividade. */
+                /**
+                 * @description Filtra por atividade, UMA por vez (e o chip da tela).
+                 *
+                 *     Desde 21/10/2026 a entrada tem VARIAS atividades, e este filtro
+                 *     passou a ser um teste de PERTINENCIA: a entrada entra no resultado
+                 *     quando a atividade pedida esta entre as dela. **A entrada com tres
+                 *     atividades aparece nos tres chips e UMA VEZ em cada** -- a consulta
+                 *     testa a lista em vez de desdobrar a linha, e por isso `total` nao
+                 *     conta a mesma entrada duas vezes.
+                 */
                 kind?: components["schemas"]["ProfessionalKind"];
                 /**
                  * @description Piso, nao igualdade: `contact_verified` traz tambem
@@ -19808,7 +19883,13 @@ export interface operations {
             query?: {
                 /** @description Busca por nome, no servidor. Sem acento e sem caixa, pelo indice trigrama de `professionals`. */
                 q?: string;
-                /** @description Filtra pela atividade. Sem o parametro, vem todas. */
+                /**
+                 * @description Filtra pela atividade, UMA por vez. Sem o parametro, vem todas.
+                 *
+                 *     Desde 21/10/2026 e teste de PERTINENCIA sobre `kinds`: a entrada
+                 *     entra quando a atividade pedida esta entre as dela, e sai UMA VEZ
+                 *     por mais atividades que tenha.
+                 */
                 kind?: components["schemas"]["ProfessionalKind"];
                 /** @description Filtra pela situacao. Sem o parametro, vem todas, inclusive as removidas. */
                 status?: components["schemas"]["DirectoryEntryStatus"];

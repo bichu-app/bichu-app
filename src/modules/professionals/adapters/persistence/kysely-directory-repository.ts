@@ -87,7 +87,7 @@ import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 interface LinhaDaEntrada {
   slug: string;
-  kind: TipoDeProfissional;
+  kinds: TipoDeProfissional[];
   entity_kind: TipoDeEntidade;
   display_name: string;
   about: string | null;
@@ -223,7 +223,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
   const aprovadas: DecisaoDaVerificacao = 'approved';
   return {
     slug: l.slug,
-    kind: l.kind,
+    kinds: l.kinds,
     entityKind: l.entity_kind,
     displayName: l.display_name,
     about: l.about,
@@ -366,8 +366,38 @@ export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio
       sql<boolean>`texto_para_busca(professionals.neighborhood) = texto_para_busca(${bairro})`,
     );
   }
+  // ========================================================================
+  // O FILTRO POR ATIVIDADE: PERTINENCIA, E NUNCA DESDOBRAMENTO
+  // ========================================================================
+  // `kinds` e uma lista desde a `20261020000015`, e o filtro deixou de ser
+  // igualdade. A forma importa, e a forma errada nao reprova nada:
+  //
+  //   ERRADO: `unnest(professionals.kinds)` em `FROM`/`JOIN` com `SELECT`
+  //           direto -- a linha se MULTIPLICA por quantas atividades ela tem. A
+  //           clinica que tambem faz banho e tosa sairia DUAS vezes na mesma
+  //           pagina, e `total` (que usa este mesmo construtor) contaria duas. A
+  //           tela mostraria a duplicata e ninguem seria avisado.
+  //
+  //   CERTO:  `kinds @> ARRAY[...]` -- a linha e TESTADA, nao desdobrada, e sai
+  //           UMA VEZ por mais atividades que tenha. O estabelecimento com tres
+  //           atividades aparece nos tres chips, uma vez em cada.
+  //
+  // **`@>` E NAO `= ANY`, E A DIFERENCA E O INDICE.** As duas expressoes dao o
+  // MESMO resultado, e foi por isso que a primeira versao disto usou `= ANY`:
+  // ele se le melhor. Mas a classe de operadores `array_ops` de um GIN sobre
+  // `text[]` indexa `@>`, `<@`, `&&` e `=`, e **nao indexa `= ANY`** -- o
+  // planejador nao reescreve um no outro. Com `= ANY` a consulta ficava correta
+  // e varria a tabela, com o indice
+  // `professionals_publicados_por_atividade` (GIN parcial) ali do lado sem ser
+  // usado. Defeito que nao reprova nada: so aparece no `EXPLAIN`.
+  //
+  // `kinds @> ARRAY['vet']` le-se "as atividades CONTEM veterinario", que e
+  // exatamente a pergunta do chip.
+  //
+  // COMPARA ITEM INTEIRO, e e por isso que a coluna e lista e nao texto grudado
+  // com separador: `'vet'` nunca casa dentro de `'vet_especialista'`.
   if (recorte.kind !== undefined) {
-    consulta = consulta.where('kind', '=', recorte.kind);
+    consulta = consulta.where(sql<boolean>`professionals.kinds @> ARRAY[${recorte.kind}]::text[]`);
   }
   // O PISO, e nao a igualdade. Pedir `contact_verified` e pedir "pelo menos
   // contato", entao quem tem documento entra tambem: igualdade esconderia o
@@ -540,7 +570,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       const ponto = pontoDoAparelho(recorte.chamador, recorte.familia, recorte.agora);
       let pagina = construtorDaListagem(db, recorte).select([
         'slug',
-        'kind',
+        'kinds',
         'entity_kind',
         'display_name',
         'about',
@@ -597,7 +627,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         .select([
           'id',
           'slug',
-          'kind',
+          'kinds',
           'entity_kind',
           'display_name',
           'about',

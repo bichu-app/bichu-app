@@ -36,6 +36,7 @@ function entrada(extra: Partial<Esquemas['AdminDirectoryEntry']> = {}): Esquemas
   return {
     slug: 'passeios-da-bia',
     kind: 'walker',
+    kinds: ['walker'],
     // `entity_kind` passou a ser obrigatorio na resposta com o eixo do tipo
     // de entidade (`20261018000012`), e esta massa nasceu no ramo da midia,
     // antes dele. `professional` e o DEFAULT da coluna e o que toda entrada
@@ -248,7 +249,8 @@ describe('logo e foto no formulario da entrada', () => {
       }),
     });
     fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Passeios da Bia' } });
-    fireEvent.change(screen.getByLabelText('Atividade *'), { target: { value: 'walker' } });
+    // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
+    fireEvent.click(screen.getByLabelText('Passeador'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
 
@@ -265,7 +267,8 @@ describe('logo e foto no formulario da entrada', () => {
       'POST /admin/directory/entries': json(201, entrada(), { ETag: '"1"' }),
     });
     fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Passeios da Bia' } });
-    fireEvent.change(screen.getByLabelText('Atividade *'), { target: { value: 'walker' } });
+    // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
+    fireEvent.click(screen.getByLabelText('Passeador'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/perto'));

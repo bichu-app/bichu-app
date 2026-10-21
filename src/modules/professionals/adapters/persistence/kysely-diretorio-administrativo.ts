@@ -115,7 +115,7 @@ const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
 interface LinhaDaEntrada {
   entity_kind: TipoDeEntidade;
   slug: string | null;
-  kind: TipoDeProfissional;
+  kinds: TipoDeProfissional[];
   display_name: string;
   about: string | null;
   city: string | null;
@@ -171,7 +171,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     // `slug` nao-nulo no tipo faria `missing_to_publish` nao ter como acusar a
     // falta. A string vazia e o que a projecao le como "sem endereco".
     slug: l.slug ?? '',
-    kind: l.kind,
+    kinds: l.kinds,
     entityKind: l.entity_kind,
     displayName: l.display_name,
     about: l.about,
@@ -202,7 +202,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
 
 const COLUNAS = [
   'professionals.slug as slug',
-  'professionals.kind as kind',
+  'professionals.kinds as kinds',
   'professionals.entity_kind as entity_kind',
   'professionals.display_name as display_name',
   'professionals.about as about',
@@ -276,7 +276,15 @@ function comRecorte<T extends { where: unknown }>(consulta: T, recorte: RecorteD
       sql<boolean>`texto_para_busca(professionals.display_name) LIKE padrao_de_busca(${busca})`,
     );
   }
-  if (recorte.kind !== undefined) c = c.where('professionals.kind', '=', recorte.kind);
+  // PERTINENCIA, nunca desdobramento -- a mesma regra, a mesma forma e o mesmo
+  // motivo do filtro da listagem do app (ver `construtorDaListagem` em
+  // `kysely-directory-repository.ts`, que tem o raciocinio por extenso):
+  // `unnest` com `SELECT` direto faria a entrada de tres atividades sair tres
+  // vezes nesta pagina e a contagem contar tres, e `@>` em vez de `= ANY` e o
+  // que deixa o GIN ser usado.
+  if (recorte.kind !== undefined) {
+    c = c.where(sql<boolean>`professionals.kinds @> ARRAY[${recorte.kind}]::text[]`);
+  }
   if (recorte.status !== undefined) c = c.where('professionals.status', '=', recorte.status);
   const cidade = recorte.city?.trim();
   if (cidade !== undefined && cidade !== '') {
@@ -339,7 +347,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
           .values({
             id: nova.id,
             slug: nova.slug,
-            kind: nova.kind,
+            kinds: [...nova.kinds],
             // Ausente vale `professional`, o mesmo `DEFAULT` da coluna. Escrito
             // aqui, e nao deixado para o banco, para que o aceite da indicacao
             // da comunidade -- que nao coleta tipo de entidade -- grave o mesmo
@@ -383,7 +391,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
           .updateTable('professionals')
           .set((eb) => ({
             ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
-            ...(mudanca.kind === undefined ? {} : { kind: mudanca.kind }),
+            ...(mudanca.kinds === undefined ? {} : { kinds: [...mudanca.kinds] }),
             ...(mudanca.entityKind === undefined ? {} : { entity_kind: mudanca.entityKind }),
             ...(mudanca.displayName === undefined ? {} : { display_name: mudanca.displayName }),
             ...(mudanca.about === undefined ? {} : { about: mudanca.about }),

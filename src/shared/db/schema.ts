@@ -1372,7 +1372,26 @@ export interface FilaDeModeracaoView {
 export interface ProfessionalsTable {
   /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
   id: string;
-  kind: TipoDeProfissional;
+  /**
+   * AS ATIVIDADES, de 1 a 6 (`20261020000015`, decisao do cliente de
+   * 21/10/2026). Substituiu `kind`, que era um valor so.
+   *
+   * **Lista de verdade, e nao texto grudado com separador.** O motivo e o
+   * filtro: com texto grudado o chip procuraria PEDACO (`LIKE`) e `'vet'`
+   * casaria dentro de `'vet_especialista'` ou de uma frase, trazendo o registro
+   * errado **sem reprovar nada**. Lista deixa comparar ITEM INTEIRO
+   * (`kinds @> ARRAY[valor]`) e usar o indice GIN -- `@>` e nao `= ANY`, porque
+   * `array_ops` nao indexa `= ANY`.
+   *
+   * **O filtro e pertinencia, nunca desdobramento:** `unnest` em `FROM` com
+   * `SELECT` direto faria a entrada de tres atividades sair tres vezes na mesma
+   * listagem, e `total` contaria tres.
+   *
+   * A unicidade dos itens e conferida na APLICACAO (`CHECK` nao aceita
+   * subconsulta). O contrato publica `kinds[0]` no campo `kind` das respostas,
+   * para o APK em campo continuar lendo.
+   */
+  kinds: TipoDeProfissional[];
   /**
    * O QUE a entrada e, eixo SEPARADO de `kind` (que e a ATIVIDADE). ONG e
    * `organization`. `Generated` porque a `20261018000012` a criou com

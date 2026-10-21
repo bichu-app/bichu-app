@@ -74,7 +74,8 @@ export interface RecorteDeEntradas {
 export interface NovaEntrada {
   readonly id: string;
   readonly slug: string;
-  readonly kind: TipoDeProfissional;
+  /** AS ATIVIDADES, de 1 a 6. Nunca vazia: o caso de uso ja recusou a vazia. */
+  readonly kinds: readonly TipoDeProfissional[];
   /**
    * **Opcional, e ausente vale `professional`.** Opcional de proposito: o aceite
    * da indicacao da comunidade (`fila-de-indicacoes.ts`, de outro ramo) monta
@@ -115,8 +116,9 @@ export interface NovaEntrada {
  */
 export interface MudancaDaEntrada {
   readonly slug?: string;
-  readonly kind?: TipoDeProfissional;
-  /** Nao aceita `null`, como `slug`, `kind` e `displayName`: a coluna e NOT NULL. */
+  /** SUBSTITUI a lista inteira. Sem `| null`: a coluna e NOT NULL com minimo 1. */
+  readonly kinds?: readonly TipoDeProfissional[];
+  /** Nao aceita `null`, como `slug`, `kinds` e `displayName`: a coluna e NOT NULL. */
   readonly entityKind?: TipoDeEntidade;
   readonly displayName?: string;
   readonly about?: string | null;

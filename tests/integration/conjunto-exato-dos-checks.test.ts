@@ -327,11 +327,25 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'claim_status',
     valores: ['unclaimed', 'claim_pending', 'claimed', 'disputed'],
   },
-  'public.professionals.professionals_kind_check': {
-    coluna: 'kind',
-    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
-  },
-  // O TIPO DE ENTIDADE (`20261018000012`), eixo SEPARADO da atividade acima.
+  // A ATIVIDADE SAIU DESTE REGISTRO EM 21/10/2026, E NAO FOI AFROUXADA.
+  //
+  // Havia aqui `public.professionals.professionals_kind_check`, com os seis
+  // valores e `coluna: 'kind'`. A `20261020000015` (decisao do cliente: uma
+  // clinica que tambem faz banho e tosa nao precisa escolher) trocou
+  // `kind text` por `kinds text[]`, e com a coluna foi o `CHECK`.
+  //
+  // A lista fechada **continua existindo, com os mesmos seis valores**, agora
+  // como `professionals_atividades_conhecidas` -- e ela mudou de REGISTRO, nao
+  // de conteudo: `LISTAS_FECHADAS` so aceita a forma `col = ANY (ARRAY[...])`
+  // (`FORMA_SIMPLES`), e `kinds <@ ARRAY[...]` nao e essa forma. Ela esta
+  // declarada no registro de CHECK com literal, com a definicao inteira fixada.
+  //
+  // `professionals_atividades_tamanho` (de 1 a 6) **nao esta em registro
+  // nenhum**, e isso e deliberado: e faixa numerica pura, sem literal de texto,
+  // entao `MENCIONA_LITERAL` nao casa e declara-lo aqui ou lá viraria entrada
+  // fantasma -- o mesmo erro que as cinco da vitrine documentam logo abaixo.
+  //
+  // O TIPO DE ENTIDADE (`20261018000012`), eixo SEPARADO da atividade.
   // ONG nao entrou em `kind` por duas razoes: acrescentar valor a `enum` de
   // RESPOSTA quebra o contrato (`oasdiff`, response-property-enum-value-added,
   // 12 erros medidos em 18/10) e, sobretudo, porque afirmaria que organizacao
@@ -1295,6 +1309,21 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((breed_free_text IS NULL) OR ((breed_code IS NOT NULL) AND (breed_code = ANY (ARRAY['outro_dog'::text, 'outro_cat'::text, 'outro_other'::text])))))",
   'public.professionals.professionals_aceite_antes_do_perfil':
     "CHECK (((source = 'import'::text) OR (claim_status <> 'unclaimed'::text)))",
+  // AS ATIVIDADES (`20261020000015`, decisao do cliente de 21/10/2026). Os
+  // MESMOS seis valores que `professionals_kind_check` fixava em
+  // `LISTAS_FECHADAS` -- a lista nao foi alargada, a COLUNA virou lista.
+  //
+  // Esta entrada esta AQUI e nao em `LISTAS_FECHADAS` por causa da FORMA:
+  // `FORMA_SIMPLES` so reconhece `col = ANY (ARRAY[...])`, e a pergunta aqui e
+  // sobre a lista INTEIRA (`kinds <@ ARRAY[...]`, "contida em"). Como a
+  // definicao menciona literal de texto, `MENCIONA_LITERAL` casa e ela cai neste
+  // registro, onde o que fica fixado e a definicao inteira.
+  //
+  // `<@` e nao `= ANY`: lista vazia satisfaz `<@`, e quem proibe a vazia e
+  // `professionals_atividades_tamanho` -- que nao entra em registro nenhum por
+  // ser faixa numerica sem literal.
+  'public.professionals.professionals_atividades_conhecidas':
+    "CHECK ((kinds <@ ARRAY['vet'::text, 'groomer'::text, 'walker'::text, 'sitter'::text, 'trainer'::text, 'clinic'::text]))",
   // O ENDERECO DE RUA da entrada do diretorio (migracao `20261018000001`,
   // decisao 9.2 respondida pelo cliente em 18/10/2026). Os quatro `CHECK` sao
   // `IS NULL OR ...` porque as quatro colunas sao OPCIONAIS: profissional

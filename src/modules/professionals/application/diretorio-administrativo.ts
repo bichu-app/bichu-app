@@ -39,6 +39,7 @@ import {
   errosDaUf,
   errosDeTexto,
   errosDoCep,
+  atividadesDoCorpo,
   errosDoSiteDaEntrada,
   errosDoTelefone,
   MAXIMO_DA_CIDADE,
@@ -312,6 +313,21 @@ export class DiretorioAdministrativo {
     const erros = errosDaForma(corpo);
     if (erros.length > 0) throw problemas.validacao(erros);
 
+    // AS ATIVIDADES, de `kinds` ou de `kind`. Na CRIACAO a ausencia dos dois e
+    // `required`: a atividade e o que a entrada E, e o contrato tirou `kind` de
+    // `required` justamente porque quem decide agora e esta linha, e nao o
+    // schema -- o schema nao consegue dizer "um destes dois".
+    const atividades = atividadesDoCorpo('kinds', corpo);
+    if ('erros' in atividades) throw problemas.validacao(atividades.erros);
+    if (atividades.ok === undefined) {
+      throw problemas.validacao([
+        { field: 'kinds', code: 'required', message: 'Escolha ao menos uma atividade.' },
+      ]);
+    }
+    // Amarrado num `const` porque o estreitamento acima nao sobrevive a entrada
+    // no fecho de `emTransacao`.
+    const kinds = atividades.ok;
+
     return this.deps.repositorio.emTransacao(async (tx) => {
       // A logo e a foto sao confirmadas ANTES do `INSERT`, na mesma transacao:
       // `imagemDoEnvio` recusa com `400` o envio que nao serve, e recusar antes
@@ -322,7 +338,7 @@ export class DiretorioAdministrativo {
         tx.inserirEntrada({
           id: this.deps.ids.uuidv7(),
           slug: corpo.slug,
-          kind: corpo.kind,
+          kinds,
           entityKind: corpo.entity_kind,
           displayName: corpo.display_name.trim(),
           about: aparado(corpo.about) ?? null,
@@ -371,6 +387,15 @@ export class DiretorioAdministrativo {
     const erros = errosDaForma(patch);
     if (erros.length > 0) throw problemas.validacao(erros);
 
+    // AS ATIVIDADES na EDICAO. A mesma funcao da criacao, e a diferenca e so
+    // esta: aqui a ausencia dos dois campos quer dizer **nao mexer**, e nao
+    // `required`. `kinds` (ou `kind`, que vale `[kind]`) SUBSTITUI a lista
+    // inteira -- nao ha "acrescentar uma atividade", pelo mesmo idioma de
+    // `images` da `Rede`: a lista que vem e a lista que fica.
+    const atividades = atividadesDoCorpo('kinds', patch);
+    if ('erros' in atividades) throw problemas.validacao(atividades.erros);
+    const kinds = atividades.ok;
+
     return this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.entradaPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
@@ -410,7 +435,7 @@ export class DiretorioAdministrativo {
 
       const mudanca: MudancaDaEntrada = {
         ...(normalizado.slug === undefined ? {} : { slug: normalizado.slug }),
-        ...(normalizado.kind === undefined ? {} : { kind: normalizado.kind }),
+        ...(kinds === undefined ? {} : { kinds }),
         ...(normalizado.entity_kind === undefined
           ? {}
           : { entityKind: normalizado.entity_kind }),

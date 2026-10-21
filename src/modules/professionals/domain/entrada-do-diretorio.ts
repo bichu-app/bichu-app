@@ -67,7 +67,14 @@ export const GRADE_EM_METROS = 100;
 /** A entrada como o repositorio a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaDoDiretorio {
   readonly slug: string;
-  readonly kind: TipoDeProfissional;
+  /**
+   * AS ATIVIDADES, de 1 a 6 (cliente, 21/10/2026). Nunca vazia: o banco cobra
+   * o minimo 1 (`professionals_atividades_tamanho`) e o caso de uso tambem.
+   *
+   * A ordem so importa para uma coisa: `kinds[0]` e o que a projecao publica em
+   * `kind`, o campo de compatibilidade que o APK em campo le.
+   */
+  readonly kinds: readonly TipoDeProfissional[];
   readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
   readonly about: string | null;
@@ -110,7 +117,14 @@ export interface VerificacaoPublica {
 /** `DirectoryEntrySummary` do contrato. */
 export interface EntradaPublica {
   readonly slug: string;
+  /**
+   * A PRIMEIRA atividade, **e ela existe para compatibilidade**. O APK
+   * publicado le `kind` como string; trocar o tipo dele por lista seria
+   * `response-property-type-changed` e quebraria a tela de quem ja tem o
+   * aplicativo instalado. Quem desenha a entrada nova le `kinds`.
+   */
   readonly kind: TipoDeProfissional;
+  readonly kinds: readonly TipoDeProfissional[];
   readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly city: string | null;
@@ -162,13 +176,32 @@ export function urlDaDerivada(
   return urlDeMidia(chave);
 }
 
+/**
+ * A ATIVIDADE PRINCIPAL: o primeiro item de `kinds`.
+ *
+ * **Uma funcao, e nao `kinds[0]` espalhado pelas projecoes.** Duas copias de
+ * "qual e a principal" divergiriam no dia em que a regra deixasse de ser "a
+ * primeira" -- e ela e so "a primeira" porque nada ainda pediu outra coisa.
+ *
+ * O `??` NUNCA dispara em dado vindo do banco: `professionals_atividades_tamanho`
+ * cobra minimo 1 e o caso de uso tambem. Ele existe porque o TIPO de um array
+ * nao carrega "nao vazio", e devolver `undefined` daqui poria `kind: undefined`
+ * numa resposta que o contrato declara `required` -- `'vet'` e errado de um jeito
+ * visivel, `undefined` desaparece.
+ */
+export function atividadePrincipal(kinds: readonly TipoDeProfissional[]): TipoDeProfissional {
+  return kinds[0] ?? 'vet';
+}
+
 export function projetarEntrada(
   entrada: EntradaDoDiretorio,
   urlDeMidia: (chave: string) => string,
 ): EntradaPublica {
   return {
     slug: entrada.slug,
-    kind: entrada.kind,
+    // `kind` e a PRIMEIRA de `kinds`, para o APK em campo. Ver `EntradaPublica`.
+    kind: atividadePrincipal(entrada.kinds),
+    kinds: [...entrada.kinds],
     entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     city: entrada.city,

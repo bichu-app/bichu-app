@@ -37,7 +37,7 @@ const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}
 function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio {
   return {
     slug: 'clinica-veterinaria-santa-barbara',
-    kind: 'clinic',
+    kinds: ['clinic'],
     entityKind: 'professional',
     displayName: 'Clínica Veterinária Santa Bárbara',
     about: 'Pronto atendimento 24 horas.',
@@ -156,7 +156,7 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 });
 
 void describe('a projecao publica da entrada', () => {
-  void it('devolve treze campos, e nenhum a mais', () => {
+  void it('devolve quatorze campos, e nenhum a mais', () => {
     // TREZE desde 21/10/2026, e cada acrescimo veio de um ramo DIFERENTE. As
     // justificativas ficam todas, porque as listas fechadas sao a mesma lista.
     //
@@ -178,6 +178,19 @@ void describe('a projecao publica da entrada', () => {
     //
     // (Doze seria o numero se `site_url` ficasse so no detalhe; a contagem
     // mudou com a decisao, e nao por acomodacao a um teste que reprovou.)
+    //
+    // `kinds` e o DECIMO QUARTO (`20261020000015`, decisao do cliente de
+    // 21/10/2026: atividades multiplas). **`kind` CONTINUA aqui ao lado dele, e
+    // os dois juntos nao sao duplicacao de dado -- sao duas idades de cliente:**
+    // `kind` e `kinds[0]` e existe porque o APK publicado le `kind` como string,
+    // e trocar o tipo dele seria `response-property-type-changed`, quebra para
+    // quem ja tem o aplicativo instalado. Quem desenha a tela nova le `kinds`.
+    // No dia em que nenhum APK em campo ler `kind`, ele sai -- e este caso e
+    // onde isso vai ser notado.
+    //
+    // Esta contagem subiu DUAS vezes em 21/10, por DUAS decisoes diferentes do
+    // cliente no mesmo dia (o site e as atividades multiplas). As duas razoes
+    // ficam escritas, porque a lista fechada e a mesma lista.
     const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }), URL_DE_MIDIA);
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
@@ -186,6 +199,7 @@ void describe('a projecao publica da entrada', () => {
       'distance_m',
       'entity_kind',
       'kind',
+      'kinds',
       'logo_url',
       'neighborhood',
       'phone_e164',
@@ -347,7 +361,7 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
     // E este o par que o eixo proprio existe para permitir: uma ONG que atende
     // como clinica e `organization` + `clinic`, e nao um terceiro valor de
     // `kind` que teria obrigado o APK instalado a entender valor novo.
-    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kind: 'clinic' }), URL_DE_MIDIA);
+    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kinds: ['clinic'] }), URL_DE_MIDIA);
     assert.equal(projetada.entity_kind, 'organization');
     assert.equal(projetada.kind, 'clinic');
   });
@@ -363,7 +377,7 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
     // exatamente pela regra que o eixo proprio evitou
     // (`response-property-enum-value-added`), e o APK receberia em `kind` um
     // valor que ele nao conhece.
-    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kind: 'vet' }), URL_DE_MIDIA);
+    const projetada = projetarEntrada(entrada({ entityKind: 'organization', kinds: ['vet'] }), URL_DE_MIDIA);
     assert.equal(projetada.kind, 'vet');
     assert.notEqual(projetada.kind, 'organization');
     assert.equal(projetada.entity_kind, 'organization');

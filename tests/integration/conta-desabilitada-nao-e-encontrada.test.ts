@@ -488,11 +488,11 @@ async function comMassaDaSegundaRodada(corpo: () => Promise<void>): Promise<void
   // mudanca: um `IS NOT NULL` no lugar da funcao apagaria do diretorio a
   // entrada de `source = 'import'`, que nunca teve dono.
   await cliente.query(
-    `insert into professionals (id, kind, display_name, source, status, claim_status,
+    `insert into professionals (id, kinds, display_name, source, status, claim_status,
                                claimed_at, claimed_by_user_id) values
-       ($1, 'vet', 'Clinica De Quem Sai',  'self',   'published', 'claimed',   now(), $2),
-       ($3, 'vet', 'Clinica De Quem Fica', 'self',   'published', 'claimed',   now(), $4),
-       ($5, 'vet', 'Clinica Importada',    'import', 'published', 'unclaimed', null,  null)`,
+       ($1, ARRAY['vet'], 'Clinica De Quem Sai',  'self',   'published', 'claimed',   now(), $2),
+       ($3, ARRAY['vet'], 'Clinica De Quem Fica', 'self',   'published', 'claimed',   now(), $4),
+       ($5, ARRAY['vet'], 'Clinica Importada',    'import', 'published', 'unclaimed', null,  null)`,
     [ENTRADA_DE_QUEM_SAI, QUE_SAI, ENTRADA_DE_QUEM_FICA, QUE_FICA, ENTRADA_SEM_TITULAR],
   );
   try {

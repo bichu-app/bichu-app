@@ -59,6 +59,7 @@
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
+import { atividadePrincipal } from './entrada-do-diretorio.js';
 import type { TipoDeEntidade, TipoDeProfissional } from './entrada-do-diretorio.js';
 import {
   evidenciasAprovadas,
@@ -155,7 +156,8 @@ export interface ImagemDaEntrada {
 /** A entrada como o repositorio administrativo a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaAdministrativa {
   readonly slug: string;
-  readonly kind: TipoDeProfissional;
+  /** AS ATIVIDADES, de 1 a 6 (cliente, 21/10/2026). Nunca vazia. */
+  readonly kinds: readonly TipoDeProfissional[];
   /** O QUE a entrada e. Eixo separado de `kind`, que e a ATIVIDADE. */
   readonly entityKind: TipoDeEntidade;
   readonly displayName: string;
@@ -210,7 +212,14 @@ export interface EntradaAdministrativa {
  */
 export interface CriacaoDaEntrada {
   readonly slug: string;
-  readonly kind: TipoDeProfissional;
+  /**
+   * AS ATIVIDADES (cliente, 21/10/2026). **Exatamente um dos dois**: `kinds`,
+   * ou `kind` -- que vale `[kind]` e e o caminho do painel antigo. Os dois
+   * juntos sao `400`; nenhum dos dois tambem.
+   */
+  readonly kinds?: readonly TipoDeProfissional[];
+  /** Equivale a `kinds: [kind]`. Aceito para o painel antigo. */
+  readonly kind?: TipoDeProfissional;
   /**
    * **Opcional, e ausente vale `professional`.** Obriga-lo quebraria o contrato
    * de REQUISICAO (`request-property-became-required`) e derrubaria o painel ja
@@ -244,6 +253,9 @@ export interface CriacaoDaEntrada {
  */
 export interface EdicaoDaEntrada {
   readonly slug?: string;
+  /** SUBSTITUI a lista inteira. Sem `| null`: a entrada nao existe sem atividade. */
+  readonly kinds?: readonly TipoDeProfissional[];
+  /** Equivale a `kinds: [kind]`, e portanto SUBSTITUI a lista. Painel antigo. */
   readonly kind?: TipoDeProfissional;
   /** Sem `| null`: a coluna e NOT NULL, como `slug`, `kind` e `display_name`. */
   readonly entity_kind?: TipoDeEntidade;
@@ -468,6 +480,89 @@ export const FORMA_DO_TELEFONE = /^\+[1-9][0-9]{7,14}$/;
  */
 export const TETO_DO_SITE = 'https://'.length + 253;
 
+/** O teto de atividades: o TAMANHO da lista fechada, e nao um numero redondo. */
+export const TETO_DE_ATIVIDADES = 6;
+
+/**
+ * As atividades que o corpo pediu, a partir de `kinds` OU de `kind`.
+ *
+ * **Uma funcao, usada na criacao e na edicao**, porque a regra de conflito e a
+ * mesma nas duas e duas copias dela divergiriam.
+ *
+ * - `kinds` e `kind` juntos: `kind_conflict`. **Nao se escolhe um vencedor em
+ *   silencio**: quem manda os dois esta dizendo duas coisas, e adivinhar qual
+ *   vale faria o painel gravar o que nao pediu.
+ * - so `kind`: vale `[kind]`. E o caminho do painel antigo, e e exatamente o que
+ *   `kind` sempre significou -- quando havia uma atividade so, "a atividade e
+ *   esta" e "a lista e esta" eram a mesma frase.
+ * - so `kinds`: vale como vem, depois das conferencias abaixo.
+ * - nenhum dos dois: `undefined`, e quem chama decide se isso e `required` (na
+ *   criacao) ou "nao mexer" (na edicao).
+ *
+ * AS DUAS CONFERENCIAS QUE O BANCO NAO FAZ:
+ *
+ * 1. **Repetido** (`duplicate_kind`). `CHECK` nao aceita subconsulta, entao
+ *    `cardinality = cardinality(DISTINCT)` nao cabe no banco. Sem esta linha,
+ *    `[vet, vet]` gravaria e o chip `vet` traria a entrada uma vez (o filtro e
+ *    de pertinencia) -- feio no painel e inutil em todo lugar.
+ * 2. **Vazia** (`kinds_empty`), que o banco tambem cobra
+ *    (`professionals_atividades_tamanho`), mas aqui a recusa tem o nome do campo
+ *    e lá seria um 500.
+ *
+ * O TETO tambem e conferido aqui (`too_many_kinds`), pelo mesmo motivo: o
+ * `CHECK` do banco e a rede embaixo, nao a mensagem.
+ */
+export function atividadesDoCorpo(
+  campo: string,
+  corpo: { readonly kinds?: readonly TipoDeProfissional[]; readonly kind?: TipoDeProfissional },
+):
+  | { readonly ok: readonly TipoDeProfissional[] | undefined }
+  | { readonly erros: ProblemFieldError[] } {
+  if (corpo.kinds !== undefined && corpo.kind !== undefined) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'kind_conflict',
+          message: 'Mande as atividades em `kinds`, e não os dois campos juntos.',
+        },
+      ],
+    };
+  }
+  if (corpo.kinds === undefined) {
+    return { ok: corpo.kind === undefined ? undefined : [corpo.kind] };
+  }
+  const lista = corpo.kinds;
+  if (lista.length === 0) {
+    return {
+      erros: [{ field: campo, code: 'kinds_empty', message: 'Escolha ao menos uma atividade.' }],
+    };
+  }
+  if (lista.length > TETO_DE_ATIVIDADES) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'too_many_kinds',
+          message: `Até ${String(TETO_DE_ATIVIDADES)} atividades.`,
+        },
+      ],
+    };
+  }
+  if (new Set(lista).size !== lista.length) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'duplicate_kind',
+          message: 'A mesma atividade apareceu duas vezes.',
+        },
+      ],
+    };
+  }
+  return { ok: lista };
+}
+
 /**
  * O SITE do estabelecimento (cliente, 21/10/2026).
  *
@@ -553,7 +648,9 @@ function projetarImagem(
 /** `AdminDirectoryEntry` do contrato. */
 export interface EntradaProjetada {
   readonly slug: string;
+  /** A PRIMEIRA de `kinds`, para compatibilidade. Ver `EntradaPublica.kind`. */
   readonly kind: TipoDeProfissional;
+  readonly kinds: readonly TipoDeProfissional[];
   readonly entity_kind: TipoDeEntidade;
   readonly display_name: string;
   readonly about: string | null;
@@ -593,7 +690,8 @@ export function projetarEntradaAdministrativa(
 ): EntradaProjetada {
   return {
     slug: entrada.slug,
-    kind: entrada.kind,
+    kind: atividadePrincipal(entrada.kinds),
+    kinds: [...entrada.kinds],
     entity_kind: entrada.entityKind,
     display_name: entrada.displayName,
     about: entrada.about,
@@ -645,7 +743,9 @@ export function projetarEntradaAdministrativa(
 export function retratoDaEntrada(entrada: EntradaAdministrativa): Record<string, unknown> {
   return {
     slug: entrada.slug,
-    kind: entrada.kind,
+    // A TRILHA guarda a LISTA, e nao a principal: ela existe para dizer o que
+    // mudou, e `kind` sozinho esconderia "passou a fazer banho e tosa".
+    kinds: [...entrada.kinds],
     display_name: entrada.displayName,
     about: entrada.about,
     city: entrada.city,

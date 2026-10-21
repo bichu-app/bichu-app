@@ -97,7 +97,7 @@ function clausulaWhere(sql: string): string {
 /** Uma entrada publicada em `São Paulo`, com o til e a maiuscula. */
 const ENTRADA_DE_SAO_PAULO: EntradaDoDiretorio = {
   slug: 'hospital-mais-pet',
-  kind: 'clinic',
+  kinds: ['clinic'],
   entityKind: 'professional',
   displayName: 'Hospital Mais Pet',
   about: null,

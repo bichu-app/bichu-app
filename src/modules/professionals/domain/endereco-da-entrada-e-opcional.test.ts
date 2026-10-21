@@ -39,7 +39,7 @@ const NASCEU_EM = Date.UTC(2026, 9, 18, 12, 0, 0) as Instant;
 /** Um autonomo publicavel: tem nome, endereco publico, cidade, UF e telefone, e **nenhuma rua**. */
 const AUTONOMO: EntradaAdministrativa = {
   slug: 'passeios-da-bia',
-  kind: 'walker',
+  kinds: ['walker'],
   entityKind: 'professional',
   displayName: 'Passeios da Bia',
   about: null,

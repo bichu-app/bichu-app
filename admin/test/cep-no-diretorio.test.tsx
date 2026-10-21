@@ -48,6 +48,7 @@ function entrada(extra: Partial<Esquemas['AdminDirectoryEntry']> = {}): Esquemas
   return {
     slug: 'passeios-da-bia',
     kind: 'walker',
+    kinds: ['walker'],
     // `entity_kind` passou a ser obrigatorio na resposta com o eixo do tipo
     // de entidade (`20261018000012`), e esta massa nasceu no ramo da midia,
     // antes dele. `professional` e o DEFAULT da coluna e o que toda entrada
@@ -86,7 +87,10 @@ function valorDoCampo(rotulo: string): string {
 
 async function preencherObrigatorios() {
   fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Passeios da Bia' } });
-  fireEvent.change(screen.getByLabelText('Atividade *'), { target: { value: 'walker' } });
+  // A ATIVIDADE VIROU CAIXA em 21/10/2026 (atividades multiplas, decisao do
+  // cliente): era um `<select>` com rotulo "Atividade *" e passou a ser um grupo
+  // de caixas dentro de um `fieldset` "Atividades *". Marcar e um clique.
+  fireEvent.click(screen.getByLabelText('Passeador'));
 }
 
 describe('CEP no formulario de entrada do diretorio', () => {

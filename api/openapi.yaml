@@ -4458,7 +4458,15 @@ paths:
           schema: { type: string, minLength: 2, maxLength: 80 }
         - name: kind
           in: query
-          description: Filtra por atividade.
+          description: |
+            Filtra por atividade, UMA por vez (e o chip da tela).
+
+            Desde 21/10/2026 a entrada tem VARIAS atividades, e este filtro
+            passou a ser um teste de PERTINENCIA: a entrada entra no resultado
+            quando a atividade pedida esta entre as dela. **A entrada com tres
+            atividades aparece nos tres chips e UMA VEZ em cada** -- a consulta
+            testa a lista em vez de desdobrar a linha, e por isso `total` nao
+            conta a mesma entrada duas vezes.
           schema: { $ref: '#/components/schemas/ProfessionalKind' }
         - name: verification_level
           in: query
@@ -9285,7 +9293,12 @@ paths:
           schema: { type: string, minLength: 3, maxLength: 80 }
         - name: kind
           in: query
-          description: Filtra pela atividade. Sem o parametro, vem todas.
+          description: |
+            Filtra pela atividade, UMA por vez. Sem o parametro, vem todas.
+
+            Desde 21/10/2026 e teste de PERTINENCIA sobre `kinds`: a entrada
+            entra quando a atividade pedida esta entre as dela, e sai UMA VEZ
+            por mais atividades que tenha.
           schema: { $ref: '#/components/schemas/ProfessionalKind' }
         - name: status
           in: query
@@ -14319,10 +14332,17 @@ components:
     ProfessionalKind:
       type: string
       description: |
-        A atividade: o que a entrada FAZ, o que se contrata dela. Espelha
-        `professionals.kind` e a entrada
-        `public.professionals.professionals_kind_check` do teste de conjunto
-        exato.
+        UMA atividade: o que a entrada FAZ, o que se contrata dela. Espelha os
+        valores de `professionals.kinds` e a entrada
+        `public.professionals.professionals_atividades_conhecidas` do teste de
+        conjunto exato.
+
+        **Desde 21/10/2026 a entrada tem VARIAS atividades** (decisao do
+        cliente): a coluna e uma lista, e quem quer todas le
+        `ProfessionalKinds`. Este schema continua descrevendo UM valor, e e
+        usado em tres papeis: cada item da lista, o filtro por chip (que filtra
+        por uma atividade de cada vez), e o campo `kind` de compatibilidade das
+        respostas.
 
         **Continua sem valor para ONG, e agora a ausencia e desenho concluido
         e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -14342,6 +14362,36 @@ components:
            (`organization`) -- os dois eixos ao mesmo tempo, e e por isso que
            um so campo nao os expressava.
       enum: [vet, groomer, walker, sitter, trainer, clinic]
+
+    ProfessionalKinds:
+      type: array
+      minItems: 1
+      maxItems: 6
+      uniqueItems: true
+      description: |
+        As ATIVIDADES da entrada, de 1 a 6 (decisao do cliente de 21/10/2026:
+        uma clinica que tambem faz banho e tosa nao precisa escolher). Espelha
+        `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
+        separador.
+
+        **A ORDEM IMPORTA, e so por uma razao:** o primeiro item e o que as
+        respostas publicam no campo `kind`, que existe para o APK em campo
+        continuar funcionando. Fora disso a lista nao tem hierarquia -- nao ha
+        "atividade secundaria" com regra propria, e o filtro por chip trata os
+        itens como iguais.
+
+        **TETO 6 = o tamanho da lista fechada.** Teto maior seria ficticio: nao
+        ha setimo valor para um setimo item carregar.
+
+        `uniqueItems` recusa `[vet, vet]` ja no schema; o servidor recusa o
+        mesmo com `400` (`code: duplicate_kind`), porque o `CHECK` do banco nao
+        alcanca unicidade de item (`CHECK` nao aceita subconsulta).
+
+        **FILTRAR por uma destas atividades devolve a entrada UMA VEZ**, e nao
+        uma vez por atividade: o filtro testa PERTINENCIA em vez de desdobrar a
+        linha. O estabelecimento com tres atividades aparece nos tres chips, uma
+        vez em cada, e o `total` da pagina nao o conta tres vezes.
+      items: { $ref: '#/components/schemas/ProfessionalKind' }
 
     EntityKind:
       type: string
@@ -14412,10 +14462,20 @@ components:
         como contagem e como existencia. A primeira e vigiada pelo portao de
         colunas que nao saem; a segunda, por nenhuma consulta de leitura a
         selecionar.
-      required: [slug, kind, entity_kind, display_name, verification]
+      required: [slug, kind, kinds, entity_kind, display_name, verification]
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
-        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: |
+            **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+            Desde 21/10/2026 a entrada tem varias atividades (decisao do
+            cliente); este campo continua aqui, e continua `required`, porque o
+            APK publicado o le e trocar o tipo dele seria
+            `response-property-type-changed` -- quebra para quem ja esta em
+            aparelho. Quem desenha a entrada nova usa `kinds`.
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
         entity_kind: { $ref: '#/components/schemas/EntityKind' }
         display_name: { type: string, maxLength: 120 }
         city: { type: string, nullable: true }
@@ -15327,7 +15387,7 @@ components:
 
     AdminDirectoryEntryInput:
       type: object
-      required: [slug, kind, display_name]
+      required: [slug, display_name]
       additionalProperties: false
       description: |
         O cadastro de uma entrada, **em rascunho**. Ver
@@ -15350,7 +15410,25 @@ components:
             exigir o endereco no cadastro move a recusa de conflito de nome
             para quem esta cadastrando, com o formulario na tela, em vez de
             para o momento de publicar.
-        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # AS ATIVIDADES (21/10/2026, decisao do cliente). **Mande `kinds`.**
+        #
+        # `kind` saiu de `required` e continua aceito: ele e o caminho do painel
+        # ja carregado no navegador de quem esta cadastrando AGORA, e tirar a
+        # chave seria `request-property-became-required` ao contrario -- recusa
+        # para um cliente que mandava o que o contrato pedia. Tornar o campo
+        # OPCIONAL e `request-property-became-optional`, que nao quebra.
+        #
+        # EXATAMENTE UM DOS DOIS: `kinds` sozinho, ou `kind` sozinho (que vale
+        # `[kind]`). Os dois juntos sao `400` (`code: kind_conflict`) em vez de
+        # um deles vencer em silencio; nenhum dos dois e `400`
+        # (`code: required`, campo `kinds`).
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: |
+            **Equivale a `kinds: [kind]`.** Aceito para o painel antigo; o
+            formulario de hoje manda `kinds`.
         entity_kind:
           allOf:
             - $ref: '#/components/schemas/EntityKind'
@@ -15471,7 +15549,22 @@ components:
           allOf:
             - $ref: '#/components/schemas/Slug'
           description: Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver.
-        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # AS ATIVIDADES. `kinds` SUBSTITUI a lista inteira -- nao ha "acrescentar
+        # uma atividade", pelo mesmo idioma de `images` da `Rede`: a lista que
+        # vem e a lista que fica.
+        #
+        # `kind` continua aceito e significa o que sempre significou: a entrada
+        # passa a ter AQUELA atividade e mais nenhuma (`kinds: [kind]`). Quando
+        # havia uma so, era exatamente isso -- entao o painel antigo nao muda de
+        # comportamento. Os dois juntos sao `400` (`code: kind_conflict`).
+        #
+        # **Nenhum dos dois aceita `null`**, como `slug` e `display_name`: a
+        # entrada nao existe sem atividade, e a coluna e `NOT NULL` com minimo 1.
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: '**Equivale a `kinds: [kind]`**, e portanto SUBSTITUI a lista inteira. Aceito para o painel antigo.'
         entity_kind:
           allOf:
             - $ref: '#/components/schemas/EntityKind'
@@ -15534,11 +15627,21 @@ components:
         na tabela, o painel nao os escreve, e devolve-los faria uma tela de
         cadastro mostrar documento de terceiro sem nenhuma necessidade.
       required:
-        [slug, kind, entity_kind, display_name, status, verification, source,
+        [slug, kind, kinds, entity_kind, display_name, status, verification, source,
          claim_status, missing_to_publish, created_at, updated_at, version]
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
-        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: |
+            **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+            Desde 21/10/2026 a entrada tem varias atividades (decisao do
+            cliente); este campo continua aqui, e continua `required`, porque o
+            APK publicado o le e trocar o tipo dele seria
+            `response-property-type-changed` -- quebra para quem ja esta em
+            aparelho. Quem desenha a entrada nova usa `kinds`.
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
         entity_kind: { $ref: '#/components/schemas/EntityKind' }
         display_name: { type: string, maxLength: 120 }
         about: { type: string, nullable: true, maxLength: 2000 }
@@ -15708,10 +15811,20 @@ components:
         **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
         quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
         (ADR-0010 item 6 e BICHUS-174).
-      required: [slug, kind, entity_kind, display_name, verification, rating]
+      required: [slug, kind, kinds, entity_kind, display_name, verification, rating]
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
-        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: |
+            **A PRIMEIRA atividade de `kinds`, e ele existe para compatibilidade.**
+            Desde 21/10/2026 a entrada tem varias atividades (decisao do
+            cliente); este campo continua aqui, e continua `required`, porque o
+            APK publicado o le e trocar o tipo dele seria
+            `response-property-type-changed` -- quebra para quem ja esta em
+            aparelho. Quem desenha a entrada nova usa `kinds`.
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
         entity_kind: { $ref: '#/components/schemas/EntityKind' }
         display_name: { type: string, maxLength: 120 }
         city: { type: string, nullable: true }

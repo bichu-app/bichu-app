@@ -62,7 +62,7 @@ const ID_DA_CLINICA = '0192a3b4-0000-7000-8000-0000000c1111';
 function entradaSemeada(): EntradaAdministrativa {
   return {
     slug: 'clinica-sao-jorge',
-    kind: 'clinic',
+    kinds: ['clinic'],
     entityKind: 'professional',
     displayName: 'Clínica Veterinária São Jorge',
     about: null,
@@ -131,7 +131,11 @@ function repositorioEmMemoria(): Memoria {
         const itens = [...linhas.values()].filter(
           (l) =>
             (recorte.status === undefined || l.status === recorte.status) &&
-            (recorte.kind === undefined || l.kind === recorte.kind),
+            // PERTINENCIA, como o adaptador de verdade (`= ANY(kinds)`). Igualdade
+            // aqui faria o dobre discordar do banco: a entrada de tres
+            // atividades nao apareceria no chip das outras duas, e o caso
+            // passaria num dobre que mente.
+            (recorte.kind === undefined || l.kinds.includes(recorte.kind)),
         );
         return Promise.resolve({ itens, total: itens.length });
       },
@@ -174,7 +178,7 @@ function repositorioEmMemoria(): Memoria {
         if ([...linhas.values()].some((l) => l.slug === nova.slug)) throw new SlugOcupado();
         const criada: EntradaAdministrativa = {
           slug: nova.slug,
-          kind: nova.kind,
+          kinds: nova.kinds,
           // O MESMO padrao do adaptador de verdade
           // (`kysely-diretorio-administrativo.ts`): ausente vale
           // `professional`. Repetido aqui de proposito -- um dobre que
@@ -213,7 +217,7 @@ function repositorioEmMemoria(): Memoria {
         const alterada: EntradaAdministrativa = {
           ...atual,
           ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
-          ...(mudanca.kind === undefined ? {} : { kind: mudanca.kind }),
+          ...(mudanca.kinds === undefined ? {} : { kinds: mudanca.kinds }),
           ...(mudanca.entityKind === undefined ? {} : { entityKind: mudanca.entityKind }),
           ...(mudanca.displayName === undefined ? {} : { displayName: mudanca.displayName }),
           ...(mudanca.about === undefined ? {} : { about: mudanca.about }),

@@ -368,12 +368,18 @@ export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
     // 1 -- nenhum perfil nasce sem o aceite de quem ele descreve.
     await sql`
       insert into professionals (
-        id, kind, display_name, about, city, state, neighborhood, geo,
+        id, kinds, display_name, about, city, state, neighborhood, geo,
         source, claim_status, claimed_by_user_id, claimed_at,
         verification_level, crmv_number, crmv_uf, cnpj, phone_e164,
         slug, status, published_at, created_at, updated_at
       ) values (
-        ${entrada.id}::uuid, ${entrada.kind}, ${entrada.displayName}, ${entrada.about},
+        -- ARRAY[kind]: a coluna e uma LISTA desde a migracao 20261020000015, e a
+        -- massa continua declarando UMA atividade por entrada. A conversao e aqui
+        -- e nao na massa de proposito: mudar a massa mudaria o que a QA confere, e
+        -- o que o cliente pediu foi a capacidade de ter varias, nao massa nova.
+        -- (Sem acento grave neste comentario: ele vive dentro de um template
+        -- literal de TypeScript, e um acento grave aqui o encerraria.)
+        ${entrada.id}::uuid, ARRAY[${entrada.kind}], ${entrada.displayName}, ${entrada.about},
         ${entrada.city}, ${entrada.state}, ${entrada.neighborhood}, ${pontoDaEntrada(entrada)},
         'self', 'claimed', ${entrada.titularId}::uuid, ${MOMENTO_DA_MASSA}::timestamptz,
         ${nivelDaEntrada(entrada)}, ${entrada.crmvNumber}, ${entrada.crmvUf},

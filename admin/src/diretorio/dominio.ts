@@ -5,7 +5,7 @@
  *
  * A `Loja` apagou o mapa fixo de categorias em 17/10/2026 porque o vocabulario
  * dela virou DADO (14 categorias, 83 subcategorias, semeadas no banco). Aqui e o
- * oposto, e por um motivo: `professionals.kind` e **lista fechada de `CHECK`**,
+ * oposto, e por um motivo: `professionals.kinds` e **lista fechada de `CHECK`**,
  * com seis valores, espelhada em `src/shared/db/schema.ts` e conferida por
  * `tests/integration/conjunto-exato-dos-checks.test.ts`. Ela nao cresce sem
  * migracao, e por isso o `satisfies Record<...>` abaixo vale como trava: se o

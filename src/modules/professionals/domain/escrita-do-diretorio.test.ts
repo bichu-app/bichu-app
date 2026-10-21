@@ -49,7 +49,7 @@ const MEXERAM_EM = Date.UTC(2026, 9, 2, 12, 0, 0) as Instant;
 
 const COMPLETA: EntradaAdministrativa = {
   slug: 'clinica-sao-jorge',
-  kind: 'clinic',
+  kinds: ['clinic'],
   entityKind: 'professional',
   displayName: 'Clínica Veterinária São Jorge',
   about: null,
@@ -80,7 +80,7 @@ const COMPLETA: EntradaAdministrativa = {
 const RASCUNHO_INCOMPLETO: EntradaAdministrativa = {
   ...COMPLETA,
   slug: 'passeios-da-bia',
-  kind: 'walker',
+  kinds: ['walker'],
   displayName: 'Passeios da Bia',
   city: null,
   state: null,

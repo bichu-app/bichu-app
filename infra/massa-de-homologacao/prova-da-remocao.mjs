@@ -323,10 +323,10 @@ async function principal() {
     );
     const profDele = randomUUID();
     await cliente.query(
-      `insert into professionals (id, kind, display_name, city, state, source,
+      `insert into professionals (id, kinds, display_name, city, state, source,
                                   claim_status, claimed_by_user_id, claimed_at, slug,
                                   status, published_at, phone_e164)
-       values ($1, 'vet', 'Clinica de verdade', 'Sao Paulo', 'SP', 'self',
+       values ($1, ARRAY['vet'], 'Clinica de verdade', 'Sao Paulo', 'SP', 'self',
                'claimed', $2, now(), 'clinica-de-verdade', 'published', now(), '+5511999990000')`,
       [profDele, deFora.usuarios[0]],
     );
@@ -413,10 +413,10 @@ async function principal() {
     for (const entrada of profissionais()) {
       const id = randomUUID();
       await cliente.query(
-        `insert into professionals (id, kind, entity_kind, display_name, city, state,
+        `insert into professionals (id, kinds, entity_kind, display_name, city, state,
                                     neighborhood, geo, source, claim_status, slug,
                                     status, published_at, phone_e164)
-         values ($1, $2, $3, $4, $5, $6, $7,
+         values ($1, ARRAY[$2], $3, $4, $5, $6, $7,
                  case when $8::float8 is null then null
                       else ST_SetSRID(ST_MakePoint($8::float8, $9::float8), 4326)::geography end,
                  'import', 'unclaimed', $10, 'published', now(), $11)`,
