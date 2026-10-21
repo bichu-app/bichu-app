@@ -1,0 +1,216 @@
+{
+  "versao": 1,
+  "gerado_em": "2026-10-21",
+  "base": "70f4aa34b4e9f9fd2eb436f656bc114e607eaba3",
+  "por_que_existe": "Qualidade de busca se mede, nao se afirma. Sem este conjunto toda mudanca no motor e palpite e toda regressao e invisivel. Cada caso diz o que a pessoa digita, qual registro tem de aparecer e em que posicao. O conjunto e o contrato de qualidade do motor: ele reprova, nao opina.",
+  "corpus": {
+    "gerador": "gerar-corpus.py",
+    "semente": 20261021,
+    "tabela": "professionals",
+    "volumes": [10000, 100000],
+    "alvos_sao_unicos": true,
+    "nota": "Os nomes dos alvos usam tokens reservados, excluidos dos sorteios, para que a resposta esperada seja UMA linha identificavel pela string exata."
+  },
+  "escala_de_posicao": {
+    "1": "primeiro resultado",
+    "<=5": "visivel sem rolar a lista",
+    "<=20": "na primeira pagina",
+    "0": "nao deve aparecer"
+  },
+  "casos": [
+    {
+      "id": "ACE-01", "categoria": "acento ausente", "campo": "diretorio.q",
+      "consulta": "clinica veterinaria sao francisco",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "O teclado do celular nao acentua sozinho. Este e o caso mais comum do produto, nao um caso de borda."
+    },
+    {
+      "id": "ACE-02", "categoria": "acento sobrando / acento errado", "campo": "diretorio.q",
+      "consulta": "clínicá veterinariá sao francísco",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Quem acentua a mao acentua errado. A normalizacao tem de tirar acento dos DOIS lados, nao so do lado indexado."
+    },
+    {
+      "id": "ACE-03", "categoria": "caixa trocada", "campo": "diretorio.q",
+      "consulta": "CLÍNICA VETERINÁRIA SÃO FRANCISCO",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Caps Lock preso, ou copiar e colar de uma fachada."
+    },
+    {
+      "id": "ACE-04", "categoria": "caixa alternada", "campo": "diretorio.q",
+      "consulta": "cLíNiCa VeTeRiNáRiA sÃo FrAnCiScO",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Controle da normalizacao de caixa: tem de ser total, nao so a primeira letra."
+    },
+
+    {
+      "id": "ERR-01", "categoria": "erro de digitacao: uma letra transposta", "campo": "diretorio.q",
+      "consulta": "clinica veterinaria sao francsico",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Transposicao e o erro de digitacao mais frequente no polegar. `LIKE` por substring NAO tolera: uma letra fora de ordem e substring diferente."
+    },
+    {
+      "id": "ERR-02", "categoria": "erro de digitacao: letra faltando", "campo": "diretorio.q",
+      "consulta": "clinica vetrinaria sao francisco",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Letra engolida. Mesmo motivo: substring exige a cadeia inteira."
+    },
+    {
+      "id": "ERR-03", "categoria": "erro de digitacao: uma letra trocada", "campo": "diretorio.q",
+      "consulta": "clinica veterinaria sao franscisco",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 1,
+      "por_que": "Tecla vizinha."
+    },
+    {
+      "id": "ERR-04", "categoria": "erro de digitacao: duas letras", "campo": "diretorio.q",
+      "consulta": "clinica vetirinaria sao franscisco",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 5,
+      "por_que": "Dois erros num termo longo. Aqui a exigencia afrouxa de propria vontade: posicao <=5 e suficiente, porque com dois erros o motor tem direito a duvida."
+    },
+    {
+      "id": "ERR-05", "categoria": "erro de digitacao em termo curto", "campo": "diretorio.q",
+      "consulta": "vacinacsao",
+      "alvo": "Vacinação Animal Vila Mariana", "posicao_esperada": 1,
+      "por_que": "Termo curto com um erro e o caso em que a semelhanca por trigrama rende mais: poucos trigramas, e quase todos ainda casam."
+    },
+
+    {
+      "id": "PAR-01", "categoria": "termo parcial", "campo": "diretorio.q",
+      "consulta": "vacin",
+      "alvo": "Vacinação Animal Vila Mariana", "posicao_esperada": 1,
+      "por_que": "A pessoa para de digitar assim que ve o que quer. O motor tem de responder no meio da palavra."
+    },
+    {
+      "id": "PAR-02", "categoria": "termo parcial de tres letras", "campo": "diretorio.q",
+      "consulta": "vet",
+      "alvo": null, "espera_resultados": true, "posicao_esperada": null,
+      "por_que": "Tres letras e o PISO do trigrama e o minimo declarado no contrato. O caso nao fixa alvo: ele mede quantas linhas voltam e em que ordem, para mostrar que sem relevancia a primeira pagina de `vet` e arbitraria."
+    },
+    {
+      "id": "PAR-03", "categoria": "termo parcial abaixo do piso", "campo": "diretorio.q",
+      "consulta": "ve",
+      "alvo": null, "espera_recusa": true,
+      "por_que": "Duas letras nao produzem trigrama nenhum e a consulta vira varredura da tabela inteira. O motor tem de RECUSAR, nao atender devagar."
+    },
+
+    {
+      "id": "CMP-01", "categoria": "termo composto em campos diferentes", "campo": "diretorio.q",
+      "consulta": "vet vila mariana",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 5,
+      "por_que": "`vet` esta no nome e `vila mariana` esta no BAIRRO. Nenhum registro tem a cadeia inteira no nome, entao um motor de campo unico devolve vazio para a consulta mais natural que existe: o que eu quero e onde."
+    },
+    {
+      "id": "CMP-02", "categoria": "termo composto nome + cidade", "campo": "diretorio.q",
+      "consulta": "zoonoses sao paulo",
+      "alvo": "Zoonoses Vet", "posicao_esperada": 5,
+      "por_que": "Nome mais cidade. Mesmo defeito do CMP-01, com a cidade no lugar do bairro."
+    },
+    {
+      "id": "CMP-03", "categoria": "termo composto fora de ordem", "campo": "diretorio.q",
+      "consulta": "francisco clinica",
+      "alvo": "Clínica Veterinária São Francisco", "posicao_esperada": 5,
+      "por_que": "As palavras certas na ordem errada. Substring exige a ordem; busca por palavra nao."
+    },
+
+    {
+      "id": "PLU-01", "categoria": "plural digitado, singular guardado", "campo": "diretorio.q",
+      "consulta": "cães",
+      "alvo": "Casa do Cão - Banho e Tosa", "posicao_esperada": 5,
+      "por_que": "`caes` e `cao` nao compartilham trigrama util. E o UNICO caso do conjunto em que radicalizacao (stemming) ganha de trigrama -- e por isso ele existe: ele e a prova de que a decisao trigrama-contra-texto-completo nao e unanime."
+    },
+    {
+      "id": "PLU-02", "categoria": "singular digitado, plural guardado", "campo": "diretorio.q",
+      "consulta": "pata",
+      "alvo": "Adestramento Quatro Patas Niterói", "posicao_esperada": 20,
+      "por_que": "Aqui o plural e so um `s` no fim, e substring resolve de graca. Serve de contraste com PLU-01: nem todo plural e o mesmo problema."
+    },
+
+    {
+      "id": "PON-01", "categoria": "hifen omitido", "campo": "diretorio.q",
+      "consulta": "bem estar animal",
+      "alvo": "Pet Shop Bem-Estar Animal", "posicao_esperada": 1,
+      "por_que": "Ninguem digita o hifen. O nome guardado tem; a consulta nao."
+    },
+    {
+      "id": "PON-02", "categoria": "hifen digitado", "campo": "diretorio.q",
+      "consulta": "bem-estar animal",
+      "alvo": "Pet Shop Bem-Estar Animal", "posicao_esperada": 1,
+      "por_que": "O contrario do PON-01. Os dois tem de achar, ou a pontuacao decide a busca."
+    },
+    {
+      "id": "PON-03", "categoria": "apostrofo omitido", "campo": "diretorio.q",
+      "consulta": "dangelo",
+      "alvo": "Clínica D'Angelo", "posicao_esperada": 1,
+      "por_que": "Apostrofo em nome proprio e comum no Brasil e ninguem o digita."
+    },
+    {
+      "id": "PON-04", "categoria": "apostrofo virou espaco", "campo": "diretorio.q",
+      "consulta": "d angelo",
+      "alvo": "Clínica D'Angelo", "posicao_esperada": 1,
+      "por_que": "A outra forma de errar o apostrofo."
+    },
+    {
+      "id": "PON-05", "categoria": "apostrofo digitado", "campo": "diretorio.q",
+      "consulta": "d'angelo",
+      "alvo": "Clínica D'Angelo", "posicao_esperada": 1,
+      "por_que": "Controle positivo da pontuacao: a forma exata tem de achar."
+    },
+    {
+      "id": "PON-06", "categoria": "travessao no nome", "campo": "diretorio.q",
+      "consulta": "casa do cao banho e tosa",
+      "alvo": "Casa do Cão - Banho e Tosa", "posicao_esperada": 1,
+      "por_que": "O nome guardado tem ` - ` no meio; a pessoa le a fachada e digita corrido."
+    },
+
+    {
+      "id": "REL-01", "categoria": "relevancia: nome exato contra nome que contem", "campo": "diretorio.q",
+      "consulta": "zoonoses vet",
+      "alvo": "Zoonoses Vet", "posicao_esperada": 1,
+      "concorrente": "Amor Animal Zoonoses Vet Clínica",
+      "por_que": "AS DUAS LINHAS CASAM POR SUBSTRING COM O MESMO DIREITO. Quem digita `zoonoses vet` quer a que se CHAMA isso. A ordenacao alfabetica de hoje devolve `Amor...` primeiro porque A < Z. Nenhum ajuste de limiar conserta: e ordenacao, nao casamento. Este caso e a prova de que falta relevancia."
+    },
+    {
+      "id": "REL-02", "categoria": "relevancia: prefixo ganha de meio da palavra", "campo": "diretorio.q",
+      "consulta": "vacinacao",
+      "alvo": "Vacinação Animal Vila Mariana", "posicao_esperada": 1,
+      "por_que": "O termo e o comeco do nome. Comeco do nome vale mais que meio, e o motor tem de saber disso."
+    },
+
+    {
+      "id": "NEG-01", "categoria": "controle negativo: nao existe", "campo": "diretorio.q",
+      "consulta": "xilofone quantico",
+      "alvo": null, "espera_zero": true,
+      "por_que": "SEM CONTROLE NEGATIVO O MOTOR QUE DEVOLVE TUDO ACERTA SEMPRE. Este caso e o que impede o recuo de limiar de virar 'devolve o catalogo'."
+    },
+    {
+      "id": "NEG-02", "categoria": "controle negativo: cadeia improvavel", "campo": "diretorio.q",
+      "consulta": "zzqwxkj",
+      "alvo": null, "espera_zero": true,
+      "por_que": "Segundo controle negativo, sem nenhuma palavra real dentro: pega o recuo que afrouxa demais."
+    },
+    {
+      "id": "NEG-03", "categoria": "controle negativo: curinga de LIKE", "campo": "diretorio.q",
+      "consulta": "%%%",
+      "alvo": null, "espera_zero": true,
+      "por_que": "`q=%` e a varredura do catalogo inteiro mais barata que existe, e sem nenhum caractere suspeito na URL. `padrao_de_busca` neutraliza; este caso prova que continua neutralizando."
+    },
+    {
+      "id": "NEG-04", "categoria": "controle negativo: curinga de uma posicao", "campo": "diretorio.q",
+      "consulta": "___",
+      "alvo": null, "espera_zero": true,
+      "por_que": "O outro curinga de `LIKE`. Tres caracteres, entao passa o minimo -- e por isso precisa de caso proprio."
+    },
+    {
+      "id": "NEG-05", "categoria": "controle negativo: nao publicado nao aparece", "campo": "diretorio.q",
+      "consulta": "rascunho oculto",
+      "alvo": null, "espera_zero": true,
+      "por_que": "O registro EXISTE e casa o termo, e esta em `draft`. Busca e o caminho em que esquecer o filtro de publicacao custa mais caro: quem digita o nome exato ja sabe o nome e so quer saber se existe."
+    },
+    {
+      "id": "NEG-06", "categoria": "controle negativo: barra invertida", "campo": "diretorio.q",
+      "consulta": "\\\\\\\\",
+      "alvo": null, "espera_zero": true,
+      "por_que": "O caractere de escape do proprio `LIKE`. Se a ordem das trocas em `padrao_de_busca` estiver errada, este caso quebra."
+    }
+  ]
+}
