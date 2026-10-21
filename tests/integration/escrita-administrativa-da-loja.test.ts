@@ -241,6 +241,39 @@ after(async () => {
     await banco.db.deleteFrom('catalog_upload_intents').where('admin_account_id', '=', autor.adminAccountId).execute();
     await banco.db.deleteFrom('store_tags').where('label', 'like', 'Tg %').execute();
     if (fotoDePet !== undefined) {
+      // ========================================================================
+      // 21/10: A ORDEM DE CADEADOS ABAIXO NÃO RESOLVEU, E NÃO TINHA COMO
+      // ========================================================================
+      // O que está escrito depois desta cerca continua verdadeiro sobre as
+      // tabelas e sobre a ordem — e continua **insuficiente**, e isso foi
+      // medido: o `deadlock detected` (40P01) voltou em 4 de 9 reprovações de
+      // uma execução de 21/10, com a assinatura idêntica, já com esta ordem de
+      // pé.
+      //
+      // O motivo de não ter como: a ordem inversa não está em UM arquivo, está
+      // em quase todos. Dois arquivos fazem DDL em tabela que o resto escreve
+      // (`chave-estrangeira-contra-restricao` trava
+      // `conversation_messages, users` em ACCESS EXCLUSIVE e derruba uma chave
+      // estrangeira; `cadastros-separados` derruba a restrição de
+      // `user_roles` e cria tabela que referencia `users`), e ACCESS
+      // EXCLUSIVE conflita com TUDO — inclusive com quem só lê. Do outro lado
+      // está o `delete from users` de limpeza de **42 dos 51 arquivos** (contado
+      // em 21/10; 43 escrevem em `users`). Ordenar cadeado aqui conserta um par
+      // de dezenas.
+      //
+      // O que resolveu foi tirar a simultaneidade: desde 21/10 a suíte roda
+      // **um arquivo de cada vez** (`CONCORRENCIA_PADRAO` em
+      // `infra/integracao/executar-suite.mjs`, que registra a medição). Sem
+      // duas sessões não há ciclo, e a classe deixou de existir em vez de ficar
+      // mais rara — rara é pior aqui, porque foi assim que uma reprovação
+      // fantasma foi atribuída a uma mudança inocente.
+      //
+      // O `lock table` abaixo fica: ele não custa nada com um arquivo de cada
+      // vez, e é a única coisa de pé se alguém voltar a subir a concorrência.
+      // Mas quem voltar a ver 40P01 aqui **não deve** mexer na ordem de novo —
+      // já se tentou duas vezes. Leia o cabeçalho de `CONCORRENCIA_PADRAO`.
+      // ========================================================================
+      //
       // ORDEM FIXA DE CADEADOS, e nao repeticao. O `delete from users` cascateia
       // para as filhas de `users` e toma o cadeado delas DEPOIS do de `users`
       // (pai -> filha). Dois arquivos que rodam em paralelo tomam na ordem

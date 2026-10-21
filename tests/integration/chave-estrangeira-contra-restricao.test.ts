@@ -2816,7 +2816,22 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
     //     -> SEGURA users (RowExclusive), ESPERA conversation_messages (RowExclusive)
     //
     // Filha→pai numa, pai→filha na outra. Qualquer ordem que esta função
-    // escolhesse fecharia ciclo com uma das duas. Pedir as duas num `lock table`
+    // escolhesse fecharia ciclo com uma das duas.
+    //
+    // **E o outro lado não é um arquivo: são 42.** Contado em 21/10 em
+    // `tests/integration/`: 42 dos 51 arquivos apagam `users` na limpeza e 43
+    // escrevem nela. Ordenar cadeado aqui, ou lá, conserta um par de dezenas —
+    // e foi essa a tentativa registrada no `after` de
+    // `escrita-administrativa-da-loja.test.ts`, que não resolveu porque não
+    // tinha como. Quem for mexer em ordem de trava de novo, leia aquele
+    // comentário primeiro: a tentativa já foi feita duas vezes.
+    //
+    // **O que resolveu foi tirar a simultaneidade, e isso não é o mesmo que a
+    // causa ter sumido.** Desde 21/10 a suíte roda um arquivo de cada vez
+    // (`CONCORRENCIA_PADRAO` em `infra/integracao/executar-suite.mjs`, com a
+    // medição no cabeçalho). Sem duas sessões não há ciclo. O ciclo continua
+    // exprimível no banco: no dia em que alguém voltar a paralelizar arquivo,
+    // ele volta no primeiro dia, e a repetição abaixo é o que ainda segura. Pedir as duas num `lock table`
     // só também não é atômico: ele adquire em sequência e pode ficar segurando a
     // primeira enquanto espera a segunda.
     //
