@@ -59,6 +59,7 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     neighborhood: 'Pinheiros',
     city: 'São Paulo',
     state: 'SP',
+    origem: 'admin',
     startsAt: (AGORA + UMA_HORA) as Instant,
     endsAt: (AGORA + 3 * UMA_HORA) as Instant,
     timeZone: 'America/Sao_Paulo',
@@ -269,6 +270,12 @@ void describe('a projecao do encontro', () => {
       'instagram_handle',
       'instagram_url',
       'notes',
+      // A ORIGEM (`admin` | `community`), de 20/10/2026. Ela entra nesta
+      // lista porque esta lista E a isca: campo a mais sem alarme e como a
+      // resposta se afasta do documento. **Nao e campo com pessoa** -- o caso
+      // `NAO devolve UUID nem campo com pessoas`, logo abaixo, continua verde,
+      // e `created_by_user_id` segue fora da projecao e fora do SELECT.
+      'origin',
       'place',
       'slug',
       'starts_at',

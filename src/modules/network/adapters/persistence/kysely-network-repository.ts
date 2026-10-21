@@ -46,7 +46,12 @@
 import { randomBytes } from 'node:crypto';
 import { sql, type Expression, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
-import type { EstruturaDoLocal, IdadeDosCaes, ItemParaLevar } from '../../../../shared/db/schema.js';
+import type {
+  EstruturaDoLocal,
+  IdadeDosCaes,
+  ItemParaLevar,
+  OrigemDoEncontro,
+} from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { EncontroDaRede, PublicacaoVisivel } from '../../domain/encontro-da-rede.js';
 import { slugDoTitulo, sufixoCurto, urlDoInstagram } from '../../domain/escrita-do-encontro.js';
@@ -112,6 +117,7 @@ interface LinhaDoEncontro {
   time_zone: string;
   publication_status: PublicacaoVisivel;
   visibility: 'public' | 'private';
+  origin: OrigemDoEncontro;
   admission_kind: 'free' | 'paid';
   admission_amount: number | null;
   admission_currency: 'BRL' | null;
@@ -156,6 +162,10 @@ function colunasDoEncontro() {
     'e.time_zone as time_zone',
     'e.publication_status as publication_status',
     'e.visibility as visibility',
+    // A ORIGEM, e **nao a autoria**: `admin` ou `community`, dois valores
+    // fixos. `created_by_user_id` continua fora desta lista, que e o que o
+    // comentario acima quer dizer com "a coluna de autoria".
+    'e.origin as origin',
     'e.admission_kind as admission_kind',
     'e.admission_amount as admission_amount',
     'e.admission_currency as admission_currency',
@@ -1095,6 +1105,7 @@ function comoEncontro(
     endsAt: linha.ends_at === null ? null : (linha.ends_at.getTime() as Instant),
     timeZone: linha.time_zone,
     publicacao: linha.publication_status,
+    origem: linha.origin,
     dataLocal: linha.local_date,
     visibilidade: linha.visibility,
     entrada:

@@ -10537,7 +10537,35 @@ export interface components {
              * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
+            origin?: components["schemas"]["NetworkEventOrigin"];
         };
+        /**
+         * @description Quem CADASTROU o encontro: `admin` (a equipe, pelo painel) ou
+         *     `community` (uma conta do app, ADR-0025 emenda 3).
+         *
+         *     ## Nao e o autor, e a diferenca e o motivo de este campo existir
+         *
+         *     `created_by_user_id` e `created_by_admin_id` **nunca saem do
+         *     servidor** (ADR-0025 secao 3, ADR-0027 apendice A.4), e
+         *     `portao-colunas-que-nao-saem.ts` varre `src/` pelo nome literal
+         *     delas. Este campo nao os contorna: ele diz a ORIGEM, que e um de dois
+         *     valores fixos, e nao identifica pessoa nenhuma -- nem por nome, nem por
+         *     id, nem por contagem.
+         *
+         *     ## Por que ele passou a sair na leitura publica (20/10/2026)
+         *
+         *     Ate aqui ele existia so em `AdminNetworkEvent`, e o app, sem ter como
+         *     saber a origem, escrevia **"Cadastrado pela equipe do Bichu"
+         *     incondicionalmente** -- inclusive em encontro proposto pela
+         *     comunidade. Era rotulo afirmando autoria que o dado nao provava, a
+         *     mesma classe de defeito que trocou "Organizado" por "Cadastrado" no
+         *     mesmo dia, com o agravante de a afirmacao estar ERRADA.
+         *
+         *     **Opcional, e a ausencia e o comportamento de antes**: cliente que nao
+         *     o entenda continua lendo o encontro como lia.
+         * @enum {string}
+         */
+        NetworkEventOrigin: "admin" | "community";
         /**
          * @description O encontro **privado**, para quem nao tem pedido aprovado: **so titulo e
          *     data** (decisao do cliente, ADR-0027 12.10). **Lista permitida**: estas
@@ -11713,16 +11741,7 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /**
-             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
-             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
-             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
-             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
-             *     e o que faz a fila de moderacao distinguir o que ela esta
-             *     revisando.
-             * @enum {string}
-             */
-            origin: "admin" | "community";
+            origin: components["schemas"]["NetworkEventOrigin"];
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];

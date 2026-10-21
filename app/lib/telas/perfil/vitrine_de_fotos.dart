@@ -14,6 +14,7 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/visualizador_de_imagem.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
 ///
@@ -112,6 +113,10 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
   static const String textoDoVazio = 'Adicione uma foto para começar a sua vitrine.';
 
   static const String recadoDeFotoQueNaoAbriu = 'Não deu para mostrar esta foto.';
+
+  /// O que o toque na celula faz. Vai em `hint`, e nao no nome: o leitor de
+  /// tela espera a ACAO ali, e o NOME da celula e o texto alternativo da foto.
+  static const String dicaDeAmpliar = 'Ampliar';
 
   static const String rotuloDaCapa = 'Capa';
 
@@ -643,13 +648,38 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
+  /// Uma celula da grade, **tocavel quando ha a foto ABERTA**.
+  ///
+  /// ## A derivada da foto aberta existia desde antes da tela que a abre
+  ///
+  /// `DERIVADAS_DA_VITRINE_DO_USUARIO` declara `card` 1024 x 1024 e a
+  /// descreve, por escrito, como *"a foto ABERTA, que e a unica que a pessoa
+  /// olha grande, e portanto a unica que mira a faixa de 300-500 KB"*. O
+  /// contrato a entrega em `open_url`, e `FotoDaVitrineLida.urlAberta` a
+  /// decodifica desde que o modelo existe.
+  ///
+  /// **E nenhuma celula tinha `onTap`.** O app baixava 320 px para a grade,
+  /// guardava 1024 px no balde, e nao havia gesto que os mostrasse. Medido em
+  /// 20/10/2026, ao procurar visualizador para reusar no evento: nao havia
+  /// visualizador NENHUM no app -- nem `InteractiveViewer`, nem `photo_view`,
+  /// nem `Hero`, nem um `onDoubleTap`.
+  ///
+  /// Agora ha um, em `widgets/visualizador_de_imagem.dart`, e foi posto em
+  /// `widgets/` exactamente para esta segunda superficie nao o duplicar.
+  ///
+  /// ## Celula SEM foto nao oferece toque
+  ///
+  /// `processing` e `rejected` nao tem `open_url`, e a celula desenha o
+  /// ESTADO em texto. Envolve-la num `InkWell` faria um quadrado que pinta
+  /// respingo, se anuncia como botao e abre uma tela preta. A guarda e a
+  /// ausencia da URL, e nao o enum: `ready` sem derivada e estado possivel.
   Widget _celula(FotoDaVitrineLida foto, BichuCores cores, TextTheme textos) {
     final moldura = BoxDecoration(
       color: cores.surfaceSunken,
       borderRadius: BorderRadius.circular(BichuRaio.sm),
     );
 
-    return ClipRRect(
+    final conteudo = ClipRRect(
       borderRadius: BorderRadius.circular(BichuRaio.sm),
       child: Stack(
         fit: StackFit.expand,
@@ -681,6 +711,28 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
               ),
             ),
         ],
+      ),
+    );
+
+    final aberta = foto.urlAberta;
+    if (aberta == null || aberta.isEmpty) return conteudo;
+
+    // **SEM `excludeSemantics`, ao contrario da capa do evento**, e a
+    // diferenca e de conteudo e nao de gosto: ali dentro ha DOIS nos que
+    // valem -- o texto alternativo da foto e o rotulo `Capa` --, e excluir
+    // calaria o segundo. O `Semantics` daqui so acrescenta a FUNCAO (botao) e
+    // a ACAO (`hint`); o NOME continua vindo de dentro.
+    return Semantics(
+      button: true,
+      hint: VitrineDeFotosDoUsuario.dicaDeAmpliar,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(BichuRaio.sm),
+        onTap: () => VisualizadorDeImagem.abrir(
+          context,
+          url: aberta,
+          textoAlternativo: foto.textoAlternativo,
+        ),
+        child: conteudo,
       ),
     );
   }

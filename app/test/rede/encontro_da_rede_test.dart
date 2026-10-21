@@ -31,6 +31,7 @@
 
 import 'package:bichu/dispositivo/saida_do_app.dart';
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/rede/encontro_da_rede.dart';
 import 'package:bichu/telas/rede/local_do_encontro.dart';
 import 'package:bichu/telas/rede/pecas_da_rede.dart';
 import 'package:bichu/widgets/visualizador_de_imagem.dart';
@@ -203,7 +204,7 @@ void main() {
       );
 
       expect(find.text(tituloPublico), findsOneWidget);
-      expect(find.text('Cadastrado pela equipe do Bichu'), findsOneWidget);
+      expect(find.text(TelaDoEncontro.cadastradoPelaEquipe), findsOneWidget);
       expect(find.text('Gratuito'), findsOneWidget);
       expect(find.text('Sábado, 3 de outubro'), findsOneWidget);
       expect(find.text('Das 9h às 11h · 2 horas'), findsOneWidget);
@@ -621,6 +622,69 @@ void main() {
         findsNothing,
         reason: 'REPROVA: a ficha sem foto abriu a imagem ampliada.',
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A LINHA DA ORIGEM NAO MENTE (20/10/2026)
+  // -------------------------------------------------------------------------
+  // Ate aqui a ficha escrevia *"Cadastrado pela equipe do Bichu"*
+  // **incondicionalmente** -- inclusive em encontro proposto pela comunidade --
+  // porque `NetworkEventPublic` nao trazia a origem e o literal era um so.
+  // Rotulo afirmando autoria que o dado nao provava, e a afirmacao estava
+  // ERRADA metade das vezes.
+  //
+  // O campo `origin` ja existia na coluna e no painel; o que mudou e que ele
+  // passou a sair tambem na leitura publica. Ele e a ORIGEM (`admin` ou
+  // `community`), e **nao o autor**: `created_by_user_id` continua sem sair
+  // do servidor, e nenhum destes tres casos pede nome de pessoa nenhuma.
+  group('a linha da origem', () {
+    testWidgets('evento da EQUIPE diz equipe do Bichu', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(origin: 'admin')),
+      );
+      expect(find.text(TelaDoEncontro.cadastradoPelaEquipe), findsOneWidget);
+      expect(find.text(TelaDoEncontro.cadastradoPelaComunidade), findsNothing);
+    });
+
+    testWidgets('evento da COMUNIDADE não diz equipe do Bichu', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(origin: 'community')),
+      );
+      expect(
+        find.text(TelaDoEncontro.cadastradoPelaComunidade),
+        findsOneWidget,
+        reason: 'REPROVA: evento da comunidade não disse que veio da comunidade.',
+      );
+      expect(
+        find.text(TelaDoEncontro.cadastradoPelaEquipe),
+        findsNothing,
+        reason: 'REPROVA: a ficha atribuiu à equipe do Bichu um evento da comunidade.',
+      );
+    });
+
+    testWidgets('sem origem a ficha CALA, e não chuta a equipe', (tester) async {
+      // `origin: ''` monta o encontro SEM o campo, que e o gravado antes de
+      // 20/10/2026. Cair na equipe aqui seria repor o defeito com outra roupa.
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(origin: '')),
+      );
+      expect(find.text(tituloPublico), findsOneWidget);
+      expect(
+        find.text(TelaDoEncontro.cadastradoPelaEquipe),
+        findsNothing,
+        reason: 'REPROVA: sem origem no contrato, a ficha chutou a equipe do Bichu.',
+      );
+      expect(find.text(TelaDoEncontro.cadastradoPelaComunidade), findsNothing);
     });
   });
 }

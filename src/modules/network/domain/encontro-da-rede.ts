@@ -31,6 +31,7 @@
  * proibidos nesta camada (`src/architecture.rules.mjs`).
  */
 
+import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import { comoIso } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
@@ -71,6 +72,15 @@ export interface EncontroDaRede {
   /** O nome IANA da zona. Sem ele o instante esta certo e a hora de parede, errada. */
   readonly timeZone: string;
   readonly publicacao: PublicacaoVisivel;
+  /**
+   * Quem CADASTROU: `admin` (a equipe) ou `community` (uma conta do app).
+   *
+   * **Nao e o autor.** `created_by_user_id` nunca sai do servidor, e este
+   * campo nao o contorna: sao dois valores fixos, e nenhum deles identifica
+   * pessoa. Ele existe porque o app precisa dizer quem cadastrou o evento sem
+   * poder -- nem querer -- dizer QUEM.
+   */
+  readonly origem: OrigemDoEncontro;
   /**
    * A data local (`AAAA-MM-DD`) no fuso do encontro, calculada pelo banco com
    * `AT TIME ZONE`. E o que o teaser do privado leva no lugar de `starts_at`,
@@ -148,6 +158,7 @@ interface CamposDoEncontroProjetados {
   readonly ends_at: string | null;
   readonly time_zone: string;
   readonly status: StatusDoEncontro;
+  readonly origin: OrigemDoEncontro;
   readonly cover_image_url: string | null;
   readonly cover_banner_url: string | null;
   readonly images: readonly {
@@ -384,6 +395,10 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
+    // A ORIGEM. Projetada campo a campo, como todo o resto deste objeto, e
+    // nao por espalhamento: `{ ...encontro }` aqui seria o caminho pelo qual
+    // a autoria sairia no dia em que alguem a carregasse na entidade.
+    origin: encontro.origem,
     // Derivada da imagem de posicao 0, nunca gravada no banco.
     cover_image_url: capa?.url ?? null,
     cover_banner_url: capa?.urlDoBanner ?? null,

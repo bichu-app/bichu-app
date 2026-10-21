@@ -93,6 +93,10 @@ const ENCONTRO: EncontroDaRede = {
   endsAt: (AGORA + 3 * UMA_HORA) as Instant,
   timeZone: 'America/Sao_Paulo',
   publicacao: 'published',
+  // `admin` e o `DEFAULT` da coluna e o caso comum. A isca da autoria, mais
+  // abaixo neste arquivo, continua cobrando que NENHUMA coluna de autoria saia
+  // -- e `origin` nao e uma: sao dois valores fixos, sem pessoa.
+  origem: 'admin',
   dataLocal: '2026-09-23',
   visibilidade: 'public',
   entrada: { tipo: 'free' },

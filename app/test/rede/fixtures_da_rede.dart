@@ -35,6 +35,13 @@ Map<String, dynamic> encontroPublico({
   String? endsAt = '2026-10-03T14:00:00Z',
   String timeZone = 'America/Sao_Paulo',
   String status = 'upcoming',
+
+  /// `origin`: quem CADASTROU, `admin` ou `community`. Nunca o autor.
+  ///
+  /// O padrao e `admin` porque e o `DEFAULT` da coluna e o caso comum. Passe
+  /// a string vazia para montar um encontro **sem o campo**, que e o encontro
+  /// gravado antes de 20/10/2026.
+  String origin = 'admin',
   List<Map<String, dynamic>> images = const <Map<String, dynamic>>[],
   /// `cover_banner_url`: a derivada de 1280 px da capa, do detalhe de borda a
   /// borda. Separada de `images` porque ela nao e campo de
@@ -69,6 +76,9 @@ Map<String, dynamic> encontroPublico({
     'time_zone': timeZone,
     'status': status,
     'visibility': 'public',
+    // Ausente de proposito quando vazio: o campo e OPCIONAL no contrato, e o
+    // encontro gravado antes dele chega sem ele.
+    if (origin.isNotEmpty) 'origin': origin,
     'cover_image_url': images.isEmpty ? null : images.first['url'],
     // `cover_banner_url`: a derivada de 1280 px da capa, para o detalhe de
     // borda a borda. Nula sem imagem, como no servidor.

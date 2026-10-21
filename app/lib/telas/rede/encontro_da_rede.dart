@@ -55,8 +55,9 @@ import 'pecas_da_rede.dart';
 ///
 /// ## Ordem, de cima para baixo (24.15, com as trocas de 24.17)
 ///
-/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, `Cadastrado pela
-/// equipe do Bichu`, selo de valor); aviso de cancelado; `Quando`; `Local`
+/// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, a linha de origem --
+/// `Cadastrado pela equipe do Bichu` ou `Cadastrado pela comunidade`, e
+/// NENHUMA quando o servidor nao disse --, selo de valor); aviso de cancelado; `Quando`; `Local`
 /// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cães`; `O que
 /// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
 /// `Observações`. **Sem `Quem organiza` e sem `Compartilhar`** (24.17.1 e
@@ -91,7 +92,38 @@ class TelaDoEncontro extends StatefulWidget {
 
   static const String tituloDaTela = 'Evento';
   static const String rotuloDeAtualizar = 'Atualizar';
-  static const String cadastradoPor = 'Cadastrado pela equipe do Bichu';
+  /// Cadastrado pela EQUIPE (`origin: admin`).
+  static const String cadastradoPelaEquipe = 'Cadastrado pela equipe do Bichu';
+
+  /// Cadastrado por uma conta do app (`origin: community`).
+  ///
+  /// **"pela comunidade", e nunca o nome de quem cadastrou**: o autor nao sai
+  /// do servidor (ADR-0025 secao 3, ADR-0027 apendice A.4) e esta tela nao tem
+  /// como saber quem e -- nem deve.
+  static const String cadastradoPelaComunidade = 'Cadastrado pela comunidade';
+
+  /// O rotulo da origem, ou **nulo quando o servidor nao disse**.
+  ///
+  /// ## Por que o nulo nao cai na equipe
+  ///
+  /// Ate 20/10/2026 esta tela escrevia *"Cadastrado pela equipe do Bichu"*
+  /// **incondicionalmente**, inclusive em encontro proposto pela comunidade --
+  /// porque `NetworkEventPublic` nao trazia a origem e o literal era um so.
+  /// Era rotulo afirmando autoria que o dado nao provava, a mesma classe do
+  /// "Organizado" que o cliente mandou trocar no mesmo dia, e com o agravante
+  /// de a afirmacao estar ERRADA.
+  ///
+  /// Fazer o nulo cair em "equipe" seria repor o defeito com outra roupa: o
+  /// campo e opcional no contrato, e encontro gravado antes dele existir chega
+  /// sem origem. Entao o nulo **nao desenha linha nenhuma** -- a tela cala em
+  /// vez de afirmar. Uma linha a menos nao engana ninguem; a linha errada sim.
+  static String? rotuloDaOrigem(OrigemDoEncontro? origem) {
+    return switch (origem) {
+      OrigemDoEncontro.equipe => cadastradoPelaEquipe,
+      OrigemDoEncontro.comunidade => cadastradoPelaComunidade,
+      null => null,
+    };
+  }
 
   /// O nome acessivel da capa quando o contrato nao traz `alt_text`.
   ///
@@ -517,6 +549,8 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       ],
     );
 
+    final rotuloDaOrigem = TelaDoEncontro.rotuloDaOrigem(conteudo?.origem);
+
     final cabecalho = Padding(
       padding: const EdgeInsets.fromLTRB(
         BichuEspaco.e4,
@@ -531,19 +565,24 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
             header: true,
             child: Text(encontro.titulo, style: textos.headlineSmall),
           ),
-          const SizedBox(height: BichuEspaco.e2),
-          Row(
-            children: <Widget>[
-              const ExcludeSemantics(child: MarcaSimbolo(altura: BichuEspaco.e6)),
-              const SizedBox(width: BichuEspaco.e2),
-              Expanded(
-                child: Text(
-                  TelaDoEncontro.cadastradoPor,
-                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+          // A LINHA DA ORIGEM, e ela SOME quando o servidor nao disse qual e.
+          // Ver [TelaDoEncontro.rotuloDaOrigem]: calar e melhor que afirmar a
+          // origem errada, que e o que esta tela fazia ate 20/10/2026.
+          if (rotuloDaOrigem != null) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e2),
+            Row(
+              children: <Widget>[
+                const ExcludeSemantics(child: MarcaSimbolo(altura: BichuEspaco.e6)),
+                const SizedBox(width: BichuEspaco.e2),
+                Expanded(
+                  child: Text(
+                    rotuloDaOrigem,
+                    style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: BichuEspaco.e3),
           Wrap(
             spacing: BichuEspaco.e2,

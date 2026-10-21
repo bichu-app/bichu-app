@@ -18,6 +18,7 @@ import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/vitrine_api.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/perfil/vitrine_de_fotos.dart';
+import 'package:bichu/widgets/visualizador_de_imagem.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -308,6 +309,92 @@ void main() {
       expect(
         const FotoPedida(uploadId: 'x', textoAlternativo: 'meu cachorro').paraJson(),
         {'upload_id': 'x', 'alt_text': 'meu cachorro'},
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A FOTO ABRE AMPLIADA (20/10/2026)
+  // -------------------------------------------------------------------------
+  // O achado que criou estes casos: `DERIVADAS_DA_VITRINE_DO_USUARIO` declara
+  // `card` 1024 x 1024 e a descreve como *"a foto ABERTA, que e a unica que a
+  // pessoa olha grande"*; o contrato a entrega em `open_url`;
+  // `FotoDaVitrineLida.urlAberta` a decodifica -- e **nenhuma celula tinha
+  // `onTap`**. A derivada da foto aberta existia desde antes da tela que a
+  // abriria.
+  //
+  // Repare que o grupo do topo deste arquivo cobra o CONTRARIO e continua
+  // valendo: a GRADE desenha `grid_url` e nunca `open_url`. Os dois nao se
+  // contradizem -- a grade pinta 320 px, e os 1024 so aparecem DEPOIS do
+  // toque, noutra tela. Se um dia a grade passar a desenhar `open_url`, e a
+  // isca de la que reprova.
+  group('a foto da vitrine abre ampliada', () {
+    testWidgets('a foto abre ampliada e fecha', (tester) async {
+      await montar(tester, vitrineCom(1));
+
+      // Antes do toque nao ha visualizador: sem isto o caso ficaria verde com
+      // uma tela que sempre esteve aberta.
+      expect(find.byType(VisualizadorDeImagem), findsNothing);
+
+      await tester.tap(find.byType(InkWell).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(VisualizadorDeImagem),
+        findsOneWidget,
+        reason: 'REPROVA: o toque na célula não abriu a foto ampliada.',
+      );
+
+      // **E a tela ampliada pede a derivada ABERTA, e nao a da grade.** Sem
+      // esta asercao o caso passaria com a miniatura de 320 px esticada, que e
+      // exactamente o defeito que a derivada de 1024 existe para nao ter.
+      final ampliada = tester
+          .widgetList<Image>(find.byType(Image))
+          .map((i) => i.image)
+          .whereType<NetworkImage>()
+          .map((i) => i.url)
+          .toList();
+      expect(
+        ampliada,
+        contains(urlAberta),
+        reason: 'REPROVA: a foto ampliada não pediu `open_url`.',
+      );
+
+      final fechar = find.byTooltip(VisualizadorDeImagem.rotuloDeFechar);
+      expect(fechar, findsOneWidget);
+      await tester.tap(fechar);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(VisualizadorDeImagem),
+        findsNothing,
+        reason: 'REPROVA: o Fechar não devolveu a pessoa para a grade.',
+      );
+    });
+
+    testWidgets('célula sem foto não oferece toque', (tester) async {
+      // `processing` nao tem `open_url`, e a celula desenha o estado em texto.
+      await montar(tester, {
+        'photos': [
+          {...fotoJson(0), 'status': 'processing', 'grid_url': null, 'open_url': null},
+        ],
+        'max_photos': 9,
+      });
+
+      // O estado APARECE -- e o que torna o caso interessante: ha o que tocar
+      // na tela, e nada pode responder.
+      expect(find.text('Preparando…'), findsOneWidget);
+
+      // Nao ha `InkWell` de celula. O atalho dos pets tem o seu, e ele fica
+      // de fora: o que se cobra aqui e a GRADE.
+      final toques = find.descendant(
+        of: find.byType(GridView),
+        matching: find.byType(InkWell),
+      );
+      expect(
+        toques,
+        findsNothing,
+        reason: 'REPROVA: a célula sem foto está envolvida por um alvo de toque.',
       );
     });
   });
