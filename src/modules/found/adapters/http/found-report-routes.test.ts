@@ -78,6 +78,14 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const RELATOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 /** Sabe o UUID do achado do `RELATOR` e tenta mesmo assim. */
 const INTRUSO = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
+/**
+ * O TUTOR DO PET a que o aviso se refere (BICHUS-35). **Não é o relator**: quem
+ * relata é quem achou o animal. Ele existe nesta bancada porque a conversa
+ * mediada é simétrica e ele precisa conseguir anexar foto — e porque a diferença
+ * entre ele e o `INTRUSO` é a única coisa que separa "autorização ampliada" de
+ * "autorização removida".
+ */
+const TUTOR = '018f3a2b-0000-7000-8000-0000000000cc' as UserId;
 
 const ACHADO_DO_RELATOR = '018f3a2b-0000-7000-8000-00000000f001' as FoundReportId;
 /** Não é de ninguém. O 404 dele precisa ser indistinguível do 404 do achado alheio. */
@@ -95,6 +103,13 @@ interface Cenario {
    * cláusula `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
    */
   readonly autorizacaoDesligada?: boolean;
+  /**
+   * **A isca da AMPLIAÇÃO (BICHUS-35).** Com `true`, `avisoParaAnexarFoto`
+   * volta a aceitar só o relator — é o equivalente exato de não ter acrescentado
+   * `OR pets.owner_user_id = :chamador` ao `WHERE`. O caso do tutor tem de
+   * reprovar, e o do intruso tem de continuar passando (404).
+   */
+  readonly ampliacaoDesligada?: boolean;
   readonly statusDoAchado?: AchadoGravado['status'];
   readonly fotosJaPedidas?: number;
 }
@@ -163,6 +178,18 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       ),
     statusDoRelator: (achado, dono) =>
       Promise.resolve(meu(achado, dono) ? (cenario.statusDoAchado ?? 'open') : null),
+    // A AMPLIAÇÃO: o relator **ou o tutor do pet**. O dublê imita o `OR` do
+    // `WHERE` e nada mais -- o `INTRUSO` continua recebendo `null`, que é
+    // o que faz o 404 do terceiro continuar sendo estrutural.
+    avisoParaAnexarFoto: (achado, chamador) =>
+      Promise.resolve(
+        meu(achado, chamador) ||
+          (cenario.ampliacaoDesligada !== true &&
+            achado === ACHADO_DO_RELATOR &&
+            chamador === TUTOR)
+          ? achadoGravado({ status: cenario.statusDoAchado ?? 'open' })
+          : null,
+      ),
     contarIntencoesDeFoto: () => Promise.resolve(cenario.fotosJaPedidas ?? 0),
     registrarIntencaoDeFoto: () => Promise.resolve(),
     paresParaCruzar: () => Promise.resolve([]),
@@ -484,7 +511,7 @@ void describe('ADR-0021: recurso de outra conta responde 404, nunca 403', () => 
     assert.equal(status, 404);
   });
 
-  void it('a foto de um achado alheio é 404', async () => {
+  void it('a foto de um achado alheio é 404 — e CONTINUA 404 depois da ampliação', async () => {
     const app = servidor();
     const { status } = await pedir(app, {
       metodo: 'POST',
@@ -625,6 +652,78 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
 
     assert.equal(status, 201);
     assert.equal(enfileirados.length, 1);
+  });
+});
+
+/**
+ * BICHUS-35: A AMPLIAÇÃO DA AUTORIZAÇÃO DA INTENÇÃO DE FOTO.
+ *
+ * O fato protegido: **o tutor do pet consegue obter intenção de foto, e um
+ * terceiro não.** Os dois casos juntos, porque separados nenhum dos dois mede o
+ * que importa -- só o tutor mediria "alguém passa", e só o intruso mediria
+ * "alguém é recusado".
+ *
+ * A isca é `ampliacaoDesligada`, que devolve o dublê ao comportamento de
+ * `buscarDoRelator` (só o relator). Com ela ligada o caso do tutor REPROVA e o
+ * do intruso continua verde -- é essa assimetria que prova que a conferência
+ * mede a ampliação e não a existência de uma recusa qualquer.
+ */
+void describe('BICHUS-35: o tutor do pet obtém intenção de foto, e o terceiro não', () => {
+  const corpoDaIntencao = {
+    found_report_id: ACHADO_DO_RELATOR,
+    content_type: 'image/jpeg',
+    byte_size: 500_000,
+  };
+
+  const pedirComo = async (cenario: Cenario, como: UserId): Promise<number> => {
+    const app = servidor(cenario);
+    const { status } = await pedir(app, {
+      metodo: 'POST',
+      url: '/media/found-report-photo-intents',
+      como,
+      corpo: corpoDaIntencao,
+    });
+    await app.close();
+    return status;
+  };
+
+  void it('o TUTOR do pet recebe 201 — a conversa mediada é simétrica', async () => {
+    assert.equal(await pedirComo({}, TUTOR), 201);
+  });
+
+  void it('um TERCEIRO recebe 404, e não 403 (ADR-0021)', async () => {
+    assert.equal(await pedirComo({}, INTRUSO), 404);
+  });
+
+  void it('CONTROLE POSITIVO: o RELATOR continua recebendo 201 nos dois estados', async () => {
+    // Passa com a ampliação ligada e desligada. Sem ele, desligar a ampliação
+    // poderia estar quebrando a rota inteira, e o caso do tutor reprovaria por
+    // um motivo que não é o medido.
+    assert.equal(await pedirComo({}, RELATOR), 201);
+    assert.equal(await pedirComo({ ampliacaoDesligada: true }, RELATOR), 201);
+  });
+
+  void it('CONTROLE NEGATIVO: o achado INEXISTENTE é 404 nos dois estados', async () => {
+    // A ampliação não pode inventar aviso. Nos dois estados, 404.
+    for (const cenario of [{}, { ampliacaoDesligada: true }]) {
+      const app = servidor(cenario);
+      const { status } = await pedir(app, {
+        metodo: 'POST',
+        url: '/media/found-report-photo-intents',
+        como: TUTOR,
+        corpo: { ...corpoDaIntencao, found_report_id: ACHADO_INEXISTENTE },
+      });
+      await app.close();
+      assert.equal(status, 404);
+    }
+  });
+
+  void it('ISCA: com a ampliação desligada, o tutor volta a receber 404', async () => {
+    // É este caso que mede que a ampliação EXISTE. Se ele passar com a
+    // ampliação ligada, o `OR` do `WHERE` não está fazendo efeito nenhum.
+    assert.equal(await pedirComo({ ampliacaoDesligada: true }, TUTOR), 404);
+    // E o terceiro continua recusado: desligar a ampliação não abre nada.
+    assert.equal(await pedirComo({ ampliacaoDesligada: true }, INTRUSO), 404);
   });
 });
 

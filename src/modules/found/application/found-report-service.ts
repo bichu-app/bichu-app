@@ -215,8 +215,21 @@ export class FoundReportService {
       throw problemas.tipoDeMidiaNaoAceito();
     }
 
-    // A autorização só sai para achado do próprio chamador. 404, nunca 403.
-    if ((await this.deps.repositorio.buscarDoRelator(achado, dono)) === null) {
+    // A AUTORIZAÇÃO: o relator do aviso **ou o tutor do pet** a que o aviso se
+    // refere. 404 nos dois sentidos da ausência, nunca 403 (ADR-0021).
+    //
+    // Era `buscarDoRelator` até a BICHUS-35, e isso fazia a conversa mediada
+    // mentir: ela é SIMÉTRICA por desenho (critério 9 -- os dois lados mandam
+    // foto, e nenhum depende de o outro ter mandado primeiro), mas o tutor do
+    // pet não é o relator do aviso, então ele recebia 404 aqui e **não tinha
+    // nenhum caminho** para obter intenção de foto. A simetria existia no
+    // contrato e não no código.
+    //
+    // A pergunta "quem é o tutor" é respondida DENTRO deste módulo, por
+    // `found_reports.pet_id` -> `pets.owner_user_id`. Nada de `messaging`
+    // entra aqui: acoplar a autorização da foto ao módulo da conversa seria
+    // pagar uma fronteira para responder uma pergunta que é de `found`.
+    if ((await this.deps.repositorio.avisoParaAnexarFoto(achado, dono)) === null) {
       throw problemas.naoEncontrado();
     }
 
@@ -224,6 +237,15 @@ export class FoundReportService {
     // borda, e a repetição é deliberada (ADR-0001): basta um job, uma rota nova
     // ou um caminho interno para a borda ser contornada, e aí o limite vira
     // decoração. As duas contagens são independentes e a mais restritiva vence.
+    //
+    // **O TETO É COMPARTILHADO entre o tutor e o achador**, e isso é
+    // consequência da ampliação acima, não uma decisão separada. A contagem é do
+    // AVISO e sempre foi -- as duas espécies juntas, sem filtrar por quem pediu
+    // --, e enquanto só o relator conseguia pedir isso não tinha efeito visível.
+    // Agora tem: se o achador gastar as três, o tutor não manda nenhuma.
+    //
+    // **O número não foi mudado** (3, SEC-009). Se três compartilhadas se
+    // mostrarem poucas na prática, quem decide o número é o cliente.
     if ((await this.deps.repositorio.contarIntencoesDeFoto(achado, dono)) >= TETO_DE_FOTOS_POR_ACHADO) {
       // `limiteSemReabertura`, e não `limiteDeChamadas`: este teto é `lifetime`
       // no contrato — três fotos neste aviso, e acabou. O prazo que estava aqui
