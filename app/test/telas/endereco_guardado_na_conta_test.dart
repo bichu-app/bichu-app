@@ -102,6 +102,9 @@ Future<http.Response> Function(http.Request) _rede(
   Map<String, dynamic>? guardado,
   bool enderecoFora = false,
   bool cepFora = false,
+  /// Recusa o POST do pedido, para a isca "pedido que falhou nao guarda nada".
+  int statusDoPedido = 200,
+  String problemaDoPedido = '',
 }) {
   final pet = petDoContrato(id: _idDoPet);
   return (req) async {
@@ -153,6 +156,9 @@ Future<http.Response> Function(http.Request) _rede(
     if (caminho == '/v1/pets/$_idDoPet/tag-requests' && req.method == 'POST') {
       registro.postsDoPedido.add(caminho);
       registro.corposDoPedido.add(req.body);
+      if (statusDoPedido != 200) {
+        return problema(problemaDoPedido, statusDoPedido);
+      }
       return json200(<String, dynamic>{
         'ref': _refDoServidor,
         'status': 'pending',
@@ -299,6 +305,155 @@ void main() {
       await tocar(tester, find.text('Pedir a plaquinha'));
       expect(registro.postsDoPedido, hasLength(1), reason: 'CONTROLE POSITIVO');
       expect(registro.putsDoEndereco, isEmpty);
+    });
+  });
+
+  // ========================================================================
+  // H. O PRIMEIRO PEDIDO GUARDA SOZINHO -- e so o primeiro
+  // ========================================================================
+  //
+  // Decisao do cliente, 21/10/2026, nas palavras dele: *"Se nao ha nada
+  // guardado, o endereco do primeiro pedido vira o da conta. Nao sobrescreve
+  // nada, porque nao havia nada -- e dai em diante 'editar no pedido nao altera
+  // o guardado' continua valendo integralmente. A pessoa ganha o beneficio sem
+  // precisar saber que a tela existe. A tela continua sendo o unico lugar de
+  // editar."*
+  //
+  // **AS QUATRO ISCAS DESTE GRUPO CONTAM `PUT`, e nao olham a tela.** Uma
+  // afirmacao sobre a tela nao enxerga uma escrita de rede -- e e justamente a
+  // escrita que esta decisao autoriza em UM caso e proibe em todos os outros.
+  // Sem o par (escreve quando devia / nao escreve quando nao devia), o
+  // mecanismo passaria com qualquer implementacao: "nunca escreve" satisfaz
+  // metade, e "escreve sempre" satisfaz a outra.
+  group('H. o primeiro pedido guarda sozinho, e so o primeiro', () {
+    testWidgets('ISCA — PRIMEIRO pedido, sem nada guardado: ESCREVE o endereco na conta',
+        (tester) async {
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: null));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Primeiro Pedido');
+      await _digitar(tester, 'CEP', '01311000');
+      await _digitar(tester, 'Número', '42');
+      await _digitar(tester, 'Telefone de quem recebe', '11987654321');
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(registro.postsDoPedido, hasLength(1), reason: 'CONTROLE POSITIVO: o pedido saiu');
+      expect(
+        registro.putsDoEndereco,
+        hasLength(1),
+        reason: 'o primeiro pedido NAO guardou o endereco na conta. Sem isto, quem '
+            'nunca abrir `Meus dados > Endereco de entrega` nunca ganha o beneficio '
+            'que o cliente autorizou',
+      );
+      // E o que foi guardado e o endereco DO PEDIDO, com os nomes do contrato.
+      final corpo = json.decode(registro.corposDoPut.single) as Map<String, dynamic>;
+      expect(corpo['recipient_name'], 'Primeiro Pedido');
+      expect(corpo['street'], 'Avenida Da Base', reason: 'a rua veio da busca de CEP');
+      expect(corpo['postal_code'], '01311000', reason: 'sem mascara, como o contrato exige');
+      expect(corpo['recipient_phone'], '+5511987654321', reason: 'E.164, nunca o da tela');
+    });
+
+    testWidgets('ISCA — SEGUNDO pedido, com endereco diferente, NAO escreve', (tester) async {
+      // **A isca central da decisao.** Ha endereco guardado, a pessoa troca
+      // tudo no formulario, e o guardado tem de ficar intacto -- "editar no
+      // pedido nao altera o guardado" vale integralmente da segunda vez em
+      // diante.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Endereco Diferente');
+      await _digitar(tester, 'CEP', '20040020');
+      await _digitar(tester, 'Rua', 'Rua Diferente Do Pedido');
+      await _digitar(tester, 'Número', '7');
+      await _digitar(tester, 'Bairro', 'Bairro Diferente');
+      await _digitar(tester, 'Cidade', 'Cidade Diferente');
+      await _digitar(tester, 'Telefone de quem recebe', '21999887766');
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(registro.postsDoPedido, hasLength(1), reason: 'CONTROLE POSITIVO: o pedido saiu');
+      expect(
+        registro.putsDoEndereco,
+        isEmpty,
+        reason: 'o segundo pedido sobrescreveu o endereco guardado. E a classe de '
+            'defeito que o cliente mais sente: ele descobre meses depois, quando a '
+            'plaquinha chega no endereco errado',
+      );
+    });
+
+    testWidgets('ISCA — PEDIDO QUE FALHOU nao guarda nada', (tester) async {
+      // A terceira exigencia, e e onde esta classe falha na pratica: a conta
+      // ganharia um endereco que a pessoa nunca confirmou, e ele passaria a
+      // preencher todos os pedidos seguintes.
+      final registro = _Registro();
+      await abrirOApp(
+        tester,
+        rede: _rede(
+          registro,
+          guardado: null,
+          statusDoPedido: 429,
+          problemaDoPedido: 'rate-limited',
+        ),
+      );
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Pedido Recusado');
+      await _digitar(tester, 'CEP', '01311000');
+      await _digitar(tester, 'Número', '42');
+      await _digitar(tester, 'Telefone de quem recebe', '11987654321');
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(
+        registro.postsDoPedido,
+        hasLength(1),
+        reason: 'CONTROLE POSITIVO: o pedido FOI tentado. Sem isto, "zero PUT" seria '
+            'verdade por nada ter acontecido',
+      );
+      expect(
+        registro.putsDoEndereco,
+        isEmpty,
+        reason: 'o pedido foi RECUSADO e o endereco entrou na conta. A pessoa nunca '
+            'confirmou esse endereco, e ele passaria a preencher todo pedido seguinte',
+      );
+    });
+
+    testWidgets('ISCA — LEITURA FORA DO AR nao guarda nada, porque nao se sabe se havia',
+        (tester) async {
+      // O terceiro estado, e o que me fez usar `bool?` em vez de `bool`. Um 500
+      // na leitura NAO prova que a conta esta sem endereco: escrever aqui
+      // sobrescreveria um endereco existente pela porta dos fundos.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, enderecoFora: true));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Leitura Fora');
+      await _digitar(tester, 'CEP', '01311000');
+      await _digitar(tester, 'Número', '42');
+      await _digitar(tester, 'Telefone de quem recebe', '11987654321');
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(registro.postsDoPedido, hasLength(1), reason: 'CONTROLE POSITIVO: o pedido saiu');
+      expect(
+        registro.putsDoEndereco,
+        isEmpty,
+        reason: 'a leitura do endereco guardado FALHOU e o pedido escreveu mesmo '
+            'assim. Ninguem sabe se havia endereco: se havia, este `PUT` acabou de '
+            'sobrescrever a casa da pessoa',
+      );
+    });
+
+    testWidgets('NAO ha caixa nem pergunta no formulario do pedido', (tester) async {
+      // Ele descartou essa saida explicitamente: a tela continua sendo o unico
+      // lugar de EDITAR, e o pedido guarda sem perguntar porque so guarda
+      // quando nao havia nada a sobrescrever.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: null));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.textContaining('Guardar'), findsNothing);
+      expect(find.textContaining('Salvar'), findsNothing);
     });
   });
 

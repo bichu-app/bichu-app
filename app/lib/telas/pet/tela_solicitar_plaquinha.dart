@@ -125,6 +125,24 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// lugar.
   final Set<String> _aindaComOValorGuardado = <String>{};
 
+  /// Havia endereço guardado na conta quando esta tela abriu?
+  ///
+  /// **TRÊS estados, e não dois**, porque a diferença entre dois deles é a que
+  /// decide se esta tela pode escrever:
+  ///
+  /// - `false` — **a leitura respondeu, e respondeu `null`**: a conta não tem
+  ///   endereço guardado. É o ÚNICO estado em que o primeiro pedido guarda;
+  /// - `true` — a leitura respondeu com um endereço. O pedido **nunca** escreve,
+  ///   nem igual, nem diferente;
+  /// - `null` — **a leitura não respondeu** (500, rede fora, token vencido).
+  ///   Aqui ninguém sabe se há endereço guardado, e escrever seria apostar: se
+  ///   houvesse um, o pedido o SOBRESCREVERIA — exatamente o defeito que a
+  ///   decisão do cliente proíbe, e pela porta dos fundos. Na dúvida, não
+  ///   escreve.
+  ///
+  /// Começa `null` de propósito: até a leitura voltar, o estado é desconhecido.
+  bool? _haviaEnderecoGuardado;
+
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`. Uma so estrutura para a validacao local e para a do
   /// servidor: duas listas de erro divergiriam na mensagem.
@@ -239,12 +257,24 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       guardado = await Escopo.of(context).me.lerEnderecoGuardado();
     } on FalhaDeChamada {
       // Ver a razão 2 acima: silencioso de propósito. O formulário abre vazio.
+      //
+      // **E `_haviaEnderecoGuardado` fica `null`**, que é o que impede o pedido
+      // de escrever: a leitura não respondeu, ninguém sabe se há endereço
+      // guardado, e escrever aqui poderia SOBRESCREVER um que existe.
       return;
     } on Object catch (erro, pilha) {
       registrarFalhaInesperada(erro, pilha, onde: 'ao ler o endereço guardado para a plaquinha');
       return;
     }
-    if (!mounted || guardado == null) return;
+    if (!mounted) return;
+
+    // A leitura RESPONDEU. Daqui em diante o estado é conhecido, e é ele que
+    // autoriza (ou não) a escrita do primeiro pedido.
+    if (guardado == null) {
+      setState(() => _haviaEnderecoGuardado = false);
+      return;
+    }
+    _haviaEnderecoGuardado = true;
 
     setState(() {
       // O CEP entra MASCARADO: quem lê é uma pessoa, e `01311000` num campo de
@@ -292,6 +322,86 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   ///
   /// Campo já escrito fica: a leitura pode voltar depois de ela começar a
   /// digitar, e sobrescrever ali seria apagar o que ela acabou de escrever.
+  /// **O PRIMEIRO PEDIDO GUARDA SOZINHO** -- e so o primeiro.
+  ///
+  /// ## A decisao, com a data e as palavras dele
+  ///
+  /// **O cliente decidiu em 21/10/2026**, escolhendo esta saida entre tres:
+  ///
+  ///     "Se nao ha nada guardado, o endereco do primeiro pedido vira o da
+  ///      conta. Nao sobrescreve nada, porque nao havia nada -- e dai em diante
+  ///      'editar no pedido nao altera o guardado' continua valendo
+  ///      integralmente. A pessoa ganha o beneficio sem precisar saber que a
+  ///      tela existe. A tela continua sendo o unico lugar de editar."
+  ///
+  /// O problema que ela resolve: com "nao mexe" puro, quem nunca abrisse
+  /// `Meus dados > Endereco de entrega` **nunca ganhava o beneficio** que ele
+  /// havia acabado de autorizar.
+  ///
+  /// ## A CONDICAO E A AUSENCIA, e nao "o pedido terminou"
+  ///
+  /// Esta funcao escreve em **um** estado so: `_haviaEnderecoGuardado == false`,
+  /// que quer dizer *a leitura respondeu e respondeu `null`*. Nos outros dois
+  /// ela nao escreve nada, e cada recusa tem motivo proprio:
+  ///
+  /// - **`true` (ha endereco guardado): nunca escreve, nem igual.** E a regra de
+  ///   "editar no pedido nao altera o guardado", e ela vale integralmente da
+  ///   segunda vez em diante. Reescrever um valor identico pareceria inofensivo
+  ///   e nao e: faria esta tela ter uma porta de escrita permanente, e no dia em
+  ///   que a comparacao de igualdade errasse um campo ela sobrescreveria;
+  /// - **`null` (a leitura nao respondeu): nao escreve, porque nao sabe.** Um
+  ///   500 na leitura nao prova que a conta esta sem endereco. Escrever aqui
+  ///   SOBRESCREVERIA um endereco existente pela porta dos fundos -- o defeito
+  ///   que a decisao proibe, chegando por um caminho que ninguem olharia.
+  ///
+  /// ## SO DEPOIS DE O PEDIDO SER ACEITO
+  ///
+  /// A chamada mora depois do `await` do `POST`, dentro do `try`, e isso e a
+  /// terceira exigencia: **pedido que nao chega ao fim nao guarda nada.**
+  /// Formulario abandonado no meio nao chega aqui porque ninguem tocou em
+  /// `Pedir a plaquinha`; pedido recusado pelo servidor (400, 404, 429) lanca
+  /// antes desta linha e cai no `catch`. Sem isso, a conta ganharia um endereco
+  /// que a pessoa nunca confirmou -- e ele passaria a preencher todos os pedidos
+  /// seguintes.
+  ///
+  /// ## FALHAR AQUI NAO DESFAZ NEM DENUNCIA O PEDIDO
+  ///
+  /// O pedido **ja foi aceito** quando esta funcao roda. Se o `PUT` falhar, o
+  /// desfecho correto e o silencio: a plaquinha foi pedida e vai chegar, e uma
+  /// faixa de erro aqui faria a pessoa achar que o pedido falhou. O custo real
+  /// de perder esta escrita e a pessoa redigitar no pedido seguinte, que e
+  /// exatamente onde ela estava antes desta frente.
+  ///
+  /// ## O QUE FOR GUARDADO AQUI VIRA DADO DE CONTA, e nao digitado
+  ///
+  /// E isso e automatico, nao precisa de codigo: no pedido seguinte a tela abre,
+  /// [_carregarOEnderecoGuardado] le este endereco e marca os campos em
+  /// [_aindaComOValorGuardado]. Entao ele CEDE a busca de CEP, como todo dado de
+  /// conta -- e nao vence, como venceria se tivesse sido digitado naquela
+  /// sessao. A separacao de origem que o cliente confirmou fica intacta.
+  ///
+  /// **Nenhuma caixa, nenhuma pergunta e nenhuma confirmacao no formulario do
+  /// pedido**: ele descartou essa saida explicitamente. A tela continua sendo o
+  /// unico lugar de EDITAR.
+  Future<void> _guardarSeNaoHavia(EnderecoDeEntrega endereco) async {
+    if (_haviaEnderecoGuardado != false) return;
+    try {
+      await Escopo.of(context).me.salvarEnderecoGuardado(endereco);
+      // A conta passa a TER endereco guardado. Sem esta linha, um segundo toque
+      // em `Pedir a plaquinha` na mesma sessao escreveria de novo.
+      _haviaEnderecoGuardado = true;
+    } on FalhaDeChamada {
+      // Silencioso de proposito: ver "falhar aqui nao desfaz nem denuncia o
+      // pedido", acima.
+    } on Object catch (erro, pilha) {
+      registrarFalhaInesperada(
+        erro,
+        pilha,
+        onde: 'ao guardar na conta o endereco do primeiro pedido de plaquinha',
+      );
+    }
+  }
+
   void _preencherDoGuardado(TextEditingController campo, String valor, String chave) {
     if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
     campo.text = valor;
@@ -445,25 +555,34 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       _enviando = true;
     });
 
+    // UM endereço, montado uma vez: ele vai no pedido e, quando a conta não
+    // tinha nenhum, é o mesmo que passa a ser o guardado. Montá-lo duas vezes
+    // abriria a porta para as duas cópias divergirem num campo.
+    final enderecoDoPedido = EnderecoDeEntrega(
+      destinatario: _destinatario.text.trim(),
+      // Sem mascara: o contrato declara oito digitos.
+      cep: _soDigitos(_cep.text),
+      logradouro: _logradouro.text.trim(),
+      numero: _numero.text.trim(),
+      complemento: _complemento.text.trim(),
+      bairro: _bairro.text.trim(),
+      cidade: _cidade.text.trim(),
+      uf: _uf!,
+      // **E.164**, nunca o que esta na tela: a mascara e do olho, e
+      // `telefoneEmE164` e a unica que produz valor de contrato.
+      telefone: telefoneEmE164(_telefone.text)!,
+    );
+
     try {
       final pedido = await Escopo.of(context).pets.solicitarPlaquinha(
         petId: pet,
-        endereco: EnderecoDeEntrega(
-          destinatario: _destinatario.text.trim(),
-          // Sem mascara: o contrato declara oito digitos.
-          cep: _soDigitos(_cep.text),
-          logradouro: _logradouro.text.trim(),
-          numero: _numero.text.trim(),
-          complemento: _complemento.text.trim(),
-          bairro: _bairro.text.trim(),
-          cidade: _cidade.text.trim(),
-          uf: _uf!,
-          // **E.164**, nunca o que esta na tela: a mascara e do olho, e
-          // `telefoneEmE164` e a unica que produz valor de contrato.
-          telefone: telefoneEmE164(_telefone.text)!,
-        ),
+        endereco: enderecoDoPedido,
         observacao: _observacao.text.trim(),
       );
+      if (!mounted) return;
+      // **O PRIMEIRO PEDIDO GUARDA SOZINHO**, e só aqui -- depois de o servidor
+      // ter aceitado o pedido. Ver `_guardarSeNaoHavia`.
+      await _guardarSeNaoHavia(enderecoDoPedido);
       if (!mounted) return;
       // O desfecho fica NESTA tela, e nao numa tela de sucesso: um `go` para
       // um destino de sucesso alcancavel por link direto afirmaria um desfecho
