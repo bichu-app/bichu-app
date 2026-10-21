@@ -21,11 +21,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bichu/api/estados_brasileiros.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:bichu/dispositivo/distintivo_do_aplicativo.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
@@ -827,6 +829,136 @@ Future<void> tocar(WidgetTester tester, Finder alvo) async {
   await tester.pumpAndSettle();
   await tester.tap(alvo);
   await tester.pumpAndSettle();
+}
+
+/// Escolhe o ESTADO no seletor de lista, pela sigla.
+///
+/// **Existe porque TRES campos de sigla de estado deixaram de ser digitados.**
+/// `perdido/tela_onde_e_quando`, `rede/criar_encontro` e
+/// `perto/sugerir_profissional` passaram a escolher na lista de 27 nesta
+/// entrega, e os casos que preenchiam o formulario com
+/// `enterText(campoDoRotulo('UF'), 'RJ')` ficaram procurando um campo de texto
+/// que nao existe -- `Bad state: No element`, que nao diz nada sobre o que
+/// mudou. Quatro arquivos de caso precisavam da mesma funcao; a quinta copia
+/// divergiria, e a que divergiria seria a menos exercitada.
+///
+/// A forma e a que `captura_de_localizacao_test.dart` ja tinha medido em
+/// 17/10/2026, e as tres armadilhas dela ficam escritas aqui porque as tres
+/// erram CALADO:
+///
+/// 1. **o seletor se acha pelo ROTULO e se toca pelo `InkWell` dentro dele.**
+///    O `estadoInicial` ("Escolher na lista") e o mesmo texto nos tres
+///    seletores de uma tela que tenha mais de um;
+/// 2. **a opcao e a do `ListTile` da folha, e nao qualquer texto igual.** Com
+///    `São Paulo` digitado no campo `Cidade`, `find.text('São Paulo')` casa o
+///    CAMPO tambem. O toque ia para o campo atras da folha, escorregava para a
+///    lista e selecionava o estado que estivesse naquele ponto -- medido, saiu
+///    `BA`;
+/// 3. **a folha de 27 itens ROLA**, e `ListView` so constroi o que cabe:
+///    `São Paulo` e o 25o e nasce fora da arvore.
+Future<void> escolherEstadoNaLista(
+  WidgetTester tester,
+  String sigla, {
+  /// O rotulo do seletor na tela. `Estado` nas tres telas desta entrega.
+  String rotulo = 'Estado',
+
+  /// QUAL lista rolar, para a tela empilhada sobre a casca de abas. Ver
+  /// [rolarAte].
+  Finder? scrollable,
+}) async {
+  // **De cima OU de baixo**, e nao `rolarAte` direto: os casos preenchem os
+  // campos fora da ordem da tela, e o seletor de estado pode ter ficado ACIMA
+  // da posicao atual. `scrollUntilVisible` com passo positivo roda ate o fim
+  // da lista sem achar o que ficou para tras e estoura `Bad state: No
+  // element` -- apontando para o lugar errado.
+  await rolarAteDeCimaOuDeBaixo(
+    tester,
+    find.text(rotulo),
+    scrollable: scrollable,
+  );
+  final seletor = find.ancestor(
+    of: find.text(rotulo),
+    matching: find.byType(SeletorDeLista),
+  );
+  await tocar(
+    tester,
+    find.descendant(of: seletor, matching: find.byType(InkWell)),
+  );
+  final opcao = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text(nomeDoEstado(sigla)),
+  );
+  if (opcao.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      opcao,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+  await tocar(tester, opcao);
+}
+
+/// Rola ate [alvo], venha ele de cima ou de baixo da posicao atual.
+///
+/// `scrollUntilVisible` so procura num sentido. Quem preenche um formulario
+/// fora da ordem da tela -- e os casos de CEP fazem isso de proposito, porque
+/// o CEP esta ACIMA dos campos que ele preenche -- precisa dos dois. Voltar ao
+/// topo e procurar para baixo acerta nos dois casos, e e o que a pessoa faz.
+Future<void> rolarAteDeCimaOuDeBaixo(
+  WidgetTester tester,
+  Finder alvo, {
+  Finder? scrollable,
+}) async {
+  if (alvo.evaluate().isNotEmpty) {
+    await tester.ensureVisible(alvo);
+    await tester.pumpAndSettle();
+    return;
+  }
+  final rolagem = scrollable ?? find.byType(Scrollable).first;
+  for (var i = 0; i < 8 && alvo.evaluate().isEmpty; i++) {
+    await tester.drag(rolagem, const Offset(0, 600));
+    await tester.pumpAndSettle();
+  }
+  await rolarAte(tester, alvo, scrollable: scrollable);
+}
+
+/// O NOME do estado da sigla [sigla], como a folha de escolha o escreve.
+String nomeDoEstado(String sigla) => estadosBrasileiros
+    .firstWhere((ItemDeLista estado) => estado.codigo == sigla)
+    .rotulo;
+
+/// A SIGLA que o seletor de estado esta mostrando, ou `''` quando nenhuma.
+///
+/// **Le o que esta NA TELA, e nao o estado do widget.** `SeletorDeLista`
+/// desenha o `rotulo` do item escolhido -- "Rio de Janeiro" --, e e o nome que
+/// a pessoa ve; a sigla e o que viaja no corpo. Devolver a sigla aqui faz o
+/// caso continuar afirmando a MESMA coisa que afirmava quando o campo era
+/// digitado (`_textoDoCampo(tester, 'UF') == 'RJ'`), em vez de trocar a
+/// afirmacao por um nome e deixar de cobrar o que importa.
+///
+/// `''` e o seletor sem escolha, que e o que ele mostra com o `estadoInicial`.
+String siglaEscolhidaNoSeletor(
+  WidgetTester tester, {
+  String rotulo = 'Estado',
+}) {
+  final seletor = find.ancestor(
+    of: find.text(rotulo),
+    matching: find.byType(SeletorDeLista),
+  );
+  for (final ItemDeLista estado in estadosBrasileiros) {
+    final mostrando = find.descendant(
+      of: seletor,
+      matching: find.text(estado.rotulo),
+    );
+    if (mostrando.evaluate().isNotEmpty) return estado.codigo;
+  }
+  return '';
 }
 
 /// Rola a lista da tela ate [alvo] existir na arvore.

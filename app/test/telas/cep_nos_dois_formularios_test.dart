@@ -220,7 +220,8 @@ Future<void> _preencherORestoEEnviar(WidgetTester tester) async {
   // a folha. Ver `escolherNaLista`, em `sugerir_profissional_test.dart`.
   await escolherNaLista(tester, 'O que eles fazem', 'Clínica');
   await _digitar(tester, 'Cidade', 'Rio de Janeiro');
-  await _digitar(tester, 'UF', 'RJ');
+  // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026).
+  await escolherEstadoNaLista(tester, 'RJ');
   await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
   await _digitar(tester, 'Telefone', '+5521988887777');
   await rolarAte(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
@@ -286,7 +287,9 @@ void main() {
       );
       expect(_textoDoCampo(tester, 'Bairro'), 'Copacabana');
       expect(_textoDoCampo(tester, 'Cidade'), 'Rio de Janeiro');
-      expect(_textoDoCampo(tester, 'UF'), 'RJ');
+      // O estado virou SELETOR: a afirmacao continua sendo a sigla, que e o
+      // que viaja no corpo, e nao o nome que a tela desenha.
+      expect(siglaEscolhidaNoSeletor(tester), 'RJ');
     });
 
     // -----------------------------------------------------------------------
@@ -318,17 +321,20 @@ void main() {
       expect(_textoDoCampo(tester, 'Bairro'), 'Icaraí');
 
       // E o campo vazio recebeu, no mesmo ato: a regra e "so o vazio", e nao
-      // "nada quando algum estiver escrito".
+      // "nada quando algum estiver escrito". **O estado e seletor agora**, e a
+      // regra passou a valer sobre ele igual: escolha vazia recebe.
       expect(
-        _textoDoCampo(tester, 'UF'),
+        siglaEscolhidaNoSeletor(tester),
         'RJ',
         reason: 'REPROVA: um campo escrito desligou o preenchimento dos '
             'outros. A regra e por CAMPO, e nao por formulario.',
       );
 
-      // E o que a busca preencheu continua editavel.
-      await _digitar(tester, 'UF', 'SP');
-      expect(_textoDoCampo(tester, 'UF'), 'SP');
+      // E o que a busca preencheu continua TROCAVEL -- antes isso se media
+      // digitando outra sigla; agora se mede escolhendo outro estado na lista,
+      // que e a mesma afirmacao: a busca sugere e a pessoa decide.
+      await escolherEstadoNaLista(tester, 'SP');
+      expect(siglaEscolhidaNoSeletor(tester), 'SP');
     });
 
     // -----------------------------------------------------------------------

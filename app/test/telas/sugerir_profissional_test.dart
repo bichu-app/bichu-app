@@ -184,9 +184,11 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
 
   await rolarAte(tester, campoDoRotulo('Cidade'));
   await tester.enterText(campoDoRotulo('Cidade'), 'Rio de Janeiro');
-  await rolarAte(tester, campoDoRotulo('UF'));
-  await tester.enterText(campoDoRotulo('UF'), 'RJ');
   await tester.pumpAndSettle();
+  // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026): a
+  // lista mostra o nome e guarda a sigla, entao o caso escolhe pelo NOME e
+  // continua afirmando `RJ` no corpo que sai -- e e o corpo que importa.
+  await escolherEstadoNaLista(tester, 'RJ');
 
   await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
 

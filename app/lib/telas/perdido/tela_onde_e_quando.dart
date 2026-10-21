@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/estados_brasileiros.dart';
 import '../../escopo.dart';
 import '../../perdido/quando_foi_visto.dart';
 import '../../perdido/rascunho_do_caso.dart';
@@ -12,6 +13,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_de_opcoes.dart';
+import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'cabecalho_do_pet.dart';
 
@@ -74,6 +76,17 @@ class TelaOndeEQuando extends StatefulWidget {
 
   static const String perguntaDeQuando = 'Quando?';
 
+  /// O rotulo do campo de estado, que deixou de ser `UF` digitada.
+  static const String rotuloDoEstado = 'Estado';
+
+  /// O que o seletor mostra enquanto nada foi escolhido.
+  static const String escolherOEstado = 'Escolher na lista';
+
+  /// **"Opcional" dito em TEXTO**, e nao pela marca do rotulo: `SeletorDeLista`
+  /// nao tem `opcional`, e a mesma frase ja diz isso no seletor de estado de
+  /// `localizacao/captura_de_localizacao.dart`.
+  static const String estadoEmBrancoFunciona = 'Em branco funciona.';
+
   /// O campo opcional do criterio 4, palavra por palavra.
   static const String perguntaDeAjuda =
       'Alguma coisa que ajude quem for procurar?';
@@ -99,8 +112,25 @@ class TelaOndeEQuando extends StatefulWidget {
 class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
   late final TextEditingController _bairro;
   late final TextEditingController _cidade;
-  late final TextEditingController _uf;
   late final TextEditingController _ajuda;
+
+  /// A sigla do estado escolhida na lista de 27, ou nulo.
+  ///
+  /// **Escolha e nao digitacao** (cliente, 17/10/2026), e esta era a terceira
+  /// e ultima tela que ainda digitava a sigla -- `Meus dados`, o pedido da
+  /// plaquinha e o registro de achado ja escolhem na lista.
+  ///
+  /// **Ela conserta DADO, e nao so atrito.** `Area.state` do contrato e so
+  /// "dois caracteres": `SA`, `XX` e o `S.` de quem errou a tecla passavam
+  /// pelo campo, pelo rascunho e pelo servidor, e chegavam GRAVADOS no caso de
+  /// um animal perdido. Com a lista nao existe valor fora dela.
+  ///
+  /// **Nasce da sigla do rascunho so quando ela esta NA LISTA.** O rascunho
+  /// sobrevive ao app fechar, e um ja gravado pode trazer `SAO` do campo
+  /// antigo; aceita-lo aqui faria o seletor mostrar "Escolher na lista" e o
+  /// envio sair com `SAO` de qualquer jeito -- o pior dos dois mundos, porque
+  /// a tela pareceria vazia e o corpo nao estaria.
+  String? _uf;
 
   /// O foco do bairro. O criterio 5 manda o foco para ELE quando o motivo do
   /// botao desabilitado e a falta de bairro, e o criterio 2 manda o teclado
@@ -119,7 +149,7 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
     final r = widget.rascunho;
     _bairro = TextEditingController(text: r.bairro);
     _cidade = TextEditingController(text: r.cidade);
-    _uf = TextEditingController(text: r.uf);
+    _uf = siglaDeEstadoValida(r.uf);
     _ajuda = TextEditingController(text: r.descricao);
     _erro = widget.erroInicial;
   }
@@ -139,7 +169,7 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
       setState(() {
         if (_bairro.text.isEmpty) _bairro.text = regiao.bairro ?? '';
         if (_cidade.text.isEmpty) _cidade.text = regiao.cidade ?? '';
-        if (_uf.text.isEmpty) _uf.text = regiao.uf ?? '';
+        _uf ??= siglaDeEstadoValida(regiao.uf);
         _sincronizar();
       });
     }
@@ -158,7 +188,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
   void dispose() {
     _bairro.dispose();
     _cidade.dispose();
-    _uf.dispose();
     _ajuda.dispose();
     _focoDoBairro.dispose();
     super.dispose();
@@ -168,9 +197,11 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
     widget.rascunho
       ..bairro = _bairro.text
       ..cidade = _cidade.text
-      ..uf = _uf.text
+      ..uf = _uf ?? ''
       ..descricao = _ajuda.text;
   }
+
+
 
   void _aoDigitar(String _) => setState(() {
         _sincronizar();
@@ -264,7 +295,12 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
               aoMudar: _aoDigitar,
               limite: 80,
               capitalizacao: TextCapitalization.words,
-              acaoDeTeclado: TextInputAction.next,
+              // **`done` e nao `next`: a cidade virou o ULTIMO campo de
+              // digitacao do bloco do "onde".** O estado deixou de ser campo
+              // de texto e passou a ser seletor, que nao recebe teclado --
+              // `next` aqui empurraria o foco para um botao e deixaria o
+              // teclado na tela sem nada para digitar.
+              acaoDeTeclado: TextInputAction.done,
               // O requisito dito ANTES da tentativa (UX secao 13): a cidade e
               // o unico campo que o contrato exige, e descobrir isso pelo
               // botao desabilitado seria descobrir tarde.
@@ -272,14 +308,27 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
                   'por perto.',
             ),
             const SizedBox(height: BichuEspaco.e4),
-            BichuField(
-              rotulo: 'UF',
-              controlador: _uf,
-              aoMudar: _aoDigitar,
-              opcional: true,
-              limite: 2,
-              capitalizacao: TextCapitalization.characters,
-              acaoDeTeclado: TextInputAction.done,
+            // **Lista de 27, e nao sigla digitada** (cliente, 17/10/2026). Ver
+            // o campo `_uf`: o seletor mostra o NOME e guarda a SIGLA, e nao
+            // existe valor fora da lista.
+            //
+            // **Continua opcional, e o rotulo diz a verdade**: quem exige o
+            // `onde` e a CIDADE, e so ela (`Area.required: [city]`). O
+            // "(opcional)" sai do rotulo e vira a `ajuda`, do mesmo jeito que
+            // em `localizacao/captura_de_localizacao.dart` -- `SeletorDeLista`
+            // nao tem a marca no rotulo, e inventar uma so para este campo
+            // deixaria dois formatos de "pode ficar vazio" na mesma tela.
+            SeletorDeLista(
+              rotulo: TelaOndeEQuando.rotuloDoEstado,
+              estadoInicial: TelaOndeEQuando.escolherOEstado,
+              itens: estadosBrasileiros,
+              selecionado: _uf,
+              ajuda: TelaOndeEQuando.estadoEmBrancoFunciona,
+              aoSelecionar: (codigo) => setState(() {
+                _uf = codigo;
+                _sincronizar();
+                _erro = null;
+              }),
             ),
             const SizedBox(height: BichuEspaco.e6),
             GrupoDeOpcoes<QuandoFoiVisto>(

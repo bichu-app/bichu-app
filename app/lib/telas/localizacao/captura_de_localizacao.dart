@@ -241,7 +241,7 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
       // area que a coordenada nao tem -- que e o caso `OndeComPontoEArea`.
       _preencherSeVazio(_bairro, endereco.bairro);
       _preencherSeVazio(_cidade, endereco.cidade);
-      if (_uf == null && endereco.uf.length == 2) _uf = endereco.uf;
+      _uf ??= siglaDeEstadoValida(endereco.uf);
     });
     // Fora do `setState`: os controladores ja notificam `_publicar` ao mudar,
     // mas `_uf` nao -- e sem esta chamada uma UF preenchida pelo CEP ficaria
@@ -253,6 +253,40 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   void _preencherSeVazio(TextEditingController campo, String valor) {
     if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
     campo.text = valor;
+  }
+
+  /// A regiao de referencia do tutor nos campos que estao VAZIOS.
+  ///
+  /// **Tres telas ja faziam isto e esta nao** (`perdido/tela_onde_e_quando`,
+  /// `rede/criar_encontro`, `perto/sugerir_profissional`): a regiao que o
+  /// tutor cadastrou (BICHUS-92) e texto -- bairro, cidade e UF -- e nao
+  /// coordenada virada em nome, porque o ADR-0006 proibe geocodificacao. Quem
+  /// acha um animal acha, na maior parte das vezes, perto de casa, e o campo
+  /// abria vazio para quem o app ja sabe onde mora.
+  ///
+  /// **Ela roda ao ENTRAR NA FASE DE DIGITAR, e nao na montagem**, e a
+  /// diferenca e de dado e nao de estilo:
+  ///
+  /// - na fase `escolhendo` os campos nao estao na tela. Preencher ali faria
+  ///   `Onde` passar a existir -- e `Registrar` a destravar -- com uma area
+  ///   que a pessoa nunca viu;
+  /// - na fase `comPonto` ha coordenada do aparelho. O bairro do TUTOR nao e o
+  ///   bairro onde o animal foi achado, e escreve-lo ao lado de um ponto medido
+  ///   poria rotulo errado num caso que tem o certo. Derivar a area do ponto e
+  ///   o que o ADR-0006 proibe, e inventa-la da ficha do tutor seria pior.
+  ///
+  /// Na fase `digitando` a pergunta e exatamente "onde foi", a resposta esta
+  /// na tela, editavel, antes de qualquer envio -- que e a mesma forma das
+  /// outras tres telas.
+  void _preencherDaRegiaoDeReferencia() {
+    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
+    if (regiao == null) return;
+    _preencherSeVazio(_bairro, regiao.bairro ?? '');
+    _preencherSeVazio(_cidade, regiao.cidade ?? '');
+    // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
+    // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
+    // `siglaDeEstadoValida`.
+    _uf ??= siglaDeEstadoValida(regiao.uf);
   }
 
   /// A linha que conta o que a busca fez. **Nenhum destes estados e erro.**
@@ -331,18 +365,32 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     }
   }
 
-  /// Vai para o campo de bairro **com o teclado aberto** (criterio 5).
+  /// Vai para o campo de bairro **com o teclado aberto** (criterio 5), **a nao
+  /// ser que o bairro ja venha preenchido**.
   ///
   /// O foco e pedido depois do quadro em que o campo passa a existir: pedir
   /// foco a um `FocusNode` que ainda nao esta montado nao abre teclado nenhum,
   /// e o defeito e silencioso -- a tela fica certa e o teclado nao sobe.
+  ///
+  /// **O criterio 5 escreve a condicao dele junto com a consequencia**: *"sem
+  /// autorizacao, o campo fica VAZIO com o teclado aberto"*. Teclado sobre um
+  /// campo que [_preencherDaRegiaoDeReferencia] acabou de preencher nao e o
+  /// criterio: e teclado sem nada a digitar, cobrindo metade da tela de quem
+  /// so precisa conferir o bairro e seguir. O caso de bairro vazio -- que e o
+  /// de quem nao tem conta ou nao cadastrou regiao -- continua abrindo o
+  /// teclado, e e ele que o caso do criterio 5 mede.
   void _irParaODigitado(MotivoDeNaoTerPonto? motivo) {
     setState(() {
       _ponto = null;
       _motivo = motivo;
       _fase = _Fase.digitando;
+      // Antes do `_publicar` abaixo: assim o `Onde` que sai daqui ja leva a
+      // area preenchida, em vez de sair vazio e ser corrigido no quadro
+      // seguinte pelos escutadores dos controladores.
+      _preencherDaRegiaoDeReferencia();
     });
     _publicar();
+    if (_bairro.text.trim().isNotEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focoDoBairro.requestFocus();
     });

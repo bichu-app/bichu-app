@@ -743,6 +743,18 @@ void main() {
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
+      // Rola PARA CIMA antes de ler: a marca fica no campo `Nome do lugar`,
+      // que é o terceiro do formulário, e o formulário preenchido ficou rolado
+      // para baixo. **Ele ficou MAIS longe em 21/10/2026**, quando o CEP
+      // entrou acima do bairro e o estado saiu da `Row` da cidade para uma
+      // linha própria: a marca passou a nascer fora da dobra, e sem este
+      // passo o caso reprovaria por não ter rolado, e não por não ter marca.
+      await rolarAte(
+        tester,
+        find.text('Escreva só o nome do lugar, sem endereço.'),
+        passo: -120,
+        scrollable: corpoDoFormulario,
+      );
       expect(
         find.text('Escreva só o nome do lugar, sem endereço.'),
         findsOneWidget,
@@ -786,7 +798,10 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
   await digitar('Nome do lugar', 'Praça da Harmonia');
   await digitar('Bairro', 'Gamboa');
   await digitar('Cidade', 'Rio de Janeiro');
-  await digitar('UF', 'RJ');
+  // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026): a
+  // lista mostra o nome e guarda a sigla, e o caso continua afirmando `RJ` no
+  // corpo que sai -- e e o corpo que importa.
+  await escolherEstadoNaLista(tester, 'RJ', scrollable: corpoDoFormulario);
   await escolherComecoAmanha(tester);
 }
 
