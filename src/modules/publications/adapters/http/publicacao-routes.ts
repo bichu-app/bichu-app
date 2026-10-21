@@ -257,8 +257,15 @@ function comoMinhaPublicacao(
  * dos dois canais. O que ele prova é canal de contato confirmado — na prática
  * e-mail —, e é por isso que o rótulo que o app desenha diz "e-mail
  * confirmado" e nunca "verificado" nem "confiável".
+ *
+ * **Exportada para a isca**, como `comoResposta` do perfil de pessoa e como os
+ * `construtorDe...` da persistência: **nenhum portão deste repositório confere o
+ * CORPO da resposta**, então a única forma de medir a forma do corpo em suíte é
+ * chamar a projeção. Antes de 21/10/2026 esta função não tinha medição nenhuma —
+ * `photo_icon_url` podia sumir do corpo e a suíte inteira continuava verde,
+ * porque a lista de seleção do SQL era o mais longe que os casos chegavam.
  */
-function comoPublicacaoDaLinha(
+export function comoPublicacaoDaLinha(
   publicacao: PublicacaoNaLinha,
   baseDeMidia: AbsoluteUrl,
 ): Record<string, unknown> {
@@ -302,8 +309,12 @@ function comoPublicacaoDaLinha(
  * foto (Emenda 5). Um `CommentAuthor` separado seria a segunda definicao da
  * mesma coisa -- e foi assim que `photo_icon_url` quase ganhou um hospedeiro que
  * o portao nao vigiava.
+ *
+ * **Exportada para a isca**, pelo mesmo motivo de [comoPublicacaoDaLinha]: o
+ * corpo da resposta não tem portão, e o reuso de `PublicationAuthor` só é real
+ * se as duas projeções forem medidas lado a lado.
  */
-function comoComentario(
+export function comoComentario(
   comentario: ComentarioVisivel,
   baseDeMidia: AbsoluteUrl,
 ): Record<string, unknown> {
