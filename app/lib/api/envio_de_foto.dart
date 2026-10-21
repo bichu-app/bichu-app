@@ -37,6 +37,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -415,9 +416,13 @@ class EnvioDeFoto {
   /// megabytes por rede de celular, e 20 s derrubaria envio que ia dar certo.
   final Duration tempoLimite;
 
+  /// [aoProgredir] recebe **bytes do arquivo entregues ao socket**, e o total,
+  /// a cada 64 KiB. Nulo nao mede nada e nao custa nada. Ver
+  /// [ProgressoDeEnvio] para o que esse numero e e o que ele nao e.
   Future<DesfechoDoEnvio> enviar({
     required FotoLocal foto,
     required DestinoDaFoto destino,
+    ProgressoDeEnvio? aoProgredir,
   }) async {
     final Uint8List bytes;
     try {
@@ -447,7 +452,12 @@ class EnvioDeFoto {
       return DesfechoDoEnvio.recusada;
     }
 
-    final subiu = await _subirOsBytes(autorizacao, bytes, foto.tipoDeConteudo);
+    final subiu = await _subirOsBytes(
+      autorizacao,
+      bytes,
+      foto.tipoDeConteudo,
+      aoProgredir,
+    );
     if (subiu != DesfechoDoEnvio.enviada) return subiu;
 
     try {
@@ -467,15 +477,26 @@ class EnvioDeFoto {
     AutorizacaoDeEnvio autorizacao,
     Uint8List bytes,
     String tipoDeConteudo,
+    ProgressoDeEnvio? aoProgredir,
   ) async {
+    // **O zero e anunciado ANTES de o socket abrir.** Quem desenha a barra
+    // precisa do TOTAL para escrever "0 KB de 3,4 MB"; sem este aviso a tela
+    // ficaria sem numero nenhum ate o primeiro pedaco sair, e um retangulo sem
+    // numero no comeco de um envio longo e indistinguivel de uma barra que
+    // anima sem medir.
+    aoProgredir?.call(0, bytes.length);
+
     final http.BaseRequest requisicao;
     if (autorizacao.metodo == 'PUT') {
       // Os cabecalhos assinados vao **sem alterar**, inclusive `Content-Type`:
       // qualquer diferenca invalida a assinatura, e o armazenamento responde
       // 403 sem dizer qual campo.
-      requisicao = http.Request('PUT', autorizacao.url)
-        ..headers.addAll(autorizacao.cabecalhos)
-        ..bodyBytes = bytes;
+      requisicao = _CorpoMedido(
+        'PUT',
+        autorizacao.url,
+        _emPedacos(bytes, aoProgredir),
+        bytes.length,
+      )..headers.addAll(autorizacao.cabecalhos);
     } else {
       // Politica de formulario: os campos assinados primeiro, o arquivo por
       // ultimo. A ordem nao e estilo -- a politica de POST do S3 exige que
@@ -485,10 +506,20 @@ class EnvioDeFoto {
       // O `Content-Type` do arquivo nao e anotado na parte: ele viaja como
       // campo assinado da politica, e uma segunda declaracao aqui seria a que
       // diverge.
+      //
+      // **`MultipartFile` de FLUXO, e nao `fromBytes`.** Ver [_emPedacos]: a
+      // versao de bytes emite o arquivo inteiro num evento so, e com ela a
+      // contagem saltaria de 0 para o total num passo -- uma barra que mede,
+      // tecnicamente, e que na tela e indistinguivel de uma que nao mede.
       requisicao = http.MultipartRequest('POST', autorizacao.url)
         ..fields.addAll(autorizacao.campos)
         ..files.add(
-          http.MultipartFile.fromBytes('file', bytes, filename: 'foto'),
+          http.MultipartFile(
+            'file',
+            _emPedacos(bytes, aoProgredir),
+            bytes.length,
+            filename: 'foto',
+          ),
         );
     }
 
@@ -518,4 +549,100 @@ class EnvioDeFoto {
   }
 
   void fechar() => _cliente.close();
+}
+
+/// Quantos bytes do ARQUIVO o cliente HTTP ja aceitou, de quantos no total.
+///
+/// Local: e medida do aparelho, e nao campo de contrato.
+///
+/// ## O que este numero e, e o que ele NAO e
+///
+/// Ele e **bytes entregues ao cliente HTTP**, isto e, aceitos pelo socket do
+/// sistema. Ele **nao** e "bytes que o armazenamento confirmou ter gravado":
+/// nenhuma das duas formas de upload assinado devolve recibo parcial, e
+/// inventar um numero mais conservador aqui seria inventar informacao.
+///
+/// A diferenca aparece no fim do envio: o contador chega ao total alguns
+/// instantes antes de a resposta voltar, porque os ultimos pedacos ainda estao
+/// no caminho. Quem desenha a barra trata 100% como *"os bytes sairam, estamos
+/// esperando o servidor"*, e nao como *"pronto"* -- e e [DesfechoDoEnvio] quem
+/// diz quando esta pronto.
+///
+/// O numero e honesto no sentido que importa: numa rede lenta ele PARA quando
+/// a rede para, porque o gerador de [_emPedacos] fica suspenso enquanto o
+/// socket nao aceita o pedaco seguinte. Uma barra que anima por tempo decorrido
+/// continuaria andando com o cabo arrancado.
+typedef ProgressoDeEnvio = void Function(int enviados, int total);
+
+/// Quanto o gerador entrega por vez. 64 KiB.
+///
+/// Numero de granularidade, e nao de desempenho: ele decide de quanto em
+/// quanto a barra anda. Com 1 MiB, uma foto de 3 MiB daria tres passos e a
+/// pessoa veria tres saltos; com 4 KiB seriam 768 chamadas de `setState` numa
+/// foto, e o custo da pintura passaria a competir com o envio.
+const int _pedacoDoEnvio = 64 * 1024;
+
+/// Os bytes do arquivo, em pedacos, **contando o que o socket ja aceitou**.
+///
+/// ## Por que a contagem mora aqui, e nao num embrulho da requisicao
+///
+/// Porque e aqui que a contrapressao acontece. `yield` suspende o gerador ate
+/// o consumidor pedir o pedaco seguinte, e o consumidor e o `IOSink` do socket:
+/// enquanto o buffer do sistema esta cheio, este `yield` nao retorna. Entao o
+/// numero anunciado logo depois dele e, literalmente, *"este pedaco saiu"*.
+///
+/// Um embrulho de `BaseRequest` que contasse o fluxo de `finalize()` mediria a
+/// mesma coisa no caminho `PUT` e mediria o ENVELOPE no caminho `POST` -- os
+/// campos assinados da politica entrariam na conta, e a barra comecaria em um
+/// numero que nao e zero por motivo que a pessoa nao tem como entender. A
+/// contagem do ARQUIVO e a que casa com o "de 3,4 MB" que a tela escreve.
+///
+/// `sublistView` nao copia: a vista aponta para os mesmos bytes.
+Stream<List<int>> _emPedacos(Uint8List bytes, ProgressoDeEnvio? aoProgredir) {
+  // Fora de `async*` de proposito: o corpo de um gerador so comeca a rodar no
+  // primeiro `listen`, e um `assert` de tamanho dentro dele passaria calado.
+  if (bytes.isEmpty) return const Stream<List<int>>.empty();
+  return _gerarPedacos(bytes, aoProgredir);
+}
+
+Stream<List<int>> _gerarPedacos(
+  Uint8List bytes,
+  ProgressoDeEnvio? aoProgredir,
+) async* {
+  final total = bytes.length;
+  var inicio = 0;
+  while (inicio < total) {
+    final fim = math.min(inicio + _pedacoDoEnvio, total);
+    yield Uint8List.sublistView(bytes, inicio, fim);
+    // DEPOIS do `yield`, e nao antes: antes, o numero seria "este pedaco esta
+    // na fila", e numa rede parada a barra chegaria a 100% com zero byte na
+    // rua. Ver o doc de [ProgressoDeEnvio].
+    inicio = fim;
+    aoProgredir?.call(inicio, total);
+  }
+}
+
+/// Uma requisicao cujo corpo e um FLUXO, para o caminho `PUT`.
+///
+/// `http.Request` so aceita corpo pronto (`bodyBytes`), e `finalize()` dele
+/// emite o arquivo inteiro num evento so -- o mesmo problema de
+/// `MultipartFile.fromBytes`. `http.StreamedRequest` resolveria o fluxo e
+/// perderia a contrapressao: o `StreamController` dele guarda tudo o que
+/// recebe, entao o gerador correria ate o fim na memoria e a barra encheria
+/// antes de qualquer byte sair.
+///
+/// `contentLength` e declarado: sem ele a requisicao sai em `chunked`, e
+/// politica assinada com tamanho declarado recusa transferencia em pedacos.
+class _CorpoMedido extends http.BaseRequest {
+  _CorpoMedido(super.method, super.url, this._corpo, int tamanho) {
+    contentLength = tamanho;
+  }
+
+  final Stream<List<int>> _corpo;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream(_corpo);
+  }
 }
