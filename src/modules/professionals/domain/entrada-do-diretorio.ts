@@ -193,6 +193,73 @@ export function atividadePrincipal(kinds: readonly TipoDeProfissional[]): TipoDe
   return kinds[0] ?? 'vet';
 }
 
+/**
+ * O ENDERECO COMERCIAL da entrada, como as quatro colunas o guardam.
+ *
+ * ## Por que ele e um tipo SEPARADO, e nao mais quatro campos de
+ * `EntradaDoDiretorio`
+ *
+ * `EntradaDoDiretorio` e o que a LISTAGEM projeta, e `projetarEntrada` e o
+ * caminho dos dois (a listagem e o detalhe). Endereco de porta em ate vinte
+ * cartoes de `Perto` nao foi pedido por nenhuma tela e alarga a superficie de
+ * graca -- entao ele segue o caminho da FOTO EM FAIXA, que e campo proprio de
+ * `LocalDoDiretorio` e por isso **nao tem como escorregar para a lista** no dia
+ * em que alguem acrescentar um campo a projecao comum.
+ *
+ * O arranjo nao e zelo: a diferenca entre "esta aqui" e "esta no outro tipo" e
+ * a unica coisa que, em TypeScript, impede a listagem de devolver isto.
+ *
+ * ## O que ele NAO e
+ *
+ * Nao e endereco de PESSOA. A secao 4 do ADR-0011 separa os dois casos: *"a
+ * pagina do tutor e uma pessoa que nao pediu para ser achada; o perfil do
+ * profissional e uma entidade que aceitou aparecer para ser contratada"*. O
+ * endereco de residencia de um usuario nao sai em superficie nenhuma, e nada
+ * aqui o alcanca -- estas colunas sao de `professionals`.
+ *
+ * Nao e coordenada e nao vira uma. ADR-0006: e TEXTO. Quem abre o mapa e o
+ * aplicativo de mapas do aparelho, a partir do texto.
+ */
+export interface EnderecoComercial {
+  readonly postalCode: string | null;
+  readonly street: string | null;
+  readonly streetNumber: string | null;
+  readonly complement: string | null;
+}
+
+/** Os quatro campos de endereco de `DirectoryEntryDetail`. */
+export interface EnderecoComercialPublico {
+  readonly postal_code: string | null;
+  readonly street: string | null;
+  readonly street_number: string | null;
+  readonly complement: string | null;
+}
+
+/**
+ * As quatro colunas viram os quatro campos do detalhe, **sem compor e sem
+ * normalizar**.
+ *
+ * O servidor nao monta uma linha unica: o que ele gravou foi o que o operador
+ * conferiu na tela do painel, e juntar os pedacos aqui seria inventar um
+ * formato que ninguem decidiu, num lugar onde o painel nao poderia mais
+ * corrigi-lo. Quem desenha a linha e quem monta o texto da busca de mapa e a
+ * tela.
+ *
+ * Nulo atravessa como nulo nos quatro, e nulo e o estado normal: profissional
+ * autonomo nao tem endereco comercial, e a migracao `20261018000001` deixou as
+ * quatro anulaveis exatamente por isso.
+ */
+export function projetarEnderecoComercial(
+  endereco: EnderecoComercial,
+): EnderecoComercialPublico {
+  return {
+    postal_code: endereco.postalCode,
+    street: endereco.street,
+    street_number: endereco.streetNumber,
+    complement: endereco.complement,
+  };
+}
+
 export function projetarEntrada(
   entrada: EntradaDoDiretorio,
   urlDeMidia: (chave: string) => string,

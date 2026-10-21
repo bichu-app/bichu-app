@@ -44,6 +44,7 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
+  projetarEnderecoComercial,
   projetarEntrada,
   urlDaDerivada,
   type TipoDeProfissional,
@@ -431,6 +432,16 @@ export function registrarRotasDoDiretorio(
         // usa -- nao a conhece, e e por isso que ela nao tem como escorregar
         // para a lista num campo novo que alguem acrescente la.
         photo_url: urlDaDerivada(local.fotoPublicKey, deps.urlDeMidia),
+        // O ENDERECO COMERCIAL, so aqui e pela mesma razao da faixa (cliente,
+        // 21/10/2026: *"o endereco completo do profissional"*). `projetarEntrada`
+        // -- que a listagem tambem usa -- nao o conhece, e e por isso que ele
+        // nao tem como escorregar para a lista num campo novo que alguem
+        // acrescente la.
+        //
+        // **Endereco de ENTIDADE, nunca de pessoa** (ADR-0011 secao 4): estas
+        // quatro colunas sao de `professionals`, e nenhuma rota de pessoa as
+        // alcanca.
+        ...projetarEnderecoComercial(local.enderecoComercial),
         rating: projetarPontuacao(local.pontuacao),
         my_review_ref: local.refDaMinhaAvaliacao,
         can_review: local.podeAvaliar,

@@ -21,6 +21,7 @@ import { describe, it } from 'node:test';
 import {
   distanciaNaGrade,
   GRADE_EM_METROS,
+  projetarEnderecoComercial,
   projetarEntrada,
   type EntradaDoDiretorio,
   urlDaDerivada,
@@ -381,5 +382,65 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
     assert.equal(projetada.kind, 'vet');
     assert.notEqual(projetada.kind, 'organization');
     assert.equal(projetada.entity_kind, 'organization');
+  });
+});
+
+/**
+ * O ENDERECO COMERCIAL (cliente, 21/10/2026): *"o endereco completo do
+ * profissional"*, para a pessoa tocar e abrir o aplicativo de mapas.
+ *
+ * Iscas desligadas no codigo de producao em 21/10/2026, conferidas no disco,
+ * suite rodada, arquivo restaurado:
+ *
+ * | o que foi desligado | `fail` |
+ * |---|---|
+ * | `projetarEnderecoComercial` devolvendo os quatro nulos | 2 |
+ * | os quatro campos acrescentados a `projetarEntrada` (a projecao da LISTA) | 1 |
+ */
+void describe('o endereco comercial da entrada', () => {
+  void it('os quatro campos atravessam como GRAVADOS, sem compor e sem normalizar', () => {
+    // O servidor nao monta uma linha unica: o que ele gravou foi o que o
+    // operador conferiu na tela do painel. Compor aqui seria inventar um
+    // formato que ninguem decidiu, num lugar onde o painel nao poderia
+    // corrigi-lo.
+    const projetado = projetarEnderecoComercial({
+      postalCode: '05422030',
+      street: 'Rua Teodoro Sampaio',
+      streetNumber: 's/n',
+      complement: 'Sala 3',
+    });
+    assert.deepEqual(projetado, {
+      postal_code: '05422030',
+      street: 'Rua Teodoro Sampaio',
+      street_number: 's/n',
+      complement: 'Sala 3',
+    });
+  });
+
+  void it('sem endereco, os quatro saem NULOS -- e nulo e o estado normal', () => {
+    assert.deepEqual(
+      projetarEnderecoComercial({
+        postalCode: null,
+        street: null,
+        streetNumber: null,
+        complement: null,
+      }),
+      { postal_code: null, street: null, street_number: null, complement: null },
+    );
+  });
+
+  void it('ISCA DE FRONTEIRA: a projecao da LISTA nao carrega nenhum dos quatro', () => {
+    // `projetarEntrada` e o caminho da listagem E do detalhe. O endereco segue
+    // o caminho da FOTO EM FAIXA -- campo proprio de `LocalDoDiretorio` --, e e
+    // por isso que ele nao tem como escorregar para o cartao de `Perto` no dia
+    // em que alguem acrescentar um campo a projecao comum.
+    const chaves = Object.keys(projetarEntrada(entrada(), URL_DE_MIDIA));
+    for (const campo of ['postal_code', 'street', 'street_number', 'complement']) {
+      assert.ok(
+        !chaves.includes(campo),
+        `\`${campo}\` entrou na projecao COMUM: a listagem passaria a devolver ` +
+          'endereco de porta em ate vinte cartoes, que nenhuma tela pediu',
+      );
+    }
   });
 });

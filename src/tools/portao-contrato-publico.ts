@@ -87,6 +87,24 @@ const CAMPOS_PROIBIDOS = new Set([
   'map_url',
   'street_number',
   'house_number',
+  // ---------------------------------------------------------------------
+  // `complement` entrou em 21/10/2026, junto com a decisao do cliente que
+  // abriu `postal_code`, `street`, `street_number` e `complement` em
+  // `DirectoryEntryDetail` -- operacao COM conta, que este portao nao
+  // percorre.
+  //
+  // Ele estava faltando. A migracao `20261018000001` criou as QUATRO colunas
+  // de endereco de `professionals` e esta lista tinha TRES: quem publicasse
+  // amanha uma superficie de diretorio sem conta levando `complement` --
+  // "apto 52", "casa dos fundos" -- atravessaria o portao sem um achado,
+  // enquanto as outras tres reprovavam. Abrir a porta do lado de dentro e
+  // deixar a fresta do lado de fora e como o vazamento entra depois, por uma
+  // coluna que ninguem reparou.
+  //
+  // **Acrescentar nao afrouxa nada e nao dispensa nada**: o portao continua
+  // olhando so operacao alcancavel sem conta, e nenhuma operacao de hoje
+  // declara `complement` sem conta. A isca de granularidade cobra as quatro.
+  'complement',
 ]);
 
 const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);
@@ -523,6 +541,10 @@ paths:
                   distance_m: { type: integer }
                   radius_m: { type: integer }
                   map_url: { type: string }
+                  postal_code: { type: string }
+                  street: { type: string }
+                  street_number: { type: string }
+                  complement: { type: string }
   /isca-pedido:
     get:
       operationId: iscaDeCoordenadaNoPedido
@@ -604,7 +626,21 @@ function autoTeste(): string[] {
     parameters: [],
   };
   const achadosDaGranularidade = inspecionarCamposPublicos(spec, [granularidade]);
-  for (const fino of ['reference_point', 'distance_m', 'radius_m', 'map_url']) {
+  // As QUATRO colunas de endereco de `professionals` estao na lista desde
+  // 21/10/2026, e estao aqui pelo motivo que o ADR-0011 secao 4 separa: o
+  // endereco comercial sai em `DirectoryEntryDetail`, que **exige conta**, e
+  // continua proibido em toda superficie que nao exige. Sem a isca, tirar
+  // qualquer uma das quatro da lista passaria verde.
+  for (const fino of [
+    'reference_point',
+    'distance_m',
+    'radius_m',
+    'map_url',
+    'postal_code',
+    'street',
+    'street_number',
+    'complement',
+  ]) {
     if (!achadosDaGranularidade.some((a) => a.campo === fino)) {
       falhas.push(
         `a isca de granularidade passou em \`${fino}\`: a superfície pública voltou a ` +

@@ -57,6 +57,7 @@ import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type {
+  EnderecoComercial,
   EntradaDoDiretorio,
   TipoDeEntidade,
   TipoDeProfissional,
@@ -99,6 +100,30 @@ interface LinhaDaEntrada {
   evidencias: TipoDeEvidencia[] | null;
   distancia_em_metros: number | null;
   logo_public_key: string | null;
+}
+
+/**
+ * As quatro colunas de endereco, **so na linha do DETALHE**.
+ *
+ * Elas nao entram em `LinhaDaEntrada` de proposito: aquele tipo e o da
+ * listagem, e `construtorDaListagem` nao as seleciona. Linha separada e o que
+ * faz "a lista nao traz endereco" ser verificavel na consulta, e nao so uma
+ * frase.
+ */
+interface LinhaDoEnderecoComercial {
+  postal_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
+}
+
+function comoEnderecoComercial(l: LinhaDoEnderecoComercial): EnderecoComercial {
+  return {
+    postalCode: l.postal_code,
+    street: l.street,
+    streetNumber: l.street_number,
+    complement: l.complement,
+  };
 }
 
 /**
@@ -642,6 +667,14 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
           // foto em faixa sai em campo proprio de `LocalDoDiretorio`.
           CHAVE_DA_DERIVADA('logo_image_id').as('logo_public_key'),
           CHAVE_DA_DERIVADA('photo_image_id').as('photo_public_key'),
+          // O ENDERECO COMERCIAL, **so aqui** (cliente, 21/10/2026). As quatro
+          // colunas existem desde `20261018000001` e nenhuma consulta as lia.
+          // `construtorDaListagem` continua sem elas: a lista responde "onde
+          // fica" com bairro, cidade e UF, e e o detalhe que responde "e ali".
+          'postal_code',
+          'street',
+          'street_number',
+          'complement',
         ])
         .where('slug', '=', slug)
         .where('status', '=', 'published')
@@ -676,6 +709,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: canal.rows[0]?.tem_canal ?? false,
         fotoPublicKey: linha.photo_public_key,
+        enderecoComercial: comoEnderecoComercial(linha as unknown as LinhaDoEnderecoComercial),
       };
     },
 

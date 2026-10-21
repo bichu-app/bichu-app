@@ -2605,12 +2605,25 @@ export interface paths {
          *     chega por link de um perfil que saiu do ar le "nao encontramos",
          *     que e a verdade que ele tem direito de saber.
          *
-         *     **Nenhum campo novo de cadastro apareceu aqui.** Site, e-mail,
-         *     WhatsApp, redes sociais, horario de funcionamento e foto **nao
-         *     existem** em `professionals` -- nao ha coluna e nao ha painel que as
-         *     preencha. Esta operacao devolve o que ha. Declarar campo que ninguem
-         *     pode preencher produziria uma tela com seis linhas vazias permanentes,
-         *     que e pior do que uma tela curta.
+         *     **O ENDERECO COMERCIAL SAI AQUI desde 21/10/2026**, em `postal_code`,
+         *     `street`, `street_number` e `complement`. As quatro colunas existiam em
+         *     `professionals` desde `20261018000001` e nao eram projetadas por uma
+         *     razao escrita na propria migracao -- *"exibir endereco completo e
+         *     decisao do cliente, e ela nao foi tomada"*. **Ela foi tomada**, pelo
+         *     cliente, em 21/10/2026: *"o endereco completo do profissional"*, para a
+         *     pessoa poder tocar nele e abrir o aplicativo de mapas.
+         *
+         *     **ISTO NAO E EMENDA AO TETO DE BAIRRO E CIDADE DO ADR-0010**, e a razao
+         *     e a secao 4 do ADR-0011: *"a pagina do tutor e uma pessoa que nao pediu
+         *     para ser achada; o perfil do profissional e uma entidade que aceitou
+         *     aparecer para ser contratada"*. O endereco de uma PESSOA continua
+         *     proibido em toda superficie, e `PersonProfile` segue sem nenhum dos
+         *     quatro. O `phone_e164` comercial ja saia por esta mesma rota e pela
+         *     mesma razao.
+         *
+         *     **E-mail, WhatsApp, redes sociais e horario continuam fora**: nao ha
+         *     coluna e nao ha painel que as preencha, e declarar campo que ninguem
+         *     pode preencher produziria uma tela com linhas vazias permanentes.
          *
          *     ## A distancia, e por que ela e NULA aqui com mais frequencia
          *
@@ -9645,8 +9658,14 @@ export interface components {
             };
         };
         /**
-         * @description A pagina do local. **Os mesmos campos de `DirectoryEntrySummary`**,
-         *     mais `rating` e `my_review_ref`.
+         * @description A pagina do local. **Os campos de `DirectoryEntrySummary`**, mais
+         *     `rating`, `my_review_ref`, a `photo_url` em faixa e o **endereco
+         *     comercial** (`postal_code`, `street`, `street_number`, `complement`).
+         *
+         *     **Os tres grupos que o resumo nao tem estao aqui pelo mesmo criterio**:
+         *     o cartao responde "existe e fica perto"; a pagina responde "e ali, e eu
+         *     vou". Endereco de porta e foto em faixa em ate vinte cartoes alargam a
+         *     superficie e o peso sem nenhuma tela pedindo.
          *
          *     Ela repete os campos em vez de usar `allOf` com o resumo porque o
          *     gerador de tipos de `src/`, `admin/` e `web/` produz uniao de
@@ -9718,6 +9737,40 @@ export interface components {
              *     esta.
              */
             site_url?: string | null;
+            /**
+             * @description O CEP comercial, **oito digitos sem mascara e sem hifen** -- a forma
+             *     gravada, que e a de `CollarTagShippingAddress.postal_code`. A
+             *     mascara vive na tela, como no painel: dois formatos para o mesmo CEP
+             *     e o defeito que a duplicacao produz.
+             */
+            postal_code?: string | null;
+            /**
+             * @description O logradouro, como o painel o gravou. **Nao e normalizado** e nao e
+             *     conferido contra o CEP: `GET /v1/admin/postal-codes/{postalCode}`
+             *     poupa digitacao e o resultado e editavel, entao o que esta aqui e o
+             *     que o operador conferiu na tela.
+             */
+            street?: string | null;
+            /**
+             * @description O numero da porta, **texto e nao inteiro**: `s/n`, `120A` e `KM 32`
+             *     sao numeros de porta reais. Mesma decisao de
+             *     `CollarTagShippingAddress.street_number`.
+             *
+             *     **Nulo com `street` preenchido e caso legitimo** (estrada, rodovia,
+             *     quadra) -- a migracao recusou de proposito um `CHECK` que exigisse
+             *     os dois juntos, e quem desenha a linha nao pode supor o par.
+             */
+            street_number?: string | null;
+            /**
+             * @description Sala, loja, andar ou bloco. Entra porque o cliente pediu o endereco
+             *     **completo** e porque e o que faz alguem achar a porta certa depois
+             *     de chegar no numero.
+             *
+             *     **Fica fora do texto que vai para o aplicativo de mapas**: nenhum
+             *     mapa procura por `sala 302`, e inclui-lo na busca piora o resultado.
+             *     Ele e linha de leitura, nao termo de busca.
+             */
+            complement?: string | null;
             /**
              * Format: uri
              * @description A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma
