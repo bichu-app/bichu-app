@@ -246,13 +246,68 @@ void describe('`escaparCuringas` procura o que a pessoa digitou, e não um padr�
  *
  * As junções da taxonomia de dois níveis nomeiam `i.category` e `i.subcategory`
  * em todo `SELECT` da vitrine, filtrado ou não; é no `WHERE` que se vê o que o
- * recorte estreitou. Sem `WHERE`, devolve vazio -- e aí não há predicado nenhum
- * a achar, que é a leitura certa.
+ * recorte estreitou.
+ *
+ * ## SEM `WHERE` ELE REPROVA, E ANTES DEVOLVIA VAZIO (21/10/2026)
+ *
+ * A versão anterior devolvia `''` e dizia que *"aí não há predicado nenhum a
+ * achar, que é a leitura certa"*. **A leitura estava errada, e o motivo é o uso
+ * NEGATIVO deste recorte:** `assert.doesNotMatch(comum, /"i"."category"/)`
+ * passa sobre texto vazio. Num SQL que perdeu o `WHERE` inteiro — que é
+ * exatamente o estado em que os dois predicados de `active` desapareceram — a
+ * asserção que existe para pegar "a categoria entrou sem recorte" ficaria
+ * verde por não ter onde olhar.
+ *
+ * Toda consulta da vitrine carrega `WHERE`: os dois `active` são incondicionais
+ * (é o caso logo abaixo). A falta dele é defeito, não caso de borda — e é a
+ * lição do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: corte que
+ * não encontra o ponto de corte vira varredura cega e silenciosa.
+ *
+ * **Nada mudou no que o portão cobra**: os mesmos predicados, a mesma
+ * taxonomia, as mesmas asserções. Mudou só o que acontece quando não há onde
+ * ler.
  */
 function whereDaVitrine(sql: string): string {
   const corte = sql.indexOf(' where ');
-  return corte === -1 ? '' : sql.slice(corte + ' where '.length);
+  assert.ok(
+    corte !== -1,
+    'a consulta da vitrine ficou SEM cláusula WHERE. Os dois predicados de ' +
+      '`active` são incondicionais, então isso é defeito; e um recorte vazio ' +
+      `deixaria as asserções NEGATIVAS deste arquivo passando sem alvo. SQL: ${sql}`,
+  );
+  return sql.slice(corte + ' where '.length);
 }
+
+// ---------------------------------------------------------------------------
+// AS ISCAS DO RECORTE -- AS DUAS DIRECOES
+// ---------------------------------------------------------------------------
+//
+// A que REPROVA e a que importa: sem ela, voltar o `assert.ok` para
+// `corte === -1 ? '' : ...` deixaria verde todo `doesNotMatch` deste arquivo.
+void describe('o recorte do WHERE da vitrine', () => {
+  void it('REPROVA um SQL sem `WHERE`, em vez de devolver vazio', () => {
+    assert.throws(
+      () => whereDaVitrine('select "i"."id" from "store_items" as "i"'),
+      /SEM cláusula WHERE/,
+      'o recorte aceitou um SQL sem `WHERE` e devolveu texto vazio. A partir ' +
+        'daí `doesNotMatch` aprova qualquer coisa: o portão varre nada e passa.',
+    );
+  });
+
+  void it('com `WHERE`, devolve a clausula e NAO as juncoes', () => {
+    const where = whereDaVitrine(
+      'select "i"."id" from "store_items" as "i" ' +
+        'inner join "categories" as "c" on "c"."id" = "i"."category" ' +
+        'where "i"."active" = $1',
+    );
+    assert.equal(where, '"i"."active" = $1');
+    assert.ok(
+      !where.includes('inner join'),
+      'o recorte engoliu a juncao: a taxonomia nomeia `i.category` em TODO ' +
+        'select, e e por isso que a juncao nao pode entrar no que se mede.',
+    );
+  });
+});
 
 void describe('o item retirado e o parceiro desativado ficam fora pela cláusula WHERE', () => {
   void it('a consulta carrega os DOIS predicados de `active`', () => {

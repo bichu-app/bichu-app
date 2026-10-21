@@ -249,9 +249,99 @@ function valoresDoEnum(corpo) {
   return valores;
 }
 
-/** As chaves de resposta que o corpo de uma classe le. */
+/**
+ * O corpo de uma classe com o CONTEUDO dos comentarios trocado por espaco,
+ * **preservando comprimento e quebra de linha**.
+ *
+ * ## O DEFEITO (21/10/2026): COMENTARIO CONTAVA COMO LEITURA
+ *
+ * `chavesLidas` casava `json['...']` no texto CRU. Em `app/lib/api/` ha hoje
+ * CINCO comentarios que citam `json['...']` -- quatro deles com o marcador
+ * `json['campo']`, escrito justamente na prosa que explica este portao:
+ *
+ *     /// propria classe, com `json['campo']`: leitura por outro nome de
+ *     /// variavel escaparia do portao.
+ *
+ * Isto e, **a prosa que documenta o portao entrava na conta dele como chave
+ * lida**, e `campo` nao existe em contrato nenhum. Foi medido na onda 4 com
+ * `json['share_url']`: um comentario acrescentou uma divergencia falsa.
+ *
+ * O conserto preserva comprimento e `\n` porque a leitura de declaracoes deste
+ * arquivo e por LINHA e os relatorios nomeiam posicao -- encurtar o texto moveria
+ * o que o portao reporta. As ASPAS e o conteudo dos literais ficam de pe: a
+ * chave chega ao Dart por dentro de um literal, e `json['share_url']` em codigo
+ * e leitura de verdade, nao prosa.
+ *
+ * LIMITE, dito em voz alta: isto nao distingue `/` de divisao de `/` de
+ * expressao regular. Nao ha nenhuma em `app/lib/api/` hoje, e uma regex ali
+ * nao esconderia chave nenhuma.
+ */
+function corpoSemComentarios(corpo) {
+  let saida = '';
+  let i = 0;
+  const n = corpo.length;
+  while (i < n) {
+    const c = corpo[i];
+    const d = corpo[i + 1];
+    if (c === '/' && d === '/') {
+      while (i < n && corpo[i] !== '\n') {
+        saida += ' ';
+        i += 1;
+      }
+      continue;
+    }
+    if (c === '/' && d === '*') {
+      saida += '  ';
+      i += 2;
+      while (i < n && !(corpo[i] === '*' && corpo[i + 1] === '/')) {
+        saida += corpo[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      if (i < n) {
+        saida += '  ';
+        i += 2;
+      }
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      saida += c;
+      while (j < n && corpo[j] !== c) {
+        if (corpo[j] === '\\') {
+          saida += corpo.slice(j, j + 2);
+          j += 2;
+          continue;
+        }
+        if (corpo[j] === '\n') break;
+        saida += corpo[j];
+        j += 1;
+      }
+      if (j < n && corpo[j] === c) {
+        saida += c;
+        j += 1;
+      }
+      i = j;
+      continue;
+    }
+    saida += c;
+    i += 1;
+  }
+  if (saida.length !== corpo.length) {
+    throw new Error(
+      `corpoSemComentarios mudou o comprimento (${saida.length} != ${corpo.length}): ` +
+        'todo indice e numero de linha que o portao reporta passaria a apontar para outro lugar',
+    );
+  }
+  return saida;
+}
+
+/** As chaves de resposta que o corpo de uma classe le. Comentario NAO conta. */
 function chavesLidas(corpo) {
-  return [...new Set([...corpo.matchAll(/\bjson\['([^']+)'\]/g)].map((m) => m[1]))];
+  return [
+    ...new Set(
+      [...corpoSemComentarios(corpo).matchAll(/\bjson\['([^']+)'\]/g)].map((m) => m[1]),
+    ),
+  ];
 }
 
 /**
@@ -290,10 +380,18 @@ function chavesLidas(corpo) {
  * guarda -- continua reprovando, e tem isca propria.
  */
 function chavesComGuardaIs(corpo) {
-  return new Set([...corpo.matchAll(/\bjson\['([^']+)'\]\s+is\s+/g)].map((m) => m[1]));
+  // Comentario nao guarda nada: a guarda tem de estar no CODIGO. Sem isto,
+  // um `// json['x'] is Map` na prosa tiraria `x` do conjunto de molde sem
+  // nulo -- a direcao CEGA deste portao, que aprova o furo em silencio.
+  return new Set(
+    [...corpoSemComentarios(corpo).matchAll(/\bjson\['([^']+)'\]\s+is\s+/g)].map((m) => m[1]),
+  );
 }
 
-function chavesSemNulo(corpo) {
+function chavesSemNulo(corpo_) {
+  // O corpo sem comentario, UMA vez: a varredura abaixo anda caractere por
+  // caractere contando `<` e `>`, e um `>` de prosa desalinharia a contagem.
+  const corpo = corpoSemComentarios(corpo_);
   const saida = new Set();
   const guardadas = chavesComGuardaIs(corpo);
   const re = /\bjson\['([^']+)'\]\s+as\s+/g;
@@ -751,6 +849,60 @@ function autoteste() {
       dart(
         "/// `#/components/schemas/Pet` do contrato.",
         "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    return Pet(nome: (json['name'] as Map<String, dynamic>)['url']);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: "campo-opcional-lido-como-obrigatorio",
+    nomeia: "name",
+  });
+
+  // ===================================================================
+  // COMENTARIO NAO E LEITURA -- AS DUAS DIRECOES, 21/10/2026
+  // ===================================================================
+  //
+  // `chavesLidas` casava `json['...']` no texto CRU. Em `app/lib/api/` ha hoje
+  // CINCO comentarios que citam `json['...']`, quatro deles com o marcador
+  // `json['campo']` escrito na prosa que EXPLICA este portao -- a documentacao
+  // do portao entrava na conta dele como chave lida.
+  //
+  // A isca que PASSA prova que o falso positivo morreu. As que REPROVAM provam
+  // que a limpeza nao cegou o portao, e sao elas que decidem: trocar
+  // `corpoSemComentarios` por `() => ""` deixaria o autoteste verde se so
+  // existisse a primeira.
+  iscas.push({
+    nome: "chave-citada-em-comentario-NAO-e-leitura",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/PetInput` do contrato.\n/// A leitura e na propria classe, com `json['campo']`: por outro nome\n/// escaparia do portao.",
+        "class PetInput {\n  factory PetInput.doJson(Map<String, Object?> json) {\n    // Antes isto se lia `json['share_url']`, e o campo saiu da spec.\n    /* nem `json['campo_de_bloco']` conta */\n    return PetInput(nome: json['name'] as String?);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: null,
+  });
+
+  iscas.push({
+    nome: "chave-lida-em-CODIGO-depois-do-comentario-continua-reprovando",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/PetInput` do contrato.",
+        "class PetInput {\n  factory PetInput.doJson(Map<String, Object?> json) {\n    // Comentario que cita `json['share_url']` para explicar o portao.\n    return PetInput(url: json['share_url'] as String?);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: "campo-que-o-contrato-nao-tem",
+    nomeia: "share_url",
+  });
+
+  iscas.push({
+    nome: "guarda-por-is-escrita-em-COMENTARIO-nao-guarda-nada",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/Pet` do contrato.",
+        "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    // json['name'] is Map<String, dynamic>\n    return Pet(nome: (json['name'] as Map<String, dynamic>)['url']);\n  }\n}",
       ),
       "isca.dart",
     ),

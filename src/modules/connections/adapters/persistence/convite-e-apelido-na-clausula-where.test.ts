@@ -69,8 +69,90 @@ const semBanco = new Kysely<Database>({
 
 const sqlDoApelido = (): string =>
   construtorDoAlvoPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
+
+/**
+ * A LISTA DE SELEÇÃO da consulta — o que de fato sai dela.
+ *
+ * ## O CORTE É NO `FROM` DE TOPO, E NÃO NO PRIMEIRO ` from `
+ *
+ * A primeira versão cortava em `indexOf(' from ')` cru e não conferia nada. As
+ * asserções deste recorte são todas NEGATIVAS (`!selecao.includes(...)`), e é
+ * essa combinação que torna o corte cru perigoso: **um portão que varre menos
+ * do que diz passa por não achar nada.**
+ *
+ * Hoje este SQL tem UM ` from ` só — foi medido em 21/10/2026, e por isso o
+ * corte cru ainda dava a resposta certa. Ele estava a uma subconsulta de
+ * distância de parar de dar: bastaria um `(select count(*) from pets ...) as
+ * "pets_count"` na lista de seleção para o corte cair DENTRO dela, e aí tudo o
+ * que fosse selecionado depois — `public_key`, `display_name`, foto — ficaria
+ * invisível para as asserções, **passando verde**.
+ *
+ * É o mesmo defeito que `busca-nao-e-oraculo.test.ts` pagou e consertou no
+ * mesmo dia, e o que o caso irmão do perfil (`people`) já documentava: *"a
+ * primeira versão deste caso contava quatro e reprovava a consulta correta"*.
+ *
+ * `from "handles"` é o `FROM` de topo e ele é único no SQL: a resolução por
+ * apelido parte de `handles` e junta `users`.
+ *
+ * **E ele REPROVA se não achar o ponto de corte.** Corte que não encontra o
+ * marcador vira varredura cega e silenciosa — que é a lição inteira.
+ */
+function selecaoDa(sql: string): string {
+  const corte = sql.toLowerCase().indexOf(' from "handles"');
+  assert.ok(
+    corte > 0,
+    'nao achei o `FROM` de topo (` from "handles"`) neste SQL. Sem ele este ' +
+      'ajudante nao sabe onde a lista de selecao termina, e um portao que corta ' +
+      `no lugar errado varre menos do que diz. SQL: ${sql}`,
+  );
+  return sql.slice(0, corte);
+}
 const sqlDoConvite = (): string =>
   construtorDoConvitePorToken(semBanco, TOKEN, QUEM_CHAMA, AGORA).sql;
+
+// ---------------------------------------------------------------------------
+// AS ISCAS DO PRÓPRIO RECORTE — AS DUAS DIREÇÕES
+// ---------------------------------------------------------------------------
+//
+// O recorte é o que decide o ALCANCE das asserções negativas acima. Se ele
+// corta no lugar errado, elas continuam verdes sem olhar para nada — e essa é
+// a forma de defeito que não dá sinal nenhum.
+//
+// A direção que REPROVA é obrigatória: sem ela, trocar o `assert.ok` por um
+// `return ''` deixaria este arquivo inteiro verde.
+void describe('o recorte da lista de selecao', () => {
+  void it('REPROVA quando o `FROM` de topo nao esta no SQL', () => {
+    // Corte que não acha o marcador vira varredura cega. Ele tem de gritar.
+    assert.throws(
+      () => selecaoDa('select "u"."id" as "user_id" from "outra_tabela" as "o"'),
+      /FROM` de topo/,
+      'o recorte ACEITOU um SQL sem o marcador. A partir daí ele devolveria um ' +
+        'trecho arbitrário e as asserções negativas passariam sem varrer nada.',
+    );
+  });
+
+  void it('corta DEPOIS da lista inteira, mesmo com subconsulta antes do topo', () => {
+    // A isca do cego, na direção que importa: um ` from ` de SUBCONSULTA antes
+    // do `FROM` de topo não pode encurtar o recorte. Com o corte cru antigo,
+    // `public_key` cairia fora e um vazamento passaria verde.
+    const comSubconsulta =
+      'select "u"."id" as "user_id", ' +
+      '(select count(*) from "pets" as "p" where "p"."owner" = "u"."id") as "pets_count", ' +
+      '"u"."public_key" as "public_key" ' +
+      'from "handles" as "h" inner join "users" as "u" on "u"."id" = "h"."user_id"';
+    const selecao = selecaoDa(comSubconsulta);
+    assert.ok(
+      selecao.includes('public_key'),
+      'o recorte parou na subconsulta: tudo o que e selecionado DEPOIS dela ' +
+        'ficou invisivel para as assercoes negativas, que e exatamente como ' +
+        'uma coluna proibida acrescentada no fim passa verde.',
+    );
+    assert.ok(
+      selecao.includes('pets_count'),
+      'o recorte perdeu a propria subconsulta',
+    );
+  });
+});
 
 void describe('o alvo por apelido cobra os SEIS predicados na clausula WHERE', () => {
   void it('ISCA -- nega conta desabilitada nos DOIS lados', () => {
@@ -114,8 +196,7 @@ void describe('o alvo por apelido cobra os SEIS predicados na clausula WHERE', (
   });
 
   void it('ISCA -- SO `u.id` sai no SELECT: nada de nome, `public_ref` ou foto', () => {
-    const sql = sqlDoApelido();
-    const selecao = sql.slice(0, sql.toLowerCase().indexOf(' from '));
+    const selecao = selecaoDa(sqlDoApelido());
     for (const proibido of ['public_ref', 'display_name', 'thumb_key', 'public_key', 'handle']) {
       assert.ok(
         !selecao.includes(proibido),

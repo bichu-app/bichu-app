@@ -62,6 +62,59 @@ const TODAS = {
 
 const sqlDo = (nome: keyof typeof TODAS): string => TODAS[nome]().sql;
 
+/**
+ * A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar.
+ *
+ * O corte em ` from "handles"` (e nao no primeiro ` from `) ja era deliberado e
+ * esta explicado nos casos: o primeiro ` from ` esta DENTRO da subconsulta de
+ * contagem. O que faltava era a GUARDA. Sem ela, um `indexOf` em -1 faz
+ * `slice(0, -1)` devolver o SQL inteiro menos um caractere: a contagem de
+ * ` as "` passa a ser a do enunciado todo, e o caso reprova dizendo que a lista
+ * cresceu quando o que aconteceu foi o corte nao ter achado onde cortar.
+ *
+ * Licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: todo corte
+ * por marcador reprova quando nao acha o marcador.
+ */
+function selecaoAteOTopo(sql: string, marcadorDeTopo: string): string {
+  const corte = sql.toLowerCase().indexOf(marcadorDeTopo);
+  assert.ok(
+    corte > 0,
+    `nao achei o \`FROM\` de topo (\`${marcadorDeTopo}\`) neste SQL. Sem ele o ` +
+      'corte nao sabe onde a lista de selecao termina, e um portao que corta no ' +
+      `lugar errado varre menos -- ou mais -- do que diz. SQL: ${sql}`,
+  );
+  return sql.slice(0, corte);
+}
+
+// AS DUAS DIRECOES DO CORTE DE TOPO.
+void describe('o corte da lista de selecao', () => {
+  void it('REPROVA quando o marcador de topo nao esta no SQL', () => {
+    assert.throws(
+      () => selecaoAteOTopo('select "u"."id" from "outra" as "o"', ' from "handles"'),
+      /FROM` de topo/,
+    );
+  });
+
+  void it('nao para na subconsulta: conta a lista INTEIRA', () => {
+    const selecao = selecaoAteOTopo(
+      'select "u"."id" as "id", ' +
+        // Sem alias interno de proposito: ` as "` tambem casaria o alias da
+        // subconsulta, e a contagem passaria a medir a minha fixture em vez do
+        // corte. (Medido: com `as "p"` aqui, da 4 e nao 3.)
+        '(select count(*) from "pets") as "pets_count", ' +
+        '"u"."display_name" as "display_name" ' +
+        'from "handles" as "h"',
+      ' from "handles"',
+    );
+    assert.equal(
+      (selecao.match(/ as "/g) ?? []).length,
+      3,
+      'o corte parou na subconsulta: o que vem DEPOIS dela ficou invisivel, e e ' +
+        'assim que uma coluna acrescentada no fim passa verde.',
+    );
+  });
+});
+
 void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', () => {
   // ------------------------------------------------------------------
   // ISCA (d): 404 E NUNCA 403 -- OS SEIS PREDICADOS
@@ -364,7 +417,7 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     // esta DENTRO da subconsulta de contagem (`FROM pets p`), e cortar ali
     // deixava `pets_count` de fora -- a primeira versao deste caso contava
     // quatro e reprovava a consulta correta.
-    const listaDeSelecao = sql.slice(0, sql.indexOf(' from "handles"'));
+    const listaDeSelecao = selecaoAteOTopo(sql, ' from "handles"');
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,
       6,

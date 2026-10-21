@@ -158,6 +158,57 @@ function aMutacaoTemDeReprovar(
   assert.throws(() => conferencia(textoMutado), queixa);
 }
 
+/**
+ * A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar.
+ *
+ * O corte em ` from "user_publications"` (e nao no primeiro ` from `) ja era
+ * deliberado e esta explicado nos casos: existe um `FROM user_connections`
+ * DENTRO do `EXISTS` do `WHERE`. O que faltava era a GUARDA. Com `indexOf` em
+ * -1, `slice(0, -1)` devolve o SQL inteiro menos um caractere, a contagem de
+ * ` as "` passa a ser a do enunciado todo, e o caso reprova dizendo que a lista
+ * cresceu -- quando o que aconteceu foi o corte nao ter achado onde cortar.
+ *
+ * Licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: todo corte
+ * por marcador reprova quando nao acha o marcador.
+ */
+function selecaoAteOTopo(sql: string): string {
+  const corte = sql.toLowerCase().indexOf(' from "user_publications"');
+  assert.ok(
+    corte > 0,
+    'nao achei o `FROM` de topo (` from "user_publications"`) neste SQL. Sem ele ' +
+      'o corte nao sabe onde a lista de selecao termina, e um portao que corta no ' +
+      `lugar errado varre menos -- ou mais -- do que diz. SQL: ${sql}`,
+  );
+  return sql.slice(0, corte);
+}
+
+// AS DUAS DIRECOES DO CORTE DE TOPO.
+void describe('o corte da lista de selecao', () => {
+  void it('REPROVA quando o `FROM` de topo nao esta no SQL', () => {
+    assert.throws(
+      () => selecaoAteOTopo('select "p"."id" as "id" from "outra" as "o"'),
+      /FROM` de topo/,
+    );
+  });
+
+  void it('nao para no `FROM` da subconsulta: conta a lista INTEIRA', () => {
+    const selecao = selecaoAteOTopo(
+      'select "p"."id" as "id", ' +
+        // Sem alias interno de proposito: ` as "` tambem casaria o alias da
+        // subconsulta, e a contagem mediria a fixture em vez do corte.
+        '(select count(*) from "user_connections") as "n", ' +
+        '"p"."ref" as "ref" ' +
+        'from "user_publications" as "p"',
+    );
+    assert.equal(
+      (selecao.match(/ as "/g) ?? []).length,
+      3,
+      'o corte parou na subconsulta: o que vem DEPOIS dela ficou invisivel, e e ' +
+        'assim que uma coluna acrescentada no fim passa verde.',
+    );
+  });
+});
+
 void describe('o recorte da LINHA DO TEMPO mora na clausula WHERE', () => {
   void it('ISCA (b) -- exige CONEXAO ACEITA, nos DOIS sentidos do par', () => {
     const sql = sqlDo('linha');
@@ -624,7 +675,7 @@ void describe('CONTRAPESOS -- sem eles as iscas de omissao passariam no vazio', 
     // primeira versao do caso irmao, no perfil, contou quatro e reprovou a
     // consulta correta.
     const { sql } = TODAS.linha();
-    const listaDeSelecao = sql.slice(0, sql.toLowerCase().indexOf(' from "user_publications"'));
+    const listaDeSelecao = selecaoAteOTopo(sql);
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,
       13,
@@ -675,7 +726,7 @@ void describe('CURTIR E COMENTAR -- o recorte e UM, e a contagem sai das LINHAS'
     // para a borda e a contagem, nunca o identificador.
     const { sql } = TODAS.alvo();
     assert.match(sql, /select "?p"?\."?id"? as "?id"?/i);
-    const listaDeSelecao = sql.slice(0, sql.toLowerCase().indexOf(' from "user_publications"'));
+    const listaDeSelecao = selecaoAteOTopo(sql);
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,
       1,

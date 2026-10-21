@@ -177,6 +177,110 @@ String semComentarios(String fonte) {
   return saida.toString();
 }
 
+/// O fonte com o CONTEUDO de comentario trocado por espaco, **preservando
+/// comprimento, posicao e quebra de linha**.
+///
+/// ## Por que isto existe, separado de [semComentarios]
+///
+/// [semComentarios] colapsa o vazio: ele serve a quem so quer saber se um
+/// trecho APARECE. Quem precisa de POSICAO -- o numero de linha que vai no
+/// relatorio, ou um equilibrio de parenteses medido sobre o fonte -- nao pode
+/// usa-lo: o texto encurta e a linha reportada passa a ser outra.
+///
+/// Esta mascara troca cada caractere de comentario por um espaco (e preserva o
+/// `\n`, para que a contagem de linhas nao mude). O resultado tem o MESMO
+/// comprimento do fonte, entao todo indice achado nela vale no original.
+///
+/// Com [mascararLiterais], o conteudo dos literais de texto tambem vira
+/// espaco. Serve a quem EQUILIBRA DELIMITADOR: um `')'` dentro de uma string
+/// -- `texto: 'tudo bem :)'` -- desconta um nivel que nunca foi aberto, e o
+/// recorte termina no lugar errado. Para quem so PROCURA identificador, o
+/// padrao (`false`) e o certo: `get('/timeline')` e codigo, e e por dentro de
+/// um literal que o caminho chega ao `http`.
+String mascaraSemComentarios(
+  String fonte, {
+  bool mascararLiterais = false,
+}) {
+  final saida = StringBuffer();
+  final n = fonte.length;
+  var i = 0;
+
+  while (i < n) {
+    final c = fonte.codeUnitAt(i);
+
+    // Comentario: de linha, ou de bloco (que ANINHA, no Dart).
+    if (c == 0x2f && i + 1 < n) {
+      final d = fonte.codeUnitAt(i + 1);
+      if (d == 0x2f) {
+        while (i < n && fonte.codeUnitAt(i) != 0x0a) {
+          saida.write(' ');
+          i++;
+        }
+        continue;
+      }
+      if (d == 0x2a) {
+        var profundidade = 1;
+        saida.write('  ');
+        i += 2;
+        while (i < n && profundidade > 0) {
+          if (i + 1 < n &&
+              fonte.codeUnitAt(i) == 0x2f &&
+              fonte.codeUnitAt(i + 1) == 0x2a) {
+            profundidade++;
+            saida.write('  ');
+            i += 2;
+            continue;
+          }
+          if (i + 1 < n &&
+              fonte.codeUnitAt(i) == 0x2a &&
+              fonte.codeUnitAt(i + 1) == 0x2f) {
+            profundidade--;
+            saida.write('  ');
+            i += 2;
+            continue;
+          }
+          // A quebra de linha SOBREVIVE: ela e o que mantem a contagem.
+          saida.write(fonte.codeUnitAt(i) == 0x0a ? '\n' : ' ');
+          i++;
+        }
+        continue;
+      }
+    }
+
+    // Literal de texto: consumido inteiro, para que um `//` dentro dele nao
+    // abra comentario nenhum.
+    final literal = _lerLiteral(fonte, i);
+    if (literal != null) {
+      final bruto = fonte.substring(i, literal.fim);
+      if (mascararLiterais) {
+        // As ASPAS ficam; o conteudo vira espaco. Quem equilibra parentese
+        // precisa que o literal continue sendo um literal, e so.
+        for (final u in bruto.codeUnits) {
+          saida.write(u == 0x0a ? '\n' : ' ');
+        }
+      } else {
+        saida.write(bruto);
+      }
+      i = literal.fim;
+      continue;
+    }
+
+    saida.writeCharCode(c);
+    i++;
+  }
+
+  final resultado = saida.toString();
+  // A promessa desta funcao e o comprimento. Se ela quebrar, todo indice que
+  // alguem achou na mascara passa a apontar para outro lugar do original, e o
+  // erro aparece como numero de linha errado num relatorio -- calado.
+  assert(
+    resultado.length == fonte.length,
+    'mascaraSemComentarios mudou o comprimento: '
+    '${resultado.length} != ${fonte.length}',
+  );
+  return resultado;
+}
+
 // ---------------------------------------------------------------------------
 // As pecas
 // ---------------------------------------------------------------------------

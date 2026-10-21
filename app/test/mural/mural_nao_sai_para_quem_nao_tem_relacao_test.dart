@@ -44,6 +44,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../dispositivo/diretivas_dart.dart';
 import '../telas/ajuda_de_tela.dart';
 
 const String urlDaImagemDaPublicacao =
@@ -276,14 +277,99 @@ void main() {
   ///      a publicacao em vez de substituir.
   ///
   /// Entao: comentario fora, e o verbo HTTP dentro do criterio.
-  String codigoDe(File arquivo) => arquivo
-      .readAsStringSync()
-      .split('\n')
-      .where((l) {
-        final limpa = l.trimLeft();
-        return !limpa.startsWith('//') && !limpa.startsWith('///');
-      })
-      .join('\n');
+  ///
+  /// ## 21/10/2026 -- A LIMPEZA POR PREFIXO DE LINHA NAO ERA LIMPEZA
+  ///
+  /// A primeira versao desta funcao descartava a linha cujo texto, ja sem o
+  /// recuo, COMECASSE com `//` ou `///`. Ela deixava passar as duas formas que
+  /// mais aparecem na prosa deste repositorio:
+  ///
+  ///     /* get('/timeline') */            // comentario de BLOCO
+  ///     algumaCoisa();  // get('/timeline')   // comentario NO FIM da linha
+  ///
+  /// Nos dois casos a prosa chegava inteira ao criterio, e o criterio e uma
+  /// igualdade de lista: um arquivo a mais em `ondeAparece` REPROVA. Era o
+  /// mesmo defeito que as duas reprovacoes de cima descrevem, so que pelas
+  /// formas que a correcao anterior nao cobriu.
+  ///
+  /// `semComentarios` de `diretivas_dart.dart` e o leitor que o portao
+  /// estrutural das telas ja usa: ele percorre o fonte como o analisador
+  /// percorre -- entende literal de texto (simples, duplo, triplo, cru),
+  /// entende escape, e trata comentario de bloco ANINHADO, que o Dart aceita.
+  /// Literal de texto fica DE PE de proposito: `get('/timeline')` e codigo, e
+  /// e exatamente por dentro de um literal que o caminho chega ao `http`.
+  String codigoDe(File arquivo) => semComentarios(arquivo.readAsStringSync());
+
+  /// O criterio da varredura (2), UM objeto so.
+  ///
+  /// Ele esta aqui fora, e nao dentro do caso, porque as ISCAS DE LEITURA
+  /// abaixo precisam medir **o mesmo criterio** que o portao aplica. Isca que
+  /// recria a expressao na mao prova que a copia dela funciona, nao que o
+  /// portao funciona -- e as duas podem divergir no primeiro refator.
+  final leituraDePublicacao = RegExp(
+    r"""\.get\(\s*['"][^'"]*(publications|timeline)""",
+  );
+
+  // -----------------------------------------------------------------------
+  // ISCAS DE LEITURA DO PROPRIO PORTAO -- AS DUAS DIRECOES
+  // -----------------------------------------------------------------------
+  //
+  // **As duas sao obrigatorias, e a segunda e a que importa mais.** A primeira
+  // prova que o falso positivo morreu: prosa que cita a rota nao reprova. A
+  // segunda prova que a limpeza NAO cegou o portao: a chamada de verdade
+  // continua sendo achada. Sem ela, trocar `codigoDe` por `(_) => ''` deixaria
+  // este arquivo inteiro verde -- que e o mesmo defeito virado do outro lado, e
+  // esse nao da sinal nenhum.
+  group('a leitura do portao: comentario nao e codigo, codigo e codigo', () {
+    test('NAO acusa a rota citada em comentario -- as TRES formas', () {
+      const prosa = '''
+// Esta tela nao faz _api.get('/timeline') de proposito.
+/// Nem _api.get('/me/publications'): quem le publicacao e MuralApi.
+/* _api.get('/publications/abc') tampouco. */
+void nada() {}
+''';
+      expect(
+        leituraDePublicacao.hasMatch(semComentarios(prosa)),
+        isFalse,
+        reason:
+            'achado FALSO: a prosa que documenta a AUSENCIA da rota foi lida '
+            'como leitura dela. Foi assim que este arquivo reprovou duas vezes '
+            'antes, e a limpeza por prefixo de linha nao pegava bloco nem fim '
+            'de linha.',
+      );
+    });
+
+    test('REPROVA a chamada de verdade, inclusive depois de prosa que a cita',
+        () {
+      const codigo = '''
+// Comentario que cita _api.get('/timeline') para explicar o portao.
+Future<void> leitura() async {
+  await _api.get('/timeline');
+}
+''';
+      expect(
+        leituraDePublicacao.hasMatch(semComentarios(codigo)),
+        isTrue,
+        reason:
+            'o portao ficou CEGO: a chamada de verdade deixou de ser achada. '
+            'Uma limpeza gulosa -- apagar a LINHA que tenha `//` -- produz '
+            'exatamente este resultado, e um portao cego aprova o furo em '
+            'silencio.',
+      );
+    });
+
+    test('REPROVA a chamada escrita com aspa DUPLA e com espaco', () {
+      expect(
+        leituraDePublicacao.hasMatch(
+          semComentarios('await _api.get( "/me/publications" );'),
+        ),
+        isTrue,
+        reason:
+            'a forma com aspa dupla e a de quem vem de outra linguagem, e o '
+            '`prefer_single_quotes` ja esteve desligado neste repositorio.',
+      );
+    });
+  });
 
   test(
       'ISCA (b) — `app/lib` LE publicacao em UM lugar so, e e `MuralApi`', () {
@@ -308,9 +394,7 @@ void main() {
 
     // `get('/...publications...')` ou `get('/timeline')`, em qualquer forma de
     // chamada: `_api.get`, `_cliente.get`, `api.get`.
-    final leitura = RegExp(
-      r"""\.get\(\s*['"][^'"]*(publications|timeline)""",
-    );
+    final leitura = leituraDePublicacao;
 
     final ondeAparece = <String>[];
     for (final entrada in raiz.listSync(recursive: true)) {

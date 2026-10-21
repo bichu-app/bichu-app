@@ -115,6 +115,50 @@ function clausulaWhere(compilada: Compilada): string {
   return compilada.sql.slice(posicao);
 }
 
+/**
+ * O `SET` do `UPDATE`, ate ANTES do ` where ` -- e REPROVANDO se nao o achar.
+ *
+ * O recorte existe pelo motivo que o cabecalho deste arquivo conta: o `UPDATE`
+ * grava `set "owner_user_id" = $1`, entao a expressao `"owner_user_id" = $n`
+ * casa no `SET` e a conferencia leria o DESTINO como se fosse o predicado de
+ * posse. O que faltava era a GUARDA (21/10/2026): sem ela, `indexOf` em -1 faz
+ * `slice(0, -1)` devolver o enunciado inteiro menos um caractere, e o recorte
+ * deixa de ser "o SET" -- passa a incluir o `WHERE`, que e exatamente a
+ * confusao que ele existe para evitar.
+ */
+function setAntesDoWhere(sql: string): string {
+  const fim = sql.indexOf(' where ');
+  assert.ok(
+    fim > 0,
+    'o `UPDATE` ficou SEM clausula WHERE, o que e a forma mais completa de ' +
+      `perder a autorizacao -- e o recorte do SET passaria a incluir tudo. SQL: ${sql}`,
+  );
+  return sql.slice(0, fim);
+}
+
+// AS DUAS DIRECOES DO RECORTE DO SET.
+void describe('o recorte do SET', () => {
+  void it('REPROVA um `UPDATE` sem `WHERE`', () => {
+    assert.throws(
+      () => setAntesDoWhere('update "pet_tags" set "code_ciphertext" = $1'),
+      /SEM clausula WHERE/,
+    );
+  });
+
+  void it('com `WHERE`, o recorte NAO alcanca o predicado de posse', () => {
+    // A isca do cego: se o recorte engolisse o `WHERE`, o `"owner_user_id" = $n`
+    // do predicado entraria no que se le como SET.
+    const recorte = setAntesDoWhere(
+      'update "pet_tags" set "code_ciphertext" = $1 where "owner_user_id" = $2',
+    );
+    assert.ok(recorte.includes('"code_ciphertext" = $1'), 'o recorte perdeu o SET');
+    assert.ok(
+      !recorte.includes('"owner_user_id"'),
+      'o recorte alcancou o predicado de posse: e a confusao que ele existe para evitar',
+    );
+  });
+});
+
 void describe('toda consulta de transferencia que responde a um tutor carrega o dono no WHERE', () => {
   void it('a busca da transferencia tem o tutor no WHERE, com o tutor ligado', () => {
     const compilada = construtorDaBuscaDoTutor(semBanco, TRANSFER, DONO).compile();
@@ -260,8 +304,13 @@ void describe('as condicoes de ESTADO tambem moram no WHERE', () => {
     // escrever `null` no texto. Procurar o literal aqui foi a primeira versao, e
     // ela reprovou -- conferir a clausula que EXISTE, e nao a que se espera
     // encontrar. A leitura certa e pela posicao.
+    // O recorte do SET para ANTES do `WHERE`, e ele reprova se nao achar o
+    // marcador: com `indexOf` em -1, `slice(0, -1)` devolve o enunciado inteiro
+    // menos um caractere -- o recorte deixa de ser "o SET" e passa a incluir o
+    // `WHERE`, que e exatamente a confusao que o cabecalho deste arquivo conta
+    // ter pago (ler o DESTINO do `UPDATE` como se fosse o predicado de posse).
     const achadoDoCifrado = /"code_ciphertext"\s*=\s*\$(\d+)/.exec(
-      compilada.sql.slice(0, compilada.sql.indexOf(' where ')),
+      setAntesDoWhere(compilada.sql),
     );
     assert.ok(achadoDoCifrado !== null, `o SET perdeu o cifrado. SQL: ${compilada.sql}`);
     assert.equal(

@@ -70,19 +70,82 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Do primeiro ` order by ` em diante. */
+/**
+ * ## OS DOIS RECORTES REPROVAM QUANDO NAO ACHAM O MARCADOR (21/10/2026)
+ *
+ * Os dois devolviam `''` quando o marcador faltava, e `''` e o pior valor
+ * possivel aqui: **as assercoes negativas deste arquivo passam todas sobre
+ * texto vazio.** `!where.includes('conversations.id) < (')`, que e o caso da
+ * primeira pagina, fica verde num SQL que perdeu a clausula inteira -- e o
+ * portao nao da sinal nenhum.
+ *
+ * E a licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: corte
+ * que nao encontra o ponto de corte vira varredura cega e silenciosa. Toda
+ * consulta deste arquivo tem `WHERE` e tem `ORDER BY` -- sao lista paginada com
+ * cursor; a falta de um dos dois e defeito, nao caso de borda.
+ */
+
+/** Do primeiro ` order by ` em diante. REPROVA se nao houver `ORDER BY`. */
 function clausulaOrderBy(sql: string): string {
   const corte = sql.indexOf(' order by ');
-  return corte < 0 ? '' : sql.slice(corte);
+  assert.ok(
+    corte >= 0,
+    'a consulta ficou SEM `ORDER BY`. Lista paginada sem ordem devolve a pagina ' +
+      `que o Postgres quiser, e o cursor deixa de significar alguma coisa. SQL: ${sql}`,
+  );
+  return sql.slice(corte);
 }
 
-/** Do primeiro ` where ` ate o ` order by `, que e onde o cursor mora. */
+/**
+ * Do primeiro ` where ` ate o ` order by `, que e onde o cursor mora.
+ *
+ * REPROVA se nao houver `WHERE`: sem ele a consulta atinge a tabela inteira, e
+ * as assercoes negativas sobre o recorte passariam sobre texto vazio.
+ */
 function clausulaWhere(sql: string): string {
   const inicio = sql.indexOf(' where ');
-  if (inicio < 0) return '';
+  assert.ok(
+    inicio >= 0,
+    'a consulta ficou SEM clausula WHERE, o que e a forma mais completa de ' +
+      `perder a autorizacao -- e deixaria as assercoes negativas sem alvo. SQL: ${sql}`,
+  );
   const fim = sql.indexOf(' order by ');
   return fim < 0 ? sql.slice(inicio) : sql.slice(inicio, fim);
 }
+
+// ---------------------------------------------------------------------------
+// AS ISCAS DOS DOIS RECORTES -- AS DUAS DIRECOES
+// ---------------------------------------------------------------------------
+//
+// A direcao que REPROVA e a que decide se o conserto valeu: sem ela, voltar os
+// dois ajudantes para `return ''` deixaria este arquivo verde, e com ele todas
+// as assercoes negativas de cursor.
+void describe('os recortes de clausula', () => {
+  void it('`clausulaWhere` REPROVA um SQL sem `WHERE`', () => {
+    assert.throws(
+      () => clausulaWhere('select "c"."id" from "conversations" as "c" order by "c"."id" desc'),
+      /SEM clausula WHERE/,
+      'o recorte devolveu texto para um SQL sem `WHERE`. Com `\'\'` no lugar, toda ' +
+        'assercao negativa deste arquivo passa sem olhar para nada.',
+    );
+  });
+
+  void it('`clausulaOrderBy` REPROVA um SQL sem `ORDER BY`', () => {
+    assert.throws(
+      () => clausulaOrderBy('select "c"."id" from "conversations" as "c" where "c"."id" = $1'),
+      /SEM `ORDER BY`/,
+      'o recorte devolveu texto para um SQL sem `ORDER BY`',
+    );
+  });
+
+  void it('com os dois marcadores, cada recorte pega a SUA clausula e para nela', () => {
+    const sql =
+      'select "c"."id" from "conversations" as "c" ' +
+      'where "c"."owner" = $1 order by "c"."last_at" desc';
+    assert.equal(clausulaWhere(sql), ' where "c"."owner" = $1');
+    assert.equal(clausulaOrderBy(sql), ' order by "c"."last_at" desc');
+  });
+});
 
 /**
  * A chave que o `ORDER BY` (ou o cursor) usa, com os espacos colapsados.
