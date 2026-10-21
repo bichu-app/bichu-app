@@ -287,6 +287,41 @@ const String rotuloDoCampoDeCidade = 'Cidade (opcional)';
 /// botao `Escolher cidade` do corpo nao existe mais -- ele era a saida da fase
 /// `semCidade`, e a fase saiu com a obrigatoriedade da cidade. A barra tambem
 /// nasce sempre agora: a lista abre com itens em vez de esperar uma cidade.
+/// Abre a folha de filtro, entrega o VALOR do campo de cidade a [conferir] e
+/// fecha a folha.
+///
+/// Existe desde 20/10/2026, e a razao e uma decisao do cliente: a caixa do
+/// recorte sai da tela depois de a localizacao dar cidade (*"deve apenas
+/// aparecer dentro do filtro a cidade selecionada"*). O unico lugar que diz
+/// qual cidade esta valendo passou a ser este campo, e um caso que queira
+/// afirmar isso precisa abrir a folha para ver.
+///
+/// **Fecha a folha no fim**, e isso nao e cortesia: a folha e modal, e deixa-la
+/// aberta fariam os `expect` seguintes do caso medirem a tela por baixo dela.
+Future<void> escolherCidadeAbrindoAFolha(
+  WidgetTester tester,
+  void Function(String? valorDoCampo) conferir,
+) async {
+  final icone = find.byIcon(Icons.tune);
+  expect(
+    icone,
+    findsOneWidget,
+    reason: 'REPROVA: nao ha caminho nenhum para a folha de filtro. Com a caixa '
+        'do recorte fora da tela, ela e o UNICO lugar que diz e troca a cidade '
+        '-- sem ela a pessoa fica com a lista recortada e sem controle.',
+  );
+  await tester.tap(icone);
+  await tester.pumpAndSettle();
+  final campo = find.descendant(
+    of: find.byType(BottomSheet),
+    matching: find.byType(TextField),
+  );
+  expect(campo, findsOneWidget);
+  conferir(tester.widget<TextField>(campo).controller?.text);
+  await tester.tapAt(const Offset(10, 10));
+  await tester.pumpAndSettle();
+}
+
 Future<void> escolherCidade(WidgetTester tester, String cidade) async {
   final icone = find.byIcon(Icons.tune);
   expect(
@@ -948,16 +983,36 @@ void main() {
             'aparecer antes, com a reserva.',
       );
       expect(pedidos.last.url.queryParameters['city'], 'Sao Paulo');
-      // E a tela DIZ de onde veio.
-      // O literal INTEIRO, e nao a constante de producao: medir contra
-      // `ListaDePerdidos.origemDoAparelho` deixaria um erro de digitacao na
-      // constante passar, porque os dois lados mudariam juntos.
+      // E A TELA DIZ QUAL CIDADE ESTA VALENDO -- **no FILTRO, desde
+      // 20/10/2026**.
+      //
+      // Este caso media a linha da caixa do recorte
+      // (`Pets perdidos em Sao Paulo · da sua localização`), e ela nao existe
+      // mais no desfecho bom: o cliente pediu *"remova essa box de localização
+      // depois de aceito e funcionando, deve apenas aparecer dentro do filtro a
+      // cidade selecionada"*. A caixa inteira sai quando ha cidade valendo e a
+      // localizacao nao tem mais nada a oferecer (`_caixaDoRecorteAparece`).
+      //
+      // **O QUE SE PERDEU NA TROCA, escrito aqui porque e decisao e nao
+      // descuido:** o rotulo `· da sua localização` era a PROVENIENCIA da
+      // cidade, e o filtro mostra o nome sem ela. A cidade continua visivel e
+      // continua trocavel; de onde ela veio deixou de ser dito. Foi decisao do
+      // cliente de 20/10/2026, com o texto dele acima.
+      await escolherCidadeAbrindoAFolha(tester, (campo) {
+        expect(
+          campo,
+          'Sao Paulo',
+          reason: 'REPROVA: a cidade foi derivada em silencio -- nem a caixa a '
+              'diz (ela saiu por decisao de desenho) nem o filtro a mostra. '
+              'Cidade derivada sem explicacao e pior que cidade nenhuma, e o '
+              'filtro e o unico lugar que sobrou para dize-la.',
+        );
+      });
       expect(
         find.text('Pets perdidos em Sao Paulo · da sua localização'),
-        findsOneWidget,
-        reason: 'REPROVA: a cidade foi derivada em silencio, ou a linha nao '
-            'diz de onde ela veio. Cidade derivada sem explicacao e pior que '
-            'cidade nenhuma.',
+        findsNothing,
+        reason: 'REPROVA: a caixa do recorte continua na tela depois de a '
+            'localizacao ter dado cidade. Ver `_caixaDoRecorteAparece`.',
       );
     });
 
@@ -1043,13 +1098,17 @@ void main() {
       _reservaSemErro(tester, pedidos);
     });
 
-    /// ISCA (4 de 5): TETO DE USO ESTOURADO.
+    /// ISCA (4 de 5): FALHA DO SERVICO DE PLATAFORMA.
     ///
-    /// E o `PlatformException(IO_ERROR, ...)` que o README do pacote descreve
-    /// como *"most of the times ... the rate limit has been reached"*. Entra
-    /// DENTRO da resolucao, com geocoder presente e ponto na mao -- nenhuma das
-    /// tres iscas acima passa por este ramo.
-    testWidgets('ISCA 4/5: TETO de uso estourado cai para a reserva, sem erro',
+    /// **Chamava-se `tetoDeUsoEstourado` ate 20/10/2026, e o nome mentia no
+    /// iOS.** No Android e quase sempre o `PlatformException(IO_ERROR, ...)`
+    /// que o README do pacote descreve como *"most of the times ... the rate
+    /// limit has been reached"*. No iOS e QUALQUER `NSError` do `CLGeocoder`:
+    /// o `CLGeocoderProxyApiDelegate.swift` do `geocoding_darwin` colapsa rede,
+    /// cancelamento e "nao achei" num codigo unico. Entra DENTRO da resolucao,
+    /// com geocoder presente e ponto na mao -- nenhuma das tres iscas acima
+    /// passa por este ramo.
+    testWidgets('ISCA 4/5: FALHA do servico cai para a reserva, sem erro',
         (tester) async {
       final pedidos = <http.Request>[];
       await abrirPets(
@@ -1058,7 +1117,7 @@ void main() {
         localizacao: LocalizacaoDeTeste(
           PermissaoDeLocalizacao.concedida,
           resultadoDaCidade: const CidadeNaoResolvida(
-            MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+            MotivoDeNaoTerCidade.falhaDoServico,
           ),
         ),
         rede: redeDosPerdidos(
@@ -1073,10 +1132,18 @@ void main() {
 
     /// ISCA (5 de 5): RESOLUCAO SEM RESULTADO.
     ///
-    /// A chamada DEU CERTO e devolveu nada (ou devolveu lugar sem `locality`):
-    /// mar aberto, zona rural, e o aparelho que responde mas nao sabe. E o
-    /// unico dos cinco em que nada falhou -- e e por isso que ele nao e
-    /// coberto por nenhum dos outros quatro.
+    /// A chamada DEU CERTO e devolveu lugar sem nenhum campo de cidade (ver
+    /// `cidadeDoLugar`): zona rural, distrito, mar aberto. E o unico dos cinco
+    /// em que nada falhou -- e e por isso que ele nao e coberto por nenhum dos
+    /// outros quatro.
+    ///
+    /// **Continuam sendo CINCO e nao nove**, e isso e decisao: dos nove
+    /// motivos, `resolucaoSemResposta` nasce do `.timeout` da PROPRIA TELA e
+    /// chega neste mesmo ramo (`if (!porToque) return;`) sem desviar em nada --
+    /// um sexto caso aqui mediria o mesmo `return` com outro nome. Quem o mede
+    /// de verdade e a isca do teto em
+    /// `test/telas/o_botao_de_localizacao_nos_pets_test.dart`, onde o relogio
+    /// anda. Os outros tres de permissao tem iscas 1 e 2 acima.
     testWidgets('ISCA 5/5: resolucao SEM RESULTADO cai para a reserva, sem erro',
         (tester) async {
       final pedidos = <http.Request>[];
@@ -1151,13 +1218,18 @@ void main() {
       );
       expect(pedidos.last.url.queryParameters['city'], 'Sao Paulo');
 
-      await tester.tap(find.text('Ver todas'));
-      await tester.pumpAndSettle();
+      // **`Ver todas` MORA DENTRO DA CAIXA, e a caixa saiu no desfecho bom**
+      // (cliente, 20/10/2026). O caminho que a pessoa tem agora e esvaziar a
+      // cidade no filtro, e e ele que este caso exerce -- a decisao medida
+      // continua a mesma: tirar a cidade derivada liga `_pessoaMexeu`, e ela
+      // NAO volta sozinha.
+      await escolherCidade(tester, '');
 
       expect(
         pedidos.last.url.queryParameters.containsKey('city'),
         isFalse,
-        reason: 'REPROVA: `Ver todas` nao tirou a cidade do recorte.',
+        reason: 'REPROVA: esvaziar a cidade no filtro nao tirou a cidade do '
+            'recorte.',
       );
       expect(find.text('Pets perdidos de todo o Brasil'), findsOneWidget);
     });
@@ -1705,13 +1777,16 @@ void main() {
         reason: 'PRE-CONDICAO: a abertura nao aplicou a cidade do aparelho.',
       );
 
-      // `Ver todas` tira a cidade -- e e isto que liga `_pessoaMexeu`.
-      await tester.tap(find.text(ListaDePerdidos.rotuloDeVerTodas));
-      await tester.pumpAndSettle();
+      // ESVAZIAR A CIDADE NO FILTRO tira a cidade -- e e isto que liga
+      // `_pessoaMexeu`. Era `Ver todas`, que mora DENTRO da caixa do recorte;
+      // a caixa sai no desfecho bom desde 20/10/2026 (cliente), e com ela sai
+      // esse botao. O estado que este caso precisa produzir e o mesmo.
+      await escolherCidade(tester, '');
       expect(
         pedidos.last.url.queryParameters['city'],
         isNull,
-        reason: 'PRE-CONDICAO: `Ver todas` nao tirou a cidade do recorte.',
+        reason: 'PRE-CONDICAO: esvaziar a cidade no filtro nao tirou a cidade '
+            'do recorte.',
       );
 
       // O botao tem de estar oferecido agora.

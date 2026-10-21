@@ -30,6 +30,7 @@
 import 'dart:async';
 
 import 'package:bichu/dispositivo/localizacao.dart';
+import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,11 +130,19 @@ Future<void> abrir(
   required List<http.Request> pedidos,
   List<Map<String, dynamic>>? itens,
   bool logado = false,
+  String? cidadeGuardada,
 }) async {
   await massa.abrirPets(
     tester,
     logado: logado,
     localizacao: localizacao,
+    // **Cidade JA guardada neste aparelho**, que e o estado da SEGUNDA sessao
+    // de qualquer pessoa: `CidadeEscolhida` grava a cidade de toda busca. Ele
+    // nao se produz passando pelo fluxo, e e o estado em que a caixa do
+    // recorte some mais facil por engano.
+    depositoDaCidade: cidadeGuardada == null
+        ? null
+        : DepositoDaCidadeEmMemoria(conteudo: cidadeGuardada),
     rede: massa.redeDosPerdidos(
       massa.paginaDePerdidos(
         itens ??
@@ -149,6 +158,20 @@ Future<void> abrir(
 /// As cidades que de fato saíram na consulta, na ordem. Nulo é "sem `city`".
 List<String?> cidadesPedidas(List<http.Request> pedidos) =>
     <String?>[for (final p in pedidos) p.url.queryParameters['city']];
+
+/// A CAIXA DO RECORTE, achada pela linha que so ela desenha.
+///
+/// `_LinhaDoRecorte` e privada, e achar pelo TIPO exigiria exporta-la. A linha
+/// "Pets perdidos em X" / "Pets perdidos de todo o Brasil" e o que ela e: a
+/// resposta a "por que estes pets?". Quem apagar a caixa apaga a linha, e e a
+/// linha que estes casos procuram.
+Finder get aCaixaDoRecorte => find.byWidgetPredicate(
+      (w) =>
+          w is Text &&
+          (w.data == 'Pets perdidos de todo o Brasil' ||
+              (w.data?.startsWith('Pets perdidos em ') ?? false)),
+      description: 'a caixa do recorte (a linha "Pets perdidos ...")',
+    );
 
 void main() {
   // -------------------------------------------------------------------------
@@ -200,17 +223,20 @@ void main() {
               'ficou verdadeiro desde o filtro e o resultado do toque foi '
               'jogado fora.',
         );
+        // **O QUE A TELA MOSTRA MUDOU EM 20/10/2026, e o que esta isca mede
+        // NAO mudou.** Ela media a linha do recorte dizendo
+        // `Pets perdidos em Sao Paulo · da sua localização`; o cliente pediu
+        // que a caixa inteira saisse depois de a localizacao funcionar (*"deve
+        // apenas aparecer dentro do filtro a cidade selecionada"*). O sinal da
+        // CAUSA continua sendo o mesmo e esta medido acima: a consulta saiu com
+        // a cidade do aparelho. O que se mede aqui agora e o desfecho visivel
+        // novo -- e ele e mais forte que o antigo, porque a caixa so sai quando
+        // a cidade do aparelho de fato valeu.
         expect(
-          find.text('Pets perdidos em Sao Paulo · da sua localização'),
-          findsOneWidget,
-          reason: 'REPROVA: a linha do recorte não passou a dizer a cidade do '
-              'aparelho, então a tela não conta que o toque funcionou.',
-        );
-        expect(
-          find.text('Pets perdidos em Campinas'),
+          aCaixaDoRecorte,
           findsNothing,
-          reason: 'REPROVA: a tela continua afirmando a cidade digitada '
-              'depois de a localização ter ganho dela.',
+          reason: 'REPROVA: a localização ganhou da cidade digitada e a caixa '
+              'do recorte continua na tela. Ver `_caixaDoRecorteAparece`.',
         );
       },
     );
@@ -231,16 +257,42 @@ void main() {
           pedidos: pedidos,
           logado: true,
         );
+        // **A ABERTURA JA RESOLVEU, e desde 20/10/2026 o sinal disso e a
+        // AUSENCIA da caixa** (ver `_caixaDoRecorteAparece`): a cidade do
+        // aparelho esta valendo e a caixa nao tem mais o que oferecer. Era
+        // `find.text('Pets perdidos em Sao Paulo · da sua localização')`.
         expect(
-          find.text('Pets perdidos em Sao Paulo · da sua localização'),
-          findsOneWidget,
+          aCaixaDoRecorte,
+          findsNothing,
           reason: 'REPROVA: a resolução de abertura não aplicou a cidade, e '
               'esta isca precisa dela para poder tirá-la.',
         );
+        expect(
+          cidadesPedidas(pedidos).last,
+          'Sao Paulo',
+          reason: 'REPROVA: a abertura não recortou pela cidade do aparelho. '
+              'Sem o recorte não há o que `Ver todas` tire.',
+        );
+        // **E A SAIDA DE VOLTA AO NACIONAL E O FILTRO**, porque `Ver todas`
+        // mora dentro da caixa que acabou de sair. Abrir a folha e esvaziar o
+        // campo de cidade e o caminho que a pessoa tem, e e ele que este caso
+        // exerce de agora em diante.
+        await massa.escolherCidade(tester, '');
 
-        await tester.tap(find.text('Ver todas'));
-        await tester.pumpAndSettle();
+        // SEM CIDADE, A CAIXA VOLTA -- e com ela o botao. Este `expect` e o
+        // que garante que a pessoa que tirou o recorte NAO ficou sem caminho
+        // de volta: a caixa que sai no desfecho bom tem de reaparecer quando o
+        // desfecho bom e desfeito.
+        expect(
+          aCaixaDoRecorte,
+          findsOneWidget,
+          reason: 'REPROVA: a pessoa esvaziou a cidade no filtro, não há mais '
+              'recorte, e a caixa não voltou. Ela ficou sem a linha que '
+              'explica a lista e sem `$oBotao` -- caixa que some sem deixar '
+              'caminho é pior que caixa que fica.',
+        );
         expect(find.text('Pets perdidos de todo o Brasil'), findsOneWidget);
+        expect(cidadesPedidas(pedidos).last, isNull);
 
         await tester.tap(find.text(oBotao));
         await tester.pumpAndSettle();
@@ -248,13 +300,15 @@ void main() {
         expect(
           cidadesPedidas(pedidos).last,
           'Sao Paulo',
-          reason: 'REPROVA: depois de `Ver todas`, o toque em `$oBotao` não '
-              'devolveu o recorte da cidade do aparelho. A pessoa fica sem '
-              'caminho de volta pelo resto da sessão.',
+          reason: 'REPROVA: depois de esvaziar a cidade no filtro, o toque em '
+              '`$oBotao` não devolveu o recorte da cidade do aparelho. A '
+              'pessoa fica sem caminho de volta pelo resto da sessão.',
         );
         expect(
-          find.text('Pets perdidos em Sao Paulo · da sua localização'),
-          findsOneWidget,
+          aCaixaDoRecorte,
+          findsNothing,
+          reason: 'REPROVA: o toque devolveu o recorte e a caixa continua na '
+              'tela.',
         );
       },
     );
@@ -322,7 +376,7 @@ void main() {
             'falha por um motivo diferente do que esta isca mede.',
       );
       expect(
-        find.text(fraseSemPermissao),
+        find.textContaining(fraseSemPermissao),
         findsOneWidget,
         reason: 'REPROVA: a pessoa recusou e a tela não disse nada. Para ela o '
             'botão não funcionou.',
@@ -361,13 +415,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(fraseServicoDesligado),
+        find.textContaining(fraseServicoDesligado),
         findsOneWidget,
         reason: 'REPROVA: o serviço do aparelho está desligado e a tela não '
             'disse qual é o caminho.',
       );
       expect(
-        find.text(fraseSemPermissao),
+        find.textContaining(fraseSemPermissao),
         findsNothing,
         reason: 'REPROVA: a tela mandou quem desligou a localização procurar '
             'uma permissão que ela já concedeu.',
@@ -376,11 +430,16 @@ void main() {
 
     testWidgets('ISCA 3/4: a CIDADE QUE NÃO SAI tem frase própria',
         (tester) async {
-      // `tetoDeUsoEstourado` é o `PlatformException(IO_ERROR)` que o README do
-      // `geocoding` descreve, e sob volume ele é o caminho NORMAL e não o
-      // excepcional. O geocoder ausente (`isPresent()` falso no Android sem
-      // Play Services) e a resolução sem resultado caem na mesma frase: as três
-      // são de fora do app e as três têm a mesma saída.
+      // `falhaDoServico` (era `tetoDeUsoEstourado` até 20/10/2026) é qualquer
+      // falha da chamada ao serviço de plataforma. No Android é quase sempre o
+      // `IO_ERROR` de teto de uso; no iOS é TUDO, porque o
+      // `CLGeocoderProxyApiDelegate.swift` colapsa todo `NSError` do
+      // `CLGeocoder` num código só. Ele, o geocoder ausente e as duas
+      // desistências por tempo caem nesta frase: as cinco são de fora do app e
+      // as cinco têm a mesma saída.
+      //
+      // **`semResultado` NÃO está mais neste grupo**: ele ganhou frase própria,
+      // porque nele nada deu errado. Ver a isca da frase 5.
       //
       // DESLIGANDO: em `_resolverEAplicar`, reponha o `case
       // CidadeNaoResolvida(): return;` sem o `switch` dos motivos.
@@ -388,7 +447,7 @@ void main() {
       final porta = LocalizacaoDeTeste(
         PermissaoDeLocalizacao.concedida,
         resultadoDaCidade:
-            const CidadeNaoResolvida(MotivoDeNaoTerCidade.tetoDeUsoEstourado),
+            const CidadeNaoResolvida(MotivoDeNaoTerCidade.falhaDoServico),
       );
       await abrir(tester, localizacao: porta, pedidos: pedidos);
 
@@ -396,7 +455,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(fraseCidadeNaoDescoberta),
+        find.textContaining(fraseCidadeNaoDescoberta),
         findsOneWidget,
         reason: 'REPROVA: o teto de uso da plataforma estourou e a tela ficou '
             'muda. É o desfecho que o cliente mais provavelmente viu.',
@@ -445,13 +504,13 @@ void main() {
             'então o que esta isca mede não aconteceu.',
       );
       expect(
-        find.text(fraseSemPetsEm('Sao Paulo')),
+        find.textContaining(fraseSemPetsEm('Sao Paulo')),
         findsOneWidget,
         reason: 'REPROVA: a localização funcionou, a cidade não tem caso '
             'aberto, e a tela não disse a diferença entre as duas coisas.',
       );
       expect(
-        find.text(fraseCidadeNaoDescoberta),
+        find.textContaining(fraseCidadeNaoDescoberta),
         findsNothing,
         reason: 'REPROVA: a tela disse que não descobriu a cidade logo depois '
             'de descobri-la e nomeá-la na linha do recorte.',
@@ -489,7 +548,7 @@ void main() {
             'que não vem.',
       );
       expect(
-        find.text(fraseSemPermissao),
+        find.textContaining(fraseSemPermissao),
         findsOneWidget,
         reason: 'REPROVA: os ajustes abriram e a tela não explicou por quê.',
       );
@@ -512,7 +571,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text(fraseProcurando),
+        find.textContaining(fraseProcurando),
         findsOneWidget,
         reason: 'REPROVA: o toque foi recebido e a tela não mudou nada. É o '
             'relato do cliente ao pé da letra.',
@@ -532,7 +591,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(fraseProcurando),
+        find.textContaining(fraseProcurando),
         findsNothing,
         reason: 'REPROVA: a resolução chegou e a tela continua dizendo que '
             'está procurando.',
@@ -557,7 +616,7 @@ void main() {
       final porta = LocalizacaoDeTeste(
         PermissaoDeLocalizacao.concedida,
         resultadoDaCidade:
-            const CidadeNaoResolvida(MotivoDeNaoTerCidade.tetoDeUsoEstourado),
+            const CidadeNaoResolvida(MotivoDeNaoTerCidade.falhaDoServico),
       );
       await abrir(tester, localizacao: porta, pedidos: pedidos);
 
@@ -569,14 +628,14 @@ void main() {
       );
       for (final frase in asQuatroFrases) {
         expect(
-          find.text(frase),
+          find.textContaining(frase),
           findsNothing,
           reason: 'REPROVA: a tela pintou "$frase" sem ninguém ter tocado em '
               '`$oBotao`. A faixa está pendurada na existência da tela, e as '
               'quatro iscas acima passam por nada.',
         );
       }
-      expect(find.text(fraseProcurando), findsNothing);
+      expect(find.textContaining(fraseProcurando), findsNothing);
       expect(
         find.text('Pets perdidos de todo o Brasil'),
         findsOneWidget,
@@ -603,7 +662,7 @@ void main() {
       expect(find.byType(CartaoDoPerdido), findsOneWidget);
       for (final frase in asQuatroFrases) {
         expect(
-          find.text(frase),
+          find.textContaining(frase),
           findsNothing,
           reason: 'REPROVA: o toque deu certo, a lista tem pet, e a tela '
               'pintou "$frase".',
@@ -620,19 +679,21 @@ void main() {
       final pedidos = <http.Request>[];
       final porta = LocalizacaoDeTeste(
         PermissaoDeLocalizacao.concedida,
+        // `falhaDoServico` e nao `semResultado`: este caso mede a faixa sendo
+        // APAGADA, e `semResultado` ganhou frase propria em 20/10/2026.
         resultadoDaCidade:
-            const CidadeNaoResolvida(MotivoDeNaoTerCidade.semResultado),
+            const CidadeNaoResolvida(MotivoDeNaoTerCidade.falhaDoServico),
       );
       await abrir(tester, localizacao: porta, pedidos: pedidos);
 
       await tester.tap(find.text(oBotao));
       await tester.pumpAndSettle();
-      expect(find.text(fraseCidadeNaoDescoberta), findsOneWidget);
+      expect(find.textContaining(fraseCidadeNaoDescoberta), findsOneWidget);
 
       await massa.escolherCidade(tester, 'Campinas');
 
       expect(
-        find.text(fraseCidadeNaoDescoberta),
+        find.textContaining(fraseCidadeNaoDescoberta),
         findsNothing,
         reason: 'REPROVA: a tela continua dizendo que não descobriu a cidade '
             'depois de a pessoa ter escolhido uma.',
@@ -660,30 +721,183 @@ void main() {
 
       await tester.tap(find.text(oBotao));
       await tester.pump();
-      expect(find.text(fraseProcurando), findsOneWidget);
+      expect(find.textContaining(fraseProcurando), findsOneWidget);
 
       // O aparelho NUNCA responde. O relógio anda.
       await tester.pump(const Duration(seconds: 25));
       await tester.pumpAndSettle();
 
       expect(
-        find.text(fraseProcurando),
+        find.textContaining(fraseProcurando),
         findsNothing,
         reason: 'REPROVA: a tela ficou pendurada em "$fraseProcurando". O '
             'canal de plataforma do geocoder não tem prazo em pacote nenhum, '
             'então quem não põe teto aqui põe uma frase que nunca sai.',
       );
       expect(
-        find.text(fraseCidadeNaoDescoberta),
+        find.textContaining(fraseCidadeNaoDescoberta),
         findsOneWidget,
         reason: 'REPROVA: a espera estourou e a tela não disse o que '
             'aconteceu. Desistir calado é o defeito de origem desta frente.',
+      );
+      // **E O CÓDIGO DIZ QUAL DOS DOIS PRAZOS ESTOUROU.**
+      //
+      // DESLIGANDO: troque o motivo do `onTimeout` de volta para
+      // `semFixNoPrazo`. Este caso reprova pelo nome, e sem ele o teto DE FORA
+      // continuaria se declarando "o aparelho não fixou" -- que é o outro
+      // prazo, o de dentro da porta, e tem conserto diferente.
+      expect(
+        find.textContaining(
+          MotivoDeNaoTerCidade.resolucaoSemResposta.codigo,
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o teto de fora se reportou como outro motivo. "o GPS '
+            'não pegou" e "o serviço de plataforma não respondeu" chegam como '
+            'o mesmo relato, e foi exatamente assim que o caso de 20/10/2026 '
+            'ficou sem diagnóstico.',
+      );
+      expect(
+        find.textContaining(MotivoDeNaoTerCidade.semFixNoPrazo.codigo),
+        findsNothing,
+        reason: 'REPROVA: a tela culpou o fix do aparelho por uma desistência '
+            'que foi do serviço de plataforma.',
       );
       expect(
         find.text('Pets perdidos de todo o Brasil'),
         findsOneWidget,
         reason: 'REPROVA: a reserva deixou de valer depois do estouro.',
       );
+    });
+
+    testWidgets(
+        'ISCA: a frase 5 é do PONTO QUE VEIO SEM NOME, e não oferece tentar '
+        'de novo', (tester) async {
+      // **O DESENHO QUE O RELATO DE 20/10/2026 OBRIGOU A SEPARAR.** Em
+      // `semResultado` nada deu errado: a plataforma respondeu, descreveu o
+      // lugar, e nome de cidade não veio. A lista nacional dos 20 mais
+      // recentes já está pintada pela reserva -- chamar isso de "não deu"
+      // ensina a pessoa a desconfiar de uma tela que está funcionando.
+      //
+      // E `Tentar a localização de novo` ali é pior que inútil: tentar no
+      // mesmo ponto devolve o mesmo nada e gasta o teto de uso da plataforma.
+      //
+      // DESLIGANDO: mande `semResultado` de volta para
+      // `_AvisoDaLocalizacao.cidadeNaoDescoberta` no `switch` de
+      // `_resolverEAplicar`. Este caso reprova pelo nome nas duas asserções.
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.concedida,
+        resultadoDaCidade:
+            const CidadeNaoResolvida(MotivoDeNaoTerCidade.semResultado),
+      );
+      await abrir(tester, localizacao: porta, pedidos: pedidos);
+
+      await tester.tap(find.text(oBotao));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('não deu para nomear sua cidade'),
+        findsOneWidget,
+        reason: 'REPROVA: veio ponto e não veio nome, e a tela chamou de falha '
+            'uma reserva que funcionou.',
+      );
+      expect(
+        find.textContaining(fraseCidadeNaoDescoberta),
+        findsNothing,
+        reason: 'REPROVA: `semResultado` continua na frase dos cinco motivos '
+            'de falha, e ele não é falha.',
+      );
+      expect(
+        find.text('Tentar a localização de novo'),
+        findsNothing,
+        reason: 'REPROVA: a tela ofereceu tentar de novo no mesmo ponto, que '
+            'devolve o mesmo nada e gasta o teto de uso da plataforma.',
+      );
+      expect(
+        find.text('Pets perdidos de todo o Brasil'),
+        findsOneWidget,
+        reason: 'REPROVA: a frase afirma que a lista nacional está embaixo '
+            'dela, e ela não está.',
+      );
+    });
+
+    testWidgets(
+        'ISCA: a faixa do toque carrega o CÓDIGO do motivo, porque o aparelho '
+        'de quem relata é o único instrumento que existe', (tester) async {
+      // **ESTA É A ISCA DO CONSERTO DE DIAGNÓSTICO, e ela nasce de um relato
+      // que não deu para ler.** Cliente, 20/10/2026, iPhone, release de
+      // `1ff67840`: *"ele ate pede a permissão para liberar, mas da o erro:
+      // Não deu para descobrir sua cidade agora"* -- instantâneo, capital de
+      // SP, permissão concedida, localização exata ligada. CINCO motivos
+      // produzem essa frase, a frase é a mesma nos cinco, e nada registrava
+      // qual foi. Um segundo build sem código na tela devolveria o mesmo
+      // relato.
+      //
+      // DESLIGANDO: faça `_textoDaFaixa` devolver `_textoDoAviso` cru. Este
+      // caso reprova pelo nome.
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.concedida,
+        resultadoDaCidade: const CidadeNaoResolvida(
+          MotivoDeNaoTerCidade.falhaDoServico,
+          detalhe: 'GeocodeAddressError',
+        ),
+      );
+      await abrir(tester, localizacao: porta, pedidos: pedidos);
+
+      await tester.tap(find.text(oBotao));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining(MotivoDeNaoTerCidade.falhaDoServico.codigo),
+        findsOneWidget,
+        reason: 'REPROVA: a faixa não carrega o código do motivo. Quem usa o '
+            'app não tem como dizer QUAL dos cinco caminhos falhou, e sem isso '
+            'o aparelho dele não mede nada.',
+      );
+      expect(
+        find.textContaining('GeocodeAddressError'),
+        findsOneWidget,
+        reason: 'REPROVA: o detalhe que a plataforma deu não chegou à tela. É '
+            'ele que separa a etapa do PONTO da etapa do NOME.',
+      );
+    });
+
+    testWidgets(
+        'CONTRAPESO: o desfecho BOM não carrega código nenhum',
+        (tester) async {
+      // Sem este caso, `comCodigo` poderia colar um código em toda faixa --
+      // inclusive na quarta frase, que afirma sucesso. "A localização
+      // funcionou: você está em Sao Paulo · cód. ..." é absurdo na tela e
+      // passaria em todas as iscas acima.
+      final pedidos = <http.Request>[];
+      // `naoPedida` + `depoisDePedir`, como na isca 4/4: com a permissao ja
+      // concedida a resolucao de ABERTURA nomeia a cidade e o botao deixa de
+      // ser oferecido -- nao haveria toque para medir.
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.naoPedida,
+        depoisDePedir: PermissaoDeLocalizacao.concedida,
+      );
+      await abrir(
+        tester,
+        localizacao: porta,
+        pedidos: pedidos,
+        itens: const <Map<String, dynamic>>[],
+      );
+
+      await tester.tap(find.text(oBotao));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(fraseSemPetsEm('Sao Paulo')), findsOneWidget);
+      for (final motivo in MotivoDeNaoTerCidade.values) {
+        expect(
+          find.textContaining('cód. ${motivo.codigo}'),
+          findsNothing,
+          reason: 'REPROVA: o desfecho bom veio com o código de '
+              '`${motivo.name}` colado. Código em frase de sucesso é defeito '
+              'inventado na cara de quem acabou de ser atendido.',
+        );
+      }
     });
 
     testWidgets('CONTRAPESO: as quatro frases são QUATRO textos distintos',
@@ -706,5 +920,246 @@ void main() {
       }
     });
   });
-}
 
+  // -------------------------------------------------------------------------
+  // 4. A CAIXA DO RECORTE SAI DEPOIS QUE A LOCALIZACAO DEU CIDADE
+  //    (cliente, 20/10/2026)
+  // -------------------------------------------------------------------------
+  //
+  // Nas palavras dele: *"remova essa box de localização depois de aceito e
+  // funcionando, deve apenas aparecer dentro do filtro a cidade
+  // selecionada."*
+  //
+  // **SAO DOIS CASOS E NAO UM, e o par e o mecanismo.** Cada um reprova um
+  // lado da "simplificacao" que esconderia a caixa no estado errado:
+  //
+  //   - `=> true`  (nunca esconder) reprova o caso do SOME;
+  //   - `=> false` (sempre esconder) reprova o caso do FICA.
+  //
+  // Com um caso so, qualquer um dos dois atalhos passaria -- e o que ele
+  // produziria e a pessoa sem botao e sem explicacao, que e pior que a caixa
+  // que fica.
+  group('a caixa do recorte sai so depois de a localizacao dar cidade', () {
+    /// LADO 1: O PEDIDO DO CLIENTE.
+    ///
+    /// DESLIGANDO: troque `_caixaDoRecorteAparece` por `=> true`. Este caso
+    /// reprova pelo nome.
+    testWidgets('a caixa SOME quando a localização já deu cidade',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.naoPedida,
+        depoisDePedir: PermissaoDeLocalizacao.concedida,
+      );
+      await abrir(tester, localizacao: porta, pedidos: pedidos);
+
+      // CONTROLE POSITIVO: antes do toque a caixa ESTA na tela. Sem isto, um
+      // desenho que nunca a mostrasse deixaria o `findsNothing` abaixo verde
+      // por vazio -- e e assim que esta classe de caso passa sem medir.
+      expect(
+        aCaixaDoRecorte,
+        findsOneWidget,
+        reason: 'REPROVA: a caixa não está na tela ANTES do toque, e é aí que '
+            'ela tem função: é a única coisa que explica o recorte e a única '
+            'que oferece `$oBotao`. Nada abaixo mede nada.',
+      );
+
+      await tester.tap(find.text(oBotao));
+      await tester.pumpAndSettle();
+
+      expect(
+        aCaixaDoRecorte,
+        findsNothing,
+        reason: 'REPROVA: a localização foi aceita, resolveu `Sao Paulo` e a '
+            'caixa continua na tela. O cliente pediu que o vestígio passasse a '
+            'ser a cidade DENTRO do filtro, e a caixa aqui repete o que o '
+            'filtro já mostra.',
+      );
+      // E O VESTIGIO EXISTE: a cidade de fato foi aplicada, e e ela que o
+      // campo da folha carrega (`_campoDaCidade`, `_recorte?.cidadeLimpa`).
+      // Sem esta linha, "a caixa sumiu" poderia significar que a resolucao
+      // falhou e nao que ela deu certo.
+      expect(
+        cidadesPedidas(pedidos).last,
+        'Sao Paulo',
+        reason: 'REPROVA: a caixa sumiu e a cidade NAO foi aplicada. Isso não '
+            'é o desfecho bom: é a tela perdendo a caixa e o recorte juntos.',
+      );
+
+      // **E O VESTIGIO E O QUE O CLIENTE PEDIU, por extenso:** *"deve apenas
+      // aparecer dentro do filtro a cidade selecionada."* Sem este `expect`, a
+      // caixa poderia sair deixando a cidade invisivel em qualquer lugar da
+      // tela -- e aí a pessoa teria a lista recortada sem nada dizendo por que.
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      final campo = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(TextField),
+      );
+      expect(
+        tester.widget<TextField>(campo).controller?.text,
+        'Sao Paulo',
+        reason: 'REPROVA: a caixa saiu e o filtro NÃO mostra a cidade que está '
+            'valendo. É o pedido do cliente ao pé da letra, e sem isto a '
+            'remoção da caixa apaga a única explicação do recorte.',
+      );
+    });
+
+    /// LADO 2: A CAIXA FICA EM TODO ESTADO NAO RESOLVIDO.
+    ///
+    /// **Cada caso roda COM cidade guardada neste aparelho**, e isso e o que
+    /// faz o caso medir: sem ela `_cidadeEmUso` seria nulo e a caixa ficaria
+    /// pela primeira condicao, sem a pendencia ser consultada nunca.
+    ///
+    /// DESLIGANDO: troque `_caixaDoRecorteAparece` por `=> false`. Os cinco
+    /// reprovam pelo nome.
+    for (final caso in <String, LocalizacaoDeTeste Function()>{
+      'semPermissao': () => LocalizacaoDeTeste(
+            PermissaoDeLocalizacao.naoPedida,
+            depoisDePedir: PermissaoDeLocalizacao.negada,
+          ),
+      'servicoDesligado': () => LocalizacaoDeTeste(
+            PermissaoDeLocalizacao.naoPedida,
+            depoisDePedir: PermissaoDeLocalizacao.concedida,
+            resultadoDaCidade: const CidadeNaoResolvida(
+              MotivoDeNaoTerCidade.servicoDesligado,
+            ),
+          ),
+      'cidadeNaoDescoberta': () => LocalizacaoDeTeste(
+            PermissaoDeLocalizacao.naoPedida,
+            depoisDePedir: PermissaoDeLocalizacao.concedida,
+            resultadoDaCidade: const CidadeNaoResolvida(
+              MotivoDeNaoTerCidade.semFixNoPrazo,
+            ),
+          ),
+      'cidadeSemNome': () => LocalizacaoDeTeste(
+            PermissaoDeLocalizacao.naoPedida,
+            depoisDePedir: PermissaoDeLocalizacao.concedida,
+            resultadoDaCidade: const CidadeNaoResolvida(
+              MotivoDeNaoTerCidade.semResultado,
+            ),
+          ),
+    }.entries) {
+      testWidgets(
+        'a caixa FICA em todo estado não resolvido: ${caso.key}',
+        (tester) async {
+          final pedidos = <http.Request>[];
+          await abrir(
+            tester,
+            localizacao: caso.value(),
+            pedidos: pedidos,
+            cidadeGuardada: 'Campinas',
+          );
+
+          await tester.tap(find.text(oBotao));
+          await tester.pumpAndSettle();
+
+          expect(
+            aCaixaDoRecorte,
+            findsOneWidget,
+            reason: 'REPROVA: a localização NÃO entregou cidade '
+                '(${caso.key}), há cidade em uso de outra origem (a guardada '
+                'neste aparelho), e a caixa saiu da tela. Ela leva consigo o '
+                'botão e a saída de quem acabou de tocá-lo: a pessoa fica sem '
+                'controle nenhum e com a lista recortada por uma cidade que '
+                'ela não escolheu agora.',
+          );
+          // CONTROLE POSITIVO: o estado nao resolvido de fato aconteceu. Sem
+          // isto, uma porta que resolvesse a cidade em silencio deixaria o
+          // caso verde pelo motivo errado.
+          expect(
+            find.textContaining('cód.'),
+            findsOneWidget,
+            reason: 'REPROVA: nenhuma frase de estado não resolvido apareceu, '
+                'então não há estado não resolvido a medir neste caso.',
+          );
+        },
+      );
+    }
+
+    /// `procurando` E O QUINTO, e ele exige o dublê que SEGURA a resposta.
+    testWidgets('a caixa FICA em todo estado não resolvido: procurando',
+        (tester) async {
+      final pedidos = <http.Request>[];
+      final porta = LocalizacaoQueDemora('Sao Paulo');
+      await abrir(
+        tester,
+        localizacao: porta,
+        pedidos: pedidos,
+        cidadeGuardada: 'Campinas',
+      );
+
+      await tester.tap(find.text(oBotao));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining(fraseProcurando), findsOneWidget);
+      expect(
+        aCaixaDoRecorte,
+        findsOneWidget,
+        reason: 'REPROVA: a tela está MEDINDO e a caixa saiu. O botão que a '
+            'pessoa acabou de tocar desapareceu junto com a frase que explica '
+            'a espera.',
+      );
+
+      porta.responder();
+      await tester.pumpAndSettle();
+
+      // E DEPOIS DE RESPONDER ELA SAI -- o par fechado no mesmo caso.
+      expect(
+        aCaixaDoRecorte,
+        findsNothing,
+        reason: 'REPROVA: a resolução chegou com cidade e a caixa continua. '
+            'É o lado 1 deste grupo, agora pelo caminho do dublê que demora.',
+      );
+    });
+
+    /// O CASO QUE SEPARA `_localizacaoPendente` DE `_podeOferecerLocalizacao`,
+    /// e ele e REAL e nao hipotetico.
+    ///
+    /// Quem abre com a cidade guardada da sessao passada e toca o botao num
+    /// build SEM localizacao recebe `indisponivel` -- e `_permissao` vira
+    /// `indisponivel` no MESMO `setState` que poe a frase na tela. A partir
+    /// desse instante `_podeOferecerLocalizacao` e falso e ha cidade em uso:
+    /// sem a condicao da pendencia, a caixa sai levando consigo a explicacao
+    /// que o toque acabou de produzir.
+    ///
+    /// DESLIGANDO: tire `|| _localizacaoPendente` de
+    /// `_caixaDoRecorteAparece`. Este caso reprova pelo nome, e os outros
+    /// cinco continuam verdes -- e e por isso que ele existe separado.
+    testWidgets(
+      'build sem localização: a caixa FICA com a frase que o toque produziu',
+      (tester) async {
+        final pedidos = <http.Request>[];
+        await abrir(
+          tester,
+          localizacao: LocalizacaoDeTeste(
+            PermissaoDeLocalizacao.naoPedida,
+            depoisDePedir: PermissaoDeLocalizacao.indisponivel,
+          ),
+          pedidos: pedidos,
+          cidadeGuardada: 'Campinas',
+        );
+
+        await tester.tap(find.text(oBotao));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining(fraseCidadeNaoDescoberta),
+          findsOneWidget,
+          reason: 'REPROVA: a permissão voltou `indisponivel` e a tela não '
+              'disse nada. Sem a frase não há nada que a caixa possa levar '
+              'consigo, e o caso perde o objeto.',
+        );
+        expect(
+          aCaixaDoRecorte,
+          findsOneWidget,
+          reason: 'REPROVA: a caixa saiu no mesmo quadro em que a frase '
+              'entrou. `_podeOferecerLocalizacao` virou falso (não há '
+              'localização neste build) e há cidade em uso — e é exatamente '
+              'esse par que `_localizacaoPendente` existe para cobrir.',
+        );
+      },
+    );
+  });
+}

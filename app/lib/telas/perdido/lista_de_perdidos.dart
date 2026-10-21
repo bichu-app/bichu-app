@@ -293,6 +293,43 @@ class ListaDePerdidos extends StatefulWidget {
       'Não deu para descobrir sua cidade agora. Dá para tentar de novo, ou '
       'escolher a cidade no filtro.';
 
+  /// 5. VEIO O PONTO, NÃO VEIO O NOME — e a reserva já está na tela.
+  ///
+  /// **Separada da 3 em 20/10/2026, e a separação é desenho de produto.** A 3
+  /// diz "não deu" para cinco situações, e em UMA delas nada deixou de dar: a
+  /// plataforma respondeu, descreveu o lugar, e simplesmente não trouxe nome
+  /// de cidade. A lista nacional dos 20 mais recentes já está embaixo da
+  /// faixa, pintada pela reserva — chamar isso de falha ensina a pessoa a
+  /// desconfiar de uma tela que está funcionando.
+  ///
+  /// **Não oferece `Tentar de novo`**, e essa é a diferença que importa: tentar
+  /// de novo no mesmo ponto devolve o mesmo nada e gasta o teto de uso. A ação
+  /// que resolve é escolher a cidade, e é a única que a frase oferece.
+  static const String avisoCidadeSemNome =
+      'Achamos onde você está, mas não deu para nomear sua cidade. A lista '
+      'abaixo é do Brasil todo — escolha a cidade no filtro para recortar.';
+
+  /// O CÓDIGO DO MOTIVO, colado no fim da faixa.
+  ///
+  /// **Existe porque o aparelho do cliente é o único instrumento que este
+  /// projeto tem, e até 20/10/2026 ele não media nada.** Relato dele, com o
+  /// build de `1ff67840`: *"da o erro: Não deu para descobrir sua cidade
+  /// agora"* — instantâneo, na capital de SP, com permissão concedida e
+  /// localização exata ligada. Quatro caminhos produzem essa frase nessas
+  /// condições, a frase é a mesma nos quatro, e nada em lugar nenhum registra
+  /// qual foi. Pedir um segundo build sem isto seria pedir a mesma frase de
+  /// novo.
+  ///
+  /// **Discreto e não escondido.** Vai no fim da faixa, com o separador que o
+  /// resto da tela usa, em vez de num log que ninguém no aparelho dele lê. Não
+  /// é bonito; é o preço de não ter esteira de aparelho. Quando houver
+  /// telemetria, isto sai e o `motivo` vai para ela — e o caso de teste que
+  /// cobra o código vai reprovar, que é o lembrete certo.
+  static String comCodigo(String frase, String codigo, String? detalhe) =>
+      detalhe == null || detalhe.isEmpty
+          ? '$frase · cód. $codigo'
+          : '$frase · cód. $codigo ($detalhe)';
+
   /// 4. A localização FUNCIONOU, e a cidade não tem pet perdido.
   ///
   /// **É a frase que responde à pergunta do cliente**, e ela é a única das
@@ -350,10 +387,22 @@ const Duration prazoDaResolucao = Duration(seconds: 12);
 ///
 /// Medido em 20/10/2026 no pacote: `cidadeAproximada` repassa o prazo a
 /// `pontoAproximado`, que o entrega ao `timeLimit` do `geolocator` — e depois
-/// chama `isPresent()` e `placemarkFromCoordinates` **sem prazo nenhum**. Não
-/// há `timeout` em lugar nenhum do `geocoding` nem do `geocoding_android`
-/// (varrido: zero ocorrência de `timeout` no pacote). Um canal de plataforma
-/// que não responde penduraria a espera para sempre.
+/// chamava `isPresent()` e o geocoder **sem prazo nenhum**. Não há `timeout` em
+/// lugar nenhum do `geocoding` nem do `geocoding_android` (varrido: zero
+/// ocorrência de `timeout` no pacote). Um canal de plataforma que não responde
+/// penduraria a espera para sempre.
+///
+/// **A PORTA GANHOU PRAZO PRÓPRIO NO MESMO DIA, e este teto FICA.** Ver
+/// `LocalizacaoPorGeolocator.prazoDoGeocoder`: o conserto certo era na porta,
+/// porque qualquer outro chamador futuro penduraria igual e quem escreve a
+/// segunda tela não tem como saber que precisa lembrar de um `.timeout`. Os dois
+/// não são redundantes, e a diferença é de ALCANCE: o da porta cobre a etapa do
+/// geocoder e nomeia o motivo; este cobre a chamada inteira, inclusive um
+/// travamento em qualquer linha da porta que não seja o geocoder — e inclusive
+/// num dublê de tela que não seja a porta de produção. O da porta é menor de
+/// propósito, e há caso cobrando isso
+/// (`test/dispositivo/cidade_da_localizacao_test.dart`): quem desiste primeiro é
+/// quem sabe dizer em que etapa foi.
 ///
 /// Enquanto o toque não dizia nada, isso era invisível — o nada não tem prazo.
 /// Com `Procurando sua localização…` na tela, pendurar virou **uma frase que
@@ -413,8 +462,11 @@ enum _AvisoDaLocalizacao {
   /// A permissão existe e o serviço do aparelho está desligado.
   servicoDesligado,
 
-  /// Veio coordenada e não veio nome de cidade.
+  /// A resolução falhou, e falhou de um jeito que pode ser tentado de novo.
   cidadeNaoDescoberta,
+
+  /// Veio coordenada e não veio nome de cidade. Ver [ListaDePerdidos.avisoCidadeSemNome].
+  cidadeSemNome,
 
   /// Deu certo, e a cidade não tem caso aberto.
   semPetsNaCidade,
@@ -481,6 +533,14 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   /// continuar verdadeira depois de a pessoa mexer no filtro, e ler a cidade em
   /// uso faria a faixa dizer "você está em Campinas" sobre uma cidade digitada.
   String? _cidadeDoAviso;
+
+  /// O CÓDIGO do motivo do último aviso, e o detalhe que a plataforma deu.
+  ///
+  /// Ver [ListaDePerdidos.comCodigo]: eles vão para a tela porque o aparelho de
+  /// quem relata é o único instrumento de medição que este projeto tem. Nulos
+  /// nos avisos que não nascem de motivo (`procurando`, `semPetsNaCidade`).
+  String? _codigoDoAviso;
+  String? _detalheDoAviso;
 
   bool _carregandoMais = false;
   bool _falhaAoCarregarMais = false;
@@ -634,7 +694,13 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // pode gastar os doze segundos de [prazoDaResolucao] mais a ida ao serviço
     // de plataforma, e doze segundos sem nada na tela são doze segundos em que
     // o botão "não está funcionando".
-    setState(() => _aviso = _AvisoDaLocalizacao.procurando);
+    setState(() {
+      // Limpa o código do toque ANTERIOR: deixá-lo colaria o motivo de ontem
+      // na frase de hoje, e um código errado é pior que código nenhum.
+      _codigoDoAviso = null;
+      _detalheDoAviso = null;
+      _aviso = _AvisoDaLocalizacao.procurando;
+    });
     final antes = await porta.estado();
     if (!mounted) return;
     if (antes == PermissaoDeLocalizacao.negadaPermanentemente) {
@@ -643,6 +709,8 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
       // ajustes sem liberar, e quem não chega a sair do app, lia o nada.
       setState(() {
         _permissao = antes;
+        _codigoDoAviso = MotivoDeNaoTerCidade.permissaoNegadaPermanentemente
+            .codigo;
         _aviso = _AvisoDaLocalizacao.semPermissao;
       });
       await porta.abrirAjustesDoSistema();
@@ -658,12 +726,22 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // `naoPedida` depois de `pedir()` é o diálogo que a pessoa dispensou
         // sem responder (o `grantResults` vazio que o plugin registra). Para a
         // tela é o mesmo que recusar: não há permissão.
-        setState(() => _aviso = _AvisoDaLocalizacao.semPermissao);
+        setState(() {
+          _codigoDoAviso = MotivoDeNaoTerCidade.permissaoNegada.codigo;
+          _aviso = _AvisoDaLocalizacao.semPermissao;
+        });
         return;
       case PermissaoDeLocalizacao.indisponivel:
         // Não é recusa, é ausência — e ausência não manda ninguém para ajuste
         // nenhum. Cai na terceira frase, que é a que oferece o filtro.
-        setState(() => _aviso = _AvisoDaLocalizacao.cidadeNaoDescoberta);
+        setState(() {
+          // **ESTE caminho não passa pelo `switch` dos nove motivos**, e por
+          // isso o código tem de ser posto à mão aqui: ele é um dos quatro que
+          // produziam a frase 3 sem deixar rastro no relato de 20/10/2026.
+          _codigoDoAviso = MotivoDeNaoTerCidade.indisponivel.codigo;
+          _detalheDoAviso = 'permissão indisponível após pedir';
+          _aviso = _AvisoDaLocalizacao.cidadeNaoDescoberta;
+        });
         return;
       case PermissaoDeLocalizacao.concedida:
         break;
@@ -704,39 +782,59 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   }) async {
     // **O `timeout` NÃO é rede sobre rede.** Ver [tetoDaEsperaDaResolucao]: o
     // prazo que a porta recebe cobre a MEDIÇÃO do ponto, e não a resolução do
-    // nome da cidade, que não tem prazo em pacote nenhum. `semFixNoPrazo` é o
-    // motivo certo para desistência por tempo, e ele cai na terceira frase
-    // junto com os outros quatro de fora do app.
+    // nome da cidade, que não tem prazo em pacote nenhum.
+    //
+    // **O motivo da desistência deixou de ser `semFixNoPrazo` em 20/10/2026.**
+    // Aquele é o aparelho não fixando a posição, e ele tem prazo próprio
+    // ([prazoDaResolucao]) dentro da porta. ESTE é o teto de fora, e ele
+    // estoura quando o serviço de plataforma não responde — com os dois no
+    // mesmo valor, "o GPS não pegou" e "a Apple não respondeu" chegavam
+    // indistinguíveis no relato de quem usa o app, e as duas têm conserto
+    // diferente. **Sem `const`**: o detalhe interpola o prazo.
     final resultado = await porta
         .cidadeAproximada(prazo: prazoDaResolucao)
         .timeout(
           tetoDaEsperaDaResolucao,
-          onTimeout: () =>
-              const CidadeNaoResolvida(MotivoDeNaoTerCidade.semFixNoPrazo),
+          onTimeout: () => CidadeNaoResolvida(
+            MotivoDeNaoTerCidade.resolucaoSemResposta,
+            detalhe: 'teto de ${tetoDaEsperaDaResolucao.inSeconds}s na tela',
+          ),
         );
     if (!mounted) return;
     switch (resultado) {
-      case CidadeNaoResolvida(motivo: final motivo):
-        // **NA ABERTURA, os oito motivos continuam caindo para a reserva sem
+      case CidadeNaoResolvida(motivo: final motivo, detalhe: final detalhe):
+        // **NA ABERTURA, os nove motivos continuam caindo para a reserva sem
         // uma palavra**, e isso é decisão e não omissão: ninguém pediu nada, e
         // faixa ali seria erro inventado em cima de uma reserva.
         if (!porToque) return;
         // **NO TOQUE, alguém pediu.** Não responder é o defeito.
-        setState(
-          () => _aviso = switch (motivo) {
+        setState(() {
+          // O código vai para a tela junto com a frase. Ver
+          // [ListaDePerdidos.comCodigo]: é o aparelho do cliente virando
+          // instrumento, porque esteira de aparelho este projeto não tem.
+          _codigoDoAviso = motivo.codigo;
+          _detalheDoAviso = detalhe;
+          _aviso = switch (motivo) {
             MotivoDeNaoTerCidade.permissaoNegada ||
             MotivoDeNaoTerCidade.permissaoNegadaPermanentemente =>
               _AvisoDaLocalizacao.semPermissao,
             MotivoDeNaoTerCidade.servicoDesligado =>
               _AvisoDaLocalizacao.servicoDesligado,
+            // **`semResultado` SAIU do grupo dos quatro**, e é a única saída
+            // deste `switch` que não é falha: a plataforma respondeu, descreveu
+            // o lugar, e nome de cidade não veio. A reserva nacional já está
+            // pintada embaixo da faixa — chamar isso de "não deu" ensina a
+            // pessoa a desconfiar de uma tela que está funcionando.
+            MotivoDeNaoTerCidade.semResultado =>
+              _AvisoDaLocalizacao.cidadeSemNome,
             MotivoDeNaoTerCidade.semFixNoPrazo ||
+            MotivoDeNaoTerCidade.resolucaoSemResposta ||
             MotivoDeNaoTerCidade.indisponivel ||
             MotivoDeNaoTerCidade.geocoderAusente ||
-            MotivoDeNaoTerCidade.tetoDeUsoEstourado ||
-            MotivoDeNaoTerCidade.semResultado =>
+            MotivoDeNaoTerCidade.falhaDoServico =>
               _AvisoDaLocalizacao.cidadeNaoDescoberta,
-          },
-        );
+          };
+        });
         return;
       case CidadeResolvida(cidade: final cidade):
         if (porToque) {
@@ -759,6 +857,8 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         setState(() {
           _cidadeDoAparelho = cidade;
           _aviso = null;
+          _codigoDoAviso = null;
+          _detalheDoAviso = null;
         });
         await _carregar();
         if (!mounted || !porToque) return;
@@ -1054,6 +1154,8 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // frase a transformaria em afirmação sobre uma lista que ela não descreve.
     _aviso = null;
     _cidadeDoAviso = null;
+    _codigoDoAviso = null;
+    _detalheDoAviso = null;
     _trocarRecorte(
       base.copiar(
         // `escolha.filtros['city']` nulo ou vazio limpa a cidade: quem apaga o
@@ -1078,6 +1180,91 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     );
   }
 
+  /// ## A CAIXA DO RECORTE APARECE, OU NÃO — decisão do cliente, 20/10/2026
+  ///
+  /// Nas palavras dele: *"remova essa box de localização depois de aceito e
+  /// funcionando, deve apenas aparecer dentro do filtro a cidade
+  /// selecionada."*
+  ///
+  /// **Enquanto não há cidade valendo, a caixa é a única coisa na tela que
+  /// explica e que oferece saída** — o botão, e as quatro frases do estado não
+  /// resolvido. Depois que a cidade está valendo, ela repete o que o filtro já
+  /// mostra: `_campoDaCidade` carrega `_recorte?.cidadeLimpa`, que é a cidade
+  /// que o servidor de fato aplicou.
+  ///
+  /// ## O critério é "há cidade em uso", e NÃO [_pessoaMexeu]
+  ///
+  /// E isso não é detalhe: `_pessoaMexeu` é exatamente o guarda que produziu o
+  /// defeito de 20/10/2026 (ver o cabeçalho deste arquivo). Ele responde "a
+  /// pessoa interagiu", e a pergunta aqui é outra — "esta tela tem cidade". Um
+  /// desenho pendurado nele esconderia a caixa de quem tocou e mostraria para
+  /// quem a resolução de abertura atendeu, que é o avesso do pedido.
+  ///
+  /// ## CAIXA QUE SOME SEM DEIXAR CAMINHO É PIOR QUE CAIXA QUE FICA
+  ///
+  /// Por isso "há cidade em uso" sozinho **não** basta, e a razão é medida e não
+  /// receio: `CidadeEscolhida` guarda a cidade da última busca, então na SEGUNDA
+  /// sessão deste app `_cidadeEmUso` já nasce preenchido por
+  /// [_cidadeDaUltimaBusca] — e `Me.reference_area.city` faz o mesmo por
+  /// [_cidadeDaRegiao] em toda conta com região cadastrada. Com o critério nu, a
+  /// caixa nunca apareceria para essas pessoas, e **`Usar minha localização`
+  /// deixaria de existir para elas** — a folha de filtro oferece a cidade (ver
+  /// [_campoDaCidade]) e **não** oferece a localização. Seria retirar o recurso
+  /// de quem nunca o usou, em silêncio, para atender um pedido sobre quem já o
+  /// usou.
+  ///
+  /// O pedido do cliente é sobre o DESFECHO BOM: *"depois de aceito e
+  /// funcionando"*. Então a caixa só sai quando ela não tem mais nada a fazer —
+  /// há cidade valendo **e** a localização não tem nada a oferecer nem nada
+  /// pendente. [_podeOferecerLocalizacao] já é exatamente "a localização ainda
+  /// pode dar em algo", e é falso justamente no caso do cliente (cidade do
+  /// aparelho valendo).
+  ///
+  /// ## O estado NÃO RESOLVIDO mantém a caixa, e é por isso que há um par
+  ///
+  /// `procurando`, `semPermissao`, `servicoDesligado`, `cidadeNaoDescoberta` e
+  /// `cidadeSemNome` são os cinco em que a localização não entregou cidade, e em
+  /// todos a caixa fica.
+  ///
+  /// **[_localizacaoPendente] não é redundante com [_podeOferecerLocalizacao],
+  /// e o caso que os separa é real:** quem abre com a cidade guardada da sessão
+  /// passada e toca o botão num build sem localização recebe
+  /// [PermissaoDeLocalizacao.indisponivel] — e aí `_permissao` passa a
+  /// `indisponivel` **no mesmo `setState`** que põe a frase na tela
+  /// ([_pedirEResolver]). `_podeOferecerLocalizacao` vira falso nesse instante,
+  /// e sem esta segunda condição a caixa sairia levando consigo a explicação que
+  /// o toque acabou de produzir. Regra explícita, e não efeito colateral da
+  /// regra do botão: foi o acoplamento entre duas regras que produziu o defeito
+  /// original.
+  ///
+  /// `semPetsNaCidade` é o único aviso que NÃO é pendência: nele a localização
+  /// funcionou e a cidade está valendo. A caixa sai, e a frase dele continua —
+  /// ela é irmã da caixa na coluna, não filha, e sem ela a lista vazia volta a
+  /// ser indistinguível de botão que não fez nada.
+  ///
+  /// DESLIGANDO (os dois lados, e cada caso pega um):
+  /// trocar por `=> true` reprova `a caixa SOME quando a localização já deu
+  /// cidade`; trocar por `=> false` reprova `a caixa FICA em todo estado não
+  /// resolvido`.
+  bool get _caixaDoRecorteAparece =>
+      _cidadeEmUso == null || _podeOferecerLocalizacao || _localizacaoPendente;
+
+  /// A localização ainda não entregou cidade, e a caixa tem função.
+  ///
+  /// **Nulo é FALSO**, e não "indefinido": nulo é ninguém ter tocado nada, e
+  /// nesse estado quem decide é a existência de cidade, não o aviso.
+  bool get _localizacaoPendente => switch (_aviso) {
+        null => false,
+        _AvisoDaLocalizacao.procurando ||
+        _AvisoDaLocalizacao.semPermissao ||
+        _AvisoDaLocalizacao.servicoDesligado ||
+        _AvisoDaLocalizacao.cidadeNaoDescoberta ||
+        _AvisoDaLocalizacao.cidadeSemNome =>
+          true,
+        // A localização FUNCIONOU. Ver [ListaDePerdidos.avisoSemPetsNaCidade].
+        _AvisoDaLocalizacao.semPetsNaCidade => false,
+      };
+
   /// Oferecer `Usar minha localização` só faz sentido quando ela ainda pode
   /// dar em algo.
   ///
@@ -1100,9 +1287,23 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
           ListaDePerdidos.avisoServicoDesligado,
         _AvisoDaLocalizacao.cidadeNaoDescoberta =>
           ListaDePerdidos.avisoCidadeNaoDescoberta,
+        _AvisoDaLocalizacao.cidadeSemNome =>
+          ListaDePerdidos.avisoCidadeSemNome,
         _AvisoDaLocalizacao.semPetsNaCidade =>
           ListaDePerdidos.avisoSemPetsNaCidade(_cidadeDoAviso ?? ''),
       };
+
+  /// A frase da faixa COM o código do motivo, que é o que a tela mostra.
+  ///
+  /// Separada de [_textoDoAviso] para os casos de teste poderem medir a frase e
+  /// o código em asserções diferentes: um código errado colado numa frase certa
+  /// passaria num `contains` da frase inteira.
+  String? get _textoDaFaixa {
+    final frase = _textoDoAviso;
+    final codigo = _codigoDoAviso;
+    if (frase == null || codigo == null) return frase;
+    return ListaDePerdidos.comCodigo(frase, codigo, _detalheDoAviso);
+  }
 
   /// A saída que a faixa oferece, **e ela não é a mesma nas quatro**.
   ///
@@ -1115,6 +1316,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
           ListaDePerdidos.rotuloDeAbrirAjustes,
         _AvisoDaLocalizacao.cidadeNaoDescoberta =>
           ListaDePerdidos.rotuloDeTentarALocalizacao,
+        // **`cidadeSemNome` não oferece `Tentar de novo`, e é deliberado**:
+        // tentar no mesmo ponto devolve o mesmo nada e gasta o teto de uso. A
+        // saída dali é o filtro, que já está na tela logo acima.
+        _AvisoDaLocalizacao.cidadeSemNome ||
         _AvisoDaLocalizacao.procurando ||
         _AvisoDaLocalizacao.semPetsNaCidade ||
         null =>
@@ -1126,6 +1331,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         _AvisoDaLocalizacao.servicoDesligado =>
           () => Escopo.of(context).localizacao.abrirAjustesDoSistema(),
         _AvisoDaLocalizacao.cidadeNaoDescoberta => _pedirEResolver,
+        _AvisoDaLocalizacao.cidadeSemNome ||
         _AvisoDaLocalizacao.procurando ||
         _AvisoDaLocalizacao.semPetsNaCidade ||
         null =>
@@ -1138,6 +1344,8 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     _cidadeDigitada = null;
     _aviso = null;
     _cidadeDoAviso = null;
+    _codigoDoAviso = null;
+    _detalheDoAviso = null;
     final base = _recorte ?? const RecorteDePerdidos();
     _trocarRecorte(base.copiar(cidade: null, pagina: 1));
   }
@@ -1196,7 +1404,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
             // que a lista está errada. Só não aparece enquanto a primeira
             // carga está no ar, porque aí ela afirmaria um recorte que ainda
             // não voltou do servidor.
-            if (_fase != _Fase.carregando) ...<Widget>[
+            //
+            // **E ELA SOME DEPOIS QUE A CIDADE ESTÁ VALENDO** (cliente,
+            // 20/10/2026). Ver [_caixaDoRecorteAparece]: o vestígio passa a ser
+            // a cidade dentro do filtro, e a troca de cidade é lá.
+            if (_fase != _Fase.carregando && _caixaDoRecorteAparece) ...<Widget>[
               _LinhaDoRecorte(
                 cidade: _cidadeEmUso,
                 origem: _origemDaCidade,
@@ -1216,9 +1428,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
             // desaparecesse durante a recarga deixaria a quarta frase sem
             // chance de aparecer. `Procurando sua localização…` também
             // sobrevive à recarga por isto.
-            if (_textoDoAviso != null) ...<Widget>[
+            if (_textoDaFaixa != null) ...<Widget>[
               FaixaDeAviso(
-                texto: _textoDoAviso!,
+                texto: _textoDaFaixa!,
                 // **`informativo`, nunca `erro`.** Nenhum dos quatro desfechos
                 // é falha do fluxo: a lista está na tela em todos, pela
                 // reserva. A tinta Brasa com borda de 2 px é da urgência.
