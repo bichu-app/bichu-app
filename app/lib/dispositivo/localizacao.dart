@@ -51,6 +51,8 @@
 /// tela que promete offline o que nao e.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show PlatformException;
@@ -352,11 +354,16 @@ class CidadeNaoResolvida extends ResultadoDaCidade {
 
 /// O NOME DA CIDADE dentro de um [Placemark], ou nulo quando nao ha nenhum.
 ///
-/// **Funcao pura, de proposito, e e a unica parte da resolucao que da para
-/// medir sem aparelho.** O resto de `_resolver` e canal de plataforma: em
-/// teste ele nao responde, e `cidade_da_localizacao_test.dart` registra essa
-/// lacuna por escrito desde 19/10/2026. A escolha de CAMPO nao precisava estar
-/// do lado de la da fronteira, e enquanto estava ela nunca foi medida.
+/// **Funcao pura, de proposito.** A escolha de CAMPO nao precisava estar do
+/// lado de la da fronteira do canal de plataforma, e enquanto estava ela nunca
+/// foi medida -- o codigo lia `locality` e mais nada, e no iOS isso falha em
+/// lugar que o Android acerta.
+///
+/// Quando isto foi escrito (19/10/2026) ela era a UNICA parte da resolucao que
+/// dava para medir sem aparelho. Deixou de ser em 20/10/2026: o prazo proprio
+/// da porta exigiu [ServicoDeGeocodificacao], e com o seam `_resolver` inteiro
+/// ficou alcancavel em teste. `cidade_da_localizacao_test.dart` registra no
+/// cabecalho o que o seam abriu e o que, dele, continua nao escrito.
 ///
 /// ## Dois degraus, e cada um dos que ficaram de fora ficou por uma razao
 ///
@@ -406,6 +413,64 @@ String? cidadeDoLugar(Placemark lugar) {
     if (nome.isNotEmpty) return nome;
   }
   return null;
+}
+
+/// O POUCO que a resolucao de cidade precisa do servico da plataforma.
+///
+/// ## Existe por UMA razao, e ela e de medicao
+///
+/// `Geocoding` do pacote monta o canal de plataforma dentro do proprio
+/// construtor (`GeocodingPlatformFactory.instance!`, medido em
+/// `geocoding-5.0.0/lib/geocoding.dart`), e num teste de unidade nenhum plugin
+/// se registrou. Sem este seam nao ha como pendurar a chamada **de proposito**,
+/// e sem poder pendura-la o `.timeout` de [LocalizacaoPorGeolocator] seria
+/// prosa -- que e exatamente como `forcarGerenciadorDoSistema` nasceu e viveu
+/// quatro semanas: declarado, documentado e sem nenhum caso o observando.
+///
+/// ## Dois metodos, e nenhum deles recebe texto
+///
+/// A camada 3 do portao `sem_geocodificacao_test.dart` reprova a porta que
+/// passe a falar de `String endereco` ou `String cep`. Esta interface e parte
+/// da porta e vale a mesma regra: coordenada entra, lugar sai, e o sentido
+/// inverso nao tem como ser escrito aqui sem mudar a forma dos metodos.
+abstract class ServicoDeGeocodificacao {
+  /// Ha geocoder neste aparelho. Android-only de fato; no iOS e sempre `true`.
+  Future<bool> geocoderPresente();
+
+  /// **O SENTIDO AUTORIZADO, e o unico**: coordenada -> lugares.
+  Future<List<Placemark>> lugaresDoPonto(double lat, double lon);
+}
+
+/// O servico de verdade, pelo pacote `geocoding`.
+///
+/// `Geocoding` e construido na PRIMEIRA chamada e nao no construtor: montar o
+/// canal custa, e esta classe e instanciada por padrao em toda
+/// [LocalizacaoPorGeolocator] -- inclusive nas que nunca resolvem cidade.
+class GeocodificacaoDaPlataforma implements ServicoDeGeocodificacao {
+  Geocoding? _geocoding;
+
+  Geocoding get _plataforma => _geocoding ??= Geocoding();
+
+  @override
+  Future<bool> geocoderPresente() => _plataforma.isPresent();
+
+  @override
+  Future<List<Placemark>> lugaresDoPonto(double lat, double lon) =>
+      // **`placemarkFromCoordinates` mora AQUI e em lugar nenhum mais.** O
+      // portao `sem_geocodificacao_test.dart` cobra o nome por arquivo, e
+      // `locationFromAddress` -- que vem no MESMO pacote -- nao pode ser
+      // escrito nem aqui.
+      _plataforma.placemarkFromCoordinates(lat, lon);
+}
+
+/// O que a reserva do ultimo ponto conhecido tinha a dizer.
+///
+/// Carrega o ponto **e a frase**, porque a frase importa justamente quando o
+/// ponto e nulo: ver [LocalizacaoPorGeolocator.idadeMaximaDoPontoGuardado].
+class _Reserva {
+  const _Reserva(this.ponto, this.detalhe);
+  final PontoCapturado? ponto;
+  final String detalhe;
 }
 
 /// O acesso a localizacao do aparelho.
@@ -472,7 +537,18 @@ abstract class Localizacao {
 /// nossa API. [forcarGerenciadorDoSistema] existe para o unico ponto em que
 /// isso poderia deixar de ser verdade -- ver o campo.
 class LocalizacaoPorGeolocator implements Localizacao {
-  LocalizacaoPorGeolocator({this.forcarGerenciadorDoSistema = true});
+  LocalizacaoPorGeolocator({
+    this.forcarGerenciadorDoSistema = true,
+    ServicoDeGeocodificacao? geocodificacao,
+  }) : _servico = geocodificacao ?? GeocodificacaoDaPlataforma();
+
+  /// O servico de plataforma, **trocavel so para medir**.
+  ///
+  /// O padrao e o de verdade. O parametro existe porque o prazo da porta (ver
+  /// [prazoDoGeocoder]) nao da para medir sem um dublê que NUNCA responda, e
+  /// um que demore mediria outra coisa: `try/catch` nao pega travamento, e
+  /// `Future` que nunca completa nao lanca.
+  final ServicoDeGeocodificacao _servico;
 
   /// No Android, usar o `LocationManager` do sistema em vez do provedor
   /// fundido do Google Play Services.
@@ -547,14 +623,7 @@ class LocalizacaoPorGeolocator implements Localizacao {
       final posicao = await Geolocator.getCurrentPosition(
         locationSettings: _ajustesDaMedicao(prazo),
       );
-      return CapturaComPonto(
-        PontoCapturado(
-          lat: posicao.latitude,
-          lon: posicao.longitude,
-          precisaoEmMetros: posicao.accuracy,
-          origem: OrigemDoPonto.deviceGps,
-        ),
-      );
+      return CapturaComPonto(_pontoDe(posicao));
     } on Object catch (erro) {
       // O pacote lanca tipos diferentes para "estourou o prazo", "o servico
       // caiu no meio" e "o aparelho recusou", e os tres terminam na mesma
@@ -567,11 +636,146 @@ class LocalizacaoPorGeolocator implements Localizacao {
       // `PermissionDeniedException` do lado nativo e um `TimeoutException` de
       // 12 s produziam byte por byte a mesma tela. O tipo e barato de guardar
       // e e a unica coisa que separa os dois.
+      //
+      // **E ANTES DE DESISTIR, A RESERVA.** Ver [_ultimoPontoConhecido]: o
+      // aparelho dentro de casa frequentemente nao fixa, e o sistema ja tem um
+      // ponto guardado que serve para nomear cidade.
+      final reserva = await _ultimoPontoConhecido();
+      if (reserva.ponto != null) return CapturaComPonto(reserva.ponto!);
       return CapturaSemPonto(
         MotivoDeNaoTerPonto.semFixNoPrazo,
-        detalhe: _detalheDoErro(erro),
+        // **DUAS ETAPAS NUM DETALHE SO**, e as duas sao necessarias para ler o
+        // relato: o que a medicao disse, e o que a reserva disse. Sem a segunda
+        // metade, "nao fixou" e "nao fixou e nao havia ponto guardado" e
+        // "nao fixou e o ponto guardado era velho demais" chegam iguais -- e
+        // as tres tem conserto diferente.
+        detalhe: '${_detalheDoErro(erro)}; ${reserva.detalhe}',
       );
     }
+  }
+
+  /// O ponto que a medicao devolveu, traduzido.
+  ///
+  /// **A origem continua [OrigemDoPonto.deviceGps] tambem na reserva**, e isso
+  /// e decisao e nao descuido: o ponto guardado foi medido por ESTE aparelho,
+  /// pelo sistema dele. Um terceiro valor aqui reprovaria o portao
+  /// `sem_geocodificacao_test.dart` ("a coordenada so nasce de `device_gps` ou
+  /// de `map_pin`"), e reprovaria com razao -- "o sistema tinha guardado" nao e
+  /// uma terceira forma de uma coordenada nascer.
+  static PontoCapturado _pontoDe(Position posicao) => PontoCapturado(
+        lat: posicao.latitude,
+        lon: posicao.longitude,
+        precisaoEmMetros: posicao.accuracy,
+        origem: OrigemDoPonto.deviceGps,
+      );
+
+  /// ## A IDADE MAXIMA DO PONTO GUARDADO, e por que ela e 30 minutos
+  ///
+  /// **O criterio esta aqui, no codigo, e nao numa decisao de cabeca.** Ponto
+  /// velho e PONTO, e nao verdade nova: aceitar qualquer idade poria a pessoa
+  /// que acabou de descer do aviao em "voce esta em" da cidade de onde ela
+  /// saiu, com o rotulo *da sua localizacao* colado -- que e exatamente a
+  /// "cidade errada derivada em silencio" que esta frente existe para nao
+  /// fazer.
+  ///
+  /// O numero sai de qual erro custa mais, e os dois custos sao assimetricos:
+  ///
+  /// - **Apertar demais** devolve o defeito que a reserva veio consertar: o
+  ///   aparelho dentro de casa nao fixa, o ponto guardado e recusado, e a
+  ///   pessoa volta a ler "nao deu para descobrir sua cidade".
+  /// - **Afrouxar demais** nomeia a cidade ERRADA, com confianca. Esse e o
+  ///   caro: a lista fica recortada por uma cidade em que a pessoa nao esta, e
+  ///   nada na tela diz que o ponto era de antes.
+  ///
+  /// Trinta minutos e onde os dois se cruzam para o que esta sendo decidido
+  /// aqui, que e NOME DE CIDADE e nao posicao: um aparelho parado dentro de
+  /// casa -- o caso que a reserva atende -- esta na mesma cidade com certeza em
+  /// meia hora; um aparelho que se moveu meia hora de carro PODE ter trocado de
+  /// municipio numa regiao metropolitana, e esse e o risco aceito. Ele e
+  /// limitado de proposito: a pessoa tem o filtro de cidade a um toque, e a
+  /// alternativa de recusar e a lista nacional, que esta errada para todo mundo.
+  ///
+  /// **Nao e `gradeEmMetros` com outro nome.** Aquela e "vale reperguntar"; esta
+  /// e "este ponto ainda descreve onde a pessoa esta". A grade compara dois
+  /// pontos, esta compara um ponto com o relogio.
+  static const Duration idadeMaximaDoPontoGuardado = Duration(minutes: 30);
+
+  /// Quantas vezes a reserva de fato salvou uma captura nesta sessao.
+  ///
+  /// Existe para ser MEDIDO, pela mesma razao de [resolucoesPedidas]: "a reserva
+  /// serviu para algo no aparelho do cliente" e uma pergunta com resposta, e sem
+  /// este contador ela seria respondida por leitura de codigo.
+  int reservasUsadas = 0;
+
+  /// O ULTIMO PONTO QUE O SISTEMA GUARDOU, quando ele ainda serve.
+  ///
+  /// ## Por que isto nao fere a decisao de privacidade -- MEDIDO no pacote
+  ///
+  /// [forcarGerenciadorDoSistema] existe para manter o `FusedLocationProvider`
+  /// do Google fora do caminho de um dado pessoal, e a reserva precisava passar
+  /// pelo mesmo crivo. O caminho foi lido inteiro em 20/10/2026, no
+  /// `geolocator_android-5.0.3`:
+  ///
+  /// 1. `Geolocator.getLastKnownPosition(forceAndroidLocationManager:)` repassa
+  ///    o valor como `forceLocationManager` para a plataforma
+  ///    (`geolocator/lib/geolocator.dart`);
+  /// 2. `GeolocatorAndroid.getLastKnownPosition` o poe no mapa do canal de
+  ///    metodo (`lib/src/geolocator_android.dart`);
+  /// 3. `MethodCallHandlerImpl.onGetLastKnownPosition` o le e o entrega a
+  ///    `GeolocationManager.getLastKnownPosition`;
+  /// 4. `GeolocationManager.createLocationClient` devolve `LocationManagerClient`
+  ///    quando ele e verdadeiro, **sem consultar `isGooglePlayServicesAvailable`**;
+  /// 5. `LocationManagerClient` importa `android.location.*` e
+  ///    `androidx.core.location.*` e **nada do Google** (varrido: zero
+  ///    ocorrencia de "google" no arquivo). Ele percorre
+  ///    `locationManager.getProviders(true)` e pega
+  ///    `getLastKnownLocation(provider)` de cada um.
+  ///
+  /// **O PADRAO DO PACOTE E `false`, E ISSO E A ARMADILHA.** Chamar
+  /// `getLastKnownPosition()` pelado cai no passo 4 com `false`, e ali
+  /// `isGooglePlayServicesAvailable(context) ? new FusedLocationClient(...)`
+  /// manda a consulta para o provedor do Google -- em silencio, sem nenhuma
+  /// linha mudar nesta porta. Por isso o campo e repassado EXPLICITAMENTE
+  /// abaixo, e por isso `gerenciador_do_sistema_test.dart` cobra o valor como
+  /// ele sai no canal **tambem nesta chamada**.
+  ///
+  /// No iOS a chave nao tem significado (ha um `CLLocationManager` e nada
+  /// mais) e o `geolocator_apple` a ignora -- o que ele devolve e o fix em
+  /// cache do proprio `CLLocationManager`, que e justamente por que o iOS nunca
+  /// teve este defeito.
+  ///
+  /// Devolve o ponto **e o que dizer sobre ele**: o detalhe vai para a faixa
+  /// quando nao ha ponto, e e a unica coisa que separa "nao havia nada
+  /// guardado" de "havia e era velho demais".
+  Future<_Reserva> _ultimoPontoConhecido() async {
+    final Position? guardado;
+    try {
+      guardado = await Geolocator.getLastKnownPosition(
+        // **EXPLICITO, e nao pelo padrao.** Ver a prosa acima: o padrao do
+        // pacote e `false`, e `false` e o provedor do Google.
+        forceAndroidLocationManager: forcarGerenciadorDoSistema,
+      );
+    } on Object catch (erro) {
+      // A reserva falhando nao e um segundo erro a relatar: ela e a reserva. O
+      // tipo entra no detalhe e a captura segue para a desistencia.
+      return _Reserva(null, 'reserva falhou (${_detalheDoErro(erro)})');
+    }
+    if (guardado == null) {
+      return const _Reserva(null, 'reserva sem ponto guardado');
+    }
+    final idade = DateTime.now().toUtc().difference(guardado.timestamp.toUtc());
+    // **Idade NEGATIVA tambem e recusa.** Relogio do aparelho adiantado, ou
+    // trocado entre a medicao e agora: um `timestamp` no futuro nao prova
+    // frescor nenhum, e `idade <= teto` o aceitaria calado.
+    if (idade.isNegative || idade > idadeMaximaDoPontoGuardado) {
+      return _Reserva(
+        null,
+        'reserva velha (${idade.inMinutes}min, teto '
+        '${idadeMaximaDoPontoGuardado.inMinutes}min)',
+      );
+    }
+    reservasUsadas += 1;
+    return _Reserva(_pontoDe(guardado), 'reserva usada (${idade.inMinutes}min)');
   }
 
   /// O que der para dizer sobre o erro, em pouco texto e sem dado pessoal.
@@ -649,9 +853,32 @@ class LocalizacaoPorGeolocator implements Localizacao {
   /// reperguntar".
   static const double gradeEmMetros = 100;
 
+  /// ## O PRAZO DA PORTA PARA O GEOCODER, e por que ele nao e o do chamador
+  ///
+  /// `placemarkFromCoordinates` era um `await` cru dentro de um `try`, e o unico
+  /// teto que existia vivia no CHAMADOR (`tetoDaEsperaDaResolucao`, em
+  /// `lib/telas/perdido/lista_de_perdidos.dart`). Isso ja bastava para a tela
+  /// dos Pets e nao bastava para a porta: **qualquer outro chamador futuro
+  /// pendurava sem limite**, e quem escreve a segunda tela nao tem como saber
+  /// que precisa lembrar de um `.timeout` -- a porta e que concentra o que as
+  /// telas nao devem lembrar, pela mesma razao de a grade de 100 m morar aqui.
+  ///
+  /// **Nao ha prazo nenhum dentro do pacote**: varrido em 20/10/2026, zero
+  /// ocorrencia de `timeout` no `geocoding`, no `geocoding_android` e no
+  /// `geocoding_darwin`. Um canal de plataforma que aceita a chamada e nao
+  /// responde pendura o `Future` para sempre, e `try/catch` nao pega isso --
+  /// `Future` que nunca completa nao lanca.
+  ///
+  /// **O teto do chamador FICA, e os dois nao sao redundantes.** Este cobre a
+  /// etapa do geocoder e nomeia o motivo
+  /// ([MotivoDeNaoTerCidade.resolucaoSemResposta]); o de la cobre a chamada
+  /// inteira, inclusive um travamento em qualquer linha desta porta que nao
+  /// seja o geocoder. Dez segundos deixam este estourar ANTES do de la, e isso
+  /// e deliberado: quem desiste primeiro e quem sabe dizer em que etapa foi.
+  static const Duration prazoDoGeocoder = Duration(seconds: 10);
+
   PontoCapturado? _ultimoPonto;
   String? _ultimaCidade;
-  Geocoding? _geocoding;
 
   /// Quantas vezes o servico de plataforma foi de fato chamado nesta sessao.
   ///
@@ -714,11 +941,23 @@ class LocalizacaoPorGeolocator implements Localizacao {
     // existe exatamente porque o Android pode nao ter.
     // Instancia guardada: `Geocoding()` monta o canal de plataforma, e montar
     // um por resolucao seria desperdicio num caminho que ja tem teto de uso.
-    final plataforma = _geocoding ??= Geocoding();
+    //
+    // **E ELE TEM PRAZO, como toda chamada de canal desta porta.** Ver
+    // [prazoDoGeocoder]: `isPresent` atravessa o mesmo canal que a resolucao, e
+    // um canal que aceita e nao responde pendura o `Future` para sempre.
     try {
-      if (!await plataforma.isPresent()) {
+      if (!await _servico.geocoderPresente().timeout(prazoDoGeocoder)) {
         return const CidadeNaoResolvida(MotivoDeNaoTerCidade.geocoderAusente);
       }
+    } on TimeoutException {
+      // **PENDURAR NAO E "NAO TER", e a distincao e o motivo de este `catch`
+      // vir antes do de baixo.** O aparelho que responde "nao tenho geocoder"
+      // e `geocoderAusente`; o que nao responde nada e o servico de plataforma
+      // sem resposta, que tem valor proprio desde 20/10/2026.
+      return CidadeNaoResolvida(
+        MotivoDeNaoTerCidade.resolucaoSemResposta,
+        detalhe: 'isPresent sem resposta em ${prazoDoGeocoder.inSeconds}s',
+      );
     } on Object {
       // `isPresent` falhando e tratado como ausencia, e nao como teto: o
       // aparelho que nao consegue nem responder "tenho geocoder" nao tem.
@@ -732,7 +971,22 @@ class LocalizacaoPorGeolocator implements Localizacao {
       // coordenada -> lugar. `locationFromAddress` existe no mesmo pacote e
       // NAO pode ser chamado aqui nem em lugar nenhum deste app: ADR-0006, e
       // o portao `sem_geocodificacao_test.dart` reprova por nome.
-      lugares = await plataforma.placemarkFromCoordinates(ponto.lat, ponto.lon);
+      //
+      // **O PRAZO E DA PORTA, e nao do chamador.** Ver [prazoDoGeocoder]: o
+      // teto de 24 s da tela dos Pets continua valendo por cima, e este vale
+      // para QUALQUER chamador -- inclusive o que ainda nao foi escrito.
+      lugares = await _servico
+          .lugaresDoPonto(ponto.lat, ponto.lon)
+          .timeout(prazoDoGeocoder);
+    } on TimeoutException {
+      // **ANTES do `on Object`, de proposito**: um `TimeoutException` caindo em
+      // `falhaDoServico` diria "o servico errou" sobre um servico que nao
+      // respondeu, e as duas tem conserto diferente -- uma e cota ou rede, a
+      // outra e canal pendurado.
+      return CidadeNaoResolvida(
+        MotivoDeNaoTerCidade.resolucaoSemResposta,
+        detalhe: 'geocoder sem resposta em ${prazoDoGeocoder.inSeconds}s',
+      );
     } on Object catch (erro) {
       // O `IO_ERROR` do teto de uso chega aqui, e e o caminho NORMAL sob
       // volume -- nao o excepcional. Qualquer outra falha de plataforma cai no
