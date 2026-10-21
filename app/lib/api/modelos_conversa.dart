@@ -343,6 +343,7 @@ class Conversa {
     required this.messages,
     required this.unread,
     this.caseId,
+    this.foundReportId,
     this.nextCursor,
     this.lastMessagePreview,
     this.lastMessageAt,
@@ -359,6 +360,34 @@ class Conversa {
   /// ele esta aqui porque o contrato o declara e ler menos que o contrato
   /// esconde a decisao de nao usar.
   final String? caseId;
+
+  /// `found_report_id`: o aviso de achado de que esta conversa nasceu.
+  ///
+  /// ## ESTE CAMPO NAO ESTA NO CONTRATO HOJE, e a leitura e deliberada
+  ///
+  /// Medido em 20/10/2026 contra `api/openapi.yaml` no commit `70f4aa34`:
+  /// `#/components/schemas/Conversation` declara `id`, `case_id`,
+  /// `pet_display_name`, `status`, `participants`, `messages`, `unread`,
+  /// `last_message_preview`, `last_message_at` e `next_cursor`. **Nao declara
+  /// `found_report_id`.**
+  ///
+  /// E ele que falta para a foto poder subir. A unica rota de intencao de
+  /// upload cujo destino e a conversa mediada e
+  /// `createFoundReportPhotoUploadIntent`, e ela **exige `found_report_id` no
+  /// corpo** (`POST /v1/media/found-report-photo-intents`). Sem este campo na
+  /// resposta da conversa **nao existe valor valido para pedir a
+  /// autorizacao**: nao e limitacao de implementacao do app, e um buraco de
+  /// contrato, e o lado servidor desta historia esta sendo escrito em paralelo.
+  ///
+  /// Ler o campo agora e o que faz o caminho ficar PRONTO em vez de meio
+  /// pronto: no dia em que a resposta o traga, o botao de anexar aparece sem
+  /// uma linha de app mudar. Enquanto ele vem nulo, `TelaDaConversa` **nao
+  /// desenha o botao** -- um controle que sempre falha e o toque sem desfecho
+  /// que o criterio 2 da BICHUS-62 proibe por escrito.
+  ///
+  /// `case_id` NAO serve no lugar dele: aquele e o caso de pet perdido, e a
+  /// rota de intencao confere o aviso do achador.
+  final String? foundReportId;
 
   final String petDisplayName;
 
@@ -423,6 +452,7 @@ class Conversa {
     if (id is! String || id.isEmpty) return null;
     final nomeDoPet = bruto['pet_display_name'];
     final caso = bruto['case_id'];
+    final aviso = bruto['found_report_id'];
     final cursor = bruto['next_cursor'];
     final participantes = bruto['participants'];
     final mensagens = bruto['messages'];
@@ -431,6 +461,11 @@ class Conversa {
     return Conversa(
       id: id,
       caseId: caso is String ? caso : null,
+      // Vazio cai no mesmo nulo que ausente: os dois querem a mesma tela (sem
+      // botao de anexar), e uma string vazia viajaria no corpo da intencao
+      // como `found_report_id: ""`, que o servidor recusa com 400 dizendo
+      // `format` -- um erro sobre um campo que a pessoa nunca viu.
+      foundReportId: aviso is String && aviso.isNotEmpty ? aviso : null,
       petDisplayName: nomeDoPet is String ? nomeDoPet : '',
       status: estado,
       nextCursor: cursor is String ? cursor : null,

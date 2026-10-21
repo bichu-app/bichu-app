@@ -1,6 +1,7 @@
 import 'api_client.dart';
 import 'falhas.dart';
 import 'modelos_conversa.dart';
+import 'problem.dart';
 
 /// As operacoes da conversa mediada que o app consome (`tags: [conversations]`).
 ///
@@ -146,16 +147,49 @@ class ConversasApi {
   /// antes de a outra parte ler. A tela mostra o aviso a partir de
   /// `redactions`, para o remetente nao achar que o texto sumiu sozinho.
   ///
+  /// ## [fotoUploadId]: a foto vai COM legenda, e nunca sozinha
+  ///
+  /// `body` continua `minLength: 1` no contrato, e o `CHECK` de
+  /// `mediated_messages.body` exige texto nao vazio no banco. Entao **nao
+  /// existe mensagem so-foto** nesta rota: a foto viaja como referencia de um
+  /// upload ja pago, ao lado de um texto que a pessoa escreveu. Uma tela que
+  /// aceitasse foto sem legenda produziria 400 depois de a pessoa ter esperado
+  /// o upload inteiro.
+  ///
+  /// O valor e o `upload_id` de uma intencao de upload ja honrada -- os bytes
+  /// chegaram ao armazenamento antes desta chamada. Ver
+  /// `EnvioParaConfirmarDepois` em `api/envio_de_foto.dart`: e ele quem guarda
+  /// o identificador em vez de chamar a rede, e e por isso que o `uploadId`
+  /// dele continua nulo quando o envio nao terminou bem.
+  ///
+  /// **A higiene da foto e ASSINCRONA no servidor** (a derivada sem metadado,
+  /// que e o que a conversa serve). Quando ela ainda nao terminou, esta rota
+  /// recusa, e a recusa e identificavel: ver [fotoAindaNaoEstaPronta]. Ela nao
+  /// e defeito e nao e definitiva.
+  ///
   /// **Nao manda `Idempotency-Key`.** O contrato declara o parametro como
   /// opcional nesta rota, e o app nao tem de onde tirar uma chave estavel: a
   /// mesma pessoa reenviando o mesmo texto de propósito e um caso real numa
   /// conversa, e deduplicar isso comeria a segunda mensagem dela. O reenvio
   /// depois de falha e um **toque da pessoa**, nunca um retry automatico --
   /// ver `TelaDaConversa`.
-  Future<MensagemDaConversa> enviar(String conversaId, String texto) async {
+  Future<MensagemDaConversa> enviar(
+    String conversaId,
+    String texto, {
+    String? fotoUploadId,
+  }) async {
     final json = await _api.post(
       '${_caminho(conversaId)}/messages',
-      corpo: <String, dynamic>{'body': texto},
+      corpo: <String, dynamic>{
+        'body': texto,
+        // **A CHAVE SO VAI QUANDO HA FOTO**, e nao como `null` explicito. O
+        // esquema declara `photo_upload_id` com `format: uuid`, e um `null`
+        // numa chave de formato reprova em validador que confere formato antes
+        // de conferir nulidade -- a mesma razao pela qual `cursor` e `q` da
+        // listagem nao viajam vazios.
+        if (fotoUploadId != null && fotoUploadId.isNotEmpty)
+          'photo_upload_id': fotoUploadId,
+      },
     );
     final mensagem = _ler(() => MensagemDaConversa.doJson(json));
     if (mensagem == null) {
@@ -211,4 +245,39 @@ class ConversasApi {
   /// O id vem da resposta do servidor: vai codificado, como nas outras rotas.
   static String _caminho(String conversaId) =>
       '/conversations/${Uri.encodeComponent(conversaId)}';
+}
+
+/// A recusa que diz **"a foto ainda nao esta pronta"**, e nao "a foto nao
+/// serve".
+///
+/// ## Por que ela e lida pelo SLUG e nao por uma constante do enum
+///
+/// `ProblemTipo` e conferido contra `x-problem-types` do contrato pelo portao
+/// `verificar-conformidade-do-app.mjs`: uma constante nova ali, para um slug
+/// que a spec ainda nao declara, reprova por `valor-que-o-contrato-nao-tem`.
+/// O lado servidor desta historia esta sendo escrito em paralelo e e ele quem
+/// batiza o slug; ate o contrato carrega-lo, a leitura mora aqui, pelo texto
+/// da URI.
+///
+/// **Os tres slugs candidatos sao aceitos de proposito.** Nao e indecisao: os
+/// tres significam a mesma coisa para esta tela -- *espere e tente outra vez*
+/// --, e errar o nome exato produziria o pior desfecho possivel (a pessoa
+/// lendo "nao foi enviada" sobre uma foto que ia subir dois segundos depois).
+/// Quando o contrato nomear o slug, esta funcao perde os outros dois e ganha a
+/// constante do enum.
+///
+/// `precondition-required` e `precondition-failed` entram pelo enum porque o
+/// contrato JA os declara, e sao a forma generica que a rota usaria se o
+/// servidor nao criasse slug proprio.
+bool fotoAindaNaoEstaPronta(Problem problem) {
+  const List<String> candidatos = <String>[
+    'photo-not-ready',
+    'upload-not-ready',
+    'photo-processing',
+  ];
+  for (final slug in candidatos) {
+    if (problem.tipoUri.endsWith('/$slug')) return true;
+  }
+  return problem.tipo == ProblemTipo.precondicaoNecessaria ||
+      problem.tipo == ProblemTipo.precondicaoFalhou;
 }
