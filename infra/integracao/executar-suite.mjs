@@ -64,6 +64,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 
 import { exigirBancoDescartavel } from './guarda-de-banco-descartavel.mjs';
@@ -123,6 +124,114 @@ if (indiceDoPlacar !== -1 && (destinoDoPlacar === undefined || destinoDoPlacar.s
   console.error('\nREPROVADO: `--placar` exige o caminho do diretorio de saida.\n');
   process.exit(1);
 }
+
+/**
+ * QUANTOS ARQUIVOS DE TESTE DE UMA VEZ. Numero FIXO, e nao o da maquina.
+ *
+ * ===========================================================================
+ * POR QUE FIXO, SE O PADRAO DO RUNNER E MELHOR INFORMADO
+ * ===========================================================================
+ * Sem esta bandeira, `node --test` sobe `availableParallelism()` processos de
+ * uma vez -- 15 nesta maquina, 2 num executor de esteira pequeno. Cada um
+ * desses processos carrega uma aplicacao Fastify inteira e um pool de Postgres,
+ * e os 15 dividem o `mem_limit: 1g` do servico `testes`.
+ *
+ * O resultado medido em 21/10, tres execucoes na MESMA arvore: 690, 701 e 705
+ * casos, com 9, 2 e 3 arquivos reprovados -- a terceira em `70f4aa34` puro,
+ * zero alteracao. Os arquivos nao reprovaram: foram MORTOS por `SIGKILL` pelo
+ * cgroup, por falta de memoria, cada execucao matando outros. O proprio placar
+ * era nao deterministico, porque caso de arquivo morto nao entra em numero
+ * nenhum.
+ *
+ * Numero derivado da maquina e nao deterministico POR CONSTRUCAO: a mesma
+ * arvore reprova aqui e passa na esteira, ou o contrario, e ninguem consegue
+ * separar "eu quebrei" de "a suite e instavel". Um numero fixo e o mesmo em
+ * todo lugar, e quando ele deixar de servir, ele reprova em todo lugar junto.
+ *
+ * ===========================================================================
+ * POR QUE 1, E NAO UM NUMERO BAIXO QUALQUER
+ * ===========================================================================
+ * Baixar a concorrencia resolveria a memoria com qualquer numero que caiba no
+ * teto. Mas a memoria e so UMA das duas causas. A outra e o `deadlock detected`
+ * (40P01) entre arquivos que compartilham o banco: dois arquivos fazem DDL em
+ * tabela que todos os outros escrevem --
+ *
+ *   chave-estrangeira-contra-restricao: `lock table conversation_messages, users
+ *                                        in access exclusive mode` e
+ *                                        `alter table ... drop constraint`
+ *   cadastros-separados:                 `alter table user_roles drop constraint`
+ *                                        e `create table ... references users`
+ *
+ * -- e `ACCESS EXCLUSIVE` conflita com TUDO, inclusive com a leitura. Nenhuma
+ * ordem de cadeado resolve isso, e isso foi MEDIDO e nao deduzido: o comentario
+ * de `escrita-administrativa-da-loja.test.ts` registra a tentativa de ordenar
+ * as travas a mao e registra que ela nao resolveu. Nao podia resolver -- a
+ * ordem inversa esta em quarenta e nove arquivos que apagam `users` na
+ * limpeza, e nao num arquivo so.
+ *
+ * Com um arquivo de cada vez nao ha duas sessoes para fechar ciclo, e a classe
+ * inteira deixa de existir em vez de ficar mais rara. Rara e pior do que
+ * frequente aqui: foi assim que uma reprovacao fantasma foi atribuida a uma
+ * mudanca inocente.
+ *
+ * ===========================================================================
+ * O PRECO, MEDIDO EM 21/10 NESTE WORKTREE, DUAS EXECUCOES SEGUIDAS
+ * ===========================================================================
+ *   15 de uma vez: `node --test` em 9,6 s, 701 casos, QUATRO arquivos mortos
+ *                  por SIGKILL, pico de memoria 1024 MB contra teto de
+ *                  1024 MB, `oom_kill +4` no cgroup.
+ *    1 de cada vez: `node --test` em 39,9 s, 711 casos, 711 passaram, nenhum
+ *                  arquivo morto, nenhum 40P01.
+ *
+ * Trinta segundos no runner, e 77 s no comando inteiro -- construcao da imagem,
+ * pilha de pe, migracao do zero, compilacao, suite e `down -v` incluidos. A
+ * maquina estava com carga 30 a 44 nas duas medicoes, de outras sessoes; os
+ * numeros sao os dois do MESMO periodo, e e a comparacao que vale, nao o
+ * absoluto.
+ *
+ * Repare no 711: ele e MAIOR que os 690, 699, 701 e 705 das execucoes
+ * concorrentes. Nao sao casos novos -- sao os casos que os arquivos mortos
+ * nunca chegaram a reportar. O placar concorrente nao era so instavel, era
+ * INCOMPLETO.
+ *
+ * DAI SAI UMA REGRA DE LEITURA, e ela vale alem desta bandeira: O TOTAL DE
+ * CASOS SO E COMPARAVEL ENTRE EXECUCOES QUANDO NENHUM ARQUIVO MORREU. Com
+ * arquivo morto, duas execucoes nao sao duas medidas da mesma suite: sao duas
+ * amostragens diferentes dela, e a diferenca entre os totais nao mede nada.
+ * Foi comparando 690 com 705 assim que se concluiu que a suite era instavel,
+ * sem nome, sem motivo e sem base. Por isso o relato de arquivo morto, mais
+ * abaixo, vem ANTES do placar, e nao depois.
+ *
+ * ===========================================================================
+ * A PROVA DE QUE ISTO APAGA A CLASSE, E NAO A INSTANCIA
+ * ===========================================================================
+ * Cinco execucoes em serie, em 21/10, nesta ordem: uma solta, depois
+ * `infra/integracao/repetir.mjs --vezes 4` (interrompida na segunda por um
+ * `docker build` que levou 254 s resolvendo `docker/dockerfile:1.7` no
+ * registro -- ambiente, e nao suite) e `--vezes 3`:
+ *
+ *   711 casos / 0 reprovaram   711 / 0   711 / 0   711 / 0   711 / 0
+ *
+ * O MESMO total nas cinco, e nao so veredito verde nas cinco: verde com total
+ * dancando continuaria sendo suite que mente. Do outro lado, CINCO de cinco
+ * execucoes concorrentes mataram arquivo (9, 4, 3, 3 e 2 reprovados), entao o
+ * desaparecimento nao e sorte de amostra pequena -- a classe deixou de ocorrer
+ * onde ela ocorria todas as vezes.
+ *
+ * `--concorrencia <n>` existe para MEDIR de novo -- e para o dia em que a
+ * suite crescer a ponto de a serie nao caber. Quem mudar o padrao mede antes,
+ * e deixa aqui o que mediu.
+ */
+const CONCORRENCIA_PADRAO = 1;
+const indiceDaConcorrencia = argv.indexOf('--concorrencia');
+if (indiceDaConcorrencia !== -1 && !/^[1-9]\d*$/.test(argv[indiceDaConcorrencia + 1] ?? '')) {
+  console.error('\nREPROVADO: `--concorrencia` exige um inteiro positivo.\n');
+  process.exit(1);
+}
+const CONCORRENCIA =
+  indiceDaConcorrencia === -1
+    ? CONCORRENCIA_PADRAO
+    : Number.parseInt(argv[indiceDaConcorrencia + 1], 10);
 
 const indiceDoLcov = argv.indexOf('--lcov');
 const lcov = indiceDoLcov === -1 ? undefined : argv[indiceDoLcov + 1];
@@ -289,6 +398,133 @@ function arquivosSemCaso(tap, caminhos) {
   return caminhos.filter((c) => aprovadosPeloCaminho.has(c));
 }
 
+/**
+ * ARQUIVO QUE MORREU INTEIRO, E COM QUE SINAL.
+ *
+ * ===========================================================================
+ * O DEFEITO QUE ISTO CONSERTA, MEDIDO EM 21/10
+ * ===========================================================================
+ * Tres execucoes da suite na MESMA arvore deram 690, 701 e 705 casos, e a
+ * terceira foi em `70f4aa34` puro -- zero alteracao -- com tres arquivos
+ * reprovados e TODOS os casos visiveis em verde. O executor imprimia
+ * "3 caso(s) reprovaram" e nao dizia QUAIS, nem que o que reprovou nao foi
+ * caso nenhum: foram tres ARQUIVOS, e nenhum deles deixou uma linha de erro.
+ *
+ * O motivo de nao haver mensagem estava no proprio relatorio, e e o que
+ * ninguem tinha lido ate aqui:
+ *
+ *   not ok 23 - dist/_tests/tests/integration/foto-na-conversa-entre-conexoes.test.js
+ *     exitCode: ~
+ *     signal: 'SIGKILL'
+ *     error: 'test failed'
+ *
+ * `signal: SIGKILL` com `exitCode: ~` NAO e teste que falhou: e processo
+ * morto de fora. Quem morre de `SIGKILL` nao roda tratador nenhum -- nao ha
+ * `catch`, nao ha `after`, nao ha o que imprimir. Procurar no log a mensagem
+ * desse erro e procurar o que nao existe, e era isso que fazia esta reprovacao
+ * custar uma tarde e terminar em chute.
+ *
+ * O veredito NAO muda aqui: esses arquivos ja estao contados em `# fail` e
+ * `reprovados` ja os conta. Muda a MENSAGEM, que e a parte que decide se
+ * alguem diagnostica ou adivinha.
+ *
+ * O bloco YAML do nivel do arquivo vem indentado com DOIS espacos e TERMINA em
+ * `  ...`. A parada nessa linha e a regra que decide a correcao, e nao a
+ * indentacao: no relatorio real o proximo arquivo vem logo abaixo, com o bloco
+ * DELE tambem em dois espacos, e uma varredura que nao para no fim do bloco
+ * atribui ao primeiro arquivo o sinal do segundo -- dois arquivos, um morto e
+ * um que so teve caso reprovado, e o relatorio acusaria os dois de mortos.
+ * Portao que mente sobre o motivo gasta o tempo de quem o atende e perde a
+ * confianca que o faz ser lido. A isca `arquivo morto nao contamina o arquivo
+ * seguinte` reprova sozinha quando a parada sai.
+ *
+ * A ancora de dois espacos da regex de campo continua, como segunda guarda do
+ * mesmo erro pelo outro lado (`signal:` mais fundo, dentro de um caso). Ela
+ * NAO tem isca que reprove sozinha, e isto esta escrito aqui de proposito:
+ * medido, afrouxa-la nao reprova nenhum caso do autoteste, porque a parada
+ * acima acontece antes. Guarda sem isca e guarda que se pode perder sem
+ * ninguem ver -- quem a tirar nao sera avisado por este autoteste.
+ */
+function arquivosMortos(tap, caminhos) {
+  const alvos = new Set(caminhos);
+  const linhas = tap.split('\n');
+  const mortos = [];
+  for (let i = 0; i < linhas.length; i += 1) {
+    const casado = /^not ok \d+ - (.*)$/.exec(linhas[i]);
+    if (casado === null || !alvos.has(casado[1])) continue;
+    const campos = {};
+    for (let j = i + 1; j < linhas.length; j += 1) {
+      if (linhas[j] === '  ...') break;
+      // `^  ` com dois espacos exatos: e aqui que o nivel do ARQUIVO se separa
+      // do nivel do CASO.
+      const campo = /^ {2}([A-Za-z_]+): (.*)$/.exec(linhas[j]);
+      if (campo !== null) campos[campo[1]] = campo[2].replace(/^'/, '').replace(/'$/, '');
+    }
+    const vazio = (v) => v === undefined || v === '~';
+    mortos.push({
+      caminho: casado[1],
+      sinal: vazio(campos.signal) ? undefined : campos.signal,
+      codigo: vazio(campos.exitCode) ? undefined : campos.exitCode,
+      tipo: campos.failureType,
+    });
+  }
+  return mortos;
+}
+
+/**
+ * O CGROUP DESTE CONTAINER: o teto, o pico e A CONTA DE QUEM FOI MORTO.
+ *
+ * Quando um arquivo aparece morto por `SIGKILL`, a pergunta seguinte e sempre
+ * a mesma -- quem matou --, e ela tem resposta MEDIDA aqui dentro, em vez de
+ * suposta. `memory.events` do cgroup v2 carrega um contador `oom_kill` que
+ * sobe uma vez por processo morto por falta de memoria DENTRO deste container.
+ * Lido antes e depois da suite, o delta separa as duas unicas explicacoes
+ * possiveis para o sinal:
+ *
+ *   delta > 0  =>  foi o teto de memoria do container (`mem_limit: 1g`), e o
+ *                  numero de processos que o runner sobe de uma vez e o que
+ *                  decide se cabe;
+ *   delta == 0  =>  NAO foi memoria. Foi alguem mais matando o processo, e a
+ *                  procura comeca em outro lugar.
+ *
+ * O controle positivo importa tanto quanto a medida: sonda que so sabe dizer
+ * "nao achei" nao distingue ausencia de defeito de ausencia de instrumento.
+ * Por isso `memory.events` AUSENTE (cgroup v1, ou fora de container) devolve
+ * `undefined` e e relatado como "nao medi", nunca como zero.
+ */
+function cgroupDeMemoria() {
+  const ler = (arquivo) => {
+    try {
+      return readFileSync(`/sys/fs/cgroup/${arquivo}`, 'utf8');
+    } catch {
+      return undefined;
+    }
+  };
+  const numero = (texto) => {
+    if (texto === undefined) return undefined;
+    const limpo = texto.trim();
+    if (!/^\d+$/.test(limpo)) return undefined; // `max` = sem teto
+    return Number.parseInt(limpo, 10);
+  };
+  const eventos = ler('memory.events');
+  const contar = (rotulo) => {
+    if (eventos === undefined) return undefined;
+    const casado = new RegExp(`^${rotulo} (\\d+)$`, 'm').exec(eventos);
+    return casado === null ? undefined : Number.parseInt(casado[1], 10);
+  };
+  return {
+    teto: numero(ler('memory.max')),
+    pico: numero(ler('memory.peak')),
+    mortes: contar('oom_kill'),
+    mortesDoGrupo: contar('oom_group_kill'),
+  };
+}
+
+/** `1073741824` nao se le; `1024 MB` se le. */
+function emMegabytes(bytes) {
+  return bytes === undefined ? 'nao medi' : `${String(Math.round(bytes / 1024 / 1024))} MB`;
+}
+
 // ===========================================================================
 // AUTOTESTE: `node infra/integracao/executar-suite.mjs --autoteste`
 // ===========================================================================
@@ -319,6 +555,40 @@ function autoteste() {
   const TAP_DO_ARQUIVO_VAZIO = `TAP version 13\n# Subtest: ${CAMINHO}\nok 1 - ${CAMINHO}\n1..1\n# tests 1\n# pass 1\n# fail 0\n`;
   /** O caso medido: arquivo com 11 casos, todos reprovados, reportado pelo caminho. */
   const TAP_DO_ARQUIVO_REPROVADO = `TAP version 13\n# Subtest: ${CAMINHO}\nnot ok 39 - ${CAMINHO}\n1..39\n# tests 39\n# pass 0\n# fail 39\n`;
+  /**
+   * O bloco medido em 21/10, literal: arquivo morto por SIGKILL, `exitCode`
+   * vazio, e um caso em verde dentro dele -- a forma exata que nao deixava
+   * mensagem.
+   */
+  const TAP_DO_ARQUIVO_MORTO =
+    `TAP version 13\n# Subtest: ${CAMINHO}\nnot ok 23 - ${CAMINHO}\n  ---\n  duration_ms: 1730.903667\n` +
+    `  type: 'test'\n  location: '/app/${CAMINHO}:1:1'\n  failureType: 'testCodeFailure'\n` +
+    `  exitCode: ~\n  signal: 'SIGKILL'\n  error: 'test failed'\n  code: 'ERR_TEST_FAILURE'\n  ...\n` +
+    `1..23\n# tests 23\n# pass 22\n# fail 1\n`;
+  /**
+   * O erro simetrico, e ele e a forma COMUM: um arquivo que terminou normalmente
+   * e reprovou porque um CASO dentro dele reprovou. O bloco do caso vem antes,
+   * indentado mais fundo, e carrega `signal`; o bloco do ARQUIVO vem depois, com
+   * dois espacos, e carrega `exitCode: 1`. Esse arquivo NAO foi morto, e dizer
+   * que foi manda procurar memoria onde ha defeito de teste.
+   */
+  const TAP_DO_CASO_REPROVADO =
+    `TAP version 13\n# Subtest: ${CAMINHO}\n    # Subtest: um caso qualquer\n` +
+    `    not ok 1 - um caso qualquer\n      ---\n      signal: 'SIGKILL'\n      error: 'x'\n      ...\n` +
+    `    1..1\nnot ok 7 - ${CAMINHO}\n  ---\n  type: 'test'\n  failureType: 'subtestsFailed'\n` +
+    `  exitCode: 1\n  error: '1 subtest failed'\n  ...\n# tests 1\n# pass 0\n# fail 1\n`;
+  /**
+   * A forma do relatorio REAL, que e onde a parada em `  ...` decide: dois
+   * arquivos seguidos, o primeiro reprovado por caso interno (`exitCode: 1`,
+   * sem sinal) e o segundo MORTO (`signal: 'SIGKILL'`). Sem a parada, o
+   * primeiro absorve o sinal do segundo e os dois aparecem como mortos.
+   */
+  const OUTRO_CAMINHO = `${COMPILADO}/vizinho.test.js`;
+  const TAP_DE_DOIS_ARQUIVOS =
+    `TAP version 13\n# Subtest: ${CAMINHO}\nnot ok 7 - ${CAMINHO}\n  ---\n  type: 'test'\n` +
+    `  failureType: 'subtestsFailed'\n  exitCode: 1\n  error: '1 subtest failed'\n  ...\n` +
+    `# Subtest: ${OUTRO_CAMINHO}\nnot ok 8 - ${OUTRO_CAMINHO}\n  ---\n  type: 'test'\n` +
+    `  exitCode: ~\n  signal: 'SIGKILL'\n  error: 'test failed'\n  ...\n# tests 2\n# pass 0\n# fail 2\n`;
   const TAP_DO_ARQUIVO_CHEIO =
     'TAP version 13\n# Subtest: grava o apelido como texto\nok 1 - grava o apelido como texto\n1..1\n# tests 1\n# pass 1\n# fail 0\n';
 
@@ -345,6 +615,22 @@ function autoteste() {
       contarReprovados(placar(TAP_PULADO)).reprovados > 0, false],
     ['o outro lado: pulado e pendente tambem NAO sao residuo sem classificacao',
       contarReprovados(placar(TAP_PULADO)).semClassificacao > 0, false],
+    ['ISCA: arquivo morto de fora e NOMEADO, com o sinal que o matou',
+      arquivosMortos(TAP_DO_ARQUIVO_MORTO, [CAMINHO])[0]?.sinal === 'SIGKILL', true],
+    // `length === 1` e nao `codigo === undefined`: a segunda forma passava com a
+    // funcao devolvendo lista VAZIA, porque `undefined === undefined`. Isca que
+    // aprova no desligamento nao mede nada -- medido com `return []` no corpo.
+    ['ISCA: o arquivo morto aparece com exitCode VAZIO, e nao como saida 0',
+      arquivosMortos(TAP_DO_ARQUIVO_MORTO, [CAMINHO]).filter((m) => m.codigo === undefined).length === 1, true],
+    ['ISCA: o sinal de um CASO nao vira sinal do ARQUIVO (o nivel do bloco decide)',
+      arquivosMortos(TAP_DO_CASO_REPROVADO, [CAMINHO]).filter((m) => m.sinal === undefined && m.codigo === '1').length === 1, true],
+    ['o outro lado: arquivo que reprovou por caso interno NAO aparece como morto por sinal',
+      arquivosMortos(TAP_DO_CASO_REPROVADO, [CAMINHO]).some((m) => m.sinal !== undefined), false],
+    ['ISCA: arquivo morto nao contamina o arquivo seguinte -- um morto, um nao',
+      arquivosMortos(TAP_DE_DOIS_ARQUIVOS, [CAMINHO, OUTRO_CAMINHO])
+        .filter((m) => m.sinal === 'SIGKILL').length === 1, true],
+    ['o outro lado: suite inteira em verde nao tem arquivo morto',
+      arquivosMortos(TAP_DA_ESTEIRA, [CAMINHO]).length > 0, false],
     ['o outro lado: arquivo com caso de verdade nao e acusado de vazio',
       arquivosSemCaso(TAP_DO_ARQUIVO_CHEIO, [CAMINHO]).length > 0, false],
     // Medido em 19/10: `troca-de-email.test.js` tinha 11 casos, todos reprovados,
@@ -451,7 +737,11 @@ if (sobrando.length > 0) {
 }
 
 const caminhos = naFonte.map((c) => join(COMPILADO, c));
-console.log(`\nsuite de integracao: ${String(caminhos.length)} arquivos\n${caminhos.join('\n')}\n`);
+console.log(
+  `\nsuite de integracao: ${String(caminhos.length)} arquivos, ${String(CONCORRENCIA)} de cada vez ` +
+    `(a maquina oferece ${String(availableParallelism())}; o numero e fixo de proposito, ver CONCORRENCIA_PADRAO)` +
+    `\n${caminhos.join('\n')}\n`,
+);
 
 // Dois relatorios: `spec` na tela, para quem esta olhando, e `tap` em arquivo,
 // para o placar ser LIDO e nao adivinhado.
@@ -470,6 +760,7 @@ const argumentos = [];
 if (lcov !== undefined) argumentos.push('--enable-source-maps');
 argumentos.push(
   '--test',
+  `--test-concurrency=${String(CONCORRENCIA)}`,
   ...(lcov === undefined ? [] : ['--experimental-test-coverage']),
   '--test-reporter=spec',
   '--test-reporter-destination=stdout',
@@ -480,6 +771,11 @@ if (lcov !== undefined) {
   mkdirSync(dirname(lcov), { recursive: true });
   argumentos.push('--test-reporter=lcov', `--test-reporter-destination=${lcov}`);
 }
+// Lido ANTES: `oom_kill` e contador acumulado do container, e so o DELTA
+// pertence a esta execucao. Container de `compose run --rm` nasce com zero,
+// mas depender disso seria depender de como a pilha foi chamada.
+const cgroupAntes = cgroupDeMemoria();
+
 const execucao = spawnSync('node', [...argumentos, ...caminhos], { stdio: 'inherit' });
 
 if (!existsSync(RELATORIO)) {
@@ -537,6 +833,55 @@ if (detalhe.length > 0) {
 }
 
 // ===========================================================================
+// ARQUIVO MORTO DE FORA: QUEM, COM QUE SINAL, E O QUE O CGROUP REGISTROU
+// ===========================================================================
+// Isto vem ANTES do piso e antes do veredito de proposito: quando um arquivo
+// morre, o placar abaixo esta INCOMPLETO -- os casos que aquele arquivo ainda
+// nao tinha reportado nao estao em numero nenhum --, e quem le precisa saber
+// disso antes de comparar o total com o da execucao anterior. Foi essa
+// comparacao, sem esta linha, que produziu 690, 701 e 705 casos na mesma
+// arvore e a conclusao de que "a suite e instavel" sem nome nem motivo.
+const mortos = arquivosMortos(saida, caminhos);
+if (mortos.length > 0) {
+  const cgroupDepois = cgroupDeMemoria();
+  const delta =
+    cgroupAntes.mortes === undefined || cgroupDepois.mortes === undefined
+      ? undefined
+      : cgroupDepois.mortes - cgroupAntes.mortes;
+  console.log(
+    `\n${String(mortos.length)} arquivo(s) reprovaram NO NIVEL DO ARQUIVO -- o processo do ` +
+      'arquivo terminou de fora, e nenhum caso dentro dele reprovou:',
+  );
+  for (const morto of mortos) {
+    const como =
+      morto.sinal !== undefined
+        ? `morto por ${morto.sinal}`
+        : `saida ${morto.codigo ?? '(sem codigo e sem sinal)'}`;
+    console.log(`  ${morto.caminho}: ${como}`);
+  }
+  console.log(
+    `cgroup deste container: teto ${emMegabytes(cgroupDepois.teto)}, pico ${emMegabytes(cgroupDepois.pico)}, ` +
+      `oom_kill ${delta === undefined ? 'nao medi (cgroup v2 ausente)' : `+${String(delta)} nesta execucao`}`,
+  );
+  console.log(`concorrencia do runner: ${String(CONCORRENCIA)} arquivo(s) de uma vez (a maquina oferece ${String(availableParallelism())})`);
+  if (delta !== undefined && delta > 0) {
+    console.log(
+      `LEIA: o cgroup matou ${String(delta)} processo(s) por FALTA DE MEMORIA nesta execucao. ` +
+        'Arquivo morto por `SIGKILL` nao chegou ao fim e nao roda tratador nenhum: ele nao ' +
+        'imprime erro, nao executa `after` e nao deixa rastro. A reprovacao dele NAO e ' +
+        'evidencia sobre o codigo em julgamento -- e tambem nao e absolvicao dele, porque o ' +
+        'arquivo nao terminou. Quem decide se cabe e a concorrencia acima contra o teto acima. ' +
+        'E o total de casos desta execucao esta INCOMPLETO: nao o compare com o de outra.',
+    );
+  } else if (delta === 0) {
+    console.log(
+      'LEIA: o cgroup NAO registrou morte por falta de memoria nesta execucao. O sinal veio de ' +
+        'outro lugar, e a procura NAO comeca na memoria.',
+    );
+  }
+}
+
+// ===========================================================================
 // O PISO. TRES CAMADAS, E NENHUMA DELAS BASTA SOZINHA.
 // ===========================================================================
 
@@ -587,7 +932,18 @@ if (violacoes.length > 0) {
   );
 }
 if (reprovados > 0) {
-  morrer(`${String(reprovados)} caso(s) reprovaram.`);
+  // O veredito nomeia o arquivo morto, e nao so a contagem. Esta e a linha que
+  // se copia para o cartao e para a conversa; deixa-la dizendo apenas
+  // "3 caso(s) reprovaram" foi o que fez tres ARQUIVOS mortos por falta de
+  // memoria serem repassados como tres casos reprovados do diff em julgamento.
+  const porArquivo =
+    mortos.length === 0
+      ? ''
+      : ` ${String(mortos.length)} desses nao e caso: e ARQUIVO morto de fora -- ` +
+        `${mortos.map((m) => `${m.caminho.split('/').pop()} (${m.sinal ?? 'sem sinal'})`).join(', ')}. ` +
+        'Arquivo morto nao deixa mensagem porque nao roda tratador nenhum; leia as linhas de ' +
+        'cgroup acima antes de procurar defeito no codigo em julgamento.';
+  morrer(`${String(reprovados)} caso(s) reprovaram.${porArquivo}`);
 }
 
 // Pedir cobertura e nao receber arquivo nenhum precisa REPROVAR aqui. O passo
