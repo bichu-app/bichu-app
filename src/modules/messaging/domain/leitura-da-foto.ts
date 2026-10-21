@@ -31,35 +31,59 @@
  * ja usava como exemplo de leitura privada, e preferir o numero que o
  * repositorio ja exercita a inventar um terceiro e deliberado.
  *
- * ## RETENCAO: por quanto tempo a foto existe
+ * ## RETENCAO: quanto tempo a foto da conversa existe
  *
- * **Trinta dias depois de o caso encerrar**, alinhado ao que o produto JA
- * decidiu em dois lugares, em vez de um numero novo:
+ * **O prazo NAO e um relogio, e isso e decisao do cliente, nao lacuna.**
  *
- * - `DIAS_DE_LEITURA_DEPOIS_DO_ENCERRAMENTO = 30`
- *   (`messaging/domain/acesso-do-achador.ts`): o acesso do achador ao canal
- *   vence em "caso aberto + 30 dias", e e esse o prazo em que a conversa
- *   inteira -- foto incluida -- ainda tem leitor;
- * - a emenda 4 do ADR-0010 mantem o pet reencontrado na listagem por 30 dias.
+ * Decisao de 17/10/2026, nas palavras dele: *"voce so deve apagar as
+ * informacoes, caso o usuario remova o pet ou delete a conta"*. Os dois
+ * caminhos legitimos sao **acao explicita de pessoa**. O cabecalho de
+ * `media/application/varrer-envios-vencidos.ts` carrega a regra por extenso,
+ * mais a secao "Por que nao um prazo proprio para o achado", cuja resposta e
+ * uma frase: *"porque prazo e apagamento automatico, e e exatamente o que a
+ * decisao proibe"*. A mesma regra esta repetida em
+ * `media/ports/media-repository.ts` e tem portao proprio
+ * (`varredura-nao-apaga-a-vitrine.test.ts`).
  *
- * Depois disso a foto nao tem mais quem a leia: o token do achador nao resolve,
- * e a conversa sai das leituras. Alinhar o prazo do OBJETO ao prazo do ACESSO e
- * o que evita a terceira data para a mesma pergunta.
+ * Esta frente NAO constroi varredura por tempo, e a recusa e deliberada. O
+ * historico pesa: a ultima vez que um prazo encostou na foto do achado, ela foi
+ * apagada dez minutos depois de subir, duas vezes, com hora medida (01:18:44 ->
+ * 01:29:10 e 01:33:35 -> 01:44:10). A causa nao foi o filtro; foi julgar por um
+ * criterio que nao era o ciclo de vida daquela foto.
  *
- * **O que ja esta coberto, e o que NAO esta:**
+ * ### O que REALMENTE apaga a foto da conversa, hoje
  *
- * - a exclusao de CONTA ja apaga o objeto. `apagar-objetos-da-conta.ts`, pelo
- *   `kysely-media-repository.ts`, ja varre `conversation_messages.photo_object_key`
- *   por `sender_user_id` e enfileira a chave no balde privado. Isso vale para o
- *   tutor e para o achador COM conta, e passa a alcancar as fotos que este
- *   commit grava -- sem uma linha nova;
- * - **nao existe varredura por TEMPO**, e a lacuna e relatada em vez de
- *   fechada aqui. O achador SEM conta tem `sender_user_id` nulo, e o proprio
- *   comentario daquele arquivo diz por que: "nao ha titular cuja exclusao
- *   estejamos cumprindo". Construir um varredor de 30 dias e trabalho proprio,
- *   com decisao de produto sobre o que acontece com a conversa junto, e
- *   fabrica-lo dentro desta frente seria desenhar expurgo de dado de duas
- *   pessoas num commit sobre envio de foto.
+ * - **exclusao de conta**: `apagar-objetos-da-conta.ts`, pelo
+ *   `kysely-media-repository.ts`, ja varre
+ *   `conversation_messages.photo_object_key` por `sender_user_id` e enfileira a
+ *   chave no balde privado. Vale para o tutor e para o achador COM conta, e
+ *   passa a alcancar as fotos que esta frente grava **sem uma linha nova**;
+ * - **remocao do pet**: a cascata de `conversations` (`ON DELETE CASCADE` a
+ *   partir de `pets`) leva as mensagens junto;
+ * - **o higienizador**, que apaga o ORIGINAL com a coordenada de GPS. E a unica
+ *   exclusao automatica autorizada, por uma segunda fala do cliente no mesmo
+ *   dia (*"pode apagar o original e guardar so o arquivo 2"*), e ela nao perde
+ *   informacao: sai uma de duas copias da MESMA imagem.
+ *
+ * ### O que fica, e e o que o cliente precisa decidir se quer mudar
+ *
+ * A foto do achador **SEM conta** nao tem titular: `sender_user_id` e nulo, e o
+ * comentario de `apagar-objetos-da-conta.ts` diz por que ("nao ha titular cuja
+ * exclusao estejamos cumprindo"). Ela sai quando o pet e removido, e **nao sai
+ * por prazo**.
+ *
+ * O crescimento e limitado e esta declarado: no maximo 3 fotos por aviso
+ * (`TETO_DE_FOTOS_POR_ACHADO`, SEC-009), e depois da higiene o que resta e a
+ * derivada de ate 500 KB -- o original ja foi apagado. Teto de ~1,5 MB por
+ * aviso.
+ *
+ * **Nao ha, portanto, numero de retencao a declarar aqui.** Houve um
+ * (`DIAS_DE_RETENCAO_DA_FOTO_DA_CONVERSA = 30`) e ele foi REMOVIDO: era
+ * constante exportada que ninguem lia, nomeando um prazo que nada aplicava.
+ * Numero assim nao e documentacao, e convite -- a proxima pessoa o encontra,
+ * conclui que falta a varredura e a escreve, contra a decisao de 17/10. Se o
+ * cliente quiser prazo, o prazo volta junto com a varredura e com a revogacao
+ * explicita daquela decisao, no mesmo commit.
  */
 
 /**
@@ -68,9 +92,6 @@
  * proxima pessoa troca por achismo.
  */
 export const VALIDADE_DA_URL_DA_FOTO_EM_SEGUNDOS = 600;
-
-/** Trinta dias depois do encerramento do caso. Ver o cabecalho. */
-export const DIAS_DE_RETENCAO_DA_FOTO_DA_CONVERSA = 30;
 
 /**
  * A SUPERFICIE DO ACHADOR SEM CONTA NAO SERVE CHAVE QUE CARREGA IDENTIFICADOR.
@@ -142,4 +163,55 @@ export function podeSairParaQuemNaoTemConta(chave: string): boolean {
     segmentos[1] === DONO_SEM_IDENTIFICADOR &&
     segmentos[2] === 'sanitized'
   );
+}
+
+/**
+ * UMA FOTO QUE ESTE CHAMADOR ENVIAR CHEGA A SER LIDA PELO OUTRO LADO?
+ *
+ * ## Por que a resposta pode ser NÃO, e por que o tutor precisa saber
+ *
+ * O ENVIO é simétrico: os dois lados mandam foto. A LEITURA do lado de quem não
+ * tem conta não é, por causa de [podeSairParaQuemNaoTemConta] acima — a URL
+ * assinada leva a chave no caminho, e a chave da foto pedida por quem TEM conta
+ * leva o `found_report_id` dentro. Servi-la entregaria um UUIDv7 a quem não tem
+ * conta, que é o que o SEC-001 proíbe.
+ *
+ * Então, hoje, o tutor pode anexar uma foto que o achador sem conta **não vê**.
+ * Sem este campo na resposta, isso é um **defeito de expectativa**: o tutor
+ * manda a foto do pet, não recebe reação nenhuma, e fica esperando resposta de
+ * quem não viu nada. O servidor é o único que sabe disso — a tela não tem como
+ * deduzir —, então é o servidor que tem de dizer.
+ *
+ * É **expectativa e não permissão**: ninguém está sendo recusado. O envio é
+ * aceito, a mensagem é gravada, a foto existe e o próprio remetente a vê. O que
+ * o campo informa é o alcance.
+ *
+ * ## A tabela inteira, e por que `achadorTemConta` basta
+ *
+ * | chamador | outro lado | onde o outro lê | alcança? |
+ * |---|---|---|---|
+ * | tutor | achador SEM conta | `FinderConversation` | **não** — o guarda recusa |
+ * | tutor | achador COM conta | `Conversation` | sim |
+ * | achador COM conta | tutor | `Conversation` | sim |
+ *
+ * A quarta linha não existe: o achador SEM conta não autentica, então ele nunca
+ * é o chamador desta vista. É por isso que `achadorTemConta` responde sozinho,
+ * sem precisar do papel do chamador — e é por isso que o nome do campo fala do
+ * "outro lado" em vez de nomear tutor ou achador.
+ *
+ * **A foto do achador sem conta CHEGA ao tutor**, e é o sentido que o texto já
+ * entregue no aplicativo promete ("a foto entra na conversa quando o tutor
+ * aparecer"): a chave dela é `found-reports/sem-conta/sanitized/...`, não carrega
+ * identificador, e o tutor lê pela vista autenticada, que não tem guarda.
+ *
+ * ## Quando isto passa a ser sempre `true`
+ *
+ * No dia em que a leitura do achador sem conta ganhar um caminho opaco (a opção
+ * 1 das três listadas em [podeSairParaQuemNaoTemConta]). Aí esta função devolve
+ * `true` sempre e **o campo continua no contrato**, respondendo a verdade nova:
+ * tirá-lo quebraria clientes que já o leem, e um campo que só diz `true` custa
+ * um booleano.
+ */
+export function fotoAlcancaOutroLado(conversa: { readonly achadorTemConta: boolean }): boolean {
+  return conversa.achadorTemConta;
 }

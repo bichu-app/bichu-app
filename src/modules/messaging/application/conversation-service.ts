@@ -48,6 +48,7 @@ import {
 } from '../domain/conversa-mediada.js';
 import { retencaoDestaMensagem } from '../domain/retencao-para-revisao.js';
 import { chaveHigienizadaOuRecusa } from '../domain/foto-anexada.js';
+import { fotoAlcancaOutroLado } from '../domain/leitura-da-foto.js';
 import type { FotoDaConversa } from '../ports/foto-da-conversa.js';
 import { codificarCursor } from '../domain/paginacao.js';
 import {
@@ -76,6 +77,15 @@ export interface ConversaVisivel {
   readonly id: ConversationId;
   /** O aviso que abriu a conversa. Ver `ConversaDoChamador.foundReportId`. */
   readonly foundReportId: string;
+  /**
+   * Uma foto que ESTE chamador enviar chega a ser lida pelo outro lado?
+   *
+   * Derivado de `achadorTemConta` por `fotoAlcancaOutroLado`
+   * (`domain/leitura-da-foto.ts`), que e onde o raciocinio inteiro esta
+   * escrito. **Expectativa, nao permissao**: o envio e aceito e a mensagem e
+   * gravada de todo jeito.
+   */
+  readonly fotoAlcancaOutroLado: boolean;
   readonly caseId: string | null;
   readonly petDisplayName: string;
   readonly status: EstadoDaConversa;
@@ -559,6 +569,7 @@ export class ConversationService {
     return {
       id: conversa.id,
       foundReportId: conversa.foundReportId,
+      fotoAlcancaOutroLado: fotoAlcancaOutroLado(conversa),
       caseId: conversa.caseId,
       petDisplayName: conversa.petDisplayName,
       status: estadoDaConversa(sinaisDe(conversa)),

@@ -92,6 +92,9 @@ function conversaAberta(parcial: Partial<ConversaDoChamador> = {}): ConversaDoCh
   return {
     id: CONVERSA,
     foundReportId: AVISO,
+    // Por omissao o achador TEM conta: e o estado em que a foto do tutor
+    // alcanca o outro lado, e o caso contrario e nomeado onde ele importa.
+    achadorTemConta: true,
     caseId: null,
     petDisplayName: 'Aurora',
     abertaEm: comoData(AGORA),

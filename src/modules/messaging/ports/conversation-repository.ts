@@ -87,6 +87,24 @@ export interface ConversaDoChamador {
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
   /**
+   * O achador tem conta (`conversations.finder_user_id IS NOT NULL`).
+   *
+   * O FATO, nunca a conclusão. Quem decide o significado é
+   * [fotoAlcancaOutroLado] (`domain/leitura-da-foto.ts`), e a separação importa
+   * mais aqui que de costume: a conclusão depende de um guarda de SEC-001 que
+   * mora na BORDA do achador, e montá-la num `CASE` da consulta esconderia essa
+   * dependência dentro de um SQL que ninguém relaciona com aquele guarda.
+   *
+   * **Falso é o caminho PRINCIPAL e não a exceção**: o achador civil não tem
+   * conta e não vai criar uma (migração `20260922000012`).
+   *
+   * **Não dá para reaproveitar `achadorDesabilitado`**: aquele é nulo tanto para
+   * "não está desabilitado" quanto para "não há achador com conta", e a
+   * ambiguidade está declarada como inofensiva *para aquela pergunta*. Para esta
+   * ela é exatamente a resposta.
+   */
+  readonly achadorTemConta: boolean;
+  /**
    * As duas pontas desabilitaram a conta? (17/10)
    *
    * `users.deleted_at !== null` de cada lado. O domínio usa isto para duas

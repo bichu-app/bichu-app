@@ -8102,6 +8102,38 @@ export interface components {
              *     nao tem conta, que e exatamente o que o SEC-001 proibe.
              */
             found_report_id?: string;
+            /**
+             * @description **Uma foto que ESTE chamador enviar chega a ser lida pelo outro
+             *     lado?** Informacao de EXPECTATIVA, nao de permissao: o envio e
+             *     aceito, a mensagem e gravada e o proprio remetente ve a foto.
+             *     O que este campo diz e o ALCANCE.
+             *
+             *     `false` hoje em um caso so: o outro lado e o achador **sem
+             *     conta**. A URL assinada de leitura leva a chave do objeto no
+             *     caminho, e a chave da foto pedida por quem TEM conta leva o
+             *     `found_report_id` dentro -- servi-la entregaria um UUIDv7 a quem
+             *     nao tem conta, que e o que o SEC-001 proibe. Entao a superficie
+             *     do achador sem conta responde `photo_url: null` para a foto do
+             *     tutor.
+             *
+             *     Sem este campo isso e defeito de EXPECTATIVA: o tutor manda a
+             *     foto do pet, nao recebe reacao nenhuma e fica esperando resposta
+             *     de quem nao viu nada. O servidor e o unico que sabe, porque a
+             *     tela nao tem como deduzir.
+             *
+             *     **O sentido contrario FUNCIONA**: a foto do achador sem conta
+             *     chega ao tutor (a chave dela e `found-reports/sem-conta/...`, sem
+             *     identificador), e e o sentido que o aplicativo ja promete em
+             *     texto entregue.
+             *
+             *     `true` quando o achador tem conta, e `true` sempre no dia em que
+             *     a leitura do achador sem conta ganhar um caminho opaco. O campo
+             *     **continua declarado** nesse dia: tira-lo quebraria quem ja o le.
+             *
+             *     **`FinderConversation` nao tem este campo**, pela mesma razao de
+             *     `found_report_id`: aquele lado nao decide nada com ele.
+             */
+            photo_reaches_other_side: boolean;
             /** Format: uuid */
             case_id?: string | null;
             pet_display_name?: string;

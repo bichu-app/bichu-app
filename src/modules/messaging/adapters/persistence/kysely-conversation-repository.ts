@@ -51,6 +51,8 @@ import type {
 interface LinhaDaConversa {
   id: string;
   found_report_id: string;
+  /** Nulo quando o achador nao tem conta, que e o caminho principal. */
+  finder_user_id: string | null;
   case_id: string | null;
   pet_display_name: string;
   opened_at: Date;
@@ -96,6 +98,8 @@ function comoConversa(linha: LinhaDaConversa): ConversaDoChamador {
     casoEncerrado: linha.case_status !== null && linha.case_status !== 'open',
     nomeDoTutor: linha.tutor_display_name,
     nomeDoAchador: linha.finder_display_name,
+    // O FATO. Quem decide o significado e `fotoAlcancaOutroLado`, no dominio.
+    achadorTemConta: linha.finder_user_id !== null,
     // `!== null` e não um `if` de tela: quem decide o que isto SIGNIFICA é
     // `estadoDaConversa` e `participantesVisiveis`, no domínio.
     tutorDesabilitado: linha.tutor_deleted_at !== null,
@@ -347,6 +351,19 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
       // ("não está desabilitado"), então a ambiguidade é inofensiva aqui.
       'tutor.deleted_at as tutor_deleted_at',
       'achador.deleted_at as achador_deleted_at',
+      // O ACHADOR TEM CONTA? Sai a COLUNA e nao um booleano montado em SQL,
+      // pela mesma regra das duas linhas acima: a consulta traz o FATO e o
+      // dominio decide o significado. Aqui isso importa mais que de costume --
+      // o significado (`fotoAlcancaOutroLado`) depende de um guarda de
+      // SEC-001 que mora na borda do achador, e montar a conclusao em SQL
+      // esconderia essa dependencia dentro de uma consulta.
+      //
+      // **Nao da para reaproveitar `achador_deleted_at`**: ele e nulo tanto
+      // para "nao esta desabilitado" quanto para "nao ha achador com conta" --
+      // o `LEFT JOIN` nao casou --, e o comentario acima declara essa
+      // ambiguidade como inofensiva PARA AQUELA pergunta. Para esta ela e
+      // exatamente a resposta, entao precisa da coluna que a distingue.
+      'conversations.finder_user_id',
       eb
         .case()
         .when('conversations.tutor_user_id', '=', chamador)

@@ -392,6 +392,14 @@ export async function comoResposta(
     // nao e o relator -- o aviso nao aparece na lista dele, e `case_id` e o
     // caso de perdido, nao o aviso.
     found_report_id: conversa.foundReportId,
+    // O ALCANCE DA FOTO, e ele e informacao de EXPECTATIVA e nao de
+    // permissao: hoje a foto do tutor nao e lida pelo achador SEM conta
+    // (guarda de SEC-001 em `domain/leitura-da-foto.ts`), e sem este campo o
+    // tutor manda a foto e fica esperando resposta de quem nao viu nada. O
+    // servidor e o unico que sabe disso.
+    //
+    // **So na vista autenticada**, como `found_report_id`.
+    photo_reaches_other_side: conversa.fotoAlcancaOutroLado,
     case_id: conversa.caseId,
     pet_display_name: conversa.petDisplayName,
     status: conversa.status,

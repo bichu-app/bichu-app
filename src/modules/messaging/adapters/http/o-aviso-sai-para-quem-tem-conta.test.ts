@@ -38,6 +38,7 @@ import { parse as parseYaml } from 'yaml';
 
 import { comoResposta } from './conversation-routes.js';
 import type { ConversaVisivel } from '../../application/conversation-service.js';
+import { fotoAlcancaOutroLado } from '../../domain/leitura-da-foto.js';
 import type { AbsoluteUrl, ConversationId } from '../../../../shared/types/brands.js';
 
 const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
@@ -54,10 +55,19 @@ function propriedadesDeSchema(nome: string): Set<string> {
   return new Set(Object.keys(schema.properties));
 }
 
+/** A lista `required` que o contrato declara para um schema. */
+function obrigatoriosDeSchema(nome: string): readonly string[] {
+  const spec = parseYaml(readFileSync('api/openapi.yaml', 'utf8')) as {
+    components: { schemas: Record<string, { required?: readonly string[] }> };
+  };
+  return spec.components.schemas[nome]?.required ?? [];
+}
+
 function conversaVisivel(): ConversaVisivel {
   return {
     id: CONVERSA,
     foundReportId: AVISO,
+    fotoAlcancaOutroLado: true,
     caseId: null,
     petDisplayName: 'Aurora',
     status: 'open',
@@ -121,5 +131,92 @@ void describe('BICHUS-35: `found_report_id` sai para quem tem conta, e não para
       assert.equal(resposta['id'], CONVERSA);
       assert.ok('case_id' in resposta);
     });
+  });
+});
+
+void describe('BICHUS-35: `photo_reaches_other_side` diz a VERDADE sobre o alcance', () => {
+  const comAchador = (achadorTemConta: boolean): ConversaVisivel => ({
+    ...conversaVisivel(),
+    fotoAlcancaOutroLado: fotoAlcancaOutroLado({ achadorTemConta }),
+  });
+
+  const responder = (achadorTemConta: boolean): Promise<Record<string, unknown>> =>
+    comoResposta(comAchador(achadorTemConta), BASE_DE_MIDIA, () =>
+      Promise.resolve('https://privado.invalid/x' as AbsoluteUrl),
+    );
+
+  void it('o CONTRATO declara `photo_reaches_other_side` em `Conversation`, e OBRIGATÓRIO', () => {
+    assert.ok(
+      propriedadesDeSchema('Conversation').has('photo_reaches_other_side'),
+      'o campo saiu do contrato: o tutor volta a mandar foto sem saber que o ' +
+        'achador sem conta não a vê',
+    );
+    assert.ok(
+      obrigatoriosDeSchema('Conversation').includes('photo_reaches_other_side'),
+      'o campo ficou opcional. Opcional é pior que ausente aqui: o cliente teria ' +
+        'de escolher um padrão, e o padrão errado é justamente `true`',
+    );
+  });
+
+  void it('o CONTRATO **não** declara o campo em `FinderConversation`', () => {
+    assert.ok(
+      !propriedadesDeSchema('FinderConversation').has('photo_reaches_other_side'),
+      'o campo entrou na vista de quem não tem conta, e aquele lado não decide ' +
+        'nada com ele',
+    );
+  });
+
+  void it('FALSO quando o achador NÃO tem conta — a foto do tutor não chega lá', async () => {
+    const resposta = await responder(false);
+    assert.equal(
+      resposta['photo_reaches_other_side'],
+      false,
+      'o campo disse que a foto alcança o achador sem conta, e o guarda de ' +
+        'SEC-001 (`podeSairParaQuemNaoTemConta`) recusa a chave do tutor: o tutor ' +
+        'mandaria a foto e ficaria esperando resposta de quem não viu nada',
+    );
+  });
+
+  void it('VERDADEIRO quando o achador tem conta — ele lê pela vista autenticada', async () => {
+    const resposta = await responder(true);
+    assert.equal(resposta['photo_reaches_other_side'], true);
+  });
+
+  void it('ISCA: os dois casos acima medem a DIFERENÇA, e não um valor fixo', async () => {
+    // Sem este caso, uma implementação que devolvesse sempre `false` passaria no
+    // caso do achador sem conta, e uma que devolvesse sempre `true` passaria no
+    // outro. É a diferença entre os dois estados que prova que o campo é
+    // DERIVADO do fato, e não uma constante.
+    const semConta = await responder(false);
+    const comConta = await responder(true);
+    assert.notEqual(
+      semConta['photo_reaches_other_side'],
+      comConta['photo_reaches_other_side'],
+      'o campo não varia com `achadorTemConta`: ele é uma constante disfarçada ' +
+        'de derivação',
+    );
+  });
+
+  void it('CONTROLE: o alcance não mexe em mais nada da resposta', async () => {
+    // Passa nos dois estados. Sem ele, uma derivação que também apagasse
+    // `messages` ou `found_report_id` passaria em tudo acima.
+    const semConta = await responder(false);
+    const comConta = await responder(true);
+    for (const chave of ['id', 'found_report_id', 'status', 'messages', 'unread']) {
+      assert.deepEqual(
+        semConta[chave],
+        comConta[chave],
+        `\`${chave}\` mudou junto com o alcance da foto`,
+      );
+    }
+  });
+
+  void it('CONTROLE NEGATIVO: a função do domínio é a MESMA que a borda usa', () => {
+    // A bancada do teto (`teto-da-rota-de-envio.test.ts`) registra, com medição,
+    // o que acontece quando um caso declara o seu próprio equivalente: ele passa
+    // a provar que o mecanismo existe, não que a borda o usa. Aqui a conferência
+    // chama `fotoAlcancaOutroLado` de produção, e este caso declara isso.
+    assert.equal(fotoAlcancaOutroLado({ achadorTemConta: false }), false);
+    assert.equal(fotoAlcancaOutroLado({ achadorTemConta: true }), true);
   });
 });
