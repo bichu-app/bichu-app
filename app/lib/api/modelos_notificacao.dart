@@ -75,6 +75,83 @@ enum TipoDeAviso {
   }
 }
 
+/// `#/components/schemas/NotificationDestination` do contrato: para onde o
+/// toque na linha leva.
+///
+/// A lista e FECHADA no contrato, e cada valor tem uma tela que EXISTE. Quem
+/// transforma destino em endereco e [PortaDoDestinoDoAviso], ligada em
+/// `roteamento/rotas.dart` -- este arquivo nao conhece rota.
+///
+/// **Nao ha sentinela de desconhecido aqui, e a diferenca em relacao a
+/// [TipoDeAviso] e de consequencia.** La um valor novo faria a LINHA INTEIRA
+/// desaparecer da caixa, e por isso ela tem [TipoDeAviso.desconhecido]. Aqui um
+/// valor que este build nao conhece significa so "nao sei para onde isto leva",
+/// e a resposta certa e tratar como SEM DESTINO: a linha aparece, informa, e
+/// nao e tocavel. [porCodigo] devolve nulo para isso, e nulo e o mesmo estado
+/// de `destination: null` -- um caminho so para os dois.
+enum DestinoDoAviso {
+  pet('pet'),
+  achado('found_report'),
+  casoPublico('public_case'),
+  encontro('network_event'),
+  indicacao('directory_suggestion'),
+  pedidoDaPlaquinha('collar_tag_request'),
+  comunicado('broadcast');
+
+  const DestinoDoAviso(this.codigo);
+
+  /// O valor do contrato.
+  final String codigo;
+
+  /// O destino de um codigo do contrato, ou **nulo** quando o campo vem nulo
+  /// ou quando este build nao conhece o valor.
+  static DestinoDoAviso? porCodigo(Object? codigo) {
+    for (final destino in DestinoDoAviso.values) {
+      if (destino.codigo == codigo) return destino;
+    }
+    return null;
+  }
+}
+
+/// `#/components/schemas/MyBroadcast` do contrato: o comunicado com o CORPO.
+///
+/// A caixa carrega so o TITULO do comunicado (em `subject`); o corpo vem desta
+/// leitura, que e a razao de a pagina intermediaria existir.
+///
+/// **Sem quem disparou e sem quantos receberam**: o contrato nao os devolve --
+/// o primeiro e conta de painel, e o segundo poria o tamanho da base na tela
+/// de uma pessoa.
+class ComunicadoDoBichu {
+  const ComunicadoDoBichu({
+    required this.ref,
+    required this.titulo,
+    required this.corpo,
+    required this.disparadoEm,
+  });
+
+  final String ref;
+  final String titulo;
+  final String corpo;
+
+  /// Quando o comunicado foi disparado. Em UTC.
+  final DateTime disparadoEm;
+
+  static ComunicadoDoBichu doJson(Map<String, dynamic> json) {
+    final quando = DateTime.tryParse(json['dispatched_at'] as String);
+    if (quando == null) {
+      throw const FormatException(
+        'Um comunicado chegou com `dispatched_at` que nao e data-hora.',
+      );
+    }
+    return ComunicadoDoBichu(
+      ref: json['ref'] as String,
+      titulo: json['title'] as String,
+      corpo: json['body'] as String,
+      disparadoEm: quando.toUtc(),
+    );
+  }
+}
+
 /// `#/components/schemas/NotificationItem` do contrato: uma linha da caixa.
 ///
 /// `subject` e anulavel no contrato e e lido como anulavel aqui: aviso que nao
@@ -88,6 +165,8 @@ class AvisoDaCaixa {
     required this.aconteceuEm,
     required this.lido,
     required this.agrupados,
+    required this.destino,
+    required this.destinoRef,
   });
 
   /// O identificador OPACO do aviso -- o que vai no caminho de
@@ -115,8 +194,29 @@ class AvisoDaCaixa {
   /// agrupam porque cada um e um animal e uma acao distintos.
   final int agrupados;
 
+  /// Para onde o toque leva, ou **nulo quando esta linha nao tem destino**.
+  ///
+  /// Nulo e estado NORMAL: `match_suggested` nao tem tela neste app, um destino
+  /// pode ter deixado de existir (pet excluido), e um valor novo do servidor
+  /// tambem cai aqui. Nos tres casos a linha aparece e **nao e tocavel**.
+  final DestinoDoAviso? destino;
+
+  /// A chave do destino. Nula quando [destino] e nulo.
+  ///
+  /// **Nao e texto de tela**, como o [ref]: ela monta endereco e nada mais.
+  final String? destinoRef;
+
   /// A linha resume mais de um aviso, e por isso a tela diz quantos.
   bool get resumeVarios => agrupados > 1;
+
+  /// **Esta linha leva a algum lugar?**
+  ///
+  /// Exige os DOIS campos. O contrato promete que eles andam juntos, e esta
+  /// conjuncao e o que faz a promessa nao virar `/pets/null` se um dia ela for
+  /// quebrada -- a mesma licao de `ligarPortaDoPerfilDoParticipante`, que
+  /// recusa apelido nulo em vez de abrir `/pessoa/null`.
+  bool get temDestino =>
+      destino != null && destinoRef != null && destinoRef!.isNotEmpty;
 
   /// `18/10/2026 às 13h52`, no fuso de quem le.
   ///
@@ -148,6 +248,8 @@ class AvisoDaCaixa {
         aconteceuEm: aconteceuEm,
         lido: true,
         agrupados: agrupados,
+        destino: destino,
+        destinoRef: destinoRef,
       );
 
   static AvisoDaCaixa doJson(Map<String, dynamic> json) {
@@ -171,6 +273,12 @@ class AvisoDaCaixa {
       aconteceuEm: quando.toUtc(),
       lido: json['read'] as bool,
       agrupados: json['grouped_count'] as int,
+      destino: DestinoDoAviso.porCodigo(json['destination']),
+      // Lido como anulavel: o contrato declara os dois como `nullable`, e
+      // `as String` cru estouraria `_TypeError` -- que nao e `Exception` e
+      // escaparia do `catch` de quem chama, como `ContagemDeAvisos` ja ensinou
+      // neste mesmo arquivo.
+      destinoRef: json['destination_ref'] as String?,
     );
   }
 }

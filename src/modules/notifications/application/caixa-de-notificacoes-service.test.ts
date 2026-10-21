@@ -43,6 +43,16 @@
  *    mesma razao de `marcarLida`. CONTRAPESO: quando o porto devolve `true`,
  *    nada e lancado.
  *
+ * 7. **O COMUNICADO que nao chegou a esta conta vira 404, e NUNCA 403**
+ *    (ADR-0021). O porto devolve `undefined` para "nao existe" e para "existe
+ *    e nao chegou aqui", e as duas sao indistinguiveis de proposito -- um 403
+ *    confirmaria que aquele `ref` foi disparado. CONTRAPESO: quando o porto
+ *    acha, o comunicado volta inteiro e nada e lancado.
+ *
+ * 8. **Ler o comunicado NAO marca o aviso como lido nem o dispensa.** Abrir a
+ *    pagina e abrir o item sao dois fatos, e encadea-los tiraria do app a
+ *    unica forma de ler o texto sem afirmar que abriu o aviso.
+ *
  * 6. **OS DOIS EIXOS SAO INDEPENDENTES, nos dois sentidos** -- e esta e a isca
  *    do pedido do cliente de 20/10/2026. `dispensar` nao chama `marcarLida`
  *    (dispensar sem ter lido e o caso COMUM: quem limpa a lista nao abre cada
@@ -57,12 +67,21 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { AppError } from '../../../shared/http/errors.js';
-import type { UserId } from '../../../shared/types/brands.js';
-import type { PaginaDaCaixa } from '../domain/caixa.js';
+import { comoData } from '../../../shared/time/clock.js';
+import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { ComunicadoDaCaixa, PaginaDaCaixa } from '../domain/caixa.js';
 import type { CaixaDeNotificacoes } from '../ports/caixa-de-notificacoes.js';
 import { CaixaDeNotificacoesService } from './caixa-de-notificacoes-service.js';
 
 const DONO = 'c0ffee00-0000-4000-8000-000000000001' as UserId;
+/**
+ * A data do comunicado, por `comoData` sobre um `Instant`.
+ *
+ * Construir a data direto reprova a regra `injectableClock` em `application/`:
+ * tempo real mora so em `shared/time/clock.ts`, e `comoData` e a porta que
+ * converte. Mesma forma de `comunicados-administrativos.test.ts`.
+ */
+const DISPARADO_EM = comoData(Date.UTC(2026, 9, 20, 12, 0, 0) as Instant);
 const OUTRA_CONTA = 'c0ffee00-0000-4000-8000-000000000002' as UserId;
 
 interface Chamadas {
@@ -72,6 +91,7 @@ interface Chamadas {
   marcarTodasLidas: UserId[];
   listaVista: UserId[];
   dispensar: { usuario: UserId; ref: string }[];
+  buscarComunicado: { usuario: UserId; ref: string }[];
 }
 
 function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
@@ -83,7 +103,11 @@ function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
  * e ele que separa "achei" de "nao achei", que e a diferenca entre 204 e 404.
  */
 function dubleDaCaixa(
-  opcoes: { marcarLidaDevolve?: boolean; dispensarDevolve?: boolean } = {},
+  opcoes: {
+    marcarLidaDevolve?: boolean;
+    dispensarDevolve?: boolean;
+    comunicadoDevolve?: ComunicadoDaCaixa | undefined;
+  } = {},
 ): {
   porto: CaixaDeNotificacoes;
   chamadas: Chamadas;
@@ -95,6 +119,7 @@ function dubleDaCaixa(
     marcarTodasLidas: [],
     listaVista: [],
     dispensar: [],
+    buscarComunicado: [],
   };
   // Sem `async`: um duble que nao espera nada nao e assincrono, e `async` sem
   // `await` reprova o lint deste repositorio. `Promise.resolve` diz a mesma
@@ -123,6 +148,10 @@ function dubleDaCaixa(
     dispensar(usuario, ref) {
       chamadas.dispensar.push({ usuario, ref });
       return Promise.resolve(opcoes.dispensarDevolve ?? true);
+    },
+    buscarComunicado(usuario, ref) {
+      chamadas.buscarComunicado.push({ usuario, ref });
+      return Promise.resolve(opcoes.comunicadoDevolve);
     },
   };
   return { porto, chamadas };
@@ -314,6 +343,92 @@ void describe('a caixa de notificacoes, na camada de aplicacao', () => {
       [{ usuario: DONO, ref: 'refQueFoiDispensado01' }],
       'REPROVA: marcar como lida DISPENSOU o aviso. Ler tira do contador e deixa a linha na ' +
         'lista dizendo `Lido`; so o "x" a tira da lista',
+    );
+  });
+
+  void it('7. comunicado que nao chegou a esta conta vira 404, e nunca 403', async () => {
+    const { porto, chamadas } = dubleDaCaixa({ comunicadoDevolve: undefined });
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    const erro = await servico.buscarComunicado({ userId: OUTRA_CONTA }, 'refDeComunicado00001').then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    assert.ok(erro instanceof AppError, 'REPROVA: nao lancou AppError para comunicado nao encontrado');
+    assert.equal(
+      erro.problemType,
+      'not-found',
+      'REPROVA: o tipo do problema nao e `not-found`. Um 403 aqui confirmaria que aquele `ref` foi disparado (ADR-0021)',
+    );
+    assert.notEqual(
+      erro.problemType,
+      'forbidden',
+      'REPROVA: respondeu `forbidden`. Comunicado de outra conta responde 404, nao 403',
+    );
+    assert.deepEqual(
+      chamadas.buscarComunicado,
+      [{ usuario: OUTRA_CONTA, ref: 'refDeComunicado00001' }],
+      'REPROVA: o dono nao foi ao porto junto do ref -- o recorte pelo destinatario e a propria clausula WHERE',
+    );
+  });
+
+  void it('7b. CONTRAPESO: quando o porto acha, o comunicado volta inteiro', async () => {
+    const { porto } = dubleDaCaixa({
+      comunicadoDevolve: {
+        ref: 'refDeComunicado00001',
+        titulo: 'Manutencao no sabado',
+        corpo: 'O app fica fora do ar das 2h as 4h.',
+        disparadoEm: DISPARADO_EM,
+      },
+    });
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    const comunicado = await servico.buscarComunicado({ userId: DONO }, 'refDeComunicado00001');
+
+    assert.equal(comunicado.titulo, 'Manutencao no sabado', 'REPROVA: o titulo nao atravessou');
+    assert.equal(
+      comunicado.corpo,
+      'O app fica fora do ar das 2h as 4h.',
+      'REPROVA: o CORPO nao atravessou -- e ele a razao desta operacao existir, porque a caixa ' +
+        'carrega so o titulo',
+    );
+    assert.equal(comunicado.disparadoEm, DISPARADO_EM, 'REPROVA: a data nao atravessou');
+  });
+
+  void it('8. ler o comunicado NAO marca o aviso como lido nem o dispensa', async () => {
+    const { porto, chamadas } = dubleDaCaixa({
+      comunicadoDevolve: {
+        ref: 'refDeComunicado00001',
+        titulo: 'Recado',
+        corpo: 'Texto do recado.',
+        disparadoEm: DISPARADO_EM,
+      },
+    });
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    await servico.buscarComunicado({ userId: DONO }, 'refDeComunicado00001');
+
+    assert.deepEqual(
+      chamadas.buscarComunicado,
+      [{ usuario: DONO, ref: 'refDeComunicado00001' }],
+      'REPROVA: a leitura nao chegou ao porto -- o resto deste caso passaria por vazio',
+    );
+    assert.deepEqual(
+      chamadas.marcarLida,
+      [],
+      'REPROVA: abrir a pagina do comunicado marcou o AVISO como lido. Sao dois fatos, e o `ref` ' +
+        'do comunicado nao e o `ref` da notificacao',
+    );
+    assert.deepEqual(
+      chamadas.dispensar,
+      [],
+      'REPROVA: abrir a pagina do comunicado DISPENSOU o aviso da caixa',
+    );
+    assert.deepEqual(
+      chamadas.marcarTodasLidas,
+      [],
+      'REPROVA: abrir a pagina do comunicado marcou todas como lidas',
     );
   });
 });

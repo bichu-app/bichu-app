@@ -1,7 +1,8 @@
 import 'api_client.dart';
 import 'modelos_notificacao.dart';
 
-/// As SEIS operacoes `tags: [me]` da CAIXA DE NOTIFICACOES.
+/// As SEIS operacoes `tags: [me]` da CAIXA DE NOTIFICACOES, mais a leitura do
+/// COMUNICADO -- a pagina intermediaria do unico tipo sem destino natural.
 ///
 /// ---------------------------------------------------------------------------
 /// ## As duas marcacoes sao SEPARADAS, e e isso que a tela promete
@@ -133,5 +134,23 @@ class NotificacoesApi {
   /// `Uri.encodeComponent` pela mesma razao de [marcarComoLido].
   Future<void> dispensar(String ref) async {
     await _api.post('$_caminho/${Uri.encodeComponent(ref)}/dismiss');
+  }
+
+  /// `GET /v1/me/broadcasts/{broadcastRef}` (`getMyBroadcast`) -- o comunicado
+  /// COM O CORPO.
+  ///
+  /// **O `ref` daqui e o do COMUNICADO, e nao o da notificacao.** Ele vem em
+  /// `AvisoDaCaixa.destinoRef` quando o destino e
+  /// [DestinoDoAviso.comunicado]; o `ref` da linha serve a `read` e a
+  /// `dismiss`, e trocar um pelo outro responde `404`.
+  ///
+  /// **Esta leitura nao marca o aviso como lido.** Abrir a pagina e abrir o
+  /// item sao dois fatos, e quem marca o segundo e [marcarComoLido].
+  ///
+  /// `404` quando o comunicado nao chegou a esta conta -- e nunca `403`, pelo
+  /// mesmo motivo de sempre (ADR-0021).
+  Future<ComunicadoDoBichu> buscarComunicado(String ref) async {
+    final json = await _api.get('/me/broadcasts/${Uri.encodeComponent(ref)}');
+    return ComunicadoDoBichu.doJson(json);
   }
 }

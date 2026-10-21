@@ -14,7 +14,11 @@
  */
 import { problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
-import { LIMITE_PADRAO_DA_CAIXA, type PaginaDaCaixa } from '../domain/caixa.js';
+import {
+  LIMITE_PADRAO_DA_CAIXA,
+  type ComunicadoDaCaixa,
+  type PaginaDaCaixa,
+} from '../domain/caixa.js';
 import type { CaixaDeNotificacoes } from '../ports/caixa-de-notificacoes.js';
 
 /** Quem esta chamando, como o autenticador o identificou. */
@@ -97,5 +101,23 @@ export class CaixaDeNotificacoesService {
   async dispensar(chamador: ChamadorDaCaixa, ref: string): Promise<void> {
     const dispensada = await this.deps.caixa.dispensar(chamador.userId, ref);
     if (!dispensada) throw problemas.naoEncontrado();
+  }
+
+  /**
+   * O COMUNICADO, para a pagina intermediaria.
+   *
+   * **404 e nunca 403** (ADR-0021), e aqui isso cobre DOIS casos que precisam
+   * ser indistinguiveis: o comunicado que nao existe e o que existe mas nao
+   * chegou a esta conta. O segundo e o que importa -- um 403 confirmaria que
+   * aquele `ref` foi disparado.
+   *
+   * **Nao marca o aviso como lido.** Abrir a pagina e abrir o item sao dois
+   * fatos, e encadea-los aqui tiraria do app a unica forma de ler o texto sem
+   * afirmar que abriu o aviso.
+   */
+  async buscarComunicado(chamador: ChamadorDaCaixa, ref: string): Promise<ComunicadoDaCaixa> {
+    const comunicado = await this.deps.caixa.buscarComunicado(chamador.userId, ref);
+    if (comunicado === undefined) throw problemas.naoEncontrado();
+    return comunicado;
   }
 }

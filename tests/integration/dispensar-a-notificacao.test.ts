@@ -204,16 +204,35 @@ async function inserirAviso(opcoes: {
   dono: string;
   tipo: string;
   assunto: string | null;
-  /** Horas a partir de agora; negativo e passado. A ordem da caixa e esta. */
+  /** Horas a partir da ancora; negativo e passado. A ordem da caixa e esta. */
   horas: number;
   lido?: boolean;
+  /**
+   * Ancorar `occurred_at` no DIA ANTERIOR em UTC, em vez de em `now()`.
+   *
+   * **Existe por causa de um defeito de relogio, medido e nao suposto.** O
+   * agrupamento da caixa e por `(tipo, autor, DIA)`, e o dia e o dia UTC. Com
+   * `now() - 3h`, `- 4h` e `- 5h`, os tres `broadcast` caem no mesmo dia na
+   * maior parte do tempo -- e em DOIS dias quando a suite roda entre 03:00 e
+   * 05:00 UTC, porque a primeira cruza a meia-noite. Ai o grupo de tres vira
+   * duas linhas e a linha de base reprova sem ninguem ter mudado codigo.
+   * Aconteceu: esta suite passou as 01:00 UTC e reprovou as 03:24.
+   *
+   * Com a ancora no dia anterior, as tres horas caem no MESMO dia qualquer que
+   * seja a hora da execucao, e continuam todas no passado.
+   */
+  noDiaAnterior?: boolean;
 }): Promise<void> {
   await cliente.query(
     `INSERT INTO notification_items
        (ref, recipient_user_id, item_kind, subject_label, source_kind, source_id,
         occurred_at, read_at)
      VALUES ($1, $2, $3, $4, $5, gen_random_uuid(),
-             now() + make_interval(hours => $6::int),
+             CASE WHEN $8::boolean
+                  THEN date_trunc('day', now()) - interval '1 day'
+                       + make_interval(hours => $6::int)
+                  ELSE now() + make_interval(hours => $6::int)
+             END,
              CASE WHEN $7::boolean THEN now() END)`,
     [
       opcoes.ref,
@@ -223,6 +242,7 @@ async function inserirAviso(opcoes: {
       `${PREFIXO}${opcoes.ref}`,
       opcoes.horas,
       opcoes.lido ?? false,
+      opcoes.noDiaAnterior ?? false,
     ],
   );
 }
@@ -268,22 +288,25 @@ async function montarCenario(): Promise<void> {
     ref: REF_DO_COMUNICADO_1,
     dono: eu,
     tipo: 'broadcast',
+    noDiaAnterior: true,
     assunto: 'Recado um',
-    horas: -3,
+    horas: 12,
   });
   await inserirAviso({
     ref: REF_DO_COMUNICADO_2,
     dono: eu,
     tipo: 'broadcast',
+    noDiaAnterior: true,
     assunto: 'Recado dois',
-    horas: -4,
+    horas: 11,
   });
   await inserirAviso({
     ref: REF_DO_COMUNICADO_3,
     dono: eu,
     tipo: 'broadcast',
+    noDiaAnterior: true,
     assunto: 'Recado tres',
-    horas: -5,
+    horas: 10,
   });
   // A conta VIZINHA, que este arquivo nunca pode alcancar.
   await inserirAviso({

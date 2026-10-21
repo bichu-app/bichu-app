@@ -33,7 +33,13 @@ import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
 import type { UserId } from '../../../../shared/types/brands.js';
-import type { AvisoDaCaixa, PaginaDaCaixa, TipoDeAviso } from '../../domain/caixa.js';
+import type {
+  AvisoDaCaixa,
+  ComunicadoDaCaixa,
+  DestinoDoAviso,
+  PaginaDaCaixa,
+  TipoDeAviso,
+} from '../../domain/caixa.js';
 import type { CaixaDeNotificacoes } from '../../ports/caixa-de-notificacoes.js';
 
 interface LinhaDaCaixa {
@@ -43,6 +49,9 @@ interface LinhaDaCaixa {
   occurred_at: Date;
   lida: boolean;
   agrupados: number;
+  /** Nulo quando a linha nao tem destino. Ver `notificacao_destino`. */
+  destino: DestinoDoAviso | null;
+  destino_ref: string | null;
   total_de_grupos: string;
 }
 
@@ -54,7 +63,21 @@ function comoAviso(l: LinhaDaCaixa): AvisoDaCaixa {
     aconteceuEm: l.occurred_at,
     lido: l.lida,
     agrupados: l.agrupados,
+    // **Os dois andam juntos, e o `LEFT JOIN LATERAL` e quem garante isso**:
+    // ou a funcao de destino devolveu uma linha (e os dois vem preenchidos),
+    // ou devolveu zero (e os dois vem nulos). Nao ha caminho que produza um
+    // sem o outro, e por isso nao ha normalizacao a fazer aqui -- normalizar
+    // esconderia uma divergencia em vez de a deixar reprovar.
+    destino: l.destino,
+    destinoRef: l.destino_ref,
   };
+}
+
+interface LinhaDoComunicado {
+  ref: string;
+  title: string;
+  body: string;
+  dispatched_at: Date;
 }
 
 export function criarCaixaDeNotificacoes(db: Db): CaixaDeNotificacoes {
@@ -122,6 +145,52 @@ export function criarCaixaDeNotificacoes(db: Db): CaixaDeNotificacoes {
 
     async listaVista(usuario: UserId): Promise<void> {
       await sql`SELECT notificacoes_lista_vista(${usuario})`.execute(db);
+    },
+
+    async buscarComunicado(usuario: UserId, ref: string): Promise<ComunicadoDaCaixa | undefined> {
+      // **A UNICA consulta montada neste arquivo, e a excecao e justificada.**
+      //
+      // O cabecalho diz que aqui nao se monta consulta, e as cinco operacoes
+      // da caixa chamam funcao. Esta nao tem funcao de banco por um motivo:
+      // ela nao carrega regra nenhuma -- nao agrupa, nao conta, nao aplica
+      // retencao e nao tem excecao por tipo. E uma leitura de duas colunas com
+      // um `EXISTS` de autorizacao, e por-la em migracao seria gastar um
+      // carimbo para esconder quatro linhas de SQL sem regra.
+      //
+      // **O RECORTE E PELO DESTINATARIO, e e o `EXISTS` que o faz.**
+      // Comunicado e para quem recebeu: a linha so sai se existir um item da
+      // caixa DESTA conta apontando para ESTE comunicado. Sem o `EXISTS`,
+      // qualquer conta leria qualquer comunicado tendo so o `ref` -- e o
+      // painel ter `listAdminBroadcasts` nao autoriza isso.
+      //
+      // `conta_habilitada` entra junto, como nas outras cinco: conta
+      // desabilitada nao e encontrada em funcionalidade nenhuma.
+      //
+      // **Nao ha filtro por `dismissed_at` aqui, e e deliberado.** Dispensar
+      // tira a LINHA da caixa, nao revoga o comunicado: quem dispensou o aviso
+      // e ainda tem a pagina aberta continua podendo ler o texto, e devolver
+      // 404 nesse instante seria punir o toque no "x".
+      const r = await sql<LinhaDoComunicado>`
+        SELECT b.ref, b.title, b.body, b.dispatched_at
+          FROM notification_broadcasts b
+         WHERE b.ref = ${ref}
+           AND conta_habilitada(${usuario})
+           AND EXISTS (
+                 SELECT 1
+                   FROM notification_items i
+                  WHERE i.recipient_user_id = ${usuario}
+                    AND i.item_kind = 'broadcast'
+                    AND i.source_kind = 'broadcast'
+                    AND i.source_id = b.id
+               )`.execute(db);
+      const linha = r.rows[0];
+      if (linha === undefined) return undefined;
+      return {
+        ref: linha.ref,
+        titulo: linha.title,
+        corpo: linha.body,
+        disparadoEm: linha.dispatched_at,
+      };
     },
   };
 }

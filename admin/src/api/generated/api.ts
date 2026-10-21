@@ -856,6 +856,14 @@ export interface paths {
          *     recarregar: o apagamento e logico no servidor, e nao um estado de
          *     tela.
          *
+         *     **Dispensa a LINHA inteira, e nao so o item do `ref`.** A caixa agrupa
+         *     por tipo, autor e dia, e o `ref` de uma linha agrupada e o do item mais
+         *     NOVO do grupo. Se a dispensa recaisse so sobre ele, os outros itens do
+         *     grupo ficariam de pe e a linha voltaria na listagem seguinte com outro
+         *     `ref` e `grouped_count` menor -- sumindo da tela e reaparecendo no
+         *     recarregamento. A unidade da dispensa e a linha que a pessoa ve, que e
+         *     tambem a unidade que `grouped_count` descreve.
+         *
          *     **`markAllNotificationsRead` nao o alcanca**, pela mesma razao pela
          *     qual ela nao alcanca o que passou dos 90 dias: ela nao mexe no que a
          *     caixa nao mostra mais, e contar linha dispensada em `marked` diria ter
@@ -869,6 +877,49 @@ export interface paths {
          *     `ref` existe.
          */
         post: operations["dismissNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/broadcasts/{broadcastRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O `ref` opaco do comunicado, como `destination_ref` o entrega. */
+                broadcastRef: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * O comunicado que esta conta recebeu, com o CORPO
+         * @description **A pagina intermediaria do comunicado** -- o unico tipo de aviso da
+         *     caixa que a tem, porque e o unico sem destino natural: ele nao fala de
+         *     pet, de caso nem de encontro, e e texto que precisa de onde ser lido.
+         *
+         *     **Existe porque a caixa carrega so o TITULO.**
+         *     `NotificationItem.subject` e o titulo do comunicado; o corpo vive no
+         *     servidor e, ate aqui, era legivel **so pelo painel**
+         *     (`listAdminBroadcasts`). Sem esta operacao a pagina abriria vazia.
+         *
+         *     **O RECORTE E PELO DESTINATARIO, na clausula `WHERE`.** Comunicado e
+         *     para quem o recebeu: a leitura exige que exista uma linha da caixa
+         *     **desta conta** apontando para este comunicado. `listAdminBroadcasts`
+         *     existir no painel **nao autoriza** ninguem a ler o comunicado de outra
+         *     pessoa.
+         *
+         *     **Comunicado que nao chegou a esta conta responde `404`, nunca `403`**
+         *     (ADR-0021): um `403` confirmaria que aquele `ref` existe.
+         *
+         *     **Nao marca nada como lido.** Quem marca e `markNotificationRead`, com
+         *     o `ref` da NOTIFICACAO -- que e outro `ref`, e nao este. Abrir a pagina
+         *     e ler o texto sao dois fatos, e o segundo e do item da caixa.
+         */
+        get: operations["getMyBroadcast"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12472,6 +12523,59 @@ export interface components {
          */
         NotificationKind: "tag_scanned" | "found_reported" | "match_suggested" | "neighborhood_alert" | "event_join_requested" | "event_join_decided" | "event_cancelled" | "suggestion_decided" | "tag_request_updated" | "broadcast";
         /**
+         * @description Um COMUNICADO como o dono da caixa o le -- titulo, corpo e quando foi
+         *     disparado.
+         *
+         *     **Nao traz quem disparou.** `notification_broadcasts.dispatched_by_admin`
+         *     e conta do painel (ADR-0027 item 20.2), e quem disparou um recado
+         *     interno nao e dado do produto: a trilha em `audit.events` e a memoria
+         *     canonica, e a fila do painel e a unica superficie que a projeta.
+         *
+         *     **Nao traz `recipients_total`.** Quantas caixas o comunicado alcancou e
+         *     numero de operacao, e poe na tela de uma pessoa o tamanho da base.
+         */
+        MyBroadcast: {
+            /** @description O mesmo `ref` opaco que `destination_ref` entregou. */
+            ref: string;
+            title: string;
+            body: string;
+            /** Format: date-time */
+            dispatched_at: string;
+        };
+        /**
+         * @description **Para onde o toque numa linha da caixa leva.** Lista FECHADA, e cada
+         *     valor tem uma tela que EXISTE neste app -- um destino sem tela seria um
+         *     toque morto, e e por isso que `match_suggested` nao tem valor aqui e sai
+         *     com `destination: null`.
+         *
+         *     O valor diz o TIPO do destino; `destination_ref` traz a chave.
+         *
+         *     | valor | tela | a chave em `destination_ref` |
+         *     |---|---|---|
+         *     | `pet` | a ficha do pet | `pets.id` (UUID) |
+         *     | `found_report` | o achado | `found_reports.id` (UUID) |
+         *     | `public_case` | a pagina publica do caso | `share_token` (opaco) |
+         *     | `network_event` | o encontro | `slug` |
+         *     | `directory_suggestion` | a indicacao | `ref` (opaco) |
+         *     | `collar_tag_request` | acompanhar a plaquinha | `pets.id` (UUID) |
+         *     | `broadcast` | a pagina do comunicado | `ref` (opaco) |
+         *
+         *     **`collar_tag_request` carrega o PET e nao o pedido, de proposito.** A
+         *     tela de acompanhamento e enderecada por pet
+         *     (`listCollarTagRequests` e **por pet**, nao por pedido), entao devolver
+         *     o `ref` do pedido exigiria rota e operacao novas para chegar a mesma
+         *     tela. O `ref` do pedido continua saindo em `CollarTagRequest.ref`, para
+         *     quem precisa cita-lo.
+         *
+         *     **`broadcast` e o UNICO com pagina intermediaria**, e e o unico que a
+         *     merece: ele nao fala de pet, de caso nem de encontro -- e texto, e o
+         *     texto precisa de onde ser lido. Os outros levam a tela que a pessoa
+         *     realmente quer, que e o que o cliente pediu ao oferecer "a pagina
+         *     interna **ou** o link".
+         * @enum {string}
+         */
+        NotificationDestination: "pet" | "found_report" | "public_case" | "network_event" | "directory_suggestion" | "collar_tag_request" | "broadcast";
+        /**
          * @description Uma linha da caixa. **Nao traz imagem nenhuma** -- sem avatar e sem foto
          *     de pet, de proposito, para nao trazer a foto a uma quarta superficie. E
          *     nao traz autor: o autor existe no servidor so para agrupar.
@@ -12502,6 +12606,47 @@ export interface components {
              *     agrupam porque cada um e um animal e uma acao distintos.
              */
             grouped_count: number;
+            /**
+             * @description **Para onde o toque na linha leva**, ou `null` quando esta linha
+             *     nao tem destino (cliente, 20/10/2026: *"tem que ter a pagina
+             *     interna da notificacao ou o link que leva para a acao que foi
+             *     notificada"*).
+             *
+             *     `null` e estado NORMAL e nao defeito, em dois casos medidos:
+             *
+             *     - **`match_suggested`**, que nao tem tela neste app -- e o mesmo
+             *       motivo pelo qual o push o manda para `mostrarNoApp`;
+             *     - **o destino que sumiu** (pet excluido, encontro apagado), em que
+             *       a alternativa seria um atalho para um `404`.
+             *
+             *     Com `null`, a linha **nao oferece toque**: toque que leva a tela
+             *     inexistente e pior que toque ausente.
+             */
+            destination?: components["schemas"]["NotificationDestination"] | null;
+            /**
+             * @description A chave do destino, para montar o endereco. Nula exatamente quando
+             *     `destination` e nula -- os dois campos andam juntos.
+             *
+             *     **A forma da chave depende do destino, e nao e sempre opaca:**
+             *     `public_case` traz o `share_token` (opaco, o mesmo do link que
+             *     circula), `network_event` e `directory_suggestion` traem `slug` e
+             *     `ref`, e `pet`, `found_report` e `collar_tag_request` traem
+             *     **UUID interno**.
+             *
+             *     **UUID aqui nao contraria o ADR-0010 item 6**, e a diferenca e de
+             *     SUPERFICIE: aquele item vale para a rota PUBLICA -- `/t/<codigo>`,
+             *     `/@<slug>`, `/cartaz/<token>`, a listagem publica e o JSON que as
+             *     sirva. Esta operacao exige `bearerAuth` e e recortada pelo dono, e
+             *     o contrato ja devolve `Pet.id`, `FoundReport.id` e
+             *     `Pet.open_case_id` como UUID em rota autenticada. **O recorte pelo
+             *     dono e o que torna isso seguro**, e por isso ele e a propria
+             *     clausula `WHERE` do servidor.
+             *
+             *     **O push NAO adota esta chave.** Ele segue `{tipo, ref}` com token
+             *     publico, porque aparece sem desbloqueio, passa por terceiro e fica
+             *     no historico do aparelho -- publico por natureza.
+             */
+            destination_ref?: string | null;
         };
         NotificationPage: {
             items: components["schemas"]["NotificationItem"][];
@@ -14843,12 +14988,42 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Dispensado. Sai da lista e do contador */
+            /**
+             * @description Dispensado: a linha inteira sai da lista e do contador, e continua
+             *     **nao lida**.
+             */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyBroadcast: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O `ref` opaco do comunicado, como `destination_ref` o entrega. */
+                broadcastRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O comunicado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyBroadcast"];
+                };
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];

@@ -72,12 +72,35 @@
 /// sem barra de abas **e** sem seta de voltar -- a seta automatica do Flutter
 /// so aparece quando ha o que desempilhar, e numa pilha de uma pagina nao ha.
 ///
-/// ## O TOQUE marca como lido, e nao navega
+/// ## O TOQUE marca como lido E LEVA AO DESTINO (20/10/2026)
 ///
-/// Um destino por tipo de aviso exigiria rota para dez tipos, e as rotas sao
-/// do agente da barra. Esta tela nao inventa endereco: o toque faz o que o
-/// requisito pede -- marca o item como aberto -- e a linha passa a dizer
-/// `Lido` na hora, porque foi o servidor que confirmou aquele item com `204`.
+/// Pedido do cliente: *"tem que ter a pagina interna da notificacao ou o link
+/// que leva para a acao que foi notificada"*. Das duas formas que ele ofereceu
+/// vale a SEGUNDA quando ela existe -- a pessoa quer ver o pet, o encontro, o
+/// caso, e nao um intermediario.
+///
+/// **Este arquivo continua sem conhecer `Rotas`**, e isso nao mudou: quem
+/// transforma destino em endereco e [PortaDoDestinoDoAviso], ligada em
+/// `roteamento/rotas.dart`. O paragrafo abaixo sobre destino independente
+/// segue valendo inteiro.
+///
+/// **O servidor diz PARA ONDE, e o app nao adivinha.** Cada linha vem com
+/// `destination` e `destination_ref`; nao ha mapa de tipo para tela aqui, e nao
+/// deve haver -- um segundo mapa divergiria do do servidor na primeira tela
+/// nova.
+///
+/// **Sem destino, o toque NAO NAVEGA -- e e isso que `mostrarNoApp` quer
+/// dizer.** Dois tipos de linha chegam sem destino: `match_suggested`, que nao
+/// tem tela neste app, e qualquer linha cujo destino deixou de existir (pet
+/// excluido). Nesses casos o toque faz so o que sempre fez -- marca como lido,
+/// a linha diz `Lido` e a pessoa fica onde estava. **Nenhuma navegacao e
+/// tentada com referencia nula**, que e a licao de
+/// `ligarPortaDoPerfilDoParticipante`: com apelido nulo o destino e nulo, em
+/// vez de abrir `/pessoa/null`.
+///
+/// **A ordem e navegar DEPOIS de marcar**, e nao antes: a marcacao e local e
+/// barata, e empilhar a tela de destino primeiro deixaria o `setState` da linha
+/// acontecendo atras de uma tela nova.
 ///
 /// ## O "x" DE CADA LINHA: dispensar, que nao e ler
 ///
@@ -103,7 +126,10 @@
 /// agrupada -- que vale `grouped_count` avisos no contador, e nao um.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -128,6 +154,32 @@ import '../../widgets/saida_da_tela.dart';
 abstract final class RotasDaCaixa {
   /// A caixa de notificacoes. Widget: [CaixaDeNotificacoes].
   static const String caixa = '/notificacoes';
+}
+
+/// O endereco do DESTINO de uma linha da caixa, ou `null` quando nao ha.
+///
+/// **Mesmo arranjo de `PortaDoPerfilDoParticipante`**, e pela mesma razao: a
+/// caixa nao conhece `Rotas` (ver "DESTINO INDEPENDENTE" no doc do arquivo), e
+/// `rotas.dart` e o unico arquivo que conhece as duas pontas. Quem liga e
+/// `ligarPortaDoDestinoDoAviso`, la.
+///
+/// **Nasce devolvendo `null`, e o `null` de fabrica nao e sobra**: e ele que
+/// faz toda bancada de teste de widget montar a caixa sem roteador e sem
+/// navegacao, e e ele que a isca religa e desliga para provar que o toque leva
+/// ao lugar certo.
+abstract final class PortaDoDestinoDoAviso {
+  /// O endereco de [aviso], ou `null` quando ele nao tem destino.
+  ///
+  /// Recebe o AVISO inteiro, e nao `(destino, ref)`: quem liga precisa do par
+  /// junto para montar o caminho, e passar os dois soltos convidaria a chamar
+  /// com um deles nulo.
+  static String? Function(AvisoDaCaixa aviso) destino = _semDestino;
+
+  /// O default, nomeado para a isca poder voltar a ele num `addTearDown`.
+  static String? _semDestino(AvisoDaCaixa aviso) => null;
+
+  /// Volta ao estado de fabrica. **Para a isca**, e nao para a tela.
+  static void soltar() => destino = _semDestino;
 }
 
 /// Os textos da caixa, num lugar so.
@@ -363,7 +415,12 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     }
   }
 
-  /// O toque na linha: o item foi ABERTO.
+  /// O toque na linha: o item foi ABERTO, e a pessoa vai ao destino.
+  ///
+  /// **A navegacao acontece DEPOIS da marcacao e so com destino de verdade.**
+  /// Sem destino -- `match_suggested`, ou destino que deixou de existir -- o
+  /// toque marca como lido e para ai, que e o `mostrarNoApp` do push: a pessoa
+  /// ve o aviso dentro do app, sem um atalho que levaria a um `404`.
   Future<void> _abrir(AvisoDaCaixa aviso) async {
     setState(() => _falhaDaAcao = null);
     try {
@@ -375,6 +432,7 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
             if (item.ref == aviso.ref) item.comoLido() else item,
         ];
       });
+      _irAoDestino(aviso);
     } on FalhaDeChamada {
       // A linha **continua nao lida**, porque o servidor nao confirmou nada.
       // Pintar `Lido` aqui seria a tela afirmando o que ela nao sabe.
@@ -427,6 +485,29 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
       if (!mounted) return;
       setState(() => _falhaDaAcao = TextosDaCaixa.naoConseguimosFechar);
     }
+  }
+
+  /// Empilha a tela de destino, **quando ha uma**.
+  ///
+  /// Tres guardas, e nenhuma e defensiva a toa:
+  ///
+  /// 1. `temDestino` exige os DOIS campos do contrato. Eles vem juntos por
+  ///    promessa do servidor, e esta conjuncao e o que impede `/pets/null` se a
+  ///    promessa for quebrada um dia.
+  /// 2. A porta pode devolver `null` -- e e o que ela devolve por fabrica, e
+  ///    tambem o que `rotas.dart` devolve para um destino que ESTE build nao
+  ///    sabe abrir. `null` aqui e "fique onde esta", nunca um endereco vazio.
+  /// 3. `mounted`, porque isto roda depois de um `await`.
+  ///
+  /// `push` e nao `go`: o destino COBRE a caixa e voltar devolve a pessoa a
+  /// lista onde ela estava -- com a linha ja dizendo `Lido`. `go` trocaria a
+  /// pilha e a seta de voltar levaria para fora da caixa.
+  void _irAoDestino(AvisoDaCaixa aviso) {
+    if (!mounted) return;
+    if (!aviso.temDestino) return;
+    final endereco = PortaDoDestinoDoAviso.destino(aviso);
+    if (endereco == null || endereco.isEmpty) return;
+    unawaited(context.push<void>(endereco));
   }
 
   Future<void> _marcarTodas() async {

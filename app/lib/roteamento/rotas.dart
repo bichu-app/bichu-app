@@ -38,7 +38,9 @@ import '../telas/mural/publicar_no_mural.dart';
 import '../telas/perfil/vitrine_de_fotos.dart';
 import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
+import '../api/modelos_notificacao.dart';
 import '../telas/notificacoes/caixa_de_notificacoes.dart';
+import '../telas/notificacoes/comunicado.dart';
 import '../telas/perfil/meus_achados.dart';
 import '../telas/perfil/meus_eventos.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
@@ -773,11 +775,62 @@ GoRoute _comBarraFixa({
   );
 }
 
+/// A COSTURA DO DESTINO DE UMA NOTIFICACAO (cliente, 20/10/2026).
+///
+/// O servidor diz O QUE e a notificacao aponta (`destination`) e COM QUAL
+/// CHAVE (`destination_ref`); esta funcao traduz o par em endereco. Ela mora
+/// **aqui** pela mesma razao de [ligarPortaDoPerfilDoParticipante]:
+/// `rotas.dart` e o unico arquivo que conhece as duas pontas, e
+/// `caixa_de_notificacoes.dart` nao importa `Rotas` -- se importasse, a caixa
+/// deixaria de ser plugavel onde quem monta a barra quiser.
+///
+/// **Nao ha mapa de TIPO para tela aqui, e isso e o desenho.** O mapa e do
+/// servidor (`notificacao_destino`, migracao `20261020000011`), e um segundo
+/// mapa no app divergiria do primeiro na primeira tela nova. Aqui so se
+/// traduz destino em caminho.
+///
+/// **Devolve nulo para o destino que ESTE build nao sabe abrir**, e nao e caso
+/// teorico: o app se atualiza devagar e o servidor pode ganhar um destino
+/// antes desta versao. `DestinoDoAviso.porCodigo` ja devolve nulo para valor
+/// desconhecido, e a linha entao aparece sem toque -- a mesma escolha de
+/// [Rotas.rotaDaTelaDeUx], que trata a tela ausente com nulo em vez de abrir
+/// um endereco inventado.
+void ligarPortaDoDestinoDoAviso() {
+  PortaDoDestinoDoAviso.destino = (aviso) {
+    final destino = aviso.destino;
+    final ref = aviso.destinoRef;
+    // Os DOIS, e nao um deles: o contrato promete que andam juntos, e esta
+    // guarda e o que impede `/pets/null` se a promessa for quebrada. Vazio
+    // tratado como ausente, como em `ligarPortaDoPerfilDoParticipante`:
+    // `Rotas.detalheDoPetDe('')` devolveria `/pets/`, que e a rota de outra
+    // coisa.
+    if (destino == null || ref == null || ref.isEmpty) return null;
+    return switch (destino) {
+      DestinoDoAviso.pet => Rotas.detalheDoPetDe(ref),
+      DestinoDoAviso.achado => Rotas.achadoDe(ref),
+      DestinoDoAviso.casoPublico => Rotas.casoPublicoDe(ref),
+      DestinoDoAviso.encontro => Rotas.encontroDaRedeDe(ref),
+      // A INDICACAO nao tem rota por item: `minhasIndicacoes` e a LISTA, e e
+      // ela que mostra o motivo da recusa. Levar a lista e levar ao lugar
+      // certo -- a decisao esta la, e o `ref` nao tem para onde ir melhor.
+      DestinoDoAviso.indicacao => Rotas.minhasIndicacoes,
+      // A PLAQUINHA: a chave e o PET, porque a tela de acompanhamento e
+      // enderecada por pet e nao por pedido.
+      DestinoDoAviso.pedidoDaPlaquinha => Rotas.acompanharPlaquinhaDe(ref),
+      DestinoDoAviso.comunicado => RotasDoComunicado.de(ref),
+    };
+  };
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
   // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
   // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
   // ha o que desfazer quando o roteador e recriado.
   ligarPortaDoPerfilDoParticipante();
+  // A COSTURA DO DESTINO DA NOTIFICACAO, pelo mesmo motivo e no mesmo lugar:
+  // e so um destino, nao depende da sessao, e nao ha o que desfazer quando o
+  // roteador e recriado.
+  ligarPortaDoDestinoDoAviso();
   return GoRouter(
     navigatorKey: _navegadorRaiz,
     initialLocation: Rotas.abertura,
@@ -1265,6 +1318,18 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       _comBarraFixa(
         path: RotasDaCaixa.caixa,
         builder: (context, estado) => const CaixaDeNotificacoes(),
+      ),
+      // A PAGINA DO COMUNICADO: o unico destino "pagina interna" da caixa,
+      // porque e o unico tipo de aviso sem destino natural -- ele e texto.
+      //
+      // Rota IRMA da caixa e nao filha: a caixa a empilha com `push`, e voltar
+      // devolve a pessoa a lista com a linha ja dizendo `Lido`. O `ref` do
+      // caminho e o do COMUNICADO, e nao o da notificacao.
+      _comBarraFixa(
+        path: RotasDoComunicado.comunicado,
+        builder: (context, estado) => PaginaDoComunicado(
+          ref: estado.pathParameters[RotasDoComunicado.parametroDoRef]!,
+        ),
       ),
       // OS PEDIDOS DE CONEXAO. `ConexoesApi` sai do `Escopo`, onde esta
       // fiacao a registrou -- a tela pedia a porta por parametro justamente

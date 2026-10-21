@@ -14,7 +14,7 @@
  * `.ts` de `src/`, inclusive em comentario.
  */
 import type { UserId } from '../../../shared/types/brands.js';
-import type { PaginaDaCaixa } from '../domain/caixa.js';
+import type { ComunicadoDaCaixa, PaginaDaCaixa } from '../domain/caixa.js';
 
 export interface CaixaDeNotificacoes {
   /** Uma pagina da caixa, ja agrupada. Conta desabilitada devolve pagina vazia. */
@@ -67,4 +67,23 @@ export interface CaixaDeNotificacoes {
    * separacao e o que torna "abrir a lista nao marca os itens" verificavel.
    */
   listaVista(usuario: UserId): Promise<void>;
+
+  /**
+   * O COMUNICADO de `ref`, **se ele chegou a esta conta** -- a pagina
+   * intermediaria do unico tipo de aviso sem destino natural.
+   *
+   * **O recorte e pelo DESTINATARIO e mora na clausula `WHERE`.** Comunicado e
+   * para quem o recebeu: a leitura exige uma linha da caixa DESTA conta
+   * apontando para este comunicado. O painel ter uma listagem de comunicados
+   * nao autoriza ninguem a ler o de outra pessoa.
+   *
+   * Devolve `undefined` para "nao existe" e para "existe e nao chegou a esta
+   * conta", indistinguiveis de proposito: a rota responde 404 nos dois casos e
+   * NUNCA 403 (ADR-0021), porque um 403 confirmaria que aquele `ref` foi
+   * disparado.
+   *
+   * **Nao marca nada como lido.** Quem marca e [marcarLida], com o `ref` da
+   * NOTIFICACAO -- que e outro `ref`, e nao este.
+   */
+  buscarComunicado(usuario: UserId, ref: string): Promise<ComunicadoDaCaixa | undefined>;
 }

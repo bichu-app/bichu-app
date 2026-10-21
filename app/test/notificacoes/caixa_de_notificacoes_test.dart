@@ -32,6 +32,11 @@
 //       e a linha FICA na lista dizendo `Lido`
 //   (i) o "x" que FALHA deixa a linha na lista e mostra a faixa -- a tela nao
 //       afirma o que o servidor nao confirmou
+//   (j) o toque numa linha COM destino marca como lido E NAVEGA para o
+//       endereco que a porta da
+//       contrapeso: a linha SEM destino marca como lido e NAO navega -- e o
+//       `mostrarNoApp` de `match_suggested`, e nenhuma navegacao e tentada
+//       com referencia nula
 //
 // A rede e sempre um `MockClient` explicito, e o caminho atravessado e o de
 // verdade: tela -> `NotificacoesApi` -> `ApiClient` -> traducao de `Problem`.
@@ -46,6 +51,7 @@ import 'dart:convert';
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/notificacoes_api.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/notificacoes/caixa_de_notificacoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
@@ -88,6 +94,8 @@ Map<String, dynamic> aviso({
   String aconteceuEm = '2026-10-18T13:52:00.000Z',
   bool lido = false,
   int agrupados = 1,
+  String? destino,
+  String? destinoRef,
 }) => <String, dynamic>{
   'ref': ref,
   'kind': tipo,
@@ -95,6 +103,11 @@ Map<String, dynamic> aviso({
   'occurred_at': aconteceuEm,
   'read': lido,
   'grouped_count': agrupados,
+  // **Os dois saem SEMPRE, nulos por padrao.** O contrato os declara sempre
+  // presentes e anulaveis, e a fixture espelha isso: um corpo que os omitisse
+  // mediria um servidor que este contrato nao descreve.
+  'destination': destino,
+  'destination_ref': destinoRef,
 };
 
 /// Um `NotificationPage` do contrato.
@@ -1068,6 +1081,185 @@ void main() {
           isNot(contains(refDaPlaquinha)),
           reason: 'REPROVA: a frase da falha vazou o `ref`. Ela nao pode '
               'confirmar nem negar que aquele `ref` existe (ADR-0021).',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  group('(j) o toque leva ao destino, e sem destino nao leva a lugar nenhum',
+      () {
+    /// O endereco de mentira do destino, e a tela que o ocupa.
+    ///
+    /// Endereco PROPRIO desta bancada, e nao uma rota de verdade do app: o que
+    /// este par mede e "a caixa empilha o que a porta mandou", e nao o que a
+    /// ficha do pet desenha. As rotas de verdade tem isca propria, em
+    /// `destino_do_aviso_test.dart`.
+    const String enderecoDoDestino = '/destino-de-mentira';
+    const String textoDoDestino = 'Cheguei ao destino';
+
+    tearDown(PortaDoDestinoDoAviso.soltar);
+
+    /// Monta a caixa com DUAS rotas: ela e o destino de mentira.
+    Future<void> abrirComDestino(
+      WidgetTester tester, {
+      required ServidorDaCaixa servidor,
+    }) async {
+      final api = apiDe(servidor);
+      final roteador = GoRouter(
+        initialLocation: RotasDaCaixa.caixa,
+        routes: <RouteBase>[
+          GoRoute(
+            path: RotasDaCaixa.caixa,
+            builder: (context, estado) => CaixaDeNotificacoes(notificacoes: api),
+          ),
+          GoRoute(
+            path: enderecoDoDestino,
+            builder: (context, estado) =>
+                const Scaffold(body: Text(textoDoDestino)),
+          ),
+        ],
+      );
+      addTearDown(roteador.dispose);
+      await tester.pumpWidget(
+        MaterialApp.router(theme: BichuTheme.claro, routerConfig: roteador),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'ISCA: o toque numa linha COM destino marca como lido E navega',
+      (tester) async {
+        // A porta devolve o endereco de mentira SO para a linha que tem
+        // destino -- e e assim que `rotas.dart` se comporta.
+        PortaDoDestinoDoAviso.destino =
+            (aviso) => aviso.temDestino ? enderecoDoDestino : null;
+
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(
+                ref: refDaPlaquinha,
+                assunto: 'Tobias',
+                destino: 'pet',
+                destinoRef: '0192f3a1-7b2c-7def-8a01-000000000001',
+              ),
+            ]),
+          ),
+        );
+        await abrirComDestino(tester, servidor: servidor);
+
+        expect(
+          find.text(textoDoDestino),
+          findsNothing,
+          reason: 'REPROVA: a tela de destino apareceu ANTES do toque -- o '
+              'resto deste caso nao mediria o toque.',
+        );
+
+        await tester.tap(find.text('Tobias'));
+        await tester.pumpAndSettle();
+
+        expect(
+          servidor.chamadasA('POST ${caminhoDoLido(refDaPlaquinha)}').length,
+          1,
+          reason: 'REPROVA: o toque precisa continuar marcando o item como '
+              'lido. Levar ao destino nao substitui a marcacao -- o cliente '
+              'pediu as duas coisas.',
+        );
+        expect(
+          find.text(textoDoDestino),
+          findsOneWidget,
+          reason: 'REPROVA: o toque nao levou ao destino. E o pedido do '
+              'cliente: "o link que leva para a acao que foi notificada".',
+        );
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: a linha SEM destino marca como lido e NAO navega',
+      (tester) async {
+        // A MESMA porta ligada do caso acima: o que muda e a LINHA, que vem
+        // sem destino. Se o caso passasse por a porta estar desligada, ele
+        // nao mediria nada.
+        PortaDoDestinoDoAviso.destino =
+            (aviso) => aviso.temDestino ? enderecoDoDestino : null;
+
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              // `match_suggested` como o servidor o manda: sem destino, porque
+              // nao existe tela de confirmar candidato neste app.
+              aviso(
+                ref: refDaPlaquinha,
+                tipo: 'match_suggested',
+                assunto: 'Pingo',
+              ),
+            ]),
+          ),
+        );
+        await abrirComDestino(tester, servidor: servidor);
+
+        await tester.tap(find.text('Pingo'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(textoDoDestino),
+          findsNothing,
+          reason: 'REPROVA: a linha SEM destino navegou. `match_suggested` nao '
+              'tem tela neste app, e toque que leva a tela inexistente e pior '
+              'que toque ausente.',
+        );
+        expect(
+          servidor.chamadasA('POST ${caminhoDoLido(refDaPlaquinha)}').length,
+          1,
+          reason: 'REPROVA: a linha sem destino deixou de marcar como lida. '
+              'Ficar onde esta E o `mostrarNoApp`, e nao perder a marcacao.',
+        );
+        // `textoDaTela` e nao `find.text('Lido')`: o estado da linha vive
+        // dentro de um texto JUNTADO (`Lido · 18/10/2026 às 13h52`), e
+        // `find.text` exige igualdade exata.
+        expect(
+          textoDaTela(tester),
+          contains('Lido'),
+          reason: 'REPROVA: a linha sem destino nao passou a dizer `Lido`. '
+              'Sem navegacao, a marcacao e o unico retorno visivel do toque.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: destino sem referencia NAO navega -- nada de `/pets/null`',
+      (tester) async {
+        // A porta aqui e a de VERDADE, religada: ela e quem recusa o par
+        // incompleto. Um `destination` sem `destination_ref` e contrato
+        // quebrado, e a tela nao pode traduzir isso em endereco.
+        ligarPortaDoDestinoDoAviso();
+
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(ref: refDaPlaquinha, assunto: 'Tobias', destino: 'pet'),
+            ]),
+          ),
+        );
+        await abrirComDestino(tester, servidor: servidor);
+
+        await tester.tap(find.text('Tobias'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(textoDoDestino),
+          findsNothing,
+          reason: 'REPROVA: navegou com `destination` e SEM '
+              '`destination_ref`. Os dois andam juntos por promessa do '
+              'contrato, e a guarda e o que impede `/pets/null` quando a '
+              'promessa for quebrada.',
+        );
+        expect(
+          find.text('Tobias'),
+          findsOneWidget,
+          reason: 'REPROVA: a caixa saiu do ar. Par incompleto deixa a linha '
+              'sem toque, e nao quebra a tela.',
         );
       },
     );

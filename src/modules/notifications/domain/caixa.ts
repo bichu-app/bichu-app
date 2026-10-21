@@ -74,6 +74,32 @@ export const TIPOS_QUE_PERSISTEM_NO_CONTADOR: readonly TipoDeAviso[] = [
   'found_reported',
 ];
 
+/**
+ * Para onde o toque numa linha da caixa leva. Uniao FECHADA, e cada valor tem
+ * tela que EXISTE -- destino sem tela seria toque morto.
+ *
+ * **`match_suggested` nao esta aqui, e a ausencia e medida**: nao existe tela
+ * de confirmar candidato neste app, e o `destinoDe` do aplicativo ja manda o
+ * push desse tipo para `mostrarNoApp` pelo mesmo motivo. A linha dele sai com
+ * destino nulo e NAO oferece toque.
+ *
+ * Espelha `NotificationDestination` do contrato e os valores de
+ * `notificacao_destino(text, uuid)` na migracao `20261020000011`. As tres
+ * copias sao de proposito -- o banco e quem RESOLVE o destino, o contrato e
+ * quem o declara, e aqui e onde o tipo impede um valor inventado de compilar.
+ */
+export const DESTINOS_DO_AVISO = [
+  'pet',
+  'found_report',
+  'public_case',
+  'network_event',
+  'directory_suggestion',
+  'collar_tag_request',
+  'broadcast',
+] as const;
+
+export type DestinoDoAviso = (typeof DESTINOS_DO_AVISO)[number];
+
 /** Uma linha da caixa, ja agrupada. */
 export interface AvisoDaCaixa {
   /** Identificador opaco. **Nao e UUID** (ADR-0010). */
@@ -87,6 +113,41 @@ export interface AvisoDaCaixa {
   readonly lido: boolean;
   /** Quantos avisos esta linha resume. Sempre 1 para os que nunca agrupam. */
   readonly agrupados: number;
+  /**
+   * Para onde o toque leva, ou **nulo quando esta linha nao tem destino**.
+   *
+   * Nulo e estado NORMAL: `match_suggested` nao tem tela, e um destino pode
+   * ter deixado de existir (pet excluido, encontro apagado). Nos dois casos a
+   * linha fica sem toque, porque toque para tela inexistente e pior que toque
+   * ausente.
+   */
+  readonly destino: DestinoDoAviso | null;
+  /**
+   * A chave do destino. Nula exatamente quando [destino] e nula.
+   *
+   * A forma depende do destino e **nao e sempre opaca**: `public_case` traz o
+   * token do caso, `network_event` e `directory_suggestion` traem `slug` e
+   * `ref`, e `pet`, `found_report` e `collar_tag_request` traem UUID interno.
+   * O UUID e legitimo nesta superficie -- ela e autenticada e recortada pelo
+   * dono, e o item 6 do ADR-0010 vale para a rota PUBLICA. O push nao usa esta
+   * chave: ele segue com token publico.
+   */
+  readonly destinoRef: string | null;
+}
+
+/**
+ * Um COMUNICADO como o dono da caixa o le -- a pagina intermediaria do unico
+ * tipo de aviso sem destino natural.
+ *
+ * **Sem quem disparou e sem quantos receberam**: o primeiro e conta de painel e
+ * nao dado de produto, e o segundo poria o tamanho da base na tela de uma
+ * pessoa.
+ */
+export interface ComunicadoDaCaixa {
+  readonly ref: string;
+  readonly titulo: string;
+  readonly corpo: string;
+  readonly disparadoEm: Date;
 }
 
 export interface PaginaDaCaixa {
