@@ -11,6 +11,7 @@
 //    e um detalhe de telemetria: e a ordem real da lista que a pessoa esta
 //    vendo, e a tela precisa dizer isso.
 
+import '../formato/cep.dart';
 import 'falhas.dart';
 
 /// `#/components/schemas/ProfessionalKind` do contrato.
@@ -836,6 +837,127 @@ enum MotivoDeNaoPoderAvaliar {
   }
 }
 
+/// O ENDERECO COMERCIAL da entrada: os quatro campos de
+/// `DirectoryEntryDetail` (cliente, 21/10/2026).
+///
+/// ## Por que ele e uma classe, e nao quatro campos soltos em [DetalheDoLocal]
+///
+/// Porque [porExtenso] e [textoParaBuscaNoMapa] sao a MESMA regra lida de duas
+/// formas, e a tela precisa das duas na mesma decisao: desenha a linha? oferece
+/// o toque? Com os campos soltos, cada tela refaria a juncao -- e juntar a mao
+/// produz `"Rua X,  - "` no dia em que o numero vier nulo, que e o caso real de
+/// estrada, rodovia e quadra (a migracao `20261018000001` recusou de proposito
+/// um `CHECK` que exigisse rua e numero juntos).
+///
+/// ## O que esta classe NAO e
+///
+/// **Nao e endereco de PESSOA.** A secao 4 do ADR-0011 separa os dois casos: o
+/// perfil do profissional e de uma entidade que aceitou aparecer para ser
+/// contratada. Nenhuma tela de tutor tem endereco, e nada aqui alcanca uma.
+///
+/// **Nao e um segundo jeito de abrir mapa.** Quem abre e
+/// `SaidaDoApp.abrirEnderecoNoAppDeMapas`, a MESMA do encontro da Rede --
+/// intencao `geo:` com o TEXTO, uma vez, num lugar. Esta classe so monta o
+/// texto.
+class EnderecoComercialDaEntrada {
+  const EnderecoComercialDaEntrada({
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
+  });
+
+  /// `postal_code`: oito digitos **sem mascara**, como o servidor o guarda. A
+  /// mascara e de exibicao e sai de `mascaraDeCep`, que e a mesma usada no
+  /// cadastro -- uma definicao so.
+  final String? cep;
+  final String? logradouro;
+
+  /// `street_number`: **texto e nao inteiro**. `s/n`, `120A` e `KM 32` sao
+  /// numeros de porta reais, e nulo com [logradouro] preenchido e caso
+  /// legitimo.
+  final String? numero;
+
+  /// `complement`: sala, loja, andar ou bloco. Entra em [porExtenso] e **fica
+  /// fora de [textoParaBuscaNoMapa]**: nenhum mapa procura por `sala 302`, e
+  /// incluir piora o resultado da busca.
+  final String? complemento;
+
+  static const EnderecoComercialDaEntrada vazio = EnderecoComercialDaEntrada();
+
+  static String? _limpo(Object? bruto) {
+    if (bruto is! String) return null;
+    final texto = bruto.trim();
+    return texto.isEmpty ? null : texto;
+  }
+
+  /// Os quatro campos de um corpo de `DirectoryEntryDetail`.
+  ///
+  /// **Ausente, nulo, vazio e de outro tipo viram nulo**, e nenhum estoura: os
+  /// quatro sao opcionais no contrato porque o APK publicado nao os conhece, e
+  /// um `as String?` cru sobre valor de outro tipo derrubaria a pagina.
+  static EnderecoComercialDaEntrada doJson(Map<String, dynamic> json) {
+    return EnderecoComercialDaEntrada(
+      cep: _limpo(json['postal_code']),
+      logradouro: _limpo(json['street']),
+      numero: _limpo(json['street_number']),
+      complemento: _limpo(json['complement']),
+    );
+  }
+
+  /// **Ha endereco de rua para mostrar?**
+  ///
+  /// O logradouro e a condicao, e nao "algum dos quatro": CEP sozinho nao e um
+  /// endereco que alguem leia, e complemento sozinho (`Sala 3`) e uma linha que
+  /// nao diz onde fica nada. Sem logradouro a pagina fica com a linha de lugar
+  /// -- bairro, cidade e UF --, que e o que ela sempre teve.
+  bool get temEnderecoDeRua => logradouro != null;
+
+  /// A linha que a pagina escreve: `Rua Teodoro Sampaio, 1020 - Sala 3`, e o
+  /// CEP mascarado depois, quando ha.
+  ///
+  /// **Nulo quando nao ha logradouro**, e nulo e o estado normal: profissional
+  /// autonomo -- adestrador, passeador, veterinario que atende em casa -- nao
+  /// tem endereco comercial, e a entrada dele e publicavel sem nenhum dos
+  /// quatro.
+  String? get porExtenso {
+    final rua = logradouro;
+    if (rua == null) return null;
+    final comNumero = numero == null ? rua : '$rua, $numero';
+    final comComplemento =
+        complemento == null ? comNumero : '$comNumero - $complemento';
+    final digitos = cep;
+    if (digitos == null) return comComplemento;
+    return '$comComplemento · CEP ${mascaraDeCep(digitos)}';
+  }
+
+  /// O TEXTO que vai para o aplicativo de mapas.
+  ///
+  /// **Nao e [porExtenso]**, e a diferenca e medida e nao estetica: o
+  /// complemento sai (nenhum mapa procura por `sala 302`) e o bairro, a cidade
+  /// e a UF entram (`Rua Teodoro Sampaio, 1020` existe em muitas cidades). O
+  /// CEP entra mascarado, que e a forma que todo mapa brasileiro espera.
+  ///
+  /// Nulo quando nao ha logradouro: **endereco ausente nao pode virar botao que
+  /// abre o mapa no nada**.
+  String? textoParaBuscaNoMapa({
+    String? bairro,
+    String? cidade,
+    String? estado,
+  }) {
+    final rua = logradouro;
+    if (rua == null) return null;
+    final partes = <String>[
+      numero == null ? rua : '$rua, $numero',
+      if (bairro != null && bairro.isNotEmpty) bairro,
+      if (cidade != null && cidade.isNotEmpty) cidade,
+      if (estado != null && estado.isNotEmpty) estado,
+      if (cep != null) mascaraDeCep(cep!),
+    ];
+    return partes.join(' - ');
+  }
+}
+
 /// `#/components/schemas/DirectoryEntryDetail` do contrato — a pagina do local.
 ///
 /// **Os mesmos campos de [EntradaDoDiretorio], mais [pontuacao],
@@ -845,11 +967,16 @@ enum MotivoDeNaoPoderAvaliar {
 /// classe e separada pelo mesmo motivo pratico: o detalhe tem `rating`
 /// OBRIGATORIO e o resumo nao.
 ///
-/// **Nenhum campo de cadastro novo.** Site, e-mail, WhatsApp, redes sociais,
-/// horario de funcionamento, foto e endereco de rua **nao existem** em
-/// `professionals` -- nao ha coluna e nao ha painel que as preencha. Esta
-/// classe nao tem onde guarda-los e a tela nao desenha espaco para eles:
-/// espaco reservado ensinaria quem le que o dado vem.
+/// **O ENDERECO COMERCIAL PASSOU A EXISTIR**, em 21/10/2026, e esta frase
+/// substitui a anterior, que o listava junto com o que "nao existe em
+/// `professionals`". As quatro colunas existiam desde `20261018000001` e nao
+/// eram projetadas porque exibi-las era decisao do cliente -- e ela foi tomada:
+/// *"o endereco completo do profissional"*, para a pessoa tocar e abrir o
+/// aplicativo de mapas. Ver [endereco].
+///
+/// **E-mail, WhatsApp, redes sociais e horario continuam fora**: nao ha coluna
+/// e nao ha painel que as preencha, e espaco reservado ensinaria quem le que o
+/// dado vem.
 class DetalheDoLocal {
   const DetalheDoLocal({
     required this.slug,
@@ -869,6 +996,7 @@ class DetalheDoLocal {
     this.motivoDeNaoPoderAvaliar,
     this.logoUrl,
     this.fotoUrl,
+    this.endereco = EnderecoComercialDaEntrada.vazio,
   });
 
   final String slug;
@@ -944,6 +1072,19 @@ class DetalheDoLocal {
   /// faixa vazia**: ela simplesmente nao desenha a faixa.
   final String? fotoUrl;
 
+  /// O ENDERECO COMERCIAL (cliente, 21/10/2026): CEP, logradouro, numero e
+  /// complemento.
+  ///
+  /// **So existe aqui, e nao em [EntradaDoDiretorio].** O cartao de `Perto`
+  /// responde "existe e fica perto" com [linhaDeLugar]; endereco de porta em
+  /// ate vinte cartoes nao foi pedido por tela nenhuma -- a mesma decisao de
+  /// [fotoUrl].
+  ///
+  /// **Nunca nulo, e os quatro campos dentro dele podem ser**: assim a tela
+  /// pergunta `detalhe.endereco.temEnderecoDeRua` sem um `?.` que esconderia a
+  /// diferenca entre "nao veio" e "nao tem".
+  final EnderecoComercialDaEntrada endereco;
+
   /// A linha de lugar: bairro, cidade e UF, sem separador orfao. **A MESMA
   /// linha do cartao da listagem**, por [linhaDeLugarDe]: duas copias da regra
   /// divergem na primeira edicao, e a pagina e o cartao mostram o mesmo lugar.
@@ -998,6 +1139,9 @@ class DetalheDoLocal {
       // Os dois sao OPCIONAIS: ausente e nulo, e nao estoura.
       logoUrl: urlDeImagem(json['logo_url']),
       fotoUrl: urlDeImagem(json['photo_url']),
+      // Os QUATRO do endereco, pela mesma tolerancia: ausente, nulo, vazio e
+      // de outro tipo viram nulo, e a pagina existe sem a linha de endereco.
+      endereco: EnderecoComercialDaEntrada.doJson(json),
     );
   }
 }

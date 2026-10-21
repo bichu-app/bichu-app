@@ -709,7 +709,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: canal.rows[0]?.tem_canal ?? false,
         fotoPublicKey: linha.photo_public_key,
-        enderecoComercial: comoEnderecoComercial(linha as unknown as LinhaDoEnderecoComercial),
+        // Sem `as`: a linha do detalhe JA tem as quatro colunas no tipo que o
+        // Kysely deduz do `select`. O `as unknown as` de `comoEntrada`, logo
+        // acima, existe por outro motivo (`kinds` e `evidencias` chegam como
+        // agregados), e copia-lo aqui esconderia um erro de nome de coluna.
+        enderecoComercial: comoEnderecoComercial(linha),
       };
     },
 
