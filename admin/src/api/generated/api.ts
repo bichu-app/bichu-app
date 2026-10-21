@@ -6837,12 +6837,30 @@ export interface components {
          *     contagens, sem foto, sem publicacoes. Esta forma e a mesma no pedido
          *     recebido e na conexao aceita, de proposito: o que muda com o aceite e o
          *     que as OUTRAS superficies passam a mostrar, nao esta.
+         *
+         *     **O SELO DE VALIDADO ENTROU EM 21/10/2026** em
+         *     `contact_channel_verified`, e a emenda do ADR-0010 que o autoriza nomeia
+         *     este schema. Ele nao contraria o paragrafo acima: o que esta proibido
+         *     aqui e o que **so conexao** poderia ver, e o selo nao e disso -- ele sai
+         *     igual no pedido recebido e na conexao aceita, como `display_name` ja
+         *     sai. Ver `PublicationAuthor.contact_channel_verified` para o que o
+         *     booleano prova e para o que o rotulo nao pode prometer.
          */
         ConnectionPerson: {
             /** @description O apelido (`@`), 5 a 20 caracteres, minusculas, digitos e hifen. Nulo quando a pessoa nao escolheu um. */
             handle: string | null;
             /** @description O nome de exibicao. Nulo nas contas que nasceram sem ele. */
             display_name: string | null;
+            /**
+             * @description **O SELO DE VALIDADO** do pedido de conexao, e a MESMA definicao de
+             *     `PublicationAuthor.contact_channel_verified`:
+             *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
+             *
+             *     **Nao anulavel, so o booleano, e `false` nao desenha nada.** As tres
+             *     regras estao escritas por extenso em `PublicationAuthor`, e nao se
+             *     repetem aqui para que exista UM lugar onde elas mudam.
+             */
+            contact_channel_verified: boolean;
         };
         /**
          * @description Uma aresta do grafo de conexao, **simetrica**, na perspectiva de quem
@@ -10179,6 +10197,14 @@ export interface components {
          * @description O perfil de OUTRA pessoa, no recorte que quem chama pode ver (emenda 2
          *     do ADR-0010, decisao do cliente de 19/10/2026).
          *
+         *     **`contact_channel_verified` ENTROU EM 21/10/2026, E ELE E UMA EMENDA A
+         *     LISTA FECHADA** -- nao uma omissao que alguem preencheu. A lista abaixo
+         *     e fechada de proposito, e a emenda 2 a fechou; o selo de validado so
+         *     entra porque a emenda do ADR-0010 de 21/10/2026 NOMEIA este schema, por
+         *     decisao do cliente. Ver
+         *     `PublicationAuthor.contact_channel_verified` para o que o booleano prova
+         *     e para o que o rotulo da tela nao pode prometer.
+         *
          *     **A lista de propriedades e fechada, e a ausencia de cada coisa tem
          *     dono.** Nao ha `city`, `neighbourhood`, `email`, `phone`,
          *     `birth_date`, `last_name`, `location`, `timeline`, `posts`,
@@ -10272,6 +10298,23 @@ export interface components {
              *     tamanho da lista.
              */
             showcase?: components["schemas"]["PersonShowcasePhoto"][];
+            /**
+             * @description **O SELO DE VALIDADO**, com a MESMA definicao de
+             *     `PublicationAuthor.contact_channel_verified`:
+             *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
+             *
+             *     **Sai nos QUATRO estados de `connection_state`, e nao so em
+             *     `connected`** -- ao contrario de `showcase`. A diferenca tem razao:
+             *     a vitrine e conteudo que a pessoa publicou para quem ela aceitou, e
+             *     o selo e um atributo da conta que vale igual para quem chega pelo
+             *     apelido. Condiciona-lo ao aceite faria a mesma conta aparecer
+             *     validada numa tela e nao na outra, que e exatamente a divergencia
+             *     que a regua unica existe para impedir.
+             *
+             *     **Nao anulavel, so o booleano, e `false` nao desenha nada** -- as
+             *     tres regras estao escritas por extenso em `PublicationAuthor`.
+             */
+            contact_channel_verified: boolean;
         };
         /**
          * @description Uma foto da vitrine de OUTRA pessoa, e ela e **menor** que
@@ -12788,7 +12831,32 @@ export interface components {
             next_cursor: string | null;
         };
         /**
-         * @description Quem publicou, na linha do tempo. **Tres campos, e nada mais.**
+         * @description Quem publicou, na linha do tempo. **Quatro campos, e nada mais.**
+         *
+         *     **O SELO DE VALIDADO ENTROU EM 21/10/2026**, em
+         *     `contact_channel_verified`, e e decisao do cliente: *"os usuarios que
+         *     validados deve ter um simbolo em frente de seu nome nos posts,
+         *     comentarios, nas mensagens, mostrando que e um usuario confiavel"*. A
+         *     emenda do ADR-0010 que o autoriza NOMEIA esta superficie, como a Emenda
+         *     5 fez com a foto -- e pela mesma razao: atributo novo sobre pessoa em
+         *     superficie de terceiro nao se acrescenta por analogia.
+         *
+         *     **O que o booleano prova e UM CANAL DE CONTATO CONFIRMADO, e o rotulo da
+         *     tela nao pode prometer mais que isso.** Ele e
+         *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a
+         *     MESMA regua dos quatro 409 `contact-channel-unverified`; e **na pratica
+         *     e e-mail**, porque nada em `src/` grava `phone_verified_at` -- a coluna
+         *     existe e so e zerada. Por isso o nome acessivel do selo diz "e-mail
+         *     confirmado", e **nunca** "verificado", "confiavel" nem "confirmado pela
+         *     equipe": documento nao e conferido por ninguem (*"nao estamos validando
+         *     documentos de faco, apenas e-mail por enquanto e futuramente
+         *     telefone"*), e um rotulo que afirmasse confianca seria o produto
+         *     assinando por uma conferencia que nao existe.
+         *
+         *     **O cliente foi avisado DUAS VEZES de que quase todo usuario ativo tera
+         *     o selo** -- confirmar e-mail ja e pre-requisito de abrir caso de
+         *     perdido, criar encontro, sugerir lugar do diretorio e avaliar -- e
+         *     reafirmou. O desenho e a tag, nao a regra para obte-la.
          *
          *     **A FOTO ENTROU EM 20/10/2026, e e a EMENDA 5 do ADR-0010 que a
          *     autoriza.** Ela nasceu sem foto, de proposito: a Emenda 3 abriu
@@ -12861,6 +12929,30 @@ export interface components {
              *     que a Emenda 3 fez e que `PersonShowcasePhoto` fez antes dela.
              */
             photo_icon_url: string | null;
+            /**
+             * @description **O SELO DE VALIDADO**: a conta tem um canal de contato confirmado.
+             *
+             *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, e a
+             *     regua e a MESMA dos quatro `409 contact-channel-unverified`. Duas
+             *     definicoes de "validado" seriam duas reguas, e a mesma conta sairia
+             *     validada numa tela e nao na outra.
+             *
+             *     **NAO ANULAVEL, e a ausencia de nulo e a regra.** Nulo seria um
+             *     terceiro estado ("nao sei") que esta pergunta nao tem: a conta ou
+             *     confirmou um canal ou nao confirmou. A tela que recebesse nulo
+             *     precisaria escolher um lado, e ela escolheria o errado.
+             *
+             *     **SO O BOOLEANO.** Nem o endereco, nem a data, nem QUAL dos dois
+             *     canais -- "o e-mail dela foi confirmado em marco" nao e assunto de
+             *     terceiro, e dizer qual canal entregaria que a pessoa tem telefone
+             *     cadastrado. E a mesma reducao de
+             *     `AdminJoinRequest.requester.email_verified` (D53).
+             *
+             *     **`false` NAO DESENHA NADA**, e nao desenha um selo apagado: um selo
+             *     cinza ao lado do nome diria "esta conta foi reprovada", e o que
+             *     `false` significa e que ninguem conferiu nada.
+             */
+            contact_channel_verified: boolean;
         };
         /**
          * @description A foto de uma publicacao na linha do tempo, e ela e **menor** que

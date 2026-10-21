@@ -169,6 +169,7 @@ import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/marca_da_pessoa.dart';
 
 /// Os enderecos da area de mensagens, num lugar so.
 ///
@@ -1113,50 +1114,59 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
     final quemEle = participante;
     // A FOTO, QUANDO ELA VEM (emenda 3 do ADR-0010, 19/10/2026).
     //
     // Nulo e o estado normal: conversa de achado com um estranho, pedido
     // pendente, achador sem conta, par bloqueado e conta desabilitada do outro
     // lado -- os cinco chegam nulos do servidor, e a tela nao os distingue.
-    final foto = quemEle?.photoIconUrl;
-    final marca = foto == null
-        ? Container(
-            width: tamanho,
-            height: tamanho,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: desligada ? cores.disabledSurface : cores.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              inicial.isEmpty ? '·' : inicial,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: desligada ? cores.onDisabled : cores.primary,
-              ),
-            ),
-          )
-        : ImagemDaRede(
-            url: foto,
-            // DECORATIVA, e de proposito: o rotulo acessivel do icone esta no
-            // `Semantics` de fora (`rotuloDaPortaDoPerfil` quando ha destino,
-            // `rotuloDaMarcaNeutra` quando nao ha). Rotular a imagem tambem
-            // faria o leitor de tela anunciar a mesma pessoa duas vezes na
-            // mesma parada de foco -- e o nome dela ja esta na linha.
-            descricao: null,
-            // 40 dp, e `ImagemDaRede` multiplica pelo fator de pixel do
-            // aparelho: 120 px a 3x. E este numero que vira `cacheWidth`.
-            largura: tamanho,
-            proporcao: 1,
-            // Circulo, como a marca que ela substitui: metade do lado.
-            raio: tamanho / 2,
-            // O retrato de uma pessoa falhando pede outro desenho que uma
-            // fachada falhando. A derivada pode nao existir ainda, o leitor de
-            // midia pode estar fora, a rede do celular pode cair no meio -- e o
-            // lugar do icone continua la.
-            simboloDeFalha: Icons.person_outline,
-          );
+    //
+    // ------------------------------------------------------------------
+    // O DESENHO SAIU PARA `widgets/marca_da_pessoa.dart` (21/10/2026)
+    // ------------------------------------------------------------------
+    // O cabecalho de `_FotoDoAutor`, no Mural, declarava a condicao: *"No dia em
+    // que aparecer a terceira superficie, este widget e o irmao dele viram um
+    // so, em `lib/widgets/`"*. Este e o irmao. A terceira superficie e o
+    // comentario do Mural, e a extracao aconteceu.
+    //
+    // **O QUE SAIU foi so o desenho** -- o circulo, a queda para a inicial, a
+    // paleta de `desligada`, o `cacheWidth` pela largura pintada e o
+    // `simboloDeFalha` de retrato. **O QUE FICOU e o que e DESTA tela**: o
+    // tamanho, o rotulo acessivel (`rotuloDaPortaDoPerfil` /
+    // `rotuloDaMarcaNeutra`), o alvo de toque de 48 dp e o destino do perfil.
+    //
+    // **E O SELO DE VALIDADO NAO CHEGA AQUI, E ISSO E A DECISAO.**
+    //
+    // A emenda do ADR-0010 de 21/10/2026 poe o selo na publicacao, no
+    // comentario, no perfil de pessoa e no pedido de conexao -- e **nao** na
+    // conversa, mesmo o cliente tendo dito *"nas mensagens"*. Tres medidas
+    // sustentam a excecao, e nenhuma delas e estetica:
+    //
+    // 1. **esta e a UNICA superficie onde o outro lado pode ser um estranho.**
+    //    Publicacao e comentario so existem entre conexao aceita; perfil e
+    //    pedido de conexao sao enderecados pelo apelido. A conversa mediada
+    //    comeca com o ACHADOR, que pode nao ter conta -- e por isso que
+    //    `photoIconUrl` chega nula em cinco estados aqui e em nenhum la;
+    // 2. **e o canal do golpe do falso achador**, que o cliente ja mediu em
+    //    20/10 quando recusou a recompensa. Um selo ao lado do nome de quem diz
+    //    ter achado o pet e exatamente o reforco que o golpe precisa -- e o que
+    //    ele prova (um e-mail confirmado) nao tem nada a ver com o que a pessoa
+    //    leria nele;
+    // 3. **A LINHA JA CORTA HOJE, SEM SELO.** Medido: o titulo da conversa pede
+    //    442 dp contra 287 de vao disponivel. Os 24 dp
+    //    (`SeloDeValidado.custoDeLargura`) sairiam do nome, que ja esta
+    //    abreviado.
+    //
+    // **Nao ha parametro de selo em `MarcaDaPessoa`**, e a ausencia e a defesa:
+    // acender o selo aqui exigiria importar `widgets/selo_de_validado.dart`
+    // neste arquivo, que e uma mudanca visivel em revisao. O caso de contrapeso
+    // de `app/test/widgets/selo_de_validado_test.dart` reprova se ela acontecer.
+    final marca = MarcaDaPessoa(
+      urlDoIcone: quemEle?.photoIconUrl,
+      inicial: inicial,
+      lado: tamanho,
+      desligada: desligada,
+    );
 
     final destino = quemEle == null
         ? null

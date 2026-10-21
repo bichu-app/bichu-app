@@ -314,7 +314,7 @@ class ImagemDaMinhaPublicacao {
   final String? textoAlternativo;
 }
 
-/// Quem publicou, na linha do tempo. **Tres campos, e nada mais.**
+/// Quem publicou, na linha do tempo. **Quatro campos, e nada mais.**
 ///
 /// **A FOTO ENTROU EM 20/10/2026** pela Emenda 5 do ADR-0010 — decisao do
 /// cliente, *"tras a foto, algo bem parecido com o instagram"*. Ela nasceu
@@ -328,6 +328,7 @@ class AutorDaPublicacao {
     required this.apelido,
     required this.nomeExibido,
     required this.urlDoIcone,
+    required this.canalConfirmado,
   });
 
   factory AutorDaPublicacao.doJson(Map<String, dynamic> json) {
@@ -335,6 +336,12 @@ class AutorDaPublicacao {
       apelido: json['handle'] as String?,
       nomeExibido: json['display_name'] as String? ?? '',
       urlDoIcone: json['photo_icon_url'] as String?,
+      // **Padrao `false`: na duvida o selo NAO nasce.** O mesmo padrao de
+      // `mine`, e pelo mesmo tipo de razao -- la um `true` errado ofereceria
+      // apagar o que nao e seu, aqui um `true` errado afirmaria uma confirmacao
+      // que ninguem fez. O campo e obrigatorio no contrato; este padrao e o que
+      // o app faz se um dia ele faltar.
+      canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
     );
   }
 
@@ -350,6 +357,27 @@ class AutorDaPublicacao {
   /// carrega o EXIF do celular), ou a conta esta desabilitada. A tela nao os
   /// distingue — com nula ela desenha a inicial do nome.
   final String? urlDoIcone;
+
+  /// **O SELO DE VALIDADO** — `contact_channel_verified`, emenda do ADR-0010 de
+  /// 21/10/2026, decisao do cliente.
+  ///
+  /// O que ele prova e **um canal de contato confirmado**:
+  /// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
+  /// servidor, que e a MESMA regua dos quatro 409
+  /// `contact-channel-unverified`. **Na pratica e e-mail**, porque nada no
+  /// servidor grava a confirmacao de telefone — e e por isso que o rotulo que a
+  /// tela desenha diz "e-mail confirmado".
+  ///
+  /// **O nome deste campo e o que ele prova, e nao o que ele parece.** Chama-se
+  /// `canalConfirmado` e nao `verificado` de proposito: documento nao e
+  /// conferido por ninguem, e um nome que dissesse "verificado" seria a primeira
+  /// peca de uma cadeia que termina num rotulo mentindo para quem usa leitor de
+  /// tela.
+  ///
+  /// **`false` nao desenha nada**, e nao desenha um selo apagado: selo cinza ao
+  /// lado do nome diria "esta conta foi reprovada", e `false` significa que
+  /// ninguem conferiu nada.
+  final bool canalConfirmado;
 }
 
 /// Uma publicacao na linha do tempo.
@@ -370,8 +398,12 @@ class ReacaoDaPublicacao {
 /// Um comentario.
 ///
 /// **O autor usa o MESMO [AutorDaPublicacao]** da publicacao, e o reuso vem do
-/// contrato: e a mesma pessoa, com os mesmos tres campos e a mesma derivada de
+/// contrato: e a mesma pessoa, com os mesmos quatro campos e a mesma derivada de
 /// foto (Emenda 5 do ADR-0010).
+///
+/// **E o reuso e o que faz o selo de validado chegar aos dois de uma vez**:
+/// `PublicationAuthor` e UM schema, entao o campo que a emenda de 21/10/2026
+/// abriu vale na publicacao e no comentario sem um segundo modelo.
 class ComentarioDaPublicacao {
   const ComentarioDaPublicacao({
     required this.ref,

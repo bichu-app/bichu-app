@@ -17,6 +17,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/selo_de_validado.dart';
 import '../seguranca/menu_do_perfil.dart';
 
 /// **O PERFIL DE OUTRA PESSOA** — a tela que o cliente disse não ter subido
@@ -361,9 +362,17 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     return <Widget>[
       // O NOME, no corpo e não só na barra: a barra corta em telas estreitas, e
       // o nome é a primeira das três coisas que o cliente liberou.
-      Text(
-        perfil.nomeParaLer,
-        style: textos.titleLarge?.copyWith(color: cores.textPrimary),
+      //
+      // **E É AQUI QUE O SELO DE VALIDADO ENTRA, e não no título da barra** —
+      // emenda do ADR-0010 de 21/10/2026. A razão é a mesma frase acima: a barra
+      // corta em telas estreitas, e um selo lá custaria 24 dp de um orçamento
+      // que já é o mais apertado da tela. No corpo o nome tem a largura inteira
+      // menos as margens, e é `NomeComSelo` que resolve a disputa — o nome
+      // encolhe com `…` e o selo fica.
+      NomeComSelo(
+        nome: perfil.nomeParaLer,
+        comSelo: perfil.canalConfirmado,
+        estilo: textos.titleLarge?.copyWith(color: cores.textPrimary),
       ),
       const SizedBox(height: BichuEspaco.e1),
       // O apelido embaixo do nome, porque é o endereço dela — e é ele que uma

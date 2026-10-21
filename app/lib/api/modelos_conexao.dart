@@ -21,6 +21,11 @@
 ///   seguidores: a conexão é simétrica, e o grafo é um só.
 /// - **Não há avatar.** A lista fechada de onde o avatar pode aparecer é
 ///   decisão da fatia da vitrine, não desta.
+/// - **Há o SELO DE VALIDADO**, e ele não é exceção às ausências de cima: um
+///   booleano sobre a conta não identifica, não localiza e não conta nada. É a
+///   emenda do ADR-0010 de 21/10/2026, e ela NOMEIA `ConnectionPerson` —
+///   atributo novo sobre pessoa em superfície de terceiro não entra por
+///   analogia.
 library;
 
 /// `#/components/schemas/ConnectionAppState`.
@@ -46,21 +51,48 @@ enum EstadoDaConexao {
 
 /// `#/components/schemas/ConnectionPerson`.
 ///
-/// Os dois campos são anuláveis **no contrato**, e por isso são anuláveis aqui.
-/// O apelido é opcional de propósito: as contas que já existem nasceram sem ele
-/// e nenhum fluxo obriga a escolher.
+/// Os dois campos de NOME são anuláveis **no contrato**, e por isso são
+/// anuláveis aqui. O apelido é opcional de propósito: as contas que já existem
+/// nasceram sem ele e nenhum fluxo obriga a escolher.
+///
+/// **O selo de validado NÃO é anulável**, e a diferença é a regra: nome a conta
+/// pode não ter, mas a pergunta "ela confirmou um canal?" tem sempre uma das
+/// duas respostas.
 class PessoaDaConexao {
-  const PessoaDaConexao({required this.handle, required this.displayName});
+  const PessoaDaConexao({
+    required this.handle,
+    required this.displayName,
+    required this.canalConfirmado,
+  });
 
   factory PessoaDaConexao.doJson(Map<String, dynamic> json) {
     return PessoaDaConexao(
       handle: json['handle'] as String?,
       displayName: json['display_name'] as String?,
+      // **Padrão `false`: na dúvida o selo NÃO nasce.** O campo é obrigatório no
+      // contrato; este padrão é o que o app faz se um dia ele faltar, e o lado
+      // seguro é não afirmar uma confirmação que ninguém fez.
+      canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
     );
   }
 
   final String? handle;
   final String? displayName;
+
+  /// **O SELO DE VALIDADO** — `contact_channel_verified`, emenda do ADR-0010 de
+  /// 21/10/2026, decisão do cliente.
+  ///
+  /// O que ele prova é **um canal de contato confirmado**
+  /// (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
+  /// servidor), que é a MESMA régua dos quatro 409
+  /// `contact-channel-unverified`. **Na prática é e-mail**, porque nada no
+  /// servidor grava a confirmação de telefone — e é por isso que o rótulo que a
+  /// tela desenha diz "e-mail confirmado" e nunca "verificado" nem "confiável".
+  ///
+  /// **`false` não desenha nada**, e não desenha um selo apagado: selo cinza ao
+  /// lado do nome diria "esta conta foi reprovada", e `false` significa que
+  /// ninguém conferiu nada.
+  final bool canalConfirmado;
 
   /// Como a pessoa é escrita na tela. **O apelido vem primeiro**: é a chave de
   /// leitura. Com ele nulo cai para o nome de exibição, e com os dois nulos

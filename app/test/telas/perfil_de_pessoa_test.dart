@@ -29,6 +29,7 @@ import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/pessoa/tela_perfil_de_pessoa.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
+import 'package:bichu/widgets/selo_de_validado.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -60,6 +61,10 @@ Map<String, dynamic> _perfil({
   int conexoes = 12,
   String? nome = 'Marina',
   List<Map<String, dynamic>>? vitrine,
+  // **Padrao `false`**, como no dublê de conexoes do servidor: perfil que o caso
+  // nao mencionou nao e perfil validado, e um padrao `true` faria a isca do selo
+  // ausente ficar verde sem medir nada.
+  bool validado = false,
 }) {
   return <String, dynamic>{
     'handle': _apelido,
@@ -68,6 +73,7 @@ Map<String, dynamic> _perfil({
     'pets_count': pets,
     'connections_count': conexoes,
     'connection_state': estado,
+    'contact_channel_verified': validado,
     'connection_ref': ref,
     // `?vitrine` OMITE a chave quando nula -- que e exatamente o que a borda
     // faz com `showcase` para quem nao e conexao. Ausente e `[]` sao estados
@@ -547,5 +553,76 @@ void main() {
     expect(chamadas.any((c) => c.endsWith('/v1/people')), isFalse);
     expect(chamadas.any((c) => c.contains('search')), isFalse);
     expect(chamadas.any((c) => c == 'GET /connections'), isFalse);
+  });
+
+  // =========================================================================
+  // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026)
+  // =========================================================================
+
+  testWidgets('SELO: com canal confirmado, o selo aparece ao lado do NOME no corpo', (
+    tester,
+  ) async {
+    await _montar(tester, perfil: _perfil(estado: 'none', validado: true));
+    expect(find.byType(SeloDeValidado), findsOneWidget);
+    // **UM, e nao dois.** O titulo da BARRA nao recebe selo: a barra corta em
+    // tela estreita (o proprio caso de `@apelido` duas vezes mede isso), e o
+    // selo custa 24 dp de um orcamento que ja e o mais apertado da tela.
+  });
+
+  testWidgets('SELO: ISCA -- sem canal confirmado, nenhuma roseta na tela', (tester) async {
+    await _montar(tester, perfil: _perfil(estado: 'none'));
+    expect(find.byType(SeloDeValidado), findsNothing);
+    expect(find.byIcon(Icons.verified), findsNothing);
+  });
+
+  testWidgets('SELO: sai nos QUATRO estados de conexao, ao contrario da vitrine', (
+    tester,
+  ) async {
+    // **A vitrine e condicionada ao aceite e o selo NAO**, e a diferenca tem
+    // razao: a vitrine e conteudo que a pessoa publicou para quem ela aceitou, e
+    // o selo e atributo da conta — ele vale igual para quem chega pelo apelido.
+    // Condiciona-lo faria a mesma conta aparecer validada numa tela e nao na
+    // outra, que e a divergencia que a regua unica existe para impedir.
+    for (final String estado in <String>[
+      'none',
+      'pending_sent',
+      'pending_received',
+      'connected',
+    ]) {
+      await _montar(
+        tester,
+        perfil: _perfil(
+          estado: estado,
+          ref: estado == 'none' ? null : 'ref-da-aresta-0001',
+          validado: true,
+        ),
+      );
+      expect(find.byType(SeloDeValidado), findsOneWidget, reason: 'estado $estado');
+    }
+  });
+
+  testWidgets('SELO: o rotulo acessivel diz "E-mail confirmado", e nada alem', (tester) async {
+    // O booleano prova um canal de contato confirmado — hoje, e-mail. Ele nao
+    // prova documento, identidade nem conferencia humana, e o rotulo nao pode
+    // dizer que prova: quem usa leitor de tela recebe SO o rotulo.
+    await _montar(tester, perfil: _perfil(estado: 'none', validado: true));
+    // **`contains` e nao igualdade**: o selo pode cair dentro de um no de
+    // semantica da tela, e ai o leitor anuncia o nome e a frase do selo numa
+    // parada so. O que este caso cobra e que a frase chegue INTEIRA e sem
+    // palavra proibida; a igualdade exata do rotulo do widget e medida em
+    // `test/widgets/selo_de_validado_test.dart`.
+    final String rotulo = tester.getSemantics(find.byType(SeloDeValidado)).label;
+    expect(rotulo, contains('E-mail confirmado'));
+    for (final String proibida in <String>['verificad', 'confiáve', 'pela equipe', 'oficial']) {
+      expect(rotulo.toLowerCase().contains(proibida), isFalse, reason: proibida);
+    }
+  });
+
+  testWidgets('SELO: a conta SEM nome de exibicao tambem pode ter selo', (tester) async {
+    // `display_name` e anulavel e `nomeParaLer` cai para `@apelido`. **O selo
+    // nao cai com ele**: o booleano e sobre a CONTA, e uma conta sem nome de
+    // exibicao pode ter confirmado o e-mail.
+    await _montar(tester, perfil: _perfil(estado: 'none', nome: null, validado: true));
+    expect(find.byType(SeloDeValidado), findsOneWidget);
   });
 }

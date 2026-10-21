@@ -11,6 +11,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_segmentado.dart';
+import '../../widgets/selo_de_validado.dart';
 
 /// **Os pedidos de conexão.** A única tela desta fatia, e a lista que ela
 /// mostra é de **pedidos** — nunca de conexões.
@@ -278,9 +279,22 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            pedido.person.nomeParaLer ?? TelaDePedidosDeConexao.semNome,
-            style: textos.titleMedium?.copyWith(color: cores.textPrimary),
+          // O NOME, COM O SELO DE VALIDADO AO LADO — emenda do ADR-0010 de
+          // 21/10/2026, decisao do cliente.
+          //
+          // **O selo sai IGUAL no pedido recebido e no enviado**, porque e
+          // atributo da conta e nao algo que o aceite libere: condiciona-lo
+          // faria a mesma pessoa aparecer validada no perfil e nao aqui, que e
+          // a divergencia que a regua unica existe para impedir.
+          //
+          // `nomeParaLer` pode ser nulo (as duas pontas de nome sao anulaveis no
+          // contrato) e cai para `semNome`. **O selo nao cai com ele**: o
+          // booleano e sobre a CONTA, e uma conta sem nome de exibicao pode ter
+          // confirmado o e-mail.
+          NomeComSelo(
+            nome: pedido.person.nomeParaLer ?? TelaDePedidosDeConexao.semNome,
+            comSelo: pedido.person.canalConfirmado,
+            estilo: textos.titleMedium?.copyWith(color: cores.textPrimary),
           ),
           const SizedBox(height: BichuEspaco.e2),
           // `Expanded` nos dois, e nao `MainAxisAlignment.end`: o tema desta
