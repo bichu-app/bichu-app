@@ -188,6 +188,85 @@ function paraJsonSchema(
   return saida;
 }
 
+/**
+ * A chave que isenta uma palavra-chave do esquema de **borda**, declarada no
+ * parâmetro e não dentro do `schema` dele.
+ *
+ * ## O defeito que ela existe para consertar
+ *
+ * `searchPeople` declara `minLength: 3` em `q` e a descrição do contrato diz,
+ * por escrito, que aquele piso **não é recusado com 400 quando menor** — a
+ * resposta é lista vazia, porque a tela chama a busca a cada tecla e `ma` no
+ * meio de alguém escrevendo `maria` é o produto discutindo com quem digita.
+ * Durante um dia aquilo foi só prosa: `vigiarParametrosDasRotas` instalava o
+ * `minLength` no validador e a rota respondia `400 validation-failed`, medido
+ * em homologação em 21/10/2026 pelo corpo da resposta.
+ *
+ * ## Por que a isenção, e não apagar o `minLength` do contrato
+ *
+ * Porque o número **documenta** um limite real: o índice é GIN trigrama e um
+ * padrão com menos de três caracteres não produz trigrama nenhum. Apagá-lo
+ * tiraria do contrato a única razão escrita pela qual o piso é `3` e não um
+ * gosto, e quem lesse a especificação amanhã não teria como saber. A isenção
+ * mantém a declaração e diz o que ela é: documentação do piso, cobrado uma
+ * camada adiante.
+ *
+ * ## Por que ela é ruidosa quando não casa nada
+ *
+ * Uma isenção escrita errada — `minlength`, ou uma palavra que saiu do `schema`
+ * e deixou a linha para trás — seria um **no-op silencioso**: a borda voltaria a
+ * recusar e o contrato continuaria prometendo que não. É a mesma classe de
+ * defeito que esta função conserta, uma volta depois. Por isso palavra isenta
+ * que o `schema` não declara **levanta**, e levanta no carregamento do
+ * contrato, que é na subida.
+ *
+ * ## O que ela NÃO faz
+ *
+ * Não toca em corpo de requisição (`requestBodySchema`) nem em schema de
+ * resposta: a prosa que ela serve é sobre parâmetro, e o 400 de corpo é outra
+ * decisão, de outro arquivo. E não isenta a operação inteira — é por parâmetro
+ * e por palavra, porque foi exatamente isso que se decidiu: em `q`, `maxLength`
+ * continua recusando.
+ */
+const ISENCAO_DE_BORDA = 'x-nao-recusado-na-borda';
+
+function semAsPalavrasIsentas(
+  parametro: Record<string, unknown>,
+  schema: Record<string, unknown>,
+  operationId: string,
+): Record<string, unknown> {
+  const isentas = parametro[ISENCAO_DE_BORDA];
+  if (isentas === undefined) return schema;
+
+  const onde = `\`${ISENCAO_DE_BORDA}\` do parâmetro '${String(parametro['name'])}' em ${operationId}`;
+  if (
+    !Array.isArray(isentas) ||
+    isentas.length === 0 ||
+    isentas.some((palavra) => typeof palavra !== 'string')
+  ) {
+    throw new Error(
+      `${onde} precisa ser uma lista NÃO VAZIA de nomes de palavra-chave de JSON ` +
+        `Schema, e veio ${JSON.stringify(isentas)}. Lista vazia isentaria nada e ` +
+        'deixaria a borda recusando contra o que a descrição promete.',
+    );
+  }
+
+  const saida = { ...schema };
+  for (const palavra of isentas as readonly string[]) {
+    if (!(palavra in saida)) {
+      throw new Error(
+        `${onde} isenta \`${palavra}\`, que o \`schema\` do parâmetro não declara. ` +
+          'A isenção seria um no-op silencioso: ou a palavra está escrita errada, ou ' +
+          'ela saiu do contrato e esta linha ficou — e nos dois casos a borda volta a ' +
+          'recusar enquanto a descrição promete que não. Corrija a lista ou reponha a ' +
+          `palavra. O \`schema\` declara: ${Object.keys(schema).join(', ')}.`,
+      );
+    }
+    delete saida[palavra];
+  }
+  return saida;
+}
+
 function achatarSecurity(security: readonly Record<string, unknown>[]): string[] {
   const nomes = new Set<string>();
   for (const entrada of security) {
@@ -359,7 +438,9 @@ export function carregarContrato(caminho: string): Contrato {
         if (!ehObjeto(convertido)) continue;
 
         const grupo = porLugar.get(lugar) ?? { propriedades: {}, exigidos: [] };
-        grupo.propriedades[nome] = convertido;
+        // A isenção de borda entra AQUI e em nenhum outro lugar: é o esquema que
+        // o Fastify instala, e é dele — e só dele — que a palavra isenta sai.
+        grupo.propriedades[nome] = semAsPalavrasIsentas(parametro, convertido, operationId);
         // Parâmetro de caminho é sempre obrigatório por definição da própria
         // especificação; o de query só quando o contrato disser.
         if (lugar === 'path' || parametro['required'] === true) grupo.exigidos.push(nome);
