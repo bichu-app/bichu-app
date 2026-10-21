@@ -50,6 +50,7 @@ import type {
   PassoDaEntrega,
   PedidoNaFilaDePlaquinhas,
 } from '../../ports/pedido-de-plaquinha.js';
+import { comoDeliveryAddress } from './endereco-de-entrega-no-contrato.js';
 import type { FilaDePlaquinhasAdministrativa } from '../../application/pedido-de-plaquinha-service.js';
 
 /** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas do painel. */
@@ -196,20 +197,14 @@ function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<str
   return {
     ref: pedido.ref,
     pet: { display_name: pedido.petNome, species: pedido.petEspecie },
-    // `DeliveryAddress` como o contrato o declara. `complement` sai
-    // explicitamente nulo, e nao omitido: o schema o declara opcional, e
-    // omitir faria o painel distinguir "sem complemento" de "campo que sumiu".
-    delivery_address: {
-      recipient_name: pedido.endereco.destinatario,
-      recipient_phone: pedido.endereco.telefone,
-      postal_code: pedido.endereco.cep,
-      street: pedido.endereco.logradouro,
-      street_number: pedido.endereco.numero,
-      complement: pedido.endereco.complemento,
-      neighborhood: pedido.endereco.bairro,
-      city: pedido.endereco.cidade,
-      state: pedido.endereco.uf,
-    },
+    // `DeliveryAddress` como o contrato o declara, pela MESMA traducao que a
+    // rota do tutor e a do endereco guardado usam
+    // (`endereco-de-entrega-no-contrato.ts`). Eram nove linhas copiadas aqui;
+    // com o endereco guardado da conta (cliente, 21/10/2026) elas seriam a
+    // terceira copia, e nove campos copiados a mao em tres lugares divergem
+    // pelo campo que alguem esquece num dos lados. `complement` continua
+    // saindo explicitamente nulo e nao omitido, e a razao esta na funcao.
+    delivery_address: comoDeliveryAddress(pedido.endereco),
     notes: pedido.observacao,
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),

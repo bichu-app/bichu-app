@@ -2036,6 +2036,75 @@ export interface CollarTagRequestsTable {
   delivered_at: Date | null;
 }
 
+/**
+ * O ENDERECO DE ENTREGA GUARDADO NA CONTA (`20261020000016`).
+ *
+ * **Autorizado pelo cliente em 21/10/2026**, nas palavras dele: *"um endereco
+ * de entrega salvo na conta, reusado em todo pedido e editavel num lugar so"*.
+ * E essa decisao que destrava a proibicao de acrescentar tabela do ADR-0011
+ * secao 5.5 -- quem ler o tipo sem o registro vai achar que alguem criou tabela
+ * por conta propria.
+ *
+ * ## Isto e a RESIDENCIA do usuario, e a postura e a mais estreita das tres
+ *
+ * **So o dono le.** A autorizacao mora na clausula `WHERE` (`user_id` e a chave
+ * primaria e toda leitura o compara com o chamador), e ausencia vira 404 e
+ * nunca 403 (ADR-0021). Nao sai em superficie publica, **nao aparece em lista
+ * nenhuma** e nao entra na trilha de auditoria.
+ *
+ * **NAO alimenta calculo de distancia.** Quem faz distancia e
+ * [UserReferenceLocationsTable], que e outra coisa: ela tem CEP, bairro, cidade
+ * e UF, nao tem logradouro, e alimenta `pending_profile_fields`. Por residencia
+ * ali vazaria residencia para calculo de distancia, e e por isso que esta
+ * tabela existe em vez de aquela ter sido alargada.
+ *
+ * **Nada e geocodificado** (ADR-0006): nao ha `lat`, nao ha `lon` e nao ha
+ * indice espacial. O CEP e resolvido NO APP, por servico publico, e o que chega
+ * aqui e texto ja digitado.
+ *
+ * ## Nao ha coluna `id`, e a ausencia e deliberada
+ *
+ * A chave e `user_id`, o recurso e singular (`/v1/me/delivery-address`) e nao
+ * ha identificador interno nenhum para por em caminho de rota (ADR-0010 item
+ * 6). Nao ha `ref` porque nao ha nada a referenciar de fora.
+ *
+ * ## Nao ha apagamento por prazo
+ *
+ * Nao existe coluna de expiracao e nenhuma varredura olha esta tabela. A
+ * decisao do cliente de 17/10/2026 e *"voce so deve apagar as informacoes, caso
+ * o usuario remova o pet ou delete a conta"*, e quem apaga e o
+ * `ON DELETE CASCADE` de `user_id`. Remover um PET nao apaga este endereco: ele
+ * e da conta e nao do pet.
+ *
+ * As travas de tamanho e formato sao, campo a campo, as MESMAS de
+ * [CollarTagRequestsTable], de proposito: o endereco guardado precisa poder
+ * preencher o pedido sem o banco recusar.
+ */
+export interface UserDeliveryAddressesTable {
+  /** O dono, e a chave primaria: "um endereco por conta" e a forma da tabela. */
+  user_id: string;
+  /** Quem recebe, como vai na etiqueta. Nao e `users.display_name`. */
+  recipient_name: string;
+  /** E.164 do Brasil. Nao e `users.phone_e164`: e o telefone de quem RECEBE. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  /**
+   * Quando a pessoa salvou pela ultima vez. **NAO e carimbo de expiracao** e
+   * nada o le para apagar nada. `Generated` porque a coluna tem `DEFAULT now()`
+   * e o `INSERT` do primeiro salvamento nao precisa escreve-lo.
+   */
+  updated_at: Generated<Date>;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -2502,6 +2571,11 @@ export interface Database {
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
   collar_tag_requests: CollarTagRequestsTable;
+  /**
+   * O endereco de entrega guardado na conta (`20261020000016`). RESIDENCIA do
+   * usuario: so o dono le, nunca em lista e nunca em calculo de distancia.
+   */
+  user_delivery_addresses: UserDeliveryAddressesTable;
   /** VISAO, e nao tabela. Somente leitura: nada escreve aqui (`20261018000009`). */
   fila_de_moderacao: FilaDeModeracaoView;
   user_blocks: UserBlocksTable;

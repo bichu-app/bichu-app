@@ -117,6 +117,8 @@ import {
   PedidoDePlaquinhaService,
 } from '../modules/tags/application/pedido-de-plaquinha-service.js';
 import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import { registrarRotasDoEnderecoGuardado } from '../modules/tags/adapters/http/endereco-guardado-routes.js';
+import { KyselyEnderecoGuardado } from '../modules/tags/adapters/persistence/kysely-endereco-guardado.js';
 import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
@@ -1317,6 +1319,16 @@ export async function main(): Promise<void> {
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
     registrarRotaDePedidoDePlaquinha(escopo, {
       pedidos: pedidosDePlaquinha,
+      autenticador: dependenciasDasRotasDeTag.autenticador,
+      contrato,
+    });
+    // O ENDERECO DE ENTREGA GUARDADO NA CONTA (cliente, 21/10/2026). Fica ao
+    // lado do pedido da plaquinha de proposito: e o MESMO endereco, pelo mesmo
+    // tipo de dominio, e e esta rota que faz o formulario do pedido nascer
+    // preenchido. Mesmo autenticador do modulo -- as duas rotas sao do dono e
+    // de mais ninguem.
+    registrarRotasDoEnderecoGuardado(escopo, {
+      enderecos: new KyselyEnderecoGuardado(db),
       autenticador: dependenciasDasRotasDeTag.autenticador,
       contrato,
     });
