@@ -13,7 +13,6 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../../roteamento/rotas.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
 import 'comentarios_da_publicacao.dart';
