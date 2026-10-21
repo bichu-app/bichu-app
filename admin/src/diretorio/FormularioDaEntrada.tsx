@@ -1036,7 +1036,7 @@ export default function FormularioDaEntrada() {
           aoMudar={(v) => mudar({ site: v })}
           maximo={LIMITE_DO_SITE}
           erro={erros['e-site']}
-          ajuda="Opcional. O endereço completo, começando com https:// — por exemplo https://clinicasantabarbara.com.br/contato. Aparece no app ao lado do telefone. Não substitui o telefone para publicar."
+          ajuda="Opcional. O endereço completo, começando com https:// — por exemplo https://clinica.exemplo.test/contato. Aparece no app ao lado do telefone. Não substitui o telefone para publicar."
         />
 
         {/* Duas imagens, e DOIS campos: a logo e quadrada e pequena, a foto e
