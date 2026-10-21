@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/modelos_rede.dart';
 import '../../dispositivo/saida_do_app.dart';
+import '../../dispositivo/textos_do_app_de_mapas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
@@ -141,12 +142,16 @@ class LocalDoEncontro extends StatefulWidget {
   static const String textoDoErro = 'Não conseguimos carregar o mapa agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
   static const String nomeDeTentar = 'Tentar carregar o mapa de novo';
-  static const String rotuloDoBotao = 'Abrir no app de mapas';
-  static const String falhaAoAbrir = 'Não conseguimos abrir o app de mapas.';
-
-  /// O botao do endereco por extenso. **Quem resolve o texto e o app de mapas
-  /// do aparelho** (ADR-0006: o Bichu nao geocodifica).
-  static const String rotuloDoMapa = 'Abrir no mapa';
+  // OS TRES TEXTOS DE ABRIR MAPA NAO MORAM MAIS AQUI.
+  //
+  // `TextosDoAppDeMapas.rotuloDoPonto` (o botao sob a area de mapa),
+  // `TextosDoAppDeMapas.rotuloDoEndereco` (o toque do endereco por extenso) e
+  // `TextosDoAppDeMapas.falhaAoAbrir` (a frase de falha dos dois) estao em
+  // `lib/dispositivo/textos_do_app_de_mapas.dart`, ao lado da porta que as
+  // tres superficies chamam. Esta tela era a regua enquanto havia tres
+  // redacoes; agora a regua e a fonte, e um portao de fonte reprova qualquer
+  // arquivo de `app/lib/` que escreva estes literais a mao. O cabecalho
+  // daquele arquivo tem a historia e a razao da redacao da falha.
 
   /// A chave da area do mapa, para as iscas acharem a area sem depender de
   /// texto (a area nao tem texto de proposito).
@@ -285,7 +290,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
     );
     if (!abriu && mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text(LocalDoEncontro.falhaAoAbrir)),
+        const SnackBar(content: Text(TextosDoAppDeMapas.falhaAoAbrir)),
       );
     }
   }
@@ -297,7 +302,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
         await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
     if (!abriu && mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text(LocalDoEncontro.falhaAoAbrir)),
+        const SnackBar(content: Text(TextosDoAppDeMapas.falhaAoAbrir)),
       );
     }
   }
@@ -351,7 +356,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
               ),
               child: Semantics(
                 button: true,
-                label: '${LocalDoEncontro.rotuloDoMapa}: $endereco',
+                label: '${TextosDoAppDeMapas.rotuloDoEndereco}: $endereco',
                 onTap: _abrirEndereco,
                 excludeSemantics: true,
                 child: OutlinedButton(
@@ -362,7 +367,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Flexible(child: Text(LocalDoEncontro.rotuloDoMapa)),
+                      Flexible(child: Text(TextosDoAppDeMapas.rotuloDoEndereco)),
                       SizedBox(width: BichuEspaco.e2),
                       Icon(Icons.open_in_new, size: BichuEspaco.e5),
                     ],
@@ -380,7 +385,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
               ),
               child: Semantics(
                 button: true,
-                label: '${LocalDoEncontro.rotuloDoBotao}: ${widget.lugar.nomeDoLugar}',
+                label: '${TextosDoAppDeMapas.rotuloDoPonto}: ${widget.lugar.nomeDoLugar}',
                 onTap: _abrirMapas,
                 excludeSemantics: true,
                 child: OutlinedButton(
@@ -392,7 +397,7 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Flexible(child: Text(LocalDoEncontro.rotuloDoBotao)),
+                      Flexible(child: Text(TextosDoAppDeMapas.rotuloDoPonto)),
                       SizedBox(width: BichuEspaco.e2),
                       Icon(Icons.open_in_new, size: BichuEspaco.e5),
                     ],
