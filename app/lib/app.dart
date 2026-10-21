@@ -619,7 +619,20 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       ],
     );
     _roteador = criarRoteador(_sessao);
-    _arrancar();
+    // **NAO esperado de proposito, mas NAO desobservado.** O primeiro quadro
+    // nao pode esperar esta fila -- e por isso que ela e disparada e nao
+    // aguardada. So que, chamada pelada, uma excecao aqui virava erro
+    // assincrono nao tratado: nao falhava alto, nao aparecia em tela, e o que
+    // sobrava era a pessoa numa tela parada sem nenhuma pista. O `catchError`
+    // nao conserta a falha, ele a torna legivel.
+    unawaited(
+      _arrancar().catchError((Object erro) {
+        debugPrint(
+          'A fila de arranque parou antes do fim ($erro). O app ja esta de pe; '
+          'o que ficou para tras sao as retomadas (fotos, fila, contadores).',
+        );
+      }),
+    );
   }
 
   /// O arranque: ler o chaveiro e, **so depois disso**, retomar a foto que

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/modelos.dart';
@@ -32,7 +33,32 @@ class DepositoNoChaveiro implements DepositoDeSessao {
 
   @override
   Future<Sessao?> ler() async {
-    final bruto = await _chaveiro.read(key: _chave);
+    // **A LEITURA ESTAVA FORA DO `try`, e o `try` abaixo so cobria o
+    // `jsonDecode`.** Uma `PlatformException` do chaveiro subia inteira por
+    // `iniciar()` e caia em `_arrancar()`, que e chamado pelado: virava erro
+    // assincrono nao tratado, `_mudar` nunca acontecia, e o estado da sessao
+    // ficava `carregando` para sempre -- com a pessoa presa na
+    // `TelaDeAbertura` achando que era splash.
+    //
+    // **E o caso esperado, nao o excentrico**: com provisionamento gratuito e
+    // app reassinado pelo Xcode, o direito de acesso ao Keychain vem do perfil
+    // e a leitura pode recusar.
+    //
+    // **Falha aqui NAO apaga nada.** O desfecho e "nao sei se ha sessao", e a
+    // resposta honesta para isso e `null` -- a pessoa entra de novo. Chamar
+    // `apagar()` seria destruir uma credencial provavelmente intacta porque o
+    // chaveiro nao respondeu desta vez, e isso nao se desfaz.
+    final String? bruto;
+    try {
+      bruto = await _chaveiro.read(key: _chave);
+    } on Object catch (erro) {
+      debugPrint(
+        'Sessao nao lida neste arranque: o chaveiro do sistema recusou '
+        '($erro). O app sobe DESLOGADO e a credencial guardada fica onde '
+        'esta; nada foi apagado.',
+      );
+      return null;
+    }
     if (bruto == null || bruto.isEmpty) return null;
     try {
       final json = jsonDecode(bruto) as Map<String, dynamic>;

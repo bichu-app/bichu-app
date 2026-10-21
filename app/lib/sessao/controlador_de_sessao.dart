@@ -144,6 +144,18 @@ void registrarSaidaNoCanalPadrao(AvisoDeSaida aviso) {
   }
 }
 
+/// O TETO DA LEITURA DO CHAVEIRO NO ARRANQUE.
+///
+/// A leitura e local -- Keychain no iOS, Keystore no Android -- e nao sai para
+/// a rede, entao o valor legitimo e de milissegundos. O teto nao esta aqui
+/// para acomodar lentidao: esta para que o chaveiro que **nao responde** tenha
+/// desfecho, porque [EstadoDaSessao.carregando] sem saida e a tela de abertura
+/// sem saida.
+///
+/// Dois segundos e folgado para uma leitura local e curto o bastante para nao
+/// parecer app travado.
+const Duration tetoDaLeituraDaSessao = Duration(seconds: 2);
+
 /// Em que ponto do arranque e da autenticacao o app esta.
 enum EstadoDaSessao {
   /// O app ainda esta lendo o chaveiro. E o estado da splash, e ele e curto.
@@ -256,7 +268,28 @@ class ControladorDeSessao extends ChangeNotifier {
   /// sessao que ja tinha e a renovacao acontece quando o sinal voltar. Deslogar
   /// alguem por falta de rede e a pior falha possivel neste produto.
   Future<void> iniciar() async {
-    final guardada = await _deposito.ler();
+    // **ESTE METODO E O UNICO QUE TIRA A PESSOA DA `TelaDeAbertura`.** O
+    // `redirect` do roteador segura quem esta em `EstadoDaSessao.carregando`,
+    // e `carregando` e o valor com que `_estado` nasce: enquanto `_mudar` nao
+    // acontecer, a tela de abertura nao tem saida. Entao **toda** saida deste
+    // metodo precisa passar por `_mudar`, inclusive as de falha.
+    //
+    // O teto cobre o deposito que nao RESPONDE, e o `catch` cobre o que
+    // LANCA. Os dois existem porque `try/catch` nao pega travamento: um
+    // `Future` que nunca completa tambem nunca lanca, e sem o `.timeout` ele
+    // deixaria a pessoa numa tela parada para sempre -- que e o mesmo defeito
+    // que o teto do push conserta no `main.dart`, uma camada acima.
+    final Sessao? guardada;
+    try {
+      guardada = await _deposito.ler().timeout(tetoDaLeituraDaSessao);
+    } on Object catch (erro) {
+      debugPrint(
+        'Sessao nao carregada neste arranque ($erro). O app sobe DESLOGADO '
+        'em vez de ficar numa tela parada; quem tinha sessao entra de novo.',
+      );
+      _mudar(EstadoDaSessao.deslogado, null);
+      return;
+    }
     if (guardada == null) {
       _mudar(EstadoDaSessao.deslogado, null);
       return;
