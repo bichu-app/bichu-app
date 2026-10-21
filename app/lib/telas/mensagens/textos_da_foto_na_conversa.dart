@@ -117,6 +117,36 @@ abstract final class TextosDaFotoNaConversa {
   static const String fotoDeQuemDizTerEncontrado =
       'Foto enviada por quem diz ter encontrado o animal.';
 
+  /// O aviso de que a foto **nao vai ser vista** pelo outro lado.
+  ///
+  /// ## Ele aparece ANTES do envio, e e isso que o torna util
+  ///
+  /// Depois do envio ele seria uma constatacao; antes, e uma decisao: a pessoa
+  /// escolhe se vale mandar a foto de todo jeito (ela fica gravada, e vale para
+  /// ela) ou se escreve o recado em palavras. **O envio nao e bloqueado.**
+  ///
+  /// ## Sem jargao, e sem culpar ninguem
+  ///
+  /// A causa real e uma regra de seguranca do servidor sobre o endereco da
+  /// imagem, e nada disso cabe aqui: "chave", "URL assinada" e o numero da
+  /// regra sao vocabulario nosso. O que a pessoa precisa saber e **o que
+  /// acontece** e **o que fazer** -- e a segunda frase e a parte acionavel,
+  /// porque o texto chega inteiro do outro lado.
+  ///
+  /// "nao tem conta no Bichu" nao e jargao: e o fato, em portugues, e e o que
+  /// explica por que o aplicativo nao consegue abrir a foto para aquela pessoa.
+  static const String aFotoNaoChegaDoOutroLado =
+      'Quem está do outro lado não tem conta no Bichu e não consegue abrir '
+      'fotos. O que você escrever, essa pessoa lê.';
+
+  /// A marca na mensagem JA ENVIADA, no fio de quem a mandou.
+  ///
+  /// **Discreta de proposito: nao e erro, e como o canal funciona.** Uma faixa
+  /// vermelha aqui diria que algo deu errado, e nada deu -- a foto subiu, foi
+  /// gravada e esta na conversa. O que esta linha impede e o tutor ficar
+  /// esperando reacao de quem nao viu nada.
+  static const String essaPessoaNaoVeFotos = 'Esta pessoa não vê fotos.';
+
   /// A legenda da foto que a PROPRIA pessoa mandou.
   static const String fotoQueVoceEnviou = 'Foto que você enviou.';
 

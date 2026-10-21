@@ -342,6 +342,7 @@ class Conversa {
     required this.participants,
     required this.messages,
     required this.unread,
+    this.fotoAlcancaOOutroLado = true,
     this.caseId,
     this.foundReportId,
     this.nextCursor,
@@ -428,6 +429,46 @@ class Conversa {
   /// `last_message_at`: quando foi a ultima mensagem. Nulo junto com a previa.
   final DateTime? lastMessageAt;
 
+  /// `photo_reaches_other_side`: uma foto que EU mandar vai ser legivel pelo
+  /// outro lado.
+  ///
+  /// ## A LEITURA DA FOTO E ASSIMETRICA, e isso foi ACEITO e nao e defeito
+  ///
+  /// O achador **sem conta** ve a foto que ele mesmo mandou e **nao ve a do
+  /// tutor**. A causa e de seguranca e mora no servidor: a chave do objeto do
+  /// lado com conta embute o identificador do aviso de achado, que e UUID
+  /// interno e nao pode sair para quem nao tem conta (SEC-001), e o guarda do
+  /// leitor de midia so deixa passar a chave do lado sem conta.
+  ///
+  /// **Essa assimetria nao vai ser consertada, e o que falta e DIZER.** Hoje o
+  /// tutor manda a foto, ela aparece inteira no fio dele, e ele espera reacao
+  /// de alguem que nao viu nada. O campo existe para a tela avisar **antes do
+  /// envio** -- a pessoa decide com a informacao na mao, e nao descobre depois.
+  ///
+  /// Falso **nao bloqueia o envio**, e isso e deliberado: a foto e gravada,
+  /// vale para o proprio tutor e valeria para um achador COM conta. Bloquear
+  /// tiraria um recurso por um motivo que a pessoa pode nao ter.
+  ///
+  /// ## ESTE CAMPO NAO ESTA NO CONTRATO HOJE
+  ///
+  /// Medido em 21/10/2026 contra `api/openapi.yaml` nesta arvore e contra
+  /// `feat/foto-na-conversa-servidor` (`3400b04a`): nenhum dos dois declara
+  /// `photo_reaches_other_side`. O lado servidor esta escrevendo com este nome
+  /// exato, e ler o campo agora e o que faz a tela ligar sozinha quando a
+  /// resposta o trouxer -- o mesmo tratamento de [foundReportId].
+  ///
+  /// **O padrao e `true`, isto e, NAO AVISA.** Ausente significa que esta
+  /// resposta nao disse nada sobre o alcance, e avisar sobre o que nao se sabe
+  /// seria afirmar a quem manda a foto que o outro lado nao a ve -- sem o
+  /// servidor ter dito isso. O preco do padrao e o defeito de hoje continuar
+  /// mais um pouco contra servidor antigo; o preco do contrario seria a tela
+  /// mentir em TODA conversa, inclusive nas em que a foto chega.
+  ///
+  /// `FinderConversation` nao tem o campo e nao deve ter: aquele schema serve
+  /// o achador sem conta, e a foto DELE alcanca o tutor -- nao ha aviso a dar
+  /// daquele lado.
+  final bool fotoAlcancaOOutroLado;
+
   /// O outro lado, para o titulo da conversa e para a marca neutra.
   ///
   /// Recebe o papel do proprio chamador, que a lista nao sabe: `participants`
@@ -473,6 +514,10 @@ class Conversa {
       // `false`: pintar a marca sem o servidor ter dito que ha algo nao lido
       // seria a mentira que o contador existe para evitar, so na outra direcao.
       unread: bruto['unread'] == true,
+      // `== false` e nao `!= true`: so o `false` EXPLICITO liga o aviso.
+      // Ausente, nulo ou de tipo inesperado caem no padrao que nao afirma
+      // nada. Ver [Conversa.fotoAlcancaOOutroLado].
+      fotoAlcancaOOutroLado: bruto['photo_reaches_other_side'] != false,
       lastMessagePreview: previa is String ? previa : null,
       lastMessageAt: quando is String ? DateTime.tryParse(quando) : null,
       participants: participantes is! List

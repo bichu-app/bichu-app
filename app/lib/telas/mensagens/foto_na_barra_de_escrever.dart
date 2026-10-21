@@ -36,6 +36,8 @@
 /// barra que anda sozinha ate 100%.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../api/modelos_conversa.dart';
@@ -95,6 +97,7 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
     required this.aoTentarDeNovo,
     super.key,
     this.motivoDaRecusa,
+    this.alcancaOOutroLado = true,
   });
 
   /// A foto no aparelho. Esta peca so e construida quando ha uma.
@@ -126,15 +129,49 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
   /// que nao foi atualizada que continua na tela.
   final String? motivoDaRecusa;
 
-  /// A altura da previa, em dp.
+  /// Uma foto que esta pessoa mandar vai ser legivel pelo outro lado.
+  ///
+  /// Falso desenha o aviso **junto da previa, antes do envio** -- e nao
+  /// desabilita nada. Ver `Conversa.fotoAlcancaOOutroLado`: a assimetria foi
+  /// aceita, e o que falta e dizer.
+  ///
+  /// O padrao e `true` pelo mesmo motivo do modelo: nao avisar sobre o que nao
+  /// se sabe.
+  final bool alcancaOOutroLado;
+
+  /// A altura MAXIMA da previa, em dp.
   ///
   /// **220 e um numero com motivo.** Ela precisa ser grande o bastante para a
   /// pessoa reconhecer QUAL foto da galeria escolheu -- e essa e a unica defesa
-  /// contra o envio por engano, que nao tem desfazer. E precisa caber acima da
-  /// barra de escrever com o teclado aberto num aparelho de 640 dp de altura,
-  /// senao a previa empurra o campo de legenda para fora da tela e a pessoa nao
-  /// consegue cumprir a legenda obrigatoria.
+  /// contra o envio por engano, que nao tem desfazer.
   static const double altura = 220;
+
+  /// Quanto da altura da tela a previa pode ocupar, no maximo.
+  ///
+  /// ## Por que 220 dp fixo NAO servia, e isso foi medido
+  ///
+  /// A previa nao esta numa area rolavel: ela mora entre o `Expanded` da
+  /// conversa e a barra de escrever, e e altura FIXA naquela coluna. Com o
+  /// aviso de alcance dentro dela, o conjunto passou da altura disponivel e o
+  /// `RenderFlex` estourou por 6 px -- medido pela isca do grupo (8) numa
+  /// janela de 544 dp de altura util, que e menos que um aparelho de 640 dp com
+  /// o teclado aberto.
+  ///
+  /// E ESTOURO NAO E COSMETICO AQUI: o que sai da tela por baixo e o campo de
+  /// legenda, que e obrigatorio para a foto poder ser enviada. A pessoa ficaria
+  /// com uma previa bonita e nenhum jeito de cumprir a legenda.
+  ///
+  /// `0.28` e o numero: numa tela de 800 dp da 224 e o teto de 220 vale; numa
+  /// de 544 da 152 e a previa encolhe em vez de empurrar o campo. Encolher
+  /// preserva o que a previa existe para fazer -- reconhecer a foto --, e
+  /// empurrar destroi o que vem depois dela.
+  static const double fracaoMaximaDaTela = 0.28;
+
+  /// A altura que esta previa vai usar de verdade.
+  static double alturaEm(BuildContext context) => math.min(
+    altura,
+    MediaQuery.sizeOf(context).height * fracaoMaximaDaTela,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +192,7 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
               children: <Widget>[
                 PreviaDaFoto(
                   foto: foto,
-                  altura: altura,
+                  altura: alturaEm(context),
                   // **O rotulo diz que nada foi enviado.** E o fato que
                   // distingue este estado de uma foto ja na conversa, e quem
                   // nao ve a tela nao tem outro jeito de saber.
@@ -175,6 +212,19 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
               ],
             ),
             const SizedBox(height: BichuEspaco.e2),
+            // O AVISO DE ALCANCE VEM PRIMEIRO, e antes do estado do envio.
+            //
+            // Ele nao depende da fase: vale desde a escolha, enquanto a foto
+            // sobe e quando ela esta pronta -- e o fato que ele conta e sobre
+            // o CANAL, nao sobre esta tentativa. Preso a uma fase so, ele
+            // apareceria e desapareceria enquanto a pessoa decide.
+            if (!alcancaOOutroLado)
+              Padding(
+                padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+                child: FaixaDeAviso(
+                  texto: TextosDaFotoNaConversa.aFotoNaoChegaDoOutroLado,
+                ),
+              ),
             ..._estado(context, cores, textos),
           ],
         ),
@@ -384,6 +434,7 @@ class FotoDaMensagem extends StatelessWidget {
     required this.papel,
     required this.aoBuscarDeNovo,
     super.key,
+    this.alcancouOOutroLado = true,
   });
 
   /// A URL assinada de `Message.photo_url`.
@@ -394,6 +445,18 @@ class FotoDaMensagem extends StatelessWidget {
 
   /// Busca a conversa outra vez, para vir assinatura nova.
   final VoidCallback aoBuscarDeNovo;
+
+  /// **ESTA** foto e legivel pelo outro lado.
+  ///
+  /// E por foto, e nao por conversa, e a diferenca e o que mantem a frase
+  /// verdadeira: a foto que o achador mandou alcancou o tutor **por
+  /// definicao** -- ela esta na tela dele agora. Quem decide e `_Bolha`, que e
+  /// quem sabe de quem e a mensagem; esta peca so desenha o que recebeu.
+  ///
+  /// Marcar a imagem de outra pessoa com "esta pessoa nao ve fotos" seria dizer
+  /// a coisa errada sobre a imagem errada -- e por isso a decisao NAO e
+  /// repetida aqui dentro: uma segunda condicao seria a que diverge.
+  final bool alcancouOOutroLado;
 
   /// A proporcao do quadro.
   ///
@@ -440,6 +503,23 @@ class FotoDaMensagem extends StatelessWidget {
             ),
           ),
         ),
+        // A MARCA NA MENSAGEM JA ENVIADA, so na do proprio tutor.
+        //
+        // **Sem `ExcludeSemantics`**, ao contrario da legenda: este fato nao
+        // esta no nome acessivel da imagem, e quem ouve a tela precisa dele
+        // tanto quanto quem a le -- e justamente ele que impede ficar
+        // esperando reacao de quem nao viu nada.
+        //
+        // `textMuted` e nao `error`: nao e erro, e como o canal funciona. A
+        // foto subiu, foi gravada e esta na conversa.
+        if (!alcancouOOutroLado)
+          Padding(
+            padding: const EdgeInsets.only(top: BichuEspaco.e1),
+            child: Text(
+              TextosDaFotoNaConversa.essaPessoaNaoVeFotos,
+              style: textos.bodySmall?.copyWith(color: cores.textMuted),
+            ),
+          ),
       ],
     );
   }

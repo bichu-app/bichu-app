@@ -111,9 +111,14 @@ const String idDoUpload = '0192f3a1-7b2c-7def-8a01-0000000beef0';
 Map<String, dynamic> conversaComAviso({
   List<Map<String, dynamic>>? mensagens,
   String? aviso = idDoAviso,
+  // `null` NAO manda a chave: e o corpo do servidor que ainda nao tem o campo,
+  // e e esse estado que o padrao do modelo cobre. `true`/`false` mandam o valor
+  // explicito.
+  bool? alcanca,
 }) {
   final corpo = conversa(mensagens: mensagens);
   if (aviso != null) corpo['found_report_id'] = aviso;
+  if (alcanca != null) corpo['photo_reaches_other_side'] = alcanca;
   return corpo;
 }
 
@@ -1278,6 +1283,344 @@ void main() {
       // CONTRAPESO: um slug de outra coisa nao e nenhum dos dois.
       expect(fotoAindaNaoEstaPronta(problema('rate-limited')), isFalse);
       expect(fotoFoiRecusadaPeloServidor(problema('rate-limited')), isFalse);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('(8) a foto que NAO chega do outro lado: a tela diz, e nao bloqueia', () {
+    // POR QUE ESTE GRUPO EXISTE, e o que ele protege.
+    //
+    // A leitura da foto e ASSIMETRICA e isso foi ACEITO: o achador sem conta ve
+    // a foto que ele mandou e nao ve a do tutor, porque a chave do objeto do
+    // lado com conta embute o identificador do aviso, que nao pode sair para
+    // quem nao tem conta (SEC-001). Nao e defeito a consertar.
+    //
+    // O DEFEITO E DE EXPECTATIVA: o tutor manda a foto, ela aparece inteira no
+    // fio dele, e ele espera reacao de alguem que nao viu nada. Entao o que
+    // estas iscas cobram e TRES coisas, e a terceira e tao importante quanto as
+    // duas primeiras:
+    //
+    //   1. com `photo_reaches_other_side` FALSO, o aviso aparece ANTES do envio;
+    //   2. com VERDADEIRO, ele nao aparece;
+    //   3. nos DOIS casos o envio continua permitido.
+    //
+    // A (3) e a que impede o conserto virar outro defeito: bloquear o envio
+    // tiraria um recurso que vale para o proprio tutor -- a foto e gravada -- e
+    // valeria inteiro para um achador COM conta.
+
+    testWidgets(
+      'ISCA: FALSO avisa ANTES do envio, perto do anexar e SEM foto escolhida',
+      (tester) async {
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            caminhoDaConversa: (_) => json200(conversaComAviso(alcanca: false)),
+          },
+        );
+        await abrirAConversa(
+          tester,
+          servidor: servidor,
+          camera: cameraComFotoDe(bytesDeFotoDeTeste.length),
+          armazenamento: ArmazenamentoDeTeste(),
+        );
+
+        // SEM NENHUM TOQUE AINDA. E aqui que o aviso precisa estar: esperar a
+        // escolha faria a pessoa abrir a galeria e procurar a foto certa para
+        // so entao descobrir que ela nao vai ser vista.
+        expect(
+          find.byType(PreviaDaFotoDaConversa),
+          findsNothing,
+          reason: 'contrapeso do proprio caso: nada foi escolhido ainda',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('não consegue abrir'),
+          reason:
+              'REPROVA: a tela nao avisa que a foto nao vai ser vista. O tutor '
+              'manda a foto e fica esperando reacao de quem nao viu nada -- e '
+              'depois do envio o aviso seria constatacao, nao decisao.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('escrever'),
+          reason:
+              'REPROVA: o aviso diz o problema e nao diz o que fazer. O texto '
+              'CHEGA inteiro do outro lado, e essa e a parte acionavel.',
+        );
+      },
+    );
+
+    testWidgets('ISCA: FALSO avisa TAMBEM na previa, com a foto na tela', (
+      tester,
+    ) async {
+      final servidor = ServidorDeConversas(
+        <String, http.Response Function(http.Request)>{
+          caminhoDaConversa: (_) => json200(conversaComAviso(alcanca: false)),
+        },
+      );
+      await abrirAConversa(
+        tester,
+        servidor: servidor,
+        camera: cameraComFotoDe(bytesDeFotoDeTeste.length),
+        armazenamento: ArmazenamentoDeTeste(),
+      );
+      await anexarDaGaleria(tester);
+
+      final previa = tester.widget<PreviaDaFotoDaConversa>(
+        find.byType(PreviaDaFotoDaConversa),
+      );
+      expect(
+        previa.alcancaOOutroLado,
+        isFalse,
+        reason:
+            'REPROVA: a previa nao recebeu o alcance. Ela e o ultimo lugar '
+            'antes do toque em Enviar, e e nela que a pessoa esta olhando.',
+      );
+      expect(
+        find.byType(FaixaDeAviso),
+        findsWidgets,
+        reason:
+            'REPROVA: a previa nao desenhou o aviso. Com a foto na tela e o '
+            'dedo perto do Enviar, a linha da barra pode ter rolado para fora '
+            'do campo de visao.',
+      );
+    });
+
+    testWidgets(
+      'ISCA: VERDADEIRO nao avisa nada -- e a foto continua desenhada',
+      (tester) async {
+        // O CONTRAPESO DO GRUPO. Sem ele, as duas iscas acima passariam numa
+        // tela que avisa SEMPRE -- e avisar sempre e mentir em toda conversa
+        // com um achador que tem conta, que e o caminho normal.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            caminhoDaConversa: (_) => json200(conversaComAviso(alcanca: true)),
+          },
+        );
+        await abrirAConversa(
+          tester,
+          servidor: servidor,
+          camera: cameraComFotoDe(bytesDeFotoDeTeste.length),
+          armazenamento: ArmazenamentoDeTeste(),
+        );
+        await anexarDaGaleria(tester);
+
+        expect(
+          textoDaTela(tester),
+          isNot(contains('não consegue abrir')),
+          reason:
+              'REPROVA: a tela avisou que a foto nao chega numa conversa em '
+              'que ela CHEGA. O aviso vale pela excecao; sempre aceso, ele '
+              'desaconselha a foto em toda conversa e deixa de ser lido.',
+        );
+        expect(
+          textoDaTela(tester),
+          isNot(contains('não vê fotos')),
+          reason:
+              'REPROVA: a marca de "nao ve fotos" apareceu com o alcance '
+              'verdadeiro.',
+        );
+        // CONTRAPESO DO CONTRAPESO: a previa ESTA na tela e a localizacao
+        // continua dita. Sem isto, os dois `isNot` acima passariam numa tela
+        // que nao desenhou nada.
+        expect(
+          find.byType(PreviaDaFotoDaConversa),
+          findsOneWidget,
+          reason:
+              'REPROVA: a previa nao apareceu, e os dois casos acima nao '
+              'mediram nada.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('localização é removida'),
+          reason:
+              'REPROVA: nem a linha da localizacao esta na tela. Entao a barra '
+              'nao foi desenhada.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: o envio CONTINUA PERMITIDO com o alcance falso, e a mensagem sai '
+      'com a foto',
+      (tester) async {
+        // A TERCEIRA EXIGENCIA, e a que impede o conserto virar outro defeito.
+        // A foto e gravada e vale para o proprio tutor; bloquear tiraria um
+        // recurso por um motivo que a pessoa pode nao ter.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            caminhoDaConversa: (_) => json200(conversaComAviso(alcanca: false)),
+            caminhoDasMensagens: (_) => json200(<String, dynamic>{
+              ...mensagem(papel: 'tutor', corpo: 'Olha ele aqui'),
+              'photo_url': urlDaFotoDaMensagem,
+            }, status: 201),
+          },
+        );
+        await abrirAConversa(
+          tester,
+          servidor: servidor,
+          camera: cameraComFotoDe(bytesDeFotoDeTeste.length),
+          armazenamento: ArmazenamentoDeTeste(),
+        );
+        await tester.enterText(find.byType(TextField), 'Olha ele aqui');
+        await tester.pumpAndSettle();
+        await anexarDaGaleria(tester);
+
+        final botao = tester.widget<IconButton>(
+          find
+              .ancestor(
+                of: find.byTooltip(TextosDasMensagens.enviar),
+                matching: find.byType(IconButton),
+              )
+              .first,
+        );
+        expect(
+          botao.onPressed,
+          isNotNull,
+          reason:
+              'REPROVA: o alcance falso DESABILITOU o envio. O aviso existe '
+              'para a pessoa DECIDIR, nao para o app decidir por ela -- e a '
+              'foto vale para o proprio tutor e valeria inteira para um achador '
+              'com conta.',
+        );
+
+        await tester.tap(find.byTooltip(TextosDasMensagens.enviar));
+        await tester.pumpAndSettle();
+
+        final postadas = servidor.chamadasA(caminhoDasMensagens);
+        expect(
+          postadas.length,
+          1,
+          reason: 'REPROVA: a mensagem nao foi postada com o alcance falso.',
+        );
+        expect(
+          (jsonDecode(postadas.single.body) as Map<String, dynamic>)['photo_upload_id'],
+          idDoUpload,
+          reason:
+              'REPROVA: a mensagem saiu SEM a foto. O envio nao e bloqueado e a '
+              'foto nao e silenciosamente descartada -- as duas coisas '
+              'deixariam a pessoa achando que mandou o que nao mandou.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: a mensagem JA ENVIADA do tutor carrega a marca, e a do achador NAO',
+      (tester) async {
+        // O tutor nao pode ficar esperando reacao. E a marca e so na foto DELE:
+        // a do achador alcancou por definicao -- ela esta na tela dele agora --,
+        // e marca-la diria a coisa errada sobre a imagem errada.
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            caminhoDaConversa: (_) => json200(
+              conversaComAviso(
+                alcanca: false,
+                mensagens: <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    ...mensagem(papel: 'tutor', corpo: 'Olha ele aqui'),
+                    'photo_url': urlDaFotoDaMensagem,
+                  },
+                  <String, dynamic>{
+                    ...mensagem(
+                      id: '0192f3a1-7b2c-7def-8a01-00000000cccc',
+                      papel: 'finder',
+                      corpo: 'Achei ele na praça',
+                    ),
+                    'photo_url': '$urlDaFotoDaMensagem&dele=1',
+                  },
+                ],
+              ),
+            ),
+          },
+        );
+        await abrirAConversa(
+          tester,
+          servidor: servidor,
+          camera: cameraComFotoDe(32),
+          armazenamento: ArmazenamentoDeTeste(),
+        );
+
+        final fotos = tester
+            .widgetList<FotoDaMensagem>(
+              find.byType(FotoDaMensagem, skipOffstage: false),
+            )
+            .toList();
+        expect(fotos.length, 2, reason: 'as duas fotos foram desenhadas');
+        expect(
+          textoDaTela(tester),
+          contains('não vê fotos'),
+          reason:
+              'REPROVA: a mensagem que o tutor JA mandou nao diz que a outra '
+              'pessoa nao a ve. Ele fica esperando reacao de quem nao viu nada, '
+              'que e o defeito inteiro desta historia.',
+        );
+        // A MARCA E SO NA DO TUTOR, e isso e medido no widget e nao no texto:
+        // o texto da tela nao diz de qual bolha a frase saiu.
+        final porPapel = <PapelNaConversa, bool>{
+          for (final f in fotos) f.papel: f.alcancouOOutroLado,
+        };
+        expect(
+          porPapel[PapelNaConversa.tutor],
+          isFalse,
+          reason: 'REPROVA: a foto do tutor nao recebeu a marca.',
+        );
+        expect(
+          porPapel[PapelNaConversa.achador],
+          isTrue,
+          reason:
+              'REPROVA: a foto do ACHADOR recebeu a marca de alcance. Ela '
+              'alcancou por definicao -- esta na tela do tutor agora --, e '
+              'dizer que "esta pessoa nao ve fotos" sobre a imagem que ELA '
+              'mandou e a coisa errada sobre a imagem errada.',
+        );
+        expect(
+          fotos
+              .where((f) => f.papel == PapelNaConversa.achador)
+              .single
+              .legenda,
+          TextosDaFotoNaConversa.fotoDeQuemDizTerEncontrado,
+          reason: 'a ressalva da foto recebida continua intacta',
+        );
+      },
+    );
+
+    test('ISCA: o campo AUSENTE nao liga o aviso, e so o `false` liga', () {
+      // `photo_reaches_other_side` nao esta no contrato em 21/10/2026 -- medido
+      // nesta arvore e em `feat/foto-na-conversa-servidor` (3400b04a). Ausente
+      // significa que esta resposta nao disse nada, e avisar sobre o que nao se
+      // sabe seria afirmar ao tutor que o outro lado nao ve a foto SEM o
+      // servidor ter dito.
+      //
+      // Sem este caso, um `!= true` no lugar do `!= false` deixaria a tela
+      // avisando em TODA conversa contra servidor antigo -- inclusive nas em
+      // que a foto chega.
+      Conversa? ler(Map<String, dynamic> corpo) => Conversa.doJson(corpo);
+
+      expect(
+        ler(conversaComAviso())?.fotoAlcancaOOutroLado,
+        isTrue,
+        reason:
+            'REPROVA: a chave AUSENTE ligou o aviso. A tela passaria a dizer '
+            '"essa pessoa nao consegue abrir fotos" em toda conversa contra um '
+            'servidor que ainda nao manda o campo.',
+      );
+      expect(
+        ler(conversaComAviso(alcanca: true))?.fotoAlcancaOOutroLado,
+        isTrue,
+      );
+      // O CONTRAPESO: o `false` EXPLICITO liga. Sem ele, os dois casos acima
+      // passariam numa leitura que devolve `true` sempre -- e o aviso nunca
+      // apareceria.
+      expect(
+        ler(conversaComAviso(alcanca: false))?.fotoAlcancaOOutroLado,
+        isFalse,
+        reason:
+            'REPROVA: o `false` explicito nao liga o aviso. Entao os dois casos '
+            'acima nao mediram nada, e o aviso nunca aparece.',
+      );
+      // Tipo inesperado cai no padrao que nao afirma nada.
+      final estranho = conversaComAviso();
+      estranho['photo_reaches_other_side'] = 'nao';
+      expect(ler(estranho)?.fotoAlcancaOOutroLado, isTrue);
     });
   });
 

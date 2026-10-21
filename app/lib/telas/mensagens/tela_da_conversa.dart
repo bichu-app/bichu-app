@@ -332,6 +332,18 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   bool get _podeAnexarFoto =>
       !_emLeitura && !_faltaConta && _avisoDoAchado != null;
 
+  /// Uma foto que esta pessoa mandar vai ser legivel pelo outro lado.
+  ///
+  /// Vem do servidor (`photo_reaches_other_side`) e **nunca e calculado aqui**:
+  /// quem sabe se a chave do objeto passa pelo guarda do leitor de midia e o
+  /// servidor, e um palpite do app sobre isso erraria exatamente nos casos
+  /// novos. Ver `Conversa.fotoAlcancaOOutroLado`, inclusive por que o padrao
+  /// nao avisa.
+  ///
+  /// **Nao desabilita nada.** A foto e gravada e vale para quem a mandou; o que
+  /// este sinalizador faz e DIZER, antes do envio.
+  bool get _fotoAlcancaOOutroLado => _conversa?.fotoAlcancaOOutroLado ?? true;
+
   /// A legenda esta vazia. Ver [TextosDaFotoNaConversa.aFotoPrecisaDeLegenda].
   bool get _faltaLegenda => _controlador.text.trim().isEmpty;
 
@@ -695,6 +707,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
                     motivoDaRecusa: _motivoDaRecusaDaFoto,
                     aoDescartar: _descartarAFoto,
                     aoTentarDeNovo: _subirAFoto,
+                    alcancaOOutroLado: _fotoAlcancaOOutroLado,
                   ),
                 _caixa(),
               ],
@@ -752,7 +765,11 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
           Padding(
             key: ValueKey<String>('mensagem-${mensagem.id}'),
             padding: const EdgeInsets.only(bottom: BichuEspaco.e3),
-            child: _Bolha(mensagem: mensagem, aoBuscarDeNovo: _carregar),
+            child: _Bolha(
+              mensagem: mensagem,
+              aoBuscarDeNovo: _carregar,
+              fotoAlcancaOOutroLado: _fotoAlcancaOOutroLado,
+            ),
           ),
         if (falhaDeEnvio != null)
           FaixaDeAviso(
@@ -781,6 +798,22 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
             // Ela fica na barra e nao numa tela de ajuda porque e aqui que a
             // decisao acontece. Ela so existe quando o anexar existe: uma
             // promessa sobre foto numa conversa sem foto e ruido.
+            // O AVISO DE ALCANCE, PERTO DO ANEXAR E ANTES DA ESCOLHA.
+            //
+            // Ele vem antes da linha da localizacao porque e o que muda a
+            // DECISAO: localizacao e uma coisa boa que acontece com a foto;
+            // isto e o motivo possivel para nao mandar foto nenhuma e escrever
+            // em vez disso. E ele aparece aqui mesmo sem foto escolhida --
+            // esperar a escolha faria a pessoa abrir a galeria e procurar a
+            // foto certa para so entao descobrir.
+            if (_podeAnexarFoto && !_fotoAlcancaOOutroLado)
+              Padding(
+                padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+                child: Text(
+                  TextosDaFotoNaConversa.aFotoNaoChegaDoOutroLado,
+                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                ),
+              ),
             if (_podeAnexarFoto)
               Padding(
                 padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
@@ -923,7 +956,11 @@ class _AvisoDeConversaEncerrada extends StatelessWidget {
 /// ninguem**: ela atravessa a largura, porque atribui-la a um lado faria
 /// parecer que uma das duas pessoas escreveu aquilo.
 class _Bolha extends StatelessWidget {
-  const _Bolha({required this.mensagem, required this.aoBuscarDeNovo});
+  const _Bolha({
+    required this.mensagem,
+    required this.aoBuscarDeNovo,
+    required this.fotoAlcancaOOutroLado,
+  });
 
   final MensagemDaConversa mensagem;
 
@@ -934,6 +971,20 @@ class _Bolha extends StatelessWidget {
   /// resolve -- o que resolve e pedir a conversa outra vez. Ver
   /// [FotoDaMensagem].
   final VoidCallback aoBuscarDeNovo;
+
+  /// O fato do CANAL: uma foto que ESTE chamador mandar alcanca o outro lado.
+  ///
+  /// Vira fato DA FOTO em [_alcancouOOutroLado], e e ali que a decisao mora --
+  /// num lugar so. Ver `FotoDaMensagem.alcancouOOutroLado`.
+  final bool fotoAlcancaOOutroLado;
+
+  /// ESTA foto alcancou o outro lado.
+  ///
+  /// A do achador alcancou **por definicao**: ela esta na tela do tutor agora.
+  /// A do sistema nao e de ninguem, e marca de alcance e sobre a foto de uma
+  /// pessoa. Entao o fato do canal vale so para a do tutor.
+  bool get _alcancouOOutroLado =>
+      mensagem.senderRole != PapelNaConversa.tutor || fotoAlcancaOOutroLado;
 
   @override
   Widget build(BuildContext context) {
@@ -967,6 +1018,7 @@ class _Bolha extends StatelessWidget {
                   url: url,
                   papel: PapelNaConversa.sistema,
                   aoBuscarDeNovo: aoBuscarDeNovo,
+                  alcancouOOutroLado: _alcancouOOutroLado,
                 ),
               ),
           ],
@@ -1011,6 +1063,7 @@ class _Bolha extends StatelessWidget {
                         url: url,
                         papel: mensagem.senderRole,
                         aoBuscarDeNovo: aoBuscarDeNovo,
+                        alcancouOOutroLado: _alcancouOOutroLado,
                       ),
                     ),
                   Text(
