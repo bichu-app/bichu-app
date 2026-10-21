@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +17,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/moldura.dart';
+import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'campos_do_pet.dart';
 import 'rascunho_de_pet.dart';
@@ -811,8 +811,39 @@ class _MolduraDaEdicao extends StatelessWidget {
   final FotoLocal? escolhida;
   final bool subindo;
 
+  /// O ponto focal das DUAS imagens desta moldura.
+  ///
+  /// **O mesmo nos dois ramos, e e por isso que ele existe.** O terco superior
+  /// e onde fica a cabeca do animal na foto tipica de tutor (design system
+  /// 5.4). Ponto focal que DIFERISSE entre a escolhida e a derivada causaria
+  /// exatamente o salto que ele existe para evitar: a foto se reposicionaria no
+  /// instante em que a derivada chegasse.
+  static const Alignment _pontoFocal = Alignment(0, -1 / 3);
+
   @override
   Widget build(BuildContext context) {
+    // A MOLDURA FICA AQUI FORA, ENVOLVENDO OS TRES RAMOS -- e isso e requisito
+    // medido, nao arrumacao.
+    //
+    // Antes da onda 4 cada ramo montava a propria `Moldura`. Enquanto as tres
+    // eram iguais, isso funcionava por coincidencia; no dia em que um ramo
+    // ganhasse outro quadro, **a foto trocaria de moldura no instante em que a
+    // derivada chegasse** -- o mesmo salto que `_pontoFocal` existe para
+    // evitar, um nivel acima. `foto_na_edicao_do_pet_test.dart` tem isca que
+    // reprova se os tres ramos deixarem de compartilhar esta moldura.
+    //
+    // E e ela que torna o conserto do `dart:io` possivel: `PreviaDaFoto` entra
+    // com `comInvolucroProprio: false` e desenha so a imagem, sem segunda
+    // borda e sem segundo raio por dentro desta.
+    return Moldura(
+      largura: BichuMoldura.larguraFotoLg,
+      estado: _estado,
+      filho: _imagem(),
+    );
+  }
+
+  /// O estado da moldura, decidido num lugar so.
+  EstadoDaMoldura get _estado {
     // A ESCOLHIDA VEM PRIMEIRO, E INCLUSIVE DURANTE O ENVIO.
     //
     // Ela e a coisa mais recente que a pessoa decidiu, e e a unica imagem que
@@ -821,29 +852,37 @@ class _MolduraDaEdicao extends StatelessWidget {
     // esqueleto aqui era apagar a foto antiga sem pintar a nova, que e o
     // "pisca" relatado; e cair de volta em `capa` depois do envio era exibir a
     // foto ANTIGA como se o envio nao tivesse acontecido.
+    if (escolhida != null) return EstadoDaMoldura.repouso;
+    if (capa != null && !subindo) return EstadoDaMoldura.repouso;
+    return subindo || pet.temFotoEmProcessamento
+        ? EstadoDaMoldura.carregando
+        : EstadoDaMoldura.vazio;
+  }
+
+  /// A imagem que a moldura recebe, ou nulo nos estados sem imagem.
+  Widget? _imagem() {
     final local = escolhida;
     if (local != null) {
+      // **`PreviaDaFoto`, e nao `Image.file` aqui.** Abrir arquivo e trabalho
+      // de `lib/widgets/`, fora de `lib/telas`: o portao de diretivas proibe
+      // `dart:io` nesta arvore, e com razao -- tela que abre arquivo e tela que
+      // fala com o aparelho por fora da porta. Esta tela era a NONA com foto
+      // escolhida e a unica que tinha furado o portao.
       return Semantics(
         image: true,
         label: TextosDoDetalhe.fotoAtualDe(pet.nome),
-        child: Moldura(
-          largura: BichuMoldura.larguraFotoLg,
-          estado: EstadoDaMoldura.repouso,
-          filho: Image.file(
-            File(local.caminho),
-            fit: BoxFit.cover,
-            // O mesmo ponto focal da derivada: o terco superior, onde esta a
-            // cabeca do animal na foto tipica de tutor. Numeros diferentes
-            // fariam a foto SALTAR quando a derivada chegasse.
-            alignment: const Alignment(0, -1 / 3),
-            // `Image.file` ja aplica a orientacao do EXIF ao decodificar, que e
-            // o mesmo `.rotate()` que o servidor faz antes de cortar.
-            errorBuilder: (context, erro, pilha) => Moldura(
-              largura: BichuMoldura.larguraFotoLg,
-              estado: subindo
-                  ? EstadoDaMoldura.carregando
-                  : EstadoDaMoldura.vazio,
-            ),
+        child: PreviaDaFoto(
+          foto: local,
+          descricao: TextosDoDetalhe.fotoAtualDe(pet.nome),
+          pontoFocal: _pontoFocal,
+          comInvolucroProprio: false,
+          // A reserva certa DENTRO de uma moldura de estados e o estado dela, e
+          // nao um paragrafo de texto que nao cabe em 160 dp.
+          aoNaoAbrir: (context) => Moldura(
+            largura: BichuMoldura.larguraFotoLg,
+            estado: subindo
+                ? EstadoDaMoldura.carregando
+                : EstadoDaMoldura.vazio,
           ),
         ),
       );
@@ -854,31 +893,23 @@ class _MolduraDaEdicao extends StatelessWidget {
       return Semantics(
         image: true,
         label: TextosDoDetalhe.fotoAtualDe(pet.nome),
-        child: Moldura(
-          largura: BichuMoldura.larguraFotoLg,
-          estado: EstadoDaMoldura.repouso,
-          filho: Image.network(
-            // `urlDeCartao`, a DERIVADA. Nao existe campo de original no
-            // contrato de `PetPhoto`, e e assim que tem de ser.
-            atual.urlDeCartao!,
-            fit: BoxFit.cover,
-            // Ponto focal no terco superior (design system 5.4): e onde esta a
-            // cabeca do animal na foto tipica de tutor.
-            alignment: const Alignment(0, -1 / 3),
-            // Falha de rede cai na moldura vazia, e nao em caixa vermelha de
-            // excecao no meio de um formulario (11.4).
-            errorBuilder: (context, erro, pilha) =>
-                const Moldura(largura: BichuMoldura.larguraFotoLg),
-          ),
+        child: Image.network(
+          // `urlDeCartao`, a DERIVADA. Nao existe campo de original no
+          // contrato de `PetPhoto`, e e assim que tem de ser.
+          atual.urlDeCartao!,
+          fit: BoxFit.cover,
+          // O MESMO ponto focal da escolhida. Ver `_pontoFocal`.
+          alignment: _pontoFocal,
+          // Falha de rede cai na moldura vazia, e nao em caixa vermelha de
+          // excecao no meio de um formulario (11.4).
+          errorBuilder: (context, erro, pilha) =>
+              const Moldura(largura: BichuMoldura.larguraFotoLg),
         ),
       );
     }
 
-    return Moldura(
-      largura: BichuMoldura.larguraFotoLg,
-      estado: subindo || pet.temFotoEmProcessamento
-          ? EstadoDaMoldura.carregando
-          : EstadoDaMoldura.vazio,
-    );
+    // CASO 3: sem imagem. A moldura de fora desenha o esqueleto ou o vazio,
+    // pelo `_estado`.
+    return null;
   }
 }

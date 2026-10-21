@@ -32,6 +32,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/tela_editar_pet.dart';
 import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/widgets/folha_destrutiva.dart';
+import 'package:bichu/widgets/moldura.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -158,6 +159,25 @@ Finder _imagemDaMoldura() => find.descendant(
   of: find.byType(TelaEditarPet),
   matching: find.byType(Image),
 );
+
+/// O `FileImage` de uma [Image], **desembrulhando o `ResizeImage`**.
+///
+/// Desde 21/10/2026 a moldura da edicao desenha a foto escolhida por
+/// `PreviaDaFoto`, e essa peca passa `cacheWidth` -- o que embrulha o provedor
+/// num `ResizeImage` POR CIMA do `FileImage`. Um caso que olhasse
+/// `image is FileImage` ficaria **vazio** e reprovaria dizendo que a foto nao
+/// esta na tela, quando ela esta.
+///
+/// O desembrulho e o mesmo de `imagem_do_profissional_test.dart`, e nao uma
+/// segunda forma de fazer a mesma coisa.
+FileImage? _doArquivo(Image imagem) {
+  final provedor = imagem.image;
+  if (provedor is ResizeImage) {
+    final interno = provedor.imageProvider;
+    return interno is FileImage ? interno : null;
+  }
+  return provedor is FileImage ? provedor : null;
+}
 
 void main() {
   // -------------------------------------------------------------------------
@@ -364,9 +384,25 @@ void main() {
               '-- e o esqueleto no lugar da foto, que foi o "pisca" relatado.',
         );
         final doArquivo = imagens
-            .where((i) => i.image is FileImage)
-            .map((i) => (i.image as FileImage).file.path)
+            .map(_doArquivo)
+            .whereType<FileImage>()
+            .map((f) => f.file.path)
             .toList(growable: false);
+        // E A FOTO GANHOU `cacheWidth` NESTA TELA, que ela nao tinha: ao adotar
+        // `PreviaDaFoto` ela passou a ser decodificada na largura PINTADA, e
+        // nao na do arquivo. Antes era `Image.file` cru aqui dentro, com o
+        // provedor `FileImage` pelado -- foto de celular de 12,2 MP custava
+        // 48.771.072 bytes decodificada. A assercao e no TIPO DO PROVEDOR
+        // porque e so ele que mostra a diferenca.
+        expect(
+          imagens.map((i) => i.image).whereType<ResizeImage>(),
+          isNotEmpty,
+          reason:
+              'REPROVA: a foto escolhida voltou a ser decodificada no tamanho '
+              'do ARQUIVO. `PreviaDaFoto` passa `cacheWidth`, e sem ele o '
+              'provedor fica `FileImage` cru. ISCA: apague `cacheWidth: '
+              'largura` de `lib/widgets/previa_da_foto.dart`.',
+        );
         expect(
           doArquivo,
           contains(fotoEscolhidaDeTeste.caminho),
@@ -412,7 +448,7 @@ void main() {
             .widgetList<Image>(_imagemDaMoldura())
             .toList(growable: false);
         expect(
-          imagens.where((i) => i.image is FileImage),
+          imagens.map(_doArquivo).whereType<FileImage>(),
           isEmpty,
           reason:
               'REPROVA: a foto recusada ficou na moldura. A tela estaria '
@@ -544,6 +580,132 @@ void main() {
             'REPROVA: a recusa caiu na mensagem generica. O 409 e o unico caso '
             'em que ha uma saida concreta a oferecer -- trocar a foto, ou '
             'encerrar o caso.',
+      );
+    });
+  });
+  // =========================================================================
+  // ISCA — OS TRÊS RAMOS COMPARTILHAM A MESMA MOLDURA
+  // =========================================================================
+  //
+  // Esta é a isca que fecha o agravante achado na mescla da onda 4. Até ela,
+  // CADA RAMO montava a própria `Moldura` — a foto escolhida, a derivada por
+  // rede e o vazio. Enquanto as três eram iguais isso funcionava **por
+  // coincidência**; no dia em que um ramo ganhasse outro quadro, **a foto
+  // trocaria de moldura no instante em que a derivada chegasse** — o mesmo
+  // salto que `_pontoFocal` existe para evitar, um nível acima.
+  //
+  // Agora a `Moldura` fica FORA, envolvendo os três, e é isso que estes casos
+  // afirmam. Sem eles, a próxima edição separa os ramos de novo e o salto
+  // volta sem ninguém ver: nenhum outro caso deste arquivo olha QUANTAS
+  // molduras existem.
+  //
+  // DESLIGAR PARA VER REPROVAR: em `lib/telas/pet/tela_editar_pet.dart`,
+  // devolva um `Moldura(...)` de dentro de `_imagem()` em vez de só a imagem.
+  // Esperado: `há UMA moldura` reprova com 2.
+  group('ISCA — os três ramos compartilham a mesma moldura', () {
+    /// A moldura ESTRUTURAL: a que envolve o ramo, e não a de reserva.
+    ///
+    /// **A distinção não é preciosismo.** Em teste de widget `Image.network`
+    /// não tem rede e cai no `errorBuilder`, e o `errorBuilder` da derivada
+    /// devolve uma `Moldura` vazia — que fica na árvore, DENTRO da `Image`.
+    /// Essa é reserva de falha, não o quadro do ramo: contá-la faria este caso
+    /// reprovar o desenho certo, que é o defeito caro.
+    ///
+    /// O que importa é quantas molduras ENVOLVEM o conteúdo, e essas são as
+    /// que não descendem de uma `Image`.
+    Finder molduras() => find.descendant(
+      of: find.byType(TelaEditarPet),
+      matching: find.byType(Moldura),
+    );
+    Finder molduraDeReserva() => find.descendant(
+      of: find.byType(Image),
+      matching: find.byType(Moldura),
+    );
+
+    Future<double> umaMolduraSo(WidgetTester tester, String ramo) async {
+      final todas = molduras().evaluate().toList(growable: false);
+      final reservas = molduraDeReserva().evaluate().toSet();
+      final estruturais = todas
+          .where((e) => !reservas.contains(e))
+          .toList(growable: false);
+      expect(
+        estruturais,
+        hasLength(1),
+        reason:
+            'REPROVA: o ramo "$ramo" tem ${estruturais.length} molduras '
+            'estruturais, e não uma (${todas.length} no total, '
+            '${reservas.length} de reserva de falha). Cada ramo montando a sua '
+            'faz a foto TROCAR DE MOLDURA quando a derivada chega -- o mesmo '
+            'salto que o ponto focal existe para evitar. A moldura é de fora, '
+            'e envolve os três.',
+      );
+      return (estruturais.single.widget as Moldura).largura;
+    }
+
+    testWidgets('a mesma moldura nos três ramos, e a mesma largura', (
+      tester,
+    ) async {
+      // RAMO 3 — sem foto nenhuma.
+      await _abrirAEdicao(tester, pet: _petSemFoto());
+      final semFoto = await umaMolduraSo(tester, 'sem foto');
+
+      // RAMO 2 — a derivada que veio do servidor.
+      await _abrirAEdicao(tester, pet: _petComFoto());
+      final daRede = await umaMolduraSo(tester, 'derivada da rede');
+
+      // RAMO 1 — a foto recém-escolhida no aparelho.
+      await tocar(tester, find.text(TextosDoDetalhe.trocarAFoto));
+      await tocar(tester, find.text(TextosDoDetalhe.escolherDaGaleria));
+      final escolhida = await umaMolduraSo(tester, 'foto escolhida');
+
+      expect(
+        <double>{semFoto, daRede, escolhida},
+        hasLength(1),
+        reason:
+            'REPROVA: os três ramos desenham molduras de LARGURAS diferentes '
+            '(sem foto: $semFoto, derivada: $daRede, escolhida: $escolhida). '
+            'Uma moldura compartilhada que muda de tamanho entre os estados é '
+            'o salto de volta, por outro caminho.',
+      );
+      expect(
+        escolhida,
+        BichuMoldura.larguraFotoLg,
+        reason: 'REPROVA: a moldura da edição deixou de ser `foto/lg`.',
+      );
+    });
+
+    testWidgets('o ponto focal é o MESMO na escolhida e na derivada', (
+      tester,
+    ) async {
+      // Ponto focal que diferisse entre os dois CAUSARIA o salto em vez de
+      // evitá-lo: a foto se reposicionaria quando a derivada chegasse.
+      await _abrirAEdicao(tester, pet: _petComFoto());
+      final daRede = tester.widget<Image>(_imagemDaMoldura()).alignment;
+
+      await tocar(tester, find.text(TextosDoDetalhe.trocarAFoto));
+      await tocar(tester, find.text(TextosDoDetalhe.escolherDaGaleria));
+      final doArquivo = tester
+          .widgetList<Image>(_imagemDaMoldura())
+          .where((i) => _doArquivo(i) != null)
+          .map((i) => i.alignment)
+          .toList(growable: false);
+
+      expect(doArquivo, isNotEmpty, reason: 'REPROVA NA ÂNCORA: sem imagem de arquivo.');
+      expect(
+        doArquivo.first,
+        daRede,
+        reason:
+            'REPROVA: a foto escolhida ($doArquivo) e a derivada ($daRede) usam '
+            'pontos focais diferentes. O recorte mudaria no instante em que a '
+            'derivada chegasse, que é exatamente o salto que o ponto focal '
+            'existe para evitar.',
+      );
+      expect(
+        daRede,
+        const Alignment(0, -1 / 3),
+        reason:
+            'REPROVA: o ponto focal deixou de ser o terço superior, onde fica a '
+            'cabeça do animal na foto típica de tutor (design system 5.4).',
       );
     });
   });
