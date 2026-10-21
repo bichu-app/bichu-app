@@ -355,6 +355,14 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     for (final String chave in _ordemDosCampos) chave: GlobalKey(),
   };
 
+  /// A rolagem do corpo do formulario.
+  ///
+  /// Ela existe porque [_levarAoPrimeiroRecusado] tem de alcancar campo que o
+  /// `ListView` **nao construiu**: sem o controlador, o unico caminho ate a
+  /// lista e a `GlobalKey` do campo -- e ela nao tem `currentContext` justamente
+  /// no caso que importa.
+  final ScrollController _rolagem = ScrollController();
+
   /// O foco de cada campo de DIGITACAO.
   ///
   /// `starts_at`, `ends_at` e `cover_image.alt_text` ficam de fora: os dois
@@ -416,6 +424,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     for (final FocusNode foco in _focos.values) {
       foco.dispose();
     }
+    _rolagem.dispose();
     super.dispose();
   }
 
@@ -838,14 +847,50 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// campo que acabou de virar visivel so tem `currentContext` depois dele --
   /// mais `requestFocus` no campo, que e o que poe o cursor onde a correcao
   /// precisa acontecer.
+  /// **E O `ensureVisible` SOZINHO NAO BASTA, medido em 21/10/2026.** Ele parte
+  /// da `GlobalKey` do campo, e `currentContext` e **nulo para campo que o
+  /// `ListView` nao construiu** -- que e exatamente o caso que esta funcao
+  /// existe para resolver. Enquanto o formulario era curto o campo recusado
+  /// caia dentro da margem que a lista constroi alem da dobra, e o
+  /// `ensureVisible` achava contexto por sorte da geometria. Com o CEP acima do
+  /// bairro e o estado em linha propria (21/10) o formulario ficou mais alto, o
+  /// campo deixou de ser construido, e a garantia caiu **em silencio**: nada
+  /// lancava, a tela so nao rolava.
+  ///
+  /// Por isso o alcance tem duas pernas: [_rolagem] leva a janela ate perto do
+  /// campo, e so ai o `ensureVisible` o centraliza.
   void _levarAoPrimeiroRecusado() {
     final String? primeiro = _ordemDosCampos
         .where(_errosDeCampo.containsKey)
         .firstOrNull;
     if (primeiro == null) return;
+    _alcancar(primeiro, 0);
+  }
+
+  /// Quantos saltos de rolagem o alcance tenta antes de desistir.
+  ///
+  /// **NUMERO FIXO, e de proposito nao um laco.** Um laco cuja condicao e "a
+  /// ancora construiu" depende do layout, e layout que nao converge nao lanca
+  /// excecao: ele **pendura**, e `try`/`catch` nao pega pendura. Oito saltos de
+  /// 80% da janela cobrem um formulario de mais de seis telas; o que nao couber
+  /// nisso cai na degradacao, que e a marca no campo sem rolagem.
+  static const int _saltosDeAlcance = 8;
+
+  /// Leva a janela ate [campo] e o centraliza, em no maximo
+  /// [_saltosDeAlcance] saltos.
+  ///
+  /// Cada salto e um `addPostFrameCallback` e **nunca um `await`**: nao ha
+  /// `Future` nenhum aqui que possa ficar pendente para sempre. Se os quadros
+  /// pararem, isto simplesmente para de progredir.
+  ///
+  /// **A degradacao e a marca no campo SEM rolagem, nunca "nao fazer nada".**
+  /// Desistir deixa a recusa desenhada no campo e a faixa do erro no topo: a
+  /// pessoa ainda ve que algo foi recusado. Rolar para o lugar errado ou perder
+  /// a marca seria pior que nao rolar.
+  void _alcancar(String campo, int salto) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final contexto = _ancoras[primeiro]?.currentContext;
+      final contexto = _ancoras[campo]?.currentContext;
       if (contexto != null) {
         Scrollable.ensureVisible(
           contexto,
@@ -853,12 +898,50 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
+        // Depois de rolar, e so para campo de digitacao. Pedir foco a um campo
+        // fora da tela faria o `EditableText` rolar por conta dele e disputar
+        // com o `ensureVisible` acima. `place.state` nao tem foco: virou
+        // seletor, e a ancora acima ja o poe na tela.
+        _focos[campo]?.requestFocus();
+        return;
       }
-      // Depois de rolar, e so para campo de digitacao. Pedir foco a um campo
-      // fora da tela faria o `EditableText` rolar por conta dele e disputar
-      // com o `ensureVisible` acima.
-      _focos[primeiro]?.requestFocus();
+      if (salto >= _saltosDeAlcance || !_rolagem.hasClients) return;
+      final posicao = _rolagem.position;
+      final double passo = posicao.viewportDimension * 0.8;
+      final double cru = _estaAcimaDaJanela(campo)
+          ? posicao.pixels - passo
+          : posicao.pixels + passo;
+      final double destino =
+          cru.clamp(posicao.minScrollExtent, posicao.maxScrollExtent);
+      // Bateu no fim da lista sem achar: nao ha mais para onde ir, e insistir
+      // seria gastar os saltos restantes no mesmo lugar.
+      if (destino == posicao.pixels) return;
+      _rolagem.jumpTo(destino);
+      _alcancar(campo, salto + 1);
     });
+  }
+
+  /// [campo] esta ACIMA da janela?
+  ///
+  /// **Decidido pelos campos que o `ListView` JA construiu, e nao por
+  /// adivinhacao de direcao.** [_ordemDosCampos] e a ordem de tela: se existe
+  /// campo construido DEPOIS do alvo, o alvo ficou atras, e o caminho e para
+  /// cima.
+  ///
+  /// Sem nenhuma ancora construida a resposta e "acima", e isso tambem nao e
+  /// chute: quem chama e sempre o PRIMEIRO campo recusado, o mais cedo da
+  /// ordem, e o topo e o lugar mais perto dele.
+  bool _estaAcimaDaJanela(String campo) {
+    final int alvo = _ordemDosCampos.indexOf(campo);
+    bool achouConstruido = false;
+    for (final MapEntry<String, GlobalKey> ancora in _ancoras.entries) {
+      if (ancora.value.currentContext == null) continue;
+      achouConstruido = true;
+      if (_ordemDosCampos.indexOf(ancora.key) > alvo) return true;
+    }
+    // Ha campo construido e TODOS vem antes do alvo: ele esta abaixo.
+    // Nenhum construido: para cima, pelo motivo da prosa acima.
+    return !achouConstruido;
   }
 
   static Map<String, String> _camposRecusados(FalhaDaApi falha) {
@@ -894,6 +977,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
             top: false,
             bottom: false,
             child: ListView(
+              controller: _rolagem,
               padding: const EdgeInsets.all(BichuEspaco.e4),
               // Corpo rolavel de uma pagina, e nao lista de itens: sem isto
               // cada bloco viraria um no de semantica com tudo dentro.
