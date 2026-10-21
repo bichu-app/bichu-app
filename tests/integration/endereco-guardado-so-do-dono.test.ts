@@ -92,6 +92,29 @@ function enderecoDe(marca: string): EnderecoDeEntrega {
   };
 }
 
+/**
+ * Um pet de verdade do dono.
+ *
+ * **Existe porque a primeira versao do grupo de bordas media errado.** Ela
+ * inseria em `collar_tag_requests` com `pet_id` NULO, para nao precisar de pet,
+ * e com isso o `INSERT` morria em `23502` (violacao de `NOT NULL`) ANTES de o
+ * Postgres avaliar qualquer `CHECK` de endereco. O codigo lia "nao foi `23514`,
+ * logo o endereco passou", e os SETE casos de recusa reprovaram dizendo que as
+ * tabelas discordavam -- quando o que discordava era a medicao.
+ *
+ * Com um pet real, a UNICA coisa que pode derrubar aquele `INSERT` sao as
+ * travas do endereco, que e o que o grupo existe para comparar.
+ */
+async function criarPet(dono: UserId): Promise<string> {
+  const pet = randomUUID();
+  await cliente.query(
+    `INSERT INTO pets (id, owner_user_id, name, species_code, size_code)
+     VALUES ($1, $2, $3, 'dog', 'M')`,
+    [pet, dono, `Pet do endereco ${pet.slice(0, 8)}`],
+  );
+  return pet;
+}
+
 async function quantosEnderecos(dono: UserId): Promise<number> {
   const r = await cliente.query<{ n: string }>(
     'SELECT count(*)::text AS n FROM user_delivery_addresses WHERE user_id = $1',
@@ -369,17 +392,27 @@ void describe('as travas do banco sao as MESMAS da tabela do pedido', () => {
         aceitouNoGuardado = false;
       }
 
-      // A MESMA linha, na tabela do PEDIDO, por SQL cru -- o pedido exige pet e
-      // `ref`, e o que interessa aqui sao as travas do endereco.
+      // A MESMA linha, na tabela do PEDIDO, por SQL cru -- com PET DE VERDADE,
+      // para que a unica coisa capaz de derrubar este `INSERT` sejam as travas
+      // do endereco. Ver `criarPet` para o que a versao anterior media errado.
+      const pet = await criarPet(dono);
+      // **`ref` UNICO por insercao.** A versao anterior usava um literal fixo,
+      // e `collar_tag_requests_ref_unico` e UNIQUE: a primeira borda ACEITA
+      // tomava o valor e as seguintes morriam em `23505`. Foi a assercao de
+      // "a recusa tem de ser do CHECK", logo abaixo, que pegou isso -- sem ela
+      // as tres ultimas bordas teriam passado por motivo errado.
+      const refDoPedido = randomUUID().replace(/-/gu, '').slice(0, 22);
       let aceitouNoPedido = true;
+      let codigoDoErroDoPedido: string | undefined;
       try {
         await cliente.query(
           `INSERT INTO collar_tag_requests
              (id, ref, pet_id, requested_by, recipient_name, recipient_phone,
               postal_code, street, street_number, complement, neighborhood, city, state)
-           VALUES (gen_random_uuid(), 'Rrrrrrrrrrrrrrrrrrrrrr',
-                   NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           VALUES (gen_random_uuid(), $12,
+                   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
+            pet,
             dono,
             endereco.destinatario,
             endereco.telefone,
@@ -390,14 +423,26 @@ void describe('as travas do banco sao as MESMAS da tabela do pedido', () => {
             endereco.bairro,
             endereco.cidade,
             endereco.uf,
+            refDoPedido,
           ],
         );
       } catch (erro) {
-        // `pet_id` NULO estoura por NOT NULL, e nao pelas travas do endereco.
-        // Esse erro nao conta como recusa do endereco: o que se mede e a
-        // violacao de `CHECK` (`23514`), e nao a de `NOT NULL` (`23502`).
-        const codigo = (erro as { code?: string }).code;
-        aceitouNoPedido = codigo !== '23514';
+        aceitouNoPedido = false;
+        codigoDoErroDoPedido = (erro as { code?: string }).code;
+      }
+
+      // **A RECUSA TEM DE SER DO `CHECK`, e nao de outra coisa.** Sem esta
+      // linha, um `NOT NULL` ou uma chave estrangeira quebrada passaria por
+      // "o endereco foi recusado" e o grupo ficaria verde medindo o erro
+      // errado -- que e exatamente o defeito da primeira versao dele.
+      if (!aceitouNoPedido) {
+        assert.equal(
+          codigoDoErroDoPedido,
+          '23514',
+          `o \`INSERT\` no pedido falhou com \`${String(codigoDoErroDoPedido)}\` e nao ` +
+            `com \`23514\` (violacao de CHECK). A recusa nao veio das travas do ` +
+            `endereco, e a comparacao abaixo estaria medindo outro erro`,
+        );
       }
 
       assert.equal(
