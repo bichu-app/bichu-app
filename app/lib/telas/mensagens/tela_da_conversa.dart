@@ -593,6 +593,24 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
         await _enviar();
         return;
       }
+      // A HIGIENE RECUSOU A FOTO, e isso NAO melhora com o tempo: os bytes nao
+      // sao imagem que o produto abra, ou a imagem e animada, ou e grande
+      // demais. A previa fica (a pessoa precisa ver QUAL foto foi recusada) e
+      // o texto e **o do servidor** -- ver `fotoFoiRecusadaPeloServidor`.
+      if (_foto != null && fotoFoiRecusadaPeloServidor(falha.problem)) {
+        setState(() {
+          _enviando = false;
+          _tentativasDePreparo = 0;
+          _faseDaFoto = FaseDaFotoEscolhida.recusada;
+          _motivoDaRecusaDaFoto = falha.problem.detalhe;
+          // **SEM faixa de falha de envio.** A previa ja carrega a recusa com
+          // o `Descartar`; uma segunda faixa dizendo "a mensagem nao foi
+          // enviada" poria dois erros na tela para um unico problema, e o
+          // `Tentar de novo` dela devolveria a mesma recusa.
+          _falhaDeEnvio = null;
+        });
+        return;
+      }
       setState(() {
         _enviando = false;
         // A ESPERA ACABOU E A FOTO CONTINUA NAO PRONTA: volta para `pronta`

@@ -48,7 +48,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bichu/api/envio_de_foto.dart';
+import 'package:bichu/api/conversas_api.dart';
 import 'package:bichu/api/mensagens_de_erro.dart';
+import 'package:bichu/api/problem.dart';
 import 'package:bichu/api/modelos_conversa.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/mensagens/area_de_mensagens.dart';
@@ -1157,6 +1159,126 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'ISCA: `photo-rejected` mostra O TEXTO DO SERVIDOR, e nao o generico da '
+      'tela',
+      (tester) async {
+        // O SLUG E DO SERVIDOR, batizado na BICHUS-35 em 20/10/2026, e os dois
+        // 409 da mesma anexacao sao indistinguiveis por status:
+        //
+        //   `photo-not-ready` -> espere e tente de novo com a MESMA foto;
+        //   `photo-rejected`  -> escolha outra, esta nunca vai passar.
+        //
+        // E o `detail` carrega o motivo que o trabalhador de higiene gravou.
+        // Reescrever aquelas frases no app seria a segunda copia da mesma
+        // microcopy -- e e a copia que ninguem atualiza que fica na tela.
+        const String doServidor =
+            'Essa foto é uma animação. Envie uma imagem parada.';
+        final servidor = ServidorDeConversas(
+          <String, http.Response Function(http.Request)>{
+            caminhoDaConversa: (_) => json200(conversaComAviso()),
+            caminhoDasMensagens: (_) => http.Response(
+              jsonEncode(<String, dynamic>{
+                'type': 'https://api.bichu.app/problems/photo-rejected',
+                'title': 'Nao foi possivel concluir',
+                'detail': doServidor,
+                'status': 409,
+              }),
+              409,
+              headers: const <String, String>{
+                'content-type': 'application/problem+json; charset=utf-8',
+              },
+            ),
+          },
+        );
+        await abrirAConversa(
+          tester,
+          servidor: servidor,
+          camera: cameraComFotoDe(bytesDeFotoDeTeste.length),
+          armazenamento: ArmazenamentoDeTeste(),
+        );
+        await tester.enterText(find.byType(TextField), 'É ele mesmo');
+        await tester.pumpAndSettle();
+        await anexarDaGaleria(tester);
+
+        await tester.tap(find.byTooltip(TextosDasMensagens.enviar));
+        await tester.pumpAndSettle();
+
+        expect(
+          textoDaTela(tester),
+          contains('animação'),
+          reason:
+              'REPROVA: a tela escondeu o motivo do servidor atras do texto '
+              'generico dela. A pessoa fica sem saber que o problema e a foto '
+              'ser animada, e escolhe outro GIF.',
+        );
+        expect(
+          textoDaTela(tester),
+          isNot(contains('Confira a conexão')),
+          reason:
+              'REPROVA: a recusa definitiva acendeu TAMBEM a faixa de falha de '
+              'envio. Sao dois erros na tela para um problema, e o `Tentar de '
+              'novo` daquela faixa devolveria a mesma recusa.',
+        );
+        expect(
+          find.byType(PreviaDaFotoDaConversa),
+          findsOneWidget,
+          reason:
+              'REPROVA: a recusa apagou a previa. A pessoa precisa ver QUAL '
+              'foto foi recusada para escolher outra.',
+        );
+        expect(
+          find.text(TextosDaFotoNaConversa.descartar),
+          findsOneWidget,
+          reason:
+              'REPROVA: a recusa definitiva nao oferece descartar, e e a unica '
+              'saida que resolve.',
+        );
+        // CONTRAPESO: o texto proprio da tela NAO aparece quando o servidor
+        // mandou um. Sem ele, o caso acima passaria numa tela que mostra os
+        // dois textos empilhados.
+        expect(
+          textoDaTela(tester),
+          isNot(contains(TextosDaFotoNaConversa.aFotoFoiRecusada)),
+          reason:
+              'REPROVA: a tela mostrou o texto do servidor E o proprio. Duas '
+              'frases para a mesma recusa, e uma delas e a copia que diverge.',
+        );
+      },
+    );
+
+    test('ISCA: os dois 409 da anexacao sao LIDOS SEPARADOS', () {
+      // Sem este caso, os dois leitores poderiam reconhecer o mesmo slug e a
+      // tela trataria recusa definitiva como "preparando" -- quatro esperas
+      // numa foto que nunca vai passar.
+      Problem problema(String slug) => Problem(
+        tipo: ProblemTipo.deUri('https://api.bichu.app/problems/$slug'),
+        tipoUri: 'https://api.bichu.app/problems/$slug',
+        status: 409,
+      );
+      expect(fotoAindaNaoEstaPronta(problema('photo-not-ready')), isTrue);
+      expect(
+        fotoFoiRecusadaPeloServidor(problema('photo-not-ready')),
+        isFalse,
+        reason:
+            'REPROVA: `photo-not-ready` foi lido como recusa definitiva. A '
+            'pessoa leria "escolha outra foto" sobre uma que ia passar em dois '
+            'segundos.',
+      );
+      expect(fotoFoiRecusadaPeloServidor(problema('photo-rejected')), isTrue);
+      expect(
+        fotoAindaNaoEstaPronta(problema('photo-rejected')),
+        isFalse,
+        reason:
+            'REPROVA: `photo-rejected` foi lido como "ainda nao esta pronta". '
+            'A tela gastaria as quatro esperas numa foto que nunca vai passar, '
+            'e terminaria dizendo "nao foi enviada" sem o motivo.',
+      );
+      // CONTRAPESO: um slug de outra coisa nao e nenhum dos dois.
+      expect(fotoAindaNaoEstaPronta(problema('rate-limited')), isFalse);
+      expect(fotoFoiRecusadaPeloServidor(problema('rate-limited')), isFalse);
+    });
   });
 
   // -------------------------------------------------------------------------

@@ -270,6 +270,10 @@ class ConversasApi {
 /// contrato JA os declara, e sao a forma generica que a rota usaria se o
 /// servidor nao criasse slug proprio.
 bool fotoAindaNaoEstaPronta(Problem problem) {
+  // `photo-not-ready` e o slug que o servidor batizou (BICHUS-35, 20/10/2026),
+  // e ele e o primeiro da lista. Os outros dois ficam porque versao de app nao
+  // some do bolso de ninguem: um app publicado com esta funcao continua certo
+  // se o slug mudar de nome numa direcao previsivel.
   const List<String> candidatos = <String>[
     'photo-not-ready',
     'upload-not-ready',
@@ -280,4 +284,32 @@ bool fotoAindaNaoEstaPronta(Problem problem) {
   }
   return problem.tipo == ProblemTipo.precondicaoNecessaria ||
       problem.tipo == ProblemTipo.precondicaoFalhou;
+}
+
+/// A recusa DEFINITIVA da foto anexada: os bytes nao servem.
+///
+/// ## Ela e o par de [fotoAindaNaoEstaPronta], e a diferenca e a saida
+///
+/// `photo-not-ready` e `photo-rejected` saem os dois como **409** da mesma
+/// anexacao, e seriam indistinguiveis por status. O que os separa e o que a
+/// pessoa faz em seguida: *esperar e tentar de novo com a MESMA foto*, contra
+/// *escolher outra*. Juntar os dois num "nao deu" faria metade das pessoas
+/// insistir para sempre numa foto que nunca vai passar, e a outra metade
+/// desistir de uma que ia passar em dois segundos.
+///
+/// ## O TEXTO E DO SERVIDOR, e nao redigido aqui
+///
+/// O `detail` carrega o motivo que o trabalhador de higiene gravou --
+/// *"Esse arquivo nao e uma foto que a gente consiga abrir"*, *"Essa foto e
+/// uma animacao. Envie uma imagem parada"*, e os outros. Reescrever essas
+/// frases no app seria a segunda copia da mesma microcopy, e e a que ninguem
+/// atualiza que fica na tela. A tela mostra `Problem.detalhe` quando ele vem, e
+/// cai num texto proprio **so quando nao vem**.
+///
+/// Esta e a unica tela do app que decide por `detail`, e a excecao e nomeada:
+/// a regra da casa e decidir pelo `type` e nunca pelo texto do servidor -- e e
+/// o que esta funcao faz. O `detail` nao decide nada aqui; ele so e EXIBIDO,
+/// depois de o `type` ter decidido.
+bool fotoFoiRecusadaPeloServidor(Problem problem) {
+  return problem.tipoUri.endsWith('/photo-rejected');
 }
