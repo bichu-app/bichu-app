@@ -481,7 +481,7 @@ void describe('o endereço guardado não sai em superfície pública (contrato)'
     const item = spec.paths['/me/delivery-address'];
     assert.ok(item !== undefined, 'o caminho do endereço guardado não existe');
     for (const metodo of ['get', 'put'] as const) {
-      const op = item[metodo] as OperacaoBruta | undefined;
+      const op: OperacaoBruta | undefined = item[metodo];
       assert.ok(op !== undefined, `falta o \`${metodo}\` de /me/delivery-address`);
       assert.deepEqual(
         op.security,
