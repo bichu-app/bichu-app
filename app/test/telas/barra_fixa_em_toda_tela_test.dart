@@ -204,6 +204,15 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
         'Se `Meus dados` e interna, ela nao pode ser primeiro plano.',
   ),
   (
+    nome: 'endereco de entrega',
+    endereco: '/perfil/endereco-de-entrega',
+    padrao: '/perfil/endereco-de-entrega',
+    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do Perfil, '
+        'e so `Meus dados` a abre, por `ItemDeMenu`. Se `Meus dados` e '
+        'interna, ela nao pode ser primeiro plano. E ela e FORMULARIO e nao '
+        'lista -- o que a regra "lista fica" nem alcanca.',
+  ),
+  (
     nome: 'meus achados',
     endereco: '/perfil/achados',
     padrao: '/perfil/achados',

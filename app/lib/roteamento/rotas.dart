@@ -36,6 +36,7 @@ import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
 import '../telas/pessoa/tela_perfil_de_pessoa.dart';
 import '../telas/mural/publicar_no_mural.dart';
+import '../telas/perfil/tela_endereco_de_entrega.dart';
 import '../telas/perfil/vitrine_de_fotos.dart';
 import '../telas/mensagens/area_de_mensagens.dart';
 import '../telas/mensagens/tela_da_conversa.dart';
@@ -425,6 +426,22 @@ abstract final class Rotas {
   /// **Irma da casca, como as telas de conta**, e por isso ela tem saida
   /// propria: ela cobre a barra de baixo, e o `escape` dela e [perfil].
   static const String dadosPessoais = '/perfil/dados';
+
+  /// `Meus dados` > `Endereço de entrega`: o endereço guardado na conta
+  /// (21/10/2026).
+  ///
+  /// **Autorizado pelo cliente nestas palavras:** *"um endereço de entrega
+  /// salvo na conta, reusado em todo pedido e editável num lugar só."* Este
+  /// endereço é o "lugar só", e `TelaEnderecoDeEntrega` é o único caminho do
+  /// app que escreve `putMyDeliveryAddress`.
+  ///
+  /// **Endereço próprio, e não bloco de `Meus dados`** — a mesma razão de
+  /// [minhaVitrine]: é TELA, com `Scaffold`, barra de saída e ação fixa. E há
+  /// uma razão a mais, que é de leitura: `Meus dados` já edita a **região de
+  /// referência**, que tem CEP, bairro, cidade e UF e alimenta cálculo de
+  /// distância. Dois blocos "CEP / Bairro / Cidade / Estado" na mesma rolagem,
+  /// um deles sendo a residência da pessoa, é confusão garantida.
+  static const String enderecoDeEntrega = '/perfil/endereco-de-entrega';
 
   /// `Perfil` > `Meus achados`: a lista dos avisos de achado desta conta.
   ///
@@ -1296,6 +1313,17 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.dadosPessoais,
         builder: (context, estado) => const TelaDadosPessoais(),
+      ),
+      // `Meus dados` > `Endereco de entrega` (21/10/2026). Irma da de cima e
+      // pelo mesmo motivo: cobre a barra de baixo e volta.
+      //
+      // **Sem parametro no construtor**: a tela tira a `MeApi` e a
+      // `BuscaDeCep` do `Escopo`, como as vizinhas. Ela e alcancada por
+      // `ItemDeMenu` dentro de `Meus dados`, do mesmo jeito que
+      // `Minhas fotos`.
+      GoRoute(
+        path: Rotas.enderecoDeEntrega,
+        builder: (context, estado) => const TelaEnderecoDeEntrega(),
       ),
       // `Perfil` > `Meus achados`. Irma da de cima e pelo mesmo motivo: ela
       // cobre a barra de baixo e volta para `Perfil`.

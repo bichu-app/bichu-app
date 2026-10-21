@@ -843,6 +843,41 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // o endereco de entrega GUARDADO NA CONTA (`20261020000016`)
+  // -------------------------------------------------------------------------
+  // Autorizado pelo cliente em 21/10/2026: *"um endereco de entrega salvo na
+  // conta, reusado em todo pedido e editavel num lugar so"*.
+  //
+  // **ESTA CASCATA E A RETENCAO, e nao so integridade.** Ela e a UNICA forma de
+  // apagamento que este endereco tem, e isso e decisao do cliente de 17/10/2026,
+  // nas palavras dele: *"voce so deve apagar as informacoes, caso o usuario
+  // remova o pet ou delete a conta"*. Nao existe coluna de prazo, nao existe
+  // varredura e nao existe constante de prazo nesta frente -- quem apaga e esta
+  // linha. Trocar este `CASCADE` por `SET NULL` ou `RESTRICT` deixaria a
+  // residencia de quem fechou a conta no banco, e e por isso que ele esta
+  // declarado aqui com o motivo e nao so com a acao.
+  //
+  // **NAO atravessa pessoas**: `user_id` e a chave primaria e ha uma linha por
+  // conta, entao apagar a conta leva o endereco DELA e de mais ninguem --
+  // diferente de `collar_tag_requests_requested_by_fkey`, que alcanca pedido de
+  // pet que hoje e de outra pessoa.
+  //
+  // **Remover um PET nao apaga este endereco**, e nao deveria: ele e da conta e
+  // nao do pet, e quem tem dois pets nao perde o endereco ao soltar um deles. O
+  // endereco do PEDIDO, esse sim, cai com o pet -- e e a FK de cima.
+  'public.user_delivery_addresses.user_delivery_addresses_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o endereco de entrega guardado da propria pessoa -- a residencia dela. E a UNICA ' +
+      'forma de apagamento que este endereco tem, por decisao do cliente de 17/10/2026 ' +
+      '("voce so deve apagar as informacoes, caso o usuario remova o pet ou delete a ' +
+      'conta"): nao ha prazo, nao ha expiracao e nao ha varredura. Uma linha por conta, ' +
+      'entao nao atravessa pessoas.',
+  },
+
+  // -------------------------------------------------------------------------
   // a indicacao do diretorio e a fila dela (`20261017000004`, `20261017000016`)
   // -------------------------------------------------------------------------
   'public.directory_suggestions.directory_suggestions_suggested_by_user_id_fkey': {

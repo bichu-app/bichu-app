@@ -40,7 +40,11 @@ import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { PetId, UserId } from '../../../../shared/types/brands.js';
 import type { Autenticador } from '../../ports/autenticador.js';
-import type { EnderecoDeEntrega, PedidoDoTutor } from '../../ports/pedido-de-plaquinha.js';
+import type { PedidoDoTutor } from '../../ports/pedido-de-plaquinha.js';
+import {
+  comoEnderecoDeEntrega,
+  type DeliveryAddressDoContrato,
+} from './endereco-de-entrega-no-contrato.js';
 import type { PedidoDePlaquinhaService } from '../../application/pedido-de-plaquinha-service.js';
 
 export const rotaDePedidoDePlaquinha = defineRoute({
@@ -128,48 +132,8 @@ async function contaDoTeto(
 
 /** O corpo, como o schema do contrato ja o validou. */
 interface CorpoDoPedido {
-  readonly delivery_address: {
-    readonly recipient_name: string;
-    readonly recipient_phone: string;
-    readonly postal_code: string;
-    readonly street: string;
-    readonly street_number: string;
-    readonly complement?: string;
-    readonly neighborhood: string;
-    readonly city: string;
-    readonly state: string;
-  };
+  readonly delivery_address: DeliveryAddressDoContrato;
   readonly notes?: string;
-}
-
-/**
- * O endereco do corpo para o do dominio.
- *
- * A UNICA transformacao e o CEP, e ela e de formato e nao de conteudo: o
- * contrato ja exige oito digitos, e `replace` aqui existe para o dia em que
- * um cliente mande `01311-000` -- guardar o mesmo endereco com e sem hifen
- * daria duas linhas diferentes para o mesmo lugar. **Nada mais e tocado**: o
- * CEP nao completa bairro, a UF nao deduz cidade e nada e geocodificado
- * (ADR-0006).
- */
-function comoEnderecoDeEntrega(corpo: CorpoDoPedido): EnderecoDeEntrega {
-  const endereco = corpo.delivery_address;
-  return {
-    destinatario: endereco.recipient_name.trim(),
-    // Ja em E.164 quando chega: o schema do contrato cobra
-    // `^\+55\d{10,11}$`, e o app converte antes de enviar.
-    telefone: endereco.recipient_phone.trim(),
-    cep: endereco.postal_code.replace(/\D/gu, ''),
-    logradouro: endereco.street.trim(),
-    numero: endereco.street_number.trim(),
-    complemento:
-      endereco.complement === undefined || endereco.complement.trim() === ''
-        ? null
-        : endereco.complement.trim(),
-    bairro: endereco.neighborhood.trim(),
-    cidade: endereco.city.trim(),
-    uf: endereco.state.trim().toUpperCase(),
-  };
 }
 
 /**
@@ -238,7 +202,7 @@ export function registrarRotaDePedidoDePlaquinha(
       const pedido = await deps.pedidos.pedir(
         petIdDoCaminho(request),
         conta,
-        comoEnderecoDeEntrega(corpo),
+        comoEnderecoDeEntrega(corpo.delivery_address),
         corpo.notes ?? null,
       );
       return reply.status(200).send(comoCollarTagRequest(pedido));

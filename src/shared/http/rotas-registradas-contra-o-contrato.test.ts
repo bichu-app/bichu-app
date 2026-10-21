@@ -69,6 +69,7 @@ import * as vitrineDeFotos from '../../modules/showcase/adapters/http/showcase-r
 import * as mural from '../../modules/publications/adapters/http/publicacao-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
+import * as enderecoGuardado from '../../modules/tags/adapters/http/endereco-guardado-routes.js';
 // 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
@@ -171,6 +172,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   indicacoesAdministrativas,
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
+  enderecoGuardado,
   moderacaoAdministrativa,
   // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
   // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele

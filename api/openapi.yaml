@@ -1440,6 +1440,109 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ----------------------------------------------------------------------
+  # O ENDERECO DE ENTREGA GUARDADO NA CONTA
+  # ----------------------------------------------------------------------
+  #
+  # **Autorizado pelo cliente em 21/10/2026**, nas palavras dele: *"um endereco
+  # de entrega salvo na conta, reusado em todo pedido e editavel num lugar so"*.
+  # Ele existe para a pessoa nao redigitar nove campos a cada pedido de
+  # plaquinha.
+  #
+  # NAO CONFUNDIR COM `/me/location` NEM COM `Me.reference_area`, e a distincao
+  # e o que impede o defeito grave desta frente:
+  #
+  #   `/me/location`          coordenada do APARELHO, quantizada, para raio
+  #   `Me.reference_area`     CEP/bairro/cidade/UF, alimenta DISTANCIA e o
+  #                           aviso de cadastro incompleto -- sem logradouro
+  #   isto aqui               a RESIDENCIA. So o dono le. Nunca distancia.
+  #
+  # **As duas operacoes exigem `bearerAuth` e nao ha alternativa vazia.** O
+  # unico `user_id` que alcanca o `WHERE` e o do portador do token: nao existe
+  # caminho de codigo que receba identificador de terceiro, e por isso endereco
+  # de outra conta nao e 403 -- ele nao existe (ADR-0021).
+  #
+  # **O caminho e singular e sem identificador** (ADR-0010 item 6): a tabela
+  # `user_delivery_addresses` tem `user_id` como chave primaria e nao tem coluna
+  # `id`, entao nao ha identificador interno para por em rota.
+  #
+  # **Nenhuma operacao de lista projeta este endereco**, e nenhuma superficie
+  # sem conta o projeta. Isso e cobrado por
+  # `src/tools/endereco-guardado-nao-sai-em-publico.test.ts`.
+
+  /me/delivery-address:
+    get:
+      operationId: getMyDeliveryAddress
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      summary: O endereco de entrega guardado na conta
+      description: |
+        O endereco que o formulario da plaquinha usa para nascer preenchido.
+
+        **`null` quando nao ha endereco guardado, e nao 404** -- a mesma forma
+        de `getMyLocation`, e pelo mesmo motivo: "nunca guardei" e um estado
+        normal da conta, nao recurso ausente. Com `null` o formulario se
+        comporta como antes desta operacao existir.
+
+        **Leitura do proprio dono, e so dele.** `bearerAuth` sem alternativa
+        vazia, e o `WHERE` compara `user_id` com o portador do token.
+      responses:
+        '200':
+          description: |
+            O endereco guardado, ou `null` quando a conta nao tem nenhum.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyDeliveryAddress' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: putMyDeliveryAddress
+      security:
+        - bearerAuth: []
+      tags: [me]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+      summary: Guarda ou troca o endereco de entrega da conta
+      description: |
+        **`PUT` e nao `PATCH`, e o endereco inteiro vem junto.** Endereco e uma
+        coisa so: trocar de casa troca os nove campos de uma vez, e um `PATCH`
+        por campo deixaria a conta parar numa mistura de duas casas -- rua nova
+        com bairro antigo chega no lugar errado sem nada ter dado erro.
+
+        **Uma linha por conta**, e nao um historico de enderecos: o cliente
+        pediu *"um endereco de entrega salvo na conta"*, no singular. Guardar de
+        novo sobrescreve.
+
+        **Este e o UNICO lugar que escreve o endereco guardado.** O pedido da
+        plaquinha (`requestCollarTag`) **nao** o escreve: editar o endereco
+        dentro do pedido muda aquele pedido e nao mexe no que esta guardado.
+        Mudar o guardado em silencio, a partir de um formulario de pedido, e
+        a classe de defeito que so aparece meses depois -- quando a plaquinha
+        chega no endereco de antes.
+
+        Cobranca, valor e pagamento continuam fora de escopo por decisao do
+        cliente, e nada aqui os introduz.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+      responses:
+        '200':
+          description: |
+            O endereco como ficou guardado (ja normalizado: CEP sem mascara, UF
+            em maiuscula, bordas sem espaco).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryAddress' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ----------------------------------------------------------------------
   # A caixa de notificacoes -- o conteudo do sino
   # ----------------------------------------------------------------------
   #
@@ -20141,7 +20244,27 @@ components:
       type: object
       description: |
         O endereco para onde a plaquinha e enviada. **Dado pessoal**, e o
-        tratamento vai junto da definicao:
+        tratamento vai junto da definicao.
+
+        **UM SCHEMA, DUAS SUPERFICIES, desde 21/10/2026.** Ele e o corpo do
+        pedido (`CollarTagRequestInput.delivery_address`), a projecao da fila do
+        painel (`AdminCollarTagRequest.delivery_address`) **e** o endereco
+        guardado na conta (`getMyDeliveryAddress`, `putMyDeliveryAddress`).
+        Escrever um segundo schema para o endereco guardado criaria a segunda
+        redacao do mesmo endereco, e as duas divergiriam no primeiro limite que
+        mudasse -- com o efeito concreto de o endereco guardado nascer capaz de
+        produzir um pedido que o banco recusa. As travas do banco sao as mesmas
+        nas duas tabelas pelo mesmo motivo.
+
+        **O endereco guardado e a RESIDENCIA do usuario, e a postura dele e a
+        mais estreita das tres deste produto:** so o dono le, nunca sai em
+        projecao publica, nunca aparece em lista e nunca alimenta calculo de
+        distancia. Nao confundir com o endereco do PROFISSIONAL (comercial e
+        publico, ADR-0011 secao 4) nem com o do ENCONTRO (lugar publico, mas o
+        logradouro fica atras de conta -- ADR-0027 item 21.2, so em
+        `getNetworkEventLocation`).
+
+        O tratamento, campo a campo:
 
         - **nao sai em superficie publica**. Ele aparece para quem pediu e para
           a administracao, e mais ninguem. Nenhuma resposta sem conta o
@@ -20201,6 +20324,27 @@ components:
         neighborhood: { type: string, minLength: 2, maxLength: 80 }
         city: { type: string, minLength: 2, maxLength: 80 }
         state: { type: string, minLength: 2, maxLength: 2 }
+
+    MyDeliveryAddress:
+      description: |
+        O endereco de entrega guardado na conta, **ou `null` quando a conta nao
+        tem nenhum**.
+
+        **Alias anulavel de `DeliveryAddress`, e nao um segundo endereco.** O
+        `null` precisa estar no schema, e nao so na prosa: um gerador de tipo
+        nao le descricao, e sem ele o cliente gerado nasceria com um endereco
+        nao-anulavel e quebraria na primeira conta sem endereco guardado -- que
+        e o estado de TODA conta no dia em que esta operacao entrar no ar.
+        `DeliveryAddress` em si **nao** pode ser anulavel: ele e corpo
+        obrigatorio de `requestCollarTag` e de `putMyDeliveryAddress`.
+
+        `null` nao e erro e nao e recurso ausente: e o estado normal de quem
+        ainda nao guardou endereco, e nele o formulario da plaquinha se comporta
+        exatamente como antes desta operacao existir. Mesma forma e mesmo motivo
+        de `UserLocation` em `getMyLocation`.
+      oneOf:
+        - $ref: '#/components/schemas/DeliveryAddress'
+        - type: 'null'
 
     CollarTagRequestStatus:
       type: string
