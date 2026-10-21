@@ -539,6 +539,9 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         rotulo: _TextosDaPlaquinha.destinatario,
                         controlador: _destinatario,
                         limite: 120,
+                        // Nome de PESSOA: `name` e a variante de teclado de
+                        // nome do sistema.
+                        tipoDeTeclado: TextInputType.name,
                         capitalizacao: TextCapitalization.words,
                       ),
                       _campo(
@@ -574,6 +577,14 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         rotulo: _TextosDaPlaquinha.logradouro,
                         controlador: _logradouro,
                         limite: 120,
+                        // `streetAddress` liga a variante de teclado de
+                        // endereco do sistema. **A sugestao de endereco
+                        // inteiro do iOS depende de `autofillHints`, e nao
+                        // deste tipo** -- este campo nao declara nenhuma, e
+                        // acrescenta-las e mudanca de outra ordem (vale para
+                        // os 4 campos de endereco das 2 telas que tem
+                        // endereco). Fica dito para quem for fazer.
+                        tipoDeTeclado: TextInputType.streetAddress,
                         capitalizacao: TextCapitalization.words,
                       ),
                       _campo(
@@ -581,6 +592,13 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         rotulo: _TextosDaPlaquinha.numero,
                         controlador: _numero,
                         limite: 20,
+                        // NUMERO DA CASA: teclado de numero. Era o campo de
+                        // teclado errado do levantamento de 20/10/2026 -- ele
+                        // abria o alfabeto inteiro para quem vai digitar
+                        // tres digitos. `number` e nao `digitsOnly`: ha
+                        // endereco com `123-A` e com `s/n`, e um filtro de
+                        // digito recusaria os dois em silencio.
+                        tipoDeTeclado: TextInputType.number,
                         exemplo: _TextosDaPlaquinha.exemploDoNumero,
                       ),
                       _campo(

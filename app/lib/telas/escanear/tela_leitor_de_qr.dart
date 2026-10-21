@@ -681,36 +681,19 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       // Sem `appBar`: ver a nota da classe. A saida vem sobreposta, logo
       // abaixo, e nao numa barra de topo.
       //
-      // A BARRA SOBE COM O TECLADO, E O RECUO E PEDIDO AQUI PORQUE O
-      // `Scaffold` NAO O DA. `_ScaffoldLayout.performLayout` ancora a
-      // `bottomNavigationBar` em `size.height` -- a altura inteira da tela --
-      // e so o `body` recebe o recuo do teclado (`contentBottom = bottom -
-      // max(minInsets.bottom, bottomWidgetsHeight)`). Sem este `Padding` a
-      // barra fica ATRAS do teclado, e `Continuar`, `Digitar de novo` e
+      // A BARRA SOBE COM O TECLADO, E O RECUO MORA DENTRO DELA. Sem ele a
+      // barra fica atras do teclado e `Continuar`, `Digitar de novo` e
       // `Como achei este animal` viram botoes inalcancaveis: e o defeito que o
       // cliente mediu no iPhone dele em 20/10/2026 ("o teclado ... sobrepoe os
-      // botoes embaixo"). O proprio cabecalho de [BarraDeAcaoFixa] tinha a
-      // medicao escrita -- barra em 543..640 dp, teclado cobrindo 370..640 --
-      // e tratava o resultado como vantagem de area rolavel.
+      // botoes embaixo").
       //
-      // **Aqui, e nao dentro de [BarraDeAcaoFixa]**: a barra e de todas as
-      // telas do app e tres outras frentes estao mexendo em telas que a usam.
-      // O recuo vive na tela que tem campo de texto.
-      //
-      // O numero vem deste `context`, que e o do `State`, acima do `Scaffold`:
-      // de dentro do corpo `viewInsets.bottom` chega zerado, pelo motivo
-      // escrito em `_corpo()`. Com o teclado fechado o recuo e zero e nada
-      // muda em nenhum dos outros cinco estados.
-      //
-      // `Padding` e nao `AnimatedPadding`: o sistema entrega o inset quadro a
-      // quadro enquanto o teclado sobe, e a barra ja acompanha a animacao
-      // dele. Um segundo animador correria atras do primeiro.
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: BarraDeAcaoFixa(acoes: _acoes()),
-      ),
+      // **NAO PONHA UM `Padding` DE TECLADO AQUI DE NOVO.** Ele nasceu nesta
+      // linha, quando esta era a unica tela com o defeito, e subiu para
+      // [BarraDeAcaoFixa] quando o cliente achou a segunda (`Meus dados`, no
+      // mesmo dia). Sao 13 as telas que trazem aquela barra junto com campo de
+      // texto, e o conserto e um so, la. Os dois juntos dariam recuo DOBRADO:
+      // a barra subiria duas vezes a altura do teclado.
+      bottomNavigationBar: BarraDeAcaoFixa(acoes: _acoes()),
       body: Stack(
         children: <Widget>[
           Positioned.fill(child: _corpo()),

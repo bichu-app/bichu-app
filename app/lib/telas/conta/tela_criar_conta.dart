@@ -567,6 +567,9 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
               BichuField(
                 key: _alvoDoNome,
                 rotulo: 'Nome',
+                // Nome de PESSOA: `name`, a variante de teclado de nome
+                // do sistema.
+                tipoDeTeclado: TextInputType.name,
                 controlador: _nome,
                 erro: _erroDoNome,
                 // **Sem `opcional`, e agora isso e verdade.** O rotulo desta

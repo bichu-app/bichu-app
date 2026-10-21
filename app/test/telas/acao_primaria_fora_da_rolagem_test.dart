@@ -263,7 +263,47 @@ void main() {
       Future<http.Response> Function(http.Request) rede,
     ) async {
       await abrir(tester, 'Entrar', rede);
+      // **A NAVEGACAO PARA C.4 TAMBEM ACONTECE NUM GABARITO FOLGADO**, pelo
+      // mesmo motivo -- e com a mesma consequencia nenhuma -- do que ja esta
+      // escrito em `abrir` sobre a porta do `Perfil`.
+      //
+      // O que mudou em 20/10/2026: a `BarraDeAcaoFixa` passou a subir com o
+      // teclado, porque o `Scaffold` a ancorava em `size.height` e ela ficava
+      // ATRAS dele -- o cliente mediu o defeito duas vezes no iPhone dele ("o
+      // teclado vem aberto o que impede de clicar no botao de salvar"). O
+      // conserto tem um custo, e e este: com o teclado aberto a barra passou a
+      // ocupar area que antes era do corpo, 97 dp no gabarito medido. Em
+      // 320 x 568 com 270 dp de teclado sobram 137 dp de corpo, e `Esqueci
+      // minha senha` -- que e um LINK no corpo de C.2, e nao a acao primaria
+      // de ninguem -- caiu atras da barra: o `tap` daqui deixou de acertar e
+      // os dois casos de C.4 reprovavam no CAMINHO DE ENTRADA, sem chegar a
+      // tela que eles medem.
+      //
+      // **Isto nao afrouxa a regra deste arquivo, e o teclado nao e
+      // dispensado:** `aparelhoPequenoComTeclado` segue valendo, `abrir`
+      // devolve o gabarito pequeno COM o teclado antes de sair, e todo
+      // `expect` destes dois casos mede C.4 em 320 x 568 com 270 dp de
+      // teclado. O que mudou de lugar foi so o toque que ENTRA na tela.
+      //
+      // **E a regra ficou mais forte com o conserto, nao mais fraca.** Antes
+      // dele, `Enviar o link` vivia na barra ATRAS do teclado e estes casos
+      // passavam -- porque `tocarSemRolar` usa `warnIfMissed: false`, que
+      // silencia exatamente o toque que nao acerta. O botao que eles juram
+      // alcancavel agora esta de verdade acima do teclado. Quem quiser
+      // endurecer isto mede o retangulo, como fazem
+      // `test/widgets/barra_de_acao_fixa_sobe_com_o_teclado_test.dart` e os
+      // dois casos de alcance de `Meus dados` e do leitor.
+      final tamanhoDoCaso = tester.view.physicalSize;
+      final tecladoDoCaso = tester.view.viewInsets.bottom;
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('Esqueci minha senha'));
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = tamanhoDoCaso;
+      tester.view.viewInsets = FakeViewPadding(bottom: tecladoDoCaso);
       await tester.pumpAndSettle();
     }
 

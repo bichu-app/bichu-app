@@ -743,6 +743,40 @@ void main() {
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
+      // **ROLA ATÉ O CAMPO ANTES DE MEDIR, desde 20/10/2026.** O `ListView`
+      // só constrói o que cabe na tela, e depois de preencher os sete campos a
+      // lista está embaixo: `Nome do lugar` é o primeiro deles e não está na
+      // árvore, então `find.text` achava zero mesmo com a marca no campo —
+      // medido (a árvore tinha `Cidade`, `UF` e `Observações`).
+      //
+      // **Por que isto mudou agora, e o que ele revela.** `BichuField` ganhou
+      // `onTapOutside` (tocar fora fecha o teclado, nos 65 campos do app, que
+      // era o conserto dos 7 becos de teclado sem saída). Com o campo perdendo
+      // o foco no toque em `Criar evento`, a posição da rolagem ao fim do envio
+      // deixou de ser a de antes — antes a mecânica de foco do `EditableText`
+      // mantinha, por acidente da geometria deste caso, o trecho de cima
+      // visível.
+      //
+      // **A INVARIANTE DO CASO NÃO MUDOU**: o que ele cobra é que a recusa
+      // marque O CAMPO, e não que saia como faixa genérica. Rolar primeiro é o
+      // que a pessoa faria, e é o que o próprio `rolarAte` existe para fazer.
+      //
+      // **E ele deixou um defeito de produto à vista, que não é desta isca:**
+      // esta tela não rola até o primeiro campo recusado. Quem envia com a
+      // lista embaixo recebe a marca num campo fora da tela e não vê recusa
+      // nenhuma. Está apontado na entrega de quem mexeu em `BichuField`.
+      // `passo: -120` porque o alvo esta ACIMA da dobra, e
+      // `scrollable: corpoDoFormulario` porque esta tela e EMPILHADA sobre a
+      // casca de abas -- as duas razoes estao escritas em `rolarAte` e no
+      // proprio `corpoDoFormulario`, e sao as mesmas dos outros tres usos
+      // deste arquivo.
+      await rolarAte(
+        tester,
+        find.widgetWithText(BichuField, 'Nome do lugar'),
+        passo: -120,
+        scrollable: corpoDoFormulario,
+      );
+
       expect(
         find.text('Escreva só o nome do lugar, sem endereço.'),
         findsOneWidget,

@@ -146,6 +146,14 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
                       controller: _relato,
                       maxLines: 3,
                       maxLength: 1000,
+                      // TOCAR FORA FECHA O TECLADO. `TextField` cru, e nao
+                      // `BichuField`: ver a prosa em
+                      // `widgets/bichu_field.dart`. Com `maxLines: 3` a tecla
+                      // de retorno insere linha, e esta folha e modal -- o
+                      // teclado aberto cobria o `Enviar` dela sem ter como
+                      // descer.
+                      onTapOutside: (PointerDownEvent _) =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
                       decoration: const InputDecoration(
                         labelText: 'Quer contar mais? (opcional)',
                       ),
