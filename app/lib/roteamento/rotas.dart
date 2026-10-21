@@ -1284,8 +1284,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // para resolver um convite lido.
       GoRoute(
         path: Rotas.convidarTutores,
-        builder: (context, estado) =>
-            TelaDeConvidarTutores(convites: Escopo.of(context).convites),
+        builder: (context, estado) => TelaDeConvidarTutores(
+          convites: Escopo.of(context).convites,
+          conexoes: Escopo.of(context).conexoes,
+        ),
       ),
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
       _comBarraFixa(

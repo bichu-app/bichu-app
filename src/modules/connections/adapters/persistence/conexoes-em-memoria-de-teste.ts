@@ -65,6 +65,16 @@ export interface PessoaDeTeste {
   readonly nomeDeExibicao: string | null;
   /** `false` reproduz `conta_habilitada(uuid) = false`. */
   readonly habilitada: boolean;
+  /**
+   * Reproduz o `EXISTS` de `pets` com `pet_photos.status = 'ready'` — o segundo
+   * sinal do contador de convidados (21/10/2026).
+   *
+   * **Opcional, e o padrão é `false`**, e isso não é conveniência: o padrão
+   * reproduz a conta recém-criada, que é justamente quem o freio anti-abuso
+   * precisa NÃO contar. Um padrão `true` faria o caso do abuso passar sem
+   * ninguém escrevê-lo.
+   */
+  readonly petComFotoPronta?: boolean;
 }
 
 export interface BancadaDeConexoes {
@@ -128,6 +138,23 @@ export function conexoesEmMemoria(
       }),
 
     contarConexoes: (pessoa: UserId) => Promise.resolve(contarConexoesDe(pessoa)),
+
+    /**
+     * Os DOIS sinais do contador de convidados, no mesmo recorte da consulta
+     * de verdade: aresta aceita com esta conta no DESTINO e origem de convite,
+     * **e** quem pediu com pet de foto pronta.
+     */
+    contarConvidadosQueEntraram: (pessoa: UserId) =>
+      Promise.resolve(
+        linhas.filter(
+          (l) =>
+            l.estado === 'accepted' &&
+            l.destinatario === pessoa &&
+            l.origem === 'invite_link' &&
+            viva(l) &&
+            estado.get(l.pedinte)?.petComFotoPronta === true,
+        ).length,
+      ),
 
     arestaDoPar: (quemChama: UserId, outro: UserId) => {
       const achada = linhas.find(

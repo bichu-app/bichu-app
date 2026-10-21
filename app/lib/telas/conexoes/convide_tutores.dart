@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../api/conexoes_api.dart';
 import '../../api/convites_api.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -57,24 +58,28 @@ import '../casca_com_abas.dart';
 /// escrita para receber um prêmio depois **sem redesenho**: ela recebe os
 /// marcos e o que cada um entrega, e hoje o que cada um entrega é uma palavra.
 ///
-/// ## O CONTADOR NÃO TEM ROTA, E É POR ISSO QUE ESTA TELA DIZ "NINGUÉM AINDA"
+/// ## O CONTADOR VEM DO SERVIDOR, E A REGRA MORA SÓ LÁ
 ///
-/// **MEDIDO:** o contrato não devolve, em operação nenhuma, quantas pessoas
-/// entraram pelo convite de alguém. `ConnectionInviteIssued` recusa a contagem
-/// de usos **por escrito** — *"seria a lista de quem viu o perfil de alguém,
-/// reduzida a um número"* — e `ConnectionSummary` traz cinco números, nenhum
-/// deles este.
+/// `invited_joined_count`, em `getMyConnectionSummary` — a operação que esta
+/// tela já tinha motivo para ler. **A regra são dois sinais**, e os dois estão
+/// na cláusula `WHERE` do servidor: conexão **aceita** nascida de um convite
+/// desta conta, **e** a pessoa com ao menos um pet de foto `ready`. O segundo é
+/// o freio anti-abuso, e é o mesmo sinal que a vitrine já usa.
 ///
-/// A regra de quando uma indicação conta está decidida (**conexão aceita E a
-/// pessoa com ao menos um pet com foto `ready`**), e os dois sinais são legíveis
-/// no banco — o segundo é o mesmo freio anti-abuso da vitrine. O que falta é a
-/// rota, e **a tela não a simula**: um número montado aqui com o que o app tem
-/// na mão contaria conexões aceitas de qualquer procedência, e diria que a
-/// pessoa trouxe gente que ela não trouxe.
+/// **O app não reproduz a regra**, e isso não é economia: dois clientes com a
+/// própria cópia contariam diferente, e o número que a pessoa vê passaria a
+/// depender de qual aplicativo ela abriu.
 ///
-/// Então o placar nasce **ausente**, com o estado que é verdade hoje. Quando a
-/// rota existir, [_placar] recebe o número e a trilha aparece: nada aqui precisa
-/// mudar de forma.
+/// **E não é contagem de usos do convite.** `ConnectionInviteIssued` recusa
+/// aquela por escrito — *"seria a lista de quem viu o perfil de alguém,
+/// reduzida a um número"* —, e as duas são coisas diferentes: quantos ABRIRAM o
+/// link é informação sobre quem olhou um perfil; quantos viraram conexão aceita
+/// com pet cadastrado é informação sobre a própria rede de quem pergunta.
+///
+/// **A falha de leitura não vira zero.** Nulo é "não consegui perguntar" e zero
+/// é "ninguém ainda", e os dois desenham telas diferentes — dizer "Ninguém
+/// ainda" sobre uma pergunta que não foi respondida é afirmar o que ninguém
+/// disse.
 ///
 /// ## NÃO HÁ "EM ANDAMENTO", e a ausência é do contrato e não de escopo
 ///
@@ -112,9 +117,20 @@ import '../casca_com_abas.dart';
 /// corpo da resposta — como `share_url` já faz no caso de perdido, onde é a
 /// **ausência do campo** que esconde a ação.
 class TelaDeConvidarTutores extends StatefulWidget {
-  const TelaDeConvidarTutores({required this.convites, super.key});
+  const TelaDeConvidarTutores({
+    required this.convites,
+    required this.conexoes,
+    super.key,
+  });
 
   final ConvitesApi convites;
+
+  /// A porta do resumo, de onde sai o contador desta tela.
+  ///
+  /// Entra por parâmetro e não sai do `Escopo` aqui dentro, como em
+  /// `TelaDePerfilDePessoa`: é isto que permite montar a tela num teste de
+  /// widget sem construir as vinte e nove dependências do escopo.
+  final ConexoesApi conexoes;
 
   /// O título, e o rótulo da porta que leva até aqui. **Uma constante para os
   /// dois**: quem procura a função pelo nome do menu precisa ver o mesmo nome
@@ -130,6 +146,29 @@ class TelaDeConvidarTutores extends StatefulWidget {
       'Mostre o seu QR para quem tem pet. Quem aceitar a conexão aparece aqui.';
 
   static const String tituloDoConvite = 'Meu QR de convite';
+
+  /// **O QR É APP-PARA-APP, e a tela diz isso em voz alta** (decisão de
+  /// 21/10/2026).
+  ///
+  /// Sem esta frase a pessoa aponta a câmera comum do celular para o quadrado,
+  /// não acontece nada que ela reconheça, e ela conclui que o recurso está
+  /// quebrado. E a frase não é consolo: ela é **a instrução** — o que faz o
+  /// convite funcionar é a outra pessoa abrir o Bichu e escanear de dentro
+  /// dele.
+  ///
+  /// **MEDIDO, e é por isso que não há alternativa hoje:** não existe página de
+  /// convite no site (`web/src/pages/` não tem uma, e `/c/` já é da conversa do
+  /// achador, ADR-0017), o app não tem `WEB_BASE_URL`, o manifesto tem um único
+  /// `intent-filter` (MAIN/LAUNCHER) com `assetlinks.json` vazio, e o contrato
+  /// recusa montar o endereço (*"quem os monta é a tela"*). Um QR com URL seria
+  /// um QR que a câmera comum abre num 404 — e o 404 deste site serve um cartão
+  /// que diz `Esta página não existe no site do Bichu`.
+  ///
+  /// **Para quem não tem o Bichu, nada funciona hoje, e a tela não promete que
+  /// funciona.** Essa limitação é conhecida e foi levada ao cliente.
+  static const String oQrEDeAppParaApp =
+      'Peça para a pessoa abrir o Bichu e escanear daqui. A câmera comum do '
+      'celular não abre este código.';
 
   /// A ação de emitir, para quem ainda não tem convite nesta sessão.
   static const String criarOConvite = 'Criar o meu QR de convite';
@@ -181,10 +220,41 @@ class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
 
   /// Quantas pessoas a conta trouxe, ou **nulo quando ninguém contou**.
   ///
-  /// Hoje é sempre nulo, e isso não é um valor de queda: é a ausência da rota,
-  /// escrita como ausência. Ver o cabeçalho — um número montado aqui contaria
-  /// conexões de qualquer procedência.
-  int? get _placar => null;
+  /// Nulo e zero são coisas diferentes, e a tela depende disso: zero é a
+  /// afirmação do servidor de que ninguém entrou ainda; nulo é a ausência de
+  /// afirmação. Ver o cabeçalho.
+  int? _placar;
+
+  bool _lendoOPlacar = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_lerOPlacar());
+  }
+
+  /// Lê `getMyConnectionSummary` e guarda só o número desta tela.
+  ///
+  /// **A falha deixa [_placar] nulo e NÃO desenha faixa**: o placar é
+  /// reconhecimento, não é o que a pessoa veio fazer aqui — ela veio pegar o
+  /// QR. Uma faixa vermelha no topo culparia o convite por uma leitura
+  /// auxiliar, e o bloco do QR continua inteiro sem ela.
+  Future<void> _lerOPlacar() async {
+    try {
+      final resumo = await widget.conexoes.resumo();
+      if (!mounted) return;
+      setState(() {
+        _placar = resumo.invitedJoinedCount;
+        _lendoOPlacar = false;
+      });
+    } on FalhaDeChamada {
+      if (!mounted) return;
+      setState(() {
+        _placar = null;
+        _lendoOPlacar = false;
+      });
+    }
+  }
 
   Future<void> _emitir() async {
     if (_emitindo) return;
@@ -255,9 +325,27 @@ class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
     );
   }
 
+  /// O bloco do reconhecimento, em **três** estados — e o terceiro é o que
+  /// separa "ninguém ainda" de "não consegui perguntar".
   List<Widget> _placarDoReconhecimento() {
+    // **ENQUANTO A LEITURA NÃO VOLTOU, nada é afirmado.** Sem isto o bloco
+    // piscaria "Ninguém ainda" por um quadro para quem trouxe dez pessoas.
+    if (_lendoOPlacar) {
+      return const <Widget>[
+        Center(
+          child: Padding(
+            padding: EdgeInsets.all(BichuEspaco.e6),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      ];
+    }
     final quantos = _placar;
-    if (quantos == null || quantos == 0) {
+    // **NULO NÃO VIRA "NINGUÉM AINDA".** O bloco inteiro sai da tela: dizer que
+    // ninguém entrou é uma afirmação, e o servidor não a fez. O que a pessoa
+    // veio fazer aqui -- pegar o QR -- continua logo abaixo.
+    if (quantos == null) return const <Widget>[];
+    if (quantos == 0) {
       return const <Widget>[
         EstadoVazio(
           titulo: TelaDeConvidarTutores.tituloSemNinguem,
@@ -303,6 +391,14 @@ class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
       ] else ...<Widget>[
         Center(child: QrDoConvite(token: convite.inviteToken)),
         const SizedBox(height: BichuEspaco.e4),
+        // **A INSTRUÇÃO VEM ANTES DO PRAZO**, e a ordem é escolhida: o prazo é
+        // sobre o convite, e esta frase é sobre o que a pessoa precisa fazer
+        // AGORA para ele funcionar. Ver `oQrEDeAppParaApp`.
+        Text(
+          TelaDeConvidarTutores.oQrEDeAppParaApp,
+          style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
         Text(
           TelaDeConvidarTutores.valeAte(convite.expiresAt),
           style: textos.bodyMedium?.copyWith(color: cores.textSecondary),

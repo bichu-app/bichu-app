@@ -116,6 +116,7 @@ void main() {
         'requests_received_count': 0,
         'remaining_requests_today': 10,
         'connection_limit': 150,
+        'invited_joined_count': 0,
       });
     }
     // O MURAL VAZIO, que é o estado que o caso (c) precisa: a linha é

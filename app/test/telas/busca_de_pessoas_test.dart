@@ -78,6 +78,7 @@ Map<String, dynamic> _resumo({int restamHoje = 7}) {
     'requests_received_count': 1,
     'remaining_requests_today': restamHoje,
     'connection_limit': 150,
+    'invited_joined_count': 0,
   };
 }
 

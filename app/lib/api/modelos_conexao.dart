@@ -140,6 +140,7 @@ class ResumoDeConexoes {
     required this.requestsReceivedCount,
     required this.remainingRequestsToday,
     required this.connectionLimit,
+    required this.invitedJoinedCount,
   });
 
   factory ResumoDeConexoes.doJson(Map<String, dynamic> json) {
@@ -149,6 +150,7 @@ class ResumoDeConexoes {
       requestsReceivedCount: json['requests_received_count'] as int,
       remainingRequestsToday: json['remaining_requests_today'] as int,
       connectionLimit: json['connection_limit'] as int,
+      invitedJoinedCount: json['invited_joined_count'] as int,
     );
   }
 
@@ -157,6 +159,29 @@ class ResumoDeConexoes {
   final int requestsReceivedCount;
   final int remainingRequestsToday;
   final int connectionLimit;
+
+  /// **Quantos tutores entraram no Bichu pelo convite desta conta e viraram
+  /// conexão aceita** — o número da seção `Convide tutores`.
+  ///
+  /// ## A REGRA NÃO MORA AQUI, e isso é deliberado
+  ///
+  /// Conta quem satisfaz os **dois** sinais: conexão aceita com esta conta,
+  /// nascida de um convite, **e** a pessoa com ao menos um pet de foto
+  /// `ready`. Os dois estão na cláusula `WHERE` do servidor, e o app **não os
+  /// reproduz** — dois clientes com a própria cópia da regra contariam
+  /// diferente, e o número que a pessoa vê passaria a depender de qual
+  /// aplicativo ela abriu.
+  ///
+  /// **Não é contagem de usos do convite**, e a distinção importa: quantas
+  /// pessoas ABRIRAM o link é informação sobre quem olhou um perfil, e
+  /// `ConnectionInviteIssued` a recusa por escrito. Este número é sobre a
+  /// própria rede de quem pergunta, do mesmo tipo que [connectedCount].
+  ///
+  /// **Não anulável, e não há `?? 0`**: zero vindo do servidor é a afirmação de
+  /// que ninguém entrou ainda; campo ausente é resposta fora do contrato, e
+  /// `FormatException` é o que a tela precisa para não afirmar "ninguém ainda"
+  /// sobre uma pergunta que não foi respondida.
+  final int invitedJoinedCount;
 }
 
 /// Local: qual caixa de pedidos a tela está mostrando. Não espelha schema

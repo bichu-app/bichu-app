@@ -12967,6 +12967,7 @@ components:
         - requests_received_count
         - remaining_requests_today
         - connection_limit
+        - invited_joined_count
       properties:
         connected_count:
           type: integer
@@ -12981,6 +12982,48 @@ components:
         connection_limit:
           type: integer
           description: O teto de conexoes, do servidor. Hoje 150.
+        invited_joined_count:
+          type: integer
+          minimum: 0
+          description: |
+            **Quantos tutores entraram no Bichu pelo convite DESTA conta e
+            viraram conexao aceita**, decisao do cliente de 21/10/2026: a secao
+            `Convide tutores` precisa de um numero para reconhecer quem trouxe
+            gente.
+
+            ## A REGRA SAO DOIS SINAIS, E OS DOIS NO SERVIDOR
+
+            Conta quem satisfaz **as duas** condicoes:
+
+            1. a conexao com esta conta esta **aceita** (`accepted`), e o pedido
+               chegou com `origin = 'invite_link'` -- e o unico convite que leva
+               ao perfil desta conta e o DELA, entao origem de convite com esta
+               conta no destino quer dizer *entrou pelo meu convite*;
+            2. a pessoa tem **ao menos um pet com foto `ready`**.
+
+            **O segundo sinal e o freio anti-abuso, e nao enfeite**: uma conta
+            criada a toa para inflar o contador de alguem nao tem pet com foto
+            aprovada. E e o MESMO freio que a vitrine ja usa, o que evita uma
+            segunda definicao de "conta de verdade".
+
+            **A regra mora SO aqui**, na clausula `WHERE` desta contagem. Ela nao
+            e reproduzida em cliente nenhum de proposito: dois clientes com a
+            propria copia contariam diferente, e o numero que a pessoa ve
+            dependeria de qual aplicativo ela abriu.
+
+            ## O QUE ELE NAO E, e a distincao e do coordenador
+
+            **Nao e contagem de USOS do convite.** `ConnectionInviteIssued`
+            recusa aquela por escrito -- *"seria a lista de quem viu o perfil de
+            alguem, reduzida a um numero"* --, e as duas coisas sao diferentes:
+            quantos ABRIRAM o link e informacao sobre quem olhou um perfil;
+            quantos viraram conexao aceita com pet cadastrado e informacao sobre
+            a propria rede de quem pergunta, do mesmo tipo que
+            `connected_count`.
+
+            **E nao diz QUEM.** Como as outras quatro contagens desta resposta, e
+            o numero e nunca a lista -- e e essa diferenca que o torna publicavel
+            onde a lista nao e (plano 4-B).
 
     Problem:
       type: object

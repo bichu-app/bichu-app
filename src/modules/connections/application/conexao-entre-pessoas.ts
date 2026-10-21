@@ -86,6 +86,15 @@ export interface ResumoDasConexoes {
   readonly requests_received_count: number;
   readonly remaining_requests_today: number;
   readonly connection_limit: number;
+  /**
+   * Quantos tutores entraram pelo convite desta conta e viraram conexão aceita.
+   *
+   * **A regra mora no banco, e não aqui**: ver
+   * `ConnectionsRepository.contarConvidadosQueEntraram`. Este arquivo não a
+   * reproduz de propósito — uma segunda cópia dela seria uma segunda resposta
+   * para a mesma pergunta.
+   */
+  readonly invited_joined_count: number;
 }
 
 export interface DependenciasDaConexao {
@@ -331,12 +340,18 @@ export class ConexaoEntrePessoas {
       limite: 1,
       agora,
     });
+    // **A contagem de convidados vem de uma consulta PRÓPRIA**, e não de
+    // `contagens`: aquela alimenta os tetos e é lida em cada pedido de conexão,
+    // e este número precisa de uma junção com `pets` e `pet_photos` que nenhum
+    // teto usa. Ver a porta.
+    const convidados = await this.deps.conexoes.contarConvidadosQueEntraram(contexto.userId);
     return {
       connected_count: contagens.conexoes,
       pending_sent_count: contagens.pendentesEnviados,
       requests_received_count: recebidos.total,
       remaining_requests_today: pedidosQueAindaCabemHoje(contagens),
       connection_limit: TETO_DE_CONEXOES,
+      invited_joined_count: convidados,
     };
   }
 

@@ -94,8 +94,20 @@ function montar(opcoes: {
   apelidoPara?: UserId;
   bloqueado?: boolean;
   agora?: Instant;
+  /**
+   * Quem tem pet com foto `ready` -- o segundo sinal do contador de convidados
+   * (21/10/2026).
+   *
+   * Lista e nao booleano porque o sinal e de UMA conta, e o caso que importa e
+   * justamente o assimetrico: quem entrou pelo convite tem pet, ou nao tem.
+   */
+  comPetComFotoPronta?: readonly UserId[];
 } = {}): Montagem {
-  const bancada = conexoesEmMemoria(PESSOAS, opcoes.agora ?? AGORA);
+  const comFoto = opcoes.comPetComFotoPronta ?? [];
+  const pessoas: readonly PessoaDeTeste[] = PESSOAS.map((pessoa) =>
+    comFoto.includes(pessoa.id) ? { ...pessoa, petComFotoPronta: true } : pessoa,
+  );
+  const bancada = conexoesEmMemoria(pessoas, opcoes.agora ?? AGORA);
   const trilha: AuditEvent[] = [];
   let sorteio = 0;
 
@@ -558,5 +570,103 @@ void describe('o pedido é idempotente, e a aresta morta é reaproveitada', () =
     const renovado = await depois.servico.pedir(contexto(BIA), 'convite');
     assert.equal(renovado.state, 'pending_sent');
     assert.equal(depois.bancada.linhas.length, 1, 'reaproveita a linha: uma linha por par');
+  });
+});
+
+void describe('ISCA: o contador de convidados conta quem ACEITOU e tem pet com foto', () => {
+  // A regra e decisao do cliente de 21/10/2026, e ela sao DOIS sinais. Este
+  // grupo os mede um a um, e cada caso tem contrapeso: sem contrapeso, um
+  // contador que devolvesse zero sempre passaria em metade deles.
+  //
+  // **O numero mora no SERVIDOR, numa fonte so.** Se a regra morasse no
+  // aplicativo, dois clientes contariam diferente e o numero que a pessoa ve
+  // dependeria de qual deles ela abriu.
+
+  void it('pedido pendente NAO conta: falta o aceite', async () => {
+    const { servico } = montar({ convitePara: ANA, comPetComFotoPronta: [BIA] });
+    await servico.pedir(contexto(BIA), 'convite');
+
+    assert.equal(
+      (await servico.resumo(contexto(ANA))).invited_joined_count,
+      0,
+      'REPROVA: um pedido pendente ja conta como tutor trazido. O aceite e ' +
+        'obrigatorio, e sem ele a pessoa nao entrou na rede de ninguem.',
+    );
+  });
+
+  void it('CONTRAPESO: aceito E com pet de foto pronta conta UM', async () => {
+    const { servico } = montar({ convitePara: ANA, comPetComFotoPronta: [BIA] });
+    const pedido = await servico.pedir(contexto(BIA), 'convite');
+    await servico.aceitar(contexto(ANA), pedido.ref);
+
+    assert.equal(
+      (await servico.resumo(contexto(ANA))).invited_joined_count,
+      1,
+      'REPROVA: a conexao aceita de quem entrou pelo convite, com pet de foto ' +
+        'pronta, nao contou.',
+    );
+  });
+
+  void it('aceito e SEM pet com foto pronta NAO conta: e o freio anti-abuso', async () => {
+    // PARA DESLIGAR E VER REPROVAR: no dublê, tire o
+    // `petComFotoPronta === true` de `contarConvidadosQueEntraram`.
+    //
+    // Uma conta criada a toa para inflar o contador de alguem nao tem pet com
+    // foto aprovada. E o mesmo sinal que a vitrine ja usa, o que evita uma
+    // segunda definicao de "conta de verdade".
+    const { servico } = montar({ convitePara: ANA });
+    const pedido = await servico.pedir(contexto(BIA), 'convite');
+    await servico.aceitar(contexto(ANA), pedido.ref);
+
+    assert.equal(
+      (await servico.resumo(contexto(ANA))).connected_count,
+      1,
+      'REPROVA: o contrapeso deste caso caiu -- a conexao nao foi aceita, e ' +
+        'entao ele nao mede o freio do pet.',
+    );
+    assert.equal(
+      (await servico.resumo(contexto(ANA))).invited_joined_count,
+      0,
+      'REPROVA: contou quem nao tem pet com foto pronta. O segundo sinal e o ' +
+        'freio anti-abuso, e sem ele o contador se enche com contas vazias.',
+    );
+  });
+
+  void it('quem CONVIDOU nao aparece no contador de quem foi convidado', async () => {
+    // A assimetria e o ponto: `connected_count` sobe nos dois lados, e este
+    // nao. Contar os dois lados somaria quem a conta trouxe com quem a trouxe.
+    const { servico } = montar({ convitePara: ANA, comPetComFotoPronta: [BIA] });
+    const pedido = await servico.pedir(contexto(BIA), 'convite');
+    await servico.aceitar(contexto(ANA), pedido.ref);
+
+    assert.equal((await servico.resumo(contexto(ANA))).invited_joined_count, 1);
+    assert.equal(
+      (await servico.resumo(contexto(BIA))).invited_joined_count,
+      0,
+      'REPROVA: quem usou o convite de alguem viu o proprio contador subir. O ' +
+        'numero e de quem TROUXE, e nao de quem veio.',
+    );
+    assert.equal(
+      (await servico.resumo(contexto(BIA))).connected_count,
+      1,
+      'REPROVA: o contrapeso caiu -- a conexao deveria contar para os dois.',
+    );
+  });
+
+  void it('quem entrou pela BUSCA nao conta: a origem e outra', async () => {
+    // O caminho do apelido grava `origin = 'people_search'`. Quem se achou na
+    // busca nao foi trazido por ninguem, e contar isso faria o numero crescer
+    // sem a pessoa ter convidado nada.
+    const { servico } = montar({ apelidoPara: ANA, comPetComFotoPronta: [BIA] });
+    const pedido = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
+    await servico.aceitar(contexto(ANA), pedido.ref);
+
+    assert.equal((await servico.resumo(contexto(ANA))).connected_count, 1);
+    assert.equal(
+      (await servico.resumo(contexto(ANA))).invited_joined_count,
+      0,
+      'REPROVA: conexao nascida da BUSCA contou como tutor trazido pelo ' +
+        'convite. As duas origens existem para serem distinguidas.',
+    );
   });
 });

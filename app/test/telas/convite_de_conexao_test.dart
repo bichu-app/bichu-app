@@ -23,6 +23,7 @@
 import 'dart:convert';
 
 import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/conexoes_api.dart';
 import 'package:bichu/api/convites_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/conexoes/convide_tutores.dart';
@@ -137,6 +138,10 @@ void main() {
     Future<void> montar(
       WidgetTester tester, {
       bool emissaoFalha = false,
+      /// Quantos tutores o SERVIDOR diz que esta conta trouxe, ou nulo para
+      /// `getMyConnectionSummary` falhando -- os dois estados que a tela
+      /// desenha de formas diferentes.
+      int? convidados = 0,
     }) async {
       chamadas = <String>[];
       AppConfig.limparParaTeste();
@@ -149,6 +154,17 @@ void main() {
             'invite_token': tokenDeConvite,
             'expires_at': '2026-11-20T12:00:00.000Z',
           }, status: 201);
+        }
+        if (pedido.url.path.endsWith('/connections/summary')) {
+          if (convidados == null) return _json(<String, dynamic>{}, status: 500);
+          return _json(<String, dynamic>{
+            'connected_count': 12,
+            'pending_sent_count': 2,
+            'requests_received_count': 1,
+            'remaining_requests_today': 7,
+            'connection_limit': 150,
+            'invited_joined_count': convidados,
+          });
         }
         if (pedido.method == 'DELETE') return http.Response('', 204);
         return _json(<String, dynamic>{}, status: 404);
@@ -163,7 +179,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: BichuTheme.claro,
-          home: TelaDeConvidarTutores(convites: ConvitesApi(api)),
+          home: TelaDeConvidarTutores(
+            convites: ConvitesApi(api),
+            conexoes: ConexoesApi(api),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -178,37 +197,128 @@ void main() {
 
       expect(
         chamadas,
-        isEmpty,
-        reason: 'REPROVA: a tela chamou o servidor ao abrir. Emitir é escrita '
-            'irreversível (ela revoga o convite anterior), e não pode '
-            'acontecer sem alguém tocar.',
+        isNot(contains('POST /v1/connection-invites')),
+        reason: 'REPROVA: a tela EMITIU convite ao abrir. Emitir é escrita '
+            'irreversível -- ela revoga o convite anterior --, e não pode '
+            'acontecer sem alguém tocar. A leitura do resumo é outra coisa: ela '
+            'não escreve nada, e é de onde vem o contador.',
       );
       expect(find.byType(QrDoConvite), findsNothing);
       expect(find.text('Criar o meu QR de convite'), findsOneWidget);
     });
 
-    testWidgets('ISCA (e) -- diz "Ninguem ainda" e NAO inventa contagem', (
+    testWidgets('ISCA (e) -- zero do servidor e "Ninguem ainda", e nao trilha', (
       tester,
     ) async {
-      // PARA DESLIGAR E VER REPROVAR: em `TelaDeConvidarTutores`, troque
-      // `int? get _placar => null;` por `int? get _placar => 3;`.
+      // PARA DESLIGAR E VER REPROVAR: em `_placarDoReconhecimento`, tire o ramo
+      // de `quantos == 0`.
       //
-      // A regra está decidida -- conexão aceita **E** a pessoa com ao menos um
-      // pet com foto `ready` --, e os dois sinais são legíveis no banco. O que
-      // falta é a ROTA: o contrato não devolve, em operação nenhuma, quantas
-      // pessoas entraram pelo convite de alguém, e `ConnectionInviteIssued`
-      // recusa a contagem de usos por escrito. Um número montado na tela com o
-      // que o app tem na mão contaria conexões aceitas de QUALQUER procedência,
-      // e diria que a pessoa trouxe gente que ela não trouxe.
+      // Zero é uma AFIRMAÇÃO do servidor: ninguém entrou ainda. Desenhar a
+      // trilha com zero marcos alcançados afirmaria um progresso que não
+      // começou.
       await montar(tester);
 
       expect(find.text('Ninguém ainda'), findsOneWidget);
       expect(
         find.byType(TrilhaDeConvites),
         findsNothing,
-        reason: 'REPROVA: a trilha de progresso foi desenhada sem número. Ela '
-            'existe escrita para receber a contagem no dia em que a rota '
-            'existir, e desenhá-la com zero afirmaria um progresso medido.',
+        reason: 'REPROVA: a trilha foi desenhada com zero. O vazio é o estado '
+            'de quem ainda não trouxe ninguém.',
+      );
+    });
+
+    testWidgets('o contador VEM DO SERVIDOR, e a trilha aparece com ele', (
+      tester,
+    ) async {
+      // **A regra dos dois sinais mora no servidor, numa fonte só** -- conexão
+      // aceita nascida de convite E pessoa com pet de foto `ready`. O app lê o
+      // número e não o recalcula: dois clientes com a própria cópia da regra
+      // contariam diferente.
+      //
+      // PARA DESLIGAR E VER REPROVAR: em `_lerOPlacar`, troque
+      // `resumo.invitedJoinedCount` por `resumo.connectedCount`. Este caso
+      // reprova com 12, que é o número de conexões da bancada -- e é
+      // exatamente o defeito: contar conexões de qualquer procedência.
+      await montar(tester, convidados: 2);
+
+      expect(
+        chamadas,
+        contains('GET /v1/connections/summary'),
+        reason: 'REPROVA: a tela não leu o resumo. O contador vem de '
+            '`invited_joined_count`, e não de nada que o app saiba somar.',
+      );
+      expect(find.byType(TrilhaDeConvites), findsOneWidget);
+      expect(
+        find.text(
+          '2 tutores entraram no Bichu com o seu convite e já cadastraram um '
+          'pet.',
+        ),
+        findsOneWidget,
+        reason: 'REPROVA: o número do servidor não chegou à frase, ou a frase '
+            'deixou de dizer a REGRA pela qual alguém conta.',
+      );
+      expect(
+        find.text('Ninguém ainda'),
+        findsNothing,
+        reason: 'REPROVA: a tela diz que ninguém entrou com duas pessoas '
+            'contadas.',
+      );
+    });
+
+    testWidgets('ISCA -- resumo que FALHA nao vira "Ninguem ainda"', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: em `_lerOPlacar`, troque
+      // `_placar = null` por `_placar = 0` no `catch`.
+      //
+      // Nulo é "não consegui perguntar" e zero é "ninguém ainda". Dizer que
+      // ninguém entrou sobre uma pergunta que não foi respondida é afirmar o
+      // que o servidor não disse -- e para quem trouxe dez pessoas é uma
+      // mentira visível.
+      await montar(tester, convidados: null);
+
+      expect(
+        find.text('Ninguém ainda'),
+        findsNothing,
+        reason: 'REPROVA: a falha de leitura do resumo virou a afirmação de '
+            'que ninguém entrou.',
+      );
+      expect(find.byType(TrilhaDeConvites), findsNothing);
+      expect(
+        find.text('Criar o meu QR de convite'),
+        findsOneWidget,
+        reason: 'REPROVA: a falha do placar levou embora o que a pessoa veio '
+            'fazer aqui. O placar é reconhecimento; o QR é a tela.',
+      );
+    });
+
+    testWidgets('o QR diz que e APP-PARA-APP, e nao promete a camera comum', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: tire o `Text` de `oQrEDeAppParaApp` de
+      // `_blocoDoConvite`.
+      //
+      // Sem a frase a pessoa aponta a câmera comum para o quadrado, nada
+      // acontece que ela reconheça, e ela conclui que o recurso está quebrado.
+      // E para quem NÃO tem o Bichu nada funciona hoje -- a tela não pode
+      // prometer que funciona.
+      await montar(tester);
+      await tester.tap(find.text('Criar o meu QR de convite'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('abrir o Bichu e escanear'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela não diz que o QR é lido de dentro do Bichu. '
+            'Não existe página de convite no site, o app não abre por link, e '
+            'quem aponta a câmera comum não chega a lugar nenhum.',
+      );
+      expect(
+        find.textContaining('WhatsApp'),
+        findsNothing,
+        reason: 'REPROVA: a tela promete mandar o convite por WhatsApp. O link '
+            'público não existe, e mandar um endereço que abre 404 é pior que '
+            'não ter o botão.',
       );
     });
 
