@@ -1,7 +1,7 @@
 import 'api_client.dart';
 import 'modelos_notificacao.dart';
 
-/// As cinco operacoes `tags: [me]` da CAIXA DE NOTIFICACOES.
+/// As SEIS operacoes `tags: [me]` da CAIXA DE NOTIFICACOES.
 ///
 /// ---------------------------------------------------------------------------
 /// ## As duas marcacoes sao SEPARADAS, e e isso que a tela promete
@@ -111,5 +111,27 @@ class NotificacoesApi {
   /// vira uma rota que nao existe.
   Future<void> marcarComoLido(String ref) async {
     await _api.post('$_caminho/${Uri.encodeComponent(ref)}/read');
+  }
+
+  /// `POST /v1/me/notifications/{notificationRef}/dismiss`
+  /// (`dismissNotification`) -- o "x" da linha, pedido pelo cliente em
+  /// 20/10/2026.
+  ///
+  /// **DISPENSAR NAO E MARCAR COMO LIDA, e esta classe nao encadeia as duas.**
+  /// [marcarComoLido] tira o aviso do contador e o deixa na lista; esta tira a
+  /// linha da LISTA e **nao** a marca como lida. Chamar as duas aqui faria o
+  /// app perder a unica forma de limpar a lista sem afirmar que leu -- e
+  /// dispensar sem ter lido e o caso comum, porque quem limpa a lista nao abre
+  /// cada linha antes.
+  ///
+  /// **Dispensa a LINHA inteira**, inclusive quando ela resume varios avisos:
+  /// o recorte do grupo e do servidor, pela mesma chave de agrupamento da
+  /// listagem. Sem isso a linha agrupada voltaria na listagem seguinte com
+  /// outro `ref`, e teria sumido da tela para reaparecer no recarregamento.
+  ///
+  /// Idempotente por contrato: dispensar duas vezes responde `204` nas duas.
+  /// `Uri.encodeComponent` pela mesma razao de [marcarComoLido].
+  Future<void> dispensar(String ref) async {
+    await _api.post('$_caminho/${Uri.encodeComponent(ref)}/dismiss');
   }
 }

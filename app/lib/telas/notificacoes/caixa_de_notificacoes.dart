@@ -78,6 +78,29 @@
 /// do agente da barra. Esta tela nao inventa endereco: o toque faz o que o
 /// requisito pede -- marca o item como aberto -- e a linha passa a dizer
 /// `Lido` na hora, porque foi o servidor que confirmou aquele item com `204`.
+///
+/// ## O "x" DE CADA LINHA: dispensar, que nao e ler
+///
+/// Pedido do cliente (20/10/2026): *"na notificacao alem da acao de marcar
+/// como lida, cada notificacao tem que ter um x para fechar aquela notificacao
+/// para ir limpando a lista"*.
+///
+/// **Sao dois eixos independentes sobre a mesma linha, e a tela nao os
+/// encadeia.** O toque no CORPO da linha marca como lida: a linha fica e passa
+/// a dizer `Lido`. O toque no "x" DISPENSA: a linha sai da lista, e **nao**
+/// vira `Lido` no caminho. Nos dois sentidos -- dispensar sem ter lido e o
+/// caso comum, porque quem limpa a lista nao abre cada linha antes.
+///
+/// **A linha sai da tela so depois do `204`**, como em toda outra acao deste
+/// arquivo: removê-la antes esconderia o aviso de quem tocou no "x" num
+/// elevador sem sinal, e ele voltaria na proxima abertura -- a tela teria
+/// afirmado o que o servidor nao confirmou.
+///
+/// **O numero do sino nao e recalculado aqui**, e isso vale para o "x" como
+/// vale para o resto: a linha dispensada sai do contador no SERVIDOR, e quem
+/// desenha o numero o le de `getNotificationCount`. Subtrair um aqui seria a
+/// segunda definicao do numero, e ela discordaria da primeira na linha
+/// agrupada -- que vale `grouped_count` avisos no contador, e nao um.
 library;
 
 import 'package:flutter/material.dart';
@@ -127,6 +150,13 @@ abstract final class TextosDaCaixa {
 
   static const String naoConseguimosMarcar =
       'Não conseguimos marcar este aviso. Tente de novo.';
+
+  /// O rotulo acessivel do "x". **Sem o `ref`**: rotulo de leitor de tela e
+  /// saida tambem, e o identificador opaco nao e texto de tela (ADR-0010).
+  static const String fechar = 'Fechar este aviso';
+
+  static const String naoConseguimosFechar =
+      'Não conseguimos fechar este aviso. Tente de novo.';
 
   static const String naoConseguimosMarcarTodas =
       'Não conseguimos marcar seus avisos. Tente de novo.';
@@ -359,6 +389,46 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     }
   }
 
+  /// O toque no "x": a linha foi DISPENSADA.
+  ///
+  /// **Nao chama `marcarComoLido`**, e a ausencia e o requisito: dispensar tira
+  /// da lista e ler tira do contador, e quem fecha uma linha nao esta dizendo
+  /// que a leu.
+  Future<void> _dispensar(AvisoDaCaixa aviso) async {
+    setState(() => _falhaDaAcao = null);
+    try {
+      await _api.dispensar(aviso.ref);
+      if (!mounted) return;
+      setState(() {
+        // **Sai da lista SO depois do `204`.** E `_total` cai com ela, porque
+        // o servidor dispensou a LINHA inteira (o grupo): sem isso o rodape
+        // continuaria prometendo uma pagina que nao existe mais, e
+        // `RodapeDaPaginacao` compara `carregados` com `total`.
+        //
+        // Isto NAO e o numero do sino. O contador continua saindo de
+        // `getNotificationCount`, e nada aqui o deduz: a linha agrupada vale
+        // `grouped_count` avisos no contador e uma linha no total, e os dois
+        // numeros nao se derivam um do outro.
+        _itens = <AvisoDaCaixa>[
+          for (final item in _itens)
+            if (item.ref != aviso.ref) item,
+        ];
+        if (_total > 0) _total -= 1;
+      });
+    } on FalhaDeChamada {
+      // A linha **FICA**, porque o servidor nao confirmou nada. Tirá-la aqui
+      // seria a tela afirmando o que ela nao sabe, e o aviso voltaria na
+      // proxima abertura.
+      //
+      // Texto desta tela, e nao `MensagensDeErro.de(falha)`, pela mesma razao
+      // de `_abrir`: o 404 de aviso de outra conta e o 429 chegariam com
+      // frases sobre outra coisa, e a frase nao pode confirmar nem negar que o
+      // `ref` existe (ADR-0021).
+      if (!mounted) return;
+      setState(() => _falhaDaAcao = TextosDaCaixa.naoConseguimosFechar);
+    }
+  }
+
   Future<void> _marcarTodas() async {
     setState(() => _falhaDaAcao = null);
     try {
@@ -475,6 +545,7 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
           key: ValueKey<String>(aviso.ref),
           aviso: aviso,
           aoTocar: () => _abrir(aviso),
+          aoFechar: () => _dispensar(aviso),
         ),
       Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -496,17 +567,32 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   }
 }
 
-/// Uma linha da caixa: o tipo, o assunto, o estado e quando aconteceu.
+/// Uma linha da caixa: o tipo, o assunto, o estado, quando aconteceu e o "x".
 ///
 /// **Sem imagem**, pelo motivo escrito no doc do arquivo. E **sem o `ref`**:
 /// ele e identificador opaco e nao e texto de tela -- nem em `Text` nem em
 /// rotulo de semantica, porque rotulo de leitor de tela tambem e saida
-/// (ADR-0010).
+/// (ADR-0010). Em especial o "x" **nao** carrega o `ref` no `tooltip`: o
+/// tooltip e rotulo acessivel, e a isca o le junto com os `Semantics`.
+///
+/// **O "x" e um alvo de toque PROPRIO dentro da linha**, e nao um segundo
+/// significado do mesmo toque: o corpo marca como lida e o "x" dispensa, e sao
+/// dois eixos independentes. `IconButton` dentro do `InkWell` resolve isso sem
+/// `GestureDetector` aninhado -- o botao e quem recebe o toque na area dele, e
+/// o `InkWell` recebe o resto.
 class _LinhaDoAviso extends StatelessWidget {
-  const _LinhaDoAviso({required this.aviso, required this.aoTocar, super.key});
+  const _LinhaDoAviso({
+    required this.aviso,
+    required this.aoTocar,
+    required this.aoFechar,
+    super.key,
+  });
 
   final AvisoDaCaixa aviso;
   final VoidCallback aoTocar;
+
+  /// O "x": dispensa a linha. **Nao marca como lida.**
+  final VoidCallback aoFechar;
 
   @override
   Widget build(BuildContext context) {
@@ -532,23 +618,54 @@ class _LinhaDoAviso extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              aviso.tipo.rotulo,
-              style: textos.titleMedium?.copyWith(
-                // O nao lido vem em peso, e a palavra `Não lido` vem junto na
-                // linha de baixo: peso sozinho nao e estado para quem nao o
-                // distingue.
-                fontWeight: aviso.lido ? FontWeight.w400 : FontWeight.w600,
-              ),
-            ),
-            if (aviso.assunto != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e1),
-              Text(aviso.assunto!, style: textos.bodyMedium),
-            ],
-            const SizedBox(height: BichuEspaco.e1),
-            Text(
-              partes.join(' · '),
-              style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+            Row(
+              // `start`: com uma linha de tres textos e outra de um, centrar
+              // poria o "x" no meio do bloco em vez de ao lado do titulo que
+              // ele fecha.
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        aviso.tipo.rotulo,
+                        style: textos.titleMedium?.copyWith(
+                          // O nao lido vem em peso, e a palavra `Não lido` vem
+                          // junto na linha de baixo: peso sozinho nao e estado
+                          // para quem nao o distingue.
+                          fontWeight:
+                              aviso.lido ? FontWeight.w400 : FontWeight.w600,
+                        ),
+                      ),
+                      if (aviso.assunto != null) ...<Widget>[
+                        const SizedBox(height: BichuEspaco.e1),
+                        Text(aviso.assunto!, style: textos.bodyMedium),
+                      ],
+                      const SizedBox(height: BichuEspaco.e1),
+                      Text(
+                        partes.join(' · '),
+                        style: textos.bodySmall
+                            ?.copyWith(color: cores.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                // O "x". `tooltip` e o rotulo acessivel, e e `Fechar este
+                // aviso` e nao `Fechar`: um rotulo que nao diz o que fecha nao
+                // ajuda quem navega por leitor de tela numa lista de trinta.
+                IconButton(
+                  // `ValueKey` com o `ref` para o caso de teste poder apontar
+                  // o "x" de UMA linha. Chave de widget **nao e saida**: ela
+                  // nao vai para a arvore de semantica nem para `Text`, e e
+                  // por isso que ela pode carregar o `ref` e o `tooltip` nao.
+                  key: ValueKey<String>('fechar:${aviso.ref}'),
+                  onPressed: aoFechar,
+                  tooltip: TextosDaCaixa.fechar,
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.close, size: 20, color: cores.textSecondary),
+                ),
+              ],
             ),
             const SizedBox(height: BichuEspaco.e3),
             Divider(height: 1, color: cores.outline),

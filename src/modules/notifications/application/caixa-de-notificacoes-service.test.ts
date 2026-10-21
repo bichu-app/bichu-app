@@ -38,6 +38,20 @@
  * 4. **O limite e recortado em 30.** O contrato ja recusa 31 na borda; este
  *    recorte e o que impede um chamador interno de pedir 10 000 linhas por uma
  *    porta que nao passa pela borda.
+ *
+ * 5. **`dispensar` traduz "nao achei" em 404, e NUNCA 403** (ADR-0021), pela
+ *    mesma razao de `marcarLida`. CONTRAPESO: quando o porto devolve `true`,
+ *    nada e lancado.
+ *
+ * 6. **OS DOIS EIXOS SAO INDEPENDENTES, nos dois sentidos** -- e esta e a isca
+ *    do pedido do cliente de 20/10/2026. `dispensar` nao chama `marcarLida`
+ *    (dispensar sem ter lido e o caso COMUM: quem limpa a lista nao abre cada
+ *    linha antes), e `marcarLida` nao chama `dispensar` (ler nao tira a linha
+ *    da lista). Um servico que encadeasse as duas -- em qualquer direcao --
+ *    reprova aqui, e reprova pelo NOME do caso. A regra em si (a linha sai da
+ *    lista, o contador cai, e `read_at` fica nulo) e SQL da `20261020000011` e
+ *    esta na suite de integracao; o que o duble prova e que a aplicacao nao
+ *    costura os dois efeitos por tras.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -57,6 +71,7 @@ interface Chamadas {
   marcarLida: { usuario: UserId; ref: string }[];
   marcarTodasLidas: UserId[];
   listaVista: UserId[];
+  dispensar: { usuario: UserId; ref: string }[];
 }
 
 function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
@@ -67,7 +82,9 @@ function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
  * O duble do porto. `marcarLidaDevolve` e o unico comportamento configuravel:
  * e ele que separa "achei" de "nao achei", que e a diferenca entre 204 e 404.
  */
-function dubleDaCaixa(opcoes: { marcarLidaDevolve?: boolean } = {}): {
+function dubleDaCaixa(
+  opcoes: { marcarLidaDevolve?: boolean; dispensarDevolve?: boolean } = {},
+): {
   porto: CaixaDeNotificacoes;
   chamadas: Chamadas;
 } {
@@ -77,6 +94,7 @@ function dubleDaCaixa(opcoes: { marcarLidaDevolve?: boolean } = {}): {
     marcarLida: [],
     marcarTodasLidas: [],
     listaVista: [],
+    dispensar: [],
   };
   // Sem `async`: um duble que nao espera nada nao e assincrono, e `async` sem
   // `await` reprova o lint deste repositorio. `Promise.resolve` diz a mesma
@@ -101,6 +119,10 @@ function dubleDaCaixa(opcoes: { marcarLidaDevolve?: boolean } = {}): {
     listaVista(usuario) {
       chamadas.listaVista.push(usuario);
       return Promise.resolve();
+    },
+    dispensar(usuario, ref) {
+      chamadas.dispensar.push({ usuario, ref });
+      return Promise.resolve(opcoes.dispensarDevolve ?? true);
     },
   };
   return { porto, chamadas };
@@ -215,5 +237,83 @@ void describe('a caixa de notificacoes, na camada de aplicacao', () => {
 
     assert.equal(chamadas.listar[0]?.pagina, 1, 'REPROVA: pagina 0 chegou ao porto');
     assert.equal(chamadas.listar[0]?.limite, 1, 'REPROVA: limite 0 chegou ao porto');
+  });
+
+  void it('5. dispensar um aviso que o porto nao acha vira 404, e nunca 403', async () => {
+    const { porto, chamadas } = dubleDaCaixa({ dispensarDevolve: false });
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    const erro = await servico
+      .dispensar({ userId: OUTRA_CONTA }, 'refDeOutraContaAAAAAA')
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+
+    assert.ok(erro instanceof AppError, 'REPROVA: nao lancou AppError para aviso nao encontrado');
+    assert.equal(
+      erro.problemType,
+      'not-found',
+      'REPROVA: o tipo do problema nao e `not-found`. Um 403 aqui confirmaria que o ref existe (ADR-0021)',
+    );
+    assert.notEqual(
+      erro.problemType,
+      'forbidden',
+      'REPROVA: respondeu `forbidden`. Recurso de outra conta responde 404, nao 403',
+    );
+    assert.deepEqual(
+      chamadas.dispensar,
+      [{ usuario: OUTRA_CONTA, ref: 'refDeOutraContaAAAAAA' }],
+      'REPROVA: o dono nao foi ao porto junto do ref -- a autorizacao e a propria clausula WHERE',
+    );
+  });
+
+  void it('5b. CONTRAPESO: quando o porto dispensa o aviso, nada e lancado', async () => {
+    const { porto } = dubleDaCaixa({ dispensarDevolve: true });
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    await assert.doesNotReject(
+      servico.dispensar({ userId: DONO }, 'refDoProprioDonoAAAAA'),
+      'REPROVA: lancou para um aviso que o porto dispensou -- o caso 5 estaria passando por vazio',
+    );
+  });
+
+  void it('6. dispensar NAO marca como lida, e marcar como lida NAO dispensa', async () => {
+    const { porto, chamadas } = dubleDaCaixa();
+    const servico = new CaixaDeNotificacoesService({ caixa: porto });
+
+    await servico.dispensar({ userId: DONO }, 'refQueFoiDispensado01');
+
+    assert.deepEqual(
+      chamadas.dispensar,
+      [{ usuario: DONO, ref: 'refQueFoiDispensado01' }],
+      'REPROVA: dispensar nao chegou ao porto -- o resto deste caso passaria por vazio',
+    );
+    assert.deepEqual(
+      chamadas.marcarLida,
+      [],
+      'REPROVA: dispensar marcou o aviso como LIDO. Os dois eixos sao independentes: dispensar ' +
+        'tira da LISTA e ler tira do CONTADOR, e dispensar sem ter lido e o caso comum -- quem ' +
+        'limpa a lista nao abre cada linha antes',
+    );
+    assert.deepEqual(
+      chamadas.marcarTodasLidas,
+      [],
+      'REPROVA: dispensar chamou "marcar todas como lidas"',
+    );
+
+    await servico.marcarLida({ userId: DONO }, 'refQueFoiLidoAAAAAAAA');
+
+    assert.deepEqual(
+      chamadas.marcarLida,
+      [{ usuario: DONO, ref: 'refQueFoiLidoAAAAAAAA' }],
+      'REPROVA: marcar como lida nao chegou ao porto',
+    );
+    assert.deepEqual(
+      chamadas.dispensar,
+      [{ usuario: DONO, ref: 'refQueFoiDispensado01' }],
+      'REPROVA: marcar como lida DISPENSOU o aviso. Ler tira do contador e deixa a linha na ' +
+        'lista dizendo `Lido`; so o "x" a tira da lista',
+    );
   });
 });

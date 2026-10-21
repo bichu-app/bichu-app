@@ -827,6 +827,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/notifications/{notificationRef}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010). */
+                notificationRef: components["parameters"]["NotificationRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dispensa UM aviso -- o "x" da linha, que o tira da lista
+         * @description Pedido do cliente (20/10/2026): *"cada notificacao tem que ter um x
+         *     para fechar aquela notificacao para ir limpando a lista"*.
+         *
+         *     **DISPENSAR NAO E LER, e os dois eixos sao independentes nos dois
+         *     sentidos.** `markNotificationRead` tira o aviso do CONTADOR e o deixa
+         *     na lista dizendo `read: true`; esta operacao o tira da LISTA, e **nao**
+         *     o marca como lido. Uma notificacao pode ser dispensada sem nunca ter
+         *     sido lida, e esse e o caso comum -- quem limpa a lista nao abre cada
+         *     linha antes.
+         *
+         *     **O aviso dispensado nao volta.** Ele sai de `listNotifications` e sai
+         *     de `getNotificationCount`, nas duas, e continua fora depois de
+         *     recarregar: o apagamento e logico no servidor, e nao um estado de
+         *     tela.
+         *
+         *     **`markAllNotificationsRead` nao o alcanca**, pela mesma razao pela
+         *     qual ela nao alcanca o que passou dos 90 dias: ela nao mexe no que a
+         *     caixa nao mostra mais, e contar linha dispensada em `marked` diria ter
+         *     marcado mais do que havia na tela.
+         *
+         *     Idempotente: dispensar duas vezes responde `204` nas duas, porque o
+         *     aparelho reenvia.
+         *
+         *     **Aviso de outra conta responde `404`, nunca `403`** (ADR-0021): a
+         *     autorizacao e a propria clausula `WHERE`, e um `403` confirmaria que o
+         *     `ref` existe.
+         */
+        post: operations["dismissNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/showcase/photo-intents": {
         parameters: {
             query?: never;
@@ -14771,6 +14819,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Marcado como lido. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    dismissNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do aviso (`NotificationItem.ref`). Nao e UUID (ADR-0010). */
+                notificationRef: components["parameters"]["NotificationRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dispensado. Sai da lista e do contador */
             204: {
                 headers: {
                     [name: string]: unknown;

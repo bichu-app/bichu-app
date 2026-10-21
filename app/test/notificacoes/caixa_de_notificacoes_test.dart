@@ -24,6 +24,14 @@
 //       caixa vazia
 //       contrapeso: a caixa de verdade vazia mostra a frase do vazio e
 //       nenhuma faixa de erro
+//   (g) o "x" chama `POST /{ref}/dismiss` com o `ref` DAQUELA linha, a linha
+//       SAI da lista, e `read` NAO e chamado -- dispensar nao e ler
+//       contrapeso: sem o toque no "x", `dismiss` nao e chamado de jeito
+//       nenhum
+//   (h) o outro sentido: o toque no CORPO chama `read` e NAO chama `dismiss`,
+//       e a linha FICA na lista dizendo `Lido`
+//   (i) o "x" que FALHA deixa a linha na lista e mostra a faixa -- a tela nao
+//       afirma o que o servidor nao confirmou
 //
 // A rede e sempre um `MockClient` explicito, e o caminho atravessado e o de
 // verdade: tela -> `NotificacoesApi` -> `ApiClient` -> traducao de `Problem`.
@@ -64,6 +72,9 @@ const String caminhoDoVisto = '/v1/me/notifications/seen';
 const String caminhoDeTodas = '/v1/me/notifications/read-all';
 
 String caminhoDoLido(String ref) => '/v1/me/notifications/$ref/read';
+
+String caminhoDoDispensado(String ref) =>
+    '/v1/me/notifications/$ref/dismiss';
 
 // ---------------------------------------------------------------------------
 // FIXTURES, campo por campo do contrato
@@ -236,13 +247,25 @@ String semanticaDaTela(WidgetTester tester) {
 Map<String, http.Response Function(http.Request)> rotasDe(
   Map<String, dynamic> pagina, {
   List<String> refsQueMarcam = const <String>[refDaPlaquinha],
+  List<String> refsQueDispensam = const <String>[refDaPlaquinha],
 }) => <String, http.Response Function(http.Request)>{
   'GET $caminhoDaLista': (_) => json200(pagina),
   'POST $caminhoDoVisto': (_) => semConteudo(),
   'POST $caminhoDeTodas': (_) => json200(<String, dynamic>{'marked': 2}),
   for (final ref in refsQueMarcam)
     'POST ${caminhoDoLido(ref)}': (_) => semConteudo(),
+  for (final ref in refsQueDispensam)
+    'POST ${caminhoDoDispensado(ref)}': (_) => semConteudo(),
 };
+
+/// O "x" da linha de [ref].
+///
+/// Por `ValueKey`, e nao por `find.byTooltip`: toda linha tem um "x" com o
+/// MESMO rotulo acessivel -- que e o certo para quem usa leitor de tela --, e
+/// um localizador por texto acharia varios. A chave de widget nao e saida: ela
+/// nao vai para `Text` nem para a arvore de semantica, e e por isso que ela
+/// pode carregar o `ref` enquanto o `tooltip` nao pode (ADR-0010).
+Finder fecharDaLinha(String ref) => find.byKey(ValueKey<String>('fechar:$ref'));
 
 void main() {
   // -------------------------------------------------------------------------
@@ -853,6 +876,198 @@ void main() {
           textoDaTela(tester),
           contains('Tobias'),
           reason: 'REPROVA: a pagina 1 nao pode ser apagada pela chegada da 2.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  group('(g) o "x" DISPENSA a linha, e dispensar nao e ler', () {
+    testWidgets(
+      'ISCA: o toque no "x" chama `POST /{ref}/dismiss` daquela linha, a linha '
+      'SAI da lista, e `read` NAO e chamado',
+      (tester) async {
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(ref: refDaPlaquinha, assunto: 'Tobias'),
+              aviso(
+                ref: refDoEncontro,
+                tipo: 'event_cancelled',
+                assunto: 'Encontro no parque',
+              ),
+            ]),
+          ),
+        );
+        await abrirACaixa(tester, servidor: servidor);
+
+        expect(
+          textoDaTela(tester),
+          contains('Tobias'),
+          reason: 'REPROVA: a linha precisa estar na tela ANTES do toque, '
+              'senao o resto deste caso passa por vazio.',
+        );
+
+        await tester.tap(fecharDaLinha(refDaPlaquinha));
+        await tester.pumpAndSettle();
+
+        expect(
+          servidor
+              .chamadasA('POST ${caminhoDoDispensado(refDaPlaquinha)}')
+              .length,
+          1,
+          reason: 'REPROVA: o "x" precisa chamar `dismissNotification` com o '
+              '`ref` DAQUELA linha, uma vez.',
+        );
+        expect(
+          servidor.chamadasA('POST ${caminhoDoDispensado(refDoEncontro)}'),
+          isEmpty,
+          reason: 'REPROVA: o "x" de uma linha dispensou OUTRA. O `ref` que '
+              'vai no caminho e o da linha tocada.',
+        );
+        expect(
+          servidor.chamadasA('POST ${caminhoDoLido(refDaPlaquinha)}'),
+          isEmpty,
+          reason: 'REPROVA: o "x" marcou o aviso como LIDO. Dispensar tira da '
+              'LISTA e ler tira do CONTADOR, e sao dois eixos independentes: '
+              'quem fecha uma linha nao esta dizendo que a leu.',
+        );
+        expect(
+          servidor.chamadasA('POST $caminhoDeTodas'),
+          isEmpty,
+          reason: 'REPROVA: o "x" chamou `marcar todas como lidas`.',
+        );
+        expect(
+          textoDaTela(tester),
+          isNot(contains('Tobias')),
+          reason: 'REPROVA: a linha dispensada precisa SAIR da lista depois do '
+              '`204` -- e isso que "ir limpando a lista" quer dizer.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('Encontro no parque'),
+          reason: 'REPROVA: dispensar uma linha apagou a OUTRA. So a linha '
+              'tocada sai.',
+        );
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: sem o toque no "x", nada e dispensado e a linha fica',
+      (tester) async {
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(ref: refDaPlaquinha, assunto: 'Tobias'),
+            ]),
+          ),
+        );
+        await abrirACaixa(tester, servidor: servidor);
+
+        expect(
+          servidor
+              .chamadasA('POST ${caminhoDoDispensado(refDaPlaquinha)}'),
+          isEmpty,
+          reason: 'REPROVA: a caixa dispensou um aviso sozinha, sem ninguem '
+              'tocar no "x". A isca acima estaria verde por efeito de '
+              'abertura.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('Tobias'),
+          reason: 'REPROVA: a linha sumiu sem toque nenhum.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  group('(h) o outro sentido: ler nao dispensa', () {
+    testWidgets(
+      'ISCA: o toque no CORPO da linha chama `read`, NAO chama `dismiss`, e a '
+      'linha FICA na lista dizendo `Lido`',
+      (tester) async {
+        final servidor = ServidorDaCaixa(
+          rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(ref: refDaPlaquinha, assunto: 'Tobias'),
+            ]),
+          ),
+        );
+        await abrirACaixa(tester, servidor: servidor);
+
+        // O toque vai no ASSUNTO, que e corpo da linha e nao o "x".
+        await tester.tap(find.text('Tobias'));
+        await tester.pumpAndSettle();
+
+        expect(
+          servidor.chamadasA('POST ${caminhoDoLido(refDaPlaquinha)}').length,
+          1,
+          reason: 'REPROVA: o toque no corpo precisa marcar o item como lido.',
+        );
+        expect(
+          servidor
+              .chamadasA('POST ${caminhoDoDispensado(refDaPlaquinha)}'),
+          isEmpty,
+          reason: 'REPROVA: marcar como lida DISPENSOU a linha. Ler deixa a '
+              'linha na lista; so o "x" a tira.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('Tobias'),
+          reason: 'REPROVA: a linha saiu da lista ao ser marcada como lida. '
+              'Ela tem de FICAR, dizendo `Lido`.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('Lido'),
+          reason: 'REPROVA: a linha marcada como lida nao passou a dizer '
+              '`Lido`.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  group('(i) o "x" que falha nao mente', () {
+    testWidgets(
+      'ISCA: `dismiss` que responde 404 deixa a linha na lista e mostra a '
+      'faixa',
+      (tester) async {
+        final servidor = ServidorDaCaixa(<String,
+            http.Response Function(http.Request)>{
+          ...rotasDe(
+            paginaDaCaixa(<Map<String, dynamic>>[
+              aviso(ref: refDaPlaquinha, assunto: 'Tobias'),
+            ]),
+          ),
+          // O 404 de aviso que nao e desta conta (ADR-0021).
+          'POST ${caminhoDoDispensado(refDaPlaquinha)}': (_) =>
+              problema('not-found', 404),
+        });
+        await abrirACaixa(tester, servidor: servidor);
+
+        await tester.tap(fecharDaLinha(refDaPlaquinha));
+        await tester.pumpAndSettle();
+
+        expect(
+          textoDaTela(tester),
+          contains('Tobias'),
+          reason: 'REPROVA: a linha saiu da lista mesmo sem o servidor '
+              'confirmar. A tela nao pode afirmar o que ela nao sabe -- o '
+              'aviso voltaria na proxima abertura.',
+        );
+        expect(
+          textoDaTela(tester),
+          contains('Não conseguimos fechar este aviso'),
+          reason: 'REPROVA: a falha de dispensar precisa de uma faixa que fale '
+              'DESTE aviso.',
+        );
+        expect(
+          semanticaDaTela(tester) + textoDaTela(tester),
+          isNot(contains(refDaPlaquinha)),
+          reason: 'REPROVA: a frase da falha vazou o `ref`. Ela nao pode '
+              'confirmar nem negar que aquele `ref` existe (ADR-0021).',
         );
       },
     );

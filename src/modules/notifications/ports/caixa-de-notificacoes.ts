@@ -35,6 +35,31 @@ export interface CaixaDeNotificacoes {
   marcarTodasLidas(usuario: UserId): Promise<number>;
 
   /**
+   * DISPENSA a LINHA -- o "x" (cliente, 20/10/2026): ela sai da LISTA e do
+   * CONTADOR, e **continua nao lida**.
+   *
+   * **Dispensa o GRUPO inteiro, e nao so o item do `ref`.** A caixa agrupa por
+   * (tipo, autor, dia) e o `ref` de uma linha agrupada e o do item mais novo;
+   * dispensar so ele deixaria os outros de pe e a linha voltaria na proxima
+   * listagem com outro `ref`. A unidade da dispensa e a linha que a pessoa ve,
+   * que e a mesma unidade que `agrupados` descreve. Quem aplica a regra e
+   * `notificacao_dispensar(uuid, text)`, com a mesma chave de grupo da
+   * listagem.
+   *
+   * Operacao propria e nao um parametro de [marcarLida], porque os dois eixos
+   * sao independentes nos DOIS sentidos: dispensar nao marca como lida (e
+   * dispensar sem ter lido e o caso comum -- quem limpa a lista nao abre cada
+   * linha), e marcar como lida nao dispensa. Um unico metodo com bandeira
+   * forcaria uma ordem entre os dois eventos que o produto nao tem.
+   *
+   * Devolve `false` para "nao existe" e para "existe e e de outra conta", pelo
+   * mesmo motivo de [marcarLida]: o dono esta no `WHERE`, a segunda nunca
+   * chega a ser lida, e a rota responde 404 nos dois casos e NUNCA 403
+   * (ADR-0021).
+   */
+  dispensar(usuario: UserId, ref: string): Promise<boolean>;
+
+  /**
    * A lista foi aberta: zera o NUMERO sem marcar item nenhum.
    *
    * Operacao propria e nao efeito de `listar` porque `listar` serve um `GET`, e

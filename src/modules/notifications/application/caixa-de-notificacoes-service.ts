@@ -78,4 +78,24 @@ export class CaixaDeNotificacoesService {
   async marcarTodasLidas(chamador: ChamadorDaCaixa): Promise<number> {
     return this.deps.caixa.marcarTodasLidas(chamador.userId);
   }
+
+  /**
+   * DISPENSA a LINHA da caixa -- o "x".
+   *
+   * O recorte do GRUPO mora no SQL (`notificacao_dispensar`), e nao aqui: ele
+   * usa a mesma chave de agrupamento da listagem, e duas copias dessa chave --
+   * uma em SQL, outra em TypeScript -- seriam duas definicoes de "a mesma
+   * linha" para divergirem na proxima mudanca.
+   *
+   * **Nao chama `marcarLida`, e nao e chamada por ela.** Dispensar tira da
+   * LISTA e ler tira do CONTADOR; encadear as duas aqui faria o app perder a
+   * unica forma de limpar a lista sem afirmar que leu -- e a independencia dos
+   * dois eixos e requisito, nao detalhe.
+   *
+   * **404 e nunca 403** (ADR-0021), pela mesma razao de `marcarLida`.
+   */
+  async dispensar(chamador: ChamadorDaCaixa, ref: string): Promise<void> {
+    const dispensada = await this.deps.caixa.dispensar(chamador.userId, ref);
+    if (!dispensada) throw problemas.naoEncontrado();
+  }
 }

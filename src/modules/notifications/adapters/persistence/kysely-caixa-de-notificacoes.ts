@@ -107,6 +107,19 @@ export function criarCaixaDeNotificacoes(db: Db): CaixaDeNotificacoes {
       return r.rows[0]?.marcadas ?? 0;
     },
 
+    async dispensar(usuario: UserId, ref: string): Promise<boolean> {
+      // Mesma forma de `marcarLida`, e de proposito: a funcao devolve `true`
+      // quando o aviso existia para esta conta e NULO quando nao, e o
+      // `?? false` traduz o nulo no 404 que a rota responde para "nao existe"
+      // e para "e de outra conta" (ADR-0021).
+      //
+      // `notificacao_dispensar` NAO toca `read_at`: o aviso sai da lista e do
+      // contador e continua nao lido.
+      const r = await sql<{ dispensada: boolean | null }>`
+        SELECT notificacao_dispensar(${usuario}, ${ref}) AS dispensada`.execute(db);
+      return r.rows[0]?.dispensada ?? false;
+    },
+
     async listaVista(usuario: UserId): Promise<void> {
       await sql`SELECT notificacoes_lista_vista(${usuario})`.execute(db);
     },
