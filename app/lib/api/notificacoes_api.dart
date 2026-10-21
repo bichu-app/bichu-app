@@ -1,7 +1,8 @@
 import 'api_client.dart';
 import 'modelos_notificacao.dart';
 
-/// As cinco operacoes `tags: [me]` da CAIXA DE NOTIFICACOES.
+/// As SEIS operacoes `tags: [me]` da CAIXA DE NOTIFICACOES, mais a leitura do
+/// COMUNICADO -- a pagina intermediaria do unico tipo sem destino natural.
 ///
 /// ---------------------------------------------------------------------------
 /// ## As duas marcacoes sao SEPARADAS, e e isso que a tela promete
@@ -111,5 +112,45 @@ class NotificacoesApi {
   /// vira uma rota que nao existe.
   Future<void> marcarComoLido(String ref) async {
     await _api.post('$_caminho/${Uri.encodeComponent(ref)}/read');
+  }
+
+  /// `POST /v1/me/notifications/{notificationRef}/dismiss`
+  /// (`dismissNotification`) -- o "x" da linha, pedido pelo cliente em
+  /// 20/10/2026.
+  ///
+  /// **DISPENSAR NAO E MARCAR COMO LIDA, e esta classe nao encadeia as duas.**
+  /// [marcarComoLido] tira o aviso do contador e o deixa na lista; esta tira a
+  /// linha da LISTA e **nao** a marca como lida. Chamar as duas aqui faria o
+  /// app perder a unica forma de limpar a lista sem afirmar que leu -- e
+  /// dispensar sem ter lido e o caso comum, porque quem limpa a lista nao abre
+  /// cada linha antes.
+  ///
+  /// **Dispensa a LINHA inteira**, inclusive quando ela resume varios avisos:
+  /// o recorte do grupo e do servidor, pela mesma chave de agrupamento da
+  /// listagem. Sem isso a linha agrupada voltaria na listagem seguinte com
+  /// outro `ref`, e teria sumido da tela para reaparecer no recarregamento.
+  ///
+  /// Idempotente por contrato: dispensar duas vezes responde `204` nas duas.
+  /// `Uri.encodeComponent` pela mesma razao de [marcarComoLido].
+  Future<void> dispensar(String ref) async {
+    await _api.post('$_caminho/${Uri.encodeComponent(ref)}/dismiss');
+  }
+
+  /// `GET /v1/me/broadcasts/{broadcastRef}` (`getMyBroadcast`) -- o comunicado
+  /// COM O CORPO.
+  ///
+  /// **O `ref` daqui e o do COMUNICADO, e nao o da notificacao.** Ele vem em
+  /// `AvisoDaCaixa.destinoRef` quando o destino e
+  /// [DestinoDoAviso.comunicado]; o `ref` da linha serve a `read` e a
+  /// `dismiss`, e trocar um pelo outro responde `404`.
+  ///
+  /// **Esta leitura nao marca o aviso como lido.** Abrir a pagina e abrir o
+  /// item sao dois fatos, e quem marca o segundo e [marcarComoLido].
+  ///
+  /// `404` quando o comunicado nao chegou a esta conta -- e nunca `403`, pelo
+  /// mesmo motivo de sempre (ADR-0021).
+  Future<ComunicadoDoBichu> buscarComunicado(String ref) async {
+    final json = await _api.get('/me/broadcasts/${Uri.encodeComponent(ref)}');
+    return ComunicadoDoBichu.doJson(json);
   }
 }

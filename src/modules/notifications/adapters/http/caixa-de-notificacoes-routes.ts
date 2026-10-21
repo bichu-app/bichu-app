@@ -1,11 +1,34 @@
 /**
- * As cinco rotas de `/v1/me/notifications` -- a CAIXA DE NOTIFICACOES, que e o
- * destino do toque no sino da barra superior.
+ * As SEIS rotas de `/v1/me/notifications` -- a CAIXA DE NOTIFICACOES, que e o
+ * destino do toque no sino da barra superior -- mais `getMyBroadcast`, que e a
+ * PAGINA INTERMEDIARIA do comunicado.
+ *
+ * ## Por que o comunicado tem pagina e os outros nove tipos nao
+ *
+ * Desde 20/10/2026 cada linha diz PARA ONDE leva (`destination` e
+ * `destination_ref`). Oito tipos levam a uma tela que ja existe -- o pet, o
+ * achado, o caso, o encontro, a indicacao, a plaquinha --, porque a pessoa
+ * quer ver a coisa e nao um intermediario. **`broadcast` e o unico sem destino
+ * natural**: ele nao fala de pet, de caso nem de encontro, e e texto que
+ * precisa de onde ser lido. E `match_suggested` nao tem destino NENHUM, porque
+ * nao existe tela de confirmar candidato neste app.
+ *
+ * `getMyBroadcast` mora aqui, e nao num modulo proprio, porque ele existe SO
+ * para essa pagina: a caixa carrega o titulo do comunicado e nao o corpo.
  *
  * `effects`, `rateLimit` e `operationId` **espelham** `api/openapi.yaml`, e
  * `rotas-registradas-contra-o-contrato` compara os dois.
  *
- * ## Por que cinco rotas, e nao duas
+ * ## `read` e `dismiss` sao DUAS rotas, e os dois eixos sao independentes
+ *
+ * `markNotificationRead` tira o aviso do CONTADOR e o deixa na lista dizendo
+ * `read: true`. `dismissNotification` (cliente, 20/10/2026 -- o "x" da linha)
+ * o tira da LISTA, e **nao** o marca como lido. Nos dois sentidos: dispensar
+ * sem ter lido e o caso COMUM, porque quem limpa a lista nao abre cada linha
+ * antes. Uma rota so com bandeira forcaria uma ordem entre os dois eventos
+ * que o produto nao tem.
+ *
+ * ## Por que seis rotas, e nao duas
  *
  * `listNotifications` e `markNotificationsListSeen` sao SEPARADAS, e e a
  * separacao que implementa o requisito: **abrir a lista zera o numero e os
@@ -38,7 +61,7 @@ import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js'
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import type { UserId } from '../../../../shared/types/brands.js';
-import type { AvisoDaCaixa, PaginaDaCaixa } from '../../domain/caixa.js';
+import type { AvisoDaCaixa, ComunicadoDaCaixa, PaginaDaCaixa } from '../../domain/caixa.js';
 import type {
   CaixaDeNotificacoesService,
   ChamadorDaCaixa,
@@ -82,6 +105,21 @@ export const rotaDeMarcarLida = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
+export const rotaDeDispensar = defineRoute({
+  operationId: 'dismissNotification',
+  method: 'post',
+  path: '/me/notifications/:notificationRef/dismiss',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDoComunicado = defineRoute({
+  operationId: 'getMyBroadcast',
+  method: 'get',
+  path: '/me/broadcasts/:broadcastRef',
+  effects: [],
+});
+
 export interface AutenticadorDaCaixa {
   autenticar(token: string): Promise<{ userId: UserId }>;
 }
@@ -111,6 +149,24 @@ function comoResposta(aviso: AvisoDaCaixa): Record<string, unknown> {
     occurred_at: aviso.aconteceuEm.toISOString(),
     read: aviso.lido,
     grouped_count: aviso.agrupados,
+    // **O DESTINO, e os dois campos saem SEMPRE -- nulos juntos.**
+    //
+    // Omiti-los quando nulos faria o app distinguir "sem destino" de "campo
+    // que este servidor nao manda", e as duas coisas pedem comportamentos
+    // diferentes: a primeira e uma linha sem toque, a segunda e um contrato
+    // mais velho. Com o campo sempre presente, `null` significa uma coisa so.
+    destination: aviso.destino,
+    destination_ref: aviso.destinoRef,
+  };
+}
+
+/** Um comunicado, campo a campo, como `MyBroadcast` o declara. */
+function comunicadoComoResposta(c: ComunicadoDaCaixa): Record<string, unknown> {
+  return {
+    ref: c.ref,
+    title: c.titulo,
+    body: c.corpo,
+    dispatched_at: c.disparadoEm.toISOString(),
   };
 }
 
@@ -229,4 +285,37 @@ export function registrarRotasDaCaixaDeNotificacoes(
       return reply.status(204).send();
     },
   );
+
+  registrarRota(
+    app,
+    rotaDeDispensar,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const { notificationRef } = request.params as { notificationRef: string };
+      // DISPENSAR, e **nao** marcar como lida. Nao ha chamada a
+      // `marcarLida` aqui, e a ausencia e o requisito: o aviso sai da lista e
+      // do contador e continua `read: false`. Mesmo 404 e nunca 403
+      // (ADR-0021).
+      await deps.caixa.dispensar(chamador, notificationRef);
+      // 204 pelo mesmo motivo de `read`: nao ha nada a dizer. Em especial
+      // NAO devolve o contador novo -- a tela que acabou de fechar uma linha
+      // leria um numero montado na mesma requisicao que o mudou, e o numero
+      // do sino tem uma fonte so (`getNotificationCount`).
+      return reply.status(204).send();
+    },
+  );
+
+  registrarRota(app, rotaDoComunicado, {}, async (request, reply: FastifyReply) => {
+    const chamador = await chamadorAutenticado(request, deps);
+    const { broadcastRef } = request.params as { broadcastRef: string };
+    // O servico lanca 404 para "nao existe" e para "existe e nao chegou a esta
+    // conta" -- indistinguiveis de proposito, porque um 403 confirmaria que
+    // aquele `ref` foi disparado (ADR-0021).
+    //
+    // **Esta leitura NAO marca o aviso como lido.** Quem marca e
+    // `markNotificationRead`, com o `ref` da NOTIFICACAO, que e outro `ref`.
+    const comunicado = await deps.caixa.buscarComunicado(chamador, broadcastRef);
+    return reply.status(200).send(comunicadoComoResposta(comunicado));
+  });
 }

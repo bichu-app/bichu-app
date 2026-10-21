@@ -14,7 +14,7 @@
  * `.ts` de `src/`, inclusive em comentario.
  */
 import type { UserId } from '../../../shared/types/brands.js';
-import type { PaginaDaCaixa } from '../domain/caixa.js';
+import type { ComunicadoDaCaixa, PaginaDaCaixa } from '../domain/caixa.js';
 
 export interface CaixaDeNotificacoes {
   /** Uma pagina da caixa, ja agrupada. Conta desabilitada devolve pagina vazia. */
@@ -35,6 +35,31 @@ export interface CaixaDeNotificacoes {
   marcarTodasLidas(usuario: UserId): Promise<number>;
 
   /**
+   * DISPENSA a LINHA -- o "x" (cliente, 20/10/2026): ela sai da LISTA e do
+   * CONTADOR, e **continua nao lida**.
+   *
+   * **Dispensa o GRUPO inteiro, e nao so o item do `ref`.** A caixa agrupa por
+   * (tipo, autor, dia) e o `ref` de uma linha agrupada e o do item mais novo;
+   * dispensar so ele deixaria os outros de pe e a linha voltaria na proxima
+   * listagem com outro `ref`. A unidade da dispensa e a linha que a pessoa ve,
+   * que e a mesma unidade que `agrupados` descreve. Quem aplica a regra e
+   * `notificacao_dispensar(uuid, text)`, com a mesma chave de grupo da
+   * listagem.
+   *
+   * Operacao propria e nao um parametro de [marcarLida], porque os dois eixos
+   * sao independentes nos DOIS sentidos: dispensar nao marca como lida (e
+   * dispensar sem ter lido e o caso comum -- quem limpa a lista nao abre cada
+   * linha), e marcar como lida nao dispensa. Um unico metodo com bandeira
+   * forcaria uma ordem entre os dois eventos que o produto nao tem.
+   *
+   * Devolve `false` para "nao existe" e para "existe e e de outra conta", pelo
+   * mesmo motivo de [marcarLida]: o dono esta no `WHERE`, a segunda nunca
+   * chega a ser lida, e a rota responde 404 nos dois casos e NUNCA 403
+   * (ADR-0021).
+   */
+  dispensar(usuario: UserId, ref: string): Promise<boolean>;
+
+  /**
    * A lista foi aberta: zera o NUMERO sem marcar item nenhum.
    *
    * Operacao propria e nao efeito de `listar` porque `listar` serve um `GET`, e
@@ -42,4 +67,23 @@ export interface CaixaDeNotificacoes {
    * separacao e o que torna "abrir a lista nao marca os itens" verificavel.
    */
   listaVista(usuario: UserId): Promise<void>;
+
+  /**
+   * O COMUNICADO de `ref`, **se ele chegou a esta conta** -- a pagina
+   * intermediaria do unico tipo de aviso sem destino natural.
+   *
+   * **O recorte e pelo DESTINATARIO e mora na clausula `WHERE`.** Comunicado e
+   * para quem o recebeu: a leitura exige uma linha da caixa DESTA conta
+   * apontando para este comunicado. O painel ter uma listagem de comunicados
+   * nao autoriza ninguem a ler o de outra pessoa.
+   *
+   * Devolve `undefined` para "nao existe" e para "existe e nao chegou a esta
+   * conta", indistinguiveis de proposito: a rota responde 404 nos dois casos e
+   * NUNCA 403 (ADR-0021), porque um 403 confirmaria que aquele `ref` foi
+   * disparado.
+   *
+   * **Nao marca nada como lido.** Quem marca e [marcarLida], com o `ref` da
+   * NOTIFICACAO -- que e outro `ref`, e nao este.
+   */
+  buscarComunicado(usuario: UserId, ref: string): Promise<ComunicadoDaCaixa | undefined>;
 }

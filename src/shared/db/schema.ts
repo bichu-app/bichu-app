@@ -780,6 +780,18 @@ export interface NotificationItemsTable {
   occurred_at: Date;
   /** O item foi ABERTO. Nulo e nao lido. Ver a LISTA nao mexe nisto. */
   read_at: Date | null;
+  /**
+   * A pessoa DISPENSOU este aviso -- o "x" da linha (migracao
+   * `20261020000011`). Nulo e "esta na lista".
+   *
+   * **Nao e `read_at` e nao implica `read_at`**: dispensar tira da LISTA, ler
+   * tira do CONTADOR, e os dois eixos sao independentes nos dois sentidos.
+   * Apagamento LOGICO e nunca `DELETE`: a linha dispensada e a evidencia de
+   * que o aviso chegou, e apaga-la furaria
+   * `notification_items_um_por_destinatario`, deixando o gatilho da fonte
+   * reinserir o MESMO fato como aviso novo.
+   */
+  dismissed_at: Date | null;
   created_at: Generated<Date>;
 }
 
