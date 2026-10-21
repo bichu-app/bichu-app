@@ -173,28 +173,30 @@ class TelaDoEncontro extends StatefulWidget {
 
   /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
   ///
-  /// ## NAO HA LINK, e a ausencia e MEDIDA e nao esquecimento
+  /// ## O LINK ENTROU EM 21/10/2026, e ele vem do SERVIDOR
   ///
-  /// Medido em 21/10/2026, de fora, nos dois ambientes, com controle positivo
-  /// (`/comunidade` responde 200 nos dois):
+  /// Quando esta funcao nasceu, no mesmo dia, nao havia link: medido de fora
+  /// nos dois ambientes, com controle positivo (`/comunidade` -> 200),
+  /// `bichu.app/encontro/<slug>` respondia 404, e `NetworkEventPublic` nao
+  /// tinha `share_url`. O comentario daquela versao previu o caminho e e
+  /// exatamente este o que foi feito: *"o endereco entra como entrou no caso do
+  /// pet: campo do servidor, aceso por `site_page_availability`, e nao literal
+  /// montado no aparelho -- assim ele acende sem APK novo. Esta funcao ganha um
+  /// parametro e mais uma linha."*
   ///
-  ///   GET `https://bichu.app/encontro/<slug>`      -> 404
-  ///   GET `https://hml.bichu.app/encontro/<slug>`  -> 404
-  ///   (e o mesmo para `/e/`, `/evento/` e `/eventos/`)
+  /// Entao [link] e `share_url`, lido de `EncontroPublico.linkDaPagina`, e
+  /// **nulo e o estado normal**:
   ///
-  /// E o contrato nao tem de onde tirar endereco: `NetworkEventPublic` **nao
-  /// tem `share_url` nem `share_token`** -- ao contrario de `LostCase`, que
-  /// tem os dois --, nao ha rota `/public/network-events/...` em
-  /// `api/openapi.yaml`, `web/src/pages/` nao tem pasta de encontro, e o
-  /// quadro das oito rotas publicas do ADR-0017 **nao lista nenhuma pagina de
-  /// encontro**. Montar um endereco aqui a partir do `slug` seria inventar: o
-  /// que chegaria no grupo de bairro e o cartao de pre-visualizacao do 404,
-  /// que diz com estas letras `og:title: Pagina nao encontrada - Bichu`.
+  /// - nulo enquanto `site_page_availability` disser que a pagina do encontro
+  ///   nao esta publicada (migracao `20261020000017`);
+  /// - nulo no encontro cancelado e no encerrado;
+  /// - nulo no privado, que nao tem pagina publica.
   ///
-  /// O dia em que a pagina existir, o endereco entra como entrou no caso do
-  /// pet: **campo do servidor**, aceso por `site_page_availability` (migracao
-  /// `20261020000010`), e nao literal montado no aparelho -- assim ele acende
-  /// sem APK novo. Esta funcao ganha um parametro e mais uma linha.
+  /// Com nulo, a mensagem sai **identica a de antes** -- e e por isso que
+  /// acender a pagina nao exige APK novo. **O app nao monta o endereco**: nao
+  /// existe `'/encontro/' + slug` em lugar nenhum dele, porque um literal aqui
+  /// viraria link morto no dia em que o site mudasse, e o binario instalado nao
+  /// se corrige.
   ///
   /// ## O QUE ESTA AUSENTE DE PROPOSITO
   ///
@@ -212,18 +214,25 @@ class TelaDoEncontro extends StatefulWidget {
   /// qualquer identificador interno, e o nome de quem cadastrou (ele nao sai
   /// do servidor, ADR-0025 secao 3).
   ///
-  /// A isca `o texto compartilhado nao carrega endereco de rua nem link` cobra
-  /// isto contra o texto REAL montado, e nao contra um literal de tela.
+  /// A isca `o texto compartilhado nao carrega endereco de rua` cobra isto
+  /// contra o texto REAL montado, e nao contra um literal de tela, e a isca
+  /// `o link do texto e o do servidor` cobra que o endereco nao seja montado
+  /// aqui.
   static String mensagemDeCompartilhar({
     required String titulo,
     required String dia,
     required String horario,
     required String lugar,
+    Uri? link,
   }) {
     return '$titulo\n'
         '$dia · $horario\n'
         '$lugar\n'
-        'Encontrei no Bichu. Vamos juntos?';
+        'Encontrei no Bichu. Vamos juntos?'
+        // A UMA LINHA que o autor da versao sem link previu. Vem por ultimo
+        // porque e o que a pre-visualizacao do WhatsApp usa para montar o
+        // cartao, e porque quem le no celular ve o convite antes do endereco.
+        '${link == null ? '' : '\n$link'}';
   }
 
   /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
@@ -457,6 +466,10 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         // `_endereco`**, que e o `street_address` de `getNetworkEventLocation`
         // e so existe com conta.
         lugar: c.lugar.linhaCompleta,
+        // `share_url`, do servidor. Nulo com o interruptor apagado, no
+        // cancelado, no encerrado e no privado -- e com nulo o texto sai como
+        // saia antes desta linha existir.
+        link: c.linkDaPagina,
       ),
       assunto: TelaDoEncontro.assuntoDeCompartilhar(encontro.titulo),
     );

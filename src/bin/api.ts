@@ -1188,6 +1188,17 @@ export async function main(): Promise<void> {
     );
     registrarRotasDaRede(escopo, {
       rede: redeDaComunidade,
+      // Onde a pagina publica do encontro mora, e se ela existe. O par anda
+      // junto de proposito: endereco sem interruptor e link que ninguem
+      // conferiu (decisao do cliente de 21/10/2026, emenda 4 do ADR-0017).
+      //
+      // A MESMA porta e a MESMA instancia de tabela que o caso do pet usa --
+      // `site_page_availability`, agora com a terceira linha (`network_event`,
+      // migracao `20261020000017`). Enquanto a linha disser `false`,
+      // `share_url` nao sai do detalhe do encontro e o aplicativo compartilha
+      // sem link, como ja compartilha hoje.
+      baseDaWeb: config.webBaseUrl,
+      paginas: criarDisponibilidadeDaPagina(db),
       autenticador: {
         // SEC-021: o `sid` atravessa esta fiacao, como ja atravessa a da
         // localizacao de referencia. Ele e a sessao de aparelho, e e dela que

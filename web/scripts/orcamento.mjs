@@ -19,7 +19,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { CODIGOS, SENHAS, TOKENS } from '../tests/mock/cenarios.mjs';
+import { CODIGOS, ENCONTROS, SENHAS, TOKENS } from '../tests/mock/cenarios.mjs';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const WEB = resolve(AQUI, '..');
@@ -63,6 +63,16 @@ const MEDICOES = {
     // faz o mock responder 422 `weak-password`, o estado que esta rota mede. Nao
     // repetir o literal aqui tambem evita que o gitleaks o leia como segredo.
     ['POST', '/redefinir-senha', `token=${TOKENS.senhaValido}&new_password=${SENHAS.vazada}`],
+  ],
+  // `/encontro/{slug}`: a nona rota publica (emenda 4 do ADR-0017). Um estado
+  // por tela renderizada; as seis situacoes sem encontro desenham a mesma.
+  'encontro/[slug].astro': [
+    `/encontro/${ENCONTROS.publicado}`,
+    `/encontro/${ENCONTROS.indisponivel}`,
+    `/encontro/${ENCONTROS.muitasTentativas}`,
+    `/encontro/${ENCONTROS.foraDoAr}`,
+    `/encontro/${ENCONTROS.lento}`,
+    `/encontro/${ENCONTROS.tipoInesperado}`,
   ],
   'robots.txt.ts': ['/robots.txt'],
   'sitemap.xml.ts': ['/sitemap.xml'],

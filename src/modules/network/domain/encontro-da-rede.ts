@@ -33,7 +33,7 @@
 
 import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import { comoIso } from '../../../shared/time/clock.js';
-import type { Instant } from '../../../shared/types/brands.js';
+import type { AbsoluteUrl, Instant } from '../../../shared/types/brands.js';
 
 /**
  * Os rotulos que a tela escreve, **calculados no servidor**.
@@ -191,6 +191,13 @@ interface CamposDoEncontroProjetados {
 /** O encontro publico, como a leitura publica o declara (`NetworkEventPublic`). */
 export interface EncontroPublicoProjetado extends CamposDoEncontroProjetados {
   readonly visibility: 'public';
+  /**
+   * O endereco da pagina publica do encontro no site. **So existe quando
+   * [linkPublicoDoEncontro] devolveu endereco**, e a ausencia e o interruptor
+   * (ver o campo `share_url` no contrato). Opcional no tipo pelo mesmo motivo
+   * que e opcional no contrato: a agenda nao o emite.
+   */
+  readonly share_url?: string;
 }
 
 /**
@@ -445,13 +452,89 @@ export function projetarTeaser(encontro: EncontroDaRede, agora: Instant): Teaser
 }
 
 /**
+ * Onde a pagina publica do encontro mora, e se ela existe de verdade.
+ *
+ * Os dois juntos num objeto, e nao dois parametros soltos: `baseDaWeb` sem
+ * `publicada` e um endereco que ninguem conferiu se responde 200, e foi
+ * exatamente esse par faltando que fez a acao de compartilhar nascer sem link
+ * em 21/10/2026.
+ */
+export interface PaginaDoEncontroNoSite {
+  /** `WEB_BASE_URL`: onde o site mora. */
+  readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * `site_page_availability` disse `true` para `network_event`? Vem da porta
+   * `lostfound/ports/disponibilidade-da-pagina.ts`, que **nunca lanca** e
+   * devolve `false` para banco fora, linha ausente e coluna de tipo trocado.
+   */
+  readonly publicada: boolean;
+}
+
+/**
+ * O endereco da pagina publica deste encontro, ou `null` -- e `null` e a
+ * resposta na maioria dos dias.
+ *
+ * ## OS QUATRO MOTIVOS DE DEVOLVER `null`, e cada um e uma decisao
+ *
+ * 1. **Ninguem passou a pagina** (`pagina === undefined`). E o caso da agenda e
+ *    da busca por distancia, que nao emitem o campo de proposito: a acao de
+ *    compartilhar vive na pagina do encontro, e vinte enderecos por pagina de
+ *    lista nao servem a tela nenhuma.
+ * 2. **O interruptor esta apagado** (`publicada === false`). E o estado de
+ *    21/10/2026, medido de fora nos dois ambientes com controle positivo. Sem
+ *    isto o produto poria um link morto num grupo de bairro, e aquela mensagem
+ *    saiu do nosso dominio no instante do envio.
+ * 3. **O encontro e PRIVADO.** Esta guarda e cinto, e nao o desenho: o privado
+ *    sai por [projetarTeaser], que e construido com cinco propriedades e nao
+ *    deriva de `camposProjetados`, entao nao ha onde o campo caber. Ela existe
+ *    porque um dia alguem pode chamar isto de outro lugar, e porque o encontro
+ *    privado nao tem pagina publica nenhuma (ADR-0027 12.10).
+ * 4. **O encontro foi CANCELADO ou JA TERMINOU.** Convidar um estranho para um
+ *    encontro que nao vai acontecer o manda a um lugar vazio -- e quem abre o
+ *    link nao tem conta, nao tem a agenda e nao tem como descobrir sozinho que
+ *    aquilo acabou. O teto aqui e o `status` CALCULADO (`statusDoEncontro`), e
+ *    nao uma coluna: `cancelled` prevalece sobre o estado temporal ate o fim
+ *    previsto, e depois disso vira `ended`.
+ *
+ * `happening` **emite**: um encontro que esta acontecendo agora e o melhor
+ * momento possivel para alguem ser convidado a aparecer.
+ */
+export function linkPublicoDoEncontro(
+  encontro: EncontroDaRede,
+  agora: Instant,
+  pagina: PaginaDoEncontroNoSite | undefined,
+): string | null {
+  if (pagina === undefined || !pagina.publicada) return null;
+  if (encontro.visibilidade === 'private') return null;
+  const status = statusDoEncontro(encontro, agora);
+  if (status === 'cancelled' || status === 'ended') return null;
+  return `${pagina.baseDaWeb.replace(/\/$/, '')}/encontro/${encontro.slug}`;
+}
+
+/**
  * Projeta o encontro para a agenda e o detalhe. A forma vem da propriedade do
  * EVENTO, igual para qualquer chamador (ADR-0021): o privado sai como teaser
  * inclusive para quem foi aprovado.
+ *
+ * `pagina` e opcional, e **omiti-la e o padrao**: so `getNetworkEvent` a passa.
+ * Quem nao a passa nao emite `share_url`, e nenhuma lista precisou mudar.
  */
-export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): EncontroProjetado {
+export function projetarEncontro(
+  encontro: EncontroDaRede,
+  agora: Instant,
+  pagina?: PaginaDoEncontroNoSite,
+): EncontroProjetado {
   if (encontro.visibilidade === 'private') return projetarTeaser(encontro, agora);
-  return { ...camposProjetados(encontro, agora), visibility: 'public' };
+  const link = linkPublicoDoEncontro(encontro, agora, pagina);
+  return {
+    ...camposProjetados(encontro, agora),
+    visibility: 'public',
+    // Espalhamento condicional, e nao `share_url: link ?? undefined`: o segundo
+    // poe a CHAVE no objeto com valor `undefined`, e `JSON.stringify` a omite
+    // mas `Object.keys` nao -- e e por `Object.keys` que o teste de lista
+    // permitida varre a projecao.
+    ...(link === null ? {} : { share_url: link }),
+  };
 }
 
 /**

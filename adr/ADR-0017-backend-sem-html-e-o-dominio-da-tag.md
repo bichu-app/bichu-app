@@ -1,6 +1,6 @@
 # ADR-0017: O serviço Node não renderiza HTML, e quem serve o domínio da tag
 
-**Status:** aceito, com emendas 1 e 3; emenda 2 superada pela 3 em 23/09/2026
+**Status:** aceito, com emendas 1, 3 e 4; emenda 2 superada pela 3 em 23/09/2026
 **Data:** 2026-09-17
 **Depende de:** ADR-0016 (a borda que torna a separação roteável)
 **Revisa:** ADR-0005 ("uma página, duas portas"), ADR-0004 (o que o QR codifica)
@@ -33,6 +33,15 @@ emenda 2 **deixa de existir**. A emenda 2 fica como registro do diagnóstico, e 
 decisão dela é substituída. Stack, forma do site e roteamento de hosts estão no
 ADR-0028. A emenda está no fim deste documento.
 
+**Emenda 4, ACEITA em 21/10/2026 (decisão do cliente):** o site ganha a **nona**
+rota pública, `GET /encontro/{slug}` — a página pública do encontro da `Rede`.
+Nada é revogado: o item 1 (zero `text/html` no serviço Node) fica de pé sem
+exceção, e a página é servida pela imagem do site (ADR-0028), não pela API. O
+quadro das oito rotas abaixo **deixa de ser a lista completa** das rotas
+públicas do site; ele continua exato como registro do que saiu do serviço Node
+em 17/09/2026, que é o que ele sempre descreveu. A emenda está no fim deste
+documento.
+
 ## Contexto
 
 O cliente decidiu, por escrito: *"vamos subir essa parte da aplicação junto com
@@ -56,6 +65,12 @@ GET/POST /verificar-email              200 410       confirmação de e-mail
 GET/POST /redefinir-senha              200 410 422   redefinição de senha
 GET/POST /transferencia/{cancelToken}  200 410       cancelamento de transferência de pet
 ```
+
+> **Estas oito são o que saiu do serviço Node, e não o total de rotas públicas
+> do site.** A emenda 4 (21/10/2026) acrescenta a nona, `GET /encontro/{slug}`,
+> que **nunca morou aqui**: ela nasceu no site, consumindo uma operação de
+> leitura que já existia. Quem contar rotas públicas pelo quadro acima vai errar
+> por um a partir daquela data.
 
 ## Decisão
 
@@ -687,3 +702,142 @@ site** até essas operações existirem, mesmo com o site no ar.
 Nada sobre impressão de plaquinha (ADR-0004 e emenda 1 item 5 continuam valendo
 sem alteração). Nada sobre o conteúdo das páginas, que é do Figma aprovado. A
 stack, a forma da imagem, o roteamento de hosts e a CSP estão no ADR-0028.
+
+---
+
+# Emenda 4 (ACEITA) — 21/10/2026: a nona rota pública é a página do encontro
+
+## 1. O que o cliente decidiu, e nas palavras dele
+
+Escolhendo explicitamente entre as opções que estavam na mesa, em 21/10/2026:
+
+> *"Criar a página do encontro — mesma forma do pet perdido: página pública no
+> site + campo de link no contrato + um interruptor que ACENDE o link sem
+> precisar de APK novo."*
+
+A decisão tem um antecedente datado do mesmo dia. O cliente havia pedido, antes:
+*"vamos implementar o recurso de compartilhar o evento também, inserir um botão
+na página de detalhes do evento para convidar outros usuários no whatsapp e
+outras ferramentas"*. Aquele botão foi construído e **compartilha sem link**,
+porque a página não existia: medido de fora, nos dois ambientes, com controle
+positivo (`/comunidade` responde 200 nos dois), `bichu.app/encontro/<slug>`
+respondia 404. O que o compartilhamento punha no grupo de bairro, se levasse um
+link montado no aparelho, era o cartão de pré-visualização do 404 — que diz, com
+estas letras, `og:title: Página não encontrada · Bichu`.
+
+Esta emenda fecha esse buraco pela terceira opção da frase do cliente, e não
+pelas duas primeiras: **a página passa a existir**.
+
+## 2. A rota, e o que ela entrega
+
+```
+GET /encontro/{slug}                   200 410       a página pública do encontro
+```
+
+Ela consome **uma operação que já existia**, sem nenhuma adição de rota na API:
+
+| Página | Operação JSON que o site chama |
+|---|---|
+| `GET /encontro/{slug}` | `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`) |
+
+`getNetworkEvent` já era alcançável sem conta (`security: [bearerAuth, {}]`,
+autenticação opcional) e já respondia o corpo público para qualquer chamador
+(ADR-0021: "um corpo só, e esse corpo é o público"). **Nenhuma operação nova
+entrou no contrato por causa desta página**, e o item 1 deste ADR continua sem
+exceção: a renderização é do site, a regra é do servidor.
+
+**O que a página entrega**, e é o teto da projeção pública e não o que o app
+logado vê:
+
+- o título, o resumo e a capa do encontro (as derivadas públicas da imagem);
+- o dia e a faixa de horário, **no fuso do encontro** e não no de quem lê;
+- o lugar nos quatro rótulos de `NetworkEventPlace` — **nome do lugar, bairro,
+  cidade e UF**;
+- entrada (gratuito, ou valor e unidade), portes aceitos, idade dos cães,
+  exigência de vacinação, área cercada, estrutura do local, o que levar, as
+  observações de quem organiza e as fotos;
+- os combinados do encontro, com as **mesmas quatro frases do aplicativo**;
+- link de ingresso e Instagram, quando houver (ADR-0027 item 22);
+- **e o caminho para o aplicativo**, que é o segundo trabalho da página: quem
+  abre este link, em geral, ainda não tem o app.
+
+## 3. O que a página NÃO entrega, e cada ausência tem dono
+
+Ela é aberta por **qualquer pessoa da internet, sem conta**. Então:
+
+1. **Nenhum logradouro.** `street_address` sai **só** em
+   `getNetworkEventLocation`, com `bearerAuth`, e o ADR-0027 item 21.2 é
+   literal: nunca "na agenda, no detalhe público, no teaser nem nos detalhes do
+   privado". Esta página chama o detalhe público, então **o campo não chega até
+   ela** — e, se um dia chegar, não é desenhado. A página **diz**, em uma linha,
+   que o endereço fica no aplicativo: ausência silenciosa parece defeito, e faz
+   a pessoa tocar de novo procurando o que não vai aparecer.
+2. **Nenhuma coordenada e nenhum mapa**, em precisão ou zoom nenhum (ADR-0010
+   itens 4 e 5). `NetworkEventPlace` não tem de onde tirar.
+3. **Nenhuma pessoa.** Nem quem organiza, nem quem vai, nem contagem (ADR-0025
+   seção 3; a `Rede` não tem lista de presença).
+4. **Nenhum identificador interno.** O endereço da página é o `slug`, que o
+   contrato já declara como "o endereço público do encontro. UUID não sai nesta
+   seção". O item 6 do ADR-0010 continua inteiro.
+5. **Nenhuma indexação.** A página sobe com `noindex`: o encontro é efêmero, e
+   uma página indexada hoje responde 410 depois dele. Ligar a indexação é
+   decisão do cliente, e é uma linha.
+
+## 4. Seis situações, uma resposta — e a régua é a do `lost-case-closed`
+
+A página **não mostra encontro** em seis casos: `slug` inexistente, encontro em
+revisão (`pending_review`), retirado (`removed`), **privado**, **cancelado** e
+**encerrado**. Os seis leem **a mesma tela, com o mesmo 410**.
+
+Os três primeiros já chegam colapsados: `getNetworkEvent` responde "404 nos três
+casos, com o mesmo corpo", porque "distinguir contaria a um estranho que aquele
+`slug` existiu". Os três últimos são decisão desta página, tomada pela régua que
+o contrato já aplica em `lost-case-closed`: *"os cinco são a MESMA resposta de
+propósito — distinguir contaria a um estranho o que aconteceu com o animal de
+outra pessoa, ou se aquele token existiu"*.
+
+As três consequências de aplicá-la aqui:
+
+- **o privado não se delata.** Uma tela própria ("este encontro é fechado")
+  confirmaria, a quem tem um `slug` privado reenviado, que ele existe;
+- **a moderação não se delata.** `removed` e `pending_review` não podem ser
+  separáveis de "nunca existiu";
+- **ninguém é levado a um lugar vazio.** Cancelado e encerrado não convidam:
+  quem abre o link não tem conta, não tem a agenda e não tem como descobrir
+  sozinho que aquilo acabou.
+
+**Encontro privado não tem página pública em nenhuma hipótese**, e isso é
+estrutural e não um `if`: o contrato responde `NetworkEventPrivateTeaser` para
+ele (lista fechada de cinco propriedades, sem lugar e sem horário), e não há do
+que desenhar uma página.
+
+## 5. O interruptor, que é a terceira parte da frase do cliente
+
+O link **acende sem APK novo e sem deploy da API**, exatamente como no caso do
+pet. A forma é a mesma, e é reusada e não reinventada:
+
+- `site_page_availability` (migração `20261020000010`) ganha a terceira linha,
+  `network_event`, pela migração `20261020000017`. Ampliar o `CHECK` daquela
+  coluna é **alterar restrição, não acrescentar tabela**: o ADR-0011 §5.5 não
+  barra, e uma segunda tabela de interruptor seria a segunda definição do mesmo
+  conceito;
+- `NetworkEventPublic` ganha `share_url`, **opcional**. A **ausência do campo é
+  o interruptor** — a mesma decisão de `LostCase.share_url`, e pela mesma razão
+  registrada lá: um booleano ao lado do endereço poderia discordar do endereço;
+- a linha nasce **desligada**, porque desligado é o estado medido em 21/10/2026.
+  Acender é um `UPDATE` com a API de pé;
+- o aplicativo **nunca monta o endereço**. Não existe `'/encontro/' + slug` no
+  app: a mensagem de compartilhar ganhou um parâmetro e uma linha, e com o campo
+  ausente ela sai idêntica à de antes.
+
+`share_url` **não sai** na agenda nem na busca por distância (só no detalhe), nem
+no cancelado, nem no encerrado, nem no privado.
+
+## 6. O que esta emenda NÃO decide
+
+Nada sobre indexação ou SEO da página além do `noindex` do item 3. Nada sobre
+check-in, galeria com autor ou lista de presença, que continuam fora por decisão
+do cliente (ADR-0025, ADR-0027 12.4). Nada sobre o conteúdo das outras oito
+rotas. Nada sobre a página pública de **outras** seções — Loja e diretório não
+ganharam página por esta decisão, e ganhar exige outra. E nada sobre recompensa,
+que o ADR-0010 proíbe em qualquer forma e que o cliente descartou em 20/10/2026.

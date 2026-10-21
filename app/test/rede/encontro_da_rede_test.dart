@@ -715,10 +715,12 @@ void main() {
   // As iscas deste grupo, e o que cada uma derruba se o mecanismo sumir:
   //   1. o botao EXISTE e abre a FOLHA, e nao o navegador;
   //   2. o texto carrega titulo, dia, horario e lugar;
-  //   3. o texto NAO carrega endereco de rua nem link -- a privacidade;
+  //   3. o texto NAO carrega endereco de rua -- a privacidade;
   //   4. cancelado e encerrado nao oferecem a acao;
   //   5. folha que nao abre vira aviso, e nao silencio;
-  //   6. o botao e ALCANCAVEL numa tela de celular de verdade.
+  //   6. o botao e ALCANCAVEL numa tela de celular de verdade;
+  //   7. o LINK do texto e o `share_url` DO SERVIDOR (21/10/2026);
+  //   8. sem `share_url`, o texto sai sem link -- e o interruptor.
   group('compartilhar o encontro', () {
     testWidgets('o botão abre a FOLHA do sistema com o texto do encontro',
         (tester) async {
@@ -757,6 +759,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final enviado = saida.compartilhados.single;
+      // O fixture nao passa `share_url`, que e o estado de 21/10/2026: a
+      // pagina nao esta publicada, o servidor omite o campo e o texto sai
+      // **identico ao de antes de o link existir**. Este caso e a prova de que
+      // acender a pagina nao exigiu APK novo -- e a isca do item 8.
       expect(
         enviado.texto,
         'Passeio matinal na Benedito Calixto\n'
@@ -764,11 +770,18 @@ void main() {
         'Praça Benedito Calixto, Pinheiros, São Paulo - SP\n'
         'Encontrei no Bichu. Vamos juntos?',
       );
+      expect(
+        enviado.texto,
+        isNot(contains('http')),
+        reason: 'REPROVA: um link apareceu sem o servidor ter mandado `share_url`. '
+            'O app NAO monta o endereco: um literal montado aqui seria link morto '
+            'no dia em que o site mudasse, e o binario instalado nao se corrige.',
+      );
       expect(enviado.assunto, 'Vamos juntos? Passeio matinal na Benedito Calixto');
     });
 
     testWidgets(
-        'ISCA -- o texto compartilhado não carrega endereço de rua nem link',
+        'ISCA -- o texto compartilhado não carrega endereço de rua',
         (tester) async {
       // ESTE CASO E O FREIO DE PRIVACIDADE. `street_address` so sai de
       // `getNetworkEventLocation`, com `bearerAuth` (emenda 1 do ADR-0010), e o
@@ -807,17 +820,131 @@ void main() {
             'um grupo de WhatsApp.',
       );
       expect(texto, isNot(contains('1020')));
-      // E NENHUM LINK. Medido em 21/10/2026, com controle positivo
-      // (`/comunidade` -> 200): `bichu.app/encontro/<slug>`, `/e/`, `/evento/`
-      // e `/eventos/` respondem 404 nos dois ambientes, e `NetworkEventPublic`
-      // nao tem `share_url`. Um link montado aqui seria link morto.
+      expect(texto, isNot(contains('Teodoro Sampaio, 1020')));
+    });
+
+    // -----------------------------------------------------------------------
+    // O LINK DA PAGINA PUBLICA (cliente, 21/10/2026)
+    // -----------------------------------------------------------------------
+    //
+    // "Criar a pagina do encontro -- mesma forma do pet perdido: pagina publica
+    //  no site + campo de link no contrato + um interruptor que ACENDE o link
+    //  sem precisar de APK novo."
+    //
+    // O interruptor mora no SERVIDOR (`site_page_availability`, migracao
+    // `20261020000017`), e o que o app faz e **ler `share_url` e nada mais**.
+
+    testWidgets('CONTROLE POSITIVO -- com `share_url`, o link entra no texto',
+        (tester) async {
+      const link = 'https://bichu.app/encontro/$slugPublico';
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(
+          encontro: encontroPublico(shareUrl: link),
+        ),
+      );
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      final texto = saida.compartilhados.single.texto;
       expect(
         texto,
-        isNot(contains('http')),
-        reason: 'REPROVA: um endereço entrou no texto. Não existe página '
-            'pública de encontro — ver `mensagemDeCompartilhar`.',
+        'Passeio matinal na Benedito Calixto\n'
+        'Sábado, 3 de outubro · Das 9h às 11h\n'
+        'Praça Benedito Calixto, Pinheiros, São Paulo - SP\n'
+        'Encontrei no Bichu. Vamos juntos?\n'
+        '$link',
+        reason: 'REPROVA: o `share_url` do servidor não chegou ao texto, ou chegou '
+            'em outro lugar. Sem este caso, todas as iscas de "não há link" '
+            'passariam com a função nunca pondo link nenhum.',
       );
-      expect(texto, isNot(contains('bichu.app')));
+    });
+
+    testWidgets(
+        'ISCA -- o link do texto é o DO SERVIDOR, e não um montado no aparelho',
+        (tester) async {
+      // O servidor manda um endereco que o app **nao teria como inventar**:
+      // outro host e outro caminho. Se o texto trouxer `/encontro/<slug>` em
+      // `bichu.app`, alguem montou o literal aqui -- e esse literal vira link
+      // morto no dia em que o site mudar de forma.
+      const doServidor = 'https://hml.bichu.app/e/zzz-outro-caminho';
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(shareUrl: doServidor)),
+      );
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      final texto = saida.compartilhados.single.texto;
+      expect(texto, contains(doServidor));
+      expect(
+        texto,
+        isNot(contains('/encontro/$slugPublico')),
+        reason: 'REPROVA: o app montou o endereço a partir do `slug` em vez de usar '
+            'o que o servidor mandou.',
+      );
+    });
+
+    testWidgets(
+        'ISCA DE VAZAMENTO -- com link, o endereço de rua CONTINUA fora do texto',
+        (tester) async {
+      // O freio de privacidade de novo, agora com o link aceso: o caso existe
+      // porque a tentacao de "mandar tudo que a tela tem" cresce exatamente
+      // quando a mensagem passa a ter mais de uma parte.
+      const endereco = 'R. Teodoro Sampaio, 1020 - Pinheiros, São Paulo - SP';
+      const link = 'https://bichu.app/encontro/$slugPublico';
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(shareUrl: link),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location':
+              sempre(localizacao(lat: null, endereco: endereco)),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+
+      // O endereco ESTA na tela antes de o caso provar que ele nao sai.
+      await rolarAte(tester, find.text(endereco));
+      expect(find.text(endereco), findsOneWidget);
+
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      final texto = saida.compartilhados.single.texto;
+      expect(texto, contains(link));
+      expect(
+        texto,
+        isNot(contains('Teodoro Sampaio')),
+        reason: 'REPROVA: o endereço de rua, que só sai com conta, foi para um grupo '
+            'de WhatsApp junto com o link.',
+      );
+      expect(texto, isNot(contains('1020')));
+    });
+
+    testWidgets('o link vem por ÚLTIMO, depois do convite', (tester) async {
+      // A ordem nao e estetica: e o fim do texto que a pre-visualizacao do
+      // WhatsApp usa para montar o cartao, e quem le no celular ve o convite
+      // antes do endereco.
+      const link = 'https://bichu.app/encontro/$slugPublico';
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: encontroPublico(shareUrl: link)),
+      );
+      await rolarAte(tester, find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.tap(find.text(TelaDoEncontro.rotuloDeCompartilhar));
+      await tester.pumpAndSettle();
+
+      expect(saida.compartilhados.single.texto, endsWith(link));
     });
 
     testWidgets('ISCA -- encontro cancelado não oferece compartilhar',

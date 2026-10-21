@@ -60,6 +60,15 @@ Map<String, dynamic> encontroPublico({
   String? ticketUrl,
   String? instagramHandle,
   String? instagramUrl,
+
+  /// `share_url`: o endereco da pagina publica do encontro no site.
+  ///
+  /// **Nulo por padrao, e o nulo e o INTERRUPTOR.** O servidor OMITE o campo
+  /// enquanto `site_page_availability` disser que a pagina nao esta publicada
+  /// (migracao `20261020000017`), e tambem no cancelado e no encerrado. O
+  /// padrao do fixture e o estado medido em 21/10/2026: apagado -- entao nenhum
+  /// caso que nao fale de compartilhamento ve link por descuido.
+  String? shareUrl,
 }) {
   return <String, dynamic>{
     'slug': slug,
@@ -97,6 +106,10 @@ Map<String, dynamic> encontroPublico({
     // O servidor monta a URL com a base da configuracao; o teste a recebe
     // pronta, como o app a recebe.
     'instagram_url': instagramUrl,
+    // AUSENTE quando nulo, e nao `null`: o servidor nao manda a chave com o
+    // interruptor apagado, e um fixture que mandasse `'share_url': null`
+    // testaria uma resposta que o servidor nunca produz.
+    'share_url': ?shareUrl,
   };
 }
 

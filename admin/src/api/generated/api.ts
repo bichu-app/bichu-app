@@ -10538,6 +10538,43 @@ export interface components {
              */
             instagram_url: string | null;
             origin?: components["schemas"]["NetworkEventOrigin"];
+            /**
+             * Format: uri
+             * @description O endereco da **pagina publica do encontro** no site
+             *     (`{WEB_BASE_URL}/encontro/{slug}`), para o botao de compartilhar
+             *     levar um link que abre para quem **ainda nao tem o app** (decisao do
+             *     cliente de 21/10/2026). E a NONA rota publica do ADR-0017, pela
+             *     emenda 4 daquele documento.
+             *
+             *     **A AUSENCIA DO CAMPO E O INTERRUPTOR, e isso e deliberado.** O
+             *     campo sai **somente** quando `site_page_availability` tem
+             *     `is_published = true` na linha `network_event` (migracao
+             *     `20261020000017`), e por isso a pagina acende **sem APK novo e sem
+             *     deploy da API** -- so um `UPDATE`. A mesma forma de
+             *     `LostCase.share_url`, e pela mesma razao registrada la: um booleano
+             *     ao lado do endereco poderia DISCORDAR do endereco, e ai alguem
+             *     teria de decidir qual dos dois manda. O endereco nao discorda de si
+             *     mesmo, e o aplicativo nao remonta este literal.
+             *
+             *     **Nao sai no encontro privado** -- ele responde
+             *     `NetworkEventPrivateTeaser`, lista fechada de cinco propriedades, e
+             *     nao ha onde o campo caber --, **nem no cancelado, nem no
+             *     encerrado**: convidar um estranho para um encontro que nao vai
+             *     acontecer o manda a um lugar vazio.
+             *
+             *     **Nao sai na agenda nem na busca por distancia**, so no detalhe
+             *     (`getNetworkEvent`): a acao de compartilhar vive na pagina do
+             *     encontro, e vinte enderecos por pagina de lista nao servem a tela
+             *     nenhuma. E por isso que ele NAO esta em `required` -- omitir e
+             *     resposta legitima, e nao contrato quebrado.
+             *
+             *     **O que este endereco NAO carrega:** nenhum identificador interno
+             *     (o `slug` e o endereco publico declarado do encontro, e nao UUID --
+             *     ADR-0010 item 6) e **nenhum logradouro**. `street_address` sai so em
+             *     `getNetworkEventLocation`, com `bearerAuth`, e **nunca** no detalhe
+             *     publico (ADR-0027 item 21.2).
+             */
+            share_url?: string;
         };
         /**
          * @description Quem CADASTROU o encontro: `admin` (a equipe, pelo painel) ou

@@ -48,6 +48,8 @@ import type {
 } from '../../ports/network-repository.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
+import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
+import type { DisponibilidadeDaPagina } from '../../../lostfound/ports/disponibilidade-da-pagina.js';
 import type { EncontroDaComunidade } from '../../application/encontro-da-comunidade.js';
 import type {
   CorpoDoCancelamentoDaComunidade,
@@ -256,6 +258,23 @@ export interface DependenciasDasRotasDaRede {
   readonly escritas: EncontroDaComunidade;
   /** De onde sai o esquema do corpo: a declaracao e a do contrato. */
   readonly contrato: Contrato;
+  /**
+   * `WEB_BASE_URL`: onde o site mora, e de onde sai o endereco da pagina
+   * publica do encontro.
+   */
+  readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * O interruptor das paginas publicas do site (`site_page_availability`,
+   * migracoes `20261020000010` e `20261020000017`).
+   *
+   * **Porta de `lostfound`, e isso e deliberado.** A tabela e do SITE, nao do
+   * modulo: a primeira pagina com interruptor foi a do caso, e importar a porta
+   * que ja existe e mais honesto que uma segunda definicao do mesmo conceito
+   * dentro de `network` -- a segunda definicao e a que diverge. Importar porta
+   * de outro modulo e o padrao desta base (`professionals` le
+   * `identity/ports`, `identity` le `media/ports`).
+   */
+  readonly paginas: DisponibilidadeDaPagina;
 }
 
 function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
@@ -556,7 +575,20 @@ export function registrarRotasDaRede(
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
     const encontro = await deps.rede.buscarEncontro(eventSlug);
     if (encontro === undefined) throw problemas.naoEncontrado();
-    return reply.send(projetarEncontro(encontro, deps.clock.now()));
+    // **O UNICO ponto que passa a pagina**, e por isso `share_url` so sai aqui:
+    // a agenda e a busca por distancia chamam `projetarEncontro` sem ela.
+    //
+    // A leitura vem ANTES da projecao e nao dentro dela porque o dominio nao
+    // fala com banco. `estaPublicada` nunca lanca (ver a porta): tabela fora
+    // devolve `false`, que ESCONDE o endereco -- e esconder e o unico estado
+    // honesto de quem nao conseguiu perguntar se a pagina existe.
+    const publicada = await deps.paginas.estaPublicada('network_event');
+    return reply.send(
+      projetarEncontro(encontro, deps.clock.now(), {
+        baseDaWeb: deps.baseDaWeb,
+        publicada,
+      }),
+    );
   });
 
   registrarRota(

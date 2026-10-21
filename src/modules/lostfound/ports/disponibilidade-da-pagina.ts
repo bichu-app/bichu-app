@@ -50,10 +50,26 @@
  * compartilhamento nao tem o direito de ficar no caminho dela.
  */
 
-/** As paginas publicas do site sobre as quais existe interruptor. */
-export type PaginaPublica = 'lost_case' | 'poster';
+/**
+ * As paginas publicas do site sobre as quais existe interruptor.
+ *
+ * **A chave e do SITE inteiro, e nao de `lostfound`.** A porta nasceu aqui
+ * porque a primeira pagina com interruptor era a do caso, e continua aqui para
+ * nao haver duas definicoes do mesmo conceito; `network_event` (21/10/2026) e a
+ * primeira chave de outro modulo, e quem a le e
+ * `network/adapters/http/network-routes.ts`. O dominio fechado desta uniao tem
+ * que casar com o `CHECK` de `site_page_availability.page` (migracoes
+ * `20261020000010` e `20261020000017`): valor que exista aqui e nao la nao e
+ * recusado pelo tipo e sim pelo banco, na forma de uma leitura que nunca acha
+ * linha -- ou seja, escondido para sempre, calado.
+ */
+export type PaginaPublica = 'lost_case' | 'poster' | 'network_event';
 
-export const PAGINAS_PUBLICAS: readonly PaginaPublica[] = ['lost_case', 'poster'];
+export const PAGINAS_PUBLICAS: readonly PaginaPublica[] = [
+  'lost_case',
+  'poster',
+  'network_event',
+];
 
 export interface DisponibilidadeDaPagina {
   /**

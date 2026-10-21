@@ -142,7 +142,22 @@ interface Cenario {
   readonly desistencia?: DesfechoDaDesistencia;
   readonly detalhes?: EncontroDaRede | undefined;
   readonly temRegiao?: boolean;
+  /**
+   * `site_page_availability` diz que a pagina publica do encontro existe?
+   *
+   * **`undefined` e `false` -- desligado e o padrao**, e e o estado medido em
+   * 21/10/2026. Nenhum caso que nao fale de compartilhamento precisou mudar por
+   * causa de `share_url`, e nenhum passa a ver o campo por descuido.
+   */
+  readonly paginaDoEncontroPublicada?: boolean;
 }
+
+/**
+ * `WEB_BASE_URL` do teste. **Com barra no fim de proposito**: o montador do
+ * endereco tem que aparar a barra, e uma base "limpa" nunca provaria isso -- o
+ * defeito que escapa e `https://site.exemplo.invalid//encontro/<slug>`.
+ */
+const BASE_DA_WEB = 'https://site.exemplo.invalid/' as AbsoluteUrl;
 
 const recortesVistos: RecorteDaAgenda[] = [];
 const locaisPedidos: string[] = [];
@@ -358,6 +373,13 @@ function servidor(
     rede,
     autenticador: { autenticar },
     clock,
+    baseDaWeb: BASE_DA_WEB,
+    // Dobre da porta `DisponibilidadeDaPagina`: so `true` explicito acende, e o
+    // padrao do cenario e desligado.
+    paginas: {
+      estaPublicada: (pagina) =>
+        Promise.resolve(pagina === 'network_event' && cenario.paginaDoEncontroPublicada === true),
+    },
     escritas: new EncontroDaComunidade({
       rede,
       trilha: {
