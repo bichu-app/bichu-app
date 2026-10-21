@@ -418,6 +418,32 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
   }
 
+  /// Abre o campo de digitacao. **SEM pedir o foco**, e isto e o pedido do
+  /// cliente de 20/10/2026.
+  ///
+  /// O relato, literal: *"quando abre a pagina para digitar o codigo do pet, no
+  /// ios o teclado vem aberto e sobrepoe os botoes embaixo, traga essa pagina,
+  /// sem selecionar o input para nao ter esse problema"*.
+  ///
+  /// **Dos tres pedidos de foco desta tela, so este era na ABERTURA.** Os
+  /// outros dois sao de recuperacao -- [_enviarODigitado] quando a forma nao
+  /// fecha, e [_voltarAoCampo] quando o servidor recusa o codigo --, e naqueles
+  /// o foco e certo: a pessoa ja esta digitando e precisa continuar de onde
+  /// parou, sem tocar o campo de novo a cada tentativa. Os dois continuam
+  /// pedindo foco, e os dois tem isca.
+  ///
+  /// **O que isto NAO conserta, e por que a barra mudou junto.** Tirar o foco
+  /// evita o teclado subir sozinho; no instante em que a pessoa toca o campo
+  /// ele sobe, e a barra de acao ficava atras dele do mesmo jeito -- o que o
+  /// cliente descreveu ("sobrepoe os botoes embaixo") e a causa, e o foco
+  /// automatico era so o gatilho mais visivel dela. O conserto da causa esta
+  /// no `build`.
+  ///
+  /// **Custo declarado:** quem vem aqui para digitar paga um toque a mais, no
+  /// campo. Esta e a tela de quem achou um animal na rua, onde toque custa
+  /// caro, e por isso o custo esta escrito e nao escondido: com a barra agora
+  /// acima do teclado, devolver o `requestFocus()` desta linha nao reabre o
+  /// defeito do cliente. A decisao de devolve-lo e dele.
   void _irParaDigitacao() {
     _ofertaManual?.cancel();
     setState(() {
@@ -426,7 +452,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       // que esta abrindo agora.
       _erroDoCampo = null;
     });
-    _focoDoCodigo.requestFocus();
   }
 
   /// O texto que a pessoa le para cada motivo de [FormaDoCodigo].
@@ -655,7 +680,37 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     return Scaffold(
       // Sem `appBar`: ver a nota da classe. A saida vem sobreposta, logo
       // abaixo, e nao numa barra de topo.
-      bottomNavigationBar: BarraDeAcaoFixa(acoes: _acoes()),
+      //
+      // A BARRA SOBE COM O TECLADO, E O RECUO E PEDIDO AQUI PORQUE O
+      // `Scaffold` NAO O DA. `_ScaffoldLayout.performLayout` ancora a
+      // `bottomNavigationBar` em `size.height` -- a altura inteira da tela --
+      // e so o `body` recebe o recuo do teclado (`contentBottom = bottom -
+      // max(minInsets.bottom, bottomWidgetsHeight)`). Sem este `Padding` a
+      // barra fica ATRAS do teclado, e `Continuar`, `Digitar de novo` e
+      // `Como achei este animal` viram botoes inalcancaveis: e o defeito que o
+      // cliente mediu no iPhone dele em 20/10/2026 ("o teclado ... sobrepoe os
+      // botoes embaixo"). O proprio cabecalho de [BarraDeAcaoFixa] tinha a
+      // medicao escrita -- barra em 543..640 dp, teclado cobrindo 370..640 --
+      // e tratava o resultado como vantagem de area rolavel.
+      //
+      // **Aqui, e nao dentro de [BarraDeAcaoFixa]**: a barra e de todas as
+      // telas do app e tres outras frentes estao mexendo em telas que a usam.
+      // O recuo vive na tela que tem campo de texto.
+      //
+      // O numero vem deste `context`, que e o do `State`, acima do `Scaffold`:
+      // de dentro do corpo `viewInsets.bottom` chega zerado, pelo motivo
+      // escrito em `_corpo()`. Com o teclado fechado o recuo e zero e nada
+      // muda em nenhum dos outros cinco estados.
+      //
+      // `Padding` e nao `AnimatedPadding`: o sistema entrega o inset quadro a
+      // quadro enquanto o teclado sobe, e a barra ja acompanha a animacao
+      // dele. Um segundo animador correria atras do primeiro.
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: BarraDeAcaoFixa(acoes: _acoes()),
+      ),
       body: Stack(
         children: <Widget>[
           Positioned.fill(child: _corpo()),
